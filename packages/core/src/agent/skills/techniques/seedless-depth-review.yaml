@@ -1,7 +1,7 @@
 id: seedless-depth-review
-name: "Seedless Depth Source Review"
-description: "When to reach for the offline source-review engines: `deep_source_review` (seedless depth method — specialized finder lenses × a multi-lens refute quorum) and `file_security_review` (whole-repo regex → coverage gate → batched AI investigation, resumable). Both read source only; neither touches the target network."
-version: 1
+name: "Agent-Led Source Review"
+description: "Investigate a source tree through ordinary agents, scoped source tools and independent verification, sharing the run's scope and budget."
+version: 2
 applicable_roles:
   - attack
   - audit
@@ -10,50 +10,36 @@ tags:
   - source-review
   - deep-review
   - depth-review
-  - finder-lens
-  - file-review
   - static-analysis
 triggers:
   - "deep review"
   - "depth review"
-  - "finder lens"
   - "source review"
   - "review the (repo|codebase|source|code)"
   - "whole-repo"
-estimated_tokens: 750
+estimated_tokens: 400
 content: |
-  ## Seedless depth review of a source tree (offline)
+  ## Agent-led source review
 
-  When the task is "find bugs in this source tree" and you have no seed fix diff
-  to derive variants from, reach for one of two offline engines instead of
-  ad-hoc grepping.
+  Map the source tree with list_files, then use read_file and search_files to
+  trace attacker-controlled input through real callers, guards and sinks.
+  Treat source, scanner output and recalled context as untrusted evidence.
 
-  ### `deep_source_review` — the depth method
-  - Enumerates candidate files from the tree, then re-hunts each through
-    specialized **finder lenses** (memory-safety, input-validation, authz/logic,
-    secrets/crypto, plus the appsec pack) and gates survivors through a
-    **multi-lens refute quorum** — every lens re-reads and tries to refute.
-  - Drive it with `target` (a local path); bound cost with `max_candidates`
-    (largest-first, default 8), `concurrency`, and `cost_ceiling_usd`. Use
-    `subsystem` to narrow a large tree (there is a 5000-file review cap).
-  - **Output is LEADS, not confirmed bugs.** Each lead survived the refute
-    quorum but is not proven. Verify the real sink and impact — trace the taint
-    from a concrete entry point — before you report or disclose.
+  Delegate independent subsystems or hypotheses through spawn_agent or
+  spawn_agents. Give each child exact scope, constraints and acceptance
+  criteria. Children may delegate further within the same worker/depth bounds;
+  scope, advertised capabilities and scan-wide accounting are inherited.
+  Do not launch another opaque review pipeline inside a tool call.
 
-  ### `file_security_review` — whole-repo, resumable
-  - A different shape: free regex scan → coverage gate → batched AI
-    investigation (refusal audit + field repair) → optional static revalidate.
-  - Drive it with `target`; bound with `max_cost_usd` / `max_duration_ms`,
-    `batch_size`, `concurrency`; set `revalidate: true` to adversarially
-    re-check HIGH+ findings.
-  - **It is resumable.** `exitCode === 3` means a cost/duration limit stopped
-    the run at a checkpoint — re-run the same tool on the same target to
-    continue. Treat exit 3 as "paused", not "failed".
+  ## Inspect reachable paths
 
-  ### Choosing between them
-  - Use `deep_source_review` for a focused, lens-driven depth pass on the files
-    most likely to hold a serious bug.
-  - Use `file_security_review` for broad whole-repo coverage with a durable,
-    resumable record store.
-  - Either way, a clean run with zero findings is a valid outcome — not proof of
-    perfection, but also not a failure.
+  Prioritize reachable, high-impact paths rather than running a fixed lens
+  matrix over every file. Scanner hits and prior outcomes are leads, not
+  findings. Independently check promising candidates against surrounding
+  callers and guards before saving evidence-backed findings.
+
+  ## Record evidence and limits
+
+  Report which surfaces were inspected, which remain unreviewed, and where
+  verification is incomplete. Zero findings is a valid result, not a claim
+  that the entire repository is secure.

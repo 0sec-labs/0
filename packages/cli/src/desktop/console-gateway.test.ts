@@ -1,12 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import type {
-  ConsoleRenderCallbacks,
-  ConsoleScopeRequest,
-  ConsoleSession,
-  ConsoleTurnOutcome,
-  ScopePolicy,
-  ToolCall,
-} from "@0sec/core";
+import type { ConsoleRenderCallbacks,
+ConsoleScopeRequest,
+ConsoleSession,
+ConsoleTurnOutcome,
+ScopePolicy,
+ToolCall, } from "@0/core"
 import { DesktopConsoleGateway, DesktopConsoleGatewayError } from "./console-gateway.js";
 
 type GatewayFactoryInput = {

@@ -2,8 +2,8 @@
  * Random install and session identifiers for analytics.
  *
  * The install id is a random UUID minted once and persisted under the 0sec
- * home state dir (`~/.0sec/analytics-id`, reusing `homeStateDir` from
- * `@0sec/shared`). It is not derived from email, hostname, MAC, username or
+ * home state dir (`~/.0/analytics-id`, reusing `homeStateDir` from
+ * `@0/shared`). It is not derived from email, hostname, MAC, username or
  * machine id. Authenticated delivery still links records to the caller.
  * The session id is a fresh random UUID per run.
  */
@@ -11,7 +11,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared"
 
 /** File that persists the install id. */
 export const INSTALL_ID_FILENAME = "analytics-id";

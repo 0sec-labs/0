@@ -1,4 +1,4 @@
-import type { TargetInfo, Finding, AuthConfig, NamedIdentity } from "@0sec/shared";
+import type { TargetInfo, Finding, AuthConfig, NamedIdentity } from "@0/shared"
 import { features as featureFlags } from "./features.js";
 
 /**

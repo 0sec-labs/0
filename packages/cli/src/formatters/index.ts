@@ -1,13 +1,11 @@
-import {
-  createAuditReportDocument,
-  createReviewReportDocument,
-  createScanReportDocument,
-  type AuditReport,
-  type OutputFormat,
-  type PresentationReportDocument,
-  type ReviewReport,
-  type ScanReport,
-} from "@0sec/shared";
+import { createAuditReportDocument,
+createReviewReportDocument,
+createScanReportDocument,
+type AuditReport,
+type OutputFormat,
+type PresentationReportDocument,
+type ReviewReport,
+type ScanReport, } from "@0/shared"
 import { formatTerminal } from "./terminal.js";
 import { formatJson } from "./json.js";
 import { formatMarkdown } from "./markdown.js";

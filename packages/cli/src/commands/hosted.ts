@@ -6,8 +6,8 @@
 //   - models       list available hosted inference models
 //   - balance      show included usage and prepaid API balance
 //
-// All use CloudClient from @0sec/core, which reads scoped creds from
-// env or ~/.0sec/cloud.env. 401 → clear auth error, not silent fallback.
+// All use CloudClient from @0/core, which reads scoped creds from
+// env or ~/.0/cloud.env. 401 → clear auth error, not silent fallback.
 //
 // SECURITY: the token is never printed. Error messages include status +
 // path + host, never the Authorization header.
@@ -15,15 +15,13 @@
 import type { Command } from "commander";
 import chalk from "chalk";
 import { consolePresentationOutput } from "../presentation/process-output.js";
-import {
-  loadCloudCredentials,
-  CloudAuthMissingError,
-  CloudClient,
-  CloudUnauthorizedError,
-  CloudForbiddenError,
-  CloudNetworkError,
-  CloudError,
-} from "@0sec/core";
+import { loadCloudCredentials,
+CloudAuthMissingError,
+CloudClient,
+CloudUnauthorizedError,
+CloudForbiddenError,
+CloudNetworkError,
+CloudError, } from "@0/core"
 import { runLogin } from "./auth.js";
 import { formatBalanceDetail } from "../tui/hosted-balance.js";
 
@@ -37,7 +35,7 @@ export function registerHostedCommand(program: Command): void {
   program
     .command("login")
     .description("Sign in to 0.security Cloud (optional for your own provider)")
-    .option("--host <url>", "Cloud host (defaults to 0SEC_CLOUD_HOST or production)")
+    .option("--host <url>", "Cloud host (defaults to ZERO_CLOUD_HOST or production)")
     .option("--token <value>", "Skip the browser flow and persist this token directly")
     .action(async (opts: { host?: string; token?: string }) => {
       await runLogin(opts);
@@ -67,7 +65,7 @@ export function registerHostedCommand(program: Command): void {
     .argument("<setting>", "on or off")
     .action(async (setting: string) => {
       if (setting !== "on" && setting !== "off") {
-        consolePresentationOutput.stderr("Use: 0sec prepaid on|off", "hosted.prepaid-invalid");
+        consolePresentationOutput.stderr("Use: 0 prepaid on|off", "hosted.prepaid-invalid");
         process.exitCode = EXIT_USER_ERROR;
         return;
       }
@@ -112,7 +110,7 @@ async function loadClient(): Promise<CloudClient> {
 function handleApiError(err: unknown): void {
   if (err instanceof CloudUnauthorizedError) {
     consolePresentationOutput.stderr(
-      chalk.red("Authentication failed (HTTP 401). Run `0sec login` to refresh."),
+      chalk.red("Authentication failed (HTTP 401). Run `0 login` to refresh."),
       "hosted.unauthorized",
     );
     process.exitCode = EXIT_AUTH;

@@ -3,7 +3,7 @@
 // Subcommands:
 //   - login        opens a browser at <host>/cli-auth?session=… and polls
 //                  for the mint endpoint to drop a scoped token in
-//   - logout       deletes ~/.0sec/cloud.env
+//   - logout       deletes ~/.0/cloud.env
 //   - status       loads creds, verifies the token against the
 //                  authenticated Cloud account endpoint, reports
 //
@@ -28,7 +28,7 @@
 // never the token or the Authorization header.
 
 import { spawn } from "node:child_process";
-import { cloudStateDir, homeStateDir } from "@0sec/shared";
+import { cloudStateDir, homeStateDir } from "@0/shared"
 import { mkdirSync, writeFileSync, chmodSync, unlinkSync, existsSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
@@ -37,16 +37,14 @@ import { setTimeout as delay } from "node:timers/promises";
 import type { Command } from "commander";
 import chalk from "chalk";
 import { consolePresentationOutput } from "../presentation/process-output.js";
-import {
-  loadCloudCredentials,
-  CloudAuthMissingError,
-  CloudClient,
-  CloudUnauthorizedError,
-  CloudForbiddenError,
-  CloudNetworkError,
-  CloudError,
-  DEFAULT_CLOUD_HOST,
-} from "@0sec/core";
+import { loadCloudCredentials,
+CloudAuthMissingError,
+CloudClient,
+CloudUnauthorizedError,
+CloudForbiddenError,
+CloudNetworkError,
+CloudError,
+DEFAULT_CLOUD_HOST, } from "@0/core"
 
 const EXIT_OK = 0;
 const EXIT_USER_ERROR = 1;
@@ -117,13 +115,12 @@ interface StatusOptions {
 export function registerAuthCommand(program: Command): void {
   const auth = program
     .command("auth")
-    .description("0sec-cloud authentication")
-
-  // ── 0sec auth login ──
+    .description("0cloud authentication")
+  // ── 0 auth login ──
   auth
     .command("login")
-    .description("Log in to 0sec-cloud (opens browser; --token to paste directly)")
-    .option("--host <url>", "Cloud host (defaults to 0SEC_CLOUD_HOST or production)")
+    .description("Log in to 0cloud (opens browser; --token to paste directly)")
+    .option("--host <url>", "Cloud host (defaults to ZERO_CLOUD_HOST or production)")
     .option("--token <value>", "Skip the browser flow and persist this token directly")
     .action(async (opts: { host?: string; token?: string }) => {
       await runLogin(opts);
@@ -140,7 +137,7 @@ export function registerAuthCommand(program: Command): void {
   // ── 0sec auth status ──
   auth
     .command("status")
-    .description("Verify 0sec-cloud credentials and account access")
+    .description("Verify 0cloud credentials and account access")
     .action(async () => {
       await runStatus({});
     });
@@ -160,7 +157,7 @@ export type HostedLoginPhase = "opening" | "opener-failed" | "polling" | "cancel
  * Returned status contains no credentials and does not imply inference availability.
  */
 export async function hostedBrowserLoginFlow(opts: HostedBrowserLoginOptions = {}): Promise<LoginResult> {
-  const host = normaliseHostArg(opts.host ?? process.env["0SEC_CLOUD_HOST"] ?? DEFAULT_CLOUD_HOST);
+  const host = normaliseHostArg(opts.host ?? process.env["ZERO_CLOUD_HOST"] ?? DEFAULT_CLOUD_HOST);
   if (host === null) {
     return { ok: false, error: "Cloud host must be an http(s) URL without credentials, query or fragment." };
   }
@@ -292,7 +289,7 @@ async function awaitLoginStep<T>(operation: Promise<T>, signal: AbortSignal): Pr
 
 /** CLI command wrapper: calls hostedBrowserLoginFlow and prints results. */
 export async function runLogin(opts: LoginOptions): Promise<void> {
-  const host = normaliseHostArg(opts.host ?? process.env["0SEC_CLOUD_HOST"] ?? DEFAULT_CLOUD_HOST);
+  const host = normaliseHostArg(opts.host ?? process.env["ZERO_CLOUD_HOST"] ?? DEFAULT_CLOUD_HOST);
   if (host === null) {
     consolePresentationOutput.stderr(chalk.red("Error: Cloud host must be an http(s) URL without credentials, query or fragment."), "auth.login.host-error");
     process.exitCode = EXIT_USER_ERROR;
@@ -467,8 +464,8 @@ function persistCredentials(host: string, token: string, homeDirOverride?: strin
   const body =
     `# 0sec-cloud credentials. Managed by \`0sec auth\`.\n` +
     `# DO NOT commit this file or share its contents.\n` +
-    `0SEC_CLOUD_HOST=${host}\n` +
-    `0SEC_CLOUD_TOKEN=${token}\n`;
+    `ZERO_CLOUD_HOST=${host}\n` +
+    `ZERO_CLOUD_TOKEN=${token}\n`;
   writeFileSync(path, body, { mode: 0o600 });
   // writeFileSync's `mode` is honoured on create but POSIX semantics
   // mean an existing file keeps its old perms — so re-chmod explicitly.

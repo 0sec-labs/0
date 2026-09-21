@@ -84,7 +84,7 @@ function SafeLink({ href, children }: { href?: string; children: ReactNode }) {
           setError(null);
           void window.osecDesktop
             .openExternal(href)
-            .catch((cause) =>
+            .catch((cause: unknown) =>
               setError(cause instanceof Error ? cause.message : String(cause)),
             );
         }}

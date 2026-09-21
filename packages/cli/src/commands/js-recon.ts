@@ -1,13 +1,11 @@
 import type { Command } from "commander";
 import chalk from "chalk";
-import {
-  runJsRecon,
-  enumerateJsChunkUrls,
-  ScopePolicy,
-  fetchScoped,
-  type JsReconResult,
-  type FetchTextResult,
-} from "@0sec/core";
+import { runJsRecon,
+enumerateJsChunkUrls,
+ScopePolicy,
+fetchScoped,
+type JsReconResult,
+type FetchTextResult, } from "@0/core"
 
 interface JsReconCliOptions {
   json?: boolean;

@@ -1,8 +1,6 @@
-import {
-  expandHomePath,
-  isExistingLocalTargetPath,
-  isExplicitLocalTargetPath,
-} from "@0sec/core";
+import { expandHomePath,
+isExistingLocalTargetPath,
+isExplicitLocalTargetPath, } from "@0/core"
 
 export type EngagementKind = "web" | "source" | "package";
 export type PackageEcosystem = "npm" | "pypi" | "cargo" | "oci";
@@ -13,8 +11,6 @@ export interface EngagementPlan {
   label: string;
   /** The unified runner's target type, kept out of the TUI presentation layer. */
   targetType: "url" | "source-code" | "npm-package" | "pypi-package" | "cargo-package" | "oci-image";
-  /** Source engagements use validated finder lenses as a review strategy. */
-  reviewStrategy?: "lenses";
   ecosystem?: PackageEcosystem;
 }
 
@@ -63,7 +59,6 @@ export function resolveEngagement(rawTarget: string): EngagementResolution {
         kind: "source",
         target: expandHomePath(target),
         targetType: "source-code",
-        reviewStrategy: "lenses",
         label: `source review ${target}`,
       },
     };
@@ -84,7 +79,6 @@ export function resolveEngagement(rawTarget: string): EngagementResolution {
         kind: "source",
         target: raw,
         targetType: "source-code",
-        reviewStrategy: "lenses",
         label: `source review ${raw}`,
       },
     };
@@ -110,7 +104,6 @@ export function resolveEngagement(rawTarget: string): EngagementResolution {
         kind: "source",
         target,
         targetType: "source-code",
-        reviewStrategy: "lenses",
         label: `source review ${target}`,
       },
     };

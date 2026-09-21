@@ -43,7 +43,7 @@ def install_authorized_artifact(
         destination.parent.mkdir(parents=True, exist_ok=True)
         temporary = None
         try:
-            with tempfile.NamedTemporaryFile(prefix=".0sec-install-", dir=destination.parent, delete=False) as output:
+            with tempfile.NamedTemporaryFile(prefix=".0-install-", dir=destination.parent, delete=False) as output:
                 temporary = Path(output.name)
                 output.write(content)
                 output.flush()

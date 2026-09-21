@@ -14,6 +14,17 @@ on the published npm package and the GitHub Release tag.
 
 ### Changed
 
+- Source-review agents can delegate recursively through the normal agent runtime.
+  Descendants retain scoped tool restrictions, share scan-wide accounting, and
+  publish findings once; stopping a subtree waits for its descendants to drain.
+- Ordinary deep reviews use the same agent runner as other source reviews;
+  remove the opaque `file_security_review` and `deep_source_review` agent tools.
+- Managed reviews consume scan-bound human feedback as untrusted context, without
+  mixing it with persistent local history or treating prior dismissals as proof.
+- Local native agents keep cross-run hunt memory off unless explicitly enabled;
+  managed source research opts in through the Cloud sink. Session history is separate.
+- Recursive descendants inherit root policy and their own task without accumulating
+  ancestor task prompts.
 - Hosted accounts report monthly included usage as a percentage and prepaid API
   funds in USD; owners control fallback with `0sec prepaid on|off`.
 
@@ -134,10 +145,10 @@ on the published npm package and the GitHub Release tag.
   State is stable per repository by default, so learnings accumulate across
   runs instead of resetting.
 - **Developer-choice learning.** Repair PRs carry a machine-readable
-  attribution marker; accepted/rejected outcomes (`0SEC_SECURE_PRIOR_OUTCOMES`)
-  and reviewer comments (`0SEC_SECURE_GUIDANCE`) flow back into future repair
+  attribution marker; accepted/rejected outcomes (`ZERO_SECURE_PRIOR_OUTCOMES`)
+  and reviewer comments (`ZERO_SECURE_GUIDANCE`) flow back into future repair
   prompts as untrusted guidance.
-- **Per-repo repair rules.** `--rules` / `0SEC_SECURE_RULES` render
+- **Per-repo repair rules.** `--rules` / `ZERO_SECURE_RULES` render
   plain-English team standards ("minimal diffs; no new dependencies") into
   repair prompts.
 
@@ -403,7 +414,7 @@ on the published npm package and the GitHub Release tag.
   blocks stale command references in CI and before documentation deployment.
 - Source proposals can inspect recent retained worker versions without
   reopening removed source paths or applying edits against stale digests.
-- Opt-in `0SEC_LOG_FORMAT=json` operational records on stderr, with
+- Opt-in `ZERO_LOG_FORMAT=json` operational records on stderr, with
   allowlisted lifecycle/cost metadata and credential redaction. Existing
   stdout output and cloud event relay framing remain unchanged.
 - Stateful `access_control_workflow` verification with isolated identities,
@@ -512,7 +523,7 @@ on the published npm package and the GitHub Release tag.
   `node_modules` ancestor from causing all package files to be skipped.
 - Invalid Foxguard JSON and scanner error exits no longer count as clean
   static scans. The default scanner no longer falls back implicitly to Semgrep;
-  `0SEC_STATIC=semgrep` remains an explicit optional compatibility mode.
+  `ZERO_STATIC=semgrep` remains an explicit optional compatibility mode.
 - Cross-validation and kernel variant hunting use the released Foxguard CLI
   syntax. SARIF file URIs are decoded, and cross-validation no longer matches
   unrelated source files solely by basename.
@@ -648,7 +659,7 @@ on the published npm package and the GitHub Release tag.
 ### Changed
 
 - Fresh `scan`, `audit`, `review`, legacy scanner, MCP, and persisted-ingest
-  executions now own `~/.0sec/runs/<run-id>/state.db` rather than contending
+  executions now own `~/.0/runs/<run-id>/state.db` rather than contending
   on one user-global SQLite file. `0sec history` and `0sec findings list`
   aggregate run-local state; `0sec resume` resolves an unambiguous abbreviated
   run id.
@@ -690,12 +701,12 @@ repository (`0sec-labs/0sec`):
   `curl -fsSL https://raw.githubusercontent.com/0sec-labs/0sec/main/install.sh | bash`
   on supported Unix hosts, or download the matching release asset directly.
 - **Environment variables**: the public env contract moved from `PWNKIT_*` to
-  `0SEC_*` (e.g. `0SEC_MODEL`, `0SEC_CLOUD_TOKEN`). At CLI startup, any legacy
-  `PWNKIT_*` value is copied onto its `0SEC_*` equivalent when the new name is
+  `ZERO_*` (e.g. `ZERO_MODEL`, `ZERO_CLOUD_TOKEN`). At CLI startup, any legacy
+  `PWNKIT_*` value is copied onto its `ZERO_*` equivalent when the new name is
   unset, so existing deployments keep working; the new name always wins
   (`packages/cli/src/env-legacy.ts`).
-  Note: POSIX shells reject digit-leading variable names, so `0SEC_*` vars
-  cannot be set or expanded in bash/sh directly — use `env 0SEC_FOO=... 0sec
+  Note: POSIX shells reject digit-leading variable names, so `ZERO_*` vars
+  cannot be set or expanded in bash/sh directly — use `env ZERO_FOO=... 0sec
   ...`, or keep using the permanently supported `PWNKIT_*` names in shell
   contexts. Docker `-e`, CI env blocks, and systemd units are unaffected.
 - **Workspace packages** moved from the `@pwnkit/*` scope to `@0sec/*`.

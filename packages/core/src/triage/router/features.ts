@@ -17,7 +17,7 @@
  * See 0sec#113 §"What the router sees".
  */
 
-import type { Finding, LayerVerdict } from "@0sec/shared";
+import type { Finding, LayerVerdict } from "@0/shared"
 import { extractFeatures, FEATURE_NAMES } from "../feature-extractor.js";
 
 // Re-export the existing handcrafted feature contract verbatim so callers

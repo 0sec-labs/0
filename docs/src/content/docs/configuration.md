@@ -16,7 +16,7 @@ separately. Each section below gives its precedence rules.
 |---------|------|-------------|
 | `api` | `--runtime api` | Direct HTTP calls to a configured provider. |
 | `claude` | `--runtime claude` | Spawns the authenticated Claude Code CLI; capabilities depend on the workflow and installed CLI. |
-| `codex` | `--runtime codex` | Uses the Codex CLI for source review. For live target scans, routes to the direct ChatGPT Codex provider when `0SEC_CHATGPT_OAUTH_REFRESH_TOKEN` is configured. |
+| `codex` | `--runtime codex` | Uses the Codex CLI for source review. For live target scans, routes to the direct ChatGPT Codex provider when `ZERO_CHATGPT_OAUTH_REFRESH_TOKEN` is configured. |
 | `gemini` | `--runtime gemini` | Spawns the authenticated Gemini CLI for source-oriented work. |
 | `auto` | `--runtime auto` | Resolve an available runtime for the selected workflow. Default for `scan`, `review`, and `audit`. |
 | `ollama` | `--runtime ollama` | Local Ollama `/api/chat` runtime, exposed by `review`; requires an available tool-calling model. |
@@ -38,8 +38,8 @@ export QWEN_API_KEY="..."
 export XAI_API_KEY="..."
 export OPENCODE_API_KEY="..."
 
-# `0SEC_*` names begin with a digit; pass a Codex token with env.
-env 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN="..." 0 doctor
+# `ZERO_*` names begin with a digit; pass a Codex token with env.
+env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="..." 0 doctor
 ```
 
 See [API Keys](/api-keys/) for the full provider list, default models, and
@@ -87,7 +87,7 @@ The Codex CLI isn't used as a live-target wrapper. For live scans on a Codex
 subscription, configure the direct provider instead:
 
 ```bash
-env 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN="..." \
+env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="..." \
   0 scan --target https://example.com --scope ./scope.json --runtime codex
 ```
 
@@ -118,7 +118,7 @@ OLLAMA_HOST=http://localhost:11434 \
   0 review ./authorized-repo --runtime ollama --model gemma4:27b
 ```
 
-The runtime uses `--model`, then `0SEC_OLLAMA_MODEL`, then `gemma4:27b`.
+The runtime uses `--model`, then `ZERO_OLLAMA_MODEL`, then `gemma4:27b`.
 `OLLAMA_HOST` defaults to `http://localhost:11434`. A remote host sends source
 context to that server; a local model is not a guarantee that every tool or
 optional integration stays offline.
@@ -133,7 +133,7 @@ optional integration stays offline.
 | `probe` | Lightweight surface scan — recon and fingerprinting without deep exploitation. |
 | `web` | Shell-first web application assessment. The automatic mode for HTTP/HTTPS targets passed to `scan`. |
 | `mcp` | Scan MCP (Model Context Protocol) servers for tool poisoning and schema abuse. **Default** when the target starts with `mcp://`. |
-| `http_audit` | Worker-driven authenticated HTTP assessment using operator-provided `0SEC_TARGET_*` configuration. |
+| `http_audit` | Worker-driven authenticated HTTP assessment using operator-provided `ZERO_TARGET_*` configuration. |
 
 ```bash
 # LLM API assessment: select deep mode explicitly.
@@ -201,7 +201,7 @@ the whole codebase on every PR:
 Enable metadata-only operational records on stderr:
 
 ```bash
-env 0SEC_LOG_FORMAT=json 0 review ./my-repo
+env ZERO_LOG_FORMAT=json 0 review ./my-repo
 ```
 
 Each NDJSON record contains `timestamp`, `level`, `service`, `event`, and
@@ -210,8 +210,8 @@ arguments/results, finding evidence, summaries and raw error text are excluded
 from these records. Credential-like values in retained identifiers are redacted.
 
 This adds records alongside existing stderr diagnostics; it does not make all
-stderr output JSON or replace `--format`. Stdout and the `0SEC_EVENT_*` cloud
-relay protocol are unchanged. Unset `0SEC_LOG_FORMAT` to disable the sink;
+stderr output JSON or replace `--format`. Stdout and the `ZERO_EVENT_*` cloud
+relay protocol are unchanged. Unset `ZERO_LOG_FORMAT` to disable the sink;
 only the `json` format enables it. These operational log records are not uploaded
 automatically; collect stderr through your runner or container logging pipeline.
 
@@ -240,14 +240,14 @@ field names refer to credential scrubbing, not broad PII removal. This pipeline
 does not introduce a separate conversation-transcript record.
 
 The setting is operator-global; project settings cannot broaden it. Saved
-opt-outs survive upgrades. An explicit `0SEC_ANALYTICS_LEVEL` limits the
-effective tier, even if the saved setting is higher. `0SEC_OFFLINE`,
-`0SEC_NO_TELEMETRY`, or `DO_NOT_TRACK` forces analytics off when set to a
+opt-outs survive upgrades. An explicit `ZERO_ANALYTICS_LEVEL` limits the
+effective tier, even if the saved setting is higher. `ZERO_OFFLINE`,
+`ZERO_NO_TELEMETRY`, or `DO_NOT_TRACK` forces analytics off when set to a
 non-empty value other than `0`, `false`, or `no`. For example:
 
 ```bash
-env 0SEC_ANALYTICS_LEVEL=off 0 console
-env 0SEC_ANALYTICS_LEVEL=usage 0 scan https://authorized.example
+env ZERO_ANALYTICS_LEVEL=off 0 console
+env ZERO_ANALYTICS_LEVEL=usage 0 scan https://authorized.example
 ```
 
 Sending requires Cloud credentials and uses `/api/cli-analytics` on the
@@ -263,9 +263,9 @@ marker; this does not reduce the tool/code content allowance.
 POSTs contain at most 100 records and 1,048,576 encoded JSON bytes, including
 escaping and the batch wrapper. An oversized field or single encoded record
 is skipped, not truncated or retried: stderr and
-`~/.0sec/analytics-outcomes.log` report only the field, byte counts, limit and
+`~/.0/analytics-outcomes.log` report only the field, byte counts, limit and
 timestamp. Post-redaction payloads attempted over HTTP are recorded in
-`~/.0sec/analytics-sent.log`; that log is not proof of server acceptance.
+`~/.0/analytics-sent.log`; that log is not proof of server acceptance.
 
 Consent is checked again before every POST. Lowering it discards disallowed
 pending records; re-enabling does not replay those discarded records. Skipping
@@ -276,7 +276,7 @@ tier does not re-enable an existing problem-report opt-out.
 ## Feedback delivery
 
 `/feedback <message>` is local-only and appends to
-`~/.0sec/feedback.md`. After `0 auth login`, staged feedback defaults to the
+`~/.0/feedback.md`. After `0 auth login`, staged feedback defaults to the
 authenticated `cloud.0.security/api/cli-feedback` receiver; it attributes the
 message to the signed-in organization and delivers through the existing
 team-feedback channel. Re-authenticate after upgrading if an older CLI token
@@ -287,15 +287,15 @@ JSON body, headers, and secret-shaped-content warnings. Only a second
 `/feedback send` transmits that exact staged payload; `/feedback cancel` drops
 the pending network action while retaining the local file.
 
-`0SEC_FEEDBACK_URL` overrides the cloud receiver for a self-hosted HTTPS relay:
+`ZERO_FEEDBACK_URL` overrides the cloud receiver for a self-hosted HTTPS relay:
 
 ```bash
-env 0SEC_FEEDBACK_URL="https://feedback.example.org/v1/feedback" 0 console
+env ZERO_FEEDBACK_URL="https://feedback.example.org/v1/feedback" 0 console
 ```
 
 Do **not** place an incoming Slack webhook URL directly in the CLI environment:
 it is a bearer secret and does not accept 0's feedback wire schema.
-`0SEC_OFFLINE`, `0SEC_NO_TELEMETRY`, and `DO_NOT_TRACK` block every submission
+`ZERO_OFFLINE`, `ZERO_NO_TELEMETRY`, and `DO_NOT_TRACK` block every submission
 before any connection is made.
 
 ### Automatic problem reports
@@ -308,7 +308,7 @@ stderr logs and manually staged `/feedback` messages.
 Use `/feedback` → **Problem-report preferences** to select `off`, `ask`, or
 `automatic`. The preference is global to this computer; project settings cannot
 override it. An explicit saved opt-out remains off after upgrading.
-`0SEC_OFFLINE`, `0SEC_NO_TELEMETRY`, and `DO_NOT_TRACK` still block submission.
+`ZERO_OFFLINE`, `ZERO_NO_TELEMETRY`, and `DO_NOT_TRACK` still block submission.
 
 Delivery requires Cloud authentication or a configured HTTPS feedback endpoint.
 Without an available transport, the automatic report is saved locally and the
@@ -327,14 +327,14 @@ enable update checks.
 Run contributions use a separate, explicit enrollment. Analytics preferences,
 problem reports, Cloud login and paid credits don't enroll a run.
 
-`0SEC_RUN_CONTRIBUTION_CONFIG` points to an absolute, operator-owned JSON file
+`ZERO_RUN_CONTRIBUTION_CONFIG` points to an absolute, operator-owned JSON file
 with private permissions (`0600`). It contains `orgId`, the authoritative
 `receipt`, the matching `policy`, and an optional absolute `spoolDir`. Use the
 configuration issued for your enrollment. A locally written receipt doesn't
 grant permission at the collector.
 
 The client validates this configuration before capture and rechecks the receipt
-before upload. The existing `0SEC_OFFLINE`, `0SEC_NO_TELEMETRY` and `DO_NOT_TRACK`
+before upload. The existing `ZERO_OFFLINE`, `ZERO_NO_TELEMETRY` and `DO_NOT_TRACK`
 switches take precedence. Without valid enrollment, it creates no contribution
 spool or contribution upload. Collection doesn't change target scope or tool
 authorization.
@@ -361,13 +361,13 @@ Startup behavior depends on the **saved global** `updatePolicy`:
 
 If no global policy is saved, the built-in setting default alone does not grant
 automatic installation. The compatibility path checks asynchronously only when
-`0SEC_UPDATE_CHECK=1`. All startup paths require a TTY and honor `CI`,
-`0SEC_NO_UPDATE_CHECK` and `0SEC_OFFLINE` (nonempty values other than `0` or
+`ZERO_UPDATE_CHECK=1`. All startup paths require a TTY and honor `CI`,
+`ZERO_NO_UPDATE_CHECK` and `ZERO_OFFLINE` (nonempty values other than `0` or
 `false` suppress the check). Project settings cannot enable updates.
 
 ```bash
-env 0SEC_UPDATE_CHECK=1 0 --version
-env 0SEC_NO_UPDATE_CHECK=1 0 console
+env ZERO_UPDATE_CHECK=1 0 --version
+env ZERO_NO_UPDATE_CHECK=1 0 console
 ```
 
 Release checks use GitHub's API and cache results for 24 hours. Automatic
@@ -377,21 +377,21 @@ Use `/settings` or the global config to set policy intentionally.
 
 ## State directory
 
-Most per-user state is under `~/.0sec`. Scan execution state is run-local,
+Most per-user state is under `~/.0`. Scan execution state is run-local,
 while console settings and credentials are user-level. Project overrides,
 Codex authentication, temporary reports, and the `~/.0cloud` credential copy
 have separate paths; moving one directory does not relocate every subsystem.
 
-Fresh scans default to `~/.0sec/runs/<scan-id>/state.db`. `--db-path` overrides
-`0SEC_DB_PATH`; `0SEC_RUN_DIR` controls the run directory. Managed workers can
-bind the local run ID through `0SEC_CLOUD_SCAN_ID`. The legacy `0sec.db` is a
+Fresh scans default to `~/.0/runs/<scan-id>/state.db`. `--db-path` overrides
+`ZERO_DB_PATH`; `ZERO_RUN_DIR` controls the run directory. Managed workers can
+bind the local run ID through `ZERO_CLOUD_SCAN_ID`. The legacy `0sec.db` is a
 resume fallback, not the default database for every new scan.
 
 | Path | Purpose |
 |------|---------|
 | `tui-settings.json` | Console display settings (global layer). |
 | `credentials.json` | Stored API-key credentials (console credential store). |
-| `cloud.env` | Cloud auth token (`0SEC_CLOUD_TOKEN`) and optional host (`0SEC_CLOUD_HOST`). Written by `0 auth login`. |
+| `cloud.env` | Cloud auth token (`ZERO_CLOUD_TOKEN`) and optional host (`ZERO_CLOUD_HOST`). Written by `0 auth login`. |
 | `console-sessions/` | Transcript JSON files, one per session. Owner-only (`0600` file, `0700` dir). |
 | `feedback.md` | Locally staged feedback entries. |
 
@@ -414,8 +414,8 @@ display settings without launching the TUI.
 
 Settings are resolved per-key, highest-priority first:
 
-1. **Project** — `<cwd>/.0sec/tui-settings.json` overrides individual keys.
-2. **Global** — `~/.0sec/tui-settings.json` is the per-user base.
+1. **Project** — `<cwd>/.0/tui-settings.json` overrides individual keys.
+2. **Global** — `~/.0/tui-settings.json` is the per-user base.
 3. **Default** — built-in defaults shown below.
 
 Operator-global settings are exceptions: a project cannot override analytics,
@@ -459,8 +459,8 @@ changes are printed so you know what was rejected.
 | `allowSubagentPeerMessaging` | boolean | `true` | Allow direct sibling-subagent messages |
 | `allowSubagentOperatorMessaging` | boolean | `true` | Allow sanitized child-to-operator transcript messages |
 | `allowModelSelfExtension` | boolean | `true` | Enable sandboxed model self-extension for new sessions, subject to role and capability gates |
-| `allowDevSourceUpdates` | boolean | `false` | Globally authorize trusted development-engine replacement between turns; requires `0SEC_DEV_SOURCE_ROOT` |
-| `theme` | built-in or installed theme ID | `slate` | Colour palette; installed themes live in `~/.0sec/themes` |
+| `allowDevSourceUpdates` | boolean | `false` | Globally authorize trusted development-engine replacement between turns; requires `ZERO_DEV_SOURCE_ROOT` |
+| `theme` | built-in or installed theme ID | `slate` | Colour palette; installed themes live in `~/.0/themes` |
 | `showTokenUsage` | boolean | `true` | Per-turn input/output token line |
 | `showCost` | boolean | `true` | Estimated dollar cost, per turn and in the status bar |
 | `showContextMeter` | boolean | `true` | Context-usage bar; missing context-window data displays unavailable |
@@ -501,13 +501,13 @@ Start a new development console from the built checkout:
 ```
 
 The `0dev` launcher targets `https://dev.cloud.0.security` and sets
-`0SEC_DEV_SOURCE_ROOT` to its checkout. Cloud login, reads and logout use
-`~/.0sec/dev/cloud.env`; production `~/.0sec/cloud.env` and private CLI
+`ZERO_DEV_SOURCE_ROOT` to its checkout. Cloud login, reads and logout use
+`~/.0/dev/cloud.env`; production `~/.0/cloud.env` and private CLI
 `~/.0cloud/credentials.json` are not changed. Inherited Cloud tokens are ignored.
 HOME, BYOK credentials and other console settings remain unchanged.
 
 Normal `0` keeps its production default. `--host` takes precedence over
-`0SEC_CLOUD_HOST` for login. Restart existing sessions to use the new launcher;
+`ZERO_CLOUD_HOST` for login. Restart existing sessions to use the new launcher;
 they cannot acquire its source-update environment retroactively.
 
 When enabled, changed Core source is built into an immutable generation and
@@ -527,7 +527,7 @@ In the terminal UI, `/connect` offers **0cloud → Sign in**,
 Cloud uses browser authorization; ChatGPT Codex uses device sign-in and its
 own auth file. Local and direct-provider workflows need no Cloud account.
 
-Keys are stored in plaintext at `~/.0sec/credentials.json` by default, with
+Keys are stored in plaintext at `~/.0/credentials.json` by default, with
 `0600` file and `0700` directory permissions. Nonblank environment credentials win.
 See [credential storage](/api-keys/#console-credential-store).
 
@@ -545,19 +545,19 @@ after connecting a new provider, reselect its model to apply it live. See
 
 | Subcommand | Description |
 |------------|-------------|
-| `0 auth login` | Opens a browser at `<host>/cli-auth?session=…`, polls for a scoped token, and persists it to `~/.0sec/cloud.env`. |
+| `0 auth login` | Opens a browser at `<host>/cli-auth?session=…`, polls for a scoped token, and persists it to `~/.0/cloud.env`. |
 | `0 auth login --token <value>` | Manual credential path for self-hosted or recovery use. |
 | `0 auth login --host <url>` | Override the default cloud host (`https://cloud.0.security`). |
-| `0 auth logout` | Deletes `~/.0sec/cloud.env` and `~/.0cloud/credentials.json`. |
+| `0 auth logout` | Deletes `~/.0/cloud.env` and `~/.0cloud/credentials.json`. |
 | `0 auth status` | Loads credentials and checks the authenticated inference-account endpoint. Unsupported account data can still remain unavailable. |
 
 Credentials are resolved in this order (first match wins):
 
-1. **Environment variables** — `0SEC_CLOUD_TOKEN` (required) + `0SEC_CLOUD_HOST`
+1. **Environment variables** — `ZERO_CLOUD_TOKEN` (required) + `ZERO_CLOUD_HOST`
    (optional, defaults to `https://cloud.0.security`).
-2. **File** — `~/.0sec/cloud.env` (line-by-line `KEY=VALUE`). Keep the file
+2. **File** — `~/.0/cloud.env` (line-by-line `KEY=VALUE`). Keep the file
    `chmod 600`; the loader warns on other permissions but does not refuse it.
-   Contains `0SEC_CLOUD_TOKEN=…` and optionally `0SEC_CLOUD_HOST=…`.
+   Contains `ZERO_CLOUD_TOKEN=…` and optionally `ZERO_CLOUD_HOST=…`.
 
 The token is never printed. `0 auth status` echoes the host on success; on
 auth failure it surfaces the status code + path, never the token or Authorization
@@ -573,21 +573,21 @@ without configuring each supplier separately. Authentication, model listing
 and request admission are separate checks; none establishes managed execution.
 The CLI provides `0 login` (alias of `0 auth login`),
 `0 models [--json]` and `0 balance [--json]`, and defaults to
-`https://cloud.0.security`. Older releases use `https://cloud.0sec.ai`.
+`https://cloud.0.security`. Older releases use `https://cloud.0.ai`.
 Check `0 login --help` and use the operator-provided host for testing.
 
-An environment `0SEC_CLOUD_TOKEN` takes precedence over `cloud.env` and uses the
+An environment `ZERO_CLOUD_TOKEN` takes precedence over `cloud.env` and uses the
 environment host or default. Without that token, the saved token is used with
-the file's host, then `0SEC_CLOUD_HOST` if the file omits a host, then the default.
+the file's host, then `ZERO_CLOUD_HOST` if the file omits a host, then the default.
 
 | Setting or action | Behavior |
 | --- | --- |
 | `--runtime api` | Uses the HTTP runtime; `hosted` is a provider, not a new runtime name. |
-| `0SEC_SELECTED_PROVIDER=hosted` | Pins hosted inference instead of ambient BYOK credentials. |
-| `0SEC_MODEL` or `--model` | Must match an alias returned by `0 models`. The service catalog determines wire protocol and output ceiling. |
+| `ZERO_SELECTED_PROVIDER=hosted` | Pins hosted inference instead of ambient BYOK credentials. |
+| `ZERO_MODEL` or `--model` | Must match an alias returned by `0 models`. The service catalog determines wire protocol and output ceiling. |
 | No provider pin | Configured BYOK providers are considered before hosted credentials. Logging in doesn't replace them. |
 | No explicit hosted model | Selects the first service catalog entry. Pin an alias for a repeatable route. |
-| `0SEC_LLM_FALLBACK` | Explicit backup chain for eligible failures. No automatic hosted accounting escape or hidden gateway substitution. |
+| `ZERO_LLM_FALLBACK` | Explicit backup chain for eligible failures. No automatic hosted accounting escape or hidden gateway substitution. |
 | `0 auth status` | Checks authenticated account access, not model entitlement, schema compatibility, spend eligibility or paid-flow readiness. |
 | `0 auth logout` | Removes local credential files; it doesn't revoke an issued token or clear a token exported in the environment. |
 
@@ -609,25 +609,25 @@ incur charges. See [billing and errors](/api-keys/#charging-and-interrupted-requ
 
 ### Explicit provider pinning
 
-`0SEC_SELECTED_PROVIDER` selects the primary provider for a run or chat.
+`ZERO_SELECTED_PROVIDER` selects the primary provider for a run or chat.
 It accepts `openrouter`, `anthropic`, `openai`, `azure`, `deepseek`,
 `chatgpt-codex`, `z-ai`, `kimi`, `qwen`, `xai`, `opencode`, `copilot`,
-`google` and `hosted`. Set an explicit `0SEC_MODEL` alongside an environment
+`google` and `hosted`. Set an explicit `ZERO_MODEL` alongside an environment
 selection, except when hosted inference should choose from its service catalog.
 The provider must have its own credentials. A separately configured explicit
 model can use a different route, such as cross-model verification.
 
-`0SEC_FORCE_PROVIDER` is an unconditional benchmark override. Setting it and
-`0SEC_SELECTED_PROVIDER` to different values is an error.
+`ZERO_FORCE_PROVIDER` is an unconditional benchmark override. Setting it and
+`ZERO_SELECTED_PROVIDER` to different values is an error.
 
 ```bash
-env 0SEC_SELECTED_PROVIDER=deepseek 0SEC_MODEL=deepseek-flash \
+env ZERO_SELECTED_PROVIDER=deepseek ZERO_MODEL=deepseek-flash \
   0 scan --target https://example.com --scope ./scope.json --mode web --runtime api
 ```
 
 ### Per-model routing
 
-When no explicit pin is set, `--model <id>` (or `0SEC_MODEL`) routes the call to
+When no explicit pin is set, `--model <id>` (or `ZERO_MODEL`) routes the call to
 the provider whose credentials are available. The runtime maps model prefixes:
 
 | Model prefix / identifier | Provider |
@@ -664,8 +664,8 @@ models, then launch the console:
 
 ```bash
 export OPENROUTER_API_KEY="sk-or-..."
-env 0SEC_SELECTED_PROVIDER=openrouter \
-  0SEC_MODEL=anthropic/claude-sonnet-4.6 0 console
+env ZERO_SELECTED_PROVIDER=openrouter \
+  ZERO_MODEL=anthropic/claude-sonnet-4.6 0 console
 ```
 
 In `/model`:
@@ -698,7 +698,7 @@ cross-model refuter) use the per-model provider routing above instead.
 When no model is specified enough to route to one provider, the runtime checks env
 vars in this priority order:
 
-1. `0SEC_CHATGPT_ACCESS_TOKEN` / `0SEC_CHATGPT_OAUTH_REFRESH_TOKEN` → ChatGPT Codex
+1. `ZERO_CHATGPT_ACCESS_TOKEN` / `ZERO_CHATGPT_OAUTH_REFRESH_TOKEN` → ChatGPT Codex
 2. `DEEPSEEK_API_KEY` → DeepSeek
 3. `OPENROUTER_API_KEY` → OpenRouter
 4. `AZURE_OPENAI_API_KEY` → Azure OpenAI
@@ -708,19 +708,19 @@ vars in this priority order:
 8. `QWEN_API_KEY` → Alibaba Qwen
 9. `XAI_API_KEY` → xAI Grok
 10. `OPENCODE_API_KEY` → OpenCode Zen
-11. `0SEC_COPILOT_GITHUB_TOKEN` → GitHub Copilot
-12. `0SEC_GEMINI_ACCESS_TOKEN` / `0SEC_GEMINI_OAUTH_REFRESH_TOKEN` → Google Gemini Code Assist
+11. `ZERO_COPILOT_GITHUB_TOKEN` → GitHub Copilot
+12. `ZERO_GEMINI_ACCESS_TOKEN` / `ZERO_GEMINI_OAUTH_REFRESH_TOKEN` → Google Gemini Code Assist
 13. `ANTHROPIC_API_KEY` → Anthropic
 14. Configured Cloud credentials → hosted inference
 15. No usable credential → Anthropic (reports missing credentials at runtime)
 
 ### Provider failover
 
-`0SEC_LLM_FALLBACK` configures an ordered chain of backup providers when the
+`ZERO_LLM_FALLBACK` configures an ordered chain of backup providers when the
 primary exhausts its retry budget or hits a plan quota limit:
 
 ```bash
-env 0SEC_LLM_FALLBACK=deepseek:deepseek-flash,azure:gpt-5-deployment \
+env ZERO_LLM_FALLBACK=deepseek:deepseek-flash,azure:gpt-5-deployment \
   0 review ./authorized-repo --runtime api
 ```
 
@@ -751,7 +751,7 @@ permissions. Stored on local disk only.
 ## Static analyzer selection
 
 Source reviews and package source scans use Foxguard by default for pre-agent
-static leads. Set `0SEC_STATIC=semgrep` to route them through Semgrep instead;
+static leads. Set `ZERO_STATIC=semgrep` to route them through Semgrep instead;
 `--changed-only` narrowing works with either. Dependency advisory checks (`npm
 audit`, OSV, OCI inventory) run separately for package targets regardless.
 
@@ -766,14 +766,14 @@ Scans run from the requested source root, so an explicitly selected installed
 package is not skipped just because an ancestor directory is `node_modules`.
 Finding paths are resolved back to that source root.
 
-This pre-agent scan is separate from `0SEC_FEATURE_MULTIMODAL=1`, the opt-in
+This pre-agent scan is separate from `ZERO_FEATURE_MULTIMODAL=1`, the opt-in
 white-box cross-validation layer. Cross-validation and `kernel variant-hunt`
 require an installed Foxguard binary (`--foxguard` can override it for
 variant hunting). Static hits and scanner agreement remain leads, not proof
 of exploitability.
 
 ```bash
-env 0SEC_STATIC=semgrep 0 review ./repo --depth quick
+env ZERO_STATIC=semgrep 0 review ./repo --depth quick
 ```
 
 Semgrep is required only when explicitly selected. Legacy report fields named
@@ -903,7 +903,7 @@ pinned-image execution, timeout cleanup, scoped HTTP, and vulnerable/patched
 negative controls. To run the same checks against the default local Docker daemon:
 
 ```bash
-pnpm --filter @0sec/core... -r build
+pnpm --filter @0/core... -r build
 node scripts/smoke-docker-replay.mjs
 ```
 
@@ -914,28 +914,28 @@ its test containers, network, and temporary workspaces afterward.
 
 [Features](/features/) is the canonical flag inventory. Do not copy a flag
 from an archival experiment and assume the current engine reads it.
-`0SEC_FEATURE_TRIAGE_MEMORIES` and `0SEC_FEATURE_DEBATE` are not current
+`ZERO_FEATURE_TRIAGE_MEMORIES` and `ZERO_FEATURE_DEBATE` are not current
 standalone toggles.
 
-Use `env` for names beginning with `0SEC_`; POSIX shells cannot export names
+Use `env` for names beginning with `ZERO_`; POSIX shells cannot export names
 beginning with a digit. Enabling a capability does not supply its credentials,
 scope, toolchain, or other prerequisites.
 
 ### Opt-in Jev assistance
 
 Jev is a bounded advisory evaluator, not a chat-provider replacement. No feature
-is enabled merely by having a key. `0SEC_JEV_FEATURES` explicitly opts selected
+is enabled merely by having a key. `ZERO_JEV_FEATURES` explicitly opts selected
 workflows into sending evaluation state to the selected provider:
 `browser`, `memory`, `dedupe`, `redteam`, and `kernel` (comma-separated).
 Probabilities do not authorize actions, establish an exploit, or replace
 deterministic verification. Unknown feature/provider names are configuration
 errors.
 
-| `0SEC_JEV_PROVIDER` | Required credential / endpoint | Route |
+| `ZERO_JEV_PROVIDER` | Required credential / endpoint | Route |
 | --- | --- | --- |
 | `vercel` (default when enabled) | `AI_GATEWAY_API_KEY` | Vercel AI Gateway evaluation model `typesafe-ai/jev` |
 | `typesafe` | `TYPESAFE_API_KEY` | `https://api.typesafe.ai/v1/systemone`, model `jev-1.13.0` |
-| `cloud` | `0SEC_JEV_CLOUD_TOKEN` and `0SEC_JEV_CLOUD_URL` | Explicit evaluation endpoint; HTTPS except loopback HTTP |
+| `cloud` | `ZERO_JEV_CLOUD_TOKEN` and `ZERO_JEV_CLOUD_URL` | Explicit evaluation endpoint; HTTPS except loopback HTTP |
 | `classifier` | No key; **kernel only** | External `https://classifier.dev` fast-tier classification |
 
 The shared adapter accepts `kernel`/`classifier`, but that acceptance is not a
@@ -949,16 +949,16 @@ For example, opt only the browser helper into the direct Typesafe route:
 
 ```bash
 export TYPESAFE_API_KEY="..."
-env 0SEC_JEV_FEATURES=browser 0SEC_JEV_PROVIDER=typesafe \
-  0SEC_JEV_BROWSER_READ_ONLY_URLS=https://authorized.example/docs \
+env ZERO_JEV_FEATURES=browser ZERO_JEV_PROVIDER=typesafe \
+  ZERO_JEV_BROWSER_READ_ONLY_URLS=https://authorized.example/docs \
   0 console --scope ./scope.json
 ```
 
-`0SEC_JEV_BROWSER_READ_ONLY_URLS` is a comma-separated list of exact normalized
+`ZERO_JEV_BROWSER_READ_ONLY_URLS` is a comma-separated list of exact normalized
 URLs required for assisted navigation, in addition to explicit scope. Jev never
 replaces target authorization; absent scope or approved URLs makes assistance
 hand off without navigation. The classifier adapter is networked even though
-it needs no credential. A normal `0SEC_CLOUD_TOKEN` is not automatically used
+it needs no credential. A normal `ZERO_CLOUD_TOKEN` is not automatically used
 as the Jev token. See [Jev budgets](/budget-management/#jev-advisory-budgets)
 for per-instance request, timeout, classification and estimated-cost limits.
 
@@ -968,13 +968,13 @@ The runtime layers that keep a provider failure from silently corrupting a scan:
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `0SEC_LLM_STREAM_IDLE_TIMEOUT_MS` | `120000` | SSE byte-idle watchdog; aborts a stream that stops emitting bytes. |
-| `0SEC_LLM_STREAM_EVENT_IDLE_TIMEOUT_MS` | `240000` | SSE event-idle watchdog; keep-alive comments and whitespace alone do not reset it. |
-| `0SEC_LLM_MAX_RETRIES` | `6` | Max retries for retryable statuses (429 + transient 5xx), with exponential backoff. |
-| `0SEC_LLM_MAX_RETRY_WAIT_MS` | `60000` | Cumulative backoff cap (ms) for the generic retry loop. |
-| `0SEC_LLM_429_MAX_RETRIES` | `12` | Max retries for 429 rate-limits specifically. Falls back to `0SEC_LLM_MAX_RETRIES` when unset. |
-| `0SEC_LLM_429_MAX_RETRY_WAIT_MS` | `300000` | Cumulative 429 backoff cap (ms). Falls back to `0SEC_LLM_MAX_RETRY_WAIT_MS` when unset. Bound server-guided `Retry-After` waits. |
-| `0SEC_SUPPRESS_PROVIDER_STARTUP_LOG` | unset | Set to `1` to suppress the "Provider: …" startup banner line. |
+| `ZERO_LLM_STREAM_IDLE_TIMEOUT_MS` | `120000` | SSE byte-idle watchdog; aborts a stream that stops emitting bytes. |
+| `ZERO_LLM_STREAM_EVENT_IDLE_TIMEOUT_MS` | `240000` | SSE event-idle watchdog; keep-alive comments and whitespace alone do not reset it. |
+| `ZERO_LLM_MAX_RETRIES` | `6` | Max retries for retryable statuses (429 + transient 5xx), with exponential backoff. |
+| `ZERO_LLM_MAX_RETRY_WAIT_MS` | `60000` | Cumulative backoff cap (ms) for the generic retry loop. |
+| `ZERO_LLM_429_MAX_RETRIES` | `12` | Max retries for 429 rate-limits specifically. Falls back to `ZERO_LLM_MAX_RETRIES` when unset. |
+| `ZERO_LLM_429_MAX_RETRY_WAIT_MS` | `300000` | Cumulative 429 backoff cap (ms). Falls back to `ZERO_LLM_MAX_RETRY_WAIT_MS` when unset. Bound server-guided `Retry-After` waits. |
+| `ZERO_SUPPRESS_PROVIDER_STARTUP_LOG` | unset | Set to `1` to suppress the "Provider: …" startup banner line. |
 
 These watchdogs are separate from the request's overall timeout, which remains
 armed while streaming. `scan --timeout` defaults to `30000` ms;
@@ -1022,13 +1022,13 @@ evaluation; candidate execution does not bootstrap packages over the network.
 Set a soft estimated-model-cost stop per scan, audit, or review. On a ceiling
 breach, 0 preserves partial findings, exits with code `4`, and emits
 `exit_reason: "cost_ceiling_exceeded"` in the optional machine-readable result
-line. `--cost-ceiling` overrides `0SEC_COST_CEILING_USD`; neither supplied means
+line. `--cost-ceiling` overrides `ZERO_COST_CEILING_USD`; neither supplied means
 no dollar ceiling. In-flight/concurrent calls can overshoot. This is not an
 invoice cap, hosted-credit reservation, infrastructure budget, or guarantee that
 every external service is metered. See [Budget Management](/budget-management/).
 
 ```bash
-env 0SEC_COST_CEILING_USD=5 \
+env ZERO_COST_CEILING_USD=5 \
   0 scan --target https://example.com --scope ./scope.json --mode web
 
 0 audit lodash --cost-ceiling 2
@@ -1041,23 +1041,23 @@ Stream findings and the final report to an orchestration layer:
 
 ```bash
 env \
-  0SEC_CLOUD_SINK=https://api.example.com \
-  0SEC_CLOUD_SCAN_ID=scan_123 \
-  0SEC_CLOUD_TOKEN=secret-token \
+  ZERO_CLOUD_SINK=https://api.example.com \
+  ZERO_CLOUD_SCAN_ID=scan_123 \
+  ZERO_CLOUD_TOKEN=secret-token \
   0 scan --target https://example.com --scope ./scope.json --mode web
 ```
 
 0 then POSTs each finding as `{ "finding": ... }` and the final report as
 `{ "report": ..., "final": true }` to
-`${0SEC_CLOUD_SINK}/scans/${0SEC_CLOUD_SCAN_ID}/findings`. Set
-`0SEC_FEATURE_CLOUD_SINK=0` to disable even when the env vars are present.
+`${ZERO_CLOUD_SINK}/scans/${ZERO_CLOUD_SCAN_ID}/findings`. Set
+`ZERO_FEATURE_CLOUD_SINK=0` to disable even when the env vars are present.
 
-Optional: `0SEC_CLOUD_ORG_ID` sends the `X-0sec-Org-Id` header for
+Optional: `ZERO_CLOUD_ORG_ID` sends the `X-0sec-Org-Id` header for
 organization-scoped sinks.
 
 ## Machine-readable result line
 
-Set `0SEC_EMIT_RESULT_LINE=1` to print one final `0SEC_RESULT=...` JSON line with
+Set `ZERO_EMIT_RESULT_LINE=1` to print one final `ZERO_RESULT=...` JSON line with
 success/failure, exit code and reason, target type, finding counts, and estimated
 cost/token usage. Useful for wrappers, CI parsers, and the cloud path.
 
@@ -1067,16 +1067,16 @@ After enabling gates, inspect their execution records and evidence before accept
 
 ```bash
 env \
-  0SEC_FEATURE_CONSENSUS_VERIFY=1 \
-  0SEC_FEATURE_REACHABILITY_GATE=1 \
-  0SEC_FEATURE_POV_GATE=1 \
-  0SEC_FEATURE_MULTIMODAL=1 \
+  ZERO_FEATURE_CONSENSUS_VERIFY=1 \
+  ZERO_FEATURE_REACHABILITY_GATE=1 \
+  ZERO_FEATURE_POV_GATE=1 \
+  ZERO_FEATURE_MULTIMODAL=1 \
   0 scan --target https://example.com --scope ./scope.json --mode web --depth deep
 ```
 
 ## Example: web search
 
 ```bash
-env 0SEC_FEATURE_WEB_SEARCH=1 \
+env ZERO_FEATURE_WEB_SEARCH=1 \
   0 scan --target https://example.com --scope ./scope.json --mode web
 ```

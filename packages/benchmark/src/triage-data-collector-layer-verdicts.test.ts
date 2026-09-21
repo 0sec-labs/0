@@ -15,7 +15,7 @@ import { describe, expect, it } from "vitest";
 import { writeFileSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { LayerVerdict } from "@0sec/shared";
+import type { LayerVerdict } from "@0/shared"
 import {
   collectFromXbowResults,
   collectFromNpmBench,

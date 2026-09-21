@@ -1,11 +1,11 @@
-# @0sec/benchmark
+# @0/benchmark
 
 Benchmark runners for 0 across multiple security evaluation suites
 (XBOW, AutoPenBench, CyBench, HarmBench, NPM advisories).
 
 ## Canonical bench integrations
 
-`@0sec/core/bench` owns the only generic benchmark execution protocol:
+`@0/core/bench` owns the only generic benchmark execution protocol:
 manifest → provisioner → scan adapter → oracle → scorecard → tournament →
 sealed evidence. This package contributes XBOW and CyberGym integrations; it
 does not add another runner/scorecard format.
@@ -55,12 +55,12 @@ to consolidation, so use per-attempt receipts to compute total repeat spend.
 
 ## Windows research evidence ledger
 
-`pnpm --filter @0sec/benchmark windows-research` converts an input JSON or
+`pnpm --filter @0/benchmark windows-research` converts an input JSON or
 JSONL file of Windows research attempts into an append-only, hash-bound ledger
 and a summary with Wilson intervals:
 
 ```sh
-pnpm --filter @0sec/benchmark windows-research \
+pnpm --filter @0/benchmark windows-research \
   --input attempts.jsonl \
   --output results/windows-research-v1.jsonl \
   --summary results/windows-research-summary-v1.json
@@ -74,7 +74,7 @@ exact receipt hash, distinct retained dump bytes, a pre-run sealed label, and
 all execution safety gates. Raw commands, exploit material, secrets, and local
 paths are rejected or omitted.
 
-Live collection also requires `0SEC_WINDOWS_LABEL_SEAL_KEY` (at least 32
+Live collection also requires `ZERO_WINDOWS_LABEL_SEAL_KEY` (at least 32
 bytes). The collector verifies the HMAC seal over campaign, case, ground truth,
 label hash, and seal timestamp without persisting the key.
 
@@ -84,7 +84,7 @@ The Windows LPE benchmark uses a separate, strict corpus manifest so known
 regressions cannot be confused with novel bounty findings:
 
 ```sh
-pnpm --filter @0sec/benchmark windows-lpe-corpus \
+pnpm --filter @0/benchmark windows-lpe-corpus \
   --input fixtures/windows-lpe-corpus-contract-v1.json
 ```
 
@@ -272,7 +272,7 @@ Use `--benchmark-ref <branch|tag|sha>` to pin a specific ref.
 Run against upstream XBOW (note: several Docker builds are broken upstream):
 
 ```sh
-pnpm --filter @0sec/benchmark xbow \
+pnpm --filter @0/benchmark xbow \
   --benchmark-repo xbow-engineering/validation-benchmarks \
   --agentic --limit 10
 ```
@@ -281,7 +281,7 @@ Run against the community patched fork (historically used for build fixes;
 pin and check the revision, platform, and service readiness for your run):
 
 ```sh
-pnpm --filter @0sec/benchmark xbow \
+pnpm --filter @0/benchmark xbow \
   --benchmark-repo 0ca/xbow-validation-benchmarks-patched \
   --agentic
 ```
@@ -291,7 +291,7 @@ filepaths, and rewrites Dockerfiles — the substrate Shannon used for
 their 96.15% result):
 
 ```sh
-pnpm --filter @0sec/benchmark xbow \
+pnpm --filter @0/benchmark xbow \
   --benchmark-repo KeygraphHQ/xbow-validation-benchmarks \
   --agentic
 ```
@@ -299,7 +299,7 @@ pnpm --filter @0sec/benchmark xbow \
 Use a local checkout without cloning:
 
 ```sh
-pnpm --filter @0sec/benchmark xbow \
+pnpm --filter @0/benchmark xbow \
   --benchmark-path /path/to/my/xbow-fork \
   --agentic --limit 5
 ```
@@ -363,7 +363,7 @@ not $5 × eight × N. It is not a hard cap on the whole sweep.
 This preserves the historical eight-case selection; it is not today's unsolved set:
 
 ```sh
-pnpm --filter @0sec/benchmark xbow \
+pnpm --filter @0/benchmark xbow \
   --agentic \
   --only XBEN-010,XBEN-051,XBEN-061,XBEN-066,XBEN-080,XBEN-084,XBEN-099,XBEN-104 \
   --repeat 10 \
@@ -378,13 +378,13 @@ flags above.
 ### JIT skills A/B
 
 Issue [#410] adds a small wrapper for comparing the default agent against
-`0SEC_FEATURE_JIT_SKILLS=1` on the same XBOW target selection. The
+`ZERO_FEATURE_JIT_SKILLS=1` on the same XBOW target selection. The
 wrapper runs the baseline cell first, then the JIT-skills cell, and
 reports pass/flag deltas plus attack turns, token totals, and estimated cost.
 
 ```sh
-pnpm --filter @0sec/benchmark xbow:jit-skills-ab --limit 10
-pnpm --filter @0sec/benchmark xbow:jit-skills-ab \
+pnpm --filter @0/benchmark xbow:jit-skills-ab --limit 10
+pnpm --filter @0/benchmark xbow:jit-skills-ab \
   --only XBEN-010,XBEN-051,XBEN-061 --repeat 3 --json
 ```
 
@@ -483,7 +483,7 @@ stratified subset from the bench-side corpus (the mask_map / HF dataset
 metadata, which is NOT in-repo — the corpus is always passed as input):
 
 ```sh
-pnpm --filter @0sec/benchmark cybergym:stratify \
+pnpm --filter @0/benchmark cybergym:stratify \
   --corpus /root/cybergym/mask_map.json \
   --target 175 --seed 0xc6f1a5ed \
   --stratify-by project,crashType \
@@ -515,7 +515,7 @@ appending to the stale `cybergym-v1.jsonl`. Defaults to
 `results/cybergym-v1.jsonl` (unchanged for existing callers):
 
 ```sh
-pnpm --filter @0sec/benchmark cybergym \
+pnpm --filter @0/benchmark cybergym \
   --subset results/cybergym-fair-v1.subset.txt \
   --corpus-path results/cybergym-fair-v1.jsonl \
   --harness-dir /root/cybergym --json

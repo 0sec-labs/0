@@ -16,12 +16,12 @@ describe("feature presets — fp-moat membership", () => {
    */
   it("enables exactly the six opt-in FP-moat flags", () => {
     expect([...FEATURE_PRESETS["fp-moat"]].sort()).toEqual([
-      "0SEC_FEATURE_CONSENSUS_VERIFY",
-      "0SEC_FEATURE_MULTIMODAL",
-      "0SEC_FEATURE_POC_GEN_STATIC",
-      "0SEC_FEATURE_POV_GATE",
-      "0SEC_FEATURE_PUBLISHABILITY_GATE",
-      "0SEC_FEATURE_REACHABILITY_GATE",
+      "ZERO_FEATURE_CONSENSUS_VERIFY",
+      "ZERO_FEATURE_MULTIMODAL",
+      "ZERO_FEATURE_POC_GEN_STATIC",
+      "ZERO_FEATURE_POV_GATE",
+      "ZERO_FEATURE_PUBLISHABILITY_GATE",
+      "ZERO_FEATURE_REACHABILITY_GATE",
     ]);
   });
 
@@ -32,16 +32,16 @@ describe("feature presets — fp-moat membership", () => {
    */
   it("excludes the triage routers and inline validation", () => {
     const flags = FEATURE_PRESETS["fp-moat"];
-    expect(flags).not.toContain("0SEC_FEATURE_LEARNED_ROUTER");
-    expect(flags).not.toContain("0SEC_FEATURE_DYNAMIC_TRIAGE");
-    expect(flags).not.toContain("0SEC_FEATURE_INLINE_VALIDATION");
+    expect(flags).not.toContain("ZERO_FEATURE_LEARNED_ROUTER");
+    expect(flags).not.toContain("ZERO_FEATURE_DYNAMIC_TRIAGE");
+    expect(flags).not.toContain("ZERO_FEATURE_INLINE_VALIDATION");
   });
 
   /** The always-on filters already run; including them would overstate the preset. */
   it("excludes the always-on filters", () => {
     const flags = FEATURE_PRESETS["fp-moat"];
-    expect(flags).not.toContain("0SEC_FEATURE_HOLDING_IT_WRONG");
-    expect(flags).not.toContain("0SEC_FEATURE_EVIDENCE_GATE");
+    expect(flags).not.toContain("ZERO_FEATURE_HOLDING_IT_WRONG");
+    expect(flags).not.toContain("ZERO_FEATURE_EVIDENCE_GATE");
   });
 
   /**
@@ -77,14 +77,14 @@ describe("feature presets — application", () => {
    * impossible.
    */
   it("never overwrites an explicitly-set flag, including '0'", () => {
-    const env: NodeJS.ProcessEnv = { "0SEC_FEATURE_POV_GATE": "0" };
+    const env: NodeJS.ProcessEnv = { "ZERO_FEATURE_POV_GATE": "0" };
     const result = applyFeaturePreset("fp-moat", env);
 
-    expect(env["0SEC_FEATURE_POV_GATE"]).toBe("0");
-    expect(result.preserved).toEqual(["0SEC_FEATURE_POV_GATE"]);
-    expect(result.applied).not.toContain("0SEC_FEATURE_POV_GATE");
+    expect(env["ZERO_FEATURE_POV_GATE"]).toBe("0");
+    expect(result.preserved).toEqual(["ZERO_FEATURE_POV_GATE"]);
+    expect(result.applied).not.toContain("ZERO_FEATURE_POV_GATE");
     // Every other layer still came on.
-    expect(env["0SEC_FEATURE_REACHABILITY_GATE"]).toBe("1");
+    expect(env["ZERO_FEATURE_REACHABILITY_GATE"]).toBe("1");
     expect(result.applied).toHaveLength(5);
   });
 
@@ -100,8 +100,8 @@ describe("feature presets — application", () => {
   it("does not touch flags outside the preset", () => {
     const env: NodeJS.ProcessEnv = {};
     applyFeaturePreset("fp-moat", env);
-    expect(env["0SEC_FEATURE_WEB_SEARCH"]).toBeUndefined();
-    expect(env["0SEC_FEATURE_DYNAMIC_TRIAGE"]).toBeUndefined();
+    expect(env["ZERO_FEATURE_WEB_SEARCH"]).toBeUndefined();
+    expect(env["ZERO_FEATURE_DYNAMIC_TRIAGE"]).toBeUndefined();
   });
 });
 
@@ -118,7 +118,7 @@ describe("feature presets — token resolution", () => {
   });
 });
 
-describe("0SEC_FEATURE_PRESET is honoured by the feature flags themselves", () => {
+describe("ZERO_FEATURE_PRESET is honoured by the feature flags themselves", () => {
   const saved = { ...process.env };
   afterEach(() => {
     process.env = { ...saved };
@@ -133,7 +133,7 @@ describe("0SEC_FEATURE_PRESET is honoured by the feature flags themselves", () =
     expect(features.povGate).toBe(false);
     expect(features.reachabilityGate).toBe(false);
 
-    process.env["0SEC_FEATURE_PRESET"] = "fp-moat";
+    process.env["ZERO_FEATURE_PRESET"] = "fp-moat";
 
     expect(features.povGate).toBe(true);
     expect(features.reachabilityGate).toBe(true);
@@ -145,15 +145,15 @@ describe("0SEC_FEATURE_PRESET is honoured by the feature flags themselves", () =
 
   /** An explicit `0` beats the preset — this is the per-layer ablation path. */
   it("lets an explicit flag override the preset in both directions", () => {
-    process.env["0SEC_FEATURE_PRESET"] = "fp-moat";
-    process.env["0SEC_FEATURE_POV_GATE"] = "0";
+    process.env["ZERO_FEATURE_PRESET"] = "fp-moat";
+    process.env["ZERO_FEATURE_POV_GATE"] = "0";
 
     expect(features.povGate).toBe(false);
     expect(features.reachabilityGate).toBe(true);
   });
 
   it("leaves flags outside the preset at their own defaults", () => {
-    process.env["0SEC_FEATURE_PRESET"] = "fp-moat";
+    process.env["ZERO_FEATURE_PRESET"] = "fp-moat";
 
     // Routers are excluded so they cannot skip the layers being measured.
     expect(features.learnedRouter).toBe(false);
@@ -166,19 +166,19 @@ describe("0SEC_FEATURE_PRESET is honoured by the feature flags themselves", () =
   });
 
   it("ignores an unrecognized preset name rather than failing the scan", () => {
-    process.env["0SEC_FEATURE_PRESET"] = "not-a-preset";
+    process.env["ZERO_FEATURE_PRESET"] = "not-a-preset";
     expect(features.povGate).toBe(false);
     expect(features.holdingItWrong).toBe(true);
   });
 });
 
 describe("feature presets — env-driven application", () => {
-  it("applies the preset named by 0SEC_FEATURE_PRESET", () => {
-    const env: NodeJS.ProcessEnv = { "0SEC_FEATURE_PRESET": "fp-moat" };
+  it("applies the preset named by ZERO_FEATURE_PRESET", () => {
+    const env: NodeJS.ProcessEnv = { "ZERO_FEATURE_PRESET": "fp-moat" };
     const result = applyFeaturePresetFromEnv(env);
 
     expect(result?.preset).toBe("fp-moat");
-    expect(env["0SEC_FEATURE_POV_GATE"]).toBe("1");
+    expect(env["ZERO_FEATURE_POV_GATE"]).toBe("1");
   });
 
   /**
@@ -189,8 +189,8 @@ describe("feature presets — env-driven application", () => {
   it("ignores an unset or unrecognized preset name without throwing", () => {
     expect(applyFeaturePresetFromEnv({})).toBeUndefined();
 
-    const env: NodeJS.ProcessEnv = { "0SEC_FEATURE_PRESET": "not-a-preset" };
+    const env: NodeJS.ProcessEnv = { "ZERO_FEATURE_PRESET": "not-a-preset" };
     expect(applyFeaturePresetFromEnv(env)).toBeUndefined();
-    expect(env["0SEC_FEATURE_POV_GATE"]).toBeUndefined();
+    expect(env["ZERO_FEATURE_POV_GATE"]).toBeUndefined();
   });
 });

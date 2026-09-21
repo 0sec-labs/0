@@ -18,38 +18,36 @@ import {
   useRenderer,
   useTerminalDimensions,
 } from "@opentui/react";
-import { DEFAULT_AUTONOMY_MODE } from "@0sec/shared";
-import {
-  ScopePolicy,
-  CloudClient,
-  loadCloudCredentials,
-  createConsoleRuntime,
-  eventBus,
-  type ConsoleAutonomyMode,
-  type ConsoleScopeRequest,
-  type ConsoleScopeResolution,
-  claimDiagnostics,
-  type ConsoleLocalScopeRequest,
-  type ConsoleLocalScopeResolution,
-  type ScopedAuditEscalationRequest,
-  type ConsoleSession,
-  type RuntimeConfig,
-  type NativeMessage,
-  type OperatorQuestionRequest,
-  type OperatorQuestionAnswer,
-  type SubagentLifecyclePayload,
-  type SubagentMessagePayload,
-  type PeerMessagePayload,
-  type TodosEventPayload,
-  type SessionObjectivePayload,
-  type ToolCall,
-  type ToolRisk,
-  describeDestructiveCategory,
-  sendOperatorMessage,
-  renderInboundMessage,
-  type MessagingRuntime,
-  type McpHost,
-} from "@0sec/core";
+import { DEFAULT_AUTONOMY_MODE } from "@0/shared"
+import { ScopePolicy,
+CloudClient,
+loadCloudCredentials,
+createConsoleRuntime,
+eventBus,
+type ConsoleAutonomyMode,
+type ConsoleScopeRequest,
+type ConsoleScopeResolution,
+claimDiagnostics,
+type ConsoleLocalScopeRequest,
+type ConsoleLocalScopeResolution,
+type ScopedAuditEscalationRequest,
+type ConsoleSession,
+type RuntimeConfig,
+type NativeMessage,
+type OperatorQuestionRequest,
+type OperatorQuestionAnswer,
+type SubagentLifecyclePayload,
+type SubagentMessagePayload,
+type PeerMessagePayload,
+type TodosEventPayload,
+type SessionObjectivePayload,
+type ToolCall,
+type ToolRisk,
+describeDestructiveCategory,
+sendOperatorMessage,
+renderInboundMessage,
+type MessagingRuntime,
+type McpHost, } from "@0/core"
 import { decodePasteBytes, type ScrollBoxRenderable } from "@opentui/core";
 import {
   useSettings,
@@ -58,7 +56,7 @@ import {
   reloadSettings,
 } from "./settings-store.js";
 import { useTheme, type Theme } from "./theme-context.js";
-import { createTranscriptDocument, modelProvider } from "@0sec/shared";
+import { createTranscriptDocument, modelProvider } from "@0/shared"
 import { homedir } from "node:os";
 import { existsSync } from "node:fs";
 import {
@@ -149,10 +147,11 @@ import {
   connectionRecoveryForError,
   type ConnectionRecovery,
 } from "./connection-recovery.js";
-import { VERSION } from "@0sec/shared";
+import { VERSION } from "@0/shared"
 import {
   type TuiSettings,
 } from "./settings.js";
+import { buildConsoleJevConfig } from "./jev-helper.js";
 import {
   pushHistory,
   recallNext,
@@ -649,7 +648,7 @@ export interface ChatScreenOptions {
    * (network-gated, `mcp__`-fenced as untrusted). The CLI connects it before
    * launching the TUI and threads it down here, so the session build stays
    * synchronous — no async connect inside React. The session closes the host on
-   * cleanup. Absent when no `0SEC_MCP` servers are configured.
+   * cleanup. Absent when no `ZERO_MCP` servers are configured.
    */
   mcpHost?: McpHost;
 }
@@ -1798,6 +1797,19 @@ export function ChatScreen({
       // Capture the operator's current mode when a session is first constructed.
       autonomyMode: modeRef.current,
       initialMessages: opts.initialMessages,
+      // Jev evaluator config from operator settings and stored credentials.
+      // Built here (not hoisted to a React effect) so every session
+      // construction reflects the latest operator choices.
+      jev: buildConsoleJevConfig({
+        jevFunding: settingsRef.current.jevFunding,
+        jevBrowser: settingsRef.current.jevBrowser,
+        jevKernel: settingsRef.current.jevKernel,
+        jevCrash: settingsRef.current.jevCrash,
+        jevRadar: settingsRef.current.jevRadar,
+        jevFoxguard: settingsRef.current.jevFoxguard,
+        jevMaxRequests: settingsRef.current.jevMaxRequests,
+        jevMaxCostUsd: settingsRef.current.jevMaxCostUsd,
+      }),
       // The parent messaging runtime. WITHOUT this, no subagent gets the
       // send_message/check_messages tools and the model correctly reports it
       // cannot coordinate — which is exactly what an operator was seeing.
@@ -3731,6 +3743,17 @@ export function ChatScreen({
           setScopeRules(session.scope?.raw.in_scope ?? []);
           appendEntry({ kind: "notice", text: notice, turn: currentTurn });
         },
+        onJevActivity: (activity) => {
+          appendEntry({
+            kind: "notice",
+            text: activity.status === "started"
+              ? `Jev/${activity.feature} evaluating${activity.model ? ` (${activity.model})` : ""}`
+              : activity.status === "completed"
+                ? `Jev/${activity.feature} ✓${activity.durationMs ? ` ${activity.durationMs}ms` : ""}${activity.estimatedCostUsd ? ` · ~$${activity.estimatedCostUsd.toFixed(6)}` : ""}${activity.billing?.chargedUsd ? ` · settled $${activity.billing.chargedUsd.toFixed(4)}` : ""}`
+                : `Jev/${activity.feature} unavailable${activity.message ? ` — ${activity.message}` : ""}`,
+            turn: currentTurn,
+          });
+        },
 
       }, { signal: controller.signal });
       onAuditActivity({
@@ -5184,10 +5207,10 @@ export function ChatScreen({
   headerSegments.push(sessionState);
   // Version rides at the far left of the top bar, like the startup masthead,
   // carrying the build-channel badge right beside it: [dev] when launched from
-  // a dev source checkout (the `0dev` wrapper exports 0SEC_DEV_SOURCE_ROOT),
+  // a dev source checkout (the `0dev` wrapper exports ZERO_DEV_SOURCE_ROOT),
   // else [beta] for a published build. fitTuiText truncates the MIDDLE here, so
   // this leading segment survives even on a narrow bar.
-  const channelBadge = process.env["0SEC_DEV_SOURCE_ROOT"]?.trim() ? "[dev]" : "[beta]";
+  const channelBadge = process.env["ZERO_DEV_SOURCE_ROOT"]?.trim() ? "[dev]" : "[beta]";
   const headerEngagement = [`v${VERSION} ${channelBadge}`, ...headerSegments].join(" · ");
 
 

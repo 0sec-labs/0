@@ -7,8 +7,8 @@ import { join } from "node:path";
 const runJsReconMock = vi.fn();
 const fetchScopedMock = vi.fn();
 
-vi.mock("@0sec/core", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@0sec/core")>();
+vi.mock("@0/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@0/core")>();
   return {
     ...actual,
     runJsRecon: runJsReconMock,

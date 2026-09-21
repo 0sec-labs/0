@@ -1,5 +1,5 @@
-import type { Finding, Severity } from "@0sec/shared";
-import { SEVERITY_RANK } from "@0sec/shared";
+import type { Finding, Severity } from "@0/shared"
+import { SEVERITY_RANK } from "@0/shared"
 
 // Ascending severity order (info … critical), derived from the shared
 // SEVERITY_RANK so this file no longer carries its own copy (#629).

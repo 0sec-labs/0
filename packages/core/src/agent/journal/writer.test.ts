@@ -605,9 +605,9 @@ describe("atomicAppendJsonLine (O_APPEND fast path) — #415", () => {
         const child = fork(childScript, {
           env: {
             ...process.env,
-            "0SEC_TEST_RUN_DIR": runDir,
-            "0SEC_TEST_WRITER_ID": writerId,
-            "0SEC_TEST_ITERATIONS": "100",
+            "ZERO_TEST_RUN_DIR": runDir,
+            "ZERO_TEST_WRITER_ID": writerId,
+            "ZERO_TEST_ITERATIONS": "100",
           },
           stdio: ["ignore", "ignore", "pipe", "ipc"],
         });
@@ -657,7 +657,7 @@ describe("atomicAppendJsonLine (O_APPEND fast path) — #415", () => {
         options && typeof options === "object" && "code" in options
           ? (options as { code?: string }).code
           : undefined;
-      if (code === "0SEC_JOURNAL_LINE_TOO_LARGE") {
+      if (code === "ZERO_JOURNAL_LINE_TOO_LARGE") {
         warnings.push(typeof warning === "string" ? warning : warning.message);
         return;
       }
@@ -696,7 +696,7 @@ describe("atomicAppendJsonLine (O_APPEND fast path) — #415", () => {
         options && typeof options === "object" && "code" in options
           ? (options as { code?: string }).code
           : undefined;
-      if (code === "0SEC_JOURNAL_LINE_TOO_LARGE") {
+      if (code === "ZERO_JOURNAL_LINE_TOO_LARGE") {
         warnings.push(typeof warning === "string" ? warning : warning.message);
         return;
       }

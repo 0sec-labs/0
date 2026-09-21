@@ -32,7 +32,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { verifyRootProof, type RootProofChallenge, type RootProofVerdict } from "@0sec/core";
+import { verifyRootProof, type RootProofChallenge, type RootProofVerdict } from "@0/core"
 
 export type Exec = (cmd: string) => string | Promise<string>;
 
@@ -238,7 +238,7 @@ export function removeEgressFirewall(containerId: string, ip?: string): void {
  * This used to be `grep -E 'uid=0\(root\)'` over that file — a bare string test
  * over a file the agent writes, so `echo 'uid=0(root)' > root_proof.txt` passed,
  * and so did a loadable kernel module printing it from ring 0. It is now the
- * shared nonce-bound gate (`@0sec/core.verifyRootProof`): this run's
+ * shared nonce-bound gate (`@0/core.verifyRootProof`): this run's
  * `0SEC-CANARY:<nonce>:ROOT` marker, a real uid=0 witness, an ordered
  * `DROP:uid=<N≠0>` before it, and no out-of-band kernel module load in anything
  * the agent authored. Read that function's doc comment for what the scheme does

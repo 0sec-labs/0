@@ -1,7 +1,5 @@
-import type {
-  PresentationTranscriptDocument,
-  PresentationTranscriptEntry,
-} from "@0sec/shared";
+import type { PresentationTranscriptDocument,
+PresentationTranscriptEntry, } from "@0/shared"
 import {
   renderMarkdown,
   spansToText,

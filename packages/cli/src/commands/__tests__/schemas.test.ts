@@ -11,13 +11,11 @@
 
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import {
-  findingSchema,
-  pocStepArraySchema,
-  pocStepSchema,
-  reportSummarySchema,
-  formatZodError,
-} from "@0sec/shared";
+import { findingSchema,
+pocStepArraySchema,
+pocStepSchema,
+reportSummarySchema,
+formatZodError, } from "@0/shared"
 
 function validFinding(): Record<string, unknown> {
   return {

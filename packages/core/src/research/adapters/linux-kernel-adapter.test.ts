@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, 
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { researchZeroCapProven, type Finding } from "@0sec/shared";
+import { researchZeroCapProven, type Finding } from "@0/shared"
 import { runResearch } from "../research-runner.js";
 import { LinuxKernelResearchAdapter, type LinuxKernelTarget } from "./linux-kernel-adapter.js";
 

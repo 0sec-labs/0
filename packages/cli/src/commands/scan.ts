@@ -2,11 +2,11 @@ import { readFileSync, existsSync } from "node:fs";
 import type { Command } from "commander";
 import chalk from "chalk";
 import { z } from "zod";
-import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig } from "@0sec/shared";
-import { networkScopeRequiredRefusal, targetRequiresScope } from "@0sec/core";
+import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig } from "@0/shared"
+import { networkScopeRequiredRefusal, targetRequiresScope } from "@0/core"
 import { renderReplay } from "../formatters/replay.js";
 import { runUnified } from "./run.js";
-import { reportSummarySchema, formatZodError } from "@0sec/shared";
+import { reportSummarySchema, formatZodError } from "@0/shared"
 
 /**
  * Parse the --auth flag value into an AuthConfig object.
@@ -87,7 +87,7 @@ function parseIntEnv(name: string, raw: string | undefined, def: number): number
  * Defaults: allowed hosts → [base host]; allowed paths → [] (allow all);
  * rate limit → 5 rps; kill switch → 1800s. Throws on malformed input.
  *
- * `target` is the resolved --target value; 0SEC_TARGET_BASE_URL takes
+ * `target` is the resolved --target value; ZERO_TARGET_BASE_URL takes
  * precedence as the base when both are set (the worker always sets it), but
  * either way the base host is the default sole allowed host.
  */
@@ -95,29 +95,29 @@ function parseHttpAuditEnv(
   target: string,
   env: NodeJS.ProcessEnv,
 ): { allowedHosts: string[]; allowedPaths: string[]; rateLimitRps: number; killAfterSec: number } {
-  const baseUrl = env["0SEC_TARGET_BASE_URL"]?.trim() || target;
+  const baseUrl = env["ZERO_TARGET_BASE_URL"]?.trim() || target;
   let baseHost: string;
   try {
     baseHost = new URL(baseUrl).hostname;
   } catch {
     throw new Error(
-      `http_audit: could not derive base host from '${baseUrl}'. Set 0SEC_TARGET_BASE_URL to an absolute http(s) URL.`,
+      `http_audit: could not derive base host from '${baseUrl}'. Set ZERO_TARGET_BASE_URL to an absolute http(s) URL.`,
     );
   }
   const allowedHosts = parseStringArrayEnv(
-    "0SEC_TARGET_ALLOWED_HOSTS",
-    env["0SEC_TARGET_ALLOWED_HOSTS"],
+    "ZERO_TARGET_ALLOWED_HOSTS",
+    env["ZERO_TARGET_ALLOWED_HOSTS"],
   );
   const allowedPaths = parseStringArrayEnv(
-    "0SEC_TARGET_ALLOWED_PATHS",
-    env["0SEC_TARGET_ALLOWED_PATHS"],
+    "ZERO_TARGET_ALLOWED_PATHS",
+    env["ZERO_TARGET_ALLOWED_PATHS"],
   );
   return {
     // Empty allowed-hosts list defaults to the base host only.
     allowedHosts: allowedHosts.length > 0 ? allowedHosts : [baseHost],
     allowedPaths,
-    rateLimitRps: parseIntEnv("0SEC_TARGET_RATE_LIMIT_RPS", env["0SEC_TARGET_RATE_LIMIT_RPS"], 5),
-    killAfterSec: parseIntEnv("0SEC_TARGET_KILL_AFTER_SEC", env["0SEC_TARGET_KILL_AFTER_SEC"], 1800),
+    rateLimitRps: parseIntEnv("ZERO_TARGET_RATE_LIMIT_RPS", env["ZERO_TARGET_RATE_LIMIT_RPS"], 5),
+    killAfterSec: parseIntEnv("ZERO_TARGET_KILL_AFTER_SEC", env["ZERO_TARGET_KILL_AFTER_SEC"], 1800),
   };
 }
 
@@ -138,9 +138,9 @@ function validateEmitTarget(value: string | undefined): "pr" | undefined {
  * `--features` tokens that name a PRESET rather than a single flag.
  *
  * Kept as a literal here on purpose: this handler must not import
- * `@0sec/core` just to recognise a token, since core is loaded lazily so
+ * `@0/core` just to recognise a token, since core is loaded lazily so
  * `--help` stays fast. The authoritative expansion still lives in core — this
- * set only decides *which* tokens get forwarded as `0SEC_FEATURE_PRESET`.
+ * set only decides *which* tokens get forwarded as `ZERO_FEATURE_PRESET`.
  *
  * `feature-preset-tokens.test.ts` asserts every entry here resolves to a real
  * preset in core, so the two cannot drift apart silently.
@@ -160,7 +160,7 @@ export function registerScanCommand(program: Command): void {
     .option("--depth <depth>", "Scan depth: quick, default, deep", "default")
     .option("--format <format>", "Output format: terminal, json, md, html, sarif, pdf", "terminal")
     .option("--runtime <runtime>", "Runtime: auto (default), api, claude, codex, gemini", "auto")
-    .option("--mode <mode>", "Scan mode: probe, deep, mcp, web, http_audit. `http_audit` is the worker-driven authed HTTP scan: it reads target config from 0SEC_TARGET_* env vars (0SEC_TARGET_BASE_URL, 0SEC_TARGET_AUTH_JSON, 0SEC_TARGET_ALLOWED_HOSTS, 0SEC_TARGET_ALLOWED_PATHS, 0SEC_TARGET_RATE_LIMIT_RPS, 0SEC_TARGET_KILL_AFTER_SEC), builds an in-memory ScopePolicy + path allowlist + per-host RateLimiter + wall-clock kill switch, runs the web-pentest loop, and emits an enforcement_summary block in the report JSON.")
+    .option("--mode <mode>", "Scan mode: probe, deep, mcp, web, http_audit. `http_audit` is the worker-driven authed HTTP scan: it reads target config from ZERO_TARGET_* env vars (ZERO_TARGET_BASE_URL, ZERO_TARGET_AUTH_JSON, ZERO_TARGET_ALLOWED_HOSTS, ZERO_TARGET_ALLOWED_PATHS, ZERO_TARGET_RATE_LIMIT_RPS, ZERO_TARGET_KILL_AFTER_SEC), builds an in-memory ScopePolicy + path allowlist + per-host RateLimiter + wall-clock kill switch, runs the web-pentest loop, and emits an enforcement_summary block in the report JSON.")
     .option("--timeout <ms>", "Request timeout in milliseconds", "30000")
     .option("--db-path <path>", "Path to SQLite database")
     .option("--api-key <key>", "API key for LLM provider")
@@ -169,37 +169,37 @@ export function registerScanCommand(program: Command): void {
     .option("--auth <json>", "Auth credentials as JSON string or path to JSON file (types: bearer, cookie, basic, header)")
     .option("--scope <path>", "Path to a JSON scope file ({in_scope, out_of_scope} arrays of host / *.domain / cidr rules). Out-of-scope URLs return as ToolResult.error at every fetch site. See 0sec#215.")
     .option("--allow-scanners", "Disable the generic-scanner suppression gate (0sec#217). When --scope is set, the agent refuses to spawn sqlmap/wpscan/nikto/gobuster/dirb/wfuzz/ffuf/`nmap -sV`/`nmap -A` by default; pass this flag only when the engagement explicitly permits generic-scanner traffic.", false)
-    .option("--require-scope", "Refuse to start unless an engagement scope is configured (0sec#133). The bash egress guards (out-of-scope URL refusal, http_audit path allowlist, generic-scanner suppression, auth-header injection) only run when a ScopePolicy is set; without this flag a scan with no --scope warns loudly and records a `scope_guards_inert` event but still runs. Equivalent to 0SEC_REQUIRE_SCOPE=1.", false)
+    .option("--require-scope", "Refuse to start unless an engagement scope is configured (0sec#133). The bash egress guards (out-of-scope URL refusal, http_audit path allowlist, generic-scanner suppression, auth-header injection) only run when a ScopePolicy is set; without this flag a scan with no --scope warns loudly and records a `scope_guards_inert` event but still runs. Equivalent to ZERO_REQUIRE_SCOPE=1.", false)
     .option(
       "--attribution-header <name=value>",
-      "Attribution header to attach to in-scope outbound requests (0sec#216). Repeatable: pass `--attribution-header X-A=1 --attribution-header X-B=2`. Lower precedence than the scope file's `attribution.headers` block and 0SEC_ATTRIBUTION_HEADERS env var. NEVER attached to out-of-scope traffic.",
+      "Attribution header to attach to in-scope outbound requests (0sec#216). Repeatable: pass `--attribution-header X-A=1 --attribution-header X-B=2`. Lower precedence than the scope file's `attribution.headers` block and ZERO_ATTRIBUTION_HEADERS env var. NEVER attached to out-of-scope traffic.",
       (value: string, prev: string[] = []) => [...prev, value],
     )
     .option(
       "--attribution-ua <token>",
-      "Engagement token to embed in the User-Agent on in-scope traffic (0sec#216). Resulting UA: `0sec/<ver> (engagement: <token>)`. Lower precedence than the scope file's `attribution.user_agent_token` and 0SEC_ATTRIBUTION_UA_TOKEN env var.",
+      "Engagement token to embed in the User-Agent on in-scope traffic (0sec#216). Resulting UA: `0sec/<ver> (engagement: <token>)`. Lower precedence than the scope file's `attribution.user_agent_token` and ZERO_ATTRIBUTION_UA_TOKEN env var.",
     )
     .option("--api-spec <path>", "Path to OpenAPI 3.x / Swagger 2.0 spec file (JSON or YAML) for pre-loaded endpoint knowledge")
     .option("--export <target>", "Export findings to issue tracker (e.g. github:owner/repo)")
     .option("--race", "Enable benchmark/CTF best-of-N strategy racing: run multiple flag-oriented attack strategies in parallel. Do not use for normal live-target audits.", false)
     .option("--egats", "Enable EGATS (Evidence-Gated Attack Tree Search): beam-search over a hypothesis tree", false)
-    .option("--cost-ceiling <usd>", "Hard per-scan USD cost ceiling. Aborts cleanly with partial findings if exceeded. Overrides 0SEC_COST_CEILING_USD.")
+    .option("--cost-ceiling <usd>", "Hard per-scan USD cost ceiling. Aborts cleanly with partial findings if exceeded. Overrides ZERO_COST_CEILING_USD.")
     .option(
       "--rate-limit <spec>",
       "Per-host requests-per-second cap for outbound scan traffic. Plain number (e.g. '5') sets the default rps; comma-separated form 'api.example.com=5,*.example.com=3:6,2' allows per-host overrides and a fallback default. Default is 5 rps when unset. Each host carries an independent token bucket; 429 responses honour Retry-After (with a conservative 60s floor).",
     )
     .option(
       "--engagement-profile <name>",
-      "Engagement hardening posture for authorized enterprise work. 'standard' (default) is the existing behaviour. 'conservative' applies ONE quiet posture: no password-reset burst probe, the deterministic web-recon pre-pass routed through the per-host rate limiter, no adaptive WAF-evasion ladder, full jitter on the token bucket, and a reduced default of 1 rps/host. The applied posture is recorded in the report as `engagementPosture` so it can be handed to the client as evidence. Lower precedence than the scope file's `engagement` block and 0SEC_ENGAGEMENT_PROFILE.",
+      "Engagement hardening posture for authorized enterprise work. 'standard' (default) is the existing behaviour. 'conservative' applies ONE quiet posture: no password-reset burst probe, the deterministic web-recon pre-pass routed through the per-host rate limiter, no adaptive WAF-evasion ladder, full jitter on the token bucket, and a reduced default of 1 rps/host. The applied posture is recorded in the report as `engagementPosture` so it can be handed to the client as evidence. Lower precedence than the scope file's `engagement` block and ZERO_ENGAGEMENT_PROFILE.",
     )
     .option(
       "--no-waf-evasion",
-      "Disable the adaptive WAF-evasion ladder (default: on). When a response classifies as blocked, the engine normally retries with encoding/casing/whitespace-mutated payload variants, which escalates a routine WAF block into a SOC incident. Detection and reporting of the block are unaffected. Independent of --engagement-profile; env form: 0SEC_WAF_EVASION=0.",
+      "Disable the adaptive WAF-evasion ladder (default: on). When a response classifies as blocked, the engine normally retries with encoding/casing/whitespace-mutated payload variants, which escalates a routine WAF block into a SOC incident. Detection and reporting of the block are unaffected. Independent of --engagement-profile; env form: ZERO_WAF_EVASION=0.",
     )
     .option("--tui", "Open the local terminal UI after the scan completes", false)
     .option(
       "--features <list>",
-      "Comma-separated list of opt-in feature flags to enable for this scan (e.g. 'wp_fingerprint,web_search'). Each flag maps to the corresponding 0SEC_FEATURE_<NAME> environment variable. The token 'fp-moat' is a preset that enables the full false-positive moat (reachability, multi-modal, publishability, pov-gate, poc-gen, consensus) for an A/B run; an env var you set yourself always wins over the preset, so '0SEC_FEATURE_POV_GATE=0 --features fp-moat' is a single-layer ablation.",
+      "Comma-separated list of opt-in feature flags to enable for this scan (e.g. 'wp_fingerprint,web_search'). Each flag maps to the corresponding ZERO_FEATURE_<NAME> environment variable. The token 'fp-moat' is a preset that enables the full false-positive moat (reachability, multi-modal, publishability, pov-gate, poc-gen, consensus) for an A/B run; an env var you set yourself always wins over the preset, so 'ZERO_FEATURE_POV_GATE=0 --features fp-moat' is a single-layer ablation.",
     )
     .option(
       "--no-decoy-detection",
@@ -207,7 +207,7 @@ export function registerScanCommand(program: Command): void {
     )
     .option(
       "--dispatch <mode>",
-      "Tool-call protocol for the legacy text agent loop (0sec#232): 'json' (default TOOL_CALL JSON lines), 'xml' (<command>/<flag>/<finding>/<note> tags — survives malformed JSON from cheap OpenRouter / Gemini / DeepSeek models), or 'auto' (xml for cheap providers, json otherwise). No effect on the native API loop. Env override: 0SEC_DISPATCH=xml.",
+      "Tool-call protocol for the legacy text agent loop (0sec#232): 'json' (default TOOL_CALL JSON lines), 'xml' (<command>/<flag>/<finding>/<note> tags — survives malformed JSON from cheap OpenRouter / Gemini / DeepSeek models), or 'auto' (xml for cheap providers, json otherwise). No effect on the native API loop. Env override: ZERO_DISPATCH=xml.",
       "auto",
     )
     .option(
@@ -225,7 +225,7 @@ export function registerScanCommand(program: Command): void {
       // ── Replay last scan (--replay flag) ──
       if (opts.replay) {
         try {
-          const { osecDB } = await import("@0sec/db");
+          const { osecDB } = await import("@0/db");
           const db = new osecDB(opts.dbPath);
           const scans = db.listScans(1);
           if (scans.length === 0) {
@@ -315,24 +315,24 @@ export function registerScanCommand(program: Command): void {
         process.exit(2);
       }
 
-      // ── Parse --features flag: map each token to 0SEC_FEATURE_<UPPER>=1 ──
+      // ── Parse --features flag: map each token to ZERO_FEATURE_<UPPER>=1 ──
       // The core `features` object for most flags is captured at import time,
-      // so in general you should prefer setting 0SEC_FEATURE_* env vars in
+      // so in general you should prefer setting ZERO_FEATURE_* env vars in
       // your shell. Flags that are declared as getters (e.g. wp_fingerprint)
       // re-read the env at access time and therefore honor this flag even
       // though it's applied inside the action handler.
       //
       // A token that names a PRESET (e.g. `fp-moat`) expands to that preset's
       // whole flag set instead of becoming a single env var. Without this, the
-      // token would silently set the meaningless `0SEC_FEATURE_FP_MOAT` and
+      // token would silently set the meaningless `ZERO_FEATURE_FP_MOAT` and
       // enable nothing — a failure mode that looks like success, which is the
       // worst possible one for a flag whose entire purpose is enabling an A/B.
       //
-      // A preset token sets `0SEC_FEATURE_PRESET` instead of a single flag.
+      // A preset token sets `ZERO_FEATURE_PRESET` instead of a single flag.
       // The expansion itself lives in core (`agent/features.ts` consults the
       // preset when a flag's own var is unset), so every entry point honours
       // it — this handler only has to forward the name. Without this branch
-      // the token would set the meaningless `0SEC_FEATURE_FP_MOAT` and
+      // the token would set the meaningless `ZERO_FEATURE_FP_MOAT` and
       // enable nothing: a failure that looks like success, which is the worst
       // outcome for a flag whose only purpose is enabling an A/B.
       if (opts.features) {
@@ -342,10 +342,10 @@ export function registerScanCommand(program: Command): void {
           .filter(Boolean);
         for (const token of tokens) {
           if (PRESET_TOKENS.has(token.toLowerCase())) {
-            process.env["0SEC_FEATURE_PRESET"] = token.toLowerCase();
+            process.env["ZERO_FEATURE_PRESET"] = token.toLowerCase();
             continue;
           }
-          const envName = `0SEC_FEATURE_${token.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
+          const envName = `ZERO_FEATURE_${token.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
           process.env[envName] = "1";
         }
       }
@@ -355,16 +355,16 @@ export function registerScanCommand(program: Command): void {
       // env var inside the action handler is still honored at tool-dispatch
       // time. See GitHub issue #82.
       if (opts.decoyDetection === false) {
-        process.env["0SEC_FEATURE_DECOY_DETECTION"] = "0";
+        process.env["ZERO_FEATURE_DECOY_DETECTION"] = "0";
       }
 
       // --require-scope → fail closed when no engagement scope is configured
       // (0sec#133). Same env-var mechanism as above: the core reads
-      // 0SEC_REQUIRE_SCOPE at scan boot and at the bash tool, which is also
+      // ZERO_REQUIRE_SCOPE at scan boot and at the bash tool, which is also
       // how the cloud worker (which builds argv from a fixed table) can turn
       // strictness on without an engine release.
       if (opts.requireScope) {
-        process.env["0SEC_REQUIRE_SCOPE"] = "1";
+        process.env["ZERO_REQUIRE_SCOPE"] = "1";
       }
 
       // Parse --auth flag if provided
@@ -380,7 +380,7 @@ export function registerScanCommand(program: Command): void {
 
       // ── http_audit env bridge (FROZEN CONTRACT) ──
       // In `--mode http_audit` the worker drives the scan entirely through
-      // 0SEC_TARGET_* env vars. We parse them here (fail-fast on malformed
+      // ZERO_TARGET_* env vars. We parse them here (fail-fast on malformed
       // JSON, same rationale as --scope/--auth pre-flight) and thread the
       // results through RunOptions → ScanConfig, where the core builds the
       // in-memory ScopePolicy + path allowlist + RateLimiter + kill switch.
@@ -397,16 +397,16 @@ export function registerScanCommand(program: Command): void {
           console.error(chalk.red(err instanceof Error ? err.message : String(err)));
           process.exit(2);
         }
-        // 0SEC_TARGET_AUTH_JSON (if set) wins over any --auth flag in
+        // ZERO_TARGET_AUTH_JSON (if set) wins over any --auth flag in
         // http_audit mode — the worker contract is env-driven.
-        const authJson = process.env["0SEC_TARGET_AUTH_JSON"]?.trim();
+        const authJson = process.env["ZERO_TARGET_AUTH_JSON"]?.trim();
         if (authJson) {
           try {
             authConfig = parseAuthFlag(authJson);
           } catch (err) {
             console.error(
               chalk.red(
-                `0SEC_TARGET_AUTH_JSON: ${err instanceof Error ? err.message : String(err)}`,
+                `ZERO_TARGET_AUTH_JSON: ${err instanceof Error ? err.message : String(err)}`,
               ),
             );
             process.exit(2);
@@ -430,7 +430,7 @@ export function registerScanCommand(program: Command): void {
         // gives the operator a clear error before the LLM/runtime cost
         // of starting a scan is incurred.
         try {
-          const { loadScope } = await import("@0sec/core");
+          const { loadScope } = await import("@0/core");
           const policy = loadScope(scopeFile);
           const verdict = policy.match(String(opts.target));
           if (!verdict.allowed) {
@@ -455,7 +455,7 @@ export function registerScanCommand(program: Command): void {
       }
 
       // Pre-validate attribution config (0sec#216). Same rationale as
-      // the --scope pre-flight: a malformed 0SEC_ATTRIBUTION_HEADERS
+      // the --scope pre-flight: a malformed ZERO_ATTRIBUTION_HEADERS
       // env var or an invalid scope-file `attribution` block is a config
       // error, and the operator should see it before the scan boots.
       try {
@@ -463,7 +463,7 @@ export function registerScanCommand(program: Command): void {
           loadScope,
           resolveAttribution,
           extractAttributionFromScopeJson,
-        } = await import("@0sec/core");
+        } = await import("@0/core");
         const policy = scopeFile ? loadScope(scopeFile) : undefined;
         resolveAttribution({
           scopeFileBlock: policy ? extractAttributionFromScopeJson(policy.raw) : undefined,
@@ -478,7 +478,7 @@ export function registerScanCommand(program: Command): void {
 
       // Pre-validate the engagement hardening posture. Same rationale as the
       // attribution pre-flight: a typo'd `--engagement-profile`, a bad
-      // 0SEC_ENGAGEMENT_RATE_RPS, or a malformed scope-file `engagement`
+      // ZERO_ENGAGEMENT_RATE_RPS, or a malformed scope-file `engagement`
       // block must fail here, not after the loud default already ran.
       // `--no-waf-evasion` sets opts.wafEvasion to false; commander leaves it
       // `true` when the flag is absent, which we map back to "unset" so the
@@ -489,7 +489,7 @@ export function registerScanCommand(program: Command): void {
           loadScope,
           resolveEngagementProfile,
           extractEngagementFromScopeJson,
-        } = await import("@0sec/core");
+        } = await import("@0/core");
         const policy = scopeFile ? loadScope(scopeFile) : undefined;
         resolveEngagementProfile({
           scopeFileBlock: policy ? extractEngagementFromScopeJson(policy.raw) : undefined,
@@ -502,10 +502,10 @@ export function registerScanCommand(program: Command): void {
         process.exit(2);
       }
 
-      // Resolve cost ceiling: --cost-ceiling flag wins over 0SEC_COST_CEILING_USD env.
+      // Resolve cost ceiling: --cost-ceiling flag wins over ZERO_COST_CEILING_USD env.
       let costCeilingUsd: number | undefined;
       const ceilingSource =
-        (opts.costCeiling as string | undefined) ?? process.env["0SEC_COST_CEILING_USD"];
+        (opts.costCeiling as string | undefined) ?? process.env["ZERO_COST_CEILING_USD"];
       if (ceilingSource !== undefined && ceilingSource !== "") {
         const parsed = Number(ceilingSource);
         if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -524,7 +524,7 @@ export function registerScanCommand(program: Command): void {
       const rateLimit = opts.rateLimit as string | undefined;
       if (rateLimit !== undefined && rateLimit !== "") {
         try {
-          const { parseRateLimitFlag } = await import("@0sec/core");
+          const { parseRateLimitFlag } = await import("@0/core");
           parseRateLimitFlag(rateLimit);
         } catch (err) {
           console.error(chalk.red(err instanceof Error ? err.message : String(err)));

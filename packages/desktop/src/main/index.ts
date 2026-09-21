@@ -12,7 +12,7 @@ import {
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { DesktopHostCommand } from "@0sec/shared";
+import type { DesktopHostCommand } from "@0/shared"
 import {
   createDashboardSidecarInvocation,
   findWorkspaceRoot,

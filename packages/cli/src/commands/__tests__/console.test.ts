@@ -1,4 +1,4 @@
-import type * as Core from "@0sec/core";
+import type * as Core from "@0/core";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -22,7 +22,7 @@ vi.mock("../../tui/run.js", () => ({
   showOpenTuiConsole: startup.showConsole,
   showOpenTuiResume: vi.fn(),
 }));
-vi.mock("@0sec/core", async (importOriginal) => {
+vi.mock("@0/core", async (importOriginal) => {
   const actual = await importOriginal<typeof Core>();
   return { ...actual, connectMcpServers: async () => undefined };
 });

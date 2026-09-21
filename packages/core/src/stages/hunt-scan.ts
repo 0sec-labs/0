@@ -32,7 +32,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { rmSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import type { Finding, RuntimeMode, ScanConfig } from "@0sec/shared";
+import type { Finding, RuntimeMode, ScanConfig } from "@0/shared"
 import { ScanCostLedger } from "../agent/cost-ledger.js";
 import { stampDeploymentContext } from "./deployment-context.js";
 import {
@@ -61,13 +61,13 @@ import {
   type CrossFamilyStatus,
 } from "./hunt-cross-family.js";
 import { scoreGeometry } from "../kernel/geometry-score.js";
-import { osecDB } from "@0sec/db";
+import { osecDB } from "@0/db"
 import { type AnalysisAgentResult, runAnalysisAgent } from "../agent-runner.js";
 import { reviewAgentPrompt } from "../analysis-prompts.js";
 import type { ScanListener } from "../scanner.js";
 
 // Per-scan throwaway SQLite DB. The finders/skeptics run concurrently and the
-// default DB is a single shared ~/.0sec/0sec.db — at any real fan-out width
+// default DB is a single shared ~/.0/0sec.db — at any real fan-out width
 // they contend on its write lock ("SQLite database is locked"), which crashed
 // verify steps mid-sweep (NOT a refute — a crash, silently dropping the gate).
 // Each source-analysis pass gets its own DB so there is zero cross-scan contention.
@@ -302,7 +302,7 @@ export interface HuntScanOptions {
    */
   novelty?: NoveltyCheckOptions & { queryFor?: (finding: Finding) => NoveltyQuery };
   /**
-   * OPTIONAL memory-flywheel priming (`0SEC_HUNT_FLYWHEEL=1`, see
+   * OPTIONAL memory-flywheel priming (`ZERO_HUNT_FLYWHEEL=1`, see
    * hunt-flywheel.ts). Injectable for tests; when the flag is on and
    * `opts.brief` is set but no instance is passed, defaults to a fresh
    * `HuntMemory()` (archetype preseed only — no corpus path). PRIMES the
@@ -313,7 +313,7 @@ export interface HuntScanOptions {
   huntMemory?: HuntMemory;
   /**
    * OPTIONAL exploitable-geometry ranking of the verify queue (LPE-hunt plan #0,
-   * `0SEC_HUNT_GEOMETRY_RANK=1`; this option overrides the env). When on, the
+   * `ZERO_HUNT_GEOMETRY_RANK=1`; this option overrides the env). When on, the
    * findings about to hit the skeptic+prover gate are STABLE-sorted by
    * {@link scoreGeometry} — a sibling-type type-confusion + elastic-reclaimable
    * heap-corruption candidate sorts ahead of a pure read-OOB / DoS, so the
@@ -356,7 +356,7 @@ export interface HuntScanOptions {
 }
 
 /**
- * Full per-finding tuple for corpus persistence (see `@0sec/benchmark`'s
+ * Full per-finding tuple for corpus persistence (see `@0/benchmark`'s
  * `hunt-corpus.ts`) — never flattened to titles-only. One row per raw finding
  * the finders surfaced, carrying its provenance (site/model/attempt) plus
  * whatever gates it actually passed through.
@@ -527,18 +527,18 @@ async function pool<T, R>(items: T[], limit: number | AimdState, fn: (item: T, i
 // The state is local to one `runHuntScan` call — each scan starts fresh, so
 // a burst on one target doesn't permanently kneecap the next.
 
-/** 0SEC_HUNT_AIMD — set to "0" or "off" to disable adaptive concurrency. */
+/** ZERO_HUNT_AIMD — set to "0" or "off" to disable adaptive concurrency. */
 function huntAimdEnabled(): boolean {
-  const raw = process.env["0SEC_HUNT_AIMD"];
+  const raw = process.env["ZERO_HUNT_AIMD"];
   return raw === undefined || raw === "" || !/^(0|off|false|no)$/i.test(raw);
 }
 
 /**
  * How many consecutive clean finder completions earn a +1 concurrency bump.
- * `0SEC_HUNT_AIMD_RECOVERY_WINDOW` (default 5).
+ * `ZERO_HUNT_AIMD_RECOVERY_WINDOW` (default 5).
  */
 function huntAimdRecoveryWindow(): number {
-  const raw = process.env["0SEC_HUNT_AIMD_RECOVERY_WINDOW"];
+  const raw = process.env["ZERO_HUNT_AIMD_RECOVERY_WINDOW"];
   if (!raw) return 5;
   const n = Number.parseInt(raw, 10);
   return Number.isFinite(n) && n >= 1 ? n : 5;
@@ -790,7 +790,7 @@ export function makeSkepticVerifier(opts: {
   costCeilingUsd?: number;
   costLedger?: ScanCostLedger;
   /**
-   * OPTIONAL learned-negatives context (`0SEC_HUNT_NEGATIVES=1`, see
+   * OPTIONAL learned-negatives context (`ZERO_HUNT_NEGATIVES=1`, see
    * hunt-negatives.ts). When a finding matches a known-refuted shape closely
    * enough, its prior refute reason is appended to the skeptic prompt as a
    * NOTE — it never auto-rejects; the skeptic call below still runs and
@@ -831,7 +831,7 @@ export function makeSkepticVerifier(opts: {
    */
   focus?: string;
   /**
-   * OPTIONAL cross-family refuter (issue #661, `0SEC_HUNT_CROSS_FAMILY`, now
+   * OPTIONAL cross-family refuter (issue #661, `ZERO_HUNT_CROSS_FAMILY`, now
    * default ON). When a distinct second family is reachable, force this refute
    * pass onto a model of a DIFFERENT family than the finder so their errors
    * decorrelate before a finding is promoted. Defaults to
@@ -919,7 +919,7 @@ export function makeSkepticVerifier(opts: {
       "CANNOT refute it — i.e. you can still point to the exact unguarded sink (file:line), a concrete " +
       "ENABLED attacker-reachable path, and (if a fix is implied) a fix that skips no required code. " +
       "If you cannot, report NOTHING.";
-    // Learned negatives (0SEC_HUNT_NEGATIVES=1): attach a prior refute
+    // Learned negatives (ZERO_HUNT_NEGATIVES=1): attach a prior refute
     // reason as CONTEXT when this shape was already refuted before — a
     // label the skeptic reads, never an auto-rejection. The skeptic call
     // below is unchanged either way: it still runs, still decides.
@@ -1278,7 +1278,7 @@ export async function runHuntScan(opts: HuntScanOptions): Promise<HuntScanResult
   // forget continuations; reads happen single-threaded after the verify gate.
   const lateArrivals: Array<{ finding: Finding; candidatePath: string; lensId: string; lensVersionDigest?: string }> = [];
 
-  // Memory-flywheel priming (0SEC_HUNT_FLYWHEEL=1, hunt-flywheel.ts): OFF by
+  // Memory-flywheel priming (ZERO_HUNT_FLYWHEEL=1, hunt-flywheel.ts): OFF by
   // default (`priming` stays `null`, every use below is a no-op and the run
   // is byte-identical to before this existed). When on and a brief is given,
   // priming ONLY (a) adjusts the attempt-budget cost-router below and (b)
@@ -1607,7 +1607,7 @@ export async function runHuntScan(opts: HuntScanOptions): Promise<HuntScanResult
   // RE-RANKS (stable; nothing dropped), so the highest-geometry findings reach
   // the expensive skeptic+prover gate first and lead the `confirmed` output.
   // Opt-in (default OFF → byte-identical): the option overrides the env flag.
-  const geometryRank = opts.geometryRank ?? process.env["0SEC_HUNT_GEOMETRY_RANK"] === "1";
+  const geometryRank = opts.geometryRank ?? process.env["ZERO_HUNT_GEOMETRY_RANK"] === "1";
   if (geometryRank && toVerify.length > 1) {
     toVerify
       .map((v, i) => ({ v, i, score: scoreGeometry(v.finding).geometryScore }))

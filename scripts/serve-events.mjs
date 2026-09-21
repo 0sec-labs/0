@@ -11,9 +11,9 @@
 //
 //   2. 0sec hunt feed (`/hunt-events`):
 //        node scripts/serve-events.mjs --0sec-log <0sec-stdout.log>
-//      Tails a file containing `0SEC_EVENT_<TYPE> {json}` lines (what
+//      Tails a file containing `ZERO_EVENT_<TYPE> {json}` lines (what
 //      core/src/events/bus.ts:cloudEventSink writes when
-//      0SEC_CLOUD_EVENTS=1) and translates each into the unified
+//      ZERO_CLOUD_EVENTS=1) and translates each into the unified
 //      `0sec.events/v1` JSON shape the Hunt lane renders. The
 //      dashboard's Hunt lane consumes this stream
 //      (`?huntEvents=http://localhost:8765/hunt-events`).
@@ -116,13 +116,13 @@ if (osecLog) {
 }
 
 /**
- * Convert one `0SEC_EVENT_<TYPE> {…}` line into a `0sec.events/v1`
+ * Convert one `ZERO_EVENT_<TYPE> {…}` line into a `0sec.events/v1`
  * JSON string. Returns null for unrecognised / unmapped event types so
  * we don't spam the Hunt lane with token-level deltas, planner pings,
  * etc. Mirrors the translator in `dashboard/src/lib/hunt-stream.ts`.
  */
 function translateOsecLine(line) {
-  const match = /^0SEC_EVENT_([A-Z_]+)\s+(\{.*\})\s*$/.exec(line);
+  const match = /^ZERO_EVENT_([A-Z_]+)\s+(\{.*\})\s*$/.exec(line);
   if (!match) return null;
   const type = match[1].toLowerCase();
   let payload;

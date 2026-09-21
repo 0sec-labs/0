@@ -3,7 +3,7 @@
  * (`chat-screen.tsx`) binds.
  *
  * This module is PURE DATA + PURE FUNCTIONS — no React, no OpenTUI, no
- * `@0sec/core` — so it can be imported by the reference view, the settings
+ * `@0/core` — so it can be imported by the reference view, the settings
  * surface, the settings loader and the runtime resolver alike, and unit-tested
  * without a terminal.
  *

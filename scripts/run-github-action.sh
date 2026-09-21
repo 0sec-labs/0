@@ -126,7 +126,7 @@ if [[ $CLI_EXIT -ne 0 ]]; then
   echo "::warning::0sec-cli exited with code $CLI_EXIT but produced a report. Continuing so findings can be surfaced."
 fi
 
-ACTION_ROOT="$(printenv 0SEC_ACTION_ROOT 2>/dev/null || true)"
+ACTION_ROOT="$(printenv ZERO_ACTION_ROOT 2>/dev/null || true)"
 : "${ACTION_ROOT:=${GITHUB_ACTION_PATH}}"
 
 node "${ACTION_ROOT}/scripts/render-github-action-output.mjs" \

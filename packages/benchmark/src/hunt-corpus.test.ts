@@ -10,8 +10,8 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { Finding } from "@0sec/shared";
-import type { HuntBrief, HuntFindingRecord } from "@0sec/core";
+import type { Finding } from "@0/shared"
+import type { HuntBrief, HuntFindingRecord } from "@0/core"
 import {
   resultToHuntSample,
   sampleToJsonl,

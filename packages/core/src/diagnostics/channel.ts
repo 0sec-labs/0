@@ -1,5 +1,5 @@
 /**
- * Structured diagnostics channel for `@0sec/core`.
+ * Structured diagnostics channel for `@0/core`.
  *
  * ## Why this exists
  *
@@ -85,7 +85,7 @@
  *
  * ## Env controls
  *
- *   `0SEC_DIAG_LEVEL` — `off` | `error` | `warn` | `info` (default `info`).
+ *   `ZERO_DIAG_LEVEL` — `off` | `error` | `warn` | `info` (default `info`).
  *   Filters at the source, before any sink sees the event. `off` silences the
  *   channel entirely.
  */
@@ -288,10 +288,10 @@ const OFF_RANK = Number.POSITIVE_INFINITY;
 /**
  * Minimum rank an event must meet to be emitted. Read per-emit (these are
  * low-frequency calls) so tests and long-lived processes can change
- * `0SEC_DIAG_LEVEL` without a restart.
+ * `ZERO_DIAG_LEVEL` without a restart.
  */
 function minimumRank(): number {
-  const raw = process.env["0SEC_DIAG_LEVEL"];
+  const raw = process.env["ZERO_DIAG_LEVEL"];
   if (!raw) return LEVEL_RANK.info;
   switch (raw.trim().toLowerCase()) {
     case "off":

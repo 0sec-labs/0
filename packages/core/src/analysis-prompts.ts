@@ -1,4 +1,4 @@
-import type { NpmAuditFinding, SemgrepFinding } from "@0sec/shared";
+import type { NpmAuditFinding, SemgrepFinding } from "@0/shared"
 
 /**
  * Build the system prompt for the package audit agent.
@@ -326,6 +326,14 @@ ${changedOnly
 
 ## Review Methodology
 
+Choose an investigation plan from the evidence and available budget; the sections
+below are guidance, not a mandatory file-by-file or fixed-lens sweep. Use
+\`spawn_agent\` or \`spawn_agents\` for independent subsystems and hypotheses,
+with exact scope and evidence requirements. Children may delegate further while
+sharing the same scoped capabilities and scan-wide budget. Independently check
+promising candidates, merge findings without duplicating evidence, and report
+uninspected surfaces and incomplete verification honestly.
+
 ### Phase -1: Live Vulnerability Intelligence
 When repository metadata, imports, or code comments suggest a relevant package,
 CVE, GHSA, CWE, or bug class, use the intel tools before making known-vulnerability
@@ -344,7 +352,7 @@ bug shape applies locally.
 Intel results are leads, not automatic findings.
 
 ### Phase 0: Recon — Map the Attack Surface
-1. Run: \`rg --files ${repoPath}\` to map source files
+1. Use \`list_files\` to map source files, then \`read_file\` and \`search_files\` to inspect them.
 2. Read package.json / Cargo.toml / go.mod / pyproject.toml for project metadata
 3. Identify the PUBLIC API — exported functions, HTTP routes, CLI handlers
 4. Map where untrusted input enters: HTTP params, CLI args, file uploads, env vars, user-supplied config

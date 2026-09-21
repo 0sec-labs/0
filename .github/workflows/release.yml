@@ -74,7 +74,7 @@ jobs:
         # generates the embedded asset manifest.
         run: |
           pnpm --filter "0sec-cli..." build
-          pnpm --filter @0sec/dashboard build
+          pnpm --filter @0/dashboard build
       - name: Compile native binary
         shell: bash
         run: bash scripts/bun-compile.sh "" "dist-bin/${{ matrix.asset }}"
@@ -106,7 +106,7 @@ jobs:
               const deadline = Date.now() + 10_000;
               while (Date.now() < deadline) {
                 try {
-                  if (readFileSync("dashboard.log", "utf8").includes("0SEC_DASHBOARD_READY")) process.exit(0);
+                  if (readFileSync("dashboard.log", "utf8").includes("ZERO_DASHBOARD_READY")) process.exit(0);
                 } catch {}
                 await new Promise((resolve) => setTimeout(resolve, 100));
               }
@@ -196,7 +196,7 @@ jobs:
         working-directory: dist
         # The private workspace name is not the established npm channel.
         # Apply packaging metadata here too so older tags can be recovered.
-        run: npm pkg set name=0sec-cli bin.0sec=0sec.js bin.0=0sec.js
+        run: npm pkg set name=0sec-cli bin.0=0sec.js bin.0=0sec.js
       - name: Install runtime dependencies and smoke the bundle
         run: |
           npm --prefix dist install --omit=dev --no-audit --no-fund

@@ -54,7 +54,7 @@ describe("CloudClient.pingHealth — auth + headers", () => {
     expect(headers.Accept).toBe("application/json");
     expect(headers["User-Agent"]).toMatch(/^0sec-cli\//);
   });
-  it.each(["https://cloud.0sec.ai", "https://cloud.0.security"])(
+  it.each(["https://cloud.0.ai", "https://cloud.0.security"])(
     "uses the hosted API health endpoint for %s",
     async (host) => {
       let url = "";

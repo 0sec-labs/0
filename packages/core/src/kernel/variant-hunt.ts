@@ -5,7 +5,7 @@ import { promises as fsp } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { promisify } from "node:util";
-import type { AttackCategory, Finding, ScanWarning, Severity } from "@0sec/shared";
+import type { AttackCategory, Finding, ScanWarning, Severity } from "@0/shared"
 import {
   detectFoxguard,
   inferCategoryFromRule,

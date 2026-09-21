@@ -4,7 +4,7 @@
  * `hunt-run.ts` seeds ONE bug class per invocation (a human/LLM names a bug
  * class, greps for variant sites, `runHuntScan`s that one plan). This module
  * runs `runHuntScan` once PER archetype plan produced by
- * `planArchetypeSweep` (`@0sec/core`'s archetype-catalog), so one invocation
+ * `planArchetypeSweep` (`@0/core`'s archetype-catalog), so one invocation
  * sweeps many bug classes over the same source tree.
  *
  * Split out from the root-level `hunt-sweep-run.ts` script (which has no test
@@ -22,9 +22,9 @@
 
 import { readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
-import type { ArchetypeSweepPlan, HuntCandidate, HuntVerifier } from "@0sec/core";
-import { runHuntScan } from "@0sec/core";
-import type { Finding, RuntimeMode } from "@0sec/shared";
+import type { ArchetypeSweepPlan, HuntCandidate, HuntVerifier } from "@0/core"
+import { runHuntScan } from "@0/core"
+import type { Finding, RuntimeMode } from "@0/shared"
 import { appendToCorpus } from "./hunt-corpus.js";
 
 // ── File-size guard ─────────────────────────────────────────────────────────
@@ -175,7 +175,7 @@ export interface ArchetypeSweepRunResult {
 
 /**
  * Run `runHuntScan` once per archetype plan, aggregating results. An empty
- * `plans` list is a clean no-op (e.g. the sweep gate `0SEC_ARCHETYPE_SWEEP`
+ * `plans` list is a clean no-op (e.g. the sweep gate `ZERO_ARCHETYPE_SWEEP`
  * was off, or nothing matched the filter) — not an error.
  */
 export async function runArchetypeSweep(opts: ArchetypeSweepRunOptions): Promise<ArchetypeSweepRunResult> {

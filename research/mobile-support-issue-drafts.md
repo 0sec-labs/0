@@ -91,7 +91,7 @@ candidate endpoints from untrusted binaries and config files.
 - Fixture extraction returns both in-scope and out-of-scope indicators.
 - Any attempted request to an out-of-scope extracted host fails before network
   execution.
-- Tests run under `pnpm --filter @0sec/core test`.
+- Tests run under `pnpm --filter @0/core test`.
 
 ## Issue 3: Add a bug-bounty-safe mobile-to-backend workflow
 

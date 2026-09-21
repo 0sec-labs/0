@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { UsageAccount } from "@0sec/core";
+import type { UsageAccount } from "@0/core"
 
 import {
   RECOMMENDED_IDS,
@@ -184,8 +184,9 @@ describe("buildConnectRows", () => {
     expect(rows[0]?.kind).toBe("cloud");
     const providers = rows.filter((row) => row.kind === "provider");
     expect(providers[0]?.provider.auth).toBe("api-key");
-    expect(new Set(providers.map((row) => row.provider.id))).toEqual(new Set(PROVIDERS.map((provider) => provider.id)));
-    expect(providers.length).toBe(PROVIDERS.length);
+    const activeProviders = PROVIDERS.filter((provider) => !provider.evaluatorOnly);
+    expect(new Set(providers.map((row) => row.provider.id))).toEqual(new Set(activeProviders.map((provider) => provider.id)));
+    expect(providers.length).toBe(activeProviders.length);
     const subscription = providers.filter((row) => row.group.id === "subscription");
     // Every OAuth-preferred provider lands in the subscription group, in the
     // PROVIDERS table order: chatgpt-codex, openrouter, kimi, xai, copilot, google.

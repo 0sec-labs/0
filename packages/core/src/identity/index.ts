@@ -74,7 +74,7 @@ export {
   GraphScopeError,
   MICROSOFT_GRAPH_APP_ID,
 } from "./graph-client.js";
-// `parseRetryAfter` is intentionally NOT re-exported here: `@0sec/core`
+// `parseRetryAfter` is intentionally NOT re-exported here: `@0/core`
 // already exports the HackerOne client's function of that name, and a star
 // re-export would be silently shadowed by it. Import it from
 // `./identity/graph-client.js` directly when you need the Graph variant.
@@ -133,7 +133,7 @@ export type {
 } from "./tokens.js";
 // `./xml.ts` is deliberately NOT re-exported. It is the narrow structural
 // reader the SAML checks are built on, not a general-purpose XML parser, and
-// putting names like `parseXml` on the `@0sec/core` surface would invite it
+// putting names like `parseXml` on the `@0/core` surface would invite it
 // to be used as one. Import it directly from `./identity/xml.js` if you are
 // working inside this module.
 

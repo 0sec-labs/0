@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ScanReport } from "@0sec/shared";
+import type { ScanReport } from "@0/shared"
 import { formatSarif } from "./sarif.js";
 
 describe("formatSarif", () => {

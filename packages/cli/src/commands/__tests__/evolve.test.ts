@@ -1,15 +1,15 @@
-import type * as Core from "@0sec/core";
+import type * as Core from "@0/core";
 import { Command } from "commander";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@0sec/core", async (importOriginal) => {
+vi.mock("@0/core", async (importOriginal) => {
   const actual = await importOriginal<typeof Core>();
   return { ...actual, runEvolution: vi.fn(), executeEvolutionVersion: vi.fn() };
 });
-import { executeEvolutionVersion, runEvolution } from "@0sec/core";
+import { executeEvolutionVersion, runEvolution } from "@0/core"
 import { registerEvolveCommand } from "../evolve.js";
 
 const directories: string[] = [];

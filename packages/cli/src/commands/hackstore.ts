@@ -5,7 +5,7 @@
 // separately by loading and calling the installed plugin.
 //
 // HackstoreCorePort lets command tests use the real validator without importing
-// the full core barrel. Production resolves it lazily from @0sec/core.
+// the full core barrel. Production resolves it lazily from @0/core.
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -13,7 +13,7 @@ import { join, resolve } from "node:path";
 import chalk from "chalk";
 import type { Command } from "commander";
 
-import type { ValidationResult } from "@0sec/core";
+import type { ValidationResult } from "@0/core"
 
 // ── Decided constants ─────────────────────────────────────────────────────────
 
@@ -33,7 +33,7 @@ const EXIT_USER_ERROR = 1;
 // ── Core port ─────────────────────────────────────────────────────────────────
 
 /**
- * Everything this command needs from `@0sec/core`. Injected so tests supply the
+ * Everything this command needs from `@0/core`. Injected so tests supply the
  * real validator from core source; {@link defaultCorePort} lazily imports the
  * barrel in production.
  */
@@ -47,7 +47,7 @@ export interface HackstoreCorePort {
 let cachedCore: HackstoreCorePort | undefined;
 async function defaultCorePort(): Promise<HackstoreCorePort> {
   if (cachedCore) return cachedCore;
-  const mod = (await import("@0sec/core")) as unknown as HackstoreCorePort;
+  const mod = (await import("@0/core")) as unknown as HackstoreCorePort;
   cachedCore = { validatePluginManifest: mod.validatePluginManifest };
   return cachedCore;
 }
@@ -310,7 +310,7 @@ export function registerHackstoreCommand(program: Command): void {
   const hackstore = program
     .command("hackstore")
     .aliases(["hack", "store"])
-    .description("Author extensions for Hackstore, the 0sec extension store");
+    .description("Author extensions for Hackstore, the 0 extension store");
 
   hackstore
     .command("init <name>")

@@ -117,7 +117,7 @@ export function startCodexDeviceAuth(options: StartCodexDeviceAuthOptions): Code
       return;
     }
     maybeLoadCodexAuth({ env, home: options.homeDir, force: true });
-    if (!env["0SEC_CHATGPT_ACCESS_TOKEN"] && !env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"]) {
+    if (!env["ZERO_CHATGPT_ACCESS_TOKEN"] && !env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"]) {
       finish("failed", "Codex completed without a readable ChatGPT subscription credential.");
       return;
     }

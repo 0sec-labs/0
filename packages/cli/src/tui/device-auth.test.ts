@@ -108,7 +108,7 @@ describe("startDeviceAuth", () => {
 
     // The env patch flipped the provider on, so providerStates would see it.
     expect(env.XAI_API_KEY).toBe("access-tok");
-    expect(env["0SEC_XAI_OAUTH_REFRESH_TOKEN"]).toBe("refresh-tok");
+    expect(env["ZERO_XAI_OAUTH_REFRESH_TOKEN"]).toBe("refresh-tok");
 
     // The account record was persisted as an active oauth account.
     const record = getActiveAccount(loadAccountStore(home), "xai");
@@ -271,7 +271,7 @@ describe("startDeviceAuth (GitHub Copilot device-code)", () => {
     expect(providerSupportsMethod("copilot", "oauth")).toBe(true);
   });
 
-  it("polls authorization_pending -> token, then writes 0SEC_COPILOT_GITHUB_TOKEN", async () => {
+  it("polls authorization_pending -> token, then writes ZERO_COPILOT_GITHUB_TOKEN", async () => {
     const home = temporaryHome();
     const env: NodeJS.ProcessEnv = {};
     // GitHub's device token has no refresh_token / expires_in — a bare
@@ -300,7 +300,7 @@ describe("startDeviceAuth (GitHub Copilot device-code)", () => {
     expect(updates.at(-1)?.phase).toBe("connected");
 
     // Access token lands in the provider's single env var; no refresh var.
-    expect(env["0SEC_COPILOT_GITHUB_TOKEN"]).toBe("gho_copilot_token");
+    expect(env["ZERO_COPILOT_GITHUB_TOKEN"]).toBe("gho_copilot_token");
 
     const record = getActiveAccount(loadAccountStore(home), "copilot");
     expect(record?.kind).toBe("oauth");
@@ -600,9 +600,9 @@ describe("startDeviceAuth pkce-loopback (Google Gemini Code Assist)", () => {
     expect(updates.at(-1)?.phase).toBe("connected");
 
     // The credential is stored as an oauth record (access + refresh + expiry)
-    // and mirrored into the two 0SEC_GEMINI_* env vars.
-    expect(env["0SEC_GEMINI_ACCESS_TOKEN"]).toBe("ya29.access");
-    expect(env["0SEC_GEMINI_OAUTH_REFRESH_TOKEN"]).toBe("1//refresh");
+    // and mirrored into the two ZERO_GEMINI_* env vars.
+    expect(env["ZERO_GEMINI_ACCESS_TOKEN"]).toBe("ya29.access");
+    expect(env["ZERO_GEMINI_OAUTH_REFRESH_TOKEN"]).toBe("1//refresh");
     const record = getActiveAccount(loadAccountStore(home), "google");
     expect(record?.kind).toBe("oauth");
     if (record?.kind === "oauth") {

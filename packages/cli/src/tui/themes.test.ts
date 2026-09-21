@@ -839,7 +839,7 @@ function seedInstalledTheme(home: string, id: string, palette = GOOD_PALETTE): v
 
 describe("installed theme paths + id safety", () => {
   it("places themes under the shared 0sec state dir", () => {
-    expect(installedThemesDir("/home/x")).toBe(`/home/x/.0sec/${INSTALLED_THEMES_DIRNAME}`);
+    expect(installedThemesDir("/home/x")).toBe(`/home/x/.0/${INSTALLED_THEMES_DIRNAME}`);
   });
   it("accepts safe ids and rejects traversal / unsafe ones", () => {
     expect(isSafeThemeId("acme.midnight")).toBe(true);

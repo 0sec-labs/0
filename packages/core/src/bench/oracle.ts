@@ -139,7 +139,7 @@ export interface BenchTargetProvenance {
 
 /**
  * Minimal structural view of a scan result the oracle needs. A real
- * `@0sec/shared` `ScanReport` is assignable to this; tests can also hand
+ * `@0/shared` `ScanReport` is assignable to this; tests can also hand
  * a hand-built object. `error` set ⇒ the scan failed ⇒ inconclusive.
  */
 export interface BenchScanResult {

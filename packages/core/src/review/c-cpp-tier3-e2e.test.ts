@@ -1,6 +1,6 @@
 /**
  * End-to-end Tier-3 test against the synthetic `test-targets/c-cpp-tier2`
- * library. Gated behind `0SEC_KERNEL_QEMU=1` because it requires a
+ * library. Gated behind `ZERO_KERNEL_QEMU=1` because it requires a
  * real kernel + rootfs and an actual QEMU binary on PATH.
  *
  * What this asserts:
@@ -23,14 +23,14 @@ import {
   runTier3Validation,
   promoteFindingsWithTier3Result,
 } from "./c-cpp-tier3.js";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // __dirname = packages/core/src/review → walk up to repo root.
 const REPO_ROOT = join(__dirname, "..", "..", "..", "..");
 const TARGET = join(REPO_ROOT, "test-targets", "c-cpp-tier2");
 
-const QEMU_E2E = process.env["0SEC_KERNEL_QEMU"] === "1";
+const QEMU_E2E = process.env["ZERO_KERNEL_QEMU"] === "1";
 
 describe.skipIf(!QEMU_E2E)("Tier-3 E2E (real QEMU)", () => {
   it("validates the synthetic integer-truncation crash through Tier-2 → Tier-3", async () => {

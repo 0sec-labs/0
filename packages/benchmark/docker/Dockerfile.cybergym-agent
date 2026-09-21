@@ -51,4 +51,4 @@ RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin agent \
 # The trusted Node runner stays root solely to read the root-owned credential
 # file. Model-written Python is explicitly spawned as `candidate` (UID 10002).
 
-ENTRYPOINT ["pnpm", "--filter", "@0sec/benchmark", "cybergym"]
+ENTRYPOINT ["pnpm", "--filter", "@0/benchmark", "cybergym"]

@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import { extractFileRefs, verifyAgainstRef, formatPatchStatusSection } from "./canary.js";
 
 function baseFinding(overrides: Partial<Finding> = {}): Finding {

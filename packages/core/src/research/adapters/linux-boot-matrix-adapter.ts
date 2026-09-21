@@ -1,6 +1,6 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import type { ResearchCandidate, ResearchContext, ResearchEvidence, ResearchFinding, ResearchStageResult, ResearchTarget, TargetResearchAdapter } from "../target-research-adapter.js";
 
 export interface ExternalBootLog { id: string; logPath: string; bootMarker: string }

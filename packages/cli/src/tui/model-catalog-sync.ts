@@ -2,13 +2,13 @@
  * Models.dev catalog sync with a cached-with-offline-fallback strategy.
  *
  * The `/model` picker (model-catalog.ts) is derived from the hand-priced table
- * in @0sec/shared — authoritative for cost, but narrow. This module widens the
+ * in @0/shared — authoritative for cost, but narrow. This module widens the
  * picker to every model the operator's provider actually offers by pulling the
  * public Models.dev catalog, without ever coupling the picker to a live network
  * call:
  *
  *   1. `syncModelCatalog()` fetches Models.dev, normalizes it, and writes a
- *      cache to `~/.0sec/model-catalog.json`. It NEVER throws — on any failure
+ *      cache to `~/.0/model-catalog.json`. It NEVER throws — on any failure
  *      (offline, timeout, bad JSON) it returns null and leaves the cache as-is.
  *   2. `loadCatalogModels()` is synchronous and safe to call on the render
  *      path: it returns the freshest thing available — a fresh cache if within
@@ -22,8 +22,8 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { homeStateDir } from "@0sec/shared";
-import { CloudClient, loadCloudCredentials, type InferenceModel } from "@0sec/core";
+import { homeStateDir } from "@0/shared"
+import { CloudClient, loadCloudCredentials, type InferenceModel } from "@0/core"
 import { OFFLINE_MODEL_CATALOG } from "./model-catalog.offline.js";
 
 /** One normalized catalog entry. Prices are $/1M tokens when known. */
@@ -54,7 +54,7 @@ const FETCH_TIMEOUT_MS = 8_000;
 export interface CatalogSyncOptions {
   /** Injectable fetch — defaults to the global. */
   fetchImpl?: typeof fetch;
-  /** Override the cache file path (defaults to ~/.0sec/model-catalog.json). */
+  /** Override the cache file path (defaults to ~/.0/model-catalog.json). */
   cachePath?: string;
   /** Injectable clock for TTL math — defaults to Date.now. */
   now?: () => number;
@@ -64,7 +64,7 @@ export interface CatalogSyncOptions {
   ttlMs?: number;
 }
 
-/** Resolve the cache path, honoring an explicit override then ~/.0sec. */
+/** Resolve the cache path, honoring an explicit override then ~/.0. */
 export function catalogCachePath(opts: CatalogSyncOptions = {}): string {
   return opts.cachePath ?? join(homeStateDir(), CATALOG_CACHE_FILENAME);
 }

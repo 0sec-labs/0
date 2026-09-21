@@ -22,8 +22,8 @@
  *     skeptical, assume-false discipline the rest of the kernel pipeline uses.
  */
 
-import type { CrashReport, CrashType, Severity } from "@0sec/shared";
-import { severityRank } from "@0sec/shared";
+import type { CrashReport, CrashType, Severity } from "@0/shared"
+import { severityRank } from "@0/shared"
 import type { WritePrimitiveProfile } from "../kernel/exploit/exploit-context.js";
 
 // ── Public types ──────────────────────────────────────────────────────────

@@ -6,7 +6,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, parse, resolve, sep } from "node:path";
 import { z } from "zod";
-import { findingSchema, VERSION, type Finding, type VerificationResult } from "@0sec/shared";
+import { findingSchema, VERSION, type Finding, type VerificationResult } from "@0/shared"
 import type { ScopePolicy } from "../scope/scope.js";
 import { DockerRunner, LocalShellRunner, runDeterministicReplay, type ReplayRunner } from "./replay-runner.js";
 

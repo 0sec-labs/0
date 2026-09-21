@@ -96,7 +96,7 @@ export interface PluginManifest {
   id: string;
   name: string;
   version: string;
-  /** Optional minimum @0sec/core version this plugin requires (semver-ish). */
+  /** Optional minimum @0/core version this plugin requires (semver-ish). */
   minCoreVersion?: string;
   tools: PluginToolManifest[];
 }

@@ -1,11 +1,9 @@
 import chalk from "chalk";
-import type {
-  ScanReport,
-  Finding,
-  AttackResult,
-  TargetInfo,
-  Severity,
-} from "@0sec/shared";
+import type { ScanReport,
+Finding,
+AttackResult,
+TargetInfo,
+Severity, } from "@0/shared"
 
 // ── Types ──
 

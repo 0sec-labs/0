@@ -21,27 +21,25 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Command } from "commander";
-import {
-  harvestMissesFromLedgerEntry,
-  inspectLensRegistry,
-  lastGreen,
-  loadLedger,
-  loadManifest,
-  makeFinderLensProbe,
-  mergeHarvestedMisses,
-  retireArchetype,
-  runLensSynthesisLoop,
-  type ConfirmedMiss,
-  type LensProbe,
-  type LensSynthesisInput,
-  type LensSynthesisModel,
-  type LensSynthesisResult,
-  type LensRegistryStatus,
-  type MissHarvestResult,
-  type MissInput,
-  type ValidationCorpus,
-  type ValidationFixture,
-} from "@0sec/core";
+import { harvestMissesFromLedgerEntry,
+inspectLensRegistry,
+lastGreen,
+loadLedger,
+loadManifest,
+makeFinderLensProbe,
+mergeHarvestedMisses,
+retireArchetype,
+runLensSynthesisLoop,
+type ConfirmedMiss,
+type LensProbe,
+type LensSynthesisInput,
+type LensSynthesisModel,
+type LensSynthesisResult,
+type LensRegistryStatus,
+type MissHarvestResult,
+type MissInput,
+type ValidationCorpus,
+type ValidationFixture, } from "@0/core"
 
 // ── Miss-input parsing (defensive) ────────────────────────────────────────
 
@@ -332,7 +330,7 @@ export function registerLensSynthCommand(program: Command): void {
     .command("lens-synth")
     .description("Evolve appsec finder coverage from curated misses; promotion is corpus-gated and active reviews stay pinned")
     .option("--miss-input <path>", "curated miss-input JSON ({ misses, corpus })")
-    .option("--registry <path>", "durable overlay path (default: ~/.0sec/lenses/appsec-archetypes.json)")
+    .option("--registry <path>", "durable overlay path (default: ~/.0/lenses/appsec-archetypes.json)")
     .option("--max-register <n>", "cap promoted champions per input revision", (value) => Number.parseInt(value, 10))
     .option("-m, --model <id>", "synthesis model override")
     .option("--promote", "persist a validated champion to the durable overlay", false)

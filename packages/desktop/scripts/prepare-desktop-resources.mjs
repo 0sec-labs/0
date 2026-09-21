@@ -23,7 +23,7 @@ function sidecarFileName(platform = process.platform, arch = process.arch) {
 }
 
 if (!existsSync(join(dashboardSource, "index.html"))) {
-  throw new Error("Dashboard build is missing. Run pnpm --filter @0sec/dashboard build before packaging desktop.");
+  throw new Error("Dashboard build is missing. Run pnpm --filter @0/dashboard build before packaging desktop.");
 }
 
 const sidecarName = sidecarFileName();

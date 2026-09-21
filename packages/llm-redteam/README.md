@@ -1,4 +1,4 @@
-# @0sec/llm-redteam
+# @0/llm-redteam
 
 Offensive LLM/agent **indirect-prompt-injection** engine — the attack-side mirror
 of `packages/benchmark`'s detection suite. Sweep a strategy library against a
@@ -35,7 +35,7 @@ frontier models.
 From a prepared repository checkout:
 
 ```bash
-pnpm --filter @0sec/llm-redteam build
+pnpm --filter @0/llm-redteam build
 node packages/llm-redteam/dist/cli.js strategies
 node packages/llm-redteam/dist/cli.js gen install-package
 node packages/llm-redteam/dist/cli.js run install-package  # simulated models, no network
@@ -73,7 +73,7 @@ labels, not deterministic replay or state-oracle proof.
 Supply `jevFeedback: (behavior, response, signal) =>
 jevAttemptFeedback(evaluator, behavior, response, signal)` to the campaign API,
 optionally with `onFeedback`. The integrated core audit also reads
-`0SEC_JEV_FEATURES=redteam` with a configured evaluator provider/credential;
+`ZERO_JEV_FEATURES=redteam` with a configured evaluator provider/credential;
 the standalone CLI does not read those settings.
 
 Labels are `explicit-refusal`, `partial-compliance`, `attempted-prohibited` and

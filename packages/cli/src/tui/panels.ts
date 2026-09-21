@@ -11,7 +11,7 @@
  * builder that truncated would bake a terminal width into data that is also
  * used by the readline console and by tests.
  *
- * Portable — no React, OpenTUI, or @0sec/core imports, no I/O.
+ * Portable — no React, OpenTUI, or @0/core imports, no I/O.
  */
 
 import type { CapabilityEntry } from "./capability-registry.js";

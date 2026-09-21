@@ -115,7 +115,7 @@ export const reconToolDefinitions: Record<string, ToolDefinition> = {
       },
       wpscan_api_token: {
         type: "string",
-        description: "Optional WPScan API token for fresh per-plugin/theme vulnerability lookup. Defaults to WPSCAN_API_TOKEN or 0SEC_WPSCAN_API_TOKEN.",
+        description: "Optional WPScan API token for fresh per-plugin/theme vulnerability lookup. Defaults to WPSCAN_API_TOKEN or ZERO_WPSCAN_API_TOKEN.",
       },
     },
   },

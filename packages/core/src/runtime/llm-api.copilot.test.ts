@@ -8,7 +8,7 @@ import type { NativeMessage } from "./types.js";
  * Copilot rides the OpenAI `chat_completions` wire, but the endpoint requires a
  * set of static VS Code Copilot Chat integration headers alongside the Bearer,
  * and the `copilot/` model prefix must be stripped before the request. The
- * device-flow access token (0SEC_COPILOT_GITHUB_TOKEN) is sent DIRECTLY as the
+ * device-flow access token (ZERO_COPILOT_GITHUB_TOKEN) is sent DIRECTLY as the
  * Bearer — no secondary token exchange and no refresh.
  */
 describe("GitHub Copilot provider wire", () => {
@@ -27,13 +27,13 @@ describe("GitHub Copilot provider wire", () => {
     delete process.env.QWEN_API_KEY;
     delete process.env.XAI_API_KEY;
     delete process.env.OPENCODE_API_KEY;
-    delete process.env["0SEC_MODEL"];
-    delete process.env["0SEC_CHATGPT_ACCESS_TOKEN"];
-    delete process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"];
+    delete process.env["ZERO_MODEL"];
+    delete process.env["ZERO_CHATGPT_ACCESS_TOKEN"];
+    delete process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"];
     delete process.env.COPILOT_BASE_URL;
-    process.env["0SEC_CHATGPT_AUTH_FILE"] = "/tmp/0sec-copilot-test-no-auth.json";
-    process.env["0SEC_SKIP_PROVIDER_BANNER"] = "1";
-    process.env["0SEC_COPILOT_GITHUB_TOKEN"] = "gho_copilot_token";
+    process.env["ZERO_CHATGPT_AUTH_FILE"] = "/tmp/0sec-copilot-test-no-auth.json";
+    process.env["ZERO_SKIP_PROVIDER_BANNER"] = "1";
+    process.env["ZERO_COPILOT_GITHUB_TOKEN"] = "gho_copilot_token";
   });
 
   afterEach(() => {
@@ -112,10 +112,10 @@ describe("GitHub Copilot provider wire", () => {
     expect(result.content).toContainEqual({ type: "text", text: "copilot ok" });
   });
 
-  it("detects copilot from 0SEC_COPILOT_GITHUB_TOKEN alone with the gpt-4o default", () => {
+  it("detects copilot from ZERO_COPILOT_GITHUB_TOKEN alone with the gpt-5.6-terra default", () => {
     const rt = new LlmApiRuntime({ type: "api", timeout: 5000 });
     expect((rt as any).provider).toBe("copilot");
-    expect((rt as any).model).toBe("gpt-4o");
+    expect((rt as any).model).toBe("gpt-5.6-terra");
     expect((rt as any).apiKey).toBe("gho_copilot_token");
   });
 

@@ -25,7 +25,7 @@ let capturedCliPrompt = "";
 
 vi.mock("./agent-runner.js", () => ({ runAnalysisAgent: (o: any) => runAnalysisAgent(o) }));
 // No DB in test.
-vi.mock("@0sec/db", () => ({}));
+vi.mock("@0/db", () => ({}));
 // Keep the static scanner cheap/deterministic.
 vi.mock("./shared-analysis.js", () => ({ runSelectedStaticScan: () => [] }));
 // Kernel variant hunting is separately tested. Keep this prompt-wiring suite

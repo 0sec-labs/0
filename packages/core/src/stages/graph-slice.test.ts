@@ -347,7 +347,7 @@ describe("buildGraphSliceHuntContext", () => {
     const sourceRoot = mkdtempSync(join(tmpdir(), "graph-slice-"));
     dirs.push(sourceRoot);
     // pre-exported CPG at the conventional path
-    const cpgDir = join(sourceRoot, ".0sec", "cpg");
+    const cpgDir = join(sourceRoot, ".0", "cpg");
     mkdirSync(cpgDir, { recursive: true });
     writeFileSync(join(cpgDir, "net__unix.json"), JSON.stringify(buildFixtureGraphson()));
     // real source files so the renderer can surface path lines
@@ -400,7 +400,7 @@ describe("buildGraphSliceHuntContext", () => {
       "@@ -10,6 +10,7 @@ static int unix_attach_fds(struct scm_cookie *scm)",
       "+\t/* fix */",
     ].join("\n");
-    expect(existsSync(join(sourceRoot, ".0sec"))).toBe(false);
+    expect(existsSync(join(sourceRoot, ".0"))).toBe(false);
     expect(buildGraphSliceHuntContext({ sourceRoot, seedDiff })).toBeNull();
   });
 });

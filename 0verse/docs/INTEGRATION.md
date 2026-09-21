@@ -49,7 +49,7 @@ backend separately (see [Ghidra setup](GHIDRA-SETUP.md)). Make `.venv/bin/0verse
 available on the launching process's `PATH`, for example by activating that
 virtual environment before starting 0.
 
-Set `0SEC_FEATURE_ZEROVERSE=1` when launching 0 and use an authorized local source
+Set `ZERO_FEATURE_ZEROVERSE=1` when launching 0 and use an authorized local source
 scope. The agent's `analyze_binary` tool accepts `binary_path`, `bug_class`,
 `backend`, and `timeout_s`; the executor resolves the path within that scope and
 requires a regular file. It runs one bounded `0verse scan ... --format ndjson`

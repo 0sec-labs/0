@@ -129,13 +129,13 @@ python3 skill_refine_loop.py --dataset results/skill-trajectories.jsonl \
     --candidate-skill ssrf-bypass \
     --operator alice \
     --promote --promote-dest packages/core/src/agent/skills/vulnerabilities/ssrf-bypass.yaml \
-    --evolution-store ~/.0sec/evolution \
+    --evolution-store ~/.0/evolution \
     --evolution-version a1b2c3d4-... \
     --evolution-artifact agent/skills/vulnerabilities/sqli-advanced.yaml
 ```
 
 The load-check needs the core build. If `check_skill.mjs` reports the build is
-missing, run `pnpm --filter @0sec/core build` (or pass `--core-dist <dir>`).
+missing, run `pnpm --filter @0/core build` (or pass `--core-dist <dir>`).
 
 ## Available flags
 

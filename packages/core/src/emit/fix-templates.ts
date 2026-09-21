@@ -16,7 +16,7 @@
 // intentionally serialisable (no functions, no closures) so it can be logged
 // and asserted on in tests.
 
-import type { Finding, AttackCategory } from "@0sec/shared";
+import type { Finding, AttackCategory } from "@0/shared"
 
 /** A single hunk of a unified diff. Line counts are recomputed at render time. */
 export interface UnifiedDiffHunk {
@@ -192,15 +192,15 @@ function inferLanguage(path: string): string | undefined {
 /**
  * Convert an arbitrary identifier hint (the variable a literal was assigned
  * to, the key in a config object, etc.) to a SCREAMING_SNAKE env-var name.
- * Falls back to `0SEC_SECRET` so we never produce an unnamed env lookup.
+ * Falls back to `ZERO_SECRET` so we never produce an unnamed env lookup.
  */
 function toEnvVarName(hint: string | undefined): string {
-  if (!hint) return "0SEC_SECRET";
+  if (!hint) return "ZERO_SECRET";
   const cleaned = hint
     .replace(/[^A-Za-z0-9_]/g, "_")
     .replace(/^_+|_+$/g, "")
     .toUpperCase();
-  if (!cleaned) return "0SEC_SECRET";
+  if (!cleaned) return "ZERO_SECRET";
   // If it doesn't already end in a "secret-shaped" suffix, leave it as-is —
   // we don't want to invent a name that's wrong.
   return cleaned;

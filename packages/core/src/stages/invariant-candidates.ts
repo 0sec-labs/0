@@ -30,7 +30,7 @@
 
 import { readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
-import type { RuntimeMode } from "@0sec/shared";
+import type { RuntimeMode } from "@0/shared"
 import type { HuntBrief, HuntCandidate } from "./hunt-scan.js";
 import { extractInvariantSpec } from "./invariant-spec-builder.js";
 

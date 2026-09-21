@@ -2,15 +2,15 @@
  * The selectable model list behind `/model`.
  *
  * There is deliberately no second hand-maintained list of models here: the
- * pricing table in @0sec/shared is already the one place that knows which
+ * pricing table in @0/shared is already the one place that knows which
  * ids the tool understands, and a separate "menu" list would drift from it
  * the first time a model is added. So the catalog is derived — ids from
  * MODEL_PRICING, provider from `modelProvider`, price from `getRates` — and
  * this module only decides ordering and presentation.
  */
 
-import { MODEL_PRICING, getRates, modelProvider } from "@0sec/shared";
-import type { InferenceModel } from "@0sec/core";
+import { MODEL_PRICING, getRates, modelProvider } from "@0/shared"
+import type { InferenceModel } from "@0/core"
 
 import type { SelectorItem } from "./selector.js";
 import { loadCatalogModels, type CatalogSyncOptions } from "./model-catalog-sync.js";
@@ -80,7 +80,7 @@ export function modelSelectorItems(currentModel?: string): SelectorItem[] {
 
 // ── Models.dev-synced superset ────────────────────────────────────────────────
 //
-// `buildModelCatalog` above is the priced core: exactly the ids @0sec/shared
+// `buildModelCatalog` above is the priced core: exactly the ids @0/shared
 // has rates for, in a stable order. The functions below widen the picker to
 // every model the operator's provider offers by folding in the Models.dev
 // catalog (cached, with a bundled offline floor — see model-catalog-sync.ts).
@@ -141,14 +141,26 @@ export function buildFullModelCatalog(
  */
 export function scopeModelCatalog(
   catalog: CatalogModel[],
-  opts: { showAll?: boolean; filter?: string; currentModel?: string } = {},
+  opts: {
+    showAll?: boolean;
+    filter?: string;
+    currentModel?: string;
+    configuredProviderIds?: readonly string[];
+  } = {},
 ): CatalogModel[] {
   if (opts.showAll || (opts.filter ?? "").trim().length > 0) return catalog;
+  const configured = opts.configuredProviderIds;
+  const visible = configured === undefined
+    ? (model: CatalogModel) => true
+    : (model: CatalogModel) => configured.includes(model.provider) ||
+      (model.provider === "openai" && configured.some((id) => id === "chatgpt-codex" || id === "copilot")) ||
+      (model.provider === "moonshot" && configured.includes("kimi"));
   const current = opts.currentModel;
-  const curated = buildModelCatalog(current);
+  const curated = buildModelCatalog(current).filter(visible);
   if (current && !curated.some((model) => model.id === current)) {
     const row = catalog.find((model) => model.id === current);
-    curated.push(row ?? { id: current, provider: modelProvider(current), price: "—" });
+    if (row) curated.push(row);
+    else curated.push({ id: current, provider: modelProvider(current), price: "—" });
     curated.sort(compareCatalogRows(current));
   }
   return curated;

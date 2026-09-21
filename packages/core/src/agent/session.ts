@@ -20,7 +20,7 @@
  * unchanged for single-credential scans.
  */
 
-import type { AuthConfig, NamedIdentity } from "@0sec/shared";
+import type { AuthConfig, NamedIdentity } from "@0/shared"
 import { buildAuthHeaders } from "./prompts.js";
 
 /** One stored cookie. We track domain + path coarsely for host-scoped matching. */

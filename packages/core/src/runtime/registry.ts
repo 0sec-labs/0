@@ -1,5 +1,5 @@
 import type { RuntimeType } from "./types.js";
-import type { PipelineStage } from "@0sec/shared";
+import type { PipelineStage } from "@0/shared"
 
 export interface RuntimeInfo {
   type: RuntimeType;
@@ -26,7 +26,7 @@ export const RUNTIME_REGISTRY: readonly RuntimeInfo[] = [
   {
     type: "codex",
     command: "codex",
-    description: "Codex CLI / direct ChatGPT Codex provider — full parity across web scans, package audits (npm/pypi/cargo/oci), and source code review (incl. linux-kernel). Set 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN to enable subscription auth without the local CLI binary (#402).",
+    description: "Codex CLI / direct ChatGPT Codex provider — full parity across web scans, package audits (npm/pypi/cargo/oci), and source code review (incl. linux-kernel). Set ZERO_CHATGPT_OAUTH_REFRESH_TOKEN to enable subscription auth without the local CLI binary (#402).",
     strengths: ["verify", "source-analysis", "discovery"],
     supportsSystemPrompt: false,
   },

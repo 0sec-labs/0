@@ -45,7 +45,7 @@
 
 import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, posix, relative, resolve, sep, win32 } from "node:path";
-import type { RuntimeMode } from "@0sec/shared";
+import type { RuntimeMode } from "@0/shared"
 import { findViolationsDataflow } from "./c-dataflow.js";
 import {
   composeGate,

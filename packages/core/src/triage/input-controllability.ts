@@ -31,7 +31,7 @@
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 
-import type { AttackCategory, Finding, Severity } from "@0sec/shared";
+import type { AttackCategory, Finding, Severity } from "@0/shared"
 
 import { extractSinkLocation } from "./reachability.js";
 

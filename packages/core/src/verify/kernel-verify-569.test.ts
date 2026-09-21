@@ -11,7 +11,7 @@ import {
 } from "./kernel-verify.js";
 import { classifyKernelPrimitive } from "../triage/kernel-primitive.js";
 import type { KernelVerifyRunner } from "./kernel-verify-types.js";
-import type { Finding, CrashReport } from "@0sec/shared";
+import type { Finding, CrashReport } from "@0/shared"
 import type { NativeContentBlock } from "../runtime/types.js";
 
 function staticKernelFinding(overrides: Partial<Finding> = {}): Finding {

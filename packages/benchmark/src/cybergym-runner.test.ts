@@ -48,7 +48,7 @@ import {
   type Submitter,
   type CyberGymResult,
 } from "./cybergym-runner.js";
-import type { CraftScanOptions, CraftScanResult, CraftCandidateJudge } from "@0sec/core";
+import type { CraftScanOptions, CraftScanResult, CraftCandidateJudge } from "@0/core"
 
 const tmpDirs: string[] = [];
 afterEach(() => {

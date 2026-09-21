@@ -46,18 +46,18 @@ function stderrText(spy: ReturnType<typeof stderrSpy>): string {
 }
 
 const ESC = "\u001B";
-const origDiagLevel = process.env["0SEC_DIAG_LEVEL"];
+const origDiagLevel = process.env["ZERO_DIAG_LEVEL"];
 
 beforeEach(() => {
   _resetDiagnosticsForTests();
-  delete process.env["0SEC_DIAG_LEVEL"];
+  delete process.env["ZERO_DIAG_LEVEL"];
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
   _resetDiagnosticsForTests();
-  if (origDiagLevel === undefined) delete process.env["0SEC_DIAG_LEVEL"];
-  else process.env["0SEC_DIAG_LEVEL"] = origDiagLevel;
+  if (origDiagLevel === undefined) delete process.env["ZERO_DIAG_LEVEL"];
+  else process.env["ZERO_DIAG_LEVEL"] = origDiagLevel;
 });
 
 // ── Structured fields ───────────────────────────────────────────────────────
@@ -430,17 +430,17 @@ describe("default delivery when nothing has subscribed", () => {
     expect(recent[recent.length - 1]!.message).toBe(`m${MAX_BUFFERED + 39}`);
   });
 
-  it("honours 0SEC_DIAG_LEVEL as an at-source filter", () => {
+  it("honours ZERO_DIAG_LEVEL as an at-source filter", () => {
     const spy = stderrSpy();
 
-    process.env["0SEC_DIAG_LEVEL"] = "error";
+    process.env["ZERO_DIAG_LEVEL"] = "error";
     diag.info("i", "info line");
     diag.warn("w", "warn line");
     diag.error("e", "error line");
     expect(stderrText(spy)).toBe("[0sec] error line\n");
 
     spy.mockClear();
-    process.env["0SEC_DIAG_LEVEL"] = "off";
+    process.env["ZERO_DIAG_LEVEL"] = "off";
     diag.error("e", "error line");
     expect(spy).not.toHaveBeenCalled();
     // Filtered at the source: nothing was buffered either.
@@ -644,8 +644,8 @@ describe("migrated llm-api quota path", () => {
   beforeEach(() => {
     // A fallback chain in the ambient environment would turn the quota error
     // into a silent failover, which is a different code path.
-    delete process.env["0SEC_LLM_FALLBACK"];
-    process.env["0SEC_SKIP_PROVIDER_BANNER"] = "1";
+    delete process.env["ZERO_LLM_FALLBACK"];
+    process.env["ZERO_SKIP_PROVIDER_BANNER"] = "1";
   });
 
   afterEach(() => {

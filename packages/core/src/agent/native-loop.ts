@@ -9,8 +9,8 @@ import type {
   NativeRuntimeResult,
 } from "../runtime/types.js";
 import { join, resolve } from "node:path";
-import type { AuthConfig, HarnessUiInput, HarnessSnapshot } from "@0sec/shared";
-import { resolveIdentities, DEFAULT_AUTONOMY_MODE, DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir } from "@0sec/shared";
+import type { AuthConfig, HarnessUiInput, HarnessSnapshot } from "@0/shared";
+import { resolveIdentities, DEFAULT_AUTONOMY_MODE, DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir } from "@0/shared";
 import { LiveHarnessHost } from "../plugins/live-harness.js";
 import { getWorkspaceHarnessTrust } from "../plugins/harness-trust.js";
 import type { ToolDefinition, ToolCall, ToolResult, ToolResultMeta, ToolContext, AgentRole } from "./types.js";
@@ -89,8 +89,8 @@ import {
   type InlineOracle,
   type InlineValidationOutcome,
 } from "./inline-validation.js";
-import type { osecDB } from "@0sec/db";
-import type { Finding, AttackResult, TargetInfo } from "@0sec/shared";
+import type { osecDB } from "@0/db";
+import type { Finding, AttackResult, TargetInfo } from "@0/shared";
 
 // ── External Memory ──
 // The agent can persist working state (creds, endpoints, attack plans) to this
@@ -256,6 +256,8 @@ export interface NativeAgentConfig {
   workerTree?: ToolContext["workerTree"];
   workerFindings?: ToolContext["findings"];
   scopePath?: string;
+  /** Console Jev authority propagated unchanged to child tool contexts. */
+  jevRuntime?: ToolContext["jevRuntime"];
   sessionId?: string; // Resume from existing session
   /** Which retry attempt this is (0 = first attempt). Used by early-stop logic. */
   retryCount?: number;
@@ -268,7 +270,7 @@ export interface NativeAgentConfig {
    * can replay as each principal. Reconciled from the legacy `authConfig` when
    * omitted.
    */
-  identities?: import("@0sec/shared").NamedIdentity[];
+  identities?: import("@0/shared").NamedIdentity[];
   /**
    * Pre-built session engine (0sec#564). Normally left unset — the loop
    * constructs one from `identities`/`authConfig`. Provided only when a caller
@@ -304,7 +306,14 @@ export interface NativeAgentConfig {
    */
   costLedger?: ScanCostLedger;
   /**
-   * Programmatic engagement scope (0sec#215). When set, every URL the
+   * Root policy context that survives recursive delegation. Inherited by
+   * spawned subagents as their own `delegationSystemPrompt` so grandchildren
+   * receive root policy guidance without ancestor task strings. Defaults to
+   * `systemPrompt` when unset — a non-delegated root carries its own prompt
+   * forward as the policy base.
+   */
+  delegationSystemPrompt?: string;
+  /** Programmatic engagement scope (0sec#215). When set, every URL the
    * agent touches is checked against this policy and out-of-scope URLs
    * return as `ToolResult.error`. Same-origin checks remain enforced ON
    * TOP of this; scope is additive, never substitutive.
@@ -375,6 +384,7 @@ export interface NativeAgentConfig {
   /** Sandboxed TypeScript tools, skills, and agent programs; never enabled for verifier roles. */
   allowModelSelfExtension?: boolean;
   autonomyMode?: ToolContext["autonomyMode"];
+  publicNetwork?: ToolContext["publicNetwork"];
   executablePlugins?: ExecutablePluginConfiguration;
   executableEvolutionProfiles?: Record<string, EvolutionConfig>;
   /**
@@ -422,11 +432,9 @@ export interface NativeAgentLoopOptions {
    */
   inlineValidationOracle?: InlineOracle;
   /**
-   * Cross-scan hunt-memory store override. Normally left unset — the loop lazily
-   * constructs a single {@link HuntMemoryStore} (defaulting to
-   * ~/.0sec/hunt-memory) for the run. Tests inject a deterministic store here so
-   * the memory path never touches the real per-user state dir. Ignored when the
-   * memory integration is disabled via `0SEC_DISABLE_HUNT_MEMORY`.
+   * Optional store override; supplying one opts into cross-scan hunt memory.
+   * Otherwise persistent hunt memory is disabled unless codebaseLearning is
+   * true. ZERO_DISABLE_HUNT_MEMORY=1/true vetoes either opt-in.
    */
   huntMemoryStore?: HuntMemoryStore;
 }
@@ -629,7 +637,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     : undefined;
 
   // 0sec#659 — hosted OAST interaction collaborator. Built only when the
-  // feature is on AND a collaborator server is configured (0SEC_OAST_URL);
+  // feature is on AND a collaborator server is configured (ZERO_OAST_URL);
   // `createCollaborator` returns undefined otherwise, in which case the
   // oast_register / oast_poll tools return a graceful "not deployed" result.
   const oast = features.oastCollaborator ? createCollaborator() : undefined;
@@ -687,7 +695,10 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     target: config.target,
     scanId: config.scanId,
     role: config.role,
+    delegationSystemPrompt: config.delegationSystemPrompt ?? config.systemPrompt,
+    jevRuntime: config.jevRuntime,
     autonomyMode: config.autonomyMode ?? DEFAULT_AUTONOMY_MODE,
+    publicNetwork: config.publicNetwork,
     findings: [],
     attackResults: [],
     targetInfo: {},
@@ -769,9 +780,16 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     ? resolveExecutableEvolutionProfiles(config.executableEvolutionProfiles)
     : {};
 
-  const huntMemoryEnabled =
-    process.env["0SEC_DISABLE_HUNT_MEMORY"] !== "1" &&
-    process.env["0SEC_DISABLE_HUNT_MEMORY"] !== "true";
+  // Default OFF for ordinary local/native runs. Enabled only via explicit
+  // opt-in: an injected store (tests, explicit runners) or
+  // config.codebaseLearning === true. The ZERO_DISABLE_HUNT_MEMORY env var
+  // acts as a hard override: when set, memory stays off regardless of opt-in.
+  const disableEnv = process.env["ZERO_DISABLE_HUNT_MEMORY"];
+  const huntMemoryVeto = disableEnv === "1" || disableEnv === "true";
+  const huntMemoryEnabled = !huntMemoryVeto && (
+    opts.huntMemoryStore !== undefined ||
+    config.codebaseLearning === true
+  );
   // Single store instance for the run. When a store is injected (tests) it is
   // used as-is; otherwise it is lazily constructed on first use so a scan that
   // never saves a finding pays no store-open cost.
@@ -840,6 +858,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     }
     return t;
   })();
+  toolCtx.delegationTools = tools;
 
   // Convert ToolDefinitions to native API format. `nativeTools` is a `let` and
   // the base (built-in) portion is captured separately: after a successful
@@ -866,8 +885,8 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   let turnCount = 0;
 
   // ── Execution-journal shadow mode (#494, flag-gated, default OFF) ──
-  // When 0SEC_FEATURE_EXECUTION_JOURNAL is on, mirror this run's steps into
-  // an append-only journal at ~/.0sec/runs/<scanId>/journal.jsonl. This is
+  // When ZERO_FEATURE_EXECUTION_JOURNAL is on, mirror this run's steps into
+  // an append-only journal at ~/.0/runs/<scanId>/journal.jsonl. This is
   // strictly additive: the loop still drives off its own conversation window,
   // the journal is write-only here, and createShadowJournal returns a no-op
   // (no I/O) when the flag is off. The run id is the scanId — the same
@@ -899,7 +918,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   }
 
   // ── Execution-journal context routing (#494, slice 2, flag-gated, OFF) ──
-  // When 0SEC_FEATURE_JOURNAL_REHYDRATE is on, seed the loop's context off
+  // When ZERO_FEATURE_JOURNAL_REHYDRATE is on, seed the loop's context off
   // the durable on-disk journal (rehydrateContext + renderSeedMessages)
   // instead of the truncated 40-message DB session blob. This is the slice
   // that routes the loop OFF the journal. Independent of the shadow-WRITE flag
@@ -1190,7 +1209,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   // CI heartbeat: one stderr line per turn so a CI log of a hung scan
   // tells us at which turn / on which tool we stopped making progress.
   // Gated on CI / explicit opt-in so local TUI runs stay quiet.
-  const heartbeatEnabled = !!(process.env.CI || process.env["0SEC_HEARTBEAT"] || process.env["0SEC_DEBUG"]);
+  const heartbeatEnabled = !!(process.env.CI || process.env["ZERO_HEARTBEAT"] || process.env["ZERO_DEBUG"]);
   const loopStartedAt = Date.now();
   let lastToolName: string | null = null;
   let lastHeartbeatAt = 0;
@@ -1306,7 +1325,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   const unregisterSignalCleanup = registerSignalCleanup(cleanupResources);
 
   // ── Coordinator rails (multi-agent supervisor) ──
-  // Additive, feature-flagged (0SEC_FEATURE_COORDINATOR_RAILS, default OFF /
+  // Additive, feature-flagged (ZERO_FEATURE_COORDINATOR_RAILS, default OFF /
   // opt-IN). Set the env var to "1"/"true" to enable. Default off so the
   // supervisor's nudge/intervention events never surface as transcript noise
   // unless the operator opts in. When on, this loop's
@@ -1327,8 +1346,8 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   // nothing subscribes and the supervise step is skipped, so behavior is
   // byte-identical to the legacy path.
   const coordinatorRailsEnabled =
-    process.env["0SEC_FEATURE_COORDINATOR_RAILS"] === "1" ||
-    process.env["0SEC_FEATURE_COORDINATOR_RAILS"] === "true";
+    process.env["ZERO_FEATURE_COORDINATOR_RAILS"] === "1" ||
+    process.env["ZERO_FEATURE_COORDINATOR_RAILS"] === "true";
   let coordinatorState: CoordinatorState = {};
   // Log each (agent, kind, action) transition once so a persistent condition
   // does not spam the diagnostics channel every turn.
@@ -1510,13 +1529,15 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   }
 
   // ── Hunt memory (cross-scan pattern DB) ──
-  // Default ON, opt out with 0SEC_DISABLE_HUNT_MEMORY=1. On each saved finding
-  // we append a REDACTED HuntRecord (the store redacts every persisted string;
-  // `evidenceRef` is a POINTER, never raw evidence), and once at loop start we
-  // surface a concise "prior findings for similar targets" count via `onEvent`
-  // (never injected into the model prompt). Best-effort throughout: every store
-  // call is wrapped and a failure is logged via the diagnostics channel only —
-  // it never blocks or fails the scan.
+  // Default OFF for ordinary local runs. Enabled only when explicitly opted in
+  // (injected huntMemoryStore or config.codebaseLearning===true), or veto'd by
+  // ZERO_DISABLE_HUNT_MEMORY=1. On each saved finding we append a REDACTED
+  // HuntRecord (the store redacts every persisted string; `evidenceRef` is a
+  // POINTER, never raw evidence), and once at loop start we surface a concise
+  // "prior findings for similar targets" count via `onEvent` (never injected
+  // into the model prompt). Best-effort throughout: every store call is wrapped
+  // and a failure is logged via the diagnostics channel only — it never blocks
+  // or fails the scan.
 
   // Append one saved finding to hunt memory as a redacted HuntRecord. Never
   // throws into the scan; a store error is logged via diagnostics only.
@@ -3250,8 +3271,8 @@ export const DEFAULT_COMPACTION_REGROW = 30_000;
 /**
  * Resolve the compaction thresholds from the environment so an operator can tune
  * them to the model's real context window (there is no context-window catalog to
- * derive a fraction from). `0SEC_COMPACTION_THRESHOLD` sets when compaction
- * fires; `0SEC_COMPACTION_REGROW` sets how much new context must accrue before it
+ * derive a fraction from). `ZERO_COMPACTION_THRESHOLD` sets when compaction
+ * fires; `ZERO_COMPACTION_REGROW` sets how much new context must accrue before it
  * fires again. Both are clamped to sane positive floors; a malformed value falls
  * back to the default. Pure — the env is passed in.
  */
@@ -3263,8 +3284,8 @@ export function resolveCompactionThresholds(
     return Number.isFinite(n) && n >= floor ? Math.floor(n) : fallback;
   };
   return {
-    threshold: parse(env["0SEC_COMPACTION_THRESHOLD"], DEFAULT_COMPACTION_THRESHOLD, 1_000),
-    regrow: parse(env["0SEC_COMPACTION_REGROW"], DEFAULT_COMPACTION_REGROW, 500),
+    threshold: parse(env["ZERO_COMPACTION_THRESHOLD"], DEFAULT_COMPACTION_THRESHOLD, 1_000),
+    regrow: parse(env["ZERO_COMPACTION_REGROW"], DEFAULT_COMPACTION_REGROW, 500),
   };
 }
 

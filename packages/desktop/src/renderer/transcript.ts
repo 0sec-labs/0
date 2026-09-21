@@ -1,11 +1,9 @@
-import type {
-  DesktopConsoleDecisionKind,
-  DesktopConsoleEvent,
-  DesktopConsoleOperatorQuestion,
-  DesktopConsoleToolCall,
-  DesktopConsoleTurnBudget,
-  DesktopConsoleUsage,
-} from "@0sec/shared";
+import type { DesktopConsoleDecisionKind,
+DesktopConsoleEvent,
+DesktopConsoleOperatorQuestion,
+DesktopConsoleToolCall,
+DesktopConsoleTurnBudget,
+DesktopConsoleUsage, } from "@0/shared"
 
 // ── Reduced Turn Types ───────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 /**
  * Pure reducers and selectors for the scan TUI's stage state.
  *
- * These helpers live in @0sec/core (instead of @0sec/cli) because they are
+ * These helpers live in @0/core (instead of @0/cli) because they are
  * pure TypeScript — no Ink, no React, no side effects — and because that
  * lets us test them in the existing vitest setup without spinning up a
  * separate test harness for the CLI package.

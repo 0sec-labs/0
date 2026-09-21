@@ -2,7 +2,7 @@ import { chmodSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { HarnessGenerationSpec } from "@0sec/shared";
+import type { HarnessGenerationSpec } from "@0/shared"
 import { ExecutablePluginManager, type PluginVersionRecord } from "./executable.js";
 import { SelfExtensionRegistry } from "./self-extension.js";
 import { BUILTIN_GUARDS } from "./guards.js";

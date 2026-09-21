@@ -3,7 +3,7 @@
  *
  * The command drives the real core primitives (enablement + registry-client +
  * loader discovery) through its injected {@link CorePort}. Those modules are not
- * yet re-exported from the `@0sec/core` barrel, so the port is assembled here
+ * yet re-exported from the `@0/core` barrel, so the port is assembled here
  * from the core source directly via a runtime URL import — the same technique
  * `commands/run.ts` uses to reach core source without a barrel round-trip. This
  * keeps the test faithful (real reconcile/validation logic) while proving the
@@ -203,7 +203,7 @@ describe("install", () => {
     await runInstall("acme.recon", deps({ registryUrl: REGISTRY_URL, fetchImpl }));
 
     // Files landed on disk.
-    const dir = join(home, ".0sec", "plugins", "acme.recon");
+    const dir = join(home, ".0", "plugins", "acme.recon");
     expect(existsSync(join(dir, "plugin.json"))).toBe(true);
     expect(existsSync(join(dir, "plugin.js"))).toBe(true);
 
@@ -298,7 +298,7 @@ describe("stale enablement", () => {
 
     // Now the ON-DISK manifest widens to also include network — a plugin update.
     const wide = manifest(); // network + filesystem-read
-    const manifestPath = join(home, ".0sec", "plugins", "acme.recon", "plugin.json");
+    const manifestPath = join(home, ".0", "plugins", "acme.recon", "plugin.json");
     writeFileSync(manifestPath, JSON.stringify(wide, null, 2));
 
     out = [];
@@ -346,7 +346,7 @@ describe("list / disable / info", () => {
     runDisable("acme.recon", deps());
     expect(joined(out)).toMatch(/Disabled acme\.recon/);
     expect(core.isEnabled(core.readEnablement(project, home), "acme.recon")).toBe(false);
-    expect(existsSync(join(home, ".0sec", "plugins", "acme.recon", "plugin.json"))).toBe(true);
+    expect(existsSync(join(home, ".0", "plugins", "acme.recon", "plugin.json"))).toBe(true);
   });
 
   it("info shows manifest, capabilities, and enablement state", async () => {
@@ -436,7 +436,7 @@ describe("run", () => {
         { name: "acme_exec", description: "exec", parameters: {}, capabilities: ["process-exec"] },
       ] as ManifestView["tools"],
     });
-    const manifestPath = join(home, ".0sec", "plugins", "acme.recon", "plugin.json");
+    const manifestPath = join(home, ".0", "plugins", "acme.recon", "plugin.json");
     writeFileSync(manifestPath, JSON.stringify(wide, null, 2));
     out = [];
     err = [];

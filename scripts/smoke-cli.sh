@@ -45,11 +45,11 @@ say() { printf '\033[36m[smoke]\033[0m %s\n' "$*"; }
 fail() { printf '\033[31m[smoke] FAIL:\033[0m %s\n' "$*" >&2; exit 1; }
 run_ai_smoke() {
   env \
-    0SEC_CHATGPT_ACCESS_TOKEN="" \
-    0SEC_CHATGPT_OAUTH_REFRESH_TOKEN="" \
-    0SEC_CHATGPT_ACCOUNT_ID="" \
-    0SEC_CHATGPT_AUTH_FILE="$TMP/no-auth.json" \
-    0SEC_CODEX_AUTH_JSON_PATH="$TMP/no-auth.json" \
+    ZERO_CHATGPT_ACCESS_TOKEN="" \
+    ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="" \
+    ZERO_CHATGPT_ACCOUNT_ID="" \
+    ZERO_CHATGPT_AUTH_FILE="$TMP/no-auth.json" \
+    ZERO_CODEX_AUTH_JSON_PATH="$TMP/no-auth.json" \
     OPENAI_API_KEY="" \
     OPENROUTER_API_KEY="" \
     ANTHROPIC_API_KEY=fake \

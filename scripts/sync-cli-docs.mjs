@@ -8,7 +8,7 @@ const referencePath = resolve(root, "docs/src/content/docs/commands.md");
 
 // These are reviewed corrections to registered help, not generated prose.
 const optionDescriptions = new Map([
-  ["0sec scan|--require-scope", "Set 0SEC_REQUIRE_SCOPE for scope-aware execution paths. Ordinary live-target scan already refuses missing scope, independently of this flag."],
+  ["0sec scan|--require-scope", "Set ZERO_REQUIRE_SCOPE for scope-aware execution paths. Ordinary live-target scan already refuses missing scope, independently of this flag."],
   ["0sec scan|--dry-run", "For --emit pr only: print proposed git/gh emission commands. The scan itself still executes."],
   ["0sec review|--dry-run", "For --emit pr only: print proposed git/gh emission commands. The source review itself still executes."],
   ["0sec console|--mode", "Autonomy mode: standard, recon, copilot, yolo. YOLO accepts absolute public-network targets without a launch target; explicit restrictions and exclusions still apply."],
@@ -17,12 +17,11 @@ const optionDescriptions = new Map([
   ["0sec hunt|--max-candidates", "Registered but not forwarded by the current CLI handler; do not rely on this flag to bound work."],
   ["0sec secure|--cost-ceiling", "Requested model-cost limit. Current accounting checks the repair ledger separately from investigation usage; this is not a guaranteed whole-workflow spend cap."],
   ["0sec secure|--max-findings", "Maximum findings selected for repair. Inspect blockedFindingIds separately from the overall run status."],
-  ["0sec scan|--cost-ceiling", "Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides 0SEC_COST_CEILING_USD."],
-  ["0sec audit|--cost-ceiling", "Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides 0SEC_COST_CEILING_USD."],
-  ["0sec review|--cost-ceiling", "Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides 0SEC_COST_CEILING_USD."],
+  ["0sec scan|--cost-ceiling", "Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD."],
+  ["0sec audit|--cost-ceiling", "Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD."],
+  ["0sec review|--cost-ceiling", "Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD."],
   ["0sec ingest|--expected-signature", "Registered but not forwarded to kernel verification; do not rely on this option as a required crash-signature match."],
   ["0sec deep-review|--cost-ceiling", "Shared estimated-model-cost ceiling for planner and finder work. Checks can stop further work after recorded usage reaches the threshold; in-flight calls can overshoot."],
-  ["0sec file-review|--max-cost-usd", "Estimated-cost stop at resumable checkpoints; in-flight inventory, batches, and revalidation can overshoot."],
   ["0sec ingest|--cost-ceiling", "Estimated model-cost ceiling for subsystem review, not a guaranteed whole-job billing cap."],
   ["0sec console|--role", "Tool set to expose: audit, review, discovery, attack, verify, or report. Defaults to audit; role selection is not authorization or OS isolation."],
   ["0sec console|--finding-intent", "Finding workflow: investigate, verify, draft_fix, or impact. These instructions do not independently enforce tool permissions."],

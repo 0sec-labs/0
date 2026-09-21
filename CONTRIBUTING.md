@@ -61,7 +61,7 @@ For test-target work, start the local fixtures in separate terminals:
 ```bash
 pnpm vulnerable
 pnpm safe
-pnpm --filter @0sec/test-targets test
+pnpm --filter @0/test-targets test
 ```
 
 ## Attack templates
@@ -73,7 +73,7 @@ payload IDs/prompts, and detection rules. The `AttackTemplate` type lives in
 `packages/shared/src/types.ts`.
 
 The template package's `prebuild` regenerates `src/embedded.ts` from YAML.
-Run `pnpm --filter @0sec/templates build` and include that generated update;
+Run `pnpm --filter @0/templates build` and include that generated update;
 do not maintain a second hand-edited copy of a template in the embedded file.
 
 ## Pull requests

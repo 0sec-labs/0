@@ -24,7 +24,7 @@ import { createJournalWriter, type JournalWriter } from "./writer.js";
 import type { JournalEntryInput } from "./types.js";
 
 export interface ShadowJournalOptions {
-  /** Run id; the agentic-scanner uses the scanId as the run id (run dir = `~/.0sec/runs/<scanId>`). */
+  /** Run id; the agentic-scanner uses the scanId as the run id (run dir = `~/.0/runs/<scanId>`). */
   runId: string;
   /** Override the runs root (tests point this at a tmp dir). */
   rootDir?: string;

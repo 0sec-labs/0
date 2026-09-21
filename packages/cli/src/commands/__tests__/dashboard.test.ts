@@ -18,7 +18,7 @@
  *   • `node:child_process` — capture execFile (browser) + spawn (daemon).
  *   • `node:fs`            — fake existsSync/readFileSync so the asset
  *                            dir resolves and HTML "files" round-trip.
- *   • `@0sec/db`         — fake osecDB (no native bindings, no WAL).
+ *   • `@0/db`         — fake osecDB (no native bindings, no WAL).
  *   • `./orchestrate.js`   — fake recoverStaleWorkers (dynamic import).
  *   • `./db.js`            — fake seedVerificationWorkbench (dynamic import).
  *
@@ -207,7 +207,7 @@ vi.mock("node:fs", async () => {
   };
 });
 
-// @0sec/db — fake osecDB plus resetOsecDatabase. We log every
+// @0/db — fake osecDB plus resetOsecDatabase. We log every
 // constructor + method call so we can assert on lifecycle (always
 // close in finally) and argument plumbing.
 interface FakeWorker {
@@ -266,7 +266,7 @@ const dbState: {
 
 const resetOsecDatabaseMock = vi.fn();
 
-vi.mock("@0sec/db", () => {
+vi.mock("@0/db", () => {
   class FakeOsecDB {
     constructor(dbPath?: string) {
       dbState.ctorPaths.push(dbPath);
@@ -543,7 +543,7 @@ describe("dashboard — argument validation", () => {
     expect(err).toBeUndefined();
     expect(httpState.listenCalls).toEqual([{ port: 0, host: "127.0.0.1" }]);
     expect(logSpy).toHaveBeenCalledWith(
-      '0SEC_DASHBOARD_READY {"url":"http://127.0.0.1:46123"}',
+      'ZERO_DASHBOARD_READY {"url":"http://127.0.0.1:46123"}',
     );
   });
 

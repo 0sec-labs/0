@@ -30,7 +30,7 @@
  * "inconclusive" verdict rather than a false confirm.
  */
 
-import type { Finding, RuntimeMode } from "@0sec/shared";
+import type { Finding, RuntimeMode } from "@0/shared"
 import {
   composeGate,
   makeSkepticVerifier,
@@ -97,16 +97,16 @@ export function kcsanRaceToFinding(race: KcsanRace, brief: HuntBrief): Finding {
 }
 
 /**
- * The `0SEC_KERNEL_QEMU_WIDEN_*` env the kernel VM runner reads to inject the
+ * The `ZERO_KERNEL_QEMU_WIDEN_*` env the kernel VM runner reads to inject the
  * `mdelay()` kprobe at the racing PC. Exposed (and unit-tested) as a pure
  * mapping; the prover applies it around the runner call since
  * `runReproducerInKernelVm` sources its config from `loadKernelVmConfigFromEnv`.
  */
 export function raceWidenEnv(race: KcsanRace, delayMs: number, offset: number): Record<string, string> {
   return {
-    "0SEC_KERNEL_QEMU_WIDEN_SYMBOL": race.a.fn,
-    "0SEC_KERNEL_QEMU_WIDEN_OFFSET": `0x${offset.toString(16)}`,
-    "0SEC_KERNEL_QEMU_WIDEN_DELAY_MS": String(delayMs),
+    "ZERO_KERNEL_QEMU_WIDEN_SYMBOL": race.a.fn,
+    "ZERO_KERNEL_QEMU_WIDEN_OFFSET": `0x${offset.toString(16)}`,
+    "ZERO_KERNEL_QEMU_WIDEN_DELAY_MS": String(delayMs),
   };
 }
 

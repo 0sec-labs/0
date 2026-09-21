@@ -4,7 +4,7 @@
 // source content digests; stale or tampered notes simply do not recall.
 
 import { HuntMemoryStore } from "../memory/hunt-memory.js";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import type { BehavioralRepairResult, SecureEvent } from "./types.js";
 
 export interface RepairLearning {
@@ -23,7 +23,7 @@ export interface RepairLearning {
  * treated as evidence of a vulnerability or its absence.
  */
 export function recallRepairLearnings(repoRoot: string): string[] {
-  if (process.env["0SEC_DISABLE_HUNT_MEMORY"] === "1") return [];
+  if (process.env["ZERO_DISABLE_HUNT_MEMORY"] === "1") return [];
   try {
     const store = new HuntMemoryStore();
     return store
@@ -46,7 +46,7 @@ export function recordRepairLearning(
   finding: Finding,
   repair: BehavioralRepairResult,
 ): void {
-  if (process.env["0SEC_DISABLE_HUNT_MEMORY"] === "1") return;
+  if (process.env["ZERO_DISABLE_HUNT_MEMORY"] === "1") return;
   const paths = (repair.changedFiles ?? []).slice(0, 8);
   if (paths.length === 0) return;
   try {

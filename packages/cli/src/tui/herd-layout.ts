@@ -26,7 +26,7 @@
  * ## Reuse note (registry symbols are not exported)
  *
  * `registry.ts`'s `PeerRecord` / `statusOf` / `DEFAULT_PEER_TTL_MS` are NOT
- * re-exported from `@0sec/core` (only the mailbox's `peekInbox` / `hubDir` are),
+ * re-exported from `@0/core` (only the mailbox's `peekInbox` / `hubDir` are),
  * and this package may not edit core to add the export. So the peer SHAPE and
  * the TTL/status derivation are mirrored here: {@link HerdPeer} is structurally
  * a `PeerRecord` (a real record assigns to it with no cast), {@link isPeerStale}

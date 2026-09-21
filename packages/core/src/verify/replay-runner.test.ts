@@ -19,7 +19,7 @@ import { describe, expect, it } from "vitest";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { VerificationResultSchema, type Finding, type PocStep } from "@0sec/shared";
+import { VerificationResultSchema, type Finding, type PocStep } from "@0/shared"
 import { ScopePolicy } from "../scope/scope.js";
 import {
   LocalShellRunner,
@@ -72,7 +72,7 @@ describe("LocalShellRunner", () => {
     expect(r.timedOut).toBeFalsy();
   });
 
-  it("does not leak harness credentials into the PoC shell, but keeps PATH + 0SEC_VERIFY", async () => {
+  it("does not leak harness credentials into the PoC shell, but keeps PATH + ZERO_VERIFY", async () => {
     const prevAnthropic = process.env.ANTHROPIC_API_KEY;
     const prevGithub = process.env.GITHUB_TOKEN;
     process.env.ANTHROPIC_API_KEY = "sk-ant-should-not-leak";
@@ -85,7 +85,7 @@ describe("LocalShellRunner", () => {
         kind: "exploit",
         summary: "print sensitive + required env vars",
         action: {
-          // `env` lists the child's full environment. `0SEC_VERIFY` cannot be
+          // `env` lists the child's full environment. `ZERO_VERIFY` cannot be
           // referenced via `$`-expansion (identifiers may not start with a
           // digit), so we inspect the raw listing instead.
           type: "shell",
@@ -99,7 +99,7 @@ describe("LocalShellRunner", () => {
       expect(r.stdoutFull).not.toContain("GITHUB_TOKEN");
       expect(r.stdoutFull).not.toContain("sk-ant-should-not-leak");
       expect(r.stdoutFull).not.toContain("ghp_should_not_leak");
-      // What the child legitimately needs is still present. (Note: 0SEC_VERIFY
+      // What the child legitimately needs is still present. (Note: ZERO_VERIFY
       // is passed to the spawn but /bin/sh strips digit-prefixed names on
       // startup, so it is deliberately not asserted via `env` here.)
       expect(r.stdoutFull).toMatch(/^PATH=/m);
@@ -444,7 +444,7 @@ if [ "$1" = "run" ]; then
     fi
     shift
   done
-  printf 'response-body\n__0SEC_HTTP_STATUS__:201\n'
+  printf 'response-body\n__ZERO_HTTP_STATUS__:201\n'
 fi
 `,
     );
@@ -546,7 +546,7 @@ done
 share=$(printf '%s' "$share" | sed 's/^local,path=//; s/,.*$//')
 printf '%s\n' "$@" > "$share/qemu.args"
 workspace=
-for candidate in "$share"/.0sec-qemu-*; do
+for candidate in "$share"/.0-qemu-*; do
   if [ -d "$candidate" ]; then
     workspace="$candidate"
     break

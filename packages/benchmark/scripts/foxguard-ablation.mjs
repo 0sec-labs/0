@@ -115,7 +115,7 @@ function selectSlices(sel) {
 function runOnce({ slice, staticAnalyzer, target }) {
   const env = {
     ...process.env,
-    "0SEC_STATIC": staticAnalyzer,
+    "ZERO_STATIC": staticAnalyzer,
     // Ablation needs deterministic-ish output; suppress noisy metrics.
     SEMGREP_SEND_METRICS: "off",
   };
@@ -123,7 +123,7 @@ function runOnce({ slice, staticAnalyzer, target }) {
   const t0 = Date.now();
   if (dryRun) {
     console.log(
-      `[dry-run] env 0SEC_STATIC=${staticAnalyzer} 0sec review ${target}`,
+      `[dry-run] env ZERO_STATIC=${staticAnalyzer} 0sec review ${target}`,
     );
     return {
       slice,
@@ -271,7 +271,7 @@ function main() {
       {
         generatedAt: new Date().toISOString(),
         notes:
-          "Manual ablation: 0SEC_STATIC=semgrep vs 0SEC_STATIC=foxguard. " +
+          "Manual ablation: ZERO_STATIC=semgrep vs ZERO_STATIC=foxguard. " +
           "Validation gate: ≥semgrep on confirmed findings AND ≥2x faster " +
           "on the source-code slice. See docs/research/foxguard-ablation/.",
         rows,

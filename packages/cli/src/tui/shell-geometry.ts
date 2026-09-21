@@ -1,4 +1,4 @@
-import { VERSION } from "@0sec/shared";
+import { VERSION } from "@0/shared"
 
 export const SHELL_HORIZONTAL_PADDING = 2;
 export const PANEL_HORIZONTAL_CHROME = 4;

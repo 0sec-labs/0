@@ -25,7 +25,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import {
   prepareKernelVmArtifacts,
   verifyKernelFinding,

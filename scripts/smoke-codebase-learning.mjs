@@ -11,8 +11,8 @@ import { LlmApiRuntime } from "../packages/core/dist/runtime/llm-api.js";
 import { getRates, MODEL_PRICING } from "../packages/shared/dist/index.js";
 
 maybeLoadCodexAuth();
-delete process.env["0SEC_DISABLE_HUNT_MEMORY"];
-process.env["0SEC_CLOUD_SINK"] = "";
+delete process.env["ZERO_DISABLE_HUNT_MEMORY"];
+process.env["ZERO_CLOUD_SINK"] = "";
 const temporary = mkdtempSync(join(tmpdir(), "0sec-learning-e2e-"));
 const root = join(temporary, "source");
 mkdirSync(root);
@@ -23,7 +23,7 @@ try {
   writeFileSync(join(root, "health.ts"), "export function health() { return { healthy: true }; }\n");
   writeFileSync(join(root, "routes.ts"), 'import { health } from "./health.js";\nexport const routes = { "/health": health };\n');
   writeFileSync(join(root, "entry.ts"), 'export { routes } from "./routes.js";\n');
-  const model = process.env["0SEC_MODEL"] || "gpt-5.6-luna";
+  const model = process.env["ZERO_MODEL"] || "gpt-5.6-luna";
   assert.notEqual(getRates(model), MODEL_PRICING.default, "model pricing must be known");
   const runtime = new LlmApiRuntime({ type: "api", model, timeout: 60000 });
   const memoryPath = join(temporary, "notes.jsonl");

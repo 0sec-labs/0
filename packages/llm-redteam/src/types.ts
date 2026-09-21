@@ -5,8 +5,8 @@
  *        -> Judge.evaluate() -> Verdict -> (break recorded | mutate & retry)
  */
 
-import type { AgentInjectionVector } from "@0sec/shared";
-import type { JevUsage } from "@0sec/shared";
+import type { AgentInjectionVector } from "@0/shared"
+import type { JevUsage } from "@0/shared"
 
 /** The injection vector a behaviour rides in — i.e. which untrusted document the
  * target ingests and which we control. */

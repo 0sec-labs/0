@@ -1,4 +1,4 @@
-import type { AttackCategory } from "@0sec/shared";
+import type { AttackCategory } from "@0/shared"
 import { fileURLToPath } from "node:url";
 
 export interface FoxguardFinding {

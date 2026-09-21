@@ -4,7 +4,7 @@
  * reach the agent's prompt-builder via the same shape semgrep produces.
  */
 import { describe, it, expect } from "vitest";
-import type { SeedFinding } from "@0sec/shared";
+import type { SeedFinding } from "@0/shared"
 import { seedFindingsToSemgrepShape } from "./unified-pipeline.js";
 
 function seed(overrides: Partial<SeedFinding> = {}): SeedFinding {

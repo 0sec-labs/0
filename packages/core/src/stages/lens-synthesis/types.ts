@@ -23,7 +23,7 @@
  * ============================================================================
  */
 
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import type { CoverageGap, FinderLens } from "../hunt-scan.js";
 
 // ── Stage 1: miss capture ─────────────────────────────────────────────────
@@ -374,7 +374,7 @@ export interface LensSynthesisDeps {
   probe: LensProbe;
   /**
    * Durable overlay file to append to. Defaults to the operator-owned
-   * `~/.0sec/lenses/appsec-archetypes.json`, never the bundled seed registry.
+   * `~/.0/lenses/appsec-archetypes.json`, never the bundled seed registry.
    */
   registryPath?: string;
   /** Hard cap on how many lenses ONE run may register. Default 1. */

@@ -1,16 +1,14 @@
 import type { Command } from "commander";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import {
-  loadManifest,
-  objectiveOracleEvaluatorAttestation,
-  objectiveOracleEvaluatorCodeBytes,
-  objectiveOracleEvaluatorConfigJson,
-  runTournament,
-  subsetManifest,
-  type BenchManifest,
-  type TournamentResult,
-} from "@0sec/core";
+import { loadManifest,
+objectiveOracleEvaluatorAttestation,
+objectiveOracleEvaluatorCodeBytes,
+objectiveOracleEvaluatorConfigJson,
+runTournament,
+subsetManifest,
+type BenchManifest,
+type TournamentResult, } from "@0/core"
 
 import { sha256Bytes, writeCanonicalJsonAtomic } from "./bench-improvement.js";
 

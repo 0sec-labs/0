@@ -16,7 +16,7 @@
  *   - No-brief fallback: attemptsPerCandidate>1 with no `brief` skips the
  *     judge (no bug-class/pattern to score against) and keeps the first
  *     `judgeTopK` attempts in order.
- *   - Flywheel wiring (0SEC_HUNT_FLYWHEEL=1, hunt-flywheel.ts): with
+ *   - Flywheel wiring (ZERO_HUNT_FLYWHEEL=1, hunt-flywheel.ts): with
  *     judgeTopK == group size (nothing dropped), priming reorders which
  *     finding `verify` is called on FIRST, but the resulting `confirmed` SET
  *     is byte-identical to the flag-off run — the primes-never-confirms
@@ -25,15 +25,15 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared";
 import { HuntMemory } from "./hunt-flywheel.js";
 import { ScanCostLedger } from "../agent/cost-ledger.js";
 
 const analysisAgentMock = vi.fn();
 vi.mock("../agent-runner.js", () => ({ runAnalysisAgent: (...args: unknown[]) => analysisAgentMock(...args) }));
 // Exercise real SQLite without making finder deadlines depend on disk fsync.
-vi.mock("@0sec/db", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@0sec/db")>();
+vi.mock("@0/db", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@0/db")>();
   return {
     ...actual,
     osecDB: class extends actual.osecDB {
@@ -630,7 +630,7 @@ describe("runHuntScan — finder-fanout resilience (HUNT_FINDER_TIMEOUT_MS / HUN
   });
 });
 
-describe("runHuntScan — memory-flywheel priming (0SEC_HUNT_FLYWHEEL=1)", () => {
+describe("runHuntScan — memory-flywheel priming (ZERO_HUNT_FLYWHEEL=1)", () => {
   it("reorders which finding verify sees first, but leaves the confirmed SET identical to the flag-off run", async () => {
     const brief = {
       bugClass: "nf_tables set-element deferred-free UAF (CWE-416)",
@@ -681,9 +681,9 @@ describe("runHuntScan — memory-flywheel priming (0SEC_HUNT_FLYWHEEL=1)", () =>
       finder,
     };
 
-    const prevFlag = process.env["0SEC_HUNT_FLYWHEEL"];
+    const prevFlag = process.env["ZERO_HUNT_FLYWHEEL"];
     try {
-      delete process.env["0SEC_HUNT_FLYWHEEL"];
+      delete process.env["ZERO_HUNT_FLYWHEEL"];
       call = 0;
       const coldOrder: string[] = [];
       const cold = await runHuntScan({ ...baseOpts, verify: mkVerify(coldOrder) });
@@ -701,7 +701,7 @@ describe("runHuntScan — memory-flywheel priming (0SEC_HUNT_FLYWHEEL=1)", () =>
         },
         brief,
       );
-      process.env["0SEC_HUNT_FLYWHEEL"] = "1";
+      process.env["ZERO_HUNT_FLYWHEEL"] = "1";
       call = 0;
       const primedOrder: string[] = [];
       const primed = await runHuntScan({ ...baseOpts, huntMemory: memory, verify: mkVerify(primedOrder) });
@@ -716,13 +716,13 @@ describe("runHuntScan — memory-flywheel priming (0SEC_HUNT_FLYWHEEL=1)", () =>
       expect([...cold.confirmed.map((f) => f.id)].sort()).toEqual(["f-0", "f-1"]);
       expect([...primed.confirmed.map((f) => f.id)].sort()).toEqual(["f-0", "f-1"]);
     } finally {
-      if (prevFlag === undefined) delete process.env["0SEC_HUNT_FLYWHEEL"];
-      else process.env["0SEC_HUNT_FLYWHEEL"] = prevFlag;
+      if (prevFlag === undefined) delete process.env["ZERO_HUNT_FLYWHEEL"];
+      else process.env["ZERO_HUNT_FLYWHEEL"] = prevFlag;
     }
   });
 });
 
-describe("runHuntScan — exploitable-geometry rank (0SEC_HUNT_GEOMETRY_RANK / opts.geometryRank)", () => {
+describe("runHuntScan — exploitable-geometry rank (ZERO_HUNT_GEOMETRY_RANK / opts.geometryRank)", () => {
   // Three findings surfaced at one site (no brief → judge is skipped, so the
   // pre-geometry order is plain attempt order): a pure read-OOB DoS, a neutral
   // logic bug, and — last — a weaponizable qdisc UAF (type-confusion +

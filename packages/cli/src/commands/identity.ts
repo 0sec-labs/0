@@ -1,15 +1,13 @@
 import type { Command } from "commander";
 import chalk from "chalk";
-import {
-  runIdentityAssessment,
-  ScopePolicy,
-  type IdentityAssessmentResult,
-  type IdentityFinding,
-  type IdentitySeverity,
-} from "@0sec/core";
+import { runIdentityAssessment,
+ScopePolicy,
+type IdentityAssessmentResult,
+type IdentityFinding,
+type IdentitySeverity, } from "@0/core"
 
 /** Env var holding the Graph bearer token. Never a CLI argument — see below. */
-const TOKEN_ENV = "0SEC_GRAPH_ACCESS_TOKEN";
+const TOKEN_ENV = "ZERO_GRAPH_ACCESS_TOKEN";
 
 const DEFAULT_TIMEOUT_MS = "300000";
 

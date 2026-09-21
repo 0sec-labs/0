@@ -141,7 +141,7 @@ for (const finding of findings) {
 
 `unified-pipeline.ts:915 runPerFileResearch` and `audit.ts:668 runPerFileAudit` mirror the shape for research and npm/PyPI/cargo/OCI audits — one agent session per source file, focused per-file system prompt, deterministic outer loop. The reference implementation already lived in the repo: `triage/pov-gate.ts buildPovSystemPrompt` was doing this for evidence-judge agents.
 
-Feature-flagged via `0SEC_FEATURE_PER_ITEM_ORCHESTRATION` (default on) — set to `0` if you need to revert to the shared-session shape for cost-bounded benchmarks.
+Feature-flagged via `ZERO_FEATURE_PER_ITEM_ORCHESTRATION` (default on) — set to `0` if you need to revert to the shared-session shape for cost-bounded benchmarks.
 
 ## The 11 patterns we didn't change
 

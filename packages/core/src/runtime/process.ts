@@ -159,7 +159,7 @@ export class ProcessRuntime implements Runtime {
     const scanId = context?.scanId;
     // Fire the cloud stream-event relay whenever (a) we're driving a
     // codex subprocess AND (b) something is listening — that is, the
-    // cloud sink has been subscribed via 0SEC_CLOUD_EVENTS=1. The
+    // cloud sink has been subscribed via ZERO_CLOUD_EVENTS=1. The
     // earlier `Boolean(scanId)` guard skipped audit-mode CLI runs
     // because `runAnalysisAgent` didn't pass scanId in its execute
     // context; the runner still subscribes events via the cloud sink,
@@ -475,7 +475,7 @@ export class ProcessRuntime implements Runtime {
               // ── 0sec cloud-trace bridge (codex only) ──
               // Codex emits structured turn/tool/reasoning events on its
               // `--json` stream which we'd otherwise discard — translating
-              // each one into a `0SEC_EVENT_*` line on our stdout fills
+              // each one into a `ZERO_EVENT_*` line on our stdout fills
               // the dashboard's live-trace UI for the duration of Codex
               // source-analysis workflows.
               //
@@ -483,7 +483,7 @@ export class ProcessRuntime implements Runtime {
               // non-cloud codex usage (e.g. local CLI `0sec scan
               // --runtime codex`) don't pay the bus serialisation cost.
               // `eventBus.emit` is a no-op when the cloud sink is not
-              // subscribed (`0SEC_CLOUD_EVENTS` unset) so this is safe
+              // subscribed (`ZERO_CLOUD_EVENTS` unset) so this is safe
               // to call unconditionally inside the guard.
               if (emitScanEvents) emitCodexCloudEvents(event);
             } catch {
@@ -633,22 +633,22 @@ export class ProcessRuntime implements Runtime {
     };
 
     if (context?.target) {
-      env["0SEC_TARGET"] = context.target;
+      env["ZERO_TARGET"] = context.target;
     }
     if (context?.findings) {
-      env["0SEC_FINDINGS"] = context.findings;
+      env["ZERO_FINDINGS"] = context.findings;
     }
     if (context?.templateId) {
-      env["0SEC_TEMPLATE_ID"] = context.templateId;
+      env["ZERO_TEMPLATE_ID"] = context.templateId;
     }
     if (context?.mcp?.auth) {
-      env["0SEC_MCP_AUTH_JSON"] = JSON.stringify(context.mcp.auth);
+      env["ZERO_MCP_AUTH_JSON"] = JSON.stringify(context.mcp.auth);
     }
     if (context?.mcp?.attributionHeaders) {
-      env["0SEC_MCP_ATTRIBUTION_HEADERS_JSON"] = JSON.stringify(context.mcp.attributionHeaders);
+      env["ZERO_MCP_ATTRIBUTION_HEADERS_JSON"] = JSON.stringify(context.mcp.attributionHeaders);
     }
     if (context?.mcp?.attributionUaToken) {
-      env["0SEC_MCP_ATTRIBUTION_UA_TOKEN"] = context.mcp.attributionUaToken;
+      env["ZERO_MCP_ATTRIBUTION_UA_TOKEN"] = context.mcp.attributionUaToken;
     }
 
     return env;

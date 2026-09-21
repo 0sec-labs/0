@@ -19,12 +19,12 @@
 #   provision-cpg.sh <source-root> <subsystem> [out-dir] [joern-cli-dir]
 # Example:
 #   provision-cpg.sh /root/linux-6.12-git net/unix
-#     -> writes <source-root>/.0sec/cpg/net__unix.json  (the convention the
+#     -> writes <source-root>/.0/cpg/net__unix.json  (the convention the
 #        stage loads by default). Then run:
 #        0sec hunt --source /root/linux-6.12-git --seed fix.patch --graph-slice
 # For code selected by kernel Kconfig, pass its enabled symbols as a
 # comma-separated environment variable, for example:
-#   env 0SEC_CPG_DEFINES=CONFIG_SMB_SERVER_KERBEROS5=1 provision-cpg.sh …
+#   env ZERO_CPG_DEFINES=CONFIG_SMB_SERVER_KERBEROS5=1 provision-cpg.sh …
 # This lets c2cpg retain the compiled branch instead of indexing the fallback
 # `#else` stub.
 #
@@ -36,7 +36,7 @@ set -euo pipefail
 SRC_ROOT="${1:?usage: provision-cpg.sh <source-root> <subsystem> [out-dir] [joern-cli-dir]}"
 SUBSYS="${2:?missing <subsystem> (e.g. net/unix)}"
 SLUG="${SUBSYS//\//__}"
-OUT_DIR="${3:-${SRC_ROOT}/.0sec/cpg}"
+OUT_DIR="${3:-${SRC_ROOT}/.0/cpg}"
 JOERN_DIR="${4:-${JOERN_HOME:-/root/joern-cli}}"
 
 SUBSYS_DIR="${SRC_ROOT}/${SUBSYS}"
@@ -50,9 +50,9 @@ EXPORT_DIR="${WORK}/export"
 mkdir -p "$OUT_DIR"
 
 # Heap: roughly 2x the source footprint, capped; net/ (38MB) needed ~16GB.
-XMX="$(printenv 0SEC_CPG_XMX 2>/dev/null || true)"
+XMX="$(printenv ZERO_CPG_XMX 2>/dev/null || true)"
 : "${XMX:=16000}"
-CPG_DEFINES="$(printenv 0SEC_CPG_DEFINES 2>/dev/null || true)"
+CPG_DEFINES="$(printenv ZERO_CPG_DEFINES 2>/dev/null || true)"
 
 declare -a C2CPG_ARGS
 C2CPG_ARGS=(-J-Xmx"${XMX}"m)

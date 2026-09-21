@@ -1,6 +1,6 @@
 import chalk from "chalk";
-import type { ScanReport, Finding, Severity } from "@0sec/shared";
-import { severityRank } from "@0sec/shared";
+import type { ScanReport, Finding, Severity } from "@0/shared"
+import { severityRank } from "@0/shared"
 import { buildShareUrl } from "../utils.js";
 
 // ── Severity Design System ──

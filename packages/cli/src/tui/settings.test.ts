@@ -35,11 +35,11 @@ afterEach(() => {
 
 describe("settingsFilePath", () => {
   it("places the file inside the shared 0sec state directory", () => {
-    expect(settingsFilePath("/home/someone")).toBe("/home/someone/.0sec/tui-settings.json");
+    expect(settingsFilePath("/home/someone")).toBe("/home/someone/.0/tui-settings.json");
   });
 
   it("defaults the home directory when none is given", () => {
-    expect(settingsFilePath().endsWith(join(".0sec", "tui-settings.json"))).toBe(true);
+    expect(settingsFilePath().endsWith(join(".0", "tui-settings.json"))).toBe(true);
   });
 });
 
@@ -233,7 +233,7 @@ describe("loadSettings / saveSettings", () => {
 
   it("returns defaults, without throwing, on invalid JSON", () => {
     const home = makeHome();
-    mkdirSync(join(home, ".0sec"), { recursive: true });
+    mkdirSync(join(home, ".0"), { recursive: true });
     writeFileSync(settingsFilePath(home), "{ this is not json, ", "utf8");
 
     expect(() => loadSettings(home)).not.toThrow();
@@ -242,7 +242,7 @@ describe("loadSettings / saveSettings", () => {
 
   it("returns defaults when the file holds valid JSON of the wrong shape", () => {
     const home = makeHome();
-    mkdirSync(join(home, ".0sec"), { recursive: true });
+    mkdirSync(join(home, ".0"), { recursive: true });
     writeFileSync(settingsFilePath(home), '["showStatusBar"]', "utf8");
 
     expect(loadSettings(home)).toEqual(DEFAULT_SETTINGS);

@@ -13,7 +13,7 @@ const { runAssumptionHuntMock, makeSkepticVerifierMock } = vi.hoisted(() => ({
   makeSkepticVerifierMock: vi.fn(() => vi.fn()),
 }));
 
-vi.mock("@0sec/core", () => ({
+vi.mock("@0/core", () => ({
   runAssumptionHunt: runAssumptionHuntMock,
   makeSkepticVerifier: makeSkepticVerifierMock,
 }));

@@ -2,7 +2,7 @@
 //
 // `emitFindingsAsPRs` turns reproduced findings into one GitHub PR each,
 // containing:
-//   - A minimal repro under `.0sec/findings/<id>/` (evidence + README)
+//   - A minimal repro under `.0/findings/<id>/` (evidence + README)
 //   - An optional second commit applying a starter fix-template patch
 //   - A PR body assembled from finding metadata
 //
@@ -14,7 +14,7 @@
 // All `git` and `gh` calls go through injectable `GitClient` / `GhClient`
 // interfaces so unit tests can assert on argv without touching disk.
 
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import {
   FixTemplateRegistry,
   createDefaultFixTemplateRegistry,
@@ -263,7 +263,7 @@ export function buildPrBody(finding: Finding, opts: { fixApplied?: UnifiedDiff; 
 
   lines.push(`## Reproduction`);
   lines.push(
-    `The full repro lives under \`.0sec/findings/${shortFindingId(finding)}/\` on this branch.`,
+    `The full repro lives under \`.0/findings/${shortFindingId(finding)}/\` on this branch.`,
   );
   lines.push("");
   if (finding.pocSteps && finding.pocSteps.length > 0) {
@@ -394,7 +394,7 @@ export function buildHypothesesMarkdown(findings: Finding[]): string {
  *
  * Workflow per reproduced finding:
  *   1. branch `0sec/finding-<short-id>` from `baseBranch`
- *   2. commit `.0sec/findings/<id>/{evidence...,README.md}`
+ *   2. commit `.0/findings/<id>/{evidence...,README.md}`
  *   3. if a fix template matches, commit the patch as a second commit
  *   4. `gh pr create` with assembled body
  *
@@ -469,7 +469,7 @@ export async function emitFindingsAsPRs(
 
     const fixDiff = registry.apply(finding);
     const commands: string[] = [];
-    const reproDir = `.0sec/findings/${shortFindingId(finding)}`;
+    const reproDir = `.0/findings/${shortFindingId(finding)}`;
 
     const execGit = async (args: string[]): Promise<void> => {
       commands.push(`git ${args.join(" ")}`);

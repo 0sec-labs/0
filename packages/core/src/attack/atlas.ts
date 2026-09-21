@@ -59,7 +59,7 @@
 // ATLAS lists more than one, the choice is stated in a comment on the catalog
 // entry and the full set is named there.
 
-import type { AttackCategory } from "@0sec/shared";
+import type { AttackCategory } from "@0/shared"
 
 export interface AtlasTechnique {
   id: string;
@@ -162,7 +162,7 @@ function chain(
 // ── Finding category → technique ──────────────────────────────────────────
 //
 // Exhaustive over `AttackCategory` on purpose: adding a category to
-// @0sec/shared without deciding its ATLAS mapping is a type error here.
+// @0/shared without deciding its ATLAS mapping is a type error here.
 //
 // Only the AI-behavioural categories map. Everything else is `[]` — see the
 // block comment above the non-AI section before "filling in" any of them.

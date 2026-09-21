@@ -563,10 +563,10 @@ function renderMakefileFragment(args: {
 # Sanitizers: ${args.sanitizers.join(", ")}
 
 OSEC_TIER2_HARNESS := ${args.harnessBinary}
-0SEC_TIER2_DEPS := \\
+ZERO_TIER2_DEPS := \\
   ${deps}
 
-$(OSEC_TIER2_HARNESS): $(0SEC_TIER2_DEPS)
+$(OSEC_TIER2_HARNESS): $(ZERO_TIER2_DEPS)
 \t${args.compileCommand}
 
 .PHONY: 0sec-tier2-run

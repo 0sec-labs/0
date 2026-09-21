@@ -31,9 +31,9 @@ import { execSync } from "node:child_process";
 import { readFileSync, existsSync, writeFileSync, appendFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { agenticScan } from "@0sec/core";
+import { agenticScan } from "@0/core"
 import { tmpdir } from "node:os";
-import type { RuntimeMode } from "@0sec/shared";
+import type { RuntimeMode } from "@0/shared"
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

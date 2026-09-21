@@ -10,8 +10,8 @@ import { join, resolve } from "node:path";
 import { createServer } from "node:http";
 import { runSmolvm, resolveSmolvmImage } from "../packages/core/dist/runtime/smolvm.js";
 
-const imageArchive = resolve(process.env["0SEC_SMOLVM_IMAGE_ARCHIVE"] || process.argv[2] || "");
-assert(process.env["0SEC_SMOLVM_IMAGE_ARCHIVE"] || process.argv[2], "provide a local Node image archive via argv or 0SEC_SMOLVM_IMAGE_ARCHIVE");
+const imageArchive = resolve(process.env["ZERO_SMOLVM_IMAGE_ARCHIVE"] || process.argv[2] || "");
+assert(process.env["ZERO_SMOLVM_IMAGE_ARCHIVE"] || process.argv[2], "provide a local Node image archive via argv or ZERO_SMOLVM_IMAGE_ARCHIVE");
 assert.notEqual(process.getuid?.(), 0, "qualification must run as a non-root host user");
 const imageDigest = await resolveSmolvmImage(imageArchive);
 const root = mkdtempSync(join(tmpdir(), "0sec-smol-qualification-"));

@@ -30,7 +30,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import type { Finding, SupplyChainAttribution } from "@0sec/shared";
+import type { Finding, SupplyChainAttribution } from "@0/shared"
 
 // ────────────────────────────────────────────────────────────────────
 // Top-N npm package list for typosquat detection

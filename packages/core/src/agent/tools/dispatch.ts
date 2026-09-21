@@ -31,6 +31,7 @@ import { evalDispatch } from "./eval.js";
 import { proxyDispatch } from "./proxy.js";
 import { securityEngineDispatch } from "./security-engines.js";
 import { offensiveEngineDispatch } from "./offensive-engines.js";
+import { jevPrepassDispatch } from "./jev-prepass.js";
 
 export const TOOL_DISPATCH: Record<string, string> = {
   ...reconDispatch,
@@ -54,4 +55,5 @@ export const TOOL_DISPATCH: Record<string, string> = {
   ...proxyDispatch,
   ...securityEngineDispatch,
   ...offensiveEngineDispatch,
+  ...jevPrepassDispatch,
 };

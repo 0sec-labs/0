@@ -25,8 +25,8 @@
 //      program override is exactly what venues need (HackerOne uses
 //      `X-HackerOne-Research`, Bugcrowd uses different fields, internal
 //      programs invent their own).
-//   2. Env vars: `0SEC_ATTRIBUTION_HEADERS` (JSON object of name→value)
-//      and `0SEC_ATTRIBUTION_UA_TOKEN` (string).
+//   2. Env vars: `ZERO_ATTRIBUTION_HEADERS` (JSON object of name→value)
+//      and `ZERO_ATTRIBUTION_UA_TOKEN` (string).
 //   3. CLI flags: repeatable `--attribution-header NAME=VALUE` and
 //      `--attribution-ua TOKEN`.
 //
@@ -45,7 +45,7 @@
 // "never injected on out-of-scope traffic".
 
 import type { ScopePolicy, ScopeJson } from "./scope.js";
-import { VERSION } from "@0sec/shared";
+import { VERSION } from "@0/shared"
 
 export interface AttributionConfig {
   /** Headers to attach to every in-scope outbound request. */
@@ -77,8 +77,8 @@ export interface AttributionInputs {
   cliUaToken?: string;
 }
 
-const ENV_HEADERS_KEY = "0SEC_ATTRIBUTION_HEADERS";
-const ENV_UA_TOKEN_KEY = "0SEC_ATTRIBUTION_UA_TOKEN";
+const ENV_HEADERS_KEY = "ZERO_ATTRIBUTION_HEADERS";
+const ENV_UA_TOKEN_KEY = "ZERO_ATTRIBUTION_UA_TOKEN";
 
 /**
  * Build an `AttributionConfig` from the three configured sources, applying

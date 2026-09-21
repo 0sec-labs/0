@@ -13,7 +13,7 @@
 
 import { mkdirSync, writeFileSync, existsSync, appendFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import { extractRoutingFeatures } from "./features.js";
 import {
   buildTraceRecord,

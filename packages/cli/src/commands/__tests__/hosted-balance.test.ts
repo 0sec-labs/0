@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Command } from "commander";
-import type { UsageAccount } from "@0sec/core";
+import type { UsageAccount } from "@0/core"
 import { registerHostedCommand } from "../hosted.js";
 
 const output = vi.hoisted(() => ({ stdout: vi.fn(), stderr: vi.fn() }));
@@ -20,8 +20,8 @@ function account(): UsageAccount {
 }
 
 beforeEach(() => {
-  vi.stubEnv("0SEC_CLOUD_TOKEN", "synthetic-fixture-token");
-  vi.stubEnv("0SEC_CLOUD_HOST", "https://fixture.invalid");
+  vi.stubEnv("ZERO_CLOUD_TOKEN", "synthetic-fixture-token");
+  vi.stubEnv("ZERO_CLOUD_HOST", "https://fixture.invalid");
 });
 afterEach(() => {
   vi.restoreAllMocks();

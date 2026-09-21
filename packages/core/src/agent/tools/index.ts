@@ -43,6 +43,7 @@ import {
   KERNEL_WEAPONIZE_TOOL_NAMES,
   CVE_ADAPT_TOOL_NAMES,
 } from "./offensive-engines.js";
+import { jevPrepassToolDefinition } from "./jev-prepass.js";
 
 export {
   SCANNER_TOOL_NAMES,
@@ -82,6 +83,8 @@ const DOMAIN_DEFINITIONS: Record<string, ToolDefinition> = {
   ...proxyToolDefinitions,
   ...securityEngineToolDefinitions,
   ...offensiveEngineToolDefinitions,
+  // Jev-powered security prepass (console runtime).
+  jev_prepass: jevPrepassToolDefinition,
 };
 
 // Canonical registry order. getToolsForRole("audit"/"review") enumerates
@@ -148,17 +151,14 @@ const TOOL_REGISTRY_ORDER = [
   // Burp-style intercepting HTTP(S) proxy (burp-network-20260913). Behind a
   // lazy ProxyDriver seam; scope-gated like http_request/browser.
   "proxy",
-  // Offline / read-only security engines (dev-live-engine-recovery). File/DB
-  // read or read-only + env-scoped — no target network, no exploit — so they
-  // join the DEFAULT read-only role set (SCOPED_SOURCE_AUDIT_TOOLS), not any
-  // allowScanners/cloud gate.
+  // Analysis and intelligence helpers; capability gating lives in tools.ts.
   "ad_attack_paths",
   "entra_attack_paths",
   "entra_posture",
-  "deep_source_review",
-  "file_security_review",
   "assemble_advisory",
   "cve_lookup",
+  // Jev-powered security prepass (console runtime).
+  "jev_prepass",
   // Phase-2 offensive / active security engines (dev-live-engine-recovery).
   // GROUP 1 (offline) join SCOPED_SOURCE_AUDIT_TOOLS; GROUP 2 are scope-gated;
   // GROUP 3 are feature-flag + scope gated, deny-by-default. See tools.ts

@@ -24,8 +24,8 @@ export function modelsByokLaunch(opts: { mouse?: boolean } = {}): LaunchOptions 
     settings: opts.mouse ? { mouseSupport: true } : {},
     env: {
       DEEPSEEK_API_KEY: "test-key",
-      "0SEC_PROVIDER": "deepseek",
-      "0SEC_MODEL": "deepseek-chat",
+      "ZERO_PROVIDER": "deepseek",
+      "ZERO_MODEL": "deepseek-chat",
     },
   };
 }

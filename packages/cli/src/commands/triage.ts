@@ -49,20 +49,20 @@ function resolveFindingByPrefix(rows: FindingRow[], id: string): FindingRow | un
 }
 
 /**
- * Convert a DB finding row (from @0sec/db listFindings) into the shared
- * Finding shape that @0sec/core's MemoryStore expects. The evidence fields
+ * Convert a DB finding row (from @0/db listFindings) into the shared
+ * Finding shape that @0/core's MemoryStore expects. The evidence fields
  * are folded into the nested `evidence` object and defaults are applied to
  * optional properties.
  */
-function rowToFinding(row: FindingRow): import("@0sec/shared").Finding {
+function rowToFinding(row: FindingRow): import("@0/shared").Finding {
   return {
     id: row.id,
     templateId: "",
     title: row.title,
     description: row.description,
-    severity: row.severity as import("@0sec/shared").Severity,
-    category: row.category as import("@0sec/shared").AttackCategory,
-    status: row.status as import("@0sec/shared").FindingStatus,
+    severity: row.severity as import("@0/shared").Severity,
+    category: row.category as import("@0/shared").AttackCategory,
+    status: row.status as import("@0/shared").FindingStatus,
     evidence: {
       request: row.evidenceRequest,
       response: row.evidenceResponse,
@@ -74,12 +74,12 @@ function rowToFinding(row: FindingRow): import("@0sec/shared").Finding {
 }
 
 async function openStore(dbPath?: string) {
-  const { MemoryStore } = await import("@0sec/core");
+  const { MemoryStore } = await import("@0/core");
   return new MemoryStore(dbPath);
 }
 
 async function loadFinding(dbPath: string | undefined, findingId: string): Promise<FindingRow> {
-  const { osecDB } = await import("@0sec/db");
+  const { osecDB } = await import("@0/db");
   const db = new osecDB(dbPath);
   try {
     const rows = db.listFindings({ limit: 5000 }) as FindingRow[];
@@ -164,7 +164,7 @@ async function runMarkFp(findingId: string, opts: TriageMarkFpOptions): Promise<
   const row = await loadFinding(opts.dbPath, findingId);
   const finding = rowToFinding(row);
 
-  const { osecDB } = await import("@0sec/db");
+  const { osecDB } = await import("@0/db");
   const db = new osecDB(opts.dbPath);
   try {
     db.updateFindingTriage(row.id, "suppressed", opts.reason);

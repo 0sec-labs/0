@@ -1,5 +1,5 @@
 /**
- * Console session transcripts, persisted to `~/.0sec/console-sessions/<id>.json`.
+ * Console session transcripts, persisted to `~/.0/console-sessions/<id>.json`.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * WHAT THIS WRITES TO DISK, AND WHY IT IS SENSITIVE
@@ -58,7 +58,7 @@
 import { chmodSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared"
 
 /** Listing entry: everything needed to describe a session without loading it. */
 export interface StoredSessionMeta {
@@ -150,7 +150,7 @@ const FILE_SUFFIX = ".json";
 /**
  * Transcripts live beside the rest of the per-user engine state (scan DB,
  * journals, credentials, TUI settings) rather than in a bespoke directory, so
- * `homeStateDir` from `@0sec/shared` — not a local `".0sec"` literal — decides
+ * `homeStateDir` from `@0/shared` — not a local `".0"` literal — decides
  * where that is. One definition of the state root means a future relocation or
  * an `$XDG_STATE_HOME` migration happens in one place, and — for a directory
  * full of engagement data — that such a relocation cannot leave a stale copy

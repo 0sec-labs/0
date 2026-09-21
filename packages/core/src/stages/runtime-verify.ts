@@ -32,7 +32,7 @@
  */
 
 import { env } from "node:process";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 
 // ── Public types ──────────────────────────────────────────────────────────────
 

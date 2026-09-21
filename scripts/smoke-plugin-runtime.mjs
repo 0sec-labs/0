@@ -14,7 +14,7 @@ const home = join(root, "home");
 const project = join(root, "project");
 const emptyPath = join(root, "no-executables");
 const pluginId = "release-smoke";
-const pluginDir = join(home, ".0sec", "plugins", pluginId);
+const pluginDir = join(home, ".0", "plugins", pluginId);
 for (const dir of [home, project, emptyPath, pluginDir]) mkdirSync(dir, { recursive: true });
 
 // No external Node/Bun executable is discoverable. A standalone CLI must use
@@ -25,7 +25,7 @@ const env = {
   USERPROFILE: home,
   XDG_CONFIG_HOME: join(home, ".config"),
   PATH: emptyPath,
-  "0SEC_REGISTRY_URL": "",
+  "ZERO_REGISTRY_URL": "",
 };
 function run(args) {
   try {

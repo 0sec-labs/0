@@ -4,18 +4,16 @@ import { readFileSync, statSync, existsSync, writeFileSync } from "node:fs";
 import { spawnSync, spawn } from "node:child_process";
 import { isAbsolute, resolve, join } from "node:path";
 
-import type {
-  Finding,
-  AttackResult,
-  PocStep,
-  TargetInfo,
-  VerificationSpec,
-  VerificationCodePredicate,
-  VerificationBehavior,
-  VerificationBehaviorStep,
-  NamedIdentity,
-} from "@0sec/shared";
-import { resolveIdentities, compareRoles, DEFAULT_AUTONOMY_MODE, createJevEvaluator, jevConfigFromEnvironment, type JevEvaluator } from "@0sec/shared";
+import type { Finding,
+AttackResult,
+PocStep,
+TargetInfo,
+VerificationSpec,
+VerificationCodePredicate,
+VerificationBehavior,
+VerificationBehaviorStep,
+NamedIdentity, } from "@0/shared"
+import { resolveIdentities, compareRoles, DEFAULT_AUTONOMY_MODE, createJevEvaluator, jevConfigFromEnvironment, type JevEvaluator } from "@0/shared"
 import type { ToolDefinition, ToolCall, ToolResult, ToolResultMeta, ToolContext, AgentRole } from "./types.js";
 import type {
   OperatorQuestion,
@@ -89,7 +87,7 @@ import {
   classifyPromptLayerImpact,
   type PromptLayerAsset,
 } from "./playbooks.js";
-import type { osecDB } from "@0sec/db";
+import type { osecDB } from "@0/db"
 import { features as featureFlags } from "./features.js";
 import { PtySessionManager } from "./pty-session.js";
 import { sanitizedEnv } from "./sanitized-env.js";
@@ -194,11 +192,10 @@ import {
   executeAdAttackPaths,
   executeEntraAttackPaths,
   executeEntraPosture,
-  executeDeepSourceReview,
-  executeFileSecurityReview,
   executeAssembleAdvisory,
   executeCveLookup,
 } from "./tools/security-engines.js";
+import { executeJevPrepass } from "./tools/jev-prepass.js";
 import {
   executeVariantHunt,
   executeAssumptionHunt,
@@ -378,7 +375,7 @@ const DEFAULT_BASH_WALLCLOCK_MS = 120_000;
 const BASH_GRACE_MS = 2_000;
 
 function resolveBashWallclockCeilingMs(): number {
-  const raw = process.env["0SEC_BASH_TIMEOUT_MS"]?.trim();
+  const raw = process.env["ZERO_BASH_TIMEOUT_MS"]?.trim();
   if (!raw) return DEFAULT_BASH_WALLCLOCK_MS;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_BASH_WALLCLOCK_MS;
@@ -611,6 +608,13 @@ const SCOPED_SOURCE_AUDIT_TOOLS: Record<string, true> = {
   update_finding: true,
   done: true,
   remember_codebase: true,
+  // Delegation shares the audit's scope, tool capabilities, budget and worker tree.
+  spawn_agent: true,
+  spawn_agents: true,
+  spawn_persistent_agent: true,
+  report_status: true,
+  send_message: true,
+  check_messages: true,
   // Structured full-state plan (TodoWrite shape). Mutates only the run's plan
   // tracker, authorizes nothing, grants no capability — safe inside the scoped
   // source-audit trust boundary.
@@ -618,10 +622,9 @@ const SCOPED_SOURCE_AUDIT_TOOLS: Record<string, true> = {
   // Explicitly opt-in; the handler confines the path, strips credentials, and
   // leaves dynamic target execution disabled unless 0verse itself is configured.
   analyze_binary: true,
-  // NOTE: the wired security engines (ad_attack_paths, entra_*, deep_source_review,
-  // file_security_review, assemble_advisory, cve_lookup, variant_hunt,
-  // assumption_hunt, generate_fix) are deliberately NOT in this set. Several
-  // spawn sub-analyses / run lenses / make network calls (entra_posture,
+  // Effectful security engines (ad_attack_paths, entra_*, assemble_advisory,
+  // cve_lookup, variant_hunt, assumption_hunt, generate_fix) are NOT in this set.
+  // They spawn sub-analyses / run lenses / make network calls (entra_posture,
   // cve_lookup), so exposing them inside the ATTACKER-CONTROLLED scoped source
   // boundary would widen the trust surface. They remain in TOOL_REGISTRY_ORDER
   // and so are available to the trusted (non-scoped) audit/review role via
@@ -1852,9 +1855,9 @@ export interface CoverageGateDecision {
  * unit-testable without spinning up a ToolExecutor.
  *
  * Default thresholds (override via env):
- *   - `0SEC_AUDIT_MIN_COVERAGE_FILES` (default 3): minimum distinct
+ *   - `ZERO_AUDIT_MIN_COVERAGE_FILES` (default 3): minimum distinct
  *     source files read.
- *   - `0SEC_AUDIT_DONE_GATE=0`: disable the gate entirely.
+ *   - `ZERO_AUDIT_DONE_GATE=0`: disable the gate entirely.
  *
  * Pass conditions (any of):
  *   1. At least N distinct source files read.
@@ -1865,7 +1868,7 @@ export interface CoverageGateDecision {
  */
 export function evaluateDoneCoverageGate(input: CoverageGateInput, env: NodeJS.ProcessEnv = process.env): CoverageGateDecision {
   // Operator-tunable kill switch.
-  if (env["0SEC_AUDIT_DONE_GATE"] === "0" || env["0SEC_AUDIT_DONE_GATE"] === "false") {
+  if (env["ZERO_AUDIT_DONE_GATE"] === "0" || env["ZERO_AUDIT_DONE_GATE"] === "false") {
     return { pass: true };
   }
 
@@ -1876,7 +1879,7 @@ export function evaluateDoneCoverageGate(input: CoverageGateInput, env: NodeJS.P
   }
 
   const minFiles = (() => {
-    const raw = env["0SEC_AUDIT_MIN_COVERAGE_FILES"];
+    const raw = env["ZERO_AUDIT_MIN_COVERAGE_FILES"];
     const n = raw === undefined ? NaN : Number.parseInt(raw, 10);
     return Number.isFinite(n) && n >= 0 ? n : 3;
   })();
@@ -2117,12 +2120,12 @@ const SUBAGENT_MAX_FANOUT = 8;
 // This bounds the RATE only: every requested child still runs, and findings
 // merge back in input order with identical behavior — matching the
 // VERIFY_CONCURRENCY pattern in unified-pipeline.ts. Override via
-// `0SEC_SUBAGENT_CONCURRENCY`.
+// `ZERO_SUBAGENT_CONCURRENCY`.
 const SUBAGENT_CONCURRENCY = 4;
 
-/** Resolve the subagent fan-out limit, honoring `0SEC_SUBAGENT_CONCURRENCY`. */
+/** Resolve the subagent fan-out limit, honoring `ZERO_SUBAGENT_CONCURRENCY`. */
 function subagentConcurrency(): number {
-  const raw = process.env["0SEC_SUBAGENT_CONCURRENCY"];
+  const raw = process.env["ZERO_SUBAGENT_CONCURRENCY"];
   if (raw !== undefined) {
     const parsed = Number.parseInt(raw, 10);
     if (Number.isFinite(parsed) && parsed > 0) return parsed;
@@ -2952,7 +2955,7 @@ export class ToolExecutor {
   private _rejectedDecoyFlags: Set<string>;
 
   /**
-   * Lazily loaded cloud audit-skill bundle from 0SEC_AUDIT_SKILLS_MANIFEST.
+   * Lazily loaded cloud audit-skill bundle from ZERO_AUDIT_SKILLS_MANIFEST.
    * null = env not set (no cloud skills); Map = already loaded and cached.
    * Populated on first listSkills/loadSkill call that finds the env var.
    */
@@ -3362,6 +3365,11 @@ export class ToolExecutor {
     try {
       signal?.throwIfAborted();
       assertAuthority?.();
+      if (this.ctx.workerTree && this.ctx.delegationTools &&
+          !this.ctx.delegationTools.some(tool => tool.name === call.name) &&
+          !this.ctx.selfExtension?.tools().some(tool => tool.name === call.name)) {
+        return { success: false, output: null, error: `Tool "${call.name}" is not available to this delegated agent` };
+      }
       const scopedAuditVerdict = await this._evaluateScopedAuditGate(call);
       if (scopedAuditVerdict) return scopedAuditVerdict;
       signal?.throwIfAborted();
@@ -3783,7 +3791,7 @@ export class ToolExecutor {
     // path, recording every attempt as evidence.
     //
     // The ladder is opt-out: an engagement hardening profile (or the standalone
-    // `--no-waf-evasion` / `0SEC_WAF_EVASION=0`) turns it off, because
+    // `--no-waf-evasion` / `ZERO_WAF_EVASION=0`) turns it off, because
     // auto-escalating a WAF block into encoded/mutated retries is what turns a
     // routine block into a SOC incident. Detection still runs — we report the
     // block, we just don't try to beat it. See `scope/engagement-profile.ts`.
@@ -5454,7 +5462,7 @@ export class ToolExecutor {
    */
   private async cloudS3Probe(args: Record<string, unknown>): Promise<ToolResult> {
     if (!featureFlags.cloudSurface) {
-      return { success: false, output: null, error: "cloud_s3_probe is disabled. Set 0SEC_FEATURE_CLOUD_SURFACE=1 to enable." };
+      return { success: false, output: null, error: "cloud_s3_probe is disabled. Set ZERO_FEATURE_CLOUD_SURFACE=1 to enable." };
     }
     const rawBuckets = args.buckets;
     if (!Array.isArray(rawBuckets) || rawBuckets.length === 0) {
@@ -5579,7 +5587,7 @@ export class ToolExecutor {
    */
   private async cloudValidateCredentials(args: Record<string, unknown>): Promise<ToolResult> {
     if (!featureFlags.cloudSurface) {
-      return { success: false, output: null, error: "cloud_validate_credentials is disabled. Set 0SEC_FEATURE_CLOUD_SURFACE=1 to enable." };
+      return { success: false, output: null, error: "cloud_validate_credentials is disabled. Set ZERO_FEATURE_CLOUD_SURFACE=1 to enable." };
     }
     if (!this.ctx.scope) {
       return {
@@ -5727,7 +5735,7 @@ export class ToolExecutor {
       // the block above concludes bash egress is checked when it is not.
       //
       // Fail-loud by default (see `agenticScan`'s boot warning for the
-      // reasoning), fail-closed under 0SEC_REQUIRE_SCOPE. Here we record
+      // reasoning), fail-closed under ZERO_REQUIRE_SCOPE. Here we record
       // the destinations of any command that actually reaches the network
       // with the guards off, so the scan event log answers "what did unscoped
       // bash talk to?" instead of nothing at all.
@@ -5852,7 +5860,7 @@ export class ToolExecutor {
       return {
         success: false,
         output: null,
-        error: `bash tool timed out after ${Math.round(timeoutMs / 1000)}s (0SEC_BASH_TIMEOUT_MS=${ceilingMs})`,
+        error: `bash tool timed out after ${Math.round(timeoutMs / 1000)}s (ZERO_BASH_TIMEOUT_MS=${ceilingMs})`,
         // Display-only card sidecar (never seen by the model): the partial
         // output plus the wall clock, so a timed-out run still renders a card.
         meta: {
@@ -6025,7 +6033,7 @@ export class ToolExecutor {
       try {
         const config = jevConfigFromEnvironment("browser", process.env);
         this._browserJev = config ? createJevEvaluator(config) : null;
-        this._browserReadOnlyUrls = new Set((process.env["0SEC_JEV_BROWSER_READ_ONLY_URLS"] ?? "")
+        this._browserReadOnlyUrls = new Set((process.env["ZERO_JEV_BROWSER_READ_ONLY_URLS"] ?? "")
           .split(",").map(url => url.trim()).filter(Boolean).map(url => new URL(url).href));
       } catch {
         this._browserJev = null;
@@ -6117,6 +6125,23 @@ export class ToolExecutor {
     return { runNativeAgentLoop };
   }
 
+  private subagentTools(messaging: MessagingRuntime | undefined): ToolDefinition[] {
+    const inherited = this.ctx.delegationTools ?? getToolsForRole(this.ctx.role ?? "attack", {
+      hasScope: !!this.ctx.scopePath, allowScanners: this.ctx.allowScanners,
+    });
+    const scopedSource = !!this.ctx.scopePath && (this.ctx.role === "audit" || this.ctx.role === "review");
+    return inherited.filter(tool =>
+      Object.hasOwn(TOOL_DEFINITIONS, tool.name) &&
+      (!scopedSource || Object.hasOwn(SCOPED_SOURCE_AUDIT_TOOLS, tool.name)),
+    ).concat(REPORT_STATUS_TOOL, buildSendMessageTool(messaging), CHECK_MESSAGES_TOOL);
+  }
+
+  private mergeSubagentFindings(findings: readonly Finding[], sink = this.ctx.findings): void {
+    for (const finding of findings) {
+      if (!sink.some(existing => existing.id === finding.id)) sink.push(finding);
+    }
+  }
+
   private async runOneSubagent(
     task: string,
     maxTurns: number,
@@ -6151,8 +6176,7 @@ export class ToolExecutor {
       }
       signal.throwIfAborted();
 
-      // Child tools retain the canonical no-spawn guard. Internally owned
-      // descendants share audit admission and lifetime ownership. Messaging
+      // Descendants share audit admission, role and capabilities. Messaging
       // remains scoped to explicit parent/operator and enabled sibling peers.
       // Thread the child's messaging identity + policy onto its context. The
       // child's stable peer id is its lifecycle `agent_id` (unique per child);
@@ -6191,10 +6215,7 @@ export class ToolExecutor {
             }
           : undefined);
 
-      const subTools: ToolDefinition[] = ["bash", "save_finding", "done"]
-        .map((n) => TOOL_DEFINITIONS[n])
-        .filter((t): t is ToolDefinition => t !== undefined)
-        .concat(REPORT_STATUS_TOOL, buildSendMessageTool(childMessaging), CHECK_MESSAGES_TOOL);
+      const subTools = this.subagentTools(childMessaging);
 
       // running — immediately before the agent loop starts
       eventBus.emit("subagent_lifecycle", { ...base,
@@ -6218,10 +6239,12 @@ export class ToolExecutor {
       // tool description — that it applies to every agent — is actually honoured
       // in child-visible input, not merely echoed onto the display card.
       const jobText = sharedContext ? `${sharedContext}\n\n${task}` : task;
+      const delegationSystemPrompt = this.ctx.delegationSystemPrompt ?? `You are a focused ${this.ctx.role ?? "attack"} agent.`;
       const state = await runNativeAgentLoop({
         config: {
-          role: "attack",
-          systemPrompt: `You are a focused exploitation agent. Your ONLY job:\n\n${jobText}\n\nUse bash to run curl, python3, or any command. Save findings with save_finding. Call done when finished.${renderSubagentMessagingPrompt(childMessaging)}`,
+          role: this.ctx.role ?? "attack",
+          systemPrompt: `${delegationSystemPrompt}\n\nYour delegated task:\n\n${jobText}\n\nUse only your provided tools within the inherited scope. Delegate independent subtasks when useful. Save evidence-backed findings with save_finding and call done when finished.${renderSubagentMessagingPrompt(childMessaging)}`,
+          delegationSystemPrompt,
           tools: subTools,
           maxTurns,
           target: this.ctx.target,
@@ -6234,8 +6257,14 @@ export class ToolExecutor {
           costCeilingUsd: this.ctx.costCeilingUsd,
           costModel: rt.resolvedModel?.() ?? this.ctx.costModel,
           scopePath: this.ctx.scopePath,
+          jevRuntime: this.ctx.jevRuntime,
           autonomyMode: this.ctx.autonomyMode,
-          allowModelSelfExtension: this.ctx.selfExtension?.isEnabled() ?? false,
+          publicNetwork: this.ctx.publicNetwork,
+          allowScanners: this.ctx.allowScanners,
+          attribution: this.ctx.attribution,
+          engagement: this.ctx.engagement,
+          codebaseLearning: false,
+          allowModelSelfExtension: subTools.some(tool => tool.name === "self_extend") && (this.ctx.selfExtension?.isEnabled() ?? false),
           executablePlugins: this.ctx.executablePluginConfiguration,
           workspaceRoot: this.ctx.workspaceRoot,
           executableEvolutionProfiles: this.ctx.executableEvolutionProfiles,
@@ -6353,22 +6382,21 @@ export class ToolExecutor {
     if (!(await rt.isAvailable())) throw new Error("No API key available for persistent agent");
     signal?.throwIfAborted();
 
-    const subTools: ToolDefinition[] = ["bash", "save_finding", "done"]
-      .map((n) => TOOL_DEFINITIONS[n])
-      .filter((t): t is ToolDefinition => t !== undefined)
-      .concat(REPORT_STATUS_TOOL, buildSendMessageTool(childMessaging), CHECK_MESSAGES_TOOL);
+    const subTools = this.subagentTools(childMessaging);
+    const delegationSystemPrompt = this.ctx.delegationSystemPrompt ?? `You are a focused ${this.ctx.role ?? "attack"} agent.`;
 
     const preamble =
       messages && messages.length > 0
         ? `You are ${base.name}, a persistent agent, REVIVED by new messages:\n\n${renderInboundBatch(messages)
             .rendered.map((r) => r.text)
             .join("\n\n")}\n\nAct on them, reply with send_message, and call done when finished — you will PARK again afterwards.`
-        : `You are ${base.name}, a persistent agent. Your task:\n\n${task ?? base.task}\n\nUse bash to run curl, python3, or any command. Save findings with save_finding. Call done when finished — you will then PARK and can be revived by a message.`;
+        : `You are ${base.name}, a persistent agent. Your task:\n\n${task ?? base.task}\n\nUse only your provided tools within the inherited scope. Delegate independent subtasks when useful. Save evidence-backed findings with save_finding and call done when finished — you will then PARK and can be revived by a message.`;
 
     const state = await runNativeAgentLoop({
       config: {
-        role: "attack",
-        systemPrompt: `${preamble}${renderSubagentMessagingPrompt(childMessaging)}`,
+        role: this.ctx.role ?? "attack",
+        systemPrompt: `${delegationSystemPrompt}\n\n${preamble}${renderSubagentMessagingPrompt(childMessaging)}`,
+        delegationSystemPrompt,
         tools: subTools,
         maxTurns,
         target: this.ctx.target,
@@ -6381,8 +6409,14 @@ export class ToolExecutor {
         costCeilingUsd: this.ctx.costCeilingUsd,
         costModel: rt.resolvedModel?.() ?? this.ctx.costModel,
         scopePath: this.ctx.scopePath,
+        jevRuntime: this.ctx.jevRuntime,
         autonomyMode: this.ctx.autonomyMode,
-        allowModelSelfExtension: this.ctx.selfExtension?.isEnabled() ?? false,
+        publicNetwork: this.ctx.publicNetwork,
+        allowScanners: this.ctx.allowScanners,
+        attribution: this.ctx.attribution,
+        engagement: this.ctx.engagement,
+        codebaseLearning: false,
+        allowModelSelfExtension: subTools.some(tool => tool.name === "self_extend") && (this.ctx.selfExtension?.isEnabled() ?? false),
         executablePlugins: this.ctx.executablePluginConfiguration,
         workspaceRoot: this.ctx.workspaceRoot,
         executableEvolutionProfiles: this.ctx.executableEvolutionProfiles,
@@ -6415,11 +6449,7 @@ export class ToolExecutor {
     });
 
     signal?.throwIfAborted();
-    for (const finding of state.findings ?? []) {
-      if (!this._workerFindings.some(existing => existing.id === finding.id)) {
-        this._workerFindings.push(finding);
-      }
-    }
+    this.mergeSubagentFindings(state.findings ?? [], this._workerFindings);
     if (state.errorExit) throw new Error(state.errorExit.error);
     return {
       turns: turnOffset + state.turnCount, summary: state.summary, done: state.done,
@@ -6434,7 +6464,7 @@ export class ToolExecutor {
    * task, PARKS, and is REVIVED by messages (see `hub/supervisor.ts`). Returns
    * immediately with the agent's id + name. Its lifetime belongs to the audit,
    * not a transient spawning invocation. Stops drain its owned subtree.
-   * The model-facing child tool set retains the canonical no-spawn guard.
+   * Descendants inherit this invocation's role and bounded tool capabilities.
    */
   private async spawnPersistentAgent(args: Record<string, unknown>): Promise<ToolResult> {
     const parsed = validateSpawnPersistentAgentArgs(args);
@@ -6681,7 +6711,7 @@ export class ToolExecutor {
 
     const outcome = await this.runOneSubagent(task, maxTurns, base, undefined, undefined, selection.data, lease);
     // Preserve accepted findings even if a later model request failed.
-    for (const finding of outcome.findings ?? []) this.ctx.findings.push(finding);
+    this.mergeSubagentFindings(outcome.findings ?? []);
     if (!outcome.ok) {
       return { success: false, output: null, error: outcome.error };
     }
@@ -6822,7 +6852,7 @@ export class ToolExecutor {
     // Keep admission leases until publication ends: a resolved stop must not
     // be followed by a late merge from an already completed concurrency wave.
     const perChild = outcomes.map((outcome, index) => {
-      for (const finding of outcome.findings ?? []) this.ctx.findings.push(finding);
+      this.mergeSubagentFindings(outcome.findings ?? []);
       if (outcome.ok) {
         return {
           index,
@@ -7356,7 +7386,7 @@ export class ToolExecutor {
    * `oast_register` (0sec#659) — mint a unique out-of-band interaction handle
    * from the hosted collaborator. Returns a unique subdomain + correlation
    * token + ready-to-inject payload URLs. When no collaborator is configured
-   * (feature off or 0SEC_OAST_URL unset), returns a graceful, explanatory
+   * (feature off or ZERO_OAST_URL unset), returns a graceful, explanatory
    * result rather than an error — the agent should fall back to in-band proof.
    */
   private async oastRegister(args: Record<string, unknown>): Promise<ToolResult> {
@@ -7938,7 +7968,7 @@ export class ToolExecutor {
 
   private async ptySession(args: Record<string, unknown>): Promise<ToolResult> {
     if (!featureFlags.ptySession) {
-      return { success: false, output: null, error: "pty_session is disabled. Set 0SEC_FEATURE_PTY_SESSION=1 to enable." };
+      return { success: false, output: null, error: "pty_session is disabled. Set ZERO_FEATURE_PTY_SESSION=1 to enable." };
     }
 
     const action = (args.action as string ?? "").trim();
@@ -8046,7 +8076,7 @@ export class ToolExecutor {
    */
   private async pythonExec(args: Record<string, unknown>): Promise<ToolResult> {
     if (!featureFlags.pythonExec) {
-      return { success: false, output: null, error: "python_exec is disabled. Set 0SEC_FEATURE_PYTHON_EXEC=1 to enable." };
+      return { success: false, output: null, error: "python_exec is disabled. Set ZERO_FEATURE_PYTHON_EXEC=1 to enable." };
     }
 
     const code = (args.code as string) ?? "";
@@ -8118,7 +8148,7 @@ export class ToolExecutor {
       return {
         success: false,
         output: null,
-        error: "analyze_binary is disabled. Set 0SEC_FEATURE_ZEROVERSE=1 to enable.",
+        error: "analyze_binary is disabled. Set ZERO_FEATURE_ZEROVERSE=1 to enable.",
       };
     }
     if (!this.ctx.scopePath) {
@@ -8163,7 +8193,7 @@ export class ToolExecutor {
 
   private async webSearch(args: Record<string, unknown>): Promise<ToolResult> {
     if (!featureFlags.webSearch) {
-      return { success: false, output: null, error: "web_search is disabled. Set 0SEC_FEATURE_WEB_SEARCH=1 to enable." };
+      return { success: false, output: null, error: "web_search is disabled. Set ZERO_FEATURE_WEB_SEARCH=1 to enable." };
     }
 
     const query = (args.query as string ?? "").trim();
@@ -8286,20 +8316,16 @@ export class ToolExecutor {
     return executeEntraPosture(this.ctx, args);
   }
 
-  private deepSourceReviewTool(args: Record<string, unknown>): Promise<ToolResult> {
-    return executeDeepSourceReview(this.ctx, args);
-  }
-
-  private fileSecurityReviewTool(args: Record<string, unknown>): Promise<ToolResult> {
-    return executeFileSecurityReview(this.ctx, args);
-  }
-
   private assembleAdvisoryTool(args: Record<string, unknown>): Promise<ToolResult> {
     return executeAssembleAdvisory(this.ctx, args);
   }
 
   private cveLookupTool(args: Record<string, unknown>): Promise<ToolResult> {
     return executeCveLookup(this.ctx, args);
+  }
+
+  private jevPrepassTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeJevPrepass(this.ctx, args);
   }
 
   // ── Phase-2 offensive / active security engines (dev-live-engine-recovery) ──
@@ -8389,7 +8415,7 @@ export class ToolExecutor {
         success: false,
         output: null,
         error:
-          "wp_fingerprint is disabled. Enable with --features wp_fingerprint or 0SEC_FEATURE_WP_FINGERPRINT=1.",
+          "wp_fingerprint is disabled. Enable with --features wp_fingerprint or ZERO_FEATURE_WP_FINGERPRINT=1.",
       };
     }
 
@@ -8473,7 +8499,7 @@ export class ToolExecutor {
         skipOsv: (args.skip_osv as boolean) ?? false,
         wpScanApiToken: (args.wpscan_api_token as string | undefined)
           ?? process.env.WPSCAN_API_TOKEN
-          ?? process.env["0SEC_WPSCAN_API_TOKEN"],
+          ?? process.env["ZERO_WPSCAN_API_TOKEN"],
       });
       return {
         success: true,
@@ -8789,7 +8815,7 @@ export class ToolExecutor {
         success: false,
         output: null,
         error:
-          "mongo_objectid is disabled. Enable with --features mongo_objectid_forge or 0SEC_FEATURE_MONGO_OBJECTID_FORGE=1.",
+          "mongo_objectid is disabled. Enable with --features mongo_objectid_forge or ZERO_FEATURE_MONGO_OBJECTID_FORGE=1.",
       };
     }
 
@@ -8838,7 +8864,7 @@ export class ToolExecutor {
 
   /**
    * Lazily load and cache the cloud audit-skills bundle from the
-   * 0SEC_AUDIT_SKILLS_MANIFEST environment variable. Returns null when
+   * ZERO_AUDIT_SKILLS_MANIFEST environment variable. Returns null when
    * the env var is unset (no cloud skills configured); returns an empty
    * Map for valid manifests with zero skills; returns the loaded Map for
    * a populated bundle. Cache lives for the lifetime of this ToolExecutor.
@@ -8846,7 +8872,7 @@ export class ToolExecutor {
   private ensureCloudSkillBundle(): Map<string, SkillDefinition> | null {
     // undefined = not yet checked; null = env unset; Map = loaded
     if (this._cloudSkillBundle !== undefined) return this._cloudSkillBundle;
-    const manifestPath = process.env["0SEC_AUDIT_SKILLS_MANIFEST"];
+    const manifestPath = process.env["ZERO_AUDIT_SKILLS_MANIFEST"];
     if (!manifestPath) {
       this._cloudSkillBundle = null;
       return null;
@@ -9248,7 +9274,7 @@ export class ToolExecutor {
     // @vercel/og bug. Audit-role flag-hunting (no scopePath) is skipped
     // because there's no local source to read; the agent is talking to a
     // remote target. See `evaluateDoneCoverageGate` for the policy and
-    // `0SEC_AUDIT_MIN_COVERAGE_FILES` / `0SEC_AUDIT_DONE_GATE` for
+    // `ZERO_AUDIT_MIN_COVERAGE_FILES` / `ZERO_AUDIT_DONE_GATE` for
     // operator overrides.
     const isSourceAudit =
       (this.ctx.role === "audit" || this.ctx.role === "review")
@@ -9353,7 +9379,7 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
   const offensiveScopedTools = opts?.hasScope ? [...OFFENSIVE_SCOPED_TOOL_NAMES] : [];
   // Phase-2 GROUP 3: engines that RUN/BUILD untrusted code or weaponize.
   // Deny-by-default — each needs its named feature flag AND an active scope
-  // (0SEC_FEATURE_CLOUD_SURFACE parity). weaponize_kernel / cve_adapt add a
+  // (ZERO_FEATURE_CLOUD_SURFACE parity). weaponize_kernel / cve_adapt add a
   // runtime kernel-VM-artifact check in their handlers on top of this.
   const memsafetyTools = featureFlags.memsafetyFuzz && opts?.hasScope ? [...MEMSAFETY_TOOL_NAMES] : [];
   const npmDiscoveryTools = featureFlags.npmDynamicDiscovery && opts?.hasScope ? [...NPM_DISCOVERY_TOOL_NAMES] : [];
@@ -9448,7 +9474,7 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     // active (parity with the scanner gating above — no scope ⇒ not offered).
     && (opts?.hasScope || !OFFENSIVE_SCOPED_TOOL_NAMES.includes(name))
     // Phase-2 GROUP 3: untrusted-exec / weaponization engines stay out unless
-    // BOTH their feature flag AND a scope are present (0SEC_FEATURE_CLOUD_SURFACE
+    // BOTH their feature flag AND a scope are present (ZERO_FEATURE_CLOUD_SURFACE
     // parity). Absent flag ⇒ never offered, even in the "everything" set.
     && ((featureFlags.memsafetyFuzz && opts?.hasScope) || !MEMSAFETY_TOOL_NAMES.includes(name))
     && ((featureFlags.npmDynamicDiscovery && opts?.hasScope) || !NPM_DISCOVERY_TOOL_NAMES.includes(name))

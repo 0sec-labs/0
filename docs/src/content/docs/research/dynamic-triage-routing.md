@@ -3,12 +3,12 @@ title: Dynamic Triage Routing — v0 Implementation
 description: Rule-based layer selection, routing traces, and the planned learned classifier.
 ---
 
-> **Status:** Rule-based v0 is gated by `0SEC_FEATURE_DYNAMIC_TRIAGE`. The learned classifier remains planned in the [design](/research/dynamic-routing-design/) and [0sec#113](https://github.com/0sec-labs/0sec/issues/113).
+> **Status:** Rule-based v0 is gated by `ZERO_FEATURE_DYNAMIC_TRIAGE`. The learned classifier remains planned in the [design](/research/dynamic-routing-design/) and [0sec#113](https://github.com/0sec-labs/0sec/issues/113).
 
 ## What shipped in v0
 
 `packages/core/src/triage/router/` selects from 11 layers per finding.
-`0SEC_FEATURE_DYNAMIC_TRIAGE` defaults off. The interface below allows a future
+`ZERO_FEATURE_DYNAMIC_TRIAGE` defaults off. The interface below allows a future
 classifier to reuse the dispatch contract:
 
 ```ts
@@ -89,7 +89,7 @@ The router falls through to today's static behavior. Any finding that doesn't ma
 
 ## The routing-trace dataset
 
-At the end of every scan with `0SEC_FEATURE_DYNAMIC_TRIAGE=1`, the scanner writes one JSONL record per finding to `<journal-sidecar-dir>/routing-trace.jsonl`. This is the dataset the phase-2 learned router trains on.
+At the end of every scan with `ZERO_FEATURE_DYNAMIC_TRIAGE=1`, the scanner writes one JSONL record per finding to `<journal-sidecar-dir>/routing-trace.jsonl`. This is the dataset the phase-2 learned router trains on.
 
 **Record shape (one example):**
 
@@ -150,7 +150,7 @@ Phase 2 of 0sec#113 (separate PR) replaces `RuleBasedRouter` with `XGBoostRouter
 4. The learned model lands as `class XGBoostRouter implements RouterModel`. Switching from `RuleBasedRouter` to `XGBoostRouter` requires a single line at module load:
 
 ```ts
-import { setRouterModel } from "@0sec/core";
+import { setRouterModel } from "@0/core";
 import { XGBoostRouter } from "./xgboost-router.js";
 setRouterModel(new XGBoostRouter(loadModelFromDisk()));
 ```
@@ -170,14 +170,14 @@ Plan: collect routing traces from the next ~10 benchmark dispatches (xbow-bench 
 ## How to enable
 
 ```bash
-env 0SEC_FEATURE_DYNAMIC_TRIAGE=1 0 scan ./your-target
+env ZERO_FEATURE_DYNAMIC_TRIAGE=1 0 scan ./your-target
 ```
 
 The routing decision for every finding is recorded in:
 - the SQLite event log (`stage:verify event_type:dynamic_triage_routing`), and
-- `~/.0sec/runs/<scan-id>/routing-trace.jsonl` at scan teardown.
+- `~/.0/runs/<scan-id>/routing-trace.jsonl` at scan teardown.
 
-The existing static feature flags (`0SEC_FEATURE_HOLDING_IT_WRONG`, `0SEC_FEATURE_POV_GATE`, etc.) still gate whether a layer **can** run; the router decides which of the available layers actually runs per finding. The router can never invoke a layer the operator explicitly disabled via the env var.
+The existing static feature flags (`ZERO_FEATURE_HOLDING_IT_WRONG`, `ZERO_FEATURE_POV_GATE`, etc.) still gate whether a layer **can** run; the router decides which of the available layers actually runs per finding. The router can never invoke a layer the operator explicitly disabled via the env var.
 
 Layer selection is not model-provider routing. The current registry includes
 `publishability`, `poc_gen`, and `kernel_oracle`; it does not include an

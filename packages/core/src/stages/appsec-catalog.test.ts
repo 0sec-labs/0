@@ -22,7 +22,7 @@ const EXPECTED_LENS_IDS = [
   "resource-exhaustion-dos",
 ];
 
-const REGISTRY_ENV = "0SEC_APPSEC_LENS_REGISTRY";
+const REGISTRY_ENV = "ZERO_APPSEC_LENS_REGISTRY";
 const originalRegistryPath = process.env[REGISTRY_ENV];
 let isolatedRegistryDirectory: string;
 
@@ -38,9 +38,9 @@ afterEach(() => {
 });
 
 
-describe("loadAppsecFinderLenses — runtime lens injection (0SEC_RUNTIME_LENSES)", () => {
-  const FLAG = "0SEC_RUNTIME_LENSES_ENABLED";
-  const ENV = "0SEC_RUNTIME_LENSES";
+describe("loadAppsecFinderLenses — runtime lens injection (ZERO_RUNTIME_LENSES)", () => {
+  const FLAG = "ZERO_RUNTIME_LENSES_ENABLED";
+  const ENV = "ZERO_RUNTIME_LENSES";
 
   /** A full, well-formed on-disk (snake_case) runtime archetype for `id`. */
   const rawRuntimeArchetype = (id: string) => ({

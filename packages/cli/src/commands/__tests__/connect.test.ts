@@ -13,7 +13,7 @@ beforeEach(() => {
   tmp = mkdtempSync(join(tmpdir(), "0sec-connect-test-"));
   previousExitCode = process.exitCode;
   process.exitCode = undefined;
-  vi.stubEnv("0SEC_CLOUD_TOKEN", "");
+  vi.stubEnv("ZERO_CLOUD_TOKEN", "");
 });
 
 afterEach(() => {
@@ -34,9 +34,9 @@ async function connect(
   response?: (path: string, method: string) => Response | undefined,
   overrides: Partial<ConnectActionOptions> = {},
 ) {
-  mkdirSync(join(tmp, ".0sec"));
-  writeFileSync(join(tmp, ".0sec", "cloud.env"),
-    "0SEC_CLOUD_HOST=https://cloud.0.security\n0SEC_CLOUD_TOKEN=test-token\n", { mode: 0o600 });
+  mkdirSync(join(tmp, ".0"));
+  writeFileSync(join(tmp, ".0", "cloud.env"),
+    "ZERO_CLOUD_HOST=https://cloud.0.security\nZERO_CLOUD_TOKEN=test-token\n", { mode: 0o600 });
   const requests: Array<{ path: string; method: string }> = [];
   const stdout: string[] = [];
   const stderr: string[] = [];

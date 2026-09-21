@@ -12,7 +12,7 @@ const cliPath = join(thisDir, "../../packages/cli/src/index.ts");
 // Invoke tsx's cli.mjs with node directly. The node_modules/.bin/tsx shim is a
 // /bin/sh script, and on dash-based systems /bin/sh strips environment
 // variables whose names are not shell identifiers — which includes the
-// digit-leading 0SEC_* contract this suite exercises.
+// digit-leading ZERO_* contract this suite exercises.
 const tsxCliPath = join(thisDir, "../node_modules/tsx/dist/cli.mjs");
 const tsconfigPath = join(thisDir, "../tsconfig.cli-e2e.json");
 const testHome = mkdtempSync(join(tmpdir(), "0sec-cli-test-"));
@@ -34,8 +34,8 @@ const run = (args: string[], timeout = 30_000, extraEnv: Record<string, string |
       HOME: testHome,
       TMPDIR: testHome,
       NO_COLOR: "1",
-      "0SEC_OFFLINE": "1",
-      "0SEC_SKIP_PROVIDER_BANNER": "1",
+      "ZERO_OFFLINE": "1",
+      "ZERO_SKIP_PROVIDER_BANNER": "1",
       ...extraEnv,
     },
   });
@@ -45,7 +45,7 @@ describe("CLI E2E", () => {
   it("--help shows all commands", () => {
     const result = run(["--help"]);
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("0sec");
+    expect(result.stdout).toContain("Usage: 0");
     for (const cmd of ["scan", "audit", "review", "history", "findings", "replay", "doctor"]) {
       expect(result.stdout).toContain(cmd);
     }
@@ -130,14 +130,14 @@ describe("CLI E2E", () => {
       ["audit", "is-odd", "--runtime", "api", "--format", "json", "--db-path", testDbPath + "-result-line"],
       60_000,
       {
-        "0SEC_EMIT_RESULT_LINE": "1",
+        "ZERO_EMIT_RESULT_LINE": "1",
       },
     );
     const output = result.stdout + result.stderr;
     expect(result.status).toBe(0);
-    const line = output.split("\n").find((entry) => entry.startsWith("0SEC_RESULT="));
+    const line = output.split("\n").find((entry) => entry.startsWith("ZERO_RESULT="));
     expect(line).toBeTruthy();
-    const parsed = JSON.parse(line!.slice("0SEC_RESULT=".length));
+    const parsed = JSON.parse(line!.slice("ZERO_RESULT=".length));
     expect(parsed.ok).toBe(true);
     expect(parsed.exitCode).toBe(0);
     expect(parsed.targetType).toBe("npm-package");

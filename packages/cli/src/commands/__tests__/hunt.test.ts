@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -45,7 +45,7 @@ const {
   };
 });
 
-vi.mock("@0sec/core", () => ({
+vi.mock("@0/core", () => ({
   generateVariantCandidates: generateVariantCandidatesMock,
   runHuntScan: runHuntScanMock,
   makeSkepticVerifier: makeSkepticVerifierMock,
@@ -448,7 +448,7 @@ describe("runHunt — novelty gate wiring", () => {
     buildInvariantHuntContextMock.mockResolvedValueOnce({
       subsystem: "net/unix",
       subsystemFiles: ["net/unix/af_unix.c"],
-      modelPath: `${tmpRoot}/.0sec/invariant-models/net__unix.json`,
+      modelPath: `${tmpRoot}/.0/invariant-models/net__unix.json`,
       modelLoaded: true,
       model: { objects: [{ object: "struct unix_sock" }] },
       violations: [{ kind: "unlocked-field-access" }],
@@ -500,7 +500,7 @@ describe("runHunt — novelty gate wiring", () => {
   it("injects the graph-slice prompt block into the finder brief when --graph-slice is set", async () => {
     buildGraphSliceHuntContextMock.mockReturnValueOnce({
       subsystem: "net/unix",
-      cpgPath: `${tmpRoot}/.0sec/cpg/net__unix.json`,
+      cpgPath: `${tmpRoot}/.0/cpg/net__unix.json`,
       targetFunctions: ["unix_attach_fds"],
       resolvedTargets: 1,
       opsEdges: 2,

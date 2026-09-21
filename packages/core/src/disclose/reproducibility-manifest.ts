@@ -23,7 +23,7 @@
 import { createHash } from "node:crypto";
 import { redactSensitiveHeaders } from "./template.js";
 import { redactPii } from "./writeup.js";
-import type { Finding, VerificationResult } from "@0sec/shared";
+import type { Finding, VerificationResult } from "@0/shared"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -129,7 +129,7 @@ export interface ManifestOptions {
   timestamp?: string;
   /**
    * Override the tool version string. Used by tests and build-embedded
-   * version stamps. Defaults to trying `process.env["0SEC_VERSION"]` or
+   * version stamps. Defaults to trying `process.env["ZERO_VERSION"]` or
    * read from the package.json at build time, falling back to `"unknown"`.
    */
   toolVersion?: string;
@@ -358,7 +358,7 @@ export function assembleReproducibilityManifest(
   const modelConfig = opts.modelConfig
     ? redactManifestValue(opts.modelConfig)
     : null;
-  const toolVersion = opts.toolVersion ?? process.env["0SEC_VERSION"] ?? "unknown";
+  const toolVersion = opts.toolVersion ?? process.env["ZERO_VERSION"] ?? "unknown";
   const timestamp = opts.timestamp ?? new Date().toISOString();
 
   // Redact the finding title through the full sanitization pipeline.

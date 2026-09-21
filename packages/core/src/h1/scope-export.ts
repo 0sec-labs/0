@@ -30,7 +30,7 @@
 // downstream review notices it.
 
 import { mkdirSync, writeFileSync } from "node:fs";
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared"
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { isIP } from "node:net";
@@ -38,11 +38,11 @@ import type { ScopeJson } from "../scope/scope.js";
 import type { H1Program, H1Scope } from "./types.js";
 
 export interface ToScopeFileOptions {
-  /** Override the default `~/.0sec/scopes/<handle>.json` path. */
+  /** Override the default `~/.0/scopes/<handle>.json` path. */
   outPath?: string;
   /**
    * Override the home directory base. Tests use this to write scope files
-   * into a tmpdir without touching the operator's real `~/.0sec`.
+   * into a tmpdir without touching the operator's real `~/.0`.
    */
   homeDir?: string;
 }
@@ -116,7 +116,7 @@ export function toScopeJson(program: H1Program, scopes: H1Scope[]): {
 }
 
 /**
- * Render + write to `~/.0sec/scopes/<handle>.json` with mode 0o600.
+ * Render + write to `~/.0/scopes/<handle>.json` with mode 0o600.
  * Returns the final path so the CLI can echo it.
  */
 export function toScopeFile(

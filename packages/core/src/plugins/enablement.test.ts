@@ -198,14 +198,14 @@ describe("fs layer", () => {
 
     const path = enablementFilePath(project, home);
     expect(statSync(path).mode & 0o777).toBe(ENABLEMENT_FILE_MODE);
-    expect(statSync(join(home, ".0sec", "plugin-enablement")).mode & 0o777).toBe(
+    expect(statSync(join(home, ".0", "plugin-enablement")).mode & 0o777).toBe(
       ENABLEMENT_DIR_MODE,
     );
   });
 
   it("readEnablement degrades to empty on corrupt / non-JSON files", () => {
     const path = enablementFilePath(project, home);
-    mkdirSync(join(home, ".0sec", "plugin-enablement"), { recursive: true });
+    mkdirSync(join(home, ".0", "plugin-enablement"), { recursive: true });
     writeFileSync(path, "this is not json {{{");
     expect(readEnablement(project, home).enabled).toEqual({});
   });

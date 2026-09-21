@@ -7,7 +7,7 @@
  * keeps the tests deterministic and CI-safe.
  *
  * Real VM tests live in `c-cpp-tier3-e2e.test.ts` and are gated on
- * `0SEC_KERNEL_QEMU=1`.
+ * `ZERO_KERNEL_QEMU=1`.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -15,7 +15,7 @@ import { mkdtempSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventEmitter } from "node:events";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import {
   runTier3Validation,
   promoteFindingsWithTier3Result,
@@ -126,8 +126,8 @@ describe("runTier3Validation — dry-run / env probe", () => {
   const originalEnv = { ...process.env };
   beforeEach(() => {
     process.env = { ...originalEnv };
-    delete process.env["0SEC_KERNEL_QEMU_KERNEL"];
-    delete process.env["0SEC_KERNEL_QEMU_DISK"];
+    delete process.env["ZERO_KERNEL_QEMU_KERNEL"];
+    delete process.env["ZERO_KERNEL_QEMU_DISK"];
   });
   afterEach(() => {
     process.env = { ...originalEnv };
@@ -137,7 +137,7 @@ describe("runTier3Validation — dry-run / env probe", () => {
     const artifact = makeTier2Artifact();
     const result = await runTier3Validation(artifact, {});
     expect(result.status).toBe("qemu_failed");
-    expect(result.reason).toMatch(/0SEC_KERNEL_QEMU_KERNEL/);
+    expect(result.reason).toMatch(/ZERO_KERNEL_QEMU_KERNEL/);
     expect(result.corpus_inputs_consumed).toBe(0);
     expect(result.run_duration_ms).toBeGreaterThanOrEqual(0);
   });

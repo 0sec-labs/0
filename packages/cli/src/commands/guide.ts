@@ -13,14 +13,12 @@
 // Everything below states only shipped, qualified behavior with measured
 // evidence. No comparative claims without named current evidence.
 
-import { VERSION } from "@0sec/shared";
+import { VERSION } from "@0/shared"
 import type { Command } from "commander";
 import { InvalidArgumentError } from "commander";
-import {
-  CloudClient,
-  CloudAuthMissingError,
-  loadCloudCredentials,
-} from "@0sec/core";
+import { CloudClient,
+CloudAuthMissingError,
+loadCloudCredentials, } from "@0/core"
 
 interface Capability {
   id: string;
@@ -204,7 +202,7 @@ const ARCHITECTURE = {
   boundaries: {
     auth: "Cloud actions need `0sec auth login` and the relevant service entitlement. Local/BYOK runs need no cloud account; provider requests can still use the network. A health response does not verify account identity or product access.",
     approval: "Verified patches are retained as artifacts by default. Publishing a PR is a separate gated action; nothing merges or deploys itself.",
-    cost: "Per-run cost ceilings (0SEC_COST_CEILING_USD / --cost-ceiling) bound model spend; the cloud adds account budgets. A run that exhausts budget stops and reports blocked, never fake-clean.",
+    cost: "Per-run cost ceilings (ZERO_COST_CEILING_USD / --cost-ceiling) bound model spend; the cloud adds account budgets. A run that exhausts budget stops and reports blocked, never fake-clean.",
     scope: "Live-target work requires an explicit scope file. Only test systems you own or are authorized to assess.",
   },
   limitations: [

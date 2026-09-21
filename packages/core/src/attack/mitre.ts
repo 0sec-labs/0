@@ -41,7 +41,7 @@
 // with the ATLAS technique named in a comment. Do not paper over the gap by
 // borrowing a loosely-related Enterprise id.
 
-import type { AttackCategory } from "@0sec/shared";
+import type { AttackCategory } from "@0/shared"
 
 export interface AttackTechnique {
   id: string;
@@ -191,7 +191,7 @@ function chain(primaryId: TechniqueId, ...secondaryIds: TechniqueId[]): AttackTe
 // ── Finding category → technique ──────────────────────────────────────────
 //
 // Exhaustive over `AttackCategory` on purpose: adding a category to
-// @0sec/shared without deciding its ATT&CK mapping is a type error here.
+// @0/shared without deciding its ATT&CK mapping is a type error here.
 
 const CATEGORY_MAP: Record<AttackCategory, AttackTechnique[]> = {
   // ── LLM / agent ──

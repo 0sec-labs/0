@@ -15,12 +15,12 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "0sec-submitted-code-"));
   records = [];
   analyticsPipeline.__resetForTests();
-  for (const name of ["0SEC_OFFLINE", "0SEC_NO_TELEMETRY", "DO_NOT_TRACK"]) {
+  for (const name of ["ZERO_OFFLINE", "ZERO_NO_TELEMETRY", "DO_NOT_TRACK"]) {
     vi.stubEnv(name, undefined);
   }
-  vi.stubEnv("0SEC_ANALYTICS_LEVEL", "commands");
-  vi.stubEnv("0SEC_CLOUD_HOST", "https://analytics.test");
-  vi.stubEnv("0SEC_CLOUD_TOKEN", "test-token");
+  vi.stubEnv("ZERO_ANALYTICS_LEVEL", "commands");
+  vi.stubEnv("ZERO_CLOUD_HOST", "https://analytics.test");
+  vi.stubEnv("ZERO_CLOUD_TOKEN", "test-token");
   analyticsPipeline.configure({
     homeDir: root,
     fetchImpl: (async (_url, init) => {

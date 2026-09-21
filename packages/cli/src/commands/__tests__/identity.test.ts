@@ -6,8 +6,8 @@ import { join } from "node:path";
 
 const runIdentityAssessmentMock = vi.fn();
 
-vi.mock("@0sec/core", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@0sec/core")>();
+vi.mock("@0/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@0/core")>();
   return {
     ...actual,
     runIdentityAssessment: runIdentityAssessmentMock,
@@ -16,7 +16,7 @@ vi.mock("@0sec/core", async (importOriginal) => {
 
 const { registerIdentityCommand } = await import("../identity.js");
 
-const TOKEN_ENV = "0SEC_GRAPH_ACCESS_TOKEN";
+const TOKEN_ENV = "ZERO_GRAPH_ACCESS_TOKEN";
 const TENANT = "11111111-2222-3333-4444-555555555555";
 
 function captureIO() {

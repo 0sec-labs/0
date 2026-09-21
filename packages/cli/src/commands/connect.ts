@@ -22,13 +22,11 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { InvalidArgumentError, type Command } from "commander";
 import chalk from "chalk";
-import {
-  CloudClient,
-  CloudUnauthorizedError,
-  loadCloudCredentials,
-  CloudAuthMissingError,
-  CloudForbiddenError,
-} from "@0sec/core";
+import { CloudClient,
+CloudUnauthorizedError,
+loadCloudCredentials,
+CloudAuthMissingError,
+CloudForbiddenError, } from "@0/core"
 
 // ── types ──
 

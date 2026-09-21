@@ -26,11 +26,11 @@ export function registerUpgradeCommand(program: Command): void {
   program
     .command("upgrade")
     .alias("update")
-    .description("Fetch and install the latest 0sec binary (re-runs install.sh)")
+    .description("Fetch and install the latest 0 binary (re-runs install.sh)")
     .option("--version <tag>", "Pin a specific release tag (e.g. v0.10.0)")
-    .option("--install-dir <path>", "Override the install directory (default: ~/.0sec/bin)")
+    .option("--install-dir <path>", "Override the install directory (default: ~/.0/bin)")
     .option("--scan-dependencies", "Scan the current project before upgrading")
-    .option("--fix-dependencies", "Refuse upgrade when vulnerabilities are present; use `0sec deps fix --yes` to remediate")
+    .option("--fix-dependencies", "Refuse upgrade when vulnerabilities are present; use `0 deps fix --yes` to remediate")
     .action(async (opts: UpgradeOptions) => {
       if (opts.fixDependencies || opts.scanDependencies) {
         const scan = await scanDependencies();

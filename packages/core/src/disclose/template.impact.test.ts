@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import type { Finding, ImpactAssessment } from "@0sec/shared";
+import type { Finding, ImpactAssessment } from "@0/shared"
 import { renderAdvisoryMarkdown } from "./template.js";
 
 function mkFinding(assessment?: ImpactAssessment): Finding {

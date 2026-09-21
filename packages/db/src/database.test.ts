@@ -2,7 +2,7 @@ import { describe, expect, it, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import { osecDB } from "./database.js";
 
 function makeFinding(overrides?: Partial<Finding>): Finding {

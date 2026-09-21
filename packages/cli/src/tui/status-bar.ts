@@ -26,7 +26,7 @@
  *    not a cosmetic one.
  */
 
-import { MODEL_PRICING, type ModelRates, type TokenUsageForPricing } from "@0sec/shared";
+import { MODEL_PRICING, type ModelRates, type TokenUsageForPricing } from "@0/shared"
 
 import { getSymbols, type SymbolTable } from "./symbols.js";
 import { fitTuiText } from "./text.js";

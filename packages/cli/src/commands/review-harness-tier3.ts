@@ -7,7 +7,7 @@
  * the verdict.
  *
  * The Tier-3 module short-circuits to `qemu_failed` when
- * `0SEC_KERNEL_QEMU_KERNEL` / `0SEC_KERNEL_QEMU_DISK` are unset,
+ * `ZERO_KERNEL_QEMU_KERNEL` / `ZERO_KERNEL_QEMU_DISK` are unset,
  * so this command is safe to exercise in CI — it just won't actually
  * boot a VM there.
  */
@@ -24,9 +24,9 @@ interface RunHarnessTier3Args {
   sanitizers?: string;
   outputDir?: string;
   verbose: boolean;
-  /** Override the kernel image path. Falls back to 0SEC_KERNEL_QEMU_KERNEL. */
+  /** Override the kernel image path. Falls back to ZERO_KERNEL_QEMU_KERNEL. */
   qemuKernel?: string;
-  /** Override the disk image path. Falls back to 0SEC_KERNEL_QEMU_DISK. */
+  /** Override the disk image path. Falls back to ZERO_KERNEL_QEMU_DISK. */
   qemuDisk?: string;
   /** Override the wall-clock budget, milliseconds. */
   wallClockMs?: number;
@@ -40,7 +40,7 @@ export async function runHarnessTier3(args: RunHarnessTier3Args): Promise<void> 
     buildTier2Harness,
     extractCorpus,
     runTier3Validation,
-  } = await import("@0sec/core");
+  } = await import("@0/core");
 
   const repoAbs = resolve(args.repo);
   if (!existsSync(repoAbs)) {
@@ -54,7 +54,7 @@ export async function runHarnessTier3(args: RunHarnessTier3Args): Promise<void> 
   }
 
   const sanitizers = parseSanitizers(args.sanitizers);
-  const outputDir = resolve(args.outputDir ?? join(repoAbs, ".0sec-out", "tier3"));
+  const outputDir = resolve(args.outputDir ?? join(repoAbs, ".0-out", "tier3"));
   const corpusDir = join(outputDir, "corpus");
 
   const functionName = args.functionName ?? deriveDefaultFunctionName(repoAbs);

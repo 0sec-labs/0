@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { z } from "zod";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import { applyPatchOps, parsePatch, type PatchOp } from "../agent/apply-patch.js";
 import { resolveScopedPath } from "../agent/tools/scope-path.js";
 import type {

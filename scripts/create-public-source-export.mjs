@@ -148,9 +148,12 @@ if (tracked) {
   for (const sourceRelative of tracked) {
     if (!isPublic(sourceRelative) || isExcluded(sourceRelative) || isGenerated(sourceRelative)) continue;
 
+    const source = join(repoRoot, sourceRelative);
+    if (!(await exists(source))) continue;
+
     const destination = join(outputDir, sourceRelative);
     await mkdir(dirname(destination), { recursive: true });
-    await cp(join(repoRoot, sourceRelative), destination, { dereference: false });
+    await cp(source, destination, { dereference: false });
   }
 } else {
   for (const root of publicRoots) await copyPublicRoot(root);

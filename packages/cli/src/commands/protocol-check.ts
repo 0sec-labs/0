@@ -11,7 +11,7 @@
  *
  * This command is GLUE: it builds the unified `NativeRuntime` (via the same
  * codex-login / API path the rest of the CLI uses — NO raw vendor keys) and the
- * live `fetch`-based HTTP sender, then calls `@0sec/core`
+ * live `fetch`-based HTTP sender, then calls `@0/core`
  * `runHttpConformanceCheck`. All the analysis lives in the engine.
  *
  * Exit codes (mirroring `0sec verify` so a dispatcher can branch on the code):
@@ -24,15 +24,13 @@
 import type { Command } from "commander";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import {
-  createLiveHttpSender,
-  createRuntime,
-  LlmApiRuntime,
-  runHttpConformanceCheck,
-  type ConformanceAttempt,
-  type HttpConformanceResult,
-  type NativeRuntime,
-} from "@0sec/core";
+import { createLiveHttpSender,
+createRuntime,
+LlmApiRuntime,
+runHttpConformanceCheck,
+type ConformanceAttempt,
+type HttpConformanceResult,
+type NativeRuntime, } from "@0/core"
 
 interface ProtocolCheckOpts {
   spec?: string;

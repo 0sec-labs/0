@@ -104,7 +104,7 @@ Use `--tools` to select from these live-attack tools:
 
 ### Auth configuration
 
-Target authentication is provided via the `0SEC_MCP_AUTH_JSON` environment
+Target authentication is provided via the `ZERO_MCP_AUTH_JSON` environment
 variable. Set it to a JSON object with one of these shapes:
 
 ```json
@@ -146,9 +146,9 @@ create a complete scan pipeline or run an independent verifier.
 
 MCP supports attribution headers for authorized engagements:
 
-- `0SEC_MCP_ATTRIBUTION_HEADERS_JSON` — JSON array of `"Header-Name: value"`
+- `ZERO_MCP_ATTRIBUTION_HEADERS_JSON` — JSON array of `"Header-Name: value"`
   strings
-- `0SEC_MCP_ATTRIBUTION_UA_TOKEN` — free-form User-Agent token appended to the
+- `ZERO_MCP_ATTRIBUTION_UA_TOKEN` — free-form User-Agent token appended to the
   default UA string
 
 ### Client setup
@@ -175,7 +175,7 @@ For a client accepting `mcpServers` (for example Claude Desktop), add:
 Use an absolute path for `command` if a GUI-launched client cannot find `0` on
 its `PATH`. This server does not need an `ANTHROPIC_API_KEY` to expose tools:
 the MCP client supplies the reasoning model. If the target needs authentication,
-provide `0SEC_MCP_AUTH_JSON` through that client's secret/environment mechanism.
+provide `ZERO_MCP_AUTH_JSON` through that client's secret/environment mechanism.
 `send_prompt` sends a prompt to the **target under test**, not a provider model.
 
 The MCP transport is stdio-only; stdout is reserved for protocol frames and
@@ -187,11 +187,11 @@ systems you do not own or have permission to assess.
 ## Connect external MCP tools to 0
 
 This is the reverse direction: `0 console` and the OpenTUI connect external
-stdio servers from the **JSON array** in `0SEC_MCP`. It is not a
+stdio servers from the **JSON array** in `ZERO_MCP`. It is not a
 `{"mcpServers": ...}` object or a config-file path:
 
 ```bash
-env '0SEC_MCP=[{"id":"workspace","command":"node","args":["/absolute/path/to/mcp-server.js"],"cwd":"/absolute/path/to/workspace"}]' \
+env 'ZERO_MCP=[{"id":"workspace","command":"node","args":["/absolute/path/to/mcp-server.js"],"cwd":"/absolute/path/to/workspace"}]' \
   0 console
 ```
 
@@ -222,7 +222,7 @@ not an HTTP/SSE URL. An SDK caller can supply its own transport to
 
 Native sessions can use `spawn_agent` for one focused task or `spawn_agents`
 for a batch of up to eight. Batches default to four concurrent children;
-`env 0SEC_SUBAGENT_CONCURRENCY=2 0 tui` lowers that concurrency. Each task
+`env ZERO_SUBAGENT_CONCURRENCY=2 0 tui` lowers that concurrency. Each task
 gets fresh context and its own turn budget, while scope, rate limits and the
 parent's shared cost ceiling remain in force. Children do not receive recursive
 spawn tools. Findings merge back through the parent; a child failure is not
@@ -267,7 +267,7 @@ discovery and scope enumeration.
 ### Credentials
 
 Set `H1_API_IDENTIFIER` and `H1_API_TOKEN` in the environment, or save the same
-unquoted `KEY=VALUE` pairs in `~/.0sec/h1.env` with mode `0600`. A complete
+unquoted `KEY=VALUE` pairs in `~/.0/h1.env` with mode `0600`. A complete
 environment pair takes precedence. The identifier is the name entered at token
 creation, **not your HackerOne handle**. The API uses Basic authentication;
 `0 h1 auth` verifies existing credentials and does not perform a login flow.
@@ -323,17 +323,17 @@ hacktivity; disclosure drafts below are a separate local workflow.
 | `0 auth login` | Open browser at the cloud host's `/cli-auth` page, poll for a scoped token |
 | `0 auth login --token <value>` | Manual credential path — persist a token directly |
 | `0 auth login --host <url>` | Point at a self-hosted cloud host |
-| `0 auth logout` | Delete `~/.0sec/cloud.env` and `~/.0cloud/credentials.json` |
+| `0 auth logout` | Delete `~/.0/cloud.env` and `~/.0cloud/credentials.json` |
 | `0 auth status` | Verify cloud credentials against the authenticated inference-account endpoint |
 
 ### Credential storage
 
-Credentials persist to `~/.0sec/cloud.env` (mode `0600`) with the format:
+Credentials persist to `~/.0/cloud.env` (mode `0600`) with the format:
 
 ```text
 # DO NOT commit this file or share its contents.
-0SEC_CLOUD_HOST=https://cloud.0.security
-0SEC_CLOUD_TOKEN=scoped-token-here
+ZERO_CLOUD_HOST=https://cloud.0.security
+ZERO_CLOUD_TOKEN=scoped-token-here
 ```
 
 Normal login also best-effort writes compatible credentials to
@@ -536,7 +536,7 @@ Node 24 strips erasable TypeScript syntax. Provision dependencies in the toolbox
 7. **Close** — releases the manager and aborts pending operations.
 
 For the model-facing lifecycle, use `self_extend` with `action` set to `submit`,
-`list`, `evolve`, or `rollback`. Point `0SEC_PLUGIN_EVOLUTION_CONFIG` at an
+`list`, `evolve`, or `rollback`. Point `ZERO_PLUGIN_EVOLUTION_CONFIG` at an
 operator-owned [source-evolution config](/improvement-plane/#config-shape) to
 expose the `default` evaluation profile. It must use the same backend and pinned
 image as the executable. Creation and replacement work without a profile;
@@ -551,7 +551,7 @@ To provision the default guest and start a session:
 
 ```bash
 docker build --target toolbox -t 0sec-toolbox:local .
-env 0SEC_PLUGIN_BACKEND=docker 0SEC_PLUGIN_IMAGE=0sec-toolbox:local 0 tui
+env ZERO_PLUGIN_BACKEND=docker ZERO_PLUGIN_IMAGE=0sec-toolbox:local 0 tui
 ```
 
 Self-extension is enabled by default for non-verifier sessions; an explicit
@@ -560,7 +560,7 @@ enablement does not install Docker or pull the guest image. Ask the agent to
 submit an executable through `self_extend`, inspect `list` for the retained
 version, and call its declared tool by name. There is no `0 plugin submit`
 command for this path. For measured evolution, start the session with
-`env 0SEC_PLUGIN_EVOLUTION_CONFIG=/absolute/path/to/evolution.json 0 tui`
+`env ZERO_PLUGIN_EVOLUTION_CONFIG=/absolute/path/to/evolution.json 0 tui`
 and use the `default` profile. Source-access consent and promotion settings in
 that operator-owned config are separate from self-extension enablement.
 
@@ -569,8 +569,8 @@ that operator-owned config are separate from self-extension enablement.
 
 #### Storage
 
-The default store is `~/.0sec/executable-plugins/`, separate from Hackstore's
-`~/.0sec/plugins/`. `registry.json` retains snapshot UUIDs under `snapshots/<uuid>`,
+The default store is `~/.0/executable-plugins/`, separate from Hackstore's
+`~/.0/plugins/`. `registry.json` retains snapshot UUIDs under `snapshots/<uuid>`,
 content digests, immutable image identity, manifest digests and evolved-version
 receipt digests. Registry provenance is checked on read; snapshot contents are
 verified at refresh/admission/execution boundaries. These are local integrity
@@ -584,8 +584,8 @@ checks, not registry signatures or an external attestation.
 | `smolvm` | KVM, smolvm **1.14.6**, Node 24 toolbox archive | MicroVM with dedicated kernel; bounded resources and no guest network |
 
 Default image for agent-created submissions is `0sec-toolbox:local`, overridable
-with `0SEC_PLUGIN_IMAGE`; the smoke script defaults to `0sec-toolbox:qualification`.
-For smolvm, configure `0SEC_SMOLVM_IMAGE_ARCHIVE`. The image is resolved to an immutable digest
+with `ZERO_PLUGIN_IMAGE`; the smoke script defaults to `0sec-toolbox:qualification`.
+For smolvm, configure `ZERO_SMOLVM_IMAGE_ARCHIVE`. The image is resolved to an immutable digest
 on first use; resumed/promoted versions retain that digest, not a retagged
 reference.
 
@@ -623,7 +623,7 @@ evolve            │
 
 **Source:** `packages/cli/src/commands/plugin.ts`
 
-Hackstore is the default community registry. Override it with `0SEC_REGISTRY_URL`
+Hackstore is the default community registry. Override it with `ZERO_REGISTRY_URL`
 or `--registry` on browse, search, and install. An explicit empty setting disables
 fetching. Entries use the unconfigured signature verifier and are marked
 `unverified`.
@@ -715,7 +715,7 @@ Options:
 ### Disclosure tracking
 
 The `track` subcommand drives a state machine through statuses defined in
-`@0sec/core`:
+`@0/core`:
 
 ```bash
 # Open a fresh draft record

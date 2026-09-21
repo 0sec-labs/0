@@ -1,4 +1,4 @@
-import { redactSensitiveHeaders, type ConsoleConversationHistory } from "@0sec/core";
+import { redactSensitiveHeaders, type ConsoleConversationHistory } from "@0/core"
 import { isValidSessionId, listSessions, loadSession, type StoredSessionMeta } from "./tui/session-store.js";
 import { sanitizeComposerText } from "./tui/text.js";
 

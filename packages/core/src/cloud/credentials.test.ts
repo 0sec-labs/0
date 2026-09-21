@@ -11,8 +11,8 @@ import {
 function makeFakeHome(content: string | null, mode: number = 0o600): string {
   const home = mkdtempSync(join(tmpdir(), "0sec-cloud-creds-"));
   if (content !== null) {
-    mkdirSync(join(home, ".0sec"), { recursive: true, mode: 0o700 });
-    const path = join(home, ".0sec", "cloud.env");
+    mkdirSync(join(home, ".0"), { recursive: true, mode: 0o700 });
+    const path = join(home, ".0", "cloud.env");
     writeFileSync(path, content, { mode });
     chmodSync(path, mode);
   }
@@ -21,9 +21,9 @@ function makeFakeHome(content: string | null, mode: number = 0o600): string {
 
 describe("loadCloudCredentials", () => {
   it("prefers env over file when both are set", () => {
-    const home = makeFakeHome("0SEC_CLOUD_TOKEN=filetok\n0SEC_CLOUD_HOST=https://file.example\n");
+    const home = makeFakeHome("ZERO_CLOUD_TOKEN=filetok\nZERO_CLOUD_HOST=https://file.example\n");
     const creds = loadCloudCredentials({
-      env: { "0SEC_CLOUD_TOKEN": "envtok", "0SEC_CLOUD_HOST": "https://env.example" },
+      env: { "ZERO_CLOUD_TOKEN": "envtok", "ZERO_CLOUD_HOST": "https://env.example" },
       homeDir: home,
     });
     expect(creds).toEqual({ host: "https://env.example", token: "envtok", source: "env" });
@@ -32,7 +32,7 @@ describe("loadCloudCredentials", () => {
   it("loads from env-only, falling back to default host", () => {
     const home = makeFakeHome(null);
     const creds = loadCloudCredentials({
-      env: { "0SEC_CLOUD_TOKEN": "tok" },
+      env: { "ZERO_CLOUD_TOKEN": "tok" },
       homeDir: home,
     });
     expect(creds.source).toBe("env");
@@ -42,7 +42,7 @@ describe("loadCloudCredentials", () => {
 
   it("loads from file when env is unset", () => {
     const home = makeFakeHome(
-      "# header comment\n0SEC_CLOUD_HOST=https://staging.example\n0SEC_CLOUD_TOKEN=tokenvalue\n",
+      "# header comment\nZERO_CLOUD_HOST=https://staging.example\nZERO_CLOUD_TOKEN=tokenvalue\n",
     );
     const creds = loadCloudCredentials({ env: {}, homeDir: home });
     expect(creds).toEqual({
@@ -53,11 +53,11 @@ describe("loadCloudCredentials", () => {
   });
 
   it("keeps development and production saved credentials separate", () => {
-    const home = makeFakeHome("0SEC_CLOUD_TOKEN=production-token\n0SEC_CLOUD_HOST=https://cloud.0.security\n");
-    const env = { "0SEC_DEV_SOURCE_ROOT": "/fixture/engine", "0SEC_CLOUD_HOST": "https://dev.0.security" };
+    const home = makeFakeHome("ZERO_CLOUD_TOKEN=production-token\nZERO_CLOUD_HOST=https://cloud.0.security\n");
+    const env = { "ZERO_DEV_SOURCE_ROOT": "/fixture/engine", "ZERO_CLOUD_HOST": "https://dev.0.security" };
     expect(() => loadCloudCredentials({ env, homeDir: home })).toThrow(CloudAuthMissingError);
-    mkdirSync(join(home, ".0sec", "dev"), { mode: 0o700 });
-    writeFileSync(join(home, ".0sec", "dev", "cloud.env"), "0SEC_CLOUD_TOKEN=dev-token\n", { mode: 0o600 });
+    mkdirSync(join(home, ".0", "dev"), { mode: 0o700 });
+    writeFileSync(join(home, ".0", "dev", "cloud.env"), "ZERO_CLOUD_TOKEN=dev-token\n", { mode: 0o600 });
     expect(loadCloudCredentials({ env, homeDir: home })).toEqual({
       host: "https://dev.0.security", token: "dev-token", source: "file",
     });
@@ -66,8 +66,8 @@ describe("loadCloudCredentials", () => {
     });
   });
 
-  it("falls back to default host when cloud.env omits 0SEC_CLOUD_HOST", () => {
-    const home = makeFakeHome("0SEC_CLOUD_TOKEN=onlytok\n");
+  it("falls back to default host when cloud.env omits ZERO_CLOUD_HOST", () => {
+    const home = makeFakeHome("ZERO_CLOUD_TOKEN=onlytok\n");
     const creds = loadCloudCredentials({ env: {}, homeDir: home });
     expect(creds.host).toBe(DEFAULT_CLOUD_HOST);
     expect(creds.token).toBe("onlytok");
@@ -77,14 +77,14 @@ describe("loadCloudCredentials", () => {
   it("strips trailing slash from host", () => {
     const home = makeFakeHome(null);
     const creds = loadCloudCredentials({
-      env: { "0SEC_CLOUD_TOKEN": "t", "0SEC_CLOUD_HOST": "https://example.com/" },
+      env: { "ZERO_CLOUD_TOKEN": "t", "ZERO_CLOUD_HOST": "https://example.com/" },
       homeDir: home,
     });
     expect(creds.host).toBe("https://example.com");
   });
 
   it("warns when cloud.env mode is not 600", () => {
-    const home = makeFakeHome("0SEC_CLOUD_TOKEN=tok\n", 0o644);
+    const home = makeFakeHome("ZERO_CLOUD_TOKEN=tok\n", 0o644);
     const warnings: string[] = [];
     const creds = loadCloudCredentials({
       env: {},
@@ -98,7 +98,7 @@ describe("loadCloudCredentials", () => {
   });
 
   it("does NOT warn when cloud.env mode is 600", () => {
-    const home = makeFakeHome("0SEC_CLOUD_TOKEN=tok\n", 0o600);
+    const home = makeFakeHome("ZERO_CLOUD_TOKEN=tok\n", 0o600);
     const warnings: string[] = [];
     loadCloudCredentials({ env: {}, homeDir: home, warn: (m) => warnings.push(m) });
     expect(warnings).toEqual([]);
@@ -110,19 +110,19 @@ describe("loadCloudCredentials", () => {
   });
 
   it("throws CloudAuthMissingError when file is missing the token", () => {
-    const home = makeFakeHome("0SEC_CLOUD_HOST=https://example.com\n");
+    const home = makeFakeHome("ZERO_CLOUD_HOST=https://example.com\n");
     expect(() => loadCloudCredentials({ env: {}, homeDir: home })).toThrow(/incomplete/);
   });
 
   it("rejects malformed lines in cloud.env", () => {
-    const home = makeFakeHome("just a banner line\n0SEC_CLOUD_TOKEN=x\n");
+    const home = makeFakeHome("just a banner line\nZERO_CLOUD_TOKEN=x\n");
     expect(() => loadCloudCredentials({ env: {}, homeDir: home })).toThrow(/Malformed cloud\.env/);
   });
 
   it("rejects a host that isn't http(s)", () => {
     expect(() =>
       loadCloudCredentials({
-        env: { "0SEC_CLOUD_TOKEN": "t", "0SEC_CLOUD_HOST": "app.example.com" },
+        env: { "ZERO_CLOUD_TOKEN": "t", "ZERO_CLOUD_HOST": "app.example.com" },
       }),
     ).toThrow(/must be an http\(s\) URL/);
   });
@@ -133,7 +133,7 @@ describe("loadCloudCredentials", () => {
     let caught: unknown;
     try {
       loadCloudCredentials({
-        env: { "0SEC_CLOUD_TOKEN": secret, "0SEC_CLOUD_HOST": "not-a-url" },
+        env: { "ZERO_CLOUD_TOKEN": secret, "ZERO_CLOUD_HOST": "not-a-url" },
         homeDir: home,
       });
     } catch (err) {

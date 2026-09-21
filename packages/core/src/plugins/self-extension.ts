@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { DEFAULT_ALLOW_MODEL_SELF_EXTENSION } from "@0sec/shared";
+import { DEFAULT_ALLOW_MODEL_SELF_EXTENSION } from "@0/shared"
 
 /**
  * Model-authored self-extension: a session-scoped, additive-only registry.

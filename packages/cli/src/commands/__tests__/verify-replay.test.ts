@@ -11,8 +11,8 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { VerificationResultSchema } from "@0sec/shared";
-import type { Finding } from "@0sec/shared";
+import { VerificationResultSchema } from "@0/shared"
+import type { Finding } from "@0/shared"
 import { runDeterministicReplayCli, parseRunnerKind } from "../verify.js";
 
 let tmpRoot: string;
@@ -204,7 +204,7 @@ for arg in "$@"; do
 done
 share=$(printf '%s' "$share" | sed 's/^local,path=//; s/,.*$//')
 workspace=
-for candidate in "$share"/.0sec-qemu-*; do
+for candidate in "$share"/.0-qemu-*; do
   if [ -d "$candidate" ]; then
     workspace="$candidate"
     break

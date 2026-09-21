@@ -1,5 +1,5 @@
 {
-  "name": "@0sec/llm-redteam",
+"name": "@0/llm-redteam",
   "version": "0.1.0",
   "private": true,
   "description": "Offensive LLM/agent red-team engine: generate indirect-prompt-injection & jailbreak payloads from a sourced strategy library, drive a target adapter, judge breaks, and iterate. The attack-side mirror of packages/benchmark's detection suite.",
@@ -7,7 +7,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "0sec-llm": "dist/cli.js"
+"0-llm": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
@@ -17,7 +17,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@0sec/shared": "workspace:*"
+"@0/shared": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

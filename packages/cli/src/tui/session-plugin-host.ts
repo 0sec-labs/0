@@ -5,7 +5,7 @@
  * The core loader remains the only registry and enablement authority.
  */
 
-import type { PluginHost } from "@0sec/core";
+import type { PluginHost } from "@0/core"
 
 import type { CoreLoadResult, CorePluginApi, PluginHostLike } from "./plugin-service.js";
 
@@ -50,9 +50,9 @@ export interface SessionPluginHostDeps {
    * built-in is rejected on both the reconcile and the load path.
    */
   reservedToolNames?: readonly string[];
-  /** Running @0sec/core version, for the loader's `minCoreVersion` check. */
+  /** Running @0/core version, for the loader's `minCoreVersion` check. */
   coreVersion?: string;
-  /** Injected @0sec/core. Defaults to a lazy `import("@0sec/core")`. */
+  /** Injected @0/core. Defaults to a lazy `import("@0/core")`. */
   core?: CorePluginApi | (() => Promise<CorePluginApi>);
   /** Injected host factory (tests). Defaults to `new core.PluginHost(...)`. */
   hostFactory?: (opts: {
@@ -63,13 +63,13 @@ export interface SessionPluginHostDeps {
   }) => PluginHostLike;
 }
 
-/** Lazily resolve @0sec/core once, honouring an injected override. */
+/** Lazily resolve @0/core once, honouring an injected override. */
 function coreLoader(injected: SessionPluginHostDeps["core"]): () => Promise<CorePluginApi> {
   if (typeof injected === "function") return injected as () => Promise<CorePluginApi>;
   if (injected) return async () => injected;
   let cached: Promise<CorePluginApi> | undefined;
   return () => {
-    if (!cached) cached = import("@0sec/core") as unknown as Promise<CorePluginApi>;
+    if (!cached) cached = import("@0/core") as unknown as Promise<CorePluginApi>;
     return cached;
   };
 }

@@ -1,4 +1,4 @@
-import type { ScanConfig, ScanReport, Finding } from "@0sec/shared";
+import type { ScanConfig, ScanReport, Finding } from "@0/shared"
 import type { ScanListener } from "../../scanner.js";
 import type { AgentOutput } from "../../agentic-scanner.js";
 import { features } from "../../agent/features.js";

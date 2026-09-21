@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, existsSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Finding, PocStep } from "@0sec/shared";
+import type { Finding, PocStep } from "@0/shared"
 import { composeExploitSession, composeStepSession, renderExploitScreenshot, isFreezeAvailable } from "./screenshots.js";
 import type { PocStepResult } from "./poc-runtime.js";
 import { renderAdvisoryMarkdown } from "./template.js";

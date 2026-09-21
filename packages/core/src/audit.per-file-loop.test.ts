@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import {
   runPerFileAudit,
   buildDirectApiAuditPromptForFile,

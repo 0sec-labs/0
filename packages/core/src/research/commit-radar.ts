@@ -7,7 +7,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import type { JevAnswer, JevEvaluator, JevUsage, SeedFinding } from "@0sec/shared";
+import type { JevAnswer, JevEvaluator, JevUsage, SeedFinding } from "@0/shared"
 
 // ---------------------------------------------------------------------------
 // Constants

@@ -91,13 +91,13 @@ export interface GraphSliceHuntContextInput {
   seedDiff: string;
   /**
    * Path to the pre-exported CPG graphson JSON. Default:
-   * `<sourceRoot>/.0sec/cpg/<subsystem-slug>.json` (produced by
+   * `<sourceRoot>/.0/cpg/<subsystem-slug>.json` (produced by
    * `scripts/provision-cpg.sh`). Absent → the stage degrades to flat-text.
    */
   cpgPath?: string;
   /**
    * Path to the pre-harvested ops map (Phase-1 indirect-call edges). Default:
-   * `<sourceRoot>/.0sec/cpg/<subsystem-slug>.ops.json`. Optional — absent just
+   * `<sourceRoot>/.0/cpg/<subsystem-slug>.ops.json`. Optional — absent just
    * means no ops-struct edges are synthesized.
    *
    * When BOTH `opsPath` and `opsHarvestSourceFiles` are set, the in-process
@@ -190,8 +190,8 @@ export function formatGraphSlicePromptBlock(
 function defaultCpgPaths(sourceRoot: string, subsystem: string): { cpg: string; ops: string } {
   const slug = subsystem.replaceAll("/", "__");
   return {
-    cpg: join(sourceRoot, ".0sec", "cpg", `${slug}.json`),
-    ops: join(sourceRoot, ".0sec", "cpg", `${slug}.ops.json`),
+    cpg: join(sourceRoot, ".0", "cpg", `${slug}.json`),
+    ops: join(sourceRoot, ".0", "cpg", `${slug}.ops.json`),
   };
 }
 

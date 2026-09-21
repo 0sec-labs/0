@@ -17,7 +17,7 @@
  * whole pass in try/catch so a post-process error can never fail the scan.
  */
 
-import type { Finding, JevEvaluator } from "@0sec/shared";
+import type { Finding, JevEvaluator } from "@0/shared"
 import type { NativeRuntime } from "../runtime/types.js";
 import { semanticDedupe, rankIncremental, type DedupeItem } from "../triage/index.js";
 
@@ -35,7 +35,7 @@ export interface PriorScanLoader {
     title: string;
     category: string;
     description: string;
-    // Persisted as serialized JSON (see @0sec/db findings.reviewAnnotation);
+    // Persisted as serialized JSON (see @0/db findings.reviewAnnotation);
     // accepted in both forms for the same reason semanticDedupe is.
     reviewAnnotation?: { path?: string; startLine?: number } | string | null;
     semanticDedupe?: { isCanonical?: boolean } | string | null;
@@ -44,9 +44,9 @@ export interface PriorScanLoader {
 
 /** Options for the post-scan post-process pass. */
 export interface FindingPostProcessOptions {
-  /** Run the semantic dedupe pass (0SEC_FEATURE_SEMANTIC_DEDUPE). */
+  /** Run the semantic dedupe pass (ZERO_FEATURE_SEMANTIC_DEDUPE). */
   semanticDedupe?: boolean;
-  /** Run the incremental ranking pass (0SEC_FEATURE_INCREMENTAL_RANK). */
+  /** Run the incremental ranking pass (ZERO_FEATURE_INCREMENTAL_RANK). */
   incrementalRank?: boolean;
   /** Scan identifier used to build stable cluster ids. */
   scanId?: string;

@@ -29,8 +29,8 @@ describe("LlmApiRuntime provider detection", () => {
   beforeEach(() => {
     fixtureHome = mkdtempSync(join(tmpdir(), "0sec-provider-detection-"));
     process.env.HOME = fixtureHome;
-    delete process.env["0SEC_CLOUD_TOKEN"];
-    delete process.env["0SEC_CLOUD_HOST"];
+    delete process.env["ZERO_CLOUD_TOKEN"];
+    delete process.env["ZERO_CLOUD_HOST"];
     delete process.env.OPENROUTER_API_KEY;
     delete process.env.DEEPSEEK_API_KEY;
     delete process.env.DEEPSEEK_BASE_URL;
@@ -55,18 +55,18 @@ describe("LlmApiRuntime provider detection", () => {
     delete process.env.XAI_BASE_URL;
     delete process.env.OPENCODE_API_KEY;
     delete process.env.OPENCODE_BASE_URL;
-    delete process.env["0SEC_MODEL"];
-    delete process.env["0SEC_SELECTED_PROVIDER"];
-    delete process.env["0SEC_FORCE_PROVIDER"];
-    delete process.env["0SEC_REGION_OVERRIDE"];
-    delete process.env["0SEC_CHATGPT_ACCESS_TOKEN"];
-    delete process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"];
-    delete process.env["0SEC_CHATGPT_ACCOUNT_ID"];
+    delete process.env["ZERO_MODEL"];
+    delete process.env["ZERO_SELECTED_PROVIDER"];
+    delete process.env["ZERO_FORCE_PROVIDER"];
+    delete process.env["ZERO_REGION_OVERRIDE"];
+    delete process.env["ZERO_CHATGPT_ACCESS_TOKEN"];
+    delete process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"];
+    delete process.env["ZERO_CHATGPT_ACCOUNT_ID"];
     // Provider-selection tests must not inherit the operator's Codex login.
-    process.env["0SEC_CHATGPT_AUTH_FILE"] = "/tmp/0sec-provider-test-no-auth.json";
+    process.env["ZERO_CHATGPT_AUTH_FILE"] = "/tmp/0sec-provider-test-no-auth.json";
     // Suppress the startup banner so provider-detection tests don't
     // spew log lines or attempt real network probes.
-    process.env["0SEC_SKIP_PROVIDER_BANNER"] = "1";
+    process.env["ZERO_SKIP_PROVIDER_BANNER"] = "1";
   });
   afterEach(() => {
     rmSync(fixtureHome, { recursive: true, force: true });
@@ -77,11 +77,11 @@ describe("LlmApiRuntime provider detection", () => {
   });
 
   it("keeps explicit new-runtime provider and credentials isolated from later selections", async () => {
-    process.env["0SEC_SELECTED_PROVIDER"] = "azure";
-    process.env["0SEC_MODEL"] = "ambient-model";
+    process.env["ZERO_SELECTED_PROVIDER"] = "azure";
+    process.env["ZERO_MODEL"] = "ambient-model";
     const firstEnv = {
       OPENAI_API_KEY: "first-fixture-key",
-      "0SEC_FORCE_PROVIDER": " ",
+      "ZERO_FORCE_PROVIDER": " ",
       OPENAI_BASE_URL: "https://first.example.test/v1",
     };
     const first = new LlmApiRuntime({
@@ -119,7 +119,7 @@ describe("LlmApiRuntime provider detection", () => {
         { url: "https://second.example.test/v1/chat/completions", authorization: "second-fixture-key", model: "second-model" },
         { url: "https://first.example.test/v1/chat/completions", authorization: "Bearer first-fixture-key", model: "first-model" },
       ]);
-      expect(process.env["0SEC_SELECTED_PROVIDER"]).toBe("azure");
+      expect(process.env["ZERO_SELECTED_PROVIDER"]).toBe("azure");
     } finally {
       fetchMock.mockRestore();
     }
@@ -128,7 +128,7 @@ describe("LlmApiRuntime provider detection", () => {
   it("rejects an explicit provider conflicting with FORCE even with a supplied API key", () => {
     expect(() => new LlmApiRuntime({
       type: "api", timeout: 5000, provider: "openai", model: "test-model",
-      apiKey: "fixture-key", env: { "0SEC_FORCE_PROVIDER": "azure" },
+      apiKey: "fixture-key", env: { "ZERO_FORCE_PROVIDER": "azure" },
     })).toThrow(/conflicts/);
   });
 
@@ -151,8 +151,8 @@ describe("LlmApiRuntime provider detection", () => {
   it.each([undefined, "openai"])("keeps the configured OpenAI endpoint with provider pin %s", async (selectedProvider) => {
     process.env.OPENAI_API_KEY = "test-key";
     process.env.OPENAI_BASE_URL = "https://gateway.example.test/v1";
-    process.env["0SEC_MODEL"] = "gpt-6-astra";
-    if (selectedProvider) process.env["0SEC_SELECTED_PROVIDER"] = selectedProvider;
+    process.env["ZERO_MODEL"] = "gpt-6-astra";
+    if (selectedProvider) process.env["ZERO_SELECTED_PROVIDER"] = selectedProvider;
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({
         choices: [{ message: { content: "Gateway response" }, finish_reason: "stop" }],
@@ -174,7 +174,7 @@ describe("LlmApiRuntime provider detection", () => {
   it("selects direct DeepSeek Flash 0731 before Azure for its exact API model", async () => {
     process.env.DEEPSEEK_API_KEY = "deepseek-key-123";
     process.env.AZURE_OPENAI_API_KEY = "azure-key-should-not-win";
-    process.env["0SEC_MODEL"] = "deepseek-v4-flash";
+    process.env["ZERO_MODEL"] = "deepseek-v4-flash";
 
     const rt = new LlmApiRuntime({ type: "api", timeout: 5000 });
 
@@ -193,7 +193,7 @@ describe("LlmApiRuntime provider detection", () => {
     process.env.AZURE_OPENAI_API_KEY = "azure-primary-key";
     process.env.AZURE_OPENAI_BASE_URL = "https://example-resource.openai.azure.com/openai/v1";
     process.env.AZURE_OPENAI_MODEL = "DeepSeek-V4-Pro";
-    process.env["0SEC_MODEL"] = "DeepSeek-V4-Pro";
+    process.env["ZERO_MODEL"] = "DeepSeek-V4-Pro";
 
     const rt = new LlmApiRuntime({ type: "api", timeout: 5000 });
     const diagnostics = rt.getConfigurationDiagnostics();
@@ -212,7 +212,7 @@ describe("LlmApiRuntime provider detection", () => {
     process.env.AZURE_OPENAI_API_KEY = "azure-primary-key";
     process.env.AZURE_OPENAI_BASE_URL = "https://example-resource.openai.azure.com/openai/v1";
     process.env.AZURE_OPENAI_MODEL = "DeepSeek-V4-Pro";
-    process.env["0SEC_MODEL"] = "gpt-5.4";
+    process.env["ZERO_MODEL"] = "gpt-5.4";
 
     const rt = new LlmApiRuntime({ type: "api", timeout: 5000 });
     const diagnostics = rt.getConfigurationDiagnostics();
@@ -231,8 +231,8 @@ describe("LlmApiRuntime provider detection", () => {
     process.env.AZURE_OPENAI_API_KEY = "azure-primary-key";
     process.env.AZURE_OPENAI_BASE_URL = "https://example-resource.openai.azure.com/openai/v1";
     process.env.AZURE_OPENAI_MODEL = "DeepSeek-V4-Pro";
-    process.env["0SEC_MODEL"] = "future-foundry-deployment";
-    process.env["0SEC_SELECTED_PROVIDER"] = "azure";
+    process.env["ZERO_MODEL"] = "future-foundry-deployment";
+    process.env["ZERO_SELECTED_PROVIDER"] = "azure";
 
     const rt = new LlmApiRuntime({ type: "api", timeout: 5000 });
 
@@ -247,8 +247,8 @@ describe("LlmApiRuntime provider detection", () => {
     process.env.AZURE_OPENAI_BASE_URL = "https://azure.example/openai/v1";
     // foxguard: ignore[js/no-hardcoded-secret]
     process.env.ANTHROPIC_API_KEY = "sk-ant-refuter-key";
-    process.env["0SEC_MODEL"] = "gpt-5.5";
-    process.env["0SEC_SELECTED_PROVIDER"] = "azure";
+    process.env["ZERO_MODEL"] = "gpt-5.5";
+    process.env["ZERO_SELECTED_PROVIDER"] = "azure";
 
     const rt = new LlmApiRuntime({
       type: "api",
@@ -261,7 +261,7 @@ describe("LlmApiRuntime provider detection", () => {
 
   it("keeps explicit Anthropic credentials ahead of hosted login", async () => {
     process.env.ANTHROPIC_API_KEY = "sk-ant-test456";
-    process.env["0SEC_CLOUD_TOKEN"] = randomUUID();
+    process.env["ZERO_CLOUD_TOKEN"] = randomUUID();
     const rt = new LlmApiRuntime({ type: "api", timeout: 5000 });
     expect(rt.getConfigurationDiagnostics().provider).toBe("anthropic");
   });
@@ -326,8 +326,8 @@ describe("LlmApiRuntime provider detection", () => {
     // Test fixture, literal non-secret key.
     // foxguard: ignore[js/no-hardcoded-secret]
     process.env.OPENAI_API_KEY = "openai-key-123";
-    process.env["0SEC_MODEL"] = "gpt-5.6-luna";
-    process.env["0SEC_SELECTED_PROVIDER"] = "openai";
+    process.env["ZERO_MODEL"] = "gpt-5.6-luna";
+    process.env["ZERO_SELECTED_PROVIDER"] = "openai";
 
     const luna = new LlmApiRuntime({ type: "api", timeout: 5000 });
     // Provider-selection tests inspect stable private runtime state directly.
@@ -354,9 +354,9 @@ describe("LlmApiRuntime provider detection", () => {
     expect((rt3 as any).provider).toBe("openai");
   });
 
-  it("respects 0SEC_MODEL env var", () => {
+  it("respects ZERO_MODEL env var", () => {
     process.env.OPENAI_API_KEY = "sk-test";
-    process.env["0SEC_MODEL"] = "gpt-4-turbo";
+    process.env["ZERO_MODEL"] = "gpt-4-turbo";
     const rt = new LlmApiRuntime({ type: "api", timeout: 5000 });
     expect((rt as any).model).toBe("gpt-4-turbo");
   });
@@ -386,7 +386,7 @@ describe("LlmApiRuntime provider detection", () => {
     // foxguard: ignore[js/no-hardcoded-secret]
     process.env.QWEN_API_KEY = "sk-sp-test";
     process.env.QWEN_BASE_URL = "https://qwen.example/v1";
-    process.env["0SEC_MODEL"] = "qwen3.7-max";
+    process.env["ZERO_MODEL"] = "qwen3.7-max";
     const rt = new LlmApiRuntime({ type: "api", timeout: 5000 });
     expect((rt as any).provider).toBe("qwen");
     expect((rt as any).model).toBe("qwen3.7-max");
@@ -414,7 +414,7 @@ describe("LlmApiRuntime provider detection", () => {
     // foxguard: ignore[js/no-hardcoded-secret]
     process.env.XAI_API_KEY = "sk-xai-test";
     process.env.XAI_BASE_URL = "https://xai.example/v1";
-    process.env["0SEC_MODEL"] = "grok-4.3";
+    process.env["ZERO_MODEL"] = "grok-4.3";
     const rt = new LlmApiRuntime({ type: "api", timeout: 5000 });
     expect((rt as any).provider).toBe("xai");
     expect((rt as any).model).toBe("grok-4.3");
@@ -458,7 +458,7 @@ describe("LlmApiRuntime provider detection", () => {
     // foxguard: ignore[js/no-hardcoded-secret]
     process.env.OPENCODE_API_KEY = "zen-test";
     process.env.OPENCODE_BASE_URL = "https://zen.example/v1";
-    process.env["0SEC_MODEL"] = "opencode/mimo-v2.5-free";
+    process.env["ZERO_MODEL"] = "opencode/mimo-v2.5-free";
     const rt = new LlmApiRuntime({ type: "api", timeout: 5000 });
     expect((rt as any).provider).toBe("opencode");
     expect((rt as any).model).toBe("mimo-v2.5-free");
@@ -533,7 +533,7 @@ describe("LlmApiRuntime provider detection", () => {
     process.env.QWEN_API_KEY = "sk-sp-test";
     // foxguard: ignore[js/no-hardcoded-secret]
     process.env.DEEPSEEK_API_KEY = "sk-ds-test"; // present but must NOT win
-    process.env["0SEC_MODEL"] = "deepseek-v4-flash-0731";
+    process.env["ZERO_MODEL"] = "deepseek-v4-flash-0731";
     const rt = new LlmApiRuntime({ type: "api", timeout: 5000 });
     expect((rt as any).provider).toBe("qwen");
     expect((rt as any).model).toBe("deepseek-v4-flash-0731");
@@ -541,8 +541,8 @@ describe("LlmApiRuntime provider detection", () => {
 
   it("binds a controlled run to its declared API-key provider over ChatGPT OAuth", async () => {
     process.env.OPENAI_API_KEY = "sk-openai-test";
-    process.env["0SEC_CHATGPT_ACCESS_TOKEN"] = "oauth-test";
-    process.env["0SEC_FORCE_PROVIDER"] = "openai";
+    process.env["ZERO_CHATGPT_ACCESS_TOKEN"] = "oauth-test";
+    process.env["ZERO_FORCE_PROVIDER"] = "openai";
 
     const rt = new LlmApiRuntime({ type: "api", timeout: 5000, model: "gpt-5.5" });
 
@@ -1295,8 +1295,8 @@ describe("LlmApiRuntime response parsing", () => {
         }),
       } as Response);
     vi.stubGlobal("fetch", fetchMock);
-    vi.stubEnv("0SEC_LLM_MAX_RETRIES", "1");
-    vi.stubEnv("0SEC_LLM_MAX_RETRY_WAIT_MS", "500");
+    vi.stubEnv("ZERO_LLM_MAX_RETRIES", "1");
+    vi.stubEnv("ZERO_LLM_MAX_RETRY_WAIT_MS", "500");
     vi.spyOn(Math, "random").mockReturnValue(0);
 
     try {
@@ -1314,7 +1314,7 @@ describe("LlmApiRuntime response parsing", () => {
 // ── Live Azure Integration (only runs when AZURE_OPENAI_API_KEY is set) ──
 
 const hasAzureKey = !!process.env.AZURE_OPENAI_API_KEY;
-const shouldRunAzureLiveTest = hasAzureKey && process.env["0SEC_RUN_AZURE_LIVE_TEST"] === "1";
+const shouldRunAzureLiveTest = hasAzureKey && process.env["ZERO_RUN_AZURE_LIVE_TEST"] === "1";
 
 // Capture the real Azure key before any test mutates process.env.
 const realAzureKey = process.env.AZURE_OPENAI_API_KEY;
@@ -1337,13 +1337,13 @@ describe("probeAzureRegion", () => {
   beforeEach(() => {
     __resetAzureRegionCacheForTests();
     __resetProviderStartupLogForTests();
-    delete process.env["0SEC_REGION_OVERRIDE"];
+    delete process.env["ZERO_REGION_OVERRIDE"];
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
-    delete process.env["0SEC_REGION_OVERRIDE"];
+    delete process.env["ZERO_REGION_OVERRIDE"];
   });
 
   it("parses x-ms-region header and pretty-prints the region", async () => {
@@ -1409,8 +1409,8 @@ describe("probeAzureRegion", () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
-  it("honors 0SEC_REGION_OVERRIDE without hitting the network", async () => {
-    process.env["0SEC_REGION_OVERRIDE"] = "East US 2 (forced)";
+  it("honors ZERO_REGION_OVERRIDE without hitting the network", async () => {
+    process.env["ZERO_REGION_OVERRIDE"] = "East US 2 (forced)";
     const mockFetch = vi.fn();
     const region = await probeAzureRegion(
       "https://any-resource.openai.azure.com/openai/v1",
@@ -1453,9 +1453,9 @@ describe.skipIf(!shouldRunAzureLiveTest)("Azure Responses API live integration",
     delete process.env.KIMI_API_KEY;
     delete process.env.QWEN_API_KEY;
     delete process.env.Z_AI_API_KEY;
-    delete process.env["0SEC_CHATGPT_ACCESS_TOKEN"];
-    delete process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"];
-    process.env["0SEC_CHATGPT_AUTH_FILE"] = "/tmp/0sec-azure-live-test-no-auth.json";
+    delete process.env["ZERO_CHATGPT_ACCESS_TOKEN"];
+    delete process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"];
+    process.env["ZERO_CHATGPT_AUTH_FILE"] = "/tmp/0sec-azure-live-test-no-auth.json";
   });
 
   it("completes a tool call and continuation round-trip", async () => {
@@ -1695,7 +1695,7 @@ describe("LlmApiRuntime 429 backoff + retry", () => {
   const origEnv = { ...process.env };
 
   beforeEach(() => {
-    process.env["0SEC_SKIP_PROVIDER_BANNER"] = "1";
+    process.env["ZERO_SKIP_PROVIDER_BANNER"] = "1";
   });
 
   afterEach(() => {
@@ -1704,10 +1704,10 @@ describe("LlmApiRuntime 429 backoff + retry", () => {
     vi.restoreAllMocks();
     Object.assign(process.env, origEnv);
     for (const k of [
-      "0SEC_LLM_MAX_RETRIES",
-      "0SEC_LLM_MAX_RETRY_WAIT_MS",
-      "0SEC_LLM_429_MAX_RETRIES",
-      "0SEC_LLM_429_MAX_RETRY_WAIT_MS",
+      "ZERO_LLM_MAX_RETRIES",
+      "ZERO_LLM_MAX_RETRY_WAIT_MS",
+      "ZERO_LLM_429_MAX_RETRIES",
+      "ZERO_LLM_429_MAX_RETRY_WAIT_MS",
     ]) {
       if (!(k in origEnv)) delete process.env[k];
     }
@@ -1780,7 +1780,7 @@ describe("LlmApiRuntime 429 backoff + retry", () => {
   });
 
   it("surfaces a clear terminal error after retries are exhausted", async () => {
-    process.env["0SEC_LLM_MAX_RETRIES"] = "2";
+    process.env["ZERO_LLM_MAX_RETRIES"] = "2";
     const fetchMock = vi.fn(async () => rateLimited("0"));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -1933,7 +1933,7 @@ describe("LlmApiRuntime 429 backoff + retry", () => {
     const rt = mkRuntime();
     const result = await rt.executeNative("sys", userMsg, []);
 
-    // 1 initial + 12 retries (default 0SEC_LLM_429_MAX_RETRIES).
+    // 1 initial + 12 retries (default ZERO_LLM_429_MAX_RETRIES).
     expect(fetchMock).toHaveBeenCalledTimes(13);
     expect(result.stopReason).toBe("error");
     expect(result.error).toContain("429");
@@ -1941,8 +1941,8 @@ describe("LlmApiRuntime 429 backoff + retry", () => {
     expect(result.error).toContain("rate limit exceeded");
   });
 
-  it("respects 0SEC_LLM_429_MAX_RETRIES when set", async () => {
-    process.env["0SEC_LLM_429_MAX_RETRIES"] = "3";
+  it("respects ZERO_LLM_429_MAX_RETRIES when set", async () => {
+    process.env["ZERO_LLM_429_MAX_RETRIES"] = "3";
     const fetchMock = vi.fn(async () => rateLimited("0"));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -1978,7 +1978,7 @@ describe("LlmApiRuntime 429 backoff + retry", () => {
 // ── SSE stream idle watchdog (the silent-stall kill) ──
 
 describe("LlmApiRuntime stream idle watchdog", () => {
-  const IDLE_ENV = "0SEC_LLM_STREAM_IDLE_TIMEOUT_MS";
+  const IDLE_ENV = "ZERO_LLM_STREAM_IDLE_TIMEOUT_MS";
 
   afterEach(() => {
     delete process.env[IDLE_ENV];
@@ -2042,7 +2042,7 @@ describe("LlmApiRuntime stream idle watchdog", () => {
     // forever while no real `data:` event ever arrives. The byte watchdog
     // (200ms) must stay quiet here; the EVENT watchdog (400ms) must fire.
     vi.useFakeTimers();
-    const EVENT_IDLE_ENV = "0SEC_LLM_STREAM_EVENT_IDLE_TIMEOUT_MS";
+    const EVENT_IDLE_ENV = "ZERO_LLM_STREAM_EVENT_IDLE_TIMEOUT_MS";
     process.env[IDLE_ENV] = "200";
     process.env[EVENT_IDLE_ENV] = "400";
     try {
@@ -2140,34 +2140,34 @@ describe("LlmApiRuntime stream idle watchdog", () => {
   });
 });
 
-// ── 0SEC_LLM_FALLBACK ──────────────────────────────────────────────────────
+// ── ZERO_LLM_FALLBACK ──────────────────────────────────────────────────────
 
 describe("parseLlmFallbackChain", () => {
-  const origVal = process.env["0SEC_LLM_FALLBACK"];
+  const origVal = process.env["ZERO_LLM_FALLBACK"];
   afterEach(() => {
-    if (origVal === undefined) delete process.env["0SEC_LLM_FALLBACK"];
-    else process.env["0SEC_LLM_FALLBACK"] = origVal;
+    if (origVal === undefined) delete process.env["ZERO_LLM_FALLBACK"];
+    else process.env["ZERO_LLM_FALLBACK"] = origVal;
   });
 
   it("returns empty when unset", () => {
-    delete process.env["0SEC_LLM_FALLBACK"];
+    delete process.env["ZERO_LLM_FALLBACK"];
     expect(parseLlmFallbackChain()).toEqual([]);
   });
 
   it("returns empty for empty string", () => {
-    process.env["0SEC_LLM_FALLBACK"] = "";
+    process.env["ZERO_LLM_FALLBACK"] = "";
     expect(parseLlmFallbackChain()).toEqual([]);
   });
 
   it("parses a single entry", () => {
-    process.env["0SEC_LLM_FALLBACK"] = "azure:gpt-5-deployment";
+    process.env["ZERO_LLM_FALLBACK"] = "azure:gpt-5-deployment";
     expect(parseLlmFallbackChain()).toEqual([
       { provider: "azure", model: "gpt-5-deployment" },
     ]);
   });
 
   it("parses multiple entries in order", () => {
-    process.env["0SEC_LLM_FALLBACK"] = "deepseek:deepseek-v4-flash,azure:gpt-5-deployment,openrouter:qwen/qwen-2.5-coder-32b-instruct";
+    process.env["ZERO_LLM_FALLBACK"] = "deepseek:deepseek-v4-flash,azure:gpt-5-deployment,openrouter:qwen/qwen-2.5-coder-32b-instruct";
     expect(parseLlmFallbackChain()).toEqual([
       { provider: "deepseek", model: "deepseek-v4-flash" },
       { provider: "azure", model: "gpt-5-deployment" },
@@ -2177,7 +2177,7 @@ describe("parseLlmFallbackChain", () => {
 
   it("skips unknown providers with a warning", () => {
     const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
-    process.env["0SEC_LLM_FALLBACK"] = "unknown:foo,openai:gpt-4o";
+    process.env["ZERO_LLM_FALLBACK"] = "unknown:foo,openai:gpt-4o";
     expect(parseLlmFallbackChain()).toEqual([
       { provider: "openai", model: "gpt-4o" },
     ]);
@@ -2187,7 +2187,7 @@ describe("parseLlmFallbackChain", () => {
 
   it("skips malformed entries with a warning", () => {
     const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
-    process.env["0SEC_LLM_FALLBACK"] = "justprovider,openai:gpt-4o";
+    process.env["ZERO_LLM_FALLBACK"] = "justprovider,openai:gpt-4o";
     expect(parseLlmFallbackChain()).toEqual([
       { provider: "openai", model: "gpt-4o" },
     ]);
@@ -2278,7 +2278,7 @@ describe("resolveFailoverProvider", () => {
   });
 });
 
-describe("LlmApiRuntime cross-provider failover (0SEC_LLM_FALLBACK)", () => {
+describe("LlmApiRuntime cross-provider failover (ZERO_LLM_FALLBACK)", () => {
   const origEnv = { ...process.env };
 
   function rateOnly429(): Response {
@@ -2342,16 +2342,16 @@ describe("LlmApiRuntime cross-provider failover (0SEC_LLM_FALLBACK)", () => {
       "OPENROUTER_API_KEY", "DEEPSEEK_API_KEY", "ANTHROPIC_API_KEY",
       "AZURE_OPENAI_API_KEY", "AZURE_OPENAI_BASE_URL", "OPENAI_API_KEY",
       "KIMI_API_KEY", "QWEN_API_KEY", "Z_AI_API_KEY",
-      "0SEC_CHATGPT_ACCESS_TOKEN", "0SEC_CHATGPT_OAUTH_REFRESH_TOKEN",
-      "0SEC_CHATGPT_ACCOUNT_ID", "0SEC_MODEL",
-      "0SEC_LLM_MAX_RETRIES", "0SEC_LLM_MAX_RETRY_WAIT_MS",
-      "0SEC_LLM_429_MAX_RETRIES", "0SEC_LLM_429_MAX_RETRY_WAIT_MS",
-      "0SEC_LLM_FALLBACK",
+      "ZERO_CHATGPT_ACCESS_TOKEN", "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN",
+      "ZERO_CHATGPT_ACCOUNT_ID", "ZERO_MODEL",
+      "ZERO_LLM_MAX_RETRIES", "ZERO_LLM_MAX_RETRY_WAIT_MS",
+      "ZERO_LLM_429_MAX_RETRIES", "ZERO_LLM_429_MAX_RETRY_WAIT_MS",
+      "ZERO_LLM_FALLBACK",
     ]) {
       if (!(k in origEnv)) delete process.env[k];
     }
-    process.env["0SEC_CHATGPT_AUTH_FILE"] = "/tmp/0sec-provider-test-no-auth.json";
-    process.env["0SEC_SKIP_PROVIDER_BANNER"] = "1";
+    process.env["ZERO_CHATGPT_AUTH_FILE"] = "/tmp/0sec-provider-test-no-auth.json";
+    process.env["ZERO_SKIP_PROVIDER_BANNER"] = "1";
     __resetFallbackChainForTests();
   });
 
@@ -2371,10 +2371,10 @@ describe("LlmApiRuntime cross-provider failover (0SEC_LLM_FALLBACK)", () => {
     // Synthetic key used only by mocked provider requests.
     // foxguard: ignore[js/no-hardcoded-secret]
     process.env.OPENROUTER_API_KEY = "sk-or-fallback";
-    // Urgent: 0SEC_LLM_FALLBACK entries and 12 429s for the primary.
+    // Urgent: ZERO_LLM_FALLBACK entries and 12 429s for the primary.
     // Tune 429 budget so it exhausts quickly: 1 retry then failover.
-    process.env["0SEC_LLM_429_MAX_RETRIES"] = "1";
-    process.env["0SEC_LLM_FALLBACK"] = "openrouter:qwen/qwen-2.5-coder-32b-instruct";
+    process.env["ZERO_LLM_429_MAX_RETRIES"] = "1";
+    process.env["ZERO_LLM_FALLBACK"] = "openrouter:qwen/qwen-2.5-coder-32b-instruct";
 
     let fetchCalls = 0;
     const fetchMock = vi.fn(async () => {
@@ -2410,7 +2410,7 @@ describe("LlmApiRuntime cross-provider failover (0SEC_LLM_FALLBACK)", () => {
     process.env.OPENAI_API_KEY = "sk-openai-primary";
     // foxguard: ignore[js/no-hardcoded-secret]
     process.env.OPENROUTER_API_KEY = "sk-or-fallback";
-    process.env["0SEC_LLM_FALLBACK"] =
+    process.env["ZERO_LLM_FALLBACK"] =
       "openrouter:qwen/qwen-2.5-coder-32b-instruct";
 
     let fetchCalls = 0;
@@ -2447,7 +2447,7 @@ describe("LlmApiRuntime cross-provider failover (0SEC_LLM_FALLBACK)", () => {
     // foxguard: ignore[js/no-hardcoded-secret]
     process.env.AZURE_OPENAI_API_KEY = "azure-fallback";
     process.env.AZURE_OPENAI_BASE_URL = "https://azure.example/openai/v1";
-    process.env["0SEC_LLM_FALLBACK"] = "kimi:k3,azure:DeepSeek-V4-Pro";
+    process.env["ZERO_LLM_FALLBACK"] = "kimi:k3,azure:DeepSeek-V4-Pro";
 
     let fetchCalls = 0;
     const fetchMock = vi.fn(async () => {
@@ -2483,8 +2483,8 @@ describe("LlmApiRuntime cross-provider failover (0SEC_LLM_FALLBACK)", () => {
     // Synthetic key used only by mocked provider requests.
     // foxguard: ignore[js/no-hardcoded-secret]
     process.env.OPENROUTER_API_KEY = "sk-or-fallback";
-    process.env["0SEC_LLM_429_MAX_RETRIES"] = "0";
-    process.env["0SEC_LLM_FALLBACK"] = "openrouter:qwen/qwen-2.5-coder-32b-instruct";
+    process.env["ZERO_LLM_429_MAX_RETRIES"] = "0";
+    process.env["ZERO_LLM_FALLBACK"] = "openrouter:qwen/qwen-2.5-coder-32b-instruct";
 
     let callCount = 0;
     const fetchMock = vi.fn(async () => {
@@ -2516,7 +2516,7 @@ describe("LlmApiRuntime cross-provider failover (0SEC_LLM_FALLBACK)", () => {
     process.env.OPENAI_API_KEY = "sk-openai-primary";
     // foxguard: ignore[js/no-hardcoded-secret]
     process.env.OPENROUTER_API_KEY = "sk-or-fallback";
-    process.env["0SEC_LLM_FALLBACK"] =
+    process.env["ZERO_LLM_FALLBACK"] =
       "openrouter:qwen/qwen-2.5-coder-32b-instruct";
     const fetchMock = vi.fn(async () => alibabaTokenPlanQuotaLimited());
     vi.stubGlobal("fetch", fetchMock);
@@ -2543,7 +2543,7 @@ describe("LlmApiRuntime cross-provider failover (0SEC_LLM_FALLBACK)", () => {
     // Synthetic key used only by mocked provider requests.
     // foxguard: ignore[js/no-hardcoded-secret]
     process.env.OPENROUTER_API_KEY = "sk-or-fallback";
-    process.env["0SEC_LLM_FALLBACK"] = "openrouter:qwen/qwen-2.5-coder-32b-instruct";
+    process.env["ZERO_LLM_FALLBACK"] = "openrouter:qwen/qwen-2.5-coder-32b-instruct";
 
     const fetchMock = vi.fn(
       async () =>
@@ -2583,10 +2583,10 @@ describe("LlmApiRuntime cross-provider failover (0SEC_LLM_FALLBACK)", () => {
 
 describe("LlmApiRuntime operator cancellation", () => {
   const origEnv = { ...process.env };
-  const IDLE_ENV = "0SEC_LLM_STREAM_IDLE_TIMEOUT_MS";
+  const IDLE_ENV = "ZERO_LLM_STREAM_IDLE_TIMEOUT_MS";
 
   beforeEach(() => {
-    process.env["0SEC_SKIP_PROVIDER_BANNER"] = "1";
+    process.env["ZERO_SKIP_PROVIDER_BANNER"] = "1";
     __resetFallbackChainForTests();
   });
 
@@ -2761,8 +2761,8 @@ describe("LlmApiRuntime operator cancellation", () => {
     process.env.OPENAI_API_KEY = "sk-openai-primary";
     // foxguard: ignore[js/no-hardcoded-secret]
     process.env.OPENROUTER_API_KEY = "sk-or-fallback";
-    process.env["0SEC_LLM_429_MAX_RETRIES"] = "0"; // next stop would be failover
-    process.env["0SEC_LLM_FALLBACK"] = "openrouter:qwen/qwen-2.5-coder-32b-instruct";
+    process.env["ZERO_LLM_429_MAX_RETRIES"] = "0"; // next stop would be failover
+    process.env["ZERO_LLM_FALLBACK"] = "openrouter:qwen/qwen-2.5-coder-32b-instruct";
     __resetFallbackChainForTests();
 
     const operator = new AbortController();

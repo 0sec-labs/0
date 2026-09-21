@@ -134,7 +134,7 @@ uv run --frozen --extra mcp python -m zeroverse.mcp
 
 The local agent tool `analyze_binary` is **off by default**. Put the installed
 `0verse` executable on the launching process's `PATH` (for example, activate
-`0verse/.venv`), then launch 0 with `0SEC_FEATURE_ZEROVERSE=1` and an authorized
+`0verse/.venv`), then launch 0 with `ZERO_FEATURE_ZEROVERSE=1` and an authorized
 local source scope. The tool accepts only a regular file confined to that scope;
 its arguments are `binary_path`, `bug_class`, `backend`, and `timeout_s`.
 

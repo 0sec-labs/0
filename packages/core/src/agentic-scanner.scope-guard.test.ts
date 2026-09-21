@@ -12,7 +12,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { agenticScan } from "./agentic-scanner.js";
 import { LlmApiRuntime } from "./runtime/llm-api.js";
-import type { ScanConfig } from "@0sec/shared";
+import type { ScanConfig } from "@0/shared"
 import type { ScanEvent } from "./scanner.js";
 
 function tmpDbPath(): string {
@@ -35,12 +35,12 @@ function baseConfig(overrides: Partial<ScanConfig> = {}): ScanConfig {
 describe("agenticScan — scope-guard visibility (0sec#133)", () => {
   let dbPath: string;
   let events: ScanEvent[];
-  const ORIGINAL_REQUIRE_SCOPE = process.env["0SEC_REQUIRE_SCOPE"];
+  const ORIGINAL_REQUIRE_SCOPE = process.env["ZERO_REQUIRE_SCOPE"];
 
   beforeEach(() => {
     dbPath = tmpDbPath();
     events = [];
-    delete process.env["0SEC_REQUIRE_SCOPE"];
+    delete process.env["ZERO_REQUIRE_SCOPE"];
     // Don't let a developer's persisted provider login turn these into live
     // native scans (same guard as agentic-scanner.events.test.ts).
     vi.spyOn(LlmApiRuntime.prototype, "getConfigurationDiagnostics").mockReturnValue({
@@ -53,8 +53,8 @@ describe("agenticScan — scope-guard visibility (0sec#133)", () => {
 
   afterEach(() => {
     try { fs.unlinkSync(dbPath); } catch { /* ignore */ }
-    if (ORIGINAL_REQUIRE_SCOPE === undefined) delete process.env["0SEC_REQUIRE_SCOPE"];
-    else process.env["0SEC_REQUIRE_SCOPE"] = ORIGINAL_REQUIRE_SCOPE;
+    if (ORIGINAL_REQUIRE_SCOPE === undefined) delete process.env["ZERO_REQUIRE_SCOPE"];
+    else process.env["ZERO_REQUIRE_SCOPE"] = ORIGINAL_REQUIRE_SCOPE;
     vi.restoreAllMocks();
   });
 
@@ -133,13 +133,13 @@ describe("agenticScan — scope-guard visibility (0sec#133)", () => {
   it("keeps dotted source filenames local and never probes them as HTTP targets", async () => {
     const source = `${dbPath}.source.js`;
     fs.writeFileSync(source, "export const value = 1;\n");
-    process.env["0SEC_REQUIRE_SCOPE"] = "1";
+    process.env["ZERO_REQUIRE_SCOPE"] = "1";
     const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("unexpected network request"));
     try {
       await expect(agenticScan({
         config: baseConfig({ target: source, repoPath: path.dirname(source), mode: "deep" }),
         dbPath,
-      })).rejects.toThrow(/0SEC_REQUIRE_SCOPE is set but no engagement scope is configured/);
+      })).rejects.toThrow(/ZERO_REQUIRE_SCOPE is set but no engagement scope is configured/);
       expect(fetch).not.toHaveBeenCalled();
     } finally {
       fs.unlinkSync(source);
@@ -147,14 +147,14 @@ describe("agenticScan — scope-guard visibility (0sec#133)", () => {
   });
 
   it("keeps the global strictness switch for unscoped local modes", async () => {
-    process.env["0SEC_REQUIRE_SCOPE"] = "1";
+    process.env["ZERO_REQUIRE_SCOPE"] = "1";
     await expect(
       agenticScan({
         config: baseConfig({ target: "lodash" }),
         dbPath,
         onEvent: (e) => { events.push(e); },
       }),
-    ).rejects.toThrow(/0SEC_REQUIRE_SCOPE is set but no engagement scope is configured/);
+    ).rejects.toThrow(/ZERO_REQUIRE_SCOPE is set but no engagement scope is configured/);
   });
 
   it("stays silent when http_audit synthesises a host policy (guards active)", async () => {

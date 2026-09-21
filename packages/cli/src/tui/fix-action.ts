@@ -24,7 +24,7 @@
  * the required `--test-command` option of `0sec fix`.
  */
 
-import type { SourceFixResult, SourceFixStatus, SourceFixTestResult } from "@0sec/core";
+import type { SourceFixResult, SourceFixStatus, SourceFixTestResult } from "@0/core"
 
 export type FixEligibility =
   | { eligible: true }
@@ -124,10 +124,10 @@ export function fixInputEligibility(inputs: {
   testCommand?: string | null;
 }): FixEligibility {
   if (!inputs.repoRoot || inputs.repoRoot.trim().length === 0) {
-    return ineligible("no repository path for this finding (set 0SEC_FIX_REPO)");
+    return ineligible("no repository path for this finding (set ZERO_FIX_REPO)");
   }
   if (!inputs.testCommand || inputs.testCommand.trim().length === 0) {
-    return ineligible("no regression command configured (set 0SEC_FIX_TEST_COMMAND)");
+    return ineligible("no regression command configured (set ZERO_FIX_TEST_COMMAND)");
   }
   return ELIGIBLE;
 }

@@ -18,13 +18,11 @@
 //     lead to the prompt block rather than risk a false positive.
 
 import { randomUUID } from "node:crypto";
-import type {
-  AttackCategory,
-  Finding,
-  ScanConfig,
-  ScanContext,
-  Severity,
-} from "@0sec/shared";
+import type { AttackCategory,
+Finding,
+ScanConfig,
+ScanContext,
+Severity, } from "@0/shared"
 import { runBaselineWebChecks } from "./web.js";
 import {
   enumerateJsChunkUrls,

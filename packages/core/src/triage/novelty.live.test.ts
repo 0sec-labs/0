@@ -8,7 +8,7 @@
  * advisory DB, not just against a stubbed response shape.
  *
  * GATED on an env flag so CI / offline `vitest run` never makes a network call:
- *   env 0SEC_LIVE_INTEL_TEST=1 pnpm --filter @0sec/core exec \
+ *   env ZERO_LIVE_INTEL_TEST=1 pnpm --filter @0/core exec \
  *     vitest run src/triage/novelty.live.test.ts
  */
 
@@ -18,7 +18,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveNovelty } from "./publishability-sources.js";
 
-const LIVE = !!process.env["0SEC_LIVE_INTEL_TEST"];
+const LIVE = !!process.env["ZERO_LIVE_INTEL_TEST"];
 
 describe("resolveNovelty — LIVE OSV smoke (#851)", () => {
   let cacheDir: string;

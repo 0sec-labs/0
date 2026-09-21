@@ -8,9 +8,9 @@ import type {
 import { ToolExecutor, getToolsForRole } from "./tools.js";
 import { WafDetector } from "../scope/waf-detect.js";
 import type { ToolContext } from "./types.js";
-import type { osecDB } from "@0sec/db";
+import type { osecDB } from "@0/db"
 import type { Runtime } from "../runtime/types.js";
-import type { Finding, TargetInfo } from "@0sec/shared";
+import type { Finding, TargetInfo } from "@0/shared"
 import {
   resolveDispatchMode,
   parseXmlDispatch,
@@ -64,6 +64,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
     target: config.target,
     scanId: config.scanId,
     role: config.role,
+    delegationSystemPrompt: config.systemPrompt,
     findings: [],
     attackResults: [],
     targetInfo: {},
@@ -91,6 +92,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
 
   const executor = new ToolExecutor(toolCtx, db, undefined, runtime.forkForSubagent?.bind(runtime));
   const tools = config.tools.length > 0 ? config.tools : getToolsForRole(config.role, { hasScope: !!config.scopePath, allowScanners: config.allowScanners });
+  toolCtx.delegationTools = tools;
   const hasJitSkillTools =
     features.jitSkills &&
     tools.some((tool) => tool.name === "list_skills") &&
@@ -199,7 +201,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
   // CI heartbeat: one stderr line per turn so a CI log of a hung scan
   // tells us at which turn / on which tool we stopped making progress.
   // Gated on CI / explicit opt-in so local TUI runs stay quiet.
-  const heartbeatEnabled = !!(process.env.CI || process.env["0SEC_HEARTBEAT"] || process.env["0SEC_DEBUG"]);
+  const heartbeatEnabled = !!(process.env.CI || process.env["ZERO_HEARTBEAT"] || process.env["ZERO_DEBUG"]);
   const loopStartedAt = Date.now();
   let lastToolName: string | null = null;
   let lastHeartbeatAt = 0;

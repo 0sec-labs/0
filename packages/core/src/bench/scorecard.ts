@@ -18,7 +18,7 @@ import type { RunSuiteResult, BenchCaseResult } from "./runner.js";
 // ── Wilson score interval (inlined) ───────────────────────────────────
 //
 // `packages/benchmark/wilson.ts` already implements this, but that package
-// DEPENDS on @0sec/core, so core can't import it back without a cycle.
+// DEPENDS on @0/core, so core can't import it back without a cycle.
 // The math is tiny and stable; we inline the 95% form here.
 
 const Z_95 = 1.959963984540054;

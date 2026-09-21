@@ -21,10 +21,10 @@
  * {@link buildPublishabilityInputs} takes a `fetchImpl` (defaults to the global
  * `fetch`) and `offline` flag so unit tests stay deterministic and offline —
  * pass a stub `fetchImpl` and nothing ever leaves the process. The scanner only
- * calls this when `0SEC_FEATURE_PUBLISHABILITY_GATE` is on.
+ * calls this when `ZERO_FEATURE_PUBLISHABILITY_GATE` is on.
  */
 
-import type { AttackCategory, Finding } from "@0sec/shared";
+import type { AttackCategory, Finding } from "@0/shared"
 import { searchAdvisories, normalizeRepositoryHint, type VulnerabilityIntel } from "../intel/index.js";
 import { toOsvEcosystem, queryOsvAdvisories } from "../intel/osv.js";
 import type { AdvisoryRef, PublishabilityInputs } from "./publishability.js";

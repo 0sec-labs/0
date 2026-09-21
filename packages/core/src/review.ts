@@ -4,16 +4,14 @@ import { join, basename } from "node:path";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { cloneGitRepo } from "./repo-clone.js";
-import type {
-  ReviewConfig,
-  ReviewReport,
-  SemgrepFinding,
-  Finding,
-  ScanConfig,
-  ReviewProfile,
-  ReviewAnchor,
-} from "@0sec/shared";
-import type { osecDB } from "@0sec/db";
+import type { ReviewConfig,
+ReviewReport,
+SemgrepFinding,
+Finding,
+ScanConfig,
+ReviewProfile,
+ReviewAnchor, } from "@0/shared"
+import type { osecDB } from "@0/db"
 import type { ScanEvent, ScanListener } from "./scanner.js";
 import { reviewAgentPrompt } from "./analysis-prompts.js";
 import { runAnalysisAgent } from "./agent-runner.js";
@@ -469,7 +467,7 @@ export async function sourceReview(
         osecDB,
         resolveOsecRunStorage,
         writeOsecRunReport,
-      } = await import("@0sec/db");
+      } = await import("@0/db");
       const storage = resolveOsecRunStorage({ dbPath: config.dbPath });
       return {
         db: new osecDB(storage.dbPath),

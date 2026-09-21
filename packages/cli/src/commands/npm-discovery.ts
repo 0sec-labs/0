@@ -1,14 +1,12 @@
 import type { Command } from "commander";
 import chalk from "chalk";
-import {
-  runNpmDynamicDiscovery,
-  createOsvAdvisoryLookup,
-  DETECTOR_REGISTRY,
-  resolveDetectors,
-  inProcessProbe,
-  type NpmDynamicDiscoveryResult,
-  type PackageRef,
-} from "@0sec/core";
+import { runNpmDynamicDiscovery,
+createOsvAdvisoryLookup,
+DETECTOR_REGISTRY,
+resolveDetectors,
+inProcessProbe,
+type NpmDynamicDiscoveryResult,
+type PackageRef, } from "@0/core"
 
 interface NpmDiscoveryRunOptions {
   installDir?: string;

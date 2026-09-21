@@ -48,7 +48,7 @@ import React, {
 import { sleekScrollbar } from "./scrollbar.js";
 import { useKeyboard } from "@opentui/react";
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core";
-import { analyticsPipeline } from "@0sec/core";
+import { analyticsPipeline } from "@0/core"
 
 import { Cells, textCells } from "./primitives.js";
 import { updateSetting, useSettings } from "./settings-store.js";
@@ -287,7 +287,7 @@ function analyticsLines(width: number): StepLine[] {
     ),
     BLANK,
     ...paragraph(
-      `Active in this process: ${analyticsPipeline.getLevel()}. Saved choices and environment restrictions are preserved. 0SEC_ANALYTICS_LEVEL, 0SEC_OFFLINE, 0SEC_NO_TELEMETRY and DO_NOT_TRACK can restrict collection. Skip keeps the current setting; change it anytime in /settings.`,
+      `Active in this process: ${analyticsPipeline.getLevel()}. Saved choices and environment restrictions are preserved. ZERO_ANALYTICS_LEVEL, ZERO_OFFLINE, ZERO_NO_TELEMETRY and DO_NOT_TRACK can restrict collection. Skip keeps the current setting; change it anytime in /settings.`,
       "muted",
       width,
     ),

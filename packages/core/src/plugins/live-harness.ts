@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Context, type Fiber } from "@deepseek-ai/cordis";
-import type { HarnessControl, HarnessGenerationSpec, HarnessProviderSpec, HarnessSnapshot, HarnessUiEvent, HarnessUiInput, HarnessView } from "@0sec/shared";
+import type { HarnessControl, HarnessGenerationSpec, HarnessProviderSpec, HarnessSnapshot, HarnessUiEvent, HarnessUiInput, HarnessView } from "@0/shared"
 import { z } from "zod";
 import { ensureEvolutionDirectory, publishEvolutionArtifact, readEvolutionArtifact } from "../improvement/artifacts.js";
 import { canonicalEvolutionJson } from "../improvement/config.js";

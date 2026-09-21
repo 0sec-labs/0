@@ -8,7 +8,7 @@ proposals. Quantitative “Impact” estimates below are retained research claim
 not measured effects on the current release. The April ablation found
 slice-dependent regressions, including EGATS; see [the dated results](/research/2026-04-11-ablation/).
 
-Current controls: early-stop retry defaults **off** (`0SEC_FEATURE_EARLY_STOP`);
+Current controls: early-stop retry defaults **off** (`ZERO_FEATURE_EARLY_STOP`);
 dynamic playbooks and external memory also default off. Loop detection,
 compaction, script templates and progress handoff default on. EGATS and strategy
 racing are explicit scan configurations, not automatically selected optimal
@@ -89,7 +89,7 @@ selected release.
 **What:** Summarize the middle of the conversation while preserving the first
 message and, by default, the last **10** messages. The scan loop defaults to a
 77,000-token trigger and 30,000-token regrowth threshold, configurable with
-`0SEC_COMPACTION_THRESHOLD` and `0SEC_COMPACTION_REGROW`; these are not derived
+`ZERO_COMPACTION_THRESHOLD` and `ZERO_COMPACTION_REGROW`; these are not derived
 automatically from the selected model's context window. Recompaction can happen
 multiple times. It reduces context, not consumed turns or accumulated cost.
 
@@ -122,7 +122,7 @@ separate `preserveCriticalMessages` feature controls verbatim critical context.
 
 **Impact:** Measured on 0's XBOW runs, the XSS playbook alone cracked previously-unsolved XBEN-011 and XBEN-018.
 
-**Implementation:** `packages/core/src/agent/playbooks.ts` — exports `PLAYBOOKS` (keyed by vuln type), `detectPlaybooks(toolResultTexts)` (pattern matcher, caps at 3 playbooks to avoid prompt bloat), and `buildPlaybookInjection(types)`. Feature flag: `0SEC_FEATURE_DYNAMIC_PLAYBOOKS`.
+**Implementation:** `packages/core/src/agent/playbooks.ts` — exports `PLAYBOOKS` (keyed by vuln type), `detectPlaybooks(toolResultTexts)` (pattern matcher, caps at 3 playbooks to avoid prompt bloat), and `buildPlaybookInjection(types)`. Feature flag: `ZERO_FEATURE_DYNAMIC_PLAYBOOKS`.
 
 ---
 
@@ -136,7 +136,7 @@ separate `preserveCriticalMessages` feature controls verbatim critical context.
 
 **Implementation:** `packages/core/src/agent/egats.ts`; the native scanner selects
 it when `config.egats` is enabled. Do not use the historical
-`0SEC_FEATURE_EGATS` name as a current activation contract.
+`ZERO_FEATURE_EGATS` name as a current activation contract.
 
 ---
 
@@ -160,7 +160,7 @@ it when `config.egats` is enabled. Do not use the historical
 
 **Impact:** Observed conversion of roughly 20% of retries into successes.
 
-**Implementation:** Progress extraction lives in `packages/core/src/agent/native-loop.ts`; injection happens in `packages/core/src/agentic-scanner.ts` when building the retry prompt. Feature flag: `0SEC_FEATURE_PROGRESS_HANDOFF`.
+**Implementation:** Progress extraction lives in `packages/core/src/agent/native-loop.ts`; injection happens in `packages/core/src/agentic-scanner.ts` when building the retry prompt. Feature flag: `ZERO_FEATURE_PROGRESS_HANDOFF`.
 
 ---
 
@@ -168,7 +168,7 @@ it when `config.egats` is enabled. Do not use the historical
 
 The native loop substitutes `{{EXTERNAL_MEMORY_PATH}}` with a scan-specific
 `/tmp/0sec-state-<scan-id>.json`, rather than a shared `/tmp/plan.json`.
-`0SEC_FEATURE_EXTERNAL_MEMORY=1` enables the external-memory path; it defaults
+`ZERO_FEATURE_EXTERNAL_MEMORY=1` enables the external-memory path; it defaults
 off. This is distinct from structured plan/loot state and durable journal data.
 An agent-authored file is working context, not trusted evidence.
 

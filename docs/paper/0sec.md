@@ -206,7 +206,7 @@ Representative commands:
 pnpm lint
 pnpm test
 0 bench run --help
-pnpm --filter @0sec/benchmark xbow --repeat 10 --json
+pnpm --filter @0/benchmark xbow --repeat 10 --json
 pnpm run consolidate-xbow
 ```
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Requires built @0sec/core and a usable local Docker daemon. Never silently skips.
+// Requires built @0/core and a usable local Docker daemon. Never silently skips.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";

@@ -12,7 +12,7 @@
  *   - 0sec SQLite DB (ground truth = blind verify status)
  *
  * For every sample we emit BOTH the raw text and the handcrafted
- * feature vector from `@0sec/core`'s `extractFeatures`. The feature vector
+ * feature vector from `@0/core`'s `extractFeatures`. The feature vector
  * was inspired by the VulnBERT hybrid architecture (handcrafted features
  * fused with neural embeddings) and makes the dataset drop-in compatible
  * with either a pure-text classifier or a hybrid model.
@@ -32,8 +32,8 @@ import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from 
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
-import { extractFeatures, FEATURE_NAMES } from "@0sec/core";
-import type { Finding, LayerVerdict } from "@0sec/shared";
+import { extractFeatures, FEATURE_NAMES } from "@0/core"
+import type { Finding, LayerVerdict } from "@0/shared"
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);

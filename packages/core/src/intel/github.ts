@@ -213,12 +213,12 @@ let cachedGitHubToken: string | false | undefined;
 /**
  * Resolve a GitHub token (0sec#intel-advisories). Most operators authenticate
  * via the `gh` CLI rather than env vars, so fall back to `gh auth token` when
- * no env token is set. Order: GITHUB_TOKEN > GH_TOKEN > 0SEC_GITHUB_TOKEN >
+ * no env token is set. Order: GITHUB_TOKEN > GH_TOKEN > ZERO_GITHUB_TOKEN >
  * `gh auth token`. Unauthenticated (public-endpoint) use still works when none
  * resolve.
  */
 export function resolveGitHubToken(): string | undefined {
-  const envToken = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? process.env["0SEC_GITHUB_TOKEN"];
+  const envToken = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? process.env["ZERO_GITHUB_TOKEN"];
   if (envToken && envToken.trim()) return envToken.trim();
   if (cachedGitHubToken !== undefined) return cachedGitHubToken || undefined;
   cachedGitHubToken = readGhCliToken() ?? false;

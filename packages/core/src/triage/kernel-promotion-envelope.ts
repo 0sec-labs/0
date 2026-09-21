@@ -24,11 +24,9 @@
  * This module contains zero I/O, zero side effects, and zero agent calls.
  */
 
-import type {
-  VerificationResult,
-  ResearchNoveltyReceipt,
-} from "@0sec/shared";
-import { normalizeResearchNovelty } from "@0sec/shared";
+import type { VerificationResult,
+ResearchNoveltyReceipt, } from "@0/shared"
+import { normalizeResearchNovelty } from "@0/shared"
 import type {
   RankSinkReachabilityResult,
   SinkLocation,

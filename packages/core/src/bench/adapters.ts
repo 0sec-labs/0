@@ -7,7 +7,7 @@
  * dependency on them, which is what keeps the scorecard deterministically
  * testable).
  *
- * Layering note: this file lives in @0sec/core, so it may import core's
+ * Layering note: this file lives in @0/core, so it may import core's
  * own engine (`agenticScan`) and its own Docker plumbing (the `docker()`
  * helper below). It
  * must NOT import the cloud verify runners in `services/` — services depends
@@ -19,7 +19,7 @@
 import { execFileSync } from "node:child_process";
 import { agenticScan } from "../agentic-scanner.js";
 import { packageAudit } from "../audit.js";
-import type { ScanReport, RuntimeMode, AuditReport, ScanDepth } from "@0sec/shared";
+import type { ScanReport, RuntimeMode, AuditReport, ScanDepth } from "@0/shared"
 import type { BenchCase } from "./manifest.js";
 import type { BenchScanResult, BenchTargetProvenance } from "./oracle.js";
 import type {

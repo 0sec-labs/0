@@ -218,7 +218,7 @@ describe("provider credential reporting", () => {
   });
 
   it("reports a provider as ready only when an env var actually holds a credential", () => {
-    for (const info of PROVIDERS) {
+    for (const info of PROVIDERS.filter((provider) => !provider.evaluatorOnly)) {
       expect(providerGroupFor(info.id, EMPTY_ENV).credential).toBe("missing");
       for (const envVar of info.envVars) {
         const lit = providerStates({ [envVar]: "value" });
@@ -246,11 +246,12 @@ describe("provider credential reporting", () => {
   it("names every configured provider in the summary line", () => {
     expect(credentialSummary(EMPTY_ENV)).toContain("none detected");
     expect(credentialSummary(LIT_ENV)).toContain(LIT_PROVIDER?.label ?? "");
+    const activeProviders = PROVIDERS.filter((provider) => !provider.evaluatorOnly);
     const all = providerStates(
-      Object.fromEntries(PROVIDERS.map((info) => [info.envVars[0] ?? "", "value"])),
+      Object.fromEntries(activeProviders.map((info) => [info.envVars[0] ?? "", "value"])),
     );
-    expect(configuredProviderLabels(all)).toHaveLength(PROVIDERS.length);
-    for (const info of PROVIDERS) expect(credentialSummary(all)).toContain(info.label);
+    expect(configuredProviderLabels(all)).toHaveLength(activeProviders.length);
+    for (const info of activeProviders) expect(credentialSummary(all)).toContain(info.label);
   });
 
   it("labels each credential state in words an operator can act on", () => {

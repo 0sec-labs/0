@@ -2,7 +2,7 @@
  * Audit-skills Markdown bundle loader (#audit-skills).
  *
  * Reads the staged bundle manifest JSON (pointed to by
- * 0SEC_AUDIT_SKILLS_MANIFEST), validates it strictly, verifies
+ * ZERO_AUDIT_SKILLS_MANIFEST), validates it strictly, verifies
  * sha256 integrity, and produces a Map<string, SkillDefinition>
  * keyed as "cloud/<skillId>" — making cloud skills impossible to
  * collide with or replace builtin IDs.

@@ -203,7 +203,7 @@ export interface ScanConfig {
   dispatchMode?: "json" | "xml" | "auto";
   /**
    * http_audit mode (FROZEN CONTRACT). Set only when `mode === "http_audit"`.
-   * The CLI parses these from the 0SEC_TARGET_* env vars; the core builds
+   * The CLI parses these from the ZERO_TARGET_* env vars; the core builds
    * an in-memory ScopePolicy (host allowlist), path-prefix allowlist,
    * per-host RateLimiter, and a wall-clock kill switch from them, threaded
    * down through an EnforcementTracker into every fetch chokepoint and
@@ -225,15 +225,15 @@ export interface ScanConfig {
    * password-reset burst probe, the web-recon pre-pass routed through the
    * per-host rate limiter, no WAF-evasion ladder, full jitter on the token
    * bucket, and a reduced default per-host rps. Lower precedence than the scope
-   * file's `engagement` block and `0SEC_ENGAGEMENT_PROFILE`. See
-   * `scope/engagement-profile.ts` in `@0sec/core`.
+   * file's `engagement` block and `ZERO_ENGAGEMENT_PROFILE`. See
+   * `scope/engagement-profile.ts` in `@0/core`.
    */
   engagementProfile?: string;
   /**
    * Standalone opt-out for the adaptive WAF-evasion ladder, independent of the
    * engagement profile (`--no-waf-evasion` → `false`). Unset = enabled, which
    * is the historical default. Lower precedence than the scope file's
-   * `engagement.waf_evasion` and `0SEC_WAF_EVASION`.
+   * `engagement.waf_evasion` and `ZERO_WAF_EVASION`.
    */
   wafEvasion?: boolean;
 }
@@ -622,7 +622,7 @@ export interface Finding {
   /**
    * Prior PoC execution report (0sec#171 / 0sec#414). Optional and
    * additive. Typed as `unknown` here because the concrete
-   * `PocExecutionReport` shape lives in `@0sec/core/disclose` and shared
+   * `PocExecutionReport` shape lives in `@0/core/disclose` and shared
    * must not import from core. Consumers that need the full shape
    * narrow it at the call site.
    */
@@ -662,7 +662,7 @@ export interface Finding {
   dedupRefs?: string[];
   /**
    * Intra-scan semantic dedupe mapping (anchored incremental LLM clustering,
-   * `triage/semantic-dedupe.ts`, flag-gated `0SEC_FEATURE_SEMANTIC_DEDUPE`,
+   * `triage/semantic-dedupe.ts`, flag-gated `ZERO_FEATURE_SEMANTIC_DEDUPE`,
    * default OFF). Optional and additive — undefined unless the post-pass ran.
    * Canonical findings carry `isCanonical: true` and map to themselves;
    * duplicates carry the canonical's id, a stable `clusterId` (`scanId:canonicalId`),
@@ -682,7 +682,7 @@ export interface Finding {
   /**
    * Incremental rank assigned by the ranking post-pass
    * (`triage/incremental-rank.ts`, flag-gated
-   * `0SEC_FEATURE_INCREMENTAL_RANK`, default OFF). 1 = highest comparative
+   * `ZERO_FEATURE_INCREMENTAL_RANK`, default OFF). 1 = highest comparative
    * promise for a security researcher. Optional and additive — undefined
    * unless the post-pass ran; ranks are per-scan, not global.
    */
@@ -690,7 +690,7 @@ export interface Finding {
   /**
    * Public-advisory novelty verdict (issue #851). Optional and additive —
    * undefined until the publishability layer's novelty step runs (flag-gated
-   * via `0SEC_FEATURE_PUBLISHABILITY_GATE`, OSS ecosystems only). The
+   * via `ZERO_FEATURE_PUBLISHABILITY_GATE`, OSS ecosystems only). The
    * structured counterpart to the old text-over-notes heuristic the disclosure
    * cockpit used: `matches-CVE-…` / `matches-GHSA-…` mean a live OSV / GitHub
    * Advisory DB lookup found a published advisory covering this package+version
@@ -720,7 +720,7 @@ export interface Finding {
   /**
    * Inline (in-loop) validation verdict (issue #554). Optional and additive.
    * Set by the native attack loop's onFindingSaved hook when
-   * 0SEC_FEATURE_INLINE_VALIDATION is on and a high/critical finding is saved:
+   * ZERO_FEATURE_INLINE_VALIDATION is on and a high/critical finding is saved:
    * a fast deterministic oracle re-runs the PoC inline so the attack agent gets
    * a real-time ground-truth signal instead of burning turns on an unprovable
    * lead. `confirmed` means the oracle reproduced the exploit — downstream
@@ -744,7 +744,7 @@ export interface Finding {
    * stages (kernel-autonomy Phase 1). Optional and additive — undefined for
    * non-kernel findings and for kernel findings that never reached
    * weaponization. The canonical typed shape (`KernelExploitContext`) lives in
-   * `@0sec/core/kernel/exploit`; shared must not import from core (the
+   * `@0/core/kernel/exploit`; shared must not import from core (the
    * dependency only runs core → shared), so we mirror it here with a
    * structurally-identical lightweight interface. Core consumers can assign a
    * `KernelExploitContext` into this field and read it back without a cast
@@ -773,7 +773,7 @@ export interface Finding {
 }
 
 /**
- * Lightweight, dependency-free mirror of `@0sec/core`'s `KernelExploitContext`
+ * Lightweight, dependency-free mirror of `@0/core`'s `KernelExploitContext`
  * so the shared `Finding` can carry kernel-exploit state without importing from
  * core (which would invert the workspace dependency direction). Kept
  * structurally identical to the core type — when one changes, change both.
@@ -1250,7 +1250,7 @@ export interface ScanWarning {
 /**
  * Reason a scan terminated. Undefined / "completed" means the scan finished
  * normally. "cost_ceiling_exceeded" means the per-scan cost ceiling
- * (`0SEC_COST_CEILING_USD` / `--cost-ceiling`) was hit and the scan
+ * (`ZERO_COST_CEILING_USD` / `--cost-ceiling`) was hit and the scan
  * aborted with partial findings preserved.
  */
 export type ScanExitReason = "completed" | "cost_ceiling_exceeded";
@@ -1314,7 +1314,7 @@ export interface ScanReport {
 
 /**
  * Auditable record of the engagement hardening posture a scan ran under.
- * Built by `describeEngagementPosture` in `@0sec/core`
+ * Built by `describeEngagementPosture` in `@0/core`
  * (`scope/engagement-profile.ts`). snake_case keys match the
  * `enforcement_summary` contract; the values are the posture as APPLIED, not
  * as requested.
@@ -1342,8 +1342,8 @@ export interface EngagementPostureRecord {
 
 /**
  * Frozen `enforcement_summary` block emitted in http_audit reports. Mirrors
- * `EnforcementSummary` in `@0sec/core` (scope/enforcement.ts); duplicated
- * here (rather than imported) so `@0sec/shared` stays dependency-free of
+ * `EnforcementSummary` in `@0/core` (scope/enforcement.ts); duplicated
+ * here (rather than imported) so `@0/shared` stays dependency-free of
  * core. snake_case keys are part of the contract — do not rename.
  */
 export interface EnforcementSummary {
@@ -1623,7 +1623,7 @@ export interface ReviewConfig {
    * External candidate vulnerable spans to seed the agent's worklist before
    * static scanner prioritisation runs. Today the only first-class producer is
    * GemmaForge (`gemmaforge scan`, schema `gemmaforge.leads/v1`). The parser
-   * lives in `@0sec/core` (`seed-findings.ts`); it normalises any compliant
+   * lives in `@0/core` (`seed-findings.ts`); it normalises any compliant
    * ND-JSON into this shape. Empty array = no external seeds; the selected
    * static scanner remains the lead source.
    */

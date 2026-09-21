@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from "node:child_process";
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared"
 import { createHash, randomBytes } from "node:crypto";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -108,7 +108,7 @@ export interface KernelVmConfig {
   artifactDir?: string;
   /**
    * KASLR control. Default `false` keeps the historical `nokaslr` boot (stable
-   * symbol addresses for verification). Set `true` (0SEC_KERNEL_QEMU_KASLR=1)
+   * symbol addresses for verification). Set `true` (ZERO_KERNEL_QEMU_KASLR=1)
    * to boot with KASLR ON — exercises a leak-dependent exploit under randomized
    * base. Only meaningful when the env append does not already pin (no)kaslr.
    */
@@ -137,7 +137,7 @@ export interface KernelVmConfig {
    *
    * The exploit C is compiled STATICALLY on the host (the initramfs has no
    * toolchain) and packed as `/init`'s payload. Gated by
-   * `0SEC_KERNEL_QEMU_INITRAMFS=1` (set by `USE_KERNEL_WEAPONIZE=1`). When
+   * `ZERO_KERNEL_QEMU_INITRAMFS=1` (set by `USE_KERNEL_WEAPONIZE=1`). When
    * false the historical 9p verify/repro lane is used unchanged.
    */
   weaponizeInitramfs?: boolean;
@@ -265,7 +265,7 @@ function inferDiskFormat(diskImage: string): "raw" | "qcow2" {
 }
 
 function defaultKernelCacheDir(): string {
-  return process.env["0SEC_KERNEL_BUILD_CACHE"]?.trim() ||
+  return process.env["ZERO_KERNEL_BUILD_CACHE"]?.trim() ||
     join(homeStateDir(), "kernel-cache");
 }
 
@@ -312,7 +312,7 @@ function sha256File(path: string): string {
 }
 
 function expectedKernelRelease(kernelTree: string, explicit?: string, requireExplicit = false): string {
-  const fromEnv = explicit?.trim() || process.env["0SEC_KERNEL_QEMU_EXPECTED_RELEASE"]?.trim();
+  const fromEnv = explicit?.trim() || process.env["ZERO_KERNEL_QEMU_EXPECTED_RELEASE"]?.trim();
   if (fromEnv) {
     if (!RELEASE_RE.test(fromEnv)) throw new Error("invalid expected kernel release");
     return fromEnv;
@@ -330,7 +330,7 @@ function expectedKernelRelease(kernelTree: string, explicit?: string, requireExp
   const part = (name: string) => new RegExp(`^${name}\\s*=\\s*([^\\s#]+)`, "m").exec(makefile)?.[1];
   const version = part("VERSION"), patch = part("PATCHLEVEL"), sub = part("SUBLEVEL") ?? "0", extra = part("EXTRAVERSION") ?? "";
   const release = version && patch ? `${version}.${patch}.${sub}${extra}` : "";
-  if (!RELEASE_RE.test(release)) throw new Error("cannot determine expected kernel release; set 0SEC_KERNEL_QEMU_EXPECTED_RELEASE");
+  if (!RELEASE_RE.test(release)) throw new Error("cannot determine expected kernel release; set ZERO_KERNEL_QEMU_EXPECTED_RELEASE");
   return release;
 }
 
@@ -364,7 +364,7 @@ function defaultBuildRunner(input: { kernelTree: string; outDir: string; configP
   ].find((candidate) => existsSync(candidate));
   if (!script) {
     throw new Error(
-      "kernel build script not found; set 0SEC_KERNEL_QEMU_KERNEL/0SEC_KERNEL_QEMU_DISK to prebuilt artifacts or run from a source checkout",
+      "kernel build script not found; set ZERO_KERNEL_QEMU_KERNEL/ZERO_KERNEL_QEMU_DISK to prebuilt artifacts or run from a source checkout",
     );
   }
   execFileSync("bash", [script, input.kernelTree, input.outDir, input.configProfile], {
@@ -375,14 +375,14 @@ function defaultBuildRunner(input: { kernelTree: string; outDir: string; configP
 export function prepareKernelVmArtifacts(opts: KernelBuildOptions): KernelVmArtifacts {
   const configProfile: KernelConfigProfile = opts.configProfile ?? "kasan";
   const log = opts.logger ?? ((line: string) => console.log(line));
-  const envKernel = process.env["0SEC_KERNEL_QEMU_KERNEL"]?.trim();
-  const envDisk = process.env["0SEC_KERNEL_QEMU_DISK"]?.trim();
+  const envKernel = process.env["ZERO_KERNEL_QEMU_KERNEL"]?.trim();
+  const envDisk = process.env["ZERO_KERNEL_QEMU_DISK"]?.trim();
   if (!opts.force && envKernel && envDisk && existsSync(envKernel) && existsSync(envDisk)) {
-    log(`[kernel-cache] env-override: using 0SEC_KERNEL_QEMU_KERNEL/DISK (skipping build)`);
+    log(`[kernel-cache] env-override: using ZERO_KERNEL_QEMU_KERNEL/DISK (skipping build)`);
     return {
       kernelImage: envKernel,
       diskImage: envDisk,
-      kernelConfig: process.env["0SEC_KERNEL_QEMU_CONFIG"]?.trim() || "",
+      kernelConfig: process.env["ZERO_KERNEL_QEMU_CONFIG"]?.trim() || "",
       cacheKey: "env",
       cacheDir: "",
       cacheStatus: "env",
@@ -455,12 +455,12 @@ function warnIfKcsanUnsupported(
 }
 
 export function loadKernelVmConfigFromEnv(): KernelVmConfig {
-  const kernelImage = process.env["0SEC_KERNEL_QEMU_KERNEL"]?.trim();
-  const diskImage = process.env["0SEC_KERNEL_QEMU_DISK"]?.trim();
+  const kernelImage = process.env["ZERO_KERNEL_QEMU_KERNEL"]?.trim();
+  const diskImage = process.env["ZERO_KERNEL_QEMU_DISK"]?.trim();
 
   const missing = [
-    !kernelImage ? "0SEC_KERNEL_QEMU_KERNEL" : "",
-    !diskImage ? "0SEC_KERNEL_QEMU_DISK" : "",
+    !kernelImage ? "ZERO_KERNEL_QEMU_KERNEL" : "",
+    !diskImage ? "ZERO_KERNEL_QEMU_DISK" : "",
   ].filter(Boolean);
 
   if (missing.length > 0) {
@@ -473,42 +473,42 @@ export function loadKernelVmConfigFromEnv(): KernelVmConfig {
   const resolvedDiskImage = diskImage!;
 
   // KASLR knob: default OFF (nokaslr) for stable verification; opt in with
-  // 0SEC_KERNEL_QEMU_KASLR=1. An explicit env append always wins (the operator
+  // ZERO_KERNEL_QEMU_KASLR=1. An explicit env append always wins (the operator
   // pinned the cmdline by hand), so we only inject (no)kaslr into the default.
-  const kaslr = /^(1|true|on|yes)$/i.test(process.env["0SEC_KERNEL_QEMU_KASLR"]?.trim() ?? "");
-  const explicitAppend = process.env["0SEC_KERNEL_QEMU_APPEND"]?.trim();
+  const kaslr = /^(1|true|on|yes)$/i.test(process.env["ZERO_KERNEL_QEMU_KASLR"]?.trim() ?? "");
+  const explicitAppend = process.env["ZERO_KERNEL_QEMU_APPEND"]?.trim();
   const kernelAppend = explicitAppend || buildKernelAppend(kaslr);
 
-  const widenSymbol = process.env["0SEC_KERNEL_QEMU_WIDEN_SYMBOL"]?.trim() || undefined;
-  const widenOffsetRaw = process.env["0SEC_KERNEL_QEMU_WIDEN_OFFSET"]?.trim();
-  const widenDelayRaw = process.env["0SEC_KERNEL_QEMU_WIDEN_DELAY_MS"]?.trim();
+  const widenSymbol = process.env["ZERO_KERNEL_QEMU_WIDEN_SYMBOL"]?.trim() || undefined;
+  const widenOffsetRaw = process.env["ZERO_KERNEL_QEMU_WIDEN_OFFSET"]?.trim();
+  const widenDelayRaw = process.env["ZERO_KERNEL_QEMU_WIDEN_DELAY_MS"]?.trim();
 
   // Weaponization lane (lightweight busybox initramfs). `USE_KERNEL_WEAPONIZE=1`
-  // is the operator-facing alias; `0SEC_KERNEL_QEMU_INITRAMFS=1` is the
+  // is the operator-facing alias; `ZERO_KERNEL_QEMU_INITRAMFS=1` is the
   // explicit knob. Either enables it.
   const weaponizeInitramfs =
-    /^(1|true|on|yes)$/i.test(process.env["0SEC_KERNEL_QEMU_INITRAMFS"]?.trim() ?? "") ||
+    /^(1|true|on|yes)$/i.test(process.env["ZERO_KERNEL_QEMU_INITRAMFS"]?.trim() ?? "") ||
     /^(1|true|on|yes)$/i.test(process.env.USE_KERNEL_WEAPONIZE?.trim() ?? "");
-  const initramfsModules = (process.env["0SEC_KERNEL_QEMU_INITRAMFS_MODULES"]?.trim() || "")
+  const initramfsModules = (process.env["ZERO_KERNEL_QEMU_INITRAMFS_MODULES"]?.trim() || "")
     .split(/[:,\s]+/)
     .map((m) => m.trim())
     .filter(Boolean);
-  const busyboxPath = process.env["0SEC_KERNEL_QEMU_BUSYBOX"]?.trim() || undefined;
+  const busyboxPath = process.env["ZERO_KERNEL_QEMU_BUSYBOX"]?.trim() || undefined;
 
   return {
-    qemuBinary: process.env["0SEC_KERNEL_QEMU_BINARY"]?.trim() || "qemu-system-x86_64",
+    qemuBinary: process.env["ZERO_KERNEL_QEMU_BINARY"]?.trim() || "qemu-system-x86_64",
     kernelImage: resolvedKernelImage,
     diskImage: resolvedDiskImage,
-    diskFormat: (process.env["0SEC_KERNEL_QEMU_DISK_FORMAT"]?.trim() as "raw" | "qcow2" | undefined) || inferDiskFormat(resolvedDiskImage),
-    bootTimeoutSec: parseInt(process.env["0SEC_KERNEL_QEMU_BOOT_TIMEOUT_SEC"]?.trim() || "120", 10),
-    memoryMb: parseInt(process.env["0SEC_KERNEL_QEMU_MEMORY_MB"]?.trim() || "2048", 10),
-    smp: parseInt(process.env["0SEC_KERNEL_QEMU_SMP"]?.trim() || "2", 10),
+    diskFormat: (process.env["ZERO_KERNEL_QEMU_DISK_FORMAT"]?.trim() as "raw" | "qcow2" | undefined) || inferDiskFormat(resolvedDiskImage),
+    bootTimeoutSec: parseInt(process.env["ZERO_KERNEL_QEMU_BOOT_TIMEOUT_SEC"]?.trim() || "120", 10),
+    memoryMb: parseInt(process.env["ZERO_KERNEL_QEMU_MEMORY_MB"]?.trim() || "2048", 10),
+    smp: parseInt(process.env["ZERO_KERNEL_QEMU_SMP"]?.trim() || "2", 10),
     kernelAppend,
-    qemuAccel: process.env["0SEC_KERNEL_QEMU_ACCEL"]?.trim() || undefined,
-    initrdPath: process.env["0SEC_KERNEL_QEMU_INITRD"]?.trim() || undefined,
-    timeoutSec: parseInt(process.env["0SEC_KERNEL_QEMU_TIMEOUT_SEC"]?.trim() || "60", 10),
-    shareTag: process.env["0SEC_KERNEL_QEMU_SHARE_TAG"]?.trim() || "osecshare",
-    artifactDir: process.env["0SEC_KERNEL_QEMU_ARTIFACT_DIR"]?.trim() || undefined,
+    qemuAccel: process.env["ZERO_KERNEL_QEMU_ACCEL"]?.trim() || undefined,
+    initrdPath: process.env["ZERO_KERNEL_QEMU_INITRD"]?.trim() || undefined,
+    timeoutSec: parseInt(process.env["ZERO_KERNEL_QEMU_TIMEOUT_SEC"]?.trim() || "60", 10),
+    shareTag: process.env["ZERO_KERNEL_QEMU_SHARE_TAG"]?.trim() || "osecshare",
+    artifactDir: process.env["ZERO_KERNEL_QEMU_ARTIFACT_DIR"]?.trim() || undefined,
     kaslr,
     ...(widenSymbol ? { widenSymbol } : {}),
     ...(widenOffsetRaw && Number.isFinite(parseInt(widenOffsetRaw, 16))
@@ -517,8 +517,8 @@ export function loadKernelVmConfigFromEnv(): KernelVmConfig {
     ...(widenDelayRaw && Number.isFinite(parseInt(widenDelayRaw, 10))
       ? { widenDelayMs: parseInt(widenDelayRaw, 10) }
       : {}),
-    ...(process.env["0SEC_KERNEL_QEMU_GUEST_BUILD_DIR"]?.trim()
-      ? { guestKernelBuildDir: process.env["0SEC_KERNEL_QEMU_GUEST_BUILD_DIR"]!.trim() }
+    ...(process.env["ZERO_KERNEL_QEMU_GUEST_BUILD_DIR"]?.trim()
+      ? { guestKernelBuildDir: process.env["ZERO_KERNEL_QEMU_GUEST_BUILD_DIR"]!.trim() }
       : {}),
     weaponizeInitramfs,
     ...(initramfsModules.length > 0 ? { initramfsModules } : {}),
@@ -632,8 +632,8 @@ const RACE_HARNESS_BASE_HEADERS: readonly string[] = [
  *    register + the IPI bursts),
  *  - spins two CPU-pinned racer threads looping their `raceOp{A,B}` bodies,
  *  - wraps them in **Bad Epoll's non-crashing retry loop**: it re-races up to
- *    `maxIters` / `seconds` (both overridable via `0SEC_RACE_RETRIES` /
- *    `0SEC_RACE_SECONDS`) and NEVER dereferences freed memory or aborts —
+ *    `maxIters` / `seconds` (both overridable via `ZERO_RACE_RETRIES` /
+ *    `ZERO_RACE_SECONDS`) and NEVER dereferences freed memory or aborts —
  *    only the in-kernel KASAN/KCSAN splat (on the serial console) terminates
  *    the run. Prints a `0SEC-RACE` progress marker so the oracle sees liveness.
  *
@@ -706,8 +706,8 @@ export function renderRealIpiRaceHarness(spec: RealIpiRaceHarnessSpec): string {
     "}",
     "",
     "int main(void) {",
-    `  long retries = osec_env_long("0SEC_RACE_RETRIES", ${maxIters});`,
-    `  long seconds = osec_env_long("0SEC_RACE_SECONDS", ${seconds});`,
+    `  long retries = osec_env_long("ZERO_RACE_RETRIES", ${maxIters});`,
+    `  long seconds = osec_env_long("ZERO_RACE_SECONDS", ${seconds});`,
     "  time_t deadline = time(NULL) + seconds;",
     "",
     "  /* Arm the widening tactics ONCE (freeze/register + IPI bursts). */",
@@ -798,7 +798,7 @@ export function buildInitramfsKernelAppend(kaslr: boolean): string {
  * to the serial console (the only channel out of an initramfs with no share) so
  * the host can scrape one stream for both the run output and the dmesg splats.
  *
- * `raceEnv` is the `0SEC_RACE_*` knob set the emitted exploit reads via
+ * `raceEnv` is the `ZERO_RACE_*` knob set the emitted exploit reads via
  * getenv at runtime. Its names begin with a digit, so BusyBox `export` cannot
  * set them; pass the validated assignments through `env` for `/exploit`.
  */
@@ -808,7 +808,7 @@ export function renderInitramfsInitScript(
   timeoutSec: number,
 ): string {
   const raceEnvEntries = Object.entries(raceEnv)
-    .filter(([key]) => /^0SEC_RACE_[A-Z0-9_]+$/.test(key));
+    .filter(([key]) => /^ZERO_RACE_[A-Z0-9_]+$/.test(key));
   const envAssignments = raceEnvEntries
     .map(([key, value]) => `${key}=${shellQuote(value)}`)
     .join(" ");
@@ -887,7 +887,7 @@ export function buildWeaponizeInitramfs(
     })();
   if (!busybox || !existsSync(busybox)) {
     throw new Error(
-      "weaponize-initramfs lane: no busybox found (set 0SEC_KERNEL_QEMU_BUSYBOX to a STATIC busybox)",
+      "weaponize-initramfs lane: no busybox found (set ZERO_KERNEL_QEMU_BUSYBOX to a STATIC busybox)",
     );
   }
   execFileSync("cp", [busybox, join(rootDir, "bin", "busybox")]);
@@ -970,18 +970,18 @@ export function buildInitramfsQemuCommand(
 }
 
 /**
- * The `0SEC_RACE_*` knob set the emitted exploit reads at runtime, sourced
+ * The `ZERO_RACE_*` knob set the emitted exploit reads at runtime, sourced
  * from the process env so the lane can be tuned without a rebuild. Only keys
  * that are actually set are forwarded (the exploit applies its own defaults).
  */
 export function collectRaceEnv(): Record<string, string> {
   const out: Record<string, string> = {};
   for (const key of [
-    "0SEC_RACE_FLOOD_THREADS",
-    "0SEC_RACE_SPRAY_THREADS",
-    "0SEC_RACE_PARK_US",
-    "0SEC_RACE_SECONDS",
-    "0SEC_RACE_SAME_CPU",
+    "ZERO_RACE_FLOOD_THREADS",
+    "ZERO_RACE_SPRAY_THREADS",
+    "ZERO_RACE_PARK_US",
+    "ZERO_RACE_SECONDS",
+    "ZERO_RACE_SAME_CPU",
   ]) {
     const v = process.env[key]?.trim();
     if (v) out[key] = v;
@@ -1341,14 +1341,14 @@ export async function runReproducerInKernelVm(report: CrashReport): Promise<Repr
     : mkdtempSync(join(tmpdir(), "0sec-kvm-"));
   const language = report.reproducerLanguage ?? "c";
   const request = report.executionAttestationRequest ?? (() => {
-    const release = process.env["0SEC_KERNEL_QEMU_EXPECTED_RELEASE"]?.trim();
-    if (!release || !RELEASE_RE.test(release)) throw new Error("direct kernel VM execution requires 0SEC_KERNEL_QEMU_EXPECTED_RELEASE");
+    const release = process.env["ZERO_KERNEL_QEMU_EXPECTED_RELEASE"]?.trim();
+    if (!release || !RELEASE_RE.test(release)) throw new Error("direct kernel VM execution requires ZERO_KERNEL_QEMU_EXPECTED_RELEASE");
     return {
       nonce: randomBytes(16).toString("hex"),
       reproducerSha256: createHash("sha256").update(report.reproducer).digest("hex"),
       expectedKernelRelease: release,
       kernelImageSha256: sha256File(config.kernelImage),
-      kernelConfigSha256: sha256File(process.env["0SEC_KERNEL_QEMU_CONFIG"]?.trim() || ""),
+      kernelConfigSha256: sha256File(process.env["ZERO_KERNEL_QEMU_CONFIG"]?.trim() || ""),
     };
   })();
   const sourcePath = join(hostTmpDir, language === "syz" ? "repro.syz" : "repro.c");
@@ -1487,7 +1487,7 @@ export interface VerifyKernelFindingOptions {
   kernelTree: string;
   /** Kernel build profile (`kasan`, `defconfig+kasan`, ...). */
   kernelConfig?: KernelConfigProfile;
-  /** Override the default cache root (`~/.0sec/kernel-cache/`). */
+  /** Override the default cache root (`~/.0/kernel-cache/`). */
   cacheDir?: string;
   /** Force a fresh build even on cache hit. */
   forceBuild?: boolean;
@@ -1625,7 +1625,7 @@ export async function verifyKernelFinding(
 
   const build_cache_hit = artifacts.cacheStatus === "hit" || artifacts.cacheStatus === "env";
   mkdirSync(dirname(dmesgOutPath), { recursive: true });
-  const launchDir = mkdtempSync(join(dirname(dmesgOutPath), ".0sec-kernel-launch-"));
+  const launchDir = mkdtempSync(join(dirname(dmesgOutPath), ".0-kernel-launch-"));
   const stagedKernelImage = join(launchDir, "kernel.image");
   const stagedKernelConfig = join(launchDir, "kernel.config");
   let attestationRequest: KernelExecutionAttestationRequest;
@@ -1650,21 +1650,21 @@ export async function verifyKernelFinding(
 
   // Make the runner pick up the freshly built artifacts.
   const previousEnv = {
-    qemu: process.env["0SEC_KERNEL_QEMU"],
-    kernel: process.env["0SEC_KERNEL_QEMU_KERNEL"],
-    disk: process.env["0SEC_KERNEL_QEMU_DISK"],
-    cfg: process.env["0SEC_KERNEL_QEMU_CONFIG"],
-    cacheKey: process.env["0SEC_KERNEL_QEMU_CACHEKEY"],
+    qemu: process.env["ZERO_KERNEL_QEMU"],
+    kernel: process.env["ZERO_KERNEL_QEMU_KERNEL"],
+    disk: process.env["ZERO_KERNEL_QEMU_DISK"],
+    cfg: process.env["ZERO_KERNEL_QEMU_CONFIG"],
+    cacheKey: process.env["ZERO_KERNEL_QEMU_CACHEKEY"],
   };
-  process.env["0SEC_KERNEL_QEMU"] = "1";
-  process.env["0SEC_KERNEL_QEMU_KERNEL"] = stagedKernelImage;
-  process.env["0SEC_KERNEL_QEMU_DISK"] = artifacts.diskImage;
+  process.env["ZERO_KERNEL_QEMU"] = "1";
+  process.env["ZERO_KERNEL_QEMU_KERNEL"] = stagedKernelImage;
+  process.env["ZERO_KERNEL_QEMU_DISK"] = artifacts.diskImage;
   if (artifacts.kernelConfig) {
-    process.env["0SEC_KERNEL_QEMU_CONFIG"] = stagedKernelConfig;
+    process.env["ZERO_KERNEL_QEMU_CONFIG"] = stagedKernelConfig;
   }
   // Booted-image identity for the weaponization oracle's wrong-kernel binding.
   if (artifacts.cacheKey) {
-    process.env["0SEC_KERNEL_QEMU_CACHEKEY"] = artifacts.cacheKey;
+    process.env["ZERO_KERNEL_QEMU_CACHEKEY"] = artifacts.cacheKey;
   }
 
   let runResult: ReproducerResult;
@@ -1694,11 +1694,11 @@ export async function verifyKernelFinding(
       build_cache_hit,
     };
   } finally {
-    process.env["0SEC_KERNEL_QEMU"] = previousEnv.qemu;
-    process.env["0SEC_KERNEL_QEMU_KERNEL"] = previousEnv.kernel;
-    process.env["0SEC_KERNEL_QEMU_DISK"] = previousEnv.disk;
-    process.env["0SEC_KERNEL_QEMU_CONFIG"] = previousEnv.cfg;
-    process.env["0SEC_KERNEL_QEMU_CACHEKEY"] = previousEnv.cacheKey;
+    process.env["ZERO_KERNEL_QEMU"] = previousEnv.qemu;
+    process.env["ZERO_KERNEL_QEMU_KERNEL"] = previousEnv.kernel;
+    process.env["ZERO_KERNEL_QEMU_DISK"] = previousEnv.disk;
+    process.env["ZERO_KERNEL_QEMU_CONFIG"] = previousEnv.cfg;
+    process.env["ZERO_KERNEL_QEMU_CACHEKEY"] = previousEnv.cacheKey;
     rmSync(launchDir, { recursive: true, force: true });
   }
 

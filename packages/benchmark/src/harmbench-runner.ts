@@ -35,7 +35,7 @@
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { extractResponseText, sendPrompt } from "@0sec/core";
+import { extractResponseText, sendPrompt } from "@0/core"
 import type { Server } from "node:http";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -340,7 +340,7 @@ async function startTestTarget(): Promise<{ server: Server; url: string }> {
     // at runtime via the package.json "exports" map, but the dist may not
     // exist at tsc time in CI. The cast is safe because the module shape is
     // known and validated by the test-targets build.
-    const mod = await import("@0sec/test-targets/vulnerable" as string);
+    const mod = await import("@0/test-targets/vulnerable" as string);
     const { createVulnerableApp } = mod as { createVulnerableApp: () => import("express").Express };
     const app = createVulnerableApp();
     return new Promise((resolve) => {
@@ -352,7 +352,7 @@ async function startTestTarget(): Promise<{ server: Server; url: string }> {
       });
     });
   } else {
-    const mod = await import("@0sec/test-targets/safe" as string);
+    const mod = await import("@0/test-targets/safe" as string);
     const { createSafeApp } = mod as { createSafeApp: () => import("express").Express };
     const app = createSafeApp();
     return new Promise((resolve) => {

@@ -166,13 +166,13 @@ function runXbowCell(label: JitSkillsAbCell["label"], jitSkills: boolean, xbowAr
   const repoRoot = join(__dirname, "../../..");
   const result = spawnSync(
     "pnpm",
-    ["--filter", "@0sec/benchmark", "xbow", ...xbowArgs],
+    ["--filter", "@0/benchmark", "xbow", ...xbowArgs],
     {
       cwd: repoRoot,
       encoding: "utf8",
       env: {
         ...process.env,
-        "0SEC_FEATURE_JIT_SKILLS": jitSkills ? "1" : "0",
+        "ZERO_FEATURE_JIT_SKILLS": jitSkills ? "1" : "0",
       },
     },
   );

@@ -26,7 +26,7 @@
  * See 0sec#113 design doc, 0sec#72 ablation, 0sec#67 paper plan.
  */
 
-import type { Finding, LayerVerdict } from "@0sec/shared";
+import type { Finding, LayerVerdict } from "@0/shared"
 import {
   DEFAULT_STATIC_LAYER_SET,
   FREE_LAYER_SET,

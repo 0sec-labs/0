@@ -46,14 +46,14 @@ function importVerdict(): string {
 }
 
 beforeEach(() => {
-  process.env["0SEC_WINDOWS_LABEL_SEAL_KEY"] = labelSealKey;
+  process.env["ZERO_WINDOWS_LABEL_SEAL_KEY"] = labelSealKey;
   root = mkdtempSync(join(tmpdir(), "windows-research-ledger-"));
   receiptPath = join(root, "receipt.json");
   writeFileSync(receiptPath, "{}\n");
 });
 
 afterEach(() => {
-  delete process.env["0SEC_WINDOWS_LABEL_SEAL_KEY"];
+  delete process.env["ZERO_WINDOWS_LABEL_SEAL_KEY"];
   rmSync(root, { recursive: true, force: true });
 });
 

@@ -60,7 +60,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Finding, RuntimeMode } from "@0sec/shared";
+import type { Finding, RuntimeMode } from "@0/shared"
 import { LlmApiRuntime } from "../runtime/llm-api.js";
 import {
   resolveContainedSourcePath,

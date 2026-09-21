@@ -1,4 +1,4 @@
-import type { SemgrepFinding, Finding, ReviewAnchor } from "@0sec/shared";
+import type { SemgrepFinding, Finding, ReviewAnchor } from "@0/shared"
 import { SUBSYSTEM_PATTERNS } from "../ingest/kernel-crash.js";
 
 export type { ReviewAnchor };

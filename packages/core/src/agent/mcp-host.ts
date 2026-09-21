@@ -140,7 +140,7 @@ export class McpHost {
 }
 
 /**
- * Parse an MCP server config blob (e.g. the `0SEC_MCP` env var) — a JSON array of
+ * Parse an MCP server config blob (e.g. the `ZERO_MCP` env var) — a JSON array of
  * `{id, command, args?, env?, cwd?}` — into validated stdio configs. Total and
  * fail-soft: malformed JSON, a non-array, or a bad entry yields fewer (or zero)
  * servers rather than throwing, so a typo never takes a console down.

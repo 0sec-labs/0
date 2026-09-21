@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type {
-  DesktopCodexAuthStatus,
-  DesktopConsoleAutonomyMode,
-  DesktopConsoleDecision,
-  DesktopConsoleDecisionResponse,
-  DesktopConsoleEvent,
-  DesktopConsoleRole,
-  DesktopConsoleSession,
-} from "@0sec/shared";
+import type { DesktopCodexAuthStatus,
+DesktopConsoleAutonomyMode,
+DesktopConsoleDecision,
+DesktopConsoleDecisionResponse,
+DesktopConsoleEvent,
+DesktopConsoleRole,
+DesktopConsoleSession, } from "@0/shared"
 import { api } from "./api.js";
 import { useStoredState } from "./use-stored-state.js";
 

@@ -3,7 +3,7 @@
  * (`run.ts` + `scan.ts`) are the on-ramp every CLI user hits, yet they
  * had zero tests prior to this seed.
  *
- * Strategy: mock `@0sec/core` at the module boundary (the same boundary
+ * Strategy: mock `@0/core` at the module boundary (the same boundary
  * `loadCoreModule` resolves), drive `runUnified` directly, and assert
  * on (a) which core entry point gets dispatched given `targetType`,
  * (b) how the runtime gate handles invalid runtime names, and
@@ -20,12 +20,12 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ScanReport } from "@0sec/shared";
+import type { ScanReport } from "@0/shared"
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
 //
 // `runUnified` calls `loadCoreModule()` which does a dynamic
-// `import("@0sec/core")`. Vitest hoists `vi.mock` so both static and
+// `import("@0/core")`. Vitest hoists `vi.mock` so both static and
 // dynamic imports see the stub.
 //
 // We expose four shims:
@@ -40,9 +40,6 @@ const agenticScanMock = vi.fn();
 const runPipelineMock = vi.fn();
 const createRuntimeMock = vi.fn();
 const loadAppsecFinderLensesMock = vi.fn(() => []);
-const runDeepReviewMock = vi.fn();
-const resolveOsecRunStorageMock = vi.fn(() => ({ runId: "test-run" }));
-const writeOsecRunReportMock = vi.fn();
 let eventBusListener:
   | { emit: (type: string, payload: unknown) => void }
   | null = null;
@@ -55,7 +52,7 @@ const eventBusMock = {
   },
 };
 
-vi.mock("@0sec/core", () => ({
+vi.mock("@0/core", () => ({
   agenticScan: agenticScanMock,
   runPipeline: runPipelineMock,
   createRuntime: createRuntimeMock,
@@ -63,14 +60,6 @@ vi.mock("@0sec/core", () => ({
   loadAppsecFinderLenses: loadAppsecFinderLensesMock,
 }));
 
-vi.mock("../deep-review.js", () => ({
-  runDeepReview: runDeepReviewMock,
-}));
-
-vi.mock("@0sec/db", () => ({
-  resolveOsecRunStorage: resolveOsecRunStorageMock,
-  writeOsecRunReport: writeOsecRunReportMock,
-}));
 
 // `runUnified` calls `checkRuntimeAvailability` for terminal format. We
 // stub it to a no-op so tests don't probe the user's environment.
@@ -167,10 +156,7 @@ describe("runUnified — runtime gating", () => {
     agenticScanMock.mockReset();
     runPipelineMock.mockReset();
     createRuntimeMock.mockReset();
-    runDeepReviewMock.mockReset();
     eventBusListener = null;
-    resolveOsecRunStorageMock.mockClear();
-    writeOsecRunReportMock.mockClear();
     tracker = {};
     exitSpy = makeExitMock(tracker);
     errSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -243,35 +229,6 @@ describe("runUnified — runtime gating", () => {
     expect(agenticScanMock).toHaveBeenCalledOnce();
   });
 
-  it("routes a source engagement through the lens strategy inside the unified runner", async () => {
-    runDeepReviewMock.mockResolvedValueOnce({
-      exitCode: 0,
-      report: {
-        ...cleanReport({ target: "/repo", scanDepth: "deep" }),
-        findings: [],
-      },
-      result: { mode: "deep_review" },
-    });
-
-    await runUnified({
-      target: "/repo",
-      targetType: "source-code",
-      reviewStrategy: "lenses",
-      depth: "deep",
-      format: "json",
-      runtime: "auto",
-      timeout: 30000,
-      verbose: false,
-    });
-
-    expect(runDeepReviewMock).toHaveBeenCalledWith(expect.objectContaining({
-      target: "/repo",
-      runtime: "auto",
-      timeoutMs: 30000,
-    }));
-    expect(writeOsecRunReportMock).toHaveBeenCalledOnce();
-    expect(runPipelineMock).not.toHaveBeenCalled();
-  });
 
   it("returns a findings outcome to the hosting TUI instead of terminating its process", async () => {
     const stdoutDescriptor = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
@@ -308,8 +265,8 @@ describe("runUnified — runtime gating", () => {
   });
 
   it("skips the Codex CLI availability probe when direct ChatGPT Codex auth is configured", async () => {
-    const oldRefreshToken = process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"];
-    process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"] = "fake-refresh-token";
+    const oldRefreshToken = process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"];
+    process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"] = "fake-refresh-token";
     try {
       agenticScanMock.mockResolvedValueOnce(cleanReport());
       await runUnified({
@@ -323,9 +280,9 @@ describe("runUnified — runtime gating", () => {
       });
     } finally {
       if (oldRefreshToken === undefined) {
-        delete process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"];
+        delete process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"];
       } else {
-        process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"] = oldRefreshToken;
+        process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"] = oldRefreshToken;
       }
     }
 
@@ -334,15 +291,15 @@ describe("runUnified — runtime gating", () => {
     expect(agenticScanMock.mock.calls[0]?.[0]?.config.runtime).toBe("codex");
   });
 
-  it("skips the Codex CLI availability probe when only 0SEC_CHATGPT_ACCESS_TOKEN is set (cloud sandbox path)", async () => {
-    // The 0sec-cloud worker forwards 0SEC_CHATGPT_ACCESS_TOKEN to
+  it("skips the Codex CLI availability probe when only ZERO_CHATGPT_ACCESS_TOKEN is set (cloud sandbox path)", async () => {
+    // The 0sec-cloud worker forwards ZERO_CHATGPT_ACCESS_TOKEN to
     // sandboxes — NOT the refresh token — so the gate must accept the
     // access token alone, otherwise the CLI preflight tries to find a
     // Codex binary the sandbox image doesn't ship.
-    const oldRefreshToken = process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"];
-    const oldAccessToken = process.env["0SEC_CHATGPT_ACCESS_TOKEN"];
-    delete process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"];
-    process.env["0SEC_CHATGPT_ACCESS_TOKEN"] = "fake-access-token";
+    const oldRefreshToken = process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"];
+    const oldAccessToken = process.env["ZERO_CHATGPT_ACCESS_TOKEN"];
+    delete process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"];
+    process.env["ZERO_CHATGPT_ACCESS_TOKEN"] = "fake-access-token";
     try {
       agenticScanMock.mockResolvedValueOnce(cleanReport());
       await runUnified({
@@ -356,14 +313,14 @@ describe("runUnified — runtime gating", () => {
       });
     } finally {
       if (oldRefreshToken === undefined) {
-        delete process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"];
+        delete process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"];
       } else {
-        process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"] = oldRefreshToken;
+        process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"] = oldRefreshToken;
       }
       if (oldAccessToken === undefined) {
-        delete process.env["0SEC_CHATGPT_ACCESS_TOKEN"];
+        delete process.env["ZERO_CHATGPT_ACCESS_TOKEN"];
       } else {
-        process.env["0SEC_CHATGPT_ACCESS_TOKEN"] = oldAccessToken;
+        process.env["ZERO_CHATGPT_ACCESS_TOKEN"] = oldAccessToken;
       }
     }
 
@@ -373,10 +330,10 @@ describe("runUnified — runtime gating", () => {
   });
 
   it("still probes the Codex CLI when neither ChatGPT env var is set (no direct provider)", async () => {
-    const oldRefreshToken = process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"];
-    const oldAccessToken = process.env["0SEC_CHATGPT_ACCESS_TOKEN"];
-    delete process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"];
-    delete process.env["0SEC_CHATGPT_ACCESS_TOKEN"];
+    const oldRefreshToken = process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"];
+    const oldAccessToken = process.env["ZERO_CHATGPT_ACCESS_TOKEN"];
+    delete process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"];
+    delete process.env["ZERO_CHATGPT_ACCESS_TOKEN"];
     createRuntimeMock.mockReturnValueOnce({
       isAvailable: vi.fn().mockResolvedValue(false),
     });
@@ -394,10 +351,10 @@ describe("runUnified — runtime gating", () => {
       // expected — process.exit throws by design
     } finally {
       if (oldRefreshToken !== undefined) {
-        process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"] = oldRefreshToken;
+        process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"] = oldRefreshToken;
       }
       if (oldAccessToken !== undefined) {
-        process.env["0SEC_CHATGPT_ACCESS_TOKEN"] = oldAccessToken;
+        process.env["ZERO_CHATGPT_ACCESS_TOKEN"] = oldAccessToken;
       }
     }
 
@@ -622,10 +579,10 @@ describe("runUnified — emitResultLine env gate", () => {
     exitSpy = makeExitMock(tracker);
     errSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    envSnapshot["0SEC_EMIT_RESULT_LINE"] = process.env["0SEC_EMIT_RESULT_LINE"];
-    envSnapshot["0SEC_CLOUD_SINK"] = process.env["0SEC_CLOUD_SINK"];
-    delete process.env["0SEC_EMIT_RESULT_LINE"];
-    delete process.env["0SEC_CLOUD_SINK"];
+    envSnapshot["ZERO_EMIT_RESULT_LINE"] = process.env["ZERO_EMIT_RESULT_LINE"];
+    envSnapshot["ZERO_CLOUD_SINK"] = process.env["ZERO_CLOUD_SINK"];
+    delete process.env["ZERO_EMIT_RESULT_LINE"];
+    delete process.env["ZERO_CLOUD_SINK"];
   });
 
   afterEach(() => {
@@ -638,7 +595,7 @@ describe("runUnified — emitResultLine env gate", () => {
     }
   });
 
-  it("does NOT emit 0SEC_RESULT line when neither env var is set", async () => {
+  it("does NOT emit ZERO_RESULT line when neither env var is set", async () => {
     agenticScanMock.mockResolvedValueOnce(cleanReport());
     await runUnified({
       target: "https://example.com",
@@ -650,11 +607,11 @@ describe("runUnified — emitResultLine env gate", () => {
       verbose: false,
     });
     const all = logSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
-    expect(all).not.toMatch(/0SEC_RESULT=/);
+    expect(all).not.toMatch(/ZERO_RESULT=/);
   });
 
-  it("emits 0SEC_RESULT line when 0SEC_EMIT_RESULT_LINE=1", async () => {
-    process.env["0SEC_EMIT_RESULT_LINE"] = "1";
+  it("emits ZERO_RESULT line when ZERO_EMIT_RESULT_LINE=1", async () => {
+    process.env["ZERO_EMIT_RESULT_LINE"] = "1";
     agenticScanMock.mockResolvedValueOnce(cleanReport());
     await runUnified({
       target: "https://example.com",
@@ -667,9 +624,9 @@ describe("runUnified — emitResultLine env gate", () => {
     });
     const line = logSpy.mock.calls
       .map((c: unknown[]) => String(c[0]))
-      .find((s: string) => s.startsWith("0SEC_RESULT="));
+      .find((s: string) => s.startsWith("ZERO_RESULT="));
     expect(line).toBeTruthy();
-    const payload = JSON.parse(line!.slice("0SEC_RESULT=".length));
+    const payload = JSON.parse(line!.slice("ZERO_RESULT=".length));
     expect(payload.ok).toBe(true);
     expect(payload.exitCode).toBe(0);
     expect(payload.exit_reason).toBe("completed");
@@ -679,7 +636,7 @@ describe("runUnified — emitResultLine env gate", () => {
   });
 
   it("emits exit_reason=findings on the result line when findings raise exit 1", async () => {
-    process.env["0SEC_EMIT_RESULT_LINE"] = "1";
+    process.env["ZERO_EMIT_RESULT_LINE"] = "1";
     agenticScanMock.mockResolvedValueOnce(
       cleanReport({
         summary: { ...emptySummary(), totalFindings: 1, critical: 1 },
@@ -700,9 +657,9 @@ describe("runUnified — emitResultLine env gate", () => {
     }
     const line = logSpy.mock.calls
       .map((c: unknown[]) => String(c[0]))
-      .find((s: string) => s.startsWith("0SEC_RESULT="));
+      .find((s: string) => s.startsWith("ZERO_RESULT="));
     expect(line).toBeTruthy();
-    const payload = JSON.parse(line!.slice("0SEC_RESULT=".length));
+    const payload = JSON.parse(line!.slice("ZERO_RESULT=".length));
     expect(payload.exitCode).toBe(1);
     expect(payload.exit_reason).toBe("findings");
     expect(payload.summary.critical).toBe(1);

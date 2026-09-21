@@ -1,4 +1,4 @@
-import type { Finding, ReachabilityTier, Weaponizability } from "@0sec/shared";
+import type { Finding, ReachabilityTier, Weaponizability } from "@0/shared"
 import { suggestCwesForCategory, formatCweSection } from "./cwe.js";
 import type { CweEntry } from "./cwe.js";
 import {

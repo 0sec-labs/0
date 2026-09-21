@@ -14,8 +14,8 @@ import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { canonicalEvolutionJson } from "@0sec/core";
-import type { FinderLens, NativeRuntimeResult, LensBaselineSnapshot, LensProbe, LensProbeOutcome, LensSynthesisModel, ValidationFixture } from "@0sec/core";
+import { canonicalEvolutionJson } from "@0/core"
+import type { FinderLens, NativeRuntimeResult, LensBaselineSnapshot, LensProbe, LensProbeOutcome, LensSynthesisModel, ValidationFixture } from "@0/core"
 import {
   parseMissInputFile,
   runLensSynthCommand,

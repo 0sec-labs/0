@@ -9,7 +9,7 @@
  * the ToolExecutor (agent/tools.ts) as a thin delegate to `executeStartScan`,
  * keeping the logic out of the 4000-line tools.ts god-module (CLAUDE.md rule).
  *
- * Cloud-only: no-op error in local mode (no 0SEC_CLOUD_SINK). Budget +
+ * Cloud-only: no-op error in local mode (no ZERO_CLOUD_SINK). Budget +
  * fan-out caps are enforced server-side (a 409 = cap hit; 429 = budget).
  */
 import type { ToolDefinition, ToolResult } from "../types.js";

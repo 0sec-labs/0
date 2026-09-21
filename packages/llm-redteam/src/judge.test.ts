@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { jevAttemptFeedback, llmJudge, regexJudge } from "./judge.js";
 import { installPackageBehavior } from "./behaviors.js";
 import type { Behavior, TargetResponse } from "./types.js";
-import type { JevEvaluator } from "@0sec/shared";
+import type { JevEvaluator } from "@0/shared"
 
 const exfil: Behavior = {
   id: "exfil",

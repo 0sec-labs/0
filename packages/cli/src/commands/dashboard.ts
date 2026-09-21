@@ -10,13 +10,11 @@ import { isIP } from "node:net";
 import type { Command } from "commander";
 import chalk from "chalk";
 import { z } from "zod";
-import {
-  createPresentationEvent,
-  type FindingTriageStatus,
-  type PresentationEvent,
-  type PresentationSource,
-} from "@0sec/shared";
-import { readToolCallNames } from "@0sec/core";
+import { createPresentationEvent,
+type FindingTriageStatus,
+type PresentationEvent,
+type PresentationSource, } from "@0/shared"
+import { readToolCallNames } from "@0/core"
 import { presentationEventBus } from "../presentation/event-bus.js";
 import { buildFindingConsoleCommand } from "../finding-handoff.js";
 import { DesktopConsoleGateway, DesktopConsoleGatewayError } from "../desktop/console-gateway.js";
@@ -931,7 +929,7 @@ function isLiveLocalPid(pid: number | null | undefined): boolean {
 }
 
 function stopDaemonWorkers(
-  osecDb: typeof import("@0sec/db").osecDB,
+  osecDb: typeof import("@0/db").osecDB,
   dbPath: string | undefined,
 ): number {
   const db = new osecDb(dbPath);
@@ -1264,7 +1262,7 @@ async function handleApiRequest(
   dbPath: string | undefined,
   controlToken: string,
 ): Promise<boolean> {
-  const { osecDB } = await import("@0sec/db");
+  const { osecDB } = await import("@0/db");
 
   if (isPresentationEventsStreamPath(pathname)) {
     if (req.method !== "GET") {
@@ -1433,7 +1431,7 @@ async function handleApiRequest(
     }
 
     if (controlPath.action === "reset-database") {
-      const { resetOsecDatabase } = await import("@0sec/db");
+      const { resetOsecDatabase } = await import("@0/db");
       const { seedVerificationWorkbench } = await import("./db.js");
       const body = (await readJson(req)) as { seed?: string };
       const seed = typeof body.seed === "string" ? body.seed.trim().toLowerCase() : "verification";
@@ -1821,7 +1819,7 @@ export function registerDashboardCommand(program: Command): void {
         const url = origin;
         console.log(chalk.red.bold("  ◆ 0sec") + chalk.gray(" dashboard"));
         console.log(chalk.gray(`  ${url}`));
-        if (opts.readyJson) console.log(`0SEC_DASHBOARD_READY ${JSON.stringify({ url })}`);
+        if (opts.readyJson) console.log(`ZERO_DASHBOARD_READY ${JSON.stringify({ url })}`);
         console.log(chalk.gray("  Ctrl+C to stop"));
         if (opts.open !== false) openBrowser(`${url}/dashboard`);
       });

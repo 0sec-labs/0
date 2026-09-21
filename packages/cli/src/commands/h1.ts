@@ -21,23 +21,21 @@
 
 import type { Command } from "commander";
 import chalk from "chalk";
-import {
-  loadH1Credentials,
-  H1AuthMissingError,
-  H1Client,
-  H1AuthError,
-  H1ForbiddenError,
-  H1RateLimitError,
-  H1NetworkError,
-  H1Error,
-  listPrograms,
-  getProgram,
-  getStructuredScopes,
-  automationVerdict,
-  summariseScopes,
-  toScopeFile,
-  type H1Program,
-} from "@0sec/core";
+import { loadH1Credentials,
+H1AuthMissingError,
+H1Client,
+H1AuthError,
+H1ForbiddenError,
+H1RateLimitError,
+H1NetworkError,
+H1Error,
+listPrograms,
+getProgram,
+getStructuredScopes,
+automationVerdict,
+summariseScopes,
+toScopeFile,
+type H1Program, } from "@0/core"
 
 interface ProgramsListOptions {
   bounty?: boolean;
@@ -157,7 +155,7 @@ export function registerH1Command(program: Command): void {
 
   scope
     .command("dump")
-    .description("Write a program's structured_scopes to ~/.0sec/scopes/<handle>.json")
+    .description("Write a program's structured_scopes to ~/.0/scopes/<handle>.json")
     .argument("<handle>", "Program handle")
     .option("--out <path>", "Override the output path")
     .action(async (handle: string, opts: ScopeDumpOptions) => {

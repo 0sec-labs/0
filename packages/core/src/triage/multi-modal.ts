@@ -15,7 +15,7 @@
  * 0sec detects; foxguard cross-checks.
  */
 
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync, readFileSync } from "node:fs";

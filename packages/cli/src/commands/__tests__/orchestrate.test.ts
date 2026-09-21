@@ -90,7 +90,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
-import type { WorkItemRecord, WorkerRecord } from "@0sec/shared";
+import type { WorkItemRecord, WorkerRecord } from "@0/shared"
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
 //
@@ -250,9 +250,9 @@ class FakeOsecDB {
   }
 }
 
-vi.mock("@0sec/db", () => ({ osecDB: FakeOsecDB }));
+vi.mock("@0/db", () => ({ osecDB: FakeOsecDB }));
 
-// @0sec/core: agenticScan, runAgentLoop, createRuntime, LlmApiRuntime,
+// @0/core: agenticScan, runAgentLoop, createRuntime, LlmApiRuntime,
 // getToolsForRole. We intercept each so no real LLM call ever fires.
 
 const agenticScanMock = vi.fn();
@@ -264,7 +264,7 @@ class FakeLlmApiRuntime {
   constructor(public opts: unknown) {}
 }
 
-vi.mock("@0sec/core", () => ({
+vi.mock("@0/core", () => ({
   agenticScan: agenticScanMock,
   runAgentLoop: runAgentLoopMock,
   createRuntime: createRuntimeMock,
@@ -272,9 +272,7 @@ vi.mock("@0sec/core", () => ({
   getToolsForRole: getToolsForRoleMock,
 }));
 
-const { registerOrchestrateCommand, recoverStaleWorkers } = await import(
-  "../orchestrate.js"
-);
+const { registerOrchestrateCommand, recoverStaleWorkers } = await import("../orchestrate.js");
 
 // The action registers SIGINT/SIGTERM handlers via process.once on every
 // invocation. Across ~16 tests that adds up; raise the listener ceiling

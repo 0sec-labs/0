@@ -2,13 +2,11 @@ import { Option, type Command } from "commander";
 import chalk from "chalk";
 import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import {
-  osecDB,
-  resolveOsecRunStorage,
-  writeOsecRunReport,
-} from "@0sec/db";
-import type { Finding, RuntimeMode, ScanReport, Severity } from "@0sec/shared";
-import type { KernelOracleResult, KernelVmArtifacts } from "@0sec/core";
+import { osecDB,
+resolveOsecRunStorage,
+writeOsecRunReport, } from "@0/db"
+import type { Finding, RuntimeMode, ScanReport, Severity } from "@0/shared"
+import type { KernelOracleResult, KernelVmArtifacts } from "@0/core"
 import { formatSarif } from "../formatters/sarif.js";
 
 const VALID_FORMATS = ["auto", "kasan", "ubsan", "oops", "syzkaller", "generic"] as const;
@@ -68,7 +66,7 @@ interface IngestReviewOutput {
 export function registerIngestCommand(program: Command): void {
   program
     .command("ingest")
-    .description("Import kernel crash reports (KASAN, UBSAN, oops, syzkaller) into 0sec findings")
+    .description("Import kernel crash reports (KASAN, UBSAN, oops, syzkaller) into 0 findings")
     .argument("[path]", "Path to a crash report file or directory of reports")
     .option("--format <format>", "Input format: auto | kasan | ubsan | oops | syzkaller | generic", "auto")
     .option("-o, --output <format>", "Output format: terminal | json | sarif", "terminal")
@@ -78,7 +76,7 @@ export function registerIngestCommand(program: Command): void {
     .option("--kernel-tree <path>", "Linux source tree for Tier 1 kernel build/cache resolution")
     .option("--kernel-config <name>", "Kernel build config name for --kernel-tree (e.g. kasan, defconfig+kasan)")
     .option("--config <profile>", "[deprecated] alias for --kernel-config")
-    .option("--kernel-cache-dir <path>", "Kernel build cache directory (default: ~/.0sec/kernel-cache)")
+    .option("--kernel-cache-dir <path>", "Kernel build cache directory (default: ~/.0/kernel-cache)")
     .option("--expected-signature <pattern>", "Expected dmesg signature substring (case-insensitive) for verify")
     .option("--force-kernel-build", "Rebuild kernel VM artifacts even when a cache entry exists")
     .option("--review-subsystem", "After ingest, run linux-kernel review against the crash subsystem for sibling bugs")
@@ -91,7 +89,7 @@ export function registerIngestCommand(program: Command): void {
     .addOption(new Option("--review-subsystem-fixture <path>").hideHelp())
     .option("-v, --verbose", "Verbose output")
     .option("--persist", "Write ingested findings to an isolated 0sec run database (default: classify only)")
-    .option("--db-path <path>", "Explicit SQLite path for --persist (default: a new ~/.0sec/runs/<run-id>/state.db)")
+    .option("--db-path <path>", "Explicit SQLite path for --persist (default: a new ~/.0/runs/<run-id>/state.db)")
     .action(async (inputPath: string | undefined, opts: IngestOpts) => {
       try {
         const format = opts.format as IngestFormat;
@@ -139,7 +137,7 @@ export function registerIngestCommand(program: Command): void {
         }
 
         let costCeilingUsd: number | undefined;
-        const ceilingSource = opts.costCeiling ?? process.env["0SEC_COST_CEILING_USD"];
+        const ceilingSource = opts.costCeiling ?? process.env["ZERO_COST_CEILING_USD"];
         if (ceilingSource !== undefined && ceilingSource !== "") {
           const parsed = Number(ceilingSource);
           if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -155,7 +153,7 @@ export function registerIngestCommand(program: Command): void {
           reviewKernelCrashSubsystems,
           verifyStandaloneKernelReproducer,
           verifyKernelCrash,
-        } = await import("@0sec/core");
+        } = await import("@0/core");
 
         let kernelBuild: KernelVmArtifacts | undefined;
         if (opts.kernelTree) {
@@ -165,11 +163,11 @@ export function registerIngestCommand(program: Command): void {
             cacheDir: opts.kernelCacheDir,
             force: opts.forceKernelBuild,
           });
-          process.env["0SEC_KERNEL_QEMU"] = "1";
-          process.env["0SEC_KERNEL_QEMU_KERNEL"] = kernelBuild.kernelImage;
-          process.env["0SEC_KERNEL_QEMU_DISK"] = kernelBuild.diskImage;
+          process.env["ZERO_KERNEL_QEMU"] = "1";
+          process.env["ZERO_KERNEL_QEMU_KERNEL"] = kernelBuild.kernelImage;
+          process.env["ZERO_KERNEL_QEMU_DISK"] = kernelBuild.diskImage;
           if (kernelBuild.kernelConfig) {
-            process.env["0SEC_KERNEL_QEMU_CONFIG"] = kernelBuild.kernelConfig;
+            process.env["ZERO_KERNEL_QEMU_CONFIG"] = kernelBuild.kernelConfig;
           }
         }
 

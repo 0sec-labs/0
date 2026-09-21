@@ -24,7 +24,7 @@
  * published by this module — the operator gates that (`disclosure/AGENTS.md`).
  */
 
-import type { Finding, PocStep } from "@0sec/shared";
+import type { Finding, PocStep } from "@0/shared"
 import { redactSensitiveHeaders } from "./template.js";
 import { evidenceKindForFinding } from "../triage/verify-verdict.js";
 import {

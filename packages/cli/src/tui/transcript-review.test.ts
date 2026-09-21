@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createTranscriptDocument } from "@0sec/shared";
+import { createTranscriptDocument } from "@0/shared"
 import { compileTranscriptReview } from "./transcript-review.js";
 import type { ChatEntry } from "./chat/types.js";
 

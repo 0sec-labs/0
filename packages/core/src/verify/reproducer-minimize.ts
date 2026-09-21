@@ -17,7 +17,7 @@
  */
 
 import type { KernelVerifyRunner, KernelVerifyRunnerInput } from "./kernel-verify-types.js";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 
 // ── Types ─────────────────────────────────────────────────────────────────
 

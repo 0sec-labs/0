@@ -14,7 +14,7 @@ The thesis: the frozen kernelCTF-LTS snapshot is TAPPED because it is *hardened*
 the days after a commit lands and before that same machinery hardens it. This is
 the only structure that beats the audit-density wall.
 
-The engine + CLI live in `@0sec/core` (`stages/recency-hunt.ts`) and
+The engine + CLI live in `@0/core` (`stages/recency-hunt.ts`) and
 `0sec recency-hunt`. This directory is just the **daily driver** on bench.
 
 ## Files

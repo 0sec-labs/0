@@ -3,20 +3,17 @@ import { stdin, stdout } from "node:process";
 
 import type { Command } from "commander";
 import chalk from "chalk";
-import {
-  createConsoleRuntime,
-  loadScope,
-  parseMcpConfig,
-  connectMcpServers,
-} from "@0sec/core";
-import type {
-  ConsoleAutonomyMode,
-  ConsoleSession,
-  NativeMessage,
-  ToolCall,
-  ToolResult,
-} from "@0sec/core";
-import { DEFAULT_AUTONOMY_MODE } from "@0sec/shared";
+import { createConsoleRuntime,
+loadScope,
+parseMcpConfig,
+connectMcpServers, } from "@0/core"
+import type { ConsoleAutonomyMode,
+ConsoleSession,
+NativeMessage,
+ToolCall,
+ToolResult, } from "@0/core"
+import { DEFAULT_AUTONOMY_MODE } from "@0/shared"
+import type { ConsoleJevConfig } from "@0/shared"
 import { canUseOpenTui, isBunRuntime } from "../tui/runtime.js";
 import {
   findCommand,
@@ -33,6 +30,8 @@ import {
   resolveFindingChatIntent,
 } from "../finding-focus.js";
 
+import { loadSettings } from "../tui/settings.js";
+import { buildConsoleJevConfig, describeJevState, formatJevActivity } from "../tui/jev-helper.js";
 import { createLocalConsoleSession } from "../console-session.js";
 interface ConsoleOptions {
   target?: string;
@@ -125,7 +124,7 @@ export function resolveConsoleAutonomyMode(opts: {
  * A single conversational surface where the operator talks to the engine and it
  * can invoke every 0sec tool (recon, web pentest, source/package scan,
  * variant hunt, verify, patch-gen) in one place. Thin REPL over the engine-side
- * driver in `@0sec/core` (`createConsoleSession`) — the tool registry and LLM
+ * driver in `@0/core` (`createConsoleSession`) — the tool registry and LLM
  * runtime are the real ones the autonomous scanner uses; this command only owns
  * terminal I/O and rendering.
  */
@@ -139,7 +138,7 @@ export function registerConsoleCommand(program: Command): void {
     .option("--scope <file>", "Initial authorization scope; required for the Node fallback (optional otherwise)")
     .option("--finding <id>", "Focus the chat on one persisted finding")
     .option("--finding-intent <intent>", "Finding workflow: investigate, verify, or draft_fix")
-    .option("--db-path <path>", "Persistent findings database (defaults to 0SEC_DB_PATH or the local store)")
+    .option("--db-path <path>", "Persistent findings database (defaults to ZERO_DB_PATH or the local store)")
     .option("-m, --model <id>", "Override the LLM model id (else provider default)")
     .option("--role <role>", "Tool set to expose: audit|review|discovery|attack|verify (default audit = every tool)")
     .option("--mode <mode>", "Autonomy mode to start in: standard|recon|copilot|yolo (default yolo). YOLO drops per-action prompts but stays target/scope-anchored; cycle live with Shift+Tab.")
@@ -283,6 +282,18 @@ export function registerConsoleCommand(program: Command): void {
         try {
           const runtime = createConsoleRuntime({ model: resumedModel ?? opts.model });
           const resolvedModel = runtime.resolvedModel();
+          // Load operator settings for Jev config. Headless still respects env.
+          const jevSettings = loadSettings();
+          const jev = buildConsoleJevConfig({
+            jevFunding: jevSettings.jevFunding,
+            jevBrowser: jevSettings.jevBrowser,
+            jevKernel: jevSettings.jevKernel,
+            jevCrash: jevSettings.jevCrash,
+            jevRadar: jevSettings.jevRadar,
+            jevFoxguard: jevSettings.jevFoxguard,
+            jevMaxRequests: jevSettings.jevMaxRequests,
+            jevMaxCostUsd: jevSettings.jevMaxCostUsd,
+          }, process.env);
           printSession = createLocalConsoleSession({
             runtime,
             target: focusedTarget,
@@ -292,6 +303,7 @@ export function registerConsoleCommand(program: Command): void {
             allowScanners: opts.allowScanners,
             scope,
             autonomyMode,
+            jev,
             ...(resumeMessages ? { initialMessages: resumeMessages as NativeMessage[] } : {}),
             // Headless: no operator to approve a scope extension or a copilot gate.
             requestScope: async () => null,
@@ -318,13 +330,13 @@ export function registerConsoleCommand(program: Command): void {
         return;
       }
 
-      // Attach any configured MCP servers (0SEC_MCP = JSON array of
+      // Attach any configured MCP servers (ZERO_MCP = JSON array of
       // {id,command,args?}) once, before either interactive front-end launches.
       // Connecting here (not inside React) keeps the TUI session build
       // synchronous — the connected host is threaded down as an option. The
       // session closes the host on cleanup. Fail-soft: a bad config or a server
       // that won't connect degrades to no MCP tools, never blocks the console.
-      const mcpHost = await connectMcpServers(parseMcpConfig(process.env["0SEC_MCP"]));
+      const mcpHost = await connectMcpServers(parseMcpConfig(process.env["ZERO_MCP"]));
       if (mcpHost) {
         console.log(chalk.dim(`MCP: connected ${mcpHost.serverIds().length} server(s) — ${mcpHost.registeredTools().length} tool(s)`));
       }
@@ -366,6 +378,19 @@ export function registerConsoleCommand(program: Command): void {
       }
 
       let session: ConsoleSession;
+      // Load operator settings for Jev config (used in session construction and
+      // the printBanner/printStatus lines below, so declared before try).
+      const jevSettings = loadSettings();
+      const jev = buildConsoleJevConfig({
+        jevFunding: jevSettings.jevFunding,
+        jevBrowser: jevSettings.jevBrowser,
+        jevKernel: jevSettings.jevKernel,
+        jevCrash: jevSettings.jevCrash,
+        jevRadar: jevSettings.jevRadar,
+        jevFoxguard: jevSettings.jevFoxguard,
+        jevMaxRequests: jevSettings.jevMaxRequests,
+        jevMaxCostUsd: jevSettings.jevMaxCostUsd,
+      }, process.env);
       try {
         const runtime = createConsoleRuntime({ model: opts.model });
         const resolvedModel = runtime.resolvedModel();
@@ -380,6 +405,7 @@ export function registerConsoleCommand(program: Command): void {
           allowScanners: opts.allowScanners,
           scope,
           autonomyMode,
+          jev,
           ...(mcpHost ? { mcpHost } : {}),
           // A resumed session seeds the model's history so it continues where it
           // left off (the readline fallback can't repaint the old transcript, but
@@ -401,7 +427,7 @@ export function registerConsoleCommand(program: Command): void {
       }
       const presentationOutput = processPresentationOutput;
 
-      printBanner(session, focusedTarget);
+      printBanner(session, focusedTarget, jev);
       if (findingPrompt) {
         await runTurn(session, findingPrompt, presentationOutput);
       }
@@ -480,7 +506,7 @@ export function registerConsoleCommand(program: Command): void {
             return;
           }
           case "status": {
-            printStatus(session);
+            printStatus(session, jev);
             rl.prompt();
             return;
           }
@@ -544,6 +570,10 @@ async function runTurn(
     onNotice: (msg) => {
       output.stdout("\n" + chalk.dim(`  (${msg})`), "console.notice");
     },
+    onJevActivity: (activity) => {
+      const line = formatJevActivity(activity);
+      output.stdout("\n" + chalk.dim(line), "console.jev.activity");
+    },
   });
 
   // If nothing streamed token-by-token (provider without delta support), print
@@ -576,12 +606,13 @@ function previewResult(result: ToolResult): string {
   return flat.length > 100 ? flat.slice(0, 97) + "…" : flat;
 }
 
-function printBanner(session: ConsoleSession, target?: string): void {
+function printBanner(session: ConsoleSession, target?: string, jev?: ConsoleJevConfig | false | undefined): void {
   console.log("");
   console.log(chalk.bold("0sec console") + chalk.dim(" — interactive operator cockpit"));
   console.log(chalk.dim(`  session ${session.scanId}`));
   console.log(chalk.dim(`  ${session.tools.length} tools available${target ? ` · target ${target}` : " · no target set"}`));
   console.log(chalk.dim(`  mode: ${modeLabel(session.autonomyMode)}`));
+  console.log(chalk.dim(`  ${describeJevState(jev)}`));
   console.log(chalk.dim("  /help for commands · /exit to quit"));
   console.log("");
 }
@@ -631,14 +662,14 @@ function findCategory(name: string): string {
   return cmd?.category ?? "system";
 }
 
-function printStatus(session: ConsoleSession): void {
+function printStatus(session: ConsoleSession, jev?: ConsoleJevConfig | false | undefined): void {
   console.log(chalk.bold("\nsession status:"));
   console.log(`  ${chalk.cyan("id")}       ${session.scanId}`);
   console.log(`  ${chalk.cyan("mode")}     ${modeLabel(session.autonomyMode)}`);
   console.log(`  ${chalk.cyan("target")}  ${session.target || "(not set)"}`);
   console.log(`  ${chalk.cyan("tools")}   ${session.tools.length} available`);
   console.log(`  ${chalk.cyan("scope")}   ${hasConfiguredScope(session.scope) ? "configured" : "not configured"}`);
-  console.log(`  ${chalk.cyan("turns")}   ${Math.ceil(session.messages.length / 2)}`);
+  console.log(`  ${chalk.cyan("jev")}     ${describeJevState(jev)}`);
   console.log("");
 }
 

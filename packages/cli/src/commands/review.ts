@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import type { Command } from "commander";
 import chalk from "chalk";
-import type { ScanDepth, OutputFormat, RuntimeMode, SeedFinding } from "@0sec/shared";
+import type { ScanDepth, OutputFormat, RuntimeMode, SeedFinding } from "@0/shared"
 import { runUnified } from "./run.js";
 import { runHarnessTier2 } from "./review-harness-tier2.js";
 import { runHarnessTier3 } from "./review-harness-tier3.js";
@@ -125,15 +125,15 @@ export function registerReviewCommand(program: Command): void {
     )
     .option(
       "--harness-out <dir>",
-      "Tier-2 only: output directory for the emitted harness + linker fragment. Defaults to <repo>/.0sec-out/tier2.",
+      "Tier-2 only: output directory for the emitted harness + linker fragment. Defaults to <repo>/.0-out/tier2.",
     )
     .option(
       "--harness-qemu-kernel <path>",
-      "Tier-3 only: pre-built kernel image. Defaults to 0SEC_KERNEL_QEMU_KERNEL.",
+      "Tier-3 only: pre-built kernel image. Defaults to ZERO_KERNEL_QEMU_KERNEL.",
     )
     .option(
       "--harness-qemu-disk <path>",
-      "Tier-3 only: pre-built rootfs image. Defaults to 0SEC_KERNEL_QEMU_DISK.",
+      "Tier-3 only: pre-built rootfs image. Defaults to ZERO_KERNEL_QEMU_DISK.",
     )
     .option(
       "--harness-wall-clock-ms <ms>",
@@ -180,7 +180,7 @@ export function registerReviewCommand(program: Command): void {
     .action(async (repo: string, opts: Record<string, string | boolean>, command: Command) => {
       let costCeilingUsd: number | undefined;
       const ceilingSource =
-        (opts.costCeiling as string | undefined) ?? process.env["0SEC_COST_CEILING_USD"];
+        (opts.costCeiling as string | undefined) ?? process.env["ZERO_COST_CEILING_USD"];
       if (ceilingSource !== undefined && ceilingSource !== "") {
         const parsed = Number(ceilingSource);
         if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -206,7 +206,7 @@ export function registerReviewCommand(program: Command): void {
       let seedFindings: SeedFinding[] | undefined;
       const seedPath = opts.seedFindings as string | undefined;
       if (seedPath) {
-        const { readSeedFindings } = await import("@0sec/core");
+        const { readSeedFindings } = await import("@0/core");
         seedFindings = readSeedFindings(seedPath);
         console.log(
           chalk.cyan(
@@ -227,7 +227,7 @@ export function registerReviewCommand(program: Command): void {
       }
 
       if (fixCommit) {
-        const { huntAppFixVariants, appFixVariantsToSeedFindings } = await import("@0sec/core");
+        const { huntAppFixVariants, appFixVariantsToSeedFindings } = await import("@0/core");
         const result = huntAppFixVariants({
           repoPath: repo,
           fixCommit,
@@ -369,7 +369,6 @@ export function registerReviewCommand(program: Command): void {
         diffBase: opts.diffBase as string | undefined,
         changedOnly: opts.changedOnly as boolean,
         depth,
-        reviewStrategy: depth === "deep" ? "lenses" : "pipeline",
         format: (opts.format === "md" ? "markdown" : opts.format) as OutputFormat,
         runtime: (opts.runtime as RuntimeMode) ?? "auto",
         timeout: parseInt(opts.timeout as string, 10),

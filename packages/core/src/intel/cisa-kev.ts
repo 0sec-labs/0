@@ -44,7 +44,7 @@ async function fetchKevCatalog(
   opts: FetchOptions,
 ): Promise<KevCatalog> {
   const cache = new IntelCache(input.cacheDir);
-  const url = process.env["0SEC_CISA_KEV_URL"] ?? DEFAULT_KEV_URL;
+  const url = process.env["ZERO_CISA_KEV_URL"] ?? DEFAULT_KEV_URL;
   return await cachedJson<KevCatalog>(
     cache,
     "cisa-kev",

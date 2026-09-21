@@ -3,8 +3,8 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { InvalidArgumentError } from "commander";
 import type { Command } from "commander";
-import { runSecureProject } from "@0sec/core";
-import type { SecureEvent, SecureProjectResult } from "@0sec/core";
+import { runSecureProject } from "@0/core"
+import type { SecureEvent, SecureProjectResult } from "@0/core"
 
 interface SecureOptions {
   testCommand: string;
@@ -69,14 +69,14 @@ export function registerSecureCommand(program: Command): void {
         .update(resolve(repo))
         .digest("hex")
         .slice(0, 12);
-      const stateDir = resolve(options.stateDir ?? join(homedir(), ".0sec", "secure", repoKey));
+      const stateDir = resolve(options.stateDir ?? join(homedir(), ".0", "secure", repoKey));
       const controller = new AbortController();
       const cancel = () => controller.abort(new Error("Workflow cancelled by operator"));
       process.once("SIGINT", cancel);
       process.once("SIGTERM", cancel);
-      const cloudOutput = process.env["0SEC_EMIT_RESULT_LINE"] === "1" || Boolean(process.env["0SEC_CLOUD_SINK"]);
+      const cloudOutput = process.env["ZERO_EMIT_RESULT_LINE"] === "1" || Boolean(process.env["ZERO_CLOUD_SINK"]);
       const onEvent = (event: SecureEvent) => {
-        if (cloudOutput) process.stdout.write(`0SEC_SECURE_EVENT=${JSON.stringify({ ...event, timestamp: Date.now() })}\n`);
+        if (cloudOutput) process.stdout.write(`ZERO_SECURE_EVENT=${JSON.stringify({ ...event, timestamp: Date.now() })}\n`);
         else process.stderr.write(`[secure:${event.phase}] ${event.message}\n`);
       };
       try {
@@ -99,7 +99,7 @@ export function registerSecureCommand(program: Command): void {
           onEvent,
         });
         process.stdout.write(cloudOutput
-          ? `0SEC_RESULT=${JSON.stringify(result)}\n`
+          ? `ZERO_RESULT=${JSON.stringify(result)}\n`
           : `${JSON.stringify(result, null, 2)}\n`);
         process.exitCode = { completed: 0, blocked: 2, failed: 3, cancelled: 130 }[result.status];
       } finally {

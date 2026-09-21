@@ -191,7 +191,7 @@ And a recall metric: **per-category recall breakdown**. No category should lose 
 1. **Phase 1: design doc (this page).** Gather feedback on [0sec#113](https://github.com/0sec-labs/0sec/issues/113). Target: ~1 week.
 2. **Phase 2: training data v2.** Re-run the 21-profile ablation matrix against a commit that has [0sec#112](https://github.com/0sec-labs/0sec/issues/112)'s `layerVerdicts` populated across the board. This produces `triage-dataset-v2.jsonl` with per-layer supervision on every row. Target: ~3 days.
 3. **Phase 3: Option A XGBoost baseline.** Train, evaluate against the three bars above, report results publicly. Target: ~1 week.
-4. **Phase 4: decision.** If Option A clears the bar, ship it behind `0SEC_FEATURE_LEARNED_ROUTER=1`, A/B test in CI, promote to default when stable. If Option A plateaus, proceed to Phase 5.
+4. **Phase 4: decision.** If Option A clears the bar, ship it behind `ZERO_FEATURE_LEARNED_ROUTER=1`, A/B test in CI, promote to default when stable. If Option A plateaus, proceed to Phase 5.
 5. **Phase 5 (contingent): Option B cross-attention model.** Fine-tune CodeBERT + feature projection + routing head on v2 dataset. Target: ~3-4 weeks (requires GPU, distribution pipeline, inference integration). This is the option most aligned with the [VulnBERT](https://pebblebed.com/blog/kernel-bugs) hybrid architecture.
 6. **Phase 6: paper.** Submit to a security venue (IEEE S&P, USENIX Security, CCS). Scope: "Learned dynamic triage routing for LLM-agent vulnerability scanners." First half of the empirical section is the [2026-04-11 ablation results log](/research/2026-04-11-ablation/); second half is the router's measured improvement over the best static profile per slice.
 

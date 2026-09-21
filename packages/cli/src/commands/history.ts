@@ -2,11 +2,9 @@ import type { Command } from "commander";
 import { existsSync } from "node:fs";
 import chalk from "chalk";
 import { writePresentationLine } from "../presentation/process-output.js";
-import {
-  listOsecRunDatabasePaths,
-  osecDB,
-  resolveOsecDbPath,
-} from "@0sec/db";
+import { listOsecRunDatabasePaths,
+osecDB,
+resolveOsecDbPath, } from "@0/db"
 
 type HistoryOptions = {
   dbPath?: string;

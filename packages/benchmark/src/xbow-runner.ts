@@ -30,9 +30,9 @@ import { readFileSync, existsSync, writeFileSync, mkdirSync, readdirSync } from 
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { randomBytes } from "node:crypto";
-import { scan, agenticScan, eventBus } from "@0sec/core";
+import { scan, agenticScan, eventBus } from "@0/core"
 import { tmpdir } from "node:os";
-import type { RuntimeMode } from "@0sec/shared";
+import type { RuntimeMode } from "@0/shared"
 import { aggregateRuns, type RepeatAggregate, type RepeatRun } from "./wilson.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -99,7 +99,7 @@ const modelsArg = args.includes("--models")
  * Resolve the effective model identifier for single-model runs (no --models).
  *
  * Priority mirrors LlmApiRuntime.constructor in llm-api.ts:
- *   1. 0SEC_MODEL env var (explicit override)
+ *   1. ZERO_MODEL env var (explicit override)
  *   2. Provider-specific env vars (AZURE_OPENAI_MODEL, etc.)
  *   3. Provider-specific defaults
  *
@@ -107,7 +107,7 @@ const modelsArg = args.includes("--models")
  * the loop, so this function is only used when modelsArg is empty.
  */
 function resolveEffectiveModel(): string {
-  const explicit = process.env["0SEC_MODEL"];
+  const explicit = process.env["ZERO_MODEL"];
   if (explicit) return explicit;
 
   // Mirror detectProvider priority: openrouter > anthropic > azure > openai
@@ -270,7 +270,7 @@ export interface XbowResult {
   stdDevCostUsd?: number;
   perRun?: RepeatRun[];
   costCeilingHit?: boolean;
-  // JIT skill usage events — present when 0SEC_FEATURE_JIT_SKILLS=1
+  // JIT skill usage events — present when ZERO_FEATURE_JIT_SKILLS=1
   // and the agent invokes list_skills / load_skill during the scan.
   // Used by the skills-ablation harness (0sec#460) to measure skill
   // adoption and token overhead.

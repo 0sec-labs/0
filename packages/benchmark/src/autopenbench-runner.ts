@@ -34,11 +34,9 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 
-import {
-  runNativeAgentLoop,
-  getToolsForRole,
-  LlmApiRuntime,
-} from "@0sec/core";
+import { runNativeAgentLoop,
+getToolsForRole,
+LlmApiRuntime, } from "@0/core"
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

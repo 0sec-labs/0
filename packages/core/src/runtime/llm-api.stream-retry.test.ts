@@ -96,20 +96,20 @@ describe("shouldRetryNativeStream (pure retry decision)", () => {
 });
 
 describe("stream retry policy knobs", () => {
-  const saved = process.env["0SEC_LLM_STREAM_MAX_ATTEMPTS"];
+  const saved = process.env["ZERO_LLM_STREAM_MAX_ATTEMPTS"];
   afterEach(() => {
-    if (saved === undefined) delete process.env["0SEC_LLM_STREAM_MAX_ATTEMPTS"];
-    else process.env["0SEC_LLM_STREAM_MAX_ATTEMPTS"] = saved;
+    if (saved === undefined) delete process.env["ZERO_LLM_STREAM_MAX_ATTEMPTS"];
+    else process.env["ZERO_LLM_STREAM_MAX_ATTEMPTS"] = saved;
   });
 
   it("defaults to 3 attempts and clamps the env override to [1,5]", () => {
-    delete process.env["0SEC_LLM_STREAM_MAX_ATTEMPTS"];
+    delete process.env["ZERO_LLM_STREAM_MAX_ATTEMPTS"];
     expect(llmStreamMaxAttempts()).toBe(3);
-    process.env["0SEC_LLM_STREAM_MAX_ATTEMPTS"] = "1";
+    process.env["ZERO_LLM_STREAM_MAX_ATTEMPTS"] = "1";
     expect(llmStreamMaxAttempts()).toBe(1);
-    process.env["0SEC_LLM_STREAM_MAX_ATTEMPTS"] = "99";
+    process.env["ZERO_LLM_STREAM_MAX_ATTEMPTS"] = "99";
     expect(llmStreamMaxAttempts()).toBe(5);
-    process.env["0SEC_LLM_STREAM_MAX_ATTEMPTS"] = "garbage";
+    process.env["ZERO_LLM_STREAM_MAX_ATTEMPTS"] = "garbage";
     expect(llmStreamMaxAttempts()).toBe(3);
   });
 
@@ -120,11 +120,11 @@ describe("stream retry policy knobs", () => {
 });
 
 describe("executeNative bounded retry loop", () => {
-  const savedAttempts = process.env["0SEC_LLM_STREAM_MAX_ATTEMPTS"];
+  const savedAttempts = process.env["ZERO_LLM_STREAM_MAX_ATTEMPTS"];
   afterEach(() => {
     vi.restoreAllMocks();
-    if (savedAttempts === undefined) delete process.env["0SEC_LLM_STREAM_MAX_ATTEMPTS"];
-    else process.env["0SEC_LLM_STREAM_MAX_ATTEMPTS"] = savedAttempts;
+    if (savedAttempts === undefined) delete process.env["ZERO_LLM_STREAM_MAX_ATTEMPTS"];
+    else process.env["ZERO_LLM_STREAM_MAX_ATTEMPTS"] = savedAttempts;
   });
 
   function newRuntime(): LlmApiRuntime {
@@ -149,7 +149,7 @@ describe("executeNative bounded retry loop", () => {
   }
 
   it("retries a transient empty stream and returns the eventual success", async () => {
-    process.env["0SEC_LLM_STREAM_MAX_ATTEMPTS"] = "3";
+    process.env["ZERO_LLM_STREAM_MAX_ATTEMPTS"] = "3";
     instantTimers();
     const rt = newRuntime();
     const attempt = vi.fn()
@@ -173,7 +173,7 @@ describe("executeNative bounded retry loop", () => {
   });
 
   it("stops at the attempt cap and annotates the exhausted error", async () => {
-    process.env["0SEC_LLM_STREAM_MAX_ATTEMPTS"] = "3";
+    process.env["ZERO_LLM_STREAM_MAX_ATTEMPTS"] = "3";
     instantTimers();
     const rt = newRuntime();
     const attempt = vi.fn().mockResolvedValue(transient("stream completed without final response"));
@@ -191,7 +191,7 @@ describe("executeNative bounded retry loop", () => {
   });
 
   it("does NOT retry a real API error — returns after one attempt", async () => {
-    process.env["0SEC_LLM_STREAM_MAX_ATTEMPTS"] = "3";
+    process.env["ZERO_LLM_STREAM_MAX_ATTEMPTS"] = "3";
     instantTimers();
     const rt = newRuntime();
     const attempt = vi.fn().mockResolvedValue({
@@ -210,7 +210,7 @@ describe("executeNative bounded retry loop", () => {
   });
 
   it("does NOT retry when the operator has already aborted", async () => {
-    process.env["0SEC_LLM_STREAM_MAX_ATTEMPTS"] = "3";
+    process.env["ZERO_LLM_STREAM_MAX_ATTEMPTS"] = "3";
     instantTimers();
     const rt = newRuntime();
     const attempt = vi.fn().mockResolvedValue(transient("stream completed without final response"));

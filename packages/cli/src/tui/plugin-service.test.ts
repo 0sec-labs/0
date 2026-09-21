@@ -42,7 +42,7 @@ function themeItem(id: string): MarketItem {
   };
 }
 
-/** A fake @0sec/core: every method has a benign default, overridable per test. */
+/** A fake @0/core: every method has a benign default, overridable per test. */
 function fakeCore(overrides: Partial<CorePluginApi> = {}): CorePluginApi {
   const base: CorePluginApi = {
     fetchRegistryIndex: async () => ({ ok: true, result: { entries: [], artifacts: [] } }),

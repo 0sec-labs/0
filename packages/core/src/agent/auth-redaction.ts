@@ -1,4 +1,4 @@
-import type { AuthConfig } from "@0sec/shared";
+import type { AuthConfig } from "@0/shared"
 
 const REDACTED_AUTH_VALUE = "<REDACTED-AUTH>";
 

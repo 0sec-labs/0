@@ -9,9 +9,9 @@
 #   kernel.config — kernel .config
 #
 # After building, configure the kernel VM runner for one invocation:
-#   env 0SEC_KERNEL_QEMU=1 \
-#     0SEC_KERNEL_QEMU_KERNEL=/path/to/bzImage \
-#     0SEC_KERNEL_QEMU_DISK=/path/to/rootfs.img \
+#   env ZERO_KERNEL_QEMU=1 \
+#     ZERO_KERNEL_QEMU_KERNEL=/path/to/bzImage \
+#     ZERO_KERNEL_QEMU_DISK=/path/to/rootfs.img \
 #     0sec ingest --verify <crash-reports-dir>
 #
 # NOTE: We use `docker buildx build` (not classic `docker build`) because the
@@ -31,7 +31,7 @@ docker buildx version >/dev/null 2>&1 || {
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT_DIR="${1:-${SCRIPT_DIR}/out}"
-KERNEL_MAKE_JOBS="$(printenv 0SEC_KERNEL_VM_MAKE_JOBS 2>/dev/null || true)"
+KERNEL_MAKE_JOBS="$(printenv ZERO_KERNEL_VM_MAKE_JOBS 2>/dev/null || true)"
 : "${KERNEL_MAKE_JOBS:=4}"
 
 mkdir -p "${OUT_DIR}"
@@ -64,6 +64,6 @@ ls -lh "${OUT_DIR}"/bzImage "${OUT_DIR}"/rootfs.img "${OUT_DIR}"/kernel.config "
 
 echo ""
 echo "To use with 0sec:"
-echo "  env 0SEC_KERNEL_QEMU=1 0SEC_KERNEL_QEMU_KERNEL=${OUT_DIR}/bzImage \\"
-echo "    0SEC_KERNEL_QEMU_DISK=${OUT_DIR}/rootfs.img \\"
+echo "  env ZERO_KERNEL_QEMU=1 ZERO_KERNEL_QEMU_KERNEL=${OUT_DIR}/bzImage \\"
+echo "    ZERO_KERNEL_QEMU_DISK=${OUT_DIR}/rootfs.img \\"
 echo "    0sec ingest --verify <crash-reports-dir>"

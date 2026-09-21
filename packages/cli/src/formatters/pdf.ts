@@ -7,8 +7,8 @@
 // Mirrors the same pattern PR #242 used for node-sqlite3-wasm.
 import { createRequire } from "node:module";
 import { createWriteStream } from "node:fs";
-import type { ScanReport, Finding, Severity, ReportSummary } from "@0sec/shared";
-import { severityRank } from "@0sec/shared";
+import type { ScanReport, Finding, Severity, ReportSummary } from "@0/shared"
+import { severityRank } from "@0/shared"
 import type PDFDocumentType from "pdfkit";
 
 type PDFDoc = InstanceType<typeof PDFDocumentType>;

@@ -14,7 +14,7 @@
  * the result is self-describing across local/docker/qemu runners.
  *
  * This module is the SHAPE contract; the runner skeleton that produces it
- * lives in `@0sec/core/verify/replay-runner`. The two are deliberately
+ * lives in `@0/core/verify/replay-runner`. The two are deliberately
  * decoupled — cloud's ingest can consume the schema without pulling in any
  * runner dependency.
  */

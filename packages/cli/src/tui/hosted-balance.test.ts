@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { UsageAccount } from "@0sec/core";
+import type { UsageAccount } from "@0/core"
 import { formatHostedBalance, hostedBalanceState, formatBalanceDetail } from "./hosted-balance.js";
 
 function account(): UsageAccount {

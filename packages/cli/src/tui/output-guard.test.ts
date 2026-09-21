@@ -55,7 +55,7 @@ describe("installTuiOutputGuard", () => {
     });
     const guard = installTuiOutputGuard();
     try {
-      process.stdout.write('0SEC_EVENT_TOOL_CALL_STARTED {"tool":"read"}\n');
+      process.stdout.write('ZERO_EVENT_TOOL_CALL_STARTED {"tool":"read"}\n');
     } finally {
       guard.restore();
       unsubscribe();

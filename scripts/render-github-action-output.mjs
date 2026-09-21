@@ -190,9 +190,9 @@ const outputLines = [
   `qualifying-findings=${qualifyingFindings.length}`,
   `should-fail=${shouldFail ? "true" : "false"}`,
   `gate-message=${gateMessage}`,
-  "comment-body<<__0SEC_COMMENT__",
+  "comment-body<<__ZERO_COMMENT__",
   ...lines,
-  "__0SEC_COMMENT__",
+  "__ZERO_COMMENT__",
 ];
 
 fs.appendFileSync(githubOutput, `${outputLines.join("\n")}\n`);

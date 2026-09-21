@@ -3,7 +3,7 @@ import {
   createDrizzleFromShim,
   type ShimmedDatabase,
 } from "./wasm-shim.js";
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared"
 import { asc, eq, desc, and, gt, inArray, or } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
@@ -18,20 +18,18 @@ import {
   statSync,
   writeSync,
 } from "node:fs";
-import type {
-  ArtifactRecord,
-  Finding,
-  VerificationResult,
-  AttackResult,
-  CaseRecord,
-  TargetInfo,
-  ScanConfig,
-  AgentVerdict,
-  PipelineEvent,
-  FindingTriageStatus,
-  WorkItemRecord,
-  WorkerRecord,
-} from "@0sec/shared";
+import type { ArtifactRecord,
+Finding,
+VerificationResult,
+AttackResult,
+CaseRecord,
+TargetInfo,
+ScanConfig,
+AgentVerdict,
+PipelineEvent,
+FindingTriageStatus,
+WorkItemRecord,
+WorkerRecord, } from "@0/shared"
 import * as schema from "./schema.js";
 import {
   findingStatuses,
@@ -48,7 +46,7 @@ const DEFAULT_DB_PATH = join(DEFAULT_DB_DIR, "0sec.db");
 type SQLiteScanId = `${string}-${string}-${string}-${string}-${string}`;
 
 export function resolveOsecDbPath(dbPath?: string): string {
-  const configuredPath = process.env["0SEC_DB_PATH"]?.trim();
+  const configuredPath = process.env["ZERO_DB_PATH"]?.trim();
   return dbPath ?? (configuredPath ? configuredPath : DEFAULT_DB_PATH);
 }
 
@@ -2414,8 +2412,8 @@ export interface PersistedFindingReviewFields {
  *     source for an unverified finding, so absence must stay absence.
  *
  * Validation is intentionally structural (no zod at runtime here, keeping
- * @0sec/db free of a zod dependency); the authoritative shape check remains
- * `VerificationResultSchema` in @0sec/shared.
+ * @0/db free of a zod dependency); the authoritative shape check remains
+ * `VerificationResultSchema` in @0/shared.
  */
 
 /** A non-null, non-array object — the only shape either column may hold. */

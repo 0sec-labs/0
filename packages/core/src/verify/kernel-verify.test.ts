@@ -18,7 +18,7 @@ import {
   buildKernelVerifySystemPrompt,
   extractKernelFindingMetadata,
 } from "./kernel-prompts.js";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import type { NativeContentBlock } from "../runtime/types.js";
 
 function staticKernelFinding(overrides: Partial<Finding> = {}): Finding {

@@ -73,7 +73,7 @@ containing `my-extension`:
   test_root="$(mktemp -d)"
   trap 'rm -rf "$test_root"' EXIT
   export HOME="$test_root/home"
-  plugin_dir="$HOME/.0sec/plugins/my-extension"
+  plugin_dir="$HOME/.0/plugins/my-extension"
   mkdir -p "$plugin_dir" "$test_root/project"
   cp "$source_dir/manifest.json" "$plugin_dir/plugin.json"
   cp "$source_dir/plugin.js" "$plugin_dir/plugin.js"
@@ -260,8 +260,8 @@ the current project without starting the plugin. Direct `plugin run`, or loading
 an approved plugin for an OpenTUI chat, starts the child. Disabling removes
 project approval but keeps files.
 
-Installed files live under `~/.0sec/plugins/<id>/`. Project approval records live
-under `~/.0sec/plugin-enablement/`, keyed by the resolved project path. A changed
+Installed files live under `~/.0/plugins/<id>/`. Project approval records live
+under `~/.0/plugin-enablement/`, keyed by the resolved project path. A changed
 aggregate capability set requires renewed approval. Version-only changes with
 the same capabilities do not by themselves invalidate that approval.
 
@@ -301,7 +301,7 @@ for the version you are installing.
 
 The default registry is
 <https://raw.githubusercontent.com/0sec-labs/hackstore/main/index.json>.
-`0SEC_REGISTRY_URL`, or `--registry URL` on browse/search/install, overrides it.
+`ZERO_REGISTRY_URL`, or `--registry URL` on browse/search/install, overrides it.
 The fetcher requires HTTPS; an explicit empty registry setting disables fetching.
 The default signature verifier is unconfigured and entries are marked
 `unverified`. Do not treat an index entry or a review as a verified signature.

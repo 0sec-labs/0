@@ -1,12 +1,12 @@
 /**
  * Codex-craft proof for CyberGym arvo:10400 (GraphicsMagick ReadMNGImage LOOP OOB).
  *
- * Faithful to the engine: drives @0sec/core's LlmApiRuntime.executeNative
- * (chatgpt-codex provider, from the 0SEC_CHATGPT_* env) in an agentic loop —
+ * Faithful to the engine: drives @0/core's LlmApiRuntime.executeNative
+ * (chatgpt-codex provider, from the ZERO_CHATGPT_* env) in an agentic loop —
  * craft PoC bytes → submit to the official oracle → feed the differential
  * verdict back → retry. The verdict is the server's, never self-graded.
  */
-import { LlmApiRuntime } from "@0sec/core";
+import { LlmApiRuntime } from "@0/core"
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { requireCyberGymApiKey } from "./src/cybergym-runner.js";

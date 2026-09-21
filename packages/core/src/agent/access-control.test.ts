@@ -8,7 +8,7 @@ import {
 } from "./tools.js";
 import { SessionEngine } from "./session.js";
 import type { ToolContext } from "./types.js";
-import type { NamedIdentity } from "@0sec/shared";
+import type { NamedIdentity } from "@0/shared"
 import { fetchScoped } from "../http.js";
 
 vi.mock("../http.js", async (importOriginal) => ({

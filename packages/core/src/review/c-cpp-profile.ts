@@ -1,4 +1,4 @@
-import type { SemgrepFinding } from "@0sec/shared";
+import type { SemgrepFinding } from "@0/shared"
 import { spawn } from "node:child_process";
 import { allowlistedChildEnv } from "../agent/sanitized-env.js";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
@@ -131,7 +131,7 @@ For each finding, call save_finding with these parameters:
        checkout <commit-or-tag>\` (or installs the exact package version).
     2. Write the harness INLINE with a heredoc — the FULL harness source, never
        a bare path reference, e.g. \`mkdir -p /tmp/h && cat > /tmp/h/harness.c
-       <<'0SEC_EOF'\\n<entire harness source>\\n0SEC_EOF\`.
+       <<'ZERO_EOF'\\n<entire harness source>\\nZERO_EOF\`.
     3. Compile + run, referencing ONLY paths steps 1-2 created.
     4. A \`"note"\` step describing the trigger path + expected sanitizer output.
 
@@ -149,7 +149,7 @@ For each finding, call save_finding with these parameters:
       "id": "write-harness",
       "kind": "exploit",
       "summary": "Write the tier-1 harness inline (self-contained, no scan-sandbox paths)",
-      "action": { "type": "shell", "cmd": "mkdir -p /tmp/h && cat > /tmp/h/harness.c <<'0SEC_EOF'\\n#include \\"/tmp/t/src/parser.c\\"\\nint main(){ unsigned char in[1]={0x01}; parse_header(in, sizeof in); return 0; }\\n0SEC_EOF" },
+      "action": { "type": "shell", "cmd": "mkdir -p /tmp/h && cat > /tmp/h/harness.c <<'ZERO_EOF'\\n#include \\"/tmp/t/src/parser.c\\"\\nint main(){ unsigned char in[1]={0x01}; parse_header(in, sizeof in); return 0; }\\nZERO_EOF" },
       "expect": { "type": "exit-zero" }
     },
     {
@@ -281,7 +281,7 @@ export async function scaffoldTier1Harness(
 ): Promise<Tier1HarnessScaffold> {
   const srcDir = resolve(options.srcDir);
   const outputDir = resolve(
-    options.outputDir ?? join(srcDir, ".0sec-harness", options.entryFn.functionName),
+    options.outputDir ?? join(srcDir, ".0-harness", options.entryFn.functionName),
   );
   const clangPath = options.clangPath ?? "clang";
   const runTimeoutSec = options.runTimeoutSec ?? 60;
@@ -337,7 +337,7 @@ export async function scaffoldTier2Harness(
 
   const srcDir = resolve(options.srcDir);
   const outputDir = resolve(
-    options.outputDir ?? join(srcDir, ".0sec-harness", `${options.entryFn.functionName}-tier2`),
+    options.outputDir ?? join(srcDir, ".0-harness", `${options.entryFn.functionName}-tier2`),
   );
   const componentFiles = options.componentFiles.map((file) => resolve(srcDir, file));
   const seedCorpusDirs = (options.seedCorpusDirs ?? []).map((dir) => resolve(srcDir, dir));

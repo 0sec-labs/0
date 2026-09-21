@@ -13,7 +13,7 @@
 // shell snippets, response status codes) and stitch them into a 2–5 step
 // graph. Anything we can't parse cleanly is skipped, never guessed.
 
-import type { PocStep, PocStepKind } from "@0sec/shared";
+import type { PocStep, PocStepKind } from "@0/shared"
 
 /**
  * Inputs are the three prose evidence fields the agent already produces. All

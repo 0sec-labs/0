@@ -7,7 +7,7 @@ import {
   type CandidatePatch,
   type PatchGenerator,
 } from "./patch-validate.js";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import type { ReproducerResult } from "../triage/kernel-oracle.js";
 
 function reproducedFinding(overrides: Partial<Finding> = {}): Finding {
@@ -40,9 +40,9 @@ describe("validatePatchRemovesCrash (AIxCC T7 patch-as-oracle)", () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv };
-    delete process.env["0SEC_KERNEL_QEMU_KERNEL"];
-    delete process.env["0SEC_KERNEL_QEMU_DISK"];
-    delete process.env["0SEC_KERNEL_QEMU_CONFIG"];
+    delete process.env["ZERO_KERNEL_QEMU_KERNEL"];
+    delete process.env["ZERO_KERNEL_QEMU_DISK"];
+    delete process.env["ZERO_KERNEL_QEMU_CONFIG"];
   });
   afterEach(() => {
     process.env = { ...originalEnv };

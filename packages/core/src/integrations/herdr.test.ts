@@ -620,11 +620,11 @@ describe("session lifecycle (pane.report_agent_session)", () => {
     const harness = createFakeHerdr();
     const sink = makeSink(harness);
 
-    sink.reportSession({ sessionPath: "/home/dev/.0sec/sessions/scan-42.jsonl" });
+    sink.reportSession({ sessionPath: "/home/dev/.0/sessions/scan-42.jsonl" });
     await sink.drain();
 
     const session = harness.requests().find((r) => r.method === "pane.report_agent_session");
-    expect(session!.params.agent_session_path).toBe("/home/dev/.0sec/sessions/scan-42.jsonl");
+    expect(session!.params.agent_session_path).toBe("/home/dev/.0/sessions/scan-42.jsonl");
   });
 });
 

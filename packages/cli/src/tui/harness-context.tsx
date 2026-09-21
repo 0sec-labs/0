@@ -1,9 +1,9 @@
 /** @jsxImportSource @opentui/react */
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { randomUUID } from "node:crypto";
-import { getWorkspaceHarnessTrust, setWorkspaceHarnessTrust } from "@0sec/core";
-import type { LiveHarnessHost } from "@0sec/core";
-import type { HarnessControl, HarnessSnapshot, HarnessUiEvent } from "@0sec/shared";
+import { getWorkspaceHarnessTrust, setWorkspaceHarnessTrust } from "@0/core"
+import type { LiveHarnessHost } from "@0/core"
+import type { HarnessControl, HarnessSnapshot, HarnessUiEvent } from "@0/shared"
 import { useTheme } from "./theme-context.js";
 
 type ViewProps = { snapshot: HarnessSnapshot; sendPrompt: (text: string) => void };

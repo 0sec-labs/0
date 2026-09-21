@@ -19,7 +19,7 @@ const crash: CrashInfo = {
   message: "Cannot read properties of undefined (reading 'x')",
   stack: [
     "TypeError: Cannot read properties of undefined (reading 'x')",
-    "    at ChatScreen (/home/op/.0sec/run.tsx:1200:5)",
+    "    at ChatScreen (/home/op/.0/run.tsx:1200:5)",
     "    at renderWithHooks (/node_modules/react/index.js:1:1)",
   ].join("\n"),
 };
@@ -55,7 +55,7 @@ describe("crashStackLines", () => {
     const lines = crashStackLines(crash.stack, 2);
     expect(lines).toHaveLength(2);
     expect(lines[0]).toBe("TypeError: Cannot read properties of undefined (reading 'x')");
-    expect(lines[1]).toBe("at ChatScreen (/home/op/.0sec/run.tsx:1200:5)");
+    expect(lines[1]).toBe("at ChatScreen (/home/op/.0/run.tsx:1200:5)");
   });
 
   it("returns nothing for max 0", () => {
@@ -131,7 +131,7 @@ describe("resolveCrashKey", () => {
 });
 
 describe("describeFeedbackOutcome", () => {
-  const local = { ok: true, path: "/home/op/.0sec/feedback.md" };
+  const local = { ok: true, path: "/home/op/.0/feedback.md" };
 
   it("reports success when both save and submit succeed", () => {
     const out = describeFeedbackOutcome(local, { ok: true });
@@ -229,18 +229,18 @@ describe("describeErrorForSurface", () => {
 
 describe("logProblem (always-on local capture)", () => {
   let dir: string;
-  const savedLog = process.env["0SEC_TUI_LOG"];
+  const savedLog = process.env["ZERO_TUI_LOG"];
 
   afterEach(() => {
     if (dir) rmSync(dir, { recursive: true, force: true });
-    if (savedLog === undefined) delete process.env["0SEC_TUI_LOG"];
-    else process.env["0SEC_TUI_LOG"] = savedLog;
+    if (savedLog === undefined) delete process.env["ZERO_TUI_LOG"];
+    else process.env["ZERO_TUI_LOG"] = savedLog;
   });
 
   it("writes the full serialized error (with stack) to the log by default", () => {
     dir = mkdtempSync(join(tmpdir(), "tui-log-"));
     const logPath = join(dir, "tui.log");
-    process.env["0SEC_TUI_LOG"] = logPath;
+    process.env["ZERO_TUI_LOG"] = logPath;
 
     const err = new Error("kaboom");
     logProblem("runtime", err, "shell");
@@ -258,7 +258,7 @@ describe("logProblem (always-on local capture)", () => {
   it("captures a non-Error problem too", () => {
     dir = mkdtempSync(join(tmpdir(), "tui-log-"));
     const logPath = join(dir, "tui.log");
-    process.env["0SEC_TUI_LOG"] = logPath;
+    process.env["ZERO_TUI_LOG"] = logPath;
 
     logProblem("tool", "string failure");
 

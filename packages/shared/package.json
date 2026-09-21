@@ -1,5 +1,5 @@
 {
-  "name": "@0sec/shared",
+"name": "@0/shared",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",

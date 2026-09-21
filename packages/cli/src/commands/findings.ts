@@ -1,13 +1,11 @@
 import type { Command } from "commander";
 import chalk from "chalk";
-import type { Finding, FindingTriageStatus, LayerVerdict } from "@0sec/shared";
+import type { Finding, FindingTriageStatus, LayerVerdict } from "@0/shared"
 import { writePresentationLine, writePresentationErrorLine } from "../presentation/process-output.js";
-import {
-  listOsecRunDatabasePaths,
-  osecDB,
-  resolveOsecDbPath,
-  resolveOsecRunStorage,
-} from "@0sec/db";
+import { listOsecRunDatabasePaths,
+osecDB,
+resolveOsecDbPath,
+resolveOsecRunStorage, } from "@0/db"
 import { buildFindingConsoleCommand } from "../finding-handoff.js";
 
 type FindingsListOptions = {
@@ -385,9 +383,7 @@ export function registerFindingsCommand(program: Command): void {
         // verdicts, so it reflects the scan's configuration and not this
         // shell's env — see `triage/provenance.ts`.
         {
-          const { summarizeTriageProvenance, formatTriageProvenance } = await import(
-            "@0sec/core"
-          );
+          const { summarizeTriageProvenance, formatTriageProvenance } = await import("@0/core");
           const provenance = summarizeTriageProvenance({
             ...(finding as unknown as Finding),
             layerVerdicts: parseLayerVerdicts(finding.layerVerdicts),

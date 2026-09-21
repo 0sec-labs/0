@@ -23,7 +23,7 @@ draft: true
 ## Experiment rationale
 
 Foxguard is now the default source-code static lead generator, with
-Semgrep preserved as `0SEC_STATIC=semgrep` for compatibility and
+Semgrep preserved as `ZERO_STATIC=semgrep` for compatibility and
 comparison. Foxguard claims 5–22× speed-up on framework-sized repos
 and ships 170+ built-in rules across 11 languages. Before removing any
 additional Semgrep runtime path, we measure.

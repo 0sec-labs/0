@@ -13,7 +13,7 @@ import {
   type KernelVerifyAgentInvoker,
 } from "./kernel-verify.js";
 import type { KernelVerifyRunner } from "./kernel-verify-types.js";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import type { NativeContentBlock } from "../runtime/types.js";
 import type { ReproducerResult, CrashReport } from "../triage/kernel-oracle.js";
 

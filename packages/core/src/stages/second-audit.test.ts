@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import type { NativeRuntimeResult, NativeToolDef } from "../runtime/types.js";
 import {
   runSecondAudit,

@@ -1,5 +1,5 @@
-import type { ScanReport, Finding, Severity } from "@0sec/shared";
-import { SEVERITY_RANK } from "@0sec/shared";
+import type { ScanReport, Finding, Severity } from "@0/shared"
+import { SEVERITY_RANK } from "@0/shared"
 
 function escapeHtml(str: string): string {
   return str

@@ -5,14 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
 
 const loadScopeMock = vi.fn();
-vi.mock("@0sec/core", () => ({ loadScope: loadScopeMock }));
+vi.mock("@0/core", () => ({ loadScope: loadScopeMock }));
 
 const mcpAgentTargetMock = vi.fn();
 const httpActionOracleMock = vi.fn();
 const runAgentActionAssuranceMock = vi.fn();
 const writeAgentActionEvidenceBundleMock = vi.fn();
 const agentActionConfigurationChangesMock = vi.fn();
-vi.mock("@0sec/llm-redteam", () => ({
+vi.mock("@0/llm-redteam", () => ({
   mcpAgentTarget: mcpAgentTargetMock,
   httpActionOracle: httpActionOracleMock,
   runAgentActionAssurance: runAgentActionAssuranceMock,

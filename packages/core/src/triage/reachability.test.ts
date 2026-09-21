@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import type { AttackCategory, Finding } from "@0sec/shared";
+import type { AttackCategory, Finding } from "@0/shared"
 
 import { checkReachability, extractSinkLocation } from "./reachability.js";
 

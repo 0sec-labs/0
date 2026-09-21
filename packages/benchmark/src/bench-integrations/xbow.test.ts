@@ -1,11 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  createBenchIntegrationRegistry,
-  createVariantExecutionFactory,
-  runTournament,
-  type BenchScan,
-} from "@0sec/core";
+import { createBenchIntegrationRegistry,
+createVariantExecutionFactory,
+runTournament,
+type BenchScan, } from "@0/core"
 
 import {
   createXbowBenchIntegration,

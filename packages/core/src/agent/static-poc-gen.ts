@@ -21,16 +21,14 @@
 //                We never downgrade severity or drop the finding here — the
 //                whole point of #666 is that no-PoC ≠ false-positive.
 //
-// Behind the default-OFF `0SEC_FEATURE_POC_GEN_STATIC` flag so it is
+// Behind the default-OFF `ZERO_FEATURE_POC_GEN_STATIC` flag so it is
 // A/B-able via the #656 harness and safe to merge dark. Wired into
 // agentic-scanner.ts after the PoV gate.
 
-import type {
-  Finding,
-  LayerVerdict,
-  PocStep,
-  PocStepAction,
-} from "@0sec/shared";
+import type { Finding,
+LayerVerdict,
+PocStep,
+PocStepAction, } from "@0/shared"
 import type { NativeRuntime } from "../runtime/types.js";
 import {
   generatePov,
@@ -75,7 +73,7 @@ export interface StaticPocGenOptions extends GeneratePovOptions {
 // ────────────────────────────────────────────────────────────────────
 
 const MAX_NOTE_CHARS = 8000;
-const HEREDOC = "0SEC_POC_EOF";
+const HEREDOC = "ZERO_POC_EOF";
 
 function clip(s: string, max = MAX_NOTE_CHARS): string {
   if (s.length <= max) return s;

@@ -1,4 +1,4 @@
-/** Default @0sec/core integration for web and source-audit manifests. */
+/** Default @0/core integration for web and source-audit manifests. */
 
 import { createDockerWebProvisioner } from "./adapters.js";
 import type { BenchIntegration } from "./integration.js";

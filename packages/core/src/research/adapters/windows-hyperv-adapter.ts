@@ -19,7 +19,7 @@ import {
 import { constants as fsConstants } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import type {
   ResearchCandidate,
   ResearchContext,
@@ -385,8 +385,8 @@ function validateWorkerAcceptance(
     || !nonempty(acceptance.signature_ssh)) {
     throw new Error("worker acceptance authority binding mismatch");
   }
-  const allowedSigners = process.env["0SEC_HYPERV_ACCEPTANCE_ALLOWED_SIGNERS"];
-  if (!allowedSigners) throw new Error("0SEC_HYPERV_ACCEPTANCE_ALLOWED_SIGNERS is required");
+  const allowedSigners = process.env["ZERO_HYPERV_ACCEPTANCE_ALLOWED_SIGNERS"];
+  if (!allowedSigners) throw new Error("ZERO_HYPERV_ACCEPTANCE_ALLOWED_SIGNERS is required");
   const signerFile = regularFile(allowedSigners, "worker acceptance allowed signers");
   const temporary = mkdtempSync(join(tmpdir(), "0sec-hyperv-signature-"));
   try {

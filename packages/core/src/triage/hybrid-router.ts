@@ -16,7 +16,7 @@
  * full pipeline ~ $0.05 per finding (6 layers with tool use).
  */
 
-import type { Finding, TriageLayerName } from "@0sec/shared";
+import type { Finding, TriageLayerName } from "@0/shared"
 import type {
   NativeRuntime,
   NativeContentBlock,

@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { BenchManifest } from "@0sec/core";
-import { objectiveOracleEvaluatorAttestation } from "@0sec/core";
+import type { BenchManifest } from "@0/core"
+import { objectiveOracleEvaluatorAttestation } from "@0/core"
 import { sha256Bytes } from "../bench-improvement.js";
 
 import {

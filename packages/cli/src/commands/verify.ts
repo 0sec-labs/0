@@ -24,38 +24,32 @@ import { processPresentationOutput } from "../presentation/process-output.js";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import {
-  executePocSteps,
-  runCliPathTraversalReplayFixture,
-  runDeterministicReplay,
-  LocalShellRunner,
-  DockerRunner,
-  QemuRunner,
-  loadScope,
-  evidenceKindForFinding,
-  oracleForCategory,
-  createReproductionBundle,
-  runReproductionBundle,
-  type PocExecutionReport,
-  type PocExecutionTarget,
-  type PocStepResult,
-  type VerifyEvidenceKind,
-} from "@0sec/core";
-import type {
-  EvidenceArtifact,
-  Finding,
-  PocStep,
-  VerificationAssertion,
-  VerificationCommand,
-  VerificationResult as SharedVerificationResult,
-  VerificationStatus as SharedVerificationStatus,
-} from "@0sec/shared";
-import {
-  VERSION,
-  VerificationResultSchema,
-} from "@0sec/shared";
+import { executePocSteps,
+runCliPathTraversalReplayFixture,
+runDeterministicReplay,
+LocalShellRunner,
+DockerRunner,
+QemuRunner,
+loadScope,
+evidenceKindForFinding,
+oracleForCategory,
+createReproductionBundle,
+runReproductionBundle,
+type PocExecutionReport,
+type PocExecutionTarget,
+type PocStepResult,
+type VerifyEvidenceKind, } from "@0/core"
+import type { EvidenceArtifact,
+Finding,
+PocStep,
+VerificationAssertion,
+VerificationCommand,
+VerificationResult as SharedVerificationResult,
+VerificationStatus as SharedVerificationStatus, } from "@0/shared"
+import { VERSION,
+VerificationResultSchema, } from "@0/shared"
 import { z } from "zod";
-import { findingSchema, formatZodError } from "@0sec/shared";
+import { findingSchema, formatZodError } from "@0/shared"
 
 // ── Public output schema ────────────────────────────────────────────────────
 
@@ -597,7 +591,7 @@ export interface VerifyOutcome {
  * Run the Tier 2 kernel-finding verifier (#271) and return a JSON-ready
  * result. Lives next to `runVerify` so the CLI surface stays in one file.
  *
- * Gated by `0SEC_KERNEL_VERIFY=1` so CI cost stays predictable — operators
+ * Gated by `ZERO_KERNEL_VERIFY=1` so CI cost stays predictable — operators
  * who want to run this opt in explicitly. The flag check is enforced at the
  * caller (`verifyAction` below), not here, so tests can call this directly.
  */
@@ -608,7 +602,7 @@ export async function runKernelFindingVerify(opts: {
   attempts?: number;
   wallClockMs?: number;
 }): Promise<{ exitCode: number; result: unknown }> {
-  const { verifyStaticKernelFinding, applyVerificationToFinding } = await import("@0sec/core");
+  const { verifyStaticKernelFinding, applyVerificationToFinding } = await import("@0/core");
 
   const rawFinding = readJson<unknown>(opts.findingPath, "finding");
   let finding;
@@ -621,7 +615,7 @@ export async function runKernelFindingVerify(opts: {
     throw err;
   }
 
-  const result = await verifyStaticKernelFinding(finding as unknown as import("@0sec/shared").Finding, {
+  const result = await verifyStaticKernelFinding(finding as unknown as import("@0/shared").Finding, {
     kernelTree: opts.kernelTree,
     kernelConfig: opts.kernelConfig,
     attempts: opts.attempts,
@@ -629,7 +623,7 @@ export async function runKernelFindingVerify(opts: {
   });
 
   const promotedFinding = applyVerificationToFinding(
-    finding as unknown as import("@0sec/shared").Finding,
+    finding as unknown as import("@0/shared").Finding,
     result,
   );
 
@@ -760,7 +754,7 @@ export async function runVerify(opts: {
     try {
       // Validated parse: the cast is now sound because zod has checked every
       // field the rest of the pipeline reads. Schema mirrors the canonical
-      // `Finding` type in `@0sec/shared` — see `./schemas.ts`.
+      // `Finding` type in `@0/shared` — see `./schemas.ts`.
       finding = findingSchema.parse(rawFinding) as Finding;
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -958,10 +952,10 @@ async function verifyAction(opts: VerifyOpts, positionalFinding?: string): Promi
   // Kernel-finding (#271 Tier 2) mode is a separate pipeline from the
   // deterministic-replay verifier — handle it first and exit.
   if (opts.kernelFinding) {
-    if (process.env["0SEC_KERNEL_VERIFY"] !== "1") {
+    if (process.env["ZERO_KERNEL_VERIFY"] !== "1") {
       throw new Error(
-        "--kernel-finding requires 0SEC_KERNEL_VERIFY=1 (CI cost gate, #271). " +
-          "Run the command through `env 0SEC_KERNEL_VERIFY=1 0sec ...` to opt in.",
+        "--kernel-finding requires ZERO_KERNEL_VERIFY=1 (CI cost gate, #271). " +
+          "Run the command through `env ZERO_KERNEL_VERIFY=1 0sec ...` to opt in.",
       );
     }
     if (!opts.kernelTree) {
@@ -1193,7 +1187,7 @@ export function registerVerifyCommand(program: Command): void {
       "--kernel-finding <path>",
       "Path to a kernel-review finding.json. Runs the Tier 2 agent loop to " +
         "produce a reproducer and promote the finding via the kernel oracle. " +
-        "Requires 0SEC_KERNEL_VERIFY=1.",
+        "Requires ZERO_KERNEL_VERIFY=1.",
     )
     .option(
       "--kernel-tree <path>",

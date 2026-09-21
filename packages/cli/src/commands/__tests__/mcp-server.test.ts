@@ -61,9 +61,9 @@ import { Command } from "commander";
 // vi.mock is hoisted; the static imports below pick up our stubs. We
 // mock four boundaries:
 //
-//   • @0sec/core   — loadScope, ToolExecutor, getToolsForRole,
+//   • @0/core   — loadScope, ToolExecutor, getToolsForRole,
 //                       RateLimiter, parseRateLimitFlag, attribution
-//   • @0sec/db      — osecDB (no WASM SQLite open!)
+//   • @0/db      — osecDB (no WASM SQLite open!)
 //   • @modelcontextprotocol/sdk/server/mcp.js
 //                     — McpServer (we capture .connect / .registerTool)
 //   • @modelcontextprotocol/sdk/server/stdio.js
@@ -89,7 +89,7 @@ const describeEngagementPostureMock = vi.fn();
 
 /**
  * Minimal posture fixtures. The resolver itself is unit-tested in
- * `@0sec/core` (scope/engagement-profile.test.ts); here we only care that
+ * `@0/core` (scope/engagement-profile.test.ts); here we only care that
  * mcp-server consults it and applies what comes back.
  */
 function standardPosture() {
@@ -185,7 +185,7 @@ const fakeTools = [
 ];
 const getToolsForRoleMock = vi.fn(() => fakeTools);
 
-vi.mock("@0sec/core", () => ({
+vi.mock("@0/core", () => ({
   ToolExecutor: FakeToolExecutor,
   getToolsForRole: getToolsForRoleMock,
   loadScope: loadScopeMock,
@@ -216,7 +216,7 @@ class FakeOsecDB {
     dbInstances.push(this);
   }
 }
-vi.mock("@0sec/db", () => ({
+vi.mock("@0/db", () => ({
   osecDB: FakeOsecDB,
   resolveOsecRunStorage: (options: { dbPath?: string }) => ({
     dbPath: options.dbPath,
@@ -300,11 +300,11 @@ let logSpy: ReturnType<typeof vi.spyOn>;
 const envSnapshot: Record<string, string | undefined> = {};
 
 const ENV_KEYS = [
-  "0SEC_MCP_AUTH_JSON",
-  "0SEC_MCP_ATTRIBUTION_HEADERS_JSON",
-  "0SEC_MCP_ATTRIBUTION_UA_TOKEN",
-  "0SEC_ENGAGEMENT_PROFILE",
-  "0SEC_WAF_EVASION",
+  "ZERO_MCP_AUTH_JSON",
+  "ZERO_MCP_ATTRIBUTION_HEADERS_JSON",
+  "ZERO_MCP_ATTRIBUTION_UA_TOKEN",
+  "ZERO_ENGAGEMENT_PROFILE",
+  "ZERO_WAF_EVASION",
 ];
 
 // Same exit harness as scan.test.ts: process.exit throws so the action
@@ -520,7 +520,7 @@ describe("mcp-server — happy path wiring", () => {
 
 // ── parseAuthEnv: the PR #295 CodeRabbit-nit area ───────────────────────────
 
-describe("mcp-server — 0SEC_MCP_AUTH_JSON validation (PR #295)", () => {
+describe("mcp-server — ZERO_MCP_AUTH_JSON validation (PR #295)", () => {
   const baseArgs = [
     "mcp-server",
     "--target",
@@ -536,49 +536,49 @@ describe("mcp-server — 0SEC_MCP_AUTH_JSON validation (PR #295)", () => {
   });
 
   it("empty/whitespace env → authConfig undefined (not a parse error)", async () => {
-    process.env["0SEC_MCP_AUTH_JSON"] = "   ";
+    process.env["ZERO_MCP_AUTH_JSON"] = "   ";
     await runCli(baseArgs);
     const ctx = toolExecutorCtorCalls[0]!.ctx;
     expect(ctx.authConfig).toBeUndefined();
   });
 
   it("malformed JSON → typed error mentioning the env-var name", async () => {
-    process.env["0SEC_MCP_AUTH_JSON"] = "{not json";
+    process.env["ZERO_MCP_AUTH_JSON"] = "{not json";
     const err = await runCli(baseArgs);
     expect(err).toBeInstanceOf(Error);
-    expect((err as Error).message).toMatch(/0SEC_MCP_AUTH_JSON.*valid JSON/);
+    expect((err as Error).message).toMatch(/ZERO_MCP_AUTH_JSON.*valid JSON/);
   });
 
   it("invalid type → 'invalid auth type' error", async () => {
-    process.env["0SEC_MCP_AUTH_JSON"] = JSON.stringify({ type: "oauth", token: "x" });
+    process.env["ZERO_MCP_AUTH_JSON"] = JSON.stringify({ type: "oauth", token: "x" });
     const err = await runCli(baseArgs);
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).toMatch(/invalid auth type/i);
   });
 
   it("bearer w/ missing token → typed validation error", async () => {
-    process.env["0SEC_MCP_AUTH_JSON"] = JSON.stringify({ type: "bearer" });
+    process.env["ZERO_MCP_AUTH_JSON"] = JSON.stringify({ type: "bearer" });
     const err = await runCli(baseArgs);
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).toMatch(/bearer auth requires.*'token'/);
   });
 
   it("bearer w/ empty-string token → rejected (CodeRabbit nit)", async () => {
-    process.env["0SEC_MCP_AUTH_JSON"] = JSON.stringify({ type: "bearer", token: "" });
+    process.env["ZERO_MCP_AUTH_JSON"] = JSON.stringify({ type: "bearer", token: "" });
     const err = await runCli(baseArgs);
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).toMatch(/bearer auth requires/);
   });
 
   it("bearer w/ whitespace-only token → rejected", async () => {
-    process.env["0SEC_MCP_AUTH_JSON"] = JSON.stringify({ type: "bearer", token: "   " });
+    process.env["ZERO_MCP_AUTH_JSON"] = JSON.stringify({ type: "bearer", token: "   " });
     const err = await runCli(baseArgs);
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).toMatch(/bearer auth requires/);
   });
 
   it("bearer w/ valid token → threaded onto ToolExecutor ctx.authConfig", async () => {
-    process.env["0SEC_MCP_AUTH_JSON"] = JSON.stringify({ type: "bearer", token: "sk-abc" });
+    process.env["ZERO_MCP_AUTH_JSON"] = JSON.stringify({ type: "bearer", token: "sk-abc" });
     await runCli(baseArgs);
     const ctx = toolExecutorCtorCalls[0]!.ctx;
     expect(ctx.authConfig).toEqual({ type: "bearer", token: "sk-abc" });
@@ -586,35 +586,35 @@ describe("mcp-server — 0SEC_MCP_AUTH_JSON validation (PR #295)", () => {
 
   it("cookie w/ missing 'value' → rejected (uses 'value' field, not 'cookie')", async () => {
     // AuthConfigCookie stores the full Cookie header value under `value`.
-    process.env["0SEC_MCP_AUTH_JSON"] = JSON.stringify({ type: "cookie" });
+    process.env["ZERO_MCP_AUTH_JSON"] = JSON.stringify({ type: "cookie" });
     const err = await runCli(baseArgs);
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).toMatch(/cookie auth requires.*'value'/);
   });
 
   it("cookie w/ valid value → threaded through", async () => {
-    process.env["0SEC_MCP_AUTH_JSON"] = JSON.stringify({ type: "cookie", value: "sid=abc" });
+    process.env["ZERO_MCP_AUTH_JSON"] = JSON.stringify({ type: "cookie", value: "sid=abc" });
     await runCli(baseArgs);
     const ctx = toolExecutorCtorCalls[0]!.ctx;
     expect(ctx.authConfig).toEqual({ type: "cookie", value: "sid=abc" });
   });
 
   it("basic w/ missing password → rejected (validates both fields)", async () => {
-    process.env["0SEC_MCP_AUTH_JSON"] = JSON.stringify({ type: "basic", username: "u" });
+    process.env["ZERO_MCP_AUTH_JSON"] = JSON.stringify({ type: "basic", username: "u" });
     const err = await runCli(baseArgs);
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).toMatch(/basic auth requires.*'password'/);
   });
 
   it("basic w/ missing username → rejected", async () => {
-    process.env["0SEC_MCP_AUTH_JSON"] = JSON.stringify({ type: "basic", password: "p" });
+    process.env["ZERO_MCP_AUTH_JSON"] = JSON.stringify({ type: "basic", password: "p" });
     const err = await runCli(baseArgs);
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).toMatch(/basic auth requires.*'username'/);
   });
 
   it("basic w/ both fields → threaded through", async () => {
-    process.env["0SEC_MCP_AUTH_JSON"] = JSON.stringify({
+    process.env["ZERO_MCP_AUTH_JSON"] = JSON.stringify({
       type: "basic",
       username: "u",
       password: "p",
@@ -625,14 +625,14 @@ describe("mcp-server — 0SEC_MCP_AUTH_JSON validation (PR #295)", () => {
   });
 
   it("header w/ missing name → rejected", async () => {
-    process.env["0SEC_MCP_AUTH_JSON"] = JSON.stringify({ type: "header", value: "v" });
+    process.env["ZERO_MCP_AUTH_JSON"] = JSON.stringify({ type: "header", value: "v" });
     const err = await runCli(baseArgs);
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).toMatch(/header auth requires.*'name'/);
   });
 
   it("header w/ valid name + value → threaded through", async () => {
-    process.env["0SEC_MCP_AUTH_JSON"] = JSON.stringify({
+    process.env["ZERO_MCP_AUTH_JSON"] = JSON.stringify({
       type: "header",
       name: "X-Api-Key",
       value: "tok",
@@ -726,7 +726,7 @@ describe("mcp-server — scope validation ordering", () => {
   });
 });
 
-// ── parseJsonEnv plumbing via 0SEC_MCP_ATTRIBUTION_HEADERS_JSON ───────────
+// ── parseJsonEnv plumbing via ZERO_MCP_ATTRIBUTION_HEADERS_JSON ───────────
 
 describe("mcp-server — parseJsonEnv (via attribution headers env)", () => {
   const baseArgs = [
@@ -738,7 +738,7 @@ describe("mcp-server — parseJsonEnv (via attribution headers env)", () => {
   ];
 
   it("valid JSON array → forwarded to resolveAttribution.cliHeaders", async () => {
-    process.env["0SEC_MCP_ATTRIBUTION_HEADERS_JSON"] = JSON.stringify([
+    process.env["ZERO_MCP_ATTRIBUTION_HEADERS_JSON"] = JSON.stringify([
       "X-Trace: 1",
       "X-Audit: 2",
     ]);
@@ -748,16 +748,16 @@ describe("mcp-server — parseJsonEnv (via attribution headers env)", () => {
   });
 
   it("malformed JSON → typed error mentioning the env-var name", async () => {
-    process.env["0SEC_MCP_ATTRIBUTION_HEADERS_JSON"] = "[oops";
+    process.env["ZERO_MCP_ATTRIBUTION_HEADERS_JSON"] = "[oops";
     const err = await runCli(baseArgs);
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).toMatch(
-      /0SEC_MCP_ATTRIBUTION_HEADERS_JSON.*valid JSON/,
+      /ZERO_MCP_ATTRIBUTION_HEADERS_JSON.*valid JSON/,
     );
   });
 
-  it("0SEC_MCP_ATTRIBUTION_UA_TOKEN → forwarded to resolveAttribution.cliUaToken", async () => {
-    process.env["0SEC_MCP_ATTRIBUTION_UA_TOKEN"] = "0sec-mcp/0.1";
+  it("ZERO_MCP_ATTRIBUTION_UA_TOKEN → forwarded to resolveAttribution.cliUaToken", async () => {
+    process.env["ZERO_MCP_ATTRIBUTION_UA_TOKEN"] = "0sec-mcp/0.1";
     await runCli(baseArgs);
     const resolveArgs = resolveAttributionMock.mock.calls[0]![0];
     expect(resolveArgs.cliUaToken).toBe("0sec-mcp/0.1");

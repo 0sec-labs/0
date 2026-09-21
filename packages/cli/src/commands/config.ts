@@ -1,8 +1,8 @@
 // `0sec config` — inspect, export, and import the console configuration.
 //
 // Configuration is TWO-LEVEL (see tui/settings.ts): a per-user GLOBAL file
-// (`~/.0sec/tui-settings.json`) with a per-project OVERRIDE
-// (`<cwd>/.0sec/tui-settings.json`) layered on top, per key, falling through to
+// (`~/.0/tui-settings.json`) with a per-project OVERRIDE
+// (`<cwd>/.0/tui-settings.json`) layered on top, per key, falling through to
 // the built-in defaults. This command is the operator surface over that model:
 //
 //   show           the effective config, each key labelled default/global/project

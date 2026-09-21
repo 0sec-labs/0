@@ -1,7 +1,7 @@
 /**
  * LLM indirect-prompt-injection (IPI) audit stage.
  *
- * Runs the @0sec/llm-redteam campaign engine against an LLM/agent endpoint and
+ * Runs the @0/llm-redteam campaign engine against an LLM/agent endpoint and
  * maps each confirmed break onto a 0sec Finding so it flows through the normal
  * triage/report pipeline. Kept as a focused module (not another branch in
  * agentic-scanner.ts) per the engineering rules.
@@ -11,19 +11,17 @@
  * attempted-prohibited, ambiguous). These are reported in the per-attempt
  * reports but never change broken/not-broken.
  */
-import type { Finding, JevEvaluator, Severity } from "@0sec/shared";
-import { createJevEvaluator, jevConfigFromEnvironment } from "@0sec/shared";
-import {
-  chatTarget,
-  runIterativeCampaign,
-  builtinBehaviors,
-  regexJudge,
-  llmJudge,
-  jevAttemptFeedback,
-  type AskFn,
-  type Behavior,
-  type BreakRecord,
-} from "@0sec/llm-redteam";
+import type { Finding, JevEvaluator, Severity } from "@0/shared"
+import { createJevEvaluator, jevConfigFromEnvironment } from "@0/shared"
+import { chatTarget,
+runIterativeCampaign,
+builtinBehaviors,
+regexJudge,
+llmJudge,
+jevAttemptFeedback,
+type AskFn,
+type Behavior,
+type BreakRecord, } from "@0/llm-redteam"
 
 /** Deterministic id so re-running the same audit upserts rather than duplicates. */
 function findingId(b: BreakRecord): string {

@@ -31,7 +31,7 @@ function writeTheme(dir: string, file: string, body: unknown): void {
 
 describe("userThemesDir", () => {
   it("resolves under the per-user 0sec state dir (same as installed themes)", () => {
-    expect(userThemesDir("/home/x")).toBe("/home/x/.0sec/themes");
+    expect(userThemesDir("/home/x")).toBe("/home/x/.0/themes");
   });
 });
 

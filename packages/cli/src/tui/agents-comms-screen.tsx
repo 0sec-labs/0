@@ -29,7 +29,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { sleekScrollbar } from "./scrollbar.js";
 import { useKeyboard } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
-import { eventBus } from "@0sec/core";
+import { eventBus } from "@0/core"
 
 import { useTheme, type Theme } from "./theme-context.js";
 import { useSymbols } from "./symbol-context.js";

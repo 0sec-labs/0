@@ -1,9 +1,9 @@
 import { readFileSync, existsSync } from "node:fs";
 import type { Command } from "commander";
 import chalk from "chalk";
-import type { AuthConfig, OutputFormat } from "@0sec/shared";
-import { runEval, getEvalCategories } from "@0sec/core";
-import type { EvalScorecard, EvalCategoryResult, EvalVerdict } from "@0sec/core";
+import type { AuthConfig, OutputFormat } from "@0/shared"
+import { runEval, getEvalCategories } from "@0/core"
+import type { EvalScorecard, EvalCategoryResult, EvalVerdict } from "@0/core"
 
 /**
  * Parse the --auth flag value into an AuthConfig object.

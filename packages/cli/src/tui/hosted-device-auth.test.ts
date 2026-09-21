@@ -22,7 +22,7 @@ it("leaves polling on an unavailable service without selecting Cloud or writing 
   expect(updates.at(-1)?.phase).toBe("failed");
   expect(requests).toBe(1);
   expect(selected).toBe(false);
-  expect(existsSync(join(homeDir, ".0sec", "cloud.env"))).toBe(false);
+  expect(existsSync(join(homeDir, ".0", "cloud.env"))).toBe(false);
 });
 
 it("prevents a cancelled late login from persisting or selecting Cloud", async () => {
@@ -42,14 +42,14 @@ it("prevents a cancelled late login from persisting or selecting Cloud", async (
   await new Promise<void>((resolve) => setImmediate(resolve));
   expect(selected).toBe(false);
   expect(updates.length).toBe(count);
-  expect(existsSync(join(homeDir, ".0sec", "cloud.env"))).toBe(false);
+  expect(existsSync(join(homeDir, ".0", "cloud.env"))).toBe(false);
 });
 
 it("reads only the supplied credential environment and returns no secret metadata", () => {
   const homeDir = home();
-  vi.stubEnv("0SEC_CLOUD_TOKEN", "ambient-must-not-leak");
+  vi.stubEnv("ZERO_CLOUD_TOKEN", "ambient-must-not-leak");
   expect(readHostedConnection({}, homeDir)).toEqual({ configured: false });
-  const result = readHostedConnection({ "0SEC_CLOUD_TOKEN": "explicit-fixture-token", "0SEC_CLOUD_HOST": "http://localhost:41000" }, homeDir);
+  const result = readHostedConnection({ "ZERO_CLOUD_TOKEN": "explicit-fixture-token", "ZERO_CLOUD_HOST": "http://localhost:41000" }, homeDir);
   expect(result).toMatchObject({ configured: true, host: "http://localhost:41000" });
   expect(JSON.stringify(result)).not.toContain("token");
 });
@@ -57,7 +57,7 @@ it("reads only the supplied credential environment and returns no secret metadat
 it("keeps legacy credit data authenticated but rejects actual HTTP auth failures", async () => {
   const options = {
     homeDir: home(),
-    env: { "0SEC_CLOUD_TOKEN": "fixture-token", "0SEC_CLOUD_HOST": "http://localhost:41000" },
+    env: { "ZERO_CLOUD_TOKEN": "fixture-token", "ZERO_CLOUD_HOST": "http://localhost:41000" },
   };
   const legacy = await verifyHostedConnection({
     ...options,

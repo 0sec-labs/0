@@ -27,7 +27,7 @@ one-way, single-depth fan-out.
   normalizes up to `SUBAGENT_MAX_FANOUT = 8` task specs, resolves child deps
   once (`loadSubagentDeps`, ~4180), runs them bounded-concurrently
   (`mapWithConcurrency`, default `SUBAGENT_CONCURRENCY = 4`, override
-  `0SEC_SUBAGENT_CONCURRENCY`), and merges findings **after the pool joins**, in
+  `ZERO_SUBAGENT_CONCURRENCY`), and merges findings **after the pool joins**, in
   input order, so there are never concurrent writers to `this.ctx.findings`.
 - `runOneSubagent` (~4187) calls `runNativeAgentLoop` with a **hardcoded child
   tool set `["bash", "save_finding", "done"]`** that deliberately excludes
@@ -127,7 +127,7 @@ A **second 0sec session in the same directory** discovers the first through a
 
 1. On startup a session computes its rendezvous key from the resolved project
    directory (realpath, to defeat symlink aliasing) and its per-user state root
-   (`homeStateDir` from `@0sec/shared`).
+   (`homeStateDir` from `@0/shared`).
 2. It reads any existing roster entries at that rendezvous, **prunes stale ones**
    (`pruneRoster`), and reconciles its own entry in (`reconcileRoster`), picking
    a unique id with `nextPeerId` (so the second session becomes `Main-2` if

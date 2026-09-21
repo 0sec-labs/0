@@ -19,7 +19,7 @@ import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, symlinkSync } from
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 
 // LLM boundary — used only by buildInvariantModel.
 const executeNativeMock = vi.fn();
@@ -164,7 +164,7 @@ describe("buildInvariantModel", () => {
   it("refuses a repo-relative source symlink that resolves outside sourceRoot", async () => {
     const root = makeSourceRoot();
     const outside = mkdtempSync(join(tmpdir(), "invsrc-outside-"));
-    const sentinel = "0SEC_READ_BOUNDARY_SENTINEL_ba41a7";
+    const sentinel = "ZERO_READ_BOUNDARY_SENTINEL_ba41a7";
     const outsideFile = join(outside, "secret.c");
     writeFileSync(outsideFile, `/* ${sentinel} */\nint secret;\n`, "utf8");
     symlinkSync(outsideFile, join(root, "leak.c"), "file");

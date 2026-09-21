@@ -42,7 +42,7 @@ pinned FoxGuard download.
 - `INSTALL_FOXGUARD=0` skips provisioning for a host where you deliberately
   supply or do not need the analyzer; it does not provide equivalent static coverage.
 - FoxGuard requires working `curl`, checksum verification and write access to
-  `INSTALL_DIR` (default `~/.0sec/bin`).
+  `INSTALL_DIR` (default `~/.0/bin`).
 - The main binary and alias are installed before FoxGuard is downloaded, so a
   companion failure can leave the CLI installed. Correct the failure and rerun
   the installer. `FOXGUARD_TAG` cannot select an arbitrary release: its checksums
@@ -56,15 +56,15 @@ INSTALL_FOXGUARD=0 bash <(curl -fsSL https://raw.githubusercontent.com/0sec-labs
 <span id="0sec-command-not-found-after-install"></span>
 ### `0` command not found after install
 
-The binary is installed to `~/.0sec/bin/0sec` (and symlinked as `~/.0sec/bin/0`).
+The binary is installed to `~/.0/bin/0sec` (and symlinked as `~/.0/bin/0`).
 Add it to your `PATH`:
 
 ```bash
-export PATH="$HOME/.0sec/bin:$PATH"
+export PATH="$HOME/.0/bin:$PATH"
 # or add the line above to ~/.bashrc / ~/.zshrc
 ```
 
-If the install script detected `~/.0sec/bin` is not on `PATH`, it prints a
+If the install script detected `~/.0/bin` is not on `PATH`, it prints a
 warning with the command to add it.
 
 ### Install on Windows
@@ -145,7 +145,7 @@ unusable. This is not a live provider-authentication test. Common cases:
 | Provider | Missing |
 |----------|---------|
 | Azure OpenAI | `AZURE_OPENAI_BASE_URL` or `AZURE_OPENAI_MODEL` not set. The base URL must include `/openai/v1` for the Responses API |
-| ChatGPT Codex | Neither `0SEC_CHATGPT_ACCESS_TOKEN`, `0SEC_CHATGPT_OAUTH_REFRESH_TOKEN`, nor `~/.codex/auth.json` was found. Run `codex login` first, or pass the env var directly: `env 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN="..." 0 scan ...` |
+| ChatGPT Codex | Neither `ZERO_CHATGPT_ACCESS_TOKEN`, `ZERO_CHATGPT_OAUTH_REFRESH_TOKEN`, nor `~/.codex/auth.json` was found. Run `codex login` first, or pass the env var directly: `env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="..." 0 scan ...` |
 
 For an explicit Azure setup, supply all three variables (a supported Azure-backed
 Codex config can also supply deployment configuration):
@@ -187,7 +187,7 @@ Agent loop error: ...
 Common causes:
 
 - **Model unavailable** — the configured provider is rate-limited, over quota,
-  or the model doesn't exist. Check `0SEC_MODEL` or `--model` and see
+  or the model doesn't exist. Check `ZERO_MODEL` or `--model` and see
   [Configuration](/configuration/) for available models
 - **Network error** — the provider API is unreachable. Check network connectivity
   and proxy settings
@@ -202,7 +202,7 @@ See [Budget Management](/budget-management/) for cost and timeout controls.
 Exit code 2 from scan-related commands indicates bad configuration:
 
 - A typo'd `--engagement-profile` name
-- An invalid `0SEC_ENGAGEMENT_RATE_RPS` value
+- An invalid `ZERO_ENGAGEMENT_RATE_RPS` value
 - A malformed scope file `engagement` block
 
 The error message on stderr identifies the exact issue. Fix it and re-run. The
@@ -251,7 +251,7 @@ the route. Review the active model/provider in `/model` and follow
 For a direct OpenAI route without deleting other keys:
 
 ```bash
-env 0SEC_SELECTED_PROVIDER=openai 0SEC_MODEL="<model-id-your-account-can-use>" \
+env ZERO_SELECTED_PROVIDER=openai ZERO_MODEL="<model-id-your-account-can-use>" \
   0 review ./authorized-repo --runtime api
 ```
 
@@ -261,17 +261,17 @@ runtime: reselect the model in `/model` to apply it live. A worker-role override
 is inactive while single-model mode is enabled; **Ctrl+S** in `/model` toggles
 that policy. See [model picker controls](/console/#model-picker).
 
-### `0SEC_*` env vars with leading digit
+### `ZERO_*` env vars with leading digit
 
-Variables like `0SEC_CHATGPT_ACCESS_TOKEN` start with a digit. Most shells
-reject `export 0SEC_*=...`. Pass them to the process with `env`:
+Variables like `ZERO_CHATGPT_ACCESS_TOKEN` start with a digit. Most shells
+reject `export ZERO_*=...`. Pass them to the process with `env`:
 
 ```bash
 # Correct
-env 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN="..." 0 review .
+env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="..." 0 review .
 
 # Incorrect (bash syntax error)
-export 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN="..."
+export ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="..."
 ```
 
 ### ChatGPT Codex auth file path
@@ -279,11 +279,11 @@ export 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN="..."
 By default, the Codex runtime reads tokens from `~/.codex/auth.json`. Override:
 
 ```bash
-env 0SEC_CHATGPT_AUTH_FILE="/path/to/auth.json" 0 scan ...
+env ZERO_CHATGPT_AUTH_FILE="/path/to/auth.json" 0 scan ...
 ```
 
-`0SEC_CODEX_AUTH_JSON_PATH` is a deprecated spelling. Prefer
-`0SEC_CHATGPT_AUTH_FILE`.
+`ZERO_CODEX_AUTH_JSON_PATH` is a deprecated spelling. Prefer
+`ZERO_CHATGPT_AUTH_FILE`.
 
 ### OpenRouter routing
 
@@ -292,7 +292,7 @@ are absent. To select it as the primary route without deleting other keys,
 configure `OPENROUTER_API_KEY` and pin a model supported by your account:
 
 ```bash
-env 0SEC_SELECTED_PROVIDER=openrouter 0SEC_MODEL="<OpenRouter-model-id>" \
+env ZERO_SELECTED_PROVIDER=openrouter ZERO_MODEL="<OpenRouter-model-id>" \
   0 review ./authorized-repo --runtime api
 ```
 
@@ -449,8 +449,8 @@ concurrent writers unlimited. For intentionally separate runs, choose separate
 database paths and keep each with its run artifacts.
 
 Fresh scan/review runs already receive isolated
-`~/.0sec/runs/<run-id>/state.db` paths unless overridden. Reusing one explicit
-`--db-path` or `0SEC_DB_PATH` across jobs defeats that separation; the console
+`~/.0/runs/<run-id>/state.db` paths unless overridden. Reusing one explicit
+`--db-path` or `ZERO_DB_PATH` across jobs defeats that separation; the console
 still uses its shared local store by default.
 
 ```bash
@@ -507,7 +507,7 @@ are configured. If a provider is disconnected, choose its supported method and
 finish sign-in or key entry, then select the model again in `/model`.
 
 If a saved credential appears missing, check which home directory the process
-uses and whether its `~/.0sec/credentials.json` is readable. An explicit
+uses and whether its `~/.0/credentials.json` is readable. An explicit
 environment credential takes precedence over the store. Do not paste that
 file into a bug report. See [API Keys](/api-keys/) for Codex auth-file overrides
 and provider-specific requirements.

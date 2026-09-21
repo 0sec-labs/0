@@ -11,7 +11,7 @@
  */
 
 import { describe, expect, it, beforeEach } from "vitest";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import {
   RuleBasedRouter,
   decideLayers,

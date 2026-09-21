@@ -19,7 +19,7 @@
 //   - `User-Agent` includes `0sec-cli/<version>` so H1 ops can identify
 //     us if traffic looks anomalous.
 
-import { VERSION } from "@0sec/shared";
+import { VERSION } from "@0/shared"
 import type { H1Collection } from "./types.js";
 
 const BASE_URL = "https://api.hackerone.com";

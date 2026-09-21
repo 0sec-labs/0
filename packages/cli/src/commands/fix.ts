@@ -1,16 +1,14 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import type { Command } from "commander";
-import type { Finding } from "@0sec/shared";
-import {
-  createRuntime,
-  runSourceFix,
-  type NativeRuntime,
-  type RuntimeType,
-  type SourceFixResult,
-} from "@0sec/core";
+import type { Finding } from "@0/shared"
+import { createRuntime,
+runSourceFix,
+type NativeRuntime,
+type RuntimeType,
+type SourceFixResult, } from "@0/core"
 import { z } from "zod";
-import { findingSchema, formatZodError } from "@0sec/shared";
+import { findingSchema, formatZodError } from "@0/shared"
 import { loadFindingFocus } from "../finding-focus.js";
 
 type FixRuntimeType = Extract<RuntimeType, "api">;

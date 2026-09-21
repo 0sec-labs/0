@@ -6,7 +6,7 @@ import { defineConfig } from "vitest/config";
 //
 // Raise the global timeout: the CLI suite's transform load is heavy
 // (chat-screen.tsx et al.), so under a full `vitest run` a test doing real work
-// mid-run (e.g. findings.ts's per-action `await import("@0sec/db")`) can exceed
+// mid-run (e.g. findings.ts's per-action `await import("@0/db")`) can exceed
 // vitest's 5s default even though it passes in ~4s alone.
 export default defineConfig({
   test: {

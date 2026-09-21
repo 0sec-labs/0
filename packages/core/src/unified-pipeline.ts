@@ -5,24 +5,22 @@ import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { mapWithConcurrency } from "./concurrency.js";
 import { PROJECT_OBSERVATION_PROMPT, type PreparedProjectContext, type ProposedProjectObservation } from "./secure/project-context.js";
-import type {
-  ScanDepth,
-  OutputFormat,
-  RuntimeMode,
-  ScanMode,
-  Finding,
-  FindingWorkflowStatus,
-  LayerVerdict,
-  NpmAuditFinding,
-  PocStep,
-  SeedFinding,
-  SemgrepFinding,
-  ScanConfig,
-} from "@0sec/shared";
+import type { ScanDepth,
+OutputFormat,
+RuntimeMode,
+ScanMode,
+Finding,
+FindingWorkflowStatus,
+LayerVerdict,
+NpmAuditFinding,
+PocStep,
+SeedFinding,
+SemgrepFinding,
+ScanConfig, } from "@0/shared"
 import type { InferSelectModel } from "drizzle-orm";
-import { restoreFindingReviewFields } from "@0sec/db";
-import type { osecDB } from "@0sec/db";
-import type * as dbSchema from "@0sec/db";
+import { restoreFindingReviewFields } from "@0/db"
+import type { osecDB } from "@0/db"
+import type * as dbSchema from "@0/db";
 import type { ScanListener } from "./scanner.js";
 import { runAnalysisAgent } from "./agent-runner.js";
 import { cloneGitRepo } from "./repo-clone.js";
@@ -78,14 +76,14 @@ import { eventBus, isCloudEventSinkActive } from "./events/bus.js";
  * burns the entire budget producing 0 tokens + 0 findings, then times out
  * silently. We'd rather fail fast with an actionable error telling the
  * operator to scope to a subsystem/path. Overridable via
- * `0SEC_REVIEW_MAX_FILES`. 5000 catches the kernel while leaving any normal
+ * `ZERO_REVIEW_MAX_FILES`. 5000 catches the kernel while leaving any normal
  * library / service repo (typically well under ~2k source files) untouched.
  */
 const REVIEW_MAX_FILES = 5000;
 
-/** Resolve the review file-count cap, honoring `0SEC_REVIEW_MAX_FILES`. */
+/** Resolve the review file-count cap, honoring `ZERO_REVIEW_MAX_FILES`. */
 function reviewMaxFiles(): number {
-  const raw = process.env["0SEC_REVIEW_MAX_FILES"];
+  const raw = process.env["ZERO_REVIEW_MAX_FILES"];
   if (raw !== undefined) {
     const parsed = Number.parseInt(raw, 10);
     if (Number.isFinite(parsed) && parsed > 0) return parsed;
@@ -108,13 +106,13 @@ function reviewMaxFiles(): number {
  * 8 matches the hunt finder pool's default, the other place this codebase fans
  * agents out. This bounds the RATE only: every finding is still verified, in
  * input order, with identical verdicts. Override via
- * `0SEC_VERIFY_CONCURRENCY`.
+ * `ZERO_VERIFY_CONCURRENCY`.
  */
 const VERIFY_CONCURRENCY = 8;
 
-/** Resolve the verify fan-out limit, honoring `0SEC_VERIFY_CONCURRENCY`. */
+/** Resolve the verify fan-out limit, honoring `ZERO_VERIFY_CONCURRENCY`. */
 function verifyConcurrency(): number {
-  const raw = process.env["0SEC_VERIFY_CONCURRENCY"];
+  const raw = process.env["ZERO_VERIFY_CONCURRENCY"];
   if (raw !== undefined) {
     const parsed = Number.parseInt(raw, 10);
     if (Number.isFinite(parsed) && parsed > 0) return parsed;
@@ -228,7 +226,7 @@ export interface PipelineOptions {
    * addition to the static review agent. Only effective for npm-ecosystem
    * targets (`--ecosystem npm` package-source reviews or `npm-package` audits).
    * Off by default (extra install + untrusted-exec cost); also enabled by the
-   * `0SEC_NPM_DYNAMIC_DISCOVERY` env toggle for cloud config. Confirmed leads
+   * `ZERO_NPM_DYNAMIC_DISCOVERY` env toggle for cloud config. Confirmed leads
    * join `findings` so they flow into the same verify → disclosure path.
    */
   npmDynamicDiscovery?: boolean;
@@ -261,7 +259,7 @@ export interface PipelineReport {
   researchFailed?: boolean;
   /**
    * True when the run terminated early because the shared per-scan cost
-   * ceiling (`--cost-ceiling` / 0SEC_COST_CEILING_USD) was reached —
+   * ceiling (`--cost-ceiling` / ZERO_COST_CEILING_USD) was reached —
    * research tripped it or the verify wave was skipped/truncated on budget.
    * The CLI maps this to exit code 4 and the cloud lands the scan
    * `cost_exceeded` (never a clean pass). Absent on normal completions.
@@ -326,7 +324,7 @@ export function resolveSubsystemScope(
 
 function shouldEmitPipelineCloudEvents(): boolean {
   if (isCloudEventSinkActive()) return true;
-  const flag = process.env["0SEC_CLOUD_EVENTS"];
+  const flag = process.env["ZERO_CLOUD_EVENTS"];
   return !!flag && flag !== "0" && flag.toLowerCase() !== "false";
 }
 
@@ -942,7 +940,7 @@ function listChangedFiles(scopePath: string, diffBase: string): string[] {
  * `--runtime codex` is a special case: it can resolve through either the
  * local `codex` CLI binary (subscription path, source-analysis only) OR
  * through the direct ChatGPT Codex provider when one of
- * `0SEC_CHATGPT_ACCESS_TOKEN` / `0SEC_CHATGPT_OAUTH_REFRESH_TOKEN` is
+ * `ZERO_CHATGPT_ACCESS_TOKEN` / `ZERO_CHATGPT_OAUTH_REFRESH_TOKEN` is
  * set. In the latter mode `LlmApiRuntime` reports `provider:
  * "chatgpt-codex"`, and the pipeline must route the codex request through
  * the API runtime instead of bailing with "Requested runtime 'codex' is
@@ -971,7 +969,7 @@ function selectVerificationRuntime(
   if (preferredRuntime && preferredRuntime !== "auto") {
     if (availableRuntimes.has(preferredRuntime)) return preferredRuntime;
     // Explicit `--runtime codex` with the direct ChatGPT Codex provider
-    // configured (0SEC_CHATGPT_*_TOKEN env). Route verification through
+    // configured (ZERO_CHATGPT_*_TOKEN env). Route verification through
     // the API runtime — agent-runner.ts will pick up the same env vars
     // and run the native tool_use loop against chatgpt.com.
     if (preferredRuntime === "codex" && hasDirectChatGptCodexProvider(apiDiagnostics)) {
@@ -1146,7 +1144,7 @@ export async function runPerFileResearch(
 
 /** Env-toggle counterpart of the `npmDynamicDiscovery` opt-in (cloud config). */
 function npmDynamicDiscoveryEnvEnabled(): boolean {
-  const v = (process.env["0SEC_NPM_DYNAMIC_DISCOVERY"] ?? "").trim().toLowerCase();
+  const v = (process.env["ZERO_NPM_DYNAMIC_DISCOVERY"] ?? "").trim().toLowerCase();
   return v === "1" || v === "true" || v === "yes" || v === "on";
 }
 
@@ -1348,7 +1346,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
         repairOsecDatabase,
         resolveOsecRunStorage,
         writeOsecRunReport,
-      } = await import("@0sec/db");
+      } = await import("@0/db");
       const storage = resolveOsecRunStorage({
         dbPath: opts.dbPath,
         runId: opts.resumeScanId ?? opts.runId,
@@ -1485,7 +1483,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
           `review cap — split the change or scope to a subsystem/path`
         : `review target too large: over ${cap} source files exceeds the ${cap} ` +
           `review cap — scope to a subsystem/path (e.g. a specific directory) or ` +
-          `use a smaller target (override with 0SEC_REVIEW_MAX_FILES)`;
+          `use a smaller target (override with ZERO_REVIEW_MAX_FILES)`;
       logPipelineEvent("prepare", "stage_error", { error: msg, fileCount, cap });
       emit({ type: "error", stage: "prepare", message: msg });
       throw new Error(msg);
@@ -1625,7 +1623,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       }
     }
 
-    // Static source scan. Foxguard is the default; 0SEC_STATIC=semgrep
+    // Static source scan. Foxguard is the default; ZERO_STATIC=semgrep
     // routes source and package-source leads through Semgrep while leaving
     // dependency advisory checks intact.
     if (
@@ -1826,7 +1824,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     const verificationRuntime = selectVerificationRuntime(opts.runtime, hasApiKey, availableRuntimes, apiDiagnostics);
 
     // Log pipeline decisions to stderr for CI visibility
-    if (process.env.CI || process.env["0SEC_DEBUG"]) {
+    if (process.env.CI || process.env["ZERO_DEBUG"]) {
       process.stderr.write(`[0sec] Research: apiKey=${hasApiKey}, apiReason=${apiDiagnostics.reason ?? "ok"}, runtimes=[${[...availableRuntimes].join(",")}], config=${opts.runtime ?? "auto"}\n`);
     }
 

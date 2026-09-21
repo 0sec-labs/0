@@ -88,8 +88,8 @@ export function renderScanStream(opts: RenderScanStreamOptions): StreamSession {
         if (event.message) console.log(`${tag} ${event.message}`);
         return;
       case "thinking":
-        // High-volume; only print if explicitly opted in via 0SEC_VERBOSE.
-        if (process.env["0SEC_VERBOSE"] && event.message) {
+        // High-volume; only print if explicitly opted in via ZERO_VERBOSE.
+        if (process.env["ZERO_VERBOSE"] && event.message) {
           console.log(`${chalk.gray("  …")} ${chalk.dim(event.message.slice(0, 200))}`);
         }
         return;

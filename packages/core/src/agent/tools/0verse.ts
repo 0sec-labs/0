@@ -1,7 +1,7 @@
 /**
  * `analyze_binary` agent tool — an opt-in bridge to **0verse**, the
  * binary-native / no-source CRS. The registry exposes it only when
- * `0SEC_FEATURE_ZEROVERSE=1`; ToolExecutor confines it to the local source
+ * `ZERO_FEATURE_ZEROVERSE=1`; ToolExecutor confines it to the local source
  * scope and launches it with a minimal credential-free environment.
  *
  * It runs one bounded `0verse scan <binary> --format ndjson` invocation through

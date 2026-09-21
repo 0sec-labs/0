@@ -6,11 +6,9 @@ import {
   useState,
   type JSX,
 } from "react";
-import type {
-  DesktopConsoleEvent,
-  DesktopConsoleSession,
-  DesktopConsoleUsage,
-} from "@0sec/shared";
+import type { DesktopConsoleEvent,
+DesktopConsoleSession,
+DesktopConsoleUsage, } from "@0/shared"
 import {
   AlertCircle,
   ArrowDown,

@@ -11,7 +11,7 @@ import {
   writeSync,
   fsyncSync,
 } from "node:fs";
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared"
 import { readFile } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
@@ -87,7 +87,7 @@ export interface BranchJournalOptions {
   fromEntry: number;
   /** Optional human-readable label baked into the new run ID. */
   label?: string;
-  /** Override the runs root directory (default: `~/.0sec/runs`). */
+  /** Override the runs root directory (default: `~/.0/runs`). */
   rootDir?: string;
 }
 
@@ -559,7 +559,7 @@ function atomicAppendJsonLine(path: string, entry: JournalEntry): void {
     process.emitWarning(
       `journal line ${bytes.byteLength}B exceeds PIPE_BUF (${LINUX_PIPE_BUF}B); ` +
         `concurrent writers may interleave. Consider forcing the artifact to a sidecar.`,
-      { code: "0SEC_JOURNAL_LINE_TOO_LARGE", type: "Warning" },
+      { code: "ZERO_JOURNAL_LINE_TOO_LARGE", type: "Warning" },
     );
   }
 

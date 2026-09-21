@@ -26,27 +26,23 @@ import { readFileSync, existsSync, realpathSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import type { Command } from "commander";
 import chalk from "chalk";
-import type {
-  EvolutionConfig,
-  EvolutionRegistry,
-  EvolutionRunResult,
-  EvolutionExecution,
-} from "@0sec/core";
-import {
-  loadEvolutionConfigFile,
-  parseEvolutionConfig,
-  runEvolution,
-  executeEvolutionVersion,
-  approveEvolutionCandidate,
-  loadEvolutionRegistry,
-  captureObservation,
-  approveObservation,
-  listObservations,
-  releaseClaim,
-  parseObservationInput,
-  parseApprovedObservationShape,
-  rollbackEvolutionVersion as rollbackEvolutionRegistryVersion,
-} from "@0sec/core";
+import type { EvolutionConfig,
+EvolutionRegistry,
+EvolutionRunResult,
+EvolutionExecution, } from "@0/core"
+import { loadEvolutionConfigFile,
+parseEvolutionConfig,
+runEvolution,
+executeEvolutionVersion,
+approveEvolutionCandidate,
+loadEvolutionRegistry,
+captureObservation,
+approveObservation,
+listObservations,
+releaseClaim,
+parseObservationInput,
+parseApprovedObservationShape,
+rollbackEvolutionVersion as rollbackEvolutionRegistryVersion, } from "@0/core"
 
 
 // ── Exit codes ──────────────────────────────────────────────────────────────

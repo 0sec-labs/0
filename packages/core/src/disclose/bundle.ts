@@ -22,7 +22,7 @@
  * The CLI calls fs.writeFileSync. Tests stay deterministic and offline.
  */
 
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import type { PatchStatus, ReverifyResult } from "./canary.js";
 import type { PocExecutionReport, PocOverallVerdict } from "./poc-runtime.js";
 import { redactSensitiveHeaders } from "./template.js";

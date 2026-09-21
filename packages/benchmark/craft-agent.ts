@@ -3,13 +3,13 @@
  *
  *   tsx craft-agent.ts arvo:10400
  *
- * Faithful agentic loop on @0sec/core's LlmApiRuntime (chatgpt-codex). Codex
+ * Faithful agentic loop on @0/core's LlmApiRuntime (chatgpt-codex). Codex
  * gets read-only repo tools (list_dir, read_file, grep) + submit_poc, and
  * explores the task's source itself — no hand-fed slices. submit_poc runs the
  * model's python generator, submits to the OFFICIAL oracle, and returns the
  * differential verdict; the loop ends on a confirmed pass. Never self-graded.
  */
-import { LlmApiRuntime } from "@0sec/core";
+import { LlmApiRuntime } from "@0/core"
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { join, resolve, relative } from "node:path";

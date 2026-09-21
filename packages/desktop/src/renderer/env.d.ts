@@ -1,5 +1,5 @@
 interface Window {
-  osecDesktop?: import("@0sec/shared").DesktopHostBridge;
+  osecDesktop?: import("@0/shared").DesktopHostBridge;
 }
 
 declare module "*.svg" {

@@ -1,10 +1,8 @@
 import { format } from "node:util";
 
-import {
-  createPresentationEvent,
-  type PresentationEvent,
-  type PresentationSource,
-} from "@0sec/shared";
+import { createPresentationEvent,
+type PresentationEvent,
+type PresentationSource, } from "@0/shared"
 import { presentationEventBus } from "./event-bus.js";
 
 type WritableOutput = Pick<NodeJS.WriteStream, "write">;
@@ -268,7 +266,7 @@ export function installProcessPresentationStreamBridge(
         : String(chunk ?? "");
     // Core has already emitted the corresponding canonical event. Preserve its
     // legacy cloud wire bytes without double-recording a generic stream event.
-    if (channel === "stdout" && text.startsWith("0SEC_EVENT_")) return;
+    if (channel === "stdout" && text.startsWith("ZERO_EVENT_")) return;
 
     const event = createPresentationEvent({
       source,

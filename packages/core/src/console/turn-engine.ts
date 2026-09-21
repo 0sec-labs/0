@@ -11,7 +11,9 @@ import {
   resolveCompactionThresholds,
 } from "../agent/native-loop.js";
 import { diag } from "../diagnostics/channel.js";
-import { DEFAULT_AUTONOMY_MODE, DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir, type HarnessSnapshot } from "@0sec/shared";
+import { DEFAULT_AUTONOMY_MODE, DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir, type HarnessSnapshot, type ConsoleJevConfig, type ConsoleJevActivity } from "@0/shared"
+import { createConsoleJevRuntime, toToolContextJevRuntime } from "./jev-runtime.js";
+import type { ConsoleJevRuntime } from "./jev-runtime.js";
 import type {
   NativeContentBlock,
   NativeMessage,
@@ -37,7 +39,7 @@ import {
   listToolsDef,
   loadToolDef,
 } from "../agent/deferred-tools.js";
-import type { osecDB } from "@0sec/db";
+import type { osecDB } from "@0/db"
 import { TOOL_DISPATCH } from "../agent/tools/dispatch.js";
 import {
   BUILTIN_GUARDS,
@@ -155,6 +157,13 @@ export interface ConsoleRenderCallbacks {
    * See {@link ConsoleCompactionEvent}.
    */
   onCompaction?: (event: ConsoleCompactionEvent) => void;
+  /**
+   * Fired on Jev evaluation lifecycle events (started, completed, unavailable).
+   * Receives sanitized records only — never credentials, raw evidence, or
+   * question text. The 'estimated' vs 'billing' split lets UI render estimated
+   * usage distinct from server-settled charges.
+   */
+  onJevActivity?: (activity: ConsoleJevActivity) => void;
 }
 
 /**
@@ -623,10 +632,22 @@ export interface ConsoleSessionConfig {
    */
   conversationHistory?: ConsoleConversationHistory;
   /**
+   * Jev evaluation configuration for the console session.
+   * - ConsoleJevConfig → enables Jev with the given config; features array
+   *   determines which evaluators are available and which tools (jev_prepass)
+   *   appear in the tool set.
+   * - false → explicitly disable Jev even if env vars are present. The evaluator
+   *   factory returns undefined for every feature, preventing env-based fallback.
+   * - undefined → legacy env-based resolution through jevConfigFromEnvironment
+   *   (the current behavior for scan pipeline users without explicit console config).
+   *
+   * apiKey lives ONLY in the evaluator factory closure. NEVER serialised to
+   * checkpoints, transcripts, ToolContext snapshots, or persisted state.
+   */
+  jev?: ConsoleJevConfig | false;
+  /**
    * A checkpoint from a prior console session. When provided, the session is
    * seeded from this checkpoint's state (messages, scope, denied sets,
-   * self-extension registrations, etc.) instead of starting fresh. The caller
-   * MUST construct the candidate session with this checkpoint BEFORE calling
    * {@link ConsoleSession.prepareHandoff} on the old session, so a candidate
    * construction failure leaves the old engine fully usable.
    *
@@ -1872,6 +1893,36 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     agentMessaging: config.agentMessaging,
   };
 
+  // ── Jev runtime (session-scoped, never serialised) ──
+  // Lazy-imported to avoid the console→jev-runtime dependency in non-Jev sessions.
+  // The runtime carries no serialisable credentials — apiKey lives only in the
+  // evaluator factory closure. Never stored in checkpoints, transcripts, or
+  // contribution captures.
+  let currentJevActivityCallback: ((activity: ConsoleJevActivity) => void) | undefined;
+  const jevRuntime: ConsoleJevRuntime | undefined =
+    config.jev === false
+      ? undefined  // Explicitly disabled — no env fallback
+      : config.jev === undefined
+        ? undefined  // No config — legacy env behaviour via ToolExecutor's own path
+        : (() => {
+            // Dynamically create the runtime with the operator-supplied config.
+            // The activity callback is captured by closure reference so sendInternal
+            // can redirect it per-turn without rebuilding the runtime.
+            try {
+              return createConsoleJevRuntime(config.jev, (activity) => {
+                currentJevActivityCallback?.(activity);
+              });
+            } catch {
+              // Runtime creation failure is non-fatal — tools degrade gracefully.
+              return undefined;
+            }
+          })();
+  // Expose only the budgeted evaluator authority. It is inherited unchanged
+  // through native delegation; raw provider credentials stay in this closure.
+  if (jevRuntime) {
+    toolContext.jevRuntime = toToolContextJevRuntime(jevRuntime);
+  }
+
   // Audit notifications are routed to the active turn's renderer.
   let activeNotify: ((message: string) => void) | undefined;
 
@@ -2874,6 +2925,10 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   }
 
   async function sendInternal(userText: string, callbacks?: ConsoleRenderCallbacks, opts?: ConsoleSendOptions): Promise<ConsoleTurnOutcome> {
+    // Per-turn Jev activity callback — redirect activity to the current
+    // turn's render callbacks so started/completed/unavailable events appear
+    // in the right turn's output even though the runtime is session-scoped.
+    currentJevActivityCallback = callbacks?.onJevActivity;
     const signal = opts?.signal;
 
     // Checkpoint — already aborted before any work. Return immediately with the
@@ -3106,11 +3161,11 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       && !runtimeUsesServerSideCompaction(config.runtime)
     ) {
       const envThresholds = resolveCompactionThresholds(process.env);
-      const envThresholdSet = process.env["0SEC_COMPACTION_THRESHOLD"] !== undefined;
-      const envRegrowSet = process.env["0SEC_COMPACTION_REGROW"] !== undefined;
+      const envThresholdSet = process.env["ZERO_COMPACTION_THRESHOLD"] !== undefined;
+      const envRegrowSet = process.env["ZERO_COMPACTION_REGROW"] !== undefined;
       // Fraction-of-window trigger, with the scan loop's absolute env threshold
       // honoured as a floor for parity: an operator who sets
-      // 0SEC_COMPACTION_THRESHOLD gets it as a lower bound here too.
+      // ZERO_COMPACTION_THRESHOLD gets it as a lower bound here too.
       const triggerThreshold = envThresholdSet
         ? Math.max(contextWindowTokens * compactionThresholdFraction, envThresholds.threshold)
         : contextWindowTokens * compactionThresholdFraction;

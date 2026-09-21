@@ -13,7 +13,7 @@
  * an array, or malformed JSON, and `output` may be any shape at all.
  *
  * The per-tool summaries below are derived from the ACTUAL argument and result
- * shapes in `@0sec/core`'s agent/tools registry (see the header comment on each
+ * shapes in `@0/core`'s agent/tools registry (see the header comment on each
  * case for where the shape was read). Anything we could not pin to a source
  * shape falls through to the generic key=value / count path rather than
  * guessing — a wrong count is worse than an honest generic one.
@@ -298,7 +298,7 @@ function distinctCount(rows: unknown[], field: string): number {
  * One-line summary of what a call is about to do.
  *
  * Each covered case reads the argument schema of the matching tool in
- * `@0sec/core` agent/tools; unknown tools use {@link kvSummary}.
+ * `@0/core` agent/tools; unknown tools use {@link kvSummary}.
  */
 export function formatToolArgs(call: ToolCallLike): string {
   const name = typeof call?.name === "string" ? call.name : "";

@@ -111,7 +111,7 @@ export type {
   CrossValidatedLead,
   CrossValidatedLeads,
   CrossValidatedLeadSource,
-} from "@0sec/shared";
+} from "@0/shared";
 export {
   buildTier1Harness,
   scaffoldTier1Harness,
@@ -372,7 +372,7 @@ export type { HuntFinder } from "./stages/hunt-scan.js";
 // Deployment-context classification — path heuristics + severity cap for findings
 // that target dev/test/build-only code paths (issue #1215, deep-review postmortem).
 export { classifyDeploymentContext, applyDeploymentContextCap, stampDeploymentContext, hasTrustBoundaryBypass } from "./stages/deployment-context.js";
-export type { DeploymentContext } from "@0sec/shared";
+export type { DeploymentContext } from "@0/shared";
 // Depth-method specialized-lens sets, per on-chain review profile. These are
 // the ready-made `*FinderLenses` / `*VerifyLenses` fan-out + verify-quorum
 // axes the seedless `deep-review` command wires into runHuntScan (G-A).
@@ -387,7 +387,7 @@ export { collectScopeFiles, countScopeFilesUpTo } from "./source-files.js";
 // Hunt best-of-N LLM judge (disambiguates multi-attempt findings before the skeptic gate).
 export { judgeHuntCandidatesWithLlm, heuristicCandidateScore } from "./stages/hunt-judge.js";
 export type { HuntCandidateJudge, HuntCandidateScore } from "./stages/hunt-judge.js";
-// Hunt memory flywheel (0SEC_HUNT_FLYWHEEL=1, ported from 0verse's
+// Hunt memory flywheel (ZERO_HUNT_FLYWHEEL=1, ported from 0verse's
 // flywheel.py): a preseeded 5-layer memory that PRIMES the best-of-N judge
 // ordering + attempt-budget cost-router — it never confirms; see
 // hunt-flywheel.ts's header for the invariant.
@@ -413,7 +413,7 @@ export type {
   HuntCorpusRow,
   HuntProofReport,
 } from "./stages/hunt-flywheel.js";
-// Learned negatives (0SEC_HUNT_NEGATIVES, default ON): a known-refuted-shape
+// Learned negatives (ZERO_HUNT_NEGATIVES, default ON): a known-refuted-shape
 // memory that attaches prior refute reasons to the skeptic prompt as context.
 // Never auto-rejects, and inert until a caller supplies a corpus; see
 // hunt-negatives.ts's header.
@@ -459,7 +459,7 @@ export type {
   ResolvedHuntClaim,
   ReadHuntLedgerOptions,
 } from "./stages/hunt-evidence-ledger.js";
-// Cross-family adversarial refuter (0SEC_HUNT_CROSS_FAMILY, default ON, issue
+// Cross-family adversarial refuter (ZERO_HUNT_CROSS_FAMILY, default ON, issue
 // #661): force the refute pass onto a DIFFERENT model family than the finder
 // before a finding is promoted, so their errors decorrelate. Degrades to the
 // same-family refute (never to a dropped finding) when only one provider is
@@ -479,7 +479,7 @@ export type {
 export type { RefuteDecorrelation } from "./stages/hunt-scan.js";
 // Kernel archetype catalog (multi-archetype hunt seeding; ported from 0verse's
 // 90-archetype registry, kernel-domain subset). Data + brief mapping are always
-// inert/available; `planArchetypeSweep` is env-gated (0SEC_ARCHETYPE_SWEEP=1).
+// inert/available; `planArchetypeSweep` is env-gated (ZERO_ARCHETYPE_SWEEP=1).
 export {
   kernelArchetypesPath,
   loadKernelArchetypes,
@@ -870,7 +870,7 @@ export type {
 // Race-widening smell-hunter (kernelCTF Pipeline #3): the LLM hunts the
 // ExpRace/Calif smell — unlock(A) -> [sleep/mutex/GFP_KERNEL alloc/copy_from_user]
 // -> lock(B) with attacker state across the gap — and maps each smell's
-// `widenHint` onto the 0SEC_KERNEL_QEMU_WIDEN_* prover knobs. Sibling of
+// `widenHint` onto the ZERO_KERNEL_QEMU_WIDEN_* prover knobs. Sibling of
 // variant/invariant-candidates; plugs into runHuntScan.
 export { generateRaceSmellCandidates, widenEnvFor, KERNELCTF_TIER1_RACE_GRID } from "./stages/race-smell-candidates.js";
 export type {
@@ -1031,7 +1031,7 @@ export type {
   TodoInput,
   TodosEventPayload,
 } from "./agent/index.js";
-// Named bundles of 0SEC_FEATURE_* vars — the documented way to enable the
+// Named bundles of ZERO_FEATURE_* vars — the documented way to enable the
 // full FP moat for an A/B run. See `agent/feature-presets.ts`.
 export {
   FEATURE_PRESETS,
@@ -1294,7 +1294,7 @@ export type {
 
 // Public-advisory novelty gate (issue #851). The `0cloud findings
 // novelty-recheck` command resolves `mod.resolveNovelty` off this root import
-// (a non-literal dynamic `import("@0sec/core")`), so it MUST be re-exported
+// (a non-literal dynamic `import("@0/core")`), so it MUST be re-exported
 // here, not only via the triage barrel — otherwise the recheck throws
 // "mod.resolveNovelty is not a function" for every finding.
 export { resolveNovelty } from "./triage/publishability-sources.js";
@@ -1383,7 +1383,7 @@ export {
 export type { ToolCallLogEntry, ToolCallsLogPayload } from "./agent/action-log.js";
 
 // Opt-in cloud-sink: POST findings/leads to the orchestrator
-// (`POST /scans/:id/findings`) when 0SEC_CLOUD_SINK + 0SEC_CLOUD_SCAN_ID are
+// (`POST /scans/:id/findings`) when ZERO_CLOUD_SINK + ZERO_CLOUD_SCAN_ID are
 // set. Exposed so `0sec hunt` can ingest its gated leads as candidate
 // findings the same way scan/review reach the cloud (#1051).
 export { getCloudSinkConfig, postFinding } from "./cloud-sink.js";
@@ -1798,7 +1798,7 @@ export type {
   VerifyKernelFinding,
 } from "./cve/index.js";
 
-// Cloud event-bus sink (0SEC_CLOUD_EVENTS=1 → emit `0SEC_EVENT_<TYPE>`
+// Cloud event-bus sink (ZERO_CLOUD_EVENTS=1 → emit `ZERO_EVENT_<TYPE>`
 // lines on stdout for the 0sec-cloud worker-controller to relay).
 // The CLI entry must call `maybeSubscribeCloudEventSink()` so the sink
 // subscribes once; without that call the sink module is dead code and
@@ -1811,7 +1811,7 @@ export {
   presentationEventSink,
 } from "./events/bus.js";
 // Consent-gated analytics pipeline — the single choke point that may transmit
-// analytics. The CLI entry must set `0SEC_ANALYTICS_LEVEL` from the operator's
+// analytics. The CLI entry must set `ZERO_ANALYTICS_LEVEL` from the operator's
 // setting and call `maybeSubscribeAnalyticsPipeline()` (mirrors the cloud sink
 // wiring); without that call the pipeline never subscribes and transmits
 // nothing. USAGE tier only for now — command/code/target/finding collectors
@@ -1840,7 +1840,7 @@ export {
   type ContributionPurpose, type ContributionClientPolicy, type RunContributionClientConfig,
   type BeginContribution, type ContributionUploadResult,
 } from "./telemetry/run-contribution.js";
-// Operational NDJSON stderr sink (0SEC_LOG_FORMAT=json). Writes one
+// Operational NDJSON stderr sink (ZERO_LOG_FORMAT=json). Writes one
 // NDJSON line per allowlisted lifecycle/cost event to stderr, stripped
 // of all sensitive fields (prompts, responses, reasoning, tool args,
 // finding evidence, token deltas, auth material, raw error text).
@@ -2161,7 +2161,7 @@ export type {
 
 // Deterministic replay runner. Consumes a finding's `pocSteps`, sequentially
 // executes them through local, Docker, or QEMU isolation, and emits a canonical
-// `VerificationResult` payload matching `@0sec/shared/verification`. Cloud's
+// `VerificationResult` payload matching `@0/shared/verification`. Cloud's
 // worker-controller can call this directly in-process without shelling out to
 // the CLI.
 //
@@ -2426,7 +2426,7 @@ export type { SecretHit, FetchTextResult } from "./recon/js-artifacts.js";
 // .js/.mjs only) — feeds runJsRecon's scriptUrls from a single page fetch.
 export { enumerateJsChunkUrls } from "./recon/stack-fingerprint.js";
 // Live cloud-surface probes (0sec#925) — read-only, gated behind the
-// 0SEC_FEATURE_CLOUD_SURFACE flag AND an engagement ScopePolicy.
+// ZERO_FEATURE_CLOUD_SURFACE flag AND an engagement ScopePolicy.
 export {
   probeS3Bucket,
   classifyTakeover,
@@ -2490,10 +2490,6 @@ export type {
   ReproducibilityManifest,
   ManifestOptions,
 } from "./disclose/reproducibility-manifest.js";
-// file-review — deepsec-pattern whole-repo review harness (scan → coverage
-// gate → batched AI investigation with refusal audit/field repair →
-// static revalidation), resumable with cost/duration caps.
-export * from "./file-review/index.js";
 
 // Improvement-plane promotion policy. This evaluates sealed benchmark
 // receipts and appends tamper-evident decision records; it never executes or

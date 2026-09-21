@@ -5,7 +5,7 @@
  * accepted, all normalised into {@link osecHuntEvent} for the renderer:
  *
  *   1. Native `0sec.events/v1` JSON — what `scripts/serve-events.mjs`
- *      produces when tailing a 0sec event log (`0SEC_EVENT_*` lines).
+ *      produces when tailing a 0sec event log (`ZERO_EVENT_*` lines).
  *   2. Raw 0sec eventBus payloads tagged with `{type, payload}` —
  *      forwarded by future in-process bridges.
  *   3. Canonical `0sec.presentation/v1` event envelopes emitted by the
@@ -189,7 +189,7 @@ function normaliseV1(obj: Record<string, unknown>): osecHuntEvent | null {
 
 /**
  * Translate a raw eventBus emission into the v1 hunt shape. Mirrors the
- * mapping `scripts/serve-events.mjs` does for `0SEC_EVENT_*` lines so
+ * mapping `scripts/serve-events.mjs` does for `ZERO_EVENT_*` lines so
  * both transport paths land on the same renderer.
  */
 function translateRawEvent(type: string, payload: Record<string, unknown>): osecHuntEvent | null {

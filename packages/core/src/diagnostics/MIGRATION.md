@@ -58,7 +58,7 @@ Rules:
 - **Level.** `error` = the run is degraded or a capability is gone.
   `warn` = something was skipped, retried, or dropped and the run continues.
   `info` = banners, debug traces, and anything already behind an env gate.
-- **Keep existing env gates.** `if (process.env["0SEC_DEBUG"])` stays exactly
+- **Keep existing env gates.** `if (process.env["ZERO_DEBUG"])` stays exactly
   where it is; the channel changes the destination, not the policy.
 - Behaviour for non-TUI users is unchanged: with nobody claiming the channel,
   every level still lands on stderr as `[0sec] <message> (k=v k=v)`.
@@ -110,8 +110,8 @@ Grouped by file, `file:line` as of this commit.
 
 ### `agent-runner.ts` — 2
 
-- `agent-runner.ts:271` — runtime-selection debug line (CI / `0SEC_DEBUG`) — `runtime_selection` (`info`)
-- `agent-runner.ts:448` — API runtime capability debug line (CI / `0SEC_DEBUG`) — `runtime_capabilities` (`info`)
+- `agent-runner.ts:271` — runtime-selection debug line (CI / `ZERO_DEBUG`) — `runtime_selection` (`info`)
+- `agent-runner.ts:448` — API runtime capability debug line (CI / `ZERO_DEBUG`) — `runtime_capabilities` (`info`)
 
 ### `stages/novelty-check.ts` — 2
 
@@ -175,7 +175,7 @@ Grouped by file, `file:line` as of this commit.
 These are wire protocols and IPC, not operator messages. Routing them through
 the diagnostics channel would corrupt a parser on the other end.
 
-- `events/bus.ts:680` — `cloudEventSink` writes `0SEC_EVENT_<TYPE> {json}` lines on **stdout**; the cloud worker-controller's `parseEventLines` reads them.
+- `events/bus.ts:680` — `cloudEventSink` writes `ZERO_EVENT_<TYPE> {json}` lines on **stdout**; the cloud worker-controller's `parseEventLines` reads them.
 - `stages/npm-detectors/sandbox-harness.ts:75` — the harness subprocess writes one JSON line on **stdout**; the parent parses the last `{…}` line.
 - `stages/npm-detectors/sandbox-harness.ts:79` — the same subprocess's top-level fault handler, immediately before `process.exit(1)`. It runs in a child process with no diagnostics sinks installed, and stderr is what the parent captures.
 - `src/diagnostics/channel.ts:338` — the channel's own built-in stderr sink. This is the one write in core that is supposed to exist.
@@ -207,10 +207,10 @@ literals. Left here so they do not get re-triaged.
 |---|---|---|
 | `provider_initialized` | info | non-Azure startup banner (`console.error`) |
 | `provider_initialized` | info | Azure startup banner incl. probed region |
-| `fallback_chain_malformed_entry` | warn | `0SEC_LLM_FALLBACK` entry without `provider:model` |
-| `fallback_chain_unknown_provider` | warn | `0SEC_LLM_FALLBACK` names an unknown provider |
-| `fallback_chain_empty_model` | warn | `0SEC_LLM_FALLBACK` entry with an empty model |
-| `prompt_cache_usage` | info | `0SEC_DEBUG_PROMPT_CACHE` hit-rate line |
+| `fallback_chain_malformed_entry` | warn | `ZERO_LLM_FALLBACK` entry without `provider:model` |
+| `fallback_chain_unknown_provider` | warn | `ZERO_LLM_FALLBACK` names an unknown provider |
+| `fallback_chain_empty_model` | warn | `ZERO_LLM_FALLBACK` entry with an empty model |
+| `prompt_cache_usage` | info | `ZERO_DEBUG_PROMPT_CACHE` hit-rate line |
 | `failover_provider_skipped` | warn | fallback entry skipped, auth env missing |
 | `failover_engaged` | warn | switched to the next provider in the chain |
 | `transport_retry` | warn | ECONNRESET-class transport retry with backoff |
@@ -242,7 +242,7 @@ Core-side work is done; the TUI claims the channel where it already installs
 the output guard:
 
 ```ts
-import { claimDiagnostics } from "@0sec/core";
+import { claimDiagnostics } from "@0/core";
 
 const releaseDiag = claimDiagnostics(
   { emit: (e) => appendTranscriptLine({ level: e.level, code: e.code, text: e.message, fields: e.fields }) },

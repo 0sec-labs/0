@@ -11,7 +11,7 @@
  *
  * Pure `ToolDefinition` metadata; the runtime handlers live on the
  * `ToolExecutor` class in agent/tools.ts and are routed by `cloudDispatch`.
- * Feature-gated behind 0SEC_FEATURE_CLOUD_SURFACE (default OFF) AND
+ * Feature-gated behind ZERO_FEATURE_CLOUD_SURFACE (default OFF) AND
  * engagement-scope gated, deny-by-default (#924 parity): cloud probing is recon
  * against the target org, so it only runs for an authorized engagement scope.
  *

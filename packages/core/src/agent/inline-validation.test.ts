@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import type { AttackCategory, Finding } from "@0sec/shared";
+import type { AttackCategory, Finding } from "@0/shared"
 import type { OracleResult } from "../triage/oracles.js";
 import {
   validateFindingInline,

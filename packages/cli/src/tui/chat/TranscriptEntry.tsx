@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/react */
 import React from "react";
 import { TextAttributes } from "@opentui/core";
-import { MODEL_PRICING, type ModelRates } from "@0sec/shared";
+import { MODEL_PRICING, type ModelRates } from "@0/shared"
 import { fitTuiText, sanitizeTuiText } from "../text.js";
 import { ShimmerText } from "./shimmer.js";
 import { renderMarkdown } from "../markdown.js";

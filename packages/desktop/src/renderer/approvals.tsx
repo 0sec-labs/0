@@ -1,12 +1,10 @@
 import { useCallback, useState, type JSX } from "react";
-import type {
-  DesktopConsoleDecision,
-  DesktopConsoleDecisionKind,
-  DesktopConsoleDecisionResponse,
-  DesktopConsoleOperatorAnswer,
-  DesktopConsoleOperatorQuestion,
-  DesktopConsoleToolCall,
-} from "@0sec/shared";
+import type { DesktopConsoleDecision,
+DesktopConsoleDecisionKind,
+DesktopConsoleDecisionResponse,
+DesktopConsoleOperatorAnswer,
+DesktopConsoleOperatorQuestion,
+DesktopConsoleToolCall, } from "@0/shared"
 import {
   Check,
   ChevronDown,

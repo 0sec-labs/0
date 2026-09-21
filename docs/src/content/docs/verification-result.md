@@ -56,7 +56,7 @@ interface VerificationResult {
 
 `agent_assisted` is a schema-reserved mode, not an automatic fallback promised
 by the deterministic runner. Import `VerificationResultSchema` from
-`@0sec/shared` for runtime validation. Artifact SHA-256 values are 64 hex
+`@0/shared` for runtime validation. Artifact SHA-256 values are 64 hex
 characters; paths alone are not integrity evidence.
 
 ## Status semantics

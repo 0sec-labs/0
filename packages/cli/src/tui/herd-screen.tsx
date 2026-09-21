@@ -32,7 +32,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { sleekScrollbar } from "./scrollbar.js";
 import { useKeyboard, usePaste } from "@opentui/react";
 import { decodePasteBytes, TextAttributes } from "@opentui/core";
-import { eventBus, peekInbox, sendOperatorMessage, type MessagingRuntime } from "@0sec/core";
+import { eventBus, peekInbox, sendOperatorMessage, type MessagingRuntime } from "@0/core"
 
 import { useTheme, type Theme } from "./theme-context.js";
 import { useSymbols } from "./symbol-context.js";
@@ -144,7 +144,7 @@ export interface HerdScreenProps {
   /**
    * The operator↔child channel toggle, mirrored onto the steering runtime.
    * Defaults to `true` — steering a running subagent is on by default, and the
-   * pure {@link import("@0sec/core").decideAddressing} still re-checks it.
+   * pure {@link import("@0/core").decideAddressing} still re-checks it.
    */
   operatorChannelEnabled?: boolean;
   /**

@@ -2,26 +2,22 @@ import type { Command } from "commander";
 import chalk from "chalk";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  ToolExecutor,
-  getToolsForRole,
-  loadScope,
-  extractAttributionFromScopeJson,
-  resolveAttribution,
-  RateLimiter,
-  parseRateLimitFlag,
-  resolveEngagementProfile,
-  extractEngagementFromScopeJson,
-  describeEngagementPosture,
-} from "@0sec/core";
-import type {
-  EngagementPosture,
-  EngagementProfileInputs,
-  HostRateConfig,
-  RateLimiterConfig,
-} from "@0sec/core";
-import { osecDB, resolveOsecRunStorage } from "@0sec/db";
-import type { AuthConfig } from "@0sec/shared";
+import { ToolExecutor,
+getToolsForRole,
+loadScope,
+extractAttributionFromScopeJson,
+resolveAttribution,
+RateLimiter,
+parseRateLimitFlag,
+resolveEngagementProfile,
+extractEngagementFromScopeJson,
+describeEngagementPosture, } from "@0/core"
+import type { EngagementPosture,
+EngagementProfileInputs,
+HostRateConfig,
+RateLimiterConfig, } from "@0/core"
+import { osecDB, resolveOsecRunStorage } from "@0/db"
+import type { AuthConfig } from "@0/shared"
 import { z } from "zod";
 
 type McpServerOptions = {
@@ -90,13 +86,13 @@ function parseJsonEnv<T>(name: string): T | undefined {
 }
 
 function parseAuthEnv(): AuthConfig | undefined {
-  const auth = parseJsonEnv<Partial<AuthConfig>>("0SEC_MCP_AUTH_JSON");
+  const auth = parseJsonEnv<Partial<AuthConfig>>("ZERO_MCP_AUTH_JSON");
   if (!auth) return undefined;
 
   const requireString = (key: string): string => {
     const value = (auth as Record<string, unknown>)[key];
     if (typeof value !== "string" || value.trim().length === 0) {
-      throw new Error(`0SEC_MCP_AUTH_JSON ${auth.type ?? "auth"} auth requires non-empty string field '${key}'.`);
+      throw new Error(`ZERO_MCP_AUTH_JSON ${auth.type ?? "auth"} auth requires non-empty string field '${key}'.`);
     }
     return value;
   };
@@ -118,7 +114,7 @@ function parseAuthEnv(): AuthConfig | undefined {
       requireString("value");
       break;
     default:
-      throw new Error("0SEC_MCP_AUTH_JSON has an invalid auth type.");
+      throw new Error("ZERO_MCP_AUTH_JSON has an invalid auth type.");
   }
 
   return auth as AuthConfig;
@@ -205,7 +201,7 @@ function withToolTimeout(
  * Resolve the engagement hardening posture, or exit 2 on malformed config.
  *
  * Same contract as the `0sec scan` pre-flight: a typo'd
- * `--engagement-profile`, a bad `0SEC_ENGAGEMENT_RATE_RPS`, or a malformed
+ * `--engagement-profile`, a bad `ZERO_ENGAGEMENT_RATE_RPS`, or a malformed
  * scope-file `engagement` block is an operator error that must surface at boot
  * — not after the server has already served a session at default noise levels.
  * Exit code 2 matches `scan` so callers can treat "bad posture config" the same
@@ -266,22 +262,22 @@ function clampRateLimitToPosture(
 export function registerMcpServerCommand(program: Command): void {
   program
     .command("mcp-server")
-    .description("Run 0sec's MCP stdio server for live target interaction tools")
+    .description("Run 0's MCP stdio server for live target interaction tools")
     .requiredOption("--target <target>", "Target URL for this MCP session")
     .requiredOption("--scan-id <scanId>", "Scan ID to associate persisted findings and target updates with")
     .option("--db-path <path>", "Path to SQLite database")
     .option("--timeout <ms>", "Default tool timeout in milliseconds", "30000")
-    .option("--scope <path>", "Path to a 0sec scope JSON file. Out-of-scope URLs are refused by every target tool.")
-    .option("--tools <names>", "Comma-separated live 0sec MCP tools to expose (default: all).")
+    .option("--scope <path>", "Path to a 0 scope JSON file. Out-of-scope URLs are refused by every target tool.")
+    .option("--tools <names>", "Comma-separated live 0 MCP tools to expose (default: all).")
     .option("--rate-limit <spec>", "Per-host request rate-limit spec. Defaults to 5 rps when unset. An active --engagement-profile caps this: the effective rate is the minimum of the two, so the profile can only lower it.")
     .option("--allow-scanners", "Disable generic-scanner suppression for scoped engagements.", false)
     .option(
       "--engagement-profile <name>",
-      "Engagement hardening posture for authorized enterprise work. 'standard' (default) is the existing behaviour. 'conservative' applies the quiet posture to this MCP session: no adaptive WAF-evasion ladder, full jitter on the per-host token bucket, and a 1 rps/host ceiling. The profile can only ever make the session quieter — the effective rate is the minimum of the profile and --rate-limit. The applied posture is recorded as an `engagement_posture_applied` event on the scan so it can be handed to the client as evidence. Lower precedence than the scope file's `engagement` block and 0SEC_ENGAGEMENT_PROFILE.",
+      "Engagement hardening posture for authorized enterprise work. 'standard' (default) is the existing behaviour. 'conservative' applies the quiet posture to this MCP session: no adaptive WAF-evasion ladder, full jitter on the per-host token bucket, and a 1 rps/host ceiling. The profile can only ever make the session quieter — the effective rate is the minimum of the profile and --rate-limit. The applied posture is recorded as an `engagement_posture_applied` event on the scan so it can be handed to the client as evidence. Lower precedence than the scope file's `engagement` block and ZERO_ENGAGEMENT_PROFILE.",
     )
     .option(
       "--no-waf-evasion",
-      "Disable the adaptive WAF-evasion ladder (default: on). When a response classifies as blocked, the engine normally retries with encoding/casing/whitespace-mutated payload variants, which escalates a routine WAF block into a SOC incident. Detection and reporting of the block are unaffected. Independent of --engagement-profile; env form: 0SEC_WAF_EVASION=0.",
+      "Disable the adaptive WAF-evasion ladder (default: on). When a response classifies as blocked, the engine normally retries with encoding/casing/whitespace-mutated payload variants, which escalates a routine WAF block into a SOC incident. Detection and reporting of the block are unaffected. Independent of --engagement-profile; env form: ZERO_WAF_EVASION=0.",
     )
     .action(async (opts: McpServerOptions) => {
       const timeoutMs = Math.max(1_000, parseInt(opts.timeout ?? "30000", 10));
@@ -319,12 +315,12 @@ export function registerMcpServerCommand(program: Command): void {
       const db = new osecDB(storage.dbPath);
 
       const attributionHeaders =
-        parseJsonEnv<string[]>("0SEC_MCP_ATTRIBUTION_HEADERS_JSON");
+        parseJsonEnv<string[]>("ZERO_MCP_ATTRIBUTION_HEADERS_JSON");
       const attribution = resolveAttribution({
         scopeFileBlock: scope ? extractAttributionFromScopeJson(scope.raw) : undefined,
         env: process.env,
         cliHeaders: attributionHeaders,
-        cliUaToken: process.env["0SEC_MCP_ATTRIBUTION_UA_TOKEN"],
+        cliUaToken: process.env["ZERO_MCP_ATTRIBUTION_UA_TOKEN"],
       });
       const rateLimitConfig = clampRateLimitToPosture(
         parseRateLimitFlag(opts.rateLimit ?? "", MCP_DEFAULT_RPS),

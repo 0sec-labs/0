@@ -1,10 +1,10 @@
 import type { Command } from "commander";
 import chalk from "chalk";
 import { readFileSync, writeFileSync } from "node:fs";
-import { generateSyzChoiceWeights, syzChoiceWeightsFromPlan } from "@0sec/core";
-import type { CrashRecord, KernelVariantHuntReport, SyzJevPrepassInput } from "@0sec/core";
-import { createJevEvaluator, findingSchema, jevConfigFromEnvironment } from "@0sec/shared";
-import type { Finding, ScanReport, Severity } from "@0sec/shared";
+import { generateSyzChoiceWeights, syzChoiceWeightsFromPlan } from "@0/core"
+import type { CrashRecord, KernelVariantHuntReport, SyzJevPrepassInput } from "@0/core"
+import { createJevEvaluator, findingSchema, jevConfigFromEnvironment } from "@0/shared"
+import type { Finding, ScanReport, Severity } from "@0/shared"
 import { formatSarif } from "../formatters/sarif.js";
 
 const VALID_OUTPUT_FORMATS = ["terminal", "json", "sarif"] as const;
@@ -207,12 +207,12 @@ export function registerKernelCommand(program: Command): void {
         const findings = readFindings(opts.findings);
         const config = jevConfigFromEnvironment("kernel", process.env);
         if (!config) {
-          throw new Error("Jev kernel prepass requires 0SEC_JEV_FEATURES=kernel and a configured provider");
+          throw new Error("Jev kernel prepass requires ZERO_JEV_FEATURES=kernel and a configured provider");
         }
         const {
           applyVerificationToFinding, checkAlreadyFixed,
           rankKernelHypothesesWithJev, verifyStaticKernelFinding,
-        } = await import("@0sec/core");
+        } = await import("@0/core");
         const noveltyExcluded = opts.upstreamTree ? findings.flatMap((finding) => {
           const path = finding.reviewAnnotation?.path ?? finding.evidence.request.match(/([^\s:]+\.[ch]):\d+/)?.[1];
           if (!path) return [];
@@ -267,8 +267,8 @@ export function registerKernelCommand(program: Command): void {
     .action(async (opts: JevCommitPrepassOpts) => {
       try {
         const config = jevConfigFromEnvironment("kernel", process.env);
-        if (!config) throw new Error("Jev commit prepass requires 0SEC_JEV_FEATURES=kernel and a configured provider");
-        const { rankKernelCommitsWithJev } = await import("@0sec/core");
+        if (!config) throw new Error("Jev commit prepass requires ZERO_JEV_FEATURES=kernel and a configured provider");
+        const { rankKernelCommitsWithJev } = await import("@0/core");
         const result = await rankKernelCommitsWithJev({
           tree: opts.tree,
           evaluator: createJevEvaluator(config),
@@ -298,8 +298,8 @@ export function registerKernelCommand(program: Command): void {
     .action(async (opts: JevSourcePrepassOpts) => {
       try {
         const config = jevConfigFromEnvironment("kernel", process.env);
-        if (!config) throw new Error("Jev source prepass requires 0SEC_JEV_FEATURES=kernel and a configured provider");
-        const { runKernelSourceJevPrepass } = await import("@0sec/core");
+        if (!config) throw new Error("Jev source prepass requires ZERO_JEV_FEATURES=kernel and a configured provider");
+        const { runKernelSourceJevPrepass } = await import("@0/core");
         const result = await runKernelSourceJevPrepass({
           tree: opts.tree,
           subtree: opts.subtree,
@@ -326,7 +326,7 @@ export function registerKernelCommand(program: Command): void {
       try {
         const config = jevConfigFromEnvironment("crash", process.env);
         if (!config) {
-          throw new Error("Jev crash triage requires 0SEC_JEV_FEATURES=crash and a configured provider");
+          throw new Error("Jev crash triage requires ZERO_JEV_FEATURES=crash and a configured provider");
         }
         const parsed: unknown = JSON.parse(readFileSync(opts.crashes, "utf8"));
         let crashes: unknown[];
@@ -342,7 +342,7 @@ export function registerKernelCommand(program: Command): void {
           !!c && typeof c === "object" && "id" in c && "summary" in c
           && typeof c.id === "string" && typeof c.summary === "string");
         if (records.length !== crashes.length) throw new Error("Every crash record requires string id and summary fields");
-        const { rankCrashesWithJev, crashSummaryFromTriage } = await import("@0sec/core");
+        const { rankCrashesWithJev, crashSummaryFromTriage } = await import("@0/core");
         const result = await rankCrashesWithJev(
           records,
           createJevEvaluator(config),
@@ -378,7 +378,7 @@ export function registerKernelCommand(program: Command): void {
         const details = parsePositiveInt(opts.details, "--details", 100);
         const detailDelayMs = parsePositiveInt(opts.detailDelay, "--detail-delay", 5_000);
         const subsystems = opts.subsystems.split(",").map((value) => value.trim()).filter(Boolean);
-        const { defaultSyzbotFetcher, mineSyzbotQueue, toHuntCandidates } = await import("@0sec/core");
+        const { defaultSyzbotFetcher, mineSyzbotQueue, toHuntCandidates } = await import("@0/core");
         const result = await mineSyzbotQueue({
           fetch: defaultSyzbotFetcher,
           fetchDetail: defaultSyzbotFetcher,
@@ -471,7 +471,7 @@ export function registerKernelCommand(program: Command): void {
           );
         }
 
-        const { runKernelVariantHunt } = await import("@0sec/core");
+        const { runKernelVariantHunt } = await import("@0/core");
         const report = await runKernelVariantHunt({
           tree: opts.tree,
           advisory: opts.advisory,

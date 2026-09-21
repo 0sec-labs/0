@@ -15,7 +15,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { describe, it, expect } from "vitest";
-import type { Finding, PocStep, PocStepAction, PocStepExpect } from "@0sec/shared";
+import type { Finding, PocStep, PocStepAction, PocStepExpect } from "@0/shared"
 import { parsePocStepsArg } from "./agent/tools.js";
 import { normalizeFinding } from "./cloud-sink.js";
 

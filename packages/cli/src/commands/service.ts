@@ -7,8 +7,8 @@
 //   service cancel  — request cancellation of a pending/running scan
 //   service disconnect — remove scan schedule(s) for a repository
 //
-// Every subcommand requires cloud credentials (0SEC_CLOUD_TOKEN or
-// `~/.0sec/cloud.env`) and uses the CloudClient for bearer-authenticated
+// Every subcommand requires cloud credentials (ZERO_CLOUD_TOKEN or
+// `~/.0/cloud.env`) and uses the CloudClient for bearer-authenticated
 // HTTP against the cloud dashboard ingress (/api/scans*, /api/scan-schedules*).
 
 import { execFileSync } from "node:child_process";
@@ -16,13 +16,11 @@ import { createInterface } from "node:readline";
 import { setTimeout } from "node:timers/promises";
 import type { Command } from "commander";
 import chalk from "chalk";
-import {
-  CloudClient,
-  CloudUnauthorizedError,
-  CloudAuthMissingError,
-  loadCloudCredentials,
-  CloudForbiddenError,
-} from "@0sec/core";
+import { CloudClient,
+CloudUnauthorizedError,
+CloudAuthMissingError,
+loadCloudCredentials,
+CloudForbiddenError, } from "@0/core"
 
 // ── Types ──
 
@@ -560,7 +558,7 @@ function resolveRepoFromCwd(): string | null {
 export function registerServiceCommand(program: Command): void {
   const service = program
     .command("service")
-    .description("Managed cloud lifecycle (start/status/wait/cancel scans, disconnect repo). Requires cloud credentials (`0sec auth login`).");
+    .description("Managed cloud lifecycle (start/status/wait/cancel scans, disconnect repo). Requires cloud credentials (`0 auth login`).");
 
   service
     .command("start")

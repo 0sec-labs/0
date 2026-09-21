@@ -14,7 +14,7 @@
  * and is the "batteries included" path, exactly like adapters.ts.
  */
 
-import type { RuntimeMode, ScanDepth } from "@0sec/shared";
+import type { RuntimeMode, ScanDepth } from "@0/shared"
 import type { BenchScan } from "./runner.js";
 import {
   createAgenticScanAdapter,
@@ -136,7 +136,7 @@ function featureEnvironmentName(name: string): string {
   if (!/^[a-z0-9_]+$/.test(name)) {
     throw new Error(`invalid feature flag "${name}"; use lowercase CLI/env-style names`);
   }
-  return `0SEC_FEATURE_${name.toUpperCase()}`;
+  return `ZERO_FEATURE_${name.toUpperCase()}`;
 }
 
 // Feature flags use process.env throughout the engine. Serialize scoped

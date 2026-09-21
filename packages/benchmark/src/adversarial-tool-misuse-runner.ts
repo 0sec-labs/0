@@ -3,8 +3,8 @@
 import express from "express";
 import type { Server } from "http";
 import type { AddressInfo } from "net";
-import { runMcpSecurityChecks } from "@0sec/core";
-import type { ScanContext } from "@0sec/shared";
+import { runMcpSecurityChecks } from "@0/core"
+import type { ScanContext } from "@0/shared"
 import {
   ADVERSARIAL_TOOL_MISUSE_CASES,
   adversarialToolMisuseCaseIds,

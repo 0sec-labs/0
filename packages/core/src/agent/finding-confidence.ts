@@ -38,7 +38,7 @@
  * `agentic-scanner.ts` where reachability/multi-modal layers already cap
  * confidence around 0.7 and the oracle layer hard-sets 1.0.
  */
-import type { PocStep } from "@0sec/shared";
+import type { PocStep } from "@0/shared"
 
 /**
  * The PoC step kinds whose `expect` predicates the behavioural re-verify

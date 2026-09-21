@@ -1,4 +1,4 @@
-import type { UsageAccount } from "@0sec/core";
+import type { UsageAccount } from "@0/core"
 
 export type HostedBalanceState =
   | { status: "loading" }

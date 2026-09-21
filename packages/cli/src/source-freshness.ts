@@ -3,9 +3,9 @@ import { existsSync, realpathSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-declare const __0SEC_BUILD_COMMIT__: string;
+declare const __ZERO_BUILD_COMMIT__: string;
 
-const BYPASS_ENV = "0SEC_ALLOW_STALE_SOURCE_DIST";
+const BYPASS_ENV = "ZERO_ALLOW_STALE_SOURCE_DIST";
 
 type GitExec = (cwd: string, args: string[]) => string;
 
@@ -29,8 +29,8 @@ export interface SourceDistFreshnessResult {
 }
 
 function currentBuildCommit(): string | undefined {
-  if (typeof __0SEC_BUILD_COMMIT__ !== "undefined") {
-    return __0SEC_BUILD_COMMIT__;
+  if (typeof __ZERO_BUILD_COMMIT__ !== "undefined") {
+    return __ZERO_BUILD_COMMIT__;
   }
   return undefined;
 }

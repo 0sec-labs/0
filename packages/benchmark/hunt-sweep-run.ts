@@ -9,23 +9,21 @@
  * testing (the file-size guard, per-archetype aggregation) live in
  * `src/hunt-sweep.ts`, tested in `src/hunt-sweep.test.ts`.
  *
- * Gated by `0SEC_ARCHETYPE_SWEEP=1` (via `planArchetypeSweep` ->
+ * Gated by `ZERO_ARCHETYPE_SWEEP=1` (via `planArchetypeSweep` ->
  * `archetypeSweepEnabled()`, default OFF) — running this without the env set
  * is a clean, logged no-op, not an error.
  */
-import {
-  archetypeSweepEnabled,
-  CHROMIUM_BARE_WORDS,
-  filterArchetypes,
-  FREEBSD_BARE_KERNEL_WORDS,
-  loadChromiumArchetypes,
-  loadFreebsdArchetypes,
-  loadKernelArchetypes,
-  makeSkepticVerifier,
-  planArchetypeSweep,
-  type ArchetypeDomain,
-  type ArchetypeRoute,
-} from "@0sec/core";
+import { archetypeSweepEnabled,
+CHROMIUM_BARE_WORDS,
+filterArchetypes,
+FREEBSD_BARE_KERNEL_WORDS,
+loadChromiumArchetypes,
+loadFreebsdArchetypes,
+loadKernelArchetypes,
+makeSkepticVerifier,
+planArchetypeSweep,
+type ArchetypeDomain,
+type ArchetypeRoute, } from "@0/core"
 import { resolveHuntCorpusPath } from "./src/hunt-corpus.js";
 import { runArchetypeSweep } from "./src/hunt-sweep.js";
 
@@ -114,8 +112,8 @@ console.log(
 
 if (!archetypeSweepEnabled()) {
   console.log(
-    "[hunt-sweep] 0SEC_ARCHETYPE_SWEEP is not set to 1 — sweep disabled (this is the default). " +
-      "Run with `env 0SEC_ARCHETYPE_SWEEP=1 0sec ...` to enable it. Exiting cleanly.",
+    "[hunt-sweep] ZERO_ARCHETYPE_SWEEP is not set to 1 — sweep disabled (this is the default). " +
+      "Run with `env ZERO_ARCHETYPE_SWEEP=1 0sec ...` to enable it. Exiting cleanly.",
   );
   process.exit(0);
 }

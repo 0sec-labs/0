@@ -4,7 +4,7 @@
  * It consumes a finding's `pocSteps`, executes each through a selected local,
  * Docker, or QEMU runner, evaluates declared assertions, and emits a
  * `VerificationResult` matching the canonical schema in
- * `@0sec/shared/verification`.
+ * `@0/shared/verification`.
  *
  * Design notes:
  *
@@ -47,15 +47,13 @@ import { tmpdir } from "node:os";
 import { join, resolve, isAbsolute, posix, win32 } from "node:path";
 import { arch as nodeArch, platform as nodePlatform } from "node:process";
 import { gzipSync } from "node:zlib";
-import type { Finding, PocStep, PocStepExpect } from "@0sec/shared";
-import {
-  VERSION,
-  type EvidenceArtifact,
-  type RunnerKind,
-  type VerificationAssertion,
-  type VerificationCommand,
-  type VerificationResult,
-} from "@0sec/shared";
+import type { Finding, PocStep, PocStepExpect } from "@0/shared"
+import { VERSION,
+type EvidenceArtifact,
+type RunnerKind,
+type VerificationAssertion,
+type VerificationCommand,
+type VerificationResult, } from "@0/shared"
 import type { ScopePolicy } from "../scope/scope.js";
 import { allowlistedChildEnv } from "../agent/sanitized-env.js";
 
@@ -197,7 +195,7 @@ export class LocalShellRunner implements ReplayRunner {
           // child must not inherit the harness's provider/cloud credentials.
           // Build from the allowlist (PATH/HOME/TMPDIR + target-auth vars a
           // reproduction legitimately needs) rather than copying process.env.
-          env: allowlistedChildEnv({ "0SEC_VERIFY": "1" }),
+          env: allowlistedChildEnv({ "ZERO_VERIFY": "1" }),
           stdio: ["ignore", "pipe", "pipe"],
           // On POSIX, isolate the shell and all descendants into a process
           // group so a timeout cannot leave a grandchild holding stdout open.
@@ -307,7 +305,7 @@ function resolveStepCwd(cwd: string, runDir: string): string {
 export const DEFAULT_DOCKER_SHELL_IMAGE = "alpine:3.20";
 export const DEFAULT_DOCKER_HTTP_IMAGE = "curlimages/curl:8.12.1";
 
-const DOCKER_HTTP_STATUS_MARKER = "\n__0SEC_HTTP_STATUS__:";
+const DOCKER_HTTP_STATUS_MARKER = "\n__ZERO_HTTP_STATUS__:";
 const CONTAINER_ID_RE = /^[a-f0-9]{12,64}$/i;
 const DOCKER_NETWORK_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
 
@@ -401,7 +399,7 @@ export class DockerRunner implements ReplayRunner {
       step.id.replace(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 64) || "step";
     const cidPath = join(
       ctx.runDir,
-      `.0sec-docker-${safeStepId}-${randomUUID()}.cid`,
+      `.0-docker-${safeStepId}-${randomUUID()}.cid`,
     );
     const args = this.dockerRunArgs(command, ctx.runDir, cidPath);
     const result = await runDockerCommand({
@@ -642,7 +640,7 @@ async function runDockerCommand(args: {
   try {
     child = spawn(args.dockerBinary, args.args, {
       cwd: args.runDir,
-      env: allowlistedChildEnv({ "0SEC_VERIFY": "1" }),
+      env: allowlistedChildEnv({ "ZERO_VERIFY": "1" }),
       stdio: ["ignore", "pipe", "pipe"],
       detached: nodePlatform !== "win32",
     });
@@ -718,7 +716,7 @@ function runDockerControl(
   try {
     child = spawn(dockerBinary, args, {
       cwd,
-      env: allowlistedChildEnv({ "0SEC_VERIFY": "1" }),
+      env: allowlistedChildEnv({ "ZERO_VERIFY": "1" }),
       stdio: "ignore",
       detached: nodePlatform !== "win32",
     });
@@ -798,12 +796,12 @@ export class QemuRunner implements ReplayRunner {
   constructor(options: QemuRunnerOptions = {}) {
     this.qemuBinary =
       options.qemuBinary ??
-      process.env["0SEC_REPLAY_QEMU_BINARY"]?.trim() ??
+      process.env["ZERO_REPLAY_QEMU_BINARY"]?.trim() ??
       (nodeArch === "arm64" ? "qemu-system-aarch64" : "qemu-system-x86_64");
     this.kernelImage =
-      options.kernelImage ?? process.env["0SEC_REPLAY_QEMU_KERNEL"]?.trim() ?? "";
+      options.kernelImage ?? process.env["ZERO_REPLAY_QEMU_KERNEL"]?.trim() ?? "";
     this.busyboxPath =
-      options.busyboxPath ?? process.env["0SEC_REPLAY_QEMU_BUSYBOX"]?.trim() ?? "";
+      options.busyboxPath ?? process.env["ZERO_REPLAY_QEMU_BUSYBOX"]?.trim() ?? "";
     this.memoryMb = options.memoryMb ?? 512;
     this.cpus = options.cpus ?? 1;
 
@@ -824,7 +822,7 @@ export class QemuRunner implements ReplayRunner {
       return failedStep(
         step,
         startedAt,
-        "QEMU replay requires kernelImage and busyboxPath (or 0SEC_REPLAY_QEMU_KERNEL and 0SEC_REPLAY_QEMU_BUSYBOX)",
+        "QEMU replay requires kernelImage and busyboxPath (or ZERO_REPLAY_QEMU_KERNEL and ZERO_REPLAY_QEMU_BUSYBOX)",
       );
     }
     if (!existsSync(this.kernelImage) || !statSync(this.kernelImage).isFile()) {
@@ -847,7 +845,7 @@ export class QemuRunner implements ReplayRunner {
     }
     const safeStepId =
       step.id.replace(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 64) || "step";
-    const workspaceName = `.0sec-qemu-${safeStepId}-${randomUUID()}`;
+    const workspaceName = `.0-qemu-${safeStepId}-${randomUUID()}`;
     const workspace = join(ctx.runDir, workspaceName);
     mkdirSync(workspace, { recursive: true });
     writeFileSync(join(workspace, "step.sh"), step.action.cmd, "utf8");
@@ -951,7 +949,7 @@ function buildQemuInitramfs(args: {
     appendNewcEntry(chunks, entries[index], index + 1);
   }
   appendNewcEntry(chunks, { name: "TRAILER!!!", mode: 0, body: empty }, 0);
-  const initrdPath = join(args.runDir, `.0sec-qemu-initrd-${randomUUID()}.cpio.gz`);
+  const initrdPath = join(args.runDir, `.0-qemu-initrd-${randomUUID()}.cpio.gz`);
   writeFileSync(initrdPath, gzipSync(Buffer.concat(chunks)));
   return initrdPath;
 }
@@ -998,7 +996,7 @@ function renderQemuInit(workspaceName: string, guestCwd: string): string {
     "/bin/busybox mount -t sysfs sysfs /sys",
     "/bin/busybox mount -t devtmpfs devtmpfs /dev 2>/dev/null || true",
     "if ! /bin/busybox mount -t 9p -o trans=virtio,version=9p2000.L 0sec-replay /mnt/0sec; then",
-    '  echo "__0SEC_QEMU_MOUNT_FAILED__"',
+    '  echo "__ZERO_QEMU_MOUNT_FAILED__"',
     "  /bin/busybox poweroff -f",
     "fi",
     `(
@@ -1070,7 +1068,7 @@ function runQemuCommand(args: {
   try {
     child = spawn(args.qemuBinary, args.args, {
       cwd: args.runDir,
-      env: allowlistedChildEnv({ "0SEC_VERIFY": "1" }),
+      env: allowlistedChildEnv({ "ZERO_VERIFY": "1" }),
       stdio: ["ignore", "pipe", "pipe"],
       detached: nodePlatform !== "win32",
     });

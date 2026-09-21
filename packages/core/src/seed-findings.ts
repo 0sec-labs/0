@@ -9,7 +9,7 @@
  * Closes 0sec#368 once these are wired into the review agent's worklist.
  */
 import { readFileSync } from "node:fs";
-import type { SeedFinding } from "@0sec/shared";
+import type { SeedFinding } from "@0/shared"
 
 export const GEMMAFORGE_LEADS_SCHEMA = "gemmaforge.leads/v1";
 

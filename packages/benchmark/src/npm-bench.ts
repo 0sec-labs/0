@@ -19,8 +19,8 @@
 import { writeFileSync, appendFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { packageAudit } from "@0sec/core";
-import type { ScanDepth, RuntimeMode } from "@0sec/shared";
+import { packageAudit } from "@0/core"
+import type { ScanDepth, RuntimeMode } from "@0/shared"
 import { computeNpmBenchMetrics } from "./npm-bench-metrics.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

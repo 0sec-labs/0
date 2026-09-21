@@ -6,7 +6,7 @@ import {
   formatUserAgent,
 } from "./attribution.js";
 import { ScopePolicy } from "./scope.js";
-import { VERSION } from "@0sec/shared";
+import { VERSION } from "@0/shared"
 
 // ── resolveAttribution ──
 
@@ -39,31 +39,31 @@ describe("resolveAttribution — config sources & precedence (0sec#216)", () => 
     expect(cfg?.headers).toEqual({ "X-Good": "ok" });
   });
 
-  it("loads env headers from 0SEC_ATTRIBUTION_HEADERS JSON", () => {
+  it("loads env headers from ZERO_ATTRIBUTION_HEADERS JSON", () => {
     const cfg = resolveAttribution({
-      env: { "0SEC_ATTRIBUTION_HEADERS": '{"X-Pentest":"env-engagement"}' },
+      env: { "ZERO_ATTRIBUTION_HEADERS": '{"X-Pentest":"env-engagement"}' },
     });
     expect(cfg?.headers["X-Pentest"]).toBe("env-engagement");
   });
 
-  it("throws on malformed 0SEC_ATTRIBUTION_HEADERS JSON", () => {
+  it("throws on malformed ZERO_ATTRIBUTION_HEADERS JSON", () => {
     expect(() =>
-      resolveAttribution({ env: { "0SEC_ATTRIBUTION_HEADERS": "{not json" } }),
-    ).toThrow(/0SEC_ATTRIBUTION_HEADERS/);
+      resolveAttribution({ env: { "ZERO_ATTRIBUTION_HEADERS": "{not json" } }),
+    ).toThrow(/ZERO_ATTRIBUTION_HEADERS/);
   });
 
   it("throws when env headers is not an object of strings", () => {
     expect(() =>
-      resolveAttribution({ env: { "0SEC_ATTRIBUTION_HEADERS": '["array"]' } }),
+      resolveAttribution({ env: { "ZERO_ATTRIBUTION_HEADERS": '["array"]' } }),
     ).toThrow();
     expect(() =>
-      resolveAttribution({ env: { "0SEC_ATTRIBUTION_HEADERS": '{"X-Bad":42}' } }),
+      resolveAttribution({ env: { "ZERO_ATTRIBUTION_HEADERS": '{"X-Bad":42}' } }),
     ).toThrow();
   });
 
-  it("loads UA token from env 0SEC_ATTRIBUTION_UA_TOKEN", () => {
+  it("loads UA token from env ZERO_ATTRIBUTION_UA_TOKEN", () => {
     const cfg = resolveAttribution({
-      env: { "0SEC_ATTRIBUTION_UA_TOKEN": "env-eng-42" },
+      env: { "ZERO_ATTRIBUTION_UA_TOKEN": "env-eng-42" },
     });
     expect(cfg?.userAgentToken).toBe("env-eng-42");
   });
@@ -71,7 +71,7 @@ describe("resolveAttribution — config sources & precedence (0sec#216)", () => 
   it("scope file beats env beats CLI on the same header name", () => {
     const cfg = resolveAttribution({
       scopeFileBlock: { headers: { "X-Pentest": "from-file" } },
-      env: { "0SEC_ATTRIBUTION_HEADERS": '{"X-Pentest":"from-env"}' },
+      env: { "ZERO_ATTRIBUTION_HEADERS": '{"X-Pentest":"from-env"}' },
       cliHeaders: ["X-Pentest=from-cli"],
     });
     expect(cfg?.headers["X-Pentest"]).toBe("from-file");
@@ -79,7 +79,7 @@ describe("resolveAttribution — config sources & precedence (0sec#216)", () => 
 
   it("env beats CLI on the same header name when no scope file value", () => {
     const cfg = resolveAttribution({
-      env: { "0SEC_ATTRIBUTION_HEADERS": '{"X-Pentest":"from-env"}' },
+      env: { "ZERO_ATTRIBUTION_HEADERS": '{"X-Pentest":"from-env"}' },
       cliHeaders: ["X-Pentest=from-cli"],
     });
     expect(cfg?.headers["X-Pentest"]).toBe("from-env");
@@ -88,7 +88,7 @@ describe("resolveAttribution — config sources & precedence (0sec#216)", () => 
   it("merges across sources for distinct keys", () => {
     const cfg = resolveAttribution({
       scopeFileBlock: { headers: { "X-Pentest": "file-pin" } },
-      env: { "0SEC_ATTRIBUTION_HEADERS": '{"X-Engagement-ID":"env-42"}' },
+      env: { "ZERO_ATTRIBUTION_HEADERS": '{"X-Engagement-ID":"env-42"}' },
       cliHeaders: ["X-Researcher=brian"],
     });
     // Names are canonicalized to title-case (0sec#239), so "X-Engagement-ID"
@@ -103,13 +103,13 @@ describe("resolveAttribution — config sources & precedence (0sec#216)", () => 
   it("UA token follows the same precedence (file > env > CLI)", () => {
     const cfg1 = resolveAttribution({
       scopeFileBlock: { user_agent_token: "file-ua" },
-      env: { "0SEC_ATTRIBUTION_UA_TOKEN": "env-ua" },
+      env: { "ZERO_ATTRIBUTION_UA_TOKEN": "env-ua" },
       cliUaToken: "cli-ua",
     });
     expect(cfg1?.userAgentToken).toBe("file-ua");
 
     const cfg2 = resolveAttribution({
-      env: { "0SEC_ATTRIBUTION_UA_TOKEN": "env-ua" },
+      env: { "ZERO_ATTRIBUTION_UA_TOKEN": "env-ua" },
       cliUaToken: "cli-ua",
     });
     expect(cfg2?.userAgentToken).toBe("env-ua");
@@ -121,7 +121,7 @@ describe("resolveAttribution — config sources & precedence (0sec#216)", () => 
   it("ignores blank UA token strings (treats them as not-set)", () => {
     const cfg = resolveAttribution({
       scopeFileBlock: { user_agent_token: "   " },
-      env: { "0SEC_ATTRIBUTION_UA_TOKEN": "real-token" },
+      env: { "ZERO_ATTRIBUTION_UA_TOKEN": "real-token" },
     });
     expect(cfg?.userAgentToken).toBe("real-token");
   });
@@ -131,7 +131,7 @@ describe("resolveAttribution — config sources & precedence (0sec#216)", () => 
   it("dedupes header names that differ only in case across sources", () => {
     const cfg = resolveAttribution({
       scopeFileBlock: { headers: { "X-Pentest": "from-file" } },
-      env: { "0SEC_ATTRIBUTION_HEADERS": '{"x-pentest":"from-env"}' },
+      env: { "ZERO_ATTRIBUTION_HEADERS": '{"x-pentest":"from-env"}' },
       cliHeaders: ["X-PENTEST=from-cli"],
     });
     expect(Object.keys(cfg!.headers)).toHaveLength(1);

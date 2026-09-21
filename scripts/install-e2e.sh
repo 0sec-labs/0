@@ -5,7 +5,7 @@
 #   bash scripts/install-e2e.sh [binary|source|container|all]
 set -euo pipefail
 
-readonly REPOSITORY="0sec-labs/0sec"
+readonly REPOSITORY="0sec-labs/0"
 readonly IMAGE="ghcr.io/${REPOSITORY}:latest"
 readonly METHOD="${1:-all}"
 
@@ -28,10 +28,9 @@ check_binary_install() {
     rm -rf /var/lib/apt/lists/*
 
     export HOME=/tmp/0sec-home
-    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0sec/main/install.sh | bash
-    export PATH="$HOME/.0sec/bin:$PATH"
+    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash
+    export PATH="$HOME/.0/bin:$PATH"
     0 --help >/dev/null
-    0sec --help >/dev/null
     foxguard --version
     ! command -v node
   '
@@ -44,8 +43,8 @@ check_source_install() {
     apt-get install -y --no-install-recommends ca-certificates git
     rm -rf /var/lib/apt/lists/*
 
-    git clone --depth 1 https://github.com/0sec-labs/0sec.git /work/0sec
-    cd /work/0sec
+    git clone --depth 1 https://github.com/0sec-labs/0.git /work/0
+    cd /work/0
     corepack enable
     pnpm install --frozen-lockfile
     pnpm build

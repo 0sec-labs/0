@@ -33,18 +33,18 @@
  * parse.
  *
  * ── Dry-run mode ──────────────────────────────────────────────────
- * If `0SEC_KERNEL_QEMU_KERNEL` / `0SEC_KERNEL_QEMU_DISK` are unset
+ * If `ZERO_KERNEL_QEMU_KERNEL` / `ZERO_KERNEL_QEMU_DISK` are unset
  * (the default in CI), `runTier3Validation` short-circuits and returns
  * `{ status: 'qemu_failed', reason: ... }`. This makes the module safe
  * to exercise from vitest without booting a VM. The real-VM path is
- * gated behind `0SEC_KERNEL_QEMU=1` in the E2E suite.
+ * gated behind `ZERO_KERNEL_QEMU=1` in the E2E suite.
  */
 
 import { spawn } from "node:child_process";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, copyFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import {
   buildQemuCommand,
   loadKernelVmConfigFromEnv,
@@ -78,12 +78,12 @@ export interface Tier3ValidationResult {
 export interface Tier3ValidationOptions {
   /**
    * Override path to a pre-built kernel image. Falls back to
-   * `0SEC_KERNEL_QEMU_KERNEL`. Both unset → dry-run.
+   * `ZERO_KERNEL_QEMU_KERNEL`. Both unset → dry-run.
    */
   qemuKernel?: string;
   /**
    * Override path to a pre-built rootfs image. Falls back to
-   * `0SEC_KERNEL_QEMU_DISK`. Both unset → dry-run.
+   * `ZERO_KERNEL_QEMU_DISK`. Both unset → dry-run.
    */
   qemuDisk?: string;
   /**
@@ -142,13 +142,13 @@ export async function runTier3Validation(
   // Env-var probe: Tier-3 must be able to boot a real VM. If the
   // operator hasn't staged a kernel + rootfs, fail cleanly. This is
   // the path CI and dev machines take by default.
-  const envKernel = opts.qemuKernel ?? process.env["0SEC_KERNEL_QEMU_KERNEL"]?.trim();
-  const envDisk = opts.qemuDisk ?? process.env["0SEC_KERNEL_QEMU_DISK"]?.trim();
+  const envKernel = opts.qemuKernel ?? process.env["ZERO_KERNEL_QEMU_KERNEL"]?.trim();
+  const envDisk = opts.qemuDisk ?? process.env["ZERO_KERNEL_QEMU_DISK"]?.trim();
   if (!envKernel || !envDisk) {
     return {
       status: "qemu_failed",
       reason:
-        "Tier-3 requires 0SEC_KERNEL_QEMU_KERNEL and 0SEC_KERNEL_QEMU_DISK (the same env vars 0cloud injects for kernel scans). Set them to prebuilt artifacts or pass qemuKernel/qemuDisk explicitly.",
+        "Tier-3 requires ZERO_KERNEL_QEMU_KERNEL and ZERO_KERNEL_QEMU_DISK (the same env vars 0cloud injects for kernel scans). Set them to prebuilt artifacts or pass qemuKernel/qemuDisk explicitly.",
       sanitizer_log_path: "",
       run_duration_ms: Date.now() - start,
       corpus_inputs_consumed: 0,

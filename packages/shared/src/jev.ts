@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /** Advisory evaluations only: probabilities never grant authority or verify an exploit. */
-export type JevFeature = "browser" | "memory" | "dedupe" | "redteam" | "kernel" | "crash" | "radar";
+export type JevFeature = "browser" | "memory" | "dedupe" | "redteam" | "kernel" | "crash" | "radar" | "foxguard";
 export type JevQuestion =
   | { type: "boolean"; instructions: string; criteria?: { true: string; false: string } }
   | { type: "choice"; instructions: string; criteria: Record<string, string> };
@@ -41,7 +41,78 @@ export type JevConfig = JevCommonConfig & (
   | { provider: "cloud"; apiKey: string; cloudUrl?: string; feature?: JevFeature }
 );
 
-const FEATURES: readonly JevFeature[] = ["browser", "memory", "dedupe", "redteam", "kernel", "crash", "radar"];
+// ── Console / hosted Jev types ─────────────────────────────────────────────
+
+/**
+ * Console-scoped Jev configuration. Features array enables specific evaluators;
+ * operator-only enablement — repo content cannot opt the user into egress/spend.
+ * apiKey is accepted here but NEVER stored in checkpoints, persisted transcripts,
+ * or serialised session state — it lives only in the in-memory evaluator factory
+ * closure. Provider 'direct' uses the same evaluator as the scan pipeline
+ * (env-configured); 'typesafe'/'vercel'/'cloud' use the supplied key.
+ */
+export interface ConsoleJevConfig {
+  /** Provider namespace for evaluator dispatch. 'typesafe'/'vercel'/'cloud' wire
+   *  to the matching hosted provider; 'direct' uses env-based resolution. */
+  provider: "typesafe" | "vercel" | "cloud" | "direct";
+  /** Feature names the console enables. Must be non-empty for any Jev tool to
+   *  appear in the tool set. Pass an empty array to disable Jev entirely. */
+  features: JevFeature[];
+  /** Max total evaluation requests across ALL enabled features in this session. */
+  maxRequests?: number;
+  /** Max total USD spend across ALL enabled features (advisory reservation model,
+   *  not billing — real charges happen at the provider level). */
+  maxCostUsd?: number;
+  /** Per-request timeout in milliseconds. Default 10_000. */
+  timeoutMs?: number;
+  /** Operator-approved read-only URLs for the browser assist feature. */
+  readOnlyUrls?: string[];
+  /** Provider API key or cloud token. NEVER included in persisted state. */
+  apiKey?: string;
+  /** Cloud host and token for hosted Jev sessions (provider: 'cloud'). */
+  cloud?: {
+    host: string;
+    token: string;
+  };
+}
+
+/**
+ * One Jev evaluation activity record, emitted via onJevActivity. Sanitised —
+ * no credentials, no raw state/evidence, no question text. The 'estimated'
+ * vs 'billing' split lets the UI render estimated usage distinct from server-
+ * settled charges.
+ */
+export interface ConsoleJevActivity {
+  /** The feature that produced this activity. */
+  feature: JevFeature | "prepass";
+  /** Evaluation status. 'started' is emitted before dispatch; 'completed' or
+   *  'unavailable' on resolution. */
+  status: "started" | "completed" | "unavailable";
+  /** Model identifier returned by the provider, when available. */
+  model?: string;
+  /** Duration of the evaluation in milliseconds. */
+  durationMs?: number;
+  /** Estimated input tokens (from server usage or reservation model). */
+  inputTokens?: number;
+  /** Estimated output tokens. */
+  outputTokens?: number;
+  /** Estimated USD cost based on reservation or returned usage. Never a billable
+   *  amount — the provider/settlement system owns actual charges. */
+  estimatedCostUsd?: number;
+  /** Billing-resolution data from the hosted session API, when available.
+   *  Present only during hosted-session settlement, never from estimated usage.
+   *  The 'estimated' vs 'billing' split is deliberate. */
+  billing?: {
+    status: "settled" | "pending";
+    chargedUsd?: number;
+    fundingSource?: "included" | "prepaid";
+  };
+  /** Human-readable message for the activity feed. Never contains credentials
+   *  or raw evidence. Limited to 280 characters. */
+  message?: string;
+}
+
+const FEATURES: readonly JevFeature[] = ["browser", "memory", "dedupe", "redteam", "kernel", "crash", "radar", "foxguard"];
 const INPUT_USD_PER_TOKEN = 0.042 / 1_000_000;
 // Reserve the provider's full documented context before dispatch, including concurrent calls.
 const MAX_INPUT_TOKENS = 65_536;
@@ -75,32 +146,32 @@ export function jevConfigFromEnvironment(
   feature: JevFeature,
   environment: Readonly<Record<string, string | undefined>>,
 ): JevConfig | undefined {
-  const requested = (environment["0SEC_JEV_FEATURES"] ?? "").split(",").map((item) => item.trim()).filter(Boolean);
+  const requested = (environment["ZERO_JEV_FEATURES"] ?? "").split(",").map((item) => item.trim()).filter(Boolean);
   for (const name of requested) {
-    if (!FEATURES.includes(name as JevFeature)) throw new Error(`Unknown 0SEC_JEV_FEATURES entry: ${name}`);
+    if (!FEATURES.includes(name as JevFeature)) throw new Error(`Unknown ZERO_JEV_FEATURES entry: ${name}`);
   }
   if (!requested.includes(feature)) return undefined;
-  const provider = environment["0SEC_JEV_PROVIDER"] ?? "vercel";
+  const provider = environment["ZERO_JEV_PROVIDER"] ?? "vercel";
   if (provider !== "typesafe" && provider !== "vercel" && provider !== "cloud" && provider !== "classifier") {
-    throw new Error("0SEC_JEV_PROVIDER must be typesafe, vercel, cloud, or classifier");
+    throw new Error("ZERO_JEV_PROVIDER must be typesafe, vercel, cloud, or classifier");
   }
   const common = {
-    timeoutMs: positiveNumber(environment["0SEC_JEV_TIMEOUT_MS"], 10_000, "0SEC_JEV_TIMEOUT_MS"),
-    maxRequests: positiveNumber(environment["0SEC_JEV_MAX_REQUESTS"], 100, "0SEC_JEV_MAX_REQUESTS"),
-    maxCostUsd: positiveNumber(environment["0SEC_JEV_MAX_COST_USD"], 0.10, "0SEC_JEV_MAX_COST_USD"),
+    timeoutMs: positiveNumber(environment["ZERO_JEV_TIMEOUT_MS"], 10_000, "ZERO_JEV_TIMEOUT_MS"),
+    maxRequests: positiveNumber(environment["ZERO_JEV_MAX_REQUESTS"], 100, "ZERO_JEV_MAX_REQUESTS"),
+    maxCostUsd: positiveNumber(environment["ZERO_JEV_MAX_COST_USD"], 0.10, "ZERO_JEV_MAX_COST_USD"),
   };
   if (provider === "classifier") {
     if (feature !== "kernel") throw new Error("classifier provider is restricted to the kernel prepass");
     return {
       provider, feature: "kernel", ...common,
-      maxClassifications: positiveNumber(environment["0SEC_JEV_MAX_CLASSIFICATIONS"], 1_000, "0SEC_JEV_MAX_CLASSIFICATIONS"),
+      maxClassifications: positiveNumber(environment["ZERO_JEV_MAX_CLASSIFICATIONS"], 1_000, "ZERO_JEV_MAX_CLASSIFICATIONS"),
     };
   }
-  const keyName = provider === "typesafe" ? "TYPESAFE_API_KEY" : provider === "cloud" ? "0SEC_JEV_CLOUD_TOKEN" : "AI_GATEWAY_API_KEY";
+  const keyName = provider === "typesafe" ? "TYPESAFE_API_KEY" : provider === "cloud" ? "ZERO_JEV_CLOUD_TOKEN" : "AI_GATEWAY_API_KEY";
   const apiKey = environment[keyName]?.trim();
   if (!apiKey) throw new Error(`${keyName} is required when Jev assistance is enabled`);
   if (provider === "cloud") {
-    return { provider, apiKey, cloudUrl: environment["0SEC_JEV_CLOUD_URL"], feature, ...common };
+    return { provider, apiKey, cloudUrl: environment["ZERO_JEV_CLOUD_URL"], feature, ...common };
   }
   return {
     provider, apiKey, ...common,

@@ -1,4 +1,4 @@
-import type { Finding, AttackResult, TargetInfo, AuthConfig, NamedIdentity } from "@0sec/shared";
+import type { Finding, AttackResult, TargetInfo, AuthConfig, NamedIdentity, JevEvaluationRequest, JevEvaluationResult } from "@0/shared"
 import type { ScopePolicy } from "../scope/scope.js";
 import type { RateLimiter } from "../scope/rate-limit.js";
 import type { AttributionConfig } from "../scope/attribution.js";
@@ -420,7 +420,7 @@ export interface AgentConfig {
    * Resolved engagement hardening posture (`scope/engagement-profile.ts`).
    * Read at the WAF chokepoint to decide whether a blocked response escalates
    * into the adaptive evasion ladder. When undefined the tool falls back to
-   * resolving the standalone `0SEC_WAF_EVASION` env opt-out, so the default
+   * resolving the standalone `ZERO_WAF_EVASION` env opt-out, so the default
    * (ladder enabled) is unchanged.
    */
   engagement?: EngagementPosture;
@@ -456,6 +456,19 @@ export interface AgentState {
 
 // ── Tool Execution Context ──
 
+/**
+ * Console-owned Jev authority. Implementations must enforce the shared
+ * session budget and must never expose provider credentials.
+ */
+export interface ToolContextJevRuntime {
+  readonly enabled: boolean;
+  readonly features: readonly string[];
+  evaluator(feature: string): {
+    evaluate(request: JevEvaluationRequest): Promise<JevEvaluationResult | undefined>;
+  } | undefined;
+  evaluate(feature: string, request: JevEvaluationRequest): Promise<JevEvaluationResult | undefined>;
+}
+
 export interface ToolContext {
   target: string;
   scanId: string;
@@ -474,6 +487,12 @@ export interface ToolContext {
    * test fixtures that construct `ToolContext` literals directly.
    */
   role?: AgentRole;
+  /** Parent-advertised built-ins; delegated agents cannot widen this capability set. */
+  delegationTools?: readonly ToolDefinition[];
+  /** Current parent instructions, inherited by delegated agent sessions. */
+  delegationSystemPrompt?: string;
+  /** Budgeted console Jev authority inherited unchanged by delegated agents. */
+  jevRuntime?: ToolContextJevRuntime;
   scopePath?: string;
   /** Session policy registry and durable, isolated executable implementation. */
   selfExtension?: SelfExtensionRegistry;
@@ -653,7 +672,7 @@ export interface ToolContext {
    * matching. A verified handle can then be supplied to `save_finding`, which
    * persists the callback as a verified finding. Created only when
    * `features.oastCollaborator` is on AND a collaborator server is configured
-   * (0SEC_OAST_URL); undefined otherwise, in which case the OAST tools return
+   * (ZERO_OAST_URL); undefined otherwise, in which case the OAST tools return
    * a graceful "not deployed" result.
    */
   oast?: OastCollaborator;

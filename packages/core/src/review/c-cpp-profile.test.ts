@@ -93,7 +93,7 @@ describe("cppReviewAgentPrompt — hypothesis seeding (#467)", () => {
     expect(prompt).toContain("SELF-CONTAINED");
     expect(prompt).toContain("FRESH sandbox");
     expect(prompt).toMatch(/git clone/);
-    expect(prompt).toMatch(/0SEC_EOF/);
+    expect(prompt).toMatch(/ZERO_EOF/);
     expect(prompt).toContain("No such file");
   });
 });

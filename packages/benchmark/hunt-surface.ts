@@ -1,5 +1,5 @@
 /** Generic novel-bug hunt on under-audited surface: enumerate files -> runHuntScan (no seed). */
-import { runHuntScan, makeSkepticVerifier, applyReachabilityGate, applySurfaceRanking } from "@0sec/core";
+import { runHuntScan, makeSkepticVerifier, applyReachabilityGate, applySurfaceRanking } from "@0/core"
 import { execFileSync } from "node:child_process";
 import { appendToCorpus, resolveHuntCorpusPath } from "./src/hunt-corpus.js";
 

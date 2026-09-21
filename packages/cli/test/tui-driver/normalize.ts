@@ -9,7 +9,7 @@
  * so a scenario asserting on real content still sees that content verbatim.
  */
 
-import { VERSION } from "@0sec/shared";
+import { VERSION } from "@0/shared"
 
 const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 

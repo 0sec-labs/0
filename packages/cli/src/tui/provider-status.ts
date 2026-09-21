@@ -14,11 +14,11 @@
  * (~L660-712), `providerForModel` (~L1152-1200), and the env-priority chain
  * in `detectProvider` (~L1386-1533). It is DERIVED, not guessed: several
  * providers deviate from the `<VENDOR>_API_KEY` pattern (`Z_AI_API_KEY`,
- * `AZURE_OPENAI_API_KEY`, and the two `0SEC_CHATGPT_*` tokens), so extend
+ * `AZURE_OPENAI_API_KEY`, and the two `ZERO_CHATGPT_*` tokens), so extend
  * this table by re-reading that file rather than by analogy.
  */
 
-import { loadCloudCredentials } from "@0sec/core";
+import { loadCloudCredentials } from "@0/core"
 
 /** The credential protocols a provider can be authenticated with. */
 export type AuthMethod = "api-key" | "oauth";
@@ -61,6 +61,10 @@ export interface ProviderInfo {
    * should ask the runtime, not this table.
    */
   fileSource?: string;
+  /** True for credential-holding endpoints that are NOT LLM runtimes (e.g. Jev
+   *  evaluator providers). Filtered from the provider display and model picker
+   *  but still managed by the credential store for key persistence. */
+  evaluatorOnly?: boolean;
 }
 
 export interface ProviderState extends ProviderInfo {
@@ -84,9 +88,9 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
     methods: ["oauth"],
     // OAuth, not an API key. Both tokens are accepted and the access token is
     // read first (llm-api.ts L874-875, L1386-1394), so it leads the list.
-    envVars: ["0SEC_CHATGPT_ACCESS_TOKEN", "0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"],
-    fileSource: "~/.codex/auth.json (override with 0SEC_CHATGPT_AUTH_FILE)",
-    hint: "run `codex login` to write ~/.codex/auth.json, or invoke 0sec with env 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN=...",
+    envVars: ["ZERO_CHATGPT_ACCESS_TOKEN", "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"],
+    fileSource: "~/.codex/auth.json (override with ZERO_CHATGPT_AUTH_FILE)",
+    hint: "run `codex login` to write ~/.codex/auth.json, or invoke 0sec with env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN=...",
   },
   {
     id: "deepseek",
@@ -140,7 +144,7 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
     // Bearer (llm-api.ts reads it there, no change needed), and the refresh
     // token to the 0sec-owned var so the store can round-trip it.
     methods: ["oauth", "api-key"],
-    envVars: ["KIMI_API_KEY", "0SEC_KIMI_OAUTH_REFRESH_TOKEN"],
+    envVars: ["KIMI_API_KEY", "ZERO_KIMI_OAUTH_REFRESH_TOKEN"],
     hint: "sign in with your Kimi account, or set KIMI_API_KEY from your Kimi coding plan (endpoint override: KIMI_BASE_URL)",
   },
   {
@@ -158,7 +162,7 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
     // Bearer (llm-api.ts reads it there, no change needed), and the refresh
     // token to the 0sec-owned var so the store can round-trip it.
     methods: ["oauth", "api-key"],
-    envVars: ["XAI_API_KEY", "0SEC_XAI_OAUTH_REFRESH_TOKEN"],
+    envVars: ["XAI_API_KEY", "ZERO_XAI_OAUTH_REFRESH_TOKEN"],
     hint: "sign in with your xAI account, or set XAI_API_KEY from console.x.ai (endpoint override: XAI_BASE_URL)",
   },
   {
@@ -172,24 +176,24 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
     id: "copilot",
     label: "GitHub Copilot",
     // OAuth only (device-code sign-in). The GitHub device-flow access token is
-    // written to 0SEC_COPILOT_GITHUB_TOKEN (envVars[0]) and sent directly as a
+    // written to ZERO_COPILOT_GITHUB_TOKEN (envVars[0]) and sent directly as a
     // Bearer to api.githubcopilot.com — no secondary exchange, no refresh, so
     // there is no refresh-token env var.
     methods: ["oauth"],
-    envVars: ["0SEC_COPILOT_GITHUB_TOKEN"],
-    hint: "sign in with your GitHub Copilot account (device sign-in), or set 0SEC_COPILOT_GITHUB_TOKEN=... (endpoint override: COPILOT_BASE_URL)",
+    envVars: ["ZERO_COPILOT_GITHUB_TOKEN"],
+    hint: "sign in with your GitHub Copilot account (device sign-in), or set ZERO_COPILOT_GITHUB_TOKEN=... (endpoint override: COPILOT_BASE_URL)",
   },
   {
     id: "google",
     label: "Google Gemini (Code Assist)",
     // OAuth only (PKCE browser sign-in — the Gemini CLI flow). The minted
-    // access token is written to 0SEC_GEMINI_ACCESS_TOKEN (envVars[0]) and the
-    // refresh token to 0SEC_GEMINI_OAUTH_REFRESH_TOKEN (the /REFRESH/i var); the
+    // access token is written to ZERO_GEMINI_ACCESS_TOKEN (envVars[0]) and the
+    // refresh token to ZERO_GEMINI_OAUTH_REFRESH_TOKEN (the /REFRESH/i var); the
     // runtime refreshes on demand against oauth2.googleapis.com. There is no
     // pasted-key equivalent — Code Assist authenticates only via OAuth.
     methods: ["oauth"],
-    envVars: ["0SEC_GEMINI_ACCESS_TOKEN", "0SEC_GEMINI_OAUTH_REFRESH_TOKEN"],
-    hint: "sign in with your Google account (browser sign-in), or set 0SEC_GEMINI_OAUTH_REFRESH_TOKEN=... for Gemini Code Assist (project override: GOOGLE_CLOUD_PROJECT / 0SEC_GEMINI_PROJECT)",
+    envVars: ["ZERO_GEMINI_ACCESS_TOKEN", "ZERO_GEMINI_OAUTH_REFRESH_TOKEN"],
+    hint: "sign in with your Google account (browser sign-in), or set ZERO_GEMINI_OAUTH_REFRESH_TOKEN=... for Gemini Code Assist (project override: GOOGLE_CLOUD_PROJECT / ZERO_GEMINI_PROJECT)",
   },
   {
     id: "anthropic",
@@ -200,6 +204,28 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
     methods: ["api-key"],
     envVars: ["ANTHROPIC_API_KEY"],
     hint: "set ANTHROPIC_API_KEY=sk-ant-... from console.anthropic.com",
+  },
+  // ── Jev evaluator providers (not LLM runtimes) ──
+  // These are credential-holding endpoints for the Jev pre-evaluation pipeline,
+  // not chat provider models. They are listed here so the credential store
+  // manages their API keys; they are filtered from the provider display and
+  // model picker via evaluatorOnly. Cloud Jev uses loadCloudCredentials from
+  // @0/core, not a separate store entry.
+  {
+    id: "jev-typesafe",
+    label: "Jev · TypeSafe",
+    methods: ["api-key"],
+    envVars: ["TYPESAFE_API_KEY"],
+    hint: "set TYPESAFE_API_KEY from your TypeSafe account",
+    evaluatorOnly: true,
+  },
+  {
+    id: "jev-vercel",
+    label: "Jev · Vercel AI Gateway",
+    methods: ["api-key"],
+    envVars: ["AI_GATEWAY_API_KEY"],
+    hint: "set AI_GATEWAY_API_KEY from vercel.com",
+    evaluatorOnly: true,
   },
 ];
 
@@ -252,8 +278,18 @@ function satisfyingVar(info: ProviderInfo, env: Record<string, string | undefine
 export function providerStates(env: Record<string, string | undefined>): ProviderState[] {
   // Reads only, and only from `env` — never process.env, so a caller can ask
   // "what would this look like under that environment?" without mutating or
-  // depending on the ambient one.
-  return PROVIDERS.map((info) => {
+  // depending on the ambient one. Filters out evaluator-only providers (e.g.
+  // Jev) which are managed by the credential store but not LLM runtimes.
+  return PROVIDERS.filter((info) => !info.evaluatorOnly).map((info) => {
+    const via = satisfyingVar(info, env);
+    return via === undefined ? { ...info, configured: false } : { ...info, configured: true, via };
+  });
+}
+
+/** Jev evaluator providers managed by the credential store. These are filtered
+ *  from providerStates but still need credential management. */
+export function evaluatorProviderStates(env: Record<string, string | undefined>): ProviderState[] {
+  return PROVIDERS.filter((info) => info.evaluatorOnly).map((info) => {
     const via = satisfyingVar(info, env);
     return via === undefined ? { ...info, configured: false } : { ...info, configured: true, via };
   });
@@ -272,8 +308,8 @@ export function providerStates(env: Record<string, string | undefined>): Provide
  *
  * Detection is delegated to `loadCloudCredentials`
  * (packages/core/src/cloud/credentials.ts) rather than re-derived here, so the
- * two never disagree: env wins (`0SEC_CLOUD_TOKEN`, host optional and defaulted),
- * else a `0SEC_CLOUD_TOKEN=` line in `~/.0sec/cloud.env`. That is the one thing
+ * two never disagree: env wins (`ZERO_CLOUD_TOKEN`, host optional and defaulted),
+ * else a `ZERO_CLOUD_TOKEN=` line in `~/.0/cloud.env`. That is the one thing
  * in this module that consults the filesystem, and deliberately so — "are we
  * connected to cloud?" cannot be answered from env vars alone, and the loader
  * already owns the file format and mode check. Every other function here stays

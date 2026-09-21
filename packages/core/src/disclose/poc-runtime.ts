@@ -32,7 +32,7 @@
 
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import type { Finding, PocStep, PocStepAction, PocStepExpect } from "@0sec/shared";
+import type { Finding, PocStep, PocStepAction, PocStepExpect } from "@0/shared"
 
 // ── Public types ────────────────────────────────────────────────────────────
 

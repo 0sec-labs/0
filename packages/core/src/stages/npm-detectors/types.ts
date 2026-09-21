@@ -25,7 +25,7 @@
  *     disclosure path works unchanged. No parallel finding type.
  */
 
-import type { AttackCategory, Severity } from "@0sec/shared";
+import type { AttackCategory, Severity } from "@0/shared"
 
 /** A package under evaluation, plus registry-derived guard metadata. */
 export interface PackageRef {

@@ -5,14 +5,12 @@ import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
-import { VERSION } from "@0sec/shared";
-import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig, ScanReport, SeedFinding } from "@0sec/shared";
-import type { CostBreakdownEntry } from "@0sec/core";
+import { VERSION } from "@0/shared"
+import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig, ScanReport, SeedFinding } from "@0/shared"
+import type { CostBreakdownEntry } from "@0/core"
 import { formatAuditReport, formatReviewReport, formatReport, generatePdfReport } from "../formatters/index.js";
 import { buildShareUrl, checkRuntimeAvailability, getRuntimeAvailability } from "../utils.js";
 import { formatCrossValidatedLeads, type CrossValidatedLeadsSummary } from "./cross-validated-leads.js";
-import { resolveOsecRunStorage, writeOsecRunReport } from "@0sec/db";
-import { runDeepReview } from "./deep-review.js";
 
 interface ScanCompletedCost {
   cost_usd: number;
@@ -20,7 +18,7 @@ interface ScanCompletedCost {
   cost_per_flag?: number;
 }
 
-type CoreModule = typeof import("@0sec/core");
+type CoreModule = typeof import("@0/core");
 
 let coreModulePromise: Promise<CoreModule> | null = null;
 
@@ -34,7 +32,7 @@ async function loadCoreModule(): Promise<CoreModule> {
     const srcExists = process.versions.bun && existsSync(fileURLToPath(srcUrl));
     coreModulePromise = srcExists
       ? import(srcUrl.href) as Promise<CoreModule>
-      : import("@0sec/core");
+      : import("@0/core");
   }
   return coreModulePromise;
 }
@@ -59,11 +57,6 @@ export interface RunOptions {
   format: OutputFormat;
   runtime: RuntimeMode;
   mode?: ScanMode;
-  /**
-   * Source review execution strategy. The primary control plane uses
-   * `lenses`, which is the validated self-evolving source-review path.
-   */
-  reviewStrategy?: "pipeline" | "lenses";
   timeout: number;
   verbose: boolean;
   dbPath?: string;
@@ -103,7 +96,7 @@ export interface RunOptions {
   wafEvasion?: boolean;
   /**
    * http_audit env-bridge config (FROZEN CONTRACT). Populated by the scan
-   * command from 0SEC_TARGET_* env vars only when `mode === "http_audit"`;
+   * command from ZERO_TARGET_* env vars only when `mode === "http_audit"`;
    * undefined otherwise. The core (`agenticScan`) turns these into an
    * in-memory ScopePolicy (host allowlist), PathPolicy (path-prefix
    * allowlist), per-host RateLimiter, and a wall-clock kill switch, all
@@ -284,16 +277,16 @@ function getTargetType(report: any, opts: RunOptions): string | undefined {
   return report?.targetType ?? opts.targetType;
 }
 
-function emitResultLine(payload: ResultLinePayload): void {  if (process.env["0SEC_EMIT_RESULT_LINE"] !== "1" && !process.env["0SEC_CLOUD_SINK"]) return;
-  console.log(`0SEC_RESULT=${JSON.stringify(payload)}`);
+function emitResultLine(payload: ResultLinePayload): void {  if (process.env["ZERO_EMIT_RESULT_LINE"] !== "1" && !process.env["ZERO_CLOUD_SINK"]) return;
+  console.log(`ZERO_RESULT=${JSON.stringify(payload)}`);
 }
 
 function getCloudFinalSinkConfig(): { sinkUrl: string; scanId: string; token?: string } | null {
-  if (process.env["0SEC_FEATURE_CLOUD_SINK"] === "0") return null;
-  const sinkUrl = process.env["0SEC_CLOUD_SINK"]?.trim();
-  const scanId = process.env["0SEC_CLOUD_SCAN_ID"]?.trim();
+  if (process.env["ZERO_FEATURE_CLOUD_SINK"] === "0") return null;
+  const sinkUrl = process.env["ZERO_CLOUD_SINK"]?.trim();
+  const scanId = process.env["ZERO_CLOUD_SCAN_ID"]?.trim();
   if (!sinkUrl || !scanId) return null;
-  const token = process.env["0SEC_CLOUD_TOKEN"]?.trim() || undefined;
+  const token = process.env["ZERO_CLOUD_TOKEN"]?.trim() || undefined;
   return { sinkUrl, scanId, token };
 }
 
@@ -416,33 +409,6 @@ async function postFinalResultToCloud(report: unknown): Promise<void> {
     process.stderr.write(`[0sec cloud-sink] report POST ${url} failed: ${msg}\n`);
   }
 }
-/**
- * A skipped lens review still needs a canonical terminal record so the unified
- * session, formatter, and persistence paths do not fork around a missing
- * report. Its nonzero runner exit code remains authoritative.
- */
-function skippedLensReviewReport(target: string, message: string): ScanReport {
-  const now = new Date().toISOString();
-  return {
-    target,
-    scanDepth: "deep",
-    startedAt: now,
-    completedAt: now,
-    durationMs: 0,
-    summary: {
-      totalAttacks: 0,
-      totalFindings: 0,
-      critical: 0,
-      high: 0,
-      medium: 0,
-      low: 0,
-      info: 0,
-    },
-    findings: [],
-    warnings: [{ stage: "attack", message }],
-  };
-}
-
 export async function runUnified(opts: RunOptions): Promise<void> {
   const { target, depth, format, runtime, timeout } = opts;
   const core = await loadCoreModule();
@@ -456,7 +422,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
       console.error(chalk.red("--branch-from requires --resume <run-id>"));
       process.exit(2);
     }
-    const { branchJournal } = await import("@0sec/core");
+    const { branchJournal } = await import("@0/core");
     const result = branchJournal({
       runId: effectiveResumeScanId,
       fromEntry: opts.branchFromEntry,
@@ -515,8 +481,8 @@ export async function runUnified(opts: RunOptions): Promise<void> {
   // preflight gate must accept either pair too.
   const directCodexProviderConfigured =
     runtime === "codex" &&
-    (!!process.env["0SEC_CHATGPT_ACCESS_TOKEN"]?.trim() ||
-      !!process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"]?.trim());
+    (!!process.env["ZERO_CHATGPT_ACCESS_TOKEN"]?.trim() ||
+      !!process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"]?.trim());
   if (runtime !== "api" && runtime !== "auto" && !directCodexProviderConfigured) {
     const rt = core.createRuntime({ type: runtime, timeout });
     const available = await rt.isAvailable();
@@ -568,49 +534,9 @@ export async function runUnified(opts: RunOptions): Promise<void> {
   }
 
   try {
-    let runnerExitCode = 0;
     let report: unknown;
 
-    if (opts.targetType === "source-code" && opts.reviewStrategy === "lenses") {
-      eventHandler({
-        type: "stage:start",
-        stage: "source-analysis",
-        message: "capturing the validated finder-lens snapshot",
-      });
-      const outcome = await runDeepReview({
-        target,
-        profile: opts.reviewProfile,
-        subsystem: opts.subsystem,
-        models: opts.model ? [opts.model] : undefined,
-        runtime,
-        timeoutMs: timeout,
-        costCeilingUsd: opts.costCeilingUsd,
-        log: (message) => eventHandler({
-          type: "stage:start",
-          stage: "attack",
-          message,
-        }),
-      });
-      runnerExitCode = outcome.exitCode;
-      const lensReport = outcome.report ?? skippedLensReviewReport(
-        target,
-        typeof outcome.result === "object" && outcome.result !== null && "note" in outcome.result
-          ? String(outcome.result.note)
-          : `lens review ended with exit code ${outcome.exitCode}`,
-      );
-      report = lensReport;
-      writeOsecRunReport(
-        resolveOsecRunStorage({ ...(opts.dbPath ? { dbPath: opts.dbPath } : {}) }),
-        lensReport,
-      );
-      eventHandler({
-        type: "stage:end",
-        stage: "attack",
-        message: outcome.exitCode === 0
-          ? "validated finder-lens review completed"
-          : `validated finder-lens review ended with exit code ${outcome.exitCode}`,
-      });
-    } else if (opts.targetType === "url" || opts.targetType === "web-app") {
+    if (opts.targetType === "url" || opts.targetType === "web-app") {
       report = await core.agenticScan({
         config: {
           target,
@@ -735,7 +661,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
     }
     unsubscribeCost();
 
-    let exitCode = runnerExitCode;
+    let exitCode = 0;
     const estimatedCostUsd = getEstimatedCost(reportAny);
     const usage = getUsage(reportAny);
 
@@ -793,7 +719,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
       }
     }
 
-    const ceilingRaw = process.env["0SEC_COST_CEILING_USD"]?.trim();
+    const ceilingRaw = process.env["ZERO_COST_CEILING_USD"]?.trim();
     if (ceilingRaw) {
       const ceiling = Number(ceilingRaw);
       if (Number.isFinite(ceiling) && estimatedCostUsd !== undefined && estimatedCostUsd > ceiling) {

@@ -4,7 +4,7 @@ description: Historical design for an execution journal, specialist dispatch, re
 ---
 
 > Historical proposal tracked in [0sec#224](https://github.com/0sec-labs/0sec/issues/224). The commands and recovery behavior below describe the design.
-> `0SEC_FEATURE_JOURNAL_LOOP`, `scan --resume`, `--branch`, and `run gc`
+> `ZERO_FEATURE_JOURNAL_LOOP`, `scan --resume`, `--branch`, and `run gc`
 > below are proposal vocabulary, not current command instructions. The referenced
 > journal-ablation workflow is absent from this checkout. Journal primitives
 > alone do not establish a wired alternate loop or durable recovery semantics;
@@ -29,12 +29,12 @@ for the design, with different evaluation conditions.
 1. Reconstruct decisions from an append-only journal; support explicit replay branches.
 2. Let the orchestrator route from a summary while specialists inspect source and raw evidence.
 3. Give each specialist a fresh context containing the relevant journal slice.
-4. **Backwards-compatible.** The current loop keeps working. The journal-based loop ships behind `0SEC_FEATURE_JOURNAL_LOOP=1`, A/B tested against the existing loop on XBOW, promoted to default only after measured gains on all three slices (BB, WB, npm-bench).
+4. **Backwards-compatible.** The current loop keeps working. The journal-based loop ships behind `ZERO_FEATURE_JOURNAL_LOOP=1`, A/B tested against the existing loop on XBOW, promoted to default only after measured gains on all three slices (BB, WB, npm-bench).
 5. **No regression on XBOW BB.** Current state-of-record is 97/104 black-box (93.3%) on retained-artifact-backed runs. Any journal-based replacement must clear that bar on a 30-run pilot before the default flips.
 
 ## Journal schema
 
-Plain JSONL under `~/.0sec/runs/<run-id>/journal.jsonl`. Append-only, never rewritten in place. Large blobs (full HTTP responses, full file reads, semgrep raw output) are sidecarred to `~/.0sec/runs/<run-id>/artifacts/<entry-id>.{ext}` and the journal entry stores a reference + content hash. This keeps the journal grep-able and small enough to feed back into the Orchestrator's window.
+Plain JSONL under `~/.0/runs/<run-id>/journal.jsonl`. Append-only, never rewritten in place. Large blobs (full HTTP responses, full file reads, semgrep raw output) are sidecarred to `~/.0/runs/<run-id>/artifacts/<entry-id>.{ext}` and the journal entry stores a reference + content hash. This keeps the journal grep-able and small enough to feed back into the Orchestrator's window.
 
 Schema versioning: every entry has `schemaVersion: 1`. A migration helper (`packages/core/src/agent/journal/migrate.ts`) runs at load time to upgrade older entries to the current shape.
 
@@ -139,9 +139,9 @@ A `--branch` flag clones the journal up to a checkpoint and continues from there
 
 ## Backwards compatibility & rollout
 
-Phase 1 — `0SEC_FEATURE_JOURNAL_LOOP=0` (default). Existing `native-loop.ts` runs unchanged. New code lands but is gated.
+Phase 1 — `ZERO_FEATURE_JOURNAL_LOOP=0` (default). Existing `native-loop.ts` runs unchanged. New code lands but is gated.
 
-Phase 2 — `0SEC_FEATURE_JOURNAL_LOOP=1` shipped, default OFF. We run a 30-run XBOW BB pilot at `limit_runs=30`. Pass criteria: BB flag count within 1 of the current 97/104 record, $/flag within 20% of the current Sonnet 4.6 baseline, no regression on `disclose` advisory render rate.
+Phase 2 — `ZERO_FEATURE_JOURNAL_LOOP=1` shipped, default OFF. We run a 30-run XBOW BB pilot at `limit_runs=30`. Pass criteria: BB flag count within 1 of the current 97/104 record, $/flag within 20% of the current Sonnet 4.6 baseline, no regression on `disclose` advisory render rate.
 
 Phase 3 — promote to default ON for one workflow at a time, starting with `vuln-discovery` (a new workflow with no current baseline) before `web-pentest`.
 

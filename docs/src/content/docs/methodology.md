@@ -65,7 +65,7 @@ Retain the following alongside any new XBOW claim:
 - **Fork** (upstream / `0ca` patched / `KeygraphHQ`) at a specific git sha
 - **Model** — exact model ID and provider
 - **Turn cap** — configured agent-turn limit per attempt (not necessarily the number of tool calls)
-- **Feature stack** — the `0SEC_FEATURE_*` flags in effect
+- **Feature stack** — the `ZERO_FEATURE_*` flags in effect
 - **Retry protocol** — best-of-K vs. repeat-N, and the value
 - **Per-attempt success rate** and its **95% Wilson CI**
 - **Cost ceiling** — the `--repeat-cost-ceiling-usd` in effect
@@ -90,7 +90,7 @@ The following specialized-runner example repeats a **historical selected slice**
 not the current unresolved set:
 
 ```sh
-pnpm --filter @0sec/benchmark xbow \
+pnpm --filter @0/benchmark xbow \
   --agentic \
   --only XBEN-010,XBEN-051,XBEN-061,XBEN-066,XBEN-080,XBEN-084,XBEN-099,XBEN-104 \
   --repeat 10 \

@@ -8,7 +8,7 @@
 #
 # Must be run from the repo root. Assumes pnpm install + pnpm -r build have
 # already run (workspace packages need their dist/ directories so Bun can
-# resolve @0sec/shared etc.).
+# resolve @0/shared etc.).
 #
 # Externals are chosen to match the runtime pattern in the source:
 #   - playwright / playwright-core / electron / chromium-bidi  — loaded via
@@ -94,8 +94,8 @@ bun build src/index.ts \
   --compile \
   ${TARGET_ARG} \
   --outfile "../../$OUTFILE" \
-  --define "__0SEC_VERSION__=\"$PKG_VERSION\"" \
-  --define "__0SEC_COMPILED_TARGET__=\"$NATIVE_TARGET\"" \
+  --define "__ZERO_VERSION__=\"$PKG_VERSION\"" \
+  --define "__ZERO_COMPILED_TARGET__=\"$NATIVE_TARGET\"" \
   --external playwright \
   --external playwright-core \
   --external electron \

@@ -29,7 +29,7 @@
  * unit-tests hermetically.
  */
 
-import type { Finding, CrashReport } from "@0sec/shared";
+import type { Finding, CrashReport } from "@0/shared"
 import { parseCrashReport } from "../ingest/kernel-crash.js";
 import { parseKcsanReport } from "../triage/kcsan-race.js";
 import type { HuntCandidate, HuntVerifier } from "./hunt-scan.js";

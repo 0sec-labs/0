@@ -25,7 +25,7 @@ const VALID_BUILD_SYSTEMS = new Set(["autotools", "cmake", "meson", "auto"]);
 const VALID_SANITIZERS = new Set(["asan", "ubsan", "msan"]);
 
 export async function runHarnessTier2(args: RunHarnessTier2Args): Promise<void> {
-  const { buildTier2Harness, extractCorpus } = await import("@0sec/core");
+  const { buildTier2Harness, extractCorpus } = await import("@0/core");
 
   const repoAbs = resolve(args.repo);
   if (!existsSync(repoAbs)) {
@@ -39,7 +39,7 @@ export async function runHarnessTier2(args: RunHarnessTier2Args): Promise<void> 
   }
 
   const sanitizers = parseSanitizers(args.sanitizers);
-  const outputDir = resolve(args.outputDir ?? join(repoAbs, ".0sec-out", "tier2"));
+  const outputDir = resolve(args.outputDir ?? join(repoAbs, ".0-out", "tier2"));
   const corpusDir = join(outputDir, "corpus");
 
   const functionName = args.functionName ?? deriveDefaultFunctionName(repoAbs);

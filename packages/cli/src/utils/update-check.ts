@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared"
 import { loadLayeredSettings } from "../tui/settings.js";
 
 const REPO = "0sec-labs/0sec";
@@ -84,9 +84,9 @@ export function shouldRunCheck(
   isTty = Boolean(process.stdout.isTTY),
   policy?: UpdatePolicy,
 ): boolean {
-  if (!isTty || disabled(env.CI) || disabled(env["0SEC_OFFLINE"]) || disabled(env["0SEC_NO_UPDATE_CHECK"])) return false;
+  if (!isTty || disabled(env.CI) || disabled(env["ZERO_OFFLINE"]) || disabled(env["ZERO_NO_UPDATE_CHECK"])) return false;
   if (policy !== undefined) return policy !== "off";
-  return env["0SEC_UPDATE_CHECK"] === "1";
+  return env["ZERO_UPDATE_CHECK"] === "1";
 }
 
 function recent(timestamp: string | undefined, now: number): boolean {
@@ -139,7 +139,7 @@ const attemptedAutomaticTags = new Set<string>();
 /** One canonical installer, shared by explicit upgrade and startup auto-update. */
 export async function performAutoUpdate(options: AutoUpdateOptions = {}): Promise<AutoUpdateResult> {
   if (process.platform === "win32") return { success: false, installed: false, error: "Automatic installation is unavailable on Windows; download a release from https://github.com/0sec-labs/0sec/releases/latest." };
-  if (disabled(process.env["0SEC_OFFLINE"]) || disabled(process.env["0SEC_NO_UPDATE_CHECK"])) {
+  if (disabled(process.env["ZERO_OFFLINE"]) || disabled(process.env["ZERO_NO_UPDATE_CHECK"])) {
     return { success: false, installed: false, error: "Updates are disabled by the current offline/update policy." };
   }
   if (installInProgress) return { success: false, installed: false, error: "An update is already in progress." };
@@ -150,7 +150,7 @@ export async function performAutoUpdate(options: AutoUpdateOptions = {}): Promis
     if (!tag || !version?.complete) return { success: false, installed: false, error: "Could not resolve a valid release tag." };
     const normalizedTag = tag.startsWith("v") ? tag : `v${tag}`;
     const env: NodeJS.ProcessEnv = { ...process.env, RELEASE_BASE_URL: `https://github.com/${REPO}/releases/download/${normalizedTag}` };
-    const installDir = options.installDir ?? process.env["0SEC_INSTALL_DIR"];
+    const installDir = options.installDir ?? process.env["ZERO_INSTALL_DIR"];
     if (installDir !== undefined) env.INSTALL_DIR = installDir;
     const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs! > 0
       ? Math.min(options.timeoutMs!, INSTALL_TIMEOUT_MS) : INSTALL_TIMEOUT_MS;

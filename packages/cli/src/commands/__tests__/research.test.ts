@@ -7,7 +7,7 @@ import { Command } from "commander";
 const runResearchMock = vi.fn();
 class LinuxKernelResearchAdapterMock {}
 
-vi.mock("@0sec/core", () => ({
+vi.mock("@0/core", () => ({
   LinuxKernelResearchAdapter: LinuxKernelResearchAdapterMock,
   runResearch: runResearchMock,
   postFinding: vi.fn(),

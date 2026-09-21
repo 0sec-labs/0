@@ -13,7 +13,7 @@ describe("connectionRecoveryForError", () => {
 
   it("does not mistake first-launch provider choices for a failed Codex credential", () => {
     expect(connectionRecoveryForError(
-      "No provider credential found. Set OPENAI_API_KEY or 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN.",
+      "No provider credential found. Set OPENAI_API_KEY or ZERO_CHATGPT_OAUTH_REFRESH_TOKEN.",
     )).toBeNull();
   });
 

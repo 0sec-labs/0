@@ -14,7 +14,7 @@ description: Choose a scan or source review, authorize it, inspect saved finding
 | MCP endpoint | `0 scan --target mcp://server.example.com --scope ./scope.json` | Active MCP assessment |
 | Local source or Git repository | `0 review ./my-app` | Source review; preparation and tools can access the network |
 | npm package | `0 audit express` | Package acquisition and analysis |
-| Whole-repository file coverage | `0 file-review ./my-app` | File-level review with its own checkpoints |
+| Deeper repository investigation | `0 review ./my-app --depth deep` | Agent-led source review; inspect reported coverage |
 | Seedless specialized review | `0 deep-review ./my-app` | Multi-lens discovery; survivors remain leads |
 | Repository investigation through repair | `0 secure ./my-app --test-command "npm test"` | Committed source, executable probes, disposable checkouts in the current worker |
 | Domain inventory | `0 recon example.com --json` | CT/DNS lookups and HTTP probes, not a vulnerability verdict |
@@ -108,7 +108,7 @@ it does not claim every layer ran or that all remaining findings are reproduced.
 
 Inspect per-finding triage provenance. A skipped layer and an unrecorded layer are different. [Features](/features/) lists current toggles; [Finding Triage](/triage/) explains the evidence gates.
 
-Jev assistance is separately opt-in through `0SEC_JEV_FEATURES`, not enabled by
+Jev assistance is separately opt-in through `ZERO_JEV_FEATURES`, not enabled by
 possessing a provider key. In this workflow it can assist browser navigation,
 memory ranking, or semantic deduplication. It does not grant scope, confirm a
 vulnerability, or turn a duplicate match into verification. Browser assistance
@@ -131,7 +131,7 @@ HTML and PDF output write a timestamped report under the system temporary direct
 
 ### SQLite database
 
-Current scan storage is run-local: by default `~/.0sec/runs/<scan-id>/state.db`, subject to the configured state root. `--db-path` selects an explicit database. Do not assume every command uses a single `~/.0sec/0sec.db`.
+Current scan storage is run-local: by default `~/.0/runs/<scan-id>/state.db`, subject to the configured state root. `--db-path` selects an explicit database. Do not assume every command uses a single `~/.0/0sec.db`.
 
 ```bash
 0 scan --target https://staging.example.com --scope ./scope.json \
@@ -220,7 +220,7 @@ selected path.
 0 verify --bundle ./bundle-dir --runner docker
 
 # Use the separate kernel-finding verification path.
-env 0SEC_KERNEL_VERIFY=1 0 verify \
+env ZERO_KERNEL_VERIFY=1 0 verify \
   --kernel-finding finding.json --kernel-tree ./linux
 ```
 
@@ -349,7 +349,9 @@ worker; disposable checkouts are not containers or an OS sandbox.
 0 review --target linux-kernel ./linux
 ```
 
-Use the ecosystem and version actually covered by your authorization. `--changed-only` narrows the documented review path; it is not proof of whole-repository coverage. `file-review` and `deep-review` offer different coverage/analysis tradeoffs and do not share all of `review`'s options.
+Use the ecosystem and version actually covered by your authorization. `--changed-only` narrows the documented review path; it is not proof of whole-repository coverage. Ordinary review uses the source-review agents at every depth. Agents can delegate scoped investigations through the same worker tree rather than invoking a separate file-review engine.
+
+`deep-review` remains an explicit research command for evaluated finder lenses and evolved source finders. It is not the implementation of `review --depth deep`, and does not share all of `review`'s options.
 
 ## Export and disclosure
 

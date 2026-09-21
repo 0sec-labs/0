@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import { runResearch } from "../research-runner.js";
 import {
   WindowsHyperVImportAdapter,
@@ -26,10 +26,10 @@ beforeAll(() => {
     allowedSigners,
     `lab-acceptance ${readFileSync(join(signerRoot, "acceptance-key.pub"), "utf8")}`,
   );
-  process.env["0SEC_HYPERV_ACCEPTANCE_ALLOWED_SIGNERS"] = allowedSigners;
+  process.env["ZERO_HYPERV_ACCEPTANCE_ALLOWED_SIGNERS"] = allowedSigners;
 });
 afterAll(() => {
-  delete process.env["0SEC_HYPERV_ACCEPTANCE_ALLOWED_SIGNERS"];
+  delete process.env["ZERO_HYPERV_ACCEPTANCE_ALLOWED_SIGNERS"];
   if (signerRoot) rmSync(signerRoot, { recursive: true, force: true });
 });
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });

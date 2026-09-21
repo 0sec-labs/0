@@ -360,9 +360,9 @@ function stableJson(value: unknown): string {
 }
 
 function verifyLiveLabelSeal(input: WindowsResearchAttemptInput): void {
-  const key = process.env["0SEC_WINDOWS_LABEL_SEAL_KEY"];
+  const key = process.env["ZERO_WINDOWS_LABEL_SEAL_KEY"];
   if (!key || Buffer.byteLength(key) < 32) {
-    throw new Error("live attempts require 0SEC_WINDOWS_LABEL_SEAL_KEY with at least 32 bytes");
+    throw new Error("live attempts require ZERO_WINDOWS_LABEL_SEAL_KEY with at least 32 bytes");
   }
   if (!input.label.keyId.trim() || !SHA256.test(input.label.signature)) {
     throw new Error("live label seal metadata is invalid");

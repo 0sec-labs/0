@@ -1,5 +1,5 @@
 /**
- * Per-provider LLM credentials, persisted to `~/.0sec/credentials.json`.
+ * Per-provider LLM credentials, persisted to `~/.0/credentials.json`.
  *
  * The runtime resolves provider credentials from environment variables only
  * (see `provider-status.ts`, transcribed from `llm-api.ts`). That is fine for
@@ -38,7 +38,7 @@
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared"
 
 import { PROVIDERS, providerSupportsMethod } from "./provider-status.js";
 
@@ -73,7 +73,7 @@ const DIR_MODE = 0o700;
 /**
  * Credentials live beside the rest of the per-user engine state (scan DB,
  * journals, TUI settings) rather than in a bespoke directory, so
- * `homeStateDir` from `@0sec/shared` — not a local `".0sec"` literal — decides
+ * `homeStateDir` from `@0/shared` — not a local `".0"` literal — decides
  * where that is. One definition of the state root means a future relocation or
  * an `$XDG_STATE_HOME` migration happens in one place.
  */
@@ -241,7 +241,7 @@ function replaceApiKeyLayer(store: AccountStore, desired: StoredCredentials): Ac
  * broken export, not a choice.
  *
  * The check spans *all* of a provider's variables, not just the one we would
- * write. A parent process that supplied `0SEC_CHATGPT_OAUTH_REFRESH_TOKEN`
+ * write. A parent process that supplied `ZERO_CHATGPT_OAUTH_REFRESH_TOKEN`
  * already configured that provider; injecting a stored access token alongside
  * it would mix credentials from two sources into one auth attempt, and the
  * runtime prefers ours — which is precisely the silent override this rule forbids.
@@ -702,7 +702,7 @@ export function logoutProvider(store: AccountStore, providerId: string): Account
  * Mapping per kind:
  *   - api_key -> the provider's key env var (`envVars[0]`).
  *   - oauth   -> the access token into the access-token var (`envVars[0]`, e.g.
- *     `0SEC_CHATGPT_ACCESS_TOKEN`) and, when present, the refresh token into the
+ *     `ZERO_CHATGPT_ACCESS_TOKEN`) and, when present, the refresh token into the
  *     provider's refresh-token var (the `envVars` entry matching /REFRESH/i).
  *
  * Pure over its arguments — no `process.env`, no mutation. Callers merge the

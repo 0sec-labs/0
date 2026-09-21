@@ -120,7 +120,7 @@ export const findings = sqliteTable(
     evidenceResponse: text("evidenceResponse").notNull(),
     evidenceAnalysis: text("evidenceAnalysis"),
     /**
-     * JSON-stringified LayerVerdict[] (see @0sec/shared types). NULL until
+     * JSON-stringified LayerVerdict[] (see @0/shared types). NULL until
      * the triage stage runs. Stored as text rather than a join table because
      * the array is read-and-write together at finding-save time and we never
      * query individual verdict rows. See 0sec#112.
@@ -128,7 +128,7 @@ export const findings = sqliteTable(
     layerVerdicts: text("layerVerdicts"),
     impactAssessment: text("impactAssessment"), // JSON: ImpactAssessment (reachability/blast/weaponizability/business)
     /**
-     * JSON-stringified PocStep[] (see @0sec/shared types). NULL when the
+     * JSON-stringified PocStep[] (see @0/shared types). NULL when the
      * agent only produced prose evidence (the legacy default). Stored as
      * text rather than a join table because the array is read-and-write
      * together at finding-save time and we never query individual steps.
@@ -136,7 +136,7 @@ export const findings = sqliteTable(
      */
     pocSteps: text("pocSteps"),
     /**
-     * JSON-stringified VerificationSpec (see @0sec/shared types). NULL
+     * JSON-stringified VerificationSpec (see @0/shared types). NULL
      * when the agent produced a finding without a deterministic re-check
      * contract — every reader must continue to work in that case. Stored
      * as text because the spec is an opaque blob that the verifier reads
@@ -161,7 +161,7 @@ export const findings = sqliteTable(
      */
     pocExecution: text("pocExecution"),
     /**
-     * JSON-stringified VerificationResult (see @0sec/shared
+     * JSON-stringified VerificationResult (see @0/shared
      * `VerificationResultSchema`) — the last deterministic-replay result
      * attached to the finding. NULL when the finding was never verified;
      * readers MUST treat NULL / malformed / statusless payloads as

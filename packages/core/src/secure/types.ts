@@ -1,4 +1,4 @@
-import type { Finding, RuntimeMode, ScanDepth } from "@0sec/shared";
+import type { Finding, RuntimeMode, ScanDepth } from "@0/shared"
 import type { NativeRuntime } from "../runtime/types.js";
 import type { PreparedProjectContext, ProjectContextSuggestions } from "./project-context.js";
 
@@ -62,7 +62,7 @@ export interface BehavioralRepairOptions {
   /**
    * Developer-choice learnings: how this tenant responded to past repairs.
    * Rendered to the model as UNTRUSTED guidance (preferences, never facts
-   * about the code). Cloud injects via 0SEC_SECURE_PRIOR_OUTCOMES.
+   * about the code). Cloud injects via ZERO_SECURE_PRIOR_OUTCOMES.
    */
   priorOutcomes?: PriorRepairOutcome[];
   onEvent?: (event: SecureEvent) => void;
@@ -70,7 +70,7 @@ export interface BehavioralRepairOptions {
   rules?: string;
   /**
    * What human reviewers said on past repair PRs (Greptile-style comment
-   * learning). Untrusted guidance. Cloud injects via 0SEC_SECURE_GUIDANCE.
+   * learning). Untrusted guidance. Cloud injects via ZERO_SECURE_GUIDANCE.
    */
   guidance?: RepairGuidance[];
 }
@@ -93,7 +93,7 @@ export interface SecureProjectOptions {
   publish?: boolean;
   /**
    * Plain-English team repair standards (untrusted guidance). Defaults to the
-   * 0SEC_SECURE_RULES env (cloud injects per-repo rules from secure_config).
+   * ZERO_SECURE_RULES env (cloud injects per-repo rules from secure_config).
    */
   rules?: string;
   signal?: AbortSignal;

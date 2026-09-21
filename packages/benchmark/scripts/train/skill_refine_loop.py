@@ -617,7 +617,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     ap.add_argument(
         "--core-dist",
         type=Path,
-        help="Path to @0sec/core build (for the load-check). Defaults to sibling.",
+        help="Path to @0/core build (for the load-check). Defaults to sibling.",
     )
     ap.add_argument(
         "--check-skill",

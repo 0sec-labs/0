@@ -30,7 +30,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Finding, PocStep, LayerVerdict } from "@0sec/shared";
+import type { Finding, PocStep, LayerVerdict } from "@0/shared"
 
 import {
   createDisclosureRecord,

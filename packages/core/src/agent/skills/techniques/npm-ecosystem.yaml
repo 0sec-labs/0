@@ -31,7 +31,7 @@ content: |
   ### This runs untrusted code — deny-by-default gating
   Executing arbitrary package code is the entire point of the engine, and it is
   dangerous. It is offered ONLY when BOTH:
-  1. the feature flag `0SEC_FEATURE_NPM_DISCOVERY=1` is set, AND
+  1. the feature flag `ZERO_FEATURE_NPM_DISCOVERY=1` is set, AND
   2. an engagement scope is active.
   Absent either, the tool is not available. Run it only in a sandbox/VM you are
   willing to discard.

@@ -25,7 +25,7 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p "${OUT_DIR}"
-KERNEL_MAKE_JOBS="$(printenv 0SEC_KERNEL_VM_MAKE_JOBS 2>/dev/null || true)"
+KERNEL_MAKE_JOBS="$(printenv ZERO_KERNEL_VM_MAKE_JOBS 2>/dev/null || true)"
 : "${KERNEL_MAKE_JOBS:=4}"
 
 docker build \

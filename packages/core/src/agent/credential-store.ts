@@ -3,7 +3,7 @@
  *
  * The in-memory {@link LootLedger} (loot.ts) is single-scan: every foothold it
  * harvests evaporates when the scan ends. This store is the durable companion —
- * a thin, security-conscious bridge between a `LootLedger` and the `@0sec/db`
+ * a thin, security-conscious bridge between a `LootLedger` and the `@0/db`
  * `persistent_credentials` / `trust_graph_edges` tables. It lets footholds
  * harvested in one scan persist and be re-surfaced to a later scan against the
  * same target.
@@ -21,11 +21,9 @@
  */
 
 import { createHash } from "node:crypto";
-import type {
-  osecDB,
-  PersistentCredentialRow,
-  CredentialKindDB,
-} from "@0sec/db";
+import type { osecDB,
+PersistentCredentialRow,
+CredentialKindDB, } from "@0/db"
 import type { LootItem } from "./loot.js";
 import { LootLedger } from "./loot.js";
 
@@ -66,7 +64,7 @@ export interface CredentialAttribution {
 }
 
 /**
- * Durable credential store backed by `@0sec/db`. Constructed with a live
+ * Durable credential store backed by `@0/db`. Constructed with a live
  * `osecDB`; all hashing/redaction happens here so the db layer never sees a
  * plaintext secret.
  */

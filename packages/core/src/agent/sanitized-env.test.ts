@@ -21,8 +21,8 @@ describe("allowlistedChildEnv", () => {
   });
 
   it("merges caller extras", () => {
-    const env = allowlistedChildEnv({ "0SEC_TARGET": "https://t.example" }, { PATH: "/bin" });
-    expect(env["0SEC_TARGET"]).toBe("https://t.example");
+    const env = allowlistedChildEnv({ "ZERO_TARGET": "https://t.example" }, { PATH: "/bin" });
+    expect(env["ZERO_TARGET"]).toBe("https://t.example");
     expect(env.PATH).toBe("/bin");
   });
 
@@ -35,11 +35,11 @@ describe("allowlistedChildEnv", () => {
     const env = sanitizedEnv({
       PATH: "/bin",
       ANTHROPIC_API_KEY: "sk-ant-x",
-      "0SEC_CLOUD_TOKEN": "tok",
+      "ZERO_CLOUD_TOKEN": "tok",
     });
     expect(env.PATH).toBe("/bin");
     expect(env.ANTHROPIC_API_KEY).toBeUndefined();
-    expect(env["0SEC_CLOUD_TOKEN"]).toBeUndefined();
+    expect(env["ZERO_CLOUD_TOKEN"]).toBeUndefined();
   });
 });
 
@@ -51,7 +51,7 @@ describe("newly covered credential shapes", () => {
     ["QWEN_API_KEY", "qwen-secret"],
     ["NVD_API_KEY", "nvd-secret"],
     ["E2B_API_KEY", "e2b-secret"],
-    ["0SEC_LLM_TARGET_KEY", "target-secret"],
+    ["ZERO_LLM_TARGET_KEY", "target-secret"],
   ])("screens %s out of caller extras", (name, value) => {
     const env = allowlistedChildEnv({ [name]: value }, { PATH: "/bin" });
     expect(env[name]).toBeUndefined();
@@ -64,7 +64,7 @@ describe("newly covered credential shapes", () => {
       QWEN_API_KEY: "q",
       NVD_API_KEY: "n",
       E2B_API_KEY: "e",
-      "0SEC_LLM_TARGET_KEY": "t",
+      "ZERO_LLM_TARGET_KEY": "t",
     });
     expect(Object.keys(env)).toEqual(["PATH"]);
   });
@@ -114,14 +114,14 @@ describe("generic credential-shape screening (extras path)", () => {
     // must NOT be caught by the widened patterns.
     const env = allowlistedChildEnv(
       {
-        "0SEC_KERNEL_BLOCK_NET": "1",
-        "0SEC_VERIFY": "1",
+        "ZERO_KERNEL_BLOCK_NET": "1",
+        "ZERO_VERIFY": "1",
         TARGET: "https://t.example",
       },
       { PATH: "/bin" },
     );
-    expect(env["0SEC_KERNEL_BLOCK_NET"]).toBe("1");
-    expect(env["0SEC_VERIFY"]).toBe("1");
+    expect(env["ZERO_KERNEL_BLOCK_NET"]).toBe("1");
+    expect(env["ZERO_VERIFY"]).toBe("1");
     expect(env.TARGET).toBe("https://t.example");
   });
 });

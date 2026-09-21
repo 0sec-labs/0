@@ -39,9 +39,9 @@ while [ "$attempt" -lt 80 ]; do
 const fs = require("node:fs");
 const lines = fs.readFileSync(process.argv[1], "utf8").split("\n");
 for (const line of lines) {
-  if (!line.startsWith("0SEC_DASHBOARD_READY ")) continue;
+  if (!line.startsWith("ZERO_DASHBOARD_READY ")) continue;
   try {
-    const value = JSON.parse(line.slice("0SEC_DASHBOARD_READY ".length));
+    const value = JSON.parse(line.slice("ZERO_DASHBOARD_READY ".length));
     if (typeof value.url === "string") process.stdout.write(value.url);
   } catch {}
 }

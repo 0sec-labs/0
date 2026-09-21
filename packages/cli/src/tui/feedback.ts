@@ -54,7 +54,7 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
-import { loadCloudCredentials } from "@0sec/core";
+import { loadCloudCredentials } from "@0/core"
 
 export interface FeedbackEntry {
   message: string;
@@ -72,7 +72,7 @@ export interface FeedbackResult {
 }
 
 export function feedbackFilePath(homeDir?: string): string {
-  return join(homeDir ?? homedir(), ".0sec", "feedback.md");
+  return join(homeDir ?? homedir(), ".0", "feedback.md");
 }
 
 /** Render one entry as a Markdown block. Pure, so it is unit-testable. */
@@ -180,7 +180,7 @@ export interface SubmitResult {
 export const DEFAULT_FEEDBACK_URL = "";
 
 /** Env var holding the submission endpoint. */
-export const FEEDBACK_URL_ENV = "0SEC_FEEDBACK_URL";
+export const FEEDBACK_URL_ENV = "ZERO_FEEDBACK_URL";
 
 /** The authenticated 0cloud receiver behind the dashboard feedback channel. */
 const CLOUD_FEEDBACK_PATH = "/api/cli-feedback";
@@ -188,7 +188,7 @@ const CLOUD_FEEDBACK_PATH = "/api/cli-feedback";
 export interface FeedbackResolveOptions {
   /**
    * Test seam for the local `0sec auth login` credential store. An explicit
-   * 0SEC_FEEDBACK_URL always wins and never consumes this credential.
+   * ZERO_FEEDBACK_URL always wins and never consumes this credential.
    */
   cloudCredentials?: () => { host: string; token: string } | null;
   /** Disable cloud-credential fallback for a caller without a reviewed preview. */
@@ -215,9 +215,9 @@ function defaultCloudCredentials(env: FeedbackEnv): { host: string; token: strin
 function cloudFeedbackUrl(host: string): string | null {
   try {
     const url = new URL(host);
-    // cloud.0sec.ai is a legacy redirect. Redirecting a POST can change its
+    // cloud.0.ai is a legacy redirect. Redirecting a POST can change its
     // method, so post to the canonical dashboard host directly.
-    if (url.hostname === "cloud.0sec.ai") url.hostname = "cloud.0.security";
+    if (url.hostname === "cloud.0.ai") url.hostname = "cloud.0.security";
     url.pathname = CLOUD_FEEDBACK_PATH;
     url.search = "";
     url.hash = "";
@@ -245,14 +245,14 @@ function resolveFeedbackTarget(
 /**
  * Env vars that hard-disable submission.
  *
- * `0SEC_OFFLINE` is the pre-existing convention in this repo (see
+ * `ZERO_OFFLINE` is the pre-existing convention in this repo (see
  * `../utils/update-check.ts`, which uses it to suppress the update ping), so
  * an operator who already sets it to keep 0sec off the network gets the
- * behaviour they asked for without learning a second knob. `0SEC_NO_TELEMETRY`
+ * behaviour they asked for without learning a second knob. `ZERO_NO_TELEMETRY`
  * is added as the name people reach for, and `DO_NOT_TRACK` is honoured
  * because it is the cross-tool standard.
  */
-export const FEEDBACK_OPT_OUT_ENV = ["0SEC_OFFLINE", "0SEC_NO_TELEMETRY", "DO_NOT_TRACK"] as const;
+export const FEEDBACK_OPT_OUT_ENV = ["ZERO_OFFLINE", "ZERO_NO_TELEMETRY", "DO_NOT_TRACK"] as const;
 
 /** Request timeout. Short: this is a courtesy call behind a human keystroke. */
 export const FEEDBACK_TIMEOUT_MS = 5000;
@@ -267,7 +267,7 @@ const MAX_BODY_BYTES = 64 * 1024;
  * permissive, because the two have opposite failure directions: there, a
  * missed opt-out costs a suppressed update nudge; here, a missed opt-out means
  * client data crosses a boundary someone explicitly tried to close. Someone
- * who supplies `0SEC_OFFLINE=true` for a command has unambiguously stated an
+ * who supplies `ZERO_OFFLINE=true` for a command has unambiguously stated an
  * intent, and honouring only `1` would transmit anyway. Anything set and not
  * explicitly falsy counts as opt-out.
  */
@@ -651,7 +651,7 @@ export function buildDiagnosticFeedback(info: DiagnosticInfo, env: NodeJS.Proces
   let message = `Diagnostic: ${kind} error — ${platform}/${arch} on ${runtime} ${runtimeVersion}\nVersion: ${version}\nError: ${diagnosticError(info.error)}`;
   // When — and ONLY when — the operator has consented to sharing commands/code
   // (analyticsLevel `commands` or `full`, surfaced to core+cli as the
-  // 0SEC_ANALYTICS_LEVEL env var), append the REDACTED full failure detail:
+  // ZERO_ANALYTICS_LEVEL env var), append the REDACTED full failure detail:
   // the error type, its message, the stack frames and any captured output,
   // with credentials, API keys, tokens, private keys and emails scrubbed and
   // home-dir usernames anonymised. Without that consent the wire body is the
@@ -679,7 +679,7 @@ const MAX_DIAGNOSTIC_DETAIL_CHARS = 6000;
  * absent/`off`/`usage` value keeps diagnostics at the finite-category default.
  */
 function diagnosticDetailAllowed(env: NodeJS.ProcessEnv): boolean {
-  const level = (env["0SEC_ANALYTICS_LEVEL"] ?? "").trim().toLowerCase();
+  const level = (env["ZERO_ANALYTICS_LEVEL"] ?? "").trim().toLowerCase();
   return level === "commands" || level === "full";
 }
 

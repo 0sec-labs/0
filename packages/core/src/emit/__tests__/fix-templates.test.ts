@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import {
   createDefaultFixTemplateRegistry,
   hardCodedSecretTemplate,

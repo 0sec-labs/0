@@ -93,7 +93,7 @@ import {
   writeSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared"
 import { sanitizeId } from "./registry.js";
 
 // ---------------------------------------------------------------------------

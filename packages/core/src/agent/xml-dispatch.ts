@@ -48,7 +48,7 @@ export function resolveDispatchMode(
   if (mode === "xml" || mode === "json") return mode;
   // env override wins over auto; respected here so callers don't have
   // to re-implement it at every entry point.
-  const env = process.env["0SEC_DISPATCH"];
+  const env = process.env["ZERO_DISPATCH"];
   if (env === "xml" || env === "json") return env;
   if (!modelHint) return "json";
   const m = modelHint.toLowerCase();

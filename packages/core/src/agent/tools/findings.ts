@@ -107,7 +107,7 @@ export const findingsToolDefinitions: Record<string, ToolDefinition> = {
       // agent has structured execution data (e.g. it actually ran the curl /
       // docker steps and observed predictable outputs), it can pass them as a
       // JSON string here. Each step has { id, kind, summary, action, expect? }.
-      // See PocStep / PocStepKind in @0sec/shared/types.ts. Optional —
+      // See PocStep / PocStepKind in @0/shared/types.ts. Optional —
       // findings with prose-only evidence MUST leave this unset.
       poc_steps: {
         type: "string",

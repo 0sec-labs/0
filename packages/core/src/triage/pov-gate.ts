@@ -22,7 +22,7 @@ import type {
   NativeContentBlock,
   NativeToolDef,
 } from "../runtime/types.js";
-import type { Finding, AttackCategory } from "@0sec/shared";
+import type { Finding, AttackCategory } from "@0/shared"
 import { verifyOracleByCategory, type OracleResult } from "./oracles.js";
 import type { OastConfirmedPayload } from "../events/bus.js";
 import type { VerifyVerdict } from "./verify-verdict.js";

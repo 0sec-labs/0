@@ -24,11 +24,11 @@
  * chokepoint mutates the same counters.
  */
 
-import type { AuthConfig, EnforcementSummary } from "@0sec/shared";
+import type { AuthConfig, EnforcementSummary } from "@0/shared"
 
 /**
  * The frozen `enforcement_summary` block emitted in the http_audit report.
- * Defined canonically in `@0sec/shared` (so `ScanReport` can carry it
+ * Defined canonically in `@0/shared` (so `ScanReport` can carry it
  * without a core→shared dependency inversion); re-exported here for the
  * core call sites that build it.
  */

@@ -5,9 +5,9 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { isAbsolute, join, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual, promisify } from "node:util";
-import { eventBus } from "@0sec/core";
-import type { ConsoleAutonomyMode, ConsoleSession, ConsoleSessionCheckpoint, ConsoleSessionConfig, ConsoleTurnOutcome } from "@0sec/core";
-import type { HarnessSnapshot } from "@0sec/shared";
+import { eventBus } from "@0/core"
+import type { ConsoleAutonomyMode, ConsoleSession, ConsoleSessionCheckpoint, ConsoleSessionConfig, ConsoleTurnOutcome } from "@0/core"
+import type { HarnessSnapshot } from "@0/shared"
 import { getSettings } from "./tui/settings-store.js";
 
 const execute = promisify(execFile);
@@ -70,10 +70,10 @@ export function withDevEngineUpdates(
   config: ConsoleSessionConfig,
   closeStore: (completed: boolean) => void,
 ): ConsoleSession {
-  const requestedRoot = process.env["0SEC_DEV_SOURCE_ROOT"];
+  const requestedRoot = process.env["ZERO_DEV_SOURCE_ROOT"];
   const root = requestedRoot ? realpathSync(requestedRoot) : undefined;
-  if (root && JSON.parse(readFileSync(join(root, "packages/core/package.json"), "utf8")).name !== "@0sec/core") {
-    throw new Error("0SEC_DEV_SOURCE_ROOT must identify a 0sec development checkout");
+  if (root && JSON.parse(readFileSync(join(root, "packages/core/package.json"), "utf8")).name !== "@0/core") {
+    throw new Error("ZERO_DEV_SOURCE_ROOT must identify a 0sec development checkout");
   }
   let current = initial;
   let activeDigest: string | undefined;
@@ -100,7 +100,7 @@ export function withDevEngineUpdates(
       if (digest === activeDigest || digest === rejectedDigest) return;
       rejectedDigest = digest;
       notify("Building changed development engine source; the current session remains active until handoff.");
-      const generationRoot = join(root, "packages/core/.0sec/dev-engines");
+      const generationRoot = join(root, "packages/core/.0/dev-engines");
       await mkdir(generationRoot, { recursive: true, mode: 0o700 });
       directory = await mkdtemp(join(generationRoot, "generation-"));
       const result = await execute(process.execPath, [join(root, "scripts/build-dev-engine.mjs"), source, directory], {
@@ -197,7 +197,7 @@ export function withDevEngineUpdates(
     finally { busy = false; activeSend = undefined; }
   };
   const devlog = (o: Record<string, unknown>) => {
-    try { appendFileSync(process.env["0SEC_TUI_LOG"] ?? "/tmp/0sec-tui.log", JSON.stringify({ ts: new Date().toISOString(), kind: "dev-engine", ...o }) + "\n"); } catch { /* best-effort */ }
+    try { appendFileSync(process.env["ZERO_TUI_LOG"] ?? "/tmp/0sec-tui.log", JSON.stringify({ ts: new Date().toISOString(), kind: "dev-engine", ...o }) + "\n"); } catch { /* best-effort */ }
   };
   // A cleanup step must never be able to trap the operator's exit. A live
   // engine hot-swap can leave `current` pointing at a candidate whose own

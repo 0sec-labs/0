@@ -14,7 +14,7 @@
  * Everything is a no-op when 0sec is not running inside herdr.
  */
 
-import type { HerdrEventSink } from "@0sec/core";
+import type { HerdrEventSink } from "@0/core"
 
 let sink: HerdrEventSink | null = null;
 

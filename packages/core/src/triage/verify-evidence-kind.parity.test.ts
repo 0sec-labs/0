@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { AttackCategory, Finding, LayerVerdict, PocStep } from "@0sec/shared";
+import type { AttackCategory, Finding, LayerVerdict, PocStep } from "@0/shared"
 import {
   VERIFY_EVIDENCE_KINDS,
   VERIFY_EVIDENCE_KINDS_ENGINE_EXT,

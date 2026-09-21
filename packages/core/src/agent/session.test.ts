@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { CookieJar, SessionEngine } from "./session.js";
-import type { NamedIdentity } from "@0sec/shared";
+import type { NamedIdentity } from "@0/shared"
 
 const URL_A = "https://target.example.com/api/users/1";
 const URL_SAME_HOST = "https://target.example.com/admin";

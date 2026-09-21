@@ -4,21 +4,21 @@
  *
  * This module is a no-op unless the user opts in via environment variables:
  *
- *   0SEC_CLOUD_SINK     — base URL of the remote API (e.g. https://api.example.com)
- *   0SEC_CLOUD_SCAN_ID  — scan correlation id (sent in X-0sec-Scan-Id header
+ *   ZERO_CLOUD_SINK     — base URL of the remote API (e.g. https://api.example.com)
+ *   ZERO_CLOUD_SCAN_ID  — scan correlation id (sent in X-0sec-Scan-Id header
  *                           AND used in the URL path)
- *   0SEC_CLOUD_TOKEN    — bearer token (sent as Authorization header)
+ *   ZERO_CLOUD_TOKEN    — bearer token (sent as Authorization header)
  *
- * When 0SEC_CLOUD_SINK is unset, behavior is identical to today's local-only
+ * When ZERO_CLOUD_SINK is unset, behavior is identical to today's local-only
  * runs. When set, every saved finding and the final scan report are POSTed to:
  *
- *   ${0SEC_CLOUD_SINK}/scans/${0SEC_CLOUD_SCAN_ID}/findings
+ *   ${ZERO_CLOUD_SINK}/scans/${ZERO_CLOUD_SCAN_ID}/findings
  *
  * The integration is intentionally fire-and-forget: any error returned by the
  * remote endpoint is logged to stderr but does NOT abort the scan. Local
  * output is unchanged either way.
  *
- * The behavior can be force-disabled with 0SEC_FEATURE_CLOUD_SINK=0 even when
+ * The behavior can be force-disabled with ZERO_FEATURE_CLOUD_SINK=0 even when
  * the URL env var is set, mirroring the existing feature-flag pattern in
  * `agent/features.ts`.
  */
@@ -78,19 +78,19 @@ export interface CloudSinkConfig {
 
 /**
  * Read sink configuration from the environment. Returns null when the feature
- * flag is disabled or when 0SEC_CLOUD_SINK is unset (the no-op case).
+ * flag is disabled or when ZERO_CLOUD_SINK is unset (the no-op case).
  */
 export function getCloudSinkConfig(): CloudSinkConfig | null {
   if (!features.cloudSink) return null;
 
-  const sinkUrl = process.env["0SEC_CLOUD_SINK"]?.trim();
+  const sinkUrl = process.env["ZERO_CLOUD_SINK"]?.trim();
   if (!sinkUrl) return null;
 
-  const scanId = process.env["0SEC_CLOUD_SCAN_ID"]?.trim();
+  const scanId = process.env["ZERO_CLOUD_SCAN_ID"]?.trim();
   if (!scanId) return null;
 
-  const token = process.env["0SEC_CLOUD_TOKEN"]?.trim() || undefined;
-  const orgId = process.env["0SEC_CLOUD_ORG_ID"]?.trim() || undefined;
+  const token = process.env["ZERO_CLOUD_TOKEN"]?.trim() || undefined;
+  const orgId = process.env["ZERO_CLOUD_ORG_ID"]?.trim() || undefined;
   return { sinkUrl, scanId, token, orgId };
 }
 
@@ -371,7 +371,7 @@ export function normalizeFinding(rawFinding: unknown): CloudSinkFinding {
  * shape unchanged when the input is already array-shaped, parses a JSON-
  * encoded string into one, and yields null for any other shape. This is
  * deliberately permissive: the OSS sink is a wire-format chokepoint, not a
- * schema validator — see PocStep in @0sec/shared for the canonical shape.
+ * schema validator — see PocStep in @0/shared for the canonical shape.
  */
 function normalizePocSteps(v: unknown): unknown[] | null {
   if (v == null || v === "") return null;
@@ -436,7 +436,7 @@ function normalizeReviewAnnotation(
  *
  * Mirrors `normalizePocSteps` in being deliberately permissive: the OSS
  * sink is a wire-format chokepoint, not a schema validator. The canonical
- * shape lives in `@0sec/shared/types.ts` (`VerificationSpec`).
+ * shape lives in `@0/shared/types.ts` (`VerificationSpec`).
  */
 function normalizeVerificationSpec(v: unknown): Record<string, unknown> | null {
   if (v == null || v === "") return null;

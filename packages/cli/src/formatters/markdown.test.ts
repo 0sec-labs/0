@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import type { Finding, ScanReport } from "@0sec/shared";
+import type { Finding, ScanReport } from "@0/shared"
 import { formatMarkdown } from "./markdown.js";
 
 function mkFinding(overrides: Partial<Finding> = {}): Finding {

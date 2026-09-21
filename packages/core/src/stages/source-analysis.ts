@@ -1,11 +1,9 @@
-import type {
-  ScanContext,
-  StageResult,
-  AttackTemplate,
-  Finding,
-  Severity,
-  AttackCategory,
-} from "@0sec/shared";
+import type { ScanContext,
+StageResult,
+AttackTemplate,
+Finding,
+Severity,
+AttackCategory, } from "@0/shared"
 import type { Runtime, RuntimeContext } from "../runtime/types.js";
 import { buildSourceAnalysisPrompt } from "../prompts.js";
 

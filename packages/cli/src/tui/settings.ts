@@ -1,6 +1,6 @@
 /**
  * User-configurable display settings for the interactive console, persisted
- * to `~/.0sec/tui-settings.json`.
+ * to `~/.0/tui-settings.json`.
  *
  * The trigger was "let me hide the status bar", but a single boolean would
  * have been the wrong shape: every chrome element in the TUI (logo, hints,
@@ -25,7 +25,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir } from "@0sec/shared";
+import { DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir } from "@0/shared"
 
 import { sanitizeKeybindingOverrides } from "./keybindings.js";
 import {
@@ -271,6 +271,38 @@ export interface TuiSettings {
    * load; unknown ids and protected/duplicate chords are dropped.
    */
   keybindings: Record<string, string>;
+
+  // ── Jev evaluator settings (operator-only) ────────────────────────────────
+
+  /**
+   * Jev evaluator funding source. 'environment' resolves legacy env vars
+   * (ZERO_JEV_PROVIDER, ZERO_JEV_FEATURES, etc.); 'off' disables Jev even
+   * if env vars are present. Explicit selection ('typesafe'/'vercel'/'cloud')
+   * uses stored or env-supplied credentials independent of chat provider.
+   * Operator-only: a project cannot enable spending or egress.
+   */
+  jevFunding: "off" | "typesafe" | "vercel" | "cloud" | "environment";
+  /** Enable browser assist pre-evaluation. */
+  jevBrowser: boolean;
+  /** Enable kernel function pre-evaluation. */
+  jevKernel: boolean;
+  /** Enable crash triage pre-evaluation. */
+  jevCrash: boolean;
+  /** Enable commit radar pre-evaluation. */
+  jevRadar: boolean;
+  /** Enable foxguard advisory SAST pre-evaluation. Explicit opt-in only, never auto-enabled. */
+  jevFoxguard: boolean;
+  /**
+   * Max evaluation requests per session. Preset string mapped to number
+   * by jev-helper. Operator-only: controls provider egress.
+   */
+  jevMaxRequests: "10" | "25" | "50" | "100" | "250" | "1000" | "unlimited";
+  /**
+   * Max estimated USD spend per session (advisory reservation model).
+   * Preset string mapped to number by jev-helper. Never a customer charge.
+   * Operator-only: controls provider egress.
+   */
+  jevMaxCostUsd: "5" | "10" | "25" | "50" | "100" | "250" | "unlimited";
 }
 
 /** Keys of `TuiSettings` whose value is a boolean. */
@@ -317,7 +349,11 @@ type TuiSettingDef =
   | EnumSettingDef<"theme">
   | EnumSettingDef<"symbolPreset">
   | EnumSettingDef<"rosterSort">
-  | EnumSettingDef<"leaderKey">;
+  | EnumSettingDef<"leaderKey">
+  // Jev evaluator settings (operator-only)
+  | EnumSettingDef<"jevFunding">
+  | EnumSettingDef<"jevMaxRequests">
+  | EnumSettingDef<"jevMaxCostUsd">;
 
 /**
  * Selectable values for the `theme` setting: the built-ins, plus any user
@@ -570,7 +606,7 @@ const DEFS: readonly TuiSettingDef[] = [
     key: "theme",
     label: "Theme",
     description:
-      "Colour palette. Slate (neutral grey, default) and Midnight (deep blue-black) and Carbon (warm dark), Standard/Paper (light), plus Contrast, Mono Dim and ANSI 16 for 16-colour terminals. Drop validated palettes in ~/.0sec/themes to add your own.",
+      "Colour palette. Slate (neutral grey, default) and Midnight (deep blue-black) and Carbon (warm dark), Standard/Paper (light), plus Contrast, Mono Dim and ANSI 16 for 16-colour terminals. Drop validated palettes in ~/.0/themes to add your own.",
     kind: "enum",
     default: DEFAULT_THEME_NAME,
     choices: THEME_CHOICES,
@@ -598,7 +634,7 @@ const DEFS: readonly TuiSettingDef[] = [
     key: "autoEvolveFinderLenses",
     label: "Auto-evolve finder lenses",
     description:
-      "Start the TUI watcher for ~/.0sec/lens-synthesis/miss-input.json (or OSEC_TUI_LENS_SYNTH_INPUT) so each new curated revision can invoke the configured model.",
+      "Start the TUI watcher for ~/.0/lens-synthesis/miss-input.json (or OSEC_TUI_LENS_SYNTH_INPUT) so each new curated revision can invoke the configured model.",
     kind: "boolean",
     default: false,
     group: "Security",
@@ -692,7 +728,7 @@ const DEFS: readonly TuiSettingDef[] = [
     key: "analyticsLevel",
     label: "Analytics and training data",
     description:
-      "Full is the new-install default. Usage shares feature counters and error categories, not tool content. Commands adds tool arguments/results and submitted code for model training and security research; Full also adds scope and findings. Recognized credentials are scrubbed; emails, URLs, identifiers and other content are retained. Sending uses authenticated Cloud storage and is not anonymous. Each tool/code content field is limited to 256 KiB after credential scrubbing; oversized records are reported locally, not silently truncated. Explicit 0SEC_ANALYTICS_LEVEL and offline/no-telemetry/DO_NOT_TRACK restrictions win over broader settings. Problem reports are separate. Applies to this computer, not this project.",
+      "Full is the new-install default. Usage shares feature counters and error categories, not tool content. Commands adds tool arguments/results and submitted code for model training and security research; Full also adds scope and findings. Recognized credentials are scrubbed; emails, URLs, identifiers and other content are retained. Sending uses authenticated Cloud storage and is not anonymous. Each tool/code content field is limited to 256 KiB after credential scrubbing; oversized records are reported locally, not silently truncated. Explicit ZERO_ANALYTICS_LEVEL and offline/no-telemetry/DO_NOT_TRACK restrictions win over broader settings. Problem reports are separate. Applies to this computer, not this project.",
     kind: "enum",
     default: "full",
     choices: ["off", "usage", "commands", "full"],
@@ -742,6 +778,76 @@ const DEFS: readonly TuiSettingDef[] = [
     default: "off",
     choices: ["off", "ctrl+a", "ctrl+b", "ctrl+space"],
     group: "Display",
+  },
+  // ── Jev evaluator settings (operator-only) ──
+  {
+    key: "jevFunding",
+    label: "Jev assistance",
+    description:
+      "Jev evaluator funding. 'Environment' reads ZERO_JEV_PROVIDER / TYPESAFE_API_KEY etc. from env (existing console users). 'Off' disables even if env vars exist. TypeSafe/Vercel/Cloud use stored or env-supplied credentials. Operator-only — a project cannot enable spending. See also standalone feature toggles (Browser, Kernel, Crash, Radar) and spend presets below.",
+    kind: "enum",
+    default: "environment",
+    choices: ["off", "typesafe", "vercel", "cloud", "environment"],
+    group: "Jev",
+  },
+  {
+    key: "jevBrowser",
+    label: "Browser assist",
+    description:
+      "Browser-assist pre-evaluation for URL analysis. Enabled features require Jev funding and must have explicit scope + operator-approved readOnlyUrls (env ZERO_JEV_READONLY_URLS) to be usable. Feature toggle alone does not grant access or derive permissions.",
+    kind: "boolean",
+    default: false,
+    group: "Jev",
+  },
+  {
+    key: "jevKernel",
+    label: "Kernel prepass",
+    description: "Kernel-function pre-evaluation for triage and hypothesis ranking.",
+    kind: "boolean",
+    default: false,
+    group: "Jev",
+  },
+  {
+    key: "jevCrash",
+    label: "Crash triage",
+    description: "Crash-record triage and signal pre-evaluation.",
+    kind: "boolean",
+    default: false,
+    group: "Jev",
+  },
+  {
+    key: "jevRadar",
+    label: "Commit radar",
+    description: "Recent-commit radar scanning and classification via Jev evaluator.",
+    kind: "boolean",
+    default: false,
+    group: "Jev",
+  },
+  {
+    key: "jevFoxguard",
+    label: "Foxguard advisory SAST",
+    description: "Foxguard advisory SAST pre-evaluation. Explicit opt-in only — must be toggled on, never auto-enabled. Feature availability is not egress/spend consent.",
+    kind: "boolean",
+    default: false,
+    group: "Jev",
+  },
+  {
+    key: "jevMaxRequests",
+    label: "Max requests",
+    description: "Maximum evaluation requests per session. Operator-only budget gate — a project cannot raise this cap.",
+    kind: "enum",
+    default: "100",
+    choices: ["10", "25", "50", "100", "250", "1000", "unlimited"],
+    group: "Jev",
+  },
+  {
+    key: "jevMaxCostUsd",
+    label: "Max estimated spend",
+    description: "Maximum estimated USD spend per session (advisory, not a customer charge — provider estimate for BYOK, server tariff cap for Cloud). Operator-only — a project cannot enable spending.",
+    kind: "enum",
+    default: "10",
+    choices: ["5", "10", "25", "50", "100", "250", "unlimited"],
+    group: "Jev",
   },
 ];
 
@@ -796,6 +902,16 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   rosterSort: "attention",
   leaderKey: "off",
   keybindings: {},
+
+  // Jev evaluator defaults (operator-only)
+  jevFunding: "environment",
+  jevBrowser: false,
+  jevKernel: false,
+  jevCrash: false,
+  jevRadar: false,
+  jevFoxguard: false,
+  jevMaxRequests: "100",
+  jevMaxCostUsd: "10",
 };
 
 /** Basename of the settings file inside the 0sec state directory. */
@@ -804,7 +920,7 @@ const SETTINGS_FILENAME = "tui-settings.json";
 /**
  * Settings live beside the rest of the per-user engine state (scan DB,
  * journals, credentials) rather than in a TUI-specific directory, so
- * `homeStateDir` from `@0sec/shared` — not a local `".0sec"` literal — decides
+ * `homeStateDir` from `@0/shared` — not a local `".0"` literal — decides
  * where that is. One definition of the state root means a future relocation or
  * an `$XDG_STATE_HOME` migration happens in one place.
  */
@@ -815,8 +931,8 @@ export function settingsFilePath(homeDir?: string): string {
 /**
  * Two-level configuration: a per-user GLOBAL file and a per-project OVERRIDE.
  *
- * The global file (`~/.0sec/tui-settings.json`) is the base. A project may add a
- * local `<cwd>/.0sec/tui-settings.json` whose SET keys override the global ones;
+ * The global file (`~/.0/tui-settings.json`) is the base. A project may add a
+ * local `<cwd>/.0/tui-settings.json` whose SET keys override the global ones;
  * a key absent from the project file falls through to global, and a key absent
  * from both falls through to the built-in default. Precedence, highest first:
  *
@@ -829,9 +945,9 @@ export function settingsFilePath(homeDir?: string): string {
  */
 export type SettingLayer = "default" | "global" | "project";
 
-/** The `.0sec` directory inside a project working tree. */
+/** The `.0` directory inside a project working tree. */
 export function projectStateDir(projectDir: string = process.cwd()): string {
-  return join(projectDir, ".0sec");
+  return join(projectDir, ".0");
 }
 
 /** The per-project override settings file (may not exist; that is the norm). */
@@ -925,7 +1041,16 @@ export function isOperatorSetting(key: keyof TuiSettings): boolean {
     || key === "diagnosticReporting"
     || key === "diagnosticReportingPrompted"
     || key === "updatePolicy"
-    || key === "allowDevSourceUpdates";
+    || key === "allowDevSourceUpdates"
+    // Jev evaluator settings — operator-only: project cannot enable spending/egress
+    || key === "jevFunding"
+    || key === "jevBrowser"
+    || key === "jevKernel"
+    || key === "jevCrash"
+    || key === "jevRadar"
+    || key === "jevFoxguard"
+    || key === "jevMaxRequests"
+    || key === "jevMaxCostUsd";
 }
 
 /**
@@ -1093,6 +1218,16 @@ export function normalizeSettings(raw: unknown): TuiSettings {
     rosterSort: enumAt(raw, "rosterSort"),
     leaderKey: enumAt(raw, "leaderKey"),
     keybindings: keybindingsAt(raw),
+
+    // Jev evaluator settings
+    jevFunding: enumAt(raw, "jevFunding"),
+    jevBrowser: booleanAt(raw, "jevBrowser"),
+    jevKernel: booleanAt(raw, "jevKernel"),
+    jevCrash: booleanAt(raw, "jevCrash"),
+    jevRadar: booleanAt(raw, "jevRadar"),
+    jevFoxguard: booleanAt(raw, "jevFoxguard"),
+    jevMaxRequests: enumAt(raw, "jevMaxRequests"),
+    jevMaxCostUsd: enumAt(raw, "jevMaxCostUsd"),
   };
 }
 

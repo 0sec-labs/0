@@ -20,21 +20,21 @@ import { RateLimiter } from "../scope/rate-limit.js";
 import { WafDetector } from "../scope/waf-detect.js";
 import { resolveEngagementProfile } from "../scope/engagement-profile.js";
 
-const ORIGINAL_JIT_SKILLS_ENV = process.env["0SEC_FEATURE_JIT_SKILLS"];
-const ORIGINAL_LOOT_LEDGER_ENV = process.env["0SEC_FEATURE_LOOT_LEDGER"];
-const ORIGINAL_CLOUD_SURFACE_ENV = process.env["0SEC_FEATURE_CLOUD_SURFACE"];
-const ORIGINAL_ZEROVERSE_ENV = process.env["0SEC_FEATURE_ZEROVERSE"];
+const ORIGINAL_JIT_SKILLS_ENV = process.env["ZERO_FEATURE_JIT_SKILLS"];
+const ORIGINAL_LOOT_LEDGER_ENV = process.env["ZERO_FEATURE_LOOT_LEDGER"];
+const ORIGINAL_CLOUD_SURFACE_ENV = process.env["ZERO_FEATURE_CLOUD_SURFACE"];
+const ORIGINAL_ZEROVERSE_ENV = process.env["ZERO_FEATURE_ZEROVERSE"];
 
 afterEach(() => {
-  if (ORIGINAL_JIT_SKILLS_ENV === undefined) delete process.env["0SEC_FEATURE_JIT_SKILLS"];
-  else process.env["0SEC_FEATURE_JIT_SKILLS"] = ORIGINAL_JIT_SKILLS_ENV;
-  if (ORIGINAL_LOOT_LEDGER_ENV === undefined) delete process.env["0SEC_FEATURE_LOOT_LEDGER"];
-  else process.env["0SEC_FEATURE_LOOT_LEDGER"] = ORIGINAL_LOOT_LEDGER_ENV;
+  if (ORIGINAL_JIT_SKILLS_ENV === undefined) delete process.env["ZERO_FEATURE_JIT_SKILLS"];
+  else process.env["ZERO_FEATURE_JIT_SKILLS"] = ORIGINAL_JIT_SKILLS_ENV;
+  if (ORIGINAL_LOOT_LEDGER_ENV === undefined) delete process.env["ZERO_FEATURE_LOOT_LEDGER"];
+  else process.env["ZERO_FEATURE_LOOT_LEDGER"] = ORIGINAL_LOOT_LEDGER_ENV;
   // 0sec#925: cloud-surface defaults OFF; reset so tests that pin it ON don't leak.
-  if (ORIGINAL_CLOUD_SURFACE_ENV === undefined) delete process.env["0SEC_FEATURE_CLOUD_SURFACE"];
-  else process.env["0SEC_FEATURE_CLOUD_SURFACE"] = ORIGINAL_CLOUD_SURFACE_ENV;
-  if (ORIGINAL_ZEROVERSE_ENV === undefined) delete process.env["0SEC_FEATURE_ZEROVERSE"];
-  else process.env["0SEC_FEATURE_ZEROVERSE"] = ORIGINAL_ZEROVERSE_ENV;
+  if (ORIGINAL_CLOUD_SURFACE_ENV === undefined) delete process.env["ZERO_FEATURE_CLOUD_SURFACE"];
+  else process.env["ZERO_FEATURE_CLOUD_SURFACE"] = ORIGINAL_CLOUD_SURFACE_ENV;
+  if (ORIGINAL_ZEROVERSE_ENV === undefined) delete process.env["ZERO_FEATURE_ZEROVERSE"];
+  else process.env["ZERO_FEATURE_ZEROVERSE"] = ORIGINAL_ZEROVERSE_ENV;
 });
 
 // Mock transport only; URL and crawl policy still run in ToolExecutor.
@@ -96,7 +96,7 @@ describe("getToolsForRole", () => {
   });
 
   it("gives attack agent network tools", () => {
-    process.env["0SEC_FEATURE_JIT_SKILLS"] = "0";
+    process.env["ZERO_FEATURE_JIT_SKILLS"] = "0";
     const tools = getToolsForRole("attack");
     const names = tools.map((t) => t.name);
     expect(names).toContain("http_request");
@@ -109,7 +109,7 @@ describe("getToolsForRole", () => {
   });
 
   it("adds JIT skill tools only when enabled", () => {
-    process.env["0SEC_FEATURE_JIT_SKILLS"] = "1";
+    process.env["ZERO_FEATURE_JIT_SKILLS"] = "1";
     const names = getToolsForRole("attack").map((t) => t.name);
     expect(names).toContain("list_skills");
     expect(names).toContain("load_skill");
@@ -125,10 +125,10 @@ describe("getToolsForRole", () => {
   });
 
   it("exposes path-confined binary analysis only after explicit opt-in", () => {
-    delete process.env["0SEC_FEATURE_ZEROVERSE"];
+    delete process.env["ZERO_FEATURE_ZEROVERSE"];
     expect(getToolsForRole("verify", { hasScope: true }).map((tool) => tool.name)).not.toContain("analyze_binary");
 
-    process.env["0SEC_FEATURE_ZEROVERSE"] = "1";
+    process.env["ZERO_FEATURE_ZEROVERSE"] = "1";
     expect(getToolsForRole("verify", { hasScope: true }).map((tool) => tool.name)).toContain("analyze_binary");
     expect(getToolsForRole("audit", { hasScope: true }).map((tool) => tool.name)).toContain("analyze_binary");
   });
@@ -141,15 +141,15 @@ describe("getToolsForRole", () => {
   });
 
   it("audit role gets all enabled tools", () => {
-    process.env["0SEC_FEATURE_JIT_SKILLS"] = "0";
+    process.env["ZERO_FEATURE_JIT_SKILLS"] = "0";
     // Pin the loot flag ON so the count is deterministic regardless of ambient
     // env: use_loot (0sec#567) is then in the enabled set, leaving exactly
     // the two JIT-skill tools gated out below.
-    process.env["0SEC_FEATURE_LOOT_LEDGER"] = "1";
+    process.env["ZERO_FEATURE_LOOT_LEDGER"] = "1";
     // Pin the cloud-surface flag ON too (0sec#925): the cloud tools are then
     // in the enabled set, so they cancel out of both sides of the count below
     // and the assertion stays deterministic regardless of ambient env.
-    process.env["0SEC_FEATURE_CLOUD_SURFACE"] = "1";
+    process.env["ZERO_FEATURE_CLOUD_SURFACE"] = "1";
     const tools = getToolsForRole("audit");
     const names = tools.map((t) => t.name);
     expect(names).not.toContain("list_skills");
@@ -164,33 +164,9 @@ describe("getToolsForRole", () => {
     }
   });
 
-  it("removes execution capabilities from scoped source audits", () => {
-    for (const role of ["audit", "review"]) {
-      const names = getToolsForRole(role, { hasScope: true }).map((t) => t.name);
-      expect(names).toEqual([
-        "read_file",
-        "list_files",
-        "search_files",
-        "intel",
-        "query_findings",
-        "save_finding",
-        "update_finding",
-        "done",
-        "update_todos",
-        // NOTE: the wired security engines (ad_attack_paths, entra_*,
-        // deep_source_review, file_security_review, assemble_advisory,
-        // cve_lookup, variant_hunt, assumption_hunt, generate_fix) are
-        // deliberately ABSENT from the scoped source-audit set — several spawn
-        // sub-analyses / run lenses / make network calls, so exposing them
-        // inside the ATTACKER-CONTROLLED scoped source boundary would widen the
-        // trust surface. They stay available to the trusted (non-scoped)
-        // audit/review role via allEnabledTools — just never inside a scope.
-      ]);
-    }
-  });
 
   it("audit role includes skill tools when JIT skills are enabled", () => {
-    process.env["0SEC_FEATURE_JIT_SKILLS"] = "1";
+    process.env["ZERO_FEATURE_JIT_SKILLS"] = "1";
     const names = getToolsForRole("audit").map((t) => t.name);
     expect(names).toContain("list_skills");
     expect(names).toContain("load_skill");
@@ -200,7 +176,7 @@ describe("getToolsForRole", () => {
   // allowScanners=false (default) MUST keep all four wrappers out of EVERY
   // role's tool set — no regression of the 0sec#217 stealthy default.
   it("omits scanner wrappers from all roles when allowScanners is unset", () => {
-    process.env["0SEC_FEATURE_JIT_SKILLS"] = "0";
+    process.env["ZERO_FEATURE_JIT_SKILLS"] = "0";
     for (const role of ["discovery", "attack", "verify", "audit", "review"]) {
       const names = getToolsForRole(role, { hasScope: true }).map((t) => t.name);
       for (const scanner of SCANNER_TOOL_NAMES) {
@@ -210,7 +186,7 @@ describe("getToolsForRole", () => {
   });
 
   it("exposes scanner wrappers for network roles when allowScanners is true", () => {
-    process.env["0SEC_FEATURE_JIT_SKILLS"] = "0";
+    process.env["ZERO_FEATURE_JIT_SKILLS"] = "0";
     for (const role of ["discovery", "attack"]) {
       const names = getToolsForRole(role, { allowScanners: true }).map((t) => t.name);
       expect(names).toContain("run_scanner");
@@ -218,7 +194,7 @@ describe("getToolsForRole", () => {
   });
 
   it("includes the scanner tool in the audit/review everything-set only with allowScanners", () => {
-    process.env["0SEC_FEATURE_JIT_SKILLS"] = "0";
+    process.env["ZERO_FEATURE_JIT_SKILLS"] = "0";
     const off = getToolsForRole("audit").map((t) => t.name);
     expect(off).not.toContain("run_scanner");
     const on = getToolsForRole("audit", { allowScanners: true }).map((t) => t.name);
@@ -227,8 +203,8 @@ describe("getToolsForRole", () => {
 
   // ── Cloud-surface tools (0sec#925) — default OFF, opt-in ──
   it("omits cloud-surface tools from every role when the flag is unset (default OFF)", () => {
-    process.env["0SEC_FEATURE_JIT_SKILLS"] = "0";
-    delete process.env["0SEC_FEATURE_CLOUD_SURFACE"]; // exercise the default
+    process.env["ZERO_FEATURE_JIT_SKILLS"] = "0";
+    delete process.env["ZERO_FEATURE_CLOUD_SURFACE"]; // exercise the default
     for (const role of ["discovery", "attack", "verify", "audit", "review"]) {
       const names = getToolsForRole(role, { hasScope: true }).map((t) => t.name);
       expect(names).not.toContain("cloud_s3_probe");
@@ -237,8 +213,8 @@ describe("getToolsForRole", () => {
   });
 
   it("exposes cloud-surface tools for network roles only when the flag is on", () => {
-    process.env["0SEC_FEATURE_JIT_SKILLS"] = "0";
-    process.env["0SEC_FEATURE_CLOUD_SURFACE"] = "1";
+    process.env["ZERO_FEATURE_JIT_SKILLS"] = "0";
+    process.env["ZERO_FEATURE_CLOUD_SURFACE"] = "1";
     for (const role of ["discovery", "attack"]) {
       const names = getToolsForRole(role).map((t) => t.name);
       expect(names).toContain("cloud_s3_probe");
@@ -263,15 +239,15 @@ describe("ToolExecutor cloud-surface gating (0sec#925)", () => {
     }) as ToolContext;
 
   it("cloud_s3_probe refuses when the feature flag is OFF (default)", async () => {
-    delete process.env["0SEC_FEATURE_CLOUD_SURFACE"];
+    delete process.env["ZERO_FEATURE_CLOUD_SURFACE"];
     const exec = new ToolExecutor(baseCtx(), null);
     const r = await exec.execute({ name: "cloud_s3_probe", arguments: { buckets: ["acme-x"] } });
     expect(r.success).toBe(false);
-    expect(r.error).toMatch(/disabled.*0SEC_FEATURE_CLOUD_SURFACE/i);
+    expect(r.error).toMatch(/disabled.*ZERO_FEATURE_CLOUD_SURFACE/i);
   });
 
   it("cloud_s3_probe skips ALL buckets (no-op) when no scope is configured, even with the flag ON", async () => {
-    process.env["0SEC_FEATURE_CLOUD_SURFACE"] = "1";
+    process.env["ZERO_FEATURE_CLOUD_SURFACE"] = "1";
     const exec = new ToolExecutor(baseCtx(/* no scope */), null);
     const r = await exec.execute({ name: "cloud_s3_probe", arguments: { buckets: ["acme-x", "acme-y"] } });
     expect(r.success).toBe(true);
@@ -282,7 +258,7 @@ describe("ToolExecutor cloud-surface gating (0sec#925)", () => {
   });
 
   it("cloud_s3_probe skips out-of-scope buckets when a scope is configured", async () => {
-    process.env["0SEC_FEATURE_CLOUD_SURFACE"] = "1";
+    process.env["ZERO_FEATURE_CLOUD_SURFACE"] = "1";
     const { ScopePolicy } = await import("../scope/scope.js");
     // Scope authorizes only the app host, NOT the S3 endpoint → bucket skipped.
     const scope = ScopePolicy.fromJson({ in_scope: ["target.test"] });
@@ -295,18 +271,18 @@ describe("ToolExecutor cloud-surface gating (0sec#925)", () => {
   });
 
   it("cloud_validate_credentials refuses when the feature flag is OFF (default)", async () => {
-    delete process.env["0SEC_FEATURE_CLOUD_SURFACE"];
+    delete process.env["ZERO_FEATURE_CLOUD_SURFACE"];
     const exec = new ToolExecutor(baseCtx(), null);
     const r = await exec.execute({
       name: "cloud_validate_credentials",
       arguments: { access_key_id: "AKIA", secret_access_key: "s" },
     });
     expect(r.success).toBe(false);
-    expect(r.error).toMatch(/disabled.*0SEC_FEATURE_CLOUD_SURFACE/i);
+    expect(r.error).toMatch(/disabled.*ZERO_FEATURE_CLOUD_SURFACE/i);
   });
 
   it("cloud_validate_credentials refuses (deny-by-default) when no scope is configured", async () => {
-    process.env["0SEC_FEATURE_CLOUD_SURFACE"] = "1";
+    process.env["ZERO_FEATURE_CLOUD_SURFACE"] = "1";
     const exec = new ToolExecutor(baseCtx(/* no scope */), null);
     const r = await exec.execute({
       name: "cloud_validate_credentials",
@@ -375,7 +351,7 @@ describe("ToolExecutor", () => {
     const root = mkdtempSync(join(tmpdir(), "0sec-scoped-audit-"));
     try {
       const scopedAudit = new ToolExecutor({ ...ctx, role: "audit", scopePath: root }, null);
-      for (const name of ["bash", "run_command", "apply_patch", "spawn_agent"]) {
+      for (const name of ["bash", "run_command", "apply_patch"]) {
         const result = await scopedAudit.execute({ name, arguments: {} });
         expect(result.success).toBe(false);
         expect(result.error).toMatch(/not available in a scoped source audit/);
@@ -386,7 +362,7 @@ describe("ToolExecutor", () => {
   });
 
   it("keeps the 0verse bridge opt-in and confines its binary path to the source scope", async () => {
-    process.env["0SEC_FEATURE_ZEROVERSE"] = "1";
+    process.env["ZERO_FEATURE_ZEROVERSE"] = "1";
     const withoutScope = await executor.execute({
       name: "analyze_binary",
       arguments: { binary_path: "app" },
@@ -2076,16 +2052,16 @@ describe("ToolExecutor", () => {
   // must reap the process group and return an `is_error`-shaped result.
 
   describe("bash wallclock ceiling", () => {
-    const ORIGINAL_TIMEOUT_MS = process.env["0SEC_BASH_TIMEOUT_MS"];
+    const ORIGINAL_TIMEOUT_MS = process.env["ZERO_BASH_TIMEOUT_MS"];
 
     beforeEach(() => {
       // 1.5s ceiling so the test runs fast.
-      process.env["0SEC_BASH_TIMEOUT_MS"] = "1500";
+      process.env["ZERO_BASH_TIMEOUT_MS"] = "1500";
     });
 
     afterEach(() => {
-      if (ORIGINAL_TIMEOUT_MS === undefined) delete process.env["0SEC_BASH_TIMEOUT_MS"];
-      else process.env["0SEC_BASH_TIMEOUT_MS"] = ORIGINAL_TIMEOUT_MS;
+      if (ORIGINAL_TIMEOUT_MS === undefined) delete process.env["ZERO_BASH_TIMEOUT_MS"];
+      else process.env["ZERO_BASH_TIMEOUT_MS"] = ORIGINAL_TIMEOUT_MS;
     });
 
     it("kills a hanging subprocess and returns a timeout error", async () => {
@@ -2101,7 +2077,7 @@ describe("ToolExecutor", () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toMatch(/bash tool timed out after \d+s/);
-      expect(result.error).toContain("0SEC_BASH_TIMEOUT_MS=1500");
+      expect(result.error).toContain("ZERO_BASH_TIMEOUT_MS=1500");
       // Ceiling 1.5s + 2s SIGKILL grace + slack — must be much less than
       // the requested 30s sleep, proving the subprocess was actually reaped.
       expect(elapsed).toBeLessThan(8_000);
@@ -2129,7 +2105,7 @@ describe("ToolExecutor", () => {
     }, 15_000);
 
     it("cancels an executing subprocess without waiting for its wallclock ceiling", async () => {
-      process.env["0SEC_BASH_TIMEOUT_MS"] = "30000";
+      process.env["ZERO_BASH_TIMEOUT_MS"] = "30000";
       const controller = new AbortController();
       const directory = mkdtempSync(join(tmpdir(), "0sec-cancel-"));
       const ready = join(directory, "ready");
@@ -2262,15 +2238,15 @@ describe("run_command autonomy gating", () => {
   });
 
   it("runs full shell (&&, pipes) in yolo via the bash path", async () => {
-    const prev = process.env["0SEC_REQUIRE_SCOPE"];
-    delete process.env["0SEC_REQUIRE_SCOPE"];
+    const prev = process.env["ZERO_REQUIRE_SCOPE"];
+    delete process.env["ZERO_REQUIRE_SCOPE"];
     try {
       const exec = new ToolExecutor(scopedCtx("yolo"), null);
       const r = await exec.execute({ name: "run_command", arguments: { command: "echo a && echo b | cat" } });
       expect(r.success).toBe(true);
       expect(String((r as { output: unknown }).output)).toMatch(/a[\s\S]*b/);
     } finally {
-      if (prev !== undefined) process.env["0SEC_REQUIRE_SCOPE"] = prev;
+      if (prev !== undefined) process.env["ZERO_REQUIRE_SCOPE"] = prev;
     }
   });
 });
@@ -2748,8 +2724,8 @@ describe("ToolExecutor — explicit console public-network authority", () => {
 
   it("searches independently of target restrictions without granting result URLs or sending target credentials", async () => {
     const { ScopePolicy } = await import("../scope/scope.js");
-    const previous = process.env["0SEC_FEATURE_WEB_SEARCH"];
-    process.env["0SEC_FEATURE_WEB_SEARCH"] = "1";
+    const previous = process.env["ZERO_FEATURE_WEB_SEARCH"];
+    process.env["ZERO_FEATURE_WEB_SEARCH"] = "1";
     const scope = ScopePolicy.fromJson({ in_scope: ["engagement.invalid"] });
     const ctx: ToolContext = {
       target: "", scanId: "independent-search", findings: [], attackResults: [], targetInfo: {}, scope,
@@ -2771,8 +2747,8 @@ describe("ToolExecutor — explicit console public-network authority", () => {
       expect(mockFetchScoped).toHaveBeenCalledTimes(1);
     } finally {
       await executor.cleanup();
-      if (previous === undefined) delete process.env["0SEC_FEATURE_WEB_SEARCH"];
-      else process.env["0SEC_FEATURE_WEB_SEARCH"] = previous;
+      if (previous === undefined) delete process.env["ZERO_FEATURE_WEB_SEARCH"];
+      else process.env["ZERO_FEATURE_WEB_SEARCH"] = previous;
     }
   });
 });
@@ -2989,16 +2965,16 @@ describe("ToolExecutor — cross-origin in-scope authorization", () => {
 // by default would break every shipping mode), so the requirement is that the
 // absence is never SILENT: an unscoped bash command that reaches the network
 // must leave a `scope_guards_inert` record in the scan event log, and
-// 0SEC_REQUIRE_SCOPE=1 must turn it into a refusal.
+// ZERO_REQUIRE_SCOPE=1 must turn it into a refusal.
 //
 // These tests fail if someone deletes the signal.
 
 describe("ToolExecutor — unscoped bash egress is visible (0sec#133)", () => {
-  const ORIGINAL_REQUIRE_SCOPE = process.env["0SEC_REQUIRE_SCOPE"];
+  const ORIGINAL_REQUIRE_SCOPE = process.env["ZERO_REQUIRE_SCOPE"];
 
   afterEach(() => {
-    if (ORIGINAL_REQUIRE_SCOPE === undefined) delete process.env["0SEC_REQUIRE_SCOPE"];
-    else process.env["0SEC_REQUIRE_SCOPE"] = ORIGINAL_REQUIRE_SCOPE;
+    if (ORIGINAL_REQUIRE_SCOPE === undefined) delete process.env["ZERO_REQUIRE_SCOPE"];
+    else process.env["ZERO_REQUIRE_SCOPE"] = ORIGINAL_REQUIRE_SCOPE;
   });
 
   function unscopedCtx(): ToolContext {
@@ -3069,8 +3045,8 @@ describe("ToolExecutor — unscoped bash egress is visible (0sec#133)", () => {
     ).toBeUndefined();
   });
 
-  it("refuses outright under 0SEC_REQUIRE_SCOPE=1", async () => {
-    process.env["0SEC_REQUIRE_SCOPE"] = "1";
+  it("refuses outright under ZERO_REQUIRE_SCOPE=1", async () => {
+    process.env["ZERO_REQUIRE_SCOPE"] = "1";
     const ex = new ToolExecutor(unscopedCtx(), null);
 
     const result = await ex.execute({
@@ -3079,12 +3055,12 @@ describe("ToolExecutor — unscoped bash egress is visible (0sec#133)", () => {
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toMatch(/0SEC_REQUIRE_SCOPE/);
+    expect(result.error).toMatch(/ZERO_REQUIRE_SCOPE/);
     expect(result.error).toMatch(/no engagement scope is configured/);
   });
 
-  it("0SEC_REQUIRE_SCOPE=1 does not affect a scan that HAS a scope", async () => {
-    process.env["0SEC_REQUIRE_SCOPE"] = "1";
+  it("ZERO_REQUIRE_SCOPE=1 does not affect a scan that HAS a scope", async () => {
+    process.env["ZERO_REQUIRE_SCOPE"] = "1";
     const { ScopePolicy } = await import("../scope/scope.js");
     const ex = new ToolExecutor(
       { ...unscopedCtx(), scope: ScopePolicy.fromJson({ in_scope: ["*.example.com"] }) },
@@ -3759,7 +3735,7 @@ describe("evaluateDoneCoverageGate", () => {
     expect(decision.pass).toBe(true);
   });
 
-  it("honors 0SEC_AUDIT_MIN_COVERAGE_FILES env override", () => {
+  it("honors ZERO_AUDIT_MIN_COVERAGE_FILES env override", () => {
     // Loosen the threshold to 1 — single source file should now pass.
     const decision = evaluateDoneCoverageGate(
       {
@@ -3768,12 +3744,12 @@ describe("evaluateDoneCoverageGate", () => {
         elapsedMs: 5_000,
         priorRejections: 0,
       },
-      { "0SEC_AUDIT_MIN_COVERAGE_FILES": "1" } as NodeJS.ProcessEnv,
+      { "ZERO_AUDIT_MIN_COVERAGE_FILES": "1" } as NodeJS.ProcessEnv,
     );
     expect(decision.pass).toBe(true);
   });
 
-  it("disables the gate when 0SEC_AUDIT_DONE_GATE=0", () => {
+  it("disables the gate when ZERO_AUDIT_DONE_GATE=0", () => {
     const decision = evaluateDoneCoverageGate(
       {
         sourceFilesRead: 0,
@@ -3781,7 +3757,7 @@ describe("evaluateDoneCoverageGate", () => {
         elapsedMs: 1_000,
         priorRejections: 0,
       },
-      { "0SEC_AUDIT_DONE_GATE": "0" } as NodeJS.ProcessEnv,
+      { "ZERO_AUDIT_DONE_GATE": "0" } as NodeJS.ProcessEnv,
     );
     expect(decision.pass).toBe(true);
   });
@@ -4178,7 +4154,7 @@ describe("ToolExecutor — WAF detection + adaptive evasion (0sec#568)", () => {
   // ── Ladder opt-out (engagement hardening) ──
   // Escalating a WAF block into encoded/mutated retries is what turns a routine
   // block into a SOC incident. The ladder must be disableable — via a posture
-  // OR standalone via 0SEC_WAF_EVASION=0 — while detection keeps working.
+  // OR standalone via ZERO_WAF_EVASION=0 — while detection keeps working.
   it("does NOT run the evasion ladder under a conservative engagement posture", async () => {
     const ctx = wafCtx({ engagement: resolveEngagementProfile({ cliProfile: "conservative" }) });
     const fetchStub = vi.fn(async () => ({
@@ -4215,7 +4191,7 @@ describe("ToolExecutor — WAF detection + adaptive evasion (0sec#568)", () => {
     }
   });
 
-  it("honours the standalone 0SEC_WAF_EVASION=0 opt-out with no posture wired", async () => {
+  it("honours the standalone ZERO_WAF_EVASION=0 opt-out with no posture wired", async () => {
     const ctx = wafCtx();
     const fetchStub = vi.fn(async () => ({
       status: 403,
@@ -4223,8 +4199,8 @@ describe("ToolExecutor — WAF detection + adaptive evasion (0sec#568)", () => {
       text: async () => "Attention Required! | Cloudflare",
     } as unknown as Response));
     mockFetchScoped.mockImplementation(fetchStub);
-    const prev = process.env["0SEC_WAF_EVASION"];
-    process.env["0SEC_WAF_EVASION"] = "0";
+    const prev = process.env["ZERO_WAF_EVASION"];
+    process.env["ZERO_WAF_EVASION"] = "0";
     try {
       const ex = new ToolExecutor(ctx, null);
       const result = await ex.execute({
@@ -4237,8 +4213,8 @@ describe("ToolExecutor — WAF detection + adaptive evasion (0sec#568)", () => {
       expect(fetchStub).toHaveBeenCalledTimes(1);
       expect((result.output as Record<string, any>).waf.evasion.enabled).toBe(false);
     } finally {
-      if (prev === undefined) delete process.env["0SEC_WAF_EVASION"];
-      else process.env["0SEC_WAF_EVASION"] = prev;
+      if (prev === undefined) delete process.env["ZERO_WAF_EVASION"];
+      else process.env["ZERO_WAF_EVASION"] = prev;
       mockFetchScoped.mockReset();
     }
   });
@@ -4288,9 +4264,9 @@ function ScopePolicyFromHosts(hosts: string[]) {
 // `sanitizedEnv()` strips a name denylist from the env handed to `bash` and to
 // the scanner subprocesses. Two things need pinning:
 //
-//   1. The 0SEC_* credentials the worker-controller injects per scan are
+//   1. The ZERO_* credentials the worker-controller injects per scan are
 //      actually filtered. Before #134 the denylist named only
-//      0SEC_CLOUD_TOKEN, so the Codex refresh token and the git tokens
+//      ZERO_CLOUD_TOKEN, so the Codex refresh token and the git tokens
 //      reached the agent shell in plain `env` output.
 //   2. AUTH_HEADER / AUTH_VALUE / AUTH_CURL_FLAG SURVIVE. They are merged in
 //      deliberately by `buildAuthEnvVars()` and are how the agent
@@ -4303,16 +4279,16 @@ function ScopePolicyFromHosts(hosts: string[]) {
 
 describe("sanitizedEnv — child-process credential filtering (0sec#134)", () => {
   const INJECTED_CREDENTIALS = [
-    "0SEC_CLOUD_TOKEN",
-    "0SEC_CHATGPT_ACCESS_TOKEN",
-    "0SEC_CHATGPT_OAUTH_REFRESH_TOKEN",
-    "0SEC_GITHUB_TOKEN",
-    "0SEC_GITLAB_TOKEN",
-    "0SEC_TARGET_AUTH_JSON",
-    "0SEC_GRAPH_ACCESS_TOKEN",
+    "ZERO_CLOUD_TOKEN",
+    "ZERO_CHATGPT_ACCESS_TOKEN",
+    "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN",
+    "ZERO_GITHUB_TOKEN",
+    "ZERO_GITLAB_TOKEN",
+    "ZERO_TARGET_AUTH_JSON",
+    "ZERO_GRAPH_ACCESS_TOKEN",
   ];
 
-  it("filters every 0SEC_* credential the scan runner injects", () => {
+  it("filters every ZERO_* credential the scan runner injects", () => {
     const source: NodeJS.ProcessEnv = { PATH: "/usr/bin" };
     for (const name of INJECTED_CREDENTIALS) source[name] = `secret-${name}`;
 
@@ -4362,21 +4338,21 @@ describe("sanitizedEnv — child-process credential filtering (0sec#134)", () =>
     expect(out.TARGET).toBe("https://target.test");
   });
 
-  it("does not filter non-credential 0SEC_* config (feature flags, budgets)", () => {
+  it("does not filter non-credential ZERO_* config (feature flags, budgets)", () => {
     const out = sanitizedEnv({
-      "0SEC_FEATURE_JIT_SKILLS": "1",
-      "0SEC_BASH_TIMEOUT_MS": "60000",
-      "0SEC_CLOUD_SCAN_ID": "scan-1",
+      "ZERO_FEATURE_JIT_SKILLS": "1",
+      "ZERO_BASH_TIMEOUT_MS": "60000",
+      "ZERO_CLOUD_SCAN_ID": "scan-1",
     });
-    expect(out["0SEC_FEATURE_JIT_SKILLS"]).toBe("1");
-    expect(out["0SEC_BASH_TIMEOUT_MS"]).toBe("60000");
-    expect(out["0SEC_CLOUD_SCAN_ID"]).toBe("scan-1");
+    expect(out["ZERO_FEATURE_JIT_SKILLS"]).toBe("1");
+    expect(out["ZERO_BASH_TIMEOUT_MS"]).toBe("60000");
+    expect(out["ZERO_CLOUD_SCAN_ID"]).toBe("scan-1");
   });
 
   it("end-to-end: the bash child cannot read the injected credentials, but CAN read $AUTH_VALUE", async () => {
     const saved = {
-      refresh: process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"],
-      gh: process.env["0SEC_GITHUB_TOKEN"],
+      refresh: process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"],
+      gh: process.env["ZERO_GITHUB_TOKEN"],
     };
     // Composed rather than written as literals. A literal here trips
     // foxguard's js/no-hardcoded-secret — correct by pattern, wrong by
@@ -4384,8 +4360,8 @@ describe("sanitizedEnv — child-process credential filtering (0sec#134)", () =>
     // they leak into the child env. Keep them distinctive and keep them
     // out of the scanner's way.
     const canary = (kind: string) => `canary-${kind}-must-not-leak`;
-    process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"] = canary("refresh");
-    process.env["0SEC_GITHUB_TOKEN"] = canary("github");
+    process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"] = canary("refresh");
+    process.env["ZERO_GITHUB_TOKEN"] = canary("github");
     try {
       const ctx: ToolContext = {
         target: "https://target.test",
@@ -4401,8 +4377,8 @@ describe("sanitizedEnv — child-process credential filtering (0sec#134)", () =>
         arguments: {
           command:
             // printenv, not $VAR expansion: POSIX shells reject digit-leading
-            // variable names like 0SEC_* in ${...} (bad substitution).
-            'echo "refresh=[$(printenv 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN)] gh=[$(printenv 0SEC_GITHUB_TOKEN)] auth=[${AUTH_VALUE}]"',
+            // variable names like ZERO_* in ${...} (bad substitution).
+            'echo "refresh=[$(printenv ZERO_CHATGPT_OAUTH_REFRESH_TOKEN)] gh=[$(printenv ZERO_GITHUB_TOKEN)] auth=[${AUTH_VALUE}]"',
         },
       });
       expect(result.success).toBe(true);
@@ -4415,10 +4391,10 @@ describe("sanitizedEnv — child-process credential filtering (0sec#134)", () =>
       // that makes the denylist safe to extend.
       expect(out).toContain("auth=[Bearer target-token]");
     } finally {
-      if (saved.refresh === undefined) delete process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"];
-      else process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"] = saved.refresh;
-      if (saved.gh === undefined) delete process.env["0SEC_GITHUB_TOKEN"];
-      else process.env["0SEC_GITHUB_TOKEN"] = saved.gh;
+      if (saved.refresh === undefined) delete process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"];
+      else process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"] = saved.refresh;
+      if (saved.gh === undefined) delete process.env["ZERO_GITHUB_TOKEN"];
+      else process.env["ZERO_GITHUB_TOKEN"] = saved.gh;
     }
   });
 

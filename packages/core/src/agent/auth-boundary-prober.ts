@@ -23,7 +23,7 @@
  * consistent with the rest of the agent.
  */
 
-import type { AuthConfig } from "@0sec/shared";
+import type { AuthConfig } from "@0/shared"
 import { buildAuthHeaders } from "./prompts.js";
 
 // ── Types ──

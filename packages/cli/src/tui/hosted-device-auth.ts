@@ -1,4 +1,4 @@
-import { loadCloudCredentials, CloudClient, CloudUnauthorizedError, CloudForbiddenError } from "@0sec/core";
+import { loadCloudCredentials, CloudClient, CloudUnauthorizedError, CloudForbiddenError } from "@0/core"
 import type { HostedVerificationStatus } from "./connect-layout.js";
 import { hostedBrowserLoginFlow, type HostedBrowserLoginOptions, type HostedLoginPhase, type LoginResult } from "../commands/auth.js";
 

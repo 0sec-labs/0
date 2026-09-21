@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import type { MemSafetyScanResult } from "../../stages/memsafety-scan.js";
 import { runResearch } from "../research-runner.js";
 import { UserspaceMemSafetyResearchAdapter, type UserspaceMemSafetyTarget } from "./userspace-memsafety-adapter.js";

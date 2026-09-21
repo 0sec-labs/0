@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import {
   emitFindingsAsPRs,
   buildBranchName,
@@ -169,7 +169,7 @@ describe("buildPrTitle / buildPrBody", () => {
     expect(body).toContain("## Summary");
     expect(body).toContain("## Severity reasoning");
     expect(body).toContain("CVSS:** 7.5 (CVSS:3.1/AV:N)");
-    expect(body).toContain(".0sec/findings/fnd1/");
+    expect(body).toContain(".0/findings/fnd1/");
     expect(body).toContain("`reproduced`");
     expect(body).toContain("Finding ID: `fnd-1`");
   });
@@ -264,11 +264,11 @@ describe("emitFindingsAsPRs", () => {
     expect(fs.files.get("/out/hypotheses.md")).toContain("Finding hyp1");
 
     // repro README + suggested patch landed for the secret finding
-    expect(fs.files.get("/repo/.0sec/findings/rep1/README.md")).toContain("Finding rep1");
-    expect(fs.files.get("/repo/.0sec/findings/rep1/suggested-fix.patch")).toContain("process.env.");
+    expect(fs.files.get("/repo/.0/findings/rep1/README.md")).toContain("Finding rep1");
+    expect(fs.files.get("/repo/.0/findings/rep1/suggested-fix.patch")).toContain("process.env.");
 
     // missing-validation finding got a guard patch
-    expect(fs.files.get("/repo/.0sec/findings/rep2/suggested-fix.patch")).toContain("starter guard");
+    expect(fs.files.get("/repo/.0/findings/rep2/suggested-fix.patch")).toContain("starter guard");
   });
 
   it("dry-run prints commands and does not invoke gh", async () => {
@@ -343,7 +343,7 @@ describe("emitFindingsAsPRs", () => {
 
     expect(fs.copies).toContainEqual({
       src: "/fixtures/sanitizer.log",
-      dest: "/repo/.0sec/findings/rep1/sanitizer.log",
+      dest: "/repo/.0/findings/rep1/sanitizer.log",
     });
   });
 
@@ -365,7 +365,7 @@ describe("emitFindingsAsPRs", () => {
       fsClient: fs.client,
     });
 
-    expect(fs.files.get("/repo/.0sec/findings/rep1/nothing.log.missing.txt")).toContain(
+    expect(fs.files.get("/repo/.0/findings/rep1/nothing.log.missing.txt")).toContain(
       "/nope/nothing.log",
     );
   });

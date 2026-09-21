@@ -7,7 +7,7 @@ import {
   computeAgreement,
   fuseTriageSignals,
 } from "./multi-modal.js";
-import type { AttackCategory, Finding } from "@0sec/shared";
+import type { AttackCategory, Finding } from "@0/shared"
 
 function makeFinding(overrides: Partial<Finding> = {}): Finding {
   return {

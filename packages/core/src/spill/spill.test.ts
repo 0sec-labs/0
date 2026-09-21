@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared"
 import {
   DEFAULT_SPILL_RETRIEVAL_TOOL,
   MAX_READ_SPILL_CHARS,
@@ -46,7 +46,7 @@ function bigPayload(chars: number, fill = "A"): string {
 }
 
 describe("spillDir", () => {
-  it("scopes the directory under the shared state dir, never a hardcoded .0sec literal", () => {
+  it("scopes the directory under the shared state dir, never a hardcoded .0 literal", () => {
     expect(spillDir(SCAN_ID, home)).toBe(join(homeStateDir(home), SPILLS_DIR_NAME, SCAN_ID));
   });
 

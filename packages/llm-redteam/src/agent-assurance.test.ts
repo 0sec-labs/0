@@ -2,10 +2,8 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  AgentActionEvidenceManifestSchema,
-  type AgentActionScenario,
-} from "@0sec/shared";
+import { AgentActionEvidenceManifestSchema,
+type AgentActionScenario, } from "@0/shared"
 import {
   agentActionConfigurationChanges,
   httpActionOracle,

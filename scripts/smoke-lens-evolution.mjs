@@ -19,13 +19,13 @@ import { LlmApiRuntime } from "../packages/core/dist/runtime/llm-api.js";
 import { estimateCost, getRates, MODEL_PRICING } from "../packages/shared/dist/index.js";
 
 maybeLoadCodexAuth();
-process.env["0SEC_DISABLE_HUNT_MEMORY"] = "1";
-process.env["0SEC_CLOUD_SINK"] = "";
+process.env["ZERO_DISABLE_HUNT_MEMORY"] = "1";
+process.env["ZERO_CLOUD_SINK"] = "";
 const root = mkdtempSync(join(tmpdir(), "0sec-lens-e2e-"));
 const registry = join(root, "lenses.json");
 const queue = { storePath: join(root, "observations.json") };
-const previousRegistry = process.env["0SEC_APPSEC_LENS_REGISTRY"];
-process.env["0SEC_APPSEC_LENS_REGISTRY"] = registry;
+const previousRegistry = process.env["ZERO_APPSEC_LENS_REGISTRY"];
+process.env["ZERO_APPSEC_LENS_REGISTRY"] = registry;
 const cleanup = () => rmSync(root, { recursive: true, force: true });
 process.on("exit", cleanup);
 // Two trials cover development and held-out lanes, each with clean controls:
@@ -36,7 +36,7 @@ const deadline = setTimeout(() => {
 }, 2400000);
 let claim;
 try {
-  const modelId = process.env["0SEC_MODEL"] || "gpt-5.6-luna";
+  const modelId = process.env["ZERO_MODEL"] || "gpt-5.6-luna";
   assert.notEqual(getRates(modelId), MODEL_PRICING.default, "model pricing must be known");
   const fixture = (id, filename, code, expectedRange) => {
     const directory = join(root, id);
@@ -119,7 +119,7 @@ try {
 } finally {
   if (claim) releaseClaim(claim.id, claim.claimToken, queue);
   clearTimeout(deadline);
-  if (previousRegistry === undefined) delete process.env["0SEC_APPSEC_LENS_REGISTRY"];
-  else process.env["0SEC_APPSEC_LENS_REGISTRY"] = previousRegistry;
+  if (previousRegistry === undefined) delete process.env["ZERO_APPSEC_LENS_REGISTRY"];
+  else process.env["ZERO_APPSEC_LENS_REGISTRY"] = previousRegistry;
   cleanup();
 }

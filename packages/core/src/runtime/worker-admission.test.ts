@@ -182,7 +182,7 @@ describe("worker admission", () => {
   });
 
   it("cannot bypass invalid environment limits by retrying initialization", async () => {
-    vi.stubEnv("0SEC_WORKER_MAX_ACTIVE", "NaN");
+    vi.stubEnv("ZERO_WORKER_MAX_ACTIVE", "NaN");
     const execute = vi.fn(async () => ok);
     for (let attempt = 0; attempt < 2; attempt++) {
       await expect(async () => withWorkerAdmission(request, undefined, execute)).rejects.toThrow(/invalid worker/);

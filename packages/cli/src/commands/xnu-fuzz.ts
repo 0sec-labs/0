@@ -9,20 +9,18 @@
  *   gen        — §2: target-model.json → gate-passing + structure-aware inputs
  *   harness-plan — §3: print what a single macOS-VM shard run needs to actually run
  *
- * This command is GLUE: all logic lives in `@0sec/core` `xnu-fuzz/`.
+ * This command is GLUE: all logic lives in `@0/core` `xnu-fuzz/`.
  */
 
 import type { Command } from "commander";
 import { readFileSync, writeFileSync } from "node:fs";
-import {
-  enumerateTargetModelFromKext,
-  generateInputsForSelector,
-  makeRng,
-  selectorModelToLine,
-  type TargetModel,
-  type UserClientModel,
-  planSingleShardRun,
-} from "@0sec/core";
+import { enumerateTargetModelFromKext,
+generateInputsForSelector,
+makeRng,
+selectorModelToLine,
+type TargetModel,
+type UserClientModel,
+planSingleShardRun, } from "@0/core"
 
 interface EnumerateOpts {
   kext: string;

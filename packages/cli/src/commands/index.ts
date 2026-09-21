@@ -50,7 +50,6 @@ export { registerXnuFuzzCommand } from "./xnu-fuzz.js";
 export { registerResearchCommand } from "./research.js";
 export { registerRadarCommand } from "./radar.js";
 export { registerTimelineCommand } from "./timeline.js";
-export { registerFileReviewCommand } from "./file-review.js";
 export { runUnified } from "./run.js";
 export { registerAgentAssureCommand } from "./agent-assure.js";
 export { registerBinaryCommand } from "./binary.js";

@@ -53,14 +53,14 @@ test("DSH runner preserves 0sec engagement arguments", () => {
     "--engagement-profile", "conservative",
     "--allow-scanners",
     "--no-waf-evasion",
-    "--mcp-env", "0SEC_MCP_AUTH_JSON",
-    "--mcp-env", "0SEC_MCP_AUTH_JSON",
+    "--mcp-env", "ZERO_MCP_AUTH_JSON",
+    "--mcp-env", "ZERO_MCP_AUTH_JSON",
     "Use only 0sec MCP tools.",
   ], "/workspace");
 
   assert.equal(options.scope, "/workspace/scope.json");
   assert.equal(options.dbPath, "/workspace/runs/scan.sqlite");
-  assert.deepEqual(options.mcpEnv, ["0SEC_MCP_AUTH_JSON"]);
+  assert.deepEqual(options.mcpEnv, ["ZERO_MCP_AUTH_JSON"]);
   assert.deepEqual(
     buildMcpArgs(options, "/opt/0sec/dist/0sec.js"),
     [

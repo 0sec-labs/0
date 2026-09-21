@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { closeSync, constants, fstatSync, openSync, readSync, realpathSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import { hasKnownMarkerText } from "../disclose/known-marker.js";
 import { readEvolutionArtifact } from "../improvement/artifacts.js";
 import { parseEvolutionConfig } from "../improvement/config.js";

@@ -27,7 +27,7 @@
  *     npm_dynamic_discovery, weaponize_kernel, cve_adapt). These RUN/BUILD
  *     untrusted code or weaponize. Each needs a named env flag AND an active
  *     scope; the absent flag ⇒ the tool is not offered at all (mirrors
- *     0SEC_FEATURE_CLOUD_SURFACE / CLOUD_TOOL_NAMES). weaponize_kernel and
+ *     ZERO_FEATURE_CLOUD_SURFACE / CLOUD_TOOL_NAMES). weaponize_kernel and
  *     cve_adapt additionally deny unless kernel-VM artifacts are present — they
  *     only ever execute inside a disposable kernel VM.
  *
@@ -135,7 +135,7 @@ export const offensiveEngineToolDefinitions: Record<string, ToolDefinition> = {
   memsafety_fuzz: {
     name: "memsafety_fuzz",
     description:
-      "Build and FUZZ a native source tree (C/C++/Rust) for memory-safety bugs — sanitizer builds + a fuzz harness driven in a closed loop, classifying crashes into exploitability verdicts. This EXECUTES the target's build scripts and native fuzz targets, so it is DENY-BY-DEFAULT: requires the feature flag 0SEC_FEATURE_MEMSAFETY=1 AND an active engagement scope. When the toolchain (cargo-fuzz / clang / miri) is missing the run reports `tooling_missing` and ZERO findings — that is an honest 'could not complete', NOT a clean result.",
+      "Build and FUZZ a native source tree (C/C++/Rust) for memory-safety bugs — sanitizer builds + a fuzz harness driven in a closed loop, classifying crashes into exploitability verdicts. This EXECUTES the target's build scripts and native fuzz targets, so it is DENY-BY-DEFAULT: requires the feature flag ZERO_FEATURE_MEMSAFETY=1 AND an active engagement scope. When the toolchain (cargo-fuzz / clang / miri) is missing the run reports `tooling_missing` and ZERO findings — that is an honest 'could not complete', NOT a clean result.",
     parameters: {
       source: { type: "string", description: "Native source tree to fuzz (a local path or git URL; resolved within scope when a scoped source path is set)." },
       language: { type: "string", description: "Source language: \"c\", \"cpp\", or \"rust\". Auto-detected from the build files when omitted." },
@@ -149,7 +149,7 @@ export const offensiveEngineToolDefinitions: Record<string, ToolDefinition> = {
   npm_dynamic_discovery: {
     name: "npm_dynamic_discovery",
     description:
-      "Install and RUN untrusted npm packages under instrumentation (in an isolated sandbox runner, never in-process) to observe malicious install/runtime behaviour — install-script abuse, network beacons, filesystem/credential access — layered with an OSV advisory lookup for known-vulnerable dependencies. This EXECUTES arbitrary package code, so it is DENY-BY-DEFAULT: requires the feature flag 0SEC_FEATURE_NPM_DISCOVERY=1 AND an active engagement scope. Run only in a sandbox/VM you can discard. A clean dynamic run is not proof of safety.",
+      "Install and RUN untrusted npm packages under instrumentation (in an isolated sandbox runner, never in-process) to observe malicious install/runtime behaviour — install-script abuse, network beacons, filesystem/credential access — layered with an OSV advisory lookup for known-vulnerable dependencies. This EXECUTES arbitrary package code, so it is DENY-BY-DEFAULT: requires the feature flag ZERO_FEATURE_NPM_DISCOVERY=1 AND an active engagement scope. Run only in a sandbox/VM you can discard. A clean dynamic run is not proof of safety.",
     parameters: {
       packages: { type: "object", description: "Array of npm package names (optionally \"name@version\") to analyze." },
       detector_ids: { type: "object", description: "Optional array of behaviour-detector ids to restrict to; omit to run the full registry." },
@@ -160,7 +160,7 @@ export const offensiveEngineToolDefinitions: Record<string, ToolDefinition> = {
   weaponize_kernel: {
     name: "weaponize_kernel",
     description:
-      "Drive the kernel-exploit weaponization ladder: classify a kernel crash into a primitive and climb from crash → leak → arbitrary write → root, iterating candidate strategies. IT ONLY EVER RUNS INSIDE A DISPOSABLE KERNEL VM — never against a live host. Highest-caution capability, DENY-BY-DEFAULT at three layers: the feature flag 0SEC_FEATURE_KERNEL_WEAPONIZE=1, an active engagement scope, AND kernel-VM artifacts present (0SEC_KERNEL_QEMU_KERNEL + 0SEC_KERNEL_QEMU_DISK on disk) — when the VM assets are absent it refuses rather than pretending to run. Success demonstrates a primitive in the VM; it is a reproduced finding, not a deployed exploit.",
+      "Drive the kernel-exploit weaponization ladder: classify a kernel crash into a primitive and climb from crash → leak → arbitrary write → root, iterating candidate strategies. IT ONLY EVER RUNS INSIDE A DISPOSABLE KERNEL VM — never against a live host. Highest-caution capability, DENY-BY-DEFAULT at three layers: the feature flag ZERO_FEATURE_KERNEL_WEAPONIZE=1, an active engagement scope, AND kernel-VM artifacts present (ZERO_KERNEL_QEMU_KERNEL + ZERO_KERNEL_QEMU_DISK on disk) — when the VM assets are absent it refuses rather than pretending to run. Success demonstrates a primitive in the VM; it is a reproduced finding, not a deployed exploit.",
     parameters: {
       dmesg: { type: "string", description: "The raw kernel crash log / KASAN splat to classify into an exploitation primitive." },
       crash_type: { type: "string", description: "Optional crash-type hint (e.g. \"kasan-uaf\"); sniffed from the dmesg when omitted." },
@@ -172,7 +172,7 @@ export const offensiveEngineToolDefinitions: Record<string, ToolDefinition> = {
   cve_adapt: {
     name: "cve_adapt",
     description:
-      "Adapt a public CVE PoC to the target kernel tree and RUN it to confirm exploitability, returning `confirmed` / `unreproduced` / `no_artifact` / `budget_exhausted`. Fetches artifacts via the read-only CVE scraper, then verifies each candidate by booting a kernel VM. This RUNS an adapted exploit, so it is DENY-BY-DEFAULT: requires the feature flag 0SEC_FEATURE_CVE_ADAPT=1 AND an active engagement scope; because verification boots a kernel VM it also refuses unless kernel-VM artifacts are present. A failed adaptation is not proof of non-exposure. Ground the CVE with `cve_lookup` first.",
+      "Adapt a public CVE PoC to the target kernel tree and RUN it to confirm exploitability, returning `confirmed` / `unreproduced` / `no_artifact` / `budget_exhausted`. Fetches artifacts via the read-only CVE scraper, then verifies each candidate by booting a kernel VM. This RUNS an adapted exploit, so it is DENY-BY-DEFAULT: requires the feature flag ZERO_FEATURE_CVE_ADAPT=1 AND an active engagement scope; because verification boots a kernel VM it also refuses unless kernel-VM artifacts are present. A failed adaptation is not proof of non-exposure. Ground the CVE with `cve_lookup` first.",
     parameters: {
       cve: { type: "string", description: "CVE identifier, e.g. CVE-2024-1086." },
       kernel_tree: { type: "string", description: "Path to the kernel source tree to build/verify against (resolved within scope when a scoped source path is set)." },
@@ -261,14 +261,14 @@ function refuseOutOfScope(ctx: ToolContext, url: string): string | null {
  * (or unique prefix) from the standard 0sec findings DB(s), rebuilding the
  * full Finding (including the verification result + verificationSpec that the
  * fix precondition depends on). CLI-only in the CLI package, re-implemented
- * here over the exported @0sec/db + @0sec/shared primitives.
+ * here over the exported @0/db + @0/shared primitives.
  */
 async function loadPersistedFinding(
   findingId: string,
   dbPathArg?: string,
-): Promise<{ finding: import("@0sec/shared").Finding; target?: string } | { error: string }> {
-  const { osecDB, resolveOsecDbPath, listOsecRunDatabasePaths } = await import("@0sec/db");
-  const { findingSchema, formatZodError } = await import("@0sec/shared");
+): Promise<{ finding: import("@0/shared").Finding; target?: string } | { error: string }> {
+  const { osecDB, resolveOsecDbPath, listOsecRunDatabasePaths } = await import("@0/db");
+  const { findingSchema, formatZodError } = await import("@0/shared");
   const { resolve } = await import("node:path");
   const { existsSync } = await import("node:fs");
 
@@ -287,7 +287,7 @@ async function loadPersistedFinding(
   const findingFromRow = (
     row: Record<string, unknown>,
     reviewFields: Record<string, unknown>,
-  ): import("@0sec/shared").Finding => {
+  ): import("@0/shared").Finding => {
     const id = typeof row.id === "string" ? row.id : "";
     const record = {
       id,
@@ -318,7 +318,7 @@ async function loadPersistedFinding(
     if (!parsed.success) {
       throw new Error(`stored finding ${id || "<unknown>"} is invalid: ${formatZodError(parsed.error, "finding")}`);
     }
-    return parsed.data as import("@0sec/shared").Finding;
+    return parsed.data as import("@0/shared").Finding;
   };
 
   const matches: Array<{ row: Record<string, unknown>; target?: string; dbPath: string }> = [];
@@ -627,7 +627,7 @@ export async function executeVerifyFinding(ctx: ToolContext, args: Record<string
   if ("error" in loaded) return errResult(loaded.error);
 
   const { runDeterministicReplay, LocalShellRunner } = await import("../../verify/replay-runner.js");
-  const { VERSION } = await import("@0sec/shared");
+  const { VERSION } = await import("@0/shared");
 
   let outcome;
   try {
@@ -871,7 +871,7 @@ export async function executeSafetyEval(ctx: ToolContext, args: Record<string, u
 
 export async function executeMemsafetyFuzz(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
   if (!featureFlags.memsafetyFuzz) {
-    return errResult("memsafety_fuzz is disabled. Set 0SEC_FEATURE_MEMSAFETY=1 to enable (it builds + fuzzes an untrusted source tree).");
+    return errResult("memsafety_fuzz is disabled. Set ZERO_FEATURE_MEMSAFETY=1 to enable (it builds + fuzzes an untrusted source tree).");
   }
   if (!hasEngagementScope(ctx)) {
     return errResult("memsafety_fuzz requires an active engagement scope. It is not available for a no-scope session.");
@@ -958,7 +958,7 @@ export async function executeMemsafetyFuzz(ctx: ToolContext, args: Record<string
 
 export async function executeNpmDynamicDiscovery(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
   if (!featureFlags.npmDynamicDiscovery) {
-    return errResult("npm_dynamic_discovery is disabled. Set 0SEC_FEATURE_NPM_DISCOVERY=1 to enable (it installs + runs untrusted npm packages).");
+    return errResult("npm_dynamic_discovery is disabled. Set ZERO_FEATURE_NPM_DISCOVERY=1 to enable (it installs + runs untrusted npm packages).");
   }
   if (!hasEngagementScope(ctx)) {
     return errResult("npm_dynamic_discovery requires an active engagement scope. It is not available for a no-scope session.");
@@ -1028,7 +1028,7 @@ export async function executeNpmDynamicDiscovery(ctx: ToolContext, args: Record<
 
 export async function executeWeaponizeKernel(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
   if (!featureFlags.kernelWeaponize) {
-    return errResult("weaponize_kernel is disabled. Set 0SEC_FEATURE_KERNEL_WEAPONIZE=1 to enable (it runs inside a disposable kernel VM only).");
+    return errResult("weaponize_kernel is disabled. Set ZERO_FEATURE_KERNEL_WEAPONIZE=1 to enable (it runs inside a disposable kernel VM only).");
   }
   if (!hasEngagementScope(ctx)) {
     return errResult("weaponize_kernel requires an active engagement scope. It is not available for a no-scope session.");
@@ -1037,7 +1037,7 @@ export async function executeWeaponizeKernel(ctx: ToolContext, args: Record<stri
   const { runWeaponization, kernelVmArtifactsReady } = await import("../../kernel/exploit/harness.js");
   if (!kernelVmArtifactsReady()) {
     return errResult(
-      "weaponize_kernel is denied: kernel-VM artifacts are not present. It only ever runs inside a DISPOSABLE kernel VM — set 0SEC_KERNEL_QEMU_KERNEL and 0SEC_KERNEL_QEMU_DISK to existing image paths. Refusing to run without the VM.",
+      "weaponize_kernel is denied: kernel-VM artifacts are not present. It only ever runs inside a DISPOSABLE kernel VM — set ZERO_KERNEL_QEMU_KERNEL and ZERO_KERNEL_QEMU_DISK to existing image paths. Refusing to run without the VM.",
     );
   }
 
@@ -1082,7 +1082,7 @@ export async function executeWeaponizeKernel(ctx: ToolContext, args: Record<stri
 
 export async function executeCveAdapt(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult> {
   if (!featureFlags.cveAdapt) {
-    return errResult("cve_adapt is disabled. Set 0SEC_FEATURE_CVE_ADAPT=1 to enable (it adapts + RUNS a CVE PoC).");
+    return errResult("cve_adapt is disabled. Set ZERO_FEATURE_CVE_ADAPT=1 to enable (it adapts + RUNS a CVE PoC).");
   }
   if (!hasEngagementScope(ctx)) {
     return errResult("cve_adapt requires an active engagement scope. It is not available for a no-scope session.");
@@ -1091,7 +1091,7 @@ export async function executeCveAdapt(ctx: ToolContext, args: Record<string, unk
   const { kernelVmArtifactsReady } = await import("../../kernel/exploit/harness.js");
   if (!kernelVmArtifactsReady()) {
     return errResult(
-      "cve_adapt is denied: its default verification boots a kernel VM and kernel-VM artifacts are not present. Set 0SEC_KERNEL_QEMU_KERNEL and 0SEC_KERNEL_QEMU_DISK to existing image paths. Refusing to run without the VM.",
+      "cve_adapt is denied: its default verification boots a kernel VM and kernel-VM artifacts are not present. Set ZERO_KERNEL_QEMU_KERNEL and ZERO_KERNEL_QEMU_DISK to existing image paths. Refusing to run without the VM.",
     );
   }
 

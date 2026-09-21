@@ -3,7 +3,7 @@
  *
  * This is the focused module the integration spine in
  * `docs/0sec-rust-memsafety-pipeline.md` calls for: it chains the three
- * tracks that already exist in `@0sec/core` into a single, side-effect-light
+ * tracks that already exist in `@0/core` into a single, side-effect-light
  * flow, *without* growing the `agentic-scanner.ts` god-module.
  *
  *   Track A (audit/playbook)  →  Track B (closed fuzz loop)  →  Track C (triage)
@@ -30,11 +30,9 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type {
-  AttackCategory,
-  Finding,
-  Severity,
-} from "@0sec/shared";
+import type { AttackCategory,
+Finding,
+Severity, } from "@0/shared"
 import { buildPlaybookInjection } from "../agent/playbooks.js";
 import {
   runUserspaceFuzzLoop,

@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import type { HuntScanResult } from "../../stages/hunt-scan.js";
 import { runResearch } from "../research-runner.js";
 import { HuntResearchAdapter, type HuntResearchTarget } from "./hunt-adapter.js";

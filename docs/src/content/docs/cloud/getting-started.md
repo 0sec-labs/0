@@ -66,9 +66,9 @@ For an account provisioned by the team:
 
 Browser login opens `https://cloud.0.security/cli-auth?session=…` by default.
 Choose the intended organization and approve the requested grant. The CLI
-polls for a ready token and saves credentials in `~/.0sec/cloud.env` with mode
-`0600`. `0SEC_CLOUD_TOKEN` in the environment takes precedence over that file;
-`0SEC_CLOUD_HOST` can select an agreed service host. Do not send a production
+polls for a ready token and saves credentials in `~/.0/cloud.env` with mode
+`0600`. `ZERO_CLOUD_TOKEN` in the environment takes precedence over that file;
+`ZERO_CLOUD_HOST` can select an agreed service host. Do not send a production
 credential to an untrusted host. A manually supplied `--token` is saved without
 being validated; run `0 auth status` afterwards.
 

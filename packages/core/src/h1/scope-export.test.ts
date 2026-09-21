@@ -114,7 +114,7 @@ describe("toScopeFile — round-trip into ScopePolicy", () => {
       { homeDir: dir },
     );
 
-    expect(result.path).toBe(join(dir, ".0sec", "scopes", "flutteruki.json"));
+    expect(result.path).toBe(join(dir, ".0", "scopes", "flutteruki.json"));
     expect(result.dropped).toEqual([]);
 
     // Mode 0o600 enforced.

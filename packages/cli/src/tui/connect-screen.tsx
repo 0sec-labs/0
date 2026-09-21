@@ -19,7 +19,7 @@
  *
  * 1. **A credential leaves this screen only through the credential store.** The
  *    input sub-step writes the pasted secret with `saveCredentials`, which
- *    persists it owner-only to `~/.0sec/credentials.json`. Nothing is sent
+ *    persists it owner-only to `~/.0/credentials.json`. Nothing is sent
  *    anywhere else.
  *
  * 2. **The raw secret is never rendered.** The input sub-step echoes
@@ -44,7 +44,7 @@
  * The 0sec Cloud path runs the hosted browser login flow via
  * `hostedBrowserLoginFlow` from commands/auth.ts. Like Codex, it never asks
  * for an API key: it opens the operator's browser, polls for session
- * completion, and persists credentials to ~/.0sec/cloud.env. An AbortSignal
+ * completion, and persists credentials to ~/.0/cloud.env. An AbortSignal
  * drives cancellation on Escape or unmount, preventing late state updates.
  */
 
@@ -549,7 +549,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
     });
     hostedSessionRef.current = startHostedDeviceAuth({
       homeDir,
-      host: (env ?? process.env)["0SEC_CLOUD_HOST"] ?? cloudState.host,
+      host: (env ?? process.env)["ZERO_CLOUD_HOST"] ?? cloudState.host,
       onUpdate: (update) => {
         applyHosted({ ...update, providerId: "hosted" });
         if (["cancelled", "timeout", "failed"].includes(update.phase)) {

@@ -195,7 +195,7 @@ describe("owned worker stop and drain", () => {
   });
 
   it("drains queued work through ordered publication without losing already completed findings", async () => {
-    vi.stubEnv("0SEC_SUBAGENT_CONCURRENCY", "1");
+    vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "1");
     const running = deferred();
     const cleanup = deferred();
     const ctx = context("audit-queued");

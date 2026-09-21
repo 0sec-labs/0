@@ -33,9 +33,9 @@
  */
 
 /** Sentinel that opens an untrusted-data block in a serialized tool result. */
-export const UNTRUSTED_OPEN = "[[0SEC_UNTRUSTED_DATA]]";
+export const UNTRUSTED_OPEN = "[[ZERO_UNTRUSTED_DATA]]";
 /** Sentinel that closes an untrusted-data block. */
-export const UNTRUSTED_CLOSE = "[[/0SEC_UNTRUSTED_DATA]]";
+export const UNTRUSTED_CLOSE = "[[/ZERO_UNTRUSTED_DATA]]";
 
 /**
  * The system-level framing note prepended inside the wrapper. Tells the model

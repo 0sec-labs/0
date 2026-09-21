@@ -6,7 +6,7 @@
  * recommendations, OWASP references) for each vulnerability category.
  */
 
-import type { Finding, AttackCategory } from "@0sec/shared";
+import type { Finding, AttackCategory } from "@0/shared"
 import type { NativeRuntime, NativeRuntimeResult } from "./runtime/types.js";
 
 // ── Public types ──

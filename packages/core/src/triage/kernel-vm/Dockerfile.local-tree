@@ -64,23 +64,23 @@ RUN printf '%s\n' \
     'mount -t devtmpfs devtmpfs /dev 2>/dev/null || true' \
     'mount -t tmpfs tmpfs /run 2>/dev/null || true' \
     'mount -t tmpfs tmpfs /tmp 2>/dev/null || true' \
-    'echo "0SEC_INIT_START" > /dev/kmsg 2>/dev/null || true' \
+    'echo "ZERO_INIT_START" > /dev/kmsg 2>/dev/null || true' \
     'mkdir -p /mnt/0sec' \
     'if mount -t 9p -o trans=virtio,version=9p2000.L osecshare /mnt/0sec 2>/tmp/0sec-mount.err; then' \
-    '  echo "0SEC_INIT_SHARE_MOUNTED" > /dev/kmsg 2>/dev/null || true' \
+    '  echo "ZERO_INIT_SHARE_MOUNTED" > /dev/kmsg 2>/dev/null || true' \
     'else' \
     '  err=$(tr "\n" " " </tmp/0sec-mount.err 2>/dev/null || true)' \
-    '  echo "0SEC_INIT_SHARE_MOUNT_FAILED:${err:-unknown}" > /dev/kmsg 2>/dev/null || true' \
+    '  echo "ZERO_INIT_SHARE_MOUNT_FAILED:${err:-unknown}" > /dev/kmsg 2>/dev/null || true' \
     'fi' \
     'if [ -f /mnt/0sec/runner.sh ]; then' \
-    '  echo "0SEC_INIT_RUNNER_START" > /dev/kmsg 2>/dev/null || true' \
+    '  echo "ZERO_INIT_RUNNER_START" > /dev/kmsg 2>/dev/null || true' \
     '  /bin/sh /mnt/0sec/runner.sh' \
     '  status=$?' \
-    '  echo "0SEC_INIT_RUNNER_EXIT:${status}" > /dev/kmsg 2>/dev/null || true' \
+    '  echo "ZERO_INIT_RUNNER_EXIT:${status}" > /dev/kmsg 2>/dev/null || true' \
     '  sync' \
     '  poweroff -f 2>/dev/null || halt -f 2>/dev/null || reboot -f 2>/dev/null || exit "$status"' \
     'fi' \
-    'echo "0SEC_INIT_IDLE" > /dev/kmsg 2>/dev/null || true' \
+    'echo "ZERO_INIT_IDLE" > /dev/kmsg 2>/dev/null || true' \
     'sleep infinity' \
     > /rootfs/sbin/0sec-init \
     && chmod 755 /rootfs/sbin/0sec-init

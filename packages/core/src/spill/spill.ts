@@ -76,7 +76,7 @@ import {
 } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { join, resolve, sep } from "node:path";
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared"
 
 // ---------------------------------------------------------------------------
 // Bounds and names

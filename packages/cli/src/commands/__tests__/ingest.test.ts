@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 const prepareKernelVmArtifactsMock = vi.fn();
 const verifyStandaloneKernelReproducerMock = vi.fn();
 
-vi.mock("@0sec/core", () => ({
+vi.mock("@0/core", () => ({
   prepareKernelVmArtifacts: prepareKernelVmArtifactsMock,
   verifyStandaloneKernelReproducer: verifyStandaloneKernelReproducerMock,
   ingestArtifactsFromFile: vi.fn(() => []),

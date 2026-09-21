@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// No mocks: the ingest + analysis path is the real @0sec/core code, driven
+// No mocks: the ingest + analysis path is the real @0/core code, driven
 // through real BloodHound-shaped fixtures on disk.
 import { registerAdGraphCommand } from "../adgraph.js";
 

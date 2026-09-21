@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import chalk from "chalk";
-import { loadScope, runMobileStaticIntake } from "@0sec/core";
+import { loadScope, runMobileStaticIntake } from "@0/core"
 
 const VALID_OUTPUT_FORMATS = ["terminal", "json"] as const;
 type MobileOutputFormat = (typeof VALID_OUTPUT_FORMATS)[number];

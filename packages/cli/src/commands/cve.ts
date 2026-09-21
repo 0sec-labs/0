@@ -37,18 +37,14 @@ import type { Command } from "commander";
 import chalk from "chalk";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import {
-  findCveArtifacts,
-  normaliseCveId,
-  adaptAndVerify,
-} from "@0sec/core";
-import type {
-  ScrapedCveArtifacts,
-  AdaptationResult,
-  AdaptationStatus,
-  CveArtifactProvider,
-  CveArtifacts,
-} from "@0sec/core";
+import { findCveArtifacts,
+normaliseCveId,
+adaptAndVerify, } from "@0/core"
+import type { ScrapedCveArtifacts,
+AdaptationResult,
+AdaptationStatus,
+CveArtifactProvider,
+CveArtifacts, } from "@0/core"
 
 // ── `cve find` (scraper) ────────────────────────────────────────────
 
@@ -219,7 +215,7 @@ export function registerCveCommand(program: Command): void {
     .description("Find public PoC + write-up artifacts for a CVE id")
     .argument("<cve-id>", "CVE identifier, e.g. CVE-2024-1086")
     .option("--format <fmt>", `Output format: ${VALID_FORMATS.join(" | ")}`, "json")
-    .option("--cache-dir <path>", "Override cache directory (default ~/.0sec/cve-cache)")
+    .option("--cache-dir <path>", "Override cache directory (default ~/.0/cve-cache)")
     .option("--no-cache", "Bypass on-disk cache and re-fetch every source")
     .option("--timeout <ms>", "Per-source timeout in milliseconds", "10000")
     .option("--retries <n>", "Retry count per source on 5xx", "2")

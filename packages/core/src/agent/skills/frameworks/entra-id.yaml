@@ -1,6 +1,6 @@
 id: entra-id
 name: "Entra ID Posture Assessment"
-description: "When to reach for the read-only `entra_posture` engine: assess a Microsoft Entra ID (Azure AD) tenant's privileged role assignments, conditional-access coverage, app registrations, service principals, and federated-domain trust over the read-only Graph API. Token comes from 0SEC_GRAPH_ACCESS_TOKEN only."
+description: "When to reach for the read-only `entra_posture` engine: assess a Microsoft Entra ID (Azure AD) tenant's privileged role assignments, conditional-access coverage, app registrations, service principals, and federated-domain trust over the read-only Graph API. Token comes from ZERO_GRAPH_ACCESS_TOKEN only."
 version: 1
 applicable_roles:
   - attack
@@ -30,7 +30,7 @@ content: |
   checks — it reads directory objects, it never writes or mutates the tenant.
 
   ### Authentication (important)
-  - The Graph access token is read from the **`0SEC_GRAPH_ACCESS_TOKEN`**
+  - The Graph access token is read from the **`ZERO_GRAPH_ACCESS_TOKEN`**
     environment variable ONLY. It is NEVER an argument — a directory-read token
     is a whole-tenant credential and must not land in a command line or log.
   - If the env var is unset, the tool returns a graceful error. Do not attempt

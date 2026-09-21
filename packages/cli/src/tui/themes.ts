@@ -38,7 +38,7 @@
  * process access; the one function that reads the environment takes it as an
  * argument. The single exception is the clearly-fenced "Installed themes"
  * section at the foot of the file, which reads validated theme palettes off disk
- * (`~/.0sec/themes/`). That I/O is total and fail-soft — an unreadable dir or a
+ * (`~/.0/themes/`). That I/O is total and fail-soft — an unreadable dir or a
  * corrupt file is skipped, never thrown — so it cannot take a session down, and
  * the pure functions above it never call into it.
  */
@@ -46,7 +46,7 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared"
 
 import type { SettingDef } from "./settings.js";
 import { loadUserThemes } from "./user-themes.js";
@@ -1493,7 +1493,7 @@ export const THEME_SETTING_DEF: SettingDef<ThemeName> & {
 /* ----------------------------------------------------- installed themes (I/O) */
 //
 // Themes become shareable artifacts by living as validated JSON palettes under
-// the per-user state dir (`~/.0sec/themes/<id>.json`). This is the ONLY part of
+// the per-user state dir (`~/.0/themes/<id>.json`). This is the ONLY part of
 // the module that touches the filesystem. Every read is total and fail-soft: a
 // missing dir, an unreadable file, malformed JSON, or a palette that fails
 // `validateTheme` is skipped, never thrown. Installed themes carry NO code and

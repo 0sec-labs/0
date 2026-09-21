@@ -1,16 +1,14 @@
 import { rmSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { randomUUID } from "node:crypto";
-import type {
-  AuditConfig,
-  AuditReport,
-  NpmAuditFinding,
-  SemgrepFinding,
-  Finding,
-  ScanConfig,
-  Severity,
-} from "@0sec/shared";
-import type { osecDB } from "@0sec/db";
+import type { AuditConfig,
+AuditReport,
+NpmAuditFinding,
+SemgrepFinding,
+Finding,
+ScanConfig,
+Severity, } from "@0/shared"
+import type { osecDB } from "@0/db"
 import type { ScanEvent, ScanListener } from "./scanner.js";
 import { auditAgentPrompt } from "./analysis-prompts.js";
 import { runAnalysisAgent } from "./agent-runner.js";
@@ -860,7 +858,7 @@ export async function packageAudit(
         osecDB,
         resolveOsecRunStorage,
         writeOsecRunReport,
-      } = await import("@0sec/db");
+      } = await import("@0/db");
       const storage = resolveOsecRunStorage({ dbPath: config.dbPath });
       return {
         db: new osecDB(storage.dbPath),

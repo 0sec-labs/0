@@ -161,7 +161,7 @@ Every moat component is inspectable:
 - feature layer: `packages/core/src/triage/feature-extractor.ts`
 - runtime layers: `packages/core/src/triage/`
 - dedicated tests
-- LLM-backed layers independently toggleable via `0SEC_FEATURE_*` flags
+- LLM-backed layers independently toggleable via `ZERO_FEATURE_*` flags
 
 <span id="our-implementation-notes"></span>
 ## Implementation notes

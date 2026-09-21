@@ -77,7 +77,7 @@ import { spawn } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared"
 
 import { allowlistedChildEnv } from "../agent/sanitized-env.js";
 import type { ToolDefinition, ToolParam } from "../agent/types.js";
@@ -355,8 +355,8 @@ export function buildPluginEnv(
   const base = allowlistedChildEnv(
     {
       // Non-secret, and screened by `allowlistedChildEnv` regardless.
-      "0SEC_PLUGIN_ID": pluginId,
-      "0SEC_PLUGIN_PROTOCOL": "1",
+      "ZERO_PLUGIN_ID": pluginId,
+      "ZERO_PLUGIN_PROTOCOL": "1",
     },
     env,
   );
@@ -554,7 +554,7 @@ export interface PluginHostOptions {
    * imports the engine (and never drifts from it silently).
    */
   reservedToolNames?: readonly string[];
-  /** Version of @0sec/core, for `minCoreVersion` enforcement. */
+  /** Version of @0/core, for `minCoreVersion` enforcement. */
   coreVersion?: string;
   spawner?: PluginSpawner;
   handshakeTimeoutMs?: number;
@@ -704,7 +704,7 @@ export class PluginHost {
           ok: false,
           pluginId,
           errors: [
-            `plugin "${pluginId}" requires @0sec/core >= ${manifest.minCoreVersion}, running ${this.coreVersion}`,
+            `plugin "${pluginId}" requires @0/core >= ${manifest.minCoreVersion}, running ${this.coreVersion}`,
           ],
         };
       }

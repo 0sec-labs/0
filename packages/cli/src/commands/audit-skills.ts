@@ -12,23 +12,21 @@
 //   skills project <prj>   — list skills assigned to a project
 //   skills archive <id>    — archive a skill (disables future bindings)
 //
-// Every subcommand requires cloud credentials (0SEC_CLOUD_TOKEN or
-// `~/.0sec/cloud.env`) and uses the CloudClient for bearer-authenticated
+// Every subcommand requires cloud credentials (ZERO_CLOUD_TOKEN or
+// `~/.0/cloud.env`) and uses the CloudClient for bearer-authenticated
 // HTTP against the cloud dashboard ingress (/api/audit-skills*).
 
 import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Command } from "commander";
 import chalk from "chalk";
-import {
-  CloudClient,
-  CloudUnauthorizedError,
-  CloudAuthMissingError,
-  CloudForbiddenError,
-  loadCloudCredentials,
-} from "@0sec/core";
+import { CloudClient,
+CloudUnauthorizedError,
+CloudAuthMissingError,
+CloudForbiddenError,
+loadCloudCredentials, } from "@0/core"
 // Wire DTOs mirroring the frozen /api/audit-skills contract
-// (0sec-audit-skills-v1). The @0sec/core root barrel is a shared-release
+// (0sec-audit-skills-v1). The @0/core root barrel is a shared-release
 // surface this feature must not extend, so the CLI owns its view of the
 // HTTP contract. Field shapes must stay assignable to the CloudClient
 // method responses in packages/core/src/cloud/client.ts.
@@ -513,7 +511,7 @@ async function actionArchive(skillId: string, opts: JsonFlag): Promise<void> {
 export function registerAuditSkillsCommand(program: Command): void {
   const skills = program
     .command("skills")
-    .description("Manage audit-skills methodology bundles (cloud). Requires cloud credentials (`0sec auth login`).");
+    .description("Manage audit-skills methodology bundles (cloud). Requires cloud credentials (`0 auth login`).");
 
   skills
     .command("list")

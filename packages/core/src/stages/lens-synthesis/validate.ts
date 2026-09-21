@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { closeSync, constants, fstatSync, lstatSync, mkdtempSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, posix, relative, resolve } from "node:path";
-import { getRates, MODEL_PRICING, type RuntimeMode } from "@0sec/shared";
+import { getRates, MODEL_PRICING, type RuntimeMode } from "@0/shared"
 import { ScanCostLedger } from "../../agent/cost-ledger.js";
 import { aggregateScorecard, pickChampion, type BenchCaseResult, type BenchScorecard } from "../../bench/index.js";
 import { canonicalEvolutionJson } from "../../improvement/config.js";

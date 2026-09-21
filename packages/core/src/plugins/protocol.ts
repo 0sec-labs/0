@@ -80,7 +80,7 @@ export interface HostCallToolMessage {
 /**
  * Host delivers a structured tool result in response to a guest's
  * `request_tool` broker call. `output` carries the structured result value,
- * NOT wrapped in the [[0SEC_UNTRUSTED_DATA]] marker — that marker is applied
+ * NOT wrapped in the [[ZERO_UNTRUSTED_DATA]] marker — that marker is applied
  * only when content is forwarded to the model as raw text.
  */
 export interface HostToolDeliveryMessage {

@@ -1,5 +1,5 @@
 /** Real novel-vuln variant hunt: seed from a proven fix, fan out finders, skeptic-gate. */
-import { generateVariantCandidates, runHuntScan, makeSkepticVerifier } from "@0sec/core";
+import { generateVariantCandidates, runHuntScan, makeSkepticVerifier } from "@0/core"
 import { readFileSync } from "node:fs";
 import { appendToCorpus, resolveHuntCorpusPath } from "./src/hunt-corpus.js";
 

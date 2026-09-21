@@ -17,10 +17,10 @@ const probeTool: NativeToolDef = { name: "propose_probe", description: "Submit a
 const patchTool: NativeToolDef = { name: "propose_patch", description: "Submit a multi-file apply_patch envelope fixing the root cause while preserving legitimate behavior. Do not weaken tests or alter the frozen probe.", input_schema: { type: "object", properties: { patch: { type: "string" } }, required: ["patch"] } };
 
 async function scopedFile(root: string, input: string): Promise<string> {
-  if (!input || isAbsolute(input) || input.includes("\\") || input.split("/").some((part) => !part || part === "." || part === ".." || part === ".git" || part === ".0sec")) throw new Error("Invalid or protected repository path");
+  if (!input || isAbsolute(input) || input.includes("\\") || input.split("/").some((part) => !part || part === "." || part === ".." || part === ".git" || part === ".0")) throw new Error("Invalid or protected repository path");
   const destination = resolveScopedPath(root, input);
   const actual = relative(root, destination);
-  if (!actual || actual.startsWith(`..${sep}`) || actual.split(sep).some((part) => part === ".git" || part === ".0sec")) throw new Error("Protected resolved path");
+  if (!actual || actual.startsWith(`..${sep}`) || actual.split(sep).some((part) => part === ".git" || part === ".0")) throw new Error("Protected resolved path");
   let current = root;
   for (const part of input.split("/")) {
     current = join(current, part);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { Finding, PocStep } from "@0sec/shared";
+import type { Finding, PocStep } from "@0/shared"
 import {
   decideFilingState,
   assembleBundleIndex,

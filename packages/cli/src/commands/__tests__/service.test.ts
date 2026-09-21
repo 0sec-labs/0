@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
   }),
 }));
 
-vi.mock("@0sec/core", () => ({
+vi.mock("@0/core", () => ({
   CloudClient: class {
     getJson = mocks.getJson;
     postJson = mocks.postJson;
@@ -390,7 +390,7 @@ describe("0sec service — error handling", () => {
     io = captureIO();
     process.exitCode = undefined;
     // Import the mock error classes so instanceof checks work
-    const core = await import("@0sec/core") as unknown as { CloudUnauthorizedError: new (path: string) => Error; CloudAuthMissingError: new () => Error };
+    const core = await import("@0/core") as unknown as { CloudUnauthorizedError: new (path: string) => Error; CloudAuthMissingError: new () => Error };
     CloudUnauthorizedError = core.CloudUnauthorizedError;
     CloudAuthMissingError = core.CloudAuthMissingError;
   });

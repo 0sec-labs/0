@@ -13,7 +13,7 @@
  *   4. Exploit Confirmation — independently reproduce with only PoC + target path.
  */
 
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import type {
   NativeRuntime,
   NativeMessage,

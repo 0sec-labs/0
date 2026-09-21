@@ -60,7 +60,7 @@ removes it after dsh exits; it does not modify DSH profiles or 0sec config.
 
 --scope is required even though 0sec mcp-server itself permits omission.
 Use --mcp-env only for an explicit 0sec child-process environment variable,
-for example --mcp-env 0SEC_MCP_AUTH_JSON. The value is never written into the
+for example --mcp-env ZERO_MCP_AUTH_JSON. The value is never written into the
 temporary patch.
 When --mcp-tools is omitted, the runner exposes the bounded recon set:
 http_request, crawl, submit_form, and send_prompt.

@@ -62,7 +62,7 @@ import {
 } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared"
 
 import { isSafePluginId } from "./loader.js";
 import { PLUGIN_CAPABILITIES, type PluginCapability, type PluginManifest } from "./manifest.js";

@@ -7,8 +7,8 @@ const searchSimilarMock = vi.fn();
 const buildIntelDossierMock = vi.fn();
 const searchTargetHistoryMock = vi.fn();
 
-vi.mock("@0sec/core", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@0sec/core")>();
+vi.mock("@0/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@0/core")>();
   return {
     ...actual,
     searchAdvisories: searchAdvisoriesMock,

@@ -21,7 +21,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { EventEmitter } from "node:events";
-import type { Finding, PocStep } from "@0sec/shared";
+import type { Finding, PocStep } from "@0/shared"
 import {
   executePocSteps,
   setRuntimeDeps,

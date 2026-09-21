@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { estimateCost, getRates, MODEL_PRICING } from "@0sec/shared";
+import { estimateCost, getRates, MODEL_PRICING } from "@0/shared"
 import { z } from "zod";
 import { LlmApiRuntime } from "../runtime/llm-api.js";
 import { loadEvolutionRegistry, verifyEvolutionSnapshot } from "./registry.js";

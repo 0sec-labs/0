@@ -96,7 +96,7 @@ export interface OastProbe {
  * the collaborator holds no per-scan state beyond the interactions it records.
  */
 export interface OastCollaborator {
-  /** Base domain interactions are addressed under (e.g. `oast.0sec.ai`). */
+  /** Base domain interactions are addressed under (e.g. `oast.0.ai`). */
   readonly baseDomain: string;
   /** Mint a fresh unique handle (unique subdomain + correlation token). */
   register(): Promise<OastHandle>;

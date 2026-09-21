@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Finding, JevEvaluator } from "@0sec/shared";
+import type { Finding, JevEvaluator } from "@0/shared"
 import { rankKernelHypothesesWithJev } from "./kernel-jev-prepass.js";
 
 function finding(id: string): Finding {

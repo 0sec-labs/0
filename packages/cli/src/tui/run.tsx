@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { CliRenderEvents, createCliRenderer, type CliRenderer } from "@opentui/core";
 import { AppContext, createRoot, useKeyboard } from "@opentui/react";
-import { type Finding } from "@0sec/shared";
+import { type Finding } from "@0/shared"
 import { resolveEngagement } from "../engagement-plan.js";
 import { getRuntimeAvailability } from "../utils.js";
 import { buildFindingChatPrompt, loadFindingFocus } from "../finding-focus.js";
@@ -58,7 +58,7 @@ import { listSessions, loadSession, deleteSession } from "./session-store.js";
 import { MarketScreen } from "./market-screen.js";
 import { createPluginService } from "./plugin-service.js";
 import { createSessionPluginHostManager, type SessionPluginHostManager } from "./session-plugin-host.js";
-import { connectMcpServers, parseMcpConfig, DEFAULT_REGISTRY_URL, TOOL_DEFINITIONS } from "@0sec/core";
+import { connectMcpServers, parseMcpConfig, DEFAULT_REGISTRY_URL, TOOL_DEFINITIONS } from "@0/core"
 import { ConnectScreen } from "./connect-screen.js";
 import type { ConnectionRecovery } from "./connection-recovery.js";
 import { UsageScreen } from "./usage-screen.js";
@@ -359,7 +359,7 @@ function ResumeRoute({ onResume, protectedSessionIds, currentId, onExit, shell }
  * mounted here: every printable key on this screen filters the list, so a second
  * `useKeyboard` competing for those keystrokes would fight the filter. The
  * registry URL, install action and installed-state read are left at their
- * defaults — `MarketScreen` resolves `$0SEC_REGISTRY_URL` (empty by default) and
+ * defaults — `MarketScreen` resolves `$ZERO_REGISTRY_URL` (empty by default) and
  * reuses the core install APIs — so this route is pure wiring and stays honest
  * with no endpoint configured.
  */
@@ -372,10 +372,10 @@ function MarketRoute({ onExit, shell, pluginHostManager }: { onExit: () => void;
   // load host persists for the life of the overlay.
   const registryUrl = React.useMemo(
     // Unset → the default Hackstore index. An explicitly-set value (even empty)
-    // is honoured verbatim, so `0SEC_REGISTRY_URL=` stays a deliberate "no
+    // is honoured verbatim, so `ZERO_REGISTRY_URL=` stays a deliberate "no
     // store" rather than silently reverting to the default.
     () => {
-      const override = process.env["0SEC_REGISTRY_URL"];
+      const override = process.env["ZERO_REGISTRY_URL"];
       return (override !== undefined ? override : DEFAULT_REGISTRY_URL).trim();
     },
     [],
@@ -725,7 +725,7 @@ function ConsoleApp({
     };
     const creation = (async (): Promise<AuditRecord | undefined> => {
       if (exitRequested.current) return undefined;
-      const mcpHost = await connectMcpServers(parseMcpConfig(process.env["0SEC_MCP"]));
+      const mcpHost = await connectMcpServers(parseMcpConfig(process.env["ZERO_MCP"]));
       if (exitRequested.current || !appAlive.current) {
         await mcpHost?.closeAll();
         return undefined;
@@ -997,25 +997,24 @@ function ConsoleApp({
         },
       });
 
-      const previousStartupLogSetting = process.env["0SEC_SUPPRESS_PROVIDER_STARTUP_LOG"];
-      const previousNativeTracePath = process.env["0SEC_TRACE_NATIVE_RESPONSES"];
-      const previousTuiTracePath = process.env["0SEC_TRACE_TUI_EVENTS"];
+      const previousStartupLogSetting = process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"];
+      const previousNativeTracePath = process.env["ZERO_TRACE_NATIVE_RESPONSES"];
+      const previousTuiTracePath = process.env["ZERO_TRACE_TUI_EVENTS"];
       try {
-        process.env["0SEC_SUPPRESS_PROVIDER_STARTUP_LOG"] = "1";
-        process.env["0SEC_TRACE_NATIVE_RESPONSES"] = `/tmp/0sec-native-responses-${Date.now()}.ndjson`;
-        process.env["0SEC_TRACE_TUI_EVENTS"] = `/tmp/0sec-tui-events-${Date.now()}.ndjson`;
+        process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"] = "1";
+        process.env["ZERO_TRACE_NATIVE_RESPONSES"] = `/tmp/0sec-native-responses-${Date.now()}.ndjson`;
+        process.env["ZERO_TRACE_TUI_EVENTS"] = `/tmp/0sec-tui-events-${Date.now()}.ndjson`;
         appendTuiTrace({
           kind: "session-start",
           target: plan.target,
           mode,
           runtime,
           depth,
-          nativeTrace: process.env["0SEC_TRACE_NATIVE_RESPONSES"],
+          nativeTrace: process.env["ZERO_TRACE_NATIVE_RESPONSES"],
         });
         await runUnified({
           target: plan.target,
           targetType: plan.targetType,
-          reviewStrategy: plan.kind === "source" && depth === "deep" ? plan.reviewStrategy : "pipeline",
           reviewPackageEcosystem: plan.ecosystem,
           depth,
           format: "terminal",
@@ -1074,12 +1073,12 @@ function ConsoleApp({
           }),
         });
       } finally {
-        if (previousStartupLogSetting === undefined) delete process.env["0SEC_SUPPRESS_PROVIDER_STARTUP_LOG"];
-        else process.env["0SEC_SUPPRESS_PROVIDER_STARTUP_LOG"] = previousStartupLogSetting;
-        if (previousNativeTracePath === undefined) delete process.env["0SEC_TRACE_NATIVE_RESPONSES"];
-        else process.env["0SEC_TRACE_NATIVE_RESPONSES"] = previousNativeTracePath;
-        if (previousTuiTracePath === undefined) delete process.env["0SEC_TRACE_TUI_EVENTS"];
-        else process.env["0SEC_TRACE_TUI_EVENTS"] = previousTuiTracePath;
+        if (previousStartupLogSetting === undefined) delete process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"];
+        else process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"] = previousStartupLogSetting;
+        if (previousNativeTracePath === undefined) delete process.env["ZERO_TRACE_NATIVE_RESPONSES"];
+        else process.env["ZERO_TRACE_NATIVE_RESPONSES"] = previousNativeTracePath;
+        if (previousTuiTracePath === undefined) delete process.env["ZERO_TRACE_TUI_EVENTS"];
+        else process.env["ZERO_TRACE_TUI_EVENTS"] = previousTuiTracePath;
       }
     }).finally(() => {
       sessionGate.close();
@@ -1435,7 +1434,7 @@ export function UnifiedApp({
 
 async function mountApp(mode: AppMode): Promise<void> {
   installTuiCrashHandlers();
-  const traceRender = Boolean(process.env["0SEC_TRACE_TUI_RENDER"]);
+  const traceRender = Boolean(process.env["ZERO_TRACE_TUI_RENDER"]);
   suspendProcessPresentationStreamBridge();
   let renderer: CliRenderer;
   try {

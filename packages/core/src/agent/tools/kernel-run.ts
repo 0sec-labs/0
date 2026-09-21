@@ -25,7 +25,7 @@
 
 import { z } from "zod";
 import type { ToolDefinition } from "../types.js";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import type { KernelVerifyOracleResult, KernelVerifyRunner } from "../../verify/kernel-verify-types.js";
 
 /**

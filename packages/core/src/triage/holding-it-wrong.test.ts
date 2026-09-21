@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { isHoldingItWrong } from "./holding-it-wrong.js";
-import type { AttackCategory, Finding } from "@0sec/shared";
+import type { AttackCategory, Finding } from "@0/shared"
 
 function makeFinding(overrides: Partial<Finding> = {}): Finding {
   return {

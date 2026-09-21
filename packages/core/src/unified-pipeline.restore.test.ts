@@ -14,14 +14,12 @@ import { copyFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { osecDB } from "@0sec/db";
-import type {
-  Finding,
-  LayerVerdict,
-  PocStep,
-  ScanConfig,
-  VerificationSpec,
-} from "@0sec/shared";
+import { osecDB } from "@0/db"
+import type { Finding,
+LayerVerdict,
+PocStep,
+ScanConfig,
+VerificationSpec, } from "@0/shared"
 import { restorePersistedFinding } from "./unified-pipeline.js";
 
 const tempDirs: string[] = [];

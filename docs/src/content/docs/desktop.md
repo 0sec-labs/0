@@ -29,8 +29,8 @@ From the monorepo root, build the CLI and dashboard before launching:
 ```bash
 pnpm install --frozen-lockfile
 pnpm --filter '0sec-cli...' build
-pnpm --filter @0sec/dashboard build
-pnpm --filter @0sec/desktop start
+pnpm --filter @0/dashboard build
+pnpm --filter @0/desktop start
 ```
 
 The same development commands work on macOS Apple Silicon. A compiled
@@ -38,7 +38,7 @@ platform-specific sidecar is needed for packaging, **not** for this source
 launch: the development app runs the built CLI entry point through Bun.
 If Bun is not on `PATH`, set `BUN_PATH` to its executable.
 The development sidecar can also run through Node.js 24+:
-`BUN_PATH=node pnpm --filter @0sec/desktop start`. Packaging still requires Bun.
+`BUN_PATH=node pnpm --filter @0/desktop start`. Packaging still requires Bun.
 
 The desktop resolves assets from `packages/dashboard/dist/` (development) or
 `process.resourcesPath/dashboard/` (packaged), and the sidecar from
@@ -86,7 +86,7 @@ The desktop separates the renderer (web UI) from engine operations through a
 │ Sidecar (0 CLI binary)            │
 │  - dashboard --no-open --host     │
 │    127.0.0.1 --port 0             │
-│  - stdout: 0SEC_DASHBOARD_READY   │
+│  - stdout: ZERO_DASHBOARD_READY   │
 │  - lifecycle: SIGTERM → SIGKILL   │
 └─────────────────────────────────────┘
 ```
@@ -98,7 +98,7 @@ The desktop separates the renderer (web UI) from engine operations through a
    `createDashboardSidecarInvocation` — the renderer never contributes a
    command, an argument, or a filesystem path to this boundary.
 2. **Readiness**: stdout is parsed for a JSON-ready line of the form
-   `0SEC_DASHBOARD_READY {"url":"http://127.0.0.1:<port>"}`. If the sidecar
+   `ZERO_DASHBOARD_READY {"url":"http://127.0.0.1:<port>"}`. If the sidecar
    exits before emitting this line (or after the 20-second timeout), the
    desktop shows an error dialog and exits.
 3. **Graceful stop**: SIGTERM is sent first. If the process has not exited
@@ -218,7 +218,7 @@ sessions or toggle the sidebar twice.
 
 ## User workflow
 
-1. Launch the desktop application from your OS (or `pnpm --filter @0sec/desktop start` in development).
+1. Launch the desktop application from your OS (or `pnpm --filter @0/desktop start` in development).
 2. The window opens a project-and-session workspace. Home lists recent sessions;
    the sidebar filters by project or session title. Closing a tab does not
    delete its live session; reopen it from Home or the command palette.
@@ -293,7 +293,7 @@ pnpm build
 bash scripts/bun-compile.sh "" "dist-bin/0sec-linux-x64"
 
 # Package the desktop (Linux example)
-pnpm --filter @0sec/desktop package:linux
+pnpm --filter @0/desktop package:linux
 ```
 
 The sidecar binary filename pattern is `0sec-<platform>-<arch>` (Linux/macOS)
@@ -324,7 +324,7 @@ archive), the dashboard web UI, and the sidecar binary.
 
 ### Package metadata
 
-- **Linux**: app ID `com.0security.osec`, category `Development`,
+- **Linux**: app ID `com.0urity.osec`, category `Development`,
   `syncDesktopName: true`
 - **macOS**: category `public.app-category.developer-tools`. Code signing and
   notarisation require an Apple Developer account and are not configured in the
@@ -347,7 +347,7 @@ In development, set `OSEC_DESKTOP_DEBUG_PORT` to attach a Chromium DevTools
 inspector bound to `127.0.0.1`:
 
 ```bash
-OSEC_DESKTOP_DEBUG_PORT=9222 pnpm --filter @0sec/desktop start
+OSEC_DESKTOP_DEBUG_PORT=9222 pnpm --filter @0/desktop start
 ```
 
 Remote inspection must traverse an SSH tunnel — the debugger is never bound to

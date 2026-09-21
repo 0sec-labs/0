@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import type { Finding } from "@0sec/shared";
-import type { ResearchExecutionContext } from "@0sec/shared";
+import type { Finding } from "@0/shared"
+import type { ResearchExecutionContext } from "@0/shared"
 import {
   verifyAcrossBoots,
   parseKernelExecutionAttestation,

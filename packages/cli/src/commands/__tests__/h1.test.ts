@@ -28,8 +28,8 @@ interface CapturedIO {
 
 function setupHomeWithCreds(): string {
   const home = mkdtempSync(join(tmpdir(), "0sec-h1-cli-"));
-  mkdirSync(join(home, ".0sec"), { recursive: true, mode: 0o700 });
-  const path = join(home, ".0sec", "h1.env");
+  mkdirSync(join(home, ".0"), { recursive: true, mode: 0o700 });
+  const path = join(home, ".0", "h1.env");
   writeFileSync(path, `H1_API_IDENTIFIER=${ID}\nH1_API_TOKEN=${SECRET}\n`, { mode: 0o600 });
   chmodSync(path, 0o600);
   return home;
@@ -299,7 +299,7 @@ describe("0sec h1 — exit codes", () => {
     expect(process.exitCode).toBe(0);
     expect(io.stdout.join("\n")).toContain(out);
     // Round-trip the file through loadScope to confirm conformance.
-    const { loadScope } = await import("@0sec/core");
+    const { loadScope } = await import("@0/core");
     const policy = loadScope(out);
     expect(policy.match("https://api.demo.com/").allowed).toBe(true);
     expect(policy.match("https://x.demo.com/").allowed).toBe(true);

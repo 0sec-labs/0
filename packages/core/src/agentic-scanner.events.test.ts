@@ -19,8 +19,8 @@ import { agenticScan } from "./agentic-scanner.js";
 import { eventBus, type EventType } from "./events/bus.js";
 import { LlmApiRuntime } from "./runtime/llm-api.js";
 import { ProcessRuntime } from "./runtime/process.js";
-import { osecDB } from "@0sec/db";
-import type { ScanConfig } from "@0sec/shared";
+import { osecDB } from "@0/db"
+import type { ScanConfig } from "@0/shared"
 import type { NativeRuntimeResult } from "./runtime/types.js";
 
 let schemaDirectory: string;
@@ -103,10 +103,10 @@ describe("agenticScan: scan_completed emission", () => {
     dbPath = tmpDbPath();
     activeScopePath = tmpScopePath();
     fs.writeFileSync(activeScopePath, JSON.stringify({ in_scope: ["target.example.invalid"] }));
-    originalCodexLiveTargets = process.env["0SEC_FEATURE_CODEX_LIVE_TARGETS"];
-    originalChatGptCodexRefreshToken = process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"];
-    delete process.env["0SEC_FEATURE_CODEX_LIVE_TARGETS"];
-    delete process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"];
+    originalCodexLiveTargets = process.env["ZERO_FEATURE_CODEX_LIVE_TARGETS"];
+    originalChatGptCodexRefreshToken = process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"];
+    delete process.env["ZERO_FEATURE_CODEX_LIVE_TARGETS"];
+    delete process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"];
     // Provider discovery also reads ~/.codex/auth.json.  Do not let a
     // developer/runner's persisted login silently turn the early-failure
     // tests below into live native scans.
@@ -127,14 +127,14 @@ describe("agenticScan: scan_completed emission", () => {
       activeScopePath = undefined;
     }
     if (originalCodexLiveTargets === undefined) {
-      delete process.env["0SEC_FEATURE_CODEX_LIVE_TARGETS"];
+      delete process.env["ZERO_FEATURE_CODEX_LIVE_TARGETS"];
     } else {
-      process.env["0SEC_FEATURE_CODEX_LIVE_TARGETS"] = originalCodexLiveTargets;
+      process.env["ZERO_FEATURE_CODEX_LIVE_TARGETS"] = originalCodexLiveTargets;
     }
     if (originalChatGptCodexRefreshToken === undefined) {
-      delete process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"];
+      delete process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"];
     } else {
-      process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"] = originalChatGptCodexRefreshToken;
+      process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"] = originalChatGptCodexRefreshToken;
     }
     vi.restoreAllMocks();
   });
@@ -178,7 +178,7 @@ describe("agenticScan: scan_completed emission", () => {
   });
 
   it("does not re-enable the removed Codex MCP live runner when the old feature flag is set", async () => {
-    process.env["0SEC_FEATURE_CODEX_LIVE_TARGETS"] = "1";
+    process.env["ZERO_FEATURE_CODEX_LIVE_TARGETS"] = "1";
     const executeSpy = vi.spyOn(ProcessRuntime.prototype, "execute");
 
     await expect(agenticScan({
@@ -190,7 +190,7 @@ describe("agenticScan: scan_completed emission", () => {
   });
 
   it("routes explicit codex live scans through the direct ChatGPT Codex provider when configured", async () => {
-    process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"] = "fake-refresh-token";
+    process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"] = "fake-refresh-token";
     vi.mocked(LlmApiRuntime.prototype.getConfigurationDiagnostics).mockReturnValue({
       valid: true,
       provider: "chatgpt-codex",
@@ -276,8 +276,8 @@ describe("agenticScan: planner LLM error mid-scan", () => {
       delete process.env[k];
     }
     process.env.ANTHROPIC_API_KEY = "sk-ant-fake-test-key-not-real";
-    originalSkipBanner = process.env["0SEC_SKIP_PROVIDER_BANNER"];
-    process.env["0SEC_SKIP_PROVIDER_BANNER"] = "1";
+    originalSkipBanner = process.env["ZERO_SKIP_PROVIDER_BANNER"];
+    process.env["ZERO_SKIP_PROVIDER_BANNER"] = "1";
   });
 
   afterEach(() => {
@@ -297,9 +297,9 @@ describe("agenticScan: planner LLM error mid-scan", () => {
       }
     }
     if (originalSkipBanner === undefined) {
-      delete process.env["0SEC_SKIP_PROVIDER_BANNER"];
+      delete process.env["ZERO_SKIP_PROVIDER_BANNER"];
     } else {
-      process.env["0SEC_SKIP_PROVIDER_BANNER"] = originalSkipBanner;
+      process.env["ZERO_SKIP_PROVIDER_BANNER"] = originalSkipBanner;
     }
     vi.restoreAllMocks();
   });

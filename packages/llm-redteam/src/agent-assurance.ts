@@ -1,16 +1,14 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
-import {
-  AGENT_ACTION_ASSURANCE_SCHEMA_VERSION,
-  AgentActionEvidenceManifestSchema,
-  AgentActionScenarioSchema,
-  AgentActionTargetMetadataSchema,
-  type AgentActionEvidenceManifest,
-  type AgentActionOutcome,
-  type AgentActionScenario,
-  type AgentActionTargetMetadata,
-} from "@0sec/shared";
+import { AGENT_ACTION_ASSURANCE_SCHEMA_VERSION,
+AgentActionEvidenceManifestSchema,
+AgentActionScenarioSchema,
+AgentActionTargetMetadataSchema,
+type AgentActionEvidenceManifest,
+type AgentActionOutcome,
+type AgentActionScenario,
+type AgentActionTargetMetadata, } from "@0/shared"
 import { isRecord } from "./guards.js";
 
 

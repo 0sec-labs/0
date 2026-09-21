@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/react */
 import { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { useKeyboard } from "@opentui/react";
-import type { Finding, FindingTriageStatus } from "@0sec/shared";
+import type { Finding, FindingTriageStatus } from "@0/shared"
 import { useTheme } from "./theme-context.js";
 import { useSettings } from "./settings-store.js";
 import { severityToneFor } from "./themes.js";
@@ -61,7 +61,7 @@ const FIX_MODEL_TIMEOUT_MS = 600_000;
 const FIX_TEST_TIMEOUT_MS = 300_000;
 const FIX_MAX_ATTEMPTS = 3;
 /** Operator-owned regression command; `0sec fix` requires --test-command. */
-const FIX_TEST_COMMAND_ENV = "0SEC_FIX_TEST_COMMAND";
+const FIX_TEST_COMMAND_ENV = "ZERO_FIX_TEST_COMMAND";
 
 // Upper bound on how far a wrapped finding detail may run inside its
 // scrolling pane, expressed in rows of the pane's own width.
@@ -147,7 +147,7 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
     let alive = true;
     const load = async () => {
       try {
-        const { osecDB } = await import("@0sec/db");
+        const { osecDB } = await import("@0/db");
         const db = new osecDB(options.dbPath);
         try {
           const findings = db.listFindings({
@@ -385,7 +385,7 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
     setNotice(`Updating ${selectedRow.fingerprint.slice(0, 10)} to ${triageStatus}...`);
 
     try {
-      const { osecDB } = await import("@0sec/db");
+      const { osecDB } = await import("@0/db");
       const db = new osecDB(options.dbPath);
       try {
         db.updateFindingTriageByFingerprint(selectedRow.fingerprint, triageStatus);
@@ -413,7 +413,7 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
     testCommand: string,
   ): Promise<void> => {
     try {
-      const { createRuntime, runSourceFix } = await import("@0sec/core");
+      const { createRuntime, runSourceFix } = await import("@0/core");
       const runtime = createRuntime({ type: "api", timeout: FIX_MODEL_TIMEOUT_MS });
       if (!isNativeRuntime(runtime)) {
         throw new Error("runtime 'api' does not support structured source remediation");

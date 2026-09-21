@@ -24,12 +24,10 @@ import {
 } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Command } from "cmdk";
-import {
-  DEFAULT_AUTONOMY_MODE,
-  type DesktopConsoleAutonomyMode,
-  type DesktopConsoleRole,
-  type DesktopConsoleSession,
-} from "@0sec/shared";
+import { DEFAULT_AUTONOMY_MODE,
+type DesktopConsoleAutonomyMode,
+type DesktopConsoleRole,
+type DesktopConsoleSession, } from "@0/shared"
 import { useWorkspace, type Workspace } from "./use-workspace";
 import { useStoredState } from "./use-stored-state";
 import { Conversation, Inspector } from "./conversation";
@@ -218,7 +216,7 @@ export function DesktopApp() {
 
   useEffect(
     () =>
-      window.osecDesktop?.onCommand((command) => {
+      window.osecDesktop?.onCommand((command: string) => {
         if (command === "new-thread") setNewTarget("");
         if (command === "open-folder") void openFolder();
         if (command === "toggle-sidebar") setSidebar((p) => !p);

@@ -123,7 +123,7 @@ installation directory to `PATH`:
 - name: Install 0
   run: |
     curl -fsSL https://raw.githubusercontent.com/0sec-labs/0sec/main/install.sh | bash
-    echo "$HOME/.0sec/bin" >> "$GITHUB_PATH"
+    echo "$HOME/.0/bin" >> "$GITHUB_PATH"
 - name: Run review
   run: 0 review . --runtime api --cost-ceiling 5 --format sarif > results.sarif
   env:
@@ -160,7 +160,7 @@ remain in the repository as integration helpers. They are not the active
 self-review workflow or a published composite action.
 
 The wrapper expects `0sec-cli` on `PATH`, Node, `GITHUB_OUTPUT`, and an action
-root through `0SEC_ACTION_ROOT` or `GITHUB_ACTION_PATH`. The release installer
+root through `ZERO_ACTION_ROOT` or `GITHUB_ACTION_PATH`. The release installer
 and current container expose `0`/`0sec`, not `0sec-cli`; copying this script into
 an ordinary installed-CLI job is therefore not a turnkey integration. Prefer
 the direct commands above unless you deliberately provide its expected runner
@@ -210,7 +210,7 @@ multiple credentials are present so CI does not depend on accidental fallback.
 | Azure OpenAI | `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_BASE_URL`, `AZURE_OPENAI_MODEL` |
 | Z.ai | `Z_AI_API_KEY` |
 | DeepSeek | `DEEPSEEK_API_KEY` |
-| ChatGPT Codex | `0SEC_CHATGPT_OAUTH_REFRESH_TOKEN` |
+| ChatGPT Codex | `ZERO_CHATGPT_OAUTH_REFRESH_TOKEN` |
 
 See [API Keys](/api-keys/) for provider requirements, account restrictions and
 fallback order. Subscription authentication is not a promise that unattended

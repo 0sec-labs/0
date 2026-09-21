@@ -3,8 +3,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { osecDB } from "@0sec/db";
-import type { Finding, PocStep, ScanConfig } from "@0sec/shared";
+import { osecDB } from "@0/db"
+import type { Finding, PocStep, ScanConfig } from "@0/shared"
 
 const tempDirs: string[] = [];
 

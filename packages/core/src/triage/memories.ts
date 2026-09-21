@@ -17,7 +17,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { createJevEvaluator, jevConfigFromEnvironment, type Finding, type JevEvaluator } from "@0sec/shared";
+import { createJevEvaluator, jevConfigFromEnvironment, type Finding, type JevEvaluator } from "@0/shared"
 import { z } from "zod";
 
 // ── Public Types ──
@@ -41,7 +41,7 @@ export interface TriageMemory {
 }
 
 /**
- * Minimal subset of the @0sec/db interface used by MemoryStore. Declared
+ * Minimal subset of the @0/db interface used by MemoryStore. Declared
  * structurally so tests can inject an in-memory fake without pulling in the
  * real better-sqlite3 binding.
  */
@@ -153,7 +153,7 @@ export function inferPackage(target: string): string {
  * Persistent store of triage memories, backed by the 0sec SQLite database.
  *
  * MemoryStore accepts either a concrete DB path (it will lazily open
- * `@0sec/db`'s `osecDB` the first time a method is called) or a custom
+ * `@0/db`'s `osecDB` the first time a method is called) or a custom
  * `MemoryDbHandle` for dependency injection in tests.
  */
 export class MemoryStore {
@@ -178,7 +178,7 @@ export class MemoryStore {
 
   private async db(): Promise<MemoryDbHandle> {
     if (this.dbHandle) return this.dbHandle;
-    const mod = await import("@0sec/db");
+    const mod = await import("@0/db");
     const instance = new mod.osecDB(this.dbPath);
     this.dbHandle = instance as unknown as MemoryDbHandle;
     return this.dbHandle;
@@ -244,10 +244,10 @@ export class MemoryStore {
    *   - scope=package and scopeValue === inferPackage(target)
    */
   async getRelevantMemories(finding: Finding, target: string): Promise<TriageMemory[]> {
-    const db = await this.db();
     const pkg = inferPackage(target);
-    const rows = [...db.listTriageMemories({ category: finding.category, limit: 500 }),
-      ...(this.options.contextMemories ?? []).filter(memory => memory.category === finding.category)];
+    const rows = this.options.contextMemories !== undefined
+      ? this.options.contextMemories.filter(memory => memory.category === finding.category)
+      : (await this.db()).listTriageMemories({ category: finding.category, limit: 500 });
 
     const applicable = rows.filter((row) => {
       if (row.scope === "global") return true;
@@ -366,7 +366,7 @@ const preparedMemorySchema = z.array(z.object({
 /** A scan-local reader: cloud context is never inserted into the global local-memory database. */
 export function createScanMemoryStore(db: MemoryDbHandle): MemoryStore | undefined {
   try {
-    const raw = process.env["0SEC_TRIAGE_FEEDBACK"];
+    const raw = process.env["ZERO_TRIAGE_FEEDBACK"];
     const config = jevConfigFromEnvironment("memory", process.env);
     if (!raw && !config) return undefined;
     if (raw && raw.length > 32_768) return undefined;

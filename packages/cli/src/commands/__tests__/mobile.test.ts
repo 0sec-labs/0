@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 const loadScopeMock = vi.fn();
 const runMobileStaticIntakeMock = vi.fn();
 
-vi.mock("@0sec/core", () => ({
+vi.mock("@0/core", () => ({
   loadScope: loadScopeMock,
   runMobileStaticIntake: runMobileStaticIntakeMock,
 }));

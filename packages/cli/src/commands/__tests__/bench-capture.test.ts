@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
-import type { BenchManifest, TournamentResult } from "@0sec/core";
+import type { BenchManifest, TournamentResult } from "@0/core"
 
 import { canonicalJson, writeCanonicalJsonAtomic } from "../bench-improvement.js";
 import { measureOperation, selectRunManifest, validateCaptureDestination } from "../bench.js";

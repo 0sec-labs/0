@@ -8,7 +8,7 @@
 //   - `User-Agent` includes `0sec-cli/<version>` so server-side ops can
 //     identify CLI traffic if it looks anomalous.
 
-import { VERSION } from "@0sec/shared";
+import { VERSION } from "@0/shared"
 
 export class CloudError extends Error {
   constructor(
@@ -340,7 +340,7 @@ function isUtcDate(value: unknown): value is string {
 function healthPath(host: string): string {
   try {
     const hostname = new URL(host).hostname.toLowerCase();
-    if (hostname === "cloud.0sec.ai" || hostname === "cloud.0.security") {
+    if (hostname === "cloud.0.ai" || hostname === "cloud.0.security") {
       return "/api/health";
     }
   } catch {

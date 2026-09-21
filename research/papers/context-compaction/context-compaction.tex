@@ -274,7 +274,7 @@ The interactive console is a distinct loop. \texttt{console/turn-engine.ts}'s
 \texttt{ConsoleSession} accepts \texttt{initialMessages} and starts its history
 as a \texttt{structuredClone} of them, replaying the transcript over a fresh
 client. \texttt{cli/src/tui/session-store.ts} persists the \emph{entire} native
-message array to \texttt{\~{}/.0sec/console-sessions/<id>.json} (files
+message array to \texttt{\~{}/.0/console-sessions/<id>.json} (files
 \texttt{0600}, directory \texttt{0700}, re-applied on every save; \texttt{prune}
 caps accumulation; nothing is transmitted). Resume loads a stored transcript and
 feeds it back as \texttt{initialMessages}. The store's own header notes the

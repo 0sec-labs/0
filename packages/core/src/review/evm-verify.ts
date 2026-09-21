@@ -24,7 +24,7 @@
  *                               multi-week build surface (see the design doc's
  *                               phased plan P1+).
  *
- * DEFAULT-SAFE: with `0SEC_EVM_VERIFY` unset (the default), `runEvmVerify` is a
+ * DEFAULT-SAFE: with `ZERO_EVM_VERIFY` unset (the default), `runEvmVerify` is a
  * no-op that returns `{ status: "skipped", ran: false }` — nothing spawns, no
  * RPC is touched. `0sec review` on an EVM repo is harmless on a box with no
  * foundry toolchain, matching the kernel verify-path gating.
@@ -36,22 +36,22 @@ import { createHash } from "node:crypto";
 
 /**
  * Master opt-in gate. Default OFF — mirrors `archetypeSweepEnabled()` /
- * `0SEC_ARCHETYPE_SWEEP`. When OFF, `planEvmVerify` still plans (returns the
+ * `ZERO_ARCHETYPE_SWEEP`. When OFF, `planEvmVerify` still plans (returns the
  * invocation + a warning) but never executes, and `runEvmVerify` no-ops.
  */
 export function evmVerifyEnabled(): boolean {
-  return !["", "0", "false", "no"].includes((process.env["0SEC_EVM_VERIFY"] ?? "").toLowerCase());
+  return !["", "0", "false", "no"].includes((process.env["ZERO_EVM_VERIFY"] ?? "").toLowerCase());
 }
 
-/** The archive-node fork RPC URL (`0SEC_EVM_FORK_RPC`), or undefined when unset. */
+/** The archive-node fork RPC URL (`ZERO_EVM_FORK_RPC`), or undefined when unset. */
 export function evmForkRpc(explicit?: string): string | undefined {
-  const v = explicit ?? process.env["0SEC_EVM_FORK_RPC"]?.trim();
+  const v = explicit ?? process.env["ZERO_EVM_FORK_RPC"]?.trim();
   return v && v.length > 0 ? v : undefined;
 }
 
-/** Resolved `forge` binary (path override via `0SEC_EVM_FORGE_BIN`, else `forge`). */
+/** Resolved `forge` binary (path override via `ZERO_EVM_FORGE_BIN`, else `forge`). */
 export function forgeBin(): string {
-  const v = process.env["0SEC_EVM_FORGE_BIN"]?.trim();
+  const v = process.env["ZERO_EVM_FORGE_BIN"]?.trim();
   return v && v.length > 0 ? v : "forge";
 }
 
@@ -131,7 +131,7 @@ export interface EvmVerifyRequest {
   testContract?: string;
   /** Optional single-test filter (`--match-test`). */
   testFn?: string;
-  /** Fork RPC override; falls back to `0SEC_EVM_FORK_RPC`. */
+  /** Fork RPC override; falls back to `ZERO_EVM_FORK_RPC`. */
   forkUrl?: string;
   /**
    * Pinned fork block. REQUIRED for a reproducible proof — an unpinned fork
@@ -407,12 +407,12 @@ export function planEvmVerify(req: EvmVerifyRequest): { plan?: EvmVerifyPlan; wa
   const warnings: string[] = [];
   const enabled = req.force || evmVerifyEnabled();
   if (!enabled) {
-    warnings.push("evm verify disabled (set 0SEC_EVM_VERIFY=1 to enable, or pass force:true)");
+    warnings.push("evm verify disabled (set ZERO_EVM_VERIFY=1 to enable, or pass force:true)");
   }
 
   const forkUrl = evmForkRpc(req.forkUrl);
   if (!forkUrl) {
-    warnings.push("no fork RPC (set 0SEC_EVM_FORK_RPC or pass forkUrl) — cannot fork; plan omitted");
+    warnings.push("no fork RPC (set ZERO_EVM_FORK_RPC or pass forkUrl) — cannot fork; plan omitted");
     return { warnings };
   }
   if (req.forkBlock === undefined) {
@@ -478,7 +478,7 @@ export async function runEvmVerify(req: EvmVerifyRequest): Promise<EvmVerifyResu
       ran: false,
       outcomes: [],
       ...(plan ? { plan, cacheKey: plan.cacheKey } : {}),
-      reason: "0SEC_EVM_VERIFY not set — harness is a default-safe no-op",
+      reason: "ZERO_EVM_VERIFY not set — harness is a default-safe no-op",
       warnings,
     };
   }

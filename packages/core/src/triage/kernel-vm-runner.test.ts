@@ -103,7 +103,7 @@ describe("kernel execution attestation", () => {
   it.skipIf(process.platform !== "linux")("compiles the launcher and proves a successful exec handshake", () => {
     // Build under the checkout so the test does not depend on system temp
     // mount policy and always exercises the compiled launcher via exec.
-    const root = mkdtempSync(join(process.cwd(), ".0sec-attest-launcher-"));
+    const root = mkdtempSync(join(process.cwd(), ".0-attest-launcher-"));
     try {
       const source = join(root, "launcher.c");
       const binary = join(root, "launcher");
@@ -127,9 +127,9 @@ describe("prepareKernelVmArtifacts", () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv };
-    delete process.env["0SEC_KERNEL_QEMU_KERNEL"];
-    delete process.env["0SEC_KERNEL_QEMU_DISK"];
-    delete process.env["0SEC_KERNEL_QEMU_CONFIG"];
+    delete process.env["ZERO_KERNEL_QEMU_KERNEL"];
+    delete process.env["ZERO_KERNEL_QEMU_DISK"];
+    delete process.env["ZERO_KERNEL_QEMU_CONFIG"];
   });
 
   afterEach(() => {
@@ -150,9 +150,9 @@ describe("prepareKernelVmArtifacts", () => {
     writeFileSync(kernel, "kernel");
     writeFileSync(disk, "disk");
     writeFileSync(config, "config");
-    process.env["0SEC_KERNEL_QEMU_KERNEL"] = kernel;
-    process.env["0SEC_KERNEL_QEMU_DISK"] = disk;
-    process.env["0SEC_KERNEL_QEMU_CONFIG"] = config;
+    process.env["ZERO_KERNEL_QEMU_KERNEL"] = kernel;
+    process.env["ZERO_KERNEL_QEMU_DISK"] = disk;
+    process.env["ZERO_KERNEL_QEMU_CONFIG"] = config;
 
     const artifacts = prepareKernelVmArtifacts({
       kernelTree: makeTree(),
@@ -241,9 +241,9 @@ describe("verifyKernelFinding", () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv };
-    delete process.env["0SEC_KERNEL_QEMU_KERNEL"];
-    delete process.env["0SEC_KERNEL_QEMU_DISK"];
-    delete process.env["0SEC_KERNEL_QEMU_CONFIG"];
+    delete process.env["ZERO_KERNEL_QEMU_KERNEL"];
+    delete process.env["ZERO_KERNEL_QEMU_DISK"];
+    delete process.env["ZERO_KERNEL_QEMU_CONFIG"];
   });
 
   afterEach(() => {
@@ -319,7 +319,7 @@ describe("verifyKernelFinding", () => {
   it("fails closed if the host kernel image changes while the VM is running", async () => {
     const cacheDir = mkdtempSync(join(tmpdir(), "0sec-kernel-cache-")); const tree = makeTree(); primeCacheForTree(tree, cacheDir); const reproPath = makeReproducer("poc.c");
     const result = await verifyKernelFinding({ reproducerPath: reproPath, kernelTree: tree, cacheDir, executionIdentity: { uid: 65534, gid: 65534 }, logger: () => undefined, buildRunner: () => { throw new Error("cache hit"); }, vmRunner: async (report) => {
-      const image = process.env["0SEC_KERNEL_QEMU_KERNEL"]!;
+      const image = process.env["ZERO_KERNEL_QEMU_KERNEL"]!;
       chmodSync(image, 0o644);
       writeFileSync(image, "mutated-after-launch");
       return { compiled: true, executed: true, output: "", dmesg: "KASAN: uaf", exitCode: 0, timedOut: false, executionAttestation: parseKernelExecutionAttestation(receiptForRequest(report.executionAttestationRequest!)) };
@@ -333,7 +333,7 @@ describe("verifyKernelFinding", () => {
     const artifacts = prepareKernelVmArtifacts({ kernelTree: tree, cacheDir, logger: () => undefined, buildRunner: () => { throw new Error("cache hit"); } });
     let launchedPath = "";
     const result = await verifyKernelFinding({ reproducerPath: reproPath, kernelTree: tree, cacheDir, expectedSignature: "KASAN: uaf", executionIdentity: { uid: 65534, gid: 65534 }, logger: () => undefined, buildRunner: () => { throw new Error("cache hit"); }, vmRunner: async (report) => {
-      launchedPath = process.env["0SEC_KERNEL_QEMU_KERNEL"]!;
+      launchedPath = process.env["ZERO_KERNEL_QEMU_KERNEL"]!;
       writeFileSync(artifacts.kernelImage, "swapped-original-cache-image");
       return { compiled: true, executed: true, output: "", dmesg: "KASAN: uaf", exitCode: 0, timedOut: false, executionAttestation: parseKernelExecutionAttestation(receiptForRequest(report.executionAttestationRequest!)) };
     } });
@@ -574,9 +574,9 @@ describe("verifyAcrossBoots — N-boot reproducibility gate (AIxCC T2)", () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv };
-    delete process.env["0SEC_KERNEL_QEMU_KERNEL"];
-    delete process.env["0SEC_KERNEL_QEMU_DISK"];
-    delete process.env["0SEC_KERNEL_QEMU_CONFIG"];
+    delete process.env["ZERO_KERNEL_QEMU_KERNEL"];
+    delete process.env["ZERO_KERNEL_QEMU_DISK"];
+    delete process.env["ZERO_KERNEL_QEMU_CONFIG"];
   });
 
   afterEach(() => {
@@ -915,7 +915,7 @@ describe("weaponize-initramfs lane", () => {
   it("renderInitramfsInitScript insmods modules and passes race env through busybox env", () => {
     const init = renderInitramfsInitScript(
       ["snd-mtpav.ko"],
-      { "0SEC_RACE_SECONDS": "35", "0SEC_RACE_FLOOD_THREADS": "4" },
+      { "ZERO_RACE_SECONDS": "35", "ZERO_RACE_FLOOD_THREADS": "4" },
       30,
     );
     expect(init).toContain("#!/bin/busybox sh");
@@ -923,9 +923,9 @@ describe("weaponize-initramfs lane", () => {
     // the module the snd-seq-midi UAF needs (the midisynth port) is insmod'd
     expect(init).toContain("insmod /lib/modules/snd-mtpav.ko");
     // Shell identifiers cannot start with a digit, so these must be argv
-    // assignments to busybox env rather than broken `export 0SEC_...` lines.
-    expect(init).toContain("/bin/busybox env 0SEC_RACE_SECONDS='35' 0SEC_RACE_FLOOD_THREADS='4'");
-    expect(init).not.toContain("export 0SEC_RACE_");
+    // assignments to busybox env rather than broken `export ZERO_...` lines.
+    expect(init).toContain("/bin/busybox env ZERO_RACE_SECONDS='35' ZERO_RACE_FLOOD_THREADS='4'");
+    expect(init).not.toContain("export ZERO_RACE_");
     // the host-compiled static exploit is run under busybox `timeout` (positional
     // SECS arg — NOT GNU `-t SECS`, which busybox rejects). Caps a hung flood.
     // Its high-volume marker output goes to a tmpfs file during the race (so the
@@ -942,10 +942,10 @@ describe("weaponize-initramfs lane", () => {
   it("forwards only validated race environment keys into the guest command", () => {
     const init = renderInitramfsInitScript(
       [],
-      { "0SEC_RACE_SECONDS": "35", "bad; poweroff": "now" },
+      { "ZERO_RACE_SECONDS": "35", "bad; poweroff": "now" },
       30,
     );
-    expect(init).toContain("0SEC_RACE_SECONDS='35'");
+    expect(init).toContain("ZERO_RACE_SECONDS='35'");
     expect(init).not.toContain("bad; poweroff");
   });
 
@@ -999,14 +999,14 @@ describe("weaponize-initramfs lane", () => {
   });
 
   it("loadKernelVmConfigFromEnv enables the lane via USE_KERNEL_WEAPONIZE / INITRAMFS env", () => {
-    process.env["0SEC_KERNEL_QEMU_KERNEL"] = "/k/bzImage";
-    process.env["0SEC_KERNEL_QEMU_DISK"] = "/k/rootfs.img";
-    delete process.env["0SEC_KERNEL_QEMU_INITRAMFS"];
+    process.env["ZERO_KERNEL_QEMU_KERNEL"] = "/k/bzImage";
+    process.env["ZERO_KERNEL_QEMU_DISK"] = "/k/rootfs.img";
+    delete process.env["ZERO_KERNEL_QEMU_INITRAMFS"];
     delete process.env.USE_KERNEL_WEAPONIZE;
     expect(loadKernelVmConfigFromEnv().weaponizeInitramfs).toBe(false);
 
     process.env.USE_KERNEL_WEAPONIZE = "1";
-    process.env["0SEC_KERNEL_QEMU_INITRAMFS_MODULES"] = "/a/snd-mtpav.ko:/b/kdelay.ko";
+    process.env["ZERO_KERNEL_QEMU_INITRAMFS_MODULES"] = "/a/snd-mtpav.ko:/b/kdelay.ko";
     const cfg = loadKernelVmConfigFromEnv();
     expect(cfg.weaponizeInitramfs).toBe(true);
     expect(cfg.initramfsModules).toEqual(["/a/snd-mtpav.ko", "/b/kdelay.ko"]);
@@ -1030,8 +1030,8 @@ describe("renderRealIpiRaceHarness — ExpRace userspace race harness", () => {
     expect(c).toContain("close(fd);");
     expect(c).toContain("ioctl(fd, 0, 0);");
     // Bad Epoll non-crashing retry loop, budget overridable via env.
-    expect(c).toContain('osec_env_long("0SEC_RACE_RETRIES", 12345)');
-    expect(c).toContain('osec_env_long("0SEC_RACE_SECONDS", 30)');
+    expect(c).toContain('osec_env_long("ZERO_RACE_RETRIES", 12345)');
+    expect(c).toContain('osec_env_long("ZERO_RACE_SECONDS", 30)');
     expect(c).toContain("time(NULL) < deadline");
     expect(c).toContain("0SEC-RACE");
   });
@@ -1108,8 +1108,8 @@ describe("prepareKernelVmArtifacts — KCSAN fail-soft config gate", () => {
   const originalEnv = { ...process.env };
   beforeEach(() => {
     process.env = { ...originalEnv };
-    delete process.env["0SEC_KERNEL_QEMU_KERNEL"];
-    delete process.env["0SEC_KERNEL_QEMU_DISK"];
+    delete process.env["ZERO_KERNEL_QEMU_KERNEL"];
+    delete process.env["ZERO_KERNEL_QEMU_DISK"];
   });
   afterEach(() => {
     process.env = { ...originalEnv };

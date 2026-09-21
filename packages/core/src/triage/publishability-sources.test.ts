@@ -24,7 +24,7 @@ import {
   OWN_SUBMISSIONS_REGISTRY,
 } from "./publishability-sources.js";
 import { checkPublishability } from "./publishability.js";
-import type { AttackCategory, Finding, Severity } from "@0sec/shared";
+import type { AttackCategory, Finding, Severity } from "@0/shared"
 
 function makeFinding(overrides: Partial<Finding> = {}): Finding {
   return {

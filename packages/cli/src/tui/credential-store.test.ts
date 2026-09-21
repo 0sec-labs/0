@@ -50,11 +50,11 @@ afterEach(() => {
 
 describe("credentialsFilePath", () => {
   it("places the file inside the shared 0sec state directory", () => {
-    expect(credentialsFilePath("/home/someone")).toBe("/home/someone/.0sec/credentials.json");
+    expect(credentialsFilePath("/home/someone")).toBe("/home/someone/.0/credentials.json");
   });
 
   it("defaults the home directory when none is given", () => {
-    expect(credentialsFilePath().endsWith(join(".0sec", "credentials.json"))).toBe(true);
+    expect(credentialsFilePath().endsWith(join(".0", "credentials.json"))).toBe(true);
   });
 });
 
@@ -157,12 +157,12 @@ describe("saveCredentials / loadCredentials", () => {
 
     const path = credentialsFilePath(home);
     expect(permissionsOf(path)).toBe(0o600);
-    expect(permissionsOf(join(home, ".0sec"))).toBe(0o700);
+    expect(permissionsOf(join(home, ".0"))).toBe(0o700);
   });
 
   it("tightens a pre-existing world-readable file instead of leaving it alone", () => {
     const home = makeHome();
-    const dir = join(home, ".0sec");
+    const dir = join(home, ".0");
     const path = join(dir, "credentials.json");
     // An older build, a restored backup or a hand-edit can leave the secret
     // readable by every local account; `mode` on writeFileSync does nothing
@@ -185,7 +185,7 @@ describe("saveCredentials / loadCredentials", () => {
 
   it("returns an empty map for invalid JSON rather than throwing", () => {
     const home = makeHome();
-    mkdirSync(join(home, ".0sec"), { recursive: true });
+    mkdirSync(join(home, ".0"), { recursive: true });
     writeFileSync(credentialsFilePath(home), "{ not json,,, ", "utf8");
 
     expect(() => loadCredentials(home)).not.toThrow();
@@ -194,7 +194,7 @@ describe("saveCredentials / loadCredentials", () => {
 
   it("returns an empty map for well-formed JSON of the wrong shape", () => {
     const home = makeHome();
-    mkdirSync(join(home, ".0sec"), { recursive: true });
+    mkdirSync(join(home, ".0"), { recursive: true });
     writeFileSync(credentialsFilePath(home), '["anthropic","sk-ant-secret"]', "utf8");
 
     expect(loadCredentials(home)).toEqual({});
@@ -262,7 +262,7 @@ describe("credentialEnvPatch", () => {
     expect(
       credentialEnvPatch(
         { "chatgpt-codex": "stored-access-token" },
-        { "0SEC_CHATGPT_OAUTH_REFRESH_TOKEN": "shell-refresh-token" },
+        { "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN": "shell-refresh-token" },
       ),
     ).toEqual({});
   });
@@ -483,7 +483,7 @@ describe("loadAccountStore / saveAccountStore", () => {
 
   it("reads a legacy flat file as a migrated store", () => {
     const home = makeHome();
-    mkdirSync(join(home, ".0sec"), { recursive: true });
+    mkdirSync(join(home, ".0"), { recursive: true });
     writeFileSync(credentialsFilePath(home), '{"anthropic":"sk-ant-old","openai":"sk-openai"}\n', "utf8");
     const loaded = loadAccountStore(home);
     expect(getActiveAccount(loaded, "anthropic")).toEqual({ kind: "api_key", secret: "sk-ant-old" });
@@ -492,7 +492,7 @@ describe("loadAccountStore / saveAccountStore", () => {
 
   it("degrades a corrupt file to an empty store rather than throwing", () => {
     const home = makeHome();
-    mkdirSync(join(home, ".0sec"), { recursive: true });
+    mkdirSync(join(home, ".0"), { recursive: true });
     writeFileSync(credentialsFilePath(home), "{ not json,,,", "utf8");
     expect(() => loadAccountStore(home)).not.toThrow();
     expect(loadAccountStore(home)).toEqual(empty());
@@ -504,7 +504,7 @@ describe("loadAccountStore / saveAccountStore", () => {
 
   it("writes the file 0600 and the directory 0700, re-tightening a loose file", () => {
     const home = makeHome();
-    const dir = join(home, ".0sec");
+    const dir = join(home, ".0");
     const path = join(dir, "credentials.json");
     mkdirSync(dir, { recursive: true });
     chmodSync(dir, 0o755);
@@ -603,14 +603,14 @@ describe("accountEnvPatch", () => {
       tokens: { accessToken: "at-1", refreshToken: "rt-1" },
     }).store;
     expect(accountEnvPatch(store, {})).toEqual({
-      "0SEC_CHATGPT_ACCESS_TOKEN": "at-1",
-      "0SEC_CHATGPT_OAUTH_REFRESH_TOKEN": "rt-1",
+      "ZERO_CHATGPT_ACCESS_TOKEN": "at-1",
+      "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN": "rt-1",
     });
   });
 
   it("maps a refresh-only oauth account to only the refresh var", () => {
     const store = addAccount(empty(), "chatgpt-codex", { kind: "oauth", tokens: { refreshToken: "rt-only" } }).store;
-    expect(accountEnvPatch(store, {})).toEqual({ "0SEC_CHATGPT_OAUTH_REFRESH_TOKEN": "rt-only" });
+    expect(accountEnvPatch(store, {})).toEqual({ "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN": "rt-only" });
   });
 
   it("respects env-wins for api_key (a set shell var is never overridden)", () => {
@@ -625,7 +625,7 @@ describe("accountEnvPatch", () => {
       kind: "oauth",
       tokens: { accessToken: "at-stored", refreshToken: "rt-stored" },
     }).store;
-    expect(accountEnvPatch(store, { "0SEC_CHATGPT_OAUTH_REFRESH_TOKEN": "rt-shell" })).toEqual({});
+    expect(accountEnvPatch(store, { "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN": "rt-shell" })).toEqual({});
   });
 
   it("treats an exported-but-blank var as absent and fills it", () => {
@@ -637,7 +637,7 @@ describe("accountEnvPatch", () => {
     let store = empty();
     store = addAccount(store, "chatgpt-codex", { kind: "oauth", tokens: { accessToken: "at-a" } }, { accountId: "a" }).store;
     store = addAccount(store, "chatgpt-codex", { kind: "oauth", tokens: { accessToken: "at-b" } }, { accountId: "b", makeActive: true }).store;
-    expect(accountEnvPatch(store, {})).toEqual({ "0SEC_CHATGPT_ACCESS_TOKEN": "at-b" });
+    expect(accountEnvPatch(store, {})).toEqual({ "ZERO_CHATGPT_ACCESS_TOKEN": "at-b" });
   });
 
   it("does not mutate its inputs and never reads process.env", () => {

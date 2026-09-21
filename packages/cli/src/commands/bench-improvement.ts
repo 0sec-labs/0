@@ -16,33 +16,31 @@ import {
 import { createHash, randomUUID } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path";
 import type { Command } from "commander";
-import {
-  aggregateScorecard,
-  appendImprovementLedgerEntry,
-  digestBenchManifest,
-  evaluateImprovementPromotion,
-  pairwiseDeltas,
-  parseManifest,
-  pickChampion,
-  projectResearchExecutionEvidence,
-  projectResearchImprovementResult,
-  researchExecutionEvidenceRef,
-  snapshotBenchVariant,
-  verifyImprovementLedger,
-  type BenchAttemptPolicy,
-  type BenchCaseResult,
-  type BenchEvaluatorAttestation,
-  type BenchManifest,
-  type BenchScorecard,
-  type BenchVariant,
-  type ImprovementCandidate,
-  type ImprovementLedgerEntry,
-  type ImprovementPromotionDecision,
-  type ResearchImprovementResult,
-  type ResearchExecutionEvidence,
-  type ResearchTournamentRun,
-  type TournamentResult,
-} from "@0sec/core";
+import { aggregateScorecard,
+appendImprovementLedgerEntry,
+digestBenchManifest,
+evaluateImprovementPromotion,
+pairwiseDeltas,
+parseManifest,
+pickChampion,
+projectResearchExecutionEvidence,
+projectResearchImprovementResult,
+researchExecutionEvidenceRef,
+snapshotBenchVariant,
+verifyImprovementLedger,
+type BenchAttemptPolicy,
+type BenchCaseResult,
+type BenchEvaluatorAttestation,
+type BenchManifest,
+type BenchScorecard,
+type BenchVariant,
+type ImprovementCandidate,
+type ImprovementLedgerEntry,
+type ImprovementPromotionDecision,
+type ResearchImprovementResult,
+type ResearchExecutionEvidence,
+type ResearchTournamentRun,
+type TournamentResult, } from "@0/core"
 
 interface CandidateMetadata {
   id: string;
@@ -76,7 +74,7 @@ interface CiEvidence {
   checks?: Array<{ name: string; conclusion: "success" | "failure" | "cancelled" }>;
 }
 
-const REQUIRED_0SEC_CHECKS = [
+const REQUIRED_ZERO_CHECKS = [
   "build",
   "ecosystem-audit-smoke (cargo)",
   "ecosystem-audit-smoke (npm)",
@@ -385,7 +383,7 @@ export function parseCiEvidence(value: unknown): CiEvidence {
     return { name, conclusion: check.conclusion as "success" | "failure" | "cancelled" };
   });
   const names = checks.map((check) => check.name);
-  if (JSON.stringify(names) !== JSON.stringify(REQUIRED_0SEC_CHECKS)) {
+  if (JSON.stringify(names) !== JSON.stringify(REQUIRED_ZERO_CHECKS)) {
     throw new Error("CI evidence does not contain the controller-required check set");
   }
   const passed = checks.every((check) => check.conclusion === "success");

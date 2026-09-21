@@ -1,7 +1,7 @@
 /**
  * Coverage seed for `0sec-cli`'s `scan` command. We register the
  * subcommand on a fresh Commander program, mock the heavy collaborators
- * (`runUnified` from `./run.js`, plus the `@0sec/core` scope/
+ * (`runUnified` from `./run.js`, plus the `@0/core` scope/
  * attribution helpers), and assert on (a) invalid-input exit codes, and
  * (b) the option payload threaded down to `runUnified`.
  *
@@ -11,7 +11,7 @@
  * Notes on coverage gaps:
  *   • The internal `parseAuthFlag` helper is not exported, so we exercise
  *     it through the `--auth` flag.
- *   • `--replay` opens `@0sec/db`'s WASM SQLite shim — exercising that
+ *   • `--replay` opens `@0/db`'s WASM SQLite shim — exercising that
  *     path needs a temp DB file, so we skip it in the seed.
  */
 
@@ -20,7 +20,7 @@ import { Command } from "commander";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ScanReport } from "@0sec/shared";
+import type { ScanReport } from "@0/shared"
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
 
@@ -37,7 +37,7 @@ const resolveEngagementProfileMock = vi.fn();
 const extractEngagementFromScopeJsonMock = vi.fn();
 const targetRequiresScopeMock = vi.fn((target: string) => /^https?:\/\//.test(target));
 const networkScopeRequiredRefusalMock = vi.fn((target: string) => `scope required for ${target}`);
-vi.mock("@0sec/core", () => ({
+vi.mock("@0/core", () => ({
   loadScope: loadScopeMock,
   parseRateLimitFlag: parseRateLimitFlagMock,
   resolveAttribution: resolveAttributionMock,
@@ -448,12 +448,12 @@ describe("scan — --features and --no-decoy-detection toggle env vars", () => {
   const envSnapshot: Record<string, string | undefined> = {};
 
   beforeEach(() => {
-    envSnapshot["0SEC_FEATURE_WP_FINGERPRINT"] = process.env["0SEC_FEATURE_WP_FINGERPRINT"];
-    envSnapshot["0SEC_FEATURE_WEB_SEARCH"] = process.env["0SEC_FEATURE_WEB_SEARCH"];
-    envSnapshot["0SEC_FEATURE_DECOY_DETECTION"] = process.env["0SEC_FEATURE_DECOY_DETECTION"];
-    delete process.env["0SEC_FEATURE_WP_FINGERPRINT"];
-    delete process.env["0SEC_FEATURE_WEB_SEARCH"];
-    delete process.env["0SEC_FEATURE_DECOY_DETECTION"];
+    envSnapshot["ZERO_FEATURE_WP_FINGERPRINT"] = process.env["ZERO_FEATURE_WP_FINGERPRINT"];
+    envSnapshot["ZERO_FEATURE_WEB_SEARCH"] = process.env["ZERO_FEATURE_WEB_SEARCH"];
+    envSnapshot["ZERO_FEATURE_DECOY_DETECTION"] = process.env["ZERO_FEATURE_DECOY_DETECTION"];
+    delete process.env["ZERO_FEATURE_WP_FINGERPRINT"];
+    delete process.env["ZERO_FEATURE_WEB_SEARCH"];
+    delete process.env["ZERO_FEATURE_DECOY_DETECTION"];
   });
 
   afterEach(() => {
@@ -463,7 +463,7 @@ describe("scan — --features and --no-decoy-detection toggle env vars", () => {
     }
   });
 
-  it("--features wp_fingerprint,web_search sets 0SEC_FEATURE_* env vars", async () => {
+  it("--features wp_fingerprint,web_search sets ZERO_FEATURE_* env vars", async () => {
     await runCli([
       "scan",
       "--target",
@@ -471,18 +471,18 @@ describe("scan — --features and --no-decoy-detection toggle env vars", () => {
       "--features",
       "wp_fingerprint,web_search",
     ]);
-    expect(process.env["0SEC_FEATURE_WP_FINGERPRINT"]).toBe("1");
-    expect(process.env["0SEC_FEATURE_WEB_SEARCH"]).toBe("1");
+    expect(process.env["ZERO_FEATURE_WP_FINGERPRINT"]).toBe("1");
+    expect(process.env["ZERO_FEATURE_WEB_SEARCH"]).toBe("1");
   });
 
-  it("--no-decoy-detection sets 0SEC_FEATURE_DECOY_DETECTION=0", async () => {
+  it("--no-decoy-detection sets ZERO_FEATURE_DECOY_DETECTION=0", async () => {
     await runCli([
       "scan",
       "--target",
       "https://example.com",
       "--no-decoy-detection",
     ]);
-    expect(process.env["0SEC_FEATURE_DECOY_DETECTION"]).toBe("0");
+    expect(process.env["ZERO_FEATURE_DECOY_DETECTION"]).toBe("0");
   });
 });
 
@@ -549,12 +549,12 @@ describe("scan — --resume (0sec#374)", () => {
 
 describe("scan — http_audit env bridge (FROZEN CONTRACT)", () => {
   const TARGET_ENV = [
-    "0SEC_TARGET_BASE_URL",
-    "0SEC_TARGET_AUTH_JSON",
-    "0SEC_TARGET_ALLOWED_HOSTS",
-    "0SEC_TARGET_ALLOWED_PATHS",
-    "0SEC_TARGET_RATE_LIMIT_RPS",
-    "0SEC_TARGET_KILL_AFTER_SEC",
+    "ZERO_TARGET_BASE_URL",
+    "ZERO_TARGET_AUTH_JSON",
+    "ZERO_TARGET_ALLOWED_HOSTS",
+    "ZERO_TARGET_ALLOWED_PATHS",
+    "ZERO_TARGET_RATE_LIMIT_RPS",
+    "ZERO_TARGET_KILL_AFTER_SEC",
   ];
   const saved: Record<string, string | undefined> = {};
   beforeEach(() => {
@@ -568,12 +568,12 @@ describe("scan — http_audit env bridge (FROZEN CONTRACT)", () => {
   });
 
   it("threads env-derived hosts/paths/rps/kill + auth into runUnified", async () => {
-    process.env["0SEC_TARGET_BASE_URL"] = "https://api.example.com";
-    process.env["0SEC_TARGET_AUTH_JSON"] = JSON.stringify({ type: "bearer", token: "SECRET" });
-    process.env["0SEC_TARGET_ALLOWED_HOSTS"] = JSON.stringify(["api.example.com", "cdn.example.com"]);
-    process.env["0SEC_TARGET_ALLOWED_PATHS"] = JSON.stringify(["/api"]);
-    process.env["0SEC_TARGET_RATE_LIMIT_RPS"] = "3";
-    process.env["0SEC_TARGET_KILL_AFTER_SEC"] = "600";
+    process.env["ZERO_TARGET_BASE_URL"] = "https://api.example.com";
+    process.env["ZERO_TARGET_AUTH_JSON"] = JSON.stringify({ type: "bearer", token: "SECRET" });
+    process.env["ZERO_TARGET_ALLOWED_HOSTS"] = JSON.stringify(["api.example.com", "cdn.example.com"]);
+    process.env["ZERO_TARGET_ALLOWED_PATHS"] = JSON.stringify(["/api"]);
+    process.env["ZERO_TARGET_RATE_LIMIT_RPS"] = "3";
+    process.env["ZERO_TARGET_KILL_AFTER_SEC"] = "600";
     await runCli(["scan", "--target", "https://api.example.com", "--mode", "http_audit", "--format", "json"]);
     expect(runUnifiedMock).toHaveBeenCalledOnce();
     const opts = runUnifiedMock.mock.calls[0]![0];
@@ -586,7 +586,7 @@ describe("scan — http_audit env bridge (FROZEN CONTRACT)", () => {
   });
 
   it("defaults allowed hosts to the base host and applies rps/kill defaults", async () => {
-    process.env["0SEC_TARGET_BASE_URL"] = "https://only.example.com";
+    process.env["ZERO_TARGET_BASE_URL"] = "https://only.example.com";
     await runCli(["scan", "--target", "https://only.example.com", "--mode", "http_audit", "--format", "json"]);
     const opts = runUnifiedMock.mock.calls[0]![0];
     expect(opts.httpAuditAllowedHosts).toEqual(["only.example.com"]);
@@ -595,17 +595,17 @@ describe("scan — http_audit env bridge (FROZEN CONTRACT)", () => {
     expect(opts.httpAuditKillAfterSec).toBe(1800);
   });
 
-  it("fails fast (exit 2, no scan) on malformed 0SEC_TARGET_ALLOWED_HOSTS", async () => {
-    process.env["0SEC_TARGET_BASE_URL"] = "https://api.example.com";
-    process.env["0SEC_TARGET_ALLOWED_HOSTS"] = "{not json}";
+  it("fails fast (exit 2, no scan) on malformed ZERO_TARGET_ALLOWED_HOSTS", async () => {
+    process.env["ZERO_TARGET_BASE_URL"] = "https://api.example.com";
+    process.env["ZERO_TARGET_ALLOWED_HOSTS"] = "{not json}";
     await runCli(["scan", "--target", "https://api.example.com", "--mode", "http_audit", "--format", "json"]);
     expect(tracker.firstCode).toBe(2);
     expect(runUnifiedMock).not.toHaveBeenCalled();
   });
 
-  it("fails fast on a non-integer 0SEC_TARGET_RATE_LIMIT_RPS", async () => {
-    process.env["0SEC_TARGET_BASE_URL"] = "https://api.example.com";
-    process.env["0SEC_TARGET_RATE_LIMIT_RPS"] = "5.5";
+  it("fails fast on a non-integer ZERO_TARGET_RATE_LIMIT_RPS", async () => {
+    process.env["ZERO_TARGET_BASE_URL"] = "https://api.example.com";
+    process.env["ZERO_TARGET_RATE_LIMIT_RPS"] = "5.5";
     await runCli(["scan", "--target", "https://api.example.com", "--mode", "http_audit", "--format", "json"]);
     expect(tracker.firstCode).toBe(2);
     expect(runUnifiedMock).not.toHaveBeenCalled();

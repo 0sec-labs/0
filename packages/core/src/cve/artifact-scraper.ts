@@ -15,7 +15,7 @@
  * `sources[]` log so the caller can see which sources hit / missed /
  * rate-limited.
  *
- * Responses are cached on disk at `~/.0sec/cve-cache/<source>/<hash>.json`
+ * Responses are cached on disk at `~/.0/cve-cache/<source>/<hash>.json`
  * with a 24h TTL (override via `opts.cacheTtlMs`, or skip the cache with
  * `opts.cache: false`). The cache is keyed on `(source, query)` so an
  * NVD lookup for CVE-2024-1086 and a GitHub search for the same CVE
@@ -33,7 +33,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared"
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -119,7 +119,7 @@ export type FetchLike = (
 }>;
 
 export interface FindCveArtifactsOptions {
-  /** Override the cache directory (default `~/.0sec/cve-cache`). */
+  /** Override the cache directory (default `~/.0/cve-cache`). */
   cacheDir?: string;
   /** Disable cache entirely (default true = cache on). */
   cache?: boolean;

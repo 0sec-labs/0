@@ -12,13 +12,13 @@
 
 import { randomUUID } from "node:crypto";
 import type { NativeRuntime } from "./runtime/types.js";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import { runNativeAgentLoop } from "./agent/native-loop.js";
 import type { NativeAgentState } from "./agent/native-loop.js";
 import { getToolsForRole, TOOL_DEFINITIONS } from "./agent/tools.js";
 import { shellPentestPrompt, attackPrompt } from "./agent/prompts.js";
 import type { ToolDefinition } from "./agent/types.js";
-import type { osecDB } from "@0sec/db";
+import type { osecDB } from "@0/db"
 
 // ── Types ──
 

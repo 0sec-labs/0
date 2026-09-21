@@ -9,13 +9,11 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  aggregateScorecard,
-  digestBenchManifest,
-  pairwiseDeltas,
-  pickChampion,
-  type BenchManifest,
-} from "@0sec/core";
+import { aggregateScorecard,
+digestBenchManifest,
+pairwiseDeltas,
+pickChampion,
+type BenchManifest, } from "@0/core"
 import {
   canonicalResultJson,
   parseCandidateMetadata,

@@ -18,38 +18,36 @@ import { resolve, join } from "node:path";
 import { performance } from "node:perf_hooks";
 import type { Command } from "commander";
 import chalk from "chalk";
-import type { RuntimeMode, ScanDepth } from "@0sec/shared";
-import {
-  createBenchIntegrationRegistry,
-  createCoreBenchIntegration,
-  createVariantExecutionFactory,
-  loadManifest,
-  subsetManifest,
-  corpusV1Path,
-  runTournament,
-  formatTournamentSummary,
-  compareScorecards,
-  loadLedger,
-  saveLedger,
-  appendLedgerEntry,
-  lastGreen,
-  evaluateRegression,
-  renderScoreboard,
-  type BenchAttemptPolicy,
-  type BenchIntegration,
-  type BenchManifest,
-  type BenchVariant,
-  type LedgerEntry,
-  type TournamentSchedule,
-  type VariantExecutionFactory,
-} from "@0sec/core";
+import type { RuntimeMode, ScanDepth } from "@0/shared"
+import { createBenchIntegrationRegistry,
+createCoreBenchIntegration,
+createVariantExecutionFactory,
+loadManifest,
+subsetManifest,
+corpusV1Path,
+runTournament,
+formatTournamentSummary,
+compareScorecards,
+loadLedger,
+saveLedger,
+appendLedgerEntry,
+lastGreen,
+evaluateRegression,
+renderScoreboard,
+type BenchAttemptPolicy,
+type BenchIntegration,
+type BenchManifest,
+type BenchVariant,
+type LedgerEntry,
+type TournamentSchedule,
+type VariantExecutionFactory, } from "@0/core"
 import {
   createCyberGymBenchIntegration,
   createCyberGymManifest,
   createXbowBenchIntegration,
   createXbowManifestFromPath,
   loadCyberGymTaskIds,
-} from "@0sec/benchmark/bench-integrations";
+} from "@0/benchmark/bench-integrations";
 import {
   registerBenchImprovementCommand,
   writeCanonicalJsonAtomic,

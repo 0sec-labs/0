@@ -83,7 +83,7 @@ The development console can reload trusted `packages/core/src` changes without
 discarding its conversation. This host-code path is not the sandboxed source
 evaluator or executable-plugin admission path.
 
-It requires a console started with `0SEC_DEV_SOURCE_ROOT` and the global
+It requires a console started with `ZERO_DEV_SOURCE_ROOT` and the global
 `allowDevSourceUpdates` setting. The setting defaults off, cannot be granted by
 a project override, and is independent of `allowModelSelfExtension`.
 
@@ -128,7 +128,7 @@ Changed, missing, out-of-scope, symlinked, or multiply linked evidence invalidat
 the note. Hashes identify source versions; interpretations still need verification.
 
 Verification runs neither receive these notes nor get the learning capability.
-`0SEC_DISABLE_HUNT_MEMORY=1` disables recall and persistence. Resumed runs keep
+`ZERO_DISABLE_HUNT_MEMORY=1` disables recall and persistence. Resumed runs keep
 their existing context rather than silently receiving new notes.
 
 ### Source access consent
@@ -314,10 +314,10 @@ Set these environment variables before the controller's first worker starts:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `0SEC_WORKER_MAX_ACTIVE` | `4` | Maximum active guest reservations |
-| `0SEC_WORKER_MAX_QUEUED` | `64` | Maximum waiting root calls |
-| `0SEC_WORKER_MEMORY_MB` | Half of available process memory, capped at `8192` MiB and floored at `32` MiB | Aggregate guest-memory budget |
-| `0SEC_WORKER_CPUS` | Node's available parallelism | Aggregate configured guest CPU budget |
+| `ZERO_WORKER_MAX_ACTIVE` | `4` | Maximum active guest reservations |
+| `ZERO_WORKER_MAX_QUEUED` | `64` | Maximum waiting root calls |
+| `ZERO_WORKER_MEMORY_MB` | Half of available process memory, capped at `8192` MiB and floored at `32` MiB | Aggregate guest-memory budget |
+| `ZERO_WORKER_CPUS` | Node's available parallelism | Aggregate configured guest CPU budget |
 
 Overrides must be positive finite numbers; all except CPU must be integers.
 A request larger than its resource budget fails immediately. Root calls wait
@@ -888,7 +888,7 @@ Finder-lens evolution remains a separate command — see [lens-synth help](/comm
 ```text
 0 lens-synth                   Evolve appsec finder coverage from curated misses
   --miss-input <path>                Curated miss-input JSON ({ misses, corpus })
-  --registry <path>                  Durable overlay path (~/.0sec/lenses/...)
+  --registry <path>                  Durable overlay path (~/.0/lenses/...)
   --max-register <n>                 Cap promoted champions per input revision
   -m, --model <id>                   Synthesis model override
   --promote                          Persist a validated champion to the durable overlay
@@ -1177,7 +1177,7 @@ runner executes candidate code separately under this worker contract:
 Finder-lens evolution (`0 lens-synth`) works alongside the evolve system but
 remains a separate command. It evolves **additive appsec finder lenses** from
 curated misses into a user-owned registry. Promotions go to
-`~/.0sec/lenses/appsec-archetypes.json`, never the bundled registry. Each
+`~/.0/lenses/appsec-archetypes.json`, never the bundled registry. Each
 promotion or retirement is recorded in the registry's hash-linked ledger.
 
 ### TUI automatic mode
@@ -1200,7 +1200,7 @@ This is a TUI settings file, **not** the source-worker `evolution.json` above.
 Evaluation can consume model usage even with promotion disabled.
 
 The watcher reads the curated inbox at
-`~/.0sec/lens-synthesis/miss-input.json` and approved observations from the
+`~/.0/lens-synthesis/miss-input.json` and approved observations from the
 feedback queue. Enabling it does not manufacture fixtures or approve captured
 misses. Use `0 evolve feedback capture`, then operator-curated
 `0 evolve feedback approve`, as described in the [CLI reference](#0-evolve).
@@ -1375,13 +1375,13 @@ approval, canaries, deployment, existing-reader pinning, and rollback using a
 small credential-detector benchmark. It does not measure general scanner quality.
 
 The executable plugin smoke check (`smoke-executable-plugins.mjs`) requires the
-built `@0sec/core` package and a local Docker daemon (or smolvm with
-`0SEC_SMOLVM_IMAGE_ARCHIVE`). It exercises the full lifecycle: submission,
+built `@0/core` package and a local Docker daemon (or smolvm with
+`ZERO_SMOLVM_IMAGE_ARCHIVE`). It exercises the full lifecycle: submission,
 execution, TypeScript argument passing, multi-owner plugins, skill composition
 with `Promise.all` broker calls, source replacement, retained version discovery,
 persisted failure counters, cold manager restore, rollback, nested call-budget
 termination, and malformed-source rejection. An optional
-`0SEC_EVOLVE_REAL=1` flag enables a real provider evolution stage using the
+`ZERO_EVOLVE_REAL=1` flag enables a real provider evolution stage using the
 configured model.
 
 This smoke does not yet qualify live root-driver replacement, browser/desktop
@@ -1416,8 +1416,8 @@ To exercise that same source lifecycle with smolvm, use `env` (the setting names
 start with a digit and therefore are not POSIX shell variable identifiers):
 
 ```bash
-env 0SEC_EVOLUTION_BACKEND=smolvm \
-  0SEC_SMOLVM_IMAGE_ARCHIVE=/absolute/path/to/node.tar \
+env ZERO_EVOLUTION_BACKEND=smolvm \
+  ZERO_SMOLVM_IMAGE_ARCHIVE=/absolute/path/to/node.tar \
   node scripts/smoke-source-evolution.mjs
 ```
 
@@ -1432,7 +1432,7 @@ protection, fresh workspaces, credentials, ambient configuration, host loopback
 denial, storage exhaustion, identity mismatch, absent runtimes, cancellation,
 deadlines, output floods, and process teardown. It does not skip missing runtime
 prerequisites. `pnpm test:smolvm:e2e` runs it when
-`0SEC_SMOLVM_IMAGE_ARCHIVE` is set in the process environment.
+`ZERO_SMOLVM_IMAGE_ARCHIVE` is set in the process environment.
 
 The lens check exercises synthesis, labelled positive/held-out/clean fixtures,
 promotion, next-reader reload, and retirement. Both consume real provider usage,

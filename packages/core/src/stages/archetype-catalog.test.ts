@@ -201,24 +201,24 @@ describe("generateArchetypeCandidates + planArchetypeSweep (real grep over a tem
   });
 
   it("archetypeSweepEnabled() defaults to false", () => {
-    const prev = process.env["0SEC_ARCHETYPE_SWEEP"];
-    delete process.env["0SEC_ARCHETYPE_SWEEP"];
+    const prev = process.env["ZERO_ARCHETYPE_SWEEP"];
+    delete process.env["ZERO_ARCHETYPE_SWEEP"];
     try {
       expect(archetypeSweepEnabled()).toBe(false);
     } finally {
-      if (prev !== undefined) process.env["0SEC_ARCHETYPE_SWEEP"] = prev;
+      if (prev !== undefined) process.env["ZERO_ARCHETYPE_SWEEP"] = prev;
     }
   });
 
   it("planArchetypeSweep is a no-op with a warning when the env gate is off and force is not set", () => {
-    const prev = process.env["0SEC_ARCHETYPE_SWEEP"];
-    delete process.env["0SEC_ARCHETYPE_SWEEP"];
+    const prev = process.env["ZERO_ARCHETYPE_SWEEP"];
+    delete process.env["ZERO_ARCHETYPE_SWEEP"];
     try {
       const result = planArchetypeSweep({ sourceRoot: dir, uids: ["kernel/NF-03"] });
       expect(result.plans).toEqual([]);
-      expect(result.warnings[0]).toContain("0SEC_ARCHETYPE_SWEEP");
+      expect(result.warnings[0]).toContain("ZERO_ARCHETYPE_SWEEP");
     } finally {
-      if (prev !== undefined) process.env["0SEC_ARCHETYPE_SWEEP"] = prev;
+      if (prev !== undefined) process.env["ZERO_ARCHETYPE_SWEEP"] = prev;
     }
   });
 

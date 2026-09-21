@@ -765,7 +765,7 @@ describe("child send_message / check_messages (real mailbox)", () => {
     const exec = new ToolExecutor(childCtx(), null);
     await exec.execute({ name: "send_message", arguments: { to: PARENT_ID, body: "hi" } });
     // Sanity: the parent's `new/` holds exactly the one delivered message.
-    const newDir = join(home, ".0sec", "hub");
+    const newDir = join(home, ".0", "hub");
     // Just assert the hub root exists; detailed layout is the mailbox's own test.
     expect(readdirSync(newDir).length).toBeGreaterThan(0);
   });

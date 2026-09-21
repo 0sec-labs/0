@@ -1040,7 +1040,8 @@ export function modelFooterHint(mode: ModelMode, hasFilter = false): string {
   return [
     "[↑↓] select",
     "[⏎] select for new chat",
-    "[⇥] curated/all",
+    "[⇥] configured/all",
+    "Other providers: /connect",
     mode === "filter" || hasFilter ? "[esc] clear" : "[esc] back",
   ].join(" · ");
 }

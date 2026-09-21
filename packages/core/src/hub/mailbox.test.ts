@@ -5,7 +5,7 @@
  * draining, permission bits, retention — so they use real temp directories
  * under `tmpdir()` and clean them up afterwards. Both the project directory and
  * the "home" state root are temporary, so no test ever touches the operator's
- * real `~/.0sec`.
+ * real `~/.0`.
  *
  * Time is always injected via `msg.ts`; nothing here reads a clock.
  */
@@ -25,7 +25,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared"
 import {
   BROADCAST_ID,
   HUB_ROOT_NAME,

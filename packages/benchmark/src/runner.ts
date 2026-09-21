@@ -4,7 +4,7 @@ import express from "express";
 import type { Server } from "http";
 import type { AddressInfo } from "net";
 import { getAllChallenges, type Challenge } from "./challenges/index.js";
-import { scan, agenticScan } from "@0sec/core";
+import { scan, agenticScan } from "@0/core"
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -150,7 +150,7 @@ async function runBenchmark(): Promise<BenchmarkReport> {
     flagExtractionRate: flagsFound / challenges.length,
     totalDurationMs: Date.now() - startTime,
     ...(useAgentic
-      ? { retainedReasoning: process.env["0SEC_FEATURE_RETAINED_REASONING"] !== "0" }
+      ? { retainedReasoning: process.env["ZERO_FEATURE_RETAINED_REASONING"] !== "0" }
       : {}),
     totalInputTokens,
     totalOutputTokens,

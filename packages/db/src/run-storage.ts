@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { homeStateDir, runStateDir } from "@0sec/shared";
+import { homeStateDir, runStateDir } from "@0/shared"
 
 const STATE_DB_FILE = "state.db";
 const REPORT_FILE = "report.json";
@@ -52,19 +52,19 @@ function normalizeRunId(value: string): string {
  *
  * A local SQLite database is execution state, not a multi-worker system of
  * record. Fresh runs therefore receive distinct paths. Managed workers pass
- * their orchestrator scan id through `0SEC_CLOUD_SCAN_ID`, making the local
+ * their orchestrator scan id through `ZERO_CLOUD_SCAN_ID`, making the local
  * run directory and the remote scan correlate without sharing a database.
  */
 export function resolveOsecRunStorage(
   options: ResolveOsecRunStorageOptions = {},
 ): OsecRunStorage {
   const env = options.env ?? process.env;
-  const cloudRunId = env["0SEC_CLOUD_SCAN_ID"]?.trim() || undefined;
+  const cloudRunId = env["ZERO_CLOUD_SCAN_ID"]?.trim() || undefined;
   let runId = normalizeRunId(options.runId ?? cloudRunId ?? randomUUID());
   const stateDir = homeStateDir(options.homeDir);
-  const configuredRunDir = env["0SEC_RUN_DIR"]?.trim() || undefined;
+  const configuredRunDir = env["ZERO_RUN_DIR"]?.trim() || undefined;
   const configuredDbPath =
-    options.dbPath ?? (env["0SEC_DB_PATH"]?.trim() || undefined);
+    options.dbPath ?? (env["ZERO_DB_PATH"]?.trim() || undefined);
   let runDir = configuredRunDir
     ? resolve(configuredRunDir)
     : runStateDir(runId, options.homeDir);
@@ -101,7 +101,7 @@ export function resolveOsecRunStorage(
   let dbPath = configuredDbPath
     ? configuredDbPath === ":memory:" ? configuredDbPath : resolve(configuredDbPath)
     : join(runDir, STATE_DB_FILE);
-  const configuredReportPath = env["0SEC_REPORT_PATH"]?.trim() || undefined;
+  const configuredReportPath = env["ZERO_REPORT_PATH"]?.trim() || undefined;
   const reportPath = configuredReportPath
     ? resolve(configuredReportPath)
     : !configuredDbPath || configuredRunDir

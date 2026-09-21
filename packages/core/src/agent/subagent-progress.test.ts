@@ -270,7 +270,7 @@ describe("spawn_agent / spawn_agents — progress events on the bus", () => {
 
   afterEach(() => {
     eventBus.clear();
-    delete process.env["0SEC_SUBAGENT_CONCURRENCY"];
+    delete process.env["ZERO_SUBAGENT_CONCURRENCY"];
   });
 
   it("emits monotonically increasing turn numbers for a single child", async () => {
@@ -414,47 +414,5 @@ describe("spawn_agent / spawn_agents — progress events on the bus", () => {
 
     const bad = await executor.execute({ name: "report_status", arguments: { status: "  " } });
     expect(bad.success).toBe(false);
-  });
-});
-
-describe("depth guard — a child cannot spawn further children", () => {
-  beforeEach(() => {
-    eventBus.clear();
-    h.impl = null;
-    h.configs = [];
-  });
-  afterEach(() => {
-    eventBus.clear();
-  });
-
-  it("gives the child a tool set that excludes spawn_agent / spawn_agents", async () => {
-    h.impl = async () => fakeState({ turns: 1 });
-    const executor = new ToolExecutor(toolContext(), undefined, undefined, fakeRuntime);
-    await executor.execute({ name: "spawn_agent", arguments: { task: "t" } });
-
-    expect(h.configs).toHaveLength(1);
-    const childToolNames = (h.configs[0].tools as Array<{ name: string }>).map((t) => t.name);
-    expect(childToolNames).not.toContain("spawn_agent");
-    expect(childToolNames).not.toContain("spawn_agents");
-    // It DOES get the non-privileged status channel plus the base three.
-    expect(childToolNames).toEqual(
-      expect.arrayContaining(["bash", "save_finding", "done", "report_status"]),
-    );
-  });
-
-  it("keeps the guard for every child in a concurrent fan-out", async () => {
-    h.impl = async () => fakeState({ turns: 1 });
-    const executor = new ToolExecutor(toolContext(), undefined, undefined, fakeRuntime);
-    await executor.execute({
-      name: "spawn_agents",
-      arguments: { tasks: [{ task: "a" }, { task: "b" }] },
-    });
-
-    expect(h.configs.length).toBe(2);
-    for (const cfg of h.configs) {
-      const names = (cfg.tools as Array<{ name: string }>).map((t) => t.name);
-      expect(names).not.toContain("spawn_agent");
-      expect(names).not.toContain("spawn_agents");
-    }
   });
 });

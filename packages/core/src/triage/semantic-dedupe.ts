@@ -31,11 +31,9 @@ import type {
   NativeContentBlock,
   NativeRuntimeResult,
 } from "../runtime/types.js";
-import type {
-  JevEvaluator,
-  JevAnswer,
-  JevUsage,
-} from "@0sec/shared";
+import type { JevEvaluator,
+JevAnswer,
+JevUsage, } from "@0/shared"
 
 // ── Constants ──
 

@@ -4,7 +4,7 @@ set -eu
 
 REPO="0sec-labs/0sec"
 RELEASE_BASE_URL="${RELEASE_BASE_URL:-https://github.com/${REPO}/releases/latest/download}"
-INSTALL_DIR="${INSTALL_DIR:-${HOME}/.0sec/bin}"
+INSTALL_DIR="${INSTALL_DIR:-${HOME}/.0/bin}"
 
 fail() {
   printf '%s\n' "0sec installer: $*" >&2

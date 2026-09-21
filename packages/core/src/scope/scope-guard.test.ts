@@ -52,22 +52,22 @@ describe("describeScopeGuards (0sec#133)", () => {
   });
 });
 
-describe("isScopeRequired (0SEC_REQUIRE_SCOPE)", () => {
+describe("isScopeRequired (ZERO_REQUIRE_SCOPE)", () => {
   it("defaults to false so today's unscoped scan modes keep running", () => {
     expect(isScopeRequired({})).toBe(false);
-    expect(isScopeRequired({ "0SEC_REQUIRE_SCOPE": "" })).toBe(false);
-    expect(isScopeRequired({ "0SEC_REQUIRE_SCOPE": "0" })).toBe(false);
-    expect(isScopeRequired({ "0SEC_REQUIRE_SCOPE": "false" })).toBe(false);
+    expect(isScopeRequired({ "ZERO_REQUIRE_SCOPE": "" })).toBe(false);
+    expect(isScopeRequired({ "ZERO_REQUIRE_SCOPE": "0" })).toBe(false);
+    expect(isScopeRequired({ "ZERO_REQUIRE_SCOPE": "false" })).toBe(false);
   });
 
   it("accepts the usual truthy spellings", () => {
     for (const raw of ["1", "true", "TRUE", "yes", " on "]) {
-      expect(isScopeRequired({ "0SEC_REQUIRE_SCOPE": raw })).toBe(true);
+      expect(isScopeRequired({ "ZERO_REQUIRE_SCOPE": raw })).toBe(true);
     }
   });
 
   it("threads through describeScopeGuards as `required`", () => {
-    expect(describeScopeGuards(false, { "0SEC_REQUIRE_SCOPE": "1" }).required).toBe(true);
+    expect(describeScopeGuards(false, { "ZERO_REQUIRE_SCOPE": "1" }).required).toBe(true);
     expect(describeScopeGuards(false, {}).required).toBe(false);
   });
 });
@@ -76,7 +76,7 @@ describe("scopeRequiredRefusal", () => {
   it("names the site and tells the operator how to fix it", () => {
     const msg = scopeRequiredRefusal("bash");
     expect(msg).toMatch(/^bash refused:/);
-    expect(msg).toMatch(/0SEC_REQUIRE_SCOPE/);
+    expect(msg).toMatch(/ZERO_REQUIRE_SCOPE/);
     expect(msg).toMatch(/--scope/);
   });
 });

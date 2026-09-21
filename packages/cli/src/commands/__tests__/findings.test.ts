@@ -6,7 +6,7 @@
  * core triage workflow that AGENTS.md documents and that the dashboard's
  * finding-family POST handlers mirror.
  *
- * Strategy: mock `@0sec/db` at the module boundary so no WASM SQLite
+ * Strategy: mock `@0/db` at the module boundary so no WASM SQLite
  * is ever opened (memory: project_db_wasm — every `new osecDB(...)`
  * path has to be intercepted) and stub the dynamic-import TUI runtime
  * so the OpenTUI fast-path is never selected during tests. Then drive
@@ -67,11 +67,11 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
-import type { FindingTriageStatus } from "@0sec/shared";
+import type { FindingTriageStatus } from "@0/shared"
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
 //
-// findings.ts uses `await import("@0sec/db")` per-action; vitest hoists
+// findings.ts uses `await import("@0/db")` per-action; vitest hoists
 // vi.mock so the dynamic resolution still lands on FakeOsecDB.
 
 interface DbCall {
@@ -118,7 +118,7 @@ const dbState: {
   listThrows: null,
 };
 
-vi.mock("@0sec/db", () => {
+vi.mock("@0/db", () => {
   class FakeOsecDB {
     constructor(dbPath?: string) {
       dbState.ctorArgs.push(dbPath);
@@ -178,7 +178,7 @@ vi.mock("../../tui/runtime.js", () => ({
 const { registerFindingsCommand } = await import("../findings.js");
 // Resolve the real provenance dependency during fixture setup, not while the
 // first detail-view command's behavioral deadline is running.
-await import("@0sec/core");
+await import("@0/core");
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -640,7 +640,7 @@ describe("findings accept/suppress/reopen — triage transitions", () => {
   // Regression for #324: parent and subcommand both declared --db-path, so
   // Commander bound the parsed value to the parent's opts. The triage
   // handlers were reading `opts.dbPath` off the subcommand (always
-  // undefined) and silently falling through to ~/.0sec/0sec.db.
+  // undefined) and silently falling through to ~/.0/0sec.db.
   // After the fix, the value threads into the osecDB constructor whether
   // it's placed after the subcommand or after the parent.
   it("accept threads --db-path placed after the subcommand into the DB constructor (regression #324)", async () => {

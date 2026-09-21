@@ -30,7 +30,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { VerificationSpec } from "@0sec/shared";
+import type { VerificationSpec } from "@0/shared"
 import { evaluateVerificationSpec } from "./spec.js";
 
 let repoRoot: string;

@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Finding, ScanReport } from "@0sec/shared";
+import type { Finding, ScanReport } from "@0/shared"
 import { runResearch } from "../research-runner.js";
 import { ResearchAdapterRegistry } from "../adapter-registry.js";
 import { LiveAgenticScanResearchAdapter, type LiveAgenticScanTarget } from "./live-agentic-scan-adapter.js";

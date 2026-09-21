@@ -57,7 +57,7 @@ describe("source dist freshness guard", () => {
     const bypassed = checkSourceDistFreshness({
       entryPath: bundlePath,
       buildCommit: OLD,
-      env: { "0SEC_ALLOW_STALE_SOURCE_DIST": "1" },
+      env: { "ZERO_ALLOW_STALE_SOURCE_DIST": "1" },
     });
     expect(bypassed.reason).toBe("bypassed");
 

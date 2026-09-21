@@ -25,7 +25,7 @@
 
 import { readdirSync, statSync } from "node:fs";
 import { join, posix, win32 } from "node:path";
-import type { RuntimeMode } from "@0sec/shared";
+import type { RuntimeMode } from "@0/shared"
 import {
   runSubsystemInvariantHunt,
   resolveContainedSourcePath,
@@ -113,7 +113,7 @@ export interface InvariantHuntContextInput {
   runtime: RuntimeMode;
   /**
    * Where the durable model JSON lives. Default:
-   * `<sourceRoot>/.0sec/invariant-models/<subsystem-slug>.json` — next to the
+   * `<sourceRoot>/.0/invariant-models/<subsystem-slug>.json` — next to the
    * tree it models, so a re-run of the same subsystem LOADS it (no LLM call) and
    * the deterministic checker re-runs against the current source for free.
    */
@@ -269,7 +269,7 @@ export async function buildInvariantHuntContext(
 
   const modelPath =
     input.modelPath ??
-    join(input.sourceRoot, ".0sec", "invariant-models", `${scope.subsystem.replaceAll("/", "__")}.json`);
+    join(input.sourceRoot, ".0", "invariant-models", `${scope.subsystem.replaceAll("/", "__")}.json`);
 
   const res = await runSubsystemInvariantHunt({
     sourceRoot: input.sourceRoot,

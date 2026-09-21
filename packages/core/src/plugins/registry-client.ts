@@ -13,7 +13,7 @@
  *
  *   1. **The default endpoint is the Hackstore community index** ({@link
  *      DEFAULT_REGISTRY_URL} → the `0sec-labs/hackstore` repo). An operator can
- *      override it with `0SEC_REGISTRY_URL`/`--registry`, and an EXPLICIT empty
+ *      override it with `ZERO_REGISTRY_URL`/`--registry`, and an EXPLICIT empty
  *      value is honoured as a clear no-op ("Hackstore disabled") — never a
  *      silent fall-back to the default.
  *   2. **No real signing key ships and the crypto is a STUB.** The signature
@@ -63,7 +63,7 @@ import { aggregateCapabilities } from "./enablement.js";
  * auditable history. It is fetched read-only over https (http is refused, see
  * below); the index carries only MANIFESTS a human reviews before installing —
  * nothing here executes code. An operator who wants a different or private
- * index overrides this with `0SEC_REGISTRY_URL` (or `--registry`); an empty
+ * index overrides this with `ZERO_REGISTRY_URL` (or `--registry`); an empty
  * override is still honoured as an explicit "no store", so the fetch stays a
  * clear no-op rather than silently falling back to this default.
  */
@@ -585,7 +585,7 @@ export async function fetchRegistryIndex(
     return {
       ok: false,
       error:
-        "the Hackstore is disabled: the registry URL is empty. Unset 0SEC_REGISTRY_URL to use " +
+        "the Hackstore is disabled: the registry URL is empty. Unset ZERO_REGISTRY_URL to use " +
         "the default community Hackstore, or set a registry index URL you trust.",
     };
   }

@@ -1,4 +1,4 @@
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import type { ChatScreenOptions } from "./chat-screen.js";
 
 export interface ShellNav {
@@ -46,7 +46,7 @@ export interface ShellNav {
   /**
    * Opens the full-screen marketplace browser: plugins and themes from the
    * configured registry. The Hackstore community index ships as the default, so it opens on
-   * empty state until `$0SEC_REGISTRY_URL` points at a registry the operator trusts.
+   * empty state until `$ZERO_REGISTRY_URL` points at a registry the operator trusts.
    */
   openMarket: () => void;
   /**

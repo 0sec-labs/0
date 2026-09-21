@@ -11,7 +11,7 @@ import { BUILTIN_GUARDS } from "../plugins/guards.js";
 import { ExecutablePluginManager } from "../plugins/executable.js";
 import { LiveHarnessHost } from "../plugins/live-harness.js";
 
-beforeEach(() => vi.stubEnv("0SEC_DISABLE_HUNT_MEMORY", "1"));
+beforeEach(() => vi.stubEnv("ZERO_DISABLE_HUNT_MEMORY", "1"));
 afterEach(() => vi.unstubAllEnvs());
 
 const submission = {

@@ -2,17 +2,15 @@ import type { Command } from "commander";
 import chalk from "chalk";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  buildAdGraph,
-  ingestBloodHoundFiles,
-  runAdGraphAnalysis,
-  type AdEdge,
-  type AdFinding,
-  type AdGraph,
-  type AdGraphAnalysis,
-  type AdNode,
-  type AdSeverity,
-} from "@0sec/core";
+import { buildAdGraph,
+ingestBloodHoundFiles,
+runAdGraphAnalysis,
+type AdEdge,
+type AdFinding,
+type AdGraph,
+type AdGraphAnalysis,
+type AdNode,
+type AdSeverity, } from "@0/core"
 
 const DEFAULT_TIMEOUT_MS = "120000";
 

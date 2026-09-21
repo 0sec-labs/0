@@ -353,7 +353,7 @@ function generateReport(variants) {
   lines.push("");
   lines.push("### Feature Flag Configuration");
   lines.push("");
-  lines.push("| Variant | `0SEC_FEATURE_JIT_SKILLS` | `0SEC_FEATURE_DYNAMIC_PLAYBOOKS` |");
+  lines.push("| Variant | `ZERO_FEATURE_JIT_SKILLS` | `ZERO_FEATURE_DYNAMIC_PLAYBOOKS` |");
   lines.push("| --- | --- | --- |");
   lines.push("| `control` | `0` | `0` |");
   lines.push("| `skills-only` | `1` | `0` |");

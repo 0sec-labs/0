@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync, closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
-import { homeStateDir, VERSION } from "@0sec/shared";
+import { homeStateDir, VERSION } from "@0/shared"
 import { z } from "zod";
 import { analyticsOptedOut } from "./analytics-level.js";
 import { redactRecordStrings } from "./analytics-pipeline.js";
@@ -526,7 +526,7 @@ let configuredClient: RunContributionClient | undefined;
 export function getConfiguredRunContributionClient(): RunContributionClient | undefined { return configuredClient; }
 /** Explicit private configuration only. Analytics level and a paid wallet never enroll a run. */
 export function configureRunContributionsFromEnvironment(): void {
-  const file = process.env["0SEC_RUN_CONTRIBUTION_CONFIG"];
+  const file = process.env["ZERO_RUN_CONTRIBUTION_CONFIG"];
   configuredClient = undefined;
   if (!file || analyticsOptedOut()) return;
   const load = () => {

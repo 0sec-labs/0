@@ -23,7 +23,7 @@ import { extractFileLine, parseHuntEvent, type osecHuntEvent } from "@/lib/hunt-
  *   ?huntEvents=<URL>   → SSE endpoint emitting ND-JSON `0sec.events/v1`
  *                          (Hunt lane). Produced by `scripts/serve-events.mjs
  *                          --0sec-log <stdout.log>` tailing a 0sec scan run
- *                          with `0SEC_CLOUD_EVENTS=1`.
+ *                          with `ZERO_CLOUD_EVENTS=1`.
  *   ?demo=1             → in-memory demo replay, no backend required. Drives
  *                          all three lanes off the same synthetic timeline.
  *

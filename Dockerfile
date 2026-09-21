@@ -55,7 +55,7 @@ ARG INSTALL_SECLISTS=0
 ARG DEBIAN_FRONTEND=noninteractive
 
 ENV NODE_ENV=production \
-    0SEC_DOCKER=1 \
+    ZERO_DOCKER=1 \
     PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin
 
 # Reuse the official Node image payload rather than downloading another runtime.

@@ -47,7 +47,7 @@ exit 99
       env: {
         ...process.env,
         PATH: `${bin}:${process.env.PATH}`,
-        "0SEC_ROOT": osecRoot,
+        "ZERO_ROOT": osecRoot,
         CYBERGYM_ROOT: cybergymRoot,
         CYBERGYM_PYTHON: fakePython,
         CYBERGYM_AUTH_FILE: auth,
@@ -129,7 +129,7 @@ cp "\${args[$((n - 2))]}" "\${args[$((n - 1))]}"
       env: {
         ...process.env,
         PATH: `${bin}:${process.env.PATH}`,
-        "0SEC_ROOT": osecRoot,
+        "ZERO_ROOT": osecRoot,
         CYBERGYM_ROOT: cybergymRoot,
         CYBERGYM_PYTHON: fakePython,
         CYBERGYM_AUTH_FILE: auth,

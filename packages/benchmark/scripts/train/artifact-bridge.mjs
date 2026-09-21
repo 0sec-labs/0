@@ -98,7 +98,7 @@ if (!existsSync(indexPath)) {
   fail(
     2,
     `core build not found at ${indexPath}\n` +
-      `Run: pnpm --filter @0sec/core build  (or build the dist/)`,
+      `Run: pnpm --filter @0/core build  (or build the dist/)`,
   );
 }
 

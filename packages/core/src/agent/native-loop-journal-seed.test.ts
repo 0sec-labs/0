@@ -15,11 +15,11 @@ import type {
 //
 // `runNativeAgentLoop` calls `loadJournal({ runId: config.scanId })` with no
 // rootDir override, so the journal it reads resolves to
-// `~/.0sec/runs/<scanId>/journal.jsonl`. We point HOME at a temp dir for the
+// `~/.0/runs/<scanId>/journal.jsonl`. We point HOME at a temp dir for the
 // duration of each test so the loop reads OUR journal, not the real one, and
 // nothing leaks between tests.
 
-const REHYDRATE_ENV = "0SEC_FEATURE_JOURNAL_REHYDRATE";
+const REHYDRATE_ENV = "ZERO_FEATURE_JOURNAL_REHYDRATE";
 
 let tmpHome: string;
 let savedHome: string | undefined;
@@ -46,7 +46,7 @@ afterEach(() => {
 function journalRoot(): string {
   // Sanity: HOME really is our temp dir for this test.
   expect(homedir()).toBe(tmpHome);
-  return join(tmpHome, ".0sec", "runs");
+  return join(tmpHome, ".0", "runs");
 }
 
 /**

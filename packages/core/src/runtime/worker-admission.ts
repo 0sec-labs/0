@@ -156,10 +156,10 @@ function defaultLimits(): WorkerAdmissionLimits {
   };
   const available = typeof process.availableMemory === "function" ? process.availableMemory() : freemem();
   return {
-    maxActive: override("0SEC_WORKER_MAX_ACTIVE", 4),
-    maxQueued: override("0SEC_WORKER_MAX_QUEUED", 64),
-    memoryMb: override("0SEC_WORKER_MEMORY_MB", Math.max(32, Math.min(8192, Math.floor(available / 2 / 1048576)))),
-    cpus: override("0SEC_WORKER_CPUS", availableParallelism(), false),
+    maxActive: override("ZERO_WORKER_MAX_ACTIVE", 4),
+    maxQueued: override("ZERO_WORKER_MAX_QUEUED", 64),
+    memoryMb: override("ZERO_WORKER_MEMORY_MB", Math.max(32, Math.min(8192, Math.floor(available / 2 / 1048576)))),
+    cpus: override("ZERO_WORKER_CPUS", availableParallelism(), false),
   };
 }
 

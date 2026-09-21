@@ -1,5 +1,5 @@
 /**
- * Resolvers for the bench manifest files shipped inside @0sec/core
+ * Resolvers for the bench manifest files shipped inside @0/core
  * (0sec#656). The JSON corpora live next to this module in both src (tests)
  * and dist (runtime) — the core build copies `src/bench/*.json` into
  * `dist/bench/`, so `import.meta.url` resolves correctly in either context.

@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import type { ScanDepth, OutputFormat, RuntimeMode } from "@0sec/shared";
+import type { ScanDepth, OutputFormat, RuntimeMode } from "@0/shared"
 import { runUnified } from "./run.js";
 
 const SUPPORTED_AUDIT_ECOSYSTEMS = new Set(["npm", "pypi", "cargo", "oci"]);
@@ -43,7 +43,7 @@ export function registerAuditCommand(program: Command): void {
       }
       let costCeilingUsd: number | undefined;
       const ceilingSource =
-        (opts.costCeiling as string | undefined) ?? process.env["0SEC_COST_CEILING_USD"];
+        (opts.costCeiling as string | undefined) ?? process.env["ZERO_COST_CEILING_USD"];
       if (ceilingSource !== undefined && ceilingSource !== "") {
         const parsed = Number(ceilingSource);
         if (!Number.isFinite(parsed) || parsed <= 0) {

@@ -33,7 +33,7 @@ content: |
   capability is safe to offer at all.
 
   ### Deny-by-default gating (three layers)
-  1. An explicit feature flag (`0SEC_FEATURE_KERNEL_WEAPONIZE=1`) — off by
+  1. An explicit feature flag (`ZERO_FEATURE_KERNEL_WEAPONIZE=1`) — off by
      default.
   2. An active engagement scope.
   3. Kernel-VM artifacts must be PRESENT. When the VM image / kernel assets are

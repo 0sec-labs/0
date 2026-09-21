@@ -54,10 +54,10 @@ describe("run-scoped local storage", () => {
     const storage = resolveOsecRunStorage({
       homeDir,
       env: {
-        "0SEC_CLOUD_SCAN_ID": "scan-123",
-        "0SEC_RUN_DIR": runDir,
-        "0SEC_DB_PATH": join(runDir, "state.sqlite"),
-        "0SEC_REPORT_PATH": join(runDir, "final.json"),
+        "ZERO_CLOUD_SCAN_ID": "scan-123",
+        "ZERO_RUN_DIR": runDir,
+        "ZERO_DB_PATH": join(runDir, "state.sqlite"),
+        "ZERO_REPORT_PATH": join(runDir, "final.json"),
       },
     });
 

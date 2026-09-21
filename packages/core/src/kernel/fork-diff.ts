@@ -36,7 +36,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 
 import {
   composeGate,

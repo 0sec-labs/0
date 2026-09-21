@@ -3,13 +3,13 @@
  *
  *   tsx craft-task.ts arvo:10400
  *
- * Faithful to the engine: drives @0sec/core's LlmApiRuntime (chatgpt-codex)
+ * Faithful to the engine: drives @0/core's LlmApiRuntime (chatgpt-codex)
  * in an agentic craft->submit->verify loop. Generalizes the arvo:10400 proof:
  * auto-extracts the suspect function + a source window + the fuzzer entry from
  * the task itself (no hand-fed slices), so it works on any Level-1 task. The
  * verdict is the official differential oracle's, never self-graded.
  */
-import { LlmApiRuntime } from "@0sec/core";
+import { LlmApiRuntime } from "@0/core"
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { createHash as hash } from "node:crypto";

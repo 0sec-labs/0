@@ -23,7 +23,7 @@
  *     mapping, exactly like `seedcatalog.load_archetypes()`.
  *   - `planArchetypeSweep` actually touches the filesystem (greps the source
  *     tree) and is gated by `archetypeSweepEnabled()` /
- *     `0SEC_ARCHETYPE_SWEEP=1` (default OFF), mirroring 0verse's
+ *     `ZERO_ARCHETYPE_SWEEP=1` (default OFF), mirroring 0verse's
  *     `ZEROVERSE_FLYWHEEL` opt-in discipline for anything that runs.
  *
  * IMPORTANT DIFFERENCE FROM 0VERSE: 0verse's `route` field
@@ -409,7 +409,7 @@ export function generateArchetypeCandidates(
 
 /** Opt-in gate. Default OFF — mirrors 0verse's `ZEROVERSE_FLYWHEEL=1` discipline. */
 export function archetypeSweepEnabled(): boolean {
-  return !["", "0", "false", "no"].includes((process.env["0SEC_ARCHETYPE_SWEEP"] ?? "").toLowerCase());
+  return !["", "0", "false", "no"].includes((process.env["ZERO_ARCHETYPE_SWEEP"] ?? "").toLowerCase());
 }
 
 export interface ArchetypeSweepPlan {
@@ -456,7 +456,7 @@ export function planArchetypeSweep(opts: ArchetypeSweepOptions): ArchetypeSweepR
   if (!opts.force && !archetypeSweepEnabled()) {
     return {
       plans: [],
-      warnings: ["archetype sweep disabled (set 0SEC_ARCHETYPE_SWEEP=1 to enable, or pass force:true)"],
+      warnings: ["archetype sweep disabled (set ZERO_ARCHETYPE_SWEEP=1 to enable, or pass force:true)"],
     };
   }
   const warnings: string[] = [];

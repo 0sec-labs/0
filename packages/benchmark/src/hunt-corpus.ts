@@ -18,8 +18,8 @@
 import { existsSync, writeFileSync, appendFileSync, mkdirSync } from "node:fs";
 import { join, dirname, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { HuntBrief, HuntFindingRecord } from "@0sec/core";
-import type { Finding } from "@0sec/shared";
+import type { HuntBrief, HuntFindingRecord } from "@0/core"
+import type { Finding } from "@0/shared"
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

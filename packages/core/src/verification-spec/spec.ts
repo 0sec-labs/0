@@ -16,10 +16,8 @@ import { promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, isAbsolute, normalize, sep } from "node:path";
 import { promisify } from "node:util";
-import type {
-  VerificationCodePredicate,
-  VerificationSpec,
-} from "@0sec/shared";
+import type { VerificationCodePredicate,
+VerificationSpec, } from "@0/shared"
 
 const execFileAsync = promisify(execFile);
 const MAX_GIT_DIFF_BYTES = 1_000_000;

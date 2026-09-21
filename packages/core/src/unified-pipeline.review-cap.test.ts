@@ -2,7 +2,7 @@
  * The oversized-review guard must apply the file cap to the CHANGED set for a
  * diff-aware (`--changed-only --diff-base`) review, not the whole repo —
  * otherwise a 1-file PR on a large repo is rejected for the repo's size. We
- * set 0SEC_REVIEW_MAX_FILES tiny so a repo with a handful of files exceeds
+ * set ZERO_REVIEW_MAX_FILES tiny so a repo with a handful of files exceeds
  * the whole-repo cap while a 1-file diff stays under it.
  */
 import { execFileSync } from "node:child_process";
@@ -79,15 +79,15 @@ function makeRepo(): { dir: string; baseSha: string } {
 describe("runPipeline — oversized-review guard vs diff-aware reviews", () => {
   let dir = "";
   let baseSha = "";
-  const savedCap = process.env["0SEC_REVIEW_MAX_FILES"];
+  const savedCap = process.env["ZERO_REVIEW_MAX_FILES"];
 
   beforeEach(() => {
-    process.env["0SEC_REVIEW_MAX_FILES"] = "3";
+    process.env["ZERO_REVIEW_MAX_FILES"] = "3";
     ({ dir, baseSha } = makeRepo());
   });
   afterEach(() => {
-    if (savedCap === undefined) delete process.env["0SEC_REVIEW_MAX_FILES"];
-    else process.env["0SEC_REVIEW_MAX_FILES"] = savedCap;
+    if (savedCap === undefined) delete process.env["ZERO_REVIEW_MAX_FILES"];
+    else process.env["ZERO_REVIEW_MAX_FILES"] = savedCap;
     if (dir) rmSync(dir, { recursive: true, force: true });
   });
 

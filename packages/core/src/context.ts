@@ -1,10 +1,8 @@
-import type {
-  ScanConfig,
-  ScanContext,
-  TargetInfo,
-  Finding,
-  AttackResult,
-} from "@0sec/shared";
+import type { ScanConfig,
+ScanContext,
+TargetInfo,
+Finding,
+AttackResult, } from "@0/shared"
 
 export function createScanContext(config: ScanConfig): ScanContext {
   return {

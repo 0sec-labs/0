@@ -1,7 +1,7 @@
 /**
  * Shared pure slash-command registry, parser, and filter.
  *
- * Portable — no React, OpenTUI, or @0sec/core imports. Usable by both
+ * Portable — no React, OpenTUI, or @0/core imports. Usable by both
  * the Bun TUI (ChatScreen) and the Node readline console.
  *
  * A "slash command" is any input starting with `/` followed by a name

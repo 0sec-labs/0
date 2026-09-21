@@ -11,13 +11,11 @@
  */
 
 import { describe, it, expect } from "vitest";
-import type {
-  Finding,
-  PocStep,
-  LayerVerdict,
-  Evidence,
-  VerificationResult,
-} from "@0sec/shared";
+import type { Finding,
+PocStep,
+LayerVerdict,
+Evidence,
+VerificationResult, } from "@0/shared"
 import {
   assembleReproducibilityManifest,
   renderReproducibilityManifest,

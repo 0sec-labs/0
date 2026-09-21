@@ -34,8 +34,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { copyFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Finding } from "@0sec/shared";
-import { osecDB } from "@0sec/db";
+import type { Finding } from "@0/shared"
+import { osecDB } from "@0/db"
 
 type PipelineEvent = {
   type: string;
@@ -58,9 +58,9 @@ const runFoxguardScanMock = vi.fn();
 vi.mock("./shared-analysis.js", () => ({
   runFoxguardScan: runFoxguardScanMock,
   runSemgrepScan: runSemgrepScanMock,
-  selectedStaticScanner: () => process.env["0SEC_STATIC"] === "semgrep" ? "semgrep" : "foxguard",
+  selectedStaticScanner: () => process.env["ZERO_STATIC"] === "semgrep" ? "semgrep" : "foxguard",
   runSelectedStaticScan: (...args: unknown[]) =>
-    process.env["0SEC_STATIC"] === "semgrep"
+    process.env["ZERO_STATIC"] === "semgrep"
       ? runSemgrepScanMock(...args)
       : runFoxguardScanMock(...args),
 }));
@@ -202,23 +202,23 @@ beforeEach(() => {
     providerLabel: "Anthropic",
   };
 
-  originalPerItemEnv = process.env["0SEC_FEATURE_PER_ITEM_ORCHESTRATION"];
-  process.env["0SEC_FEATURE_PER_ITEM_ORCHESTRATION"] = "0";
+  originalPerItemEnv = process.env["ZERO_FEATURE_PER_ITEM_ORCHESTRATION"];
+  process.env["ZERO_FEATURE_PER_ITEM_ORCHESTRATION"] = "0";
 
-  originalStaticAnalyzer = process.env["0SEC_STATIC"];
-  delete process.env["0SEC_STATIC"];
+  originalStaticAnalyzer = process.env["ZERO_STATIC"];
+  delete process.env["ZERO_STATIC"];
 });
 
 afterEach(() => {
   if (originalPerItemEnv === undefined) {
-    delete process.env["0SEC_FEATURE_PER_ITEM_ORCHESTRATION"];
+    delete process.env["ZERO_FEATURE_PER_ITEM_ORCHESTRATION"];
   } else {
-    process.env["0SEC_FEATURE_PER_ITEM_ORCHESTRATION"] = originalPerItemEnv;
+    process.env["ZERO_FEATURE_PER_ITEM_ORCHESTRATION"] = originalPerItemEnv;
   }
   if (originalStaticAnalyzer === undefined) {
-    delete process.env["0SEC_STATIC"];
+    delete process.env["ZERO_STATIC"];
   } else {
-    process.env["0SEC_STATIC"] = originalStaticAnalyzer;
+    process.env["ZERO_STATIC"] = originalStaticAnalyzer;
   }
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });

@@ -36,9 +36,9 @@ import {
 } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
-import type { AttackCategory, Finding, Severity } from "@0sec/shared";
-import type { RuntimeMode } from "@0sec/shared";
-import { estimateCost } from "@0sec/shared";
+import type { AttackCategory, Finding, Severity } from "@0/shared"
+import type { RuntimeMode } from "@0/shared"
+import { estimateCost } from "@0/shared"
 import {
   LlmApiRuntime,
   LOOP_SERVER_COMPACTION_TOKENS,
@@ -231,7 +231,7 @@ export interface CraftScanResult {
    * NOTIONAL API-equivalent cost in USD (what these tokens WOULD cost on a
    * pay-per-token API). Our actual marginal spend is ~$0 on the Codex
    * subscription — this quantifies the free-compute advantage. Computed from
-   * the canonical per-model price table in @0sec/shared (`estimateCost`), the
+   * the canonical per-model price table in @0/shared (`estimateCost`), the
    * single source of truth for pricing across the engine.
    */
   estimatedCostUsd: number;

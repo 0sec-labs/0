@@ -2,8 +2,8 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { createJevEvaluator } from "@0sec/shared";
-import type { JevEvaluator } from "@0sec/shared";
+import { createJevEvaluator } from "@0/shared"
+import type { JevEvaluator } from "@0/shared"
 import { extractKernelFunctions, KERNEL_FUNCTION_BATCH_SIZE, runKernelSourceJevPrepass } from "./kernel-source-jev-prepass.js";
 
 describe("direct kernel function prepass", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { MODEL_PRICING, modelProvider } from "@0sec/shared";
+import { MODEL_PRICING, modelProvider } from "@0/shared"
 
 import {
   buildHostedModelCatalog,
@@ -9,6 +9,7 @@ import {
   hostedModelDetails,
   modelSelectorItems,
   preferredHostedModel,
+  scopeModelCatalog,
 } from "./model-catalog.js";
 
 const SOME_MODEL = "gpt-5.5";
@@ -95,6 +96,25 @@ describe("buildModelCatalog", () => {
       warn.mockRestore();
       log.mockRestore();
     }
+  });
+});
+
+describe("scopeModelCatalog", () => {
+  it("defaults to configured provider models and preserves the active model", () => {
+    const catalog = buildModelCatalog("claude-test-model");
+    const scoped = scopeModelCatalog(catalog, {
+      configuredProviderIds: ["openai"],
+      currentModel: "claude-test-model",
+    });
+    expect(scoped.length).toBeGreaterThan(0);
+    expect(scoped.every((model) => model.provider === "openai" || model.id === "claude-test-model")).toBe(true);
+    expect(scoped[0].id).toBe("claude-test-model");
+  });
+
+  it("shows all providers when explicitly requested or filtered", () => {
+    const catalog = buildModelCatalog();
+    expect(scopeModelCatalog(catalog, { configuredProviderIds: ["openai"], showAll: true })).toEqual(catalog);
+    expect(scopeModelCatalog(catalog, { configuredProviderIds: ["openai"], filter: "claude" })).toEqual(catalog);
   });
 });
 

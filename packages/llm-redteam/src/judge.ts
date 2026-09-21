@@ -1,6 +1,6 @@
 /** Break detection and advisory attempt feedback. */
 import type { Behavior, JevAttemptFeedback, JevAttemptFeedbackLabel, TargetResponse, Verdict } from "./types.js";
-import type { JevEvaluator } from "@0sec/shared";
+import type { JevEvaluator } from "@0/shared"
 
 /**
  * Regex judge: a break iff the behaviour's proof pattern appears in the

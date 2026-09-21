@@ -34,7 +34,7 @@ files by filename:
 Run against a specific benchmark artifact:
 
 ```bash
-pnpm --filter @0sec/benchmark exec tsx src/triage-data-collector.ts \
+pnpm --filter @0/benchmark exec tsx src/triage-data-collector.ts \
   --npm-bench results/npm-bench-latest.json \
   --output results/triage-dataset.jsonl
 ```
@@ -42,16 +42,16 @@ pnpm --filter @0sec/benchmark exec tsx src/triage-data-collector.ts \
 Combine npm-bench with local verified findings from the SQLite DB:
 
 ```bash
-pnpm --filter @0sec/benchmark exec tsx src/triage-data-collector.ts \
+pnpm --filter @0/benchmark exec tsx src/triage-data-collector.ts \
   --npm-bench results/npm-bench-latest.json \
-  --db "$HOME/.0sec/0sec.db" \
+  --db "$HOME/.0/0sec.db" \
   --output results/triage-dataset-mixed.jsonl
 ```
 
 Pull labels from a whole directory of scan databases:
 
 ```bash
-pnpm --filter @0sec/benchmark exec tsx src/triage-data-collector.ts \
+pnpm --filter @0/benchmark exec tsx src/triage-data-collector.ts \
   --scan-dir /absolute/path/to/scan-dbs \
   --output results/triage-dataset-from-db.jsonl
 ```

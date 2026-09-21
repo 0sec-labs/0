@@ -9,10 +9,10 @@ const DEFAULT_CLI = "packages/cli/dist/index.js";
 
 function parseArgs(argv) {
   const args = {
-    corpus: process.env["0SEC_KERNEL_BATCH_CORPUS"] || DEFAULT_CORPUS,
-    outDir: process.env["0SEC_KERNEL_BATCH_OUT_DIR"] || DEFAULT_OUT_DIR,
-    cli: process.env["0SEC_KERNEL_BATCH_CLI"] || DEFAULT_CLI,
-    limit: process.env["0SEC_KERNEL_BATCH_LIMIT"] || "",
+    corpus: process.env["ZERO_KERNEL_BATCH_CORPUS"] || DEFAULT_CORPUS,
+    outDir: process.env["ZERO_KERNEL_BATCH_OUT_DIR"] || DEFAULT_OUT_DIR,
+    cli: process.env["ZERO_KERNEL_BATCH_CLI"] || DEFAULT_CLI,
+    limit: process.env["ZERO_KERNEL_BATCH_LIMIT"] || "",
     dryRun: false,
   };
 
@@ -274,8 +274,8 @@ async function runCase(testCase, args, rootDir) {
 
     const env = {
       ...process.env,
-      "0SEC_KERNEL_QEMU": "1",
-      "0SEC_KERNEL_QEMU_ARTIFACT_DIR": artifactDir,
+      "ZERO_KERNEL_QEMU": "1",
+      "ZERO_KERNEL_QEMU_ARTIFACT_DIR": artifactDir,
     };
     const ingest = await runNode(
       [args.cli, "ingest", inputDir, "--verify", "-o", "json"],

@@ -10,15 +10,15 @@ set -euo pipefail
 
 CLI="${1:-node packages/cli/dist/index.js}"
 REPO="${2:-}"
-if [ -z "$REPO" ]; then REPO="$(printenv 0SEC_SMOKE_REPO 2>/dev/null || true)"; fi
+if [ -z "$REPO" ]; then REPO="$(printenv ZERO_SMOKE_REPO 2>/dev/null || true)"; fi
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 say() { printf '\033[36m[cloud-smoke]\033[0m %s\n' "$*"; }
 fail() { printf '\033[31m[cloud-smoke] FAIL:\033[0m %s\n' "$*" >&2; exit 1; }
 
-if ! printenv 0SEC_CLOUD_TOKEN >/dev/null 2>&1 && ! printenv 0SEC_CLOUD_HOST >/dev/null 2>&1 \
-  && [ ! -f "${HOME}/.0sec/cloud.env" ]; then
+if ! printenv ZERO_CLOUD_TOKEN >/dev/null 2>&1 && ! printenv ZERO_CLOUD_HOST >/dev/null 2>&1 \
+  && [ ! -f "${HOME}/.0/cloud.env" ]; then
   fail "no Cloud credentials found; run 0sec auth login first"
 fi
 

@@ -4,7 +4,7 @@
  * the driver lifecycle and the scope-pinned network interceptor.
  */
 import { z } from "zod";
-import type { JevEvaluator } from "@0sec/shared";
+import type { JevEvaluator } from "@0/shared"
 import type { ScopePolicy } from "../../scope/scope.js";
 import type { ToolDefinition, ToolResult } from "../types.js";
 

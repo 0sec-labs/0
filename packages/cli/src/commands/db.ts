@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { Command } from "commander";
 import chalk from "chalk";
-import { osecDB, repairOsecDatabase, resetOsecDatabase } from "@0sec/db";
-import type { AgentVerdict, Finding, ScanConfig, WorkItemKind, WorkItemStatus } from "@0sec/shared";
+import { osecDB, repairOsecDatabase, resetOsecDatabase } from "@0/db"
+import type { AgentVerdict, Finding, ScanConfig, WorkItemKind, WorkItemStatus } from "@0/shared"
 
 type DbResetOptions = {
   dbPath?: string;
@@ -612,7 +612,7 @@ export function seedVerificationWorkbench(db: osecDB): {
 export function registerDbCommand(program: Command): void {
   const db = program
     .command("db")
-    .description("Manage the local 0sec database");
+    .description("Manage the local 0 database");
 
   db
     .command("repair")
@@ -620,7 +620,7 @@ export function registerDbCommand(program: Command): void {
     .option("--db-path <path>", "Path to SQLite database")
     .action((opts: DbRepairOptions) => {
       const repaired = repairOsecDatabase(opts.dbPath);
-      console.log(chalk.green.bold("  ◆ 0sec") + chalk.gray(" db repair"));
+      console.log(chalk.green.bold("  ◆ 0") + chalk.gray(" db repair"));
       console.log(chalk.gray(`  ${repaired.path}`));
       if (repaired.backupPath) {
         console.log(chalk.gray(`  backup: ${repaired.backupPath}`));

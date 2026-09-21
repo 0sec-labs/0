@@ -18,7 +18,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, extname, join, relative, sep } from "node:path";
 
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 
 // ────────────────────────────────────────────────────────────────────
 // Public types

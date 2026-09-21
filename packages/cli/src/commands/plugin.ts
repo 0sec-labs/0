@@ -17,7 +17,7 @@ import type { Command } from "commander";
 // Declared locally (not imported from the barrel) so the command type-checks
 // without depending on barrel exports that land in a separate change.
 
-import type { PluginCapability } from "@0sec/core";
+import type { PluginCapability } from "@0/core"
 
 export interface ManifestView {
   id: string;
@@ -140,7 +140,7 @@ export interface PluginHostView {
 }
 
 /**
- * Everything this command needs from `@0sec/core`. Injected so tests supply
+ * Everything this command needs from `@0/core`. Injected so tests supply
  * fakes; the default {@link defaultCorePort} lazily imports the real barrel.
  */
 export interface CorePort {
@@ -192,7 +192,7 @@ export interface CorePort {
 let cachedCore: CorePort | undefined;
 async function defaultCorePort(): Promise<CorePort> {
   if (cachedCore) return cachedCore;
-  const mod = (await import("@0sec/core")) as unknown as CorePort;
+  const mod = (await import("@0/core")) as unknown as CorePort;
   cachedCore = mod;
   return mod;
 }
@@ -228,7 +228,7 @@ export interface PluginCommandDeps {
   yes?: boolean;
   /** JSON object of tool arguments (merged under any `key=value` pairs). */
   jsonArgs?: string;
-  /** @0sec/core version, for the host's `minCoreVersion` enforcement. */
+  /** @0/core version, for the host's `minCoreVersion` enforcement. */
   coreVersion?: string;
   /** Per-call timeout override (ms). */
   callTimeoutMs?: number;
@@ -330,7 +330,7 @@ export async function runSearch(query: string, deps: PluginCommandDeps): Promise
   if (d.registryUrl.trim().length === 0) {
     d.out("The Hackstore is disabled (registry URL is empty), so there is nothing to search.");
     d.out("  The default community Hackstore lives at github.com/0sec-labs/hackstore.");
-    d.out("  Unset 0SEC_REGISTRY_URL to use it, or point --registry at an index URL you trust.");
+    d.out("  Unset ZERO_REGISTRY_URL to use it, or point --registry at an index URL you trust.");
     process.exitCode = EXIT_OK;
     return;
   }
@@ -377,7 +377,7 @@ export async function runInstall(id: string, deps: PluginCommandDeps): Promise<v
   }
   if (d.registryUrl.trim().length === 0) {
     d.err(chalk.red("The Hackstore is disabled (registry URL is empty), so nothing can be installed."));
-    d.err("  Unset 0SEC_REGISTRY_URL for the default community Hackstore, or point --registry at an index URL you trust.");
+    d.err("  Unset ZERO_REGISTRY_URL for the default community Hackstore, or point --registry at an index URL you trust.");
     process.exitCode = EXIT_USER_ERROR;
     return;
   }
@@ -559,7 +559,7 @@ export function runInfo(id: string, deps: PluginCommandDeps): void {
   const enabled = d.core.isEnabled(record, id);
 
   d.out(chalk.bold(`${m.name} (${m.id}@${m.version})`));
-  if (m.minCoreVersion) d.out(`  Requires @0sec/core >= ${m.minCoreVersion}`);
+  if (m.minCoreVersion) d.out(`  Requires @0/core >= ${m.minCoreVersion}`);
   d.out(`  Source: ${join(root, id)}`);
   d.out(`  Enabled for this project: ${enabled ? chalk.green("yes") : chalk.dim("no")}`);
   d.out(`  Aggregated capabilities: ${capSummary(d.core.aggregateCapabilities(m))}`);

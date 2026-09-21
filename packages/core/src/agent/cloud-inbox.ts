@@ -84,7 +84,7 @@ export function startCloudInboxPoller(
 }
 
 /**
- * Start the inbox poller iff we're running under a cloud sink (0SEC_CLOUD_SINK
+ * Start the inbox poller iff we're running under a cloud sink (ZERO_CLOUD_SINK
  * + scan id set). Returns null in local-only mode — callers fall back to their
  * own getPendingUserMessages (TUI) or none.
  */

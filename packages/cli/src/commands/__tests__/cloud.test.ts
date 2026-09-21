@@ -8,8 +8,8 @@ const probeS3BucketMock = vi.fn();
 const classifyTakeoverMock = vi.fn();
 const validateAwsCredentialsMock = vi.fn();
 
-vi.mock("@0sec/core", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@0sec/core")>();
+vi.mock("@0/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@0/core")>();
   return {
     ...actual,
     probeS3Bucket: probeS3BucketMock,
@@ -35,7 +35,7 @@ async function runCli(argv: string[]): Promise<void> {
   await program.parseAsync(["node", "0sec-cli", ...argv]);
 }
 
-const ORIGINAL_FLAG = process.env["0SEC_FEATURE_CLOUD_SURFACE"];
+const ORIGINAL_FLAG = process.env["ZERO_FEATURE_CLOUD_SURFACE"];
 
 describe("0cloud", () => {
   let io: ReturnType<typeof captureIO>;
@@ -66,34 +66,34 @@ describe("0cloud", () => {
     vi.clearAllMocks();
     io.restore();
     rmSync(dir, { recursive: true, force: true });
-    if (ORIGINAL_FLAG === undefined) delete process.env["0SEC_FEATURE_CLOUD_SURFACE"];
-    else process.env["0SEC_FEATURE_CLOUD_SURFACE"] = ORIGINAL_FLAG;
+    if (ORIGINAL_FLAG === undefined) delete process.env["ZERO_FEATURE_CLOUD_SURFACE"];
+    else process.env["ZERO_FEATURE_CLOUD_SURFACE"] = ORIGINAL_FLAG;
   });
 
   describe("s3-probe", () => {
     it("refuses when the feature flag is off", async () => {
-      delete process.env["0SEC_FEATURE_CLOUD_SURFACE"];
+      delete process.env["ZERO_FEATURE_CLOUD_SURFACE"];
       await runCli(["cloud", "s3-probe", "acme-assets", "--scope", scopePath]);
       expect(probeS3BucketMock).not.toHaveBeenCalled();
       expect(process.exitCode).toBe(2);
-      expect(io.stderr.join("\n")).toContain("0SEC_FEATURE_CLOUD_SURFACE=1");
+      expect(io.stderr.join("\n")).toContain("ZERO_FEATURE_CLOUD_SURFACE=1");
     });
 
     it("deny-by-default: requires --scope (commander rejects without it)", async () => {
-      process.env["0SEC_FEATURE_CLOUD_SURFACE"] = "1";
+      process.env["ZERO_FEATURE_CLOUD_SURFACE"] = "1";
       await expect(runCli(["cloud", "s3-probe", "acme-assets"])).rejects.toBeDefined();
       expect(probeS3BucketMock).not.toHaveBeenCalled();
     });
 
     it("probes an in-scope bucket when flag on + scope present", async () => {
-      process.env["0SEC_FEATURE_CLOUD_SURFACE"] = "1";
+      process.env["ZERO_FEATURE_CLOUD_SURFACE"] = "1";
       await runCli(["cloud", "s3-probe", "acme-assets", "--scope", scopePath]);
       expect(probeS3BucketMock).toHaveBeenCalledTimes(1);
       expect(io.stdout.join("\n")).toContain("public");
     });
 
     it("refuses an out-of-scope bucket (does not probe it)", async () => {
-      process.env["0SEC_FEATURE_CLOUD_SURFACE"] = "1";
+      process.env["ZERO_FEATURE_CLOUD_SURFACE"] = "1";
       writeFileSync(scopePath, JSON.stringify({ in_scope: ["other.s3.amazonaws.com"], out_of_scope: [] }));
       await runCli(["cloud", "s3-probe", "acme-assets", "--scope", scopePath]);
       expect(probeS3BucketMock).not.toHaveBeenCalled();
@@ -103,14 +103,14 @@ describe("0cloud", () => {
 
   describe("validate-creds", () => {
     it("refuses when the feature flag is off", async () => {
-      delete process.env["0SEC_FEATURE_CLOUD_SURFACE"];
+      delete process.env["ZERO_FEATURE_CLOUD_SURFACE"];
       await runCli(["cloud", "validate-creds", "--scope", scopePath, "--access-key-id", "AKIA", "--secret-access-key", "s"]);
       expect(validateAwsCredentialsMock).not.toHaveBeenCalled();
       expect(process.exitCode).toBe(2);
     });
 
     it("deny-by-default: requires --scope (commander rejects without it)", async () => {
-      process.env["0SEC_FEATURE_CLOUD_SURFACE"] = "1";
+      process.env["ZERO_FEATURE_CLOUD_SURFACE"] = "1";
       await expect(
         runCli(["cloud", "validate-creds", "--access-key-id", "AKIA", "--secret-access-key", "s"]),
       ).rejects.toBeDefined();
@@ -118,7 +118,7 @@ describe("0cloud", () => {
     });
 
     it("validates when flag on + scope + creds present, never echoing the secret", async () => {
-      process.env["0SEC_FEATURE_CLOUD_SURFACE"] = "1";
+      process.env["ZERO_FEATURE_CLOUD_SURFACE"] = "1";
       await runCli([
         "cloud", "validate-creds", "--scope", scopePath,
         "--access-key-id", "AKIAEXAMPLE", "--secret-access-key", "topsecretvalue", "--json",
@@ -130,7 +130,7 @@ describe("0cloud", () => {
     });
 
     it("refuses with flag on + scope but no credentials", async () => {
-      process.env["0SEC_FEATURE_CLOUD_SURFACE"] = "1";
+      process.env["ZERO_FEATURE_CLOUD_SURFACE"] = "1";
       delete process.env.AWS_ACCESS_KEY_ID;
       delete process.env.AWS_SECRET_ACCESS_KEY;
       await runCli(["cloud", "validate-creds", "--scope", scopePath]);

@@ -7,7 +7,7 @@
  * the pure `handleOastRequest`, but a production deployment still needs, as
  * FOLLOW-UP (out of scope for this PR):
  *
- *   - A wildcard DNS zone `*.oast.0sec.ai` delegated to an authoritative
+ *   - A wildcard DNS zone `*.oast.0.ai` delegated to an authoritative
  *     resolver that logs every QNAME and POSTs it to `/ingest/dns` (the DNS
  *     channel that confirms OOB-SQLi / DNS-only SSRF). A pure Node HTTP server
  *     cannot answer DNS; that front-end is a separate process.

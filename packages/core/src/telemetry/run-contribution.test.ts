@@ -15,7 +15,7 @@ afterEach(() => { vi.unstubAllEnvs(); for (const directory of directories.splice
 function fixture(fetchImpl?: typeof fetch, maxSpoolBytes = 2 * 1024 * 1024, maxChunkBytes = 32768) {
   const directory = mkdtempSync(join(tmpdir(), "0sec-contribution-test-"));
   directories.push(directory);
-  const env: NodeJS.ProcessEnv = { "0SEC_ANALYTICS_LEVEL": "off" };
+  const env: NodeJS.ProcessEnv = { "ZERO_ANALYTICS_LEVEL": "off" };
   let receipt: ContributionReceipt | null = {
     schemaVersion: 1, id: "synthetic-receipt", orgId: "synthetic-org", authorizedBy: "synthetic-admin", authority: "organization_admin",
     policyId: "synthetic-policy", termsId: "synthetic-only-not-production", status: "active",
@@ -35,7 +35,7 @@ const begin = { runId: "synthetic-run", attemptId: "synthetic-attempt", model: "
 describe("permissioned run contributions", () => {
   it("does not turn analytics or billing into contribution permission; independently enforces purposes", () => {
     const f = fixture();
-    f.env["0SEC_ANALYTICS_LEVEL"] = "full";
+    f.env["ZERO_ANALYTICS_LEVEL"] = "full";
     f.receipt = null;
     expect(f.client.begin(begin)).toBeNull();
     const permitted = fixture();
@@ -51,9 +51,9 @@ describe("permissioned run contributions", () => {
     const capture = f.client.begin(begin)!;
     capture.record("tool_result", { output: "owned result" });
     capture.finish("interrupted", "operator_cancelled");
-    f.env["0SEC_OFFLINE"] = "1";
+    f.env["ZERO_OFFLINE"] = "1";
     expect((await f.client.upload(capture)).status).toBe("offline");
-    delete f.env["0SEC_OFFLINE"];
+    delete f.env["ZERO_OFFLINE"];
     f.receipt = { ...f.receipt!, status: "blocked" };
     expect((await f.client.upload(capture)).status).toBe("denied");
     f.receipt = { ...f.receipt!, status: "active", expiresAt: new Date(Date.now() - 1).toISOString() };
@@ -203,7 +203,7 @@ describe("permissioned run contributions", () => {
   });
 
   it("captures the real console tool loop and a native child under one parent", async () => {
-    vi.stubEnv("0SEC_DISABLE_HUNT_MEMORY", "1");
+    vi.stubEnv("ZERO_DISABLE_HUNT_MEMORY", "1");
     const f = fixture(undefined, 16 * 1024 * 1024, 2 * 1024 * 1024);
     const capture = f.client.begin(begin)!;
     let turn = 0;
@@ -232,7 +232,7 @@ describe("permissioned run contributions", () => {
   });
 
   it("binds actual native host exclusions and normalized path enforcement into scope hashes", async () => {
-    vi.stubEnv("0SEC_DISABLE_HUNT_MEMORY", "1");
+    vi.stubEnv("ZERO_DISABLE_HUNT_MEMORY", "1");
     const scopes: Array<{ hash: string; scope: unknown }> = [];
     for (const excluded of ["blocked.example", "other.example"]) {
       const f = fixture();
@@ -250,8 +250,8 @@ describe("permissioned run contributions", () => {
   });
 
   it.each([true, false])("records actual same-turn inline oracle evidence, including inconclusive=%s", async inconclusive => {
-    vi.stubEnv("0SEC_DISABLE_HUNT_MEMORY", "1");
-    vi.stubEnv("0SEC_FEATURE_INLINE_VALIDATION", "1");
+    vi.stubEnv("ZERO_DISABLE_HUNT_MEMORY", "1");
+    vi.stubEnv("ZERO_FEATURE_INLINE_VALIDATION", "1");
     const f = fixture();
     const capture = f.client.begin(begin)!;
     await runNativeAgentLoop({ contribution: capture, db: null,

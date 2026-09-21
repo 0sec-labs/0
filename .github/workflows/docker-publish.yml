@@ -8,7 +8,7 @@ name: "0sec: Publish Docker image"
 #   - successful 0sec: Main on main → SHA-tagged image + :main + refreshed
 #                                       :latest. This is the rolling-main path
 #                                       the worker-controller pins by default
-#                                       (0SEC_IMAGE=…/0sec:latest).
+#                                       (ZERO_IMAGE=…/0sec:latest).
 #
 # Main publishes are chained from `0sec: Main` instead of running directly on
 # push, so a bad engine cannot refresh :latest before the CI suite has passed.

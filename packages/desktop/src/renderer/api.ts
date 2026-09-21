@@ -1,11 +1,9 @@
-import type {
-  DesktopCodexAuthStatus,
-  DesktopConsoleAutonomyMode,
-  DesktopConsoleDecisionResponse,
-  DesktopConsoleEvent,
-  DesktopConsoleRole,
-  DesktopConsoleSession,
-} from "@0sec/shared";
+import type { DesktopCodexAuthStatus,
+DesktopConsoleAutonomyMode,
+DesktopConsoleDecisionResponse,
+DesktopConsoleEvent,
+DesktopConsoleRole,
+DesktopConsoleSession, } from "@0/shared"
 
 /* ── CSRF control token ────────────────────────────────────── */
 

@@ -48,8 +48,8 @@ it("rejects malformed declared frontmatter instead of treating it as plain Markd
 
 it("exposes and loads an assigned methodology through the real tool dispatcher, while honoring explicit opt-out", async () => {
   const value = bundle("Inspect transaction isolation before approving the repair.");
-  vi.stubEnv("0SEC_AUDIT_SKILLS_MANIFEST", value.path);
-  vi.stubEnv("0SEC_FEATURE_JIT_SKILLS", undefined);
+  vi.stubEnv("ZERO_AUDIT_SKILLS_MANIFEST", value.path);
+  vi.stubEnv("ZERO_FEATURE_JIT_SKILLS", undefined);
   const executor = new ToolExecutor({ target: value.path, scopePath: value.path, scanId: "methodology-contract", role: "audit",
     findings: [], attackResults: [], targetInfo: {} });
   const tools = getToolsForRole("audit", { hasScope: true }).map(tool => tool.name);
@@ -58,7 +58,7 @@ it("exposes and loads an assigned methodology through the real tool dispatcher, 
   const result = await executor.execute({ id: "load", name: "load_skill", arguments: { skill_id: `cloud/${value.snapshot.skillId}` } });
   expect(result.success).toBe(true);
   expect(JSON.stringify(result.output)).toContain("Inspect transaction isolation before approving the repair.");
-  vi.stubEnv("0SEC_FEATURE_JIT_SKILLS", "0");
+  vi.stubEnv("ZERO_FEATURE_JIT_SKILLS", "0");
   expect(getToolsForRole("audit", { hasScope: true }).some(tool => tool.name === "load_skill")).toBe(false);
   expect((await executor.execute({ id: "denied", name: "load_skill", arguments: { skill_id: `cloud/${value.snapshot.skillId}` } })).success).toBe(false);
 });

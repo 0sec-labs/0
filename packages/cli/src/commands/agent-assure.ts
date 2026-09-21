@@ -1,21 +1,17 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type { Command } from "commander";
-import { loadScope, type ScopePolicy } from "@0sec/core";
-import {
-  AgentActionScenarioSchema,
-  parseAgentActionEvidenceManifest,
-  type AgentActionEvidenceManifest,
-  type AgentActionScenario,
-} from "@0sec/shared";
-import {
-  agentActionConfigurationChanges,
-  agentActionManifestSha256,
-  httpActionOracle,
-  mcpAgentTarget,
-  runAgentActionAssurance,
-  writeAgentActionEvidenceBundle,
-} from "@0sec/llm-redteam";
+import { loadScope, type ScopePolicy } from "@0/core"
+import { AgentActionScenarioSchema,
+parseAgentActionEvidenceManifest,
+type AgentActionEvidenceManifest,
+type AgentActionScenario, } from "@0/shared"
+import { agentActionConfigurationChanges,
+agentActionManifestSha256,
+httpActionOracle,
+mcpAgentTarget,
+runAgentActionAssurance,
+writeAgentActionEvidenceBundle, } from "@0/llm-redteam"
 
 interface AgentAssureOptions {
   agentEndpoint: string;

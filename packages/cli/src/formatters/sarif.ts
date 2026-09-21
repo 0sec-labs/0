@@ -1,5 +1,5 @@
-import type { PocStep, ScanReport, Finding, Severity } from "@0sec/shared";
-import { VERSION } from "@0sec/shared";
+import type { PocStep, ScanReport, Finding, Severity } from "@0/shared"
+import { VERSION } from "@0/shared"
 
 interface SarifResult {
   ruleId: string;

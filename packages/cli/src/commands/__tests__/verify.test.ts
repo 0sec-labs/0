@@ -18,14 +18,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventEmitter } from "node:events";
 import { Command } from "commander";
-import { setRuntimeDeps } from "@0sec/core";
-import {
-  VerificationResultSchema,
-  type Finding,
-  type LayerVerdict,
-  type PocStep,
-  type VerificationResult,
-} from "@0sec/shared";
+import { setRuntimeDeps } from "@0/core"
+import { VerificationResultSchema,
+type Finding,
+type LayerVerdict,
+type PocStep,
+type VerificationResult, } from "@0/shared"
 import {
   runVerify,
   registerVerifyCommand,
@@ -312,7 +310,7 @@ describe("OAST evidence provenance", () => {
         id: "s1",
         kind: "exploit",
         summary: "inject oast payload",
-        action: { type: "http", method: "GET", url: "http://t/?u=http://x.oast.0sec.ai" },
+        action: { type: "http", method: "GET", url: "http://t/?u=http://x.oast.0.ai" },
         expect: { type: "http-status", status: 200 },
       },
     ]);

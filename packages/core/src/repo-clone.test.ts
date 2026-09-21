@@ -52,7 +52,7 @@ describe("resolveGitCloneTimeoutMs", () => {
     "rejects an unsafe clone timeout %s",
     (raw) => {
       expect(() => resolveGitCloneTimeoutMs(raw)).toThrow(
-        `0SEC_GIT_CLONE_TIMEOUT_MS must be an integer between ${DEFAULT_GIT_CLONE_TIMEOUT_MS} and ${MAX_GIT_CLONE_TIMEOUT_MS}`,
+        `ZERO_GIT_CLONE_TIMEOUT_MS must be an integer between ${DEFAULT_GIT_CLONE_TIMEOUT_MS} and ${MAX_GIT_CLONE_TIMEOUT_MS}`,
       );
     },
   );

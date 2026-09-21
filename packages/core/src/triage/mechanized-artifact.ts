@@ -59,7 +59,7 @@
  */
 
 import { z } from "zod";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import type { CrashArtifact } from "./memsafety-types.js";
 import { isReproducedMemCorruption } from "./pov-gate.js";
 import type { VerifyVerdict, VerifySignal } from "./verify-verdict.js";

@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import type { SemgrepFinding } from "@0sec/shared";
+import type { SemgrepFinding } from "@0/shared"
 import type { RuntimeType } from "./runtime/index.js";
 import type { ScanListener } from "./scanner.js";
 
@@ -132,7 +132,7 @@ export interface StaticScannerOptions {
 }
 
 export function selectedStaticScanner(): "foxguard" | "semgrep" {
-  return process.env["0SEC_STATIC"] === "semgrep" ? "semgrep" : "foxguard";
+  return process.env["ZERO_STATIC"] === "semgrep" ? "semgrep" : "foxguard";
 }
 
 /**
@@ -174,7 +174,7 @@ interface FoxguardJsonFinding {
  *
  * Uses an installed Foxguard binary when available, otherwise the pinned npm
  * release. Scanner failure always propagates — no Semgrep fallback path.
- * Set `0SEC_STATIC=semgrep` (via {@link runSelectedStaticScan}) to use
+ * Set `ZERO_STATIC=semgrep` (via {@link runSelectedStaticScan}) to use
  * Semgrep instead.
  *
  * @param targetPath  Absolute path to scan.
@@ -291,7 +291,7 @@ export function runFoxguardScan(
     const message = err instanceof Error ? err.message : String(err);
     logger(
       `[0sec] foxguard scan failed (${message}). ` +
-        `Npm pin: foxguard@${foxguardTag}. Set 0SEC_STATIC=semgrep to use semgrep.`,
+        `Npm pin: foxguard@${foxguardTag}. Set ZERO_STATIC=semgrep to use semgrep.`,
     );
     emit({ type: "error", stage: "source-analysis", message: `Foxguard scan failed: ${message}` });
     throw err;

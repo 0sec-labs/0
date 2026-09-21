@@ -2,7 +2,7 @@
  * artifact-scraper tests. Same pattern as wp-fingerprint.test.ts:
  * a route-table mock fetch substituted via `opts.fetchImpl`, an
  * injected clock for cache-TTL deterministic tests, and a temp
- * cache dir per test so the operator's real `~/.0sec` is never
+ * cache dir per test so the operator's real `~/.0` is never
  * touched.
  *
  * No real network is hit — every URL the scraper would resolve is

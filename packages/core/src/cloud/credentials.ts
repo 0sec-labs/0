@@ -1,13 +1,13 @@
 // 0sec-cloud credential resolver.
 //
 // Resolution order (first match wins):
-//   1. Environment: 0SEC_CLOUD_HOST + 0SEC_CLOUD_TOKEN
-//   2. ~/.0sec/cloud.env (0dev uses ~/.0sec/dev/cloud.env)
+//   1. Environment: ZERO_CLOUD_HOST + ZERO_CLOUD_TOKEN
+//   2. ~/.0/cloud.env (0dev uses ~/.0/dev/cloud.env)
 //
-// 0SEC_CLOUD_HOST is optional — if absent, we fall back to the
-// canonical production host. 0SEC_CLOUD_TOKEN is required.
+// ZERO_CLOUD_HOST is optional — if absent, we fall back to the
+// canonical production host. ZERO_CLOUD_TOKEN is required.
 //
-// `~/.0sec/cloud.env` MUST be chmod 600. We warn (stderr) when it isn't,
+// `~/.0/cloud.env` MUST be chmod 600. We warn (stderr) when it isn't,
 // but we don't refuse to load — same trade-off as the H1 credential
 // loader (see packages/core/src/h1/credentials.ts).
 //
@@ -21,11 +21,11 @@
 // messages. `CloudAuthMissingError` carries no secret material.
 
 import { readFileSync, statSync } from "node:fs";
-import { cloudStateDir } from "@0sec/shared";
+import { cloudStateDir } from "@0/shared"
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-/** Canonical production host. Override via 0SEC_CLOUD_HOST or cloud.env. */
+/** Canonical production host. Override via ZERO_CLOUD_HOST or cloud.env. */
 export const DEFAULT_CLOUD_HOST = "https://cloud.0.security";
 
 export interface CloudCredentials {
@@ -70,9 +70,9 @@ export function loadCloudCredentials(opts: LoadCloudCredentialsOptions = {}): Cl
   const warn = opts.warn ?? ((m: string) => process.stderr.write(`${m}\n`));
 
   // 1. Env wins.
-  const envTok = env["0SEC_CLOUD_TOKEN"]?.trim();
+  const envTok = env["ZERO_CLOUD_TOKEN"]?.trim();
   if (envTok) {
-    const envHost = normaliseHost(env["0SEC_CLOUD_HOST"]?.trim() ?? DEFAULT_CLOUD_HOST);
+    const envHost = normaliseHost(env["ZERO_CLOUD_HOST"]?.trim() ?? DEFAULT_CLOUD_HOST);
     return { host: envHost, token: envTok, source: "env" };
   }
 
@@ -85,7 +85,7 @@ export function loadCloudCredentials(opts: LoadCloudCredentialsOptions = {}): Cl
     const code = (err as { code?: string }).code;
     if (code === "ENOENT") {
       throw new CloudAuthMissingError(
-        `0sec-cloud credentials not found. Run \`${env["0SEC_DEV_SOURCE_ROOT"]?.trim() ? "0dev" : "0sec"} auth login\`.`,
+        `0sec-cloud credentials not found. Run \`${env["ZERO_DEV_SOURCE_ROOT"]?.trim() ? "0dev" : "0sec"} auth login\`.`,
       );
     }
     throw err;
@@ -106,13 +106,13 @@ export function loadCloudCredentials(opts: LoadCloudCredentialsOptions = {}): Cl
   }
 
   const parsed = parseEnvFile(raw);
-  const fileTok = parsed["0SEC_CLOUD_TOKEN"]?.trim();
+  const fileTok = parsed["ZERO_CLOUD_TOKEN"]?.trim();
   if (!fileTok) {
     throw new CloudAuthMissingError(
-      `0sec-cloud credentials in ${path} are incomplete: 0SEC_CLOUD_TOKEN is required.`,
+      `0sec-cloud credentials in ${path} are incomplete: ZERO_CLOUD_TOKEN is required.`,
     );
   }
-  const fileHost = normaliseHost(parsed["0SEC_CLOUD_HOST"]?.trim() ?? env["0SEC_CLOUD_HOST"]?.trim() ?? DEFAULT_CLOUD_HOST);
+  const fileHost = normaliseHost(parsed["ZERO_CLOUD_HOST"]?.trim() ?? env["ZERO_CLOUD_HOST"]?.trim() ?? DEFAULT_CLOUD_HOST);
   return { host: fileHost, token: fileTok, source: "file" };
 }
 
@@ -125,7 +125,7 @@ function normaliseHost(host: string): string {
   let h = host;
   if (!/^https?:\/\//.test(h)) {
     throw new CloudAuthMissingError(
-      `0SEC_CLOUD_HOST must be an http(s) URL (got ${JSON.stringify(host)}).`,
+      `ZERO_CLOUD_HOST must be an http(s) URL (got ${JSON.stringify(host)}).`,
     );
   }
   while (h.endsWith("/")) h = h.slice(0, -1);

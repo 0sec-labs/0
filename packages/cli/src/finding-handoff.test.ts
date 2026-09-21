@@ -2,8 +2,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { osecDB } from "@0sec/db";
-import type { Finding } from "@0sec/shared";
+import { osecDB } from "@0/db"
+import type { Finding } from "@0/shared"
 import {
   buildFindingChatPrompt,
   buildFindingConsoleCommand,

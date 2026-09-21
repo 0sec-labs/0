@@ -54,7 +54,7 @@ describe("config show", () => {
     const home = makeDir("cfg-home-");
     const project = makeDir("cfg-proj-");
     saveSettings({ ...DEFAULT_SETTINGS, showLogo: false }, home);
-    writeFileSync(join(project, ".0sec-tmp"), ""); // placeholder to keep dir
+    writeFileSync(join(project, ".0-tmp"), ""); // placeholder to keep dir
     const cap = capture();
     runConfigShow(cap.deps({ homeDir: home, projectDir: project }));
     const text = cap.out.join("\n");

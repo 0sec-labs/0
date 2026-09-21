@@ -26,13 +26,13 @@
  *     preserved, error message attached
  *
  * The CLI surface lives in `packages/cli/src/commands/verify.ts` and is
- * gated behind `0SEC_KERNEL_VERIFY=1` so CI cost stays predictable.
+ * gated behind `ZERO_KERNEL_VERIFY=1` so CI cost stays predictable.
  */
 
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared"
 import type {
   NativeMessage,
   NativeContentBlock,

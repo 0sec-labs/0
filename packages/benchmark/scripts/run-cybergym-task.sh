@@ -12,7 +12,7 @@ task_id="$1"
 shift
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-OSEC_ROOT="$(printenv 0SEC_ROOT 2>/dev/null || true)"
+OSEC_ROOT="$(printenv ZERO_ROOT 2>/dev/null || true)"
 : "${OSEC_ROOT:=$(cd -- "${script_dir}/../../.." && pwd)}"
 : "${CYBERGYM_ROOT:=/srv/cybergym}"
 : "${CYBERGYM_PYTHON:=${CYBERGYM_ROOT}/venv/bin/python}"

@@ -25,7 +25,7 @@
 import type { Command } from "commander";
 import chalk from "chalk";
 import { writePresentationLine, writePresentationErrorLine } from "../presentation/process-output.js";
-import { atlasTechniquesForEvent, techniquesForEvent } from "@0sec/core";
+import { atlasTechniquesForEvent, techniquesForEvent } from "@0/core"
 import {
   formatTimeline,
   isTimelineFormat,
@@ -114,7 +114,7 @@ export function registerTimelineCommand(program: Command): void {
         return;
       }
 
-      const { osecDB } = await import("@0sec/db");
+      const { osecDB } = await import("@0/db");
       const db = new osecDB(opts.dbPath);
       let scan: { id: string; target?: string | null } | undefined;
       let rows: TimelineEventRow[];

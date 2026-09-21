@@ -4,9 +4,9 @@ import {
   type CodexDeviceAuthUpdate,
   type StartCodexDeviceAuthOptions,
 } from "../tui/codex-device-auth.js";
-import type { DesktopCodexAuthStatus } from "@0sec/shared";
+import type { DesktopCodexAuthStatus } from "@0/shared"
 
-export type { DesktopCodexAuthStatus } from "@0sec/shared";
+export type { DesktopCodexAuthStatus } from "@0/shared";
 
 export interface DesktopCodexAuthControllerOptions {
   start?: (options: StartCodexDeviceAuthOptions) => CodexDeviceAuthSession;
