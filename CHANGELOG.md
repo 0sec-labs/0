@@ -12,6 +12,17 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.21.3] - 2026-09-22
+
+### Changed
+
+- Publish the npm package as `0sec-cli` (bins `0` and `0sec`), resuming the
+  established package name so existing installs keep updating. The
+  `@0sec/zero` publish was accepted by npm and then quarantined — present in
+  the org's access list but never served by the registry — after `@0sec/0`
+  had already been refused by name policy. The scoped identity can return
+  once npm support clears it.
+
 ## [0.21.2] - 2026-09-22
 
 ### Changed

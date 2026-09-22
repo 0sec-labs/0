@@ -198,7 +198,7 @@ const publishPkg = {
   version: rootPkg.version,
   type: "module",
   description: rootPkg.description,
-  bin: { "0": "0.js" },
+  bin: { "0": "0.js", "0sec": "0.js" },
   files: ["0.js", "chunks", "attacks", "dashboard"],
   keywords: rootPkg.keywords,
   author: rootPkg.author,
