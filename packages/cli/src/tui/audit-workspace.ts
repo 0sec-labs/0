@@ -205,17 +205,6 @@ export class AuditWorkspace {
     this.#refreshStatus(record);
     if (changed || unread !== record.unread) this.#emit();
   }
-  /** Consume setup choices once, before any ChatScreen owns this audit. */
-  applyInitialChoices(id: string): boolean {
-    const record = this.get(id);
-    if (!record || record.session || record.closeHandle.current || record.closeRequested) return false;
-    this.#records = this.#records.map((item) => item.id === id
-      ? { ...item, options: { ...item.options, ...item.nextOptions }, nextOptions: {} }
-      : item);
-    this.#emit();
-    return true;
-  }
-
   /**
    * Reconfigure the audit's live runtime in place, when a ChatScreen has bound
    * its runtime handle. Selection never changes runtime lifetime; a busy turn

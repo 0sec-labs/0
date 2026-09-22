@@ -49,11 +49,11 @@ export interface DeterministicEnv {
   restore: () => void;
 }
 
-/** The base settings a self-test wants: no motion, a fixed theme, no first-run gate. */
+/** The base settings a self-test wants: no motion and a fixed theme. */
 const BASE_SETTINGS: Record<string, unknown> = {
   reduceMotion: true,
   theme: "blue-team",
-  // Skip the onboarding overlay so a launched chat lands on the home screen.
+  // Individual setup scenarios override completion without changing the landing route.
   onboardingCompleted: true,
   // Quiet, deterministic chrome.
   logoAnimation: "off",

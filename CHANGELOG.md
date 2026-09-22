@@ -12,6 +12,14 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Start directly in chat on fresh installations; keep guided setup available
+  through `/onboard` instead of opening it automatically.
+- Keep runtime initialization details and diagnostic stacks in the local TUI
+  log. Show each failed turn once with model/connection recovery commands, and
+  label an inactive chat `idle` rather than implying its provider is ready.
+
 ## [0.21.1] - 2026-09-22
 
 ### Changed

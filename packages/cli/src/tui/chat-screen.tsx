@@ -2223,13 +2223,15 @@ export function ChatScreen({
       {
         emit: (event) => {
           if (!alive.current) return;
+          appendTuiEvent({ kind: "runtime-diagnostic", ...event });
+          // Lifecycle chatter belongs in the local log, not the conversation.
+          // Turn failures are rendered once below, from the turn's outcome.
+          if (event.level === "info" || event.code === "turn_runtime_error") return;
           if (!settingsRef.current.showRuntimeNotices) return;
           appendEntry({
             kind: event.level === "error" ? "error" : "notice",
             text: `runtime: ${event.message}`,
-            detail: event.fields && Object.keys(event.fields).length > 0
-              ? Object.entries(event.fields).map(([k, v]) => `${k}=${String(v)}`).join(" ")
-              : undefined,
+            detail: event.level === "error" ? `Details: ${tuiLogPath()}` : undefined,
             turn: turn.current,
           });
         },
@@ -3815,8 +3817,8 @@ export function ChatScreen({
         recordProblem("runtime", outcome.error);
         appendEntry({
           kind: "error",
-          text: "turn failed",
-          detail,
+          text: "Could not complete this message",
+          detail: `${detail}\nUse /model to choose a model or /connect to change providers, then send your message again.`,
           turn: currentTurn,
         });
         const recovery = connectionRecoveryForError(detail);
@@ -3868,8 +3870,8 @@ export function ChatScreen({
       const detail = describeErrorForSurface(error);
       appendEntry({
         kind: "error",
-        text: "turn failed",
-        detail,
+        text: "Could not complete this message",
+        detail: `${detail}\nUse /model to choose a model or /connect to change providers, then send your message again.`,
         turn: currentTurn,
       });
       const recovery = connectionRecoveryForError(detail);
@@ -5216,7 +5218,7 @@ export function ChatScreen({
   })();
   const sessionState = startupError
     ? "unavailable"
-    : busyStatusWord || (busy ? "working" : session ? "ready" : "connecting");
+    : busyStatusWord || (busy ? "working" : session ? "idle" : "connecting");
   const headerSegments: string[] = [];
   if (settings.showScope) headerSegments.push(`Scope: ${scopeLabel}`);
   headerSegments.push(sessionState);
@@ -6063,7 +6065,9 @@ export function ChatScreen({
   // Keep first-use actions visible without opening a second navigation surface.
   const heroHintPairs: KeyHint[] = [
     { key: "/connect", label: "connection" },
-    { key: "/resume", label: "saved audits" },
+    settings.onboardingCompleted
+      ? { key: "/resume", label: "saved audits" }
+      : { key: "/onboard", label: "optional setup" },
     { key: "ctrl+p", label: "commands" },
   ];
   // Any overlay open in the hero (slash menu, picker, an approval, the secret
@@ -6211,7 +6215,7 @@ export function ChatScreen({
               {keyHintsLength(heroHintPairs, " · ") <= heroContentWidth ? (
                 <KeyHints pairs={heroHintPairs} theme={theme} />
               ) : (
-                <text fg={MUTED}>{fitLegend(heroContentWidth, "/connect · /resume · [⌃P]")}</text>
+                <text fg={MUTED}>{fitLegend(heroContentWidth, settings.onboardingCompleted ? "/connect · /resume · [⌃P]" : "/connect · /onboard · [⌃P]")}</text>
               )}
             </box>
             <box height={heroBottomSpacer} flexShrink={0} minWidth={0} />

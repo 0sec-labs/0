@@ -19,17 +19,28 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-async function firstRun(cols = 100, rows = 34) {
+async function firstRun(cols = 100, rows = 34, openSetup = true) {
   // Every request is synthetic, including connection checks during chat startup.
-  vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 503 }));
+  vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(null, { status: 503 }));
   // An Escape regression must fail, not terminate the test worker successfully.
   vi.spyOn(process, "exit").mockImplementation(() => { throw new Error("Unexpected application exit"); });
-  return launch({ ...modelsByokLaunch(), route: { type: "chat" }, cols, rows,
+  const screen = await launch({ ...modelsByokLaunch(), route: { type: "chat" }, cols, rows,
     settings: { onboardingCompleted: false, mouseSupport: true } });
+  await screen.waitForText(/type to chat or \/ for commands/);
+  if (openSetup) {
+    await screen.sendKeys("/onboard");
+    await screen.sendKey("return");
+    await screen.waitForText(/Step 1 of 6/);
+  }
+  return screen;
 }
 
-test("first-run Escape skips into a usable chat without completing or quitting", async () => {
-  tui = await firstRun();
+test("first launch opens chat; optional setup returns without completing or quitting", async () => {
+  tui = await firstRun(100, 34, false);
+  expect(tui.captureFrame()).not.toContain("Step 1 of 6");
+  expect(tui.captureFrame()).not.toContain("provider initialized");
+  await tui.sendKeys("/onboard");
+  await tui.sendKey("return");
   await tui.waitForText(/Step 1 of 6/);
   await tui.sendKey("escape");
   await tui.settle();
@@ -39,6 +50,30 @@ test("first-run Escape skips into a usable chat without completing or quitting",
   await tui.sendKeys("draft survives setup");
   expect(tui.captureFrame()).toContain("draft survives setup");
   expect(process.exit).not.toHaveBeenCalled();
+});
+
+test("an empty hosted catalog leaves one actionable failure and usable model navigation", async () => {
+  vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+    Response.json({ object: "list", data: [] }));
+  tui = await launch({
+    route: { type: "chat", options: { providerId: "hosted" } },
+    env: { ZERO_PROVIDER: "hosted", ZERO_MODEL: "", ZERO_CLOUD_TOKEN: "synthetic-test-token" },
+    settings: { onboardingCompleted: false, diagnosticReporting: "off" },
+  });
+  await tui.waitForText(/type to chat or \/ for commands/);
+  await tui.sendKeys("hello");
+  await tui.sendKey("return");
+  const frame = await tui.waitForText(/Could not complete this message/);
+  expect(frame).toContain("No hosted models are available");
+  expect(frame).toContain("/model");
+  expect(frame).not.toContain("runtime: No hosted models");
+  expect(frame).not.toContain("stack=");
+  await tui.sendKeys("/model");
+  await tui.sendKey("return");
+  await tui.waitForText(/Models.*Hosted catalog/);
+  await tui.sendKey("escape");
+  await tui.sendKeys("retry draft");
+  expect(tui.captureFrame()).toContain("retry draft");
 });
 
 test.each([[100, 34], [64, 24]])("Back traverses decisions, filters unwind first, confirmed preferences survive (%ix%i)", async (cols, rows) => {
