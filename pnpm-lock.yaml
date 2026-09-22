@@ -31,9 +31,12 @@ importers:
 
   .:
     dependencies:
-      '@types/pdfkit':
-        specifier: ^0.13.9
-        version: 0.13.9
+      '@opentui/core':
+        specifier: 0.5.4
+        version: 0.5.4(typescript@5.9.3)(web-tree-sitter@0.25.10)
+      '@opentui/react':
+        specifier: 0.5.4
+        version: 0.5.4(react-devtools-core@7.0.1)(react@19.2.6)(typescript@5.9.3)(web-tree-sitter@0.25.10)(ws@8.21.0)
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2
@@ -43,6 +46,9 @@ importers:
       pdfkit:
         specifier: ^0.15.2
         version: 0.15.2
+      react:
+        specifier: ^19.2.4
+        version: 19.2.6
       tree-sitter:
         specifier: 0.21.1
         version: 0.21.1
@@ -53,6 +59,9 @@ importers:
       '@types/node':
         specifier: ^25.5.0
         version: 25.9.1
+      '@types/pdfkit':
+        specifier: ^0.13.9
+        version: 0.13.9
       esbuild:
         specifier: ^0.28.1
         version: 0.28.2

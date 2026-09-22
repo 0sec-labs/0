@@ -7,6 +7,11 @@
 // ZERO_CLOUD_HOST is optional — if absent, we fall back to the
 // canonical production host. ZERO_CLOUD_TOKEN is required.
 //
+// Pre-rebrand installs wrote 0SEC_CLOUD_HOST / 0SEC_CLOUD_TOKEN (old
+// `0sec` CLI). Those keys are still honoured as a fallback so upgrading
+// the binary never silently logs a user out; a deprecation warning
+// nudges them to re-run `0 auth login`.
+//
 // `~/.0/cloud.env` MUST be chmod 600. We warn (stderr) when it isn't,
 // but we don't refuse to load — same trade-off as the H1 credential
 // loader (see packages/core/src/h1/credentials.ts).
@@ -70,9 +75,14 @@ export function loadCloudCredentials(opts: LoadCloudCredentialsOptions = {}): Cl
   const warn = opts.warn ?? ((m: string) => process.stderr.write(`${m}\n`));
 
   // 1. Env wins.
-  const envTok = env["ZERO_CLOUD_TOKEN"]?.trim();
+  const envTok = env["ZERO_CLOUD_TOKEN"]?.trim() || env["0SEC_CLOUD_TOKEN"]?.trim();
   if (envTok) {
-    const envHost = normaliseHost(env["ZERO_CLOUD_HOST"]?.trim() ?? DEFAULT_CLOUD_HOST);
+    const envHost = normaliseHost(
+      env["ZERO_CLOUD_HOST"]?.trim() ?? env["0SEC_CLOUD_HOST"]?.trim() ?? DEFAULT_CLOUD_HOST,
+    );
+    if (!env["ZERO_CLOUD_TOKEN"]?.trim()) {
+      warn("[0 cloud] using legacy 0SEC_CLOUD_* credentials; re-run `0 auth login` to migrate to ZERO_CLOUD_*.");
+    }
     return { host: envHost, token: envTok, source: "env" };
   }
 
@@ -106,13 +116,19 @@ export function loadCloudCredentials(opts: LoadCloudCredentialsOptions = {}): Cl
   }
 
   const parsed = parseEnvFile(raw);
-  const fileTok = parsed["ZERO_CLOUD_TOKEN"]?.trim();
+  const fileTok = parsed["ZERO_CLOUD_TOKEN"]?.trim() || parsed["0SEC_CLOUD_TOKEN"]?.trim();
   if (!fileTok) {
     throw new CloudAuthMissingError(
       `0-cloud credentials in ${path} are incomplete: ZERO_CLOUD_TOKEN is required.`,
     );
   }
-  const fileHost = normaliseHost(parsed["ZERO_CLOUD_HOST"]?.trim() ?? env["ZERO_CLOUD_HOST"]?.trim() ?? DEFAULT_CLOUD_HOST);
+  if (!parsed["ZERO_CLOUD_TOKEN"]?.trim()) {
+    warn("[0 cloud] using legacy 0SEC_CLOUD_* credentials; re-run `0 auth login` to migrate to ZERO_CLOUD_*.");
+  }
+  const fileHost = normaliseHost(
+    parsed["ZERO_CLOUD_HOST"]?.trim() ?? parsed["0SEC_CLOUD_HOST"]?.trim() ??
+      env["ZERO_CLOUD_HOST"]?.trim() ?? env["0SEC_CLOUD_HOST"]?.trim() ?? DEFAULT_CLOUD_HOST,
+  );
   return { host: fileHost, token: fileTok, source: "file" };
 }
 

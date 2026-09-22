@@ -52,6 +52,38 @@ describe("loadCloudCredentials", () => {
     });
   });
 
+  it("accepts legacy 0SEC_CLOUD_* env keys with a deprecation warning", () => {
+    const home = makeFakeHome(null);
+    const warnings: string[] = [];
+    const creds = loadCloudCredentials({
+      env: { "0SEC_CLOUD_TOKEN": "legacytok", "0SEC_CLOUD_HOST": "https://legacy.example" },
+      homeDir: home,
+      warn: (m) => warnings.push(m),
+    });
+    expect(creds).toEqual({ host: "https://legacy.example", token: "legacytok", source: "env" });
+    expect(warnings.join("\n")).toMatch(/0SEC_CLOUD_\*/);
+  });
+
+  it("prefers ZERO_CLOUD_* over legacy 0SEC_CLOUD_* without warning", () => {
+    const home = makeFakeHome(null);
+    const warnings: string[] = [];
+    const creds = loadCloudCredentials({
+      env: { "ZERO_CLOUD_TOKEN": "newtok", "0SEC_CLOUD_TOKEN": "legacytok" },
+      homeDir: home,
+      warn: (m) => warnings.push(m),
+    });
+    expect(creds.token).toBe("newtok");
+    expect(warnings).toEqual([]);
+  });
+
+  it("accepts legacy 0SEC_CLOUD_* keys in cloud.env", () => {
+    const home = makeFakeHome("0SEC_CLOUD_HOST=https://legacy.example\n0SEC_CLOUD_TOKEN=legacytok\n");
+    const warnings: string[] = [];
+    const creds = loadCloudCredentials({ env: {}, homeDir: home, warn: (m) => warnings.push(m) });
+    expect(creds).toEqual({ host: "https://legacy.example", token: "legacytok", source: "file" });
+    expect(warnings.join("\n")).toMatch(/0SEC_CLOUD_\*/);
+  });
+
   it("keeps development and production saved credentials separate", () => {
     const home = makeFakeHome("ZERO_CLOUD_TOKEN=production-token\nZERO_CLOUD_HOST=https://cloud.0.security\n");
     const env = { "ZERO_DEV_SOURCE_ROOT": "/fixture/engine", "ZERO_CLOUD_HOST": "https://dev.0.security" };
