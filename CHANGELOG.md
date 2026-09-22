@@ -12,7 +12,12 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.21.1] - 2026-09-22
+
 ### Changed
+
+- Publish the npm package as `@0sec/0`; the unscoped `0` name is a
+  third-party squat and could not receive the v0.21.0 publish.
 
 - Source-review agents can delegate recursively through the normal agent runtime.
   Descendants retain scoped tool restrictions, share scan-wide accounting, and

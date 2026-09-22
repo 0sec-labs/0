@@ -1,7 +1,7 @@
 {
   "name": "@0/cli",
-  "version": "0.21.0",
-  "description": "0.security CLI — the self-improving, open-source cybersecurity harness for agent-driven security research and verification.",
+  "version": "0.21.1",
+  "description": "0.security CLI \u2014 the self-improving, open-source cybersecurity harness for agent-driven security research and verification.",
   "type": "module",
   "bin": {
     "0": "dist/index.js"
