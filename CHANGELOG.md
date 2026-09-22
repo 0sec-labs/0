@@ -12,6 +12,13 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.21.2] - 2026-09-22
+
+### Fixed
+
+- Publish the npm package as `@0sec/zero`: npm rejects creating a
+  package whose name segment is `0` ("That word is not allowed").
+
 ## [0.21.1] - 2026-09-22
 
 ### Changed
