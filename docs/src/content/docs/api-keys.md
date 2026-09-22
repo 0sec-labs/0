@@ -411,9 +411,10 @@ is governed by the supplier, not by 0's displayed token-dollar estimate.
 
 Jev assistance is off until `ZERO_JEV_FEATURES` explicitly names a workflow.
 It does not reuse your chat-provider selection: Vercel needs
-`AI_GATEWAY_API_KEY`, Typesafe needs `TYPESAFE_API_KEY`, and the Cloud adapter
-needs both `ZERO_JEV_CLOUD_TOKEN` and `ZERO_JEV_CLOUD_URL`. The kernel-only
-`classifier` route needs no key but still sends data to an external service.
+`AI_GATEWAY_API_KEY`, and the Cloud adapter needs both `ZERO_JEV_CLOUD_TOKEN`
+and `ZERO_JEV_CLOUD_URL`. Both reach the same upstream model; Cloud routes
+through the orchestrator so usage bills your workspace credits, while Vercel
+calls the gateway directly with your own key.
 See [opt-in Jev assistance](/configuration/#opt-in-jev-assistance) before
 enabling data egress and [separate budgets](/budget-management/#jev-advisory-budgets).
 

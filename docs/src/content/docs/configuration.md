@@ -935,23 +935,20 @@ errors.
 
 | `ZERO_JEV_PROVIDER` | Required credential / endpoint | Route |
 | --- | --- | --- |
-| `vercel` (default when enabled) | `AI_GATEWAY_API_KEY` | Vercel AI Gateway evaluation model `typesafe-ai/jev` |
-| `typesafe` | `TYPESAFE_API_KEY` | `https://api.typesafe.ai/v1/systemone`, model `jev-1.13.0` |
-| `cloud` | `ZERO_JEV_CLOUD_TOKEN` and `ZERO_JEV_CLOUD_URL` | Explicit evaluation endpoint; HTTPS except loopback HTTP |
-| `classifier` | No key; **kernel only** | External `https://classifier.dev` fast-tier classification |
+| `vercel` (default when enabled) | `AI_GATEWAY_API_KEY` | Vercel AI Gateway evaluation model `typesafe-ai/jev`, billed to your own gateway key |
+| `cloud` | `ZERO_JEV_CLOUD_TOKEN` and `ZERO_JEV_CLOUD_URL` | Your evaluation endpoint, which reaches the same upstream model and bills workspace credits; HTTPS except loopback HTTP |
 
-The shared adapter accepts `kernel`/`classifier`, but that acceptance is not a
-wired kernel-command prepass. Current production consumers are the browser
+Current production consumers are the browser
 helper, agentic-scan memory/deduplication, and the indirect-prompt-injection
 red-team path. Enable only a feature your chosen workflow actually calls;
 putting `memory,dedupe` on a source `review` does not add those agentic-scan
 consumers to the source pipeline.
 
-For example, opt only the browser helper into the direct Typesafe route:
+For example, opt only the browser helper in, through the gateway:
 
 ```bash
-export TYPESAFE_API_KEY="..."
-env ZERO_JEV_FEATURES=browser ZERO_JEV_PROVIDER=typesafe \
+export AI_GATEWAY_API_KEY="..."
+env ZERO_JEV_FEATURES=browser ZERO_JEV_PROVIDER=vercel \
   ZERO_JEV_BROWSER_READ_ONLY_URLS=https://authorized.example/docs \
   0 console --scope ./scope.json
 ```
@@ -959,8 +956,7 @@ env ZERO_JEV_FEATURES=browser ZERO_JEV_PROVIDER=typesafe \
 `ZERO_JEV_BROWSER_READ_ONLY_URLS` is a comma-separated list of exact normalized
 URLs required for assisted navigation, in addition to explicit scope. Jev never
 replaces target authorization; absent scope or approved URLs makes assistance
-hand off without navigation. The classifier adapter is networked even though
-it needs no credential. A normal `ZERO_CLOUD_TOKEN` is not automatically used
+hand off without navigation. A normal `ZERO_CLOUD_TOKEN` is not automatically used
 as the Jev token. See [Jev budgets](/budget-management/#jev-advisory-budgets)
 for per-instance request, timeout, classification and estimated-cost limits.
 
