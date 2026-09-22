@@ -488,3 +488,17 @@ describe("the meta-row budget", () => {
     }
   });
 });
+
+
+it("marks and prioritizes the active connection when both OpenAI routes offer the same model ID", () => {
+  const rows = buildModelRows({
+    catalog: [
+      { id: "gpt-5.5", provider: "openai", price: "$1" },
+      { id: "gpt-5.5", provider: "chatgpt-codex", price: "subscription" },
+    ],
+    states: providerStates({ OPENAI_API_KEY: "synthetic-key", ZERO_CHATGPT_ACCESS_TOKEN: "synthetic-token" }),
+    activeModel: "gpt-5.5", activeProvider: "chatgpt-codex",
+  });
+  expect(rows[0].group.id).toBe("chatgpt-codex");
+  expect(rows.filter((row) => row.kind === "model" && row.active).map((row) => row.group.id)).toEqual(["chatgpt-codex"]);
+});

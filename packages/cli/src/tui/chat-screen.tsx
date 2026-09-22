@@ -698,6 +698,7 @@ export interface ChatScreenProps {
   runtimeInfoHandle: React.MutableRefObject<{
     model: () => string;
     providerId: () => string;
+    codexCatalog?: (signal?: AbortSignal) => Promise<import("@0/core").CodexCatalogModel[]>;
     /**
      * Live-apply a model/provider/role-map selection to the running runtime.
      * Reconfigures in place at a turn boundary (never mid-turn): applies at
@@ -1888,6 +1889,7 @@ export function ChatScreen({
     runtimeInfoHandle.current = {
       model: () => runtime.resolvedModel(),
       providerId: () => runtime.getConfigurationDiagnostics().provider,
+      codexCatalog: (signal) => runtime.codexModelCatalog(signal),
       applySelection: (sel) => applySelectionRef.current?.(sel),
     };
     // resolvedModel() is the id the runtime actually settled on after
@@ -2056,7 +2058,10 @@ export function ChatScreen({
     let targetProvider: string | undefined = sel.providerId;
     if (targetProvider === undefined && sel.model !== undefined) {
       const derived = modelProvider(sel.model);
-      if (derived !== currentProvider && derived !== "unknown") targetProvider = derived;
+      // An OpenAI model family is also served by the active subscription.
+      // A model-only switch must not force that account onto the API-key lane.
+      const subscriptionModel = currentProvider === "chatgpt-codex" && derived === "openai";
+      if (!subscriptionModel && derived !== currentProvider && derived !== "unknown") targetProvider = derived;
     }
     if (targetProvider !== undefined && targetProvider !== currentProvider) {
       const configured = targetProvider === "hosted"
