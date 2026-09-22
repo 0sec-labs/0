@@ -192,10 +192,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Build the published CLI package
         run: pnpm build
-      - name: Normalize public npm identity
-        working-directory: dist
-        # The published npm identity is the canonical 0 package.
-        run: npm pkg set name=0 bin.0=0.js
+      # The published npm identity (@0sec/0, bin 0 -> 0.js) comes straight from
+      # the root package.json via scripts/bundle-cli.mjs — no publish-time
+      # rewrite. Scoped packages require --access public on publish.
       - name: Install runtime dependencies and smoke the bundle
         run: |
           npm --prefix dist install --omit=dev --no-audit --no-fund
