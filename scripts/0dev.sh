@@ -27,16 +27,13 @@ if [ "${1:-}" = "--build" ]; then
     bun "$DEV_ENTRY" "$@"
 fi
 
-# Default: use the installed packaged 0 binary (coherent release build).
-# The empty ZERO_CLOUD_TOKEN override prevents any env-level production token
-# from leaking in; the binary uses its saved DEV credentials.
-if [ ! -x "$O_SEC_BIN" ]; then
-  echo "0dev: packaged 0 binary not found at $O_SEC_BIN" >&2
-  echo "0dev:   install the latest release from https://github.com/0sec-labs/0" >&2
-  echo "0dev:   or use --build to run from source" >&2
-  exit 1
+# Default: run the checked-out source through Bun so `0dev` actually uses the
+# current checkout. The packaged binary remains the fallback when Bun is absent.
+if command -v bun >/dev/null 2>&1; then
+  exec env ZERO_DEV_SOURCE_ROOT="$DEV_ROOT" \
+    ZERO_CLOUD_HOST=https://dev.cloud.0.security ZERO_CLOUD_TOKEN= \
+    bun "$DEV_ROOT/packages/cli/src/index.ts" "$@"
 fi
 
-exec env \
-  ZERO_CLOUD_HOST=https://dev.cloud.0.security ZERO_CLOUD_TOKEN= \
-  "$O_SEC_BIN" "$@"
+# Fallback: use the installed packaged 0 binary when Bun is unavailable.
+# The fallback is release code and may not contain unreleased source fixes.
