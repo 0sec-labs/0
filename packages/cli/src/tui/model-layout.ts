@@ -871,11 +871,11 @@ export interface ModelDialogTitleInput {
  */
 export function modelDialogTitle({ scope, providerId, showAll = false, cloudMerged = false }: ModelDialogTitleInput): string {
   const head = `${operatorIcon("models")} ${operatorTitle("models")}`;
-  if (scope === "hosted") return `${head} · Hosted catalog`;
+  if (scope === "hosted") return `${head} · 0security Auto`;
   if (scope === "unknown") return `${head} · no connection`;
   const connection = sanitizeTuiText(providerId ?? "");
   const source = cloudMerged
-    ? `${connection.length > 0 ? connection : "BYOK"} + 0cloud`
+    ? `${connection.length > 0 ? connection : "BYOK"} + 0security Auto`
     : connection.length > 0 ? connection : "BYOK";
   return `${head} · ${source} · ${showAll ? "all synced" : "curated"}`;
 }

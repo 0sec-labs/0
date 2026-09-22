@@ -2139,7 +2139,7 @@ export function ChatScreen({
     modelIdRef.current = applied;
     const providerNow = runtime.getConfigurationDiagnostics().provider;
     const providerLabel = providerNow === "hosted"
-      ? "0cloud"
+      ? "0security Auto"
       : PROVIDERS.find((candidate) => candidate.id === providerNow)?.label ?? providerNow;
     appendEntry({
       kind: "notice",
@@ -2188,7 +2188,7 @@ export function ChatScreen({
     }
     const provider = providerId as NonNullable<RuntimeConfig["provider"]>;
     const providerLabel = providerId === "hosted"
-      ? "0cloud"
+      ? "0security Auto"
       : knownProvider?.label ?? providerId;
     // Keep the choice staged so /new inherits it too; then apply it LIVE to
     // this audit's running runtime (deferred to the turn boundary when busy).
@@ -4928,8 +4928,9 @@ export function ChatScreen({
     }),
     { input: 0, output: 0, cached: 0 },
   );
+  const visibleModel = activeProvider === "hosted" ? "0security Auto" : modelId ?? undefined;
   const statusSegments = buildStatusSegments({
-    model: focusAgentId ? focusedTelemetry?.model : modelId ?? undefined,
+    model: focusAgentId ? focusedTelemetry?.model : visibleModel,
     mode: autonomyFooterText(mode),
     activity: statusActivity,
     turnElapsedMs: settings.elapsedTimer !== "off" && !focusAgentId && busy && activeTurnStartedAt.current !== null
@@ -5139,7 +5140,7 @@ export function ChatScreen({
     richToolCards: settings.richToolCards,
     mode: modeLabel(mode),
     modeColor: modeColorFor(mode, theme),
-    model: modelId ?? "",
+    model: visibleModel ?? "",
     modelInFooter: settings.modelDisplay === "message",
     showTokenUsage: settings.showTokenUsage,
     showCost: settings.showCost,

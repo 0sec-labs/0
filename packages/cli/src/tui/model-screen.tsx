@@ -158,16 +158,18 @@ import {
 } from "./model-catalog-sync.js";
 import { cloudConfigured, providerStates } from "./provider-status.js";
 import { sanitizeTuiText } from "./text.js";
-
 /** How many rows page-up and page-down move. */
 const PAGE_STEP = 5;
 /**
  * The runtime discriminator for the hosted service. It is the runtime's own
- * `providerId`, not an upstream vendor name: a hosted route's upstream
- * ("anthropic", "openai", …) lives in the catalogue row's `provider`, and
- * comparing the two is a category error.
+ * provider id, not an upstream supplier name.
  */
 const HOSTED_PROVIDER_ID = "hosted";
+
+/** Synthetic parent selection that delegates model choice to the hosted service. */
+export const HOSTED_AUTO_MODEL_ID = "";
+/** Display label for the service-selected hosted route. */
+export const HOSTED_AUTO_LABEL = "0security Auto";
 /**
  * The roles an audit can assign a model to. The list is the union of these and
  * whatever keys the caller's map already carries, so a role the caller knows
@@ -484,27 +486,37 @@ export function ModelScreen({
     () => buildModelRows({ catalog: scopedCatalog, states, filter, activeModel, activeProvider: providerId }),
     [scopedCatalog, states, filter, activeModel, providerId],
   );
-  // Cloud rows share a customer-facing group and search only public model IDs.
-  // Supplier routing and cost fields remain outside this presentation.
-  const hostedItems = (query: string, prefix: string): DialogItem[] => {
-    if (role !== null && providerId !== "hosted") return [];
-    const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
-    return hostedCatalog
-      .filter((model) =>
-        terms.every((term) => model.id.toLowerCase().includes(term)),
-      )
-      .map((model) => ({
-        id: model.id,
-        label: model.id,
-        category: prefix,
-        current: model.id === activeModel,
-      }));
-  };
   const modelOnlyRows = useMemo(
     () => modelRows.filter((row): row is Extract<ModelRow, { kind: "model" }> => row.kind === "model"),
     [modelRows],
   );
   const byokItems = useMemo(() => modelDialogItems(modelOnlyRows), [modelOnlyRows]);
+  // Cloud rows share a customer-facing group and search only public model IDs.
+  // Supplier routing and cost fields remain outside this presentation.
+  const hostedItems = (query: string, prefix: string): DialogItem[] => {
+    if (role !== null && providerId !== "hosted") return [];
+    const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    const auto: DialogItem[] = role === null && terms.every((term) => HOSTED_AUTO_LABEL.toLowerCase().includes(term))
+      ? [{
+          id: HOSTED_AUTO_MODEL_ID,
+          label: HOSTED_AUTO_LABEL,
+          meta: "service-selected",
+          category: "0security",
+          current: providerId === HOSTED_PROVIDER_ID,
+        }]
+      : [];
+    return [
+      ...auto,
+      ...hostedCatalog
+        .filter((model) => terms.every((term) => model.id.toLowerCase().includes(term)))
+        .map((model) => ({
+          id: model.id,
+          label: model.id,
+          category: prefix,
+          current: model.id === activeModel,
+        })),
+    ];
+  };
   // Pure hosted → the hosted catalogue only. BYOK → the credential-grouped BYOK
   // rows, with the 0cloud group appended when cloud creds exist. Appending
   // (rather than prepending) leaves the operator's chosen BYOK ordering untouched
@@ -774,7 +786,23 @@ export function ModelScreen({
 
     const compact = pane.height < 12;
 
-    // Item identity keeps a same-ID BYOK model on its own pricing/detail path.
+    if (item.id === HOSTED_AUTO_MODEL_ID) {
+      const inner = Math.max(1, pane.width - 1);
+      const lines = [
+        { text: HOSTED_AUTO_LABEL, tone: "title" as const },
+        { text: "The 0security service selects the model for this audit.", tone: "muted" as const },
+        { text: hostedCatalog.length > 0 ? "A hosted route is available." : "No hosted model route is available for this account yet.", tone: hostedCatalog.length > 0 ? "ok" as const : "warn" as const },
+      ];
+      return (
+        <box width={inner} flexDirection="column" flexShrink={0} minWidth={0}>
+          {lines.map((line, index) => (
+            <Cells key={`auto-detail-${index}`} width={inner} fg={toneColor(theme, line.tone)} attributes={line.tone === "title" ? TextAttributes.BOLD : undefined}>
+              {line.text}
+            </Cells>
+          ))}
+        </box>
+      );
+    }
     const row = rowByItem.get(item);
     const hosted = row ? undefined : hostedById.get(item.id);
     if (hosted) {
