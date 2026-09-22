@@ -613,7 +613,7 @@ function statusRoleColor(
 
 function startupRecoveryText(detail: string): string {
   if (/\bprepaid_disabled\b/.test(detail)) {
-    return "Signed in to 0cloud, but account access is restricted because prepaid fallback is off (prepaid_disabled). Review your account in /connect or contact your organization owner.";
+    return "0cloud reports no usable included allowance (prepaid_disabled). Prepaid is optional: included usage works without it. Review your included allowance in /connect or with your organization owner, then check again.";
   }
   if (/No hosted models are available|Hosted model ".+" is unavailable/.test(detail)) {
     return "0cloud has not provided an available service model. It selects the model automatically; you do not need to pick one. Check again or use /connect to choose another provider.";

@@ -494,16 +494,17 @@ updates** in global settings only for a trusted source checkout. Project setting
 cannot grant it. Loading that code runs with the console process's host
 permissions, including credential access.
 
-Build the checkout and start a development console explicitly:
+Start a development console from the current checkout:
 
 ```bash
-./scripts/0dev.sh --build console
+./scripts/0dev.sh console
 ```
 
-Without `--build`, `0dev` uses the installed packaged `0` release, so Cloud
-reads remain available while workspace packages are unfinished. `--build`
-rebuilds Core/CLI and sets `ZERO_DEV_SOURCE_ROOT` to the checkout.
-Both modes target `https://dev.cloud.0.security`. Cloud login, reads and logout use
+`0dev` rebuilds the CLI and its workspace dependencies on every launch, sets
+`ZERO_DEV_SOURCE_ROOT` to the checkout, and runs the result with Bun. The old
+`--build` switch is no longer needed. A failed build stops launch rather than
+silently running an installed release or stale output. Build logs go to stderr.
+The launcher targets `https://dev.cloud.0.security`. Cloud login, reads and logout use
 `~/.0/dev/cloud.env`; production `~/.0/cloud.env` and private CLI
 `~/.0cloud/credentials.json` are not changed. Inherited Cloud tokens are ignored.
 HOME, BYOK credentials and other console settings remain unchanged.

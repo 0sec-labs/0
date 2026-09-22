@@ -120,9 +120,11 @@ there is no hosted-model selection step.
 
 0cloud selects its service model automatically. Before accepting a chat
 message, the CLI checks account eligibility and model availability. A saved
-login does not guarantee inference access: `prepaid_disabled` is an account
-admission restriction, not a missing provider. Review your account in `/connect` or contact your
-organization owner. Your draft stays in the composer; **Ctrl+R** checks again,
+login does not guarantee inference access. Included allowance works with prepaid
+fallback off. `prepaid_disabled` means the service reports no usable included
+allowance and fallback is off, not that prepaid is required or a provider is missing.
+Review included usage in `/connect` or contact your organization owner.
+Your draft stays in the composer; **Ctrl+R** checks again,
 and **Enter** sends it only after access is restored.
 
 For your own provider, use `/model` to select a model. Model and role-model

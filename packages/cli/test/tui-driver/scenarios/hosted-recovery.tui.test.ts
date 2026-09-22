@@ -8,7 +8,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-test("account admission preserves a draft until an explicit check and send", async () => {
+test("included allowance restores a retained draft without enabling prepaid", async () => {
   let eligible = false;
   let inferenceCalls = 0;
   let sentDrafts = 0;
@@ -21,8 +21,8 @@ test("account admission preserves a draft until an explicit check and send", asy
       state: "ready",
       reason: null,
       plan: { id: null, name: null, monthlyPriceUsd: null },
-      included: { state: "exhausted", usedPercent: 100, resetsAt: null },
-      prepaid: { balanceUsd: "20.00", fallbackEnabled: eligible },
+      included: { state: eligible ? "active" : "none", usedPercent: eligible ? 0 : null, resetsAt: null },
+      prepaid: { balanceUsd: "0", fallbackEnabled: false },
       canManageBilling: true,
       admission: { eligible, reason: eligible ? null : "prepaid_disabled" },
     });

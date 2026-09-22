@@ -306,10 +306,14 @@ interpret the account response; it does not mean zero credit or a failed login.
 Use the CLI/service combination approved for your test environment.
 
 The client expects a `usage-v2` snapshot. A legacy `credits-v1` response is
-not compatible with that reader. `prepaid_disabled` means sign-in succeeded
-but account admission is restricted because prepaid fallback is off. Review
-your account in `/connect` or contact your organization owner; reconnecting or choosing another
-hosted model does not remove that restriction. After access changes, use
+not compatible with that reader. Included allowance works without prepaid.
+`prepaid_disabled` means the service reports no usable included allowance and
+prepaid fallback is off; it is not an instruction to enable prepaid.
+Check `included.state` in `0 balance --json`: `none` means no included allowance
+is reported, `exhausted` means it has been used up, and `unavailable` means it
+could not be verified. A missing percentage is not zero usage.
+Review the organization's included allowance in `/connect` or with its owner;
+reconnecting or choosing another hosted model does not provision allowance. After access changes, use
 **Ctrl+R** in chat to check again. Your draft is retained, not automatically sent.
 See [hosted account data](/api-keys/#hosted-inference).
 

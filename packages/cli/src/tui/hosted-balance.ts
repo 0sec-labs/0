@@ -14,8 +14,9 @@ function fmtUsd(usd: string | null): string {
 export function hostedBalanceState(account: CreditAccount | null | undefined): HostedBalanceState {
   if (!account) return { status: "unavailable" };
   const { included, prepaid } = account;
-  const parts = [included.state !== "unavailable" && included.usedPercent !== null
-    ? `${included.usedPercent}% used` : "unavailable"];
+  const parts = [included.state === "none" ? "no included allowance"
+    : included.state !== "unavailable" && included.usedPercent !== null
+      ? `${included.usedPercent}% used` : "unavailable"];
   if (included.state !== "unavailable" && included.resetsAt) {
     parts.push(`resets ${included.resetsAt.slice(0, 10)}`);
   }
@@ -38,8 +39,9 @@ export function formatHostedBalance(state: HostedBalanceState): string {
 export function formatBalanceDetail(account: CreditAccount | null): string {
   if (!account) return "  Usage unavailable (unsupported account data).\n";
   const { included, prepaid } = account;
-  const lines = [included.state !== "unavailable" && included.usedPercent !== null
-    ? `  Usage: ${included.usedPercent}% used` : "  Usage: unavailable"];
+  const lines = [included.state === "none" ? "  Usage: no included allowance"
+    : included.state !== "unavailable" && included.usedPercent !== null
+      ? `  Usage: ${included.usedPercent}% used` : "  Usage: unavailable"];
   if (included.state !== "unavailable" && included.resetsAt) {
     lines.push(`  Resets: ${included.resetsAt}`);
   }

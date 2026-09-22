@@ -24,6 +24,10 @@ on the published npm package and the GitHub Release tag.
 - Simplify hosted usage to percentage used and reset timing. Show a prepaid
   balance only when prepaid fallback is enabled; keep extra billing metadata
   in JSON instead of the normal display.
+- Make `0dev` rebuild and run its source checkout by default instead of silently
+  launching the installed release.
+- Distinguish a missing included allowance from unavailable usage data. Clarify
+  that included usage does not require prepaid fallback.
 
 ## [0.21.3] - 2026-09-22
 

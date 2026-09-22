@@ -80,6 +80,18 @@ describe("usage presentation", () => {
     expect(summary).not.toContain("resets");
   });
 
+  it("distinguishes missing included allowance from an unreadable account", () => {
+    const value = account();
+    value.included = { state: "none", usedPercent: null, resetsAt: null };
+    value.prepaid = { balanceUsd: "0", fallbackEnabled: false };
+    value.admission = { eligible: false, reason: "prepaid_disabled" };
+    for (const text of [display(value), formatBalanceDetail(value)]) {
+      expect(text).toContain("no included allowance");
+      expect(text).not.toContain("unavailable");
+      expect(text).not.toMatch(/\d+%|\$|resets/i);
+    }
+  });
+
   it("returns unavailable for null account", () => {
     expect(hostedBalanceState(null).status).toBe("unavailable");
     expect(display(null)).toContain("unavailable");
