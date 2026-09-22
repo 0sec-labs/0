@@ -29,7 +29,7 @@ afterEach(async () => {
 
 test("arrow keys scroll the model list; up retreats to the start", async () => {
   tui = await launch(modelsByokLaunch());
-  await tui.waitForText(/per M/, 15_000);
+  await tui.waitForText(/● deepseek-chat/, 15_000);
   await tui.settle();
 
   const start = highlightedRow(tui.captureSpans());

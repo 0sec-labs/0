@@ -681,10 +681,20 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
       const item = visible[clampDialogSelection(visible, selectedRef.current)];
       const row = connectRowForId(visibleRows, item?.id);
       if (row?.kind === "cloud") {
+        if (cloudConnected && hostedVerification?.kind === "verified" && recovery?.providerId !== CLOUD_ID) {
+          onConnected?.("hosted");
+          return;
+        }
         beginHosted();
         return;
       }
-      if (row?.kind === "provider") beginConnect(row.provider);
+      if (row?.kind === "provider") {
+        if (row.provider.connected && recovery?.providerId !== row.provider.id) {
+          onConnected?.(row.provider.id);
+          return;
+        }
+        beginConnect(row.provider);
+      }
       return;
     }
 
@@ -829,7 +839,8 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
         lines.push(blank());
       }
       const detail = connectDetailLines(
-        { row: shownRow, compact: bodyRows < 12, cloudConnected, hostedVerification },
+        { row: shownRow, compact: bodyRows < 12, cloudConnected,
+          hostedVerification: isCloud && recovering ? { kind: "rejected" } : hostedVerification },
         width,
       );
       // The pane header already names the provider; drop the repeated lead
@@ -881,6 +892,23 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
                   {line.text}
                 </Cells>
               ))}
+              {isCloud && cloudConnected && hostedVerification?.kind === "verified" && !recovering ? (
+                <text width={width} flexShrink={0} fg={theme.ACCENT}
+                  attributes={TextAttributes.BOLD}
+                  onMouseDown={(event) => {
+                    if (event.button === 0) { event.stopPropagation(); onConnected?.("hosted"); }
+                  }}>
+                  [Continue →]
+                </text>
+              ) : !isCloud && provider?.connected && !recovering ? (
+                <text width={width} flexShrink={0} fg={theme.ACCENT}
+                  attributes={TextAttributes.BOLD}
+                  onMouseDown={(event) => {
+                    if (event.button === 0) { event.stopPropagation(); onConnected?.(provider.id); }
+                  }}>
+                  [Continue →]
+                </text>
+              ) : null}
             </box>
           </scrollbox>
         ) : null}
@@ -915,9 +943,12 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
         ? oauth.phase === "failed" ? theme.ERROR : oauth.phase === "connected" ? theme.SUCCESS : theme.ACCENT
         : recovery ? theme.ERROR : inInput ? theme.ACCENT : isCloudRow && cloudState.warning ? theme.WARNING : theme.MUTED;
 
+  const canContinue = isCloudRow
+    ? cloudConnected && hostedVerification?.kind === "verified" && recovery?.providerId !== CLOUD_ID
+    : Boolean(activeProvider?.connected && recovery?.providerId !== activeProvider.id);
   const hint = onSkip && mode === "browse" && !filter
-    ? "[esc] back · [⌃N] skip · [⏎] connect · [↑↓] move · [/] filter · [⌃C] quit"
-    : connectFooterHint(mode, filter.length > 0);
+    ? `[esc] back · [⌃N] skip · [⏎] ${canContinue ? "continue" : "connect"} · [↑↓] move · [/] filter · [⌃C] quit`
+    : connectFooterHint(mode, filter.length > 0, canContinue);
   const counts = connectConnectedCounts(rows, hostedVerification);
   const titleText = `${operatorIcon(SCREEN_KEY, symbols)} ${operatorTitle(SCREEN_KEY)}`;
   const titleMeta = counts.total === 0 ? "" : `${counts.connected}/${counts.total} connected`;

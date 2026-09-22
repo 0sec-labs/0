@@ -20,7 +20,7 @@ import { VERSION, homeStateDir } from "@0/shared";
 import { features } from "../agent/features.js";
 import { diag } from "../diagnostics/channel.js";
 import { loadCloudCredentials, CloudAuthMissingError, DEFAULT_CLOUD_HOST } from "../cloud/credentials.js";
-import { CloudClient } from "../cloud/client.js";
+import { CloudClient, CloudError } from "../cloud/client.js";
 import {
   MESSAGE_CACHE_BREAKPOINTS,
   planMessageBreakpoints,
@@ -2594,6 +2594,43 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     return loadCodexModelCatalog({ signal, resolveCredentials: () => refreshChatGptCodexAuthState(state) });
   }
 
+  /** Check account admission and resolve the service model without inference.
+   * Each explicit check refreshes admission; failed discovery is never cached.
+   */
+  async prepare(): Promise<void> {
+    while (this.provider === "hosted") {
+      const config = this.config;
+      const client = new CloudClient({
+        host: this.baseUrl.replace(/\/api\/inference\/v1$/, ""),
+        token: this.apiKey,
+      });
+      try {
+        const account = await client.getInferenceAccount();
+        if (this.config !== config) continue;
+        if (!account) {
+          throw new CloudError(
+            "0cloud account availability could not be read. Check again or review your account in /connect.",
+            undefined, "/api/inference/account", "unsupported_account_data",
+          );
+        }
+        if (!account.admission.eligible) {
+          const reason = account.admission.reason ?? account.reason ?? "account_restricted";
+          throw new CloudError(
+            account.state === "unavailable"
+              ? `0cloud account availability could not be checked (${reason}). Check again or review your account in /connect.`
+              : `0cloud account access is restricted (${reason}). Review your account in /connect or contact your organization owner.`,
+            undefined, "/api/inference/account", reason,
+          );
+        }
+        await this.ensureHostedModel();
+        if (this.config === config) return;
+      } catch (error) {
+        if (this.config !== config) continue;
+        throw error;
+      }
+    }
+  }
+
   /**
    * Mutate the live selection in place so the NEXT turn (the engine reads
    * `config.runtime` per turn) and the NEXT `forkForSubagent` pick up the new
@@ -2609,15 +2646,20 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   }): void {
     const providerChanged = sel.provider !== undefined && sel.provider !== this.provider;
 
-    if (providerChanged) {
+    if (providerChanged || (this.provider === "hosted" && (sel.env !== undefined || sel.provider === "hosted"))) {
       // Full re-detection against the (optionally new) account, reusing the
       // exact constructor path. Preserve the existing selection knobs unless
       // this call overrides them; drop any explicit apiKey so credentials come
       // from the (possibly refreshed) environment.
+      //
+      // Switching TO hosted without an explicit model must NOT carry over the
+      // old provider's model — the catalog auto-selects the service default.
+      // An empty model also explicitly requests the service default.
       const merged: RuntimeConfig = {
         ...this.config,
+        ...(providerChanged && sel.provider === "hosted" && sel.model === undefined ? { model: "" } : {}),
         apiKey: undefined,
-        provider: sel.provider as RuntimeConfig["provider"],
+        provider: (sel.provider ?? this.provider) as RuntimeConfig["provider"],
         ...(sel.model !== undefined ? { model: sel.model } : {}),
         ...(sel.agentModels !== undefined ? { agentModels: sel.agentModels } : {}),
         ...(sel.singleModel !== undefined ? { singleModel: sel.singleModel } : {}),
@@ -2657,6 +2699,11 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         if (this.provider === "azure") this.wireApi = openAICompatibleWireApi(this.env, "AZURE_OPENAI_WIRE_API", this.azureConfig.wireApi);
         this.applyModelWireApi();
         this.reasoningEffort = undefined;
+        // A new model on the same hosted account must re-resolve the catalog
+        // against the new model ID. Clear the memo so ensureHostedModel
+        // re-queries rather than trusting the old ceiling/id.
+        this.hostedCatalogPromise = null;
+        this.hostedMaxOutputTokens = undefined;
       }
     }
   }
@@ -2773,29 +2820,41 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
 
   /** The server catalog is authoritative even when a model was selected explicitly. */
   private async ensureHostedModel(): Promise<void> {
-    if (this.provider !== "hosted") return;
-
-    if (!this.hostedCatalogPromise) {
-      this.hostedCatalogPromise = (async () => {
+    while (this.provider === "hosted") {
+      let pending = this.hostedCatalogPromise;
+      if (!pending) {
+        const requestedModel = this.model;
         const client = new CloudClient({
           host: this.baseUrl.replace(/\/api\/inference\/v1$/, ""),
           token: this.apiKey,
         });
-        const catalog = await client.getInferenceModels();
-        const selected = this.model
-          ? catalog.data.find((model) => model.id === this.model)
-          : catalog.data[0];
-        if (!selected) {
-          throw new Error(this.model
-            ? `Hosted model "${this.model}" is unavailable. Run \`0 models\` for available models.`
-            : "No hosted models are available. Run `0 models` to check service availability.");
-        }
-        this.model = selected.id;
-        this.wireApi = selected.wire_api;
-        this.hostedMaxOutputTokens = selected.max_output_tokens;
-      })();
+        const request: Promise<void> = client.getInferenceModels().then((catalog) => {
+          // Reconfiguration invalidates ownership of this result.
+          if (this.hostedCatalogPromise !== request) return;
+          const selected = requestedModel
+            ? catalog.data.find((model) => model.id === requestedModel)
+            : catalog.data[0];
+          if (!selected) {
+            throw new Error(requestedModel
+              ? `Hosted model "${requestedModel}" is unavailable. Run \`0 models\` for available models.`
+              : "No hosted models are available. Run `0 models` to check service availability.");
+          }
+          this.model = selected.id;
+          this.wireApi = selected.wire_api;
+          this.hostedMaxOutputTokens = selected.max_output_tokens;
+        });
+        this.hostedCatalogPromise = pending = request;
+      }
+      try {
+        await pending;
+      } catch (error) {
+        if (this.hostedCatalogPromise !== pending) continue;
+        this.hostedCatalogPromise = null;
+        throw error;
+      }
+      if (this.hostedCatalogPromise === pending) return;
+      // Only a changed selection can loop; a discovery failure always rejects.
     }
-    await this.hostedCatalogPromise;
   }
 
   /**

@@ -1187,8 +1187,13 @@ function ConsoleApp({
         <ConnectScreen
           onConnected={(providerId) => {
             const owner = ownerForAction();
-            if (owner) owner.onNextOptions({ providerId: providerId as ChatScreenOptions["providerId"] });
-            nav.onDone();
+            if (!owner) return;
+            owner.onNextOptions({
+              providerId: providerId as ChatScreenOptions["providerId"],
+              ...(providerId === "hosted" ? { model: "" } : {}),
+            });
+            if (providerId === "hosted") owner.reconnect.current?.(providerId);
+            nav.onDone({ skipModels: providerId === "hosted" });
           }}
           onBack={nav.onBack}
           onSkip={nav.onSkip}
@@ -1322,7 +1327,11 @@ function ConsoleApp({
           owner.onNextOptions({ providerId: providerId as ChatScreenOptions["providerId"] });
           owner.recovery = undefined;
           owner.onActivity({ waiting: false });
-          if (currentRoute.recovery) owner.reconnect.current?.(providerId);
+          if (providerId !== "hosted" && owner.runtimeInfo.current?.providerId() !== providerId) {
+            shell.openModels(owner.options);
+            return;
+          }
+          owner.reconnect.current?.(providerId);
           leaveCurrentScreen(shell, appExit);
         }}
         onExit={appExit}

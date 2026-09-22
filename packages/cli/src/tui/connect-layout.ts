@@ -585,10 +585,13 @@ export function connectDetailLines(
     }
     push("Use your own API key or provider subscription without a 0cloud account.", "muted");
     separate();
-    push(
-      "Enter: open browser for 0cloud sign-in.",
-      "muted",
-    );
+    if (connected && hostedVerification?.kind === "verified") {
+      push("Enter: continue with 0cloud", "accent");
+    } else if (connected && hostedVerification?.kind === "rejected") {
+      push("Enter: open browser to sign in again", "muted");
+    } else {
+      push("Enter: open browser for 0cloud sign-in.", "muted");
+    }
     return lines;
   }
 
@@ -641,9 +644,11 @@ export function connectDetailLines(
 
   separate();
   push(
-    provider.auth === "oauth"
-      ? `Enter: start ${provider.label} ${oauthVerb}. No API key or pasted token is used.`
-      : "Enter: paste an API key. It is stored owner-only on this machine.",
+    provider.connected
+      ? "Enter: continue with this provider"
+      : (provider.auth === "oauth"
+        ? `Enter: start ${provider.label} ${oauthVerb}. No API key or pasted token is used.`
+        : "Enter: paste an API key. It is stored owner-only on this machine."),
     "muted",
   );
 
@@ -780,14 +785,15 @@ export function connectInputMask(secretLength: number): string {
 }
 
 /** The footer hint, per mode. Names the real bindings. */
-export function connectFooterHint(mode: ConnectMode, hasFilter = false): string {
+export function connectFooterHint(mode: ConnectMode, hasFilter = false, canContinue = false): string {
   if (mode === "input") return "paste credential · [⏎] save · [esc] cancel";
   if (mode === "oauth") return "device sign-in running · [esc] cancel";
   if (mode === "hosted") return "cloud sign-in running · [esc] cancel";
-  if (mode === "filter") return "type to filter · [⏎] connect · [esc] done · [⌫] delete";
+  const action = canContinue ? "continue" : "connect";
+  if (mode === "filter") return `type to filter · [⏎] ${action} · [esc] done · [⌫] delete`;
   return [
     "[↑↓] select",
-    "[⏎] connect",
+    `[⏎] ${action}`,
     "[/] filter",
     hasFilter ? "[esc] clear filter" : "[esc] back",
     "[⌃C] exit",

@@ -22,6 +22,7 @@ import { DEFAULT_AUTONOMY_MODE } from "@0/shared";
 import {
   ScopePolicy,
   CloudClient,
+  CloudError,
   loadCloudCredentials,
   createConsoleRuntime,
   eventBus,
@@ -610,14 +611,23 @@ function statusRoleColor(
 }
 
 function startupRecoveryText(detail: string): string {
+  if (/\bprepaid_disabled\b/.test(detail)) {
+    return "Signed in to 0cloud, but account access is restricted because prepaid fallback is off (prepaid_disabled). Review your account in /connect or contact your organization owner.";
+  }
+  if (/No hosted models are available|Hosted model ".+" is unavailable/.test(detail)) {
+    return "0cloud has not provided an available service model. It selects the model automatically; you do not need to pick one. Check again or use /connect to choose another provider.";
+  }
   if (/no provider credential found/i.test(detail)) {
     return "Use /connect to sign in to 0cloud, or use your own API key or provider subscription.";
   }
   const recovery = connectionRecoveryForError(detail);
+  if (recovery?.providerId === "hosted") {
+    return "0cloud could not verify this sign-in. Use /connect to sign in again.";
+  }
   if (recovery?.providerId === "chatgpt-codex") {
     return "ChatGPT Codex needs device OAuth. Use /connect; do not paste an OpenAI API key.";
   }
-  return detail;
+  return detail.replaceAll("`0 models`", "`/model`");
 }
 
 
@@ -1234,7 +1244,10 @@ export function ChatScreen({
   const [sessionTokens, setSessionTokens] = useState({ input: 0, output: 0 });
   /** Live turn-budget consumption, updated per model call. */
   const [turnBudget, setTurnBudget] = useState<{ used: number; limit: number } | null>(null);
-  const [startupError, setStartupError] = useState<string | null>(null);
+  const [startupError, setStartupError] = useState<{ text: string; accountRestricted: boolean } | null>(null);
+  const [checkingModel, setCheckingModel] = useState(false);
+  const runtimeReadyRef = useRef(false);
+  const runtimeCheckEpoch = useRef(0);
   const [mode, setMode] = useState<ConsoleAutonomyMode>(options?.autonomyMode ?? DEFAULT_AUTONOMY_MODE);
   /**
    * The live autonomy mode, for callbacks that must not be rebuilt when it
@@ -1744,6 +1757,36 @@ export function ChatScreen({
       },
     });
   }, [problemReview, settings.diagnosticReporting, busy, picker, pendingScope, pendingLocalScope, pendingToolApproval, pendingOperatorQuestion, stageFeedback, chooseReporting, showToast]);
+  // Resolve hosted availability before accepting a message, without sending
+  // inference. A late check from an old selection must not overwrite recovery.
+  const checkRuntime = useCallback(async () => {
+    const runtime = runtimeRef.current;
+    if (!runtime || closingRef.current || stoppingAuditRef.current) return;
+    const epoch = ++runtimeCheckEpoch.current;
+    runtimeReadyRef.current = false;
+    setCheckingModel(true);
+    try {
+      await runtime.prepare();
+      if (!alive.current || epoch !== runtimeCheckEpoch.current || runtimeRef.current !== runtime) return;
+      runtimeReadyRef.current = true;
+      setStartupError(null);
+      setModelId(runtime.resolvedModel());
+      modelIdRef.current = runtime.resolvedModel();
+    } catch (error) {
+      if (!alive.current || epoch !== runtimeCheckEpoch.current || runtimeRef.current !== runtime) return;
+      const detail = error instanceof Error ? error.message : String(error);
+      setStartupError({
+        text: startupRecoveryText(detail),
+        accountRestricted: error instanceof CloudError
+          && error.path === "/api/inference/account"
+          && Boolean(error.code && error.code !== "unsupported_account_data" && error.code !== "billing_unavailable"),
+      });
+      logProblem("runtime-preflight", error);
+    } finally {
+      if (alive.current && epoch === runtimeCheckEpoch.current) setCheckingModel(false);
+    }
+  }, []);
+
   /** Construct only at initial startup, explicit new chat, or failed-start recovery. */
   const buildSession = useCallback((
     opts: { model?: string; providerId?: RuntimeConfig["provider"]; initialMessages?: NativeMessage[] } = {},
@@ -1892,11 +1935,12 @@ export function ChatScreen({
       codexCatalog: (signal) => runtime.codexModelCatalog(signal),
       applySelection: (sel) => applySelectionRef.current?.(sel),
     };
+    void checkRuntime();
     // resolvedModel() is the id the runtime actually settled on after
     // provider detection — not necessarily what was requested — so it is
     // the only value honest enough to display.
     return { session: created, model: runtime.resolvedModel() };
-  }, [options, pluginHostManager, messagingHomeDir, trackedRequest, runtimeInfoHandle]);
+  }, [options, pluginHostManager, messagingHomeDir, trackedRequest, runtimeInfoHandle, checkRuntime]);
 
   useEffect(() => {
     if (closingRef.current) return;
@@ -1922,7 +1966,7 @@ export function ChatScreen({
     } catch (error) {
       recordProblem("runtime", error);
       const detail = error instanceof Error ? error.message : String(error);
-      setStartupError(startupRecoveryText(detail));
+      setStartupError({ text: startupRecoveryText(detail), accountRestricted: false });
       const recovery = connectionRecoveryForError(detail);
       if (recovery) connectionFailureRef.current?.(recovery);
     }
@@ -2018,7 +2062,7 @@ export function ChatScreen({
     void refresh();
     const interval = setInterval(() => { void refresh(); }, 30_000);
     return () => { active = false; clearInterval(interval); };
-  }, [session, busy, interactive]);
+  }, [session, busy, interactive, startupError]);
   // Marketplace changes never replace this session's runtime or live harness.
   // Its leased host remains usable until cleanup; new chats acquire the new set.
   useEffect(() => {
@@ -2087,6 +2131,7 @@ export function ChatScreen({
       ...(sel.singleModel !== undefined ? { singleModel: sel.singleModel } : {}),
       env,
     });
+    void checkRuntime();
     // resolvedModel() is the id the runtime settled on after re-detection.
     const applied = runtime.resolvedModel();
     setModelId(applied);
@@ -2101,7 +2146,7 @@ export function ChatScreen({
       detail: "Live for the next turn and every new subagent. Conversation, scope and self-extension are unchanged.",
       turn: turn.current,
     });
-  }, [appendEntry]);
+  }, [appendEntry, checkRuntime]);
   applyRuntimeSelectionRef.current = applyRuntimeSelection;
 
   // Busy-aware handle. Apply at once when idle; when a turn is in flight, stash
@@ -2146,13 +2191,14 @@ export function ChatScreen({
       : knownProvider?.label ?? providerId;
     // Keep the choice staged so /new inherits it too; then apply it LIVE to
     // this audit's running runtime (deferred to the turn boundary when busy).
-    onNextChatOptions?.({ providerId: provider });
+    const selection = { providerId: provider, ...(provider === "hosted" ? { model: "" } : {}) };
+    onNextChatOptions?.(selection);
     if (sessionRef.current) {
-      applySelectionRef.current?.({ providerId: provider });
+      applySelectionRef.current?.(selection);
       return;
     }
     try {
-      const built = buildSession({ providerId: provider, model: options?.model, initialMessages: options?.initialMessages });
+      const built = buildSession({ providerId: provider, model: provider === "hosted" ? "" : options?.model, initialMessages: options?.initialMessages });
       sessionRef.current = built.session;
       modelIdRef.current = built.model;
       setSession(built.session);
@@ -3588,6 +3634,15 @@ export function ChatScreen({
     const text = raw.trim();
     if (!text) return;
     if (routeSlashCommand(text)) return;
+    if (!runtimeReadyRef.current) {
+      if (!composerRef.current.trim()) {
+        setComposerText(raw);
+        composingRef.current = true;
+        setComposing(true);
+      }
+      showToast("Message not sent. Your draft is kept; review the recovery actions below.");
+      return;
+    }
     if (busy || abortRef.current || stoppingAuditRef.current || !alive.current || !session) return;
 
     const currentTurn = ++turn.current;
@@ -3818,7 +3873,7 @@ export function ChatScreen({
         appendEntry({
           kind: "error",
           text: "Could not complete this message",
-          detail: `${detail}\nUse /model to choose a model or /connect to change providers, then send your message again.`,
+          detail: `${startupRecoveryText(detail)}\nUp recalls your message.`,
           turn: currentTurn,
         });
         const recovery = connectionRecoveryForError(detail);
@@ -3871,7 +3926,7 @@ export function ChatScreen({
       appendEntry({
         kind: "error",
         text: "Could not complete this message",
-        detail: `${detail}\nUse /model to choose a model or /connect to change providers, then send your message again.`,
+        detail: `${startupRecoveryText(detail)}\nUp recalls your message.`,
         turn: currentTurn,
       });
       const recovery = connectionRecoveryForError(detail);
@@ -3983,6 +4038,8 @@ export function ChatScreen({
     protectedSessionIds,
     recordProblem,
     routeSlashCommand,
+    setComposerText,
+    showToast,
     session,
     settings.showTurnSummary,
   ]);
@@ -4037,6 +4094,10 @@ export function ChatScreen({
   const submitOperatorMessage = useCallback((raw: string) => {
     const input = raw.trim();
     if (!input) return;
+    if (!findCommand(input).isSlash && !runtimeReadyRef.current) {
+      void send(raw);
+      return;
+    }
     const disposition = classifyComposerInput({
       input,
       isSlash: findCommand(input).isSlash,
@@ -4124,13 +4185,13 @@ export function ChatScreen({
   // itself, and it means a queued message never races the turn it was typed
   // during.
   useEffect(() => {
-    if (busy || abortRef.current || stoppingAuditRef.current || !alive.current || !session) return;
+    if (busy || abortRef.current || stoppingAuditRef.current || !alive.current || !session || !runtimeReadyRef.current) return;
     const { next, rest } = dequeueComposerInput(queuedRef.current);
     if (next === undefined) return;
     queuedRef.current = rest;
     setQueuedMessages(rest);
     void submitRef.current?.(next);
-  }, [busy, session]);
+  }, [busy, session, checkingModel]);
 
   // usePaste shares AppContext.keyHandler with useKeyboard, so an overlay
   // owns the paste exclusively while the persistent chat remains mounted.
@@ -4472,6 +4533,10 @@ export function ChatScreen({
     // expanded detail; both sidebars toggle their pane. All three persist via
     // the settings store (the same layer `/settings` writes), so the choice
     // survives the session and the store's subscribers repaint immediately.
+    if (startupError && key.ctrl && key.name === "r") {
+      if (!checkingModel) void checkRuntime();
+      return;
+    }
     if (matchesBinding(key, "view.transcript-detail", keybindingOverrides)) {
       updateSetting(
         "transcriptDetail",
@@ -4563,7 +4628,7 @@ export function ChatScreen({
       const action = queuedInputAction({
         input: composerRef.current,
         busy: busy || abortRef.current !== null,
-        hasSession: Boolean(session),
+        hasSession: Boolean(session) && runtimeReadyRef.current,
         queuedCount: queuedRef.current.length,
       });
       if (action !== "none") {
@@ -4699,6 +4764,12 @@ export function ChatScreen({
           setComposerText("");
           setComposing(false);
           setCommandMenuVisible(false);
+          return;
+        }
+        if (!findCommand(input).isSlash && !runtimeReadyRef.current) {
+          showToast(checkingModel
+            ? "Checking service availability. Your draft is kept."
+            : "Your draft is kept. Review the recovery actions below.");
           return;
         }
         // Remember every submitted message (sent or queued) for Up/Down recall.
@@ -5216,8 +5287,10 @@ export function ChatScreen({
     }
     return "";
   })();
-  const sessionState = startupError
-    ? "unavailable"
+  const accountAdmissionBlocked = startupError?.accountRestricted ?? false;
+  const sessionState = checkingModel
+    ? "checking service"
+    : startupError ? accountAdmissionBlocked ? "account restricted" : activeProvider === "hosted" ? "service unavailable" : "needs connection"
     : busyStatusWord || (busy ? "working" : session ? "idle" : "connecting");
   const headerSegments: string[] = [];
   if (settings.showScope) headerSegments.push(`Scope: ${scopeLabel}`);
@@ -5282,8 +5355,10 @@ export function ChatScreen({
     ? suggestCompletion(composer, historyRef.current)
     : null;
   const composerInput = (textWidth: number) => {
-    const placeholder = startupError
-      ? "type / for setup and commands"
+    const placeholder = checkingModel
+      ? "checking service · you can keep drafting"
+      : startupError
+      ? "draft here · restore access to send"
       : queueLabel
         ? queueLabel
         : busy
@@ -5388,7 +5463,7 @@ export function ChatScreen({
   // the column itself. Four cells of chrome (rail + its gap + the "› " prefix)
   // come off the width for the input field.
   const heroContentWidth = sidebars.rightVisible ? sidebars.transcriptWidth : contentWidth;
-  const heroComposerWidth = Math.min(heroContentWidth, Math.max(40, Math.min(72, Math.floor(heroContentWidth * 0.6))));
+  const heroComposerWidth = Math.min(heroContentWidth, startupError || checkingModel ? 72 : Math.max(40, Math.min(72, Math.floor(heroContentWidth * 0.6))));
   const heroComposerTextWidth = Math.max(1, heroComposerWidth - (composerStyle === "rail" ? 5 : 3));
   const heroComposerNode = buildComposer({
     textWidth: heroComposerTextWidth,
@@ -5995,6 +6070,23 @@ export function ChatScreen({
   // flexGrows; each sidebar is flexShrink={0} and only present when the layout
   // found room for it, so with both hidden the transcript takes the full width
   // exactly as before.
+  const recoveryPanel = (
+    <box flexDirection="column" width="100%" minWidth={0} flexShrink={0} padding={1} backgroundColor={PANEL}>
+      <text fg={checkingModel ? MUTED : WARNING}>
+        {checkingModel ? "Checking service availability…" : accountAdmissionBlocked ? "Signed in · account access restricted" : activeProvider === "hosted" ? "0cloud needs attention" : "Connect a provider to start chatting"}
+      </text>
+      {startupError ? <text fg={MUTED} wrapMode="word">{startupError.text}</text> : null}
+      <text fg={MUTED} wrapMode="word">Draft kept. Press Enter to send after access is restored.</text>
+      <box flexDirection="row" flexWrap="wrap" minWidth={0} marginTop={1} gap={1}>
+        <box onMouseDown={() => onNavigate("connect")}><text fg={PRIMARY}>{activeProvider === "hosted" ? "[Account & connections]" : "[Connect provider]"}</text></box>
+        {session && !checkingModel ? (
+          <box onMouseDown={() => { void checkRuntime(); }}><text fg={PRIMARY}>[Check again]</text></box>
+        ) : null}
+      </box>
+      <text fg={MUTED} wrapMode="word">{session ? "Ctrl+R check again · Ctrl+P commands" : "Ctrl+P commands · /connect"}</text>
+    </box>
+  );
+
   const conversationRegion = reviewOpen ? (
     <TranscriptReview
       transcript={transcriptDocument}
@@ -6028,7 +6120,7 @@ export function ChatScreen({
             {!sidebars.rightVisible && todos && todos.total > 0 ? (
               <Todos payload={todos} width={transcriptWidth} theme={theme} />
             ) : null}
-            {startupError ? <text fg={ERROR}>{fitTuiText(startupError, contentWidth)}</text> : null}
+            {startupError || checkingModel ? recoveryPanel : null}
           </box>
         </scrollbox>
       </box>
@@ -6075,7 +6167,7 @@ export function ChatScreen({
   // upward into the header. The composer stays put — it is anchored by the
   // fixed bottom spacer regardless of what the region above it holds.
   const heroOverlayOpen = commandMenuVisible || Boolean(picker) || Boolean(approvalPrompt) || Boolean(secretPrompt) || operatorQuestionOpen;
-  const showMasthead = !heroOverlayOpen && !startupError;
+  const showMasthead = !heroOverlayOpen && !startupError && !checkingModel;
 
   // The command menu now renders through the shared `DialogSelectBody`, which
   // windows the list around the cursor internally (see dialog-select-layout's
@@ -6199,11 +6291,8 @@ export function ChatScreen({
                 </box>
               ) : null}
               {workingIndicator}
-              {startupError && !heroOverlayOpen ? (
-                <box flexDirection="column" width={heroComposerWidth} minWidth={0} flexShrink={0} marginBottom={1}>
-                  <text fg={TEXT}>Chat needs setup</text>
-                  <text fg={MUTED} wrapMode="word">{startupError}</text>
-                </box>
+              {(startupError || checkingModel) && !heroOverlayOpen ? (
+                <box width={heroComposerWidth} minWidth={0} flexShrink={0}>{recoveryPanel}</box>
               ) : null}
               {heroOverlaysNode}
             </box>
@@ -6218,7 +6307,7 @@ export function ChatScreen({
                 <text fg={MUTED}>{fitLegend(heroContentWidth, settings.onboardingCompleted ? "/connect · /resume · [⌃P]" : "/connect · /onboard · [⌃P]")}</text>
               )}
             </box>
-            <box height={heroBottomSpacer} flexShrink={0} minWidth={0} />
+            <box height={startupError || checkingModel ? 1 : heroBottomSpacer} flexShrink={0} minWidth={0} />
           </box>
           {rightSidebarNode}
         </box>

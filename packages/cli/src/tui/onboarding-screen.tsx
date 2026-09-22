@@ -156,7 +156,7 @@ export interface OnboardingSubNav {
   /** Return to the previous decision without undoing confirmed choices. */
   onBack: () => void;
   /** The sub-step's decision was made (and already persisted/staged by the host). */
-  onDone: () => void;
+  onDone: (options?: { skipModels: boolean }) => void;
   /** Skip this step, keeping defaults, and advance. */
   onSkip: () => void;
   /** Leave onboarding entirely, without completing it. */
@@ -424,6 +424,7 @@ export function OnboardingScreen({
   );
   const [stepIndex, setStepIndex] = useState(0);
   const [prefIndex, setPrefIndex] = useState(0);
+  const [skipModels, setSkipModels] = useState(false);
   const currentStep = ONBOARDING_STEPS[stepIndex]?.key ?? "done";
 
   const advanceTo = useCallback((next: OnboardingStep) => {
@@ -432,8 +433,10 @@ export function OnboardingScreen({
     if (idx >= 0) setStepIndex(idx);
   }, []);
 
-  const advancePastCurrent = useCallback(() => {
-    const next = stepAfter(currentStep);
+  const advancePastCurrent = useCallback((options?: { skipModels: boolean }) => {
+    if (currentStep === "connect") setSkipModels(options?.skipModels ?? false);
+    const next = currentStep === "connect" && options?.skipModels
+      ? "preferences" : stepAfter(currentStep);
     if (next) advanceTo(next);
   }, [currentStep, advanceTo]);
 
@@ -446,10 +449,10 @@ export function OnboardingScreen({
       return;
     }
     if (currentStep === "analytics") setPrefIndex(ONBOARDING_PREFERENCE_KEYS.length - 1);
-    const previous = stepBefore(currentStep);
+    const previous = currentStep === "preferences" && skipModels ? "connect" : stepBefore(currentStep);
     if (previous) setStepIndex(ONBOARDING_STEPS.findIndex((step) => step.key === previous));
     else onDismiss();
-  }, [currentStep, prefIndex, onDismiss]);
+  }, [currentStep, prefIndex, onDismiss, skipModels]);
   const prefKey: PreferenceKey | undefined = ONBOARDING_PREFERENCE_KEYS[prefIndex];
   const prefDef = useMemo(
     () => SETTING_DEFS.find((d) => d.key === prefKey),
@@ -469,6 +472,7 @@ export function OnboardingScreen({
     // settings notification (that would fight the operator's cycling).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep, prefKey]);
+
 
   const handleEnter = useCallback(() => {
     if (currentStep === "welcome") {

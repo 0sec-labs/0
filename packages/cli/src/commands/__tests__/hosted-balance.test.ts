@@ -9,12 +9,15 @@ const originalExitCode = process.exitCode;
 
 function account(): CreditAccount {
   return {
-    schemaVersion: "credits-v1", snapshotAt: "2026-09-18T12:00:00.000Z", policyVersion: "credits-v1",
-    scope: { orgId: "fixture-org" }, state: "ready", reason: null,
-    free: { state: "active", claimableCreditNanos: "0", spendableCreditNanos: "1", heldCreditNanos: null, resetAt: null },
-    subscription: { state: "none", priceCents: 1500, periodStart: null, periodEnd: null, windows: [] },
-    prepaid: { spendableCreditNanos: "123456789012345678", heldCreditNanos: "0", settledDeficitCreditNanos: "0", holdShortfallCreditNanos: "0", consentEnabled: false },
-    purchase: { enabled: false, presets: [], customMinCents: 1000, customMaxCents: 100000, stepCents: 100, currency: "usd" },
+    schemaVersion: "usage-v2",
+    snapshotAt: "2026-09-18T12:00:00.000Z",
+    scope: { orgId: "fixture-org" },
+    state: "ready",
+    reason: null,
+    plan: { id: null, name: null, monthlyPriceUsd: null },
+    included: { state: "active", usedPercent: 45.5, resetsAt: "2026-10-01T00:00:00.000Z" },
+    prepaid: { balanceUsd: "123456789.01", fallbackEnabled: true },
+    canManageBilling: true,
     admission: { eligible: true, reason: null },
   };
 }
@@ -40,10 +43,9 @@ async function run(args: string[], body: unknown, status = 200): Promise<string>
   return String(output.stdout.mock.lastCall?.[0] ?? "");
 }
 
-it("shows exact credits without rounding a spendable nano to zero", async () => {
+it("shows exact prepaid balance without rounding", async () => {
   const text = await run(["balance"], account());
-  expect(text).toContain("0.000000001 credits");
-  expect(text).toContain("123456789.012345678 credits");
+  expect(text).toContain("$123456789.01");
   expect(process.exitCode).toBe(0);
 });
 
@@ -51,8 +53,7 @@ it("keeps JSON amounts as exact wire strings and excludes private extensions", a
   const parsed = JSON.parse(await run(["balance", "--json"], {
     ...account(), supplierCostUsd: "private-cost-value",
   }));
-  expect(parsed.prepaid.spendableCreditNanos).toBe("123456789012345678");
-  expect(parsed.free.spendableCreditNanos).toBe("1");
+  expect(parsed.prepaid.balanceUsd).toBe("123456789.01");
   expect(JSON.stringify(parsed)).not.toContain("private-cost-value");
 });
 
@@ -60,7 +61,7 @@ it("does not reject authenticated disabled or legacy account responses", async (
   const disabled = await run(["balance"], { ...account(), state: "disabled", reason: "policy_disabled" });
   expect(disabled).toContain("policy_disabled");
   expect(process.exitCode).toBe(0);
-  const legacy = await run(["balance", "--json"], { credits: { remainingPercent: 70 } });
+  const legacy = await run(["balance", "--json"], { schemaVersion: "credits-v1" });
   expect(JSON.parse(legacy)).toBeNull();
   expect(process.exitCode).toBe(0);
   expect(output.stderr).not.toHaveBeenCalled();

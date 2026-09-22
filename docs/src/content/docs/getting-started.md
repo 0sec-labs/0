@@ -114,16 +114,21 @@ Run `0` to open chat, then `/connect`. Choose **0cloud → Sign in**,
 your browser; **Esc** returns to chat. Source-based terminal UI execution
 requires Bun; the release binary includes its runtime.
 
-On the first no-argument launch, guided setup covers connection, model,
-display preferences and analytics consent. Confirm the final **Done** step to
-finish setup. Cancelling retains saved choices but leaves setup incomplete.
+`0` starts in chat, including on a fresh installation. Use `/onboard` for
+optional guided setup. Once 0cloud is connected, **Enter** continues setup;
+there is no hosted-model selection step.
 
-Use `/model` to select a model. Model and role-model selections apply to the
-current audit while idle, or after its current turn completes. If a provider
-isn't connected, connect it and select the model again. A normal `/connect`
-choice alone prepares the next chat rather than switching a healthy runtime.
-A saved Cloud login still needs service access, an available model and an
-account eligible to make requests.
+0cloud selects its service model automatically. Before accepting a chat
+message, the CLI checks account eligibility and model availability. A saved
+login does not guarantee inference access: `prepaid_disabled` is an account
+admission restriction, not a missing provider. Review your account in `/connect` or contact your
+organization owner. Your draft stays in the composer; **Ctrl+R** checks again,
+and **Enter** sends it only after access is restored.
+
+For your own provider, use `/model` to select a model. Model and role-model
+selections apply to the current audit while idle, or after its current turn
+completes. Switching to a different API-key or subscription provider opens its
+model picker before applying the connection.
 
 <a id="hosted-models-draft"></a>
 
@@ -143,7 +148,7 @@ off your machine.
 1. Set `HOSTED_TEST_HOST` to the operator-provided URL. Log in below, choose
    your organization, and authorize the CLI.
 2. Check the model catalog and credit account. Review any reported eligibility,
-   subscription windows, prepaid consent and admission state. These fields are
+   included allowance, prepaid fallback and admission state. These fields are
    deployment responses, not a promise of free credit. If account data is
    unavailable, resolve CLI/service compatibility first.
 3. Choose an ID from `0 models`. Pin `hosted` to use it instead of any

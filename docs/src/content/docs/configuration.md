@@ -597,12 +597,12 @@ Revoke issued credentials through the dashboard's session controls.
 The gateway checks membership and scopes; a CLI credential doesn't authorize
 purchases.
 
-`0 balance --json` returns the validated `credits-v1` account snapshot or
-`null` for unsupported account data. Free credit, overlapping subscription
-windows and prepaid credit are separate sources, not one additive balance.
-Unavailable amounts are not zero. Use a compatible CLI and service revision;
-a successful login or catalog response does not prove their account schemas
-match. See [account interpretation](/api-keys/#hosted-inference).
+`0 balance --json` returns the validated `usage-v2` account snapshot or
+`null` for unsupported account data. It reports the plan, included allowance
+percentage and reset time, prepaid USD balance, fallback setting and admission.
+USD amounts stay exact decimal strings; unavailable amounts are not zero.
+Successful login is separate from request eligibility. See
+[account interpretation](/api-keys/#hosted-inference).
 
 Local cost ceilings are separate from the hosted ledger. Cancellation can still
 incur charges. See [billing and errors](/api-keys/#charging-and-interrupted-requests).

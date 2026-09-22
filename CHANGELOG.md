@@ -12,6 +12,16 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- Check 0cloud account admission and service-model availability before accepting
+  chat messages. Keep blocked drafts and offer an explicit recheck without
+  replaying messages or asking users to choose a hosted model.
+- Read the service's `usage-v2` account response, showing included allowance and
+  exact prepaid amounts. Distinguish `prepaid_disabled` from missing credentials.
+- Give connected onboarding an explicit Continue action and skip the model
+  picker when 0cloud selects the service model.
+
 ## [0.21.3] - 2026-09-22
 
 ### Changed

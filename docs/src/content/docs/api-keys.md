@@ -39,14 +39,14 @@ CLI's estimated model cost. It distinguishes:
 
 | Source | What to check |
 | --- | --- |
-| Free credits | Eligibility, claimable credits, spendable credits, held credits and the reset time. Claimable is not spendable. |
-| Subscription | Subscription state and each reported monthly, weekly or five-hour window. These windows overlap; do not add them together. |
-| Prepaid | Spendable and held credits, settled deficit, hold shortfall and whether prepaid use is permitted. |
+| Plan | The current plan and its reported monthly price in USD. |
+| Included allowance | Allowance state, percentage used and reset time. |
+| Prepaid | Exact USD balance and whether prepaid fallback is enabled. |
 | Admission | Whether the service currently reports the account eligible to make a request, with its reason when unavailable. |
 
-`0 balance --json` returns a validated `credits-v1` account or `null`.
-Credit amounts are decimal integer strings in nanocredits, with 1 credit equal
-to 1,000,000,000 nanocredits. Missing amounts stay unavailable, never zero.
+`0 balance --json` returns a validated `usage-v2` account or `null`.
+USD amounts remain decimal strings without floating-point conversion.
+Missing amounts stay unavailable, never zero.
 Unsupported or malformed account data displays **Credit data unavailable**;
 this is not evidence that your credentials are invalid or your balance is empty.
 Use a compatible CLI and service before attempting a paid request.
