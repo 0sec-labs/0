@@ -9,7 +9,6 @@ import { getRuntimeAvailability } from "../utils.js";
 import { buildFindingChatPrompt, loadFindingFocus } from "../finding-focus.js";
 import { runUnified } from "../commands/run.js";
 import { useTheme } from "./theme-context.js";
-import { useSettings } from "./settings-store.js";
 import { useMouseSupport } from "./mouse.js";
 import {
   SHELL_HORIZONTAL_PADDING,
@@ -585,17 +584,13 @@ function ConsoleApp({
 }) {
   const { width: terminalWidth, height: terminalHeight } = useSurfaceDimensions();
   const initialChatOptions = initialRoute.type === "chat" ? initialRoute.options : undefined;
-  const tuiSettings = useSettings();
-  const [firstRun, setFirstRun] = useState(() => initialRoute.type === "chat" &&
-    !tuiSettings.onboardingCompleted && initialChatOptions?.initialMessages === undefined && !initialChatOptions?.initialPrompt);
   const workspaceRef = useRef<AuditWorkspace | null>(null);
   if (!workspaceRef.current) workspaceRef.current = new AuditWorkspace(initialChatOptions);
   const workspace = workspaceRef.current;
   const rootRoute: ConsoleRoute = { type: "chat", auditId: workspace.selectedId };
-  const [routes, setRoutes] = useState<ConsoleRoute[]>(() => firstRun
-    ? [rootRoute, { type: "onboard", auditId: workspace.selectedId }]
-    : initialRoute.type === "chat" ? [rootRoute] : [rootRoute, { ...initialRoute, auditId: workspace.selectedId }]);
-  const [routeIndex, setRouteIndex] = useState(() => firstRun || initialRoute.type !== "chat" ? 1 : 0);
+  const [routes, setRoutes] = useState<ConsoleRoute[]>(() =>
+    initialRoute.type === "chat" ? [rootRoute] : [rootRoute, { ...initialRoute, auditId: workspace.selectedId }]);
+  const [routeIndex, setRouteIndex] = useState(() => initialRoute.type !== "chat" ? 1 : 0);
   const [lensEvolutionState, setLensEvolutionState] = useState<TuiLensEvolutionStatus | undefined>(
     () => lensEvolution?.getStatus(),
   );
@@ -751,18 +746,7 @@ function ConsoleApp({
       if (record && requestedAt === navigationEpoch.current) showChat(record.id);
     }, reportError);
   };
-  const finishSetup = () => {
-    if (exitRequested.current) return;
-    const id = currentRoute.auditId ?? records[0]?.id;
-    if (!id || !workspace.applyInitialChoices(id)) {
-      reportError("The setup audit is no longer available.");
-      return;
-    }
-    setFirstRun(false);
-    showChat(id);
-  };
   const openNewAudit = () => {
-    if (firstRun) { finishSetup(); return; }
     openCreatedAudit(createAudit(routeOwner));
   };
   const closeAudit = (id: string) => {
@@ -804,7 +788,7 @@ function ConsoleApp({
 
   // Workspace shortcuts remain available when either audit panel is collapsed.
   useKeyboard((key) => {
-    if (firstRun || closingAll || (currentRoute.type !== "chat" && currentRoute.type !== "audits")) return;
+    if (closingAll || (currentRoute.type !== "chat" && currentRoute.type !== "audits")) return;
     if (!key.ctrl || !(key.option || key.meta) || !["up", "down", "n", "w"].includes(key.name)) return;
     key.preventDefault();
     key.stopPropagation();
@@ -896,9 +880,9 @@ function ConsoleApp({
     return true;
   };
   const shell: ShellNav = {
-    canGoBack: routeIndex > (firstRun ? 1 : 0),
+    canGoBack: routeIndex > 0,
     canGoForward: routeIndex < routes.length - 1,
-    goBack: () => { navigationEpoch.current++; setRouteIndex((current) => Math.max(firstRun ? 1 : 0, current - 1)); },
+    goBack: () => { navigationEpoch.current++; setRouteIndex((current) => Math.max(0, current - 1)); },
     goForward: () => { navigationEpoch.current++; setRouteIndex((current) => Math.min(routes.length - 1, current + 1)); },
     openChat: (options) => {
       if (options?.initialMessages !== undefined || options?.initialPrompt) {
@@ -911,8 +895,7 @@ function ConsoleApp({
         ...(options.agentModels !== undefined ? { agentModels: options.agentModels } : {}),
         ...(options.singleModel !== undefined ? { singleModel: options.singleModel } : {}),
       });
-      if (firstRun) setRouteIndex(1);
-      else showChat(routeOwner?.id);
+      showChat(routeOwner?.id);
     },
     openNewChat: openNewAudit,
     openLauncher: () => navigate({ type: "launcher" }),
@@ -1112,7 +1095,7 @@ function ConsoleApp({
   const auditPanels = records.length > 0 ? (
     records.map((record) => {
       const isSelected = record.id === selectedId;
-      const interactive = isSelected && !overlayActive && !firstRun && !closingAll && !record.closeRequested;
+      const interactive = isSelected && !overlayActive && !closingAll && !record.closeRequested;
       return (
         <box
           key={record.id}
@@ -1242,8 +1225,8 @@ function ConsoleApp({
           </OnboardingSubstep>
         );
       }}
-      onComplete={() => { if (firstRun) finishSetup(); else showChat(onboardingOwner); }}
-      onDismiss={() => { if (firstRun) finishSetup(); else showChat(onboardingOwner); }}
+      onComplete={() => showChat(onboardingOwner)}
+      onDismiss={() => showChat(onboardingOwner)}
       onExit={appExit}
     />
   ) : null;
@@ -1390,7 +1373,7 @@ function ConsoleApp({
         level-0 route/DialogSurface with a sized parent for their absolute
         layout, and only the topmost one is interactive. Route stack = level 0. */}
     <PopupStackProvider>
-      <RouteHistoryKeys shell={shell} enabled={!firstRun && !closingAll && routeType !== "onboard"}>
+      <RouteHistoryKeys shell={shell} enabled={!closingAll && routeType !== "onboard"}>
       {pluginError ? <text fg={theme.ERROR} wrapMode="word">{pluginError}</text> : null}
       {shellError ? <text fg={theme.ERROR} wrapMode="word">{shellError}</text> : null}
       {closingAll ? (
@@ -1404,18 +1387,18 @@ function ConsoleApp({
         />
       ) : null}
       <box flexDirection="column" width="100%" flexGrow={1} minHeight={0} position="relative" overflow="hidden">
-        {!firstRun ? auditPanels : null}
+        {auditPanels}
         {onboarding ? (
           <box position="absolute" top={0} left={0} width={routeType === "onboard" ? "100%" : 0}
             height={routeType === "onboard" ? "100%" : 0} overflow="hidden" zIndex={100}>
-            <DialogSurface onDismiss={() => { if (!closingAll) { if (firstRun) finishSetup(); else showChat(onboardingOwner); } }}>
+            <DialogSurface onDismiss={() => { if (!closingAll) showChat(onboardingOwner); }}>
               {onboarding}
             </DialogSurface>
           </box>
         ) : null}
         {overlay ? (
           <DialogSurface onDismiss={closingAll ? undefined : shell.goBack}>
-            {firstRun || SCREENS_WITH_LOCAL_PALETTE[routeType] ? overlay : (
+            {SCREENS_WITH_LOCAL_PALETTE[routeType] ? overlay : (
               <PanePalette key={`${routeType}:${currentRoute.auditId ?? ""}`} shell={shell}>{overlay}</PanePalette>
             )}
           </DialogSurface>

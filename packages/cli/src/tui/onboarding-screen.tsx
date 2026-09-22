@@ -1,8 +1,8 @@
 /** @jsxImportSource @opentui/react */
 /**
- * The guided first-run onboarding dialog.
+ * Optional guided setup, opened with /onboard from the default chat screen.
  *
- * A GUIDED, one-decision-per-step first run: welcome → connect → models →
+ * A GUIDED, one-decision-per-step flow: welcome → connect → models →
  * preferences → analytics → done. Each step explains itself and collects its
  * own answer inline; onboarding never hands the operator the whole Settings
  * catalogue.
@@ -30,7 +30,7 @@
  * COMPLETION IS WRITTEN IN EXACTLY ONE PLACE. `onboardingCompleted` is set only
  * by `finalizeOnboarding()`, called only from the `done` step's Enter. Every
  * confirmed preference or connection persists independently of completion.
- * Model choices are staged on the audit and applied on Finish or Skip setup.
+ * Model choices apply to an available runtime and are staged for the next audit.
  * Escape goes back one decision; at Welcome it skips into chat without marking
  * setup complete. Ctrl+C quits; confirmed disk writes remain, while staged
  * audit choices last only for this process. `onboardingCompleted` is operator-owned
