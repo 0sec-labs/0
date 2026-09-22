@@ -88,14 +88,23 @@ ordinary `scan` command's requirement for a scope file on live targets.
 
 ### Setup and navigation
 
-On first launch, Escape goes back one setup decision, including Density →
-Theme. Within a provider login or search, Escape cancels that local operation
-first. Connect and Models use Ctrl+N to skip; preferences and sharing use `s`.
+Running `0` opens chat directly, including on a fresh installation. Setup does
+not block the composer. Use `/connect` to sign in, `/model` to choose a model,
+or `/onboard` for optional guided setup.
+
+In guided setup, Escape goes back one decision, including Density → Theme.
+Within a provider login or search, Escape cancels that local operation first.
+Connect and Models use Ctrl+N to skip; preferences and sharing use `s`.
 Back, Confirm, and Skip also have clickable controls. At Welcome, Escape skips
 setup and opens chat without marking setup complete. Ctrl+C explicitly quits.
-Confirmed settings and credentials remain saved; model choices are applied to
-the current audit when you finish or skip setup. Unconfirmed preference previews
-are discarded when you go back. `/onboard` opens setup again.
+Confirmed settings and credentials remain saved. Model selections apply to an
+available audit runtime and are also staged for the next audit. Unconfirmed
+preference previews are discarded when you go back.
+
+The header says `idle` when chat is waiting for input; it does not certify
+provider availability. Runtime initialization details and error stacks stay in
+the local TUI log (`/tmp/0-tui.log`, overridable with `ZERO_TUI_LOG`). Turn
+failures appear once in chat with the cause and model/connection recovery commands.
 
 Outside setup, Alt+Left and Alt+Right move through console route history.
 Nested popups own input until closed; Escape first closes the current popup or

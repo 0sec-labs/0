@@ -185,7 +185,7 @@ describe("cancel preserves choices without completing", () => {
     // Cancel = leave the wizard. finalizeOnboarding is NEVER called on cancel,
     // so nothing writes onboardingCompleted.
 
-    // The next session re-reads disk: choices survive, onboarding shows again.
+    // The next session re-reads disk: choices survive without completing setup.
     const persisted = reloadSettings();
     expect(persisted.theme).toBe(theme);
     expect(persisted.density).toBe("compact");
