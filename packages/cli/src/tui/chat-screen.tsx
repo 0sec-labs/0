@@ -3461,6 +3461,7 @@ export function ChatScreen({
             kind: "notice",
             text: "invalid mode",
             detail: "Use Shift+Tab to cycle autonomy modes.",
+            turn: turn.current,
           });
           return true;
         }
