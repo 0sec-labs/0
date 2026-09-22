@@ -18,7 +18,7 @@ function account(): CreditAccount {
 }
 const display = (value: CreditAccount | null) => formatHostedBalance(hostedBalanceState(value));
 
-describe("exact credit presentation", () => {
+describe("usage presentation", () => {
   it("preserves prepaid decimals beyond floating-point precision", () => {
     const value = account();
     value.prepaid.balanceUsd = "123456789012345678.000000001";
@@ -29,40 +29,33 @@ describe("exact credit presentation", () => {
   it("shows included allowance percent and reset date", () => {
     const value = account();
     const detail = formatBalanceDetail(value);
-    expect(detail).toContain("Included state: active");
-    expect(detail).toContain("Used: 45.5%");
-    expect(detail).toContain("Resets at: 2026-10-01");
-    expect(display(value)).toContain("included active (45.5% used");
+    expect(detail).toContain("45.5% used");
+    expect(detail).toContain(value.included.resetsAt);
+    expect(display(value)).toContain("45.5% used");
+    expect(display(value)).toContain("2026-10-01");
   });
 
-  it("shows prepaid USD with fallback indicator", () => {
+  it("hides a funded prepaid balance until fallback is enabled", () => {
     const value = account();
-    expect(display(value)).toContain("prepaid $123.45 (fallback)");
-    const detail = formatBalanceDetail(value);
-    expect(detail).toContain("Prepaid balance: $123.45");
-    expect(detail).toContain("Prepaid fallback: enabled");
-
-    // Without fallback
     value.prepaid.fallbackEnabled = false;
-    expect(display(value)).toContain("prepaid $123.45");
-    expect(display(value)).not.toContain("(fallback)");
-    expect(formatBalanceDetail(value)).toContain("Prepaid fallback: disabled");
+    for (const text of [display(value), formatBalanceDetail(value)]) {
+      expect(text).toContain("45.5% used");
+      expect(text).not.toMatch(/prepaid|\$123\.45/i);
+    }
+    value.prepaid.fallbackEnabled = true;
+    for (const text of [display(value), formatBalanceDetail(value)]) {
+      expect(text).toContain("45.5% used");
+      expect(text).toContain("$123.45");
+    }
+    value.prepaid.balanceUsd = "0.00";
+    expect(display(value)).toContain("$0.00");
+    expect(formatBalanceDetail(value)).toContain("$0.00");
   });
 
   it("reports unavailable prepaid balance as unavailable", () => {
     const value = account();
     value.prepaid.balanceUsd = null;
     expect(display(value)).toContain("prepaid unavailable");
-  });
-
-  it("shows admission eligibility and reason", () => {
-    const value = account();
-    value.admission = { eligible: false, reason: "prepaid_disabled" };
-    const summary = display(value);
-    expect(summary).toContain("not eligible: prepaid_disabled");
-    const detail = formatBalanceDetail(value);
-    expect(detail).toContain("Admission: not eligible");
-    expect(detail).toContain("Admission reason: prepaid_disabled");
   });
 
   it("preserves service restriction display separately from admission", () => {
@@ -75,26 +68,16 @@ describe("exact credit presentation", () => {
     expect(display(value)).toContain("restricted: debt");
     const detail = formatBalanceDetail(value);
     expect(detail).toContain("Prepaid balance: $50.00");
-    expect(detail).toContain("Admission: not eligible");
-    expect(detail).toContain("Admission reason: debt");
+    expect(detail).toContain("debt");
   });
 
   it("does not fabricate included data when unavailable", () => {
     const value = account();
     value.included = { state: "unavailable", usedPercent: null, resetsAt: null };
     const summary = display(value);
-    expect(summary).toContain("included: unavailable");
+    expect(summary).toContain("unavailable");
+    expect(summary).not.toMatch(/\d+%/);
     expect(summary).not.toContain("resets");
-  });
-
-  it("shows plan info in detail", () => {
-    const detail = formatBalanceDetail(account());
-    expect(detail).toContain("Plan: Pro");
-    expect(detail).toContain("Price: $39.00");
-
-    const noPlan = account();
-    noPlan.plan = { id: null, name: null, monthlyPriceUsd: null };
-    expect(formatBalanceDetail(noPlan)).toContain("Plan: none");
   });
 
   it("returns unavailable for null account", () => {

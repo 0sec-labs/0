@@ -402,7 +402,7 @@ export function connectDialogItems({
           case "verified": {
             const account = hostedVerification.account;
             meta = account && account.state !== "ready"
-              ? `connected · credits ${account.state}`
+              ? `connected · access ${account.state}`
               : "connected";
             current = true;
             tone = tones?.connected;
@@ -564,7 +564,7 @@ export function connectDetailLines(
     push("0cloud", "title");
     separate();
     push("Sign in once to use the 0.security-managed model catalog.", "text");
-    push("Model access and credits are checked when used.", "muted");
+    push("Access and usage are checked before sending messages.", "muted");
     separate();
     if (connected) {
       const v = hostedVerification;

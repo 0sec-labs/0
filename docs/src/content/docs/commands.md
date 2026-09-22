@@ -2810,7 +2810,7 @@ Guide: [Hosted models](/getting-started/#hosted-models-draft).
 
 ### balance
 
-Read the service's `usage-v2` account. The human view shows the plan, included allowance percentage and reset time, exact prepaid USD balance, fallback setting and admission status.
+Read the service's `usage-v2` account. The human view shows the percentage of included allowance used and its reset time. The exact prepaid USD balance appears only when prepaid fallback is enabled, including when that balance is zero. Blocked-access notices remain visible; plan and other billing metadata remain in JSON.
 
 `--json` prints the validated customer account, retaining USD amounts as decimal strings. Unknown, malformed, or legacy responses produce unavailable account data (`null` in JSON), not an inferred zero. Authenticated disabled, restricted, and unavailable states remain distinct from HTTP authentication failures.
 

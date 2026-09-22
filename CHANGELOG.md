@@ -21,6 +21,9 @@ on the published npm package and the GitHub Release tag.
   exact prepaid amounts. Distinguish `prepaid_disabled` from missing credentials.
 - Give connected onboarding an explicit Continue action and skip the model
   picker when 0cloud selects the service model.
+- Simplify hosted usage to percentage used and reset timing. Show a prepaid
+  balance only when prepaid fallback is enabled; keep extra billing metadata
+  in JSON instead of the normal display.
 
 ## [0.21.3] - 2026-09-22
 

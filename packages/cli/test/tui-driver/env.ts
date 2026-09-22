@@ -32,10 +32,10 @@ const MANAGED_KEYS = [
   "ZERO_MCP",
   // The default hosted runtime otherwise reaches cloud.0.ai for health,
   // catalog and balance — and in a networked CI it actually connects, flipping
-  // the home between "connecting"/"ready"/"Cloud: Unavailable" run to run.
+  // the home between "connecting"/"ready"/"Usage: unavailable" run to run.
   // Pointing the cloud host at an unroutable local port makes every cloud fetch
   // fail FAST and DETERMINISTICALLY, so the home settles into one stable
-  // offline state (an interactive composer, "Cloud: Unavailable").
+  // offline state (an interactive composer, "Usage: unavailable").
   "ZERO_CLOUD_HOST",
   "ZERO_CLOUD_TOKEN",
 ] as const;

@@ -290,7 +290,7 @@ function hostedRecoveryHint(phase: HostedDeviceAuthUpdate["phase"]): string {
     case "opener-failed":
       return "Your browser could not be opened automatically. Visit the URL above to sign in. Esc cancels.";
     case "ready":
-      return "Login saved. Model access and credits are checked when used.";
+      return "Login saved. Access and usage are checked before sending messages.";
     case "cancelled":
       return "Press Enter to try again or use ↑/↓ to choose another provider.";
     case "timeout":
@@ -921,7 +921,7 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
   const statusText = inHosted
     ? hosted?.message ?? "signing in to 0cloud..."
     : hostedVisible && hosted
-      ? hosted.phase === "ready" ? "Cloud login saved; access and credits checked when used" : hosted.message
+      ? hosted.phase === "ready" ? "Signed in; access and usage checked before sending" : hosted.message
       : oauthVisible && oauth
         ? oauth.message
         : recovery

@@ -34,20 +34,21 @@ output limits: `id`, `contextTokens` and `maxOutputTokens`. It does not print
 supplier details, wire protocols or prices. Select an exact ID from this list;
 otherwise the hosted runtime selects the first catalog entry.
 
-`0 balance` displays the service's credit account, separately from the
-CLI's estimated model cost. It distinguishes:
+`0 balance` and the connection screen show usage separately from the CLI's
+estimated model cost:
 
-| Source | What to check |
-| --- | --- |
-| Plan | The current plan and its reported monthly price in USD. |
-| Included allowance | Allowance state, percentage used and reset time. |
-| Prepaid | Exact USD balance and whether prepaid fallback is enabled. |
-| Admission | Whether the service currently reports the account eligible to make a request, with its reason when unavailable. |
+- **Usage:** percentage of included allowance used, with its reset time.
+- **Prepaid balance:** exact USD amount, shown **only when prepaid fallback is enabled**.
+  A stored balance is hidden while fallback is disabled; enabling it shows even a zero balance.
+- **Access notices:** restrictions remain visible when requests are blocked.
+
+Plan, billing-management and admission metadata remain available in JSON rather
+than cluttering the normal usage display.
 
 `0 balance --json` returns a validated `usage-v2` account or `null`.
 USD amounts remain decimal strings without floating-point conversion.
 Missing amounts stay unavailable, never zero.
-Unsupported or malformed account data displays **Credit data unavailable**;
+Unsupported or malformed account data displays **Usage unavailable**;
 this is not evidence that your credentials are invalid or your balance is empty.
 Use a compatible CLI and service before attempting a paid request.
 
