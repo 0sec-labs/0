@@ -91,6 +91,22 @@ describe("startCodexDeviceAuth", () => {
     expect(connected).toBe(1);
   });
 
+  it("opens the browser when Codex emits the device URL without a newline", () => {
+    const child = fakeProcess();
+    const opened: string[] = [];
+    startCodexDeviceAuth({
+      env: {},
+      openBrowser: (url) => { opened.push(url); },
+      spawn: () => child.process,
+      onUpdate: () => {},
+      onConnected: () => {},
+    });
+
+    child.stdout("https://auth.openai.com/codex/device?user_code=ABCD");
+
+    expect(opened).toEqual(["https://auth.openai.com/codex/device?user_code=ABCD"]);
+  });
+
   it("cancels the device flow without treating it as an API-key failure", () => {
     const child = fakeProcess();
     const phases: string[] = [];

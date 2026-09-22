@@ -77,8 +77,25 @@ export function startCodexDeviceAuth(options: StartCodexDeviceAuthOptions): Code
   const publish = (phase: CodexDeviceAuthPhase, message: string): void => {
     options.onUpdate({ phase, lines: [...lines], message });
   };
+  const tryOpenBrowser = (text: string): void => {
+    if (browserOpened) return;
+    // Codex may emit the URL without a trailing newline, or redraw the line
+    // with carriage returns. Scan each chunk before line buffering so browser
+    // launch does not depend on terminal formatting.
+    const rawUrl = text.match(/https:\/\/auth\.openai\.com\/codex\/device[^\s\x1b]*/)?.[0];
+    if (!rawUrl) return;
+    const url = rawUrl.replace(/[),.;]+$/, "");
+    browserOpened = true;
+    void Promise.resolve(openBrowser(url)).catch(() => {
+      lines.push("Could not open a browser automatically; open the URL above.");
+      if (lines.length > MAX_VISIBLE_LINES) lines.shift();
+      publish("running", "Complete the ChatGPT Codex device sign-in in your browser.");
+    });
+  };
   const pushOutput = (chunk: Buffer): void => {
-    const raw = `${pending}${chunk.toString("utf8")}`;
+    const text = chunk.toString("utf8");
+    tryOpenBrowser(text);
+    const raw = `${pending}${text}`;
     const parts = raw.split(/\r?\n/);
     pending = parts.pop() ?? "";
     for (const line of parts) {
@@ -86,17 +103,7 @@ export function startCodexDeviceAuth(options: StartCodexDeviceAuthOptions): Code
       if (value.length === 0) continue;
       lines.push(value);
       if (lines.length > MAX_VISIBLE_LINES) lines.shift();
-      if (!browserOpened) {
-        const url = value.match(/https:\/\/auth\.openai\.com\/codex\/device\S*/)?.[0];
-        if (url) {
-          browserOpened = true;
-          void Promise.resolve(openBrowser(url)).catch(() => {
-            lines.push("Could not open a browser automatically; open the URL above.");
-            if (lines.length > MAX_VISIBLE_LINES) lines.shift();
-            publish("running", "Complete the ChatGPT Codex device sign-in in your browser.");
-          });
-        }
-      }
+      tryOpenBrowser(value);
     }
     publish("running", "Complete the ChatGPT Codex device sign-in in your browser.");
   };
