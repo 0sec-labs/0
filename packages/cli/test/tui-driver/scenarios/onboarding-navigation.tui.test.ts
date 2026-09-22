@@ -103,6 +103,47 @@ test("mouse Back uses the same previous-step transition", async () => {
   expect(getSettings().onboardingCompleted).toBe(false);
 });
 
+test("theme preview colors follow the draft without saving it", async () => {
+  tui = await firstRun();
+  await tui.sendKey("return");
+  await tui.sendKey("n", { ctrl: true });
+  await tui.sendKey("n", { ctrl: true });
+  await tui.waitForText(/Step 4 of 6/);
+  const originalTheme = getSettings().theme;
+  const previewColors = () => {
+    const lines = tui!.captureSpans().lines;
+    const sample = lines.findIndex((line) => line.spans.map((span) => span.text).join("").includes("operator warn error"));
+    expect(sample).toBeGreaterThan(0);
+    // Exclude surrounding chrome and the gaps, whose colors legitimately
+    // change only after the highlighted theme is confirmed.
+    const start = lines[sample].spans.map((span) => span.text).join("").indexOf("0 operator");
+    expect(start).toBeGreaterThanOrEqual(0);
+    const backgrounds = lines[sample - 1].spans.flatMap((span) => Array.from({ length: span.width }, () => span.bg.toInts()));
+    return {
+      swatches: Array.from({ length: 10 }, (_, i) => backgrounds[start + i * 3]),
+      sample: lines[sample].spans.filter((span) => span.text.trim()).map((span) => [span.text, span.fg.toInts()]),
+    };
+  };
+  const original = previewColors();
+  await tui.sendKey("right");
+  const draft = previewColors();
+  expect(draft.swatches).not.toEqual(original.swatches);
+  expect(draft.sample).not.toEqual(original.sample);
+  expect(getSettings().theme).toBe(originalTheme);
+  await tui.sendKey("left");
+  expect(previewColors()).toEqual(original);
+  await tui.sendKey("right");
+  await tui.sendKey("escape");
+  await tui.sendKey("n", { ctrl: true });
+  expect(previewColors()).toEqual(original);
+  expect(getSettings().theme).toBe(originalTheme);
+  await tui.sendKey("right");
+  await tui.sendKey("return");
+  expect(getSettings().theme).not.toBe(originalTheme);
+  await tui.sendKey("escape");
+  expect(previewColors()).toEqual(draft);
+});
+
 test("credential entry cancels before the provider filter or wizard step", async () => {
   tui = await firstRun();
   await tui.sendKey("return");

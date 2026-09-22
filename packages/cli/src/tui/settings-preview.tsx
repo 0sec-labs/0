@@ -32,7 +32,7 @@ import type { ReactNode } from "react";
 
 import { Cells, Columns, toCells } from "./primitives.js";
 import type { SettingDef, TuiSettings } from "./settings.js";
-import type { Theme } from "./theme-context.js";
+import { paletteFor, type Theme } from "./theme-context.js";
 import {
   roleLabelText,
   speechFrame,
@@ -820,11 +820,16 @@ export interface SettingsPreviewProps extends PreviewInput {
 export function SettingsPreview({ rowBudget, theme, ...input }: SettingsPreviewProps) {
   const kept = fitPreviewBlocks(previewBlocks(input), rowBudget);
   if (kept.length === 0) return null;
+  // Onboarding keeps the highlighted choice separate from the saved setting.
+  // Paint that draft with the same palette resolution used after confirmation.
+  const previewTheme = input.def?.key === "theme" && typeof input.value === "string"
+    ? paletteFor(input.value)
+    : theme;
   return (
     <>
       {kept.map((block) => (
         <box key={block.key} flexShrink={0} minWidth={0}>
-          {block.render(theme)}
+          {block.render(previewTheme)}
         </box>
       ))}
     </>
