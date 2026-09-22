@@ -19,6 +19,11 @@ on the published npm package and the GitHub Release tag.
 - Publish the npm package as `@0sec/zero` (bin stays `0`). npm's name policy
   rejects single-character package names, so the v0.21.1 publish of `@0sec/0`
   was refused with E400 after every build, release, and smoke step had passed.
+- Start directly in chat on fresh installations; keep guided setup available
+  through `/onboard` instead of opening it automatically.
+- Keep runtime initialization details and diagnostic stacks in the local TUI
+  log. Show each failed turn once with model/connection recovery commands, and
+  label an inactive chat `idle` rather than implying its provider is ready.
 
 ### Fixed
 
