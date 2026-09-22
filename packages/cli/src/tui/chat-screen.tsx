@@ -1343,6 +1343,10 @@ export function ChatScreen({
   const latestProblemRef = useRef<FeedbackPayload | null>(null);
   const reportedProblemsRef = useRef(new Set<string>());
   const [problemReview, setProblemReview] = useState<FeedbackPayload | null>(null);
+  // First-ever problem report: until the operator has answered the consent
+  // prompt once (diagnosticReportingPrompted), an "automatic" policy must not
+  // silently transmit — hold the payload and ask first.
+  const [firstProblemConsent, setFirstProblemConsent] = useState<FeedbackPayload | null>(null);
   // The OMP-style "what am I working on" objective for the bottom-bar pill.
   // Empty ("") hides the pill; the session-objective service replaces it in
   // place (heuristic first, model-refined when/if it lands).
@@ -1718,6 +1722,13 @@ export function ChatScreen({
     if (seen.has(key)) return;
     if (seen.size >= 64) seen.delete(seen.values().next().value!);
     seen.add(key);
+    // First-ever report: "automatic" is the shipping default, but nothing is
+    // transmitted before the operator has seen and answered the consent
+    // prompt once. Held payloads become a picker via the effect below.
+    if (!settingsRef.current.diagnosticReportingPrompted) {
+      setFirstProblemConsent(payload);
+      return;
+    }
     if (policy === "ask") {
       setProblemReview(payload);
       return;
@@ -1787,6 +1798,49 @@ export function ChatScreen({
     }
   }, []);
 
+  // First-run consent for automatic problem reports. The stored default is
+  // "automatic"; this effect converts the first held report into an explicit
+  // choice, then hands the payload to the matching path. chooseReporting
+  // persists both the policy and diagnosticReportingPrompted, so this fires
+  // once per install. Cancel defers: the next problem re-asks.
+  useEffect(() => {
+    if (!firstProblemConsent) return;
+    if (settings.diagnosticReportingPrompted) {
+      // Answered through the settings picker while a payload was held.
+      setFirstProblemConsent(null);
+      return;
+    }
+    if (busy || picker || pendingScope || pendingLocalScope || pendingToolApproval || pendingOperatorQuestion) return;
+    const payload = firstProblemConsent;
+    setFirstProblemConsent(null);
+    setPicker({
+      state: createSelectorState("Send problem reports to 0?", [
+        { id: "automatic", label: "Send automatically", detail: "Limited diagnostics only: version, platform, runtime and problem category. No prompts, tool arguments, output, paths or credentials.", current: settings.diagnosticReporting === "automatic" },
+        { id: "ask", label: "Ask me each time", detail: "Review the exact bytes and destination before anything is sent.", current: settings.diagnosticReporting === "ask" },
+        { id: "off", label: "Keep reports local", detail: "Reports stay on this machine. You can still send one explicitly with /feedback.", current: settings.diagnosticReporting === "off" },
+      ], settings.diagnosticReporting),
+      commit: (id) => {
+        if (id !== "automatic" && id !== "ask" && id !== "off") return;
+        chooseReporting(id);
+        if (id === "automatic") {
+          const written = appendFeedback(payload);
+          if (!written.ok) {
+            showToast("Could not save the diagnostic report.");
+            return;
+          }
+          void submitFeedback(payload).then((result) => {
+            if (alive.current) showToast(result.ok ? "Problem report submitted" : "Problem report saved locally; submission unavailable.");
+          });
+        } else if (id === "ask") {
+          stageFeedback(payload);
+        } else {
+          const saved = appendFeedback(payload);
+          showToast(saved.ok ? "Problem report saved locally" : "Could not save the problem report.");
+        }
+      },
+      onCancel: () => { restorePaletteDraft(); },
+    });
+  }, [firstProblemConsent, settings.diagnosticReportingPrompted, settings.diagnosticReporting, busy, picker, pendingScope, pendingLocalScope, pendingToolApproval, pendingOperatorQuestion, chooseReporting, stageFeedback, showToast, restorePaletteDraft]);
   /** Construct only at initial startup, explicit new chat, or failed-start recovery. */
   const buildSession = useCallback((
     opts: { model?: string; providerId?: RuntimeConfig["provider"]; initialMessages?: NativeMessage[] } = {},
