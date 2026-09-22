@@ -12,6 +12,24 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.21.2] - 2026-09-22
+
+### Changed
+
+- Publish the npm package as `@0sec/zero` (bin stays `0`). npm's name policy
+  rejects single-character package names, so the v0.21.1 publish of `@0sec/0`
+  was refused with E400 after every build, release, and smoke step had passed.
+
+### Fixed
+
+- Honour legacy `0SEC_CLOUD_HOST`/`0SEC_CLOUD_TOKEN` keys in `~/.0/cloud.env`
+  (env and file, with a deprecation warning) so installs written by the
+  pre-rename `0sec` CLI stay authenticated after upgrading instead of
+  reporting "credentials not found".
+- Declare the bundle's external runtime dependencies (`react`,
+  `@opentui/core`, `@opentui/react`) in the root package so a root-packed
+  tarball runs under `npx`; `@types/pdfkit` moves to devDependencies.
+
 ## [0.21.1] - 2026-09-22
 
 ### Changed

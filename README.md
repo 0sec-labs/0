@@ -36,6 +36,8 @@
 Give this to your AI agent, or run the following in your terminal:
 
 > Install 0 with `curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash`, then use 0 to test this repository for security issues.
+
+> Or straight from npm: `npx -y @0sec/zero connect https://github.com/your/repo --schedule` — installs the CLI, verifies repository access, and turns on recurring self-driving security scans (fix PRs stay gated behind your review).
 [Website](https://0.security/) · [Documentation](https://docs.0.security/)
 
 ## License
