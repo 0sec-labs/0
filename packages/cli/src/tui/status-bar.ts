@@ -98,6 +98,13 @@ export interface StatusSegment {
   icon: string;
 }
 
+export interface StatusBarUsageEntry {
+  model?: string;
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens?: number;
+}
+
 export interface StatusBarInput {
   model?: string;
   /** Reasoning effort, e.g. "max". Omit when unknown. */
@@ -128,6 +135,11 @@ export interface StatusBarInput {
   outputTokens?: number;
   /** Cumulative cached-input tokens, for a more accurate cost estimate. */
   cachedInputTokens?: number;
+  /**
+   * Optional per-model usage ledger. When present, cost is summed across all
+   * entries instead of pricing every token at the main model's rate.
+   */
+  usageByModel?: readonly StatusBarUsageEntry[];
   /** Show raw token totals; independent of the optional cost estimate. */
   showTokenUsage?: boolean;
   /**
@@ -492,22 +504,37 @@ export function buildStatusSegments(input: StatusBarInput): StatusSegment[] {
   // "no rate" instead of a plausible-looking lie, the same rule the context
   // percentage obeys.
   if (input.showCost && inputTokens + outputTokens > 0) {
-    const rates = model ? resolveRates(model) : undefined;
-    texts.set(
-      "cost",
-      rates
-        ? formatCost(
-            costUsd(
-              {
-                inputTokens,
-                outputTokens,
-                cachedInputTokens: positiveCount(input.cachedInputTokens),
-              },
-              rates,
-            ),
-          )
-        : "$—",
-    );
+    let estimated: number | undefined;
+    let priced = true;
+    if (input.usageByModel && input.usageByModel.length > 0) {
+      estimated = 0;
+      for (const entry of input.usageByModel) {
+        const entryTokens = positiveCount(entry.inputTokens) + positiveCount(entry.outputTokens);
+        if (entryTokens === 0) continue;
+        const rates = entry.model ? resolveRates(entry.model) : undefined;
+        if (!rates) {
+          priced = false;
+          break;
+        }
+        estimated += costUsd({
+          inputTokens: positiveCount(entry.inputTokens),
+          outputTokens: positiveCount(entry.outputTokens),
+          cachedInputTokens: positiveCount(entry.cachedInputTokens),
+        }, rates);
+      }
+    } else {
+      const rates = model ? resolveRates(model) : undefined;
+      if (rates) {
+        estimated = costUsd({
+          inputTokens,
+          outputTokens,
+          cachedInputTokens: positiveCount(input.cachedInputTokens),
+        }, rates);
+      } else {
+        priced = false;
+      }
+    }
+    texts.set("cost", priced && estimated !== undefined ? formatCost(estimated) : "$—");
   }
 
   // Both halves are required. A window with no usage reading, or a usage

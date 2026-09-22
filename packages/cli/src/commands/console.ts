@@ -656,7 +656,7 @@ function handleModeCommand(session: ConsoleSession, args: string): void {
   } else if (modeArg === "") {
     console.log(chalk.dim(`\nCurrent mode: ${chalk.bold(modeLabel(session.autonomyMode))}\n`));
   } else {
-    console.log(chalk.yellow(`\nUsage: /mode [standard|recon|copilot|yolo]. Current mode: ${modeLabel(session.autonomyMode)}\n`));
+    console.log(chalk.yellow(`\nShift+Tab cycles autonomy modes. Current mode: ${modeLabel(session.autonomyMode)}\n`));
   }
 }
 

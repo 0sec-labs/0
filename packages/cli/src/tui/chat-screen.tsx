@@ -84,6 +84,7 @@ import {
   fitStatusSegments,
   fitStatusPills,
   pillText,
+  type StatusBarUsageEntry,
   type StatusColorRole,
 } from "./status-bar.js";
 import { SHIMMER_TEXT_INTERVAL_MS, spinnerGlyph } from "./animations.js";
@@ -3459,8 +3460,7 @@ export function ChatScreen({
           appendEntry({
             kind: "notice",
             text: "invalid mode",
-            detail: "Use /mode standard, /mode recon, /mode copilot, or /mode yolo.",
-            turn: turn.current,
+            detail: "Use Shift+Tab to cycle autonomy modes.",
           });
           return true;
         }
@@ -4898,6 +4898,35 @@ export function ChatScreen({
   const statusActivity = busy && !focusAgentId && runningTool
     ? (statusRunningEntry?.toolArgs ? `${runningTool} · ${statusRunningEntry.toolArgs}` : runningTool)
     : fleetActivityLabel || undefined;
+  const usageByModel = useMemo(() => {
+    const entries: StatusBarUsageEntry[] = [];
+    if (modelId && (sessionTokens.input > 0 || sessionTokens.output > 0)) {
+      entries.push({
+        model: modelId,
+        inputTokens: sessionTokens.input,
+        outputTokens: sessionTokens.output,
+      });
+    }
+    for (const telemetry of Object.values(workerTelemetry)) {
+      const usage = telemetry?.usage;
+      if (!usage || usage.inputTokens <= 0 && usage.outputTokens <= 0) continue;
+      entries.push({
+        model: telemetry.model,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        cachedInputTokens: usage.cachedInputTokens,
+      });
+    }
+    return entries;
+  }, [modelId, sessionTokens, workerTelemetry]);
+  const aggregateUsage = usageByModel.reduce(
+    (total, usage) => ({
+      input: total.input + Math.max(0, usage.inputTokens),
+      output: total.output + Math.max(0, usage.outputTokens),
+      cached: total.cached + Math.max(0, usage.cachedInputTokens ?? 0),
+    }),
+    { input: 0, output: 0, cached: 0 },
+  );
   const statusSegments = buildStatusSegments({
     model: focusAgentId ? focusedTelemetry?.model : modelId ?? undefined,
     mode: autonomyFooterText(mode),
@@ -4910,9 +4939,10 @@ export function ChatScreen({
     branch: git?.isRepo ? git.branch ?? git.detachedSha : undefined,
     modified: git?.modified,
     untracked: git?.untracked,
-    inputTokens: focusAgentId ? focusedTelemetry?.usage?.inputTokens : sessionTokens.input,
-    outputTokens: focusAgentId ? focusedTelemetry?.usage?.outputTokens : sessionTokens.output,
-    cachedInputTokens: focusAgentId ? focusedTelemetry?.usage?.cachedInputTokens : undefined,
+    inputTokens: focusAgentId ? focusedTelemetry?.usage?.inputTokens : aggregateUsage.input,
+    outputTokens: focusAgentId ? focusedTelemetry?.usage?.outputTokens : aggregateUsage.output,
+    cachedInputTokens: focusAgentId ? focusedTelemetry?.usage?.cachedInputTokens : aggregateUsage.cached,
+    usageByModel: focusAgentId ? undefined : usageByModel,
     showTokenUsage: settings.showTokenUsage,
     // Telemetry toggles: where the model name is surfaced, whether the
     // context reading renders as a visual meter, and whether an estimated
@@ -5129,10 +5159,13 @@ export function ChatScreen({
         label: animationKind === "tool" ? runningTool ?? undefined : undefined,
         motion: !settings.reduceMotion && animationKind !== "awaiting-operator",
       })
-    : null;
+: null;
   const loadingLabel = animation?.glyph ?? "";
-  const loadingWidth = loadingLabel ? textCells(loadingLabel) + 3 : 0;
-  const statusContentWidth = Math.max(0, controlsWidth - loadingWidth);
+  // The bottom bar is telemetry-only. The live spinner already appears in
+  // `workingIndicator`; repeating its glyph before the status pills made the
+  // real activity read as an unexplained `Esc · ...` prefix in terminals that
+  // render the glyph fallback textually.
+  const statusContentWidth = controlsWidth;
   const visibleStatusSegments = settings.showStatusBar ? statusSegments
     : statusSegments.filter((segment) => segment.kind === "mode" || segment.kind === "elapsed");
   const statusPills = fitStatusPills(visibleStatusSegments, statusContentWidth);
@@ -5317,8 +5350,7 @@ export function ChatScreen({
   const workingLine = fleetActivityLabel && !workingLineBase.includes("agent")
     ? (workingLineBase ? `${workingLineBase} · ${fleetActivityLabel}` : fleetActivityLabel)
     : workingLineBase;
-  const canInterrupt = busy && !composing && !gateOpen && !picker && !commandMenuVisible && !reviewOpen;
-  const workingLineFitted = fitTuiText(`${canInterrupt ? "Esc · " : ""}${workingLine}`, controlsWidth);
+  const workingLineFitted = fitTuiText(workingLine, controlsWidth);
   const workingIndicator = animation ? (
     <box width="100%" height={1} flexShrink={0} marginTop={1} overflow="hidden">
       {shimmerActive
@@ -6347,7 +6379,6 @@ export function ChatScreen({
         * telemetry, not the only indicator of the operator's approval mode.
         */}
         <box flexDirection="row" width={controlsWidth} height={1} flexShrink={0} minWidth={0} overflow="hidden">
-          {loadingLabel ? <text fg={animationKind === "awaiting-operator" ? WARNING : ACCENT}>{`${loadingLabel} · `}</text> : null}
           {statusPills.length > 0 ? (
             <box flexDirection="row" flexShrink={0} minWidth={0}>
               {statusPills.map((segment, index) => (
