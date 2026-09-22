@@ -1,7 +1,7 @@
 {
   "name": "@0sec/0",
   "type": "module",
-  "version": "0.21.0",
+  "version": "0.21.1",
   "description": "Your self-improving, open-source cybersecurity team.",
   "bin": {
     "0": "dist/0.js"
