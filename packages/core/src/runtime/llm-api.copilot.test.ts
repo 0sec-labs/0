@@ -112,12 +112,6 @@ describe("GitHub Copilot provider wire", () => {
     expect(result.content).toContainEqual({ type: "text", text: "copilot ok" });
   });
 
-  it("detects copilot from ZERO_COPILOT_GITHUB_TOKEN alone with the gpt-4o default", () => {
-    const rt = new LlmApiRuntime({ type: "api", timeout: 5000 });
-    expect((rt as any).provider).toBe("copilot");
-    expect((rt as any).model).toBe("gpt-4o");
-    expect((rt as any).apiKey).toBe("gho_copilot_token");
-  });
 
   it("honors COPILOT_BASE_URL for the enterprise/business endpoint override", () => {
     process.env.COPILOT_BASE_URL = "https://api.business.githubcopilot.com";

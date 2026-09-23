@@ -99,6 +99,12 @@ Hosted HTTP 429 permits retry or configured fallback only with
 `x-0-retry-safe: 1`, issued for pre-dispatch concurrency rejection.
 Provider throttling and unresolved charges are unmarked and aren't replayed.
 
+Within one CLI process, hosted requests share four in-flight slots per endpoint
+and credential across audits and nested agents. Extra requests wait locally;
+slots remain held until response bodies finish. Cancelling a queued request
+removes it without sending inference. Other CLI processes still share the
+service's account limits and can cause a concurrency rejection.
+
 Plugin evolution's SDK model calls use the parent runtime's accounting when
 routed through `hosted`. Subagents fork through the parent runtime's
 child-inference factory and inherit its resolved account and route, subject to
@@ -182,20 +188,20 @@ Within the API runtime, when there is no provider pin or model-to-provider match
 the following ambient credential order applies. `--model` takes precedence over
 `ZERO_MODEL`; loading a credential is not the same as selecting that provider.
 
-1. **ChatGPT Codex** — `ZERO_CHATGPT_ACCESS_TOKEN` or `ZERO_CHATGPT_OAUTH_REFRESH_TOKEN`
-2. **DeepSeek** — `DEEPSEEK_API_KEY`
-3. **OpenRouter** — `OPENROUTER_API_KEY`
-4. **Azure OpenAI** — `AZURE_OPENAI_API_KEY`
-5. **OpenAI** — `OPENAI_API_KEY`
-6. **Z.ai GLM** — `Z_AI_API_KEY`
-7. **Moonshot Kimi** — `KIMI_API_KEY`
-8. **Alibaba Qwen** — `QWEN_API_KEY`
-9. **xAI Grok** — `XAI_API_KEY`
-10. **OpenCode Zen** — `OPENCODE_API_KEY`
-11. **GitHub Copilot** — `ZERO_COPILOT_GITHUB_TOKEN`
-12. **Google Gemini Code Assist** — `ZERO_GEMINI_ACCESS_TOKEN` or `ZERO_GEMINI_OAUTH_REFRESH_TOKEN`
-13. **Anthropic** — `ANTHROPIC_API_KEY`
-14. **Hosted** — configured Cloud credentials, after the direct providers above.
+1. **Hosted / 0security Auto** — configured Cloud credentials; the service selects the model.
+2. **ChatGPT Codex** — `ZERO_CHATGPT_ACCESS_TOKEN` or `ZERO_CHATGPT_OAUTH_REFRESH_TOKEN`
+3. **DeepSeek** — `DEEPSEEK_API_KEY`
+4. **OpenRouter** — `OPENROUTER_API_KEY`
+5. **Azure OpenAI** — `AZURE_OPENAI_API_KEY`
+6. **OpenAI** — `OPENAI_API_KEY`
+7. **Z.ai GLM** — `Z_AI_API_KEY`
+8. **Moonshot Kimi** — `KIMI_API_KEY`
+9. **Alibaba Qwen** — `QWEN_API_KEY`
+10. **xAI Grok** — `XAI_API_KEY`
+11. **OpenCode Zen** — `OPENCODE_API_KEY`
+12. **GitHub Copilot** — `ZERO_COPILOT_GITHUB_TOKEN`
+13. **Google Gemini Code Assist** — `ZERO_GEMINI_ACCESS_TOKEN` or `ZERO_GEMINI_OAUTH_REFRESH_TOKEN`
+14. **Anthropic** — `ANTHROPIC_API_KEY`
 
 Without a usable provider or Cloud credential, the runtime selects Anthropic
 and reports a missing-credential failure.

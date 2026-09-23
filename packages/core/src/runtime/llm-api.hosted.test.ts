@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { LlmApiRuntime, __resetFallbackChainForTests } from "./llm-api.js";
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
@@ -226,5 +227,99 @@ describe("hosted catalog selection", () => {
     }));
     await expect(runtime.execute("fixture")).resolves.toMatchObject({ exitCode: 0, output: "recovered answer" });
     expect(attempts).toBe(2);
+  });
+});
+
+describe("shared hosted request admission", () => {
+  it("queues nested workers until response bodies finish instead of generating capacity errors", async () => {
+    vi.useFakeTimers();
+    const root = hostedRuntime("");
+    vi.stubEnv("ZERO_LLM_429_MAX_RETRIES", "0");
+    let active = 0;
+    let rejected = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.endsWith("/models")) return Response.json({ data: [{ id: "service-default", wire_api: "chat_completions", max_output_tokens: 512 }] });
+      if (active >= 4) {
+        rejected++;
+        return Response.json({ error: { code: "inference_concurrency_limit" } }, { status: 429 });
+      }
+      active++;
+      return new Response(new ReadableStream({
+        start(controller) {
+          setTimeout(() => {
+            active--;
+            controller.enqueue(new TextEncoder().encode(JSON.stringify({
+              choices: [{ message: { content: "completed" }, finish_reason: "stop" }],
+            })));
+            controller.close();
+          }, 10);
+        },
+      }));
+    }));
+    const child = await root.forkForSubagent(1000);
+    const workers = [root, child, ...await Promise.all(Array.from({ length: 12 }, () => child.forkForSubagent(1000)))];
+    const pending = Promise.all(workers.map(runtime => runtime.executeNative("system", [], [])));
+    await vi.runAllTimersAsync();
+    const results = await pending;
+    expect(rejected).toBe(0);
+    for (const result of results) {
+      expect(result.content).toContainEqual({ type: "text", text: "completed" });
+    }
+  });
+
+  it("cancels queued work without dispatch and shares capacity with plain completions", async () => {
+    vi.useFakeTimers();
+    const root = hostedRuntime("");
+    const held: Array<{ resolve(response: Response): void }> = [];
+    const sent: string[] = [];
+    let hold = true;
+    const answer = () => Response.json({ choices: [{ message: { content: "completed" }, finish_reason: "stop" }] });
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/models")) return Response.json({ data: [{ id: "service-default", wire_api: "chat_completions" }] });
+      sent.push(String(init?.body));
+      if (!hold) return answer();
+      const response = Promise.withResolvers<Response>();
+      held.push(response);
+      return response.promise;
+    }));
+    const active = Array.from({ length: 4 }, () => root.executeNative("active", [], []));
+    await vi.waitFor(() => expect(held).toHaveLength(4));
+    const controller = new AbortController();
+    const cancelled = root.executeNative("must-not-send", [], [], undefined, controller.signal);
+    const legacy = root.execute("plain-completion");
+    await vi.advanceTimersByTimeAsync(0);
+    controller.abort();
+    expect(await cancelled).toMatchObject({ cancelled: true, stopReason: "error" });
+    expect(sent).toHaveLength(4);
+    hold = false;
+    for (const response of held) response.resolve(answer());
+    await Promise.all(active);
+    expect(await legacy).toMatchObject({ output: "completed", exitCode: 0 });
+    expect(sent).toHaveLength(5);
+    expect(sent.some(body => body.includes("must-not-send"))).toBe(false);
+  });
+
+  it("does not queue a different cloud credential behind another account", async () => {
+    const root = hostedRuntime("");
+    const held: Array<{ resolve(response: Response): void }> = [];
+    const answer = () => Response.json({ choices: [{ message: { content: "independent" }, finish_reason: "stop" }] });
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/models")) return Response.json({ data: [{ id: "service-default", wire_api: "chat_completions" }] });
+      if (new Headers(init?.headers).get("authorization") === "Bearer other-account") return answer();
+      const response = Promise.withResolvers<Response>();
+      held.push(response);
+      return response.promise;
+    }));
+    const active = Array.from({ length: 4 }, () => root.executeNative("active", [], []));
+    await vi.waitFor(() => expect(held).toHaveLength(4));
+    const other = new LlmApiRuntime({ type: "api", provider: "hosted", model: "", timeout: 1000,
+      env: { ...process.env, ZERO_CLOUD_TOKEN: "other-account" },
+    });
+    try {
+      expect((await other.executeNative("other", [], [])).content).toContainEqual({ type: "text", text: "independent" });
+    } finally {
+      for (const response of held) response.resolve(answer());
+      await Promise.all(active);
+    }
   });
 });

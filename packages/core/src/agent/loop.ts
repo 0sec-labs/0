@@ -228,13 +228,13 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
     // Budget-bound termination (#S1): before spending another turn, stop if the
     // running cost estimate has reached the ceiling. `maxTurns` (the while
     // guard) stays the runaway backstop. Mirrors native-loop.ts:1042.
-    if (
-      config.costCeilingUsd &&
-      estimateCost(totalUsage, config.costModel) >= config.costCeilingUsd
-    ) {
-      state.costCeilingExceeded = true;
-      state.summary = `Agent reached cost ceiling ($${config.costCeilingUsd}) after ${state.turnCount} turns.`;
-      break;
+    if (config.costCeilingUsd) {
+      const model = runtime.resolvedModel?.() || config.costModel;
+      if (estimateCost(totalUsage, model === "auto" ? undefined : model) >= config.costCeilingUsd) {
+        state.costCeilingExceeded = true;
+        state.summary = `Agent reached cost ceiling ($${config.costCeilingUsd}) after ${state.turnCount} turns.`;
+        break;
+      }
     }
     state.turnCount++;
 

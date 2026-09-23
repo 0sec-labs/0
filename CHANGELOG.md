@@ -14,6 +14,12 @@ on the published npm package and the GitHub Release tag.
 
 ### Fixed
 
+- Default signed-in accounts to 0security Auto when no provider or model was
+  explicitly selected, rather than preferring ambient BYOK credentials.
+- Share hosted request capacity across audits and nested agents, queueing excess
+  work locally instead of generating avoidable concurrency-limit retries.
+- Use the runtime's resolved model for cost estimates and ledger entries,
+  including models resolved on first use, rather than pricing the Auto label.
 - Check 0cloud account admission and service-model availability before accepting
   chat messages. Keep blocked drafts and offer an explicit recheck without
   replaying messages or asking users to choose a hosted model.

@@ -592,6 +592,13 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     inlineValidationOracle,
   } = opts;
 
+  // Hosted discovery and failover can change the model during a call.
+  // Price usage against its resolved identity, never the Auto routing choice.
+  const pricingModel = () => {
+    const model = runtime.resolvedModel?.() || config.costModel;
+    return model === "auto" ? undefined : model;
+  };
+
   const memoryPath = externalMemoryPath(config.scanId);
 
   // Substitute external memory placeholder in system prompt
@@ -727,7 +734,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // off-ledger gap where subagent spend escaped the ceiling entirely).
     costLedger: config.costLedger,
     costCeilingUsd: config.costCeilingUsd,
-    costModel: config.costModel,
+    get costModel() { return pricingModel(); },
     // Tool-health aggregator (0#tool-reliability). Shared across the scan so
     // the end-of-run summary sees every tool skip/failure; each NEW distinct
     // event also fans out on the bus as `tool_health`.
@@ -1046,7 +1053,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     const parsed = parseExecutableModelRequest(request);
     const signal = requestSignal ? AbortSignal.any([executionSignal, requestSignal]) : executionSignal;
     signal.throwIfAborted();
-    const runningCost = config.costLedger?.totalCostUsd() ?? estimateCost(state.totalUsage, config.costModel);
+    const runningCost = config.costLedger?.totalCostUsd() ?? estimateCost(state.totalUsage, pricingModel());
     if (config.costCeilingUsd && runningCost >= config.costCeilingUsd) {
       state.costCeilingExceeded = true;
       throw new Error("Parent scan cost ceiling is exhausted.");
@@ -1062,8 +1069,8 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       state.totalUsage.inputTokens += usage.inputTokens;
       state.totalUsage.outputTokens += usage.outputTokens;
       state.totalUsage.cachedInputTokens += usage.cachedInputTokens ?? 0;
-      config.costLedger?.add(usage, config.costModel);
-      state.estimatedCostUsd = estimateCost(state.totalUsage, config.costModel);
+      config.costLedger?.add(usage, pricingModel());
+      state.estimatedCostUsd = estimateCost(state.totalUsage, pricingModel());
       onEvent?.("usage", {
         turn: state.turnCount, inputTokens: state.totalUsage.inputTokens,
         outputTokens: state.totalUsage.outputTokens, estimatedCostUsd: state.estimatedCostUsd,
@@ -1983,7 +1990,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // `cost_update` below once the runtime returns.
     eventBus.emit("llm_planner_invoked", {
       turn: state.turnCount,
-      model: config.costModel,
+      model: pricingModel(),
       tokens_est: state.totalUsage.inputTokens,
       role: config.role,
     });
@@ -2029,7 +2036,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
             turn: state.turnCount,
             inputTokens: cumulativeUsage.inputTokens,
             outputTokens: cumulativeUsage.outputTokens,
-            estimatedCostUsd: estimateCost(cumulativeUsage, config.costModel),
+            estimatedCostUsd: estimateCost(cumulativeUsage, pricingModel()),
           });
         },
         ...(deltaBatchers
@@ -2064,8 +2071,8 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       // sibling agent sessions see this spend in their own ceiling checks.
       // The session's pricing model keys the ledger's per-model buckets,
       // which the scan_completed cost_breakdown is derived from.
-      config.costLedger?.add(result.usage, config.costModel);
-      state.estimatedCostUsd = estimateCost(state.totalUsage, config.costModel);
+      config.costLedger?.add(result.usage, pricingModel());
+      state.estimatedCostUsd = estimateCost(state.totalUsage, pricingModel());
       if (
         streamedUsageInputTokens !== result.usage.inputTokens
         || streamedUsageOutputTokens !== result.usage.outputTokens
@@ -2951,7 +2958,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     if (config.costCeilingUsd !== undefined && config.costCeilingUsd > 0) {
       const runningCost = config.costLedger
         ? config.costLedger.totalCostUsd()
-        : estimateCost(state.totalUsage, config.costModel);
+        : estimateCost(state.totalUsage, pricingModel());
       if (runningCost >= config.costCeilingUsd) {
         state.costCeilingExceeded = true;
         state.estimatedCostUsd = runningCost;
@@ -3040,9 +3047,9 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   }
 
   // Keep the final return value on the same model-specific rate used for every
-  // turn and cost-ceiling check; dropping costModel here reprices Azure runs at
-  // the generic fallback after the loop completes.
-  state.estimatedCostUsd = estimateCost(state.totalUsage, config.costModel);
+  // turn and cost-ceiling check; dropping the pricing model here reprices Azure
+  // runs at the generic fallback after the loop completes.
+  state.estimatedCostUsd = estimateCost(state.totalUsage, pricingModel());
 
   // If none of the break paths set a summary, the loop exited naturally by
   // completing all maxTurns iterations. Only in that case do we stamp the
