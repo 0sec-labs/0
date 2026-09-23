@@ -27,7 +27,11 @@ DEV_MODEL="${ZERO_MODEL:-}"
 if [ "$DEV_PROVIDER" = "hosted" ]; then
   DEV_MODEL=""
 fi
-exec env ZERO_DEV_SOURCE_ROOT="$DEV_ROOT" \
-  ZERO_CLOUD_HOST=https://dev.cloud.0.security ZERO_CLOUD_TOKEN= \
+exec env \
+  -u ZERO_CLOUD_TOKEN \
+  -u 0SEC_CLOUD_HOST \
+  -u 0SEC_CLOUD_TOKEN \
+  ZERO_DEV_SOURCE_ROOT="$DEV_ROOT" \
+  ZERO_CLOUD_HOST=https://dev.cloud.0.security \
   ZERO_SELECTED_PROVIDER="$DEV_PROVIDER" ZERO_MODEL="$DEV_MODEL" \
   bun "$DEV_ENTRY" "$@"
