@@ -1470,6 +1470,40 @@ describe("runPipeline — diff-aware review", () => {
     });
   });
 
+  it("keeps one finding and adopts the verifier's changed-line replacement within the small-diff budget", async () => {
+    const { repoDir, changedFile } = makeRepoWithDiff();
+    const research = fakeFinding("original", {
+      reviewAnnotation: { path: changedFile, startLine: 1 },
+    });
+    const verification = fakeFinding("independent", {
+      reviewAnnotation: {
+        path: changedFile, startLine: 1, suggestion: "export const y = safe(req.body);",
+      },
+    });
+    runAnalysisAgentMock.mockResolvedValueOnce({ findings: [research] })
+      .mockResolvedValueOnce({ findings: [verification] });
+
+    const report = await runPipeline({
+      target: repoDir, targetType: "source-code", depth: "default", format: "json",
+      runtime: "api", apiKey: "sk-fake", diffBase: "HEAD~", changedOnly: true,
+      dbPath: freshDbPath(),
+    });
+
+    expect(runAnalysisAgentMock).toHaveBeenCalledTimes(2);
+    expect(runAnalysisAgentMock.mock.calls[0]![0]).toMatchObject({
+      singleAgent: true, reviewDiffBase: "HEAD~", maxTurns: 12,
+    });
+    expect(runAnalysisAgentMock.mock.calls[1]![0]).toMatchObject({
+      purpose: "verify", singleAgent: true, reviewDiffBase: "HEAD~", maxTurns: 10,
+    });
+    expect(runAnalysisAgentMock.mock.calls[1]![0].agentSystemPrompt).toContain(`FILE: ${changedFile}`);
+    expect(report.findings).toHaveLength(1);
+    expect(report.findings[0]).toMatchObject({
+      id: "original", status: "verified",
+      reviewAnnotation: { path: changedFile, startLine: 1, suggestion: "export const y = safe(req.body);" },
+    });
+  });
+
   it("missing diff-base produces a warning but the pipeline still completes", async () => {
     const repoDir = freshTmpDir("repo-baddiff");
     writeFileSync(join(repoDir, "f.ts"), "// fixture");

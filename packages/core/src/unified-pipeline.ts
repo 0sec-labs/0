@@ -1463,6 +1463,17 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     ], { cwd: prepared.scopePath, timeout: 30_000, encoding: "utf-8", maxBuffer: 256 * 1024 });
     if (!diffPatch.trim()) throw new Error("No reviewable diff found; refusing whole-repository fallback.");
   }
+  // A routine small change gets one bounded research pass and one bounded
+  // independent verification pass. Bigger diffs keep the established budget;
+  // neither path widens the source scope or silently turns exhaustion into a
+  // clean review.
+  let addedLines = 0;
+  if (diffReview) {
+    for (const line of diffPatch.split("\n")) {
+      if (line.startsWith("+") && !line.startsWith("+++")) addedLines++;
+    }
+  }
+  const smallDiffReview = diffReview && diffChangedFiles!.length <= 3 && addedLines <= 80;
 
   if (prepared.resolvedType === "source-code" && !opts.resumeScanId) {
     const cap = reviewMaxFiles();
@@ -2086,6 +2097,8 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
           const agentResult = await runAnalysisAgent({
             role: prepared.resolvedType === "source-code" ? "review" : "audit",
             singleAgent: diffReview,
+            reviewDiffBase: diffReview ? opts.diffBase : undefined,
+            maxTurns: smallDiffReview ? 12 : undefined,
             scopePath: prepared.scopePath,
             target: prepared.resolvedTarget,
             scanId: persistedScanId,
@@ -2304,7 +2317,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
           diffReview ? 1 : verifyConcurrency(),
           async (finding) => {
             // Extract file path from evidence_request field
-            const filePath = finding.evidence.request || "";
+            const filePath = finding.reviewAnnotation?.path || finding.evidence.request || "";
             // Extract PoC from evidence_response (the PoC code)
             const poc = finding.evidence.response || finding.evidence.analysis || "";
             const claimedSeverity = finding.severity;
@@ -2339,6 +2352,8 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
                 role: "review",
                 purpose: "verify",
                 singleAgent: diffReview,
+                reviewDiffBase: diffReview ? opts.diffBase : undefined,
+                maxTurns: smallDiffReview ? 10 : undefined,
                 scopePath: prepared.scopePath,
                 target: prepared.resolvedTarget,
                 scanId: `${persistedScanId}-verify`,
@@ -2438,6 +2453,16 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
                 status: "verified" as Finding["status"],
                 confidence: verifiedFinding?.confidence ?? finding.confidence,
                 severity: verifiedFinding?.severity ?? finding.severity,
+                // The blind verifier is evidence for the original finding,
+                // never a second published finding. Adopt an exact replacement
+                // only when it cites the same validated source location.
+                ...(diffReview && !finding.reviewAnnotation?.suggestion &&
+                  verifiedFinding?.category === finding.category &&
+                  verifiedFinding.reviewAnnotation?.suggestion &&
+                  verifiedFinding.reviewAnnotation.path === finding.reviewAnnotation?.path &&
+                  verifiedFinding.reviewAnnotation.startLine === finding.reviewAnnotation?.startLine &&
+                  verifiedFinding.reviewAnnotation.endLine === finding.reviewAnnotation?.endLine
+                  ? { reviewAnnotation: verifiedFinding.reviewAnnotation } : {}),
               };
             }
             // Not confirmed (rejected or inconclusive). Route the drop through
