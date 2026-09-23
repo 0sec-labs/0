@@ -12,6 +12,8 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.21.4] - 2026-09-23
+
 ### Changed
 
 - Changed-only reviews use one bounded researcher in the shared harness, receive
@@ -26,6 +28,9 @@ on the published npm package and the GitHub Release tag.
   hosted customer tariffs and invoiced provider spend.
 
 ### Fixed
+
+- Show exact settled usage in `0 service status` and `0 service wait`;
+  PostgreSQL decimal values no longer crash the terminal display.
 
 - Correct the pinned tree-sitter runtime lock metadata so immutable Docker
   publication can complete `npm ci`; validate the generated runtime with npm's
