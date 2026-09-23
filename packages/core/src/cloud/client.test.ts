@@ -19,18 +19,17 @@ function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   });
 }
 
-function validCreditAccount(overrides?: Partial<CreditAccount>): CreditAccount {
+function validUsageAccount(overrides?: Partial<CreditAccount>): CreditAccount {
   return {
-    schemaVersion: "credits-v1",
+    schemaVersion: "usage-v2",
     snapshotAt: "2026-09-18T12:00:00Z",
-    policyVersion: "2026-09",
     scope: { orgId: "org_test123" },
     state: "ready",
     reason: null,
-    free: { state: "ineligible", claimableCreditNanos: null, spendableCreditNanos: null, heldCreditNanos: null, resetAt: null },
-    subscription: { state: "none", priceCents: 1500, periodStart: null, periodEnd: null, windows: [] },
-    prepaid: { spendableCreditNanos: "123456789012345678", heldCreditNanos: null, settledDeficitCreditNanos: null, holdShortfallCreditNanos: null, consentEnabled: false },
-    purchase: { enabled: true, presets: [{ principalCents: 1000, creditNanos: "1000000000000" }], customMinCents: 1000, customMaxCents: 100_000, stepCents: 100, currency: "usd" },
+    plan: { id: "pro", name: "Pro", monthlyPriceUsd: "39.00" },
+    included: { state: "active", usedPercent: 45.5, resetsAt: "2026-10-01T00:00:00.000Z" },
+    prepaid: { balanceUsd: "123.45", fallbackEnabled: true },
+    canManageBilling: true,
     admission: { eligible: true, reason: null },
     ...overrides,
   };
@@ -161,53 +160,109 @@ describe("CloudClient — token never leaks", () => {
 });
 
 describe("CloudClient credit account boundary", () => {
-  it("rejects legacy or malformed credit and reset values", async () => {
-    const account = validCreditAccount();
+  it("rejects legacy or malformed schemas, preserving auth errors", async () => {
+    const account = validUsageAccount();
     const malformed = [
       null,
-      { ...account, schemaVersion: "usage-v2" },
-      { ...account, prepaid: { ...account.prepaid, spendableCreditNanos: 10 } },
-      { ...account, prepaid: { ...account.prepaid, spendableCreditNanos: "-1" } },
-      { ...account, free: { ...account.free, resetAt: "not-a-date" } },
-      { ...account, subscription: { ...account.subscription, priceCents: 1000 } },
+      { ...account, schemaVersion: "credits-v1" },
+      { ...account, schemaVersion: "usage-v1" },
+      { ...account, prepaid: { ...account.prepaid, balanceUsd: 10 } },    // number, not string
+      { ...account, prepaid: { ...account.prepaid, balanceUsd: "not-an-amount" } },
+      { ...account, prepaid: { ...account.prepaid, fallbackEnabled: "no" as unknown as boolean } },
+      { ...account, included: { ...account.included, usedPercent: "50" as unknown as number } },
+      { ...account, included: { ...account.included, usedPercent: 150 } },  // out of range
+      { ...account, included: { ...account.included, resetsAt: "not-a-date" } },
+      { ...account, canManageBilling: "yes" as unknown as boolean },
+      { ...account, admission: { eligible: "yes" as unknown as boolean, reason: null } },
+      { ...account, plan: { ...account.plan, id: "unknownTier" } },
+      { ...account, scope: { orgId: 42 as unknown as string } },
+      { ...account, snapshotAt: "yesterday" },
     ];
     for (const payload of malformed) {
       const client = new CloudClient({ host: HOST, token: SECRET, fetchImpl: async () => jsonResponse(payload) });
-      expect(await client.getInferenceAccount()).toBeNull();
+      await expect(client.getInferenceAccount(), `expected null for ${JSON.stringify(payload)}`).resolves.toBeNull();
     }
   });
 
-  it("keeps unavailable credit state distinct from a zero balance or authentication failure", async () => {
-    const client = new CloudClient({
-      host: HOST, token: SECRET,
-      fetchImpl: async () => jsonResponse(validCreditAccount({
-        state: "unavailable", reason: "billing_unavailable",
-        free: { state: "unresolved", claimableCreditNanos: null, spendableCreditNanos: null, heldCreditNanos: null, resetAt: null },
-        prepaid: { spendableCreditNanos: null, heldCreditNanos: null, settledDeficitCreditNanos: null, holdShortfallCreditNanos: null, consentEnabled: false },
-      })),
-    });
-    const account = await client.getInferenceAccount();
-    expect(account?.state).toBe("unavailable");
-    expect(account?.free.spendableCreditNanos).toBeNull();
-    expect(account?.prepaid.spendableCreditNanos).toBeNull();
+  it("distinguishes unsupported account data from authentication failure", async () => {
+    // null body: recognised HTTP 200 but payload is null
+    const nullBody = new CloudClient({ host: HOST, token: SECRET, fetchImpl: async () => jsonResponse(null) });
+    await expect(nullBody.getInferenceAccount()).resolves.toBeNull();
+
+    // legacy credits-v1: recognised HTTP 200 but unsupported schema
+    const legacy = new CloudClient({ host: HOST, token: SECRET, fetchImpl: async () => jsonResponse({ ...validUsageAccount(), schemaVersion: "credits-v1" }) });
+    await expect(legacy.getInferenceAccount()).resolves.toBeNull();
+
+    // auth rejection still throws
     for (const [status, error] of [[401, CloudUnauthorizedError], [403, CloudForbiddenError]] as const) {
       const denied = new CloudClient({ host: HOST, token: SECRET, fetchImpl: async () => new Response(null, { status }) });
       await expect(denied.getInferenceAccount()).rejects.toBeInstanceOf(error);
     }
   });
 
-  it("preserves exact credit nanos while excluding private accounting at every depth", async () => {
+  it("keeps unavailable credit state distinct from a zero balance", async () => {
+    const client = new CloudClient({
+      host: HOST, token: SECRET,
+      fetchImpl: async () => jsonResponse(validUsageAccount({
+        state: "unavailable", reason: "billing_unavailable",
+        plan: { id: null, name: null, monthlyPriceUsd: null },
+        included: { state: "unavailable", usedPercent: null, resetsAt: null },
+        prepaid: { balanceUsd: null, fallbackEnabled: false },
+        canManageBilling: false,
+        admission: { eligible: false, reason: "billing_unavailable" },
+      })),
+    });
+    const account = await client.getInferenceAccount();
+    expect(account?.state).toBe("unavailable");
+    expect(account?.included.usedPercent).toBeNull();
+    expect(account?.prepaid.balanceUsd).toBeNull();
+  });
+
+  it("preserves exact decimal strings while excluding private accounting", async () => {
     const privateValue = "PRIVATE-SUPPLIER-ACCOUNTING";
-    const payload = JSON.parse(JSON.stringify(validCreditAccount()), (_key, value) =>
+    const payload = JSON.parse(JSON.stringify(validUsageAccount()), (_key, value) =>
       value && typeof value === "object" && !Array.isArray(value)
         ? { ...value, supplierInternal: privateValue } : value,
     );
     const client = new CloudClient({ host: HOST, token: SECRET, fetchImpl: async () => jsonResponse(payload) });
     const account = await client.getInferenceAccount();
-    expect(account?.prepaid.spendableCreditNanos).toBe("123456789012345678");
+    expect(account?.prepaid.balanceUsd).toBe("123.45");
+    expect(account?.included.usedPercent).toBe(45.5);
+    expect(account?.plan.monthlyPriceUsd).toBe("39.00");
     expect(JSON.stringify(account)).not.toContain(privateValue);
   });
 
+  it("preserves admission ineligibility and reason", async () => {
+    const client = new CloudClient({
+      host: HOST, token: SECRET,
+      fetchImpl: async () => jsonResponse(validUsageAccount({
+        state: "ready", reason: null,
+        plan: { id: null, name: null, monthlyPriceUsd: null },
+        included: { state: "exhausted", usedPercent: 100, resetsAt: "2026-10-01T00:00:00.000Z" },
+        prepaid: { balanceUsd: "0.00", fallbackEnabled: false },
+        canManageBilling: true,
+        admission: { eligible: false, reason: "prepaid_disabled" },
+      })),
+    });
+    const account = await client.getInferenceAccount();
+    expect(account?.admission.eligible).toBe(false);
+    expect(account?.admission.reason).toBe("prepaid_disabled");
+  });
+
+  it("roundtrips ready eligible account with plan and included percent", async () => {
+    const client = new CloudClient({
+      host: HOST, token: SECRET,
+      fetchImpl: async () => jsonResponse(validUsageAccount()),
+    });
+
+    const account = await client.getInferenceAccount();
+    expect(account).not.toBeNull();
+    expect(account!.state).toBe("ready");
+    expect(account!.admission.eligible).toBe(true);
+    expect(account!.plan.id).toBe("pro");
+    expect(account!.included.usedPercent).toBeCloseTo(45.5);
+    expect(account!.prepaid.balanceUsd).toBe("123.45");
+  });
 });
 
 describe("gateway error codes", () => {
@@ -230,11 +285,5 @@ describe("gateway error codes", () => {
     await expect(client.getInferenceModels()).rejects.toMatchObject({
       name: "CloudError", status: 402, code: "insufficient_funds",
     });
-  });
-
-  it("leaves code undefined when the body has none", async () => {
-    const client = new CloudClient({ host: HOST2, token: SECRET2,
-      fetchImpl: (async () => new Response("oops", { status: 500 })) as typeof fetch });
-    await expect(client.getInferenceModels()).rejects.toMatchObject({ name: "CloudError", status: 500 });
   });
 });

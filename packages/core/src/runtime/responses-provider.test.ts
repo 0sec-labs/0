@@ -50,7 +50,7 @@ describe("provider Responses selection", () => {
   let fetchMock: ReturnType<typeof vi.fn<typeof fetch>>;
 
   beforeEach(() => {
-    originalEnv = process.env;
+    originalEnv = { ...process.env };
     home = mkdtempSync(join(tmpdir(), "0-responses-provider-"));
     // This suite asserts single-request WIRE shaping (usage retention, tool
     // non-promotion, terminal-event handling). The transient empty-stream retry
@@ -58,7 +58,8 @@ describe("provider Responses selection", () => {
     // failed" / truncated-stream fixtures 3x, firing onUsage repeatedly and
     // breaking toHaveBeenCalledOnce. Pin one attempt here; the retry loop itself
     // is covered by llm-api.stream-retry.test.ts.
-    process.env = { HOME: home, "ZERO_SKIP_PROVIDER_BANNER": "1", "ZERO_LLM_STREAM_MAX_ATTEMPTS": "1" };
+    for (const key of Object.keys(process.env)) delete process.env[key];
+    Object.assign(process.env, { HOME: home, "ZERO_SKIP_PROVIDER_BANNER": "1", "ZERO_LLM_STREAM_MAX_ATTEMPTS": "1" });
     __resetFallbackChainForTests();
     // Every request is intercepted; no operator credentials or external network.
     fetchMock = vi.fn<typeof fetch>(async () => { throw new Error("Unexpected network request"); });
@@ -67,7 +68,8 @@ describe("provider Responses selection", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    process.env = originalEnv;
+    for (const key of Object.keys(process.env)) delete process.env[key];
+    Object.assign(process.env, originalEnv);
     __resetFallbackChainForTests();
     rmSync(home, { recursive: true, force: true });
   });

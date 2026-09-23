@@ -20,7 +20,8 @@ import { VERSION, homeStateDir } from "@0/shared";
 import { features } from "../agent/features.js";
 import { diag } from "../diagnostics/channel.js";
 import { loadCloudCredentials, CloudAuthMissingError, DEFAULT_CLOUD_HOST } from "../cloud/credentials.js";
-import { CloudClient } from "../cloud/client.js";
+import { CloudClient, CloudError } from "../cloud/client.js";
+import { acquireHostedRequestSlot } from "./hosted-request-queue.js";
 import {
   MESSAGE_CACHE_BREAKPOINTS,
   planMessageBreakpoints,
@@ -2001,11 +2002,8 @@ const DEFAULT_PROVIDER_MODELS: Record<ApiProvider, string | undefined> = {
 const AUTO_MODEL_SENTINEL = "auto";
 
 /**
- * Detect which API provider to use based on available keys.
- * When `preferredModel` maps to a provider whose auth is present, that wins
- * (per-call routing). Otherwise priority: ZERO_CHATGPT_OAUTH_REFRESH_TOKEN ->
- * ANTHROPIC_API_KEY -> DEEPSEEK_API_KEY -> Z_AI_API_KEY -> AZURE_OPENAI_API_KEY ->
- * OPENAI_API_KEY -> OPENROUTER_API_KEY (last-resort)
+ * Explicit provider, API key, and reachable model choices win. Otherwise prefer
+ * signed-in 0cloud, then subscription credentials, then ambient BYOK keys.
  */
 function detectProvider(configApiKey: string | undefined, preferredModel: string | undefined, env: Readonly<NodeJS.ProcessEnv>, configProvider?: ApiProvider): {
   provider: ApiProvider;
@@ -2167,8 +2165,25 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
       break; // fall through to env-priority detection
   }
 
-  // Check env vars in priority order. ChatGPT subscription auth wins
-  // when present — it's a deliberate operator opt-in via either:
+  // With no explicit choice, a signed-in account starts on 0security Auto.
+  // Ambient BYOK keys and saved subscription logins remain alternatives.
+  try {
+    const hostedCreds = loadCloudCredentials({
+      env: env,
+      warn: () => { /* silent in detection path */ },
+    });
+    return {
+      provider: "hosted",
+      apiKey: hostedCreds.token,
+      baseUrl: `${hostedCreds.host}/api/inference/v1`,
+      defaultModel: "",
+      wireApi: "chat_completions",
+    };
+  } catch {
+    // No cloud credentials — continue to BYOK fallbacks.
+  }
+
+  // Without cloud credentials, prefer ChatGPT subscription auth over API keys:
   //
   //   - ZERO_CHATGPT_ACCESS_TOKEN — pre-issued access token. The
   //     worker-controller refreshes once at dispatch time, persists the
@@ -2211,8 +2226,8 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
     };
   }
 
-  // Direct DeepSeek is the first metered fallback after the Codex
-  // subscription. Its native Responses API supports Flash 0731 tool calling.
+  // Direct DeepSeek is the first metered fallback after hosted and Codex.
+  // Its native Responses API supports Flash 0731 tool calling.
   const deepseekKey = env.DEEPSEEK_API_KEY;
   if (deepseekKey) {
     return {
@@ -2332,9 +2347,6 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
     };
   }
 
-  // GitHub Copilot — device-code OAuth token sent directly as a Bearer to the
-  // Copilot chat_completions endpoint. Explicit operator opt-in via
-  // ZERO_COPILOT_GITHUB_TOKEN, still before the Anthropic final fallback.
   const copilotToken = env["ZERO_COPILOT_GITHUB_TOKEN"];
   if (copilotToken) {
     return {
@@ -2346,9 +2358,6 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
     };
   }
 
-  // Google Gemini Code Assist — OAuth Bearer refreshed on demand (empty api
-  // key, like chatgpt-codex). Explicit operator opt-in via a Google sign-in,
-  // still before the Anthropic final fallback.
   const geminiAccess = env["ZERO_GEMINI_ACCESS_TOKEN"];
   const geminiRefresh = env["ZERO_GEMINI_OAUTH_REFRESH_TOKEN"];
   if ((geminiAccess && geminiAccess.length > 0) || (geminiRefresh && geminiRefresh.length > 0)) {
@@ -2361,6 +2370,9 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
     };
   }
 
+  // Anthropic API key — checked last among BYOK providers so the explicit
+  // selections above (config, env override, model routing, Codex, hosted)
+  // all win first.
   const anthropicKey = env.ANTHROPIC_API_KEY;
   if (anthropicKey) {
     return {
@@ -2371,26 +2383,6 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
       wireApi: "chat_completions",
     };
   }
-  // 0 Cloud hosted inference. Detected when cloud credentials are present
-  // and no explicit BYOK provider was configured above. The default model is
-  // a placeholder; the first async catalog fetch replaces it at invocation
-  // time with the actual first model from the server's catalog.
-  try {
-    const hostedCreds = loadCloudCredentials({
-      env: env,
-      warn: () => { /* silent in detection path */ },
-    });
-    return {
-      provider: "hosted",
-      apiKey: hostedCreds.token,
-      baseUrl: `${hostedCreds.host}/api/inference/v1`,
-      defaultModel: "",
-      wireApi: "chat_completions",
-    };
-  } catch {
-    // No cloud credentials — continue to BYOK fallbacks.
-  }
-
 
   // No key found — default to Anthropic (will fail at runtime with helpful message)
   return {
@@ -2411,7 +2403,7 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
  * - Anthropic (ANTHROPIC_API_KEY) — direct Claude API access
  * - OpenAI (OPENAI_API_KEY) — direct OpenAI API access
  *
- * Priority: ZERO_CHATGPT_OAUTH_REFRESH_TOKEN -> ANTHROPIC_API_KEY -> Z_AI_API_KEY -> AZURE_OPENAI_API_KEY -> OPENAI_API_KEY -> OPENROUTER_API_KEY (last-resort)
+ * Without an explicit choice, signed-in 0cloud is preferred over ambient keys.
  *
  * Model can be overridden with ZERO_MODEL env var or --model flag.
  *
@@ -2594,6 +2586,43 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     return loadCodexModelCatalog({ signal, resolveCredentials: () => refreshChatGptCodexAuthState(state) });
   }
 
+  /** Check account admission and resolve the service model without inference.
+   * Each explicit check refreshes admission; failed discovery is never cached.
+   */
+  async prepare(): Promise<void> {
+    while (this.provider === "hosted") {
+      const config = this.config;
+      const client = new CloudClient({
+        host: this.baseUrl.replace(/\/api\/inference\/v1$/, ""),
+        token: this.apiKey,
+      });
+      try {
+        const account = await client.getInferenceAccount();
+        if (this.config !== config) continue;
+        if (!account) {
+          throw new CloudError(
+            "0cloud account availability could not be read. Check again or review your account in /connect.",
+            undefined, "/api/inference/account", "unsupported_account_data",
+          );
+        }
+        if (!account.admission.eligible) {
+          const reason = account.admission.reason ?? account.reason ?? "account_restricted";
+          throw new CloudError(
+            account.state === "unavailable"
+              ? `0cloud account availability could not be checked (${reason}). Check again or review your account in /connect.`
+              : `0cloud account access is restricted (${reason}). Review your account in /connect or contact your organization owner.`,
+            undefined, "/api/inference/account", reason,
+          );
+        }
+        await this.ensureHostedModel();
+        if (this.config === config) return;
+      } catch (error) {
+        if (this.config !== config) continue;
+        throw error;
+      }
+    }
+  }
+
   /**
    * Mutate the live selection in place so the NEXT turn (the engine reads
    * `config.runtime` per turn) and the NEXT `forkForSubagent` pick up the new
@@ -2609,15 +2638,20 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   }): void {
     const providerChanged = sel.provider !== undefined && sel.provider !== this.provider;
 
-    if (providerChanged) {
+    if (providerChanged || (this.provider === "hosted" && (sel.env !== undefined || sel.provider === "hosted"))) {
       // Full re-detection against the (optionally new) account, reusing the
       // exact constructor path. Preserve the existing selection knobs unless
       // this call overrides them; drop any explicit apiKey so credentials come
       // from the (possibly refreshed) environment.
+      //
+      // Switching TO hosted without an explicit model must NOT carry over the
+      // old provider's model — the catalog auto-selects the service default.
+      // An empty model also explicitly requests the service default.
       const merged: RuntimeConfig = {
         ...this.config,
+        ...(providerChanged && sel.provider === "hosted" && sel.model === undefined ? { model: "" } : {}),
         apiKey: undefined,
-        provider: sel.provider as RuntimeConfig["provider"],
+        provider: (sel.provider ?? this.provider) as RuntimeConfig["provider"],
         ...(sel.model !== undefined ? { model: sel.model } : {}),
         ...(sel.agentModels !== undefined ? { agentModels: sel.agentModels } : {}),
         ...(sel.singleModel !== undefined ? { singleModel: sel.singleModel } : {}),
@@ -2657,6 +2691,11 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         if (this.provider === "azure") this.wireApi = openAICompatibleWireApi(this.env, "AZURE_OPENAI_WIRE_API", this.azureConfig.wireApi);
         this.applyModelWireApi();
         this.reasoningEffort = undefined;
+        // A new model on the same hosted account must re-resolve the catalog
+        // against the new model ID. Clear the memo so ensureHostedModel
+        // re-queries rather than trusting the old ceiling/id.
+        this.hostedCatalogPromise = null;
+        this.hostedMaxOutputTokens = undefined;
       }
     }
   }
@@ -2773,29 +2812,53 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
 
   /** The server catalog is authoritative even when a model was selected explicitly. */
   private async ensureHostedModel(): Promise<void> {
-    if (this.provider !== "hosted") return;
-
-    if (!this.hostedCatalogPromise) {
-      this.hostedCatalogPromise = (async () => {
+    while (this.provider === "hosted") {
+      let pending = this.hostedCatalogPromise;
+      if (!pending) {
+        const requestedModel = this.model;
         const client = new CloudClient({
           host: this.baseUrl.replace(/\/api\/inference\/v1$/, ""),
           token: this.apiKey,
         });
-        const catalog = await client.getInferenceModels();
-        const selected = this.model
-          ? catalog.data.find((model) => model.id === this.model)
-          : catalog.data[0];
-        if (!selected) {
-          throw new Error(this.model
-            ? `Hosted model "${this.model}" is unavailable. Run \`0 models\` for available models.`
-            : "No hosted models are available. Run `0 models` to check service availability.");
-        }
-        this.model = selected.id;
-        this.wireApi = selected.wire_api;
-        this.hostedMaxOutputTokens = selected.max_output_tokens;
-      })();
+        const request: Promise<void> = client.getInferenceModels().then((catalog) => {
+          // Reconfiguration invalidates ownership of this result.
+          if (this.hostedCatalogPromise !== request) return;
+          const selected = requestedModel
+            ? catalog.data.find((model) => model.id === requestedModel)
+            : catalog.data[0];
+          if (!selected) {
+            throw new Error(requestedModel
+              ? `Hosted model "${requestedModel}" is unavailable. Run \`0 models\` for available models.`
+              : "No hosted models are available. Run `0 models` to check service availability.");
+          }
+          this.model = selected.id;
+          this.wireApi = selected.wire_api;
+          this.hostedMaxOutputTokens = selected.max_output_tokens;
+        });
+        this.hostedCatalogPromise = pending = request;
+      }
+      try {
+        await pending;
+      } catch (error) {
+        if (this.hostedCatalogPromise !== pending) continue;
+        this.hostedCatalogPromise = null;
+        throw error;
+      }
+      if (this.hostedCatalogPromise === pending) return;
+      // Only a changed selection can loop; a discovery failure always rejects.
     }
-    await this.hostedCatalogPromise;
+  }
+
+  /** All audits and nested workers on this hosted credential share admission. */
+  private async acquireHostedSlot(signal?: AbortSignal): Promise<(() => void) | undefined> {
+    while (this.provider === "hosted") {
+      const config = this.config;
+      const release = await acquireHostedRequestSlot(this.baseUrl, this.apiKey, signal);
+      if (this.config === config) return release;
+      release();
+      await this.ensureHostedModel();
+    }
+    return undefined;
   }
 
   /**
@@ -3617,6 +3680,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     }
 
     const systemPrompt = context?.systemPrompt ?? "";
+    let releaseHostedSlot = this.provider === "hosted" ? await this.acquireHostedSlot() : undefined;
 
     const controller = new AbortController();
     const timer = setTimeout(
@@ -3627,6 +3691,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     try {
       let res: Response | null;
       do {
+        if (this.provider === "hosted" && !releaseHostedSlot) {
+          releaseHostedSlot = await this.acquireHostedSlot(controller.signal);
+        }
 
         if (this.isOpenAICompat && this.wireApi === "chat_completions") {
           // OpenRouter / OpenAI / Azure chat completions format
@@ -3813,6 +3880,8 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           ? `${this.providerLabel} API request timed out`
           : `${this.providerLabel} API error: ${msg}`,
       };
+    } finally {
+      releaseHostedSlot?.();
     }
   }
 
@@ -3900,6 +3969,16 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     // rounds, so this is the common shape of "Esc pressed during a tool run".
     if (signal?.aborted) return this.cancelledResult(start);
 
+    let releaseHostedSlot: (() => void) | undefined;
+    if (this.provider === "hosted") {
+      try {
+        releaseHostedSlot = await this.acquireHostedSlot(signal);
+      } catch (error) {
+        if (signal?.aborted) return this.cancelledResult(start);
+        throw error;
+      }
+    }
+
     const controller = new AbortController();
     const timer = setTimeout(
       () => controller.abort(),
@@ -3912,6 +3991,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     try {
       let res: Response | null;
       do {
+        if (this.provider === "hosted" && !releaseHostedSlot) {
+          releaseHostedSlot = await this.acquireHostedSlot(call.signal);
+        }
 
         if (this.isOpenAICompat && this.wireApi === "chat_completions") {
           // Convert to OpenAI chat completions format
@@ -4693,6 +4775,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           : `${this.providerLabel} API error: ${msg}`,
       };
     } finally {
+      releaseHostedSlot?.();
       // Drop the listeners this call installed on the caller's (session-long)
       // operator signal. A no-op when no operator signal was passed.
       call.dispose();

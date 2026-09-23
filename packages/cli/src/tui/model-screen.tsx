@@ -26,39 +26,23 @@
  * domain — which models exist, how they group, what their detail says — and its
  * own keyboard.
  *
- * ## Account catalogues retain their own metadata
+ * ## One picker, independent catalogues
  *
- * A hosted runtime (`providerId === "hosted"`) is served by the account's own
- * catalogue, read live through `loadHostedModelCatalog` and projected by
- * `buildHostedModelCatalog`. A hosted id names a route on that account, so this
- * path has no cache, no bundled floor and no BYOK fallback: when the live read
- * fails the screen says so and offers a reload, because a Models.dev row of the
- * same name describes a different thing — the public model — and showing its
- * numbers under this account's route would be a fabrication. Every other
- * runtime keeps the BYOK catalogue (`buildFullModelCatalog`, the pricing table
- * plus the Models.dev sync), with separate account groups for configured
- * 0cloud and Codex connections. Codex model IDs and context windows come from
- * the subscription account, including models absent from public pricing feeds.
+ * A hosted connection offers one `0security Auto` choice on the parent
+ * picker. Its availability is read from the account's live catalogue; no
+ * public model is substituted if that read fails. Connected API-key providers
+ * appear beside it, derived from the pricing table and Models.dev. Codex
+ * subscription IDs are discovered from the account, not inferred from public
+ * model names. Matching IDs across connections remain separate rows because
+ * choosing one also chooses its provider.
  *
  * ## What this screen may say about a model
  *
- * Only what the authoritative catalogue reported. Every id on screen comes out
- * of `buildFullModelCatalog` (BYOK), `buildHostedModelCatalog` (hosted), or
- * `loadCodexModelCatalog` (subscription) —
- * there is no hand-written model list anywhere in this file. BYOK prices come
- * from the pricing table. Cloud rows show model identity and capabilities,
- * without supplier routing or cost metadata. The BYOK context
- * window comes from the synced Models.dev cache (`contextTokens`), keyed on
- * provider AND id together, and the hosted one from the service's own
- * `context_length`; both read "unknown" when absent. Nothing is derived from a
- * sibling model, a vendor default, or the model's name. Only BYOK rows can
- * show `free`, when their catalogue states both rates are zero.
- *
- * The hosted catalogue carries no availability, readiness or entitlement
- * signal — canonical `InferenceModel` has none — so this screen makes no such
- * claim either. Listed rows are OFFERED for explicit operator selection; no row
- * is labelled qualified, ready, healthy or funded, and no row is drawn as
- * disabled on a fact nobody reported.
+ * API-key rows use their own priced catalogue and provider-qualified context
+ * windows. The hosted Auto choice delegates model selection to the service;
+ * it never borrows a public model's price or context window. A hosted role
+ * assignment may show account-reported capabilities for a concrete route.
+ * Listing a route does not assert funding or availability for a request.
  *
  * Every write is an explicit operator action applied to the current audit: the
  * base model, one role's assignment, or the single-model policy. Loading,
@@ -120,6 +104,7 @@ import {
   moveDialogSelection,
 } from "./dialog-select-layout.js";
 import {
+  activateModelConnectAction,
   agentRosterLines,
   buildContextWindowIndex,
   clipModelDetailLines,
@@ -130,12 +115,17 @@ import {
   dialogContentWidth,
   hostedDetailLines,
   isFilterKey,
+  isModelConnectAction,
+  modelConnectActionItem,
+  modelConnectDetailLines,
   modelDetailLines,
   modelDialogCount,
   modelDialogHint,
   modelDialogTitle,
   modelFooterHint,
+  modelResultCount,
   modelTargetLine,
+  reachableModelCatalog,
   buildModelRows,
   type ModelCatalogScope,
   type ModelDetailLine,
@@ -147,7 +137,6 @@ import {
   buildFullModelCatalog,
   buildHostedModelCatalog,
   hostedModelDetails,
-  preferredHostedModel,
   scopeModelCatalog,
 } from "./model-catalog.js";
 import {
@@ -158,16 +147,18 @@ import {
 } from "./model-catalog-sync.js";
 import { cloudConfigured, providerStates } from "./provider-status.js";
 import { sanitizeTuiText } from "./text.js";
-
 /** How many rows page-up and page-down move. */
 const PAGE_STEP = 5;
 /**
  * The runtime discriminator for the hosted service. It is the runtime's own
- * `providerId`, not an upstream vendor name: a hosted route's upstream
- * ("anthropic", "openai", …) lives in the catalogue row's `provider`, and
- * comparing the two is a category error.
+ * provider id, not an upstream supplier name.
  */
 const HOSTED_PROVIDER_ID = "hosted";
+
+/** Synthetic parent selection that delegates model choice to the hosted service. */
+export const HOSTED_AUTO_MODEL_ID = "";
+/** Display label for the service-selected hosted route. */
+export const HOSTED_AUTO_LABEL = "0security Auto";
 /**
  * The roles an audit can assign a model to. The list is the union of these and
  * whatever keys the caller's map already carries, so a role the caller knows
@@ -217,7 +208,8 @@ export interface ModelScreenProps {
   onSingleModelChange?: (enabled: boolean) => void;
   /** Enter on a model row. The router decides what "select" means. */
   onSelect: (id: string, providerId?: RuntimeConfig["provider"]) => void;
-  /** Leave the screen — Esc, once any filter has been cleared. */
+  /** Open the existing provider Connections flow. */
+  onConnect?: () => void;
   onBack: () => void;
   /** Wizard-only: skip this decision with Ctrl+N when unfiltered. */
   onSkip?: () => void;
@@ -271,6 +263,7 @@ export function ModelScreen({
   onAgentModelsChange,
   onSingleModelChange,
   onSelect,
+  onConnect,
   onBack,
   onSkip,
   onExit,
@@ -285,27 +278,12 @@ export function ModelScreen({
     ...process.env, ...credentialEnvPatch(loadCredentials(), process.env),
   }, [suppliedEnv, reload]);
 
-  // A hosted *runtime* (`providerId === "hosted"`) still gets the pure hosted
-  // catalogue with no BYOK fallback — that lane is unchanged. What is new is the
-  // BYOK lane: when 0cloud credentials exist, the account can reach every
-  // route the cloud lists, so those are folded in as an extra "0cloud"
-  // group alongside the BYOK rows rather than being hidden until the runtime
-  // itself is hosted. The old "two catalogues, never mixed" rule held because a
-  // hosted id's numbers must never be borrowed from a public Models.dev row of
-  // the same name; that invariant is intact here — the cloud rows carry the
-  // service's OWN catalogue metadata (`buildHostedModelCatalog`), never a BYOK
-  // number — this only lets both authoritative catalogues appear at once.
+  // One picker for every connected route. The active runtime determines the
+  // initial highlight, not which provider groups are allowed to appear.
   const isHosted = providerId === HOSTED_PROVIDER_ID;
-  const isByok = !isHosted;
-  // 0cloud credentials present → the BYOK lane merges the cloud catalogue.
-  // Read once per mount for the same reason provider credentials are: they are
-  // process/file-level and cannot change under a screen with no way to set them.
-  const cloudCreds = useMemo(() => cloudConfigured(env ?? process.env), [env]);
-  const mergeCloud = isByok && cloudCreds;
-  // Whether the live hosted catalogue must be read at all: the pure hosted
-  // runtime always, and the BYOK lane only when cloud creds exist to merge.
-  const loadHosted = isHosted || mergeCloud;
-  const scope: ModelCatalogScope = isHosted ? "hosted" : "byok";
+  const cloudCreds = useMemo(() => cloudConfigured(env), [env]);
+  const loadHosted = cloudCreds;
+  const scope: ModelCatalogScope = "byok";
   // A control exists only when its callback does. These two flags gate the
   // key, the row and the footer text together, so a binding is never named
   // where it would do nothing.
@@ -333,7 +311,7 @@ export function ModelScreen({
   // under a screen that has no way to set them; re-deriving them on every
   // keystroke would only make the filter slower.
   const credentialStates = useMemo(() => providerStates(env), [env]);
-  const loadCodex = isByok && (providerId === "chatgpt-codex" || credentialStates.some((state) => state.id === "chatgpt-codex" && state.configured));
+  const loadCodex = providerId === "chatgpt-codex" || credentialStates.some((state) => state.id === "chatgpt-codex" && state.configured);
 
   // The identity of the connection this load belongs to. A hosted snapshot is
   // only ever shown while it still matches — rows fetched for one account must
@@ -380,10 +358,8 @@ export function ModelScreen({
         () => { if (alive) setCodexState({ source, models: null, failed: true }); },
       ));
     }
-    // Hosted read: the pure hosted runtime, or the BYOK lane merging cloud
-    // routes. A failure here becomes a status line, never a blanked picker —
-    // when it is a merge the BYOK list still stands (see `connectionMessage`,
-    // which only clears the list for the pure hosted lane).
+    // Cloud discovery only controls Auto. A failed read never hides connected
+    // API-key models or substitutes a public model for the hosted route.
     if (loadHosted) {
       tasks.push(
         loadHostedModelCatalog({ env })
@@ -411,15 +387,12 @@ export function ModelScreen({
           }),
       );
     }
-    // BYOK sync: refresh the Models.dev cache for next open. Runs alongside the
-    // hosted read in merge mode, so the list is both cloud-aware and up to date.
-    if (isByok) {
-      tasks.push(
-        syncModelCatalog().then((updated) => {
-          if (alive && updated) setCatalogNonce((n) => n + 1);
-        }),
-      );
-    }
+    // Refresh the public catalogue independently of Cloud discovery.
+    tasks.push(
+      syncModelCatalog().then((updated) => {
+        if (alive && updated) setCatalogNonce((n) => n + 1);
+      }),
+    );
     void Promise.allSettled(tasks).finally(() => {
       if (alive) setRefreshing(false);
     });
@@ -427,17 +400,16 @@ export function ModelScreen({
       alive = false;
       controller.abort();
     };
-  }, [source, isHosted, isByok, loadHosted, loadCodex, env, codexCatalog]);
+  }, [source, loadHosted, loadCodex, env, codexCatalog]);
 
   const hostedCatalog = useMemo(
     () => (hostedSnapshot ? buildHostedModelCatalog(hostedSnapshot.models) : []),
     [hostedSnapshot],
   );
   const catalog = useMemo(
-    () => (isByok ? buildFullModelCatalog(activeModel) : []),
-    // catalogNonce forces a re-read after a background sync writes the cache.
+    () => buildFullModelCatalog(activeModel),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isByok, activeModel, catalogNonce],
+    [activeModel, catalogNonce],
   );
   // BYOK context windows come straight off the synced Models.dev cache (or its
   // bundled offline floor). `CatalogModel` does not carry the field, and
@@ -452,25 +424,28 @@ export function ModelScreen({
   // hosted path never consults it: a hosted route's window is the service's
   // own `context_length` or nothing.
   const contextIndex = useMemo(
-    () => (isByok ? buildContextWindowIndex(loadCatalogModels().models) : new Map<string, number>()),
+    () => buildContextWindowIndex(loadCatalogModels().models),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isByok, catalogNonce],
+    [catalogNonce],
   );
   const scopeCatalog = (query: string, all: boolean) => {
-    if (!isByok) return [];
+    // The active hosted route does not hide the operator's other connections.
     const scoped = scopeModelCatalog(catalog, { showAll: all, filter: query, currentModel: activeModel });
     // Subscription rows come only from this account, including models absent
     // from the public pricing feed. Do not dress API-key rows as subscription access.
-    const apiConfigured = states.some((state) => state.id === "openai" && state.configured);
-    return [
-      ...scoped.filter((model) => !(providerId === "chatgpt-codex" && !apiConfigured && model.provider === "openai")),
+    const catalogRows = [
+      ...scoped,
       ...(codexModels ?? []).map((model) => ({ id: model.id, provider: "chatgpt-codex", price: "subscription" })),
-    ].filter((model) => role === null || (
-      // Role maps carry only IDs and inherit the parent connection. Keep the
-      // subscription boundary; other routes retain their existing catalog
-      // mappings (e.g. Azure uses OpenAI-named GPT rows).
-      model.provider === "chatgpt-codex" ? providerId === "chatgpt-codex" : providerId !== "chatgpt-codex"
-    ));
+    ];
+    const codexModelIds = new Set((codexModels ?? []).map((model) => model.id));
+    return reachableModelCatalog(catalogRows, states, { env, providerId, codexModelIds })
+      .filter((model) => role === null || (
+        // Role maps carry IDs but no provider: a child inherits its parent's
+        // connection. Never offer a cross-provider assignment it cannot route.
+        providerId === "chatgpt-codex" ? model.provider === "chatgpt-codex"
+          : providerId === "hosted" ? false
+          : model.provider !== "chatgpt-codex" && model.provider === providerId
+      ));
   };
   const scopedCatalog = scopeCatalog(filter, showAll);
 
@@ -484,36 +459,29 @@ export function ModelScreen({
     () => buildModelRows({ catalog: scopedCatalog, states, filter, activeModel, activeProvider: providerId }),
     [scopedCatalog, states, filter, activeModel, providerId],
   );
-  // Cloud rows share a customer-facing group and search only public model IDs.
-  // Supplier routing and cost fields remain outside this presentation.
-  const hostedItems = (query: string, prefix: string): DialogItem[] => {
-    if (role !== null && providerId !== "hosted") return [];
-    const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
-    return hostedCatalog
-      .filter((model) =>
-        terms.every((term) => model.id.toLowerCase().includes(term)),
-      )
-      .map((model) => ({
-        id: model.id,
-        label: model.id,
-        category: prefix,
-        current: model.id === activeModel,
-      }));
-  };
   const modelOnlyRows = useMemo(
     () => modelRows.filter((row): row is Extract<ModelRow, { kind: "model" }> => row.kind === "model"),
     [modelRows],
   );
   const byokItems = useMemo(() => modelDialogItems(modelOnlyRows), [modelOnlyRows]);
-  // Pure hosted → the hosted catalogue only. BYOK → the credential-grouped BYOK
-  // rows, with the 0cloud group appended when cloud creds exist. Appending
-  // (rather than prepending) leaves the operator's chosen BYOK ordering untouched
-  // and reads as "…and these are also reachable through 0cloud".
-  const items = isHosted
-    ? hostedItems(filter, "Hosted")
-    : mergeCloud
-      ? [...byokItems, ...hostedItems(filter, "0cloud")]
-      : byokItems;
+  // Parent selection exposes one service-managed Auto choice. Concrete hosted
+  // routes are only relevant while targeting a role on an existing hosted audit.
+  const hostedItems = (query: string): DialogItem[] => {
+    if (!cloudCreds || hostedCatalog.length === 0) return [];
+    const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    if (role === null) {
+      return terms.every((term) => HOSTED_AUTO_LABEL.toLowerCase().includes(term))
+        ? [{ id: HOSTED_AUTO_MODEL_ID, label: HOSTED_AUTO_LABEL, meta: "service-selected", category: "0security", current: isHosted }]
+        : [];
+    }
+    if (!isHosted) return [];
+    return hostedCatalog
+      .filter((model) => model.id !== "auto" && terms.every((term) => model.id.toLowerCase().includes(term)))
+      .map((model) => ({ id: model.id, label: model.id, category: "0security", current: model.id === activeModel }));
+  };
+  const connectAction = onConnect ? modelConnectActionItem() : undefined;
+  const resultItems = [...hostedItems(filter), ...byokItems];
+  const items = connectAction ? [...resultItems, connectAction] : resultItems;
   const hostedById = useMemo(
     () => new Map(hostedCatalog.map((model) => [model.id, model])),
     [hostedCatalog],
@@ -540,16 +508,10 @@ export function ModelScreen({
   // Match provider and id so duplicates remain navigable across catalog refreshes.
   const [selectedItem, setSelectedItem] = useState<DialogItem>();
   const selectedItemRef = useRef(selectedItem);
-  // On the hosted path the opening highlight is the operator's pin resolved
-  // against the account's own catalogue: `preferredHostedModel` returns that
-  // row, or nothing when the pinned id is not in this account's list. It never
-  // substitutes another model, so an unlisted pin simply leaves the cursor on
-  // the first row instead of silently pointing at a different one.
-  const offeredId = preferredHostedModel(hostedCatalog, activeModel)?.id;
   const selectionIndex = (visible: DialogItem[], selection = selectedItemRef.current) =>
     clampDialogSelection(visible, visible.findIndex((item) =>
-      item.id === (selection?.id ?? (isHosted ? offeredId : activeModel)) &&
-      (!selection ? !providerId || item.category === (isHosted ? "Hosted" : states.find((state) => state.id === providerId)?.label) : item.category === selection.category),
+      item.id === (selection?.id ?? (isHosted ? HOSTED_AUTO_MODEL_ID : activeModel)) &&
+      item.category === (selection?.category ?? (isHosted ? "0security" : states.find((state) => state.id === providerId)?.label)),
     ));
   const cursor = selectionIndex(items, selectedItem);
 
@@ -598,50 +560,25 @@ export function ModelScreen({
   const visibleMetaLines = metaLines.slice(0, layout.metaRows);
 
   const mode: ModelMode = filter ? "filter" : "browse";
-  // The always-on status line carries the one statement this screen can always
-  // make. Account discovery is reported separately from local credentials,
-  // so loading or unavailable catalogs are not mistaken for missing login.
-  // On hosted it names the host the rows came from and how many were listed —
-  // a count of rows, not a verdict on any of them.
-  // In the merged BYOK lane the cloud read is additive: its outcome is reported
-  // as a suffix on the credential summary — offline, loading, or a route count —
-  // and never replaces the BYOK list, so a dark cloud degrades to "BYOK plus a
-  // note" rather than an empty picker.
-  const cloudStatus = mergeCloud
+  // Connection failures affect only that provider's row; other connected
+  // providers remain selectable.
+  const cloudStatus = cloudCreds
     ? hostedError
-      ? `${symbols.warning} 0cloud offline: ${hostedError} · Ctrl+R retry`
+      ? `${symbols.warning} 0security Auto unavailable: ${hostedError} · Ctrl+R retry`
       : hostedSnapshot
-        ? `0cloud · ${hostedCatalog.length} route${hostedCatalog.length === 1 ? "" : "s"}`
-        : "0cloud · loading…"
+        ? hostedCatalog.length > 0
+          ? `${hostedSnapshot.host} · 0security Auto`
+          : `${symbols.warning} 0security Auto unavailable: this account lists no routes`
+        : "0security Auto · loading…"
     : null;
-  // A hosted error is only fatal on the *pure* hosted lane, where there is no
-  // other list to fall back to. In the merge it is just the cloud suffix above.
-  const hostedFatal = isHosted && hostedError !== null;
-  const baseStatusText = isHosted
-    ? hostedError
-      ? `${symbols.warning} Hosted catalog error: ${hostedError} · Ctrl+R reload`
-      : !hostedSnapshot
-        ? "Loading the account's hosted model catalog…"
-        : `${hostedSnapshot.host} · ${hostedCatalog.length} model${hostedCatalog.length === 1 ? "" : "s"} listed for this account`
-    : cloudStatus
-      ? `${credentialSummary(states)} · ${cloudStatus}`
-      : credentialSummary(states);
+  const baseStatusText = cloudStatus
+    ? `${credentialSummary(states)} · ${cloudStatus}`
+    : credentialSummary(states);
   const statusText = !loadCodex ? baseStatusText : `${baseStatusText} · ${codexFailed
     ? "Codex model discovery unavailable · Ctrl+R retry"
     : codexModels === null ? "Loading Codex account models…" : `${codexModels.length} Codex account models`}`;
-  // When there is no list to draw, the reason takes the list's place. It is the
-  // whole explanation, so it is wrapped and scrolled rather than clipped. This
-  // only happens on the pure hosted lane — the merge always has the BYOK list.
-  const connectionMessage = !isHosted
-    ? null
-    : hostedError
-      ? `${statusText}. No cached, offline or BYOK models are substituted for a hosted route.`
-      : hostedSnapshot && hostedCatalog.length === 0
-        ? "The hosted service listed no models for this account. Check the connection, then Ctrl+R to reload. No fallback model will be substituted."
-        : null;
 
   const currentItems = (): DialogItem[] => {
-    if (isHosted) return hostedItems(filterRef.current, "Hosted");
     const byok = filterRef.current === filter && showAllRef.current === showAll
       ? byokItems
       : modelDialogItems(buildModelRows({
@@ -651,7 +588,8 @@ export function ModelScreen({
         activeModel,
         activeProvider: providerId,
       }));
-    return mergeCloud ? [...byok, ...hostedItems(filterRef.current, "0cloud")] : byok;
+    const results = [...hostedItems(filterRef.current), ...byok];
+    return connectAction ? [...results, connectAction] : results;
   };
   const highlight = (index: number) => {
     const item = currentItems()[index];
@@ -726,9 +664,6 @@ export function ModelScreen({
     if (key.name === "home") return highlight(0);
     if (key.name === "end") return highlight(Math.max(0, currentItems().length - 1));
     if (key.name === "tab") {
-      // Curated/all is a property of the BYOK superset; the hosted catalogue is
-      // whatever the account listed, so there is nothing to widen.
-      if (isHosted) return;
       showAllRef.current = !showAllRef.current;
       setShowAll(showAllRef.current);
       return;
@@ -737,6 +672,7 @@ export function ModelScreen({
       const visible = currentItems();
       const activeItem = visible[selectionIndex(visible)];
       if (!activeItem) return;
+      if (activateModelConnectAction(activeItem, onConnect)) return;
       if (role !== null && rolesLive) {
         onAgentModelsChange?.({ ...agentModels, [role]: activeItem.id });
         setNotice(
@@ -744,9 +680,11 @@ export function ModelScreen({
         );
         return;
       }
-      const selectedRow = modelOnlyRows.find((row) => row.model.id === activeItem.id && row.group.label === activeItem.category);
-      const selectedProvider = activeItem.category === "Hosted" || activeItem.category === "0cloud" ? "hosted"
-        : selectedRow && states.some((state) => state.id === selectedRow.model.provider) ? selectedRow.model.provider as RuntimeConfig["provider"] : undefined;
+      // The category is the connection identity. Resolve it from the same
+      // live items used for navigation; a filter typed before React paints
+      // must not accidentally keep the previous provider.
+      const selectedProvider = activeItem.category === "0security" ? "hosted"
+        : states.find((state) => state.label === activeItem.category)?.id as RuntimeConfig["provider"] | undefined;
       onSelect(activeItem.id, selectedProvider);
       return;
     }
@@ -773,8 +711,44 @@ export function ModelScreen({
   const renderDetail = (item: DialogItem, pane: { width: number; height: number }) => {
 
     const compact = pane.height < 12;
+    if (isModelConnectAction(item)) {
+      const lines = clipModelDetailLines(
+        modelConnectDetailLines(pane.width),
+        pane.height,
+        pane.width,
+      );
+      return (
+        <>
+          {lines.map((line, index) => (
+            <Cells
+              key={`connect-detail-${index}`}
+              width={pane.width}
+              fg={toneColor(theme, line.tone)}
+            >
+              {line.text}
+            </Cells>
+          ))}
+        </>
+      );
+    }
 
-    // Item identity keeps a same-ID BYOK model on its own pricing/detail path.
+    if (item.id === HOSTED_AUTO_MODEL_ID) {
+      const inner = Math.max(1, pane.width - 1);
+      const lines = [
+        { text: HOSTED_AUTO_LABEL, tone: "title" as const },
+        { text: "The 0security service selects the model for this audit.", tone: "muted" as const },
+        { text: hostedCatalog.length > 0 ? "A hosted route is available." : "No hosted model route is available for this account yet.", tone: hostedCatalog.length > 0 ? "ok" as const : "warn" as const },
+      ];
+      return (
+        <box width={inner} flexDirection="column" flexShrink={0} minWidth={0}>
+          {lines.map((line, index) => (
+            <Cells key={`auto-detail-${index}`} width={inner} fg={toneColor(theme, line.tone)} attributes={line.tone === "title" ? TextAttributes.BOLD : undefined}>
+              {line.text}
+            </Cells>
+          ))}
+        </box>
+      );
+    }
     const row = rowByItem.get(item);
     const hosted = row ? undefined : hostedById.get(item.id);
     if (hosted) {
@@ -847,42 +821,17 @@ export function ModelScreen({
 
   // ── Title row: glyph + label on the left, the live row count on the right.
   // Split explicitly so the two leaves can never be handed overlapping cells.
-  const titleText = modelDialogTitle({ scope, providerId, showAll: showAll || !!filter.trim(), cloudMerged: mergeCloud });
-  const countText = modelDialogCount(items.length, refreshing);
+  const titleText = modelDialogTitle({ scope, showAll: showAll || !!filter.trim(), cloudMerged: cloudCreds });
+  const countText = modelDialogCount(modelResultCount(items), refreshing);
   const countWidth = Math.min(contentWidth, textCells(countText));
   const titleWidth = Math.max(0, contentWidth - countWidth - (countWidth > 0 ? 1 : 0));
 
-  // The footer names bindings, so it is composed from what is actually bound.
-  // `modelDialogHint` names Ctrl+←/→ and Ctrl+S unconditionally, so it is used
-  // only when both of those callbacks exist; `modelFooterHint` names Tab, so it
-  // is used only on the BYOK path. The hosted path without a role layer is
-  // neither, and is listed explicitly rather than borrowing a line that
-  // advertises a key it does not implement.
   const hint = onSkip && !filter
     ? "[esc] back · [⌃N] skip · [⏎] select · [↑↓] move · type to filter · [⌃C] quit"
     : rolesLive && singleModelLive
-    ? modelDialogHint({ scope, role, hasFilter: filter.length > 0, canReload: loadHosted || loadCodex })
-    : isByok
-      ? modelFooterHint(mode, filter.length > 0)
-      : [
-        "[↑↓] model",
-        role !== null && rolesLive ? "[⏎] apply" : "[⏎] select",
-        rolesLive ? "[⌃←→] target" : undefined,
-        rolesLive && role !== null ? "[⌃⌫] inherit" : undefined,
-        singleModelLive ? "[⌃S] single" : undefined,
-        "[⌃R] reload",
-        filter.length > 0 ? "[⌃U] clear" : "type to filter",
-        filter.length > 0 ? "[esc] clear" : "[esc] back",
-      ]
-        .filter((part): part is string => part !== undefined)
-        .join(" · ");
+      ? modelDialogHint({ scope, role, hasFilter: filter.length > 0, canReload: loadHosted || loadCodex })
+      : modelFooterHint(mode, filter.length > 0);
 
-  // The connection/failure notice is wrapped, not clipped: it is the whole
-  // explanation of why there is no list. One cell goes to the scrollbar.
-  const messageWidth = Math.max(1, contentWidth - 1);
-  const messageLines = connectionMessage && contentWidth > 0
-    ? hostedDetailLines([sanitizeTuiText(connectionMessage)], messageWidth, true)
-    : [];
 
   const body = (
     <box flexDirection="column" width="100%" flexGrow={1} minWidth={0} overflow="hidden">
@@ -910,23 +859,7 @@ export function ModelScreen({
         ))
         : null}
 
-      {listRows < 2 || contentWidth < 1 ? null : connectionMessage ? (
-        <scrollbox
-          width={contentWidth}
-          height={listRows}
-          flexShrink={0}
-          scrollX={false}
-          verticalScrollbarOptions={sleekScrollbar(theme)}
-        >
-          <box width={messageWidth} flexDirection="column" flexShrink={0} minWidth={0}>
-            {messageLines.map((line, index) => (
-              <Cells key={`msg-${index}`} width={messageWidth} fg={hostedError ? theme.ERROR : theme.MUTED}>
-                {line.text}
-              </Cells>
-            ))}
-          </box>
-        </scrollbox>
-      ) : (
+      {listRows < 2 || contentWidth < 1 ? null : (
         <DialogSelectBody
           items={items}
           cursor={cursor}
@@ -939,25 +872,21 @@ export function ModelScreen({
           onActivateRow={highlight}
           onHoverRow={highlight}
           onScroll={move}
-          emptyText={isHosted
-            ? refreshing
-              ? "Loading the hosted catalog"
-              : "No hosted models matched; no fallback catalog is used"
-            : showAll || filter.trim()
-              ? "No matches. Ctrl+U clears search."
-              : "No matches. Tab searches all models; Ctrl+U clears."}
+          emptyText={showAll || filter.trim()
+            ? "No matches. Ctrl+U clears search."
+            : "No connected models found. Open Connections or press Tab to search all."}
         />
       )}
 
-      {stackedRows > 0 && !connectionMessage && items[cursor] ? (
+      {stackedRows > 0 && items[cursor] ? (
         <box width={contentWidth} height={stackedRows} flexDirection="column" flexShrink={0} minWidth={0}>
           {renderDetail(items[cursor]!, { width: contentWidth, height: stackedRows })}
         </box>
       ) : null}
 
       {layout.statusRows > 0 && contentWidth > 0 ? (
-        <Cells width={contentWidth} fg={hostedFatal ? theme.ERROR : theme.MUTED}>
-          {hostedFatal ? statusText : notice || statusText}
+        <Cells width={contentWidth} fg={theme.MUTED}>
+          {notice || statusText}
         </Cells>
       ) : null}
     </box>

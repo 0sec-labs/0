@@ -59,12 +59,12 @@ export function selectorPanelHeight(itemRows: number, showContext: boolean, show
 /**
  * THE decision surface.
  *
- * The in-chat picker (`/mode`, `/scope` and every inline `SelectorState`-driven
- * choice) renders through this one component, driven by the same reducer and
- * the same key bindings. Its item list is now drawn by the SAME
- * `DialogSelectBody` the model/theme pickers use, in inline `bodyRows` mode, so
- * the rows are byte-for-byte the same style as every other picker: one row per
- * item, the PRIMARY-background active-row highlight, the shared column layout
+ * The in-chat `/scope` picker and every inline `SelectorState`-driven choice
+ * render through this one component, driven by the same reducer and bindings.
+ * Its item list is drawn by the SAME `DialogSelectBody` the model/theme pickers
+ * use, in inline `bodyRows` mode, so the rows are byte-for-byte the same style
+ * as every other picker: one row per item, the PRIMARY-background active-row
+ * highlight, the shared column layout
  * and the current-value gutter dot. Only the surrounding chrome (the title /
  * context / detail / footer lines) is this component's own, and it keeps the
  * explicit-height + `flexShrink={0}` discipline that stops Yoga from squeezing

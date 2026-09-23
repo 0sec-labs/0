@@ -22,6 +22,7 @@ import { DEFAULT_AUTONOMY_MODE } from "@0/shared";
 import {
   ScopePolicy,
   CloudClient,
+  CloudError,
   loadCloudCredentials,
   createConsoleRuntime,
   eventBus,
@@ -83,6 +84,7 @@ import {
   fitStatusSegments,
   fitStatusPills,
   pillText,
+  type StatusBarUsageEntry,
   type StatusColorRole,
 } from "./status-bar.js";
 import { SHIMMER_TEXT_INTERVAL_MS, spinnerGlyph } from "./animations.js";
@@ -197,12 +199,15 @@ import {
   moveAgentSelection,
 } from "./chat-layout.js";
 import {
+  agentFocusNavigationTarget,
   applySubagentLifecycle,
   applySubagentProgress,
   clipDetailLines,
   computeHerdFocusLayout,
   focusHeaderLines,
   herdFocusTranscriptTitle,
+  projectAgentForest,
+  projectLiveAgentForest,
   renderFocusActivity,
   shellChromeRows,
   subagentPeers,
@@ -333,6 +338,13 @@ import { summarizeAgentActivity, summarizeRoster } from "./agents-panel-model.js
 import { appendTuiCrash, appendTuiEvent, serializeError, logProblem, describeErrorForSurface, tuiLogPath } from "./tui-crash.js";
 
 export type ChatDestination = "launcher" | "ops" | "history" | "findings" | "doctor" | "replay" | "settings" | "keybindings" | "harness" | "new-chat" | "models" | "market" | "usage" | "connect" | "herd" | "comms" | "finding" | "resume" | "audits" | "onboard";
+
+function waitingForAgentsLabel(count: number): string {
+  const liveCount = Math.max(0, Math.trunc(count));
+  return liveCount > 0
+    ? `Waiting for ${liveCount} agent${liveCount === 1 ? "" : "s"}`
+    : "Waiting for agents";
+}
 
 /**
  * Map a status pill's semantic colour role onto the live palette. Kept theme-
@@ -610,14 +622,23 @@ function statusRoleColor(
 }
 
 function startupRecoveryText(detail: string): string {
+  if (/\bprepaid_disabled\b/.test(detail)) {
+    return "0cloud reports no usable included allowance (prepaid_disabled). Prepaid is optional: included usage works without it. Review your included allowance in /connect or with your organization owner, then check again.";
+  }
+  if (/No hosted models are available|Hosted model ".+" is unavailable/.test(detail)) {
+    return "0cloud has not provided an available service model. It selects the model automatically; you do not need to pick one. Check again or use /connect to choose another provider.";
+  }
   if (/no provider credential found/i.test(detail)) {
     return "Use /connect to sign in to 0cloud, or use your own API key or provider subscription.";
   }
   const recovery = connectionRecoveryForError(detail);
+  if (recovery?.providerId === "hosted") {
+    return "0cloud could not verify this sign-in. Use /connect to sign in again.";
+  }
   if (recovery?.providerId === "chatgpt-codex") {
     return "ChatGPT Codex needs device OAuth. Use /connect; do not paste an OpenAI API key.";
   }
-  return detail;
+  return detail.replaceAll("`0 models`", "`/model`");
 }
 
 
@@ -1209,9 +1230,8 @@ export function ChatScreen({
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   /**
-   * Open picker overlay. `commit` runs with the chosen item id; the
-   * overlay owns no domain logic so the same component serves /model,
-   * /mode and anything added later.
+   * Open a small inline picker. `commit` runs with the chosen item id; the
+   * overlay owns no domain logic and is used by model/theme selection.
    */
   const [picker, setPicker] = useState<
     {
@@ -1234,7 +1254,10 @@ export function ChatScreen({
   const [sessionTokens, setSessionTokens] = useState({ input: 0, output: 0 });
   /** Live turn-budget consumption, updated per model call. */
   const [turnBudget, setTurnBudget] = useState<{ used: number; limit: number } | null>(null);
-  const [startupError, setStartupError] = useState<string | null>(null);
+  const [startupError, setStartupError] = useState<{ text: string; accountRestricted: boolean } | null>(null);
+  const [checkingModel, setCheckingModel] = useState(false);
+  const runtimeReadyRef = useRef(false);
+  const runtimeCheckEpoch = useRef(0);
   const [mode, setMode] = useState<ConsoleAutonomyMode>(options?.autonomyMode ?? DEFAULT_AUTONOMY_MODE);
   /**
    * The live autonomy mode, for callbacks that must not be rebuilt when it
@@ -1366,12 +1389,30 @@ export function ChatScreen({
   const projectedHerdRef = useRef(projectedHerdAgents);
   projectedHerdRef.current = projectedHerdAgents;
   herdHandle.current = useCallback(() => projectedHerdRef.current, []);
-  const workerRoster = useMemo(() => Object.values(herdAgents).map((agent) => ({
+  const workerRosterRecords = useMemo(() => Object.values(herdAgents).map((agent) => ({
     ...workerOutcomes[agent.agentId],
     agent_id: agent.agentId, parent_scan_id: agent.parentScanId,
     name: agent.name, task: agent.task, status: agent.status,
     max_turns: agent.maxTurns, turns: agent.turns ?? agent.turn,
   })), [herdAgents, workerOutcomes]);
+  const agentTree = useMemo(
+    () => projectAgentForest(workerRosterRecords, session?.scanId),
+    [workerRosterRecords, session?.scanId],
+  );
+  const liveAgentTree = useMemo(
+    () => projectLiveAgentForest(workerRosterRecords, session?.scanId),
+    [workerRosterRecords, session?.scanId],
+  );
+  // Sibling arrival order is stable; preorder keeps each projected subtree contiguous.
+  const workerRoster = useMemo(() => liveAgentTree.map((row) => row.item), [liveAgentTree]);
+  const runningSpawnChildren = useMemo(
+    () => workerRosterRecords.filter((worker) =>
+      worker.parent_scan_id === session?.scanId
+      && !operatorStopped.has(worker.agent_id)
+      && (worker.status === "running" || worker.status === "queued"),
+    ).length,
+    [workerRosterRecords, session?.scanId, operatorStopped],
+  );
   useEffect(() => {
     let runningWorkers = 0;
     let parkedWorkers = 0;
@@ -1744,6 +1785,36 @@ export function ChatScreen({
       },
     });
   }, [problemReview, settings.diagnosticReporting, busy, picker, pendingScope, pendingLocalScope, pendingToolApproval, pendingOperatorQuestion, stageFeedback, chooseReporting, showToast]);
+  // Resolve hosted availability before accepting a message, without sending
+  // inference. A late check from an old selection must not overwrite recovery.
+  const checkRuntime = useCallback(async () => {
+    const runtime = runtimeRef.current;
+    if (!runtime || closingRef.current || stoppingAuditRef.current) return;
+    const epoch = ++runtimeCheckEpoch.current;
+    runtimeReadyRef.current = false;
+    setCheckingModel(true);
+    try {
+      await runtime.prepare();
+      if (!alive.current || epoch !== runtimeCheckEpoch.current || runtimeRef.current !== runtime) return;
+      runtimeReadyRef.current = true;
+      setStartupError(null);
+      setModelId(runtime.resolvedModel());
+      modelIdRef.current = runtime.resolvedModel();
+    } catch (error) {
+      if (!alive.current || epoch !== runtimeCheckEpoch.current || runtimeRef.current !== runtime) return;
+      const detail = error instanceof Error ? error.message : String(error);
+      setStartupError({
+        text: startupRecoveryText(detail),
+        accountRestricted: error instanceof CloudError
+          && error.path === "/api/inference/account"
+          && Boolean(error.code && error.code !== "unsupported_account_data" && error.code !== "billing_unavailable"),
+      });
+      logProblem("runtime-preflight", error);
+    } finally {
+      if (alive.current && epoch === runtimeCheckEpoch.current) setCheckingModel(false);
+    }
+  }, []);
+
   /** Construct only at initial startup, explicit new chat, or failed-start recovery. */
   const buildSession = useCallback((
     opts: { model?: string; providerId?: RuntimeConfig["provider"]; initialMessages?: NativeMessage[] } = {},
@@ -1892,11 +1963,12 @@ export function ChatScreen({
       codexCatalog: (signal) => runtime.codexModelCatalog(signal),
       applySelection: (sel) => applySelectionRef.current?.(sel),
     };
+    void checkRuntime();
     // resolvedModel() is the id the runtime actually settled on after
     // provider detection — not necessarily what was requested — so it is
     // the only value honest enough to display.
     return { session: created, model: runtime.resolvedModel() };
-  }, [options, pluginHostManager, messagingHomeDir, trackedRequest, runtimeInfoHandle]);
+  }, [options, pluginHostManager, messagingHomeDir, trackedRequest, runtimeInfoHandle, checkRuntime]);
 
   useEffect(() => {
     if (closingRef.current) return;
@@ -1922,7 +1994,7 @@ export function ChatScreen({
     } catch (error) {
       recordProblem("runtime", error);
       const detail = error instanceof Error ? error.message : String(error);
-      setStartupError(startupRecoveryText(detail));
+      setStartupError({ text: startupRecoveryText(detail), accountRestricted: false });
       const recovery = connectionRecoveryForError(detail);
       if (recovery) connectionFailureRef.current?.(recovery);
     }
@@ -2018,7 +2090,7 @@ export function ChatScreen({
     void refresh();
     const interval = setInterval(() => { void refresh(); }, 30_000);
     return () => { active = false; clearInterval(interval); };
-  }, [session, busy, interactive]);
+  }, [session, busy, interactive, startupError]);
   // Marketplace changes never replace this session's runtime or live harness.
   // Its leased host remains usable until cleanup; new chats acquire the new set.
   useEffect(() => {
@@ -2087,13 +2159,14 @@ export function ChatScreen({
       ...(sel.singleModel !== undefined ? { singleModel: sel.singleModel } : {}),
       env,
     });
+    void checkRuntime();
     // resolvedModel() is the id the runtime settled on after re-detection.
     const applied = runtime.resolvedModel();
     setModelId(applied);
     modelIdRef.current = applied;
     const providerNow = runtime.getConfigurationDiagnostics().provider;
     const providerLabel = providerNow === "hosted"
-      ? "0cloud"
+      ? "0security Auto"
       : PROVIDERS.find((candidate) => candidate.id === providerNow)?.label ?? providerNow;
     appendEntry({
       kind: "notice",
@@ -2101,7 +2174,7 @@ export function ChatScreen({
       detail: "Live for the next turn and every new subagent. Conversation, scope and self-extension are unchanged.",
       turn: turn.current,
     });
-  }, [appendEntry]);
+  }, [appendEntry, checkRuntime]);
   applyRuntimeSelectionRef.current = applyRuntimeSelection;
 
   // Busy-aware handle. Apply at once when idle; when a turn is in flight, stash
@@ -2142,17 +2215,18 @@ export function ChatScreen({
     }
     const provider = providerId as NonNullable<RuntimeConfig["provider"]>;
     const providerLabel = providerId === "hosted"
-      ? "0cloud"
+      ? "0security Auto"
       : knownProvider?.label ?? providerId;
     // Keep the choice staged so /new inherits it too; then apply it LIVE to
     // this audit's running runtime (deferred to the turn boundary when busy).
-    onNextChatOptions?.({ providerId: provider });
+    const selection = { providerId: provider, ...(provider === "hosted" ? { model: "" } : {}) };
+    onNextChatOptions?.(selection);
     if (sessionRef.current) {
-      applySelectionRef.current?.({ providerId: provider });
+      applySelectionRef.current?.(selection);
       return;
     }
     try {
-      const built = buildSession({ providerId: provider, model: options?.model, initialMessages: options?.initialMessages });
+      const built = buildSession({ providerId: provider, model: provider === "hosted" ? "" : options?.model, initialMessages: options?.initialMessages });
       sessionRef.current = built.session;
       modelIdRef.current = built.model;
       setSession(built.session);
@@ -2815,9 +2889,15 @@ export function ChatScreen({
   const streamingRef = useRef(false);
   /** Name of the tool currently executing, for the tool animation. */
   const [runningTool, setRunningTool] = useState<string | null>(null);
+  const waitingForSpawnResult = busy && (runningTool === "spawn_agent" || runningTool === "spawn_agents");
+  const waitActivityLabel = waitingForSpawnResult
+    ? waitingForAgentsLabel(runningSpawnChildren)
+    : undefined;
   useEffect(() => {
-    onAuditActivity({ activity: runningTool ? `Running ${runningTool}` : busy ? "Working on audit" : "" });
-  }, [runningTool, busy, onAuditActivity]);
+    onAuditActivity({
+      activity: waitActivityLabel ?? (runningTool ? `Running ${runningTool}` : busy ? "Working on audit" : ""),
+    });
+  }, [waitActivityLabel, runningTool, busy, onAuditActivity]);
   /**
    * Interrupt handle for the turn in flight, or null when none is running.
    * Held in a ref because the keyboard handler must reach the CURRENT turn's
@@ -3370,93 +3450,6 @@ export function ChatScreen({
         selectModel(requested);
         return true;
       }
-      case "mode": {
-        const modeArg = args.toLowerCase();
-        if (!modeArg) {
-          const modeItems: SelectorItem[] = [
-            {
-              id: "standard",
-              label: "Standard",
-              meta: "approve each action",
-              detail: "You approve each action before it runs; asks to extend scope.",
-              current: mode === "standard",
-            },
-            {
-              id: "recon",
-              label: "Recon",
-              meta: "passive, read-only",
-              detail: "Passive, in-scope reconnaissance only; effectful tools are refused.",
-              current: mode === "recon",
-            },
-            {
-              id: "copilot",
-              label: "Co-pilot",
-              meta: "autonomous in scope",
-              detail: "Full autonomy inside the engagement; scope expands to discovered targets.",
-              current: mode === "copilot",
-            },
-            {
-              id: "yolo",
-              label: "YOLO",
-              meta: "full autonomy",
-              detail: "No per-action prompts. Asks before accessing a new target.",
-              current: mode === "yolo",
-            },
-          ];
-          setPicker({
-            state: createSelectorState("Engagement mode", modeItems, mode),
-            commit: (id) => void routeSlashCommand(`/mode ${id}`),
-          });
-          return true;
-        }
-        if (modeArg !== "standard" && modeArg !== "recon" && modeArg !== "copilot" && modeArg !== "yolo") {
-          appendEntry({
-            kind: "notice",
-            text: "invalid mode",
-            detail: "Use /mode standard, /mode recon, /mode copilot, or /mode yolo.",
-            turn: turn.current,
-          });
-          return true;
-        }
-        // NO busy guard. `autonomyMode` is a scalar on the shared tool
-        // context, re-read fresh at every gate — maybeResolveScope,
-        // maybeApproveTool and the scoped-audit gate in agent/tools.ts all
-        // look it up at dispatch time — so there is no torn state to protect
-        // and a change simply applies from the next tool call. It is also
-        // operator-initiated authority, and tightening mid-turn (standard →
-        // copilot) is exactly when an operator wants it.
-        //
-        // This licence is for the MODE SCALAR ONLY. Anything that mutates
-        // the tool set or the gate maps must still refuse mid-turn: a tool
-        // could otherwise be gated under one policy at scope resolution and
-        // a different one at approval.
-        if (!session) {
-          appendEntry({
-            kind: "notice",
-            text: "runtime is not ready; mode is unchanged",
-            turn: turn.current,
-          });
-          return true;
-        }
-        const next: ConsoleAutonomyMode = modeArg === "standard"
-          ? "standard"
-          : modeArg === "recon"
-            ? "recon"
-            : modeArg === "copilot"
-              ? "copilot"
-              : "yolo";
-        session.setAutonomyMode(next);
-        modeRef.current = next;
-        setMode(next);
-        // A mode switch is transient STATE, not conversation. The operator
-        // cycles modes constantly with Shift+Tab, and the current mode is
-        // already shown (coloured) in the bottom bar — appending a persistent
-        // "Mode: X" notice for every flip just spammed the transcript. Confirm
-        // the switch with an ephemeral toast instead; mid-turn it still only
-        // governs the NEXT tool call, so say so briefly.
-        showToast(`${modeLabel(next)} mode${busy ? " · from the next tool call" : ""}`);
-        return true;
-      }
       case "tools": {
         const toolNames = session?.tools.map((tool) => tool.name) ?? [];
         appendEntry({
@@ -3588,6 +3581,15 @@ export function ChatScreen({
     const text = raw.trim();
     if (!text) return;
     if (routeSlashCommand(text)) return;
+    if (!runtimeReadyRef.current) {
+      if (!composerRef.current.trim()) {
+        setComposerText(raw);
+        composingRef.current = true;
+        setComposing(true);
+      }
+      showToast("Message not sent. Your draft is kept; review the recovery actions below.");
+      return;
+    }
     if (busy || abortRef.current || stoppingAuditRef.current || !alive.current || !session) return;
 
     const currentTurn = ++turn.current;
@@ -3818,7 +3820,7 @@ export function ChatScreen({
         appendEntry({
           kind: "error",
           text: "Could not complete this message",
-          detail: `${detail}\nUse /model to choose a model or /connect to change providers, then send your message again.`,
+          detail: `${startupRecoveryText(detail)}\nUp recalls your message.`,
           turn: currentTurn,
         });
         const recovery = connectionRecoveryForError(detail);
@@ -3871,7 +3873,7 @@ export function ChatScreen({
       appendEntry({
         kind: "error",
         text: "Could not complete this message",
-        detail: `${detail}\nUse /model to choose a model or /connect to change providers, then send your message again.`,
+        detail: `${startupRecoveryText(detail)}\nUp recalls your message.`,
         turn: currentTurn,
       });
       const recovery = connectionRecoveryForError(detail);
@@ -3983,6 +3985,8 @@ export function ChatScreen({
     protectedSessionIds,
     recordProblem,
     routeSlashCommand,
+    setComposerText,
+    showToast,
     session,
     settings.showTurnSummary,
   ]);
@@ -4037,6 +4041,10 @@ export function ChatScreen({
   const submitOperatorMessage = useCallback((raw: string) => {
     const input = raw.trim();
     if (!input) return;
+    if (!findCommand(input).isSlash && !runtimeReadyRef.current) {
+      void send(raw);
+      return;
+    }
     const disposition = classifyComposerInput({
       input,
       isSlash: findCommand(input).isSlash,
@@ -4124,13 +4132,13 @@ export function ChatScreen({
   // itself, and it means a queued message never races the turn it was typed
   // during.
   useEffect(() => {
-    if (busy || abortRef.current || stoppingAuditRef.current || !alive.current || !session) return;
+    if (busy || abortRef.current || stoppingAuditRef.current || !alive.current || !session || !runtimeReadyRef.current) return;
     const { next, rest } = dequeueComposerInput(queuedRef.current);
     if (next === undefined) return;
     queuedRef.current = rest;
     setQueuedMessages(rest);
     void submitRef.current?.(next);
-  }, [busy, session]);
+  }, [busy, session, checkingModel]);
 
   // usePaste shares AppContext.keyHandler with useKeyboard, so an overlay
   // owns the paste exclusively while the persistent chat remains mounted.
@@ -4372,17 +4380,19 @@ export function ChatScreen({
     // ── Inline subagent focus view (modal) ─────────────────────────────────────
     // Drilled into ONE subagent: the live meta + activity panes replace the
     // transcript. While the composer is IDLE, Up/Down (and PageUp/PageDown)
-    // scroll the activity back from its tail and Left/Esc returns to the agents
-    // list. A printable key falls through to the idle→compose transition below,
-    // so the operator can type a message straight to the focused subagent
-    // (delivered on Enter by the composing block, which routes to it when
-    // `focusAgentId` is set). Once composing, this branch yields entirely so the
-    // composer owns typing/editing/Enter exactly as it does on the main screen.
+    // scroll the activity back from its tail. Left focuses its parent (or Main
+    // for a root); Escape always returns to Main. A printable key falls through
+    // so the operator can message this worker; once composing, the composer
+    // retains its existing editing behavior.
     if (focusAgentId && !composingRef.current) {
       if (key.name === "escape" || key.name === "left") {
-        setFocusAgentId(null);
+        const focusTree = liveAgentTree.some((row) => row.item.agent_id === focusAgentId)
+          ? liveAgentTree
+          : agentTree;
+        const target = agentFocusNavigationTarget(key.name, focusTree, focusAgentId);
+        setFocusAgentId(target);
         setFocusScrollOffset(0);
-        setAgentNavIndex(0);
+        setAgentNavIndex(-1);
         return;
       }
       if (key.name === "up") {
@@ -4472,6 +4482,10 @@ export function ChatScreen({
     // expanded detail; both sidebars toggle their pane. All three persist via
     // the settings store (the same layer `/settings` writes), so the choice
     // survives the session and the store's subscribers repaint immediately.
+    if (startupError && key.ctrl && key.name === "r") {
+      if (!checkingModel) void checkRuntime();
+      return;
+    }
     if (matchesBinding(key, "view.transcript-detail", keybindingOverrides)) {
       updateSetting(
         "transcriptDetail",
@@ -4526,11 +4540,18 @@ export function ChatScreen({
     // escape sequence (`\x1b[Z`, or `\x1b[9;2u` under the kitty protocol) into
     // the composer.
     //
-    // The cycle delegates to `/mode` rather than calling `setAutonomyMode`
-    // directly, so it uses the same live-mode transition and runtime readiness
-    // checks. All four modes are available without a preconfigured scope.
+    // Shift+Tab applies the mode transition directly; autonomy is not a slash
+    // command and stays out of the command chooser.
     if (isAutonomyCycleKey(key)) {
-      routeSlashCommand(`/mode ${nextAutonomyMode(modeRef.current)}`);
+      if (!session) {
+        showToast("Runtime is not ready; mode is unchanged");
+        return;
+      }
+      const next = nextAutonomyMode(modeRef.current);
+      session.setAutonomyMode(next);
+      modeRef.current = next;
+      setMode(next);
+      showToast(`${modeLabel(next)} mode${busy ? " · from the next tool call" : ""}`);
       return;
     }
     if (matchesBinding(key, "nav.palette", keybindingOverrides)) {
@@ -4563,7 +4584,7 @@ export function ChatScreen({
       const action = queuedInputAction({
         input: composerRef.current,
         busy: busy || abortRef.current !== null,
-        hasSession: Boolean(session),
+        hasSession: Boolean(session) && runtimeReadyRef.current,
         queuedCount: queuedRef.current.length,
       });
       if (action !== "none") {
@@ -4701,6 +4722,12 @@ export function ChatScreen({
           setCommandMenuVisible(false);
           return;
         }
+        if (!findCommand(input).isSlash && !runtimeReadyRef.current) {
+          showToast(checkingModel
+            ? "Checking service availability. Your draft is kept."
+            : "Your draft is kept. Review the recovery actions below.");
+          return;
+        }
         // Remember every submitted message (sent or queued) for Up/Down recall.
         // Done before the setComposerText("") below, which re-bases the history
         // cursor onto the freshly-grown ring.
@@ -4825,10 +4852,40 @@ export function ChatScreen({
   // preview) while the root turn owns a call, otherwise the fleet's running
   // count when subagents are the only thing in flight. Never fabricated.
   const statusActivity = busy && !focusAgentId && runningTool
-    ? (statusRunningEntry?.toolArgs ? `${runningTool} · ${statusRunningEntry.toolArgs}` : runningTool)
+    ? waitActivityLabel ?? (statusRunningEntry?.toolArgs ? `${runningTool} · ${statusRunningEntry.toolArgs}` : runningTool)
     : fleetActivityLabel || undefined;
+  const usageByModel = useMemo(() => {
+    const entries: StatusBarUsageEntry[] = [];
+    if (modelId && (sessionTokens.input > 0 || sessionTokens.output > 0)) {
+      entries.push({
+        model: modelId,
+        inputTokens: sessionTokens.input,
+        outputTokens: sessionTokens.output,
+      });
+    }
+    for (const telemetry of Object.values(workerTelemetry)) {
+      const usage = telemetry?.usage;
+      if (!usage || usage.inputTokens <= 0 && usage.outputTokens <= 0) continue;
+      entries.push({
+        model: telemetry.model,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        cachedInputTokens: usage.cachedInputTokens,
+      });
+    }
+    return entries;
+  }, [modelId, sessionTokens, workerTelemetry]);
+  const aggregateUsage = usageByModel.reduce(
+    (total, usage) => ({
+      input: total.input + Math.max(0, usage.inputTokens),
+      output: total.output + Math.max(0, usage.outputTokens),
+      cached: total.cached + Math.max(0, usage.cachedInputTokens ?? 0),
+    }),
+    { input: 0, output: 0, cached: 0 },
+  );
+  const visibleModel = activeProvider === "hosted" ? "0security Auto" : modelId ?? undefined;
   const statusSegments = buildStatusSegments({
-    model: focusAgentId ? focusedTelemetry?.model : modelId ?? undefined,
+    model: focusAgentId ? focusedTelemetry?.model : visibleModel,
     mode: autonomyFooterText(mode),
     activity: statusActivity,
     turnElapsedMs: settings.elapsedTimer !== "off" && !focusAgentId && busy && activeTurnStartedAt.current !== null
@@ -4839,9 +4896,10 @@ export function ChatScreen({
     branch: git?.isRepo ? git.branch ?? git.detachedSha : undefined,
     modified: git?.modified,
     untracked: git?.untracked,
-    inputTokens: focusAgentId ? focusedTelemetry?.usage?.inputTokens : sessionTokens.input,
-    outputTokens: focusAgentId ? focusedTelemetry?.usage?.outputTokens : sessionTokens.output,
-    cachedInputTokens: focusAgentId ? focusedTelemetry?.usage?.cachedInputTokens : undefined,
+    inputTokens: focusAgentId ? focusedTelemetry?.usage?.inputTokens : aggregateUsage.input,
+    outputTokens: focusAgentId ? focusedTelemetry?.usage?.outputTokens : aggregateUsage.output,
+    cachedInputTokens: focusAgentId ? focusedTelemetry?.usage?.cachedInputTokens : aggregateUsage.cached,
+    usageByModel: focusAgentId ? undefined : usageByModel,
     showTokenUsage: settings.showTokenUsage,
     // Telemetry toggles: where the model name is surfaced, whether the
     // context reading renders as a visual meter, and whether an estimated
@@ -4958,6 +5016,18 @@ export function ChatScreen({
   // focus view and suppresses the rail / subagent block while it is open.
   const nowMs = Date.now();
   const focusRecord = focusAgentId ? projectedHerdAgents[focusAgentId] : undefined;
+  const focusTreeRow = focusAgentId
+    ? liveAgentTree.find((row) => row.item.agent_id === focusAgentId)
+      ?? agentTree.find((row) => row.item.agent_id === focusAgentId)
+    : undefined;
+  const focusAgentName = focusRecord?.name
+    ?? agentNamesRef.current.get(focusAgentId ?? "")
+    ?? "Unnamed worker";
+  const focusParentName = focusTreeRow?.parentId
+    ? projectedHerdAgents[focusTreeRow.parentId]?.name
+      ?? agentNamesRef.current.get(focusTreeRow.parentId)
+      ?? focusTreeRow.parentId
+    : "Main";
   const focusPeer = focusAgentId
     ? subagentPeers(projectedHerdAgents, nowMs).find((peer) => peer.id === focusAgentId)
     : undefined;
@@ -5037,7 +5107,7 @@ export function ChatScreen({
     richToolCards: settings.richToolCards,
     mode: modeLabel(mode),
     modeColor: modeColorFor(mode, theme),
-    model: modelId ?? "",
+    model: visibleModel ?? "",
     modelInFooter: settings.modelDisplay === "message",
     showTokenUsage: settings.showTokenUsage,
     showCost: settings.showCost,
@@ -5055,13 +5125,16 @@ export function ChatScreen({
   };
   const animation = animationKind
     ? frameAt(animationKind, Date.now() - activitySince, {
-        label: animationKind === "tool" ? runningTool ?? undefined : undefined,
+        label: animationKind === "tool" ? waitActivityLabel ?? runningTool ?? undefined : undefined,
         motion: !settings.reduceMotion && animationKind !== "awaiting-operator",
       })
-    : null;
+: null;
   const loadingLabel = animation?.glyph ?? "";
-  const loadingWidth = loadingLabel ? textCells(loadingLabel) + 3 : 0;
-  const statusContentWidth = Math.max(0, controlsWidth - loadingWidth);
+  // The bottom bar is telemetry-only. The live spinner already appears in
+  // `workingIndicator`; repeating its glyph before the status pills made the
+  // real activity read as an unexplained `Esc · ...` prefix in terminals that
+  // render the glyph fallback textually.
+  const statusContentWidth = controlsWidth;
   const visibleStatusSegments = settings.showStatusBar ? statusSegments
     : statusSegments.filter((segment) => segment.kind === "mode" || segment.kind === "elapsed");
   const statusPills = fitStatusPills(visibleStatusSegments, statusContentWidth);
@@ -5109,7 +5182,8 @@ export function ChatScreen({
   // are drilled into (the focused row wears the highlight below). Its rows are
   // reserved in the ledger via computeLedgerRows regardless of focus, so the
   // focus transcript makes room for it.
-  const subagentEntries = settings.showSubagents ? workerRoster : [];
+  const subagentTreeRows = settings.showSubagents ? liveAgentTree : [];
+  const subagentEntries = subagentTreeRows.map((row) => row.item);
   const hasSubagents = subagentEntries.length > 0;
   const visibleRosterLimit = Math.max(1, Math.min(SUBAGENT_MAX_VISIBLE, Math.floor(height / 5)));
   // The panel is EXPANDED by default so running agents are visible without the
@@ -5124,8 +5198,8 @@ export function ChatScreen({
   const subagentVisible = subagentPanelCollapsed
     ? []
     : agentNavIndex >= 0
-      ? subagentEntries.slice(rosterStart, rosterStart + visibleRosterLimit)
-      : subagentEntries.slice(0, visibleRosterLimit);
+      ? subagentTreeRows.slice(rosterStart, rosterStart + visibleRosterLimit)
+      : subagentTreeRows.slice(0, visibleRosterLimit);
   const subagentOverflow = subagentEntries.length - subagentVisible.length;
   // Below the header: the visible rows plus a "+N more" tail whenever the
   // roster outruns the window (both when navigating and when resting expanded).
@@ -5200,7 +5274,7 @@ export function ChatScreen({
     // A busy machine-turn: spinner + verb (+ agents) (+ elapsed).
     if (animation && animationKind !== "awaiting-operator") {
       const parts = [animation.label];
-      if (fleetActivityLabel) parts.push(fleetActivityLabel);
+      if (fleetActivityLabel && !waitActivityLabel) parts.push(fleetActivityLabel);
       if (elapsedClock) parts.push(elapsedClock);
       return `${loadingLabel} ${parts.join(" · ")}`;
     }
@@ -5216,8 +5290,10 @@ export function ChatScreen({
     }
     return "";
   })();
-  const sessionState = startupError
-    ? "unavailable"
+  const accountAdmissionBlocked = startupError?.accountRestricted ?? false;
+  const sessionState = checkingModel
+    ? "checking service"
+    : startupError ? accountAdmissionBlocked ? "account restricted" : activeProvider === "hosted" ? "service unavailable" : "needs connection"
     : busyStatusWord || (busy ? "working" : session ? "idle" : "connecting");
   const headerSegments: string[] = [];
   if (settings.showScope) headerSegments.push(`Scope: ${scopeLabel}`);
@@ -5234,9 +5310,8 @@ export function ChatScreen({
   // Activity comes from the real in-flight call, not an invented model intent.
   // Its spinner lives once, below the composer in the loading/status row.
   const runningEntry = runningTool ? entries.findLast((entry) => entry.kind === "tool" && entry.text === runningTool && entry.success === undefined) : undefined;
-  const workingLineBase = runningEntry?.toolArgs
-    ? `${runningTool} · ${runningEntry.toolArgs}`
-    : animation?.label ?? "";
+  const workingLineBase = waitActivityLabel
+    ?? (runningEntry?.toolArgs ? `${runningTool} · ${runningEntry.toolArgs}` : animation?.label ?? "");
   // Fold the live "running N agents" fact into the below-composer indicator too
   // (unless the base already speaks about the fleet), so the most prominent
   // "something is happening" line names what the herd is doing, not just the
@@ -5244,8 +5319,7 @@ export function ChatScreen({
   const workingLine = fleetActivityLabel && !workingLineBase.includes("agent")
     ? (workingLineBase ? `${workingLineBase} · ${fleetActivityLabel}` : fleetActivityLabel)
     : workingLineBase;
-  const canInterrupt = busy && !composing && !gateOpen && !picker && !commandMenuVisible && !reviewOpen;
-  const workingLineFitted = fitTuiText(`${canInterrupt ? "Esc · " : ""}${workingLine}`, controlsWidth);
+  const workingLineFitted = fitTuiText(workingLine, controlsWidth);
   const workingIndicator = animation ? (
     <box width="100%" height={1} flexShrink={0} marginTop={1} overflow="hidden">
       {shimmerActive
@@ -5282,8 +5356,10 @@ export function ChatScreen({
     ? suggestCompletion(composer, historyRef.current)
     : null;
   const composerInput = (textWidth: number) => {
-    const placeholder = startupError
-      ? "type / for setup and commands"
+    const placeholder = checkingModel
+      ? "checking service · you can keep drafting"
+      : startupError
+      ? "draft here · restore access to send"
       : queueLabel
         ? queueLabel
         : busy
@@ -5388,7 +5464,7 @@ export function ChatScreen({
   // the column itself. Four cells of chrome (rail + its gap + the "› " prefix)
   // come off the width for the input field.
   const heroContentWidth = sidebars.rightVisible ? sidebars.transcriptWidth : contentWidth;
-  const heroComposerWidth = Math.min(heroContentWidth, Math.max(40, Math.min(72, Math.floor(heroContentWidth * 0.6))));
+  const heroComposerWidth = Math.min(heroContentWidth, startupError || checkingModel ? 72 : Math.max(40, Math.min(72, Math.floor(heroContentWidth * 0.6))));
   const heroComposerTextWidth = Math.max(1, heroComposerWidth - (composerStyle === "rail" ? 5 : 3));
   const heroComposerNode = buildComposer({
     textWidth: heroComposerTextWidth,
@@ -5551,7 +5627,8 @@ export function ChatScreen({
       }}>
         <text fg={agentNavIndex >= 0 ? ACCENT : MUTED}>{fitTuiText(subagentHeaderText, contentWidth)}</text>
       </box>
-      {subagentVisible.map((sa, index) => {
+      {subagentVisible.map((treeRow, index) => {
+        const sa = treeRow.item;
         const rec = herdAgents[sa.agent_id];
         const status = subagentEffectiveStatus(sa);
         // The tail is a LIVE, present-tense summary of what the agent is doing
@@ -5575,7 +5652,8 @@ export function ChatScreen({
         };
         return <AgentTreeRow key={sa.agent_id} view={view} width={contentWidth} theme={theme}
           selected={index + rosterStart === agentNavSelected || sa.agent_id === focusAgentId}
-          isLast={index === subagentVisible.length - 1}
+          isLast={treeRow.isLast}
+          ancestorContinues={treeRow.ancestorContinues}
           onSelect={() => { setFocusAgentId(sa.agent_id); setAgentNavIndex(-1); }} />;
       })}
       {subagentOverflowRow > 0 ? (
@@ -5600,7 +5678,11 @@ export function ChatScreen({
   const sidebarContentRows = Math.max(0, ledgerRows - 2);
   const cloudHintRows = !cloudHintDismissed && shouldOfferCloudHint({ hostedConnected: cloudConfigured, rows: sidebarContentRows, width: rightInner })
     ? Math.min(5, Math.max(0, sidebarContentRows - 8)) : 0;
-  const railRecords = Object.values(herdAgents);
+  const railTreeRows = liveAgentTree.flatMap((treeRow) => {
+    const record = herdAgents[treeRow.item.agent_id];
+    return record ? [{ treeRow, record }] : [];
+  });
+  const railRecords = railTreeRows.map((row) => row.record);
   const runFindings = runFindingsFromEntries(entries);
   // Header rows: AGENTS(1), FINDINGS(1 + separator), and the hide control(1).
   // Vertical padding was deducted above. Empty sections consume only their
@@ -5620,7 +5702,7 @@ export function ChatScreen({
     railRecords.length > railMaxAgents
       ? Math.max(0, Math.floor((agentsBudget - 1) / AGENT_SIDEBAR_ROWS))
       : railMaxAgents;
-  const railVisible = railRecords.slice(0, railCapacity);
+  const railVisible = railTreeRows.slice(0, railCapacity);
   const railOverflow = railRecords.length - railVisible.length;
   // FINDINGS rendering (wrapping to ≤2 lines, budget, "+N more") now lives in
   // the FindingsSidebar component; it owns its 1-row header, so it is handed the
@@ -5650,7 +5732,7 @@ export function ChatScreen({
             ) : null}
           </box>
         ) : (
-          railVisible.map((rec) => {
+          railVisible.map(({ treeRow, record: rec }) => {
             // Share the inline worker identity and truthful status presentation.
             const railStatus = operatorStopped.has(rec.agentId) ? "cancelled" : rec.status === "completed" && workerOutcomes[rec.agentId]?.done === false ? "incomplete" : rec.status;
             const view: AgentRowView = {
@@ -5676,6 +5758,8 @@ export function ChatScreen({
                 view={view}
                 width={rightInner}
                 theme={theme}
+                isLast={treeRow.isLast}
+                ancestorContinues={treeRow.ancestorContinues}
                 selected={workerRoster[agentNavIndex]?.agent_id === rec.agentId}
                 onSelect={() => { setFocusAgentId(rec.agentId); setAgentNavIndex(-1); }}
               />
@@ -5908,7 +5992,7 @@ export function ChatScreen({
   const focusHasTranscript = focused && Boolean(focusEntries?.length);
   // The coarse activity fallback is row-windowed. Rich transcripts use their
   // actual viewport and measured content extent instead of this estimate.
-  const focusMetaRows = focusMetaLines.length + 1;
+  const focusMetaRows = focusMetaLines.length + 2;
   const focusTranscriptCap = Math.max(1, ledgerRows - focusMetaRows - (compact ? 1 : 3));
   const focusTail = windowFocusTail(
     focusActivityLines.length,
@@ -5930,7 +6014,8 @@ export function ChatScreen({
       paddingY={compact ? 0 : 1}
     >
       <box flexDirection="column" flexShrink={0} minWidth={0}>
-        <text fg={ACCENT}>{fitTuiText(`Main › ${focusRecord?.name ?? agentNamesRef.current.get(focusAgentId ?? "") ?? "Unnamed worker"}`, focusInner)}</text>
+        <text fg={ACCENT}>{fitTuiText(`Selected agent: ${focusAgentName}`, focusInner)}</text>
+        <text fg={MUTED}>{fitTuiText(`Parent: ${focusParentName}`, focusInner)}</text>
         {focusMetaLines.map((line, index) => (
           <text key={`focus-meta-${index}`} fg={herdToneColor(theme, line.tone)}>
             {fitTuiText(line.text, focusInner)}
@@ -5984,7 +6069,7 @@ export function ChatScreen({
         </box>
       )}
       <text fg={MUTED} marginTop={1}>
-        {fitTuiText(`[⌃O] ${latestCompaction !== undefined ? "recap" : "transcript"} · [⌃R] ${workerDisplay.transcriptDetail === "expanded" ? "collapse" : "expand"} details · [esc]/[←] Main`, focusInner)}
+        {fitTuiText(`[←] ${focusTreeRow?.parentId ? "Parent" : "Main"} · [Esc] Main · [⌃O] ${latestCompaction !== undefined ? "recap" : "transcript"} · [⌃R] ${workerDisplay.transcriptDetail === "expanded" ? "collapse" : "expand"} details`, focusInner)}
       </text>
     </box>
   );
@@ -5995,6 +6080,23 @@ export function ChatScreen({
   // flexGrows; each sidebar is flexShrink={0} and only present when the layout
   // found room for it, so with both hidden the transcript takes the full width
   // exactly as before.
+  const recoveryPanel = (
+    <box flexDirection="column" width="100%" minWidth={0} flexShrink={0} padding={1} backgroundColor={PANEL}>
+      <text fg={checkingModel ? MUTED : WARNING}>
+        {checkingModel ? "Checking service availability…" : accountAdmissionBlocked ? "Signed in · account access restricted" : activeProvider === "hosted" ? "0cloud needs attention" : "Connect a provider to start chatting"}
+      </text>
+      {startupError ? <text fg={MUTED} wrapMode="word">{startupError.text}</text> : null}
+      <text fg={MUTED} wrapMode="word">Draft kept. Press Enter to send after access is restored.</text>
+      <box flexDirection="row" flexWrap="wrap" minWidth={0} marginTop={1} gap={1}>
+        <box onMouseDown={() => onNavigate("connect")}><text fg={PRIMARY}>{activeProvider === "hosted" ? "[Account & connections]" : "[Connect provider]"}</text></box>
+        {session && !checkingModel ? (
+          <box onMouseDown={() => { void checkRuntime(); }}><text fg={PRIMARY}>[Check again]</text></box>
+        ) : null}
+      </box>
+      <text fg={MUTED} wrapMode="word">{session ? "Ctrl+R check again · Ctrl+P commands" : "Ctrl+P commands · /connect"}</text>
+    </box>
+  );
+
   const conversationRegion = reviewOpen ? (
     <TranscriptReview
       transcript={transcriptDocument}
@@ -6028,7 +6130,7 @@ export function ChatScreen({
             {!sidebars.rightVisible && todos && todos.total > 0 ? (
               <Todos payload={todos} width={transcriptWidth} theme={theme} />
             ) : null}
-            {startupError ? <text fg={ERROR}>{fitTuiText(startupError, contentWidth)}</text> : null}
+            {startupError || checkingModel ? recoveryPanel : null}
           </box>
         </scrollbox>
       </box>
@@ -6075,7 +6177,7 @@ export function ChatScreen({
   // upward into the header. The composer stays put — it is anchored by the
   // fixed bottom spacer regardless of what the region above it holds.
   const heroOverlayOpen = commandMenuVisible || Boolean(picker) || Boolean(approvalPrompt) || Boolean(secretPrompt) || operatorQuestionOpen;
-  const showMasthead = !heroOverlayOpen && !startupError;
+  const showMasthead = !heroOverlayOpen && !startupError && !checkingModel;
 
   // The command menu now renders through the shared `DialogSelectBody`, which
   // windows the list around the cursor internally (see dialog-select-layout's
@@ -6199,11 +6301,8 @@ export function ChatScreen({
                 </box>
               ) : null}
               {workingIndicator}
-              {startupError && !heroOverlayOpen ? (
-                <box flexDirection="column" width={heroComposerWidth} minWidth={0} flexShrink={0} marginBottom={1}>
-                  <text fg={TEXT}>Chat needs setup</text>
-                  <text fg={MUTED} wrapMode="word">{startupError}</text>
-                </box>
+              {(startupError || checkingModel) && !heroOverlayOpen ? (
+                <box width={heroComposerWidth} minWidth={0} flexShrink={0}>{recoveryPanel}</box>
               ) : null}
               {heroOverlaysNode}
             </box>
@@ -6218,7 +6317,7 @@ export function ChatScreen({
                 <text fg={MUTED}>{fitLegend(heroContentWidth, settings.onboardingCompleted ? "/connect · /resume · [⌃P]" : "/connect · /onboard · [⌃P]")}</text>
               )}
             </box>
-            <box height={heroBottomSpacer} flexShrink={0} minWidth={0} />
+            <box height={startupError || checkingModel ? 1 : heroBottomSpacer} flexShrink={0} minWidth={0} />
           </box>
           {rightSidebarNode}
         </box>
@@ -6258,7 +6357,6 @@ export function ChatScreen({
         * telemetry, not the only indicator of the operator's approval mode.
         */}
         <box flexDirection="row" width={controlsWidth} height={1} flexShrink={0} minWidth={0} overflow="hidden">
-          {loadingLabel ? <text fg={animationKind === "awaiting-operator" ? WARNING : ACCENT}>{`${loadingLabel} · `}</text> : null}
           {statusPills.length > 0 ? (
             <box flexDirection="row" flexShrink={0} minWidth={0}>
               {statusPills.map((segment, index) => (

@@ -97,10 +97,10 @@ export function modelLabel(rowText: string): string {
 /**
  * The home screen is fully interactive once the composer prompt is up. Offline
  * the hosted cloud is deliberately unreachable (see env.ts), so the status line
- * settles on "Cloud: Unavailable"; either marker means the screen is ready to
+ * settles on "Usage: unavailable"; either marker means the screen is ready to
  * drive.
  */
-export const HOME_READY = /type to chat or \/ for commands|Cloud: (Unavailable|Loading)/;
+export const HOME_READY = /type to chat or \/ for commands|Usage: (unavailable|Loading)/;
 
 /** Any box-drawing glyph: light/heavy/double borders, corners, tees and dividers. */
 export const BORDER_GLYPHS =

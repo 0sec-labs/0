@@ -125,6 +125,41 @@ describe("LlmApiRuntime provider detection", () => {
     }
   });
 
+  it("uses the service default despite ambient credentials, while preserving an explicit provider", async () => {
+    const cloudHost = `https://${randomUUID()}.example.test`;
+    process.env["ZERO_CLOUD_HOST"] = cloudHost;
+    process.env["ZERO_CLOUD_TOKEN"] = "cloud-fixture";
+    process.env["ZERO_CHATGPT_ACCESS_TOKEN"] = "subscription-fixture";
+    process.env.DEEPSEEK_API_KEY = "deepseek-fixture";
+    process.env.OPENAI_API_KEY = "openai-fixture";
+    process.env.OPENAI_WIRE_API = "chat_completions";
+    const requests: Array<{ url: string; authorization: string | null; model: string }> = [];
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+      if (String(url).endsWith("/models")) {
+        return Response.json({ data: [{ id: "service-default", wire_api: "chat_completions" }] });
+      }
+      requests.push({
+        url: String(url),
+        authorization: new Headers(init?.headers).get("authorization"),
+        model: JSON.parse(String(init?.body)).model,
+      });
+      return Response.json({ choices: [{ message: { content: "ready" }, finish_reason: "stop" }] });
+    });
+    try {
+      const automatic = new LlmApiRuntime({ type: "api", timeout: 1000 });
+      const explicit = new LlmApiRuntime({ type: "api", timeout: 1000, provider: "openai", model: "direct-choice" });
+      for (const runtime of [automatic, explicit]) {
+        expect((await runtime.executeNative("system", [], [])).content).toContainEqual({ type: "text", text: "ready" });
+      }
+      expect(requests).toEqual([
+        { url: `${cloudHost}/api/inference/v1/chat/completions`, authorization: "Bearer cloud-fixture", model: "service-default" },
+        { url: "https://api.openai.com/v1/chat/completions", authorization: "Bearer openai-fixture", model: "direct-choice" },
+      ]);
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
   it("rejects an explicit provider conflicting with FORCE even with a supplied API key", () => {
     expect(() => new LlmApiRuntime({
       type: "api", timeout: 5000, provider: "openai", model: "test-model",
@@ -259,10 +294,10 @@ describe("LlmApiRuntime provider detection", () => {
     expect(rt.getConfigurationDiagnostics().provider).toBe("anthropic");
   });
 
-  it("keeps explicit Anthropic credentials ahead of hosted login", async () => {
+  it("honors an explicit Anthropic selection with a hosted login", async () => {
     process.env.ANTHROPIC_API_KEY = "sk-ant-test456";
     process.env["ZERO_CLOUD_TOKEN"] = randomUUID();
-    const rt = new LlmApiRuntime({ type: "api", timeout: 5000 });
+    const rt = new LlmApiRuntime({ type: "api", timeout: 5000, provider: "anthropic" });
     expect(rt.getConfigurationDiagnostics().provider).toBe("anthropic");
   });
 

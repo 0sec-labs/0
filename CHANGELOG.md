@@ -25,11 +25,62 @@ on the published npm package and the GitHub Release tag.
 - Recognize GPT-6 Luna's short-context supplier-list estimate separately from
   hosted customer tariffs and invoiced provider spend.
 
+### Fixed
+
+- Default signed-in accounts to 0security Auto when no provider or model was
+  explicitly selected, rather than preferring ambient BYOK credentials.
+- Share hosted request capacity across audits and nested agents, queueing excess
+  work locally instead of generating avoidable concurrency-limit retries.
+- Use the runtime's resolved model for cost estimates and ledger entries,
+  including models resolved on first use, rather than pricing the Auto label.
+- Check 0cloud account admission and service-model availability before accepting
+  chat messages. Keep blocked drafts and offer an explicit recheck without
+  replaying messages or asking users to choose a hosted model.
+- Read the service's `usage-v2` account response, showing included allowance and
+  exact prepaid amounts. Distinguish `prepaid_disabled` from missing credentials.
+- Give connected onboarding an explicit Continue action and skip the model
+  picker when 0cloud selects the service model.
+- Simplify hosted usage to percentage used and reset timing. Show a prepaid
+  balance only when prepaid fallback is enabled; keep extra billing metadata
+  in JSON instead of the normal display.
+- Make `0dev` rebuild and run its source checkout by default instead of silently
+  launching the installed release.
+- Distinguish a missing included allowance from unavailable usage data. Clarify
+  that included usage does not require prepaid fallback.
+
+## [0.21.3] - 2026-09-22
+
+### Changed
+
+- Publish the npm package as `0sec-cli` (bins `0` and `0sec`), resuming the
+  established package name so existing installs keep updating. The
+  `@0sec/zero` publish was accepted by npm and then quarantined — present in
+  the org's access list but never served by the registry — after `@0sec/0`
+  had already been refused by name policy. The scoped identity can return
+  once npm support clears it.
+
+## [0.21.2] - 2026-09-22
+
+### Changed
+
+- Publish the npm package as `@0sec/zero` (bin stays `0`). npm's name policy
+  rejects single-character package names, so the v0.21.1 publish of `@0sec/0`
+  was refused with E400 after every build, release, and smoke step had passed.
 - Start directly in chat on fresh installations; keep guided setup available
   through `/onboard` instead of opening it automatically.
 - Keep runtime initialization details and diagnostic stacks in the local TUI
   log. Show each failed turn once with model/connection recovery commands, and
   label an inactive chat `idle` rather than implying its provider is ready.
+
+### Fixed
+
+- Honour legacy `0SEC_CLOUD_HOST`/`0SEC_CLOUD_TOKEN` keys in `~/.0/cloud.env`
+  (env and file, with a deprecation warning) so installs written by the
+  pre-rename `0sec` CLI stay authenticated after upgrading instead of
+  reporting "credentials not found".
+- Declare the bundle's external runtime dependencies (`react`,
+  `@opentui/core`, `@opentui/react`) in the root package so a root-packed
+  tarball runs under `npx`; `@types/pdfkit` moves to devDependencies.
 
 ## [0.21.1] - 2026-09-22
 

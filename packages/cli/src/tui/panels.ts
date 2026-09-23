@@ -21,7 +21,7 @@ import type { CapabilityEntry } from "./capability-registry.js";
 // ---------------------------------------------------------------------------
 
 export interface PanelRow {
-  /** Left column, e.g. "/mode" or "target". Omit for a full-width line. */
+  /** Left column, e.g. "/model" or "target". Omit for a full-width line. */
   label?: string;
   /** Right column text. */
   value: string;
@@ -113,7 +113,6 @@ export interface HelpCommand {
 const CATEGORY_ORDER: readonly string[] = [
   "info",
   "session",
-  "mode",
   "navigation",
   "system",
 ];
@@ -121,7 +120,6 @@ const CATEGORY_ORDER: readonly string[] = [
 const CATEGORY_TITLES: Record<string, string> = {
   info: "Info",
   session: "Session",
-  mode: "Mode",
   navigation: "Navigation",
   system: "System",
 };
@@ -184,7 +182,7 @@ export function buildHelpPanel(
     if (!group || group.length === 0) continue;
     rows.push({ value: categoryTitle(category), heading: true });
     for (const cmd of group) {
-      // `usage` carries the argument hint ("/mode [standard|copilot|yolo]"),
+      // `usage` carries the argument hint ("/model [id]"),
       // which is the more useful left column when a command takes arguments.
       const label = cmd.usage && cmd.usage.trim() ? cmd.usage.trim() : `/${cmd.name}`;
       const aliases = cmd.aliases.length

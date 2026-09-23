@@ -1120,6 +1120,137 @@ export function herdComposerVisibleDraft(draft: unknown, contentWidth: number): 
 /** The four lifecycle states a subagent moves through. Mirrors the bus. */
 export type SubagentStatus = "queued" | "running" | "completed" | "failed" | "parked";
 
+/** A lifecycle row's identity fields, used to project the chat roster as a tree. */
+export interface AgentTreeRecord {
+  readonly agent_id: string;
+  readonly parent_scan_id?: string;
+}
+
+/** One preorder row in the stable agent forest projection. */
+export interface AgentTreeRow<T extends AgentTreeRecord> {
+  readonly item: T;
+  /** Present only when this row has a visible worker parent. */
+  readonly parentId: string | null;
+  readonly depth: number;
+  readonly isLast: boolean;
+  /** One entry per ancestor; true keeps that ancestor's vertical tree rail. */
+  readonly ancestorContinues: readonly boolean[];
+  /** Visible worker ancestors, from the root down to the direct parent. */
+  readonly ancestorIds: readonly string[];
+}
+
+/**
+ * Turn lifecycle records into a stable preorder forest. A direct child points
+ * at its parent's agent id in `parent_scan_id`; the root scan id itself is not
+ * a roster row. Missing parents (including records observed before their
+ * parent) remain visible as roots. Malformed cycles are broken at the earliest
+ * input row so every record remains reachable exactly once.
+ */
+export function projectAgentForest<T extends AgentTreeRecord>(
+  records: readonly T[],
+  rootScanId?: string,
+): AgentTreeRow<T>[] {
+  if (records.length === 0) return [];
+  const indexById = new Map<string, number>();
+  for (let i = 0; i < records.length; i += 1) {
+    const record = records[i]!;
+    if (!indexById.has(record.agent_id)) indexById.set(record.agent_id, i);
+  }
+
+  const parentById = new Map<string, string>();
+  for (const record of records) {
+    const parent = record.parent_scan_id;
+    if (parent && parent !== rootScanId && parent !== record.agent_id && indexById.has(parent)) {
+      parentById.set(record.agent_id, parent);
+    }
+  }
+
+  const resolved = new Set<string>();
+  for (const record of records) {
+    const path: string[] = [];
+    const pathIndex = new Map<string, number>();
+    let cursor = record.agent_id;
+    while (parentById.has(cursor) && !resolved.has(cursor)) {
+      const cycleStart = pathIndex.get(cursor);
+      if (cycleStart !== undefined) {
+        let root = path[cycleStart]!;
+        for (let i = cycleStart + 1; i < path.length; i += 1) {
+          const candidate = path[i]!;
+          if (indexById.get(candidate)! < indexById.get(root)!) root = candidate;
+        }
+        parentById.delete(root);
+        break;
+      }
+      pathIndex.set(cursor, path.length);
+      path.push(cursor);
+      cursor = parentById.get(cursor)!;
+    }
+    for (const id of path) resolved.add(id);
+  }
+
+  const roots: T[] = [];
+  const children = new Map<string, T[]>();
+  for (const record of records) {
+    const parent = parentById.get(record.agent_id);
+    if (!parent) {
+      roots.push(record);
+      continue;
+    }
+    const siblings = children.get(parent);
+    if (siblings) siblings.push(record);
+    else children.set(parent, [record]);
+  }
+
+  const rows: AgentTreeRow<T>[] = [];
+  const append = (
+    siblings: readonly T[],
+    ancestorContinues: readonly boolean[],
+    ancestorIds: readonly string[],
+  ) => {
+    for (let i = 0; i < siblings.length; i += 1) {
+      const item = siblings[i]!;
+      const isLast = i === siblings.length - 1;
+      rows.push({
+        item,
+        parentId: parentById.get(item.agent_id) ?? null,
+        depth: ancestorIds.length,
+        isLast,
+        ancestorContinues,
+        ancestorIds,
+      });
+      const descendants = children.get(item.agent_id);
+      if (descendants?.length) {
+        append(descendants, [...ancestorContinues, !isLast], [...ancestorIds, item.agent_id]);
+      }
+    }
+  };
+  append(roots, [], []);
+  return rows;
+}
+
+/**
+ * The live roster omits successful completions but retains failures and
+ * incomplete completions. Projection happens after filtering, so children of
+ * a hidden completed parent remain visible as roots.
+ */
+export function projectLiveAgentForest<
+  T extends AgentTreeRecord & { readonly status: string; readonly done?: boolean },
+>(records: readonly T[], rootScanId?: string): AgentTreeRow<T>[] {
+  const live = records.filter((record) => record.status !== "completed" || record.done === false);
+  return projectAgentForest(live, rootScanId);
+}
+
+/** Focus-left enters the projected parent; Escape always returns to Main. */
+export function agentFocusNavigationTarget(
+  key: "left" | "escape",
+  rows: readonly AgentTreeRow<AgentTreeRecord>[],
+  agentId: string,
+): string | null {
+  if (key === "escape") return null;
+  return rows.find((row) => row.item.agent_id === agentId)?.parentId ?? null;
+}
+
+
 /** How many activity entries a single agent's ring buffer retains. */
 export const HERD_ACTIVITY_MAX = 200;
 

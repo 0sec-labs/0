@@ -62,7 +62,7 @@
  * `shell-geometry.ts`, and this import is the marker for that move.
  */
 
-import { computeDialogPanel, type DialogPanel } from "./dialog-select-layout.js";
+import { computeDialogPanel, type DialogItem, type DialogPanel } from "./dialog-select-layout.js";
 import { buildModelCatalog, type CatalogModel } from "./model-catalog.js";
 import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import { PROVIDERS, providerStates, type ProviderState } from "./provider-status.js";
@@ -238,6 +238,51 @@ export interface ModelRowsInput {
   activeProvider?: string;
 }
 
+export interface ReachableModelCatalogOptions {
+  /** Environment used to derive the provider inventory. */
+  env: Readonly<Record<string, string | undefined>>;
+  /** Runtime's current route, when this picker is changing an active session. */
+  providerId?: string;
+  /** Model ids returned by successful Codex account discovery. */
+  codexModelIds?: ReadonlySet<string>;
+}
+
+/**
+ * Keep only catalogue rows with a route the current screen can establish.
+ * Azure uses OpenAI-named model ids, so those rows map to Azure only when the
+ * Azure key and endpoint (or the current runtime's Azure route) are present.
+ */
+export function reachableModelCatalog(
+  catalog: readonly CatalogModel[],
+  states: readonly ProviderState[],
+  { env, providerId, codexModelIds }: ReachableModelCatalogOptions,
+): CatalogModel[] {
+  const configured = new Set(states.filter((state) => state.configured).map((state) => state.id));
+  const azureReady = configured.has("azure") &&
+    (providerId === "azure" || !!(env.AZURE_OPENAI_BASE_URL?.trim() || env.OPENAI_BASE_URL?.trim()));
+  const codexReady = configured.has("chatgpt-codex") && codexModelIds !== undefined;
+  const reachable: CatalogModel[] = [];
+
+  for (const model of catalog) {
+    if (!model || typeof model.id !== "string" || model.id.length === 0) continue;
+    const provider = typeof model.provider === "string" ? model.provider : "";
+    if (provider === "chatgpt-codex") {
+      if (codexReady && codexModelIds?.has(model.id)) reachable.push(model);
+    } else if (provider === "azure") {
+      if (azureReady) reachable.push(model);
+    } else if (provider === "openai") {
+      if (configured.has("openai")) reachable.push(model);
+      // One public model id may be reachable through both API-key routes.
+      // Keep two provider-qualified rows so selecting Azure cannot silently
+      // switch an OpenAI key (or vice versa).
+      if (azureReady) reachable.push({ ...model, provider: "azure" });
+    } else if (configured.has(provider)) {
+      reachable.push(model);
+    }
+  }
+  return reachable;
+}
+
 /** Byte-order compare: locale-independent so the order never shifts. */
 function compareStrings(a: string, b: string): number {
   if (a === b) return 0;
@@ -373,6 +418,42 @@ export type ModelDetailTone = "title" | "text" | "muted" | "accent" | "ok" | "wa
 export interface ModelDetailLine {
   readonly text: string;
   readonly tone: ModelDetailTone;
+}
+
+/** Reserved id for the selectable Connections action, never a model id. */
+export const MODEL_CONNECT_ACTION_ID = "\u0000model-connect";
+
+export function modelConnectActionItem(): DialogItem {
+  return {
+    id: MODEL_CONNECT_ACTION_ID,
+    label: "Connect another provider…",
+    description: "Open Connections",
+    category: "Connections",
+  };
+}
+
+export function isModelConnectAction(item: Pick<DialogItem, "id">): boolean {
+  return item.id === MODEL_CONNECT_ACTION_ID;
+}
+
+/** Activate the connection action without passing it to model selection. */
+export function activateModelConnectAction(item: Pick<DialogItem, "id">, onConnect?: () => void): boolean {
+  if (!isModelConnectAction(item)) return false;
+  onConnect?.();
+  return true;
+}
+
+/** The dialog count includes model results, never the appended action row. */
+export function modelResultCount(items: readonly Pick<DialogItem, "id">[]): number {
+  return items.reduce((count, item) => count + (isModelConnectAction(item) ? 0 : 1), 0);
+}
+
+/** Clear action detail copy, wrapped to the pane width. */
+export function modelConnectDetailLines(width: number): ModelDetailLine[] {
+  const limit = cells(width);
+  if (limit === 0) return [];
+  return wrapCells("Opens Connections to connect another provider.", limit)
+    .map((text): ModelDetailLine => ({ text, tone: "accent" }));
 }
 
 export interface ModelDetailInput {
@@ -850,14 +931,9 @@ export type ModelCatalogScope = "hosted" | "byok" | "unknown";
 
 export interface ModelDialogTitleInput {
   scope: ModelCatalogScope;
-  /** The BYOK connection id, when there is one. Never invented. */
-  providerId?: string;
   /** BYOK only: whether the full synced superset is on show. */
   showAll?: boolean;
-  /**
-   * BYOK only: whether 0 Cloud routes are being folded in as an extra group.
-   * Reflected in the title so an operator can see the list is not BYOK-only.
-   */
+  /** Whether the connected Cloud account offers Auto beside API-key models. */
   cloudMerged?: boolean;
 }
 
@@ -869,14 +945,11 @@ export interface ModelDialogTitleInput {
  * exactly like every other one, and the label is always beside the glyph —
  * there is no icon font behind these code points.
  */
-export function modelDialogTitle({ scope, providerId, showAll = false, cloudMerged = false }: ModelDialogTitleInput): string {
+export function modelDialogTitle({ scope, showAll = false, cloudMerged = false }: ModelDialogTitleInput): string {
   const head = `${operatorIcon("models")} ${operatorTitle("models")}`;
-  if (scope === "hosted") return `${head} · Hosted catalog`;
+  if (scope === "hosted") return `${head} · 0security Auto`;
   if (scope === "unknown") return `${head} · no connection`;
-  const connection = sanitizeTuiText(providerId ?? "");
-  const source = cloudMerged
-    ? `${connection.length > 0 ? connection : "BYOK"} + 0cloud`
-    : connection.length > 0 ? connection : "BYOK";
+  const source = cloudMerged ? "connected + 0security Auto" : "connected providers";
   return `${head} · ${source} · ${showAll ? "all synced" : "curated"}`;
 }
 

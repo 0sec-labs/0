@@ -15,7 +15,8 @@
  */
 
 import React from "react";
-import { expect } from "vitest";
+import { expect, vi } from "vitest";
+import type * as Os from "node:os";
 import { createTestRenderer, type TestRendererSetup } from "@opentui/core/testing";
 import { createRoot } from "@opentui/react";
 import { UnifiedApp } from "../../src/tui/run.js";
@@ -25,6 +26,13 @@ import {
 } from "../../src/tui/settings-store.js";
 import { withDeterministicEnv } from "./env.js";
 import { normalizeFrame } from "./normalize.js";
+
+// Bun caches homedir at startup; all app modules must use the isolated launch HOME.
+vi.mock("node:os", async (original) => {
+  const actual = await original<typeof Os>();
+  const homedir = () => process.env.HOME ?? actual.homedir();
+  return { ...actual, homedir, default: { ...actual, homedir } };
+});
 
 /** The console-mode routes `UnifiedApp` understands, recovered from its props. */
 type UnifiedMode = React.ComponentProps<typeof UnifiedApp>["mode"];

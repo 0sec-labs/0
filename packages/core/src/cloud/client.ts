@@ -202,15 +202,13 @@ export interface AuditSkillsByProjectResponse {
   availableSkills: AuditSkillSummary[];
 }
 
-// ── Credit account types (v1 direct /account DTO) ──
+// ── Credit account types (usage-v2 /account DTO) ──
 
 /**
  * Customer credit account from GET /api/inference/account.
  *
- * All CREDIT NANO fields are decimal integer strings or `null`
- * (numeric(30,0) on the server). No client-side Number coercion.
- * The caller preserves them as-is for display using BigInt/string
- * operations.
+ * Wires the usage-v2 schema. Monetary amount fields are decimal
+ * strings or `null` — no client-side Number coercion.
  *
  * Authenticated `disabled`/`unavailable`/`restricted` returns HTTP 200
  * with `state`/`reason` and nullable amounts. A missing, unknown, or
@@ -218,96 +216,39 @@ export interface AuditSkillsByProjectResponse {
  * throw the existing typed errors.
  */
 export interface CreditAccount {
-  schemaVersion: "credits-v1";
+  schemaVersion: "usage-v2";
   snapshotAt: string;
-  policyVersion: string;
   scope: { orgId: string };
   state: "ready" | "disabled" | "unavailable" | "restricted";
   reason: string | null;
-  free: CreditAccountFree;
-  subscription: CreditAccountSubscription;
-  prepaid: CreditAccountPrepaid;
-  purchase: CreditAccountPurchase;
-  admission: CreditAccountAdmission;
-}
-
-export interface CreditAccountFree {
-  state:
-    | "unverified"
-    | "ineligible"
-    | "eligible_unclaimed"
-    | "active"
-    | "expired"
-    | "revoked"
-    | "unresolved";
-  claimableCreditNanos: string | null;
-  spendableCreditNanos: string | null;
-  heldCreditNanos: string | null;
-  resetAt: string | null;
-}
-
-export interface CreditAccountSubscriptionWindow {
-  kind: "monthly" | "weekly" | "five_hour";
-  limitCreditNanos: string | null;
-  settledCreditNanos: string | null;
-  heldCreditNanos: string | null;
-  availableCreditNanos: string | null;
-  resetsAt: string;
-}
-
-export interface CreditAccountSubscription {
-  state: "none" | "active" | "inactive_verified" | "expired" | "revoked" | "unresolved";
-  priceCents: 1500;
-  periodStart: string | null;
-  periodEnd: string | null;
-  windows: CreditAccountSubscriptionWindow[];
-}
-
-export interface CreditAccountPrepaid {
-  spendableCreditNanos: string | null;
-  heldCreditNanos: string | null;
-  settledDeficitCreditNanos: string | null;
-  holdShortfallCreditNanos: string | null;
-  consentEnabled: boolean;
-}
-
-export interface CreditAccountPurchasePreset {
-  principalCents: number;
-  creditNanos: string;
-}
-
-export interface CreditAccountPurchase {
-  enabled: boolean;
-  presets: CreditAccountPurchasePreset[];
-  customMinCents: number;
-  customMaxCents: number;
-  stepCents: 100;
-  currency: "usd";
-}
-
-export interface CreditAccountAdmission {
-  eligible: boolean;
-  reason: string | null;
+  plan: { id: "pro" | "gold" | "enterprise" | null; name: string | null; monthlyPriceUsd: string | null };
+  included: { state: "active" | "exhausted" | "none" | "unavailable"; usedPercent: number | null; resetsAt: string | null };
+  prepaid: { balanceUsd: string | null; fallbackEnabled: boolean };
+  canManageBilling: boolean;
+  admission: { eligible: boolean; reason: string | null };
 }
 
 /**
- * Bounded runtime type guard for the CreditAccount v1 direct wire shape.
+ * Bounded runtime type guard for the CreditAccount usage-v2 wire shape.
  *
- * Checks the top-level discriminator (`schemaVersion === "credits-v1"`),
- * structural fields, and credit-nano type discipline (string or null).
- * Unrecognised / legacy / structurally invalid payloads return `false`,
- * which surfaces as a `null` account — never an auth failure.
+ * Checks the top-level discriminator (`schemaVersion === "usage-v2"`),
+ * structural fields, and type discipline. Unrecognised / legacy /
+ * structurally invalid payloads return `false`, which surfaces
+ * as a `null` account — never an auth failure.
+ *
+ * Retains an explicit set of known fields so a structurally valid
+ * response passes even when optional server-side extras are present;
+ * the caller (getInferenceAccount) strips those via destructuring.
  */
-function isCreditAccount(raw: unknown): raw is CreditAccount {
+function isUsageAccount(raw: unknown): raw is CreditAccount {
   if (!raw || typeof raw !== "object") return false;
   const obj = raw as Record<string, unknown>;
 
   // ── Discriminator — reject legacy and unknown schemas ──
-  if (obj.schemaVersion !== "credits-v1") return false;
+  if (obj.schemaVersion !== "usage-v2") return false;
 
   // ── Required top-level fields ──
   if (!isUtcDate(obj.snapshotAt)) return false;
-  if (typeof obj.policyVersion !== "string") return false;
 
   // ── Scope ──
   if (!obj.scope || typeof obj.scope !== "object") return false;
@@ -320,87 +261,43 @@ function isCreditAccount(raw: unknown): raw is CreditAccount {
   // ── Reason (string or null) ──
   if (obj.reason !== null && typeof obj.reason !== "string") return false;
 
-  // ── Section objects ──
-  if (!obj.free || typeof obj.free !== "object") return false;
-  if (!obj.subscription || typeof obj.subscription !== "object") return false;
-  if (!obj.prepaid || typeof obj.prepaid !== "object") return false;
-  if (!obj.purchase || typeof obj.purchase !== "object") return false;
-  if (!obj.admission || typeof obj.admission !== "object") return false;
+  // ── plan ──
+  const plan = obj.plan as Record<string, unknown> | undefined;
+  if (!plan || typeof plan !== "object") return false;
+  if (typeof plan.id !== "string" && plan.id !== null) return false;
+  if (plan.id !== null && !["pro", "gold", "enterprise"].includes(plan.id)) return false;
+  if (typeof plan.name !== "string" && plan.name !== null) return false;
+  if (!isUsd(plan.monthlyPriceUsd)) return false;
 
-  const free = obj.free as Record<string, unknown>;
-  const sub = obj.subscription as Record<string, unknown>;
-  const prepaid = obj.prepaid as Record<string, unknown>;
-  const purchase = obj.purchase as Record<string, unknown>;
-
-  // ── free ──
-  if (typeof free.state !== "string") return false;
-  if (
-    !["unverified", "ineligible", "eligible_unclaimed", "active", "expired", "revoked", "unresolved"].includes(
-      free.state as string,
-    )
-  ) return false;
-  if (!isNanoStringOrNull(free.claimableCreditNanos)) return false;
-  if (!isNanoStringOrNull(free.spendableCreditNanos)) return false;
-  if (!isNanoStringOrNull(free.heldCreditNanos)) return false;
-  if (free.resetAt !== null && !isUtcDate(free.resetAt)) return false;
-
-  // ── subscription ──
-  if (typeof sub.state !== "string") return false;
-  if (!["none", "active", "inactive_verified", "expired", "revoked", "unresolved"].includes(sub.state as string)) return false;
-  if (sub.priceCents !== 1500) return false;
-  if (sub.periodStart !== null && !isUtcDate(sub.periodStart)) return false;
-  if (sub.periodEnd !== null && !isUtcDate(sub.periodEnd)) return false;
-  if (!Array.isArray(sub.windows)) return false;
-  for (const w of sub.windows as unknown[]) {
-    if (!w || typeof w !== "object") return false;
-    const win = w as Record<string, unknown>;
-    if (typeof win.kind !== "string") return false;
-    if (!["monthly", "weekly", "five_hour"].includes(win.kind as string)) return false;
-    if (!isNanoStringOrNull(win.limitCreditNanos)) return false;
-    if (!isNanoStringOrNull(win.settledCreditNanos)) return false;
-    if (!isNanoStringOrNull(win.heldCreditNanos)) return false;
-    if (!isNanoStringOrNull(win.availableCreditNanos)) return false;
-    if (!isUtcDate(win.resetsAt)) return false;
-  }
+  // ── included ──
+  const included = obj.included as Record<string, unknown> | undefined;
+  if (!included || typeof included !== "object") return false;
+  if (typeof included.state !== "string") return false;
+  if (!["active", "exhausted", "none", "unavailable"].includes(included.state as string)) return false;
+  if (included.usedPercent !== null && typeof included.usedPercent !== "number") return false;
+  if (included.usedPercent !== null && (!Number.isFinite(included.usedPercent) || included.usedPercent < 0 || included.usedPercent > 100)) return false;
+  if (included.resetsAt !== null && !isUtcDate(included.resetsAt)) return false;
 
   // ── prepaid ──
-  if (!isNanoStringOrNull(prepaid.spendableCreditNanos)) return false;
-  if (!isNanoStringOrNull(prepaid.heldCreditNanos)) return false;
-  if (!isNanoStringOrNull(prepaid.settledDeficitCreditNanos)) return false;
-  if (!isNanoStringOrNull(prepaid.holdShortfallCreditNanos)) return false;
-  if (typeof prepaid.consentEnabled !== "boolean") return false;
+  const prepaid = obj.prepaid as Record<string, unknown> | undefined;
+  if (!prepaid || typeof prepaid !== "object") return false;
+  if (!isUsd(prepaid.balanceUsd)) return false;
+  if (typeof prepaid.fallbackEnabled !== "boolean") return false;
 
-  // ── purchase ──
-  if (typeof purchase.enabled !== "boolean") return false;
-  if (!isOfferCents(purchase.customMinCents)) return false;
-  if (!isOfferCents(purchase.customMaxCents)) return false;
-  if (purchase.stepCents !== 100) return false;
-  if (purchase.currency !== "usd") return false;
-  if (!Array.isArray(purchase.presets)) return false;
-  for (const p of purchase.presets as unknown[]) {
-    if (!p || typeof p !== "object") return false;
-    const preset = p as Record<string, unknown>;
-    if (!isOfferCents(preset.principalCents)) return false;
-    if (typeof preset.creditNanos !== "string" || !isNanoStringOrNull(preset.creditNanos)) return false;
-  }
+  // ── canManageBilling ──
+  if (typeof obj.canManageBilling !== "boolean") return false;
 
   // ── admission ──
-  const admission = obj.admission as Record<string, unknown>;
+  const admission = obj.admission as Record<string, unknown> | undefined;
+  if (!admission || typeof admission !== "object") return false;
   if (typeof admission.eligible !== "boolean") return false;
   if (admission.reason !== null && typeof admission.reason !== "string") return false;
 
   return true;
 }
 
-/** Canonical unsigned numeric(30,0) text, without Number coercion. */
-function isNanoStringOrNull(v: unknown): v is string | null {
-  if (v === null) return true;
-  if (typeof v !== "string") return false;
-  return /^(0|[1-9]\d{0,29})$/.test(v);
-}
-
-function isOfferCents(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+function isUsd(value: unknown): value is string | null {
+  return value === null || (typeof value === "string" && /^\d+(?:\.\d{1,9})?$/.test(value));
 }
 
 function isUtcDate(value: unknown): value is string {
@@ -452,8 +349,8 @@ export class CloudClient {
   }
 
   /**
-   * Fetch the organization's credit account — reported credit balances,
-   * subscription windows, prepaid spends, and purchase presets.
+   * Fetch the organization's credit account — usage-v2 shape including
+   * plan, included allowance, prepaid balance, and admission status.
    *
    * Returns `null` when the response is a recognised HTTP 200 (customer is
    * authenticated) but the payload is missing, legacy, or structurally
@@ -461,62 +358,36 @@ export class CloudClient {
    * existing typed errors so the caller can distinguish a credential
    * problem from unsupported credit data.
    *
-   * All credit nano amounts are decimal integer strings (no Number
-   * coercion); the caller preserves them for exact display. The server's
-   * `state` field carries readiness independently of amount presence.
+   * Monetary amounts are decimal strings (no Number coercion); the
+   * caller preserves them for exact display.
    */
   async getInferenceAccount(): Promise<CreditAccount | null> {
     const raw = await this.getJson<unknown>("/api/inference/account");
-    if (!isCreditAccount(raw)) return null;
-    // Return only the customer contract, including inside arrays. A valid v1
-    // payload must not smuggle private accounting metadata into CLI JSON.
-    const { free, subscription, prepaid, purchase, admission } = raw;
+    if (!isUsageAccount(raw)) return null;
+    // Return only the customer-contract fields. A valid usage-v2 payload
+    // must not smuggle private accounting metadata into CLI JSON.
+    const { plan, included, prepaid, admission } = raw;
     return {
       schemaVersion: raw.schemaVersion,
       snapshotAt: raw.snapshotAt,
-      policyVersion: raw.policyVersion,
       scope: { orgId: raw.scope.orgId },
       state: raw.state,
       reason: raw.reason,
-      free: {
-        state: free.state,
-        claimableCreditNanos: free.claimableCreditNanos,
-        spendableCreditNanos: free.spendableCreditNanos,
-        heldCreditNanos: free.heldCreditNanos,
-        resetAt: free.resetAt,
+      plan: {
+        id: plan.id,
+        name: plan.name,
+        monthlyPriceUsd: plan.monthlyPriceUsd,
       },
-      subscription: {
-        state: subscription.state,
-        priceCents: subscription.priceCents,
-        periodStart: subscription.periodStart,
-        periodEnd: subscription.periodEnd,
-        windows: subscription.windows.map((window) => ({
-          kind: window.kind,
-          limitCreditNanos: window.limitCreditNanos,
-          settledCreditNanos: window.settledCreditNanos,
-          heldCreditNanos: window.heldCreditNanos,
-          availableCreditNanos: window.availableCreditNanos,
-          resetsAt: window.resetsAt,
-        })),
+      included: {
+        state: included.state,
+        usedPercent: included.usedPercent,
+        resetsAt: included.resetsAt,
       },
       prepaid: {
-        spendableCreditNanos: prepaid.spendableCreditNanos,
-        heldCreditNanos: prepaid.heldCreditNanos,
-        settledDeficitCreditNanos: prepaid.settledDeficitCreditNanos,
-        holdShortfallCreditNanos: prepaid.holdShortfallCreditNanos,
-        consentEnabled: prepaid.consentEnabled,
+        balanceUsd: prepaid.balanceUsd,
+        fallbackEnabled: prepaid.fallbackEnabled,
       },
-      purchase: {
-        enabled: purchase.enabled,
-        presets: purchase.presets.map((preset) => ({
-          principalCents: preset.principalCents,
-          creditNanos: preset.creditNanos,
-        })),
-        customMinCents: purchase.customMinCents,
-        customMaxCents: purchase.customMaxCents,
-        stepCents: purchase.stepCents,
-        currency: purchase.currency,
-      },
+      canManageBilling: raw.canManageBilling,
       admission: { eligible: admission.eligible, reason: admission.reason },
     };
   }

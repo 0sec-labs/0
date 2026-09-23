@@ -494,16 +494,17 @@ updates** in global settings only for a trusted source checkout. Project setting
 cannot grant it. Loading that code runs with the console process's host
 permissions, including credential access.
 
-Build the checkout and start a development console explicitly:
+Start a development console from the current checkout:
 
 ```bash
-./scripts/0dev.sh --build console
+./scripts/0dev.sh console
 ```
 
-Without `--build`, `0dev` uses the installed packaged `0` release, so Cloud
-reads remain available while workspace packages are unfinished. `--build`
-rebuilds Core/CLI and sets `ZERO_DEV_SOURCE_ROOT` to the checkout.
-Both modes target `https://dev.cloud.0.security`. Cloud login, reads and logout use
+`0dev` rebuilds the CLI and its workspace dependencies on every launch, sets
+`ZERO_DEV_SOURCE_ROOT` to the checkout, and runs the result with Bun. The old
+`--build` switch is no longer needed. A failed build stops launch rather than
+silently running an installed release or stale output. Build logs go to stderr.
+The launcher targets `https://dev.cloud.0.security`. Cloud login, reads and logout use
 `~/.0/dev/cloud.env`; production `~/.0/cloud.env` and private CLI
 `~/.0cloud/credentials.json` are not changed. Inherited Cloud tokens are ignored.
 HOME, BYOK credentials and other console settings remain unchanged.
@@ -597,12 +598,12 @@ Revoke issued credentials through the dashboard's session controls.
 The gateway checks membership and scopes; a CLI credential doesn't authorize
 purchases.
 
-`0 balance --json` returns the validated `credits-v1` account snapshot or
-`null` for unsupported account data. Free credit, overlapping subscription
-windows and prepaid credit are separate sources, not one additive balance.
-Unavailable amounts are not zero. Use a compatible CLI and service revision;
-a successful login or catalog response does not prove their account schemas
-match. See [account interpretation](/api-keys/#hosted-inference).
+`0 balance --json` returns the validated `usage-v2` account snapshot or
+`null` for unsupported account data. It reports the plan, included allowance
+percentage and reset time, prepaid USD balance, fallback setting and admission.
+USD amounts stay exact decimal strings; unavailable amounts are not zero.
+Successful login is separate from request eligibility. See
+[account interpretation](/api-keys/#hosted-inference).
 
 Local cost ceilings are separate from the hosted ledger. Cancellation can still
 incur charges. See [billing and errors](/api-keys/#charging-and-interrupted-requests).

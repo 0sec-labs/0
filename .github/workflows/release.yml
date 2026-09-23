@@ -192,7 +192,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Build the published CLI package
         run: pnpm build
-      # The published npm identity (@0sec/0, bin 0 -> 0.js) comes straight from
+      # The published npm identity (0sec-cli, bins 0 + 0sec -> 0.js) comes straight from
       # the root package.json via scripts/bundle-cli.mjs — no publish-time
       # rewrite. Scoped packages require --access public on publish.
       - name: Install runtime dependencies and smoke the bundle

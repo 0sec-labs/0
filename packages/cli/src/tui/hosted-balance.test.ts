@@ -1,86 +1,99 @@
 import { describe, expect, it } from "vitest";
 import type { CreditAccount } from "@0/core";
-import { formatHostedBalance, hostedBalanceState, formatCreditNanos, formatBalanceDetail } from "./hosted-balance.js";
+import { formatHostedBalance, hostedBalanceState, formatBalanceDetail } from "./hosted-balance.js";
 
 function account(): CreditAccount {
   return {
-    schemaVersion: "credits-v1", snapshotAt: "2026-09-18T12:00:00.000Z", policyVersion: "credits-v1",
-    scope: { orgId: "fixture-org" }, state: "ready", reason: null,
-    free: { state: "active", claimableCreditNanos: "7000000000", spendableCreditNanos: "90000000000", heldCreditNanos: "1000000000", resetAt: null },
-    subscription: { state: "none", priceCents: 1500, periodStart: null, periodEnd: null, windows: [] },
-    prepaid: { spendableCreditNanos: "0", heldCreditNanos: "0", settledDeficitCreditNanos: "0", holdShortfallCreditNanos: "0", consentEnabled: false },
-    purchase: { enabled: false, presets: [], customMinCents: 1000, customMaxCents: 100000, stepCents: 100, currency: "usd" },
+    schemaVersion: "usage-v2",
+    snapshotAt: "2026-09-18T12:00:00.000Z",
+    scope: { orgId: "fixture-org" },
+    state: "ready",
+    reason: null,
+    plan: { id: "pro", name: "Pro", monthlyPriceUsd: "39.00" },
+    included: { state: "active", usedPercent: 45.5, resetsAt: "2026-10-01T00:00:00.000Z" },
+    prepaid: { balanceUsd: "123.45", fallbackEnabled: true },
+    canManageBilling: true,
     admission: { eligible: true, reason: null },
   };
 }
 const display = (value: CreditAccount | null) => formatHostedBalance(hostedBalanceState(value));
 
-describe("exact credit presentation", () => {
-  it("preserves the smallest unit and amounts beyond Number precision", () => {
-    expect(formatCreditNanos("1")).toBe("0.000000001");
-    expect(formatCreditNanos("123456789012345678")).toBe("123456789.012345678");
-    expect(formatCreditNanos("999999999999999999999999999999")).toBe("999999999999999999999.999999999");
-    expect(formatCreditNanos("1000000000")).toBe("1");
-    expect(formatCreditNanos("0")).toBe("0");
-    expect(formatCreditNanos(null)).toBeNull();
+describe("usage presentation", () => {
+  it("preserves prepaid decimals beyond floating-point precision", () => {
+    const value = account();
+    value.prepaid.balanceUsd = "123456789012345678.000000001";
+    expect(display(value)).toContain("$123456789012345678.000000001");
+    expect(formatBalanceDetail(value)).toContain("$123456789012345678.000000001");
   });
 
-  it("keeps claimable credits distinct from spendable funds", () => {
+  it("shows included allowance percent and reset date", () => {
     const value = account();
-    value.free.state = "eligible_unclaimed";
-    value.free.spendableCreditNanos = "0";
-    value.admission = { eligible: false, reason: "claim_required" };
     const detail = formatBalanceDetail(value);
-    expect(detail).toMatch(/Claimable: 7 credits/);
-    expect(detail).toMatch(/Spendable: 0 credits/);
-    expect(detail).toContain("claim_required");
-    expect(display(value)).toContain("claimable 7 credits");
-    expect(display(value)).toContain("free 0 credits");
+    expect(detail).toContain("45.5% used");
+    expect(detail).toContain(value.included.resetsAt);
+    expect(display(value)).toContain("45.5% used");
+    expect(display(value)).toContain("2026-10-01");
   });
 
-  it("keeps overlapping windows and their reset times separate", () => {
+  it("hides a funded prepaid balance until fallback is enabled", () => {
     const value = account();
-    value.subscription.state = "active";
-    value.subscription.windows = [
-      { kind: "monthly", limitCreditNanos: "9000000000", settledCreditNanos: "2000000000", heldCreditNanos: "0", availableCreditNanos: "7000000000", resetsAt: "2026-10-01T00:00:00.000Z" },
-      { kind: "weekly", limitCreditNanos: "6000000000", settledCreditNanos: "3000000000", heldCreditNanos: "0", availableCreditNanos: "3000000000", resetsAt: "2026-09-21T00:00:00.000Z" },
-      { kind: "five_hour", limitCreditNanos: null, settledCreditNanos: null, heldCreditNanos: null, availableCreditNanos: null, resetsAt: "2026-09-18T17:00:00.000Z" },
-    ];
-    const summary = display(value);
-    expect(summary).toContain("monthly 7 credits");
-    expect(summary).toContain("weekly 3 credits");
-    expect(summary).toContain("five_hour unavailable");
-    expect(summary).not.toContain("10 credits");
-    const detail = formatBalanceDetail(value);
-    for (const window of value.subscription.windows) expect(detail).toContain(window.resetsAt);
-    expect(detail).toContain("monthly available: 7 credits");
-    expect(detail).toContain("weekly available: 3 credits");
+    value.prepaid.fallbackEnabled = false;
+    for (const text of [display(value), formatBalanceDetail(value)]) {
+      expect(text).toContain("45.5% used");
+      expect(text).not.toMatch(/prepaid|\$123\.45/i);
+    }
+    value.prepaid.fallbackEnabled = true;
+    for (const text of [display(value), formatBalanceDetail(value)]) {
+      expect(text).toContain("45.5% used");
+      expect(text).toContain("$123.45");
+    }
+    value.prepaid.balanceUsd = "0.00";
+    expect(display(value)).toContain("$0.00");
+    expect(formatBalanceDetail(value)).toContain("$0.00");
   });
 
-  it("does not turn unresolved amounts into zero", () => {
+  it("reports unavailable prepaid balance as unavailable", () => {
     const value = account();
-    value.free = { state: "unresolved", claimableCreditNanos: null, spendableCreditNanos: null, heldCreditNanos: null, resetAt: null };
-    value.prepaid = { spendableCreditNanos: null, heldCreditNanos: null, settledDeficitCreditNanos: null, holdShortfallCreditNanos: null, consentEnabled: false };
-    const summary = display(value);
-    expect(summary).toContain("unavailable");
-    expect(summary).not.toMatch(/\b0 credits/);
-    value.free.spendableCreditNanos = "0";
-    expect(display(value)).toContain("free 0 credits");
-    expect(hostedBalanceState(null).status).toBe("unavailable");
+    value.prepaid.balanceUsd = null;
+    expect(display(value)).toContain("prepaid unavailable");
   });
 
-  it("preserves service restrictions and debt independently from consent", () => {
+  it("preserves service restriction display separately from admission", () => {
     const value = account();
     value.state = "restricted";
     value.reason = "debt";
-    value.prepaid = { spendableCreditNanos: "123456789012345678", heldCreditNanos: "2000000000", settledDeficitCreditNanos: "3000000000", holdShortfallCreditNanos: "4000000000", consentEnabled: true };
     value.admission = { eligible: false, reason: "debt" };
+    value.prepaid = { balanceUsd: "50.00", fallbackEnabled: true };
+    value.included = { state: "exhausted", usedPercent: 100, resetsAt: "2026-10-01T00:00:00.000Z" };
     expect(display(value)).toContain("restricted: debt");
     const detail = formatBalanceDetail(value);
-    expect(detail).toContain("123456789.012345678 credits");
-    expect(detail).toContain("settled deficit: 3 credits");
-    expect(detail).toContain("hold shortfall: 4 credits");
-    expect(detail).toContain("Admission: not eligible");
-    expect(detail).toContain("consent: enabled");
+    expect(detail).toContain("Prepaid balance: $50.00");
+    expect(detail).toContain("debt");
+  });
+
+  it("does not fabricate included data when unavailable", () => {
+    const value = account();
+    value.included = { state: "unavailable", usedPercent: null, resetsAt: null };
+    const summary = display(value);
+    expect(summary).toContain("unavailable");
+    expect(summary).not.toMatch(/\d+%/);
+    expect(summary).not.toContain("resets");
+  });
+
+  it("distinguishes missing included allowance from an unreadable account", () => {
+    const value = account();
+    value.included = { state: "none", usedPercent: null, resetsAt: null };
+    value.prepaid = { balanceUsd: "0", fallbackEnabled: false };
+    value.admission = { eligible: false, reason: "prepaid_disabled" };
+    for (const text of [display(value), formatBalanceDetail(value)]) {
+      expect(text).toContain("no included allowance");
+      expect(text).not.toContain("unavailable");
+      expect(text).not.toMatch(/\d+%|\$|resets/i);
+    }
+  });
+
+  it("returns unavailable for null account", () => {
+    expect(hostedBalanceState(null).status).toBe("unavailable");
+    expect(display(null)).toContain("unavailable");
   });
 });

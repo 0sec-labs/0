@@ -169,7 +169,7 @@ make these tools available.
 
 ### Autonomy modes
 
-Cycle the mode with **Shift+Tab** in the TUI, or the `/mode` command.
+Cycle the mode with **Shift+Tab** in the TUI. The command chooser has no mode selector.
 
 | Mode | Behavior |
 |------|----------|
@@ -189,12 +189,10 @@ effectful calls whenever an operator cannot be asked:
   leave the callback unset.
 - A **Co-pilot launch** wires an always-rejecting callback, but Co-pilot skips
   the per-action gate, so that callback is not consulted.
-- In **readline**, `/mode` changes the engine mode without replacing the launch
-  callback. Switching a session launched in Co-pilot to Standard makes the
-  retained callback reject effectful calls, not prompt for them. Switching to
-  Standard from a launch without a callback still bypasses this gate.
 
-Use the **Bun TUI in Standard mode** for interactive per-action approval.
+Readline sessions keep the mode selected at launch; use `--mode` when starting
+a session. Use the **Bun TUI in Standard mode** for interactive per-action approval.
+
 Session-only scope extensions are denied separately on the readline and
 `--print` paths. Scope, exclusions, Recon restrictions and workspace-trust
 checks remain independent controls.
@@ -348,8 +346,7 @@ the command menu. The readline console supports a subset (noted below).
 | `/replay` | — | session | — |
 | `/resume` | `/sessions` | session | — |
 | `/explain` | `/eli5` | session | — |
-| `/mode` | — | mode | ✓ |
-| `/model` | `/models` | mode | — |
+| `/model` | `/models` | session | — |
 | `/chat` | — | navigation | — |
 | `/launcher` | `/run`, `/home` | navigation | — |
 | `/ops` | `/runs` | navigation | — |

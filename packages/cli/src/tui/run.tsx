@@ -310,6 +310,7 @@ function ModelRoute({
       onAgentModelsChange={onAgentModelsChange}
       onSingleModelChange={onSingleModelChange}
       onSelect={onSelect}
+      onConnect={shell ? () => shell.openConnect() : undefined}
       onBack={() => leaveCurrentScreen(shell, onExit)}
       onExit={onExit}
       frame={({ body, hint }) => (
@@ -1187,8 +1188,13 @@ function ConsoleApp({
         <ConnectScreen
           onConnected={(providerId) => {
             const owner = ownerForAction();
-            if (owner) owner.onNextOptions({ providerId: providerId as ChatScreenOptions["providerId"] });
-            nav.onDone();
+            if (!owner) return;
+            owner.onNextOptions({
+              providerId: providerId as ChatScreenOptions["providerId"],
+              ...(providerId === "hosted" ? { model: "" } : {}),
+            });
+            if (providerId === "hosted") owner.reconnect.current?.(providerId);
+            nav.onDone({ skipModels: providerId === "hosted" });
           }}
           onBack={nav.onBack}
           onSkip={nav.onSkip}
@@ -1212,6 +1218,7 @@ function ConsoleApp({
             onAgentModelsChange={(map) => { applyOrStage({ agentModels: map }); }}
             onSingleModelChange={(enabled) => { applyOrStage({ singleModel: enabled }); }}
             onSelect={(id, providerId) => { applyOrStage({ model: id, ...(providerId ? { providerId } : {}) }); nav.onDone(); }}
+            onConnect={() => shell.openConnect()}
             onBack={nav.onBack}
             onSkip={nav.onSkip}
             onExit={nav.onExit}
@@ -1322,7 +1329,11 @@ function ConsoleApp({
           owner.onNextOptions({ providerId: providerId as ChatScreenOptions["providerId"] });
           owner.recovery = undefined;
           owner.onActivity({ waiting: false });
-          if (currentRoute.recovery) owner.reconnect.current?.(providerId);
+          if (providerId !== "hosted" && owner.runtimeInfo.current?.providerId() !== providerId) {
+            shell.openModels(owner.options);
+            return;
+          }
+          owner.reconnect.current?.(providerId);
           leaveCurrentScreen(shell, appExit);
         }}
         onExit={appExit}

@@ -491,11 +491,6 @@ export function registerConsoleCommand(program: Command): void {
             rl.prompt();
             return;
           }
-          case "mode": {
-            handleModeCommand(session, parsed.args);
-            rl.prompt();
-            return;
-          }
           default: {
             // A known, non-tuiOnly command the line-mode REPL doesn't implement
             // (e.g. model/providers/settings/resume). Say so instead of silently
@@ -643,22 +638,6 @@ function printStatus(session: ConsoleSession): void {
   console.log("");
 }
 
-function handleModeCommand(session: ConsoleSession, args: string): void {
-  const modeArg = args.trim().toLowerCase();
-  if (modeArg === "standard" || modeArg === "recon" || modeArg === "copilot" || modeArg === "yolo") {
-    const next = modeArg as ConsoleAutonomyMode;
-    if (next === "yolo" && !hasConfiguredScope(session.scope)) {
-      console.log(chalk.yellow(`\nYOLO requires a configured non-empty scope. Mode remains ${chalk.bold(modeLabel(session.autonomyMode))}.\n`));
-      return;
-    }
-    session.setAutonomyMode(next);
-    console.log(chalk.green(`\nMode switched to ${chalk.bold(modeLabel(next))}.\n`));
-  } else if (modeArg === "") {
-    console.log(chalk.dim(`\nCurrent mode: ${chalk.bold(modeLabel(session.autonomyMode))}\n`));
-  } else {
-    console.log(chalk.yellow(`\nUsage: /mode [standard|recon|copilot|yolo]. Current mode: ${modeLabel(session.autonomyMode)}\n`));
-  }
-}
 
 function modeLabel(mode: ConsoleAutonomyMode): string {
   if (mode === "standard") return "Standard";

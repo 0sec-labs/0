@@ -2810,9 +2810,9 @@ Guide: [Hosted models](/getting-started/#hosted-models-draft).
 
 ### balance
 
-Read the service's `credits-v1` credit account. The human view shows free claimable and spendable credits, each subscription window, and prepaid credits separately. One credit is 1,000,000,000 credit nanos; displayed amounts preserve that precision. Overlapping subscription windows are not added together or reduced to a derived balance.
+Read the service's `usage-v2` account. The human view shows the percentage of included allowance used and its reset time. The exact prepaid USD balance appears only when prepaid fallback is enabled, including when that balance is zero. Blocked-access notices remain visible; plan and other billing metadata remain in JSON.
 
-`--json` prints the validated customer account, retaining credit-nano amounts as decimal strings. Unknown, malformed, or legacy responses produce unavailable credit data (`null` in JSON), not an inferred zero or percentage. Authenticated disabled, restricted, and unavailable credit states remain distinct from HTTP authentication failures.
+`--json` prints the validated customer account, retaining USD amounts as decimal strings. Unknown, malformed, or legacy responses produce unavailable account data (`null` in JSON), not an inferred zero. Authenticated disabled, restricted, and unavailable states remain distinct from HTTP authentication failures.
 
 ```text
 0 balance [options]

@@ -186,7 +186,7 @@ export const findingsToolDefinitions: Record<string, ToolDefinition> = {
   query_findings: {
     name: "query_findings",
     description:
-      "Query existing findings from the database. Defaults to the current scan/session; set all_sessions=true to search across sessions, or pass scan_id to inspect a specific prior session.",
+      "Query existing findings. Defaults to the current scan/session; set all_sessions=true or pass scan_id to query other sessions (requires the persistent findings database). Workers without database access should ask their parent to run cross-session queries.",
     parameters: {
       scan_id: {
         type: "string",
@@ -196,7 +196,7 @@ export const findingsToolDefinitions: Record<string, ToolDefinition> = {
       all_sessions: {
         type: "boolean",
         description:
-          "Optional: when true, query findings across all sessions/scans instead of only the current session.",
+          "Optional: when true, query findings across all sessions/scans instead of only the current session; requires a persistent findings database.",
       },
       severity: {
         type: "string",

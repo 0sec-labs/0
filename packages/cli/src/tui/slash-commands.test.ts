@@ -144,19 +144,9 @@ describe("findCommand", () => {
     expect(result.command).toBe("help");
   });
 
-  it("extracts arguments after command name", () => {
-    const result = findCommand("/mode copilot");
-    expect(result.isSlash).toBe(true);
-    expect(result.isKnown).toBe(true);
-    expect(result.command).toBe("mode");
-    expect(result.rawName).toBe("mode");
-    expect(result.args).toBe("copilot");
-  });
-
-  it("handles multiple space-separated arguments", () => {
-    const result = findCommand("/mode yolo  --force");
-    expect(result.command).toBe("mode");
-    expect(result.args).toBe("yolo  --force");
+  it("does not register autonomy mode as a slash command", () => {
+    expect(findCommand("/mode").isUnknown).toBe(true);
+    expect(findCommand("/mode copilot").isUnknown).toBe(true);
   });
 
   it("handles trailing whitespace in args", () => {
@@ -237,8 +227,8 @@ describe("filterCommands", () => {
   it("filters case-insensitively", () => {
     const upper = filterCommands("M");
     const lower = filterCommands("m");
-    // Both should return mode
-    expect(upper.map((c) => c.name)).toContain("mode");
+    // The model command remains searchable; autonomy is Shift+Tab only.
+    expect(upper.map((c) => c.name)).toContain("model");
     expect(lower.map((c) => c.name)).toEqual(upper.map((c) => c.name));
   });
 

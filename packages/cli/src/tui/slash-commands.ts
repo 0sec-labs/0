@@ -22,7 +22,6 @@ export type CommandCategory =
   | "navigation"
   | "session"
   | "info"
-  | "mode"
   | "system";
 
 export interface SlashCommand {
@@ -33,7 +32,7 @@ export interface SlashCommand {
   readonly category: CommandCategory;
   /** One-line description for help output. */
   readonly description: string;
-  /** Usage hint, e.g. "/mode [standard|copilot|yolo]". Omitted when blank. */
+  /** Usage hint, e.g. "/model <id>". Omitted when blank. */
   readonly usage?: string;
   /**
    * Commands that only make sense in the Bun TUI (navigation/routing).
@@ -52,7 +51,7 @@ export interface ParsedSlashInput {
   readonly command: string | undefined;
   /**
    * The raw name extracted from input: everything between the leading `/`
-   * and the first space (or end of string). E.g. "/mode copilot" → "mode".
+   * and the first space (or end of string). E.g. "/model gpt-5.5" → "model".
    */
   readonly rawName: string;
   /**
@@ -203,14 +202,6 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     tuiOnly: true,
   },
 
-  // ── mode ────────────────────────────────────────────────────────────────
-  {
-    name: "mode",
-    aliases: [],
-    category: "mode",
-    description: "Set Standard (approve actions), Co-pilot (in scope), YOLO (public-network autonomy), or Recon (passive)",
-    usage: "/mode [standard|copilot|yolo|recon]",
-  },
   {
     name: "resume",
     aliases: ["sessions"],
@@ -266,7 +257,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
   {
     name: "model",
     aliases: ["models"],
-    category: "mode",
+    category: "session",
     description: "Show or select a model (TUI: applies to New chat)",
     usage: "/model [id]",
   },

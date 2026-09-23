@@ -66,6 +66,8 @@ export interface Runtime {
   readonly type: RuntimeType;
   execute(prompt: string, context?: RuntimeContext): Promise<RuntimeResult>;
   isAvailable(): Promise<boolean>;
+  /** Current model identifier; not a per-request billing identity or rate receipt. */
+  resolvedModel?(): string;
   /** Fork the parent account; model overrides require operator consent, never account failover. */
   forkForSubagent?(timeoutMs: number, selection?: SubagentModelSelection): Promise<NativeRuntime>;
   /**

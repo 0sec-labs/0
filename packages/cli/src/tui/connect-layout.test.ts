@@ -15,7 +15,6 @@ import {
   connectDetailTitleMeta,
   connectDialogItems,
   connectDisplayRowCount,
-  connectFooterHint,
   connectInputMask,
   connectRowForId,
   hasAnyConnection,
@@ -29,48 +28,15 @@ import { PROVIDERS, providerStates } from "./provider-status.js";
 
 /** Minimal CreditAccount fixture for dialog items tests. */
 const cloudAcct: CreditAccount = {
-  schemaVersion: "credits-v1",
+  schemaVersion: "usage-v2",
   snapshotAt: "2026-09-18T12:00:00.000Z",
-  policyVersion: "credits-v1",
   scope: { orgId: "test-org" },
-  state: "ready" as const,
+  state: "ready",
   reason: null,
-  free: {
-    state: "active" as const,
-    claimableCreditNanos: "0",
-    spendableCreditNanos: "90000000000",
-    heldCreditNanos: "10000000000",
-    resetAt: "2026-10-01T00:00:00.000Z",
-  },
-  subscription: {
-    state: "none" as const,
-    priceCents: 1500 as const,
-    periodStart: null,
-    periodEnd: null,
-    windows: [] as Array<{
-      kind: "monthly" | "weekly" | "five_hour";
-      limitCreditNanos: string | null;
-      settledCreditNanos: string | null;
-      heldCreditNanos: string | null;
-      availableCreditNanos: string | null;
-      resetsAt: string;
-    }>,
-  },
-  prepaid: {
-    spendableCreditNanos: "0",
-    heldCreditNanos: "0",
-    settledDeficitCreditNanos: "0",
-    holdShortfallCreditNanos: "0",
-    consentEnabled: false,
-  },
-  purchase: {
-    enabled: true,
-    presets: [{ principalCents: 1000, creditNanos: "1000000000000" }],
-    customMinCents: 1000,
-    customMaxCents: 100000,
-    stepCents: 100 as const,
-    currency: "usd" as const,
-  },
+  plan: { id: "pro", name: "Pro", monthlyPriceUsd: "15.00" },
+  included: { state: "active", usedPercent: 10, resetsAt: "2026-10-01T00:00:00.000Z" },
+  prepaid: { balanceUsd: "10.00", fallbackEnabled: false },
+  canManageBilling: true,
   admission: { eligible: true, reason: null },
 };
 
@@ -532,16 +498,6 @@ describe("connected reporting, masks and hints", () => {
     }
   });
 
-  it("names the real keys in the footer hints", () => {
-    expect(connectFooterHint("browse")).toContain("[⏎] connect");
-    expect(connectFooterHint("browse")).toContain("[↑↓] select");
-    expect(connectFooterHint("browse", false)).toContain("[esc] back");
-    expect(connectFooterHint("browse", true)).toContain("[esc] clear filter");
-    expect(connectFooterHint("filter")).toContain("[⌫]");
-    expect(connectFooterHint("input")).toContain("save");
-    expect(connectFooterHint("input")).toContain("cancel");
-  });
-
   it("routes printable characters to filter and input, control keys to neither", () => {
     for (const key of ["a", "Z", "5", "-", ".", " ", "s"]) {
       expect(isFilterKey(key)).toBe(true);
@@ -597,16 +553,17 @@ describe("cloud verification in the detail pane", () => {
     }
   });
 
-  it("keeps exact customer amounts in the connection detail", () => {
+  it("shows included usage and prepaid balance in the connection detail", () => {
     const account: CreditAccount = {
       ...cloudAcct,
-      prepaid: { ...cloudAcct.prepaid, spendableCreditNanos: "123456789012345678" },
+      included: { state: "active", usedPercent: 42, resetsAt: "2026-10-01T00:00:00.000Z" },
+      prepaid: { balanceUsd: "123.45", fallbackEnabled: true },
     };
     const lines = connectDetailLines({
       row, cloudConnected: true, hostedVerification: { kind: "verified", account },
     }, 100);
     const text = lines.map((line) => line.text).join("\n");
-    expect(text).toContain("123456789.012345678 credits");
-    expect(text).toContain("Spendable: 90 credits");
+    expect(text).toContain("42%");
+    expect(text).toContain("$123.45");
   });
 });

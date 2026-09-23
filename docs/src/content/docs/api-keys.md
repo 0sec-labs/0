@@ -34,20 +34,21 @@ output limits: `id`, `contextTokens` and `maxOutputTokens`. It does not print
 supplier details, wire protocols or prices. Select an exact ID from this list;
 otherwise the hosted runtime selects the first catalog entry.
 
-`0 balance` displays the service's credit account, separately from the
-CLI's estimated model cost. It distinguishes:
+`0 balance` and the connection screen show usage separately from the CLI's
+estimated model cost:
 
-| Source | What to check |
-| --- | --- |
-| Free credits | Eligibility, claimable credits, spendable credits, held credits and the reset time. Claimable is not spendable. |
-| Subscription | Subscription state and each reported monthly, weekly or five-hour window. These windows overlap; do not add them together. |
-| Prepaid | Spendable and held credits, settled deficit, hold shortfall and whether prepaid use is permitted. |
-| Admission | Whether the service currently reports the account eligible to make a request, with its reason when unavailable. |
+- **Usage:** percentage of included allowance used, with its reset time.
+- **Prepaid balance:** exact USD amount, shown **only when prepaid fallback is enabled**.
+  A stored balance is hidden while fallback is disabled; enabling it shows even a zero balance.
+- **Access notices:** restrictions remain visible when requests are blocked.
 
-`0 balance --json` returns a validated `credits-v1` account or `null`.
-Credit amounts are decimal integer strings in nanocredits, with 1 credit equal
-to 1,000,000,000 nanocredits. Missing amounts stay unavailable, never zero.
-Unsupported or malformed account data displays **Credit data unavailable**;
+Plan, billing-management and admission metadata remain available in JSON rather
+than cluttering the normal usage display.
+
+`0 balance --json` returns a validated `usage-v2` account or `null`.
+USD amounts remain decimal strings without floating-point conversion.
+Missing amounts stay unavailable, never zero.
+Unsupported or malformed account data displays **Usage unavailable**;
 this is not evidence that your credentials are invalid or your balance is empty.
 Use a compatible CLI and service before attempting a paid request.
 
@@ -97,6 +98,12 @@ and which account pays.
 Hosted HTTP 429 permits retry or configured fallback only with
 `x-0-retry-safe: 1`, issued for pre-dispatch concurrency rejection.
 Provider throttling and unresolved charges are unmarked and aren't replayed.
+
+Within one CLI process, hosted requests share four in-flight slots per endpoint
+and credential across audits and nested agents. Extra requests wait locally;
+slots remain held until response bodies finish. Cancelling a queued request
+removes it without sending inference. Other CLI processes still share the
+service's account limits and can cause a concurrency rejection.
 
 Plugin evolution's SDK model calls use the parent runtime's accounting when
 routed through `hosted`. Subagents fork through the parent runtime's
@@ -181,20 +188,20 @@ Within the API runtime, when there is no provider pin or model-to-provider match
 the following ambient credential order applies. `--model` takes precedence over
 `ZERO_MODEL`; loading a credential is not the same as selecting that provider.
 
-1. **ChatGPT Codex** — `ZERO_CHATGPT_ACCESS_TOKEN` or `ZERO_CHATGPT_OAUTH_REFRESH_TOKEN`
-2. **DeepSeek** — `DEEPSEEK_API_KEY`
-3. **OpenRouter** — `OPENROUTER_API_KEY`
-4. **Azure OpenAI** — `AZURE_OPENAI_API_KEY`
-5. **OpenAI** — `OPENAI_API_KEY`
-6. **Z.ai GLM** — `Z_AI_API_KEY`
-7. **Moonshot Kimi** — `KIMI_API_KEY`
-8. **Alibaba Qwen** — `QWEN_API_KEY`
-9. **xAI Grok** — `XAI_API_KEY`
-10. **OpenCode Zen** — `OPENCODE_API_KEY`
-11. **GitHub Copilot** — `ZERO_COPILOT_GITHUB_TOKEN`
-12. **Google Gemini Code Assist** — `ZERO_GEMINI_ACCESS_TOKEN` or `ZERO_GEMINI_OAUTH_REFRESH_TOKEN`
-13. **Anthropic** — `ANTHROPIC_API_KEY`
-14. **Hosted** — configured Cloud credentials, after the direct providers above.
+1. **Hosted / 0security Auto** — configured Cloud credentials; the service selects the model.
+2. **ChatGPT Codex** — `ZERO_CHATGPT_ACCESS_TOKEN` or `ZERO_CHATGPT_OAUTH_REFRESH_TOKEN`
+3. **DeepSeek** — `DEEPSEEK_API_KEY`
+4. **OpenRouter** — `OPENROUTER_API_KEY`
+5. **Azure OpenAI** — `AZURE_OPENAI_API_KEY`
+6. **OpenAI** — `OPENAI_API_KEY`
+7. **Z.ai GLM** — `Z_AI_API_KEY`
+8. **Moonshot Kimi** — `KIMI_API_KEY`
+9. **Alibaba Qwen** — `QWEN_API_KEY`
+10. **xAI Grok** — `XAI_API_KEY`
+11. **OpenCode Zen** — `OPENCODE_API_KEY`
+12. **GitHub Copilot** — `ZERO_COPILOT_GITHUB_TOKEN`
+13. **Google Gemini Code Assist** — `ZERO_GEMINI_ACCESS_TOKEN` or `ZERO_GEMINI_OAUTH_REFRESH_TOKEN`
+14. **Anthropic** — `ANTHROPIC_API_KEY`
 
 Without a usable provider or Cloud credential, the runtime selects Anthropic
 and reports a missing-credential failure.

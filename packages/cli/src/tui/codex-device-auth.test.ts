@@ -64,11 +64,13 @@ describe("startCodexDeviceAuth", () => {
     };
     const child = fakeProcess();
     const updates: string[] = [];
+    const opened: string[] = [];
     let connected = 0;
 
     startCodexDeviceAuth({
       env,
       homeDir: home,
+      openBrowser: (url) => { opened.push(url); },
       spawn: (command, args) => {
         expect(command).toBe("codex");
         expect(args).toEqual(["login", "--device-auth"]);
@@ -77,14 +79,32 @@ describe("startCodexDeviceAuth", () => {
       onUpdate: (update) => updates.push(update.phase),
       onConnected: () => { connected += 1; },
     });
-    child.stdout("Open https://auth.openai.com/device\n");
+    child.stdout("Open https://auth.openai.com/codex/device\n");
     child.stderr("Enter code ABCD-EFGH\n");
     child.close(0);
+
+    expect(opened).toEqual(["https://auth.openai.com/codex/device"]);
 
     expect(env["ZERO_CHATGPT_ACCESS_TOKEN"]).toBe("fresh-access");
     expect(env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"]).toBe("fresh-refresh");
     expect(updates).toEqual(["running", "running", "running", "connected"]);
     expect(connected).toBe(1);
+  });
+
+  it("opens the browser when Codex emits the device URL without a newline", () => {
+    const child = fakeProcess();
+    const opened: string[] = [];
+    startCodexDeviceAuth({
+      env: {},
+      openBrowser: (url) => { opened.push(url); },
+      spawn: () => child.process,
+      onUpdate: () => {},
+      onConnected: () => {},
+    });
+
+    child.stdout("https://auth.openai.com/codex/device?user_code=ABCD");
+
+    expect(opened).toEqual(["https://auth.openai.com/codex/device?user_code=ABCD"]);
   });
 
   it("cancels the device flow without treating it as an API-key failure", () => {

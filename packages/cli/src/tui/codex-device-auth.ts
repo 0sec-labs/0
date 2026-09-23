@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 
+import { defaultOpenBrowser } from "../commands/auth.js";
 import { maybeLoadCodexAuth } from "../codex-auth.js";
 import { sanitizeTuiText } from "./text.js";
 
@@ -31,6 +32,8 @@ export interface StartCodexDeviceAuthOptions {
   homeDir?: string;
   env?: NodeJS.ProcessEnv;
   spawn?: SpawnCodexDeviceAuth;
+  /** Test seam; defaults to the platform browser opener. */
+  openBrowser?: (url: string) => void | Promise<void>;
   onUpdate: (update: CodexDeviceAuthUpdate) => void;
   onConnected: () => void;
 }
@@ -64,23 +67,43 @@ function defaultSpawnCodexDeviceAuth(
 export function startCodexDeviceAuth(options: StartCodexDeviceAuthOptions): CodexDeviceAuthSession {
   const env = options.env ?? process.env;
   const launch = options.spawn ?? defaultSpawnCodexDeviceAuth;
+  const openBrowser = options.openBrowser ?? defaultOpenBrowser;
   const lines: string[] = [];
   let pending = "";
   let settled = false;
   let cancelled = false;
+  let browserOpened = false;
 
   const publish = (phase: CodexDeviceAuthPhase, message: string): void => {
     options.onUpdate({ phase, lines: [...lines], message });
   };
+  const tryOpenBrowser = (text: string): void => {
+    if (browserOpened) return;
+    // Codex may emit the URL without a trailing newline, or redraw the line
+    // with carriage returns. Scan each chunk before line buffering so browser
+    // launch does not depend on terminal formatting.
+    const rawUrl = text.match(/https:\/\/auth\.openai\.com\/codex\/device[^\s\x1b]*/)?.[0];
+    if (!rawUrl) return;
+    const url = rawUrl.replace(/[),.;]+$/, "");
+    browserOpened = true;
+    void Promise.resolve(openBrowser(url)).catch(() => {
+      lines.push("Could not open a browser automatically; open the URL above.");
+      if (lines.length > MAX_VISIBLE_LINES) lines.shift();
+      publish("running", "Complete the ChatGPT Codex device sign-in in your browser.");
+    });
+  };
   const pushOutput = (chunk: Buffer): void => {
-    const normalized = sanitizeTuiText(`${pending}${chunk.toString("utf8")}`);
-    const parts = normalized.split("\n");
+    const text = chunk.toString("utf8");
+    tryOpenBrowser(text);
+    const raw = `${pending}${text}`;
+    const parts = raw.split(/\r?\n/);
     pending = parts.pop() ?? "";
     for (const line of parts) {
-      const value = line.trim();
+      const value = sanitizeTuiText(line);
       if (value.length === 0) continue;
       lines.push(value);
       if (lines.length > MAX_VISIBLE_LINES) lines.shift();
+      tryOpenBrowser(value);
     }
     publish("running", "Complete the ChatGPT Codex device sign-in in your browser.");
   };

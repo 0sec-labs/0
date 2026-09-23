@@ -1012,6 +1012,39 @@ describe("runNativeAgentLoop cost ceiling", () => {
     expect(state.estimatedCostUsd).toBeCloseTo(1.74 + 3.48, 5);
   });
 
+  it("prices Auto usage after lazy service resolution instead of charging the routing label", async () => {
+    const ledger = new ScanCostLedger();
+    const streamedCosts: unknown[] = [];
+    let model = "";
+    const runtime: NativeRuntime = {
+      type: "api",
+      resolvedModel: () => model,
+      isAvailable: async () => true,
+      async executeNative(_system, _messages, _tools, callbacks) {
+        model = "DeepSeek-V4-Pro";
+        const usage = { inputTokens: 1_000_000, outputTokens: 1_000_000 };
+        callbacks?.onUsage?.(usage);
+        return { content: [{ type: "text", text: "Done" }], stopReason: "end_turn", durationMs: 0, usage };
+      },
+    };
+    const state = await runNativeAgentLoop({
+      config: {
+        role: "attack", systemPrompt: "test", tools: [], maxTurns: 1,
+        target: "https://example.com", scanId: randomUUID(),
+        costModel: "auto", costLedger: ledger, costCeilingUsd: 6,
+      },
+      runtime, db: null,
+      onEvent: (kind, payload) => {
+        if (kind === "usage") streamedCosts.push(payload.estimatedCostUsd);
+      },
+    });
+    expect(state.estimatedCostUsd).toBeCloseTo(5.22, 5);
+    expect(streamedCosts).toEqual([5.22]);
+    expect(ledger.totalCostUsd()).toBeCloseTo(5.22, 5);
+    expect(ledger.soleModel()).toBe("DeepSeek-V4-Pro");
+    expect(state.costCeilingExceeded).toBe(false);
+  });
+
   it("does NOT abort when running cost is well below the ceiling", async () => {
     // Tiny per-turn cost; $100 ceiling → never hit.
     const runtime = createCostBurningRuntime(100, 100);
