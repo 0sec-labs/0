@@ -80,6 +80,47 @@ test("arrow keys scroll the model list; up retreats to the start", async () => {
   expect(afterUp.text, "up did not retreat to the starting model").toBe(start.text);
 });
 
+test("the single /model match leads to agents without running it; Left edits the draft, Enter opens a navigable picker", async () => {
+  tui = await launch({
+    ...modelsByokLaunch(),
+    route: { type: "chat" },
+    env: { ...modelsByokLaunch().env, OSEC_TUI_DEMO_AGENTS: "1" },
+    settings: { reduceMotion: true },
+  });
+  await tui.waitForText(/agents \(2\)/, 15_000);
+  await tui.sendKeys("/model");
+  await tui.waitForText(/\/model · 1/);
+  expect(tui.captureFrame()).toContain("open picker");
+
+  // One matching command has nowhere to move: Down instead selects the first
+  // worker, not /model. Down again moves to a genuinely different roster row.
+  await tui.sendKey("down");
+  const first = tui.captureFrame().match(/^\s*▸[^\n]+/m)?.[0] ?? "";
+  expect(first).toMatch(/Enumerating \/api endpoints/i);
+  await tui.sendKey("down");
+  const second = tui.captureFrame().match(/^\s*▸[^\n]+/m)?.[0] ?? "";
+  expect(second).toMatch(/Running replay/i);
+  expect(second).not.toBe(first);
+  await tui.sendKey("return");
+  await tui.waitForText(/\[←\] Main/);
+  await tui.sendKey("left");
+  expect(tui.captureFrame()).not.toContain("[←] Main");
+
+  // The draft survives roster/focus navigation. Left moves the visible caret,
+  // and an insertion/backspace at that boundary edits rather than appends.
+  await tui.sendKey("left");
+  expect(tui.captureFrame()).toMatch(/\/mode█l/);
+  await tui.sendKeys("x");
+  expect(tui.captureFrame()).toMatch(/\/modex█l/);
+  await tui.sendKey("backspace");
+  expect(tui.captureFrame()).toMatch(/\/mode█l/);
+  await tui.sendKey("return");
+  await tui.waitForText(/DEEPSEEK/, 15_000);
+  const start = highlightedRow(tui.captureSpans());
+  await tui.sendKey("down");
+  expect(highlightedRow(tui.captureSpans()).text).not.toBe(start.text);
+});
+
 test("hosted Auto and connected API models share one picker without a second auto row", async () => {
   tui = await launch({
     ...modelsByokLaunch(),

@@ -62,3 +62,23 @@ test("the selected command wears the PRIMARY highlight, like the model picker", 
   ).toBe(1);
   expect(highlighted[0]!.text, "the highlighted row is not a slash command").toMatch(/^\/\S/);
 });
+
+test("Left leaves a one-result slash menu at an editable caret without running it", async () => {
+  tui = await launch();
+  await tui.waitForText(HOME_READY, 15_000);
+  await tui.sendKeys("/model");
+  await tui.waitForText(/\/model · 1/);
+  await tui.sendKey("up");
+  await tui.sendKey("left");
+  expect(tui.captureFrame()).toMatch(/\/mode█l/);
+  expect(tui.captureFrame()).not.toMatch(/\/model · 1/);
+  await tui.sendKey("right");
+  expect(tui.captureFrame()).toMatch(/\/model█/);
+  // Down with no agents leaves the only-match menu without executing it.
+  await tui.sendKey("backspace");
+  await tui.sendKeys("l");
+  await tui.waitForText(/\/model · 1/);
+  await tui.sendKey("down");
+  expect(tui.captureFrame()).toMatch(/\/model█/);
+  expect(tui.captureFrame()).not.toMatch(/\/model · 1/);
+});

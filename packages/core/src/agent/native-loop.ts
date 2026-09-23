@@ -169,23 +169,24 @@ export function summarizeReasoning(thinkingText: string | undefined | null): str
 const EXTERNAL_MEMORY_MAX_CHARS = 2000;
 
 /**
- * Transient provider error classifier: overload / rate-limit / 5xx / held
- * stream — failures where retrying the SAME turn after a backoff is right
- * (bounded by MAX_TRANSIENT_RETRIES, then the run exits loudly via errorExit).
- * `stall` covers the SSE idle-watchdog's error (a server that accepted the
- * request then held the stream silently; see llm-api.ts
- * consumeResponsesStream). Exported for tests.
+ * Transient provider error classifier. Hosted inference is fail-closed: an
+ * admission rejection is replayable only when the gateway explicitly marks
+ * it safe. A response/stream/transport failure can hide a billable outcome.
+ * Direct providers retain their existing bounded retry behavior.
  */
-export function isTransientLlmError(errorMsg: string): boolean {
+export function isTransientLlmError(errorMsg: string, retrySafe?: boolean): boolean {
+  if (retrySafe === false || /automatic replay is disabled|outcome (?:is|may be) unknown/i.test(errorMsg)) return false;
+  if (/(?:\b0 hosted request\b|\b0\.security Cloud\b)/i.test(errorMsg) && retrySafe !== true) return false;
   return /\b(429|529|502|503|504)\b|overloaded|rate.?limit|temporarily|too many requests|ETIMEDOUT|ECONNRESET|throttl|stall/i.test(errorMsg);
 }
 
 /**
- * Provider context-window rejection classifier. This is intentionally narrower
- * than transient transport errors: pruning history changes the next request,
- * so it must never fire for a rate limit or a generic 5xx.
+ * Provider context-window rejection classifier. Hosted 413
+ * input_limit_exceeded is a pre-dispatch admission rejection; pruning changes
+ * the next request. Rate limits and generic 5xx never prune history.
  */
 export function isContextWindowError(errorMsg: string): boolean {
+  if (/\b0\.security Cloud API error 429:/i.test(errorMsg)) return false;
   return /context.{0,40}(?:window|length|limit)|(?:maximum|max).{0,20}context|too many tokens|prompt.{0,30}(?:too long|too large)|input.{0,30}(?:too long|too large|limit(?:_exceeded)?)/i.test(
     errorMsg,
   );
@@ -2184,6 +2185,12 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // Handle error or empty response
     if (result.stopReason === "error" || result.error || (result.content.length === 0 && (!result.usage || result.usage.outputTokens === 0))) {
       const errorMsg = result.error || "API returned empty response (0 tokens) — model may be rate-limited or unavailable";
+      // Operator cancellation is terminal, even if the runtime supplied an
+      // error string that also resembles a rate limit or context rejection.
+      if (result.cancelled || executionSignal.aborted) {
+        state.summary = "Error: Agent execution cancelled.";
+        break;
+      }
       if (
         !driven &&
         result.error
@@ -2215,14 +2222,22 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       // Transient provider overload / rate-limit / 5xx → back off and retry the
       // SAME turn rather than killing the run. Doesn't consume a turn (the LLM
       // call failed before any tool ran), capped by MAX_TRANSIENT_RETRIES.
-      const transient = !driven && isTransientLlmError(errorMsg);
+      const transient = !driven && isTransientLlmError(errorMsg, result.retrySafe);
       if (transient && transientRetries < MAX_TRANSIENT_RETRIES) {
         transientRetries++;
         const backoffMs = Math.min(20_000, 500 * 2 ** transientRetries);
         process.stderr.write(`[0] transient LLM error (retry ${transientRetries}/${MAX_TRANSIENT_RETRIES}, backoff ${backoffMs}): ${errorMsg.slice(0, 120)}\n`);
         onEvent?.("agent_error", { turn: state.turnCount, error: `transient (retry ${transientRetries}): ${errorMsg.slice(0, 200)}` });
         if (state.turnCount > 0) state.turnCount--; // a failed transient turn must not burn budget
-        await delay(backoffMs);
+        try {
+          await delay(backoffMs, undefined, { signal: executionSignal });
+        } catch (error) {
+          if (!executionSignal.aborted) throw error;
+        }
+        if (executionSignal.aborted) {
+          state.summary = "Error: Agent execution cancelled.";
+          break;
+        }
         continue;
       }
       process.stderr.write(`[0] Agent loop error on turn ${state.turnCount}: ${errorMsg}\n`);

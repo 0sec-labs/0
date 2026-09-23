@@ -181,7 +181,7 @@ describe("hosted catalog selection", () => {
       throw new TypeError("fetch failed", { cause: { code: "ECONNRESET" } });
     }));
     await expect(runtime.executeNative("system", [{ role: "user", content: [{ type: "text", text: "fixture" }] }], []))
-      .resolves.toMatchObject({ stopReason: "error" });
+      .resolves.toMatchObject({ stopReason: "error", retrySafe: false });
     expect(attempts).toBe(1);
   });
 
@@ -196,7 +196,21 @@ describe("hosted catalog selection", () => {
       return new Response("upstream response unavailable", { status: 502 });
     }));
     await expect(runtime.executeNative("system", [{ role: "user", content: [{ type: "text", text: "fixture" }] }], []))
-      .resolves.toMatchObject({ stopReason: "error" });
+      .resolves.toMatchObject({ stopReason: "error", retrySafe: false });
+    expect(attempts).toBe(1);
+  });
+
+  it("does not replay a hosted stream that ends without a terminal event", async () => {
+    const runtime = hostedRuntime("hosted-responses");
+    vi.stubEnv("ZERO_LLM_STREAM_MAX_ATTEMPTS", "3");
+    let attempts = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.endsWith("/models")) return Response.json({ data: [{ id: "hosted-responses", wire_api: "responses", max_output_tokens: 512 }] });
+      attempts++;
+      return new Response("data: {\"type\":\"response.created\"}\n\n", { headers: { "content-type": "text/event-stream" } });
+    }));
+    const result = await runtime.executeNative("system", [{ role: "user", content: [{ type: "text", text: "fixture" }] }], []);
+    expect(result).toMatchObject({ stopReason: "error", error: expect.stringContaining("stream completed without final response") });
     expect(attempts).toBe(1);
   });
 
@@ -210,8 +224,22 @@ describe("hosted catalog selection", () => {
       attempts++;
       return Response.json({ error: { code: "provider_rejected_request" } }, { status: 429, headers: { "retry-after": "0" } });
     }));
-    await expect(runtime.executeNative("system", [{ role: "user", content: [{ type: "text", text: "fixture" }] }], []))
-      .resolves.toMatchObject({ stopReason: "error" });
+    const result = await runtime.executeNative("system", [{ role: "user", content: [{ type: "text", text: "fixture" }] }], []);
+    expect(result).toMatchObject({ stopReason: "error", retrySafe: false });
+    expect(attempts).toBe(1);
+  });
+
+  it("marks only proven pre-dispatch hosted 429s safe for an outer retry", async () => {
+    const runtime = hostedRuntime("hosted-chat");
+    vi.stubEnv("ZERO_LLM_429_MAX_RETRIES", "0");
+    let attempts = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.endsWith("/models")) return Response.json({ data: [{ id: "hosted-chat", wire_api: "chat_completions", max_output_tokens: 512 }] });
+      attempts++;
+      return Response.json({ error: { code: "rate_limit" } }, { status: 429, headers: { "x-0-retry-safe": "1" } });
+    }));
+    const result = await runtime.executeNative("system", [{ role: "user", content: [{ type: "text", text: "fixture" }] }], []);
+    expect(result).toMatchObject({ stopReason: "error", retrySafe: true });
     expect(attempts).toBe(1);
   });
 

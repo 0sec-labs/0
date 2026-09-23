@@ -3899,12 +3899,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   }
 
   /**
-   * Public entry point. Runs {@link executeNativeAttempt} and, ONLY for a
-   * transient empty stream (see {@link shouldRetryNativeStream}), re-issues the
-   * whole request up to {@link llmStreamMaxAttempts} times with a short backoff.
-   * Every other outcome — success, a real API error, a timeout, an operator
-   * cancellation — is returned from the first attempt untouched, preserving the
-   * existing behaviour exactly.
+   * Public entry point. Retries a transient empty stream for direct providers
+   * only. A hosted stream may have completed billable work before its terminal
+   * event disappeared, so it must not be replayed even on this path.
    */
   async executeNative(
     system: string,
@@ -3918,9 +3915,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     let attempt = 0;
     for (attempt = 1; attempt <= maxAttempts; attempt++) {
       result = await this.executeNativeAttempt(system, messages, tools, callbacks, signal);
-      // Last attempt, a non-transient outcome, or an operator cancel arrived
-      // between attempts: stop and return whatever we have.
-      if (attempt >= maxAttempts || !shouldRetryNativeStream(result) || signal?.aborted) break;
+      // A hosted stream can hide completed billable work. Never re-issue it,
+      // including when a direct provider failed over to hosted on this attempt.
+      if (attempt >= maxAttempts || this.provider === "hosted" || !shouldRetryNativeStream(result) || signal?.aborted) break;
 
       const backoff = streamRetryBackoffMs(attempt);
       diag.warn(
@@ -4293,6 +4290,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
               stopReason: "error",
               durationMs: Date.now() - start,
               error: `${this.providerLabel} API error ${res.status}: ${responseText.slice(0, 500)}`,
+              ...(this.provider === "hosted" ? { retrySafe: res.status === 429 && res.headers.get("x-0-retry-safe") === "1" } : {}),
             };
           }
 
@@ -4474,6 +4472,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           stopReason: "error",
           durationMs: Date.now() - start,
           error: `${this.providerLabel} API error ${res.status}: ${responseText.slice(0, 500)}`,
+          ...(this.provider === "hosted" ? { retrySafe: res.status === 429 && res.headers.get("x-0-retry-safe") === "1" } : {}),
         };
       }
 
@@ -4773,6 +4772,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         error: timedOut
           ? `${this.providerLabel} API request timed out`
           : `${this.providerLabel} API error: ${msg}`,
+        ...(this.provider === "hosted" ? { retrySafe: false } : {}),
       };
     } finally {
       releaseHostedSlot?.();

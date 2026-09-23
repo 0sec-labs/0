@@ -91,8 +91,8 @@ export function composerCursorGlyph(active: boolean): string {
  * soft-wraps to `width` cells on word boundaries, exactly like a message
  * composer. A word wider than the whole row is hard-split rather than
  * overflowing. Whitespace is the operator's content, so nothing is trimmed:
- * the rows always concatenate back to the logical line, which is what keeps the
- * append-only cursor's "end of the last row" position exact.
+ * rows always concatenate back to the logical line, allowing the visible
+ * caret to be placed at a real character boundary.
  *
  * Pure and total — every input, width included, yields an array of rows.
  */
@@ -166,19 +166,17 @@ export function composerRailRows(text: string, width: number, composing: boolean
 }
 
 /**
- * The composer's editable body: the wrapped input rows with a focus-aware
- * block cursor at the end of the buffer, or the muted placeholder when idle.
- *
- * The input is append-only (the caret always sits at the end), so the cursor
- * is drawn at the tail of the last visual row; `composerContentRows` guarantees
- * that row leaves it a cell. Long text soft-wraps across rows automatically and
- * the box grows with them, up to COMPOSER_MAX_ROWS.
+ * The composer's editable body: wrapped input rows and a focus-aware block
+ * cursor at the requested character boundary, or the muted placeholder when
+ * idle. An interior cursor occupies one cell of its own; wrapping includes
+ * that cell, and the visible window follows the row containing the caret.
  */
 export function ComposerInput({
   composing,
   active,
   text,
   textWidth,
+  cursorIndex = text.length,
   placeholder,
   placeholderTone,
   theme,
@@ -190,31 +188,49 @@ export function ComposerInput({
   text: string;
   /** Cells available for the input, excluding the "› " prefix. */
   textWidth: number;
+  /** UTF-16 boundary in the draft; keyboard movement keeps it grapheme-aligned. */
+  cursorIndex?: number;
   placeholder: string;
   /** Colour for the placeholder (e.g. ERROR for a startup failure). */
   placeholderTone?: string;
   theme: Theme;
   /**
-   * fish-style inline autosuggestion: the dimmed continuation drawn after the
-   * cursor on the last row. Only the tail — never the operator's text — and
-   * only when the caret sits at end-of-input (which the append-only composer
-   * guarantees while composing). Truncated to the row's remaining width so it
-   * can never wrap or shift the real input; `null`/empty shows nothing.
+   * fish-style inline autosuggestion, shown only at end-of-input. The caller
+   * suppresses it when the caret is inside the draft.
    */
   suggestion?: string | null;
 }) {
   const { TEXT, MUTED, PRIMARY } = theme;
   if (composing) {
-    const rows = composerContentRows(sanitizeComposerText(text).replace(/\t/g, "    "), textWidth);
+    const displayed = sanitizeComposerText(text).replace(/\t/g, "    ");
+    const interior = cursorIndex < text.length;
+    // A private-use, one-cell placeholder makes the wrap algorithm account for
+    // the cursor itself, including when its row was otherwise exactly full.
+    const mark = "\uE000";
+    const prefixLength = sanitizeComposerText(text.slice(0, cursorIndex)).replace(/\t/g, "    ").length;
+    const marked = interior ? `${displayed.slice(0, prefixLength)}${mark}${displayed.slice(prefixLength)}` : displayed;
+    const wrapped = interior ? wrapComposerInput(marked, textWidth) : composerContentRows(marked, textWidth);
+    const caretRow = interior ? wrapped.findIndex((row) => row.includes(mark)) : wrapped.length - 1;
+    const start = interior ? Math.min(Math.max(0, caretRow), Math.max(0, wrapped.length - COMPOSER_MAX_ROWS)) : 0;
+    const rows = interior ? wrapped.slice(start, start + COMPOSER_MAX_ROWS) : wrapped;
     const cursor = composerCursorGlyph(active);
     return (
       <box flexDirection="column" minWidth={0}>
         {rows.map((line, i) => {
+          const markAt = interior ? line.indexOf(mark) : -1;
+          if (markAt >= 0) {
+            return (
+              <text key={`composer-line-${i}`} fg={TEXT} wrapMode="none">
+                {renderComposerRow(line.slice(0, markAt), TEXT, PRIMARY)}
+                <span fg={TEXT}>{cursor}</span>
+                {renderComposerRow(line.slice(markAt + mark.length), TEXT, PRIMARY)}
+              </text>
+            );
+          }
           const isLast = i === rows.length - 1;
-          // Sanitize before wrapping, and expand tabs for display only. The
-          // submitted draft retains its original whitespace. Paste chips are
-          // coloured so they read as distinct tokens; plain text is unchanged.
-          if (!isLast) {
+          // Paste chips are coloured where present; the interior caret was
+          // already rendered in its own row, so no extra tail cursor is drawn.
+          if (!isLast || interior) {
             return (
               <text key={`composer-line-${i}`} fg={TEXT}>
                 {renderComposerRow(line, TEXT, PRIMARY)}

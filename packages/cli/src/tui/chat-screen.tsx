@@ -245,6 +245,7 @@ import {
   deletePreviousCharacter,
   deletePreviousWord,
   deleteToLineStart,
+  stepComposerCursor,
 } from "./composer-edit.js";
 import { appendTranscriptEntry } from "./transcript.js";
 import {
@@ -1289,6 +1290,7 @@ export function ChatScreen({
   const [queuedMessages, setQueuedMessages] = useState<string[]>([]);
   const queuedCount = queuedMessages.length;
   const [composer, setComposer] = useState("");
+  const [composerCursor, setComposerCursor] = useState(0);
   const [composing, setComposing] = useState(false);
   const paletteDraftRef = useRef<{ text: string; composing: boolean } | null>(null);
   const [commandMenuOpen, setCommandMenuOpen] = useState(false);
@@ -1537,6 +1539,7 @@ export function ChatScreen({
     controlsWidth,
   } = layout;
   const composerRef = useRef("");
+  const composerCursorRef = useRef(0);
   // OMP-style paste collapsing: long text and image-path pastes are stashed here
   // and represented in the composer by a compact chip marker; `pasteCounterRef`
   // is the monotonic chip number N (shared across text and image chips so their
@@ -1609,15 +1612,23 @@ export function ChatScreen({
     setCommandMenuOpen(visible);
   }, []);
 
-  const setComposerText = useCallback((value: string) => {
+  const setComposerText = useCallback((value: string, cursor = value.length) => {
     composerRef.current = value;
+    composerCursorRef.current = cursor;
     setComposer(value);
+    setComposerCursor(cursor);
     setSlashSelected(0);
     setCommandMenuVisible(value.trimStart().startsWith("/"));
     // Any composer edit leaves history browsing and re-bases the cursor on the
     // live draft. A recall re-sets the cursor immediately after calling this.
     historyIndexRef.current = historyRef.current.length;
   }, [setCommandMenuVisible]);
+
+  const moveComposerCursor = (direction: -1 | 1) => {
+    const next = stepComposerCursor(composerRef.current, composerCursorRef.current, direction);
+    composerCursorRef.current = next;
+    setComposerCursor(next);
+  };
 
   // Drop the store entries a submit expanded, so the map does not grow without
   // bound. Called from the composer-clear branches after Enter expands markers.
@@ -4438,7 +4449,9 @@ export function ChatScreen({
     // for a root); Escape always returns to Main. A printable key falls through
     // so the operator can message this worker; once composing, the composer
     // retains its existing editing behavior.
-    if (focusAgentId && !composingRef.current) {
+    if (focusAgentId && (!composingRef.current || (
+      !commandMenuOpenRef.current && composerRef.current.trimStart().startsWith("/")
+    ))) {
       if (key.name === "escape" || key.name === "left") {
         const focusTree = liveAgentTree.some((row) => row.item.agent_id === focusAgentId)
           ? liveAgentTree
@@ -4659,12 +4672,26 @@ export function ChatScreen({
     }
     if (composingRef.current) {
       if (commandMenuOpenRef.current && composerRef.current.trimStart().startsWith("/")) {
+        if (key.name === "left" && !key.ctrl && !key.meta && !key.option) {
+          // Leave the completion menu and put the caret inside the draft;
+          // this does not apply the command or discard its text.
+          setCommandMenuVisible(false);
+          moveComposerCursor(-1);
+          return;
+        }
         if (key.name === "up") {
           setSlashSelected((current) => Math.max(0, current - 1));
           return;
         }
         if (key.name === "down") {
-          setSlashSelected((current) => Math.min(Math.max(menuCommands.length - 1, 0), current + 1));
+          if (menuCommands.length <= 1) {
+            // There is no next command. Leave the single-result menu instead
+            // of pretending to move (or silently running its only command).
+            setCommandMenuVisible(false);
+            if (settings.showSubagents && workerRoster.length > 0) setAgentNavIndex(0);
+          } else {
+            setSlashSelected((current) => Math.min(menuCommands.length - 1, current + 1));
+          }
           return;
         }
         if (key.name === "tab") {
@@ -4682,13 +4709,8 @@ export function ChatScreen({
         return;
       }
       if (key.name === "down") {
-        // The composer is append-only: the caret always sits on the LAST line,
-        // so "Down with nothing below the cursor" is the steady state while
-        // composing. When the operator is NOT browsing history back through the
-        // draft, and workers are running, that Down drops INTO the agents list —
-        // the same affordance the empty composer offers — rather than doing
-        // nothing. While browsing history, Down still walks forward toward the
-        // live draft first.
+        // Down at the end of a draft enters the worker roster, unless history
+        // recall is in progress. Up/Down do not move the horizontal caret.
         const browsingHistory = historyIndexRef.current < historyRef.current.length;
         if (!browsingHistory) {
           const navList = settings.showSubagents ? workerRoster : [];
@@ -4700,32 +4722,31 @@ export function ChatScreen({
         recallComposerHistory("down");
         return;
       }
-      // Right arrow accepts the inline autosuggestion (fish / Claude Code
-      // style). The composer is append-only, so the caret is ALWAYS at
-      // end-of-input while composing — the precondition for accepting — and →
-      // fills the ghost suffix into the draft WITHOUT submitting, then leaves
-      // the caret at the new end (setComposerText re-bases it there). With the
-      // feature off, a slash draft, or no matching suggestion, → falls through
-      // to its previous behaviour: a no-op, since the append-only composer has
-      // no caret to move right. Arrows are protected (non-rebindable) keys, so
-      // this is a literal key.name check like the Up/Down/Left handlers, not a
-      // matchesBinding lookup.
-      if (key.name === "right") {
+      // The suggestion is accepted only at end-of-input; otherwise the arrow
+      // moves the visible caret through the draft one grapheme at a time.
+      if (key.name === "left" && !key.ctrl && !key.meta && !key.option) {
+        moveComposerCursor(-1);
+        return;
+      }
+      if (key.name === "right" && !key.ctrl && !key.meta && !key.option) {
+        if (composerCursorRef.current < composerRef.current.length) {
+          moveComposerCursor(1);
+          return;
+        }
         const suffix = settingsRef.current.composerSuggestions
           && !composerRef.current.trimStart().startsWith("/")
           ? suggestCompletion(composerRef.current, historyRef.current)
           : null;
-        if (suffix) {
-          setComposerText(`${composerRef.current}${suffix}`);
-          return;
-        }
+        if (suffix) setComposerText(`${composerRef.current}${suffix}`);
+        return;
       }
       // Shift+Enter inserts a newline; plain Enter submits. Terminals that
       // cannot distinguish the two (no kitty keyboard protocol) fall through to
       // submit, which is the safe default. The multi-line composer renders the
       // newlines and grows to fit.
       if (key.name === "return" && key.shift) {
-        setComposerText(`${composerRef.current}\n`);
+        const at = composerCursorRef.current;
+        setComposerText(`${composerRef.current.slice(0, at)}\n${composerRef.current.slice(at)}`, at + 1);
         return;
       }
       if (key.name === "return") {
@@ -4796,35 +4817,28 @@ export function ChatScreen({
         }
         return;
       }
-      // Line editing. The composer is append-only — there is no caret to
-      // move — so the kill verbs that operate on the tail of the buffer are
-      // implemented and the caret-relative ones (Ctrl+A / Ctrl+E / Ctrl+K,
-      // arrows) deliberately are not; faking them would be worse than their
-      // absence. The transforms live in composer-edit.ts so word-boundary
-      // handling is unit-tested rather than inlined here.
-      //
-      // Ctrl+U — delete to start of line. This is where macOS maps
-      // Cmd+Backspace, which is the key the operator reported dead.
+      // Edit the text before the caret and keep the untouched suffix. The
+      // existing tail-oriented transforms also work on that prefix.
+      const at = composerCursorRef.current;
+      const prefix = composerRef.current.slice(0, at);
+      const suffix = composerRef.current.slice(at);
       if (key.ctrl && key.name === "u") {
-        setComposerText(deleteToLineStart(composerRef.current));
+        const next = deleteToLineStart(prefix);
+        setComposerText(next + suffix, next.length);
         return;
       }
-      // Ctrl+W, and Alt/Option+Backspace (`\x1b\x7f`, parsed as backspace
-      // with meta/option set) — delete the previous word.
-      if (key.ctrl && key.name === "w") {
-        setComposerText(deletePreviousWord(composerRef.current));
-        return;
-      }
-      if (key.name === "backspace" && (key.meta || key.option || key.ctrl)) {
-        setComposerText(deletePreviousWord(composerRef.current));
+      if ((key.ctrl && key.name === "w") || (key.name === "backspace" && (key.meta || key.option || key.ctrl))) {
+        const next = deletePreviousWord(prefix);
+        setComposerText(next + suffix, next.length);
         return;
       }
       if (key.name === "backspace") {
-        setComposerText(deletePreviousCharacter(composerRef.current));
+        const next = deletePreviousCharacter(prefix);
+        setComposerText(next + suffix, next.length);
         return;
       }
       if (key.sequence && !key.ctrl && !key.meta && !/[\x00-\x1f\x7f]/.test(key.sequence)) {
-        setComposerText(`${composerRef.current}${key.sequence}`);
+        setComposerText(`${prefix}${key.sequence}${suffix}`, at + key.sequence.length);
       }
       return;
     }
@@ -5402,11 +5416,8 @@ export function ChatScreen({
   // cells and grows downward up to COMPOSER_MAX_ROWS, then scrolls the oldest
   // rows out to keep the tail cursor in view. The block cursor is FILLED when
   // the composer is focused (`composerActive`) and HOLLOW when it is not.
-  // The inline autosuggestion shown as dimmed ghost text after the caret. Only
-  // while composing a non-slash draft with the feature enabled; the pure prefix
-  // match over submitted-message history lives in composer-suggest.ts. `null`
-  // (empty draft, no match, or a draft equal to a full entry) shows nothing.
-  const composerSuggestion = settings.composerSuggestions && composing && !isSlashComposer
+  // Autosuggestions appear only at the tail, never after an interior caret.
+  const composerSuggestion = settings.composerSuggestions && composing && composerCursor === composer.length && !isSlashComposer
     ? suggestCompletion(composer, historyRef.current)
     : null;
   const composerInput = (textWidth: number) => {
@@ -5429,6 +5440,7 @@ export function ChatScreen({
         active={composerActive}
         text={composer}
         textWidth={textWidth}
+        cursorIndex={composerCursor}
         placeholder={placeholder}
         placeholderTone={startupError ? ERROR : MUTED}
         theme={theme}
@@ -5555,6 +5567,7 @@ export function ChatScreen({
       selectedIndex={slashSelected}
       visibleRows={visibleCommandRows}
       query={slashQuery}
+      hasAgentRoster={settings.showSubagents && workerRoster.length > 0}
       theme={theme}
       onActivateRow={activateSlashCommand}
       onHoverRow={hoverSlashCommand}
