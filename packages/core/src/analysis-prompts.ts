@@ -320,7 +320,7 @@ ${semgrepSection}
 - Demonstrate the attacker's required control and the source-to-sink path; inspect relevant authorization, validation, and sanitization before reporting.
 - Independently check each candidate against the surrounding code. Discard intended behavior, unsupported assumptions, unreachable paths, and pre-existing issues unaffected by the delta.
 - Use save_finding only for a concrete, evidenced regression. Cite the changed location, attack preconditions, impact, evidence, and a focused remediation. Do not inflate severity or claim execution you did not perform.
-- Record repository-relative source_path and exact source_start_line, preferring an added line that exposes the regression. Set source_end_line or suggested_replacement only when exact; never invent a location to obtain an inline comment.
+- Record repository-relative source_path and exact source_start_line, preferring an added line that exposes the regression. For suggested_replacement, copy source_original exactly from the cited line(s), including indentation but without the read_file line-number prefix. The tool checks both original text and added-line position; never guess, shift a citation, or attach a fix to an adjacent line. Set source_end_line only when exact.
 - If essential context is unavailable, say what remains uncertain. Budget exhaustion is incomplete review, never evidence that the change is safe.
 - Once the delta and its relevant context are understood, call done. Summarize actual coverage, findings, and gaps without claiming whole-repository coverage.
 

@@ -83,4 +83,26 @@ describe("runAnalysisAgent — errorExit propagation", () => {
     expect(res.findings).toHaveLength(1);
     expect(res.turns).toBe(3);
   });
+
+  it("does not publish a blind verifier's independent copy of the same diff finding", async () => {
+    const emitted: string[] = [];
+    mockedLoop.mockImplementation(async ({ config, onFindingSaved }) => {
+      expect(config.suppressFindingEvents).toBe(true);
+      expect(config.maxTurns).toBe(10);
+      await onFindingSaved?.({ title: "Independent confirmation", severity: "medium" } as never);
+      return {
+        findings: [{ title: "Independent confirmation" }],
+        summary: "done", turnCount: 2, done: true, messages: [],
+        totalUsage: { inputTokens: 10, outputTokens: 5 },
+        estimatedCostUsd: 0.001, costCeilingExceeded: false,
+      } as never;
+    });
+    const result = await runAnalysisAgent({
+      ...baseOpts(), role: "review", purpose: "verify", singleAgent: true,
+      reviewDiffBase: "HEAD~", maxTurns: 10,
+      emit: event => emitted.push(event.type),
+    });
+    expect(result.findings).toHaveLength(1);
+    expect(emitted).not.toContain("finding");
+  });
 });
