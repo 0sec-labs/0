@@ -1446,8 +1446,8 @@ describe("runPipeline — diff-aware review", () => {
     ]);
   });
 
-  it("default foxguard uses its native diff mode for changed-only review", async () => {
-    const { repoDir, changedFile } = makeRepoWithDiff();
+  it("ordinary changed-only review skips Foxguard but still investigates the exact patch", async () => {
+    const { repoDir } = makeRepoWithDiff();
 
     await runPipeline({
       target: repoDir,
@@ -1461,13 +1461,19 @@ describe("runPipeline — diff-aware review", () => {
       dbPath: freshDbPath(),
     });
 
-    expect(runFoxguardScanMock).toHaveBeenCalledTimes(1);
+    expect(runFoxguardScanMock).not.toHaveBeenCalled();
     expect(runSemgrepScanMock).not.toHaveBeenCalled();
-    const opts = runFoxguardScanMock.mock.calls[0]![2];
-    expect(opts).toEqual({
-      paths: [join(repoDir, changedFile)],
-      diffBase: "HEAD~",
+    expect(runAnalysisAgentMock).toHaveBeenCalledTimes(1);
+    expect(runAnalysisAgentMock.mock.calls[0]![0].agentSystemPrompt).toContain("+export const y = req.body;");
+  });
+
+  it("whole-tree source review still runs Foxguard", async () => {
+    const { repoDir } = makeRepoWithDiff();
+    await runPipeline({
+      target: repoDir, targetType: "source-code", depth: "quick", format: "json",
+      runtime: "api", apiKey: "sk-fake", dbPath: freshDbPath(),
     });
+    expect(runFoxguardScanMock).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the original diff finding and research suggestion after independent verification", async () => {
