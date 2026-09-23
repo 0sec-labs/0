@@ -1497,6 +1497,7 @@ describe("runPipeline — diff-aware review", () => {
       purpose: "verify", singleAgent: true, reviewDiffBase: "HEAD~", maxTurns: 10,
     });
     expect(runAnalysisAgentMock.mock.calls[1]![0].agentSystemPrompt).toContain(`FILE: ${changedFile}`);
+    expect(runAnalysisAgentMock.mock.calls[1]![0].agentSystemPrompt).toContain("source_original");
     expect(report.findings).toHaveLength(1);
     expect(report.findings[0]).toMatchObject({
       id: "original", status: "verified",

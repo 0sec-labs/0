@@ -2328,6 +2328,9 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
               claimedSeverity,
               prepared.scopePath,
             );
+            if (diffReview) {
+              verifySystemPrompt += "\n\nThis is a diff-scoped review. Independently verify only the claimed change and its required callers/guards; stop once resolved. If confirmed and an exact fix is known, include source_path, source_start_line and suggested_replacement in save_finding. Copy source_original verbatim from the numbered read_file output without its line prefix. The proposed replacement must apply to those exact changed lines; if not certain, report the finding without a suggestion.";
+            }
             if (memoryStore) {
               try {
                 const memories = await memoryStore.getRelevantMemories(finding, opts.target);
