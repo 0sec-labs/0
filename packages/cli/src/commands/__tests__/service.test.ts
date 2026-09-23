@@ -258,6 +258,16 @@ describe("0 service wait", () => {
     expect(out).toContain("Scan finished");
   });
 
+  it("shows settled usage without crashing on PostgreSQL decimals", async () => {
+    mocks.getJson.mockResolvedValue({ ...COMPLETE_SCAN, cost_usd: "0.301440", billed_usd: "0.434447" });
+    await runCli(["service", "wait", "scan-abc", "--interval", "0.01"]);
+    const out = io.stdout.join("");
+    expect(out).toContain("Scan finished");
+    expect(out).toContain("Usage:        $0.434447");
+    expect(out).not.toContain("Cost:");
+    expect(out).not.toContain("Billed:");
+  });
+
   it("stops at cancelled status", async () => {
     mocks.getJson
       .mockResolvedValueOnce(RUNNING_SCAN)
