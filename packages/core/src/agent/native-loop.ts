@@ -186,7 +186,7 @@ export function isTransientLlmError(errorMsg: string): boolean {
  * so it must never fire for a rate limit or a generic 5xx.
  */
 export function isContextWindowError(errorMsg: string): boolean {
-  return /context.{0,40}(?:window|length|limit)|(?:maximum|max).{0,20}context|too many tokens|prompt.{0,30}(?:too long|too large)|input.{0,30}(?:too long|too large|limit(?:_exceeded)?)/i.test(
+  return /context.{0,40}(?:window|length|limit)|(?:maximum|max).{0,20}context|too many tokens|prompt.{0,30}(?:too long|too large)|input.{0,30}(?:too long|too large)/i.test(
     errorMsg,
   );
 }
@@ -253,10 +253,6 @@ export interface NativeAgentConfig {
   maxTurns: number;
   /** Disable delegation, including unadvertised calls to spawn tools. */
   singleAgent?: boolean;
-  /** Bound diff base for exact source-line suggestions. */
-  reviewDiffBase?: string;
-  /** Blind verification may assess findings but must not publish a second copy. */
-  suppressFindingEvents?: boolean;
   target: string;
   scanId: string;
   workerTree?: ToolContext["workerTree"];
@@ -704,7 +700,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     scanId: config.scanId,
     role: config.role,
     diffScopedReview: config.role === "review" && config.singleAgent === true,
-    reviewDiffBase: config.reviewDiffBase,
     delegationSystemPrompt: config.delegationSystemPrompt ?? config.systemPrompt,
     autonomyMode: config.autonomyMode ?? DEFAULT_AUTONOMY_MODE,
     publicNetwork: config.publicNetwork,
@@ -1683,7 +1678,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
           typeof input.confidence === "number" && Number.isFinite(input.confidence)
             ? input.confidence
             : undefined;
-        if (!config.suppressFindingEvents && f?.message === "Finding saved") eventBus.emit("finding_ingested", {
+        eventBus.emit("finding_ingested", {
           finding_id: typeof f?.id === "string" ? f.id : typeof f?.findingId === "string" ? f.findingId : undefined,
           severity: typeof input.severity === "string" ? input.severity : undefined,
           title: typeof input.title === "string" ? input.title : undefined,

@@ -490,8 +490,6 @@ export interface ToolContext {
   role?: AgentRole;
   /** A bounded diff review must not satisfy whole-repository coverage quotas. */
   diffScopedReview?: boolean;
-  /** The exact base commit of a diff-scoped review, used to ground replacement lines. */
-  reviewDiffBase?: string;
   /** Parent-advertised built-ins; delegated agents cannot widen this capability set. */
   delegationTools?: readonly ToolDefinition[];
   /** Current parent instructions, inherited by delegated agent sessions. */

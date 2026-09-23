@@ -49,10 +49,6 @@ export interface AnalysisAgentOptions {
   collectProjectContext?: boolean;
   /** Diff review: one bounded researcher, with no delegated inference. */
   singleAgent?: boolean;
-  /** Exact commit used to validate suggested replacements in a diff review. */
-  reviewDiffBase?: string;
-  /** A smaller deterministic budget for a small changed-only review. */
-  maxTurns?: number;
 }
 
 /**
@@ -476,7 +472,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
 
     if (supportsNative) {
       const turnBudget = getMaxTurns(role, config.depth, "native", purpose);
-      const maxTurns = Math.min(opts.maxTurns ?? turnBudget, opts.singleAgent ? 20 : turnBudget);
+      const maxTurns = opts.singleAgent ? Math.min(turnBudget, 20) : turnBudget;
 
       // #978 (ADR-060) — cloud control channel. unified-pipeline.ts (the
       // package/source audit + review path) runs the agent here, NOT through
@@ -493,8 +489,6 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
           tools: getToolsForRole(role, { hasScope: !!scopePath }),
           maxTurns,
           singleAgent: opts.singleAgent,
-          reviewDiffBase: opts.reviewDiffBase,
-          suppressFindingEvents: purpose === "verify" && !!opts.singleAgent,
           target,
           scanId,
           scopePath,
@@ -508,7 +502,6 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
         db,
         getPendingUserMessages: cloudInbox?.drain,
         onFindingSaved: (finding) => {
-          if (purpose === "verify" && opts.singleAgent) return;
           emit({
             type: "finding",
             message: `[${finding.severity}] ${finding.title}`,

@@ -134,7 +134,7 @@ function parsePositiveIntArg(
  */
 export function windowFileContent(
   fileContent: string,
-  args: { offset?: unknown; maxLines?: unknown; numberLines?: boolean },
+  args: { offset?: unknown; maxLines?: unknown },
 ): ReadFileWindow {
   const offsetArg = parsePositiveIntArg(args.offset, "offset", 1);
   if (!offsetArg.ok) return { ok: false, error: offsetArg.error };
@@ -187,10 +187,7 @@ export function windowFileContent(
     );
   }
 
-  const body = args.numberLines
-    ? selected.map((line, index) => `${startLine + index}: ${line}`)
-    : selected;
-  const content = notes.length > 0 ? [...body, ...notes].join("\n") : body.join("\n");
+  const content = notes.length > 0 ? [...selected, ...notes].join("\n") : selected.join("\n");
 
   return {
     ok: true,

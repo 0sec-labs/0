@@ -1446,8 +1446,8 @@ describe("runPipeline — diff-aware review", () => {
     ]);
   });
 
-  it("ordinary changed-only review skips Foxguard but still investigates the exact patch", async () => {
-    const { repoDir } = makeRepoWithDiff();
+  it("default foxguard uses its native diff mode for changed-only review", async () => {
+    const { repoDir, changedFile } = makeRepoWithDiff();
 
     await runPipeline({
       target: repoDir,
@@ -1461,54 +1461,45 @@ describe("runPipeline — diff-aware review", () => {
       dbPath: freshDbPath(),
     });
 
-    expect(runFoxguardScanMock).not.toHaveBeenCalled();
-    expect(runSemgrepScanMock).not.toHaveBeenCalled();
-    expect(runAnalysisAgentMock).toHaveBeenCalledTimes(1);
-    expect(runAnalysisAgentMock.mock.calls[0]![0].agentSystemPrompt).toContain("+export const y = req.body;");
-  });
-
-  it("whole-tree source review still runs Foxguard", async () => {
-    const { repoDir } = makeRepoWithDiff();
-    await runPipeline({
-      target: repoDir, targetType: "source-code", depth: "quick", format: "json",
-      runtime: "api", apiKey: "sk-fake", dbPath: freshDbPath(),
-    });
     expect(runFoxguardScanMock).toHaveBeenCalledTimes(1);
+    expect(runSemgrepScanMock).not.toHaveBeenCalled();
+    const opts = runFoxguardScanMock.mock.calls[0]![2];
+    expect(opts).toEqual({
+      paths: [join(repoDir, changedFile)],
+      diffBase: "HEAD~",
+    });
   });
 
-  it("keeps the original diff finding and research suggestion after independent verification", async () => {
+  it("emits a cloud-shaped local callback envelope without widening the diff", async () => {
     const { repoDir, changedFile } = makeRepoWithDiff();
-    const research = fakeFinding("original", {
-      reviewAnnotation: { path: changedFile, startLine: 1, suggestion: "export const y = safe(req.body);" },
-    });
-    const verification = fakeFinding("independent", {
-      reviewAnnotation: {
-        path: changedFile, startLine: 2, suggestion: "wrong-location",
-      },
-    });
-    runAnalysisAgentMock.mockResolvedValueOnce({ findings: [research] })
-      .mockResolvedValueOnce({ findings: [verification] });
+    const events: Array<{ type: string; stage?: string; message: string }> = [];
 
     const report = await runPipeline({
-      target: repoDir, targetType: "source-code", depth: "default", format: "json",
-      runtime: "api", apiKey: "sk-fake", diffBase: "HEAD~", changedOnly: true,
+      target: repoDir,
+      targetType: "source-code",
+      depth: "quick",
+      format: "json",
+      runtime: "api",
+      apiKey: "sk-fake",
+      diffBase: "HEAD~",
+      changedOnly: true,
       dbPath: freshDbPath(),
+      onEvent: (event) => events.push(event),
     });
 
-    expect(runAnalysisAgentMock).toHaveBeenCalledTimes(2);
-    expect(runAnalysisAgentMock.mock.calls[0]![0]).toMatchObject({
-      singleAgent: true, reviewDiffBase: "HEAD~", maxTurns: 12,
+    expect(report).toMatchObject({
+      target: repoDir,
+      targetType: "source-code",
+      summary: {
+        totalFindings: 0,
+      },
+      findings: [],
     });
-    expect(runAnalysisAgentMock.mock.calls[1]![0]).toMatchObject({
-      purpose: "verify", singleAgent: true, reviewDiffBase: "HEAD~", maxTurns: 10,
-    });
-    expect(runAnalysisAgentMock.mock.calls[1]![0].agentSystemPrompt).toContain(`FILE: ${changedFile}`);
-    expect(runAnalysisAgentMock.mock.calls[1]![0].agentSystemPrompt).toContain("do not emit a second suggestion");
-    expect(report.findings).toHaveLength(1);
-    expect(report.findings[0]).toMatchObject({
-      id: "original", status: "verified",
-      reviewAnnotation: { path: changedFile, startLine: 1, suggestion: "export const y = safe(req.body);" },
-    });
+    expect(events.some((event) => event.type === "stage:start" && event.stage === "research")).toBe(true);
+    expect(events.some((event) => event.type === "stage:end" && event.stage === "research")).toBe(true);
+    expect(runAnalysisAgentMock).toHaveBeenCalledTimes(1);
+    expect(runAnalysisAgentMock.mock.calls[0]![0].cliPrompt).toContain(changedFile);
+    expect(runAnalysisAgentMock.mock.calls[0]![0].cliPrompt).not.toContain("stable.ts");
   });
 
   it("missing diff-base produces a warning but the pipeline still completes", async () => {

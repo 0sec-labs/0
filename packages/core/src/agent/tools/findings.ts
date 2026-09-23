@@ -98,15 +98,10 @@ export const findingsToolDefinitions: Record<string, ToolDefinition> = {
         description:
           "OPTIONAL inclusive 1-based end line. Must be >= source_start_line.",
       },
-      source_original: {
-        type: "string",
-        description:
-          "For a diff-scoped suggested_replacement, REQUIRED exact current text of the cited source lines, including indentation but without the read_file line-number prefixes. The tool compares these bytes before allowing a GitHub suggestion.",
-      },
       suggested_replacement: {
         type: "string",
         description:
-          "OPTIONAL exact replacement text for source_start_line..source_end_line. For a diff review, every cited line must be added in the bound patch; read the numbered source before citing it. Do not send a unified diff or markdown fence.",
+          "OPTIONAL exact replacement text for source_start_line..source_end_line. Do not send a unified diff or markdown fence.",
       },
       // 0#170 — optional structured proof-of-concept step graph. When the
       // agent has structured execution data (e.g. it actually ran the curl /

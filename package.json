@@ -23,6 +23,7 @@
     "dev": "pnpm -r --parallel dev",
     "lint": "pnpm --filter '!@0/docs' -r exec tsc --noEmit",
     "test": "pnpm test:public",
+    "test:review-local": "node scripts/review-local-smoke.mjs",
     "test:public": "pnpm --filter @0/core test && pnpm --filter @0/test-targets test && pnpm --filter @0/cli test && pnpm test:runtime-lock && pnpm test:bundle-skills && pnpm test:public-source-export && pnpm test:dev-engine && node --test scripts/dsh-0-mcp.test.mjs && pnpm test:docs-pointers",
     "test:bundle-skills": "node --test scripts/bundle-skills-assets.test.mjs",
     "test:dsh-mcp:e2e": "node scripts/dsh-0-mcp.e2e.mjs",

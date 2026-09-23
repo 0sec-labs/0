@@ -1462,28 +1462,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       "diff", "--no-ext-diff", "--no-textconv", "--unified=3", `${opts.diffBase}...HEAD`,
     ], { cwd: prepared.scopePath, timeout: 30_000, encoding: "utf-8", maxBuffer: 256 * 1024 });
     if (!diffPatch.trim()) throw new Error("No reviewable diff found; refusing whole-repository fallback.");
-    // A diff is input data, not an unlimited prompt budget. Keep the initial
-    // review request below the provider context ceiling; the agent can fetch
-    // omitted hunks with read_file after the changed-path manifest is shown.
-    const maxInitialDiffChars = 64 * 1024;
-    if (Buffer.byteLength(diffPatch, "utf8") > maxInitialDiffChars) {
-      const half = Math.floor(maxInitialDiffChars / 2);
-      diffPatch = diffPatch.slice(0, half)
-        + "\n\n[0: middle of oversized diff omitted from initial prompt; inspect changed paths with read_file]\n\n"
-        + diffPatch.slice(-half);
-    }
   }
-  // A routine small change gets one bounded research pass and one bounded
-  // independent verification pass. Bigger diffs keep the established budget;
-  // neither path widens the source scope or silently turns exhaustion into a
-  // clean review.
-  let addedLines = 0;
-  if (diffReview) {
-    for (const line of diffPatch.split("\n")) {
-      if (line.startsWith("+") && !line.startsWith("+++")) addedLines++;
-    }
-  }
-  const smallDiffReview = diffReview && diffChangedFiles!.length <= 3 && addedLines <= 80;
 
   if (prepared.resolvedType === "source-code" && !opts.resumeScanId) {
     const cap = reviewMaxFiles();
@@ -1578,13 +1557,6 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     let changedFiles: string[] = diffChangedFiles ?? [];
     const staticScanner = selectedStaticScanner();
     let staticScannerRan = false;
-    // The managed PR review already binds an exact patch and sends one
-    // diff-scoped agent through its relevant callers. Foxguard's `diff`
-    // subcommand first scans the entire HEAD tree, then filters to changed
-    // files, so a one-line PR on a large repo paid a 134-second static pass.
-    // Skip that prepass only here; whole-tree/source and package reviews
-    // retain Foxguard, and an explicit Semgrep selection still runs.
-    const skipFoxguardForDiff = diffReview && staticScanner === "foxguard";
     let staticScannerFindings = 0;
 
     // External seeds (e.g. from `gemmaforge scan` via `--seed-findings`).
@@ -1653,8 +1625,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     // routes source and package-source leads through Semgrep while leaving
     // dependency advisory checks intact.
     if (
-      !skipSemgrep && !skipFoxguardForDiff &&
-      (!diffReview || changedFiles.some(path => existsSync(join(prepared.scopePath, path)))) && (
+      !skipSemgrep && (!diffReview || changedFiles.some(path => existsSync(join(prepared.scopePath, path)))) && (
       prepared.resolvedType === "source-code" ||
       prepared.resolvedType === "npm-package" ||
       prepared.resolvedType === "pypi-package" ||
@@ -2115,8 +2086,6 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
           const agentResult = await runAnalysisAgent({
             role: prepared.resolvedType === "source-code" ? "review" : "audit",
             singleAgent: diffReview,
-            reviewDiffBase: diffReview ? opts.diffBase : undefined,
-            maxTurns: smallDiffReview ? 12 : undefined,
             scopePath: prepared.scopePath,
             target: prepared.resolvedTarget,
             scanId: persistedScanId,
@@ -2335,7 +2304,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
           diffReview ? 1 : verifyConcurrency(),
           async (finding) => {
             // Extract file path from evidence_request field
-            const filePath = finding.reviewAnnotation?.path || finding.evidence.request || "";
+            const filePath = finding.evidence.request || "";
             // Extract PoC from evidence_response (the PoC code)
             const poc = finding.evidence.response || finding.evidence.analysis || "";
             const claimedSeverity = finding.severity;
@@ -2346,9 +2315,6 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
               claimedSeverity,
               prepared.scopePath,
             );
-            if (diffReview) {
-              verifySystemPrompt += "\n\nThis is a diff-scoped review. Independently verify only the claimed change and its required callers/guards; stop once resolved. The research finding already owns the PR annotation and any exact replacement; do not emit a second suggestion. Cite the actual source path if confirmed, and report independently whether the claimed issue holds.";
-            }
             if (memoryStore) {
               try {
                 const memories = await memoryStore.getRelevantMemories(finding, opts.target);
@@ -2373,8 +2339,6 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
                 role: "review",
                 purpose: "verify",
                 singleAgent: diffReview,
-                reviewDiffBase: diffReview ? opts.diffBase : undefined,
-                maxTurns: smallDiffReview ? 10 : undefined,
                 scopePath: prepared.scopePath,
                 target: prepared.resolvedTarget,
                 scanId: `${persistedScanId}-verify`,
