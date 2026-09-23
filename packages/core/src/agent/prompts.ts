@@ -129,6 +129,32 @@ a captured hash — then turn that access into a higher-severity finding. Call t
 truncate long ones) before you replay it in a request. The best findings come
 from combining footholds, not from single isolated probes.`;
 
+// (0#1103) Impact-assessment guidance. Appended to any prompt that describes
+// save_finding fields — asks the model to supply evidence-grounded business
+// impact only when the evidence supports it, avoiding hallucinated defaults.
+const IMPACT_ASSESSMENT_INSTRUCTION = `
+
+## Impact assessment (OPTIONAL)
+
+When your evidence concretely shows how the attacker is positioned (reachability),
+what scope is affected (blast radius), and what the attacker gains (weaponizability),
+supply an \`impact_assessment\` JSON object with your \`save_finding\` call:
+- \`reachability_tier\`: How the attacker reaches the sink —
+  \`remote-unauth\` (worst) | \`remote-auth\` | \`proximity-rf\` |
+  \`local-unpriv\` | \`local-priv\` | \`needs-hardware\` | \`needs-host-migration\` (weakest)
+- \`blast_radius\`: Brief sentence naming who/what is affected
+- \`weaponizability\`: What the attacker gains — \`rce\` > \`lpe-to-root\` >
+  \`integrity-tampering\` > \`info-leak\` > \`dos-crash\`
+- \`business_impact\`: The coarse ranking tier — \`headline\` | \`notable\` |
+  \`modest\` | \`noise\`
+- \`rationale\`: 1-2 sentence justification
+
+Only supply this when the evidence genuinely supports it. When you lack
+concrete reachability, blast-radius, or weaponizability facts, leave
+\`impact_assessment\` unset — downstream consumers (CVSS generators, advisory
+templates) handle an absent assessment independently. Do NOT fabricate or
+default values. Supply the full object or omit it entirely.`;
+
 // Typed TODO ledger guidance. Appended to the attack-oriented system prompts,
 // flag-gated, mirroring LOOT_LEDGER_INSTRUCTION above. The ledger itself is
 // maintained by the `plan` tool and re-injected each turn by the agent loop;
@@ -366,7 +392,7 @@ Only save findings where:
 1. The sink is reachable through a realistic, unintended attack path
 2. The attacker's input comes from a network-ingestion point (HTTP request body/query/header, file upload, user-supplied URL)
 3. The impact involves privilege escalation, data exfiltration, or lateral movement — not self-DoS
-4. The package's own documentation doesn't already warn about this usage${buildAuthPromptBlock(auth)}${featureFlags.externalMemory ? EXTERNAL_MEMORY_INSTRUCTION : ""}${featureFlags.lootLedger ? LOOT_LEDGER_INSTRUCTION : ""}${featureFlags.agentPlan ? PLAN_LEDGER_INSTRUCTION : ""}`;
+4. The package's own documentation doesn't already warn about this usage${IMPACT_ASSESSMENT_INSTRUCTION}${buildAuthPromptBlock(auth)}${featureFlags.externalMemory ? EXTERNAL_MEMORY_INSTRUCTION : ""}${featureFlags.lootLedger ? LOOT_LEDGER_INSTRUCTION : ""}${featureFlags.agentPlan ? PLAN_LEDGER_INSTRUCTION : ""}`;
 }
 
 export function webPentestPrompt(target: string, opts?: { hasBrowser?: boolean; auth?: AuthConfig }): string {
@@ -437,7 +463,7 @@ ${IDOR_SECTION}
 - Be thorough: test every input field and parameter you discover
 - Do NOT report missing security headers as critical/high — they are typically medium/low
 
-When done testing all categories, call the done tool with a summary of findings.${browserSection}${buildAuthPromptBlock(opts?.auth)}${featureFlags.externalMemory ? EXTERNAL_MEMORY_INSTRUCTION : ""}${featureFlags.lootLedger ? LOOT_LEDGER_INSTRUCTION : ""}${featureFlags.agentPlan ? PLAN_LEDGER_INSTRUCTION : ""}`;
+When done testing all categories, call the done tool with a summary of findings.${IMPACT_ASSESSMENT_INSTRUCTION}${browserSection}${buildAuthPromptBlock(opts?.auth)}${featureFlags.externalMemory ? EXTERNAL_MEMORY_INSTRUCTION : ""}${featureFlags.lootLedger ? LOOT_LEDGER_INSTRUCTION : ""}${featureFlags.agentPlan ? PLAN_LEDGER_INSTRUCTION : ""}`;
 }
 
 export function webPentestDiscoveryPrompt(target: string, auth?: AuthConfig): string {
@@ -575,6 +601,7 @@ When you find a vulnerability:
 9. Use save_finding for EACH confirmed vulnerability with FULL request/response evidence.
 10. Do NOT give up after one failed payload — try ALL variations.
 11. Call done with a summary when you have exhausted the realistic audit surface.
+${IMPACT_ASSESSMENT_INSTRUCTION}
 
 If the target uses MongoDB-style 24-char hex IDs (ObjectIds) and you suspect an IDOR vulnerability, the \`mongo_objectid\` tool can forge IDs with arbitrary timestamp + counter. The 'first user' has counter 0 — copy the 5-byte machine ID from any observed ObjectId.${buildAuthPromptBlock(auth)}${featureFlags.externalMemory ? EXTERNAL_MEMORY_INSTRUCTION : ""}${featureFlags.lootLedger ? LOOT_LEDGER_INSTRUCTION : ""}${featureFlags.agentPlan ? PLAN_LEDGER_INSTRUCTION : ""}${featureFlags.jitSkills ? SKILL_TOOL_HINT : ""}`;
 }
@@ -700,7 +727,7 @@ For EACH finding above:
 
 ### Step 4: Verdict
 For CONFIRMED findings:
-- Use save_finding with the verified details, updated severity if needed, and a concrete PoC
+- Use save_finding with the verified details, updated severity if needed, and a concrete PoC${IMPACT_ASSESSMENT_INSTRUCTION}
 For REJECTED findings (false positives):
 - Do NOT save them — simply skip them
 
@@ -756,6 +783,7 @@ For EACH vulnerability you find, you MUST write a concrete proof-of-concept — 
 - evidence_response: the PoC code/command that exploits the vulnerability
 - evidence_analysis: your detailed analysis of the vulnerability and how the PoC triggers it
 - verification_spec: JSON-encoded code predicates that are true only while the cited vulnerable source shape remains present. Include at least one \`file-contains\` or \`file-missing-pattern\` predicate for the cited file; do not use a mere \`file-exists\` or \`git-diff-applies\` receipt as proof.
+- impact_assessment: OPTIONAL JSON-encoded ImpactAssessment when your evidence supports it${IMPACT_ASSESSMENT_INSTRUCTION}
 
 ## Static Analysis Leads
 
@@ -817,6 +845,7 @@ You will analyze ONE FILE in this session. Stay focused — do NOT enumerate the
    - evidence_response: PoC code/command that exploits the vulnerability
    - evidence_analysis: detailed analysis of how the PoC triggers it
    - verification_spec: JSON-encoded code predicates that are true only while the cited vulnerable source shape remains present. Include at least one \`file-contains\` or \`file-missing-pattern\` predicate for this file; do not use a mere \`file-exists\` or \`git-diff-applies\` receipt as proof.
+   - impact_assessment: OPTIONAL JSON-encoded ImpactAssessment when your evidence supports it${IMPACT_ASSESSMENT_INSTRUCTION}
 
 ## Static Analysis Leads (this file)
 
@@ -1023,6 +1052,7 @@ ${scriptSection}${featureFlags.externalMemory ? EXTERNAL_MEMORY_INSTRUCTION : ""
 - Chain exploits: login → escalate → prove unauthorized access or data exposure
 - Write Python scripts when curl isn't enough
 - Use save_finding for each confirmed vulnerability with request, response, and impact evidence
+${IMPACT_ASSESSMENT_INSTRUCTION}
 - Call done when the realistic audit surface is exhausted${buildAuthPromptBlock(opts?.auth)}`;
 }
 

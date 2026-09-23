@@ -28,6 +28,7 @@
 
 import { existsSync, lstatSync, realpathSync } from "node:fs";
 import { isAbsolute, resolve, sep } from "node:path";
+import type { ImpactAssessment } from "@0/shared";
 
 // ────────────────────────────────────────────────────────────────────
 // Public types
@@ -64,6 +65,14 @@ export interface FindingDraft {
    * field. Wire those into this list before calling the validator.
    */
   evidence?: Array<{ path?: string | null }>;
+  /**
+   * Optional business-impact assessment (0#1103). When the LLM supplied
+   * evidence-grounded reachability / blast-radius / weaponizability facts,
+   * these fields are populated inline by the model at save_finding time
+   * rather than by a separate report-time LLM call. Structurally validated
+   * in the saveFinding handler — no special validation here.
+   */
+  impactAssessment?: ImpactAssessment;
 }
 
 export interface ValidationError {

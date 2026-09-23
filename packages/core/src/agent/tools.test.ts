@@ -1073,7 +1073,155 @@ describe("ToolExecutor", () => {
     expect(ctx.findings[0].confidence).toBeUndefined();
   });
 
-  // ── save_finding empty-PoC gate (0#283) ──
+  // ── impact_assessment validation (0#1103) ────────────────────────────
+
+  it("save_finding stamps evidence-grounded impact_assessment on the finding", async () => {
+    const result = await executor.execute({
+      name: "save_finding",
+      arguments: {
+        title: "SQLi with impact",
+        severity: "critical",
+        category: "sql-injection",
+        evidence_request: "GET /search?q=1' OR '1'='1",
+        evidence_response: "MySQL error near line 1",
+        impact_assessment: JSON.stringify({
+          reachability_tier: "remote-unauth",
+          blast_radius: "all users of the search endpoint",
+          weaponizability: "rce",
+          business_impact: "headline",
+          rationale: "Remote unauthenticated attacker can extract the full DB",
+        }),
+      },
+    });
+    expect(result.success).toBe(true);
+    expect(ctx.findings).toHaveLength(1);
+    const f = ctx.findings[0];
+    expect(f.impactAssessment).toBeDefined();
+    expect(f.impactAssessment!.reachability_tier).toBe("remote-unauth");
+    expect(f.impactAssessment!.business_impact).toBe("headline");
+  });
+
+  it("save_finding rejects a malformed JSON impact_assessment", async () => {
+    const result = await executor.execute({
+      name: "save_finding",
+      arguments: {
+        title: "Bad JSON",
+        severity: "high",
+        category: "xss",
+        evidence_request: "x",
+        evidence_response: "y",
+        impact_assessment: "not valid json",
+      },
+    });
+    expect(result.success).toBe(false);
+    expect(ctx.findings).toHaveLength(0);
+  });
+
+  it("save_finding rejects impact_assessment with an unknown reachability_tier", async () => {
+    const result = await executor.execute({
+      name: "save_finding",
+      arguments: {
+        title: "Bad tier",
+        severity: "high",
+        category: "xss",
+        evidence_request: "x",
+        evidence_response: "y",
+        impact_assessment: JSON.stringify({
+          reachability_tier: "from-mars",
+          blast_radius: "something",
+          weaponizability: "rce",
+          business_impact: "headline",
+          rationale: "made up",
+        }),
+      },
+    });
+    expect(result.success).toBe(false);
+    expect(ctx.findings).toHaveLength(0);
+  });
+
+  it("save_finding rejects impact_assessment with empty rationale", async () => {
+    const result = await executor.execute({
+      name: "save_finding",
+      arguments: {
+        title: "Empty rationale",
+        severity: "high",
+        category: "xss",
+        evidence_request: "x",
+        evidence_response: "y",
+        impact_assessment: JSON.stringify({
+          reachability_tier: "remote-unauth",
+          blast_radius: "something",
+          weaponizability: "rce",
+          business_impact: "headline",
+          rationale: "",
+        }),
+      },
+    });
+    expect(result.success).toBe(false);
+    expect(ctx.findings).toHaveLength(0);
+  });
+
+  it("save_finding rejects impact_assessment with oversized blast_radius", async () => {
+    const result = await executor.execute({
+      name: "save_finding",
+      arguments: {
+        title: "Oversized blast",
+        severity: "high",
+        category: "xss",
+        evidence_request: "x",
+        evidence_response: "y",
+        impact_assessment: JSON.stringify({
+          reachability_tier: "remote-unauth",
+          blast_radius: "X".repeat(1001),
+          weaponizability: "rce",
+          business_impact: "headline",
+          rationale: "legit",
+        }),
+      },
+    });
+    expect(result.success).toBe(false);
+    expect(ctx.findings).toHaveLength(0);
+  });
+
+  // Prototype-pollution guard: `__proto__` must NOT bypass validation.
+  it("save_finding rejects impact_assessment with __proto__ reachability_tier", async () => {
+    const result = await executor.execute({
+      name: "save_finding",
+      arguments: {
+        title: "Proto pollution",
+        severity: "high",
+        category: "xss",
+        evidence_request: "x",
+        evidence_response: "y",
+        impact_assessment: JSON.stringify({
+          reachability_tier: "__proto__",
+          blast_radius: "stuff",
+          weaponizability: "rce",
+          business_impact: "headline",
+          rationale: "test",
+        }),
+      },
+    });
+    expect(result.success).toBe(false);
+    expect(ctx.findings).toHaveLength(0);
+  });
+
+  it("save_finding leaves impactAssessment undefined when arg is absent", async () => {
+    const result = await executor.execute({
+      name: "save_finding",
+      arguments: {
+        title: "No assessment",
+        severity: "medium",
+        category: "xss",
+        evidence_request: "x",
+        evidence_response: "y",
+      },
+    });
+    expect(result.success).toBe(true);
+    expect(ctx.findings).toHaveLength(1);
+    expect(ctx.findings[0].impactAssessment).toBeUndefined();
+  });
+
   // Disclose already refuses empty PoCs at render time; we pull the gate
   // upstream so the agent sees its own bad finding rejected and can retry
   // with real evidence rather than burning turns on findings that disclose

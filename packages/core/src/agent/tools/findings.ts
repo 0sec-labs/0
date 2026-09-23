@@ -135,6 +135,19 @@ export const findingsToolDefinitions: Record<string, ToolDefinition> = {
         description:
           "OPTIONAL JSON-encoded VerificationSpec (0#193). Shape: { code: Array<{ kind:'file-contains'|'file-missing-pattern'|'file-exists'|'ast-shape'|'git-diff-applies', file?, pattern?, flags?, query?, baseCommit?, diff? }>, behavior?: { steps: Array<{ method, path, body?, expect: 'success'|'forbidden'|{status:number} }> } }. Populate code[] predicates from the file:line evidence you cited so cloud can re-verify the finding deterministically. Use git-diff-applies only as a companion to an independent code or behavioural predicate: it confirms a unified diff you generated against the exact full HEAD commit is compatible, never that the exploit works. Example for a SQLi at app/users.ts:43: code:[{kind:'file-contains',file:'app/users.ts',pattern:'db\\\\.query.*req\\\\.body'}]. Leave unset when you cannot pin the vulnerable shape to a regex.",
       },
+      // 0#1103 — optional business-impact assessment. When the evidence
+      // supports it (you observed reachability, blast radius, and whether
+      // the bug is weaponizable), supply a JSON-encoded ImpactAssessment.
+      // Required fields: reachability_tier, blast_radius, weaponizability,
+      // business_impact, rationale. Leave unset when you lack concrete
+      // evidence for any of these dimensions — the field remains undefined
+      // and downstream consumers (CVSS, advisory templates) handle absence
+      // gracefully. Do NOT supply default values.
+      impact_assessment: {
+        type: "string",
+        description:
+          'OPTIONAL JSON-encoded ImpactAssessment. Shape: { reachability_tier: "remote-unauth"|"remote-auth"|"proximity-rf"|"local-unpriv"|"local-priv"|"needs-hardware"|"needs-host-migration", blast_radius: string, weaponizability: "dos-crash"|"info-leak"|"integrity-tampering"|"lpe-to-root"|"rce", business_impact: "headline"|"notable"|"modest"|"noise", rationale: string }. Supply ONLY when evidence supports it. Leave unset when you lack concrete reachability or blast-radius facts.',
+      },
       // Self-reported calibration of how confident the agent is that this
       // finding is a true positive. The cloud DB stores it in
       // `findings.confidence` (numeric(4,3)) and the dashboard surfaces it in

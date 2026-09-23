@@ -14,6 +14,9 @@ import type {
   VerificationBehavior,
   VerificationBehaviorStep,
   NamedIdentity,
+  ReachabilityTier,
+  Weaponizability,
+  BusinessImpact,
 } from "@0/shared";
 import { resolveIdentities, compareRoles, DEFAULT_AUTONOMY_MODE, createJevEvaluator, jevConfigFromEnvironment, type JevEvaluator } from "@0/shared";
 import type { ToolDefinition, ToolCall, ToolResult, ToolResultMeta, ToolContext, AgentRole } from "./types.js";
@@ -2915,6 +2918,29 @@ export const toolExecutorCheckpointSchema = z.object({
 }).strict();
 
 export type ToolExecutorCheckpoint = z.infer<typeof toolExecutorCheckpointSchema>;
+
+// ── Impact-assessment enum validation (0#1103) ─────────────────────────
+// Module-level constants (never recreated per call) with safe `hasOwn`
+// property lookup to block prototype-pollution via `__proto__` keys.
+
+const IMPACT_REACHABILITY_TIERS: Record<string, true> = {
+  "remote-unauth": true, "remote-auth": true, "proximity-rf": true,
+  "local-unpriv": true, "local-priv": true, "needs-hardware": true,
+  "needs-host-migration": true,
+};
+
+const IMPACT_WEAPONIZABILITY: Record<string, true> = {
+  "dos-crash": true, "info-leak": true, "integrity-tampering": true,
+  "lpe-to-root": true, "rce": true,
+};
+
+const IMPACT_BUSINESS_IMPACTS: Record<string, true> = {
+  headline: true, notable: true, modest: true, noise: true,
+};
+
+/** Max chars for blast_radius and rationale in an inline impact assessment. */
+const IMPACT_BLAST_RADIUS_MAX = 1000;
+const IMPACT_RATIONALE_MAX = 1000;
 
 export class ToolExecutor {
   private db: osecDB | null;
@@ -7176,6 +7202,57 @@ export class ToolExecutor {
       finding.evidence.analysis = finding.evidence.analysis
         ? `${prefix}\n\n${finding.evidence.analysis}`
         : prefix;
+    }
+
+    // 0#1103 — optional evidence-grounded business-impact assessment. The LLM
+    // supplies this JSON-encoded string at save_finding time rather than via a
+    // separate report-time LLM call. Parse, validate enums against the
+    // vocabulary shared with impact-assessment.ts, and stamp on the Finding.
+    // When absent (the common case) the finding carries no assessment —
+    // consumers (CVSS, advisory templates) handle an undefined field gracefully.
+    const impactRaw = args.impact_assessment;
+    if (typeof impactRaw === "string" && impactRaw.trim().length > 0) {
+      let parsed: Record<string, unknown>;
+      try { parsed = JSON.parse(impactRaw); } catch {
+        return buildValidationFailureResult([
+          { field: "impact_assessment", reason: "must be valid JSON" },
+        ]);
+      }
+      if (typeof parsed !== "object" || parsed === null) {
+        return buildValidationFailureResult([
+          { field: "impact_assessment", reason: "must be a JSON object" },
+        ]);
+      }
+      const rt = parsed.reachability_tier;
+      const br = parsed.blast_radius;
+      const wz = parsed.weaponizability;
+      const bi = parsed.business_impact;
+      const rn = parsed.rationale;
+      const errors: Array<{ field: string; reason: string }> = [];
+      // Safe property lookup via Object.hasOwn — guards against
+      // prototype-pollution through `__proto__` in the key.
+      if (typeof rt !== "string" || !Object.hasOwn(IMPACT_REACHABILITY_TIERS, rt))
+        errors.push({ field: "impact_assessment.reachability_tier", reason: "must be one of: remote-unauth|remote-auth|proximity-rf|local-unpriv|local-priv|needs-hardware|needs-host-migration" });
+      if (typeof br !== "string" || br.trim().length === 0)
+        errors.push({ field: "impact_assessment.blast_radius", reason: "must be a non-empty string" });
+      else if (br.length > IMPACT_BLAST_RADIUS_MAX)
+        errors.push({ field: "impact_assessment.blast_radius", reason: `must not exceed ${IMPACT_BLAST_RADIUS_MAX} characters` });
+      if (typeof wz !== "string" || !Object.hasOwn(IMPACT_WEAPONIZABILITY, wz))
+        errors.push({ field: "impact_assessment.weaponizability", reason: "must be one of: dos-crash|info-leak|integrity-tampering|lpe-to-root|rce" });
+      if (typeof bi !== "string" || !Object.hasOwn(IMPACT_BUSINESS_IMPACTS, bi))
+        errors.push({ field: "impact_assessment.business_impact", reason: "must be one of: headline|notable|modest|noise" });
+      if (typeof rn !== "string" || rn.trim().length === 0)
+        errors.push({ field: "impact_assessment.rationale", reason: "must be a non-empty string" });
+      else if (rn.length > IMPACT_RATIONALE_MAX)
+        errors.push({ field: "impact_assessment.rationale", reason: `must not exceed ${IMPACT_RATIONALE_MAX} characters` });
+      if (errors.length > 0) return buildValidationFailureResult(errors);
+      finding.impactAssessment = {
+        reachability_tier: rt as ReachabilityTier,
+        blast_radius: br as string,
+        weaponizability: wz as Weaponizability,
+        business_impact: bi as BusinessImpact,
+        rationale: rn as string,
+      };
     }
 
     // Hybrid confidence (LLM self-report + PoC-status floor). Closes the gap

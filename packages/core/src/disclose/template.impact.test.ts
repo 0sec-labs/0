@@ -55,6 +55,18 @@ describe("renderAdvisoryMarkdown — Impact section", () => {
     expect(markdown).toContain("remote, unauthenticated");
     expect(markdown).toContain("every tenant on the shared egress path");
   });
+  it("describes a contributor-controlled repair workflow as integrity, not an information leak", () => {
+    const { markdown } = renderAdvisoryMarkdown(mkFinding({
+      ...REMOTE,
+      reachability_tier: "remote-auth",
+      weaponizability: "integrity-tampering",
+      blast_radius: "a forged repair marker can misattribute a recorded finding",
+    }));
+    expect(markdown).toContain("remote, authenticated");
+    expect(markdown).toContain("workflow integrity manipulation");
+    expect(markdown).not.toContain("Attacker gains: information disclosure");
+  });
+
 
   it("labels the CVSS source as assessment-derived when assessed", () => {
     const { markdown } = renderAdvisoryMarkdown(mkFinding(REMOTE));

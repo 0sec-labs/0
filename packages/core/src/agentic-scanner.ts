@@ -46,8 +46,7 @@ import { z } from "zod";
 import { layerVerdictArraySchema, formatZodError } from "./schemas.js";
 import { createScanContext, finalize } from "./context.js";
 import { generateRemediation } from "./remediation.js";
-import { parseImpactAssessment } from "./triage/impact-assessment.js";
-import { attachRemediation, attachImpactAssessment, countFlagsInFindings } from "./agentic/report-enrichment.js";
+import { attachRemediation, countFlagsInFindings } from "./agentic/report-enrichment.js";
 import { getOrCreateRateLimiter, resolveEngagementForConfig, attachEngagementPosture, resolveEnforcementForConfig, attachEnforcementSummary, resolveScopeForConfig, buildAttributionForConfig, cacheScopePolicy } from "./agentic/scan-config.js";
 
 
@@ -3136,20 +3135,11 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
       const dbFindings = db.getFindings(scanId);
       allFindings = dbFindings.map(dbFindingToFinding);
 
-      // Assess impact first: it feeds the CVSS vector, the advisory Impact
-      // section, and can inform remediation prose — so it must land on the
-      // finding before those are derived or persisted.
-      await attachImpactAssessment(
-        allFindings,
-        (f) => f.status !== "false-positive",
-        {
-          enabled: features.impactAssessment,
-          runtime: nativeApiAvailable || cliNativeRuntime ? nativeRuntime : null,
-          db,
-          scanId,
-          stage: "verify",
-        },
-      );
+      // Impact assessment is supplied inline by the model at save_finding
+      // time (0#1103). No separate report-time LLM call is made — the
+      // findings already carry `impactAssessment` when the evidence
+      // supported it, and unassessed findings fall through to heuristic
+      // defaults in CVSS/advisory consumers without a postpass.
 
       // Attach remediation guidance to confirmed/verified findings
       await attachRemediation(

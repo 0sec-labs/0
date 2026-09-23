@@ -32,6 +32,8 @@
  *   });
  */
 
+import type { ImpactAssessment } from "@0/shared";
+
 /** Severity levels accepted by the orchestrator (strict enum). */
 export type CloudSinkSeverity = "critical" | "high" | "medium" | "low" | "info";
 
@@ -125,6 +127,13 @@ export interface CloudSinkFinding {
    * Engine-assigned per-scan rank (1 = highest comparative promise).
    */
   findingRank?: number;
+  /**
+   * Optional evidence-grounded business-impact assessment (0#1103).
+   * Populated inline by the model at save_finding time; avoids a separate
+   * report-time LLM call. Pass-through — the cloud persists or ignores
+   * based on its own schema.
+   */
+  impactAssessment?: ImpactAssessment;
 }
 
 /**

@@ -34,6 +34,7 @@ import type {
   CloudSinkSeverity,
 } from "./cloud-contracts.js";
 import type { ReconAsset, ReconAssetKind } from "./recon/recon.js";
+import type { ImpactAssessment } from "@0/shared";
 
 export type {
   CloudSinkEvidence,
@@ -55,6 +56,17 @@ const VALID_SEVERITIES: ReadonlySet<CloudSinkSeverity> = new Set([
   "medium",
   "low",
   "info",
+]);
+const IMPACT_TEXT_MAX = 1000;
+const IMPACT_REACHABILITY: ReadonlySet<ImpactAssessment["reachability_tier"]> = new Set([
+  "remote-unauth", "remote-auth", "proximity-rf", "local-unpriv", "local-priv",
+  "needs-hardware", "needs-host-migration",
+]);
+const IMPACT_WEAPONIZABILITY: ReadonlySet<ImpactAssessment["weaponizability"]> = new Set([
+  "dos-crash", "info-leak", "integrity-tampering", "lpe-to-root", "rce",
+]);
+const IMPACT_BUSINESS: ReadonlySet<ImpactAssessment["business_impact"]> = new Set([
+  "headline", "notable", "modest", "noise",
 ]);
 
 export interface CloudSinkConfig {
@@ -361,6 +373,32 @@ export function normalizeFinding(rawFinding: unknown): CloudSinkFinding {
   const findingRankRaw = raw.findingRank;
   if (typeof findingRankRaw === "number" && Number.isFinite(findingRankRaw)) {
     normalized.findingRank = findingRankRaw;
+  }
+
+  // ── impactAssessment pass-through (0#1103) ─────────────────────────
+  // Drop invalid optional model impact rather than turning a finding into a 400.
+  const impactRaw = raw.impactAssessment;
+  if (isRecord(impactRaw)) {
+    const rt = impactRaw.reachability_tier;
+    const br = impactRaw.blast_radius;
+    const wz = impactRaw.weaponizability;
+    const bi = impactRaw.business_impact;
+    const rn = impactRaw.rationale;
+    if (
+      typeof rt === "string" && IMPACT_REACHABILITY.has(rt as ImpactAssessment["reachability_tier"]) &&
+      typeof br === "string" && br.trim().length > 0 && br.length <= IMPACT_TEXT_MAX &&
+      typeof wz === "string" && IMPACT_WEAPONIZABILITY.has(wz as ImpactAssessment["weaponizability"]) &&
+      typeof bi === "string" && IMPACT_BUSINESS.has(bi as ImpactAssessment["business_impact"]) &&
+      typeof rn === "string" && rn.trim().length > 0 && rn.length <= IMPACT_TEXT_MAX
+    ) {
+      normalized.impactAssessment = {
+        reachability_tier: rt as ImpactAssessment["reachability_tier"],
+        blast_radius: br,
+        weaponizability: wz as ImpactAssessment["weaponizability"],
+        business_impact: bi as ImpactAssessment["business_impact"],
+        rationale: rn,
+      };
+    }
   }
 
   return normalized;

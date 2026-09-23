@@ -614,6 +614,26 @@ describe("normalizeFinding", () => {
     expect(normalizeFinding({ title: "x", findingRank: "3" }).findingRank).toBeUndefined();
   });
 
+  it("forwards bounded contributor-workflow impact and drops invalid optional claims", () => {
+    const impactAssessment = {
+      reachability_tier: "remote-auth",
+      blast_radius: "A contributor can forge the repair status for another finding.",
+      weaponizability: "integrity-tampering",
+      business_impact: "notable",
+      rationale: "src/routes/repair.ts:41 reads the PR body without binding the marker to this run.",
+    };
+    expect(normalizeFinding({ title: "PR marker", impactAssessment }).impactAssessment).toEqual(impactAssessment);
+    for (const malformed of [
+      { ...impactAssessment, rationale: "x".repeat(1001) },
+      { ...impactAssessment, weaponizability: "__proto__" },
+      { ...impactAssessment, blast_radius: "" },
+    ]) {
+      const finding = normalizeFinding({ title: "PR marker", impactAssessment: malformed });
+      expect(finding.title).toBe("PR marker");
+      expect(finding.impactAssessment).toBeUndefined();
+    }
+  });
+
   it("semanticDedupe and findingRank are both undefined when absent", () => {
     const out = normalizeFinding({ title: "x" });
     expect(out.semanticDedupe).toBeUndefined();
