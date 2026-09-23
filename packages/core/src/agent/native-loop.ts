@@ -186,7 +186,7 @@ export function isTransientLlmError(errorMsg: string): boolean {
  * so it must never fire for a rate limit or a generic 5xx.
  */
 export function isContextWindowError(errorMsg: string): boolean {
-  return /context.{0,40}(?:window|length|limit)|(?:maximum|max).{0,20}context|too many tokens|prompt.{0,30}(?:too long|too large)|input.{0,30}(?:too long|too large)/i.test(
+  return /context.{0,40}(?:window|length|limit)|(?:maximum|max).{0,20}context|too many tokens|prompt.{0,30}(?:too long|too large)|input.{0,30}(?:too long|too large|limit(?:_exceeded)?)/i.test(
     errorMsg,
   );
 }

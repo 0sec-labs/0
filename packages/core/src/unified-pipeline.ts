@@ -1462,6 +1462,16 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       "diff", "--no-ext-diff", "--no-textconv", "--unified=3", `${opts.diffBase}...HEAD`,
     ], { cwd: prepared.scopePath, timeout: 30_000, encoding: "utf-8", maxBuffer: 256 * 1024 });
     if (!diffPatch.trim()) throw new Error("No reviewable diff found; refusing whole-repository fallback.");
+    // A diff is input data, not an unlimited prompt budget. Keep the initial
+    // review request below the provider context ceiling; the agent can fetch
+    // omitted hunks with read_file after the changed-path manifest is shown.
+    const maxInitialDiffChars = 64 * 1024;
+    if (Buffer.byteLength(diffPatch, "utf8") > maxInitialDiffChars) {
+      const half = Math.floor(maxInitialDiffChars / 2);
+      diffPatch = diffPatch.slice(0, half)
+        + "\n\n[0: middle of oversized diff omitted from initial prompt; inspect changed paths with read_file]\n\n"
+        + diffPatch.slice(-half);
+    }
   }
   // A routine small change gets one bounded research pass and one bounded
   // independent verification pass. Bigger diffs keep the established budget;
