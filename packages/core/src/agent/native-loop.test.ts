@@ -70,6 +70,35 @@ function createMockRuntime(responses: NativeRuntimeResult[]): NativeRuntime {
 // ── Tests ──
 
 describe("runNativeAgentLoop", () => {
+  it("keeps diff review in one session even if the model attempts delegation", async () => {
+    const scope = mkdtempSync(join(tmpdir(), "0-single-review-"));
+    writeFileSync(join(scope, "context.ts"), "export const guarded = true;");
+    const runtime = createMockRuntime([
+      { content: [
+        { type: "tool_use", id: "spawn", name: "spawn_agent", input: { task: "Inspect unrelated subsystem", max_turns: 1 } },
+        { type: "tool_use", id: "context", name: "read_file", input: { path: "context.ts" } },
+      ], stopReason: "tool_use", durationMs: 0 },
+      { content: [{ type: "tool_use", id: "finish", name: "done", input: { summary: "Changed path checked." } }], stopReason: "tool_use", durationMs: 0 },
+    ]);
+    runtime.forkForSubagent = vi.fn(async () => runtime);
+    try {
+      const state = await runNativeAgentLoop({
+        config: { role: "review", systemPrompt: "Review the change", tools: getToolsForRole("review", { hasScope: true }),
+          maxTurns: 2, target: scope, scopePath: scope, scanId: randomUUID(), singleAgent: true },
+        runtime, db: null,
+      });
+      expect(runtime.forkForSubagent).not.toHaveBeenCalled();
+      expect(state.done).toBe(true);
+      expect(state.turnCount).toBe(2);
+      const receipts = state.messages.flatMap(message => message.content).filter(block => block.type === "tool_result");
+      expect(receipts.find(block => block.tool_use_id === "spawn")?.is_error).toBe(true);
+      expect(receipts.find(block => block.tool_use_id === "context")?.is_error).not.toBe(true);
+      expect(JSON.stringify(receipts.find(block => block.tool_use_id === "context"))).toContain("guarded");
+    } finally {
+      rmSync(scope, { recursive: true, force: true });
+    }
+  });
+
   it.each(["done-failure", "returned-revoke", "sdk-revoke"])("preserves error outcome, receipts and usage without replay for %s", async mode => {
     const home = mkdtempSync(join(tmpdir(), "0-native-driver-boundary-"));
     const previousHome = process.env.HOME;

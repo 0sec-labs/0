@@ -47,6 +47,8 @@ export interface AnalysisAgentOptions {
    */
   purpose?: "research" | "verify";
   collectProjectContext?: boolean;
+  /** Diff review: one bounded researcher, with no delegated inference. */
+  singleAgent?: boolean;
 }
 
 /**
@@ -469,7 +471,8 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
     }
 
     if (supportsNative) {
-      const maxTurns = getMaxTurns(role, config.depth, "native", purpose);
+      const turnBudget = getMaxTurns(role, config.depth, "native", purpose);
+      const maxTurns = opts.singleAgent ? Math.min(turnBudget, 20) : turnBudget;
 
       // #978 (ADR-060) — cloud control channel. unified-pipeline.ts (the
       // package/source audit + review path) runs the agent here, NOT through
@@ -485,6 +488,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
           systemPrompt: agentSystemPrompt,
           tools: getToolsForRole(role, { hasScope: !!scopePath }),
           maxTurns,
+          singleAgent: opts.singleAgent,
           target,
           scanId,
           scopePath,
@@ -565,6 +569,9 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
       // 2026-07-17: codex 401 → 0-finding clean report, warnings[] empty).
       if (agentState.errorExit) {
         throw new Error(agentState.errorExit.error);
+      }
+      if (opts.singleAgent && !agentState.done && agentState.turnCount >= maxTurns) {
+        throw new Error("Bounded review turn limit reached; coverage is incomplete.");
       }
 
       emit({

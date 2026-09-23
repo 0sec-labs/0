@@ -251,6 +251,8 @@ export interface NativeAgentConfig {
   systemPrompt: string;
   tools: ToolDefinition[];
   maxTurns: number;
+  /** Disable delegation, including unadvertised calls to spawn tools. */
+  singleAgent?: boolean;
   target: string;
   scanId: string;
   workerTree?: ToolContext["workerTree"];
@@ -697,6 +699,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     target: config.target,
     scanId: config.scanId,
     role: config.role,
+    diffScopedReview: config.role === "review" && config.singleAgent === true,
     delegationSystemPrompt: config.delegationSystemPrompt ?? config.systemPrompt,
     autonomyMode: config.autonomyMode ?? DEFAULT_AUTONOMY_MODE,
     publicNetwork: config.publicNetwork,
@@ -811,8 +814,12 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     }
     return huntMemory;
   }
-  const executor = new ToolExecutor(toolCtx, db, undefined, runtime.forkForSubagent?.bind(runtime));
-  const baseTools = config.tools.length > 0 ? config.tools : getToolsForRole(config.role, { hasScope: !!config.scopePath, allowScanners: config.allowScanners });
+  const executor = new ToolExecutor(toolCtx, db, undefined,
+    config.singleAgent ? undefined : runtime.forkForSubagent?.bind(runtime));
+  const roleTools = config.tools.length > 0 ? config.tools : getToolsForRole(config.role, { hasScope: !!config.scopePath, allowScanners: config.allowScanners });
+  const baseTools = config.singleAgent
+    ? roleTools.filter(tool => tool.name !== "spawn_agent" && tool.name !== "spawn_agents" && tool.name !== "spawn_persistent_agent")
+    : roleTools;
 
   // ── Codebase learning (source-grounded hunt memory) ──
   // Eligible when hunt memory is available AND either the caller explicitly
