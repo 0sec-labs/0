@@ -2940,7 +2940,7 @@ const IMPACT_BUSINESS_IMPACTS: Record<string, true> = {
 
 /** Max chars for blast_radius and rationale in an inline impact assessment. */
 const IMPACT_BLAST_RADIUS_MAX = 1000;
-const IMPACT_RATIONALE_MAX = 2000;
+const IMPACT_RATIONALE_MAX = 1000;
 
 export class ToolExecutor {
   private db: osecDB | null;

@@ -64,6 +64,13 @@ describe("suggestCvss — additive over impactAssessment", () => {
     expect(r.vector).toContain("/AV:N/");
     expect(r.vector).toContain("/PR:N/");
   });
+  it("requires low privileges rather than none for a remote authenticated contributor", () => {
+    const r = suggestCvss(mkFinding({ impactAssessment: assessment("remote-auth") }));
+    expect(r.vector).toContain("/AV:N/");
+    expect(r.vector).toContain("/PR:L/");
+    expect(r.score).toBeLessThan(suggestCvss(mkFinding({ impactAssessment: assessment("remote-unauth") })).score);
+  });
+
 
   it("derives AV:L/PR:L for a local-unpriv assessment", () => {
     const r = suggestCvss(mkFinding({ impactAssessment: assessment("local-unpriv") }));
@@ -102,7 +109,7 @@ describe("suggestCvss — additive over impactAssessment", () => {
 
   it("keeps every derived vector a well-formed CVSS 3.1 base string", () => {
     const tiers: ReachabilityTier[] = [
-      "remote-unauth", "proximity-rf", "local-unpriv",
+      "remote-unauth", "remote-auth", "proximity-rf", "local-unpriv",
       "local-priv", "needs-hardware", "needs-host-migration",
     ];
     for (const tier of tiers) {

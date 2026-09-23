@@ -162,6 +162,8 @@ function reachabilityLabel(tier: ReachabilityTier): string {
   switch (tier) {
     case "remote-unauth":
       return "remote, unauthenticated — reachable over the network with no credentials";
+    case "remote-auth":
+      return "remote, authenticated — requires an account or contributor access";
     case "proximity-rf":
       return "RF/physical proximity — attacker must be within radio range (NFC/BLE/Wi-Fi)";
     case "local-unpriv":
@@ -182,6 +184,8 @@ function weaponizabilityLabel(w: Weaponizability): string {
       return "remote code execution";
     case "lpe-to-root":
       return "local privilege escalation to root/SYSTEM";
+    case "integrity-tampering":
+      return "workflow integrity manipulation";
     case "info-leak":
       return "information disclosure";
     case "dos-crash":

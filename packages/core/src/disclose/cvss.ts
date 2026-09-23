@@ -125,6 +125,8 @@ function metricsForReachability(
   switch (tier) {
     case "remote-unauth":
       return { av: "N", pr: "N", ui: "N" };
+    case "remote-auth":
+      return { av: "N", pr: "L", ui: "N" };
     case "proximity-rf":
       return { av: "A", pr: "N", ui: "N" };
     case "local-unpriv":
@@ -707,6 +709,8 @@ function cvss4MetricsForReachability(
   switch (tier) {
     case "remote-unauth":
       return { AV: "N", AT: "N", PR: "N", UI: "N" };
+    case "remote-auth":
+      return { AV: "N", AT: "N", PR: "L", UI: "N" };
     case "proximity-rf":
       return { AV: "A", AT: "N", PR: "N", UI: "N" };
     case "local-unpriv":

@@ -32,6 +32,8 @@
  *   });
  */
 
+import type { ImpactAssessment } from "@0/shared";
+
 /** Severity levels accepted by the orchestrator (strict enum). */
 export type CloudSinkSeverity = "critical" | "high" | "medium" | "low" | "info";
 
@@ -131,13 +133,7 @@ export interface CloudSinkFinding {
    * report-time LLM call. Pass-through — the cloud persists or ignores
    * based on its own schema.
    */
-  impactAssessment?: {
-    reachability_tier: string;
-    blast_radius: string;
-    weaponizability: string;
-    business_impact: string;
-    rationale: string;
-  };
+  impactAssessment?: ImpactAssessment;
 }
 
 /**
