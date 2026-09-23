@@ -281,7 +281,7 @@ export function reviewAgentPrompt(
               `${i + 1}. [${f.severity}] ${f.ruleId}\n   ${f.path}:${f.startLine}\n   ${f.message}\n   \`\`\`\n   ${f.snippet.slice(0, 300)}\n   \`\`\``,
           )
           .join("\n\n")
-      : "No static scanner findings. You must hunt for vulnerabilities manually.";
+      : changedOnly ? "No static scanner findings. Inspect the diff for concrete regressions; a clean change is a valid result." : "No static scanner findings. You must hunt for vulnerabilities manually.";
 
   const changedFilesSection =
     changedFiles && changedFiles.length > 0
@@ -300,7 +300,7 @@ export function reviewAgentPrompt(
     : "";
 
 
-  return `You are a security researcher performing an authorized deep source code review.
+  return `You are a security researcher performing an authorized ${changedOnly ? "single-agent, diff-scoped" : "deep source code"} review.
 
 REPOSITORY: ${repoPath}
 ${hypothesisBlock}${conversationBlock}
@@ -321,18 +321,14 @@ ${semgrepSection}
 ${changedFilesSection}
 
 ${changedOnly
-  ? "This is a diff-aware review. Prioritize vulnerabilities introduced by or reachable from the changed files above. You may read surrounding code outside the changed files to trace data flow, but findings should stay anchored to the changed delta."
+  ? "Review vulnerabilities introduced or exposed by the exact delta, not every vulnerability reachable anywhere in a changed file. Read surrounding callers, callees, tests, and guards only when needed to understand a changed behavior. Do not enumerate unrelated subsystems or turn this PR into a repository audit. A clean diff is a valid outcome; disclose gaps instead of implying whole-repository coverage."
   : "Use the changed files above as a priority queue if provided, but continue expanding outward into the rest of the repository when the investigation requires it."}
 
 ## Review Methodology
 
-Choose an investigation plan from the evidence and available budget; the sections
-below are guidance, not a mandatory file-by-file or fixed-lens sweep. Use
-\`spawn_agent\` or \`spawn_agents\` for independent subsystems and hypotheses,
-with exact scope and evidence requirements. Children may delegate further while
-sharing the same scoped capabilities and scan-wide budget. Independently check
-promising candidates, merge findings without duplicating evidence, and report
-uninspected surfaces and incomplete verification honestly.
+${changedOnly
+  ? "Work as one reviewer. Inspect the patch first, identify changed trust boundaries, and follow only concrete change-related hypotheses. Do not delegate or start subagents. The methodology below is a reference for relevant bug classes, not a checklist to execute in full. Stop when the delta is understood or the bounded budget is exhausted; report any unfinished investigation explicitly."
+  : "Choose an investigation plan from the evidence and available budget. Use spawn_agent or spawn_agents for independent subsystems and hypotheses, with exact scope and evidence requirements. Children share the scoped capabilities and scan-wide budget. Independently check promising candidates and report uninspected surfaces honestly."}
 
 ### Phase -1: Live Vulnerability Intelligence
 When repository metadata, imports, or code comments suggest a relevant package,

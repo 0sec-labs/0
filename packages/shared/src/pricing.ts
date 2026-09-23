@@ -104,17 +104,18 @@ export const MANUAL_PRICING: Record<string, ModelRates> = {
   // which this schema cannot represent.
   "DeepSeek-V4-Pro": { input: 1.74, output: 3.48 },
   "DeepSeek-V4-Flash": { input: 0.19, output: 0.51 },
-  // Fireworks-on-Foundry Global meters (verified 2026-09-17 against the Azure
-  // Retail Prices API): input $0.375/M, cached input $0.008/M, output $1.50/M.
-  // The deployment name is the lowercase "deepseek-v4.1-flash" — cannot reuse
-  // the direct "deepseek-flash" $0.30/$1.20 tariff because Azure Foundry billing
-  // differs from DeepSeek's own API invoice.
+  // Fireworks Priority list-rate estimate, not an Azure invoice.
+  // The cache estimate remains rounded; don't substitute direct API pricing
+  // for the separately metered Foundry deployment.
   "deepseek-v4.1-flash": { input: 0.375, output: 1.5, cachedInput: 0.008 },
   "Kimi-K2.7-Code": { input: 0.95, output: 4.00, cachedInput: 0.19 },
   "gpt-oss-120b": { input: 0.15, output: 0.60 },
   "gpt-5.6-sol": { input: 5.00, output: 30.00, cachedInput: 0.50 },
   "gpt-5.6-luna": { input: 1.00, output: 6.00, cachedInput: 0.10 },
   "gpt-5.6-terra": { input: 2.50, output: 15.00, cachedInput: 0.25 },
+  // Azure Global Standard short-context list estimate (2026-09-23).
+  // Hosted settlement separately meters cache writes and bounds input context.
+  "gpt-6-luna": { input: 0.10, output: 0.50, cachedInput: 0.01 },
   default: { input: 3.00, output: 15.00 },
 };
 
@@ -144,6 +145,7 @@ const AZURE_DEPLOYMENT_PRICE_ALIASES = new Map<string, string>([
   ["gpt-5.6-sol", "gpt-5.6-sol"],
   ["gpt-5.6-luna", "gpt-5.6-luna"],
   ["gpt-5.6-terra", "gpt-5.6-terra"],
+  ["gpt-6-luna", "gpt-6-luna"],
 ]);
 
 function azureDeploymentPriceKey(model: string): string | null {

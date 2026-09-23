@@ -129,4 +129,13 @@ describe("runPipeline — oversized-review guard vs diff-aware reviews", () => {
       }),
     ).rejects.toThrow(/too large/i);
   });
+
+  it.each(["missing-ref", "HEAD"])("never widens an unavailable or empty diff into a full review: %s", async diffBase => {
+    process.env["ZERO_REVIEW_MAX_FILES"] = "100";
+    await expect(runPipeline({
+      target: dir, targetType: "source-code", depth: "quick", format: "json",
+      runtime: "api", apiKey: "sk-fake", diffBase, changedOnly: true,
+      dbPath: join(dir, "scope-regression.db"),
+    })).rejects.toThrow();
+  });
 });
