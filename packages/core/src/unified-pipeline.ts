@@ -1568,6 +1568,13 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     let changedFiles: string[] = diffChangedFiles ?? [];
     const staticScanner = selectedStaticScanner();
     let staticScannerRan = false;
+    // The managed PR review already binds an exact patch and sends one
+    // diff-scoped agent through its relevant callers. Foxguard's `diff`
+    // subcommand first scans the entire HEAD tree, then filters to changed
+    // files, so a one-line PR on a large repo paid a 134-second static pass.
+    // Skip that prepass only here; whole-tree/source and package reviews
+    // retain Foxguard, and an explicit Semgrep selection still runs.
+    const skipFoxguardForDiff = diffReview && staticScanner === "foxguard";
     let staticScannerFindings = 0;
 
     // External seeds (e.g. from `gemmaforge scan` via `--seed-findings`).
@@ -1636,7 +1643,8 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     // routes source and package-source leads through Semgrep while leaving
     // dependency advisory checks intact.
     if (
-      !skipSemgrep && (!diffReview || changedFiles.some(path => existsSync(join(prepared.scopePath, path)))) && (
+      !skipSemgrep && !skipFoxguardForDiff &&
+      (!diffReview || changedFiles.some(path => existsSync(join(prepared.scopePath, path)))) && (
       prepared.resolvedType === "source-code" ||
       prepared.resolvedType === "npm-package" ||
       prepared.resolvedType === "pypi-package" ||
