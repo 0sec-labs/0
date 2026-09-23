@@ -1470,6 +1470,38 @@ describe("runPipeline — diff-aware review", () => {
     });
   });
 
+  it("emits a cloud-shaped local callback envelope without widening the diff", async () => {
+    const { repoDir, changedFile } = makeRepoWithDiff();
+    const events: Array<{ type: string; stage?: string; message: string }> = [];
+
+    const report = await runPipeline({
+      target: repoDir,
+      targetType: "source-code",
+      depth: "quick",
+      format: "json",
+      runtime: "api",
+      apiKey: "sk-fake",
+      diffBase: "HEAD~",
+      changedOnly: true,
+      dbPath: freshDbPath(),
+      onEvent: (event) => events.push(event),
+    });
+
+    expect(report).toMatchObject({
+      target: repoDir,
+      targetType: "source-code",
+      summary: {
+        totalFindings: 0,
+      },
+      findings: [],
+    });
+    expect(events.some((event) => event.type === "stage:start" && event.stage === "research")).toBe(true);
+    expect(events.some((event) => event.type === "stage:end" && event.stage === "research")).toBe(true);
+    expect(runAnalysisAgentMock).toHaveBeenCalledTimes(1);
+    expect(runAnalysisAgentMock.mock.calls[0]![0].cliPrompt).toContain(changedFile);
+    expect(runAnalysisAgentMock.mock.calls[0]![0].cliPrompt).not.toContain("stable.ts");
+  });
+
   it("missing diff-base produces a warning but the pipeline still completes", async () => {
     const repoDir = freshTmpDir("repo-baddiff");
     writeFileSync(join(repoDir, "f.ts"), "// fixture");
