@@ -274,7 +274,7 @@ const CAPABILITIES: readonly CapabilityEntry[] = [
     category: "settings",
     outboundOrMutating: true,
     safetyTier: "operator-confirmed",
-    description: "Switch between Standard, Co-pilot, YOLO, and Recon autonomy modes.",
+    description: "Cycle between Standard, Co-pilot, YOLO, and Recon with Shift+Tab.",
   },
   {
     id: "shortcuts",

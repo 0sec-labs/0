@@ -3,8 +3,8 @@
  *
  * `/model` used to answer with a single line of text. The overlay that
  * replaces it is a keyboard-driven list — filter as you type, arrow to
- * navigate, enter to commit — and the same widget has to serve `/mode`,
- * `/agents` and `/targets` without being rewritten each time. So the
+ * navigate, enter to commit — and the same widget has to serve `/agents`,
+ * `/targets` and other inline choices without being rewritten each time. So the
  * *behaviour* lives here as a reducer over a plain object and the React /
  * OpenTUI component becomes a dumb projection of it.
  *

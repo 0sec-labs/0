@@ -1,9 +1,9 @@
 /**
  * Autonomy-mode cycling and the bottom status bar's shared mode hint.
  *
- * The current mode and its shortcut must agree with the same `/mode` transition
- * used by the keyboard handler. The mode stays visible at the bottom of both
- * the startup and conversation surfaces, independently of optional telemetry.
+ * The current mode and its Shift+Tab shortcut are handled directly by the
+ * keyboard handler. The mode stays visible at the bottom of both the startup
+ * and conversation surfaces, independently of optional telemetry.
  *
  * WHO OWNS THE KEY. Not this module. `chat-screen.tsx` keeps the single
  * inline Shift+Tab handler and calls {@link isAutonomyCycleKey} and
@@ -15,8 +15,8 @@
  *
  * AUTHORITY. Nothing here changes what a mode MEANS or who may grant it. The
  * cycle is a pure function over the existing `ConsoleAutonomyMode` union from
- * `@0/core`; applying it is the host's job, via the same `/mode` route the
- * operator can type by hand. This module never calls `setAutonomyMode`.
+ * `@0/core`; applying it is the chat screen's job. This module never calls
+ * `setAutonomyMode`.
  */
 import type { ConsoleAutonomyMode } from "@0/core";
 import { modeLabel } from "./chat/helpers.js";

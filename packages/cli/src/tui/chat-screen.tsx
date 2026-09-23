@@ -1220,9 +1220,8 @@ export function ChatScreen({
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   /**
-   * Open picker overlay. `commit` runs with the chosen item id; the
-   * overlay owns no domain logic so the same component serves /model,
-   * /mode and anything added later.
+   * Open a small inline picker. `commit` runs with the chosen item id; the
+   * overlay owns no domain logic and is used by model/theme selection.
    */
   const [picker, setPicker] = useState<
     {
@@ -3417,93 +3416,6 @@ export function ChatScreen({
         selectModel(requested);
         return true;
       }
-      case "mode": {
-        const modeArg = args.toLowerCase();
-        if (!modeArg) {
-          const modeItems: SelectorItem[] = [
-            {
-              id: "standard",
-              label: "Standard",
-              meta: "approve each action",
-              detail: "You approve each action before it runs; asks to extend scope.",
-              current: mode === "standard",
-            },
-            {
-              id: "recon",
-              label: "Recon",
-              meta: "passive, read-only",
-              detail: "Passive, in-scope reconnaissance only; effectful tools are refused.",
-              current: mode === "recon",
-            },
-            {
-              id: "copilot",
-              label: "Co-pilot",
-              meta: "autonomous in scope",
-              detail: "Full autonomy inside the engagement; scope expands to discovered targets.",
-              current: mode === "copilot",
-            },
-            {
-              id: "yolo",
-              label: "YOLO",
-              meta: "full autonomy",
-              detail: "No per-action prompts. Asks before accessing a new target.",
-              current: mode === "yolo",
-            },
-          ];
-          setPicker({
-            state: createSelectorState("Engagement mode", modeItems, mode),
-            commit: (id) => void routeSlashCommand(`/mode ${id}`),
-          });
-          return true;
-        }
-        if (modeArg !== "standard" && modeArg !== "recon" && modeArg !== "copilot" && modeArg !== "yolo") {
-          appendEntry({
-            kind: "notice",
-            text: "invalid mode",
-            detail: "Use Shift+Tab to cycle autonomy modes.",
-            turn: turn.current,
-          });
-          return true;
-        }
-        // NO busy guard. `autonomyMode` is a scalar on the shared tool
-        // context, re-read fresh at every gate — maybeResolveScope,
-        // maybeApproveTool and the scoped-audit gate in agent/tools.ts all
-        // look it up at dispatch time — so there is no torn state to protect
-        // and a change simply applies from the next tool call. It is also
-        // operator-initiated authority, and tightening mid-turn (standard →
-        // copilot) is exactly when an operator wants it.
-        //
-        // This licence is for the MODE SCALAR ONLY. Anything that mutates
-        // the tool set or the gate maps must still refuse mid-turn: a tool
-        // could otherwise be gated under one policy at scope resolution and
-        // a different one at approval.
-        if (!session) {
-          appendEntry({
-            kind: "notice",
-            text: "runtime is not ready; mode is unchanged",
-            turn: turn.current,
-          });
-          return true;
-        }
-        const next: ConsoleAutonomyMode = modeArg === "standard"
-          ? "standard"
-          : modeArg === "recon"
-            ? "recon"
-            : modeArg === "copilot"
-              ? "copilot"
-              : "yolo";
-        session.setAutonomyMode(next);
-        modeRef.current = next;
-        setMode(next);
-        // A mode switch is transient STATE, not conversation. The operator
-        // cycles modes constantly with Shift+Tab, and the current mode is
-        // already shown (coloured) in the bottom bar — appending a persistent
-        // "Mode: X" notice for every flip just spammed the transcript. Confirm
-        // the switch with an ephemeral toast instead; mid-turn it still only
-        // governs the NEXT tool call, so say so briefly.
-        showToast(`${modeLabel(next)} mode${busy ? " · from the next tool call" : ""}`);
-        return true;
-      }
       case "tools": {
         const toolNames = session?.tools.map((tool) => tool.name) ?? [];
         appendEntry({
@@ -4592,11 +4504,18 @@ export function ChatScreen({
     // escape sequence (`\x1b[Z`, or `\x1b[9;2u` under the kitty protocol) into
     // the composer.
     //
-    // The cycle delegates to `/mode` rather than calling `setAutonomyMode`
-    // directly, so it uses the same live-mode transition and runtime readiness
-    // checks. All four modes are available without a preconfigured scope.
+    // Shift+Tab applies the mode transition directly; autonomy is not a slash
+    // command and stays out of the command chooser.
     if (isAutonomyCycleKey(key)) {
-      routeSlashCommand(`/mode ${nextAutonomyMode(modeRef.current)}`);
+      if (!session) {
+        showToast("Runtime is not ready; mode is unchanged");
+        return;
+      }
+      const next = nextAutonomyMode(modeRef.current);
+      session.setAutonomyMode(next);
+      modeRef.current = next;
+      setMode(next);
+      showToast(`${modeLabel(next)} mode${busy ? " · from the next tool call" : ""}`);
       return;
     }
     if (matchesBinding(key, "nav.palette", keybindingOverrides)) {

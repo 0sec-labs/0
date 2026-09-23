@@ -25,7 +25,7 @@ describe("deleteToLineStart", () => {
   });
 
   it("does not spare a leading slash command", () => {
-    expect(deleteToLineStart("/mode copilot")).toBe("");
+    expect(deleteToLineStart("/model gpt-5.5")).toBe("");
   });
 });
 
