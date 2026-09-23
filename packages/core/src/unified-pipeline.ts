@@ -2329,7 +2329,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
               prepared.scopePath,
             );
             if (diffReview) {
-              verifySystemPrompt += "\n\nThis is a diff-scoped review. Independently verify only the claimed change and its required callers/guards; stop once resolved. If confirmed and an exact fix is known, include source_path, source_start_line and suggested_replacement in save_finding. Copy source_original verbatim from the numbered read_file output without its line prefix. The proposed replacement must apply to those exact changed lines; if not certain, report the finding without a suggestion.";
+              verifySystemPrompt += "\n\nThis is a diff-scoped review. Independently verify only the claimed change and its required callers/guards; stop once resolved. The research finding already owns the PR annotation and any exact replacement; do not emit a second suggestion. Cite the actual source path if confirmed, and report independently whether the claimed issue holds.";
             }
             if (memoryStore) {
               try {
@@ -2456,16 +2456,6 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
                 status: "verified" as Finding["status"],
                 confidence: verifiedFinding?.confidence ?? finding.confidence,
                 severity: verifiedFinding?.severity ?? finding.severity,
-                // The blind verifier is evidence for the original finding,
-                // never a second published finding. Adopt an exact replacement
-                // only when it cites the same validated source location.
-                ...(diffReview && !finding.reviewAnnotation?.suggestion &&
-                  verifiedFinding?.category === finding.category &&
-                  verifiedFinding.reviewAnnotation?.suggestion &&
-                  verifiedFinding.reviewAnnotation.path === finding.reviewAnnotation?.path &&
-                  verifiedFinding.reviewAnnotation.startLine === finding.reviewAnnotation?.startLine &&
-                  verifiedFinding.reviewAnnotation.endLine === finding.reviewAnnotation?.endLine
-                  ? { reviewAnnotation: verifiedFinding.reviewAnnotation } : {}),
               };
             }
             // Not confirmed (rejected or inconclusive). Route the drop through

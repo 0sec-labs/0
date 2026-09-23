@@ -1470,14 +1470,14 @@ describe("runPipeline — diff-aware review", () => {
     });
   });
 
-  it("keeps one finding and adopts the verifier's changed-line replacement within the small-diff budget", async () => {
+  it("keeps the original diff finding and research suggestion after independent verification", async () => {
     const { repoDir, changedFile } = makeRepoWithDiff();
     const research = fakeFinding("original", {
-      reviewAnnotation: { path: changedFile, startLine: 1 },
+      reviewAnnotation: { path: changedFile, startLine: 1, suggestion: "export const y = safe(req.body);" },
     });
     const verification = fakeFinding("independent", {
       reviewAnnotation: {
-        path: changedFile, startLine: 1, suggestion: "export const y = safe(req.body);",
+        path: changedFile, startLine: 2, suggestion: "wrong-location",
       },
     });
     runAnalysisAgentMock.mockResolvedValueOnce({ findings: [research] })
@@ -1497,7 +1497,7 @@ describe("runPipeline — diff-aware review", () => {
       purpose: "verify", singleAgent: true, reviewDiffBase: "HEAD~", maxTurns: 10,
     });
     expect(runAnalysisAgentMock.mock.calls[1]![0].agentSystemPrompt).toContain(`FILE: ${changedFile}`);
-    expect(runAnalysisAgentMock.mock.calls[1]![0].agentSystemPrompt).toContain("source_original");
+    expect(runAnalysisAgentMock.mock.calls[1]![0].agentSystemPrompt).toContain("do not emit a second suggestion");
     expect(report.findings).toHaveLength(1);
     expect(report.findings[0]).toMatchObject({
       id: "original", status: "verified",
