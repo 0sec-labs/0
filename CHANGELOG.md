@@ -27,6 +27,10 @@ on the published npm package and the GitHub Release tag.
 
 ### Fixed
 
+- Correct the pinned tree-sitter runtime lock metadata so immutable Docker
+  publication can complete `npm ci`; validate the generated runtime with npm's
+  locked-install check instead of comparing selected manifest fields.
+
 - Default signed-in accounts to 0security Auto when no provider or model was
   explicitly selected, rather than preferring ambient BYOK credentials.
 - Share hosted request capacity across audits and nested agents, queueing excess
