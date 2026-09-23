@@ -26,6 +26,7 @@ import type { ChatEntry, EntryDisplay } from "./types.js";
 import { ToolCard } from "./ToolCard.js";
 import { ImageCard } from "./ImageCard.js";
 import { toolActionTitle, toolResultLine, toolState, toolStateLabel } from "./card-layout.js";
+import { previewTranscriptText } from "../transcript-preview.js";
 
 /**
  * Mouse affordances for a clickable transcript row (a collapsed fold, or a
@@ -179,10 +180,13 @@ export function renderEntry(
     const card = roundedCardFrame(maxWidth);
     const bordered = card.render && (frame.bordered || transcriptStyle === "rail");
     const bodyWidth = bordered ? card.innerWidth : Math.max(1, maxWidth);
+    const preview = previewTranscriptText(entry.text);
     // Body: raw text for the operator, rendered markdown for the model.
     const body = isUser
-      ? <text fg={TEXT} wrapMode="word">{sanitizeTuiText(entry.text)}</text>
-      : renderMarkdownBlocks(renderMarkdown(entry.text, bodyWidth), entry.id, theme);
+      ? <text fg={TEXT} wrapMode="word">{sanitizeTuiText(preview.text)}</text>
+      : display.richMarkdown === false
+        ? <text fg={TEXT} wrapMode="word">{sanitizeTuiText(preview.text)}</text>
+        : renderMarkdownBlocks(renderMarkdown(preview.text, bodyWidth, { cache: display.activeEntryId !== entry.id }), entry.id, theme);
     const footerParts: string[] = [];
     if (!isUser) {
       if (display.modelInFooter && display.model) footerParts.push(display.model);
@@ -445,6 +449,7 @@ export function renderEntry(
   }
 
   if (entry.kind === "reasoning") {
+    const preview = previewTranscriptText(entry.text);
     // Thinking is deliberately quieter than the answer: a dotted rail and
     // muted text, so it reads as working-out rather than a conclusion. While the
     // reasoning belongs to the turn STILL IN FLIGHT the "thinking" label shimmers
@@ -469,12 +474,14 @@ export function renderEntry(
           ) : (
             <text fg={MUTED}>thinking</text>
           )}
-          {renderMarkdownBlocks(
-            renderMarkdown(normalizeReasoning(entry.text), Math.max(8, maxWidth - 2)),
-            entry.id,
-            theme,
-            MUTED,
-          )}
+          {display.richMarkdown === false
+            ? <text fg={MUTED} wrapMode="word">{sanitizeTuiText(preview.text)}</text>
+            : renderMarkdownBlocks(
+              renderMarkdown(normalizeReasoning(preview.text), Math.max(8, maxWidth - 2), { cache: display.activeEntryId !== entry.id }),
+              entry.id,
+              theme,
+              MUTED,
+            )}
         </box>
       </box>,
     );

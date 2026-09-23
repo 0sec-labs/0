@@ -1066,29 +1066,83 @@ function wrapBlock(block: MdBlock, width: number): MdBlock {
  * O(transcript length) parse/wrap per frame that grows with the conversation.
  * The output is `readonly MdBlock[]` (never mutated by renderMarkdownBlocks),
  * and parsing/wrapping is a pure function of (source, width) — theme colours are
- * applied later at render — so the result is safe to memoize and reuse. Only the
- * growing tail entry (new text each frame → new key) misses; every stable entry
- * above it hits. Insertion-order LRU, bounded so long sessions stay flat.
+ * applied later at render — so the result is safe to memoize and reuse. The
+ * growing tail bypasses the cache; stable entries reuse their cached blocks.
+ * Insertion-order LRU, bounded by both entry count and estimated retained weight.
  */
 const RENDER_MARKDOWN_CACHE_MAX = 512;
-const renderMarkdownCache = new Map<string, MdBlock[]>();
+// Estimated retained bytes, including the source key and parsed span graph.
+// Entry count alone lets streaming prefixes retain many copies of long replies.
+const RENDER_MARKDOWN_CACHE_WEIGHT_MAX = 8 * 1024 * 1024;
+const renderMarkdownCache = new Map<string, { blocks: MdBlock[]; weight: number }>();
+let renderMarkdownCacheWeight = 0;
 
-export function renderMarkdown(source: string, width: number): MdBlock[] {
+/** Release cached transcript text when its conversation is explicitly cleared. */
+export function clearMarkdownCache(): void {
+  renderMarkdownCache.clear();
+  renderMarkdownCacheWeight = 0;
+}
+
+function markdownCacheWeight(key: string, blocks: MdBlock[]): number {
+  let weight = 64 + key.length * 2;
+  const spansWeight = (lines: MdSpan[][]): number => {
+    let total = 32;
+    for (const line of lines) {
+      total += 32;
+      for (const span of line) total += 64 + span.text.length * 2;
+    }
+    return total;
+  };
+  for (const block of blocks) {
+    weight += 64;
+    switch (block.kind) {
+      case "rule": break;
+      case "code":
+        weight += (block.language?.length ?? 0) * 2 + 32;
+        for (const line of block.lines) weight += 32 + line.length * 2;
+        break;
+      case "table":
+        weight += spansWeight(block.header) + 32 + block.widths.length * 16;
+        for (const row of block.rows) weight += spansWeight(row);
+        break;
+      default:
+        weight += spansWeight(block.lines);
+        if (block.kind === "listItem") weight += block.marker.length * 2;
+    }
+  }
+  return weight;
+}
+
+export function renderMarkdown(
+  source: string,
+  width: number,
+  options: { cache?: boolean } = {},
+): MdBlock[] {
   const w = normalizeWidth(width);
   if (w <= 0) return [];
+  // The growing tail has a new source every flush. Do not retain its prefixes
+  // or evict the stable transcript entries on behalf of this transient text.
+  if (options.cache === false) {
+    return parseMarkdownBlocks(source).map((block) => wrapBlock(block, w));
+  }
   const key = `${w}\u0000${source}`;
   const cached = renderMarkdownCache.get(key);
   if (cached) {
-    // Refresh recency (delete+set moves the key to the newest slot).
     renderMarkdownCache.delete(key);
     renderMarkdownCache.set(key, cached);
-    return cached;
+    return cached.blocks;
   }
   const blocks = parseMarkdownBlocks(source).map((block) => wrapBlock(block, w));
-  renderMarkdownCache.set(key, blocks);
-  if (renderMarkdownCache.size > RENDER_MARKDOWN_CACHE_MAX) {
-    const oldest = renderMarkdownCache.keys().next().value;
-    if (oldest !== undefined) renderMarkdownCache.delete(oldest);
+  const weight = markdownCacheWeight(key, blocks);
+  if (weight > RENDER_MARKDOWN_CACHE_WEIGHT_MAX) return blocks;
+  renderMarkdownCache.set(key, { blocks, weight });
+  renderMarkdownCacheWeight += weight;
+  while (renderMarkdownCache.size > RENDER_MARKDOWN_CACHE_MAX
+    || renderMarkdownCacheWeight > RENDER_MARKDOWN_CACHE_WEIGHT_MAX) {
+    const oldest = renderMarkdownCache.entries().next().value;
+    if (!oldest) break;
+    renderMarkdownCache.delete(oldest[0]);
+    renderMarkdownCacheWeight -= oldest[1].weight;
   }
   return blocks;
 }

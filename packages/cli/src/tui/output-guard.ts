@@ -48,6 +48,8 @@ export interface TuiOutputGuardOptions {
   onLine?: (line: TuiOutputLine) => void;
   /** Maximum retained lines. Oldest are dropped first. Default 200. */
   maxBuffered?: number;
+  /** Maximum retained UTF-16 code units per line, before a truncation marker. Default 16384. */
+  maxLineLength?: number;
   /** Capture `console.*` in addition to the raw streams. Default true. */
   captureConsole?: boolean;
 }
@@ -69,6 +71,7 @@ const CONSOLE_METHODS = ["log", "warn", "error", "info", "debug", "trace"] as co
 type ConsoleMethod = (typeof CONSOLE_METHODS)[number];
 
 const DEFAULT_MAX_BUFFERED = 200;
+const DEFAULT_MAX_LINE_LENGTH = 16_384;
 
 /** `console.*` formats its own arguments; mirror the useful subset. */
 function formatConsoleArgs(args: unknown[]): string {
@@ -106,6 +109,9 @@ export function onTuiOutputLine(listener: (line: TuiOutputLine) => void): () => 
 
 export function installTuiOutputGuard(options: TuiOutputGuardOptions = {}): TuiOutputGuard {
   const maxBuffered = Math.max(1, options.maxBuffered ?? DEFAULT_MAX_BUFFERED);
+  const requestedLineLength = options.maxLineLength ?? DEFAULT_MAX_LINE_LENGTH;
+  const maxLineLength = Number.isFinite(requestedLineLength)
+    ? Math.max(32, Math.floor(requestedLineLength)) : DEFAULT_MAX_LINE_LENGTH;
   const captureConsole = options.captureConsole !== false;
 
   const buffer: TuiOutputLine[] = [];
@@ -115,10 +121,30 @@ export function installTuiOutputGuard(options: TuiOutputGuardOptions = {}): TuiO
 
   // Partial writes are common: core emits a message and its trailing
   // newline separately, and a single write may carry several lines.
-  const partial: Record<TuiOutputStream, string> = { stdout: "", stderr: "" };
+  const partial = {
+    stdout: { text: "", omitted: 0 },
+    stderr: { text: "", omitted: 0 },
+  };
 
-  const emit = (stream: TuiOutputStream, text: string): void => {
-    const clean = sanitizeTuiText(text);
+  // Copy truncated slices so engines cannot retain a giant backing string for
+  // a small diagnostic prefix. UTF-16 preserves the original JS code units.
+  const copyPrefix = (text: string, start: number, end: number): string =>
+    Buffer.from(text.slice(start, end), "utf16le").toString("utf16le");
+
+  const emit = (stream: TuiOutputStream, text: string, omitted = 0): void => {
+    if (text.length > maxLineLength) {
+      omitted += text.length - maxLineLength;
+      text = copyPrefix(text, 0, maxLineLength);
+    }
+    // A cap can bisect a surrogate pair. Omit the dangling high surrogate
+    // along with the truncated suffix instead of displaying a broken glyph.
+    const last = text.charCodeAt(text.length - 1);
+    if (omitted > 0 && last >= 0xd800 && last <= 0xdbff) {
+      text = text.slice(0, -1);
+      omitted += 1;
+    }
+    const clean = sanitizeTuiText(text)
+      + (omitted > 0 ? ` … [truncated ${omitted} code units]` : "");
     if (!clean) return;
     // Core already emitted the canonical event before writing the legacy cloud
     // relay line. Keep that wire protocol out of the TUI transcript and avoid
@@ -151,20 +177,31 @@ export function installTuiOutputGuard(options: TuiOutputGuardOptions = {}): TuiO
     }
   };
 
+  const flushLine = (stream: TuiOutputStream): void => {
+    const pending = partial[stream];
+    const { text, omitted } = pending;
+    pending.text = "";
+    pending.omitted = 0;
+    emit(stream, text, omitted);
+  };
+
   const ingest = (stream: TuiOutputStream, chunk: string): void => {
-    const combined = partial[stream] + chunk;
-    const segments = combined.split("\n");
-    // The trailing segment has no newline yet; hold it for the next write.
-    partial[stream] = segments.pop() ?? "";
-    for (const segment of segments) emit(stream, segment);
+    let start = 0;
+    while (start < chunk.length) {
+      const newline = chunk.indexOf("\n", start);
+      const end = newline < 0 ? chunk.length : newline;
+      const pending = partial[stream];
+      const take = Math.min(maxLineLength - pending.text.length, end - start);
+      if (take > 0) pending.text += copyPrefix(chunk, start, start + take);
+      pending.omitted += end - start - take;
+      if (newline < 0) break;
+      flushLine(stream);
+      start = newline + 1;
+    }
   };
 
   const flushPartial = (): void => {
-    for (const stream of ["stdout", "stderr"] as const) {
-      const pending = partial[stream];
-      partial[stream] = "";
-      if (pending) emit(stream, pending);
-    }
+    for (const stream of ["stdout", "stderr"] as const) flushLine(stream);
   };
 
   const originalWrites: Partial<Record<TuiOutputStream, StreamWrite>> = {};

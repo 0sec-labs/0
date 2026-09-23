@@ -264,7 +264,11 @@ import {
   isRightClick,
   type ContextMenuItem,
 } from "./use-context-menu.js";
-import { firstCodeBlock } from "./markdown.js";
+import { clearMarkdownCache, firstCodeBlock } from "./markdown.js";
+import {
+  MAX_RICH_TRANSCRIPT_CHARS,
+  MAX_TRANSCRIPT_PREVIEW_CHARS,
+} from "./transcript-preview.js";
 import {
   copyToClipboard,
   defaultSpawn,
@@ -1173,9 +1177,8 @@ export function ChatScreen({
   const reviewRenderableRef = useRef<TranscriptReviewRenderable | null>(null);
   const reviewEventOpenRef = useRef(false);
   // ── Context-compaction recaps ───────────────────────────────────────────────
-  // Every compaction the core loop performs this session, keyed by its 1-based
-  // `compactionNumber`. Bounded by the (small) compaction count, so the whole
-  // set is kept for the session — the Ctrl+O overlay reads the most recent one.
+  // Ctrl+O exposes only the latest recap. Retain at most that one snapshot:
+  // each pre-compaction history can contain large tool results.
   const compactionRecapsRef = useRef<Map<number, CompactionRecap>>(new Map());
   // The most recent compaction number, in state so the indicator + overlay
   // recap re-render when a compaction happens. `undefined` until the first one.
@@ -3156,6 +3159,10 @@ export function ChatScreen({
         turn.current = 0;
         setTurnBudget(null);
         setLastContext(undefined);
+        clearMarkdownCache();
+        compactionRecapsRef.current.clear();
+        setLatestCompaction(undefined);
+        pendingTokensAfterRef.current = undefined;
         // The live plan tree belongs to the conversation being emptied.
         setTodos(null);
         // The objective describes the conversation being emptied; drop it so a
@@ -3798,9 +3805,9 @@ export function ChatScreen({
           }
         },
         onCompaction: (event) => {
-          // Retain the recap for the Ctrl+O overlay (bounded by compaction
-          // count). `tokensAfter` is unknown at emit time — the next planner
-          // sample patches it in (see onUsage above).
+          // Release the previous full history; only the latest is reviewable.
+          // The next planner sample patches tokensAfter (see onUsage above).
+          compactionRecapsRef.current.clear();
           compactionRecapsRef.current.set(event.compactionNumber, {
             tokensBefore: event.tokensBefore,
             // Core's immediate count is a local estimate. Wait for measured
@@ -3814,7 +3821,7 @@ export function ChatScreen({
           // A degraded compaction kept its history but produced no usable
           // summary and no meaningful post size, so its indicator is a muted
           // "summary unavailable" with no token counts to back-fill.
-          if (!event.degraded) pendingTokensAfterRef.current = event.compactionNumber;
+          pendingTokensAfterRef.current = event.degraded ? undefined : event.compactionNumber;
           appendEntry({
             kind: "notice",
             text: event.degraded
@@ -5940,6 +5947,19 @@ export function ChatScreen({
     return byName;
   }, [herdAgents, workerTelemetry, operatorStopped]);
   const renderTranscriptEntries = (transcript: readonly ChatEntry[], width: number, display: EntryDisplay) => {
+    // A scrollbox keeps its entire child tree mounted. Spend rich Markdown's
+    // native text-buffer budget from the tail backward, so the newest answer
+    // remains styled while older rows degrade gracefully to plain previews.
+    const richMarkdownEntryIds = new Set<string>();
+    let remainingRichChars = MAX_RICH_TRANSCRIPT_CHARS;
+    for (let index = transcript.length - 1; index >= 0; index--) {
+      const entry = transcript[index];
+      if (entry.kind !== "assistant" && entry.kind !== "reasoning") continue;
+      const chars = Math.min(entry.text.length, MAX_TRANSCRIPT_PREVIEW_CHARS);
+      if (chars > remainingRichChars) continue;
+      richMarkdownEntryIds.add(entry.id);
+      remainingRichChars -= chars;
+    }
     // "thinking" is a per-TURN label, not a per-entry one. Walk the plan once
     // (it is already in transcript order) and record which turns have shown it,
     // so both the expanded reasoning rows and the folded summaries emit it at
@@ -5988,6 +6008,9 @@ export function ChatScreen({
             }
           : rawEntry;
       const expanded = expandedTurns.has(entry.turn);
+      const rowDisplay = richMarkdownEntryIds.has(entry.id)
+        ? display
+        : { ...display, richMarkdown: false };
       const interactive = expanded && (
         entry.kind === "tool" || entry.kind === "subagent" || entry.kind === "reasoning"
       );
@@ -6006,7 +6029,7 @@ export function ChatScreen({
       const node = renderEntry(
         entry,
         width,
-        expanded ? { ...display, transcriptDetail: "expanded" } : display,
+        expanded ? { ...rowDisplay, transcriptDetail: "expanded" } : rowDisplay,
         theme,
         interactive ? {
           expanded,
@@ -6176,7 +6199,11 @@ export function ChatScreen({
         paddingY={1}
       >
         <scrollbox ref={transcriptRef} focusable={false} width="100%" flexGrow={1} minHeight={0} backgroundColor={PANEL} stickyScroll stickyStart="bottom" verticalScrollbarOptions={sleekScrollbar(theme, PANEL)}>
-          <box flexDirection="column" width="100%">
+          <box flexDirection="column" width="100%" onSizeChange={function () {
+            // Wrapped Markdown can grow after the scrollbox first measures its
+            // child. Update the extent so sticky-bottom follows a long reply.
+            if (transcriptRef.current) transcriptRef.current.content.height = this.height;
+          }}>
             {renderTranscriptEntries(entries, transcriptWidth, entryDisplay)}
             {/* The plan lives in the RIGHT sidebar now; this inline card is only
                 a fallback for when that sidebar is hidden, so the todos are
