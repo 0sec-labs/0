@@ -17,9 +17,35 @@
  * the highlight never moves and this fails.
  */
 
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { launch, type TuiHandle } from "../index.js";
 import { highlightedRow, modelsByokLaunch } from "./_helpers.js";
+import type * as ModelCatalogSync from "../../../src/tui/model-catalog-sync.js";
+
+vi.mock("../../../src/tui/model-catalog-sync.js", async (importOriginal) => {
+  const original = await importOriginal<typeof ModelCatalogSync>();
+  return {
+    ...original,
+    loadHostedModelCatalog: (opts: Parameters<typeof original.loadHostedModelCatalog>[0]) =>
+      opts?.env?.ZERO_CLOUD_TOKEN === "picker-fixture-token"
+        ? Promise.resolve({
+            host: "https://fixture.0.security",
+            fetchedAt: Date.now(),
+            models: [{
+              id: "auto",
+              object: "model" as const,
+              owned_by: "0security",
+              provider: "openai",
+              upstream_model: "hidden",
+              wire_api: "responses" as const,
+              context_length: 128000,
+              max_output_tokens: 8192,
+              pricing: { input_per_million_usd: 0, output_per_million_usd: 0, cached_input_per_million_usd: 0 },
+            }],
+          })
+        : original.loadHostedModelCatalog(opts),
+  };
+});
 
 let tui: TuiHandle | undefined;
 afterEach(async () => {
@@ -29,12 +55,12 @@ afterEach(async () => {
 
 test("arrow keys scroll the model list; up retreats to the start", async () => {
   tui = await launch(modelsByokLaunch());
-  await tui.waitForText(/● deepseek-chat/, 15_000);
+  await tui.waitForText(/DEEPSEEK/, 15_000);
   await tui.settle();
 
   const start = highlightedRow(tui.captureSpans());
   expect(start.index, "no highlighted row at start").toBeGreaterThanOrEqual(0);
-  expect(start.text, "highlighted row carries no model").toMatch(/per M/);
+  expect(start.text, "highlighted row carries no model").toMatch(/DeepSeek|deepseek/i);
 
   // Press "down" several times: a LATER row (further down the list) becomes the
   // active one. The model TEXT is the stable identity — the screen line index
@@ -52,4 +78,35 @@ test("arrow keys scroll the model list; up retreats to the start", async () => {
   const afterUp = highlightedRow(tui.captureSpans());
 
   expect(afterUp.text, "up did not retreat to the starting model").toBe(start.text);
+});
+
+test("hosted Auto and connected API models share one picker without a second auto row", async () => {
+  tui = await launch({
+    ...modelsByokLaunch(),
+    env: {
+      ZERO_CLOUD_TOKEN: "picker-fixture-token",
+      ZERO_PROVIDER: "hosted",
+      ZERO_MODEL: "auto",
+      OPENAI_API_KEY: "openai-fixture",
+      DEEPSEEK_API_KEY: "deepseek-fixture",
+      AZURE_OPENAI_API_KEY: "azure-fixture",
+      AZURE_OPENAI_BASE_URL: "https://azure.example.test/openai/v1",
+    },
+  });
+  await tui.waitForText(/0security Auto/);
+  const frame = tui.captureFrame();
+  expect(frame).toContain("0security Auto");
+  expect(frame).toContain("DEEPSEEK");
+  expect(frame).toContain("OPENAI");
+  expect(frame).toContain("AZURE OPENAI");
+  expect(frame).not.toMatch(/\bHOSTED\b/);
+  expect(frame).not.toMatch(/^\s*auto\s*$/m);
+  await tui.sendKey("down");
+  const selected = highlightedRow(tui.captureSpans());
+  expect(selected.text).toMatch(/DeepSeek/i);
+  await tui.sendKey("return");
+  await tui.sendKeys("/model");
+  await tui.sendKey("return");
+  await tui.waitForText(/Target: parent.*DeepSeek-V4-Flash/);
+  expect(highlightedRow(tui.captureSpans()).text).toMatch(/DeepSeek/i);
 });

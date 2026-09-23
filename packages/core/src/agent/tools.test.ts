@@ -1277,6 +1277,17 @@ describe("ToolExecutor", () => {
     expect(findings[0].title).toBe("Finding A");
   });
 
+  it("explains that database-free workers must ask their parent for cross-session findings", async () => {
+    const result = await executor.execute({
+      name: "query_findings",
+      arguments: { all_sessions: true },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("no persistent database is attached");
+    expect(result.error).toContain("ask the parent to run this query");
+  });
+
   it("query_findings can query a specific scan or all sessions from the DB", async () => {
     const calls: unknown[] = [];
     const dbExecutor = new ToolExecutor(ctx, {

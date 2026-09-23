@@ -104,6 +104,28 @@ export function agentTaskLabel(view: AgentRowView, compact: boolean): string {
   return [view.role, view.task, activity].filter(Boolean).join(" · ");
 }
 
+function treeConnector(
+  ancestorContinues: readonly boolean[],
+  isLast: boolean,
+  selected: boolean,
+  maxCells: number,
+): string {
+  const branch = selected ? "▸ " : isLast ? "└─" : "├─";
+  const ancestryBudget = Math.max(0, maxCells - branch.length);
+  const fullCells = ancestorContinues.length * 2;
+  if (fullCells <= ancestryBudget) {
+    return `${ancestorContinues.map((continues) => continues ? "│ " : "  ").join("")}${branch}`;
+  }
+
+  const showOmission = ancestryBudget >= 2;
+  const visibleDepth = Math.floor((ancestryBudget - (showOmission ? 2 : 0)) / 2);
+  const visibleAncestors = visibleDepth > 0 ? ancestorContinues.slice(-visibleDepth) : [];
+  const ancestry = `${showOmission ? "… " : ""}${visibleAncestors
+    .map((continues) => continues ? "│ " : "  ")
+    .join("")}`;
+  return `${ancestry}${branch}`;
+}
+
 /**
  * The inline (below-composer) variant: a single tree row with a left connector
  * (`├─`, `└─` for the last), then `bullet name: task` and optional right meta.
@@ -117,6 +139,7 @@ export function AgentTreeRow({
   theme,
   selected,
   isLast,
+  ancestorContinues = [],
   onSelect,
 }: {
   view: AgentRowView;
@@ -124,6 +147,7 @@ export function AgentTreeRow({
   theme: Theme;
   selected: boolean;
   isLast: boolean;
+  ancestorContinues?: readonly boolean[];
   onSelect?: () => void;
 }) {
   const symbols = useSymbols();
@@ -135,12 +159,14 @@ export function AgentTreeRow({
   // severity badge, so the two sections keep one trailing-badge rhythm; the
   // inline row additionally caps it at 30% so the wide row keeps its task.
   const metaCells = Math.min(sidebarBadgeCells(meta, width), Math.max(0, Math.floor(width * 0.3)));
-  // connector(2) + gap(1) + bullet(1) + gap(1) + [name + task] + [gap + meta].
-  const reserved = 2 + 1 + 1 + 1 + (metaCells > 0 ? metaCells + 1 : 0);
+  const connectorBudget = Math.max(2, width - 8 - metaCells - (metaCells > 0 ? 1 : 0));
+  const connector = treeConnector(ancestorContinues, isLast, selected, connectorBudget);
+  const connectorCells = connector.length;
+  // connector + gap + bullet + gap + [name + task] + [gap + meta].
+  const reserved = connectorCells + 1 + 1 + 1 + (metaCells > 0 ? metaCells + 1 : 0);
   const bodyWidth = Math.max(1, width - reserved);
   const nameCells = Math.min(view.name.length, Math.max(4, Math.floor(bodyWidth * 0.45)));
   const taskCells = Math.max(0, bodyWidth - nameCells);
-  const connector = selected ? "▸ " : isLast ? "└─" : "├─";
   const nameFg = view.accent ?? ACCENT;
 
   const taskLabel = agentTaskLabel(view, false);
@@ -158,7 +184,7 @@ export function AgentTreeRow({
       backgroundColor={bg}
       onMouseDown={onSelect ? (() => onSelect()) : undefined}
     >
-      <text width={2} height={1} flexShrink={0} wrapMode="none" truncate fg={selected ? ACCENT : MUTED} bg={bg}>{connector}</text>
+      <text width={connectorCells} height={1} flexShrink={0} wrapMode="none" truncate fg={selected ? ACCENT : MUTED} bg={bg}>{connector}</text>
       <text width={1} height={1} flexShrink={0} marginLeft={1} wrapMode="none" truncate fg={mark.color} bg={bg}>{mark.glyph}</text>
       <box width={nameCells} height={1} flexShrink={0} minWidth={0} marginLeft={1} backgroundColor={bg}>
         <text width={nameCells} height={1} wrapMode="none" truncate fg={nameFg} attributes={TextAttributes.BOLD} bg={bg}>{fitTuiText(view.name, nameCells)}</text>
@@ -181,22 +207,26 @@ export function AgentTreeRow({
 export const AGENT_SIDEBAR_ROWS = 2;
 
 /**
- * The sidebar variant: two lines in a narrow column — `bullet name  meta` over
- * an indented, muted, truncated task — so the connectors are dropped for space
- * but the bold-name / muted-task hierarchy and the selection bar are identical
- * to the inline row. Widths are explicit and sum to `width` on each line.
+ * The sidebar variant: two lines in a narrow column — a compact tree connector
+ * and status/name/meta over an indented, muted, truncated task. It keeps the
+ * bold-name hierarchy and selection bar while allowing very deep ancestry to
+ * collapse to a bounded connector. Widths sum to `width` on each line.
  */
 export function AgentSidebarRow({
   view,
   width,
   theme,
   selected,
+  isLast,
+  ancestorContinues = [],
   onSelect,
 }: {
   view: AgentRowView;
   width: number;
   theme: Theme;
   selected: boolean;
+  isLast: boolean;
+  ancestorContinues?: readonly boolean[];
   onSelect?: () => void;
 }) {
   const symbols = useSymbols();
@@ -204,10 +234,13 @@ export function AgentSidebarRow({
   const mark = statusMark(view.status, theme, symbols, view.animationFrame);
   const bg = selected ? PANEL_ALT : undefined;
   const meta = agentStatusLabel(view.status);
-  // Share the findings badge budget, keeping both sidebar sections aligned.
   const metaCells = sidebarBadgeCells(meta, width);
-  const nameCells = Math.max(1, width - 2 - (metaCells > 0 ? metaCells + 1 : 0));
-  const taskCells = Math.max(1, width - 2);
+  const connectorBudget = Math.max(2, width - 3 - metaCells - (metaCells > 0 ? 1 : 0));
+  const connector = treeConnector(ancestorContinues, isLast, selected, connectorBudget);
+  const connectorCells = connector.length;
+  const nameCells = Math.max(1, width - connectorCells - 2 - (metaCells > 0 ? metaCells + 1 : 0));
+  const taskIndent = connectorCells + 2;
+  const taskCells = Math.max(1, width - taskIndent);
   const nameFg = view.accent ?? ACCENT;
   const metaFg = selected ? MUTED : mark.color;
 
@@ -224,6 +257,7 @@ export function AgentSidebarRow({
       onMouseDown={onSelect ? (() => onSelect()) : undefined}
     >
       <box flexDirection="row" width={width} height={1} flexShrink={0} minWidth={0}>
+        <text width={connectorCells} height={1} flexShrink={0} wrapMode="none" truncate fg={selected ? ACCENT : MUTED} bg={bg}>{connector}</text>
         <text width={1} height={1} flexShrink={0} wrapMode="none" truncate fg={mark.color} bg={bg}>{mark.glyph}</text>
         <box width={nameCells} height={1} flexShrink={0} minWidth={0} marginLeft={1} backgroundColor={bg}>
           <text width={nameCells} height={1} wrapMode="none" truncate fg={nameFg} attributes={TextAttributes.BOLD} bg={bg}>{fitTuiText(view.name, nameCells)}</text>
@@ -235,7 +269,7 @@ export function AgentSidebarRow({
         ) : null}
       </box>
       <box flexDirection="row" width={width} height={1} flexShrink={0} minWidth={0}>
-        <box width={taskCells} height={1} flexShrink={0} minWidth={0} marginLeft={2} backgroundColor={bg}>
+        <box width={taskCells} height={1} flexShrink={0} minWidth={0} marginLeft={taskIndent} backgroundColor={bg}>
           <text width={taskCells} height={1} wrapMode="none" truncate fg={MUTED} bg={bg}>{fitTuiText(taskLabel, taskCells)}</text>
         </box>
       </box>

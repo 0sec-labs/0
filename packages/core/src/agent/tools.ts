@@ -7529,7 +7529,7 @@ export class ToolExecutor {
       return {
         success: false,
         output: null,
-        error: "query_findings across sessions requires the persistent findings database",
+        error: "Cross-session findings are unavailable because no persistent database is attached. In a subagent, ask the parent to run this query; otherwise configure the persistent findings database.",
       };
     }
 

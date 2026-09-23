@@ -310,6 +310,7 @@ function ModelRoute({
       onAgentModelsChange={onAgentModelsChange}
       onSingleModelChange={onSingleModelChange}
       onSelect={onSelect}
+      onConnect={shell ? () => shell.openConnect() : undefined}
       onBack={() => leaveCurrentScreen(shell, onExit)}
       onExit={onExit}
       frame={({ body, hint }) => (
@@ -1217,6 +1218,7 @@ function ConsoleApp({
             onAgentModelsChange={(map) => { applyOrStage({ agentModels: map }); }}
             onSingleModelChange={(enabled) => { applyOrStage({ singleModel: enabled }); }}
             onSelect={(id, providerId) => { applyOrStage({ model: id, ...(providerId ? { providerId } : {}) }); nav.onDone(); }}
+            onConnect={() => shell.openConnect()}
             onBack={nav.onBack}
             onSkip={nav.onSkip}
             onExit={nav.onExit}
