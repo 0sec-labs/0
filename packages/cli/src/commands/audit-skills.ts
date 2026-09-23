@@ -16,6 +16,7 @@
 // `~/.0/cloud.env`) and uses the CloudClient for bearer-authenticated
 // HTTP against the cloud dashboard ingress (/api/audit-skills*).
 
+import { execFileSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Command } from "commander";
@@ -588,4 +589,155 @@ export function registerAuditSkillsCommand(program: Command): void {
     .description("Archive a skill (disables future project bindings, preserves history).")
     .option("--json", "Emit result as machine-readable JSON")
     .action(actionArchive);
+}
+
+// A review check is one prompt stored as an assigned audit skill. The marker
+// separates always-run checks from optional methodology skills in the same
+// existing versioned, repository-scoped storage.
+const REVIEW_CHECK_DESCRIPTION_PREFIX = "review-check:v1:";
+
+function checkoutRepository(): string {
+  const raw = execFileSync("git", ["remote", "get-url", "origin"], {
+    encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+  const match = raw.match(/^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/);
+  if (!match) throw new Error("Use --project owner/repo or run from its Git checkout.");
+  return match[1]!;
+}
+
+async function checkProject(api: CloudClient, value?: string): Promise<string> {
+  const selected = value || checkoutRepository();
+  if (/^[0-9a-f-]{36}$/i.test(selected)) return selected;
+  const projects = (await api.listAuditSkills()).projects;
+  const found = projects.find(p => p.fullName.toLowerCase() === selected.toLowerCase());
+  if (!found) throw new Error(`Codebase ${selected} is not enrolled. Run 0 connect first.`);
+  return found.id;
+}
+
+async function checkDetail(api: CloudClient, projectId: string, id: string) {
+  const assigned = await api.listAuditSkillsByProject(projectId);
+  const detail = await api.getAuditSkill(id);
+  if (detail.skill.description !== `${REVIEW_CHECK_DESCRIPTION_PREFIX}${projectId}`) {
+    throw new Error("This review check does not belong to this codebase.");
+  }
+  return { detail, binding: assigned.assignments.find(a => a.skillId === id) };
+}
+
+type CheckOptions = { project?: string; json?: boolean };
+
+async function checkAction(action: () => Promise<unknown>, json: boolean): Promise<void> {
+  try {
+    const value = await action();
+    process.stdout.write(JSON.stringify(value, null, json ? undefined : 2) + "\n");
+  } catch (error) {
+    handleCloudError(error, json);
+  }
+}
+
+async function createCheck(api: CloudClient, projectId: string, name: string, rawPrompt: string, enabled: boolean) {
+  const prompt = rawPrompt.trim();
+  if (!prompt || prompt.length > 2000 || !name.trim() || name.length > 120) {
+    throw new Error("Name and prompt are required (120/2000 character limits).");
+  }
+  if (enabled) {
+    const assigned = await api.listAuditSkillsByProject(projectId);
+    if (assigned.assignments.length >= 8) throw new Error("This codebase already has 8 assigned audit skills/checks.");
+  }
+  const created = await api.createAuditSkill({ name: name.trim(),
+    description: `${REVIEW_CHECK_DESCRIPTION_PREFIX}${projectId}`, files: [{ path: "SKILL.md", content: prompt }] });
+  if (enabled) await api.assignAuditSkill(created.skill.id, projectId, created.revision.revisionId);
+  return { id: created.skill.id, name: created.skill.name, prompt, projectId, enabled };
+}
+
+export function registerReviewChecksCommand(program: Command): void {
+  const checks = program.command("checks").description("Manage one-prompt review checks for an enrolled codebase.");
+  checks.command("propose")
+    .description("Save a check draft for developer review. Does not enable it.")
+    .requiredOption("--name <name>", "Short check name")
+    .requiredOption("--prompt <text>", "Behavior or code pattern to review")
+    .option("--project <owner/repo>", "Codebase (defaults to the current Git checkout)")
+    .option("--json", "Machine-readable result")
+    .action((opts: CheckOptions & { name: string; prompt: string }) => checkAction(async () => {
+      const api = loadClient().client;
+      return createCheck(api, await checkProject(api, opts.project), opts.name, opts.prompt, false);
+    }, !!opts.json));
+  checks.command("add")
+    .description("Save and enable one developer-approved check.")
+    .requiredOption("--name <name>", "Short check name")
+    .requiredOption("--prompt <text>", "Behavior or code pattern to review on each change")
+    .option("--project <owner/repo>", "Codebase (defaults to the current Git checkout)")
+    .requiredOption("--yes", "Confirm that this prompt should run on future configured reviews")
+    .option("--json", "Machine-readable result")
+    .action((opts: CheckOptions & { name: string; prompt: string; yes: boolean }) => checkAction(async () => {
+      const api = loadClient().client;
+      return createCheck(api, await checkProject(api, opts.project), opts.name, opts.prompt, true);
+    }, !!opts.json));
+  checks.command("list")
+    .description("Show active checks and drafts for this codebase.")
+    .option("--project <owner/repo>", "Codebase (defaults to the current Git checkout)")
+    .option("--json", "Machine-readable result")
+    .action((opts: CheckOptions) => checkAction(async () => {
+      const api = loadClient().client;
+      const projectId = await checkProject(api, opts.project);
+      const assigned = await api.listAuditSkillsByProject(projectId);
+      const summaries = (await api.listAuditSkills()).skills
+        .filter(s => s.description === `${REVIEW_CHECK_DESCRIPTION_PREFIX}${projectId}`);
+      const entries = await Promise.all(summaries.map(async skill => {
+        const detail = await api.getAuditSkill(skill.id);
+        const binding = assigned.assignments.find(a => a.skillId === skill.id);
+        const revision = binding
+          ? detail.revisions.find(r => r.revisionId === binding.revisionId)
+          : detail.revisions.find(r => r.revision === skill.latestRevision);
+        return revision ? { id: skill.id, name: skill.name,
+          prompt: revision.files.find(f => f.path === "SKILL.md")?.content ?? "",
+          revision: revision.revision, enabled: !!binding } : null;
+      }));
+      return { projectId, checks: entries.filter((entry): entry is NonNullable<typeof entry> => entry !== null) };
+    }, !!opts.json));
+  checks.command("enable <id>")
+    .description("Enable a reviewed draft for future configured reviews.")
+    .option("--project <owner/repo>", "Codebase (defaults to the current Git checkout)")
+    .requiredOption("--yes", "Confirm developer approval")
+    .option("--json", "Machine-readable result")
+    .action((id: string, opts: CheckOptions & { yes: boolean }) => checkAction(async () => {
+      const api = loadClient().client;
+      const projectId = await checkProject(api, opts.project);
+      const { detail, binding } = await checkDetail(api, projectId, id);
+      if (!binding) {
+        const assigned = await api.listAuditSkillsByProject(projectId);
+        if (assigned.assignments.length >= 8) throw new Error("This codebase already has 8 assigned audit skills/checks.");
+        const latest = detail.revisions.find(r => r.revision === detail.skill.latestRevision);
+        if (!latest) throw new Error("Review check revision is unavailable.");
+        await api.assignAuditSkill(id, projectId, latest.revisionId);
+      }
+      return { id, projectId, enabled: true };
+    }, !!opts.json));
+  checks.command("set <id>")
+    .description("Update a draft or active check. Active changes apply to future reviews.")
+    .requiredOption("--prompt <text>", "Replacement prompt for this check")
+    .option("--project <owner/repo>", "Codebase (defaults to the current Git checkout)")
+    .option("--json", "Machine-readable result")
+    .action((id: string, opts: CheckOptions & { prompt: string }) => checkAction(async () => {
+      const api = loadClient().client;
+      const projectId = await checkProject(api, opts.project);
+      const { detail, binding } = await checkDetail(api, projectId, id);
+      const prompt = opts.prompt.trim();
+      if (!prompt || prompt.length > 2000) throw new Error("Prompt must be 1–2000 characters.");
+      const revised = await api.createAuditSkillRevision(id, { expectedRevision: detail.skill.latestRevision,
+        files: [{ path: "SKILL.md", content: prompt }] });
+      if (binding) await api.assignAuditSkill(id, projectId, revised.revision.revisionId);
+      return { id, prompt, projectId, revision: revised.revision.revision, enabled: !!binding };
+    }, !!opts.json));
+  checks.command("remove <id>")
+    .description("Stop applying an active check or discard an unapproved draft.")
+    .option("--project <owner/repo>", "Codebase (defaults to the current Git checkout)")
+    .option("--json", "Machine-readable result")
+    .action((id: string, opts: CheckOptions) => checkAction(async () => {
+      const api = loadClient().client;
+      const projectId = await checkProject(api, opts.project);
+      const { binding } = await checkDetail(api, projectId, id);
+      if (binding) await api.unassignAuditSkill(id, projectId);
+      await api.archiveAuditSkill(id);
+      return { id, projectId, enabled: false };
+    }, !!opts.json));
 }

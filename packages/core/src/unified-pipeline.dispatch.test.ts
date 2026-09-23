@@ -47,6 +47,7 @@
  */
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 import { copyFileSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -218,6 +219,7 @@ let originalPerItemEnv: string | undefined;
 let originalApiKey: string | undefined;
 let originalStaticAnalyzer: string | undefined;
 let originalCloudEvents: string | undefined;
+let originalReviewManifest: string | undefined;
 
 beforeEach(() => {
   installPackageMock.mockReset();
@@ -252,6 +254,8 @@ beforeEach(() => {
   originalApiKey = process.env.ANTHROPIC_API_KEY;
   originalStaticAnalyzer = process.env["ZERO_STATIC"];
   originalCloudEvents = process.env["ZERO_CLOUD_EVENTS"];
+  originalReviewManifest = process.env["ZERO_AUDIT_SKILLS_MANIFEST"];
+  delete process.env["ZERO_AUDIT_SKILLS_MANIFEST"];
   delete process.env["ZERO_STATIC"];
   delete process.env["ZERO_CLOUD_EVENTS"];
 });
@@ -276,6 +280,11 @@ afterEach(() => {
     delete process.env["ZERO_CLOUD_EVENTS"];
   } else {
     process.env["ZERO_CLOUD_EVENTS"] = originalCloudEvents;
+  }
+  if (originalReviewManifest === undefined) {
+    delete process.env["ZERO_AUDIT_SKILLS_MANIFEST"];
+  } else {
+    process.env["ZERO_AUDIT_SKILLS_MANIFEST"] = originalReviewManifest;
   }
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
@@ -1401,6 +1410,27 @@ describe("runPipeline — diff-aware review", () => {
     return { repoDir, changedFile: "changed.ts" };
   }
 
+  function writeReviewCheckManifest(dir: string): string {
+    const skillId = "00000000-0000-4000-8000-000000000001";
+    const files = [{ path: "SKILL.md", content: "Tenant-owned queries must enforce the authenticated organization." }];
+    const manifest = {
+      schema: "0-audit-skills-v1",
+      skills: [{
+        skillId,
+        revisionId: "00000000-0000-4000-8000-000000000003",
+        revision: 1,
+        name: "Tenant boundaries",
+        description: "review-check:v1:00000000-0000-4000-8000-000000000002",
+        sha256: createHash("sha256").update(JSON.stringify(files), "utf8").digest("hex"),
+        entrypoint: "SKILL.md",
+        files,
+      }],
+    };
+    const manifestPath = join(dir, "review-checks.json");
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+    return manifestPath;
+  }
+
   it("--diff-base threads changed-files context into the agent prompt", async () => {
     const { repoDir, changedFile } = makeRepoWithDiff();
 
@@ -1474,6 +1504,54 @@ describe("runPipeline — diff-aware review", () => {
       runtime: "api", apiKey: "sk-fake", dbPath: freshDbPath(),
     });
     expect(runFoxguardScanMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns configured review-check issues and suggested changes", async () => {
+    const { repoDir } = makeRepoWithDiff();
+    process.env["ZERO_AUDIT_SKILLS_MANIFEST"] = writeReviewCheckManifest(repoDir);
+    runAnalysisAgentMock.mockResolvedValueOnce({
+      findings: [],
+      summary: JSON.stringify({ checks: [{
+        id: "00000000-0000-4000-8000-000000000001",
+        status: "issue",
+        reason: "The changed query omits the organization predicate.",
+        fix: "Bind the authenticated organization ID in the query.",
+      }] }),
+    });
+
+    const report = await runPipeline({
+      target: repoDir, targetType: "source-code", depth: "quick", format: "json",
+      runtime: "api", apiKey: "sk-fake", diffBase: "HEAD~", changedOnly: true,
+      dbPath: freshDbPath(),
+    });
+
+    expect(report.reviewChecks).toEqual([{
+      id: "00000000-0000-4000-8000-000000000001",
+      name: "Tenant boundaries",
+      status: "issue",
+      reason: "The changed query omits the organization predicate.",
+      fix: "Bind the authenticated organization ID in the query.",
+    }]);
+    expect(report.researchFailed).toBeUndefined();
+  });
+
+  it("does not report a clean review when check output is malformed", async () => {
+    const { repoDir } = makeRepoWithDiff();
+    process.env["ZERO_AUDIT_SKILLS_MANIFEST"] = writeReviewCheckManifest(repoDir);
+    runAnalysisAgentMock.mockResolvedValueOnce({ findings: [], summary: "Review complete; no issue found." });
+
+    const report = await runPipeline({
+      target: repoDir, targetType: "source-code", depth: "quick", format: "json",
+      runtime: "api", apiKey: "sk-fake", diffBase: "HEAD~", changedOnly: true,
+      dbPath: freshDbPath(),
+    });
+
+    expect(report.reviewChecks).toBeUndefined();
+    expect(report.researchFailed).toBe(true);
+    expect(report.warnings).toContainEqual(expect.objectContaining({
+      stage: "research",
+      message: "AI analysis failed: Review check results were not valid JSON.",
+    }));
   });
 
   it("keeps the original diff finding and research suggestion after independent verification", async () => {

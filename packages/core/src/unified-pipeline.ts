@@ -27,7 +27,8 @@ import type { ScanListener } from "./scanner.js";
 import { runAnalysisAgent } from "./agent-runner.js";
 import { cloneGitRepo } from "./repo-clone.js";
 import { ScanCostLedger } from "./agent/cost-ledger.js";
-import { auditAgentPrompt, reviewAgentPrompt } from "./analysis-prompts.js";
+import { auditAgentPrompt, reviewAgentPrompt, type ReviewCheck } from "./analysis-prompts.js";
+import { loadSkillBundleFromManifest } from "./agent/skills/markdown-bundle.js";
 import { cppReviewAgentPrompt } from "./review/c-cpp-profile.js";
 import { kernelReviewAgentPrompt } from "./review/linux-kernel-profile.js";
 import { cardanoOnchainReviewAgentPrompt } from "./review/cardano-onchain-profile.js";
@@ -240,6 +241,46 @@ export interface PipelineOptions {
   npmDynamicRunner?: NpmPackageRunner;
 }
 
+export interface ReviewCheckResult {
+  id: string;
+  name: string;
+  status: "pass" | "issue" | "unknown";
+  reason: string;
+  fix: string;
+}
+
+function assignedReviewChecks(): ReviewCheck[] {
+  const manifest = process.env["ZERO_AUDIT_SKILLS_MANIFEST"];
+  if (!manifest) return [];
+  return [...loadSkillBundleFromManifest(manifest).values()]
+    .filter(skill => /^review-check:v1:[0-9a-f-]{36}$/i.test(skill.description))
+    .map(skill => {
+      if (skill.content.length > 2000) throw new Error("Review check prompt exceeds 2000 characters.");
+      return { id: skill.id.slice("cloud/".length), name: skill.name, prompt: skill.content };
+    });
+}
+
+function parseReviewCheckResults(summary: string | undefined, checks: ReviewCheck[]): ReviewCheckResult[] {
+  if (!summary) throw new Error("Review checks did not return a result.");
+  let parsed: unknown;
+  try { parsed = JSON.parse(summary); } catch { throw new Error("Review check results were not valid JSON."); }
+  if (!parsed || typeof parsed !== "object" || !("checks" in parsed) || !Array.isArray(parsed.checks) ||
+      parsed.checks.length !== checks.length) throw new Error("Review check results were incomplete.");
+  const expected = new Map(checks.map(check => [check.id, check.name]));
+  const seen = new Set<string>();
+  return parsed.checks.map((row: unknown) => {
+    if (!row || typeof row !== "object") throw new Error("Malformed review check result.");
+    const item = row as Record<string, unknown>;
+    if (typeof item.id !== "string" || !expected.has(item.id) || seen.has(item.id) ||
+        (item.status !== "pass" && item.status !== "issue" && item.status !== "unknown") ||
+        typeof item.reason !== "string" || !item.reason.trim() || item.reason.length > 500 ||
+        typeof item.fix !== "string" || item.fix.length > 1000 ||
+        (item.status === "issue" && !item.fix.trim())) throw new Error("Malformed review check result.");
+    seen.add(item.id);
+    return { id: item.id, name: expected.get(item.id)!, status: item.status, reason: item.reason, fix: item.fix };
+  });
+}
+
 export interface PipelineReport {
   target: string;
   targetType: string;
@@ -257,6 +298,8 @@ export interface PipelineReport {
   };
   findings: Finding[];
   warnings: Array<{ stage: string; message: string }>;
+  /** Results of approved per-repository checks, evaluated during the same review run. */
+  reviewChecks?: ReviewCheckResult[];
   /** Primary research failed; report findings are partial and not a clean verdict. */
   researchFailed?: boolean;
   /**
@@ -1453,6 +1496,8 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
   // only reads the changed set, so the cap must apply to that set, not the
   // repo. A missing or unreadable diff must never widen an explicitly scoped run.
   const diffReview = prepared.resolvedType === "source-code" && !!opts.changedOnly;
+  const reviewChecks = diffReview ? assignedReviewChecks() : [];
+  let reviewCheckResults: ReviewCheckResult[] | undefined;
   let diffChangedFiles: string[] | null = null;
   let diffPatch = "";
   if (diffReview) {
@@ -1950,8 +1995,10 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
         }
       }
 
-      const baseSystemPrompt = prepared.resolvedType === "source-code"
-        ? (opts.reviewProfile === "linux-kernel"
+      const baseSystemPrompt = diffReview && reviewChecks.length
+        ? reviewAgentPrompt(prepared.scopePath, semgrepFindings, changedFiles, true, opts.hypothesis, opts.conversation, reviewChecks)
+        : prepared.resolvedType === "source-code"
+          ? (opts.reviewProfile === "linux-kernel"
             ? kernelReviewAgentPrompt(prepared.scopePath, semgrepFindings, undefined, opts.subsystem, opts.hypothesis, attackSurfaceCtx)
             : opts.reviewProfile === "c-library"
             ? cppReviewAgentPrompt(prepared.scopePath, semgrepFindings, opts.hypothesis)
@@ -2140,6 +2187,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
           });
           recordUsage(agentResult);
           findings = agentResult.findings;
+          if (reviewChecks.length) reviewCheckResults = parseReviewCheckResults(agentResult.summary, reviewChecks);
           if (opts.projectContext && agentResult.projectObservations) opts.onProjectObservations?.(agentResult.projectObservations);
         }
       } catch (err) {
@@ -2535,6 +2583,10 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     }
 
     } // end of hasApiKey || hasCliRuntime else block
+    if (reviewChecks.length && !reviewCheckResults) {
+      researchFailed = true;
+      warnings.push({ stage: "review-checks", message: "Review checks did not complete." });
+    }
 
     // ── PHASE 5: BUILD REPORT ──
     startPhase("report");
@@ -2607,6 +2659,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       summary,
       findings: confirmedFindings,
       warnings,
+      ...(reviewCheckResults ? { reviewChecks: reviewCheckResults } : {}),
       ...(researchFailed ? { researchFailed: true } : {}),
       // Backwards-compat extras
       ...(costCeilingExceeded
