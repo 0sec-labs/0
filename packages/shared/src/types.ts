@@ -438,6 +438,8 @@ export type PublishabilityDecision =
  * How the attacker has to be positioned to reach the sink — the gate that
  * turns raw severity into real risk. Ordered most→least dangerous.
  *   - `remote-unauth`         — reachable over the network with no auth.
+ *   - `remote-auth`           — reachable over the network but requires valid
+ *     authentication (e.g. a contributor with write access).
  *   - `proximity-rf`          — needs RF/physical proximity (NFC, BLE, Wi-Fi).
  *   - `local-unpriv`          — needs an unprivileged local account.
  *   - `local-priv`            — needs an already-privileged local account
@@ -448,6 +450,7 @@ export type PublishabilityDecision =
  */
 export type ReachabilityTier =
   | "remote-unauth"
+  | "remote-auth"
   | "proximity-rf"
   | "local-unpriv"
   | "local-priv"
@@ -458,10 +461,18 @@ export type ReachabilityTier =
  * What the attacker gets once they trigger the bug. Ordered least→most severe.
  *   - `dos-crash`   — denial of service / crash only.
  *   - `info-leak`   — reads memory / secrets they shouldn't.
+ *   - `integrity-tampering` — tampers with data, workflows, policies, or
+ *     build artifacts (CI config, signing keys, policy files) without
+ *     achieving arbitrary code execution or data exfiltration.
  *   - `lpe-to-root` — local privilege escalation to root/admin.
  *   - `rce`         — arbitrary remote code execution.
  */
-export type Weaponizability = "dos-crash" | "info-leak" | "lpe-to-root" | "rce";
+export type Weaponizability =
+  | "dos-crash"
+  | "info-leak"
+  | "integrity-tampering"
+  | "lpe-to-root"
+  | "rce";
 
 /**
  * Deployment context of a finding's exploit path — where the vulnerable code

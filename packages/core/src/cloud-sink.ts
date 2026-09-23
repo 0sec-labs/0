@@ -363,6 +363,29 @@ export function normalizeFinding(rawFinding: unknown): CloudSinkFinding {
     normalized.findingRank = findingRankRaw;
   }
 
+  // ── impactAssessment pass-through (0#1103) ─────────────────────────
+  // Optional evidence-grounded business-impact assessment, populated
+  // inline by the model at save_finding time. Accept any record-like
+  // object and pass through — the cloud validates its own ingests.
+  const impactRaw = raw.impactAssessment;
+  if (isRecord(impactRaw)) {
+    const { reachability_tier, blast_radius, weaponizability, business_impact, rationale } = impactRaw;
+    if (
+      typeof reachability_tier === "string" &&
+      typeof blast_radius === "string" &&
+      typeof weaponizability === "string" &&
+      typeof business_impact === "string"
+    ) {
+      normalized.impactAssessment = {
+        reachability_tier,
+        blast_radius,
+        weaponizability,
+        business_impact,
+        rationale: typeof rationale === "string" ? rationale : "",
+      };
+    }
+  }
+
   return normalized;
 }
 

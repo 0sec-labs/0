@@ -10,7 +10,6 @@ import {
   generateRemediationWithLLM,
 } from "../remediation.js";
 import type { RemediationObservation } from "../remediation.js";
-import { assessImpact } from "../triage/impact-assessment.js";
 
 /**
  * How many model-written remediation calls may be in flight at once.
@@ -115,43 +114,6 @@ export async function attachRemediation(
       inputTokens,
       outputTokens,
     },
-    timestamp: Date.now(),
-  });
-}
-
-/**
- * Populate `finding.impactAssessment` for eligible findings.
- *
- * Gated on `ZERO_FEATURE_IMPACT_ASSESSMENT` and a reachable runtime. `assessImpact`
- * is total (never throws; falls back to the deterministic heuristic when no
- * model is available), so the only failure mode to guard here is the wave
- * itself. Bounded fan-out shares the remediation concurrency knob — both are
- * per-finding report-time LLM calls with the same cost profile.
- */
-export async function attachImpactAssessment(
-  findings: Finding[],
-  select: (f: Finding) => boolean,
-  deps: { enabled: boolean; runtime: NativeRuntime | null; db: { logEvent: (event: Omit<PipelineEvent, "id">) => unknown } | null; scanId: string; stage: string },
-): Promise<void> {
-  if (!deps.enabled || !deps.runtime) return;
-  const targets = findings.filter(select);
-  if (targets.length === 0) return;
-
-  await mapWithConcurrency(targets, remediationConcurrency(), async (finding) => {
-    try {
-      finding.impactAssessment = await assessImpact(finding, { runtime: deps.runtime! });
-    } catch {
-      // assessImpact is already total; this is belt-and-suspenders so a
-      // surprise never takes down report assembly for a confirmed finding.
-    }
-  });
-
-  const assessed = targets.filter((f) => f.impactAssessment).length;
-  deps.db?.logEvent({
-    scanId: deps.scanId,
-    stage: deps.stage,
-    eventType: "impact_assessment",
-    payload: { findings: targets.length, assessed },
     timestamp: Date.now(),
   });
 }

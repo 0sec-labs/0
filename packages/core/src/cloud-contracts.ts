@@ -125,6 +125,19 @@ export interface CloudSinkFinding {
    * Engine-assigned per-scan rank (1 = highest comparative promise).
    */
   findingRank?: number;
+  /**
+   * Optional evidence-grounded business-impact assessment (0#1103).
+   * Populated inline by the model at save_finding time; avoids a separate
+   * report-time LLM call. Pass-through — the cloud persists or ignores
+   * based on its own schema.
+   */
+  impactAssessment?: {
+    reachability_tier: string;
+    blast_radius: string;
+    weaponizability: string;
+    business_impact: string;
+    rationale: string;
+  };
 }
 
 /**

@@ -42,6 +42,7 @@ import type { NativeRuntime } from "../runtime/types.js";
 
 const REACHABILITY_TIERS: readonly ReachabilityTier[] = [
   "remote-unauth",
+  "remote-auth",
   "proximity-rf",
   "local-unpriv",
   "local-priv",
@@ -52,6 +53,7 @@ const REACHABILITY_TIERS: readonly ReachabilityTier[] = [
 const WEAPONIZABILITY: readonly Weaponizability[] = [
   "dos-crash",
   "info-leak",
+  "integrity-tampering",
   "lpe-to-root",
   "rce",
 ];
@@ -98,9 +100,9 @@ A nominally "critical" bug gated behind root access plus a host filesystem migra
 
 Respond with ONLY a JSON object, no prose, matching this schema exactly:
 {
-  "reachability_tier": one of "remote-unauth" | "proximity-rf" | "local-unpriv" | "local-priv" | "needs-hardware" | "needs-host-migration",
+  "reachability_tier": one of "remote-unauth" | "remote-auth" | "proximity-rf" | "local-unpriv" | "local-priv" | "needs-hardware" | "needs-host-migration",
   "blast_radius": "one short sentence naming who/what is affected",
-  "weaponizability": one of "dos-crash" | "info-leak" | "lpe-to-root" | "rce",
+  "weaponizability": one of "dos-crash" | "info-leak" | "integrity-tampering" | "lpe-to-root" | "rce",
   "business_impact": one of "headline" | "notable" | "modest" | "noise",
   "rationale": "one or two sentences justifying the tier"
 }
