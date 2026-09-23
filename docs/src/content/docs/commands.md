@@ -7,7 +7,7 @@ tableOfContents:
 ---
 
 Find the command, arguments, and options for your task. This reference covers
-**64 top-level commands** and their registered subcommands.
+**65 top-level commands** and their registered subcommands.
 
 For a worked example, start with [Scan Workflows](/scan-workflows/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
@@ -3568,6 +3568,123 @@ Archive a skill for future use while preserving its revision history.
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--json` | — | Emit result as machine-readable JSON |
+
+### checks
+
+Save short prompts for a codebase's configured PR reviews. Your coding agent can
+propose checks from the repository. Drafts do not run until the developer enables
+them. Enabled checks share the existing funded review run. A failed check includes
+a suggested change; it does not edit the repository or publish a repair PR.
+
+```text
+0 checks
+```
+
+Subcommands: [propose](#checks-propose) · [add](#checks-add) · [list](#checks-list) · [enable](#checks-enable) · [set](#checks-set) · [remove](#checks-remove).
+
+### checks propose
+
+Save one behavior or code-pattern draft on the platform. It remains off until
+the developer reviews and enables it.
+
+```text
+0 checks propose [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--name <name>` **required** | — | Short check name |
+| `--prompt <text>` **required** | — | Behavior or code pattern to review |
+| `--project <owner/repo>` | — | Codebase (defaults to the current Git checkout) |
+| `--json` | — | Machine-readable result |
+
+### checks add
+
+Add one approved behavior or code-pattern prompt to the current codebase, or
+select an enrolled codebase with `--project`. `--yes` is required because the
+check will run on future configured reviews. This does not enable PR review if
+the repository's trigger is off.
+
+```text
+0 checks add [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--name <name>` **required** | — | Short check name |
+| `--prompt <text>` **required** | — | Behavior or code pattern to review on each change |
+| `--project <owner/repo>` | — | Codebase (defaults to the current Git checkout) |
+| `--yes` **required** | — | Confirm that this prompt should run on future configured reviews |
+| `--json` | — | Machine-readable result |
+
+### checks list
+
+Show the active prompts and unapproved drafts for a codebase.
+
+```text
+0 checks list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--project <owner/repo>` | — | Codebase (defaults to the current Git checkout) |
+| `--json` | — | Machine-readable result |
+
+### checks enable
+
+Enable a reviewed draft. The codebase's configured PR review trigger still
+controls when it runs.
+
+```text
+0 checks enable [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--project <owner/repo>` | — | Codebase (defaults to the current Git checkout) |
+| `--yes` **required** | — | Confirm developer approval |
+| `--json` | — | Machine-readable result |
+
+### checks set
+
+Replace one draft or active prompt. An active new revision applies to future
+reviews; existing scan snapshots do not change.
+
+```text
+0 checks set [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--prompt <text>` **required** | — | Replacement prompt for this check |
+| `--project <owner/repo>` | — | Codebase (defaults to the current Git checkout) |
+| `--json` | — | Machine-readable result |
+
+### checks remove
+
+Remove a draft or stop applying an enabled check to future reviews. Previous
+revisions remain in the workspace's audit history.
+
+```text
+0 checks remove [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--project <owner/repo>` | — | Codebase (defaults to the current Git checkout) |
+| `--json` | — | Machine-readable result |
 
 ## XBOW benchmark runner
 

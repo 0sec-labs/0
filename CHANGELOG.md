@@ -14,6 +14,7 @@ on the published npm package and the GitHub Release tag.
 
 ### Changed
 
+- Add codebase-scoped review checks to `0 checks`. Save drafts, enable or remove them, and evaluate pass, issue, or unknown during changed-only reviews. Suggested changes stay advisory; the existing security gate is unchanged.
 - Changed-only reviews use one bounded researcher in the shared harness, receive
   the exact patch, and inspect surrounding code only for change-related issues.
   Delegated inference is disabled. Concrete findings retain sequential,
