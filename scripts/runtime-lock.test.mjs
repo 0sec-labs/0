@@ -1,31 +1,23 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { copyFileSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-function read(path) {
-  return readFileSync(join(repoRoot, path), "utf8");
-}
-
-test("dist runtime lock matches the generated package identity", () => {
-  const lock = JSON.parse(read("scripts/dist-package-lock.json"));
-  const rootPackage = JSON.parse(read("package.json"));
-  const cliPackage = JSON.parse(read("packages/cli/package.json"));
-
-  const publishedPackage = JSON.parse(read("dist/package.json"));
-  assert.equal(publishedPackage.name, rootPackage.name);
-  assert.equal(lock.name, publishedPackage.name);
-  assert.equal(lock.packages[""].name, publishedPackage.name);
-  assert.equal(lock.packages[""].version, rootPackage.version);
-  assert.equal(lock.packages[""].dependencies["node-sqlite3-wasm"], rootPackage.dependencies["node-sqlite3-wasm"]);
-  assert.equal(lock.packages[""].dependencies["tree-sitter"], rootPackage.dependencies["tree-sitter"]);
-  assert.equal(lock.packages[""].dependencies["@opentui/core"], cliPackage.dependencies["@opentui/core"]);
-  assert.equal(lock.packages[""].dependencies["@opentui/react"], cliPackage.dependencies["@opentui/react"]);
-  assert.equal(lock.packages[""].dependencies.react, cliPackage.dependencies.react);
-  assert.equal(cliPackage.dependencies.cfonts, undefined);
-  assert.equal(lock.packages[""].dependencies.cfonts, undefined);
+test("the published runtime supports a locked production install", () => {
+  const directory = mkdtempSync(join(tmpdir(), "zero-runtime-lock-"));
+  try {
+    copyFileSync(join(repoRoot, "dist/package.json"), join(directory, "package.json"));
+    copyFileSync(join(repoRoot, "scripts/dist-package-lock.json"), join(directory, "package-lock.json"));
+    const result = spawnSync("npm", [
+      "ci", "--omit=dev", "--ignore-scripts", "--dry-run", "--no-audit", "--no-fund",
+    ], { cwd: directory, encoding: "utf8", timeout: 30_000, shell: process.platform === "win32" });
+    assert.equal(result.status, 0, result.error?.message ?? result.stderr);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 

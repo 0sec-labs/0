@@ -7606,7 +7606,7 @@ export class ToolExecutor {
       return {
         success: false,
         output: null,
-        error: "query_findings across sessions requires the persistent findings database",
+        error: "Cross-session findings are unavailable because no persistent database is attached. In a subagent, ask the parent to run this query; otherwise configure the persistent findings database.",
       };
     }
 
@@ -9357,7 +9357,7 @@ export class ToolExecutor {
       (this.ctx.role === "audit" || this.ctx.role === "review")
       && typeof this.ctx.scopePath === "string"
       && this.ctx.scopePath.length > 0;
-    if (isSourceAudit) {
+    if (isSourceAudit && !this.ctx.diffScopedReview) {
       const decision = evaluateDoneCoverageGate({
         sourceFilesRead: this._sourceFilesRead.size,
         totalToolCalls: this._totalNonDoneToolCalls,

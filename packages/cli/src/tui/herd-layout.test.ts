@@ -8,6 +8,7 @@ import {
   HERD_PEER_TTL_MS,
   HERD_STATUS_ORDER,
   abbreviateHomePath,
+  agentFocusNavigationTarget,
   applySubagentLifecycle,
   applySubagentProgress,
   completionReasonNote,
@@ -42,6 +43,8 @@ import {
   mergeSubagentRoster,
   moveHerdSelection,
   renderFocusActivity,
+  projectAgentForest,
+  projectLiveAgentForest,
   subagentPeers,
   windowFocusTail,
   wrapCells,
@@ -751,6 +754,82 @@ describe("subagentPeers + mergeSubagentRoster", () => {
   });
 });
 
+
+describe("chat agent forest projection", () => {
+  it("keeps direct Main children at the root in their existing order", () => {
+    const rows = projectAgentForest([
+      { agent_id: "first", parent_scan_id: "scan-root" },
+      { agent_id: "second", parent_scan_id: "scan-root" },
+    ], "scan-root");
+
+    expect(rows.map((row) => row.item.agent_id)).toEqual(["first", "second"]);
+    expect(rows.map((row) => [row.parentId, row.depth, row.isLast])).toEqual([
+      [null, 0, false],
+      [null, 0, true],
+    ]);
+  });
+
+  it("nests children under worker ids without changing sibling order", () => {
+    const rows = projectAgentForest([
+      { agent_id: "parent", parent_scan_id: "scan-root" },
+      { agent_id: "other-root", parent_scan_id: "scan-root" },
+      { agent_id: "child-a", parent_scan_id: "parent" },
+      { agent_id: "grandchild", parent_scan_id: "child-a" },
+      { agent_id: "child-b", parent_scan_id: "parent" },
+    ], "scan-root");
+
+    expect(rows.map((row) => row.item.agent_id)).toEqual([
+      "parent", "child-a", "grandchild", "child-b", "other-root",
+    ]);
+    expect(rows.map((row) => [row.parentId, row.depth, row.ancestorContinues])).toEqual([
+      [null, 0, []],
+      ["parent", 1, [true]],
+      ["child-a", 2, [true, true]],
+      ["parent", 1, [true]],
+      [null, 0, []],
+    ]);
+  });
+
+  it("keeps missing-parent workers visible as roots with their own descendants", () => {
+    const rows = projectAgentForest([
+      { agent_id: "orphan-child", parent_scan_id: "orphan" },
+      { agent_id: "orphan", parent_scan_id: "not-in-roster" },
+    ], "scan-root");
+
+    expect(rows.map((row) => [row.item.agent_id, row.parentId, row.depth])).toEqual([
+      ["orphan", null, 0],
+      ["orphan-child", "orphan", 1],
+    ]);
+  });
+  it("hides successful completions and promotes active children of hidden parents", () => {
+    const rows = projectLiveAgentForest([
+      { agent_id: "completed", parent_scan_id: "scan-root", status: "completed", done: true },
+      { agent_id: "unknown-completion", parent_scan_id: "scan-root", status: "completed" },
+      { agent_id: "failed", parent_scan_id: "scan-root", status: "failed" },
+      { agent_id: "incomplete", parent_scan_id: "scan-root", status: "completed", done: false },
+      { agent_id: "active-child", parent_scan_id: "completed", status: "running" },
+    ], "scan-root");
+
+    expect(rows.map((row) => row.item.agent_id)).toEqual(["failed", "incomplete", "active-child"]);
+    expect(rows.find((row) => row.item.agent_id === "active-child")?.parentId).toBeNull();
+  });
+});
+
+describe("focused agent parent and Escape navigation", () => {
+  const rows = projectAgentForest([
+    { agent_id: "root-worker", parent_scan_id: "scan-root" },
+    { agent_id: "nested-worker", parent_scan_id: "root-worker" },
+  ], "scan-root");
+
+  it("moves Left to a nested worker's parent", () => {
+    expect(agentFocusNavigationTarget("left", rows, "nested-worker")).toBe("root-worker");
+  });
+
+  it("returns Left on a root worker and Escape at any depth to Main", () => {
+    expect(agentFocusNavigationTarget("left", rows, "root-worker")).toBeNull();
+    expect(agentFocusNavigationTarget("escape", rows, "nested-worker")).toBeNull();
+  });
+});
 describe("focus content — header and transcript", () => {
   it("renders acknowledged cancellation without failure styling", () => {
     const map = applySubagentLifecycle({}, lifecycle({ status: "failed", error: "Worker stopped by operator" }), NOW);

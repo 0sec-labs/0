@@ -488,6 +488,8 @@ export interface ToolContext {
    * test fixtures that construct `ToolContext` literals directly.
    */
   role?: AgentRole;
+  /** A bounded diff review must not satisfy whole-repository coverage quotas. */
+  diffScopedReview?: boolean;
   /** Parent-advertised built-ins; delegated agents cannot widen this capability set. */
   delegationTools?: readonly ToolDefinition[];
   /** Current parent instructions, inherited by delegated agent sessions. */

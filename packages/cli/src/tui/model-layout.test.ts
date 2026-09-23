@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildModelCatalog, type CatalogModel } from "./model-catalog.js";
 import {
+  activateModelConnectAction,
   agentRosterLines,
   agentRosterToken,
   buildModelRows,
@@ -13,9 +14,15 @@ import {
   dialogContentWidth,
   indexOfModel,
   isFilterKey,
+  isModelConnectAction,
+  modelConnectActionItem,
+  modelConnectDetailLines,
   modelDetailLines,
+  modelDialogCount,
+  modelResultCount,
   modelTargetLine,
   providerGroupFor,
+  reachableModelCatalog,
   type ModelRow,
 } from "./model-layout.js";
 import { PROVIDERS, providerStates } from "./provider-status.js";
@@ -194,6 +201,83 @@ describe("buildModelRows", () => {
     expect(rows.some((row) => row.kind === "model" && row.model.id === "")).toBe(false);
     const orphan = rows.find((row) => row.kind === "model" && row.model.id === "orphan");
     expect(orphan?.group.id).toBe("unknown");
+  });
+});
+
+describe("reachableModelCatalog", () => {
+  const catalog: CatalogModel[] = [
+    { id: "claude-sonnet-4-6", provider: "anthropic", price: "$3/15 per M" },
+    { id: "gpt-5.5", provider: "openai", price: "$5/30 per M" },
+    { id: "codex-account-model", provider: "chatgpt-codex", price: "subscription" },
+    { id: "deepseek-v4.1", provider: "deepseek", price: "$0.5/1 per M" },
+  ];
+
+  it("excludes all model rows without a configured provider route", () => {
+    expect(reachableModelCatalog(catalog, providerStates({}), { env: {} })).toEqual([]);
+  });
+
+  it("includes exact provider rows only for configured credentials", () => {
+    const env = {
+      ANTHROPIC_API_KEY: "anthropic-test",
+      DEEPSEEK_API_KEY: "deepseek-test",
+      OPENAI_API_KEY: "openai-test",
+    };
+    const rows = reachableModelCatalog(catalog, providerStates(env), { env });
+    expect(rows.map((model) => model.id).sort()).toEqual(["claude-sonnet-4-6", "deepseek-v4.1", "gpt-5.5"]);
+  });
+
+  it("maps OpenAI model ids to Azure only when the Azure key and endpoint are configured", () => {
+    const keyOnly = { AZURE_OPENAI_API_KEY: "azure-test" };
+    expect(reachableModelCatalog(catalog, providerStates(keyOnly), { env: keyOnly })).toEqual([]);
+
+    const env = {
+      AZURE_OPENAI_API_KEY: "azure-test",
+      AZURE_OPENAI_BASE_URL: "https://azure.example.test/openai/v1",
+    };
+    expect(reachableModelCatalog(catalog, providerStates(env), { env })).toContainEqual({
+      id: "gpt-5.5",
+      provider: "azure",
+      price: "$5/30 per M",
+    });
+  });
+  it("keeps both connected OpenAI routes distinct for the same model id", () => {
+    const env = {
+      OPENAI_API_KEY: "openai-test",
+      AZURE_OPENAI_API_KEY: "azure-test",
+      AZURE_OPENAI_BASE_URL: "https://azure.example.test/openai/v1",
+    };
+    const rows = reachableModelCatalog(catalog, providerStates(env), { env, providerId: "hosted" });
+    expect(rows.filter((model) => model.id === "gpt-5.5").map((model) => model.provider)).toEqual(["openai", "azure"]);
+  });
+
+  it("includes Codex account rows only after successful model discovery", () => {
+    const env = { ZERO_CHATGPT_ACCESS_TOKEN: "codex-test" };
+    const states = providerStates(env);
+    expect(reachableModelCatalog(catalog, states, { env })).toEqual([]);
+
+    const rows = reachableModelCatalog(catalog, states, {
+      env,
+      codexModelIds: new Set(["codex-account-model"]),
+    });
+    expect(rows.map((model) => model.id)).toEqual(["codex-account-model"]);
+  });
+});
+
+describe("the Connect action", () => {
+  it("opens Connections, stays outside the model count, and explains its destination", () => {
+    const action = modelConnectActionItem();
+    let connectionsOpened = 0;
+    expect(action.label).toBe("Connect another provider…");
+    expect(isModelConnectAction(action)).toBe(true);
+    expect(activateModelConnectAction(action, () => { connectionsOpened += 1; })).toBe(true);
+    expect(connectionsOpened).toBe(1);
+
+    const items = [{ id: "claude-sonnet-4-6" }, action];
+    expect(modelResultCount(items)).toBe(1);
+    expect(modelDialogCount(modelResultCount(items), false)).toBe("1 model");
+    expect(modelConnectDetailLines(60).map((line) => line.text).join(" ")).toContain("Opens Connections");
+    expect(activateModelConnectAction({ id: "claude-sonnet-4-6" }, () => { connectionsOpened += 1; })).toBe(false);
+    expect(connectionsOpened).toBe(1);
   });
 });
 

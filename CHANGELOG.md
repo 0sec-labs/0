@@ -12,7 +12,24 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Changed-only reviews use one bounded researcher in the shared harness, receive
+  the exact patch, and inspect surrounding code only for change-related issues.
+  Delegated inference is disabled. Concrete findings retain sequential,
+  independent verification under the same scan budget.
+  A compact change-review prompt replaces full-audit instructions, and finishing
+  a small diff no longer requires reading three unrelated source files.
+- Missing, unreadable, oversized or empty diffs never fall back to whole-repository
+  scans. Deletion-only changes remain reviewable.
+- Recognize GPT-6 Luna's short-context supplier-list estimate separately from
+  hosted customer tariffs and invoiced provider spend.
+
 ### Fixed
+
+- Correct the pinned tree-sitter runtime lock metadata so immutable Docker
+  publication can complete `npm ci`; validate the generated runtime with npm's
+  locked-install check instead of comparing selected manifest fields.
 
 - Default signed-in accounts to 0security Auto when no provider or model was
   explicitly selected, rather than preferring ambient BYOK credentials.

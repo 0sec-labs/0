@@ -922,7 +922,7 @@ export function restorePersistedFinding(row: RestorablePersistedFindingRow): Fin
 function listChangedFiles(scopePath: string, diffBase: string): string[] {
   const output = execFileSync(
     "git",
-    ["diff", "--name-only", "--diff-filter=ACMR", `${diffBase}...HEAD`],
+    ["diff", "--name-only", "--diff-filter=ACMRD", `${diffBase}...HEAD`],
     {
       cwd: scopePath,
       timeout: 30_000,
@@ -934,8 +934,7 @@ function listChangedFiles(scopePath: string, diffBase: string): string[] {
   return output
     .split("\n")
     .map((line) => line.trim())
-    .filter(Boolean)
-    .filter((path) => existsSync(join(scopePath, path)));
+    .filter(Boolean);
 }
 
 /**
@@ -1452,19 +1451,17 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
   // review guard. The guard counts the WHOLE repo, so a 3-file PR on a
   // monorepo would otherwise be rejected for the repo's size — the review
   // only reads the changed set, so the cap must apply to that set, not the
-  // repo. null = not a diff run or the diff failed (fall back to whole-repo).
+  // repo. A missing or unreadable diff must never widen an explicitly scoped run.
+  const diffReview = prepared.resolvedType === "source-code" && !!opts.changedOnly;
   let diffChangedFiles: string[] | null = null;
-  if (
-    prepared.resolvedType === "source-code" &&
-    opts.diffBase &&
-    opts.changedOnly &&
-    !opts.resumeScanId
-  ) {
-    try {
-      diffChangedFiles = listChangedFiles(prepared.scopePath, opts.diffBase);
-    } catch {
-      diffChangedFiles = null;
-    }
+  let diffPatch = "";
+  if (diffReview) {
+    if (!opts.diffBase) throw new Error("Changed-only review requires a diff base; refusing whole-repository fallback.");
+    diffChangedFiles = listChangedFiles(prepared.scopePath, opts.diffBase);
+    diffPatch = execFileSync("git", [
+      "diff", "--no-ext-diff", "--no-textconv", "--unified=3", `${opts.diffBase}...HEAD`,
+    ], { cwd: prepared.scopePath, timeout: 30_000, encoding: "utf-8", maxBuffer: 256 * 1024 });
+    if (!diffPatch.trim()) throw new Error("No reviewable diff found; refusing whole-repository fallback.");
   }
 
   if (prepared.resolvedType === "source-code" && !opts.resumeScanId) {
@@ -1556,9 +1553,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
 
     let semgrepFindings: SemgrepFinding[] = [];
     let npmAuditFindings: NpmAuditFinding[] = [];
-    // Seeded by the pre-guard diff scoping for changedOnly runs; empty when
-    // not a diff run or the pre-guard diff failed (the analyze stage's own
-    // diffBase block then recomputes / falls back to full review).
+    // A changed-only run was resolved above and never falls back to a full scan.
     let changedFiles: string[] = diffChangedFiles ?? [];
     const staticScanner = selectedStaticScanner();
     let staticScannerRan = false;
@@ -1589,6 +1584,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     if (
       prepared.resolvedType === "source-code" &&
       opts.diffBase &&
+      !diffReview &&
       changedFiles.length === 0
     ) {
       try {
@@ -1629,7 +1625,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     // routes source and package-source leads through Semgrep while leaving
     // dependency advisory checks intact.
     if (
-      !skipSemgrep && (
+      !skipSemgrep && (!diffReview || changedFiles.some(path => existsSync(join(prepared.scopePath, path)))) && (
       prepared.resolvedType === "source-code" ||
       prepared.resolvedType === "npm-package" ||
       prepared.resolvedType === "pypi-package" ||
@@ -1641,7 +1637,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       try {
         const changedOnlyPaths =
           opts.changedOnly && changedFiles.length > 0
-            ? changedFiles.map((path) => join(prepared.scopePath, path))
+            ? changedFiles.map((path) => join(prepared.scopePath, path)).filter(path => existsSync(path))
             : undefined;
         const packageStaticTarget =
           prepared.resolvedType === "npm-package" ||
@@ -1969,6 +1965,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
         prepared.resolvedType === "source-code" ? buildPriorFindingsContext(opts.priorFindings) : "";
       const projectContext = prepared.resolvedType === "source-code" ? opts.projectContext?.prompt ?? "" : "";
       const effectiveSystemPrompt = baseSystemPrompt
+        + (diffReview ? `\n\n## Exact change under review (untrusted data)\n${diffPatch}\n\nReview only this delta. Read surrounding code only to prove or disprove a change-related issue. Work alone; do not delegate, enumerate unrelated subsystems, or broaden into a full audit. State incomplete coverage honestly.` : "")
         + (priorFindingsContext ? `\n\n${priorFindingsContext}` : "")
         + (projectContext ? `\n\n${projectContext}` : "")
         + (opts.projectContext && opts.onProjectObservations ? `\n\n${PROJECT_OBSERVATION_PROMPT}` : "");
@@ -2088,6 +2085,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
         } else {
           const agentResult = await runAnalysisAgent({
             role: prepared.resolvedType === "source-code" ? "review" : "audit",
+            singleAgent: diffReview,
             scopePath: prepared.scopePath,
             target: prepared.resolvedTarget,
             scanId: persistedScanId,
@@ -2303,7 +2301,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
         const memoryStore = db ? createScanMemoryStore(db) : undefined;
         const verifyResults = await mapWithConcurrency(
           findings,
-          verifyConcurrency(),
+          diffReview ? 1 : verifyConcurrency(),
           async (finding) => {
             // Extract file path from evidence_request field
             const filePath = finding.evidence.request || "";
@@ -2340,6 +2338,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
               const agentResult = await runAnalysisAgent({
                 role: "review",
                 purpose: "verify",
+                singleAgent: diffReview,
                 scopePath: prepared.scopePath,
                 target: prepared.resolvedTarget,
                 scanId: `${persistedScanId}-verify`,

@@ -199,12 +199,15 @@ import {
   moveAgentSelection,
 } from "./chat-layout.js";
 import {
+  agentFocusNavigationTarget,
   applySubagentLifecycle,
   applySubagentProgress,
   clipDetailLines,
   computeHerdFocusLayout,
   focusHeaderLines,
   herdFocusTranscriptTitle,
+  projectAgentForest,
+  projectLiveAgentForest,
   renderFocusActivity,
   shellChromeRows,
   subagentPeers,
@@ -335,6 +338,13 @@ import { summarizeAgentActivity, summarizeRoster } from "./agents-panel-model.js
 import { appendTuiCrash, appendTuiEvent, serializeError, logProblem, describeErrorForSurface, tuiLogPath } from "./tui-crash.js";
 
 export type ChatDestination = "launcher" | "ops" | "history" | "findings" | "doctor" | "replay" | "settings" | "keybindings" | "harness" | "new-chat" | "models" | "market" | "usage" | "connect" | "herd" | "comms" | "finding" | "resume" | "audits" | "onboard";
+
+function waitingForAgentsLabel(count: number): string {
+  const liveCount = Math.max(0, Math.trunc(count));
+  return liveCount > 0
+    ? `Waiting for ${liveCount} agent${liveCount === 1 ? "" : "s"}`
+    : "Waiting for agents";
+}
 
 /**
  * Map a status pill's semantic colour role onto the live palette. Kept theme-
@@ -1379,12 +1389,30 @@ export function ChatScreen({
   const projectedHerdRef = useRef(projectedHerdAgents);
   projectedHerdRef.current = projectedHerdAgents;
   herdHandle.current = useCallback(() => projectedHerdRef.current, []);
-  const workerRoster = useMemo(() => Object.values(herdAgents).map((agent) => ({
+  const workerRosterRecords = useMemo(() => Object.values(herdAgents).map((agent) => ({
     ...workerOutcomes[agent.agentId],
     agent_id: agent.agentId, parent_scan_id: agent.parentScanId,
     name: agent.name, task: agent.task, status: agent.status,
     max_turns: agent.maxTurns, turns: agent.turns ?? agent.turn,
   })), [herdAgents, workerOutcomes]);
+  const agentTree = useMemo(
+    () => projectAgentForest(workerRosterRecords, session?.scanId),
+    [workerRosterRecords, session?.scanId],
+  );
+  const liveAgentTree = useMemo(
+    () => projectLiveAgentForest(workerRosterRecords, session?.scanId),
+    [workerRosterRecords, session?.scanId],
+  );
+  // Sibling arrival order is stable; preorder keeps each projected subtree contiguous.
+  const workerRoster = useMemo(() => liveAgentTree.map((row) => row.item), [liveAgentTree]);
+  const runningSpawnChildren = useMemo(
+    () => workerRosterRecords.filter((worker) =>
+      worker.parent_scan_id === session?.scanId
+      && !operatorStopped.has(worker.agent_id)
+      && (worker.status === "running" || worker.status === "queued"),
+    ).length,
+    [workerRosterRecords, session?.scanId, operatorStopped],
+  );
   useEffect(() => {
     let runningWorkers = 0;
     let parkedWorkers = 0;
@@ -2861,9 +2889,15 @@ export function ChatScreen({
   const streamingRef = useRef(false);
   /** Name of the tool currently executing, for the tool animation. */
   const [runningTool, setRunningTool] = useState<string | null>(null);
+  const waitingForSpawnResult = busy && (runningTool === "spawn_agent" || runningTool === "spawn_agents");
+  const waitActivityLabel = waitingForSpawnResult
+    ? waitingForAgentsLabel(runningSpawnChildren)
+    : undefined;
   useEffect(() => {
-    onAuditActivity({ activity: runningTool ? `Running ${runningTool}` : busy ? "Working on audit" : "" });
-  }, [runningTool, busy, onAuditActivity]);
+    onAuditActivity({
+      activity: waitActivityLabel ?? (runningTool ? `Running ${runningTool}` : busy ? "Working on audit" : ""),
+    });
+  }, [waitActivityLabel, runningTool, busy, onAuditActivity]);
   /**
    * Interrupt handle for the turn in flight, or null when none is running.
    * Held in a ref because the keyboard handler must reach the CURRENT turn's
@@ -4346,17 +4380,19 @@ export function ChatScreen({
     // ── Inline subagent focus view (modal) ─────────────────────────────────────
     // Drilled into ONE subagent: the live meta + activity panes replace the
     // transcript. While the composer is IDLE, Up/Down (and PageUp/PageDown)
-    // scroll the activity back from its tail and Left/Esc returns to the agents
-    // list. A printable key falls through to the idle→compose transition below,
-    // so the operator can type a message straight to the focused subagent
-    // (delivered on Enter by the composing block, which routes to it when
-    // `focusAgentId` is set). Once composing, this branch yields entirely so the
-    // composer owns typing/editing/Enter exactly as it does on the main screen.
+    // scroll the activity back from its tail. Left focuses its parent (or Main
+    // for a root); Escape always returns to Main. A printable key falls through
+    // so the operator can message this worker; once composing, the composer
+    // retains its existing editing behavior.
     if (focusAgentId && !composingRef.current) {
       if (key.name === "escape" || key.name === "left") {
-        setFocusAgentId(null);
+        const focusTree = liveAgentTree.some((row) => row.item.agent_id === focusAgentId)
+          ? liveAgentTree
+          : agentTree;
+        const target = agentFocusNavigationTarget(key.name, focusTree, focusAgentId);
+        setFocusAgentId(target);
         setFocusScrollOffset(0);
-        setAgentNavIndex(0);
+        setAgentNavIndex(-1);
         return;
       }
       if (key.name === "up") {
@@ -4816,7 +4852,7 @@ export function ChatScreen({
   // preview) while the root turn owns a call, otherwise the fleet's running
   // count when subagents are the only thing in flight. Never fabricated.
   const statusActivity = busy && !focusAgentId && runningTool
-    ? (statusRunningEntry?.toolArgs ? `${runningTool} · ${statusRunningEntry.toolArgs}` : runningTool)
+    ? waitActivityLabel ?? (statusRunningEntry?.toolArgs ? `${runningTool} · ${statusRunningEntry.toolArgs}` : runningTool)
     : fleetActivityLabel || undefined;
   const usageByModel = useMemo(() => {
     const entries: StatusBarUsageEntry[] = [];
@@ -4980,6 +5016,18 @@ export function ChatScreen({
   // focus view and suppresses the rail / subagent block while it is open.
   const nowMs = Date.now();
   const focusRecord = focusAgentId ? projectedHerdAgents[focusAgentId] : undefined;
+  const focusTreeRow = focusAgentId
+    ? liveAgentTree.find((row) => row.item.agent_id === focusAgentId)
+      ?? agentTree.find((row) => row.item.agent_id === focusAgentId)
+    : undefined;
+  const focusAgentName = focusRecord?.name
+    ?? agentNamesRef.current.get(focusAgentId ?? "")
+    ?? "Unnamed worker";
+  const focusParentName = focusTreeRow?.parentId
+    ? projectedHerdAgents[focusTreeRow.parentId]?.name
+      ?? agentNamesRef.current.get(focusTreeRow.parentId)
+      ?? focusTreeRow.parentId
+    : "Main";
   const focusPeer = focusAgentId
     ? subagentPeers(projectedHerdAgents, nowMs).find((peer) => peer.id === focusAgentId)
     : undefined;
@@ -5077,7 +5125,7 @@ export function ChatScreen({
   };
   const animation = animationKind
     ? frameAt(animationKind, Date.now() - activitySince, {
-        label: animationKind === "tool" ? runningTool ?? undefined : undefined,
+        label: animationKind === "tool" ? waitActivityLabel ?? runningTool ?? undefined : undefined,
         motion: !settings.reduceMotion && animationKind !== "awaiting-operator",
       })
 : null;
@@ -5134,7 +5182,8 @@ export function ChatScreen({
   // are drilled into (the focused row wears the highlight below). Its rows are
   // reserved in the ledger via computeLedgerRows regardless of focus, so the
   // focus transcript makes room for it.
-  const subagentEntries = settings.showSubagents ? workerRoster : [];
+  const subagentTreeRows = settings.showSubagents ? liveAgentTree : [];
+  const subagentEntries = subagentTreeRows.map((row) => row.item);
   const hasSubagents = subagentEntries.length > 0;
   const visibleRosterLimit = Math.max(1, Math.min(SUBAGENT_MAX_VISIBLE, Math.floor(height / 5)));
   // The panel is EXPANDED by default so running agents are visible without the
@@ -5149,8 +5198,8 @@ export function ChatScreen({
   const subagentVisible = subagentPanelCollapsed
     ? []
     : agentNavIndex >= 0
-      ? subagentEntries.slice(rosterStart, rosterStart + visibleRosterLimit)
-      : subagentEntries.slice(0, visibleRosterLimit);
+      ? subagentTreeRows.slice(rosterStart, rosterStart + visibleRosterLimit)
+      : subagentTreeRows.slice(0, visibleRosterLimit);
   const subagentOverflow = subagentEntries.length - subagentVisible.length;
   // Below the header: the visible rows plus a "+N more" tail whenever the
   // roster outruns the window (both when navigating and when resting expanded).
@@ -5225,7 +5274,7 @@ export function ChatScreen({
     // A busy machine-turn: spinner + verb (+ agents) (+ elapsed).
     if (animation && animationKind !== "awaiting-operator") {
       const parts = [animation.label];
-      if (fleetActivityLabel) parts.push(fleetActivityLabel);
+      if (fleetActivityLabel && !waitActivityLabel) parts.push(fleetActivityLabel);
       if (elapsedClock) parts.push(elapsedClock);
       return `${loadingLabel} ${parts.join(" · ")}`;
     }
@@ -5261,9 +5310,8 @@ export function ChatScreen({
   // Activity comes from the real in-flight call, not an invented model intent.
   // Its spinner lives once, below the composer in the loading/status row.
   const runningEntry = runningTool ? entries.findLast((entry) => entry.kind === "tool" && entry.text === runningTool && entry.success === undefined) : undefined;
-  const workingLineBase = runningEntry?.toolArgs
-    ? `${runningTool} · ${runningEntry.toolArgs}`
-    : animation?.label ?? "";
+  const workingLineBase = waitActivityLabel
+    ?? (runningEntry?.toolArgs ? `${runningTool} · ${runningEntry.toolArgs}` : animation?.label ?? "");
   // Fold the live "running N agents" fact into the below-composer indicator too
   // (unless the base already speaks about the fleet), so the most prominent
   // "something is happening" line names what the herd is doing, not just the
@@ -5579,7 +5627,8 @@ export function ChatScreen({
       }}>
         <text fg={agentNavIndex >= 0 ? ACCENT : MUTED}>{fitTuiText(subagentHeaderText, contentWidth)}</text>
       </box>
-      {subagentVisible.map((sa, index) => {
+      {subagentVisible.map((treeRow, index) => {
+        const sa = treeRow.item;
         const rec = herdAgents[sa.agent_id];
         const status = subagentEffectiveStatus(sa);
         // The tail is a LIVE, present-tense summary of what the agent is doing
@@ -5603,7 +5652,8 @@ export function ChatScreen({
         };
         return <AgentTreeRow key={sa.agent_id} view={view} width={contentWidth} theme={theme}
           selected={index + rosterStart === agentNavSelected || sa.agent_id === focusAgentId}
-          isLast={index === subagentVisible.length - 1}
+          isLast={treeRow.isLast}
+          ancestorContinues={treeRow.ancestorContinues}
           onSelect={() => { setFocusAgentId(sa.agent_id); setAgentNavIndex(-1); }} />;
       })}
       {subagentOverflowRow > 0 ? (
@@ -5628,7 +5678,11 @@ export function ChatScreen({
   const sidebarContentRows = Math.max(0, ledgerRows - 2);
   const cloudHintRows = !cloudHintDismissed && shouldOfferCloudHint({ hostedConnected: cloudConfigured, rows: sidebarContentRows, width: rightInner })
     ? Math.min(5, Math.max(0, sidebarContentRows - 8)) : 0;
-  const railRecords = Object.values(herdAgents);
+  const railTreeRows = liveAgentTree.flatMap((treeRow) => {
+    const record = herdAgents[treeRow.item.agent_id];
+    return record ? [{ treeRow, record }] : [];
+  });
+  const railRecords = railTreeRows.map((row) => row.record);
   const runFindings = runFindingsFromEntries(entries);
   // Header rows: AGENTS(1), FINDINGS(1 + separator), and the hide control(1).
   // Vertical padding was deducted above. Empty sections consume only their
@@ -5648,7 +5702,7 @@ export function ChatScreen({
     railRecords.length > railMaxAgents
       ? Math.max(0, Math.floor((agentsBudget - 1) / AGENT_SIDEBAR_ROWS))
       : railMaxAgents;
-  const railVisible = railRecords.slice(0, railCapacity);
+  const railVisible = railTreeRows.slice(0, railCapacity);
   const railOverflow = railRecords.length - railVisible.length;
   // FINDINGS rendering (wrapping to ≤2 lines, budget, "+N more") now lives in
   // the FindingsSidebar component; it owns its 1-row header, so it is handed the
@@ -5678,7 +5732,7 @@ export function ChatScreen({
             ) : null}
           </box>
         ) : (
-          railVisible.map((rec) => {
+          railVisible.map(({ treeRow, record: rec }) => {
             // Share the inline worker identity and truthful status presentation.
             const railStatus = operatorStopped.has(rec.agentId) ? "cancelled" : rec.status === "completed" && workerOutcomes[rec.agentId]?.done === false ? "incomplete" : rec.status;
             const view: AgentRowView = {
@@ -5704,6 +5758,8 @@ export function ChatScreen({
                 view={view}
                 width={rightInner}
                 theme={theme}
+                isLast={treeRow.isLast}
+                ancestorContinues={treeRow.ancestorContinues}
                 selected={workerRoster[agentNavIndex]?.agent_id === rec.agentId}
                 onSelect={() => { setFocusAgentId(rec.agentId); setAgentNavIndex(-1); }}
               />
@@ -5936,7 +5992,7 @@ export function ChatScreen({
   const focusHasTranscript = focused && Boolean(focusEntries?.length);
   // The coarse activity fallback is row-windowed. Rich transcripts use their
   // actual viewport and measured content extent instead of this estimate.
-  const focusMetaRows = focusMetaLines.length + 1;
+  const focusMetaRows = focusMetaLines.length + 2;
   const focusTranscriptCap = Math.max(1, ledgerRows - focusMetaRows - (compact ? 1 : 3));
   const focusTail = windowFocusTail(
     focusActivityLines.length,
@@ -5958,7 +6014,8 @@ export function ChatScreen({
       paddingY={compact ? 0 : 1}
     >
       <box flexDirection="column" flexShrink={0} minWidth={0}>
-        <text fg={ACCENT}>{fitTuiText(`Main › ${focusRecord?.name ?? agentNamesRef.current.get(focusAgentId ?? "") ?? "Unnamed worker"}`, focusInner)}</text>
+        <text fg={ACCENT}>{fitTuiText(`Selected agent: ${focusAgentName}`, focusInner)}</text>
+        <text fg={MUTED}>{fitTuiText(`Parent: ${focusParentName}`, focusInner)}</text>
         {focusMetaLines.map((line, index) => (
           <text key={`focus-meta-${index}`} fg={herdToneColor(theme, line.tone)}>
             {fitTuiText(line.text, focusInner)}
@@ -6012,7 +6069,7 @@ export function ChatScreen({
         </box>
       )}
       <text fg={MUTED} marginTop={1}>
-        {fitTuiText(`[⌃O] ${latestCompaction !== undefined ? "recap" : "transcript"} · [⌃R] ${workerDisplay.transcriptDetail === "expanded" ? "collapse" : "expand"} details · [esc]/[←] Main`, focusInner)}
+        {fitTuiText(`[←] ${focusTreeRow?.parentId ? "Parent" : "Main"} · [Esc] Main · [⌃O] ${latestCompaction !== undefined ? "recap" : "transcript"} · [⌃R] ${workerDisplay.transcriptDetail === "expanded" ? "collapse" : "expand"} details`, focusInner)}
       </text>
     </box>
   );
