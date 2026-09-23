@@ -78,7 +78,7 @@ describe("runNativeAgentLoop", () => {
         { type: "tool_use", id: "spawn", name: "spawn_agent", input: { task: "Inspect unrelated subsystem", max_turns: 1 } },
         { type: "tool_use", id: "context", name: "read_file", input: { path: "context.ts" } },
       ], stopReason: "tool_use", durationMs: 0 },
-      { content: [{ type: "text", text: "Changed path checked." }], stopReason: "end_turn", durationMs: 0 },
+      { content: [{ type: "tool_use", id: "finish", name: "done", input: { summary: "Changed path checked." } }], stopReason: "tool_use", durationMs: 0 },
     ]);
     runtime.forkForSubagent = vi.fn(async () => runtime);
     try {
@@ -88,6 +88,8 @@ describe("runNativeAgentLoop", () => {
         runtime, db: null,
       });
       expect(runtime.forkForSubagent).not.toHaveBeenCalled();
+      expect(state.done).toBe(true);
+      expect(state.turnCount).toBe(2);
       const receipts = state.messages.flatMap(message => message.content).filter(block => block.type === "tool_result");
       expect(receipts.find(block => block.tool_use_id === "spawn")?.is_error).toBe(true);
       expect(receipts.find(block => block.tool_use_id === "context")?.is_error).not.toBe(true);

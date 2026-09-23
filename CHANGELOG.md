@@ -18,6 +18,8 @@ on the published npm package and the GitHub Release tag.
   the exact patch, and inspect surrounding code only for change-related issues.
   Delegated inference is disabled. Concrete findings retain sequential,
   independent verification under the same scan budget.
+  A compact change-review prompt replaces full-audit instructions, and finishing
+  a small diff no longer requires reading three unrelated source files.
 - Missing, unreadable, oversized or empty diffs never fall back to whole-repository
   scans. Deletion-only changes remain reviewable.
 - Recognize GPT-6 Luna's short-context supplier-list estimate separately from

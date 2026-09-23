@@ -9280,7 +9280,7 @@ export class ToolExecutor {
       (this.ctx.role === "audit" || this.ctx.role === "review")
       && typeof this.ctx.scopePath === "string"
       && this.ctx.scopePath.length > 0;
-    if (isSourceAudit) {
+    if (isSourceAudit && !this.ctx.diffScopedReview) {
       const decision = evaluateDoneCoverageGate({
         sourceFilesRead: this._sourceFilesRead.size,
         totalToolCalls: this._totalNonDoneToolCalls,

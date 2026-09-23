@@ -692,6 +692,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     target: config.target,
     scanId: config.scanId,
     role: config.role,
+    diffScopedReview: config.role === "review" && config.singleAgent === true,
     delegationSystemPrompt: config.delegationSystemPrompt ?? config.systemPrompt,
     autonomyMode: config.autonomyMode ?? DEFAULT_AUTONOMY_MODE,
     publicNetwork: config.publicNetwork,
