@@ -140,9 +140,9 @@ export const findingsToolDefinitions: Record<string, ToolDefinition> = {
       // the bug is weaponizable), supply a JSON-encoded ImpactAssessment.
       // Required fields: reachability_tier, blast_radius, weaponizability,
       // business_impact, rationale. Leave unset when you lack concrete
-      // evidence for any of these dimensions — consumers (CVSS, advisory
-      // templates) handle an absent assessment independently with their
-      // own heuristics. Do NOT supply default values.
+      // evidence for any of these dimensions — the field remains undefined
+      // and downstream consumers (CVSS, advisory templates) handle absence
+      // gracefully. Do NOT supply default values.
       impact_assessment: {
         type: "string",
         description:

@@ -2919,6 +2919,29 @@ export const toolExecutorCheckpointSchema = z.object({
 
 export type ToolExecutorCheckpoint = z.infer<typeof toolExecutorCheckpointSchema>;
 
+// ── Impact-assessment enum validation (0#1103) ─────────────────────────
+// Module-level constants (never recreated per call) with safe `hasOwn`
+// property lookup to block prototype-pollution via `__proto__` keys.
+
+const IMPACT_REACHABILITY_TIERS: Record<string, true> = {
+  "remote-unauth": true, "remote-auth": true, "proximity-rf": true,
+  "local-unpriv": true, "local-priv": true, "needs-hardware": true,
+  "needs-host-migration": true,
+};
+
+const IMPACT_WEAPONIZABILITY: Record<string, true> = {
+  "dos-crash": true, "info-leak": true, "integrity-tampering": true,
+  "lpe-to-root": true, "rce": true,
+};
+
+const IMPACT_BUSINESS_IMPACTS: Record<string, true> = {
+  headline: true, notable: true, modest: true, noise: true,
+};
+
+/** Max chars for blast_radius and rationale in an inline impact assessment. */
+const IMPACT_BLAST_RADIUS_MAX = 1000;
+const IMPACT_RATIONALE_MAX = 2000;
+
 export class ToolExecutor {
   private db: osecDB | null;
   private ctx: ToolContext;
@@ -7185,23 +7208,9 @@ export class ToolExecutor {
     // supplies this JSON-encoded string at save_finding time rather than via a
     // separate report-time LLM call. Parse, validate enums against the
     // vocabulary shared with impact-assessment.ts, and stamp on the Finding.
-    // Malformed values REJECT so the agent can self-correct (same pattern as
-    // the CVE/CWE/CVSS validation block above). When absent (the common case)
-    // the finding gets no assessment — the report-time enrichment path falls
-    // back to the deterministic heuristic.
+    // When absent (the common case) the finding carries no assessment —
+    // consumers (CVSS, advisory templates) handle an undefined field gracefully.
     const impactRaw = args.impact_assessment;
-    const REACHABILITY_TIERS: Record<string, true> = {
-      "remote-unauth": true, "remote-auth": true, "proximity-rf": true,
-      "local-unpriv": true, "local-priv": true, "needs-hardware": true,
-      "needs-host-migration": true,
-    };
-    const WEAPONIZABILITY: Record<string, true> = {
-      "dos-crash": true, "info-leak": true, "integrity-tampering": true,
-      "lpe-to-root": true, "rce": true,
-    };
-    const BUSINESS_IMPACTS: Record<string, true> = {
-      "headline": true, "notable": true, "modest": true, "noise": true,
-    };
     if (typeof impactRaw === "string" && impactRaw.trim().length > 0) {
       let parsed: Record<string, unknown>;
       try { parsed = JSON.parse(impactRaw); } catch {
@@ -7220,15 +7229,23 @@ export class ToolExecutor {
       const bi = parsed.business_impact;
       const rn = parsed.rationale;
       const errors: Array<{ field: string; reason: string }> = [];
-      if (!REACHABILITY_TIERS[rt as string]) errors.push({ field: "impact_assessment.reachability_tier", reason: "must be one of: remote-unauth|remote-auth|proximity-rf|local-unpriv|local-priv|needs-hardware|needs-host-migration" });
-      if (typeof br !== "string" || br.trim().length === 0) errors.push({ field: "impact_assessment.blast_radius", reason: "must be a non-empty string" });
-      if (!WEAPONIZABILITY[wz as string]) errors.push({ field: "impact_assessment.weaponizability", reason: "must be one of: dos-crash|info-leak|integrity-tampering|lpe-to-root|rce" });
-      if (!BUSINESS_IMPACTS[bi as string]) errors.push({ field: "impact_assessment.business_impact", reason: "must be one of: headline|notable|modest|noise" });
-      if (typeof rn !== "string" || rn.trim().length === 0) errors.push({ field: "impact_assessment.rationale", reason: "must be a non-empty string" });
+      // Safe property lookup via Object.hasOwn — guards against
+      // prototype-pollution through `__proto__` in the key.
+      if (typeof rt !== "string" || !Object.hasOwn(IMPACT_REACHABILITY_TIERS, rt))
+        errors.push({ field: "impact_assessment.reachability_tier", reason: "must be one of: remote-unauth|remote-auth|proximity-rf|local-unpriv|local-priv|needs-hardware|needs-host-migration" });
+      if (typeof br !== "string" || br.trim().length === 0)
+        errors.push({ field: "impact_assessment.blast_radius", reason: "must be a non-empty string" });
+      else if (br.length > IMPACT_BLAST_RADIUS_MAX)
+        errors.push({ field: "impact_assessment.blast_radius", reason: `must not exceed ${IMPACT_BLAST_RADIUS_MAX} characters` });
+      if (typeof wz !== "string" || !Object.hasOwn(IMPACT_WEAPONIZABILITY, wz))
+        errors.push({ field: "impact_assessment.weaponizability", reason: "must be one of: dos-crash|info-leak|integrity-tampering|lpe-to-root|rce" });
+      if (typeof bi !== "string" || !Object.hasOwn(IMPACT_BUSINESS_IMPACTS, bi))
+        errors.push({ field: "impact_assessment.business_impact", reason: "must be one of: headline|notable|modest|noise" });
+      if (typeof rn !== "string" || rn.trim().length === 0)
+        errors.push({ field: "impact_assessment.rationale", reason: "must be a non-empty string" });
+      else if (rn.length > IMPACT_RATIONALE_MAX)
+        errors.push({ field: "impact_assessment.rationale", reason: `must not exceed ${IMPACT_RATIONALE_MAX} characters` });
       if (errors.length > 0) return buildValidationFailureResult(errors);
-      // All enum checks passed — cast via the canonical ImpactAssessment type.
-      // The enums are structurally validated above; the cast is a formality
-      // since TypeScript can't narrow Record<string,true> into a string union.
       finding.impactAssessment = {
         reachability_tier: rt as ReachabilityTier,
         blast_radius: br as string,

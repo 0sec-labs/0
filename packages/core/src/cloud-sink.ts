@@ -365,23 +365,30 @@ export function normalizeFinding(rawFinding: unknown): CloudSinkFinding {
 
   // ── impactAssessment pass-through (0#1103) ─────────────────────────
   // Optional evidence-grounded business-impact assessment, populated
-  // inline by the model at save_finding time. Accept any record-like
-  // object and pass through — the cloud validates its own ingests.
+  // inline by the model at save_finding time. All five fields must be
+  // present, non‑empty, and bounded — an incomplete or oversized
+  // assessment is dropped rather than forwarded.
+  const IMPACT_STR_MAX = 2000;
   const impactRaw = raw.impactAssessment;
   if (isRecord(impactRaw)) {
-    const { reachability_tier, blast_radius, weaponizability, business_impact, rationale } = impactRaw;
+    const rt = impactRaw.reachability_tier;
+    const br = impactRaw.blast_radius;
+    const wz = impactRaw.weaponizability;
+    const bi = impactRaw.business_impact;
+    const rn = impactRaw.rationale;
     if (
-      typeof reachability_tier === "string" &&
-      typeof blast_radius === "string" &&
-      typeof weaponizability === "string" &&
-      typeof business_impact === "string"
+      typeof rt === "string" && rt.length > 0 && rt.length <= IMPACT_STR_MAX &&
+      typeof br === "string" && br.trim().length > 0 &&
+      typeof wz === "string" && wz.length > 0 && wz.length <= IMPACT_STR_MAX &&
+      typeof bi === "string" && bi.length > 0 && bi.length <= IMPACT_STR_MAX &&
+      typeof rn === "string" && rn.trim().length > 0 && rn.length <= IMPACT_STR_MAX
     ) {
       normalized.impactAssessment = {
-        reachability_tier,
-        blast_radius,
-        weaponizability,
-        business_impact,
-        rationale: typeof rationale === "string" ? rationale : "",
+        reachability_tier: rt,
+        blast_radius: br.slice(0, 1000),
+        weaponizability: wz,
+        business_impact: bi,
+        rationale: rn.slice(0, 2000),
       };
     }
   }
