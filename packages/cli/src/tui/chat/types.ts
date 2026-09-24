@@ -298,6 +298,12 @@ export interface EntryDisplay {
    * appear collapsed and there is at most one for the active turn.)
    */
   activeEntryId?: string;
+  /**
+   * Whether this row may use the rich Markdown renderer. A false value keeps
+   * the bounded preview readable as one plain text buffer when the transcript
+   * has already spent its native rich-text budget on newer rows.
+   */
+  richMarkdown?: boolean;
 }
 
 export interface KeyHint {

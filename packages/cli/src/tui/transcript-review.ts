@@ -12,6 +12,13 @@ import {
   type TranscriptDetail,
 } from "./transcript-style.js";
 import { sanitizeTuiText } from "./text.js";
+import { previewTranscriptText } from "./transcript-preview.js";
+
+/** Maximum source text handed to the native review buffer. */
+export const MAX_REVIEW_CHARS = 32_000;
+
+/** A single row must never consume the review document's whole budget. */
+export const MAX_REVIEW_LINE_CHARS = 8_000;
 
 export type TranscriptReviewTone =
   | "user"
@@ -115,7 +122,7 @@ function markdownLines(source: string, width: number): string[] {
 
 function detailLines(value: unknown): string[] {
   if (typeof value !== "string") return [];
-  return value
+  return previewTranscriptText(value).text
     .replace(/\r/g, "")
     .split("\n")
     .map((line) => sanitizeTuiText(line))
@@ -159,13 +166,13 @@ function compileEntry(
       turn: entry.turn,
       entryId: entry.id,
     });
-    pushLines(document, markdownLines(entry.text, width), tone, entry, "  ");
+    pushLines(document, markdownLines(previewTranscriptText(entry.text).text, width), tone, entry, "  ");
     return;
   }
 
   if (entry.kind === "reasoning") {
     document.push({ text: `${GUTTER.quiet} THINKING${repeat}`, tone: "reasoning", turn: entry.turn, entryId: entry.id });
-    pushLines(document, markdownLines(entry.text, width), "reasoning", entry, "  ");
+    pushLines(document, markdownLines(previewTranscriptText(entry.text).text, width), "reasoning", entry, "  ");
     return;
   }
 
@@ -192,6 +199,50 @@ function compileEntry(
   pushLines(document, detailLines(entry.detail), tone, entry, "  ");
 }
 
+function reviewOmissionMarker(omitted: number): string {
+  return `… [${omitted} earlier review lines hidden to protect the terminal; copy a message for full text] …`;
+}
+
+// Reserve the widest possible count in the marker. The resulting selection is
+// conservative, which keeps the joined native buffer strictly bounded.
+const MAX_REVIEW_OMISSION_MARKER_CHARS = reviewOmissionMarker(Number.MAX_SAFE_INTEGER).length;
+
+function boundedReviewLine(line: TranscriptReviewLine): TranscriptReviewLine {
+  const text = previewTranscriptText(line.text, MAX_REVIEW_LINE_CHARS).text;
+  return text === line.text ? line : { ...line, text };
+}
+
+function boundedReviewLines(lines: readonly TranscriptReviewLine[]): TranscriptReviewLine[] {
+  // Header, fold, notice, error, peer, and tool rows are all display-only
+  // projections. Bound every one before aggregating so a giant final row
+  // cannot bypass the document limit merely because there are no earlier rows.
+  const projected = lines.map(boundedReviewLine);
+  const total = projected.reduce((chars, line) => chars + line.text.length + 1, 0);
+  if (total <= MAX_REVIEW_CHARS) return projected;
+
+  const retainedBudget = Math.max(1, MAX_REVIEW_CHARS - MAX_REVIEW_OMISSION_MARKER_CHARS);
+  let chars = 0;
+  let start = projected.length;
+  while (start > 0) {
+    const next = projected[start - 1];
+    const cost = next.text.length + 1;
+    if (chars + cost > retainedBudget) break;
+    chars += cost;
+    start -= 1;
+  }
+  if (start === 0) return projected;
+  const first = projected[start];
+  return [
+    {
+      text: reviewOmissionMarker(start),
+      tone: "notice",
+      turn: first?.turn ?? 0,
+      entryId: first?.entryId,
+    },
+    ...projected.slice(start),
+  ];
+}
+
 /**
  * Compile the shared transcript document into a deterministic, line-oriented
  * review projection. Native TextBufferView owns final terminal wrapping and
@@ -215,5 +266,15 @@ export function compileTranscriptReview(
   }
 
   while (lines.at(-1)?.text === "") lines.pop();
-  return { lines, text: lines.map((line) => line.text).join("\n") };
+  const bounded = boundedReviewLines(lines);
+  return { lines: bounded, text: bounded.map((line) => line.text).join("\n") };
+}
+
+/**
+ * Apply the review's final bound after its title, hints, and optional
+ * pre-compaction recap have been composed. This is the exact string passed to
+ * the native TextBufferView, so component chrome cannot reopen the cap.
+ */
+export function boundTranscriptReviewContent(content: string): string {
+  return previewTranscriptText(content, MAX_REVIEW_CHARS).text;
 }

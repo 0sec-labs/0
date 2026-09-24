@@ -4,6 +4,7 @@ import type { PresentationTranscriptDocument } from "@0/shared";
 import type { Theme } from "../theme-context.js";
 import { useSymbols } from "../symbol-context.js";
 import {
+  boundTranscriptReviewContent,
   compileTranscriptReview,
   reviewRule,
   type TranscriptReviewDocument,
@@ -14,6 +15,7 @@ import "../transcript-review-renderable.js";
 import type { TranscriptReviewRenderable } from "../transcript-review-renderable.js";
 import type { TranscriptDetail } from "../transcript-style.js";
 import type { CompactionRecap } from "./types.js";
+import { previewTranscriptText } from "../transcript-preview.js";
 
 export interface TranscriptReviewProps {
   transcript: PresentationTranscriptDocument;
@@ -42,7 +44,7 @@ function formatRecapMessages(recap: CompactionRecap): string {
     const who = message.role === "user" ? "▸ user" : "◂ assistant";
     for (const block of message.content ?? []) {
       if (block.type === "text") {
-        const text = block.text.trim();
+        const text = previewTranscriptText(block.text).text.trim();
         if (text) lines.push(`${who}: ${text}`);
       } else if (block.type === "tool_use") {
         let args = "";
@@ -59,7 +61,7 @@ function formatRecapMessages(recap: CompactionRecap): string {
       }
     }
   }
-  return lines.join("\n\n");
+  return previewTranscriptText(lines.join("\n\n"), 16_000).text;
 }
 
 export function TranscriptReview({
@@ -115,7 +117,7 @@ export function TranscriptReview({
           "",
           recap.degraded
             ? "Summary unavailable — this compaction degraded to a hard trim."
-            : `Summary:\n${recap.summaryText.trim() || "(empty)"}`,
+            : `Summary:\n${previewTranscriptText(recap.summaryText).text.trim() || "(empty)"}`,
           "",
           `Retained history · ${recap.preCompactionMessages.length} ${recap.preCompactionMessages.length === 1 ? "message" : "messages"}:`,
           "",
@@ -126,7 +128,7 @@ export function TranscriptReview({
         ].join("\n"),
       )
     : null;
-  const content = recapText ? `${recapText}\n${baseContent}` : baseContent;
+  const content = boundTranscriptReviewContent(recapText ? `${recapText}\n${baseContent}` : baseContent);
 
   return (
     <box flexGrow={1} minHeight={0} width="100%" minWidth={0} backgroundColor={theme.PANEL}>
