@@ -338,9 +338,9 @@ Workspace-trusted ESM can use external clients outside SDK accounting.
 
 Hosted request admission and settlement belong to the service; local token-cost
 estimates do not establish remaining spend or commercial terms. Inference is
-separate from review, compute and engagement accounting. See
-[hosted account interpretation](/api-keys/#hosted-inference). Hosted lifecycle
-qualification and security-performance claims require separate evidence.
+separate from review, compute and engagement accounting. The internal hosted
+transport is not offered by the public console; its qualification and security
+performance require separate evidence.
 
 ## Presentation contract
 

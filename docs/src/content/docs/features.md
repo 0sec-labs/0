@@ -164,9 +164,7 @@ results are not current-target guarantees.
 <span id="unified-soc-story"></span>
 ## Related products
 
-See [Integrations](/integrations/) for connected tools.
-[Hosted inference](/getting-started/#hosted-models) leaves tools in your
-environment; [managed work](/getting-started/#managed-work-and-onboarding)
-requires separate scoping, access and terms. Neither is required to use the
-local open-source CLI with your own model connection.
+See [Integrations](/integrations/) for connected tools and
+[managed work](/getting-started/#managed-work-and-onboarding) for separate
+scoping, access and terms. The interactive console uses your model connection.
 See [Commands](/commands/) for the full CLI reference.

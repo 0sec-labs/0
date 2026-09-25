@@ -5,6 +5,7 @@ import {
   compactMessagesWithLLM,
   dropOldestMessages,
   isContextWindowError,
+  isTransientLlmError,
   computeBudgetWarningTurns,
   toolFailureText,
   BUDGET_WARNING_SOFT,
@@ -1364,6 +1365,9 @@ describe("context overflow recovery", () => {
     expect(isContextWindowError("maximum context length exceeded")).toBe(true);
     expect(isContextWindowError("prompt is too long for this model")).toBe(true);
     expect(isContextWindowError("429 rate limit exceeded")).toBe(false);
+    expect(isContextWindowError('0.security Cloud API error 413: {"error":{"code":"input_limit_exceeded"}}')).toBe(true);
+    expect(isContextWindowError('0.security Cloud API error 413: {"error":{"code":"payload_too_large"}}')).toBe(false);
+    expect(isContextWindowError('0.security Cloud API error 429: {"error":{"code":"input_limit_exceeded"}}')).toBe(false);
   });
 
   it("drops only old middle messages while preserving opening task, recent tail, and alternation", () => {
@@ -1393,6 +1397,78 @@ describe("context overflow recovery", () => {
     for (let index = 1; index < pruned.length; index++) {
       expect(pruned[index]!.role).not.toBe(pruned[index - 1]!.role);
     }
+  });
+
+  it("prunes a long transcript after hosted input_limit_exceeded and retries with shorter context", async () => {
+    const rejected = '0.security Cloud API error 413: {"error":{"code":"input_limit_exceeded"}}';
+    const attempts: number[] = [];
+    const recoveries: unknown[] = [];
+    const runtime: NativeRuntime = {
+      type: "api",
+      isAvailable: async () => true,
+      async executeNative(_system, messages) {
+        attempts.push(messages.length);
+        if (attempts.length <= 12) return {
+          content: [{ type: "tool_use", id: `update-${attempts.length}`, name: "update_target", input: { type: "api" } }],
+          stopReason: "tool_use", durationMs: 1,
+        };
+        if (attempts.length === 13) return { content: [], stopReason: "error", error: rejected, durationMs: 1 };
+        return {
+          content: [{ type: "tool_use", id: "complete", name: "done", input: { summary: "Recovered" } }],
+          stopReason: "tool_use", durationMs: 1,
+        };
+      },
+    };
+    const state = await runNativeAgentLoop({
+      config: { role: "discovery", systemPrompt: "test", tools: [], maxTurns: 20, target: "https://example.com", scanId: randomUUID() },
+      runtime, db: null,
+      onEvent: (type, payload) => { if (type === "context_overflow_recovered") recoveries.push(payload); },
+    });
+    expect(state.done).toBe(true);
+    expect(state.summary).toBe("Recovered");
+    expect(attempts).toHaveLength(14);
+    expect(attempts[13]).toBeLessThan(attempts[12]!);
+    expect(recoveries).toHaveLength(1);
+    expect(state.messages.some(message => message.content.some(block =>
+      block.type === "text" && block.text.includes("CONTEXT OVERFLOW RECOVERY"),
+    ))).toBe(true);
+  });
+
+  it("stops after two shrinking recoveries when hosted input is still rejected", async () => {
+    const rejected = '0.security Cloud API error 413: {"error":{"code":"input_limit_exceeded"}}';
+    let calls = 0;
+    let recoveries = 0;
+    const state = await runNativeAgentLoop({
+      config: { role: "discovery", systemPrompt: "test", tools: [], maxTurns: 20, target: "https://example.com", scanId: randomUUID() },
+      runtime: {
+        type: "api", isAvailable: async () => true,
+        async executeNative(): Promise<NativeRuntimeResult> {
+          calls++;
+          return calls <= 12
+            ? { content: [{ type: "tool_use", id: `update-${calls}`, name: "update_target", input: { type: "api" } }], stopReason: "tool_use", durationMs: 1 }
+            : { content: [], stopReason: "error", error: rejected, durationMs: 1 };
+        },
+      },
+      db: null,
+      onEvent: (type) => { if (type === "context_overflow_recovered") recoveries++; },
+    });
+    expect(calls).toBe(15);
+    expect(recoveries).toBe(2);
+    expect(state.errorExit?.error).toBe(rejected);
+  });
+
+  it("exits after one unprunable hosted 413 rather than replaying identical input", async () => {
+    const executeNative = vi.fn(async (): Promise<NativeRuntimeResult> => ({
+      content: [], stopReason: "error", durationMs: 1,
+      error: '0.security Cloud API error 413: {"error":{"code":"input_limit_exceeded"}}',
+    }));
+    const state = await runNativeAgentLoop({
+      config: { role: "discovery", systemPrompt: "test", tools: [], maxTurns: 20, target: "https://example.com", scanId: randomUUID() },
+      runtime: { type: "api", isAvailable: async () => true, executeNative }, db: null,
+    });
+    expect(executeNative).toHaveBeenCalledTimes(1);
+    expect(state.errorExit?.error).toContain("input_limit_exceeded");
+    expect(state.summary).not.toContain("max turns");
   });
 });
 
@@ -2147,8 +2223,7 @@ describe("runNativeAgentLoop — inline validation (#554)", () => {
 // ── transient LLM error classifier (bounded retry vs loud exit) ──
 
 describe("isTransientLlmError", () => {
-  it("classifies rate-limit/overload/timeout/stall as transient", async () => {
-    const { isTransientLlmError } = await import("./native-loop.js");
+  it("classifies rate-limit/overload/timeout/stall as transient", () => {
     expect(isTransientLlmError("OpenRouter API error 429: too many requests")).toBe(true);
     expect(isTransientLlmError("provider overloaded")).toBe(true);
     expect(isTransientLlmError("fetch failed: ETIMEDOUT")).toBe(true);
@@ -2157,15 +2232,13 @@ describe("isTransientLlmError", () => {
     ).toBe(true);
   });
 
-  it("does NOT classify auth errors as transient (fail-fast, never retry)", async () => {
-    const { isTransientLlmError } = await import("./native-loop.js");
+  it("does NOT classify auth errors as transient (fail-fast, never retry)", () => {
     expect(isTransientLlmError("ChatGPT (Codex backend) API error 401: could not parse token")).toBe(false);
     expect(isTransientLlmError("OpenRouter API error 401: user not found")).toBe(false);
     expect(isTransientLlmError("Anthropic API error 403: forbidden")).toBe(false);
   });
 
-  it("does NOT classify plan-quota exhaustion as transient (reschedulable, not retryable)", async () => {
-    const { isTransientLlmError } = await import("./native-loop.js");
+  it("does NOT classify plan-quota exhaustion as transient (reschedulable, not retryable)", () => {
     // Exact message shape produced by LlmApiRuntime on a usage_limit_reached
     // 429 (see QuotaExhaustedError in llm-api.ts): resets in hours/days, so
     // the loop must NOT burn its bounded transient retries against it.
@@ -2175,6 +2248,61 @@ describe("isTransientLlmError", () => {
           "(plan=pro, resets_at=2026-07-19T00:00:00.000Z) — reschedulable after reset",
       ),
     ).toBe(false);
+  });
+
+  it("fails closed for hosted outcomes unless admission was proven pre-dispatch", () => {
+    expect(isTransientLlmError("0.security Cloud API error: 0 hosted request returned HTTP 502; its outcome may be unknown. Automatic replay is disabled")).toBe(false);
+    expect(isTransientLlmError('0.security Cloud API error 429: {"error":{"code":"rate_limit"}}')).toBe(false);
+    expect(isTransientLlmError('0.security Cloud API error 429: {"error":{"code":"rate_limit"}}', true)).toBe(true);
+    expect(isTransientLlmError("OpenRouter API error 502: overloaded")).toBe(true);
+  });
+});
+
+describe("runNativeAgentLoop — hosted retry safety", () => {
+  it.each([
+    "0.security Cloud API error: 0 hosted request returned HTTP 502; its outcome may be unknown. Automatic replay is disabled; check your inference usage before retrying.",
+    '0.security Cloud API error 429: {"error":{"code":"rate_limit"}}',
+  ])("does not issue a second request after unsafe hosted failure: %s", async error => {
+    const executeNative = vi.fn(async (): Promise<NativeRuntimeResult> => ({
+      content: [], stopReason: "error", error, durationMs: 1,
+    }));
+    const retries: string[] = [];
+    const state = await runNativeAgentLoop({
+      config: { role: "discovery", systemPrompt: "test", tools: [], maxTurns: 15, target: "https://example.com", scanId: randomUUID() },
+      runtime: { type: "api", isAvailable: async () => true, executeNative }, db: null,
+      onEvent: (type, payload) => { if (type === "agent_error" && String(payload.error).startsWith("transient (retry")) retries.push(String(payload.error)); },
+    });
+    expect(executeNative).toHaveBeenCalledTimes(1);
+    expect(retries).toEqual([]);
+    expect(state.errorExit?.error).toBe(error);
+  });
+
+  it("stops a retry backoff on interruption without dispatching again", async () => {
+    const controller = new AbortController();
+    const executeNative = vi.fn(async (): Promise<NativeRuntimeResult> => ({
+      content: [], stopReason: "error", error: "OpenRouter API error 503: overloaded", durationMs: 1,
+    }));
+    const state = await runNativeAgentLoop({
+      config: { role: "discovery", systemPrompt: "test", tools: [], maxTurns: 15, target: "https://example.com", scanId: randomUUID() },
+      runtime: { type: "api", isAvailable: async () => true, executeNative }, db: null,
+      signal: controller.signal,
+      onEvent: (type) => { if (type === "agent_error") controller.abort(); },
+    });
+    expect(executeNative).toHaveBeenCalledTimes(1);
+    expect(state.summary).toBe("Error: Agent execution cancelled.");
+    expect(state.errorExit).toBeUndefined();
+  });
+
+  it("treats a runtime cancellation as terminal even if its text looks retryable", async () => {
+    const executeNative = vi.fn(async (): Promise<NativeRuntimeResult> => ({
+      content: [], stopReason: "error", cancelled: true, error: "0.security Cloud API error 429: rate limit", durationMs: 1,
+    }));
+    const state = await runNativeAgentLoop({
+      config: { role: "discovery", systemPrompt: "test", tools: [], maxTurns: 15, target: "https://example.com", scanId: randomUUID() },
+      runtime: { type: "api", isAvailable: async () => true, executeNative }, db: null,
+    });
+    expect(executeNative).toHaveBeenCalledTimes(1);
+    expect(state.summary).toBe("Error: Agent execution cancelled.");
   });
 });
 

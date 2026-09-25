@@ -7117,6 +7117,48 @@ export class ToolExecutor {
           },
         ]);
       }
+      // GitHub can only apply a replacement to right-side added lines. Check
+      // the exact bound base/head diff here, before saving a suggestion, so a
+      // mistaken citation returns a correction to the agent instead of silently
+      // disappearing from the PR. Never shift an off-by-one line automatically:
+      // the neighbouring line may contain a different security decision.
+      if (typeof args.suggested_replacement === "string" &&
+          args.suggested_replacement.length > 0 && this.ctx.reviewDiffBase) {
+        const diff = spawnSync("git", [
+          "diff", "--no-ext-diff", "--no-textconv", "--unified=0",
+          `${this.ctx.reviewDiffBase}...HEAD`, "--", sourcePath,
+        ], { cwd: this.ctx.scopePath, encoding: "utf8", timeout: 30_000, maxBuffer: 256 * 1024 });
+        const changed = new Set<number>();
+        if (diff.status === 0 && !diff.error) {
+          for (const line of diff.stdout.split("\n")) {
+            const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
+            if (!hunk) continue;
+            const start = Number(hunk[1]), count = Number(hunk[2] ?? 1);
+            if (count > 20_000) break;
+            for (let offset = 0; offset < count; offset++) changed.add(start + offset);
+          }
+        }
+        let allAdded = true;
+        for (let line = startLine as number; line <= lastLine; line++) {
+          if (!changed.has(line)) { allAdded = false; break; }
+        }
+        if (diff.status !== 0 || diff.error || !allAdded) {
+          return buildValidationFailureResult([{
+            field: "source_start_line",
+            reason: `suggested_replacement must cite added lines in the bound diff; ${sourcePath} changed at ${[...changed].slice(0, 20).join(", ") || "no verifiable added lines"}. Read the numbered source and cite the exact changed line, or omit the replacement.`,
+          }]);
+        }
+        const original = args.source_original;
+        if (typeof original !== "string" || !original ||
+            statSync(sourceAbsolute).size > 2 * 1024 * 1024 ||
+            readFileSync(sourceAbsolute, "utf8").replace(/\r\n/g, "\n")
+              .split("\n").slice((startLine as number) - 1, lastLine).join("\n") !== original) {
+          return buildValidationFailureResult([{
+            field: "source_original",
+            reason: "suggested_replacement requires the exact current text of the cited changed lines, including indentation and without line-number prefixes. Re-read the source and correct the citation or omit the replacement.",
+          }]);
+        }
+      }
       // Oversized / fenced / unified-diff suggestions are dropped (never
       // truncated), keeping the location — same gate as the CLI parser and
       // the cloud sink (findings-parser.ts isSuggestionAcceptable).
@@ -7652,6 +7694,7 @@ export class ToolExecutor {
     const window = windowFileContent(raw, {
       offset: args.offset,
       maxLines: args.max_lines,
+      numberLines: this.ctx.diffScopedReview,
     });
     if (!window.ok) {
       return { success: false, output: null, error: window.error };

@@ -20,18 +20,10 @@ if [ ! -f "$DEV_ENTRY" ]; then
   exit 1
 fi
 
-# The dev account's automatic hosted route is the default. Operators can opt
-# into a BYOK provider by setting ZERO_SELECTED_PROVIDER and ZERO_MODEL.
-DEV_PROVIDER="${ZERO_SELECTED_PROVIDER:-hosted}"
-DEV_MODEL="${ZERO_MODEL:-}"
-if [ "$DEV_PROVIDER" = "hosted" ]; then
-  DEV_MODEL=""
-fi
-exec env \
-  -u ZERO_CLOUD_TOKEN \
-  -u 0SEC_CLOUD_HOST \
-  -u 0SEC_CLOUD_TOKEN \
+# Keep the dev Cloud account separate while leaving BYOK/subscription provider
+# selection untouched. A production token in the invoking shell must never
+# override the dev credential file selected by ZERO_DEV_SOURCE_ROOT.
+exec env -u ZERO_CLOUD_TOKEN \
   ZERO_DEV_SOURCE_ROOT="$DEV_ROOT" \
   ZERO_CLOUD_HOST=https://dev.cloud.0.security \
-  ZERO_SELECTED_PROVIDER="$DEV_PROVIDER" ZERO_MODEL="$DEV_MODEL" \
   bun "$DEV_ENTRY" "$@"

@@ -38,8 +38,9 @@ export function CommandMenu({
   height,
   commands,
   selectedIndex,
-  visibleRows,
   query,
+  visibleRows,
+  hasAgentRoster,
   theme,
   onActivateRow,
   onHoverRow,
@@ -52,6 +53,7 @@ export function CommandMenu({
   selectedIndex: number;
   visibleRows: number;
   query: string;
+  hasAgentRoster: boolean;
   theme: Theme;
   onActivateRow: (index: number) => void;
   onHoverRow: (index: number) => void;
@@ -132,10 +134,12 @@ export function CommandMenu({
         </box>
       )}
       <box width={innerWidth} flexShrink={0} minWidth={0}>
-        <text fg={MUTED}>{fitHint(Math.max(1, innerWidth), [
-          "[↑↓] select · [⇥] complete · [⏎] run · [esc] close",
-          "[↑↓] select · [⇥] · [⏎] run · [esc]",
-          "[↑↓] · [⇥] · [⏎] · [esc]",
+        <text fg={MUTED}>{fitHint(Math.max(1, innerWidth), commands.length === 1 ? [
+          `${hasAgentRoster ? "[↓] agents" : "[↓] close"} · [⏎] ${commands[0]?.name === "model" ? "open picker" : "run"} · [←] edit`,
+        ] : [
+          "[↑↓] select · [⇥] complete · [⏎] run · [←] edit · [esc] close",
+          "[↑↓] select · [⏎] run · [←] edit",
+          "[↑↓] · [⏎] · [←]",
         ])}</text>
       </box>
     </box>  );

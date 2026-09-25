@@ -129,6 +129,17 @@ export function registerAuthCommand(program: Command): void {
       await runLogin(opts);
     });
 
+  // Managed-service enrollment still uses Cloud authentication; keep the
+  // short login alias after hosted inference commands are removed.
+  program
+    .command("login")
+    .description("Sign in for managed-service CLI commands")
+    .option("--host <url>", "Cloud host (defaults to ZERO_CLOUD_HOST or production)")
+    .option("--token <value>", "Skip the browser flow and persist this token directly")
+    .action(async (opts: { host?: string; token?: string }) => {
+      await runLogin(opts);
+    });
+
   // ── 0 auth logout ──
   auth
     .command("logout")
@@ -412,7 +423,8 @@ export async function runStatus(opts: StatusOptions): Promise<void> {
 
   const client = new CloudClient({ ...creds, fetchImpl: opts.fetchImpl });
   try {
-    await client.getInferenceAccount();
+    // Managed-service authorization, not inference-account eligibility.
+    await client.getJson("/api/scans?limit=1");
     consolePresentationOutput.stdout(`OK (host=${creds.host})`, "auth.status.ok");
     process.exitCode = EXIT_OK;
   } catch (err) {

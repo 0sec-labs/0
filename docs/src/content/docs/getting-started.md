@@ -14,7 +14,6 @@ retain their existing technical names.
 | Path | What you need | Where the work runs |
 | --- | --- | --- |
 | Local CLI with your model access | A supported [API key or provider subscription](#use-my-own-api-key) | Tools run on your configured executor; your provider handles inference and billing. No 0cloud account is required. |
-| Local CLI with hosted inference | A compatible [0cloud account and service](#hosted-models), CLI, and model access | The service handles model requests; tools still run on your configured executor. |
 | Managed security work | Agreed scope, permissions, budget and service access | A separately scoped service. See [managed onboarding](#managed-work-and-onboarding). |
 
 ## Install
@@ -109,72 +108,24 @@ mount for the database, journal and reports.
 
 ## Configure a provider
 
-Run `0` to open chat, then `/connect`. Choose **0cloud → Sign in**,
-**Use my own API key**, or **Provider subscription**. Cloud sign-in opens
-your browser; **Esc** returns to chat. Source-based terminal UI execution
-requires Bun; the release binary includes its runtime.
+Run `0` to open chat, then `/connect`. Choose **Use my own API key** or
+**Provider subscription**. Source-based terminal UI execution requires Bun;
+the release binary includes its runtime.
 
 `0` starts in chat, including on a fresh installation. Use `/onboard` for
-optional guided setup. Once 0cloud is connected, **Enter** continues setup;
-there is no hosted-model selection step.
-
-0cloud selects its service model automatically. Before accepting a chat
-message, the CLI checks account eligibility and model availability. A saved
-login does not guarantee inference access. Included allowance works with prepaid
-fallback off. `prepaid_disabled` means the service reports no usable included
-allowance and fallback is off, not that prepaid is required or a provider is missing.
-Review included usage in `/connect` or contact your organization owner.
-Your draft stays in the composer; **Ctrl+R** checks again,
-and **Enter** sends it only after access is restored.
+optional guided setup. Choose a connected provider's model in `/model`.
+The interactive console does not route inference through 0cloud; Cloud authentication
+for managed-service commands is separate from model access.
 
 For your own provider, use `/model` to select a model. Model and role-model
 selections apply to the current audit while idle, or after its current turn
 completes. Switching to a different API-key or subscription provider opens its
 model picker before applying the connection.
 
-<a id="hosted-models-draft"></a>
-
-### Hosted models
-
-:::caution[Confirm account and service compatibility]
-This source audit is not an authenticated production acceptance test.
-Use the compatible CLI and service approved for your account. A public
-sign-in page, browser login, or listed model does not establish that billing
-and inference are ready.
-:::
-
-0cloud model access and managed security work have separate setup and
-authorization. Choosing hosted inference does not move the CLI's shell tools
-off your machine.
-
-1. Set `HOSTED_TEST_HOST` to the operator-provided URL. Log in below, choose
-   your organization, and authorize the CLI.
-2. Check the model catalog and credit account. Review any reported eligibility,
-   included allowance, prepaid fallback and admission state. These fields are
-   deployment responses, not a promise of free credit. If account data is
-   unavailable, resolve CLI/service compatibility first.
-3. Choose an ID from `0 models`. Pin `hosted` to use it instead of any
-   existing provider key or Codex login.
-
-```bash
-0 login --host "$HOSTED_TEST_HOST"
-0 models --json
-0 balance --json
-
-env ZERO_SELECTED_PROVIDER=hosted ZERO_MODEL="<model-id-from-catalog>" \
-  0 review ./authorized-repo --runtime api
-```
-
-Replace the model ID and repository path. Reading the catalog or account does
-not start an inference request. The review does; account admission and billing
-depend on the approved deployment. Login does not claim or purchase credits.
-
-See [account states and errors](/api-keys/#hosted-inference) and
-[hosted settings](/configuration/#hosted-configuration).
 
 ### Use my own API key
 
-Your provider handles authentication and billing. Local, BYOK and supported
+Your provider handles authentication and billing. Local API-key and supported
 provider-subscription workflows need no 0cloud account.
 
 Set one provider key:
@@ -189,8 +140,7 @@ Keep model keys separate from target credentials (`--auth`).
 Never commit keys or paste them into issues.
 
 For supported subscription sign-in, use `/connect` and choose the provider's
-subscription entry. This is separate from buying hosted model access through
-0cloud. Provider account restrictions and model availability still apply.
+subscription entry. Provider account restrictions and model availability still apply.
 
 ### Use multiple models deliberately
 
@@ -351,9 +301,8 @@ Keep patch publication, applying a change and checking a deployed fix as
 separate approvals. A generated patch is not a verified fix.
 
 Agree on verification and remediation deliverables as part of the engagement.
-Local engine access, hosted inference and managed security are separate paths;
-access to one does not grant the others. Follow the
-[roadmap](/roadmap/#0cloud) for the current availability boundary.
+Local model access and managed security are separate paths; access to one does
+not grant the other. See the [roadmap](/roadmap/#0cloud).
 
 The CLI also implements [managed lifecycle commands](/commands/#service) for
 approved service environments. Starting a remote scan, polling its outcome,

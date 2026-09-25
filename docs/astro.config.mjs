@@ -88,10 +88,6 @@ export default defineConfig({
         {
           label: "0cloud",
           items: [
-            { label: "Hosted inference setup", link: "/getting-started/#hosted-models" },
-            { label: "Access & credentials", link: "/api-keys/#hosted-inference" },
-            { label: "Accounting & errors", link: "/api-keys/#charging-and-interrupted-requests" },
-            { label: "Models", link: "/configuration/#hosted-configuration" },
             { label: "Managed work & onboarding", link: "/getting-started/#managed-work-and-onboarding" },
             { label: "Availability", link: "/roadmap/#0cloud" },
           ],

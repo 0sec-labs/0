@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ToolExecutor, getToolsForRole, TOOL_DEFINITIONS, SCANNER_TOOL_NAMES, detectHttpEgressSegments, evaluateDoneCoverageGate, containsUnquotedShellChars, sanitizedEnv, toolExecutorCheckpointSchema } from "./tools.js";
 import { parseFindingsFromCliOutput } from "../findings-parser.js";
 import type { ToolContext, ToolCall } from "./types.js";
+import { execFileSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -432,6 +433,50 @@ describe("ToolExecutor", () => {
         path: "parser.ts",
         startLine: 1,
         suggestion: "safe(validate(input))",
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a suggested replacement cited on context instead of the changed line", async () => {
+    const root = mkdtempSync(join(tmpdir(), "0-diff-suggestion-"));
+    try {
+      execFileSync("git", ["init", "-q"], { cwd: root });
+      writeFileSync(join(root, "auth.ts"), "const token = getToken();\nconst match = parse(token);\nif (!match) deny();\n");
+      execFileSync("git", ["add", "auth.ts"], { cwd: root });
+      execFileSync("git", ["-c", "user.name=Review", "-c", "user.email=review@example.invalid",
+        "commit", "-qm", "base"], { cwd: root });
+      const base = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+      writeFileSync(join(root, "auth.ts"), "const token = getToken();\nconst match = parse(token);\nif (false && !match) deny();\n");
+      execFileSync("git", ["add", "auth.ts"], { cwd: root });
+      execFileSync("git", ["-c", "user.name=Review", "-c", "user.email=review@example.invalid",
+        "commit", "-qm", "change"], { cwd: root });
+
+      const context: ToolContext = { ...ctx, findings: [], scopePath: root, diffScopedReview: true, reviewDiffBase: base };
+      const finder = new ToolExecutor(context, null);
+      const claim = {
+        title: "Authorization bypass", category: "security-misconfiguration", severity: "high",
+        description: "The changed condition skips the authorization check.",
+        evidence_request: "auth.ts:3", source_path: "auth.ts",
+        source_original: "if (false && !match) deny();",
+        suggested_replacement: "if (!match) deny();",
+      };
+      const wrong = await finder.execute({ name: "save_finding", arguments: { ...claim, source_start_line: 2 } });
+      expect(wrong.success).toBe(false);
+      expect(wrong.error).toContain("changed at 3");
+      const misbound = await finder.execute({
+        name: "save_finding",
+        arguments: { ...claim, source_start_line: 3, source_original: "const match = parse(token);" },
+      });
+      expect(misbound.success).toBe(false);
+      expect(misbound.error).toContain("exact current text");
+      expect(context.findings).toEqual([]);
+
+      const corrected = await finder.execute({ name: "save_finding", arguments: { ...claim, source_start_line: 3 } });
+      expect(corrected.success).toBe(true);
+      expect(context.findings[0]?.reviewAnnotation).toEqual({
+        path: "auth.ts", startLine: 3, suggestion: "if (!match) deny();",
       });
     } finally {
       rmSync(root, { recursive: true, force: true });

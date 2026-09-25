@@ -137,7 +137,6 @@ async function buildProgram(): Promise<Command> {
   c.registerDepsCommand(program);
   c.registerH1Command(program);
   c.registerAuthCommand(program);
-  c.registerHostedCommand(program);
   c.registerIntelCommand(program);
   c.registerReconCommand(program);
   c.registerConsoleCommand(program);

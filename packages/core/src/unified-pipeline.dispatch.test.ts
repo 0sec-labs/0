@@ -1446,8 +1446,8 @@ describe("runPipeline — diff-aware review", () => {
     ]);
   });
 
-  it("default foxguard uses its native diff mode for changed-only review", async () => {
-    const { repoDir, changedFile } = makeRepoWithDiff();
+  it("ordinary changed-only review skips Foxguard but still investigates the exact patch", async () => {
+    const { repoDir } = makeRepoWithDiff();
 
     await runPipeline({
       target: repoDir,
@@ -1461,12 +1461,53 @@ describe("runPipeline — diff-aware review", () => {
       dbPath: freshDbPath(),
     });
 
-    expect(runFoxguardScanMock).toHaveBeenCalledTimes(1);
+    expect(runFoxguardScanMock).not.toHaveBeenCalled();
     expect(runSemgrepScanMock).not.toHaveBeenCalled();
-    const opts = runFoxguardScanMock.mock.calls[0]![2];
-    expect(opts).toEqual({
-      paths: [join(repoDir, changedFile)],
-      diffBase: "HEAD~",
+    expect(runAnalysisAgentMock).toHaveBeenCalledTimes(1);
+    expect(runAnalysisAgentMock.mock.calls[0]![0].agentSystemPrompt).toContain("+export const y = req.body;");
+  });
+
+  it("whole-tree source review still runs Foxguard", async () => {
+    const { repoDir } = makeRepoWithDiff();
+    await runPipeline({
+      target: repoDir, targetType: "source-code", depth: "quick", format: "json",
+      runtime: "api", apiKey: "sk-fake", dbPath: freshDbPath(),
+    });
+    expect(runFoxguardScanMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the original diff finding and research suggestion after independent verification", async () => {
+    const { repoDir, changedFile } = makeRepoWithDiff();
+    const research = fakeFinding("original", {
+      reviewAnnotation: { path: changedFile, startLine: 1, suggestion: "export const y = safe(req.body);" },
+    });
+    const verification = fakeFinding("independent", {
+      reviewAnnotation: {
+        path: changedFile, startLine: 2, suggestion: "wrong-location",
+      },
+    });
+    runAnalysisAgentMock.mockResolvedValueOnce({ findings: [research] })
+      .mockResolvedValueOnce({ findings: [verification] });
+
+    const report = await runPipeline({
+      target: repoDir, targetType: "source-code", depth: "default", format: "json",
+      runtime: "api", apiKey: "sk-fake", diffBase: "HEAD~", changedOnly: true,
+      dbPath: freshDbPath(),
+    });
+
+    expect(runAnalysisAgentMock).toHaveBeenCalledTimes(2);
+    expect(runAnalysisAgentMock.mock.calls[0]![0]).toMatchObject({
+      singleAgent: true, reviewDiffBase: "HEAD~", maxTurns: 12,
+    });
+    expect(runAnalysisAgentMock.mock.calls[1]![0]).toMatchObject({
+      purpose: "verify", singleAgent: true, reviewDiffBase: "HEAD~", maxTurns: 10,
+    });
+    expect(runAnalysisAgentMock.mock.calls[1]![0].agentSystemPrompt).toContain(`FILE: ${changedFile}`);
+    expect(runAnalysisAgentMock.mock.calls[1]![0].agentSystemPrompt).toContain("do not emit a second suggestion");
+    expect(report.findings).toHaveLength(1);
+    expect(report.findings[0]).toMatchObject({
+      id: "original", status: "verified",
+      reviewAnnotation: { path: changedFile, startLine: 1, suggestion: "export const y = safe(req.body);" },
     });
   });
 

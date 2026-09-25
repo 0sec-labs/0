@@ -199,6 +199,13 @@ export interface NativeRuntimeResult {
    */
   cancelled?: boolean;
   /**
+   * Whether the gateway proved a failed hosted request can safely be
+   * replayed unchanged (currently x-0-retry-safe on 429). Hosted failures
+   * without this proof must not enter transient same-request retries; a
+   * pre-dispatch 413 can instead trigger bounded history pruning.
+   */
+  retrySafe?: boolean;
+  /**
    * The provider's raw response items for this turn, when the wire format has
    * items worth replaying (Responses API). Callers that maintain a message
    * history should carry this onto the assistant message they push — see

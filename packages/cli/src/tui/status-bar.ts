@@ -46,7 +46,6 @@ export type StatusSegmentKind =
   | "dirty"
   | "tokens"
   | "cost"
-  | "cloud"
   | "context"
   | "meter"
   | "plan";
@@ -170,8 +169,6 @@ export interface StatusBarInput {
    * not billed — the same "never invent a number" rule the context percent obeys.
    */
   showCost?: boolean;
-  /** Already formatted authoritative Cloud account state, never a quota estimate. */
-  hostedBalance?: string;
   /**
    * Active glyph preset. Resolved by the screen via `useSymbols()` and threaded
    * through; absent, the width-safe Unicode default is used, so the bar is
@@ -216,7 +213,6 @@ const PRIORITY: Record<StatusSegmentKind, number> = {
   // anything the operator relies on to read (cwd, git, tokens, mode).
   activity: 2,
   evolution: 8,
-  cloud: 9,
   model: 0,
 };
 
@@ -235,7 +231,6 @@ const ORDER: StatusSegmentKind[] = [
   "model",
   "effort",
   "mode",
-  "cloud",
   "evolution",
   "cwd",
   "branch",
@@ -270,7 +265,6 @@ function iconMap(symbols: SymbolTable): Record<StatusSegmentKind, string> {
     dirty: symbols.fieldDirty,
     tokens: symbols.fieldTokens,
     cost: symbols.fieldCost,
-    cloud: "",
     context: symbols.fieldContext,
     meter: symbols.fieldContext,
     plan: symbols.fieldPlan,
@@ -290,7 +284,6 @@ const COLOR_ROLE: Record<StatusSegmentKind, StatusColorRole> = {
   dirty: "dirty",
   tokens: "tokens",
   cost: "cost",
-  cloud: "cost",
   context: "context",
   meter: "context",
   plan: "plan",
@@ -448,7 +441,6 @@ export function buildStatusSegments(input: StatusBarInput): StatusSegment[] {
   const symbols = input.symbols ?? DEFAULT_SYMBOLS;
   const ICON = iconMap(symbols);
   const texts = new Map<StatusSegmentKind, string>();
-  if (input.hostedBalance) texts.set("cloud", input.hostedBalance);
 
   // The model is kept for pricing regardless of where it is displayed, but it
   // only occupies a bar segment when `modelDisplay` is "statusbar" (or is

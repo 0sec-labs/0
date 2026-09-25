@@ -2003,7 +2003,8 @@ const AUTO_MODEL_SENTINEL = "auto";
 
 /**
  * Explicit provider, API key, and reachable model choices win. Otherwise prefer
- * signed-in 0cloud, then subscription credentials, then ambient BYOK keys.
+ * subscription credentials, then ambient BYOK keys. Cloud credentials alone
+ * never authorize an implicit hosted inference route.
  */
 function detectProvider(configApiKey: string | undefined, preferredModel: string | undefined, env: Readonly<NodeJS.ProcessEnv>, configProvider?: ApiProvider): {
   provider: ApiProvider;
@@ -2165,25 +2166,7 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
       break; // fall through to env-priority detection
   }
 
-  // With no explicit choice, a signed-in account starts on 0security Auto.
-  // Ambient BYOK keys and saved subscription logins remain alternatives.
-  try {
-    const hostedCreds = loadCloudCredentials({
-      env: env,
-      warn: () => { /* silent in detection path */ },
-    });
-    return {
-      provider: "hosted",
-      apiKey: hostedCreds.token,
-      baseUrl: `${hostedCreds.host}/api/inference/v1`,
-      defaultModel: "",
-      wireApi: "chat_completions",
-    };
-  } catch {
-    // No cloud credentials — continue to BYOK fallbacks.
-  }
-
-  // Without cloud credentials, prefer ChatGPT subscription auth over API keys:
+  // Prefer ChatGPT subscription auth over API keys:
   //
   //   - ZERO_CHATGPT_ACCESS_TOKEN — pre-issued access token. The
   //     worker-controller refreshes once at dispatch time, persists the
@@ -2226,7 +2209,7 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
     };
   }
 
-  // Direct DeepSeek is the first metered fallback after hosted and Codex.
+  // Direct DeepSeek is the first metered fallback after Codex.
   // Its native Responses API supports Flash 0731 tool calling.
   const deepseekKey = env.DEEPSEEK_API_KEY;
   if (deepseekKey) {
@@ -2370,9 +2353,8 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
     };
   }
 
-  // Anthropic API key — checked last among BYOK providers so the explicit
-  // selections above (config, env override, model routing, Codex, hosted)
-  // all win first.
+  // Anthropic API key — checked last among BYOK providers so explicit
+  // selections (config, env override, model routing, Codex) win first.
   const anthropicKey = env.ANTHROPIC_API_KEY;
   if (anthropicKey) {
     return {
@@ -3289,8 +3271,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       "  export QWEN_API_KEY=...                (Alibaba Qwen — Token Plan sub, OpenAI-compatible)\n" +
       "  export XAI_API_KEY=...                 (xAI Grok — OpenAI-compatible)\n" +
       "  export OPENCODE_API_KEY=...            (OpenCode Zen — multi-wire gateway)\n" +
-      "  export ZERO_COPILOT_GITHUB_TOKEN=...   (GitHub Copilot — device-code OAuth token)\n" +
-      "  Run `0 login`                     (0 hosted inference)"
+      "  export ZERO_COPILOT_GITHUB_TOKEN=...   (GitHub Copilot — device-code OAuth token)"
     );
   }
 
@@ -3899,12 +3880,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   }
 
   /**
-   * Public entry point. Runs {@link executeNativeAttempt} and, ONLY for a
-   * transient empty stream (see {@link shouldRetryNativeStream}), re-issues the
-   * whole request up to {@link llmStreamMaxAttempts} times with a short backoff.
-   * Every other outcome — success, a real API error, a timeout, an operator
-   * cancellation — is returned from the first attempt untouched, preserving the
-   * existing behaviour exactly.
+   * Public entry point. Retries a transient empty stream for direct providers
+   * only. A hosted stream may have completed billable work before its terminal
+   * event disappeared, so it must not be replayed even on this path.
    */
   async executeNative(
     system: string,
@@ -3918,9 +3896,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     let attempt = 0;
     for (attempt = 1; attempt <= maxAttempts; attempt++) {
       result = await this.executeNativeAttempt(system, messages, tools, callbacks, signal);
-      // Last attempt, a non-transient outcome, or an operator cancel arrived
-      // between attempts: stop and return whatever we have.
-      if (attempt >= maxAttempts || !shouldRetryNativeStream(result) || signal?.aborted) break;
+      // A hosted stream can hide completed billable work. Never re-issue it,
+      // including when a direct provider failed over to hosted on this attempt.
+      if (attempt >= maxAttempts || this.provider === "hosted" || !shouldRetryNativeStream(result) || signal?.aborted) break;
 
       const backoff = streamRetryBackoffMs(attempt);
       diag.warn(
@@ -4293,6 +4271,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
               stopReason: "error",
               durationMs: Date.now() - start,
               error: `${this.providerLabel} API error ${res.status}: ${responseText.slice(0, 500)}`,
+              ...(this.provider === "hosted" ? { retrySafe: res.status === 429 && res.headers.get("x-0-retry-safe") === "1" } : {}),
             };
           }
 
@@ -4474,6 +4453,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           stopReason: "error",
           durationMs: Date.now() - start,
           error: `${this.providerLabel} API error ${res.status}: ${responseText.slice(0, 500)}`,
+          ...(this.provider === "hosted" ? { retrySafe: res.status === 429 && res.headers.get("x-0-retry-safe") === "1" } : {}),
         };
       }
 
@@ -4773,6 +4753,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         error: timedOut
           ? `${this.providerLabel} API request timed out`
           : `${this.providerLabel} API error: ${msg}`,
+        ...(this.provider === "hosted" ? { retrySafe: false } : {}),
       };
     } finally {
       releaseHostedSlot?.();

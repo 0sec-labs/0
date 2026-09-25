@@ -68,6 +68,17 @@ describe("windowFileContent — offset windows", () => {
     expect(result.totalLines).toBe(5000);
   });
 
+  it("shows exact absolute line numbers for diff-scoped review, including blank lines", () => {
+    const result = windowFileContent("one\ntwo\n\nunsafe()\n", {
+      offset: 2, maxLines: 3, numberLines: true,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(bodyLines(result.content)).toEqual(["2: two", "3: ", "4: unsafe()"]);
+    expect(result.startLine).toBe(2);
+    expect(result.endLine).toBe(4);
+  });
+
   it("offset=1 is identical to omitting offset", () => {
     const withOffset = windowFileContent(numberedFile(50), { offset: 1, maxLines: 10 });
     const without = windowFileContent(numberedFile(50), { maxLines: 10 });

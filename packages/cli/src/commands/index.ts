@@ -36,7 +36,6 @@ export { registerUpgradeCommand } from "./upgrade.js";
 export { registerDepsCommand } from "./deps.js";
 export { registerH1Command } from "./h1.js";
 export { registerAuthCommand } from "./auth.js";
-export { registerHostedCommand } from "./hosted.js";
 export { registerIntelCommand } from "./intel.js";
 export { registerReconCommand } from "./recon.js";
 export { registerConsoleCommand } from "./console.js";

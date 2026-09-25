@@ -37,7 +37,6 @@ describe("agent guide discovery", () => {
     expect(result.states.service.status).toBe("ok");
     expect(result.states.account.status).toBe("unknown");
     expect(result.capabilities).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: "hosted-inference", layer: "service", requiresAuth: true }),
       expect.objectContaining({ id: "connect", layer: "service" }),
     ]));
   });
