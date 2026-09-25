@@ -2003,7 +2003,8 @@ const AUTO_MODEL_SENTINEL = "auto";
 
 /**
  * Explicit provider, API key, and reachable model choices win. Otherwise prefer
- * signed-in 0cloud, then subscription credentials, then ambient BYOK keys.
+ * subscription credentials, then ambient BYOK keys. Cloud credentials alone
+ * never authorize an implicit hosted inference route.
  */
 function detectProvider(configApiKey: string | undefined, preferredModel: string | undefined, env: Readonly<NodeJS.ProcessEnv>, configProvider?: ApiProvider): {
   provider: ApiProvider;
@@ -2165,25 +2166,7 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
       break; // fall through to env-priority detection
   }
 
-  // With no explicit choice, a signed-in account starts on 0security Auto.
-  // Ambient BYOK keys and saved subscription logins remain alternatives.
-  try {
-    const hostedCreds = loadCloudCredentials({
-      env: env,
-      warn: () => { /* silent in detection path */ },
-    });
-    return {
-      provider: "hosted",
-      apiKey: hostedCreds.token,
-      baseUrl: `${hostedCreds.host}/api/inference/v1`,
-      defaultModel: "",
-      wireApi: "chat_completions",
-    };
-  } catch {
-    // No cloud credentials — continue to BYOK fallbacks.
-  }
-
-  // Without cloud credentials, prefer ChatGPT subscription auth over API keys:
+  // Prefer ChatGPT subscription auth over API keys:
   //
   //   - ZERO_CHATGPT_ACCESS_TOKEN — pre-issued access token. The
   //     worker-controller refreshes once at dispatch time, persists the
@@ -2226,7 +2209,7 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
     };
   }
 
-  // Direct DeepSeek is the first metered fallback after hosted and Codex.
+  // Direct DeepSeek is the first metered fallback after Codex.
   // Its native Responses API supports Flash 0731 tool calling.
   const deepseekKey = env.DEEPSEEK_API_KEY;
   if (deepseekKey) {
@@ -2370,9 +2353,8 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
     };
   }
 
-  // Anthropic API key — checked last among BYOK providers so the explicit
-  // selections above (config, env override, model routing, Codex, hosted)
-  // all win first.
+  // Anthropic API key — checked last among BYOK providers so explicit
+  // selections (config, env override, model routing, Codex) win first.
   const anthropicKey = env.ANTHROPIC_API_KEY;
   if (anthropicKey) {
     return {
@@ -3289,8 +3271,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       "  export QWEN_API_KEY=...                (Alibaba Qwen — Token Plan sub, OpenAI-compatible)\n" +
       "  export XAI_API_KEY=...                 (xAI Grok — OpenAI-compatible)\n" +
       "  export OPENCODE_API_KEY=...            (OpenCode Zen — multi-wire gateway)\n" +
-      "  export ZERO_COPILOT_GITHUB_TOKEN=...   (GitHub Copilot — device-code OAuth token)\n" +
-      "  Run `0 login`                     (0 hosted inference)"
+      "  export ZERO_COPILOT_GITHUB_TOKEN=...   (GitHub Copilot — device-code OAuth token)"
     );
   }
 

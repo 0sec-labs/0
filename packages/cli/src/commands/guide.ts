@@ -74,15 +74,6 @@ const CAPABILITIES: Capability[] = [
     limitations: "Requires matching deployed audit-skills APIs; mutations need owner or administrator authority. Runs capture immutable bundles, and workers must use an engine with the manifest consumer. Methodology does not authorize additional scope, spending or publication.",
   },
   {
-    id: "hosted-inference",
-    summary: "Use 0cloud model access while the harness and its tools execute locally. Provider credentials remain on the service.",
-    when: "You want hosted models without setting up a supplier account, rather than moving tool execution into a managed run.",
-    command: "0 models --json",
-    layer: "service",
-    requiresAuth: true,
-    limitations: "Model availability, account entitlement and funding are checked separately. Model allowance does not grant managed execution, review credits or repair publication. Use 0 balance --json for account allowance; health alone proves none of these.",
-  },
-  {
     id: "secure-lifecycle",
     summary: "Investigate a repository, behaviorally reproduce each finding with a frozen probe, repair across multiple files, run your regression command, and independently verify the fix in a fresh checkout.",
     when: "You want to run the repair workflow with your own execution resources. Use connect for qualified managed execution.",
@@ -189,7 +180,7 @@ const CAPABILITIES: Capability[] = [
 ];
 
 const ARCHITECTURE = {
-  summary: "0.security is the open engine and CLI brand; the executable remains 0. 0cloud by 0.security offers two paths: hosted inference with local tools, or managed security execution using the same engine. These paths have separate access and funding.",
+  summary: "0.security is the open engine and CLI brand; the executable remains 0. The local CLI uses your provider key or subscription for inference. 0cloud by 0.security provides separately authorized managed security execution using the same engine.",
   lifecycle: [
     "prepare — pin a clean managed checkout of your repository",
     "investigate — source review with tool-using agents under budgets",

@@ -234,10 +234,10 @@ authorized workflow; this is not a blanket network-scope bypass.
 
 ### Supported runtimes
 
-The console constructs the direct **API runtime**, including supported
-API-key, provider-subscription and hosted transports. It does not choose the
-Claude Code, Codex or Gemini CLI subprocess wrappers, and has no `--runtime`
-option. Installing one of those CLIs is not by itself a console connection.
+The console constructs the direct **API runtime** from your API key or
+provider subscription. It does not choose the Claude Code, Codex or Gemini
+CLI subprocess wrappers, and has no `--runtime` option. Installing one of
+those CLIs is not by itself a console connection.
 
 Use `/connect` and `/model`, or supply the provider configuration described in
 [API Keys](/api-keys/). The `--runtime auto|api|claude|codex|gemini` options on
@@ -276,8 +276,8 @@ auto-scrolls to newest content. **PageUp** / **PageDown** (or **Ctrl+Up** /
 **Ctrl+Down**) scrolls through history.
 
 The context meter displays **unavailable** when the runtime does not report a
-usable context window; it is not a turn-budget percentage. Hosted sessions show
-the Cloud account's reported credit state separately from estimated model cost.
+usable context window; it is not a turn-budget percentage. Token and dollar
+costs are estimates for the current conversation and its workers.
 
 Use `/copy` (aliases `/export` and `/dump`) while idle to export the complete
 public conversation, not just visible transcript rows. It saves private local
@@ -377,7 +377,7 @@ actions, settings toggles, and screen switches.
 
 ### Model picker
 
-For BYOK connections, `/model` opens the priced core and includes the active
+For connected providers, `/model` opens the priced core and includes the active
 model even when it is a custom deployment. With an empty query, **Tab**
 switches between this curated list and the full catalog. Any nonblank
 model/provider query searches the full catalog, regardless of the Tab setting.
@@ -388,8 +388,6 @@ Models with the same ID remain separate provider rows. Moving between them
 shows each provider's own price and context window. Provider labels describe
 catalog entries; configured credentials determine runtime routing.
 
-Hosted connections show only the account's model catalog. **Tab** does not
-add BYOK models, and a catalog failure does not substitute an offline list.
 
 The detail pane keeps its height while filtering, so a single BYOK result still
 shows its price estimate, credential source, and setup guidance. A listed model
@@ -414,8 +412,8 @@ To assign different models to workers:
    remain stored but are inactive.
 
 The parent selection closes the picker; a role selection keeps it open for more
-assignments. **Ctrl+R** reloads an available hosted catalog. Role overrides
-select models for work that actually runs; they do not start workers themselves.
+assignments. **Ctrl+R** retries Codex account model discovery when available.
+Role overrides select models for work that actually runs; they do not start workers.
 Workers inherit the parent's provider, key and endpoint; selecting a role's
 model does not switch it to another account. A gateway route can serve several
 vendors' models through that one transport. See

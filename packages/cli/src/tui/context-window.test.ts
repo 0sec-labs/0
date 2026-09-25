@@ -1,33 +1,23 @@
 import { describe, expect, it } from "vitest";
 import { resolveContextLimit } from "./context-window.js";
-import type { HostedCatalogModel } from "./model-catalog.js";
 
-const HOSTED = { modelId: "gpt-5.5", providerId: "hosted", hosted: true as const };
-
-describe("resolveContextLimit — hosted family fallback", () => {
-  it("prefers the live hosted catalog window when it carries the exact route", () => {
-    const catalog: HostedCatalogModel[] = [
-      { id: "gpt-5.5", contextTokens: 400_000 } as HostedCatalogModel,
-    ];
-    const r = resolveContextLimit(HOSTED, { hostedCatalog: catalog });
-    expect(r).toEqual({ tokens: 400_000, source: "hosted-catalog" });
+describe("resolveContextLimit — connected providers", () => {
+  const loadModels = () => ({
+    source: "synced",
+    models: [
+      { id: "gpt-5.5", provider: "openai", contextTokens: 200_000 },
+      { id: "gpt-5.5", provider: "azure", contextTokens: 300_000 },
+    ],
   });
 
-  it("falls back to the published family window (not 'unavailable') when the catalog has not loaded", () => {
-    const r = resolveContextLimit(HOSTED, { hostedCatalog: null });
-    expect(r).toEqual({ tokens: 272_000, source: "known-family" });
+  it("uses the active provider's exact catalog window when model IDs overlap", () => {
+    expect(resolveContextLimit({ modelId: "gpt-5.5", providerId: "azure" }, { loadModels }))
+      .toEqual({ tokens: 300_000, source: "synced-catalog" });
+    expect(resolveContextLimit({ modelId: "gpt-5.5", providerId: "openai" }, { loadModels }))
+      .toEqual({ tokens: 200_000, source: "synced-catalog" });
   });
 
-  it("falls back to the family window when the catalog is ambiguous or lacks a usable window", () => {
-    const dup: HostedCatalogModel[] = [
-      { id: "gpt-5.5", contextTokens: 400_000 } as HostedCatalogModel,
-      { id: "gpt-5.5", contextTokens: 300_000 } as HostedCatalogModel,
-    ];
-    expect(resolveContextLimit(HOSTED, { hostedCatalog: dup })).toEqual({ tokens: 272_000, source: "known-family" });
-  });
-
-  it("still returns null for a hosted model with no known family", () => {
-    const r = resolveContextLimit({ modelId: "mystery-9", providerId: "hosted", hosted: true }, { hostedCatalog: null });
-    expect(r).toBeNull();
+  it("never guesses a window without a running provider", () => {
+    expect(resolveContextLimit({ modelId: "gpt-5.5", providerId: undefined }, { loadModels })).toBeNull();
   });
 });

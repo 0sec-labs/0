@@ -2302,7 +2302,8 @@ Probe S3 public access and takeover risks, or validate AWS credentials. Read-onl
 0 cloud
 ```
 
-These commands inspect authorized cloud infrastructure. Managed testing is documented under [0cloud](/roadmap/#0cloud); 0cloud account setup uses the [connection guide](/getting-started/#hosted-models-draft).
+These commands inspect authorized cloud infrastructure. Managed testing uses
+separate [0cloud access](/roadmap/#0cloud); see [managed onboarding](/getting-started/#managed-work-and-onboarding).
 
 Guide: [Read the workflow](/research-workflows/).
 
@@ -2777,54 +2778,22 @@ Write a program's structured_scopes to ~/.0/scopes/<handle>.json
 
 ### login
 
-Sign in to 0cloud through the browser. This uses the same login flow as `auth login`; your own provider credentials work without a Cloud account.
+Sign in to 0cloud for separately authorized managed-service commands. Local
+model providers are connected in the terminal UI with `/connect`.
 
 ```text
 0 login [options]
 ```
 
-Signing in authenticates the CLI; it does not establish credit eligibility or model access. The development launcher `0dev` defaults to `https://dev.cloud.0.security` and keeps its Cloud credentials separate from normal CLI credentials.
+Signing in authenticates managed-service CLI operations; it does not configure
+a model for local inference. `0dev` no longer injects Cloud settings.
 
-Guide: [Cloud authentication](/api-keys/).
+Guide: [Managed-service authentication](/integrations/#cloud-auth).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--host <url>` | — | Cloud host (defaults to ZERO_CLOUD_HOST or production) |
 | `--token <value>` | — | Skip the browser flow and persist this token directly |
-
-### models
-
-Read the configured Cloud host's public model IDs, context windows, and output limits. `--json` prints those same fields, without supplier routing metadata or supplier prices.
-
-```text
-0 models [options]
-```
-
-Requires Cloud credentials. An empty catalog means the service listed no models for this account. A catalog entry does not establish current access, credit eligibility, or successful inference.
-
-Guide: [Hosted models](/getting-started/#hosted-models-draft).
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Output model IDs and capabilities as JSON |
-
-### balance
-
-Read the service's `usage-v2` account. The human view shows the percentage of included allowance used and its reset time. The exact prepaid USD balance appears only when prepaid fallback is enabled, including when that balance is zero. Blocked-access notices remain visible; plan and other billing metadata remain in JSON.
-
-`--json` prints the validated customer account, retaining USD amounts as decimal strings. Unknown, malformed, or legacy responses produce unavailable account data (`null` in JSON), not an inferred zero. Authenticated disabled, restricted, and unavailable states remain distinct from HTTP authentication failures.
-
-```text
-0 balance [options]
-```
-
-Requires Cloud credentials. This command reads the balance; it does not purchase or grant credits. Managed scans and review credits have separate accounting.
-
-Guide: [Cloud authentication](/api-keys/).
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Output the validated credit account as JSON |
 
 ### service
 
@@ -2832,7 +2801,6 @@ Managed scan lifecycle commands. These are implemented client entry points,
 not evidence that a managed service or self-serve onboarding is available.
 Use only an environment approved by the team, with Cloud credentials, repository
 access, testing authorization and agreed scope, spend and delivery terms.
-Hosted model access alone does not provide managed execution.
 
 ```text
 0 service
@@ -2840,7 +2808,7 @@ Hosted model access alone does not provide managed execution.
 
 These commands use the configured Cloud host's `/api/scans` and
 `/api/scan-schedules` APIs. `start`, `cancel` and `disconnect` make remote changes.
-They are separate from local `scan`, `secure` and hosted inference.
+They are separate from local `scan` and `secure` workflows.
 
 :::caution[Confirm managed API compatibility before changing schedules]
 The audited client trusts the server to filter schedules by repository. The
@@ -2978,9 +2946,11 @@ Authenticate with a configured control plane.
 0 auth
 ```
 
-These credentials authenticate to the configured 0cloud host. Hosted inference, managed scans, and repository enrollment have separate account and access requirements; signing in does not grant every capability. Other model-provider credentials are configured separately. See [0cloud's current boundaries](/roadmap/#0cloud).
+These credentials authorize managed-service operations where granted. They do
+not supply model inference to the local console; configure a provider key or
+subscription separately. See [managed boundaries](/roadmap/#0cloud).
 
-Guide: [Read the workflow](/api-keys/).
+Guide: [Managed-service authentication](/integrations/#cloud-auth).
 
 Subcommands: [login](#auth-login) · [logout](#auth-logout) · [status](#auth-status).
 
@@ -3007,7 +2977,8 @@ Delete saved credentials for the current Cloud profile. Development credentials 
 
 #### auth status
 
-Check configured credentials against the authenticated inference-account endpoint, not `/health`. Success establishes account-endpoint access, not available credits, successful inference, or permission to dispatch managed work.
+Check credentials against the authenticated managed scan-list endpoint, not
+`/health`. Success establishes scan-read access, not dispatch authorization.
 
 ```text
 0 auth status
@@ -3016,9 +2987,8 @@ Check configured credentials against the authenticated inference-account endpoin
 ### guide
 
 Discover the installed CLI's capabilities, execution boundaries and command
-contracts. Hosted inference with local tools and managed security execution are
-separate paths. `guide` is included in the v0.19.0 release; use `0 --help` to check
-your installed build rather than assuming it matches the current source reference.
+contracts. Local model access and managed security execution are separate
+paths. Check `0 --help` against your installed build.
 
 ```text
 0 guide [options] [topic]
@@ -3026,7 +2996,6 @@ your installed build rather than assuming it matches the current source referenc
 
 ```bash
 0 guide
-0 guide hosted-inference
 0 guide commands --json
 0 guide "auth login" --json
 ```

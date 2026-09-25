@@ -11,7 +11,6 @@ import type { AuditActivity } from "./audit-workspace.js";
 import { HarnessPresentation, useHarness } from "./harness-context.js";
 import { loadFindingFocus, buildFindingChatPrompt } from "../finding-focus.js";
 import { exportChatConversation } from "./chat-export.js";
-import { hostedBalanceState, formatHostedBalance, type HostedBalanceState } from "./hosted-balance.js";
 import {
   useKeyboard,
   usePaste,
@@ -21,9 +20,6 @@ import {
 import { DEFAULT_AUTONOMY_MODE } from "@0/shared";
 import {
   ScopePolicy,
-  CloudClient,
-  CloudError,
-  loadCloudCredentials,
   createConsoleRuntime,
   eventBus,
   type ConsoleAutonomyMode,
@@ -139,7 +135,6 @@ import {
 import {
   PROVIDERS,
   isProviderConfigured,
-  cloudConfigured as isCloudConfigured,
 } from "./provider-status.js";
 import {
   credentialEnvPatch,
@@ -303,8 +298,6 @@ import { ComposerFrame, ComposerInput, composerContentRows } from "./chat/Compos
 import { autonomyFooterText, isAutonomyCycleKey, nextAutonomyMode } from "./composer-mode.js";
 import { matchesBinding } from "./keybindings.js";
 import { resolveContextLimit } from "./context-window.js";
-import { buildHostedModelCatalog, type HostedCatalogModel } from "./model-catalog.js";
-import { CloudHintCard, shouldOfferCloudHint } from "./chat/CloudHintCard.js";
 import { textCells } from "./primitives.js";
 import { buildSidebarSectionHeader } from "./chat/todos-sidebar-layout.js";
 import {
@@ -623,23 +616,14 @@ function statusRoleColor(
 }
 
 function startupRecoveryText(detail: string): string {
-  if (/\bprepaid_disabled\b/.test(detail)) {
-    return "0cloud reports no usable included allowance (prepaid_disabled). Prepaid is optional: included usage works without it. Review your included allowance in /connect or with your organization owner, then check again.";
-  }
-  if (/No hosted models are available|Hosted model ".+" is unavailable/.test(detail)) {
-    return "0cloud has not provided an available service model. It selects the model automatically; you do not need to pick one. Check again or use /connect to choose another provider.";
-  }
-  if (/no provider credential found/i.test(detail)) {
-    return "Use /connect to sign in to 0cloud, or use your own API key or provider subscription.";
+  if (/no provider credential found/i.test(detail) || /0cloud inference is not available/i.test(detail)) {
+    return "Connect your own API key or provider subscription with /connect.";
   }
   const recovery = connectionRecoveryForError(detail);
-  if (recovery?.providerId === "hosted") {
-    return "0cloud could not verify this sign-in. Use /connect to sign in again.";
-  }
   if (recovery?.providerId === "chatgpt-codex") {
     return "ChatGPT Codex needs device OAuth. Use /connect; do not paste an OpenAI API key.";
   }
-  return detail.replaceAll("`0 models`", "`/model`");
+  return detail;
 }
 
 
@@ -1019,14 +1003,6 @@ export function ChatScreen({
   }, []);
   useEffect(() => discardStreamPatches, [discardStreamPatches]);
   const [session, setSession] = useState<ConsoleSession | null>(null);
-  const cloudSource = useRef<{ owner: ConsoleSession; isHosted: () => boolean; env: NodeJS.ProcessEnv } | null>(null);
-  const [cloudBalance, setCloudBalance] = useState<{ owner: ConsoleSession; state: HostedBalanceState } | null>(null);
-  const [hostedCatalog, setHostedCatalog] = useState<{ owner: ConsoleSession; models: readonly HostedCatalogModel[]; expiresAt: number } | null>(null);
-  // Private cache identity: never rendered or logged. A retained window belongs
-  // to the account that supplied it, not merely to this runtime's model name.
-  const hostedCatalogAccount = useRef<{ owner: ConsoleSession; host: string; token: string } | null>(null);
-  const [cloudConfigured, setCloudConfigured] = useState<boolean>();
-  const [cloudHintDismissed, setCloudHintDismissed] = useState(false);
   const initialPromptRef = useRef(options?.initialPrompt?.trim() || null);
   const presentationEmitterRef = useRef<PresentationEmitter | null>(null);
   if (!presentationEmitterRef.current) {
@@ -1255,7 +1231,7 @@ export function ChatScreen({
   const [sessionTokens, setSessionTokens] = useState({ input: 0, output: 0 });
   /** Live turn-budget consumption, updated per model call. */
   const [turnBudget, setTurnBudget] = useState<{ used: number; limit: number } | null>(null);
-  const [startupError, setStartupError] = useState<{ text: string; accountRestricted: boolean } | null>(null);
+  const [startupError, setStartupError] = useState<{ text: string } | null>(null);
   const [checkingModel, setCheckingModel] = useState(false);
   const runtimeReadyRef = useRef(false);
   const runtimeCheckEpoch = useRef(0);
@@ -1807,8 +1783,8 @@ export function ChatScreen({
       },
     });
   }, [problemReview, settings.diagnosticReporting, busy, picker, pendingScope, pendingLocalScope, pendingToolApproval, pendingOperatorQuestion, stageFeedback, chooseReporting, showToast]);
-  // Resolve hosted availability before accepting a message, without sending
-  // inference. A late check from an old selection must not overwrite recovery.
+  // Check the selected provider before accepting a message. A late check from
+  // an old selection must not overwrite recovery.
   const checkRuntime = useCallback(async () => {
     const runtime = runtimeRef.current;
     if (!runtime || closingRef.current || stoppingAuditRef.current) return;
@@ -1825,12 +1801,7 @@ export function ChatScreen({
     } catch (error) {
       if (!alive.current || epoch !== runtimeCheckEpoch.current || runtimeRef.current !== runtime) return;
       const detail = error instanceof Error ? error.message : String(error);
-      setStartupError({
-        text: startupRecoveryText(detail),
-        accountRestricted: error instanceof CloudError
-          && error.path === "/api/inference/account"
-          && Boolean(error.code && error.code !== "unsupported_account_data" && error.code !== "billing_unavailable"),
-      });
+      setStartupError({ text: startupRecoveryText(detail) });
       logProblem("runtime-preflight", error);
     } finally {
       if (alive.current && epoch === runtimeCheckEpoch.current) setCheckingModel(false);
@@ -1888,25 +1859,23 @@ export function ChatScreen({
     // Resolve credentials into this construction only. Explicit shell exports
     // win, and changing a connection never mutates a live runtime's environment.
     const env = { ...process.env, ...credentialEnvPatch(loadCredentials(), process.env) };
+    const requestedProvider = opts.providerId ?? options?.providerId ?? env.ZERO_SELECTED_PROVIDER ?? env.ZERO_FORCE_PROVIDER;
+    if (requestedProvider === "hosted" || env.ZERO_FORCE_PROVIDER === "hosted"
+      || env.ZERO_LLM_FALLBACK?.split(",").some((entry) => entry.trim().startsWith("hosted:"))) {
+      throw new Error("0cloud inference is not available in the CLI. Connect your own API key or provider subscription with /connect.");
+    }
     const runtime = createConsoleRuntime({
-      model: opts.model ?? options?.model,
+      model: (opts.model ?? options?.model) || undefined,
       provider: opts.providerId ?? options?.providerId,
       agentModels: options?.agentModels,
       singleModel: options?.singleModel,
       env: Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined)),
     });
     const resolvedModel = runtime.resolvedModel();
-    // Initial compaction window: resolved synchronously from the just-built
-    // runtime's model + provider. BYOK/local models resolve against the synced/
-    // offline catalog here; a hosted route's window is only in the per-account
-    // catalog (not yet loaded for this new session), so it stays undefined and
-    // is re-based by the effect below once that catalog arrives. Deliberately
-    // NOT the display-gated `contextLimit` (that goes null when the meter is
-    // hidden or a subagent is focused, which must not disable compaction).
+    // Resolve compaction from this direct/subscription runtime's model.
     const buildDiag = runtime.getConfigurationDiagnostics();
     const initialContextWindow = resolveContextLimit(
-      { modelId: resolvedModel, providerId: buildDiag.provider, hosted: buildDiag.provider === "hosted" },
-      { hostedCatalog: null },
+      { modelId: resolvedModel, providerId: buildDiag.provider },
     )?.tokens;
     const pluginLease = pluginHostManager?.acquire();
     let created: ConsoleSession;
@@ -2018,7 +1987,6 @@ export function ChatScreen({
       cleanupPromise = undefined;
       throw error;
     });
-    cloudSource.current = { owner: created, isHosted: () => runtime.getConfigurationDiagnostics().provider === "hosted", env };
     // Publish the live runtime so applyRuntimeSelection can reconfigure it in
     // place. A rebuild (provider connect from a dead session) swaps this.
     runtimeRef.current = runtime;
@@ -2059,7 +2027,7 @@ export function ChatScreen({
     } catch (error) {
       recordProblem("runtime", error);
       const detail = error instanceof Error ? error.message : String(error);
-      setStartupError({ text: startupRecoveryText(detail), accountRestricted: false });
+      setStartupError({ text: startupRecoveryText(detail) });
       const recovery = connectionRecoveryForError(detail);
       if (recovery) connectionFailureRef.current?.(recovery);
     }
@@ -2071,91 +2039,6 @@ export function ChatScreen({
       });
     };
   }, []);
-  useEffect(() => {
-    if (!interactive) return;
-    try {
-      const source = cloudSource.current;
-      const env = source && source.owner === session ? source.env : { ...process.env, ...credentialEnvPatch(loadCredentials(), process.env) };
-      loadCloudCredentials({ env, warn: () => {} });
-      setCloudConfigured(true);
-    } catch (error) {
-      setCloudConfigured(error instanceof Error && error.name === "CloudAuthMissingError" ? false : undefined);
-    }
-  }, [session, startupError, interactive]);
-
-  useEffect(() => {
-    if (!interactive) return;
-    const source = cloudSource.current;
-    if (!session || !source || source.owner !== session || !source.isHosted()) {
-      setCloudBalance(null);
-      setHostedCatalog(null);
-      hostedCatalogAccount.current = null;
-      return;
-    }
-    let active = true;
-    let pending = false;
-    const refresh = async () => {
-      if (pending || !active) return;
-      // Keep still-valid metadata while refreshing. Clearing it here would
-      // disable compaction at every busy/idle transition and polling interval.
-      if (!source.isHosted()) { setCloudBalance(null); setHostedCatalog(null); return; }
-      pending = true;
-      setCloudBalance({ owner: session, state: { status: "loading" } });
-      const readCredentials = () => {
-        try {
-          const credentials = loadCloudCredentials({ env: source.env, warn: () => {} });
-          const cachedAccount = hostedCatalogAccount.current;
-          if (cachedAccount && (cachedAccount.owner !== session || cachedAccount.host !== credentials.host || cachedAccount.token !== credentials.token)) {
-            setHostedCatalog(null);
-            hostedCatalogAccount.current = null;
-          }
-          return credentials;
-        }
-        catch (error) {
-          setHostedCatalog(null);
-          hostedCatalogAccount.current = null;
-          throw error;
-        }
-      };
-      try {
-        const credentials = readCredentials();
-        const client = new CloudClient({ host: credentials.host, token: credentials.token });
-        const [account, catalog] = await Promise.all([
-          client.getInferenceAccount(),
-          // Model windows drive compaction even when the meter is hidden.
-          // Distinguish transport failure from a successful malformed payload.
-          client.getInferenceModels().then((value) => ({ ok: true as const, value }), () => ({ ok: false as const })),
-        ]);
-        if (!active || cloudSource.current !== source) return;
-        const current = readCredentials();
-        if (!source.isHosted()) { setCloudBalance(null); setHostedCatalog(null); return; }
-        const sameCredentials = current.host === credentials.host && current.token === credentials.token;
-        setCloudBalance({ owner: session, state: sameCredentials ? hostedBalanceState(account) : { status: "unavailable" } });
-        if (sameCredentials && catalog.ok) {
-          try {
-            const models = buildHostedModelCatalog(catalog.value.data);
-            hostedCatalogAccount.current = { owner: session, host: credentials.host, token: credentials.token };
-            setHostedCatalog({ owner: session, models, expiresAt: Date.now() + 60_000 });
-          } catch {
-            hostedCatalogAccount.current = null;
-            setHostedCatalog(null); // Malformed metadata cannot establish a limit.
-          }
-        } else if (!sameCredentials) {
-          hostedCatalogAccount.current = null;
-          setHostedCatalog(null);
-        }
-      } catch {
-        if (active && cloudSource.current === source) {
-          // A transport failure may coincide with logout/account replacement.
-          try { readCredentials(); } catch { /* The reader invalidates the cache. */ }
-          setCloudBalance(source.isHosted() ? { owner: session, state: { status: "unavailable" } } : null);
-        }
-      } finally { pending = false; }
-    };
-    void refresh();
-    const interval = setInterval(() => { void refresh(); }, 30_000);
-    return () => { active = false; clearInterval(interval); };
-  }, [session, busy, interactive, startupError]);
   // Marketplace changes never replace this session's runtime or live harness.
   // Its leased host remains usable until cleanup; new chats acquire the new set.
   useEffect(() => {
@@ -2183,15 +2066,11 @@ export function ChatScreen({
   }): void => {
     const runtime = runtimeRef.current;
     if (!runtime) return;
-    // Explicit shell exports win; a live switch re-resolves the account from
-    // this environment, exactly as construction does.
+    // A live switch uses the same explicit credential environment as
+    // construction; model selection never creates a hosted route.
     const env = { ...process.env, ...credentialEnvPatch(loadCredentials(), process.env) };
     const currentProvider = runtime.getConfigurationDiagnostics().provider;
-    // Which provider would this selection switch the live runtime into? An
-    // explicit hint (e.g. a 0 Cloud row's "hosted") wins over the model id,
-    // so a hosted model whose id also lives in a BYOK catalog still forces
-    // hosted; otherwise derive it from the model and only treat it as a switch
-    // when it actually differs from the running provider.
+    // Prefer the selected row's provider identity over model-family inference.
     let targetProvider: string | undefined = sel.providerId;
     if (targetProvider === undefined && sel.model !== undefined) {
       const derived = modelProvider(sel.model);
@@ -2200,14 +2079,14 @@ export function ChatScreen({
       const subscriptionModel = currentProvider === "chatgpt-codex" && derived === "openai";
       if (!subscriptionModel && derived !== currentProvider && derived !== "unknown") targetProvider = derived;
     }
+    if (targetProvider === "hosted") {
+      appendEntry({ kind: "notice", text: "0cloud inference is not available in the CLI", detail: "Connect your own provider with /connect.", turn: turn.current });
+      return;
+    }
     if (targetProvider !== undefined && targetProvider !== currentProvider) {
-      const configured = targetProvider === "hosted"
-        ? isCloudConfigured(env)
-        : isProviderConfigured(targetProvider, env);
+      const configured = isProviderConfigured(targetProvider, env);
       if (!configured) {
-        const label = targetProvider === "hosted"
-          ? "0cloud"
-          : PROVIDERS.find((candidate) => candidate.id === targetProvider)?.label ?? targetProvider;
+        const label = PROVIDERS.find((candidate) => candidate.id === targetProvider)?.label ?? targetProvider;
         appendEntry({
           kind: "notice",
           text: `Connect ${label} to switch this audit live`,
@@ -2230,9 +2109,7 @@ export function ChatScreen({
     setModelId(applied);
     modelIdRef.current = applied;
     const providerNow = runtime.getConfigurationDiagnostics().provider;
-    const providerLabel = providerNow === "hosted"
-      ? "0security Auto"
-      : PROVIDERS.find((candidate) => candidate.id === providerNow)?.label ?? providerNow;
+    const providerLabel = PROVIDERS.find((candidate) => candidate.id === providerNow)?.label ?? providerNow;
     appendEntry({
       kind: "notice",
       text: `Applied to this audit: ${applied} (${providerLabel})`,
@@ -2274,24 +2151,22 @@ export function ChatScreen({
 
   const reconnectProvider = useCallback((providerId: string) => {
     const knownProvider = PROVIDERS.find((candidate) => candidate.id === providerId);
-    if (providerId !== "hosted" && !knownProvider) {
+    if (!knownProvider) {
       appendEntry({ kind: "error", text: "Unknown connection", detail: providerId, turn: turn.current });
       return;
     }
     const provider = providerId as NonNullable<RuntimeConfig["provider"]>;
-    const providerLabel = providerId === "hosted"
-      ? "0security Auto"
-      : knownProvider?.label ?? providerId;
+    const providerLabel = knownProvider.label;
     // Keep the choice staged so /new inherits it too; then apply it LIVE to
     // this audit's running runtime (deferred to the turn boundary when busy).
-    const selection = { providerId: provider, ...(provider === "hosted" ? { model: "" } : {}) };
+    const selection = { providerId: provider };
     onNextChatOptions?.(selection);
     if (sessionRef.current) {
       applySelectionRef.current?.(selection);
       return;
     }
     try {
-      const built = buildSession({ providerId: provider, model: provider === "hosted" ? "" : options?.model, initialMessages: options?.initialMessages });
+      const built = buildSession({ providerId: provider, model: options?.model, initialMessages: options?.initialMessages });
       sessionRef.current = built.session;
       modelIdRef.current = built.model;
       setSession(built.session);
@@ -4879,25 +4754,22 @@ export function ChatScreen({
   const focusedTelemetry = focusAgentId ? workerTelemetry[focusAgentId] : undefined;
   const activeModel = session ? runtimeInfoHandle.current?.model() : undefined;
   const activeProvider = session ? runtimeInfoHandle.current?.providerId() : undefined;
-  const currentHostedCatalog = hostedCatalog && hostedCatalog.owner === session && hostedCatalog.expiresAt > Date.now() ? hostedCatalog.models : null;
   const contextLimit = useMemo(() => !focusAgentId && settings.showContextMeter
-    ? resolveContextLimit({ modelId: activeModel, providerId: activeProvider, hosted: activeProvider === "hosted" }, { hostedCatalog: currentHostedCatalog })
-    : null, [focusAgentId, settings.showContextMeter, activeModel, activeProvider, currentHostedCatalog]);
+    ? resolveContextLimit({ modelId: activeModel, providerId: activeProvider })
+    : null, [focusAgentId, settings.showContextMeter, activeModel, activeProvider]);
   // The window that drives context COMPACTION — resolved independently of the
   // context-METER display (which is gated by `showContextMeter` / a focused
   // subagent). Compaction must not turn off just because the meter is hidden or
   // the operator drilled into a child, so this ignores both gates.
   const compactionContextWindow = useMemo(
     () => (activeModel && activeProvider)
-      ? resolveContextLimit({ modelId: activeModel, providerId: activeProvider, hosted: activeProvider === "hosted" }, { hostedCatalog: currentHostedCatalog })?.tokens
+      ? resolveContextLimit({ modelId: activeModel, providerId: activeProvider })?.tokens
       : undefined,
-    [activeModel, activeProvider, currentHostedCatalog],
+    [activeModel, activeProvider],
   );
-  // Re-base the live session's compaction trigger whenever that window changes:
-  // a `/model` switch to a different-window model, or the per-account hosted
-  // catalog loading after the session was built (when the window was unknown).
-  // Unknown metadata explicitly clears a previous model's window. Keeping that
-  // stale limit would compact against the wrong model after a switch.
+  // Re-base the live session's compaction trigger after a model switch. An
+  // unknown window clears the previous model's threshold rather than carrying
+  // a stale limit into the next turn.
   useEffect(() => {
     sessionRef.current?.reconfigureRuntime({ contextWindowTokens: compactionContextWindow ?? null });
   }, [compactionContextWindow, activeModel, activeProvider]);
@@ -4951,7 +4823,7 @@ export function ChatScreen({
     }),
     { input: 0, output: 0, cached: 0 },
   );
-  const visibleModel = activeProvider === "hosted" ? "0security Auto" : modelId ?? undefined;
+  const visibleModel = modelId ?? undefined;
   const statusSegments = buildStatusSegments({
     model: focusAgentId ? focusedTelemetry?.model : visibleModel,
     mode: autonomyFooterText(mode),
@@ -4978,8 +4850,6 @@ export function ChatScreen({
     contextWindow: contextLimit?.tokens,
     contextUsed: !focusAgentId ? lastContext : undefined,
     showCost: settings.showCost,
-    hostedBalance: !focusAgentId && cloudBalance && cloudBalance.owner === session && cloudSource.current?.isHosted()
-      ? formatHostedBalance(cloudBalance.state) : undefined,
   });
   // Feed herdr the same live facts the status bar shows — model/provider,
   // context %, the target/objective topic and the current activity — so the
@@ -5358,10 +5228,9 @@ export function ChatScreen({
     }
     return "";
   })();
-  const accountAdmissionBlocked = startupError?.accountRestricted ?? false;
   const sessionState = checkingModel
-    ? "checking service"
-    : startupError ? accountAdmissionBlocked ? "account restricted" : activeProvider === "hosted" ? "service unavailable" : "needs connection"
+    ? "checking model"
+    : startupError ? "needs connection"
     : busyStatusWord || (busy ? "working" : session ? "idle" : "connecting");
   const headerSegments: string[] = [];
   if (settings.showScope) headerSegments.push(`Scope: ${scopeLabel}`);
@@ -5743,8 +5612,6 @@ export function ChatScreen({
   // status bar, not here — no duplication.
   const rightInner = sidebars.rightInnerWidth;
   const sidebarContentRows = Math.max(0, ledgerRows - 2);
-  const cloudHintRows = !cloudHintDismissed && shouldOfferCloudHint({ hostedConnected: cloudConfigured, rows: sidebarContentRows, width: rightInner })
-    ? Math.min(5, Math.max(0, sidebarContentRows - 8)) : 0;
   const railTreeRows = liveAgentTree.flatMap((treeRow) => {
     const record = herdAgents[treeRow.item.agent_id];
     return record ? [{ treeRow, record }] : [];
@@ -5754,7 +5621,7 @@ export function ChatScreen({
   // Header rows: AGENTS(1), FINDINGS(1 + separator), and the hide control(1).
   // Vertical padding was deducted above. Empty sections consume only their
   // actual placeholder rows, leaving that space available for the live plan.
-  const rightSectionRows = Math.max(0, sidebarContentRows - 4 - cloudHintRows);
+  const rightSectionRows = Math.max(0, sidebarContentRows - 4);
   const hasPlan = Boolean(todos?.todos.length);
   const planMinimum = hasPlan ? Math.min(3, rightSectionRows) : 0;
   const rightBodyRows = rightSectionRows - planMinimum;
@@ -5849,8 +5716,6 @@ export function ChatScreen({
           <TodosSidebar payload={todos!} width={rightInner} rows={rightPlanBudget} theme={theme} />
         ) : null}
         <box flexGrow={1} minHeight={0} flexShrink={1} />
-        <CloudHintCard hostedConnected={cloudConfigured} width={rightInner} rows={cloudHintRows} theme={theme}
-          dismissed={cloudHintDismissed} onDismiss={() => setCloudHintDismissed(true)} onConnect={() => onNavigate("connect")} />
         <box width={rightInner} flexShrink={0} minWidth={0} onMouseDown={() => updateSetting("showRightSidebar", false)}>
           <text fg={MUTED}>{fitLegend(rightInner, "Hide agents · [⌃L]")}</text>
         </box>
@@ -6150,12 +6015,12 @@ export function ChatScreen({
   const recoveryPanel = (
     <box flexDirection="column" width="100%" minWidth={0} flexShrink={0} padding={1} backgroundColor={PANEL}>
       <text fg={checkingModel ? MUTED : WARNING}>
-        {checkingModel ? "Checking service availability…" : accountAdmissionBlocked ? "Signed in · account access restricted" : activeProvider === "hosted" ? "0cloud needs attention" : "Connect a provider to start chatting"}
+        {checkingModel ? "Checking model availability…" : "Connect a provider to start chatting"}
       </text>
       {startupError ? <text fg={MUTED} wrapMode="word">{startupError.text}</text> : null}
       <text fg={MUTED} wrapMode="word">Draft kept. Press Enter to send after access is restored.</text>
       <box flexDirection="row" flexWrap="wrap" minWidth={0} marginTop={1} gap={1}>
-        <box onMouseDown={() => onNavigate("connect")}><text fg={PRIMARY}>{activeProvider === "hosted" ? "[Account & connections]" : "[Connect provider]"}</text></box>
+        <box onMouseDown={() => onNavigate("connect")}><text fg={PRIMARY}>[Connect provider]</text></box>
         {session && !checkingModel ? (
           <box onMouseDown={() => { void checkRuntime(); }}><text fg={PRIMARY}>[Check again]</text></box>
         ) : null}

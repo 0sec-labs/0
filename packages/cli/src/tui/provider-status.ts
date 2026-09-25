@@ -18,7 +18,6 @@
  * this table by re-reading that file rather than by analogy.
  */
 
-import { loadCloudCredentials } from "@0/core";
 
 /** The credential protocols a provider can be authenticated with. */
 export type AuthMethod = "api-key" | "oauth";
@@ -257,42 +256,6 @@ export function providerStates(env: Record<string, string | undefined>): Provide
     const via = satisfyingVar(info, env);
     return via === undefined ? { ...info, configured: false } : { ...info, configured: true, via };
   });
-}
-
-/**
- * Whether 0cloud credentials are configured for this environment.
- *
- * The BYOK providers above authenticate one upstream vendor each; 0cloud is
- * a different axis — a single Bearer token that reaches every route the account
- * can address, provider keys held service-side. When it is present the `/model`
- * picker can offer those routes as an extra "0cloud" group alongside the
- * BYOK rows, so this reports only "is a cloud token configured", never which
- * models it reaches (that is a live catalogue read, and its failure must not
- * hide the BYOK list).
- *
- * Detection is delegated to `loadCloudCredentials`
- * (packages/core/src/cloud/credentials.ts) rather than re-derived here, so the
- * two never disagree: env wins (`ZERO_CLOUD_TOKEN`, host optional and defaulted),
- * else a `ZERO_CLOUD_TOKEN=` line in `~/.0/cloud.env`. That is the one thing
- * in this module that consults the filesystem, and deliberately so — "are we
- * connected to cloud?" cannot be answered from env vars alone, and the loader
- * already owns the file format and mode check. Every other function here stays
- * pure over `env`.
- *
- * Never throws: `loadCloudCredentials` throws `CloudAuthMissingError` (and its
- * malformed-file variants) when nothing usable is configured, and all of those
- * collapse to `false` — the honest answer for the picker's gate.
- */
-export function cloudConfigured(
-  env: Record<string, string | undefined> = process.env,
-  homeDir?: string,
-): boolean {
-  try {
-    loadCloudCredentials({ env: env as NodeJS.ProcessEnv, homeDir, warn: () => {} });
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /** Is this specific provider usable given the environment? */

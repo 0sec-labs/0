@@ -312,7 +312,9 @@ hacktivity; disclosure drafts below are a separate local workflow.
 
 ## Cloud auth
 
-`0 auth` manages scoped organization credentials. For 0cloud availability and operator-host setup, see [Getting started](/getting-started/#hosted-models-draft). Local API-key and subscription use require no 0cloud account.
+`0 auth` manages scoped managed-service credentials. For access and setup, see
+[Managed work](/getting-started/#managed-work-and-onboarding). Local API-key
+and subscription use require no 0cloud account.
 
 **Source:** `packages/cli/src/commands/auth.ts`
 
@@ -324,7 +326,7 @@ hacktivity; disclosure drafts below are a separate local workflow.
 | `0 auth login --token <value>` | Manual credential path — persist a token directly |
 | `0 auth login --host <url>` | Point at a self-hosted cloud host |
 | `0 auth logout` | Delete `~/.0/cloud.env` and `~/.0cloud/credentials.json` |
-| `0 auth status` | Verify cloud credentials against the authenticated inference-account endpoint |
+| `0 auth status` | Verify cloud credentials against the authenticated managed scan-list endpoint |
 
 ### Credential storage
 
@@ -339,8 +341,8 @@ ZERO_CLOUD_TOKEN=scoped-token-here
 Normal login also best-effort writes compatible credentials to
 `~/.0cloud/credentials.json`; normal logout removes both files. Development-state
 login/logout keeps production-compatible credentials separate. Cloud auth uses
-Bearer tokens. Successful login or status verifies credentials, not the
-availability of every model or a managed execution environment.
+Bearer tokens. Successful login or status verifies credentials, not local model
+access or permission to run a managed engagement.
 
 ### Manual token path
 

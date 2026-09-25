@@ -12,6 +12,16 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The interactive CLI now uses connected API keys or provider subscriptions
+  only. Cloud credentials no longer select hosted inference implicitly, and
+  `/connect` and `/model` no longer offer 0cloud sign-in or 0security Auto.
+  Local token, context and estimated-cost reporting remains available.
+- `0dev` no longer injects a Cloud provider or credentials. Remove the
+  hosted-inference `0 models` and `0 balance` commands; keep managed-service
+  `0 auth`, `0 login`, `0 connect` and `0 service` separate from local model access.
+
 ## [0.21.4] - 2026-09-23
 
 ### Changed

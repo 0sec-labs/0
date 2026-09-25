@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type { CreditAccount } from "@0/core";
 
 import {
   RECOMMENDED_IDS,
@@ -26,19 +25,6 @@ import {
 } from "./connect-layout.js";
 import { PROVIDERS, providerStates } from "./provider-status.js";
 
-/** Minimal CreditAccount fixture for dialog items tests. */
-const cloudAcct: CreditAccount = {
-  schemaVersion: "usage-v2",
-  snapshotAt: "2026-09-18T12:00:00.000Z",
-  scope: { orgId: "test-org" },
-  state: "ready",
-  reason: null,
-  plan: { id: "pro", name: "Pro", monthlyPriceUsd: "15.00" },
-  included: { state: "active", usedPercent: 10, resetsAt: "2026-10-01T00:00:00.000Z" },
-  prepaid: { balanceUsd: "10.00", fallbackEnabled: false },
-  canManageBilling: true,
-  admission: { eligible: true, reason: null },
-};
 
 const isInteger = (value: number): boolean => Number.isInteger(value) && value >= 0;
 
@@ -179,9 +165,8 @@ describe("pane header labels and meta", () => {
 });
 
 describe("buildConnectRows", () => {
-  it("keeps Cloud first, BYOK second and subscription sign-in independent", () => {
+  it("groups BYOK providers and subscription sign-in independently", () => {
     const rows = buildConnectRows({ states: EMPTY });
-    expect(rows[0]?.kind).toBe("cloud");
     const providers = rows.filter((row) => row.kind === "provider");
     expect(providers[0]?.provider.auth).toBe("api-key");
     expect(new Set(providers.map((row) => row.provider.id))).toEqual(new Set(PROVIDERS.map((provider) => provider.id)));
@@ -272,13 +257,12 @@ describe("buildConnectRows", () => {
 // ---------------------------------------------------------------------------
 
 describe("connectDialogItems — the projection onto the shared picker", () => {
-  it("keeps Cloud first and groups every provider under its own category", () => {
+  it("groups every provider under its own category without a hosted row", () => {
     const rows = buildConnectRows({ states: EMPTY });
     const items = connectDialogItems({ rows });
-    expect(items[0]?.id).toBe("hosted");
-    // Every provider row reaches the picker exactly once, under its group.
     const providers = rows.filter((row) => row.kind === "provider");
-    expect(items).toHaveLength(providers.length + 1);
+    expect(items).toHaveLength(providers.length);
+    expect(items.some((item) => item.id === "hosted")).toBe(false);
     for (const row of providers) {
       const item = items.find((candidate) => candidate.id === row.provider.id);
       expect(item, `${row.provider.id} never reached the picker`).toBeDefined();
@@ -296,7 +280,7 @@ describe("connectDialogItems — the projection onto the shared picker", () => {
     expect(lit?.current).toBe(true);
     expect(lit?.meta).toBe("connected");
     for (const item of items) {
-      if (item.id === LIT_PROVIDER?.id || item.id === "hosted") continue;
+      if (item.id === LIT_PROVIDER?.id) continue;
       expect(item.current, `${item.id} claimed a connection it does not have`).toBe(false);
       expect(item.meta).not.toBe("connected");
     }
@@ -310,29 +294,6 @@ describe("connectDialogItems — the projection onto the shared picker", () => {
     expect(lit?.meta).toBe("reconnect");
   });
 
-  it("counts remote authentication independently of credit readiness", () => {
-    const rows = buildConnectRows({ states: EMPTY });
-    expect(connectConnectedCounts(rows).connected).toBe(0);
-    expect(connectConnectedCounts(rows, { kind: "pending" }).connected).toBe(0);
-    for (const account of [
-      null,
-      cloudAcct,
-      ...(["disabled", "unavailable", "restricted"] as const).map((state) => ({ ...cloudAcct, state })),
-    ]) {
-      const verification = { kind: "verified" as const, account };
-      const item = connectDialogItems({ rows, cloudConnected: true, hostedVerification: verification })[0];
-      expect(item?.current).toBe(true);
-      expect(connectConnectedCounts(rows, verification).connected).toBe(1);
-    }
-    for (const kind of ["rejected", "unreachable"] as const) {
-      const verification = { kind };
-      expect(connectDialogItems({ rows, cloudConnected: true, hostedVerification: verification })[0]?.current).toBe(false);
-      expect(connectConnectedCounts(rows, verification).connected).toBe(0);
-    }
-    expect(connectDialogItems({
-      rows, cloudConnected: true, recoveryProviderId: "hosted", hostedVerification: { kind: "verified" },
-    })[0]?.current).toBe(false);
-  });
 
   it("carries the two lifecycle colours the list used to draw, and only those", () => {
     const rows = buildConnectRows({ states: LIT });
@@ -368,9 +329,9 @@ describe("connectDialogItems — the projection onto the shared picker", () => {
     expect(connectDisplayRowCount([])).toBe(0);
   });
 
-  it("finds the row behind an item id, cloud included", () => {
+  it("finds the row behind a direct provider item id", () => {
     const rows = buildConnectRows({ states: LIT });
-    expect(connectRowForId(rows, "hosted")?.kind).toBe("cloud");
+    expect(connectRowForId(rows, "hosted")).toBeUndefined();
     const row = connectRowForId(rows, LIT_PROVIDER?.id);
     expect(row?.kind === "provider" && row.provider.id).toBe(LIT_PROVIDER?.id);
     expect(connectRowForId(rows, undefined)).toBeUndefined();
@@ -456,23 +417,10 @@ describe("connected reporting, masks and hints", () => {
     expect(hasAnyConnection({ states: EMPTY, stored: new Set(["kimi"]) })).toBe(true);
   });
 
-  it("counts Cloud only after verification and removes it on rejection", () => {
-    const rows = buildConnectRows({ states: EMPTY }).filter((row) =>
-      row.kind === "cloud" || (row.kind === "provider" && row.provider.id === "openai"),
-    );
-    expect(connectConnectedCounts(rows, { kind: "pending" })).toEqual({ connected: 0, total: 2 });
-    expect(connectConnectedCounts(rows, { kind: "verified" })).toEqual({ connected: 1, total: 2 });
-    expect(connectConnectedCounts(rows, { kind: "rejected" })).toEqual({ connected: 0, total: 2 });
-  });
-
-  it("does not double-count repeated provider or Cloud rows", () => {
-    const rows = buildConnectRows({ states: LIT }).filter((row) =>
-      row.kind === "cloud" || (row.kind === "provider" && row.provider.connected),
-    );
-    expect(connectConnectedCounts([...rows, ...rows], { kind: "verified" }))
-      .toEqual({ connected: 2, total: 2 });
-    expect(connectConnectedCounts([], { kind: "verified" }))
-      .toEqual({ connected: 0, total: 0 });
+  it("counts distinct direct connections without double-counting repeated rows", () => {
+    const rows = buildConnectRows({ states: LIT }).filter((row) => row.kind === "provider" && row.provider.connected);
+    expect(connectConnectedCounts([...rows, ...rows])).toEqual({ connected: 1, total: 1 });
+    expect(connectConnectedCounts([])).toEqual({ connected: 0, total: 0 });
   });
 
   it("never echoes the credential and caps the mask length it leaks", () => {
@@ -522,48 +470,5 @@ describe("connected reporting, masks and hints", () => {
     for (const id of RECOMMENDED_IDS) {
       expect(PROVIDERS.some((info) => info.id === id), `${id} is not a real provider`).toBe(true);
     }
-  });
-});
-
-
-describe("cloud verification in the detail pane", () => {
-  const row = { kind: "cloud" as const };
-
-  it("retains authenticated presentation when credit data is unavailable", () => {
-    for (const account of [
-      null,
-      ...(["disabled", "unavailable", "restricted"] as const).map((state) => ({
-        ...cloudAcct, state, reason: "fixture-credit-reason",
-      })),
-    ]) {
-      const lines = connectDetailLines({
-        row, cloudConnected: true, hostedVerification: { kind: "verified", account },
-      }, 80);
-      expect(lines.some((line) => line.tone === "ok")).toBe(true);
-      expect(lines.some((line) => line.tone === "warn")).toBe(false);
-      if (account) expect(lines.map((line) => line.text).join("\n")).toContain(account.reason);
-    }
-  });
-
-  it("does not present pending or rejected credentials as authenticated", () => {
-    for (const kind of ["pending", "rejected", "unreachable"] as const) {
-      const lines = connectDetailLines({ row, cloudConnected: true, hostedVerification: { kind } }, 80);
-      expect(lines.some((line) => line.tone === "ok")).toBe(false);
-      expect(lines.some((line) => line.tone === "warn")).toBe(kind === "rejected");
-    }
-  });
-
-  it("shows included usage and prepaid balance in the connection detail", () => {
-    const account: CreditAccount = {
-      ...cloudAcct,
-      included: { state: "active", usedPercent: 42, resetsAt: "2026-10-01T00:00:00.000Z" },
-      prepaid: { balanceUsd: "123.45", fallbackEnabled: true },
-    };
-    const lines = connectDetailLines({
-      row, cloudConnected: true, hostedVerification: { kind: "verified", account },
-    }, 100);
-    const text = lines.map((line) => line.text).join("\n");
-    expect(text).toContain("42%");
-    expect(text).toContain("$123.45");
   });
 });

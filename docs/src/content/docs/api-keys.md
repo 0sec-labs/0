@@ -3,114 +3,10 @@ title: API Keys
 description: Supported LLM providers, environment variables, credential priority, model routing, and provider failover.
 ---
 
-The local 0 CLI can use your own provider key or a supported provider
-subscription without a 0cloud account. Hosted model access routes inference
-through 0cloud; it does not move your local tools into a managed sandbox.
-Managed security work has separate authorization, access and billing.
+The interactive 0 console uses your provider API key or supported subscription.
+0cloud authentication is only for separately authorized managed-service
+commands; it does not provide model inference to the local console.
 
-<a id="hosted-inference-draft"></a>
-<a id="0-hosted-inference-draft"></a>
-
-## Hosted inference
-
-Hosted model access and managed execution are separate service contracts.
-The public site describes hosted plans by inquiry; an available login page,
-successful authentication or model listing is not proof of production-paid
-readiness or permission to dispatch managed work. Use a compatible CLI and
-service revision; follow [Cloud setup](/getting-started/#hosted-models).
-
-The `api` runtime's `hosted` provider uses a scoped organization credential.
-The service holds supplier keys and receives model context, including tool
-results. Tools execute on your configured local executor.
-The managed service additionally distinguishes organization product modes:
-an inference-only organization cannot submit security scans, and a review-only
-organization is limited to its review workflow. A hosted inference credential
-does not confer general managed-security execution rights.
-
-### Account, models and usage
-
-`0 models --json` returns an array of model IDs, context limits and maximum
-output limits: `id`, `contextTokens` and `maxOutputTokens`. It does not print
-supplier details, wire protocols or prices. Select an exact ID from this list;
-otherwise the hosted runtime selects the first catalog entry.
-
-`0 balance` and the connection screen show usage separately from the CLI's
-estimated model cost:
-
-- **Usage:** percentage of included allowance used, with its reset time.
-- **Prepaid balance:** exact USD amount, shown **only when prepaid fallback is enabled**.
-  A stored balance is hidden while fallback is disabled; enabling it shows even a zero balance.
-- **Access notices:** restrictions remain visible when requests are blocked.
-
-Plan, billing-management and admission metadata remain available in JSON rather
-than cluttering the normal usage display.
-
-`0 balance --json` returns a validated `usage-v2` account or `null`.
-USD amounts remain decimal strings without floating-point conversion.
-Missing amounts stay unavailable, never zero.
-Unsupported or malformed account data displays **Usage unavailable**;
-this is not evidence that your credentials are invalid or your balance is empty.
-Use a compatible CLI and service before attempting a paid request.
-
-Login does not itself claim credits, buy a subscription or authorize prepaid
-spending. Availability and enabled purchase options come from the service.
-Use only the account controls provided by the approved deployment; the CLI
-does not create a checkout or promise that an offer is available.
-
-The usage endpoint returns recent request metadata. There is no top-level
-`0 usage` command; the console's `/usage` describes the current chat.
-
-| Endpoint on the selected cloud host | Required token scope | Purpose |
-| --- | --- | --- |
-| `GET /api/inference/v1/models` | `inference:read` | Model catalog for the selected service |
-| `GET /api/inference/account` | `billing:read` | Versioned credit account and admission state |
-| `GET /api/inference/usage` | `inference:read` | Recent request records |
-| `POST /api/inference/v1/chat/completions` | `inference:invoke` | Catalog-selected Chat Completions route |
-| `POST /api/inference/v1/responses` | `inference:invoke` | Catalog-selected Responses route |
-
-All routes require bearer authentication. Reauthorize older tokens that lack
-these scopes. The catalog controls the provider endpoint and wire protocol.
-
-### Charging and interrupted requests
-
-The service determines reservation, usage settlement and admission policy.
-Do not treat the CLI's dollar cost estimate or `--cost-ceiling` as the hosted
-credit balance, a subscription allowance or a retail price.
-
-Both wire APIs support server-sent events. A cancelled or interrupted request
-may already have consumed model work. Check the service's request record and
-account state before resubmitting; a disconnected stream does not establish a
-refund or prove that no work ran.
-
-| Failure | Action |
-| --- | --- |
-| HTTP 401 | Missing, invalid or revoked credential. Sign in again. |
-| HTTP 403 | Missing scope, organization access or service entitlement. Read the returned reason before reauthorizing. |
-| HTTP 402 | A payment or credit admission check rejected the request. Check account state and the deployment's supported billing flow. |
-| HTTP 429 | A usage window, concurrency limit, unresolved request or provider throttle blocked the request. Inspect the reason and retry timing. |
-| HTTP 503 | Hosted service, provider or account state unavailable. |
-| Transport failure or hosted HTTP 5xx | The CLI doesn't automatically replay a potentially consumed request. Inspect usage before trying again. |
-
-The gateway rejects detected model substitution. `ZERO_LLM_FALLBACK` configures
-explicit backup routes; switching providers changes who receives the request
-and which account pays.
-
-Hosted HTTP 429 permits retry or configured fallback only with
-`x-0-retry-safe: 1`, issued for pre-dispatch concurrency rejection.
-Provider throttling and unresolved charges are unmarked and aren't replayed.
-
-Within one CLI process, hosted requests share four in-flight slots per endpoint
-and credential across audits and nested agents. Extra requests wait locally;
-slots remain held until response bodies finish. Cancelling a queued request
-removes it without sending inference. Other CLI processes still share the
-service's account limits and can cause a concurrency rejection.
-
-Plugin evolution's SDK model calls use the parent runtime's accounting when
-routed through `hosted`. Subagents fork through the parent runtime's
-child-inference factory and inherit its resolved account and route, subject to
-the role-model and single-model policy. Workspace-trusted code can use external
-clients outside SDK accounting. Keep model and route fixed when comparing
-evolution results.
 
 ## Supported providers
 
@@ -130,10 +26,9 @@ evolution results.
 | **Google Gemini Code Assist** | `ZERO_GEMINI_ACCESS_TOKEN` / `ZERO_GEMINI_OAUTH_REFRESH_TOKEN` | `gemini-2.5-pro` | Code Assist generateContent (browser sign-in) |
 | **Anthropic** | `ANTHROPIC_API_KEY` | `claude-sonnet-4-6` | Anthropic Messages |
 
-These direct connections are separate from [hosted inference](#hosted-inference).
-Model families without a direct connection, such as Meta and Mistral, remain
+Model families without a direct connection, such as Meta and Mistral, may be
 available through gateways where your account permits them. Provider support
-does not establish a subscription entitlement or guarantee a model is available.
+does not establish a subscription entitlement or guarantee model availability.
 
 OpenAI, OpenRouter, xAI and Azure accept `OPENAI_WIRE_API`,
 `OPENROUTER_WIRE_API`, `XAI_WIRE_API` and `AZURE_OPENAI_WIRE_API`, respectively,
@@ -188,23 +83,22 @@ Within the API runtime, when there is no provider pin or model-to-provider match
 the following ambient credential order applies. `--model` takes precedence over
 `ZERO_MODEL`; loading a credential is not the same as selecting that provider.
 
-1. **Hosted / 0security Auto** — configured Cloud credentials; the service selects the model.
-2. **ChatGPT Codex** — `ZERO_CHATGPT_ACCESS_TOKEN` or `ZERO_CHATGPT_OAUTH_REFRESH_TOKEN`
-3. **DeepSeek** — `DEEPSEEK_API_KEY`
-4. **OpenRouter** — `OPENROUTER_API_KEY`
-5. **Azure OpenAI** — `AZURE_OPENAI_API_KEY`
-6. **OpenAI** — `OPENAI_API_KEY`
-7. **Z.ai GLM** — `Z_AI_API_KEY`
-8. **Moonshot Kimi** — `KIMI_API_KEY`
-9. **Alibaba Qwen** — `QWEN_API_KEY`
-10. **xAI Grok** — `XAI_API_KEY`
-11. **OpenCode Zen** — `OPENCODE_API_KEY`
-12. **GitHub Copilot** — `ZERO_COPILOT_GITHUB_TOKEN`
-13. **Google Gemini Code Assist** — `ZERO_GEMINI_ACCESS_TOKEN` or `ZERO_GEMINI_OAUTH_REFRESH_TOKEN`
-14. **Anthropic** — `ANTHROPIC_API_KEY`
+1. **ChatGPT Codex** — `ZERO_CHATGPT_ACCESS_TOKEN` or `ZERO_CHATGPT_OAUTH_REFRESH_TOKEN`
+2. **DeepSeek** — `DEEPSEEK_API_KEY`
+3. **OpenRouter** — `OPENROUTER_API_KEY`
+4. **Azure OpenAI** — `AZURE_OPENAI_API_KEY`
+5. **OpenAI** — `OPENAI_API_KEY`
+6. **Z.ai GLM** — `Z_AI_API_KEY`
+7. **Moonshot Kimi** — `KIMI_API_KEY`
+8. **Alibaba Qwen** — `QWEN_API_KEY`
+9. **xAI Grok** — `XAI_API_KEY`
+10. **OpenCode Zen** — `OPENCODE_API_KEY`
+11. **GitHub Copilot** — `ZERO_COPILOT_GITHUB_TOKEN`
+12. **Google Gemini Code Assist** — `ZERO_GEMINI_ACCESS_TOKEN` or `ZERO_GEMINI_OAUTH_REFRESH_TOKEN`
+13. **Anthropic** — `ANTHROPIC_API_KEY`
 
-Without a usable provider or Cloud credential, the runtime selects Anthropic
-and reports a missing-credential failure.
+Without a usable provider credential, the runtime reports a missing-credential
+failure. Saved Cloud credentials do not become a model provider.
 
 **Two things override this fallback chain:**
 - A `--model` (or `ZERO_MODEL`) value that maps to a specific provider — see
@@ -355,7 +249,6 @@ In the interactive console, open `/connect` and select **ChatGPT
 Codex** under **Provider subscription**. 0 runs `codex login --device-auth`,
 shows the device instructions, and reloads `~/.codex/auth.json` after success.
 Choose **OpenAI** under **Use my own API key** for `OPENAI_API_KEY` access.
-The separate **0cloud → Sign in** choice authorizes a Cloud organization.
 
 Every `0` run loads that file into the environment before any subcommand
 runs, so a codex-login file is picked up everywhere — the console `/providers`

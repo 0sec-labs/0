@@ -34,9 +34,8 @@ Before automating managed work, read the concrete client/server compatibility
 limits in [`connect`](/commands/#connect) and [`service`](/commands/#service),
 especially repository schedule filtering and remote cost-ceiling enforcement.
 
-[Hosted inference](/getting-started/#hosted-models) has its own availability
-and account-compatibility boundary. Signing in does not establish hosted spend,
-managed execution or PR-review entitlement.
+Cloud authentication supports approved managed-service commands; it does not
+select a model for the local CLI.
 
 ## Desktop
 

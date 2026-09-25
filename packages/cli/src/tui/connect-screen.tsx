@@ -40,12 +40,6 @@
  * under this OpenTUI pane. It never asks for an API key or pasted OAuth token:
  * Codex owns the browser/device protocol and writes its auth file; completion
  * reloads that file into this process only after a successful device login.
- *
- * The 0 Cloud path runs the hosted browser login flow via
- * `hostedBrowserLoginFlow` from commands/auth.ts. Like Codex, it never asks
- * for an API key: it opens the operator's browser, polls for session
- * completion, and persists credentials to ~/.0/cloud.env. An AbortSignal
- * drives cancellation on Escape or unmount, preventing late state updates.
  */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -77,19 +71,12 @@ import {
   type DeviceAuthSession,
 } from "./device-auth.js";
 import {
-  startHostedDeviceAuth,
-  verifyHostedConnection,
-  readHostedConnection,
-  type HostedDeviceAuthUpdate,
-} from "./hosted-device-auth.js";
-import {
   CONNECT_DIALOG_HOST_ROWS,
   buildConnectRows,
   computeConnectLayout,
   computeConnectTitleLayout,
   connectConnectedCounts,
   connectDetailLines,
-  type HostedVerificationStatus,
   connectDetailTitleLabel,
   connectDetailTitleMeta,
   connectDialogItems,
@@ -113,8 +100,6 @@ import {
 const PAGE_STEP = 5;
 /** The dialog's own identity, from the shared operator icon/title table. */
 const SCREEN_KEY = "connect";
-/** The picker id the cloud sign-in row commits with. */
-const CLOUD_ID = "hosted";
 
 export interface ConnectFrameInput {
   body: React.ReactNode;
@@ -224,81 +209,6 @@ function oauthRecoveryHint(phase: CodexDeviceAuthUpdate["phase"]): string {
   }
 }
 
-/**
- * The tone for the cloud/hosted sign-in detail pane, based on its phase.
- */
-function hostedStateTone(theme: Theme, phase: HostedDeviceAuthUpdate["phase"]): string {
-  switch (phase) {
-    case "cancelled":
-    case "timeout":
-    case "opener-failed":
-    case "failed":
-      return theme.WARNING;
-    case "ready":
-      return theme.SUCCESS;
-    case "opening":
-    case "polling":
-      return theme.ACCENT;
-  }
-}
-
-/**
- * The title for the cloud sign-in state.
- */
-function hostedStateTitle(phase: HostedDeviceAuthUpdate["phase"]): string {
-  if (phase === "failed") return "0cloud sign-in unavailable";
-  switch (phase) {
-    case "ready":
-      return "Signed in to 0cloud";
-    case "cancelled":
-      return "0cloud sign-in cancelled";
-    case "timeout":
-      return "0cloud sign-in timed out";
-    case "opener-failed":
-      return "Open this URL to sign in";
-    default:
-      return "Signing in to 0cloud";
-  }
-}
-
-/**
- * The right-aligned meta for the cloud sign-in state pane header.
- */
-function hostedStateMeta(phase: HostedDeviceAuthUpdate["phase"]): string {
-  switch (phase) {
-    case "ready":
-      return "signed in";
-    case "cancelled":
-      return "cancelled";
-    case "timeout":
-    case "opener-failed":
-    case "failed":
-      return "failed";
-    default:
-      return "signing in";
-  }
-}
-
-/**
- * Hint text shown after each cloud sign-in phase.
- */
-function hostedRecoveryHint(phase: HostedDeviceAuthUpdate["phase"]): string {
-  switch (phase) {
-    case "opening":
-    case "polling":
-      return "Complete the sign-in in your browser. Keep this pane open; Esc cancels.";
-    case "opener-failed":
-      return "Your browser could not be opened automatically. Visit the URL above to sign in. Esc cancels.";
-    case "ready":
-      return "Login saved. Access and usage are checked before sending messages.";
-    case "cancelled":
-      return "Press Enter to try again or use ↑/↓ to choose another provider.";
-    case "timeout":
-      return "Try again or use your own provider.";
-    case "failed":
-      return "Use your own API key or provider subscription, or try Cloud sign-in again.";
-  }
-}
 
 export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConnected, env, homeDir }: ConnectScreenProps) {
   const theme = useTheme();
@@ -340,28 +250,15 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
   // Both engines expose the same cancel-only session, so one ref serves the
   // Codex subprocess flow and the generic in-process device-code flow alike.
   const oauthSessionRef = useRef<DeviceAuthSession | undefined>(undefined);
-  const hostedSessionRef = useRef<{ cancel(): void } | undefined>(undefined);
   const [oauth, setOauth] = useState<
     (CodexDeviceAuthUpdate & { providerId: string }) | undefined
   >(undefined);
-  const [hosted, setHosted] = useState<
-    (HostedDeviceAuthUpdate & { providerId: string }) | undefined
-  >(undefined);
   const oauthRef = useRef<typeof oauth>(undefined);
-  const hostedRef = useRef<typeof hosted>(undefined);
   const applyOauth = (next: typeof oauth) => {
     oauthRef.current = next;
     setOauth(next);
   };
-  const applyHosted = (next: typeof hosted) => {
-    hostedRef.current = next;
-    setHosted(next);
-  };
   const [authEpoch, setAuthEpoch] = useState(0);
-  const [hostedVerification, setHostedVerification] = useState<HostedVerificationStatus | undefined>(undefined);
-
-  const cloudState = useMemo(() => readHostedConnection(env ?? process.env, homeDir), [env, authEpoch, homeDir]);
-  const cloudConnected = cloudState.configured && recovery?.providerId !== "hosted";
 
   // OAuth completion updates process env, so authEpoch is the explicit redraw
   // boundary for providerStates rather than a hidden file-read side effect.
@@ -378,15 +275,13 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
   const items = useMemo(
     () => connectDialogItems({
       rows,
-      cloudConnected,
       recoveryProviderId: recovery?.providerId,
       // The two lifecycle colours the hand-rolled list used to carry, and no
       // others: connected reads green, a provider awaiting repair reads as an
       // error. Both come off state the row model already verified.
       tones: { connected: theme.SUCCESS, recovering: theme.ERROR },
-      hostedVerification,
     }),
-    [rows, cloudConnected, recovery?.providerId, theme.SUCCESS, theme.ERROR, hostedVerification],
+    [rows, recovery?.providerId, theme.SUCCESS, theme.ERROR],
   );
   const totalRows = useMemo(() => connectDisplayRowCount(items), [items]);
 
@@ -403,7 +298,6 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
   const activeRow: ConnectRow | undefined = connectRowForId(rows, activeItem?.id);
   const activeProvider: ConnectProvider | undefined =
     activeRow?.kind === "provider" ? activeRow.provider : undefined;
-  const isCloudRow = activeRow?.kind === "cloud";
 
 
   // Inside a dialog the surface IS the panel's inner box — the shell renders
@@ -418,9 +312,7 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
   const inInput = inputProviderId !== undefined;
   const oauthVisible = oauth?.providerId === activeProvider?.id;
   const inOAuth = oauthVisible && oauth?.phase === "running";
-  const hostedVisible = hosted?.providerId === "hosted" && isCloudRow;
-  const inHosted = hostedVisible && ["opening", "polling", "opener-failed"].includes(hosted?.phase ?? "");
-  const mode: ConnectMode = inInput ? "input" : inOAuth ? "oauth" : inHosted ? "hosted" : filtering ? "filter" : "browse";
+  const mode: ConnectMode = inInput ? "input" : inOAuth ? "oauth" : filtering ? "filter" : "browse";
 
   useEffect(() => {
     if (cursor !== selected) highlight(cursor);
@@ -436,22 +328,8 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
   // Cleanup on unmount: cancel any active auth session.
   useEffect(() => () => {
     oauthSessionRef.current?.cancel();
-    hostedSessionRef.current?.cancel();
   }, []);
 
-  // Actually verify a saved 0 Cloud sign-in against the backend (rather than
-  // trusting that the browser flow completed): call the Bearer-authenticated
-  // account endpoint and surface verified / rejected / unreachable in the cloud
-  // detail pane. Re-runs whenever the sign-in changes (authEpoch).
-  useEffect(() => {
-    if (!cloudConnected) { setHostedVerification(undefined); return; }
-    let active = true;
-    setHostedVerification({ kind: "pending" });
-    void verifyHostedConnection({ env: (env ?? process.env) as Record<string, string | undefined>, homeDir })
-      .then((result) => { if (active) setHostedVerification(result); })
-      .catch(() => { if (active) setHostedVerification({ kind: "unreachable" }); });
-    return () => { active = false; };
-  }, [cloudConnected, authEpoch, env, homeDir]);
 
   const currentRows = () => filterRef.current === filter
     ? rows
@@ -460,10 +338,8 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
     ? items
     : connectDialogItems({
       rows: visibleRows,
-      cloudConnected,
       recoveryProviderId: recovery?.providerId,
       tones: { connected: theme.SUCCESS, recovering: theme.ERROR },
-      hostedVerification,
     });
 
   const move = (delta: number) => {
@@ -483,11 +359,9 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
   };
 
   const beginOauth = (provider: ConnectProvider) => {
-    hostedSessionRef.current?.cancel();
     oauthSessionRef.current?.cancel();
     applyInputProviderId(undefined);
     applyInputValue("");
-    applyHosted(undefined);
     setNotice(undefined);
     applyOauth({
       providerId: provider.id,
@@ -537,42 +411,11 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
     });
   };
 
-  const beginHosted = () => {
-    hostedSessionRef.current?.cancel();
-    oauthSessionRef.current?.cancel();
-    applyInputProviderId(undefined);
-    applyInputValue("");
-    applyOauth(undefined);
-    setNotice(undefined);
-    applyHosted({
-      providerId: "hosted",
-      phase: "opening",
-      message: "Starting 0cloud sign-in…",
-    });
-    hostedSessionRef.current = startHostedDeviceAuth({
-      homeDir,
-      host: (env ?? process.env)["ZERO_CLOUD_HOST"] ?? cloudState.host,
-      onUpdate: (update) => {
-        applyHosted({ ...update, providerId: "hosted" });
-        if (["cancelled", "timeout", "failed"].includes(update.phase)) {
-          setNotice(update.message);
-        }
-      },
-      onConnected: () => {
-        hostedSessionRef.current = undefined;
-        setAuthEpoch((current) => current + 1);
-        setNotice("signed in to 0cloud");
-        onConnected?.("hosted");
-      },
-    });
-  };
-
   const beginConnect = (provider: ConnectProvider) => {
     if (provider.auth === "oauth") {
       beginOauth(provider);
       return;
     }
-    applyHosted(undefined);
     applyOauth(undefined);
     applyInputProviderId(provider.id);
     applyInputValue("");
@@ -586,13 +429,6 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
 
   const cancelOauth = () => {
     oauthSessionRef.current?.cancel();
-  };
-
-  const cancelHosted = () => {
-    hostedSessionRef.current?.cancel();
-    hostedSessionRef.current = undefined;
-    applyHosted(undefined);
-    // Cancel only the login attempt. A second Escape can leave the provider list.
   };
 
   const commitInput = () => {
@@ -639,12 +475,6 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
       return;
     }
 
-    const hostedPhase = hostedRef.current?.phase;
-    if (hostedPhase === "opening" || hostedPhase === "polling" || hostedPhase === "opener-failed") {
-      if (key.name === "escape") cancelHosted();
-      return;
-    }
-
     // ── input sub-step ──
     if (inputProviderRef.current !== undefined) {
       if (key.name === "escape") {
@@ -680,14 +510,6 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
       const visible = currentItems(visibleRows);
       const item = visible[clampDialogSelection(visible, selectedRef.current)];
       const row = connectRowForId(visibleRows, item?.id);
-      if (row?.kind === "cloud") {
-        if (cloudConnected && hostedVerification?.kind === "verified" && recovery?.providerId !== CLOUD_ID) {
-          onConnected?.("hosted");
-          return;
-        }
-        beginHosted();
-        return;
-      }
       if (row?.kind === "provider") {
         if (row.provider.connected && recovery?.providerId !== row.provider.id) {
           onConnected?.(row.provider.id);
@@ -740,19 +562,18 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
   //
   // One renderer for every sub-step, so the column always describes exactly
   // the state the screen is in: the provider's facts while browsing, the
-  // device/browser sign-in while one is running, the masked key prompt while
-  // one is being pasted, and the failure that opened the screen when there is
+  // device sign-in while one is running, the masked key prompt while one is
+  // being pasted, and the failure that opened the screen when there is
   // one. Every line is wrapped to the pane's width and the list is clipped to
   // its rows, because OpenTUI paints an overflow through its neighbours.
 
   const renderDetail = (item: DialogItem, pane: { width: number; height: number }) => {
     if (pane.width <= 0 || pane.height <= 0) return null;
     const row = connectRowForId(rows, item.id);
-    const isCloud = row?.kind === "cloud";
     const provider = row?.kind === "provider" ? row.provider : undefined;
     const recoveringId = recovery?.providerId;
     const recovering = recoveringId !== undefined
-      && recoveringId === (isCloud ? CLOUD_ID : provider?.id);
+      && recoveringId === provider?.id;
     // A provider being repaired is never described as connected: the
     // credential it holds is the one that just failed.
     const shownRow: ConnectRow | undefined =
@@ -760,14 +581,13 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
         ? { ...row, provider: { ...row.provider, connected: false, source: undefined, via: undefined } }
         : row;
 
-    const hostedHere = isCloud && hosted?.providerId === CLOUD_ID;
     const oauthHere = provider !== undefined && oauth?.providerId === provider.id;
     const inputHere = provider !== undefined && inputProviderId === provider.id;
 
     const headerRows = pane.height >= 4 ? 1 : 0;
     const bodyRows = Math.max(0, pane.height - headerRows);
     // The body scrolls rather than being clipped away: a provider's setup
-    // hint, a Codex transcript or an account note that does not fit must
+    // hint or a Codex transcript that does not fit must
     // still be reachable. A scrollbox reveals its bar in the last column the
     // moment it overflows, so the text is budgeted one cell narrower.
     const width = Math.max(1, pane.width - 1);
@@ -780,16 +600,7 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
     let metaFg: string;
     let title: string;
 
-    if (hostedHere && hosted) {
-      const tone = hostedStateTone(theme, hosted.phase);
-      title = "0cloud";
-      meta = hostedStateMeta(hosted.phase);
-      metaFg = tone;
-      lines.push(...wrap(hostedStateTitle(hosted.phase), tone, true), blank());
-      lines.push(...wrap(hosted.message, hosted.phase === "ready" ? theme.MUTED : theme.TEXT));
-      if (hosted.loginUrl) lines.push(blank(), ...wrap(hosted.loginUrl, theme.ACCENT));
-      lines.push(blank(), ...wrap(hostedRecoveryHint(hosted.phase), theme.MUTED));
-    } else if (oauthHere && oauth && provider) {
+    if (oauthHere && oauth && provider) {
       const tone = oauthStateTone(theme, oauth.phase);
       title = provider.label;
       meta = oauthStateMeta(oauth.phase);
@@ -818,11 +629,11 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
       lines.push(blank(), ...wrap("[⏎] save · [esc] cancel", theme.MUTED));
     } else {
       const codexRecovery = recovery?.providerId === "chatgpt-codex";
-      title = isCloud ? "0cloud" : provider?.label ?? connectDetailTitleLabel();
-      meta = recovering ? "reconnect" : connectDetailTitleMeta(shownRow, cloudConnected);
+      title = provider?.label ?? connectDetailTitleLabel();
+      meta = recovering ? "reconnect" : connectDetailTitleMeta(shownRow);
       metaFg = recovering
         ? theme.ERROR
-        : (shownRow?.kind === "provider" && shownRow.provider.connected) || (isCloud && cloudConnected)
+        : shownRow?.kind === "provider" && shownRow.provider.connected
           ? theme.SUCCESS
           : theme.MUTED;
       if (recovering) {
@@ -838,11 +649,7 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
         ));
         lines.push(blank());
       }
-      const detail = connectDetailLines(
-        { row: shownRow, compact: bodyRows < 12, cloudConnected,
-          hostedVerification: isCloud && recovering ? { kind: "rejected" } : hostedVerification },
-        width,
-      );
+      const detail = connectDetailLines({ row: shownRow, compact: bodyRows < 12 }, width);
       // The pane header already names the provider; drop the repeated lead
       // title (and its spacer) when there is a header to carry it.
       let start = 0;
@@ -892,15 +699,7 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
                   {line.text}
                 </Cells>
               ))}
-              {isCloud && cloudConnected && hostedVerification?.kind === "verified" && !recovering ? (
-                <text width={width} flexShrink={0} fg={theme.ACCENT}
-                  attributes={TextAttributes.BOLD}
-                  onMouseDown={(event) => {
-                    if (event.button === 0) { event.stopPropagation(); onConnected?.("hosted"); }
-                  }}>
-                  [Continue →]
-                </text>
-              ) : !isCloud && provider?.connected && !recovering ? (
+              {provider?.connected && !recovering ? (
                 <text width={width} flexShrink={0} fg={theme.ACCENT}
                   attributes={TextAttributes.BOLD}
                   onMouseDown={(event) => {
@@ -918,38 +717,25 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
 
   // ── status line ──────────────────────────────────────────────────────────
   // Never the secret: the input sub-step reports only the masked length.
-  const statusText = inHosted
-    ? hosted?.message ?? "signing in to 0cloud..."
-    : hostedVisible && hosted
-      ? hosted.phase === "ready" ? "Signed in; access and usage checked before sending" : hosted.message
-      : oauthVisible && oauth
-        ? oauth.message
-        : recovery
-          ? recovery.providerId === "chatgpt-codex"
-            ? "ChatGPT Codex needs device sign-in"
-            : recovery.title || "provider needs to reconnect"
-          : inInput
-            ? `paste API key for ${activeProvider?.label ?? inputProviderId}: ${connectInputMask(inputValue.length)}`
-            : notice
-              ? notice
-              : isCloudRow && cloudState.warning
-                ? cloudState.warning
-                : connectStatusLine(rows, hostedVerification);
-  const statusFg = inHosted
-    ? theme.ACCENT
-    : hostedVisible && hosted
-      ? hostedStateTone(theme, hosted.phase)
-      : oauthVisible && oauth
-        ? oauth.phase === "failed" ? theme.ERROR : oauth.phase === "connected" ? theme.SUCCESS : theme.ACCENT
-        : recovery ? theme.ERROR : inInput ? theme.ACCENT : isCloudRow && cloudState.warning ? theme.WARNING : theme.MUTED;
-
-  const canContinue = isCloudRow
-    ? cloudConnected && hostedVerification?.kind === "verified" && recovery?.providerId !== CLOUD_ID
-    : Boolean(activeProvider?.connected && recovery?.providerId !== activeProvider.id);
+  const statusText = oauthVisible && oauth
+    ? oauth.message
+    : recovery
+      ? recovery.providerId === "chatgpt-codex"
+        ? "ChatGPT Codex needs device sign-in"
+        : recovery.title || "provider needs to reconnect"
+      : inInput
+        ? `paste API key for ${activeProvider?.label ?? inputProviderId}: ${connectInputMask(inputValue.length)}`
+        : notice
+          ? notice
+          : connectStatusLine(rows);
+  const statusFg = oauthVisible && oauth
+    ? oauth.phase === "failed" ? theme.ERROR : oauth.phase === "connected" ? theme.SUCCESS : theme.ACCENT
+    : recovery ? theme.ERROR : inInput ? theme.ACCENT : theme.MUTED;
+  const canContinue = Boolean(activeProvider?.connected && recovery?.providerId !== activeProvider.id);
   const hint = onSkip && mode === "browse" && !filter
     ? `[esc] back · [⌃N] skip · [⏎] ${canContinue ? "continue" : "connect"} · [↑↓] move · [/] filter · [⌃C] quit`
     : connectFooterHint(mode, filter.length > 0, canContinue);
-  const counts = connectConnectedCounts(rows, hostedVerification);
+  const counts = connectConnectedCounts(rows);
   const titleText = `${operatorIcon(SCREEN_KEY, symbols)} ${operatorTitle(SCREEN_KEY)}`;
   const titleMeta = counts.total === 0 ? "" : `${counts.connected}/${counts.total} connected`;
   const title = computeConnectTitleLayout(contentWidth, titleMeta.length);

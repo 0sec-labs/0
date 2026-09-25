@@ -158,18 +158,6 @@ Important boundaries:
 - Failed or cancelled requests can consume provider work without complete usage
   reaching the CLI. Reconcile with the provider invoice or service ledger.
 
-For hosted access, `0 balance` reports a `usage-v2` account: included monthly
-usage as a percentage, its next reset, and a separate prepaid API balance in USD.
-The service supplies the percentage and reset time; the CLI does not infer them
-from token estimates. Unknown usage remains unavailable rather than becoming zero.
-
-Included allowance is used first. An organization owner can opt in to prepaid
-fallback with `0 prepaid on`, or disable it with `0 prepaid off`. A request that
-cannot reserve enough included allowance is denied unless fallback is enabled and
-the prepaid balance covers it. Login and a local cost ceiling are not spending
-consent. A reservation can exceed the remaining allowance before the displayed
-usage reaches 100%; held funds are not a final charge. See
-[hosted billing and interrupted requests](/api-keys/#charging-and-interrupted-requests).
 
 ## Jev advisory budgets
 
