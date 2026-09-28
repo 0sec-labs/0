@@ -127,6 +127,7 @@ jobs:
           name: ${{ matrix.asset }}
           path: dist-bin/${{ matrix.asset }}
           if-no-files-found: error
+          retention-days: 1
 
   release:
     name: publish release
