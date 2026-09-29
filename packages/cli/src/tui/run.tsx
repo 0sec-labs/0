@@ -1189,12 +1189,8 @@ function ConsoleApp({
           onConnected={(providerId) => {
             const owner = ownerForAction();
             if (!owner) return;
-            owner.onNextOptions({
-              providerId: providerId as ChatScreenOptions["providerId"],
-              ...(providerId === "hosted" ? { model: "" } : {}),
-            });
-            if (providerId === "hosted") owner.reconnect.current?.(providerId);
-            nav.onDone({ skipModels: providerId === "hosted" });
+            owner.onNextOptions({ providerId: providerId as ChatScreenOptions["providerId"] });
+            nav.onDone();
           }}
           onBack={nav.onBack}
           onSkip={nav.onSkip}
@@ -1329,7 +1325,7 @@ function ConsoleApp({
           owner.onNextOptions({ providerId: providerId as ChatScreenOptions["providerId"] });
           owner.recovery = undefined;
           owner.onActivity({ waiting: false });
-          if (providerId !== "hosted" && owner.runtimeInfo.current?.providerId() !== providerId) {
+          if (owner.runtimeInfo.current?.providerId() !== providerId) {
             shell.openModels(owner.options);
             return;
           }

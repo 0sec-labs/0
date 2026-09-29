@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -31,6 +31,8 @@ describe("LlmApiRuntime provider detection", () => {
     process.env.HOME = fixtureHome;
     delete process.env["ZERO_CLOUD_TOKEN"];
     delete process.env["ZERO_CLOUD_HOST"];
+    delete process.env["0SEC_CLOUD_TOKEN"];
+    delete process.env["ZERO_DEV_SOURCE_ROOT"];
     delete process.env.OPENROUTER_API_KEY;
     delete process.env.DEEPSEEK_API_KEY;
     delete process.env.DEEPSEEK_BASE_URL;
@@ -62,6 +64,9 @@ describe("LlmApiRuntime provider detection", () => {
     delete process.env["ZERO_CHATGPT_ACCESS_TOKEN"];
     delete process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"];
     delete process.env["ZERO_CHATGPT_ACCOUNT_ID"];
+    delete process.env["ZERO_GEMINI_ACCESS_TOKEN"];
+    delete process.env["ZERO_GEMINI_OAUTH_REFRESH_TOKEN"];
+    delete process.env["ZERO_COPILOT_GITHUB_TOKEN"];
     // Provider-selection tests must not inherit the operator's Codex login.
     process.env["ZERO_CHATGPT_AUTH_FILE"] = "/tmp/0-provider-test-no-auth.json";
     // Suppress the startup banner so provider-detection tests don't
@@ -125,14 +130,55 @@ describe("LlmApiRuntime provider detection", () => {
     }
   });
 
-  it("uses the service default despite ambient credentials, while preserving an explicit provider", async () => {
+  it.each(["cloud.env", "ZERO_CLOUD_TOKEN"] as const)(
+    "routes direct credentials instead of ambient %s, and fails without a direct provider",
+    async (cloudSource) => {
+      const cloudHost = `https://${randomUUID()}.example.test`;
+      if (cloudSource === "cloud.env") {
+        const cloudDir = join(fixtureHome, ".0");
+        mkdirSync(cloudDir);
+        writeFileSync(join(cloudDir, "cloud.env"),
+          `ZERO_CLOUD_HOST=${cloudHost}\nZERO_CLOUD_TOKEN=cloud-fixture\n`, { mode: 0o600 });
+      } else {
+        process.env["ZERO_CLOUD_HOST"] = cloudHost;
+        process.env["ZERO_CLOUD_TOKEN"] = "cloud-fixture";
+      }
+      process.env.OPENAI_API_KEY = "openai-fixture";
+      process.env.OPENAI_WIRE_API = "chat_completions";
+      const requests: Array<{ url: string; authorization: string | null }> = [];
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+        requests.push({
+          url: String(url),
+          authorization: new Headers(init?.headers).get("authorization"),
+        });
+        return Response.json({ choices: [{ message: { content: "direct" }, finish_reason: "stop" }] });
+      });
+      try {
+        const direct = new LlmApiRuntime({ type: "api", timeout: 1000 });
+        expect((await direct.executeNative("system", [], [])).content).toContainEqual({ type: "text", text: "direct" });
+        expect(requests).toEqual([
+          { url: "https://api.openai.com/v1/chat/completions", authorization: "Bearer openai-fixture" },
+        ]);
+
+        delete process.env.OPENAI_API_KEY;
+        const missing = new LlmApiRuntime({ type: "api", timeout: 1000 });
+        expect(missing.getConfigurationDiagnostics()).toMatchObject({
+          valid: false, provider: "anthropic", reason: "missing_key",
+        });
+        expect(await missing.isAvailable()).toBe(false);
+        expect(requests).toHaveLength(1);
+      } finally {
+        fetchMock.mockRestore();
+      }
+    },
+  );
+
+  it("preserves an explicit hosted worker pin despite a direct provider key", async () => {
     const cloudHost = `https://${randomUUID()}.example.test`;
+    process.env["ZERO_SELECTED_PROVIDER"] = "hosted";
     process.env["ZERO_CLOUD_HOST"] = cloudHost;
     process.env["ZERO_CLOUD_TOKEN"] = "cloud-fixture";
-    process.env["ZERO_CHATGPT_ACCESS_TOKEN"] = "subscription-fixture";
-    process.env.DEEPSEEK_API_KEY = "deepseek-fixture";
     process.env.OPENAI_API_KEY = "openai-fixture";
-    process.env.OPENAI_WIRE_API = "chat_completions";
     const requests: Array<{ url: string; authorization: string | null; model: string }> = [];
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
       if (String(url).endsWith("/models")) {
@@ -143,17 +189,13 @@ describe("LlmApiRuntime provider detection", () => {
         authorization: new Headers(init?.headers).get("authorization"),
         model: JSON.parse(String(init?.body)).model,
       });
-      return Response.json({ choices: [{ message: { content: "ready" }, finish_reason: "stop" }] });
+      return Response.json({ choices: [{ message: { content: "hosted" }, finish_reason: "stop" }] });
     });
     try {
-      const automatic = new LlmApiRuntime({ type: "api", timeout: 1000 });
-      const explicit = new LlmApiRuntime({ type: "api", timeout: 1000, provider: "openai", model: "direct-choice" });
-      for (const runtime of [automatic, explicit]) {
-        expect((await runtime.executeNative("system", [], [])).content).toContainEqual({ type: "text", text: "ready" });
-      }
+      const runtime = new LlmApiRuntime({ type: "api", timeout: 1000 });
+      expect((await runtime.executeNative("system", [], [])).content).toContainEqual({ type: "text", text: "hosted" });
       expect(requests).toEqual([
         { url: `${cloudHost}/api/inference/v1/chat/completions`, authorization: "Bearer cloud-fixture", model: "service-default" },
-        { url: "https://api.openai.com/v1/chat/completions", authorization: "Bearer openai-fixture", model: "direct-choice" },
       ]);
     } finally {
       fetchMock.mockRestore();

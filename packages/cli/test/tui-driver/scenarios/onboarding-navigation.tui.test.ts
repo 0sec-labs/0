@@ -3,14 +3,6 @@ import { launch, type TuiHandle } from "../index.js";
 import { getSettings } from "../../../src/tui/settings-store.js";
 import { modelsByokLaunch } from "./_helpers.js";
 
-const hosted = vi.hoisted(() => ({ cancel: vi.fn() }));
-vi.mock("../../../src/tui/hosted-device-auth.js", async (original) => ({
-  ...await original<typeof import("../../../src/tui/hosted-device-auth.js")>(),
-  startHostedDeviceAuth: (options: { onUpdate: (update: unknown) => void }) => {
-    options.onUpdate({ phase: "polling", message: "Synthetic login pending" });
-    return { cancel: hosted.cancel };
-  },
-}));
 
 let tui: TuiHandle | undefined;
 afterEach(async () => {
@@ -174,19 +166,6 @@ test("credential entry cancels before the provider filter or wizard step", async
   await tui.waitForText(/Step 1 of 6/);
 });
 
-test("Escape cancels Cloud login before leaving Connect", async () => {
-  hosted.cancel.mockClear();
-  tui = await firstRun();
-  await tui.sendKey("return");
-  await tui.sendKey("return"); // the Cloud row
-  await tui.waitForText(/Synthetic login pending/);
-  await tui.sendKey("escape");
-  expect(hosted.cancel).toHaveBeenCalledOnce();
-  expect(tui.captureFrame()).not.toContain("Synthetic login pending");
-  expect(tui.captureFrame()).not.toMatch(/Step 1 of 6/);
-  await tui.sendKey("escape");
-  await tui.waitForText(/Step 1 of 6/);
-});
 
 test("connected provider Continue advances to model selection", async () => {
   tui = await firstRun();
@@ -199,78 +178,6 @@ test("connected provider Continue advances to model selection", async () => {
   await tui.waitForText(/Connections/);
 });
 
-test("connected cloud Enter invokes Continue with hosted account", async () => {
-  // Mock the account endpoint to return a verified usage-v2 account.
-  vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
-    if (String(url).includes("inference/account")) {
-      return Response.json({
-        schemaVersion: "usage-v2",
-        snapshotAt: "2026-09-22T12:00:00.000Z",
-        scope: { orgId: "test-org" },
-        state: "ready",
-        reason: null,
-        plan: { id: "pro", name: "Pro", monthlyPriceUsd: "15.00" },
-        included: { state: "active", usedPercent: 10, resetsAt: "2026-10-01T00:00:00.000Z" },
-        prepaid: { balanceUsd: "10.00", fallbackEnabled: false },
-        canManageBilling: true,
-        admission: { eligible: true, reason: null },
-      });
-    }
-    return new Response(null, { status: 503 });
-  });
-  tui = await launch({
-    ...modelsByokLaunch(),
-    route: { type: "chat" },
-    env: { ...modelsByokLaunch().env, ZERO_CLOUD_TOKEN: "sk-test-cloud" },
-    settings: { onboardingCompleted: false },
-  });
-  await tui.waitForText(/type to chat or \/ for commands/);
-  await tui.sendKeys("/onboard");
-  await tui.sendKey("return");
-  await tui.waitForText(/Step 1 of 6/);
-  // Welcome → Connect
-  await tui.sendKey("return");
-  await tui.waitForText(/\[⏎\] continue/);
-  await tui.sendKey("return");
-  // With hosted skip, should advance past Models directly to Preferences.
-  await tui.waitForText(/Step 4 of 6|Theme|Density/);
-  await tui.sendKey("escape");
-  await tui.waitForText(/Connections/);
-  await tui.sendKeys("/deepseek");
-  await tui.waitForText(/\[⏎\] continue/);
-  await tui.sendKey("return");
-  await tui.waitForText(/Models/);
-});
-
-test("rejected cloud token does not Continue; Enter re-initiates auth", async () => {
-  // Mock account endpoint to return 401 → rejected verification.
-  vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
-    if (String(url).includes("inference/account")) {
-      return Response.json({ error: "invalid_token" }, { status: 401 });
-    }
-    return new Response(null, { status: 503 });
-  });
-  tui = await launch({
-    ...modelsByokLaunch(),
-    route: { type: "chat" },
-    env: { ...modelsByokLaunch().env, ZERO_CLOUD_TOKEN: "sk-expired-test-token" },
-    settings: { onboardingCompleted: false },
-  });
-  await tui.waitForText(/type to chat or \/ for commands/);
-  await tui.sendKeys("/onboard");
-  await tui.sendKey("return");
-  await tui.waitForText(/Step 1 of 6/);
-  await tui.sendKey("return"); // Welcome → Connect
-  await tui.settle();
-  // Wait for verification to complete (rejected).
-  await tui.waitForText(/rejected/i);
-  // Cloud row is at index 0. Enter must still start hosted auth, not Continue.
-  await tui.sendKey("return");
-  await tui.waitForText(/Synthetic login pending|sign.in/i);
-  await tui.sendKey("escape"); // cancel auth
-  await tui.settle();
-  expect(hosted.cancel).toHaveBeenCalled();
-});
 
 test("rerun dismissal returns to chat without changing completion", async () => {
   vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 503 }));

@@ -6,17 +6,9 @@
 import type { LaunchOptions, TuiHandle } from "../index.js";
 
 /**
- * Launch options that pin the model picker onto a STABLE, deterministic BYOK
- * catalogue for keyboard/mouse navigation tests.
- *
- * Left to itself the picker's runtime resolves asynchronously to the hosted
- * lane, which — offline (see env.ts) — loads an empty "0 models" catalogue with
- * nothing to navigate, and the BYOK→hosted flip makes any assertion racy.
- * Pinning a BYOK provider + model via env keeps the picker on the curated BYOK
- * list (a fixed 66-model catalogue) that is present from the first paint and
- * does not flip. `mouseSupport` is opt-in per scenario: it defaults off in the
- * deterministic env (mouse chrome is noisy), but a hover test must turn it on
- * so the renderer arms its hit grid (see `modelsByokLaunch`).
+ * Pin a direct provider and model for deterministic picker navigation. The
+ * fixture supplies a credential and an active model from the first paint;
+ * `mouseSupport` is opt-in for scenarios that need hover hit testing.
  */
 export function modelsByokLaunch(opts: { mouse?: boolean } = {}): LaunchOptions {
   return {
@@ -94,13 +86,8 @@ export function modelLabel(rowText: string): string {
   return (rowText.replace(/^●\s*/, "").split(/\s{2,}|\$/)[0] ?? "").trim();
 }
 
-/**
- * The home screen is fully interactive once the composer prompt is up. Offline
- * the hosted cloud is deliberately unreachable (see env.ts), so the status line
- * settles on "Usage: unavailable"; either marker means the screen is ready to
- * drive.
- */
-export const HOME_READY = /type to chat or \/ for commands|Usage: (unavailable|Loading)/;
+/** The chat composer is interactive once its prompt appears. */
+export const HOME_READY = /type to chat or \/ for commands/;
 
 /** Any box-drawing glyph: light/heavy/double borders, corners, tees and dividers. */
 export const BORDER_GLYPHS =

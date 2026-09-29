@@ -72,12 +72,11 @@ polls for a ready token and saves credentials in `~/.0/cloud.env` with mode
 credential to an untrusted host. A manually supplied `--token` is saved without
 being validated; run `0 auth status` afterwards.
 
-`auth status` checks the inference-account endpoint, not just server health.
-It is not a managed-run readiness check. Managed enrollment additionally needs
-organization membership, a `scans:dispatch` grant, a nonsuspended GitHub App
-installation and repository access. Scan reads use `scans:read`; account
-capabilities remain separate from token scopes. Inference-only accounts cannot
-start scans, and review-only accounts cannot start `secure` runs.
+`auth status` checks authenticated managed scan-read access, not just server
+health. It is not a dispatch readiness check. Managed enrollment additionally
+needs organization membership, a `scans:dispatch` grant, a nonsuspended GitHub
+App installation and repository access. A review-only account may still have
+other product restrictions.
 
 Production-profile login also attempts to write compatible credentials for the
 separate `0cloud` client at `~/.0cloud/credentials.json`; the saved `orgId` is

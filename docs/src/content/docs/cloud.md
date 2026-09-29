@@ -1,39 +1,33 @@
 ---
 title: Cloud access and managed execution
-description: Distinguish local execution, hosted model access, and managed repository workflows, including current compatibility limits.
+description: Distinguish local provider access from managed repository workflows and current compatibility limits.
 draft: true
 pagefind: false
 ---
 
-Cloud is not a prerequisite for using 0. Choose the execution and model-access
-arrangement that matches your requirements:
+Cloud is not a prerequisite for using 0 locally. The public console brings
+your own model connection; managed execution is a separate service:
 
 | Arrangement | Models | Tools and execution | Setup |
 | --- | --- | --- | --- |
 | Local harness / BYOK | Your supported provider or subscription | Your configured executor | [CLI quickstart](/getting-started/) and [API Keys](/api-keys/) |
-| Local harness / hosted models | Requests through 0cloud | Still your configured executor | Cloud sign-in, compatible account and hosted model access |
 | Managed execution | As agreed for the workflow | Service-managed workers | Organization access, target authorization, supported service configuration and budget |
 
-The [pricing page](https://0.security/pricing/) separates hosted model access
-from managed execution. Free software does not mean free provider usage or
-infrastructure. Confirm current plans and access with the team; this guide does
-not promise included usage, a public production qualification, or managed
-execution for every signed-in account.
+Free software does not imply free provider usage or infrastructure. Confirm
+managed-service access, scope, budget and deployment compatibility with the
+team; a signed-in account alone does not authorize managed execution.
 
 ## What is implemented
 
-The public CLI implements browser authentication, hosted account/model queries,
-repository enrollment (`0 connect`), and managed lifecycle commands
-(`0 service start/status/wait/cancel/disconnect`). The Cloud integration source
-also implements scoped CLI-token authorization, GitHub App enrollment checks,
-secure-run scheduling, scan status/cancellation, and evidence delivery. These
-are real integration paths, not just editable onboarding mockups.
+The CLI implements browser authentication for managed-service commands,
+repository enrollment (`0 connect`) and managed lifecycle commands
+(`0 service start/status/wait/cancel/disconnect`). The separate Cloud integration
+implements scoped CLI-token authorization, GitHub App enrollment checks,
+scheduling, status/cancellation, and evidence delivery. The public interactive
+console uses your configured API key or provider subscription for model calls.
 
-They are **not interchangeable account capabilities**. In the reviewed server
-source, an inference-only organization cannot enqueue scans, and a review-only
-organization cannot enqueue a `secure` run. A successful `0 auth status` checks
-an authenticated inference-account endpoint; it does not authorize managed
-execution or prove that a model request will be admitted.
+A successful `0 auth status` checks read access to managed scan records. It
+does not authorize a new scan or configure a model in the local console.
 
 The public [Cloud login](https://cloud.0.security/login) was reachable during
 this documentation review. A reachable login page proves neither deployment
@@ -42,9 +36,6 @@ retrieval. Managed access should be confirmed with the team.
 
 ## Choose a workflow
 
-- **Use hosted models locally:** follow [Hosted models](/getting-started/#hosted-models)
-  and inspect account eligibility before making requests. Shell tools do not
-  move to the service merely because you sign in.
 - **Arrange managed testing:** [prepare an engagement](/cloud/getting-started/),
   including scope, a test command, service access and a stop procedure.
 - **Connect GitHub reviews:** use the organization's GitHub App integration and

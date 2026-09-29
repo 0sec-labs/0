@@ -14,7 +14,21 @@ on the published npm package and the GitHub Release tag.
 
 ### Changed
 
-- Add codebase-scoped review checks to `0 checks`. Save drafts, enable or remove them, and evaluate pass, issue, or unknown during changed-only reviews. Suggested changes stay advisory; the existing security gate is unchanged.
+- Add codebase-scoped checks to `0 checks`. Save drafts, enable or remove them,
+  and return pass, issue, or unknown during changed-only reviews. Suggestions
+  stay advisory; existing security merge policy is unchanged.
+- The interactive CLI now uses connected API keys or provider subscriptions
+  only. Cloud credentials no longer select hosted inference implicitly, and
+  `/connect` and `/model` no longer offer 0cloud sign-in or 0security Auto.
+  Local token, context and estimated-cost reporting remains available.
+- `0dev` no longer injects a Cloud provider or credentials. Remove the
+  hosted-inference `0 models` and `0 balance` commands; keep managed-service
+  `0 auth`, `0 login`, `0 connect` and `0 service` separate from local model access.
+
+## [0.21.4] - 2026-09-23
+
+### Changed
+
 - Changed-only reviews use one bounded researcher in the shared harness, receive
   the exact patch, and inspect surrounding code only for change-related issues.
   Delegated inference is disabled. Concrete findings retain sequential,
@@ -27,6 +41,9 @@ on the published npm package and the GitHub Release tag.
   hosted customer tariffs and invoiced provider spend.
 
 ### Fixed
+
+- Show exact settled usage in `0 service status` and `0 service wait`;
+  PostgreSQL decimal values no longer crash the terminal display.
 
 - Correct the pinned tree-sitter runtime lock metadata so immutable Docker
   publication can complete `npm ci`; validate the generated runtime with npm's

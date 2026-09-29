@@ -289,13 +289,13 @@ describe("0 auth status", () => {
     io.restore();
   });
 
-  it("authenticates against the Cloud account on a custom host", async () => {
+  it("checks managed scan access without querying hosted inference", async () => {
     seedHomeWithCreds(home);
     const fetchImpl = (async (input) => {
-      const path = new URL(String(input)).pathname;
-      return path === "/api/inference/account"
-        ? jsonResponse({ credits: null })
-        : new Response("Not an account endpoint", { status: 404 });
+      const url = new URL(String(input));
+      return url.pathname === "/api/scans" && url.searchParams.get("limit") === "1"
+        ? jsonResponse({ scans: [] })
+        : new Response("Not a managed scan endpoint", { status: 404 });
     }) as typeof fetch;
     await runStatus({ fetchImpl });
     expect(process.exitCode).toBe(0);
@@ -313,7 +313,7 @@ describe("0 auth status", () => {
   it("exit 2 on 401, stderr does NOT contain token", async () => {
     seedHomeWithCreds(home);
     const fetchImpl = (async (input) =>
-      new URL(String(input)).pathname === "/api/inference/account"
+      new URL(String(input)).pathname === "/api/scans"
         ? new Response("nope", { status: 401 })
         : jsonResponse({ status: "ok" })) as typeof fetch;
     await runStatus({ fetchImpl });

@@ -504,14 +504,10 @@ Start a development console from the current checkout:
 `ZERO_DEV_SOURCE_ROOT` to the checkout, and runs the result with Bun. The old
 `--build` switch is no longer needed. A failed build stops launch rather than
 silently running an installed release or stale output. Build logs go to stderr.
-The launcher targets `https://dev.cloud.0.security`. Cloud login, reads and logout use
-`~/.0/dev/cloud.env`; production `~/.0/cloud.env` and private CLI
-`~/.0cloud/credentials.json` are not changed. Inherited Cloud tokens are ignored.
-HOME, BYOK credentials and other console settings remain unchanged.
-
-Normal `0` keeps its production default. `--host` takes precedence over
-`ZERO_CLOUD_HOST` for login. Restart existing sessions to use the new launcher;
-they cannot acquire its source-update environment retroactively.
+`0dev` no longer selects a hosted provider or injects Cloud credentials. It
+uses your configured API key or provider subscription, just like `0`. Existing
+shell provider/model overrides remain explicit. Restart an old 0dev session
+to use the rebuilt source; engine replacement does not reload the TUI shell.
 
 When enabled, changed Core source is built into an immutable generation and
 activated at an idle boundary. Conversation, scope decisions, task progress and
@@ -525,10 +521,9 @@ new process. See [development engine replacement](/improvement-plane/#developmen
 
 ## Console credential store
 
-In the terminal UI, `/connect` offers **0cloud → Sign in**,
-**Use my own API key**, and a separate **Provider subscription** section.
-Cloud uses browser authorization; ChatGPT Codex uses device sign-in and its
-own auth file. Local and direct-provider workflows need no Cloud account.
+In the terminal UI, `/connect` offers **Use my own API key** and a separate
+**Provider subscription** section. ChatGPT Codex uses device sign-in and its
+own auth file. The local console does not use a Cloud account for inference.
 
 Keys are stored in plaintext at `~/.0/credentials.json` by default, with
 `0600` file and `0700` directory permissions. Nonblank environment credentials win.
@@ -552,7 +547,7 @@ after connecting a new provider, reselect its model to apply it live. See
 | `0 auth login --token <value>` | Manual credential path for self-hosted or recovery use. |
 | `0 auth login --host <url>` | Override the default cloud host (`https://cloud.0.security`). |
 | `0 auth logout` | Deletes `~/.0/cloud.env` and `~/.0cloud/credentials.json`. |
-| `0 auth status` | Loads credentials and checks the authenticated inference-account endpoint. Unsupported account data can still remain unavailable. |
+| `0 auth status` | Loads credentials and checks authenticated managed scan-read access; this is not dispatch authorization. |
 
 Credentials are resolved in this order (first match wins):
 
@@ -566,59 +561,18 @@ The token is never printed. `0 auth status` echoes the host on success; on
 auth failure it surfaces the status code + path, never the token or Authorization
 header.
 
-<a id="hosted-configuration-draft"></a>
-
-### Hosted configuration
-
-See [Cloud setup and availability](/getting-started/#hosted-models).
-Hosted inference uses the selected organization's service catalog and account,
-without configuring each supplier separately. Authentication, model listing
-and request admission are separate checks; none establishes managed execution.
-The CLI provides `0 login` (alias of `0 auth login`),
-`0 models [--json]` and `0 balance [--json]`, and defaults to
-`https://cloud.0.security`. Older releases use `https://cloud.0.ai`.
-Check `0 login --help` and use the operator-provided host for testing.
-
-An environment `ZERO_CLOUD_TOKEN` takes precedence over `cloud.env` and uses the
-environment host or default. Without that token, the saved token is used with
-the file's host, then `ZERO_CLOUD_HOST` if the file omits a host, then the default.
-
-| Setting or action | Behavior |
-| --- | --- |
-| `--runtime api` | Uses the HTTP runtime; `hosted` is a provider, not a new runtime name. |
-| `ZERO_SELECTED_PROVIDER=hosted` | Pins hosted inference instead of ambient BYOK credentials. |
-| `ZERO_MODEL` or `--model` | Must match an alias returned by `0 models`. The service catalog determines wire protocol and output ceiling. |
-| No provider pin | Configured BYOK providers are considered before hosted credentials. Logging in doesn't replace them. |
-| No explicit hosted model | Selects the first service catalog entry. Pin an alias for a repeatable route. |
-| `ZERO_LLM_FALLBACK` | Explicit backup chain for eligible failures. No automatic hosted accounting escape or hidden gateway substitution. |
-| `0 auth status` | Checks authenticated account access, not model entitlement, schema compatibility, spend eligibility or paid-flow readiness. |
-| `0 auth logout` | Removes local credential files; it doesn't revoke an issued token or clear a token exported in the environment. |
-
-Revoke issued credentials through the dashboard's session controls.
-The gateway checks membership and scopes; a CLI credential doesn't authorize
-purchases.
-
-`0 balance --json` returns the validated `usage-v2` account snapshot or
-`null` for unsupported account data. It reports the plan, included allowance
-percentage and reset time, prepaid USD balance, fallback setting and admission.
-USD amounts stay exact decimal strings; unavailable amounts are not zero.
-Successful login is separate from request eligibility. See
-[account interpretation](/api-keys/#hosted-inference).
-
-Local cost ceilings are separate from the hosted ledger. Cancellation can still
-incur charges. See [billing and errors](/api-keys/#charging-and-interrupted-requests).
 
 ## Provider selection and model routing
 
 ### Explicit provider pinning
 
-`ZERO_SELECTED_PROVIDER` selects the primary provider for a run or chat.
-It accepts `openrouter`, `anthropic`, `openai`, `azure`, `deepseek`,
-`chatgpt-codex`, `z-ai`, `kimi`, `qwen`, `xai`, `opencode`, `copilot`,
-`google` and `hosted`. Set an explicit `ZERO_MODEL` alongside an environment
-selection, except when hosted inference should choose from its service catalog.
-The provider must have its own credentials. A separately configured explicit
-model can use a different route, such as cross-model verification.
+`ZERO_SELECTED_PROVIDER` selects the primary direct provider for a run or chat.
+The public console offers `openrouter`, `anthropic`, `openai`, `azure`,
+`deepseek`, `chatgpt-codex`, `z-ai`, `kimi`, `qwen`, `xai`, `opencode`,
+`copilot`, and `google`. Set an explicit `ZERO_MODEL` alongside an environment
+selection. The provider must have its own credentials; a separately configured
+model can use a different route for cross-model verification. The internal
+managed-worker runtime may pin `hosted`, but the local console does not.
 
 `ZERO_FORCE_PROVIDER` is an unconditional benchmark override. Setting it and
 `ZERO_SELECTED_PROVIDER` to different values is an error.
@@ -714,8 +668,7 @@ vars in this priority order:
 11. `ZERO_COPILOT_GITHUB_TOKEN` → GitHub Copilot
 12. `ZERO_GEMINI_ACCESS_TOKEN` / `ZERO_GEMINI_OAUTH_REFRESH_TOKEN` → Google Gemini Code Assist
 13. `ANTHROPIC_API_KEY` → Anthropic
-14. Configured Cloud credentials → hosted inference
-15. No usable credential → Anthropic (reports missing credentials at runtime)
+14. No usable credential → Anthropic (reports missing credentials at runtime)
 
 ### Provider failover
 
@@ -731,9 +684,7 @@ Each entry is `<providerId>:<model>`, comma-separated. Eligible retry-budget
 exhaustion or recognized plan quota exhaustion advances to the next usable
 route. Missing credentials (and missing endpoint configuration for Azure) skip
 that entry. Failover changes the recipient of model context and the account
-that pays; it is not a free retry or an automatic hosted-ledger escape.
-Hosted unknown-outcome requests are not replayed; see
-[interrupted requests](/api-keys/#charging-and-interrupted-requests).
+that pays; it is not a free retry or an automatic switch to a Cloud account.
 
 ## Session persistence
 

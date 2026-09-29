@@ -729,53 +729,6 @@ export function clipModelDetailLines(
 }
 
 // ---------------------------------------------------------------------------
-// Hosted detail pane
-// ---------------------------------------------------------------------------
-
-/**
- * Tone-tags and wraps the hosted service's own description of a model.
- *
- * The strings come from `hostedModelDetails` in `model-catalog.ts`, which is
- * the authoritative projection of what the account's catalogue and allowance
- * actually reported. Nothing is added here and nothing is rewritten: this
- * function only decides which rows read as a heading, which read as an absent
- * value, and which read as a failure, then wraps them to the pane.
- *
- * An absent value is muted rather than hidden, because on this screen "the
- * hosted service did not report a context window" is itself the fact the
- * operator needs; dropping the row would leave a gap that reads as though the
- * field were never asked for.
- */
-const HOSTED_ABSENT = /\b(unknown|none reported|not established|no evidence reference|unavailable)\b/i;
-
-export function hostedDetailLines(
-  details: readonly string[],
-  width: number,
-  compact = false,
-): ModelDetailLine[] {
-  const limit = cells(width);
-  if (limit <= 0) return [];
-  const lines: ModelDetailLine[] = [];
-  details.forEach((detail, index) => {
-    const value = sanitizeTuiText(detail);
-    if (value.length === 0) return;
-    const tone: ModelDetailTone =
-      index === 0
-        ? "title"
-        : /^State: available$/i.test(value)
-          ? "ok"
-          : /^State:/i.test(value)
-            ? "warn"
-            : HOSTED_ABSENT.test(value)
-              ? "muted"
-              : "text";
-    for (const text of wrapCells(value, limit)) lines.push({ text, tone });
-    if (!compact && index === 0) lines.push({ text: "", tone: "blank" });
-  });
-  return lines;
-}
-
-// ---------------------------------------------------------------------------
 // Dialog geometry
 // ---------------------------------------------------------------------------
 
@@ -926,15 +879,13 @@ export function computeModelDialogLayout({
 // Title, scope and hints
 // ---------------------------------------------------------------------------
 
-/** Which catalogue the screen is actually looking at. */
-export type ModelCatalogScope = "hosted" | "byok" | "unknown";
+/** Which connection state the screen is looking at. */
+export type ModelCatalogScope = "byok" | "unknown";
 
 export interface ModelDialogTitleInput {
   scope: ModelCatalogScope;
   /** BYOK only: whether the full synced superset is on show. */
   showAll?: boolean;
-  /** Whether the connected Cloud account offers Auto beside API-key models. */
-  cloudMerged?: boolean;
 }
 
 /**
@@ -945,12 +896,10 @@ export interface ModelDialogTitleInput {
  * exactly like every other one, and the label is always beside the glyph —
  * there is no icon font behind these code points.
  */
-export function modelDialogTitle({ scope, showAll = false, cloudMerged = false }: ModelDialogTitleInput): string {
+export function modelDialogTitle({ scope, showAll = false }: ModelDialogTitleInput): string {
   const head = `${operatorIcon("models")} ${operatorTitle("models")}`;
-  if (scope === "hosted") return `${head} · 0security Auto`;
   if (scope === "unknown") return `${head} · no connection`;
-  const source = cloudMerged ? "connected + 0security Auto" : "connected providers";
-  return `${head} · ${source} · ${showAll ? "all synced" : "curated"}`;
+  return `${head} · connected providers · ${showAll ? "all synced" : "curated"}`;
 }
 
 /**
@@ -970,23 +919,16 @@ export interface ModelDialogHintInput {
   /** Null when the parent model is the target; otherwise the role being set. */
   role?: string | null;
   hasFilter?: boolean;
-  /**
-   * Whether Ctrl+R reloads a live hosted catalogue. True on the hosted lane,
-   * and on the BYOK lane while 0 Cloud routes are merged (a dark cloud is
-   * retried without disturbing the BYOK list). Defaults to `scope === "hosted"`.
-   */
+  /** Whether Ctrl+R retries account model discovery for a subscription. */
   canReload?: boolean;
 }
 
 /**
  * The footer hints, naming only bindings this screen actually implements.
- *
- * `Ctrl+R` exists only on the hosted path and `Tab` only on the BYOK path, so
- * each is named only where it works; `Ctrl+Backspace` is named only while a
- * role is targeted, because that is the only state in which it does anything.
+ * `Ctrl+R` retries account model discovery where available and
+ * `Ctrl+Backspace` is named only while a role is targeted.
  */
-export function modelDialogHint({ scope, role = null, hasFilter = false, canReload }: ModelDialogHintInput): string {
-  const reload = canReload ?? scope === "hosted";
+export function modelDialogHint({ scope, role = null, hasFilter = false, canReload = false }: ModelDialogHintInput): string {
   return [
     "[↑↓] model",
     "[⏎] apply",
@@ -994,7 +936,7 @@ export function modelDialogHint({ scope, role = null, hasFilter = false, canRelo
     "[⌃S] single",
     role !== null ? "[⌃⌫] inherit" : undefined,
     scope === "byok" ? "[⇥] curated/all" : undefined,
-    reload ? "[⌃R] reload" : undefined,
+    canReload ? "[⌃R] reload" : undefined,
     hasFilter ? "[⌃U] clear" : "type to filter",
     hasFilter ? "[esc] clear" : "[esc] back",
   ]

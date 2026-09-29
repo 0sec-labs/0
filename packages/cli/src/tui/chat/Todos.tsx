@@ -162,8 +162,8 @@ export const TODOS_SIDEBAR_HEADER_ROWS = SIDEBAR_SECTION_HEADER_ROWS;
  *
  * HEIGHT: the section paints EXACTLY `rows` rows and never one more — a leading
  * separator row (only when there is room for it), the header, the tree body,
- * and the footer. Every row is explicitly sized, because an overflowing section
- * in this column paints straight through the CloudHintCard beneath it.
+ * and the footer. Every row is explicitly sized so the section cannot paint
+ * through the content below it.
  */
 export function TodosSidebar({ payload, width, rows, theme, expanded: expandedProp, onToggle }: {
   payload: TodosEventPayload;

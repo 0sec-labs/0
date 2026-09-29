@@ -23,7 +23,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { homeStateDir } from "@0/shared";
-import { CloudClient, loadCloudCredentials, type InferenceModel } from "@0/core";
 import { OFFLINE_MODEL_CATALOG } from "./model-catalog.offline.js";
 
 /** One normalized catalog entry. Prices are $/1M tokens when known. */
@@ -198,66 +197,4 @@ export async function syncModelCatalog(
   } finally {
     clearTimeout(timer);
   }
-}
-
-// ── Hosted catalogue ──────────────────────────────────────────────────────────
-//
-// Everything above is the BYOK path: a public feed, cached on disk, with a
-// bundled offline floor so the picker always has something to draw. The hosted
-// path deliberately has none of that. A hosted id names a route on the
-// operator's own account, and a Models.dev row or a stale disk cache describes
-// a different thing entirely — the public model of the same name. Letting a
-// hosted id borrow that metadata would put another vendor's numbers on screen
-// under this account's route, so there is no fallback here at all: if the live
-// catalogue cannot be read, that is an honest failure and the caller reports it.
-
-export interface HostedCatalogSnapshot {
-  /** The cloud host the catalogue was read from, as the credentials resolved it. */
-  host: string;
-  /** The service's own rows, verbatim. Projected by `buildHostedModelCatalog`. */
-  models: readonly InferenceModel[];
-  /** Epoch millis the read completed, so a caller can age its own copy. */
-  fetchedAt: number;
-}
-
-/**
- * Read the authenticated account's own model catalogue.
- *
- * Account-scoped and live-only: the catalogue endpoint returns the routes this
- * account can address, so the credentials decide the answer and there is
- * nothing to cache or fall back to. Only `GET /api/inference/v1/models` is
- * called — no inference request is made, so this costs nothing.
- *
- * Credential loading owns host selection, canonicalisation and token matching;
- * there is deliberately no second host parser here. The credentials are re-read
- * after the request and compared: if the operator reconnected to a different
- * host or token while the read was in flight, the rows that came back describe
- * someone else's account and are thrown away rather than shown.
- */
-export async function loadHostedModelCatalog(
-  opts: {
-    env?: NodeJS.ProcessEnv;
-    homeDir?: string;
-    fetchImpl?: typeof fetch;
-    now?: () => number;
-  } = {},
-): Promise<HostedCatalogSnapshot> {
-  const env = opts.env ?? process.env;
-  const credentials = loadCloudCredentials({ env, homeDir: opts.homeDir, warn: () => {} });
-  const client = new CloudClient({
-    host: credentials.host,
-    token: credentials.token,
-    fetchImpl: opts.fetchImpl,
-  });
-  const catalog = await client.getInferenceModels();
-  const current = loadCloudCredentials({ env, homeDir: opts.homeDir, warn: () => {} });
-  if (current.host !== credentials.host || current.token !== credentials.token) {
-    throw new Error("Cloud connection changed while loading models. Reload the picker.");
-  }
-  if (!Array.isArray(catalog.data)) throw new Error("Hosted model catalog is malformed");
-  return {
-    host: credentials.host,
-    models: catalog.data,
-    fetchedAt: (opts.now ?? Date.now)(),
-  };
 }

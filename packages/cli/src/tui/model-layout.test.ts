@@ -246,7 +246,7 @@ describe("reachableModelCatalog", () => {
       AZURE_OPENAI_API_KEY: "azure-test",
       AZURE_OPENAI_BASE_URL: "https://azure.example.test/openai/v1",
     };
-    const rows = reachableModelCatalog(catalog, providerStates(env), { env, providerId: "hosted" });
+    const rows = reachableModelCatalog(catalog, providerStates(env), { env, providerId: "azure" });
     expect(rows.filter((model) => model.id === "gpt-5.5").map((model) => model.provider)).toEqual(["openai", "azure"]);
   });
 

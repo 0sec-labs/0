@@ -55,8 +55,8 @@ interface ScanResponse {
   org_id: string | null;
   started_at: string | null;
   completed_at: string | null;
-  cost_usd: number | null;
-  billed_usd: number | null;
+  cost_usd: number | string | null;
+  billed_usd: number | string | null;
   token_input: number | null;
   token_output: number | null;
   cancel_requested_at?: string | null;
@@ -90,6 +90,11 @@ function loadClient(): CredLoadResult {
   return { client, host: creds.host };
 }
 
+function formatUsageUsd(value: number | string | null | undefined): string {
+  if (value == null) return "(not recorded)";
+  return `$${typeof value === "number" ? value.toFixed(6) : value}`;
+}
+
 function formatScanRow(s: ScanResponse): string {
   const lines: string[] = [
     `  ID:            ${s.id}`,
@@ -99,8 +104,7 @@ function formatScanRow(s: ScanResponse): string {
   if (s.model) lines.push(`  Model:        ${s.model}`);
   if (s.started_at) lines.push(`  Started:      ${s.started_at}`);
   if (s.completed_at) lines.push(`  Completed:    ${s.completed_at}`);
-  if (s.cost_usd != null) lines.push(`  Cost:         $${s.cost_usd.toFixed(4)}`);
-  if (s.billed_usd != null) lines.push(`  Billed:       $${s.billed_usd.toFixed(4)}`);
+  lines.push(`  Usage:        ${formatUsageUsd(s.billed_usd)}`);
   if (s.token_input != null) lines.push(`  Tokens in:    ${s.token_input.toLocaleString()}`);
   if (s.token_output != null) lines.push(`  Tokens out:   ${s.token_output.toLocaleString()}`);
   return lines.join("\n");

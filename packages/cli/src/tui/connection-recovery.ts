@@ -17,15 +17,9 @@ export function connectionRecoveryForError(error: string): ConnectionRecovery | 
   // them has failed authentication; keep chat open and let /connect choose.
   if (/no provider credential found/i.test(detail)) return null;
 
-  // Cloud credentials are not upstream provider keys. In particular, scope,
-  // credit, catalog and service failures must never open a vendor's key form.
-  if (/0cloud|0[- ]cloud|0 hosted models|RuntimeConfig\.provider\s*=\s*hosted/i.test(detail)) {
-    if (/\b(?:HTTP|API error)\s*:?\s*401\b/i.test(detail)
-      || /RuntimeConfig\.provider\s*=\s*hosted has no configured credentials/i.test(detail)) {
-      return { providerId: "hosted", title: "Sign in to 0cloud", detail };
-    }
-    return null;
-  }
+  // Managed-service auth errors do not belong to any model-provider form.
+  // Cloud inference is no longer offered by this console.
+  if (/0cloud|0[- ]cloud|0 hosted models|RuntimeConfig\.provider\s*=\s*hosted/i.test(detail)) return null;
 
   // A provider name alone is not an authentication failure. Keep model,
   // balance, rate-limit and transport errors visible in the conversation.

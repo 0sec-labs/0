@@ -186,6 +186,13 @@ export function registerConsoleCommand(program: Command): void {
         return;
       }
       const autonomyMode: ConsoleAutonomyMode = autonomyResolution.mode;
+      if (process.env.ZERO_SELECTED_PROVIDER === "hosted"
+        || process.env.ZERO_FORCE_PROVIDER === "hosted"
+        || process.env.ZERO_LLM_FALLBACK?.split(",").some((entry) => entry.trim().startsWith("hosted:"))) {
+        console.error(chalk.red("0cloud inference is not available in the console. Connect your own API key or provider subscription."));
+        process.exitCode = 2;
+        return;
+      }
       const useOpenTui = opts.print === undefined && isBunRuntime() && canUseOpenTui();
 
       let scope;
