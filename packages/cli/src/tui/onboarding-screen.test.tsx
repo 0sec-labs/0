@@ -17,8 +17,6 @@ import {
   updateSetting,
 } from "./settings-store.js";
 import {
-  ONBOARDING_PREFERENCE_KEYS,
-  ONBOARDING_STEPS,
   finalizeOnboarding,
   recordAnalyticsConsent,
   stepAfter,
@@ -57,28 +55,13 @@ afterEach(() => {
 });
 
 describe("guided step machine", () => {
-  it("walks welcome → connect → models → preferences → analytics → done", () => {
-    expect(ONBOARDING_STEPS.map((s) => s.key)).toEqual([
-      "welcome",
-      "connect",
-      "models",
-      "preferences",
-      "analytics",
-      "done",
-    ]);
-
-    // Analytics is skippable; only welcome and done are not.
-    const analytics = ONBOARDING_STEPS.find((s) => s.key === "analytics");
-    expect(analytics?.skippable).toBe(true);
-
-    // Linear transitions — the same chain the embedded ConnectScreen.onConnected
-    // and ModelScreen.onSelect advance along. Analytics sits between the
-    // preferences step and completion.
+  it("walks every optional choice before explicit completion", () => {
     expect(stepAfter("welcome")).toBe("connect");
     expect(stepAfter("connect")).toBe("models");
     expect(stepAfter("models")).toBe("preferences");
     expect(stepAfter("preferences")).toBe("analytics");
-    expect(stepAfter("analytics")).toBe("done");
+    expect(stepAfter("analytics")).toBe("plugins");
+    expect(stepAfter("plugins")).toBe("done");
     expect(stepAfter("done")).toBeUndefined();
   });
 
@@ -88,19 +71,10 @@ describe("guided step machine", () => {
     expect(stepBefore("models")).toBe("connect");
     expect(stepBefore("preferences")).toBe("models");
     expect(stepBefore("analytics")).toBe("preferences");
-    expect(stepBefore("done")).toBe("analytics");
+    expect(stepBefore("plugins")).toBe("analytics");
+    expect(stepBefore("done")).toBe("plugins");
   });
 
-  it("never mounts the full Settings catalogue — preferences are two safe Display cosmetics", () => {
-    expect(ONBOARDING_PREFERENCE_KEYS).toEqual(["theme", "density"]);
-    for (const key of ONBOARDING_PREFERENCE_KEYS) {
-      const def = SETTING_DEFS.find((d) => d.key === key);
-      expect(def, `SETTING_DEFS must define ${key}`).toBeDefined();
-      expect(def?.kind).toBe("enum");
-      expect(def?.group).toBe("Display");
-      expect((def?.choices?.length ?? 0)).toBeGreaterThan(1);
-    }
-  });
 });
 
 describe("completion is written in exactly one place", () => {

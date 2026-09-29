@@ -303,15 +303,6 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   // The only rebindable set: self-contained, stateless toggles that call
   // `updateSetting(...)` and take no part in text entry or modal cycles.
   {
-    id: "view.left-sidebar",
-    keys: "Ctrl+B",
-    defaultChords: ["ctrl+b"],
-    rebindable: true,
-    description: "Toggle the left sidebar (persists across the session).",
-    category: "View",
-    handler: 'if (matchesBinding(key, "view.left-sidebar", …)) updateSetting("showLeftSidebar", …)',
-  },
-  {
     id: "view.right-sidebar",
     keys: "Ctrl+L",
     defaultChords: ["ctrl+l"],

@@ -16,12 +16,10 @@
  *                   verify: makeMultiLensVerifier(<p>VerifyLenses) })
  *                          │  confirmed leads
  *                          ▼
- *     leadToCandidateFinding ─▶ CloudSink (same 'discovered' candidate path as hunt)
+ *                  local report + findings
  *
  * A deep-review finding is a LEAD, not a confirmed bug: the multi-lens quorum
- * filters (each lens re-reads and refutes) but does not PROVE. In cloud mode the
- * leads flow to the orchestrator as `discovered` candidates and enter the
- * cloud's own adversarial verify gate, exactly like `hunt`.
+ * filters (each lens re-reads and refutes) but does not PROVE.
  *
  * Exit codes:
  *   0 → the sweep RAN to completion — a VALID outcome whether or not any lead
@@ -44,7 +42,7 @@ import type { EvolutionConfig, FinderLens, ThreatLane, VerifyLens } from "@0/cor
 // allowing the next review in a long-lived CLI process to observe a completed
 // durable-registry promotion.
 import { eventBus, loadAppsecFinderLenses, ScanCostLedger, captureObservation, createEvolvedFinder } from "@0/core";
-import { leadToCandidateFinding, type HuntOutcome } from "./hunt.js";
+import type { HuntOutcome } from "./hunt.js";
 import { loadEvolutionConfigFile } from "@0/core";
 import { resolveOsecRunStorage, writeOsecRunReport } from "@0/db";
 import { createHash, randomUUID } from "node:crypto";
@@ -571,8 +569,6 @@ export async function runDeepReview(
     prepare,
     collectScopeFiles,
     countScopeFilesUpTo,
-    getCloudSinkConfig,
-    postFinding,
     evmFinderLenses,
     evmVerifyLenses,
     solanaFinderLenses,
@@ -625,13 +621,6 @@ export async function runDeepReview(
     }
   }
 
-  // Capture the cloud-sink config BEFORE suppressing the env (same reasoning as
-  // hunt.ts #1051): the inner finder/skeptic passes would otherwise auto-POST
-  // their RAW pre-gate findings as 'confirmed'. We disable that inner auto-post
-  // and post ONLY the gated leads ourselves as honest 'discovered' candidates.
-  const sinkCfg = getCloudSinkConfig();
-  const savedCloudSink = process.env["ZERO_CLOUD_SINK"];
-  if (sinkCfg) delete process.env["ZERO_CLOUD_SINK"];
 
   try {
     // EVM-scoped candidate filtering: for the evm-onchain profile, keep the
@@ -802,24 +791,6 @@ export async function runDeepReview(
       log,
     });
 
-    // Post each gated lead to the cloud-sink as a CANDIDATE finding (same path
-    // hunt uses): leadToCandidateFinding forces status 'discovered' so leads
-    // enter the cloud's adversarial verify gate, never as confirmed/sendable.
-    // We post INCREMENTALLY — via runHuntScan's onConfirmed hook, as each lead
-    // clears the multi-lens quorum — NOT in one burst after the whole sweep.
-    // A long fan-out can outrun the sandbox/agent deadline; posting as-we-go
-    // means a mid-sweep kill still lands the leads found so far, so the worker
-    // sees findings_count > 0 and marks the scan complete-truncated instead of
-    // failed-with-zero-findings. No-op when not in cloud mode (sinkCfg null).
-    const postedIds = new Set<string>();
-    let ingested = 0;
-    const provenance = `deep_review (${matchedProfile} lenses)`;
-    const postLead = async (lead: Finding): Promise<void> => {
-      if (!sinkCfg || postedIds.has(lead.id)) return;
-      postedIds.add(lead.id);
-      await postFinding(leadToCandidateFinding(lead, `deep-review:${matchedProfile}`, provenance), sinkCfg);
-      ingested++;
-    };
 
     const res = await runHuntScan({
       sourceRoot,
@@ -833,7 +804,6 @@ export async function runDeepReview(
       attemptsPerCandidate,
       ...(models ? { models } : {}),
       verify,
-      ...(sinkCfg ? { onConfirmed: postLead } : {}),
       log,
     });
 
@@ -874,15 +844,6 @@ export async function runDeepReview(
       }
     }
 
-    // Safety net: post any confirmed lead the incremental hook didn't already
-    // stream (deduped by id via postLead). In the normal path onConfirmed has
-    // already posted every confirmed lead, so this is a no-op — it only covers
-    // a confirmed-but-not-streamed edge (e.g. a future gate that confirms
-    // outside the verify pool).
-    if (sinkCfg) {
-      for (const lead of leads) await postLead(lead);
-      log(`[deep-review] posted ${ingested} lead(s) to the cloud-sink as candidate findings (incremental)`);
-    }
 
     // Terminal status. A sweep that RAN is a SUCCESS whether or not any lead
     // survived the quorum — a clean 0-lead hunt is a valid outcome, not a
@@ -996,7 +957,6 @@ export async function runDeepReview(
           dropReason: d.dropReason,
           detail: d.detail,
         })),
-        ingested: sinkCfg ? ingested : null,
         warnings: res.warnings.slice(0, 10),
         note: "LEADS, not confirmed bugs. Each survived the multi-lens refute quorum; verify the real sink + impact before disclosure.",
       },
@@ -1013,7 +973,6 @@ export async function runDeepReview(
     });
     throw error;
   } finally {
-    if (savedCloudSink !== undefined) process.env["ZERO_CLOUD_SINK"] = savedCloudSink;
     prepared.cleanup();
   }
 }

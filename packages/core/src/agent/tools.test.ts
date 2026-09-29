@@ -1,4 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+// Existing authorization regressions exercise the explicitly activated plugin.
+vi.mock("../plugins/enablement.js", async (importOriginal) => ({
+  ...await importOriginal<object>(),
+  readEnablement: () => ({ schema: 1, project: process.cwd(), enabled: { scope: { version: "1.0.0", capabilities: [], enabledAt: 1 } } }),
+}));
 import { ToolExecutor, getToolsForRole, TOOL_DEFINITIONS, SCANNER_TOOL_NAMES, detectHttpEgressSegments, evaluateDoneCoverageGate, containsUnquotedShellChars, sanitizedEnv, toolExecutorCheckpointSchema } from "./tools.js";
 import { parseFindingsFromCliOutput } from "../findings-parser.js";
 import type { ToolContext, ToolCall } from "./types.js";
@@ -1058,9 +1063,8 @@ describe("ToolExecutor", () => {
     expect(f.confidence!).toBeGreaterThanOrEqual(0);
     expect(f.confidence!).toBeLessThanOrEqual(1);
     expect(f.confidence!).toBeCloseTo(0.92);
-    // Mirrored back onto the call args so agent-runner's mid-scan
-    // postFinding(call.arguments) and the native-loop's finding_ingested
-    // event both see the computed value.
+    // Mirrored onto the call arguments so the native-loop's local
+    // finding_ingested event sees the computed value.
     expect(args.confidence).toBeCloseTo(0.92);
   });
 
@@ -4546,11 +4550,9 @@ describe("sanitizedEnv — child-process credential filtering (0#134)", () => {
     const out = sanitizedEnv({
       "ZERO_FEATURE_JIT_SKILLS": "1",
       "ZERO_BASH_TIMEOUT_MS": "60000",
-      "ZERO_CLOUD_SCAN_ID": "scan-1",
     });
     expect(out["ZERO_FEATURE_JIT_SKILLS"]).toBe("1");
     expect(out["ZERO_BASH_TIMEOUT_MS"]).toBe("60000");
-    expect(out["ZERO_CLOUD_SCAN_ID"]).toBe("scan-1");
   });
 
   it("end-to-end: the bash child cannot read the injected credentials, but CAN read $AUTH_VALUE", async () => {

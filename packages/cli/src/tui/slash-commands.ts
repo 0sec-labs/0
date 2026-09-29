@@ -120,13 +120,6 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     tuiOnly: true,
   },
   {
-    name: "audits",
-    aliases: [],
-    category: "navigation",
-    description: "Switch between live audits without stopping their work",
-    tuiOnly: true,
-  },
-  {
     name: "onboard",
     aliases: [],
     category: "navigation",
@@ -179,6 +172,14 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     tuiOnly: true,
   },
   {
+    name: "fix",
+    aliases: [],
+    category: "session",
+    description: "Generate a verified local source fix; review before explicitly publishing a draft PR",
+    usage: "/fix [finding-id] | /fix publish <finding-id> | /fix cancel",
+    tuiOnly: true,
+  },
+  {
     name: "impact",
     aliases: [],
     category: "session",
@@ -203,11 +204,12 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
   },
 
   {
-    name: "resume",
-    aliases: ["sessions"],
+    name: "sessions",
+    aliases: [],
     category: "session",
-    description: "Find and resume saved conversations",
-    usage: "/resume",
+    description: "Switch open sessions or resume saved conversations",
+    usage: "/sessions",
+    tuiOnly: true,
   },
   {
     name: "providers",

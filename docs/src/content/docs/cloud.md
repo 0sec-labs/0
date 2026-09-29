@@ -11,28 +11,25 @@ your own model connection; managed execution is a separate service:
 | Arrangement | Models | Tools and execution | Setup |
 | --- | --- | --- | --- |
 | Local harness / BYOK | Your supported provider or subscription | Your configured executor | [CLI quickstart](/getting-started/) and [API Keys](/api-keys/) |
-| Managed execution | As agreed for the workflow | Service-managed workers | Organization access, target authorization, supported service configuration and budget |
+| Managed execution | As agreed for the workflow | Service-managed workers | Operator-provisioned access, target authorization, supported service configuration and budget |
 
 Free software does not imply free provider usage or infrastructure. Confirm
 managed-service access, scope, budget and deployment compatibility with the
-team; a signed-in account alone does not authorize managed execution.
+team; an account or token alone does not authorize managed execution.
 
 ## What is implemented
 
-The CLI implements browser authentication for managed-service commands,
-repository enrollment (`0 connect`) and managed lifecycle commands
-(`0 service start/status/wait/cancel/disconnect`). The separate Cloud integration
-implements scoped CLI-token authorization, GitHub App enrollment checks,
-scheduling, status/cancellation, and evidence delivery. The public interactive
-console uses your configured API key or provider subscription for model calls.
+The local CLI does not provide managed-service login, repository enrollment,
+scan lifecycle, codebase configuration, or methodology commands. Those workflows
+belong to the separately operated Cloud integration, which implements scoped
+token authorization, GitHub App enrollment checks, scheduling,
+status/cancellation, and evidence delivery. The local interactive console uses
+your configured API key or provider subscription for model calls.
 
-A successful `0 auth status` checks read access to managed scan records. It
-does not authorize a new scan or configure a model in the local console.
-
-The public [Cloud login](https://cloud.0.security/login) was reachable during
-this documentation review. A reachable login page proves neither deployment
-revision nor successful enrollment, billing, worker execution, or artifact
-retrieval. Managed access should be confirmed with the team.
+When an approved service integration requires a token, the operator supplies
+`ZERO_CLOUD_TOKEN` explicitly (and `ZERO_CLOUD_HOST` if using a nondefault
+deployment). Token presence does not authorize a scan or configure a model
+provider. Confirm managed access and service compatibility with the team.
 
 ## Choose a workflow
 
@@ -46,45 +43,24 @@ retrieval. Managed access should be confirmed with the team.
 
 ## Compatibility before automation
 
-Do not infer service compatibility from command availability. The current CLI
-and the reviewed Cloud integration still have mismatches around repository
-schedule filtering and the one-shot service cost-ceiling field. Read the
-[onboarding compatibility checks](/cloud/getting-started/#compatibility-checks)
-before using enrollment or disconnect in an organization with schedules.
+Do not infer a deployed service's compatibility from the local CLI. Confirm
+repository schedule filtering, budget enforcement, and authorization with the
+operator before automating enrollment or schedule changes.
 
 These guides describe source-backed behavior and its limits, not an end-to-end
-production acceptance test. The review compared public CLI revision `708f0117`
-with Cloud root revision `d2cb1a38` and the newer `website-integration-20260918`
-worktree at `61e68bad`. The integration worktree contains managed APIs absent
-from the older root checkout; neither local revision establishes what is
-currently deployed. Public website and login observations were made on
-2026-09-19. No authenticated execution or billing request was performed.
+production acceptance test. The source review compared Cloud root revision
+`d2cb1a38` with the newer `website-integration-20260918` worktree at
+`61e68bad`; neither local revision establishes what is currently deployed.
+No authenticated execution or billing request was performed.
 
 ## Agent-operated codebase setup
 
-The source implementation shares saved configuration between the dashboard and
-the `project` CLI group. Check `0 guide --json` and `0 project --help` in
-the installed version before using these commands:
-
-```bash
-0 project setup owner/repository --json
-0 project show owner/repository --json
-0 project history owner/repository --json
-```
-
-A coding agent reads source-backed observations, asks about conventions, test
-commands, repair preferences and the budget, then saves an approved revision.
-The dashboard can edit the same context. Starting a scan requires separate
-approval and confirmed credit-backed admission; setup alone does not spend.
-
-Use `0 skills --help` for versioned methodology files and codebase
-assignments. Bundle file paths are relative to the working directory, with
-`SKILL.md` as the entrypoint. A queued scan keeps its captured configuration
-and methodology revisions even when a later revision is saved.
-
-Scan-derived observations stay suggestions until explicitly reviewed and saved.
-They are not automatic training. Slack notification setup remains optional.
-Source/fixture qualification does not establish endpoint or engine deployment.
+The managed dashboard and operator-approved service integrations can store
+codebase context, operating plans and methodology revisions. An agent should
+ask about conventions, test commands, repair preferences and budget before
+proposing a revision. Saving setup is separate from authorizing or starting
+a managed scan. Consult the operator for available interfaces; the local CLI
+does not expose `project` or `skills` service commands.
 
 ## Draft material
 

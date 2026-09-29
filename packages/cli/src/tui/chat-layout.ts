@@ -403,132 +403,69 @@ export function computeAgentRailLayout({
 }
 
 // ---------------------------------------------------------------------------
-// Collapsible LEFT + RIGHT sidebars (the chat's two-rail layout)
+// Collapsible right sidebar and persistent edge rail
 // ---------------------------------------------------------------------------
 
-/**
- * Below this TERMINAL width a sidebar is hidden even when its setting is on —
- * the same "a chat is transcript-first" rule the single rail obeyed, applied to
- * each side independently. Aliases the rail's threshold so the two agree.
- */
+/** Sidebars become edge rails below this width; content then opens in the center. */
 export const SIDEBAR_MIN_TERMINAL_WIDTH = AGENT_RAIL_MIN_TERMINAL_WIDTH;
-const SIDEBAR_MIN_WIDTH = AGENT_RAIL_MIN_WIDTH;
-const SIDEBAR_MAX_WIDTH = AGENT_RAIL_MAX_WIDTH;
-const SIDEBAR_WIDTH_SHARE = AGENT_RAIL_WIDTH_SHARE;
-/** The transcript must keep at least this many text cells between the sidebars. */
+export const SIDEBAR_EDGE_RAIL_WIDTH = 3;
 const SIDEBAR_MIN_TRANSCRIPT = AGENT_RAIL_MIN_TRANSCRIPT;
 
 export interface SidebarsLayoutInput {
-  /** Raw terminal width, gated against {@link SIDEBAR_MIN_TERMINAL_WIDTH}. */
   width: number;
-  /** The screen's padded content column width (from {@link computeChatLayout}). */
+  /** Full width of the body below the header, including its right rail. */
   contentWidth: number;
+  height?: number;
   compact: boolean;
-  /** The `showLeftSidebar` setting. */
-  showLeft: boolean;
-  /** The `showRightSidebar` setting (the promoted agent rail). */
   showRight: boolean;
+  /** Inspection needs readable tool cards, not the roster's narrow columns. */
+  inspectorOpen?: boolean;
 }
 
 export interface SidebarsLayout {
-  leftVisible: boolean;
   rightVisible: boolean;
-  /** Outer cells the left sidebar occupies. 0 when hidden. */
-  leftWidth: number;
-  /** Text cells inside the left sidebar (after its divider + padding). 0 when hidden. */
-  leftInnerWidth: number;
-  /** Outer cells the right sidebar occupies. 0 when hidden. */
+  /** Occupied width, including the persistent rail when collapsed. */
   rightWidth: number;
-  /** Text cells inside the right sidebar (after its divider + padding). 0 when hidden. */
   rightInnerWidth: number;
-  /** Gap cells between the left sidebar and the transcript. 0 when the left is hidden. */
-  leftGap: number;
-  /** Gap cells between the transcript and the right sidebar. 0 when the right is hidden. */
-  rightGap: number;
-  /**
-   * Text-wrap width for transcript entries — the full-width value when both
-   * sidebars are hidden, and the shrunken value between them otherwise, so the
-   * caller passes ONE number to `renderEntry` either way.
-   */
+  /** One rectangle owns transcript, overlays, composer, and status. */
+  centralWidth: number;
   transcriptWidth: number;
+  /** Root top padding plus the one-row header and its bottom margin. */
+  bodyHeight: number;
 }
 
-/**
- * Budget the chat body between an optional LEFT sidebar, the transcript, and an
- * optional RIGHT sidebar. Pure, and total over any geometry.
- *
- * The transcript takes priority: each sidebar is only granted its column while
- * the transcript keeps {@link SIDEBAR_MIN_TRANSCRIPT} cells. When both are
- * requested but only one fits, the RIGHT sidebar ("what's happening now") is
- * kept and the LEFT is dropped, so the live view wins the last column. A narrow
- * terminal, a cleared toggle, or a pair that would starve the transcript all
- * collapse to fewer (or no) sidebars — the caller never special-cases the off
- * state. Left chrome is divider + padding; right chrome is divider + two
- * padding cells. The transcript keeps its usual paddingX (`compact ? 2 : 4`).
- * Widths never exceed `contentWidth` — swept in the tests.
- */
+/** Allocate stable full-height rectangles, never dividers or floating footer bands. */
 export function computeSidebarsLayout({
   width,
   contentWidth,
+  height = 0,
   compact,
-  showLeft,
   showRight,
+  inspectorOpen = false,
 }: SidebarsLayoutInput): SidebarsLayout {
   const cw = Math.max(0, Math.trunc(Number.isFinite(contentWidth) ? contentWidth : 0));
-  const pad = compact ? 2 : 4;
-  const fullTranscript = Math.max(8, cw - pad);
-  const hidden: SidebarsLayout = {
-    leftVisible: false,
-    rightVisible: false,
-    leftWidth: 0,
-    leftInnerWidth: 0,
-    rightWidth: 0,
-    rightInnerWidth: 0,
-    leftGap: 0,
-    rightGap: 0,
-    transcriptWidth: fullTranscript,
-  };
   const terminalWidth = Math.max(0, Math.trunc(Number.isFinite(width) ? width : 0));
-  const narrow = terminalWidth < SIDEBAR_MIN_TERMINAL_WIDTH;
-  const canLeft = showLeft && !narrow;
-  const canRight = showRight && !narrow;
-  if (!canLeft && !canRight) return hidden;
-
-  const sidebarWidth = Math.min(
-    SIDEBAR_MAX_WIDTH,
-    Math.max(SIDEBAR_MIN_WIDTH, Math.floor(cw * SIDEBAR_WIDTH_SHARE)),
-  );
-  const gap = 1;
-
-  // Priority order: both, then right-only, then left-only. The transcript keeps
-  // its minimum in every accepted case, so a pair that would starve it falls
-  // through to a single sidebar (right wins), then to none.
-  const attempts: { l: boolean; r: boolean }[] = [];
-  if (canLeft && canRight) attempts.push({ l: true, r: true });
-  if (canRight) attempts.push({ l: false, r: true });
-  if (canLeft) attempts.push({ l: true, r: false });
-
-  for (const attempt of attempts) {
-    const leftWidth = attempt.l ? sidebarWidth : 0;
-    const rightWidth = attempt.r ? sidebarWidth : 0;
-    const leftGap = attempt.l ? gap : 0;
-    const rightGap = attempt.r ? gap : 0;
-    const transcriptOuter = cw - leftWidth - rightWidth - leftGap - rightGap;
-    const transcriptWidth = transcriptOuter - pad;
-    if (transcriptWidth < SIDEBAR_MIN_TRANSCRIPT) continue;
-    return {
-      leftVisible: attempt.l,
-      rightVisible: attempt.r,
-      leftWidth,
-      leftInnerWidth: attempt.l ? Math.max(1, leftWidth - 2) : 0,
-      rightWidth,
-      rightInnerWidth: attempt.r ? Math.max(1, rightWidth - 3) : 0,
-      leftGap,
-      rightGap,
-      transcriptWidth: Math.max(8, transcriptWidth),
-    };
+  const railWidth = Math.min(SIDEBAR_EDGE_RAIL_WIDTH, Math.floor(cw / 2));
+  const padding = compact ? 2 : 4;
+  const sidebarWidth = Math.min(34, Math.max(22, Math.floor(cw * 0.28)));
+  const inspectorWidth = Math.min(72, Math.max(40, Math.floor(cw * 0.45)));
+  const rightExpandedWidth = inspectorOpen ? inspectorWidth : sidebarWidth;
+  const canRight = showRight && terminalWidth >= SIDEBAR_MIN_TERMINAL_WIDTH;
+  let rightVisible = false;
+  // Expand only while the conversation keeps its readable text width.
+  if (canRight && cw - rightExpandedWidth - padding >= SIDEBAR_MIN_TRANSCRIPT) {
+    rightVisible = true;
   }
-  return hidden;
+  const rightWidth = rightVisible ? rightExpandedWidth : railWidth;
+  const centralWidth = cw - rightWidth;
+  return {
+    rightVisible,
+    rightWidth,
+    rightInnerWidth: rightVisible ? Math.max(0, rightWidth - 2) : 0,
+    centralWidth,
+    transcriptWidth: Math.max(0, centralWidth - Math.min(centralWidth, padding)),
+    bodyHeight: Math.max(0, Math.trunc(Number.isFinite(height) ? height : 0) - 3),
+  };
 }
 
 /**

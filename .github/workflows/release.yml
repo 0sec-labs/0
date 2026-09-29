@@ -4,7 +4,7 @@ name: "0: Release"
 # four (+ checksums) to the GitHub Release. Native builds avoid `bun --compile`
 # cross-compilation, which cannot resolve @opentui/core's per-platform native
 # packages from a single host. Each binary is smoke-tested on its own runner
-# before it ships.
+# before it ships. Desktop is development-only alpha and is never a release asset.
 #
 # Trigger: pushing a `v*` tag, or manually via workflow_dispatch with the tag.
 
@@ -140,20 +140,29 @@ jobs:
         with:
           path: dist-bin
           merge-multiple: true
-      - name: Generate checksums
+      # Keep an explicit CLI allowlist: additional workflow artifacts, including
+      # locally packaged desktop alpha apps, must not enter the release.
+      - name: Generate CLI checksums
         run: |
           cd dist-bin
-          sha256sum * > checksums.txt
+          sha256sum 0-darwin-arm64 0-linux-x64 0-linux-arm64 0-windows-x64.exe > checksums.txt
           cat checksums.txt
       - name: Create / update the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
+          assets=(
+            dist-bin/0-darwin-arm64
+            dist-bin/0-linux-x64
+            dist-bin/0-linux-arm64
+            dist-bin/0-windows-x64.exe
+            dist-bin/checksums.txt
+          )
           if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist-bin/* --repo "${{ github.repository }}" --clobber
+            gh release upload "$TAG" "${assets[@]}" --repo "${{ github.repository }}" --clobber
           else
-            gh release create "$TAG" dist-bin/* \
+            gh release create "$TAG" "${assets[@]}" \
               --repo "${{ github.repository }}" \
               --title "0 $TAG" \
               --notes "Automated multi-platform release. See CHANGELOG.md for changes." \

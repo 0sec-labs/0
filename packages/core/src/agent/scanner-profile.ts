@@ -40,6 +40,7 @@
 
 import type { ScopePolicy } from "../scope/scope.js";
 import type { EnforcementTracker } from "../scope/enforcement.js";
+import { isScopeEnforcementEnabled } from "../scope/activation.js";
 
 /** Inputs the gate inspects. A subset of `ToolContext`, narrowed for testability. */
 export interface ScannerEngagementContext {
@@ -97,7 +98,7 @@ export function scannerEngagementGate(
   // Rail 2: an authorized engagement is an explicitly SCOPED one. With no
   // scope policy we refuse (deny-by-default) rather than scan an unbounded
   // target set — mirrors recon/active-subdomains.ts and cloud-surface gating.
-  if (!ctx.scope) {
+  if (isScopeEnforcementEnabled() && !ctx.scope) {
     return {
       allowed: false,
       reason:
@@ -108,8 +109,8 @@ export function scannerEngagementGate(
   }
 
   // Rail 3a: per-invocation host scope.
-  const hostVerdict = ctx.scope.match(scopeUrl);
-  if (!hostVerdict.allowed) {
+  const hostVerdict = ctx.scope?.enforce(scopeUrl);
+  if (hostVerdict && !hostVerdict.allowed) {
     return {
       allowed: false,
       reason: `${tool} refused: target out-of-scope '${scopeUrl}' (${hostVerdict.reason})`,
@@ -132,7 +133,7 @@ export function scannerEngagementGate(
         countsAsBlocked: false,
       };
     }
-    const pathVerdict = ctx.enforcement.pathPolicy.match(scopeUrl);
+    const pathVerdict = ctx.enforcement.pathPolicy.enforce(scopeUrl);
     if (!pathVerdict.allowed) {
       return {
         allowed: false,

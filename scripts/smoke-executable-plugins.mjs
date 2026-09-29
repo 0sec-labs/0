@@ -141,7 +141,6 @@ try {
     const { maybeLoadCodexAuth } = await import("../packages/cli/dist/codex-auth.js");
     maybeLoadCodexAuth();
     process.env["ZERO_DISABLE_HUNT_MEMORY"] = "1";
-    process.env["ZERO_CLOUD_SINK"] = "";
     await step("Real provider repairs source and activates a measured version", async () => {
       const buggy = output(await manager.submit({ manifest: manifest("smoke.evolve", [tool("smoke_evolve")]), entry: "main.ts", kind: "agent", files: {
         "main.ts": source("if (typeof args.value !== 'number' || !Number.isFinite(args.value)) return {error:'invalid'}; return {result:args.value - 42};"),

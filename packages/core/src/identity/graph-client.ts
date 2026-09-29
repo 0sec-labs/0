@@ -289,7 +289,7 @@ export class GraphClient {
       throw new GraphScopeError(url, `origin '${parsed.origin}' is not the configured Graph origin '${this.origin}'`);
     }
     if (this.scope) {
-      const match = this.scope.match(url);
+      const match = this.scope.enforce(url);
       if (!match.allowed) throw new GraphScopeError(url, match.reason);
     }
   }

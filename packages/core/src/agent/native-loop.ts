@@ -52,7 +52,7 @@ import { SECURITY_RULES, selectRules, buildRuleInjection, type EngagementPhase, 
 import { formatJitSkillsInstruction, getSkillById } from "./skills/index.js";
 import { estimateCost } from "./cost.js";
 import type { ScanCostLedger } from "./cost-ledger.js";
-import { eventBus, isCloudEventSinkActive } from "../events/bus.js";
+import { eventBus } from "../events/bus.js";
 import { diag } from "../diagnostics/channel.js";
 import {
   reduceCoordinatorState,
@@ -73,7 +73,6 @@ import {
   isUntrustedSourceTool,
   sanitizeUntrustedToolResult,
 } from "../untrusted-sanitizer.js";
-import { DeltaBatcherSet } from "./delta-batcher.js";
 import { toolCallPreview } from "./tool-preview.js";
 import {
   newCorrelationId,
@@ -169,24 +168,19 @@ export function summarizeReasoning(thinkingText: string | undefined | null): str
 const EXTERNAL_MEMORY_MAX_CHARS = 2000;
 
 /**
- * Transient provider error classifier. Hosted inference is fail-closed: an
- * admission rejection is replayable only when the gateway explicitly marks
- * it safe. A response/stream/transport failure can hide a billable outcome.
- * Direct providers retain their existing bounded retry behavior.
+ * Classify transient provider overloads, rate limits and transport failures
+ * for the agent loop's bounded same-turn retry.
  */
-export function isTransientLlmError(errorMsg: string, retrySafe?: boolean): boolean {
-  if (retrySafe === false || /automatic replay is disabled|outcome (?:is|may be) unknown/i.test(errorMsg)) return false;
-  if (/(?:\b0 hosted request\b|\b0\.security Cloud\b)/i.test(errorMsg) && retrySafe !== true) return false;
+export function isTransientLlmError(errorMsg: string): boolean {
   return /\b(429|529|502|503|504)\b|overloaded|rate.?limit|temporarily|too many requests|ETIMEDOUT|ECONNRESET|throttl|stall/i.test(errorMsg);
 }
 
 /**
- * Provider context-window rejection classifier. Hosted 413
- * input_limit_exceeded is a pre-dispatch admission rejection; pruning changes
- * the next request. Rate limits and generic 5xx never prune history.
+ * Provider context-window rejection classifier. Pruning changes the next
+ * request; rate limits and generic 5xx never prune history.
  */
 export function isContextWindowError(errorMsg: string): boolean {
-  if (/\b0\.security Cloud API error 429:/i.test(errorMsg)) return false;
+  if (/\bAPI error 429:/i.test(errorMsg)) return false;
   return /context.{0,40}(?:window|length|limit)|(?:maximum|max).{0,20}context|too many tokens|prompt.{0,30}(?:too long|too large)|input.{0,30}(?:too long|too large|limit(?:_exceeded)?)/i.test(
     errorMsg,
   );
@@ -599,10 +593,10 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     inlineValidationOracle,
   } = opts;
 
-  // Hosted discovery and failover can change the model during a call.
+  // Failover can change the model during a call.
   // Price usage against its resolved identity, never the Auto routing choice.
   const pricingModel = () => {
-    const model = runtime.resolvedModel?.() || config.costModel;
+    const model = runtime.resolvedPricingModel?.() || runtime.resolvedModel?.() || config.costModel;
     return model === "auto" ? undefined : model;
   };
 
@@ -743,7 +737,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // off-ledger gap where subagent spend escaped the ceiling entirely).
     costLedger: config.costLedger,
     costCeilingUsd: config.costCeilingUsd,
-    get costModel() { return pricingModel(); },
+    get costModel() { return runtime.resolvedModel?.() || config.costModel; },
     // Tool-health aggregator (0#tool-reliability). Shared across the scan so
     // the end-of-run summary sees every tool skip/failure; each NEW distinct
     // event also fans out on the bus as `tool_health`.
@@ -1970,33 +1964,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     let streamedUsageInputTokens: number | undefined;
     let streamedUsageOutputTokens: number | undefined;
 
-    // ── Token-level delta forwarding (cloud Live Trace) ──
-    // Only wire the per-token callback when a cloud sink is actually
-    // listening. For local CLI invocations `isCloudEventSinkActive()`
-    // returns false and we leave `onDelta` undefined — the runtime then
-    // skips the delta-forwarding branch entirely, so non-cloud runs pay
-    // zero per-token overhead beyond the existing thinking-throttle path.
-    //
-    // `deltaSeq` is keyed by scope so assistant_response and reasoning
-    // each get their own monotonic counter. Resets every turn — the
-    // (turn, scope) tuple is what the dashboard renderer keys on.
-    const cloudActive = isCloudEventSinkActive();
-    const deltaSeq: Record<"assistant_response" | "reasoning", number> = {
-      assistant_response: 0,
-      reasoning: 0,
-    };
-    const deltaBatchers = cloudActive
-      ? new DeltaBatcherSet(({ scope, text }) => {
-          const seq = deltaSeq[scope]++;
-          eventBus.emit("delta", {
-            turn: state.turnCount,
-            role: config.role,
-            scope,
-            text,
-            seq,
-          });
-        })
-      : null;
 
     // Bus event: planner invocation. `tokens_est` is cumulative input
     // tokens going INTO this call — the actual response usage lands on
@@ -2052,21 +2019,10 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
             estimatedCostUsd: estimateCost(cumulativeUsage, pricingModel()),
           });
         },
-        ...(deltaBatchers
-          ? {
-              onDelta: (scope: "assistant_response" | "reasoning", text: string) => {
-                deltaBatchers.push(scope, text);
-              },
-            }
-          : {}),
       },
       executionSignal,
     );
 
-    // Drain any trailing delta buffer before the turn-completed event so
-    // the cloud sees the full streamed text BEFORE it sees the next
-    // turn's `agent_turn_started` and retires the typing cursor.
-    deltaBatchers?.flushAll();
 
     // `reasoning_summary` is emitted further down once we've also seen the
     // assistant's pre-tool-call text — that lets us fall back to summarising
@@ -2222,7 +2178,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       // Transient provider overload / rate-limit / 5xx → back off and retry the
       // SAME turn rather than killing the run. Doesn't consume a turn (the LLM
       // call failed before any tool ran), capped by MAX_TRANSIENT_RETRIES.
-      const transient = !driven && isTransientLlmError(errorMsg, result.retrySafe);
+      const transient = !driven && isTransientLlmError(errorMsg);
       if (transient && transientRetries < MAX_TRANSIENT_RETRIES) {
         transientRetries++;
         const backoffMs = Math.min(20_000, 500 * 2 ** transientRetries);

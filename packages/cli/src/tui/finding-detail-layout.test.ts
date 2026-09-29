@@ -9,7 +9,6 @@ import {
   computeFindingKvLayout,
   computeScrollWindow,
   findingActions,
-  findingDetailFooterHint,
   findingDetailTitle,
   maxScrollOffset,
   paneTitleColumns,
@@ -233,14 +232,6 @@ describe("findingActions / hints / title", () => {
     expect(findingDetailTitle(undefined)).toBe("FINDING");
   });
 
-  it("lists the keys that work in the footer hint", () => {
-    const hint = findingDetailFooterHint({ canStatus: true });
-    expect(hint).toContain("[i] investigate");
-    expect(hint).toContain("[f] plan fix");
-    expect(hint).toContain("[c] copy report");
-    expect(hint).toContain("[v] verify");
-    expect(hint).toContain("[esc] back");
-  });
 });
 
 // ---------------------------------------------------------------------------

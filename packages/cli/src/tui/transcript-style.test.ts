@@ -174,6 +174,11 @@ describe("role label styles produce the documented widths", () => {
     expect(roleLabelWidth("user", "off")).toBe(0);
   });
 
+  it("keeps assistant replies unheaded while retaining optional operator identification", () => {
+    expect(roleLabelText("assistant", "full", "12s")).toBeNull();
+    expect(roleLabelText("user", "full")).toBe("You");
+  });
+
 });
 
 // ---------------------------------------------------------------------------

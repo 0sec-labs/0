@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { estimateCost, registerModelPricing } from "@0/shared";
 import {
   LlmApiRuntime,
   probeAzureRegion,
@@ -173,33 +174,10 @@ describe("LlmApiRuntime provider detection", () => {
     },
   );
 
-  it("preserves an explicit hosted worker pin despite a direct provider key", async () => {
-    const cloudHost = `https://${randomUUID()}.example.test`;
+  it("rejects a removed provider pin rather than using available direct credentials", () => {
     process.env["ZERO_SELECTED_PROVIDER"] = "hosted";
-    process.env["ZERO_CLOUD_HOST"] = cloudHost;
-    process.env["ZERO_CLOUD_TOKEN"] = "cloud-fixture";
     process.env.OPENAI_API_KEY = "openai-fixture";
-    const requests: Array<{ url: string; authorization: string | null; model: string }> = [];
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
-      if (String(url).endsWith("/models")) {
-        return Response.json({ data: [{ id: "service-default", wire_api: "chat_completions" }] });
-      }
-      requests.push({
-        url: String(url),
-        authorization: new Headers(init?.headers).get("authorization"),
-        model: JSON.parse(String(init?.body)).model,
-      });
-      return Response.json({ choices: [{ message: { content: "hosted" }, finish_reason: "stop" }] });
-    });
-    try {
-      const runtime = new LlmApiRuntime({ type: "api", timeout: 1000 });
-      expect((await runtime.executeNative("system", [], [])).content).toContainEqual({ type: "text", text: "hosted" });
-      expect(requests).toEqual([
-        { url: `${cloudHost}/api/inference/v1/chat/completions`, authorization: "Bearer cloud-fixture", model: "service-default" },
-      ]);
-    } finally {
-      fetchMock.mockRestore();
-    }
+    expect(() => new LlmApiRuntime({ type: "api", timeout: 1000 })).toThrow(/unsupported/);
   });
 
   it("rejects an explicit provider conflicting with FORCE even with a supplied API key", () => {
@@ -230,18 +208,18 @@ describe("LlmApiRuntime provider detection", () => {
     process.env.OPENAI_BASE_URL = "https://gateway.example.test/v1";
     process.env["ZERO_MODEL"] = "gpt-6-astra";
     if (selectedProvider) process.env["ZERO_SELECTED_PROVIDER"] = selectedProvider;
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({
-        choices: [{ message: { content: "Gateway response" }, finish_reason: "stop" }],
-        usage: { prompt_tokens: 1, completion_tokens: 2 },
-      }), { headers: { "content-type": "application/json" } }),
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      new Response(`data: ${JSON.stringify({ type: "response.completed", response: {
+        output: [{ type: "message", content: [{ type: "output_text", text: "Gateway response" }] }],
+        usage: { input_tokens: 1, output_tokens: 2 },
+      } })}\n\n`, { headers: { "content-type": "text/event-stream" } }),
     );
     try {
       const rt = new LlmApiRuntime({ type: "api", timeout: 5000 });
       const result = await rt.executeNative("sys", [
         { role: "user", content: [{ type: "text", text: "hello" }] },
       ], []);
-      expect(fetchMock.mock.calls[0]?.[0]).toBe("https://gateway.example.test/v1/chat/completions");
+      expect(fetchMock.mock.calls[0]?.[0]).toBe("https://gateway.example.test/v1/responses");
       expect(result.content).toContainEqual({ type: "text", text: "Gateway response" });
       expect(result.error).toBeUndefined();
     } finally {
@@ -336,13 +314,6 @@ describe("LlmApiRuntime provider detection", () => {
     expect(rt.getConfigurationDiagnostics().provider).toBe("anthropic");
   });
 
-  it("honors an explicit Anthropic selection with a hosted login", async () => {
-    process.env.ANTHROPIC_API_KEY = "sk-ant-test456";
-    process.env["ZERO_CLOUD_TOKEN"] = randomUUID();
-    const rt = new LlmApiRuntime({ type: "api", timeout: 5000, provider: "anthropic" });
-    expect(rt.getConfigurationDiagnostics().provider).toBe("anthropic");
-  });
-
   it("selects Azure when AZURE_OPENAI_API_KEY is set (before OPENAI_API_KEY)", async () => {
     process.env.AZURE_OPENAI_API_KEY = "azure-key-123";
     process.env.OPENAI_API_KEY = "sk-openai-should-not-win";
@@ -417,6 +388,59 @@ describe("LlmApiRuntime provider detection", () => {
     expect(resolved.provider).toBe("openai");
     expect(resolved.model).toBe("gpt-5.6-luna");
     expect(resolved.wireApi).toBe("responses");
+  });
+
+  it("sends GPT-6.1 Sol function tools over Responses rather than Chat Completions", async () => {
+    process.env.OPENAI_API_KEY = "openai-key-123";
+    process.env["ZERO_MODEL"] = "gpt-6.1-sol";
+    process.env["ZERO_SELECTED_PROVIDER"] = "openai";
+    process.env.OPENAI_WIRE_API = "chat_completions";
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+      expect(String(url)).toBe("https://api.openai.com/v1/responses");
+      const body = JSON.parse(String(init?.body));
+      expect(body.model).toBe("gpt-6.1-sol");
+      expect(body.tools).toEqual([expect.objectContaining({ name: "inspect" })]);
+      const event = { type: "response.completed", response: {
+        output: [{ type: "message", content: [{ type: "output_text", text: "done" }] }],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      } };
+      return new Response(`data: ${JSON.stringify(event)}\n\n`, {
+        headers: { "content-type": "text/event-stream" },
+      });
+    });
+    try {
+      const runtime = new LlmApiRuntime({ type: "api", timeout: 5000 });
+      const result = await runtime.executeNative("system", [
+        { role: "user", content: [{ type: "text", text: "inspect this" }] },
+      ], [{ name: "inspect", description: "Inspect input", input_schema: { type: "object", properties: {} } }]);
+      expect(result.content).toContainEqual({ type: "text", text: "done" });
+      expect(result.error).toBeUndefined();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it("prices an arbitrary discovered ID on its selected route without sending the pricing prefix upstream", async () => {
+    registerModelPricing("openai/aaa-catalog-pricing-regression", { input: 2, output: 12 });
+    const request = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      expect(JSON.parse(String(init?.body)).model).toBe("aaa-catalog-pricing-regression");
+      return Response.json({
+        choices: [{ message: { content: "done" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 10, completion_tokens: 5 },
+      });
+    });
+    try {
+      const runtime = new LlmApiRuntime({
+        type: "api", provider: "openai", model: "aaa-catalog-pricing-regression", timeout: 5000,
+        env: { OPENAI_API_KEY: "fixture-key", OPENAI_WIRE_API: "chat_completions" },
+      });
+      const result = await runtime.executeNative("system", [{ role: "user", content: [{ type: "text", text: "hello" }] }], []);
+      expect(result.content).toContainEqual({ type: "text", text: "done" });
+      expect(estimateCost(result.usage, runtime.resolvedPricingModel())).toBeCloseTo(0.00008, 8);
+    } finally {
+      request.mockRestore();
+    }
   });
 
 
@@ -2254,7 +2278,7 @@ describe("parseLlmFallbackChain", () => {
 
   it("skips unknown providers with a warning", () => {
     const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
-    process.env["ZERO_LLM_FALLBACK"] = "unknown:foo,openai:gpt-4o";
+    process.env["ZERO_LLM_FALLBACK"] = "unknown:foo,hosted:retired,openai:gpt-4o";
     expect(parseLlmFallbackChain()).toEqual([
       { provider: "openai", model: "gpt-4o" },
     ]);

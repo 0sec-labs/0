@@ -10,6 +10,8 @@ vi.mock("@0/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@0/core")>();
   return {
     ...actual,
+    getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, projectPath: process.cwd(), message: "Scope plugin enabled" }),
+    isScopeEnforcementEnabled: () => true,
     runRecon: runReconMock,
   };
 });

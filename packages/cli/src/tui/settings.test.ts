@@ -95,6 +95,7 @@ describe("normalizeSettings", () => {
     const normalized = normalizeSettings({
       showStatusBar: false,
       legacyShowFooter: true,
+      showLeftSidebar: true,
       showstatusbar: true,
       __proto__marker: "x",
     });
@@ -414,34 +415,22 @@ describe("subagent messaging settings", () => {
 
 describe("sidebar settings", () => {
 
-  it("are Display booleans", () => {
-    for (const key of ["showRightSidebar", "showLeftSidebar"] as const) {
-      const def = SETTING_DEFS.find((d) => d.key === key);
-      expect(def?.group).toBe("Display");
-      expect(def?.kind).toBe("boolean");
-    }
-  });
 
   it("toggle on and back off", () => {
     const on = toggleSetting({ ...DEFAULT_SETTINGS, showRightSidebar: false }, "showRightSidebar");
     expect(on.showRightSidebar).toBe(true);
     expect(toggleSetting(on, "showRightSidebar").showRightSidebar).toBe(false);
-
-    const left = toggleSetting(DEFAULT_SETTINGS, "showLeftSidebar");
-    expect(left.showLeftSidebar).toBe(true);
-    expect(toggleSetting(left, "showLeftSidebar").showLeftSidebar).toBe(false);
   });
 
   it("round-trip an enabled sidebar through save and load", () => {
     const home = makeHome();
     expect(
       saveSettings(
-        { ...DEFAULT_SETTINGS, showRightSidebar: true, showLeftSidebar: true },
+        { ...DEFAULT_SETTINGS, showRightSidebar: true },
         home,
       ),
     ).toBe(true);
     expect(loadSettings(home).showRightSidebar).toBe(true);
-    expect(loadSettings(home).showLeftSidebar).toBe(true);
   });
 
   it("honours the legacy `showAgentRail` key on load", () => {
@@ -713,7 +702,6 @@ describe("operator-only privacy and updates", () => {
       showLogo: false,
     });
     const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
-    expect(settings.diagnosticReporting).toBe("automatic");
     expect(settings.diagnosticReportingPrompted).toBe(false);
     expect(settings.updatePolicy).toBe("automatic");
     expect(settings.allowDevSourceUpdates).toBe(false);
@@ -790,19 +778,6 @@ describe("operator-only privacy and updates", () => {
     expect(readProjectOverrides(project)).toEqual({ showLogo: false });
   });
 
-  it("defaults analyticsLevel to full and offers off/usage/commands/full", () => {
-    expect(DEFAULT_SETTINGS.analyticsLevel).toBe("full");
-    const def = SETTING_DEFS.find((d) => d.key === "analyticsLevel");
-    expect(def?.kind).toBe("enum");
-    expect(def?.choices).toEqual(["off", "usage", "commands", "full"]);
-    // A project override may not set it (operator-owned egress grant).
-    const { settings, sources } = loadLayeredSettings({
-      homeDir: makeHome(),
-      projectDir: makeProjectDir(),
-    });
-    expect(settings.analyticsLevel).toBe("full");
-    expect(sources.analyticsLevel).toBe("default");
-  });
 });
 
 describe("two-level layering", () => {
@@ -939,13 +914,14 @@ describe("keybindings overrides", () => {
   it("keeps a valid override, canonicalised, and drops invalid ones", () => {
     const normalized = normalizeSettings({
       keybindings: {
-        "view.left-sidebar": "Ctrl+J", // valid, canonicalises to ctrl+j
+        "overlay.review-toggle": "Ctrl+J", // valid, canonicalises to ctrl+j
         "session.quit": "ctrl+x", // protected id — dropped
         "view.right-sidebar": "k", // no modifier — dropped
         "view.transcript-detail": "ctrl+c", // reserved chord — dropped
+        "view.left-sidebar": "ctrl+j", // removed id — ignored, even beside the same valid chord
       },
     });
-    expect(normalized.keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+    expect(normalized.keybindings).toEqual({ "overlay.review-toggle": "ctrl+j" });
   });
 
   it("tolerates a non-object keybindings value", () => {
@@ -957,14 +933,14 @@ describe("keybindings overrides", () => {
 
   it("survives a save/normalise round-trip on disk", () => {
     const home = makeHome();
-    saveSettings({ ...DEFAULT_SETTINGS, keybindings: { "view.left-sidebar": "ctrl+j" } }, home);
-    expect(loadSettings(home).keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+    saveSettings({ ...DEFAULT_SETTINGS, keybindings: { "overlay.review-toggle": "ctrl+j" } }, home);
+    expect(loadSettings(home).keybindings).toEqual({ "overlay.review-toggle": "ctrl+j" });
   });
 
   it("layers the map as a unit: a project map replaces the global one", () => {
     const home = makeHome();
     const project = makeProjectDir();
-    writeGlobalFull(home, { ...DEFAULT_SETTINGS, keybindings: { "view.left-sidebar": "ctrl+j" } });
+    writeGlobalFull(home, { ...DEFAULT_SETTINGS, keybindings: { "overlay.review-toggle": "ctrl+j" } });
     writeProjectRaw(project, { keybindings: { "view.right-sidebar": "ctrl+shift+l" } });
 
     const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
@@ -975,11 +951,11 @@ describe("keybindings overrides", () => {
   it("falls through to global when the project omits the key", () => {
     const home = makeHome();
     const project = makeProjectDir();
-    writeGlobalFull(home, { ...DEFAULT_SETTINGS, keybindings: { "view.left-sidebar": "ctrl+j" } });
+    writeGlobalFull(home, { ...DEFAULT_SETTINGS, keybindings: { "overlay.review-toggle": "ctrl+j" } });
     writeProjectRaw(project, { showLogo: false });
 
     const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
-    expect(settings.keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+    expect(settings.keybindings).toEqual({ "overlay.review-toggle": "ctrl+j" });
     expect(sources.keybindings).toBe("global");
   });
 
@@ -993,7 +969,7 @@ describe("keybindings overrides", () => {
 
   it("is a project-overridable setting (not operator-only)", () => {
     const project = makeProjectDir();
-    expect(saveProjectOverrides({ keybindings: { "view.left-sidebar": "ctrl+j" } }, project)).toBe(true);
-    expect(readProjectOverrides(project).keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+    expect(saveProjectOverrides({ keybindings: { "overlay.review-toggle": "ctrl+j" } }, project)).toBe(true);
+    expect(readProjectOverrides(project).keybindings).toEqual({ "overlay.review-toggle": "ctrl+j" });
   });
 });

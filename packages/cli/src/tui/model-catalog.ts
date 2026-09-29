@@ -1,18 +1,15 @@
 /**
  * The selectable model list behind `/model`.
  *
- * There is deliberately no second hand-maintained list of models here: the
- * pricing table in @0/shared is already the one place that knows which
- * ids the tool understands, and a separate "menu" list would drift from it
- * the first time a model is added. So the catalog is derived — ids from
- * MODEL_PRICING, provider from `modelProvider`, price from `getRates` — and
- * this module only decides ordering and presentation.
+ * The shared pricing table supplies the offline floor; Models.dev supplies
+ * newly published provider-qualified IDs and metadata. Neither registry is an
+ * allowlist for inference, and public rows never establish account entitlement.
  */
 
 import { MODEL_PRICING, getRates, modelProvider } from "@0/shared";
 
 import type { SelectorItem } from "./selector.js";
-import { loadCatalogModels, type CatalogSyncOptions } from "./model-catalog-sync.js";
+import { loadCatalogModels, METERED_CATALOG_PROVIDERS, type CatalogSyncOptions } from "./model-catalog-sync.js";
 
 export interface CatalogModel {
   id: string;
@@ -53,8 +50,9 @@ export function buildModelCatalog(currentModel?: string): CatalogModel[] {
   const models = Object.keys(MODEL_PRICING)
     .filter((id) => !NON_MODEL_PRICING_KEYS.has(id))
     .map((id) => {
-      const rates = getRates(id);
-      return { id, provider: modelProvider(id), price: formatModelPrice(rates.input, rates.output) };
+      const provider = modelProvider(id);
+      const rates = getRates(Object.hasOwn(METERED_CATALOG_PROVIDERS, provider) ? `${provider}/${id}` : id);
+      return { id, provider, price: formatModelPrice(rates.input, rates.output) };
     });
 
   // The active model floats to the top: it is the row the operator most
@@ -79,11 +77,11 @@ export function modelSelectorItems(currentModel?: string): SelectorItem[] {
 
 // ── Models.dev-synced superset ────────────────────────────────────────────────
 //
-// `buildModelCatalog` above is the priced core: exactly the ids @0/shared
-// has rates for, in a stable order. The functions below widen the picker to
-// every model the operator's provider offers by folding in the Models.dev
-// catalog (cached, with a bundled offline floor — see model-catalog-sync.ts).
-// Drop a synced row only when the priced core shows that exact row already.
+// The priced catalog is an offline floor, not an allowlist. Cached public
+// metadata adds provider-qualified models without requiring a pricing edit.
+const PLAN_PROVIDERS: Readonly<Record<string, true>> = {
+  kimi: true, qwen: true, "z-ai": true, copilot: true, google: true,
+};
 
 /** Byte-order-stable sort used by both the priced and full catalogs. */
 function compareCatalogRows(currentModel?: string) {
@@ -95,11 +93,8 @@ function compareCatalogRows(currentModel?: string) {
 }
 
 /**
- * Models present in the cached/offline Models.dev catalog beyond the priced
- * core's own rows. Price is shown only when the feed carried one; otherwise
- * a neutral placeholder, so the operator can still select the model (cost
- * accounting falls back to the `default` rate row, exactly as it does today
- * for any unrecognised id).
+ * Models in the cached/offline public catalog beyond the priced floor. Missing
+ * prices remain unknown; subscription-plan zeroes are not free API tariffs.
  */
 export function catalogExtras(opts: CatalogSyncOptions = {}): CatalogModel[] {
   const priced = new Set(Object.keys(MODEL_PRICING).map((k) => k.toLowerCase()));
@@ -107,10 +102,14 @@ export function catalogExtras(opts: CatalogSyncOptions = {}): CatalogModel[] {
   for (const m of loadCatalogModels(opts).models) {
     // Skip only the priced core's own rows (same id, same provider).
     if (priced.has(m.id.toLowerCase()) && m.provider === modelProvider(m.id)) continue;
-    const price =
-      typeof m.input === "number" && typeof m.output === "number"
-        ? formatModelPrice(m.input, m.output)
-        : "—";
+    const plan = Object.hasOwn(PLAN_PROVIDERS, m.provider);
+    let price = plan ? "subscription" : "—";
+    if (!plan && m.input !== undefined && m.output !== undefined) {
+      const rates = Object.hasOwn(METERED_CATALOG_PROVIDERS, m.provider)
+        ? getRates(`${m.provider}/${m.id}`)
+        : { input: m.input, output: m.output };
+      price = formatModelPrice(rates.input, rates.output);
+    }
     out.push({ id: m.id, provider: m.provider, price });
   }
   return out;
@@ -125,8 +124,9 @@ export function buildFullModelCatalog(
   currentModel?: string,
   opts: CatalogSyncOptions = {},
 ): CatalogModel[] {
-  const priced = buildModelCatalog(currentModel);
+  // Cached provider-qualified estimates must be registered before pricing the floor.
   const extras = catalogExtras(opts);
+  const priced = buildModelCatalog(currentModel);
   const models = [...priced, ...extras];
   if (currentModel && !models.some((model) => model.id === currentModel)) {
     models.push({ id: currentModel, provider: modelProvider(currentModel), price: "—" });

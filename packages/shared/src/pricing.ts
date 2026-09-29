@@ -13,7 +13,7 @@ export interface TokenUsageForPricing {
   cachedInputTokens?: number;
 }
 
-export const PRICING_SNAPSHOT_DATE = "2026-09-11";
+export const PRICING_SNAPSHOT_DATE = "2026-09-29";
 
 /**
  * The IRREDUCIBLE manual residue: models no public pricing feed (LiteLLM, and by
@@ -30,6 +30,8 @@ export const MANUAL_PRICING: Record<string, ModelRates> = {
   "claude-haiku-4-5": { input: 0.80, output: 4.00, cachedInput: 0.08 },
   // OpenAI codex alias — mirrors gpt-5.5 (OSS feed has only the bare key)
   "gpt-5.5-codex": { input: 5.00, output: 30.00 },
+  // LiteLLM no longer carries this exact key; retain its last published rate.
+  "gemini-2.0-flash": { input: 0.10, output: 0.40, cachedInput: 0.025 },
   // Meta (hosted) — not in the OSS feed
   "llama-4-maverick": { input: 0.50, output: 0.77 },
   "llama-4-scout": { input: 0.20, output: 0.35 },
@@ -131,6 +133,25 @@ export const MODEL_PRICING: Record<string, ModelRates> = {
   ...OSS_PRICING,
 };
 
+const DISCOVERED_PRICING = new Map<string, Readonly<ModelRates>>();
+
+/** Add validated catalog estimates for new IDs without replacing bundled tariffs. */
+export function registerModelPricing(model: string, rates: ModelRates): boolean {
+  if (!model || model !== model.trim() || /[\s\x00-\x1f\x7f]/.test(model) ||
+    Object.hasOwn(MODEL_PRICING, model) ||
+    !Number.isFinite(rates.input) || rates.input < 0 ||
+    !Number.isFinite(rates.output) || rates.output < 0 ||
+    (rates.cachedInput !== undefined && (!Number.isFinite(rates.cachedInput) || rates.cachedInput < 0))) {
+    return false;
+  }
+  DISCOVERED_PRICING.set(model, Object.freeze({
+    input: rates.input,
+    output: rates.output,
+    ...(rates.cachedInput !== undefined ? { cachedInput: rates.cachedInput } : {}),
+  }));
+  return true;
+}
+
 // Azure's runtime model id is the operator deployment name. Accept casing
 // differences and Azure's version suffixes while keeping all other pricing
 // keys exact, so a deployment such as `DeepSeek-V4-Pro-2026-04-23` cannot
@@ -157,31 +178,33 @@ function azureDeploymentPriceKey(model: string): string | null {
 }
 
 /** Known vendor prefixes to strip (e.g. "openai/gpt-4o" -> "gpt-4o"). */
+const MODEL_VENDOR_PREFIXES = [
+  "openai/", "azure/", "anthropic/", "google/", "deepseek/", "meta/", "mistral/",
+  "z-ai/", "zai/", "kimi/", "moonshot/", "qwen/", "openrouter/", "opencode/",
+  "xai/", "x-ai/",
+];
+
 function normalizeModel(model: string): string {
-  const prefixes = [
-    "openai/",
-    "anthropic/",
-    "google/",
-    "deepseek/",
-    "meta/",
-    "mistral/",
-    "z-ai/",
-    "zai/",
-    "kimi/",
-    "moonshot/",
-    "openrouter/",
-    "opencode/",
-  ];
-  for (const prefix of prefixes) {
-    if (model.startsWith(prefix)) return model.slice(prefix.length);
+  let key = model;
+  for (;;) {
+    let stripped = false;
+    for (const prefix of MODEL_VENDOR_PREFIXES) {
+      if (!key.startsWith(prefix)) continue;
+      key = key.slice(prefix.length);
+      stripped = true;
+      break;
+    }
+    if (!stripped) return key;
   }
-  return model;
 }
 
 export function getRates(model?: string): ModelRates {
   const key = model ? normalizeModel(model) : "";
   const aliasKey = azureDeploymentPriceKey(key);
-  const rates = MODEL_PRICING[key] ?? (aliasKey ? MODEL_PRICING[aliasKey] : undefined);
+  const rates = (model && Object.hasOwn(MODEL_PRICING, model) ? MODEL_PRICING[model] : undefined) ??
+    (model ? DISCOVERED_PRICING.get(model) : undefined) ??
+    (Object.hasOwn(MODEL_PRICING, key) ? MODEL_PRICING[key] : undefined) ??
+    (aliasKey ? MODEL_PRICING[aliasKey] : undefined) ?? DISCOVERED_PRICING.get(key);
   if (!rates) {
     if (model) console.warn(`[0] Unknown model for cost estimation: ${model}`);
     return MODEL_PRICING.default;
@@ -209,6 +232,7 @@ export function modelProvider(model?: string): string {
   if (!model) return "unknown";
   const lowered = model.toLowerCase();
   if (lowered.startsWith("openai/")) return "openai";
+  if (lowered.startsWith("azure/")) return "azure";
   if (lowered.startsWith("anthropic/")) return "anthropic";
   if (lowered.startsWith("google/")) return "google";
   if (lowered.startsWith("deepseek/")) return "deepseek";

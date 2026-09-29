@@ -167,7 +167,7 @@ export function sidebarBadgeCells(label: string, columnWidth: number): number {
 }
 
 /**
- * The shared section header: an uppercase label followed by the count of items
+ * The shared section header: a label followed by the count of items
  * the section actually holds, fitted to `width`. The count is rendered only
  * when it is a real, finite number — an unknown count shows the bare label
  * rather than a fabricated "0".
@@ -177,7 +177,7 @@ export function buildSidebarSectionHeader(
   count: number | undefined,
   width: number,
 ): string {
-  const name = String(label ?? "").toUpperCase();
+  const name = String(label ?? "");
   const text =
     typeof count === "number" && Number.isFinite(count) ? `${name} ${Math.max(0, Math.floor(count))}` : name;
   return fitTuiText(text, Math.max(1, width));
@@ -234,15 +234,15 @@ export function buildSidebarOverflowText(
 /**
  * Build the sidebar section header with status-aware labels.
  *
- * - All completed: "PLAN ● 5/5" (compact checkmark style)
- * - Normal: "PLAN 3/5"
+ * - All completed: "Plan ● 5/5" (compact checkmark style)
+ * - Normal: "Plan 3/5"
  */
 export function buildSidebarHeader(
   done: number,
   total: number,
   width: number,
 ): string {
-  const base = `PLAN ${done}/${total}`;
+  const base = `Plan ${done}/${total}`;
   const allDone = done === total && total > 0;
 
   if (allDone) {

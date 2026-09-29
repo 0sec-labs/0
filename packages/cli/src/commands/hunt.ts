@@ -28,58 +28,8 @@
 import type { Command } from "commander";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { Finding, RuntimeMode } from "@0/shared";
+import type { RuntimeMode } from "@0/shared";
 import type { ImpactCeiling } from "@0/core";
-import { stampDeploymentContext } from "@0/core";
-
-/**
- * #1051 — map a gated hunt LEAD onto the cloud-sink finding shape as a
- * CANDIDATE: status forced to `discovered` (never `confirmed`/sendable — these
- * are hypotheses, not proven bugs) and a provenance note stamped into
- * `evidence.analysis`. The orchestrator sets verify_status server-side, so a
- * `discovered` lead enters the verify queue as a candidate; sendability stays
- * gated behind the cloud's own adversarial verify (verify_status='verified').
- * Returned as a plain object — `postFinding` normalizes it to CloudSinkFinding.
- *
- * When `candidatePath` is provided, the finding gets a deployment-context
- * classification via mechanical path heuristics (issue #1215), with severity
- * capped at low/info for dev-only/test-only/build-only code unless the evidence
- * shows a trust-boundary bypass from production.
- *
- * Exposed for unit testing the lead → finding mapping.
- */
-export function leadToCandidateFinding(
-  finding: Finding,
-  bugClass: string,
-  seedRef: string,
-  candidatePath?: string,
-): Record<string, unknown> {
-  const evidence =
-    (finding.evidence as { request?: string; response?: string; analysis?: string } | undefined) ??
-    {};
-  const provenance =
-    `Variant-hunt LEAD (bug class: ${bugClass}; seed: ${seedRef}). ` +
-    `Surfaced by the recency hunt and gated by the adversarial skeptic — a HYPOTHESIS, ` +
-    `not a confirmed bug. Verify the real sink + upstream-fix status (novelty) before any disclosure.`;
-
-  // #1215 — stamp deployment context and apply severity cap BEFORE serialising
-  // the finding. The path heuristic is the deterministic floor; the model lens
-  // (deployment-context verify lens) may overlap but never overrides it.
-  if (candidatePath) stampDeploymentContext(finding, candidatePath);
-
-  return {
-    ...finding,
-    // LEADS are never confirmed/sendable: force candidate status so the cloud
-    // ingests them as verify candidates, never as confirmed findings.
-    status: "discovered",
-    templateId: "recency-hunt-lead",
-    evidence: {
-      request: evidence.request ?? "",
-      response: evidence.response ?? "",
-      analysis: evidence.analysis ? `${evidence.analysis}\n\n${provenance}` : provenance,
-    },
-  };
-}
 
 interface HuntOpts {
   source?: string;
@@ -240,8 +190,6 @@ export async function runHunt(opts: {
     makeLloreJudge,
     makeHuntProveStage,
     prepare,
-    getCloudSinkConfig,
-    postFinding,
   } = await import("@0/core");
   const log = opts.log ?? (() => {});
   const runtime: RuntimeMode = opts.runtime ?? "api";
@@ -263,18 +211,6 @@ export async function runHunt(opts: {
   const noveltyRecentEpochs = opts.novelty?.recentEpochs ?? 1;
   const noveltyWarnings: string[] = [];
 
-  // #1051 — capture the cloud-sink config BEFORE suppressing the env below.
-  // In cloud mode (ZERO_CLOUD_SINK + scan id set) the inner finder/skeptic
-  // agenticScan passes would auto-POST their RAW, pre-gate findings (status
-  // 'confirmed') straight to the orchestrator — flooding the scan with
-  // unverified, mislabeled findings. We instead post ONLY the gated leads
-  // ourselves (as honest 'discovered' candidates) after the gate.
-  // getCloudSinkConfig() reads ZERO_CLOUD_SINK at call time, so clearing it
-  // for the duration of the finder runs disables that inner auto-post; the env
-  // is restored in the finally and the captured config is used for our own post.
-  const sinkCfg = getCloudSinkConfig();
-  const savedCloudSink = process.env["ZERO_CLOUD_SINK"];
-  if (sinkCfg) delete process.env["ZERO_CLOUD_SINK"];
 
   try {
     let noveltyMirrors: Awaited<ReturnType<typeof localMirrors>> = [];
@@ -490,25 +426,6 @@ export async function runHunt(opts: {
     const gated = opts.verify !== false;
     const leads = gated ? res.confirmed : res.findings;
 
-    // 3. #1051 — post the gated leads to the cloud-sink as CANDIDATE findings so
-    // they flow through the cloud's existing adversarial gate + verify, the same
-    // way scan/review reach the cloud (postFinding → POST /scans/:id/findings).
-    // No-op when not in cloud mode (sinkCfg null). Honest: leadToCandidateFinding
-    // forces status 'discovered' (never confirmed/sendable).
-    let ingested = 0;
-    if (sinkCfg) {
-      const seedRef = opts.ref ?? opts.seedPath;
-      // #1215 — build a finding-id → candidate-path lookup from the scan records
-      // so leadToCandidateFinding can stamp the deployment context from the path.
-      const pathForId = new Map<string, string>();
-      for (const rec of res.records) pathForId.set(rec.finding.id, rec.candidatePath);
-      for (const lead of leads) {
-        const candidatePath = pathForId.get(lead.id);
-        await postFinding(leadToCandidateFinding(lead, plan.brief.bugClass, seedRef, candidatePath), sinkCfg);
-        ingested++;
-      }
-      log(`[hunt] posted ${ingested} lead(s) to the cloud-sink as candidate findings`);
-    }
 
     return {
       exitCode: leads.length > 0 ? 0 : 1,
@@ -572,7 +489,6 @@ export async function runHunt(opts: {
               slice_chars: graphSliceCtx.stats.chars,
             }
           : { enabled: false },
-        ingested: sinkCfg ? ingested : null,
         gated,
         methodology: opts.methodology === true,
         warnings: [...invariantWarnings, ...graphSliceWarnings, ...noveltyWarnings, ...plan.warnings, ...res.warnings].slice(0, 10),
@@ -582,7 +498,6 @@ export async function runHunt(opts: {
       },
     };
   } finally {
-    if (savedCloudSink !== undefined) process.env["ZERO_CLOUD_SINK"] = savedCloudSink;
     prepared.cleanup();
   }
 }

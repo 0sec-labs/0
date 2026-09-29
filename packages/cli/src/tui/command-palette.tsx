@@ -176,10 +176,10 @@ export function createShellCommands(shell?: ShellNav): PaletteCommand[] {
       action: () => shell.openModels(),
     },
     {
-      id: "nav-resume",
-      title: "Resume a saved audit",
+      id: "nav-sessions",
+      title: "Sessions",
       category: "Navigate",
-      description: "Find conversations from this project or all projects",
+      description: "Switch open sessions or resume saved conversations from any project",
       action: () => shell.openResume(),
     },
     {

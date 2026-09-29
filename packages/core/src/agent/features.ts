@@ -257,18 +257,6 @@ export const features = {
     return env("ZERO_FEATURE_CLOUD_SURFACE", false);
   },
 
-  /**
-   * #978 (ADR-060) — agent fan-out. When ON, the agent gets the `start_scan`
-   * tool: it can dispatch CHILD scans (via the same POST /scans the UI uses)
-   * that run independently and report up the scan tree — the recursive
-   * sub-agent orchestration. Default OFF: fan-out multiplies scans/cost, so it
-   * stays opt-in even though the orchestrator enforces budget + a tree-level
-   * cap (max children/depth). Enable with ZERO_FEATURE_AGENT_FANOUT=1.
-   * Getter so the CLI `--features` flag is honored at dispatch time.
-   */
-  get agentFanout(): boolean {
-    return env("ZERO_FEATURE_AGENT_FANOUT", false);
-  },
 
   // ── Phase-2 offensive-engine feature flags (dev-live-engine-recovery) ──
   // Each gates a tool that RUNS/BUILDS untrusted code or WEAPONIZES. They are
@@ -399,19 +387,6 @@ export const features = {
    * 0#113 for the design doc and 0#67 for the joint paper plan.
    */
   get dynamicTriageRouting(): boolean { return env("ZERO_FEATURE_DYNAMIC_TRIAGE", false); },
-
-  /**
-   * Opt-in cloud-sink webhook integration (`packages/core/src/cloud-sink.ts`).
-   * When enabled AND the user has set ZERO_CLOUD_SINK + ZERO_CLOUD_SCAN_ID,
-   * every finding and the final scan report are POSTed to the configured
-   * remote endpoint in real time.
-   *
-   * Default ON so the env-var trio is sufficient to enable streaming, but the
-   * flag exists so operators can force-disable the integration in environments
-   * where outbound HTTP from the scanner is not desired (e.g. air-gapped CI).
-   * Disable via ZERO_FEATURE_CLOUD_SINK=0.
-   */
-  get cloudSink(): boolean { return env("ZERO_FEATURE_CLOUD_SINK", true); },
 
   /**
    * Pre-recon CVE check (`packages/core/src/pre-recon-cve.ts`).

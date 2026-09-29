@@ -12,10 +12,8 @@ Choose the integration direction first:
 | Give 0 tools from another MCP server | [MCP client configuration](#connect-external-mcp-tools-to-0) | 0 launches operator-configured stdio servers |
 | Install a third-party tool | [Hackstore plugins](#cli-managed-operator-plugins) | Enabled JavaScript runs as a local child process, not in a sandbox |
 | Let the model author executable tools | [Self-extension](#model-authored-executable-plugins-self-extension) | Generated TypeScript runs in disposable Docker or smolvm guests |
-| Connect organization credentials | [Cloud auth](#cloud-auth) | Authentication and hosted model transport are separate from managed execution |
 
-Local tools and BYOK workflows do not require a cloud account. Selecting hosted
-models does not move your tool execution to a managed worker. The
+Local tools and BYOK workflows do not require a cloud account. The
 [website](https://0.security/harness/) describes the product organization;
 the command and runtime sources linked below define these integration contracts.
 
@@ -240,9 +238,9 @@ This is not a stock CLI `--auto-route` flag. Crucially, forked children still
 inherit the parent's **provider, endpoint and account**, with no cross-account
 fallback chain. Use model IDs that account or gateway actually serves; the
 presence of another provider's ambient credentials does not reroute a fork to
-it. Hosted children must pass the hosted model catalog check. Model selection
-does not change tool permissions or establish that a model is better at
-verification. Ordinary worker consensus is not independent reproduction.
+it. Model selection does not change tool permissions or establish that a
+model is better at verification. Ordinary worker consensus is not independent
+reproduction.
 
 **Sources:** [`tools.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/agent/tools.ts),
 [`runtime/types.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/runtime/types.ts),
@@ -309,52 +307,6 @@ Review the program's current policy and automation restrictions before using
 an exported scope. Scope enumeration is not permission to automate testing.
 This integration does not submit HackerOne reports, rank program fit, or ingest
 hacktivity; disclosure drafts below are a separate local workflow.
-
-## Cloud auth
-
-`0 auth` manages scoped managed-service credentials. For access and setup, see
-[Managed work](/getting-started/#managed-work-and-onboarding). Local API-key
-and subscription use require no 0cloud account.
-
-**Source:** `packages/cli/src/commands/auth.ts`
-
-### Subcommands
-
-| Subcommand | Description |
-|------------|-------------|
-| `0 auth login` | Open browser at the cloud host's `/cli-auth` page, poll for a scoped token |
-| `0 auth login --token <value>` | Manual credential path — persist a token directly |
-| `0 auth login --host <url>` | Point at a self-hosted cloud host |
-| `0 auth logout` | Delete `~/.0/cloud.env` and `~/.0cloud/credentials.json` |
-| `0 auth status` | Verify cloud credentials against the authenticated managed scan-list endpoint |
-
-### Credential storage
-
-Credentials persist to `~/.0/cloud.env` (mode `0600`) with the format:
-
-```text
-# DO NOT commit this file or share its contents.
-ZERO_CLOUD_HOST=https://cloud.0.security
-ZERO_CLOUD_TOKEN=scoped-token-here
-```
-
-Normal login also best-effort writes compatible credentials to
-`~/.0cloud/credentials.json`; normal logout removes both files. Development-state
-login/logout keeps production-compatible credentials separate. Cloud auth uses
-Bearer tokens. Successful login or status verifies credentials, not local model
-access or permission to run a managed engagement.
-
-### Manual token path
-
-For self-hosted or recovery use, pass a token directly:
-
-```bash
-0 auth login --token "your-token" --host "https://your-host.example.com"
-```
-
-This skips the browser flow entirely and persists the token immediately.
-Run `0 auth status` afterward to verify it; manual persistence does not validate
-the token with the server. Avoid putting real tokens in shared shell history.
 
 ## Report formats
 
@@ -630,28 +582,33 @@ or `--registry` on browse, search, and install. An explicit empty setting disabl
 fetching. Entries use the unconfigured signature verifier and are marked
 `unverified`.
 
-The [author guide](/hackstore/)
-covers executable scaffolding, the manifest, and a local two-file installation
-in an isolated home. The installer writes `plugin.js` and `plugin.json` only.
-Use 0 0.17.0 or newer for direct plugin calls. The 0.16.3 binary has a
-tool-registry bug in `plugin run`.
+The [author guide](/hackstore/) covers scaffolding, shared manifest validation,
+offline installation with `0 plugin install ./extension --local`, approval, real
+tool calls, and `0 hackstore prepare-submission ./extension`. Submission preparation
+produces a reproducible source bundle for a reviewed Hackstore pull request; it
+does not upload or publish. The installer writes `plugin.js` and `plugin.json`
+only. Check command-specific `--help` and update 0 if these commands are missing.
 
 #### Subcommands
 
 | Subcommand | Description |
 |------------|-------------|
-| `0 plugin list` | List installed plugins |
+| `0 plugin list` | List installed code and built-in authorization plugins with project activation state |
 | `0 plugin browse` | List the configured registry |
 | `0 plugin search <query>` | Search the configured registry |
-| `0 plugin install <id>` | Write plugin files to disk (does not execute) |
-| `0 plugin enable <id>` | Record operator decision to permit the plugin |
-| `0 plugin disable <id>` | Revoke enablement |
-| `0 plugin info <id>` | Show plugin manifest and capabilities |
+| `0 plugin install <id>` | Fetch, validate, and write registry code without executing it |
+| `0 plugin install <path> --local` | Validate and install offline source; never execute it or approve a new installation |
+| `0 plugin enable <id>` | Approve installed code or activate built-in `scope` enforcement for this project |
+| `0 plugin disable <id>` | Revoke project approval or disable built-in scope enforcement |
+| `0 plugin info <id>` | Inspect the manifest/capabilities or built-in authorization state |
 | `0 plugin run <id> <tool> [pairs...]` | Invoke a tool; name it explicitly before `key=value` arguments. Effectful calls require `--yes`. |
+| `0 hackstore init <name>` | Scaffold a working example tool and author instructions |
+| `0 hackstore validate <path>` | Validate the shared manifest contract without executing code |
+| `0 hackstore prepare-submission <path> --out <directory>` | Prepare reviewed source under `extensions/<id>/`; no publication side effects |
 
 #### Security model
 
-CLI-managed plugins have three distinct states:
+External CLI-managed plugins have three distinct states:
 
 | State | Description |
 |-------|-------------|
@@ -664,6 +621,11 @@ Declared capabilities are `compute`, `model-call`, `network`, `filesystem-read`,
 approval decisions; they do not enforce operating-system restrictions. A plugin
 runs under the operator's account. Review code before enabling it. Omitting
 `--yes` for an effectful call prevents the call, not the preceding plugin load.
+
+The first-party `scope` plugin is a host authorization feature, not external
+code: it has no installed entry point or child process. It is disabled until
+`0 plugin enable scope` explicitly activates it for the project. Read
+[Scope](/scope/) for the boundaries it controls.
 
 Use `0 plugin enable <id>` from the intended project, then launch `0 tui`
 there for agent access. The OpenTUI pins the approved plugin host for each chat;

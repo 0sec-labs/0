@@ -22,7 +22,7 @@ export function registerResearchCommand(program: Command): void {
     .option("--runtime <runtime>", "auto, api, claude, codex, gemini, or ollama", "auto")
     .option("--artifact-root <path>", "Research artifact root", ".0-research")
     .action(async (opts: { target: string; targetType?: string; profile?: string; depth: string; runtime: string; artifactRoot: string }) => {
-      const { UnifiedPipelineResearchAdapter, postFinding, runResearch } = await import("@0/core");
+      const { UnifiedPipelineResearchAdapter, runResearch } = await import("@0/core");
       const allowedTypes = new Set(["url", "web-app", "source-code", "npm-package", "pypi-package", "cargo-package", "oci-image"]);
       if (opts.targetType && !allowedTypes.has(opts.targetType)) throw new Error(`unsupported --target-type ${opts.targetType}`);
       print(await runResearch(
@@ -41,7 +41,7 @@ export function registerResearchCommand(program: Command): void {
             },
           },
         },
-        { artifactRoot: resolve(opts.artifactRoot), emitFinding: postFinding, log: (message) => process.stderr.write(message + "\n") },
+        { artifactRoot: resolve(opts.artifactRoot), log: (message) => process.stderr.write(message + "\n") },
       ));
     });
 
@@ -51,12 +51,12 @@ export function registerResearchCommand(program: Command): void {
     .requiredOption("--target <path>", "Extracted APK/IPA directory or metadata file")
     .option("--artifact-root <path>", "Research artifact root", ".0-research")
     .action(async (opts: { target: string; artifactRoot: string }) => {
-      const { MobileStaticResearchAdapter, postFinding, runResearch } = await import("@0/core");
+      const { MobileStaticResearchAdapter, runResearch } = await import("@0/core");
       const targetPath = resolve(opts.target);
       print(await runResearch(
         new MobileStaticResearchAdapter(),
         { kind: "mobile.static-intake", id: `mobile:${targetPath}`, location: targetPath, config: {} },
-        { artifactRoot: resolve(opts.artifactRoot), emitFinding: postFinding, log: (message) => process.stderr.write(message + "\n") },
+        { artifactRoot: resolve(opts.artifactRoot), log: (message) => process.stderr.write(message + "\n") },
       ));
     });
 
@@ -67,13 +67,13 @@ export function registerResearchCommand(program: Command): void {
     .requiredOption("--finding <path>", "Existing Finding JSON to bind the proof to")
     .option("--artifact-root <path>", "Research artifact root", ".0-research")
     .action(async (opts: { matrix: string; finding: string; artifactRoot: string }) => {
-      const { LinuxBootMatrixImportAdapter, postFinding, runResearch } = await import("@0/core");
+      const { LinuxBootMatrixImportAdapter, runResearch } = await import("@0/core");
       const matrix = resolve(opts.matrix);
       const finding = JSON.parse(readFileSync(resolve(opts.finding), "utf8")) as Finding;
       const result = await runResearch(
         new LinuxBootMatrixImportAdapter(),
         { kind: "linux.kernel-boot-matrix-import", id: `linux-matrix:${finding.id}`, location: matrix, config: { finding } },
-        { artifactRoot: resolve(opts.artifactRoot), emitFinding: postFinding, log: (message) => process.stderr.write(message + "\n") },
+        { artifactRoot: resolve(opts.artifactRoot), log: (message) => process.stderr.write(message + "\n") },
       );
       if (result.candidates.length === 0) throw new Error("external boot-matrix manifest failed validation");
       print(result);
@@ -90,7 +90,7 @@ export function registerResearchCommand(program: Command): void {
     .option("--min-hits <n>", "Required reproducing boots", "2")
     .option("--artifact-root <path>", "Research artifact root", ".0-research")
     .action(async (opts: { kernelTree: string; reproducer: string; finding: string; expectedSignature: string; boots: string; minHits: string; artifactRoot: string }) => {
-      const { LinuxKernelResearchAdapter, postFinding, runResearch } = await import("@0/core");
+      const { LinuxKernelResearchAdapter, runResearch } = await import("@0/core");
       const kernelTree = resolve(opts.kernelTree);
       const reproducer = resolve(opts.reproducer);
       const finding = JSON.parse(readFileSync(resolve(opts.finding), "utf8")) as Finding;
@@ -111,7 +111,7 @@ export function registerResearchCommand(program: Command): void {
           location: kernelTree,
           config: { finding, verify },
         },
-        { artifactRoot: resolve(opts.artifactRoot), emitFinding: postFinding, log: (message) => process.stderr.write(message + "\n") },
+        { artifactRoot: resolve(opts.artifactRoot), log: (message) => process.stderr.write(message + "\n") },
       );
       if (result.findings.length === 0) {
         throw new Error("kernel N-boot verification did not reproduce the expected signature");

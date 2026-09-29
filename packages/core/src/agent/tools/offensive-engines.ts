@@ -40,6 +40,7 @@
 import type { ToolDefinition, ToolContext, ToolResult } from "../types.js";
 import { features as featureFlags } from "../features.js";
 import { resolveScopedPath } from "./scope-path.js";
+import { isScopeEnforcementEnabled } from "../../scope/activation.js";
 
 // ── Tool definitions ──
 
@@ -225,6 +226,7 @@ function errResult(message: string): ToolResult {
 }
 
 /** Resolve a caller-supplied path against the scoped source path when set. */
+
 function scopedPath(ctx: ToolContext, input: string): string {
   return ctx.scopePath ? resolveScopedPath(ctx.scopePath, input) : input;
 }
@@ -238,7 +240,7 @@ function scopedPath(ctx: ToolContext, input: string): string {
  */
 function hasEngagementScope(ctx: ToolContext): boolean {
   return (
-    !!ctx.scope ||
+    !isScopeEnforcementEnabled() || !!ctx.scope ||
     (typeof ctx.scopePath === "string" && ctx.scopePath.length > 0)
   );
 }
@@ -247,7 +249,7 @@ function hasEngagementScope(ctx: ToolContext): boolean {
 function refuseOutOfScope(ctx: ToolContext, url: string): string | null {
   if (!ctx.scope) return null; // no network scope to check against
   try {
-    if (!ctx.scope.match(url).allowed) {
+    if (!ctx.scope.enforce(url).allowed) {
       return `'${url}' is out of the engagement scope — refusing to send traffic to an unauthorized target.`;
     }
   } catch {

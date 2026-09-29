@@ -430,7 +430,7 @@ export interface FindingAction {
 export interface FindingActionsInput {
   /** Whether the investigate-in-chat action is offered. */
   canInvestigate?: boolean;
-  /** Whether the plan-a-fix-in-chat action is offered. */
+  /** Whether the verified-source-fix action is offered. */
   canPlanFix?: boolean;
   /** Whether the Copy-report action is offered. */
   canCopy?: boolean;
@@ -450,7 +450,7 @@ export function findingActions({
 }: FindingActionsInput = {}): FindingAction[] {
   const actions: FindingAction[] = [];
   if (canInvestigate) actions.push({ key: "i", label: "Investigate" });
-  if (canPlanFix) actions.push({ key: "f", label: "Plan fix" });
+  if (canPlanFix) actions.push({ key: "f", label: "Source fix" });
   if (canCopy) actions.push({ key: "c", label: "Copy report" });
   if (canStatus) {
     actions.push({ key: "v", label: "Verify" });
@@ -679,7 +679,7 @@ export function findingDetailFooterHint({
 }: FindingFooterHintInput = {}): string {
   const parts: string[] = [];
   if (canInvestigate) parts.push("[i] investigate");
-  if (canPlanFix) parts.push("[f] plan fix");
+  if (canPlanFix) parts.push("[f] source fix");
   if (canCopy) parts.push("[c] copy report");
   if (canStatus) parts.push("[v] verify", "[d] dismiss");
   parts.push("[↑↓] scroll", "[esc] back", "[⌃C] exit");

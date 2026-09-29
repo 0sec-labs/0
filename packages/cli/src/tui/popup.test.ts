@@ -5,73 +5,58 @@ import {
   anchoredPosition,
   backdropDismissMode,
   modalPanelGeometry,
-  popupBandWidth,
   resolveBackdropColor,
 } from "./popup.js";
 
-/**
- * Geometry and behaviour guards for the shared `Popup` primitive. Rendering has
- * no test renderer in this suite (see onboarding-screen.test.tsx), so these
- * pin the pure placement/sizing exports the component projects onto — the same
- * numbers the old DialogSurface / ContextMenu drew by hand.
- */
-
-describe("popup size bands", () => {
-  // Regression guard: these are the verbatim DialogSurface bands. A change to
-  // any of them changes every modal popup's width.
-  it("keeps the 64 / 92 / 120 bands", () => {
-    expect(popupBandWidth("small")).toBe(64);
-    expect(popupBandWidth("medium")).toBe(92);
-    expect(popupBandWidth("large")).toBe(120);
-  });
-
-  it("applies each band when the terminal is roomy", () => {
-    const term = { width: 200, height: 80 };
-    expect(modalPanelGeometry(term, "small").panelWidth).toBe(64);
-    expect(modalPanelGeometry(term, "medium").panelWidth).toBe(92);
-    expect(modalPanelGeometry(term, "large").panelWidth).toBe(120);
-  });
-});
-
 describe("modal panel geometry", () => {
-  it("clamps the height to 44", () => {
-    // Tall terminal: height is capped by the 44 band, not the terminal.
-    expect(modalPanelGeometry({ width: 200, height: 80 }, "large").panelHeight).toBe(44);
-    expect(modalPanelGeometry({ width: 200, height: 400 }, "large").panelHeight).toBe(44);
+  it("fits the viewport and child surface across terminal sizes and close modes", () => {
+    for (const width of [1, 2, 3, 4, 5, 8, 9, 12, 20, 40, 80, 100, 200]) {
+      for (const height of [1, 2, 3, 4, 6, 7, 8, 10, 11, 14, 24, 50, 80]) {
+        for (const size of ["small", "medium", "large"] as const) {
+          for (const dismissible of [false, true]) {
+            const g = modalPanelGeometry({ width, height }, size, dismissible);
+            expect(g.left).toBeGreaterThanOrEqual(0);
+            expect(g.top).toBeGreaterThanOrEqual(0);
+            expect(g.left + g.panelWidth).toBeLessThanOrEqual(width);
+            expect(g.top + g.panelHeight).toBeLessThanOrEqual(height);
+            expect(g.inner.width).toBeGreaterThanOrEqual(1);
+            expect(g.inner.height).toBeGreaterThanOrEqual(1);
+            expect(g.inner.width + g.paddingX * 2).toBe(g.panelWidth);
+            expect(g.inner.height + g.paddingY * 2 + g.closeRows).toBe(g.panelHeight);
+            expect(Math.abs(g.left - (width - g.left - g.panelWidth))).toBeLessThanOrEqual(1);
+            expect(Math.abs(g.top - (height - g.top - g.panelHeight))).toBeLessThanOrEqual(1);
+            expect(g.closeRows).toBe(dismissible && g.panelHeight - g.paddingY * 2 >= 2 ? 1 : 0);
+          }
+        }
+      }
+    }
   });
 
-  it("clamps the width to the terminal on a narrow screen", () => {
-    // width 40 → 40 - 4 = 36 wins over the 120 band.
-    expect(modalPanelGeometry({ width: 40, height: 80 }, "large").panelWidth).toBe(36);
+  it("bounds the panel instead of growing with a roomy terminal", () => {
+    for (const size of ["small", "medium", "large"] as const) {
+      const roomy = modalPanelGeometry({ width: 200, height: 80 }, size);
+      const huge = modalPanelGeometry({ width: 400, height: 160 }, size);
+      expect(huge.panelWidth).toBe(roomy.panelWidth);
+      expect(huge.panelHeight).toBe(roomy.panelHeight);
+      expect(roomy.panelWidth).toBeLessThan(200);
+      expect(roomy.panelHeight).toBeLessThan(80);
+    }
   });
 
-  it("reserves a cell of border each side and centres in the upper third", () => {
-    const g = modalPanelGeometry({ width: 100, height: 50 }, "medium");
-    expect(g.panelWidth).toBe(92);
-    expect(g.panelHeight).toBe(44);
-    expect(g.border).toBe(true);
-    expect(g.inner).toEqual({ width: 90, height: 42 });
-    expect(g.left).toBe(Math.floor((100 - 92) / 2)); // 4
-    expect(g.top).toBe(Math.floor((50 - 44) / 3)); // 2
-  });
+  it("reserves only one close row and retains content even in a one-row viewport", () => {
+    const terminal = { width: 100, height: 50 };
+    const plain = modalPanelGeometry(terminal, "large");
+    const dismissible = modalPanelGeometry(terminal, "large", true);
+    expect(dismissible.inner.width).toBe(plain.inner.width);
+    expect(dismissible.inner.height + dismissible.closeRows).toBe(plain.inner.height);
+    expect(dismissible.closeRows).toBe(1);
 
-  it("shrinks the chrome margins on a tiny terminal", () => {
-    // width/height <= threshold: no 4-cell margin subtracted.
-    const g = modalPanelGeometry({ width: 3, height: 3 }, "large");
-    expect(g.panelWidth).toBe(3);
-    expect(g.panelHeight).toBe(3);
-    expect(g.border).toBe(false); // not > 4
-    expect(g.inner).toEqual({ width: 3, height: 3 }); // no border reserved
-    expect(g.left).toBe(0);
-    expect(g.top).toBe(0);
-  });
-
-  it("keeps a border once the box clears 4 cells but the terminal is short", () => {
-    const g = modalPanelGeometry({ width: 200, height: 8 }, "large");
-    // height 8 <= 10 → no margin; clamped to 8.
-    expect(g.panelHeight).toBe(8);
-    expect(g.border).toBe(true);
-    expect(g.inner.height).toBe(6);
+    const tiny = modalPanelGeometry({ width: 3, height: 3 }, "large", true);
+    expect(tiny.closeRows).toBe(1);
+    expect(tiny.inner).toEqual({ width: 3, height: 2 });
+    const singleRow = modalPanelGeometry({ width: 3, height: 1 }, "large", true);
+    expect(singleRow.closeRows).toBe(0);
+    expect(singleRow.inner.height).toBe(1);
   });
 });
 

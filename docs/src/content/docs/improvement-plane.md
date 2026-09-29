@@ -95,9 +95,11 @@ and aliases escaping Core source are rejected. Failed builds or incompatible
 checkpoints retain the current engine. Turning the setting off prevents later
 replacement without reverting the active generation.
 
-The UI shell, injected provider/MCP clients and shared dependencies stay pinned.
-Rebuild and restart for changes to those components. A development engine runs
-with the host process's permissions; source replacement is not a sandbox grant.
+Engine replacement alone keeps the UI shell, injected clients and shared
+dependencies pinned. Separately, `0dev --watch console` can safely remount TUI
+generations while keeping the live engines and drafts. Startup, native/reload
+integration and Core/shared changes still need a coherent restart. These are
+trusted host-development paths, not sandbox grants.
 
 Local qualification exercised a continuing session across source activation,
 broken-source rollback and flag disablement, with retained scope metadata and
@@ -618,6 +620,7 @@ replacement for the stock target-facing 0 process.
 | Skill/router installation | Training loops install exact authorized artifact bytes. | Authorization does not hot-swap a model already loaded by another process. |
 | Executable plugin | An enabled agent submits or evolves actual code; later calls select the active retained version. | An invocation pins its version and declared capabilities; structural admission is not measured improvement. |
 | Development engine replacement | An explicitly enabled development console loads changed Core source between turns without losing the session. | Trusted host execution; UI shell, injected clients and shared dependencies stay pinned. Build and checkpoint failures retain the current engine. |
+| Development frontend watch | `0dev --watch console` rebuilds immutable TUI generations and remounts at a safe idle boundary. | One renderer and live engines remain; conversations, drafts, routes and audits stay in memory. Auth/approval/work gates defer reload; failed candidates retain the old UI. |
 | Live harness generation | Core/OpenTUI support replacing `agent.driver` and `ui.view`, including namespaced UI commands/settings, in the same session. | Session history and accounting survive; generation changes wait for a defined checkpoint. This is not durable campaign recovery. |
 
 Observation capture is not independent truth: source consent and operator-curated
@@ -1390,14 +1393,11 @@ Those need their own real integration scenarios, including a task that
 continues across generation changes without reconstructing its session.
 
 A local plugin smoke or a provider-backed candidate-generation check does not
-qualify this lifecycle with hosted inference. Hosted model transport is separate
-from local Docker/smolvm execution and from a managed worker service. Parent SDK
-model calls use the parent's configured runtime; that is not a blanket guarantee
-for arbitrary trusted ESM clients or every child route. See
-[hosted inference and evolution accounting](/architecture/#hosted-inference-and-evolution-accounting)
-for routing, pricing and qualification boundaries. The historical checks here
-establish neither current production availability nor launched billing, and
-Self-Harness's model-specific results establish no universal gains.
+qualify a managed worker service. Parent SDK model calls use the parent's
+configured runtime; that is not a blanket guarantee for arbitrary trusted ESM
+clients or every child route. The historical checks here establish neither
+current production availability nor launched billing, and Self-Harness's
+model-specific results establish no universal gains.
 
 If the account already has approved Docker group membership but a persistent
 process predates it, the Docker backend can use that existing group through

@@ -84,11 +84,6 @@ export interface TuiSettings {
    * Formerly `showAgentRail`; that key is still honoured on load.
    */
   showRightSidebar: boolean;
-  /**
-   * Left sidebar in the chat view: recent resumable sessions on top, this run's
-   * findings below ("what you have"). Auto-hidden on narrow terminals.
-   */
-  showLeftSidebar: boolean;
   /** Relative timestamps on transcript entries. */
   showTimestamps: boolean;
   /**
@@ -220,7 +215,7 @@ export interface TuiSettings {
    */
   reduceMotion: boolean;
   /**
-   * Operator-global analytics and training-data tier; full for new installs.
+   * Operator-global analytics and training-data tier; sharing is opt-in.
    * Usage contains counters, commands adds credential-scrubbed tool content
    * and code, and full adds scope and findings. Ordinary content is retained.
    * Explicit environment restrictions and saved opt-outs remain effective.
@@ -263,7 +258,7 @@ export interface TuiSettings {
   leaderKey: "off" | "ctrl+a" | "ctrl+b" | "ctrl+space";
   /**
    * Per-action chord overrides for the rebindable keybindings, keyed by
-   * `Keybinding.id` (e.g. `{ "view.left-sidebar": "ctrl+b" }`). NOT part of the
+   * `Keybinding.id` (e.g. `{ "view.right-sidebar": "ctrl+j" }`). NOT part of the
    * scalar `SETTING_DEFS` table — it is a map, neither a boolean nor a
    * fixed-choice enum — so it is validated by its own bespoke `keybindingsAt`
    * helper (the way `theme` uses `themeAt`) rather than the enum table. Only
@@ -415,15 +410,6 @@ const DEFS: readonly TuiSettingDef[] = [
     group: "Transcript",
   },
   {
-    key: "showLeftSidebar",
-    label: "Left sidebar",
-    description:
-      "Left sidebar in the chat view: recent sessions to resume, plus this run's findings. Hidden on narrow terminals.",
-    kind: "boolean",
-    default: false,
-    group: "Display",
-  },
-  {
     key: "showRightSidebar",
     label: "Right sidebar",
     description:
@@ -514,9 +500,9 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "roleLabelStyle",
     label: "Role label",
-    description: 'Speaker name on each message: "You" for your turns, "0" for answers. Full and short add the elapsed age when one is known; glyph shows the name alone; off omits the label entirely. Bubble cards carry it top-left on the card border, with your messages right-aligned and answers left.',
+    description: 'Labels your messages as "You"; assistant replies stay unlabeled. Full and short include the optional age, glyph shows the name alone, and off hides the label.',
     kind: "enum",
-    default: "full",
+    default: "off",
     choices: ["full", "short", "glyph", "off"],
     group: "Display",
   },
@@ -617,7 +603,7 @@ const DEFS: readonly TuiSettingDef[] = [
     label: "Token usage",
     description: 'Per-turn "in→out tok" line under each answer.',
     kind: "boolean",
-    default: true,
+    default: false,
     group: "Telemetry",
   },
   {
@@ -625,7 +611,7 @@ const DEFS: readonly TuiSettingDef[] = [
     label: "Cost",
     description: "Estimated dollar cost, per turn and in the status bar.",
     kind: "boolean",
-    default: true,
+    default: false,
     group: "Telemetry",
   },
   {
@@ -690,20 +676,20 @@ const DEFS: readonly TuiSettingDef[] = [
   },
   {
     key: "analyticsLevel",
-    label: "Analytics and training data",
+    label: "Data sharing",
     description:
-      "Full is the new-install default. Usage shares feature counters and error categories, not tool content. Commands adds tool arguments/results and submitted code for model training and security research; Full also adds scope and findings. Recognized credentials are scrubbed; emails, URLs, identifiers and other content are retained. Sending uses authenticated Cloud storage and is not anonymous. Each tool/code content field is limited to 256 KiB after credential scrubbing; oversized records are reported locally, not silently truncated. Explicit ZERO_ANALYTICS_LEVEL and offline/no-telemetry/DO_NOT_TRACK restrictions win over broader settings. Problem reports are separate. Applies to this computer, not this project.",
+      "Usage sends counts, timing, cost and error categories. Commands adds tool inputs/outputs and code; Full adds scope and findings. Credentials are scrubbed, but identifying content may remain. Uploads require an endpoint and are not anonymous. Environment opt-outs take precedence. Applies to this computer.",
     kind: "enum",
-    default: "full",
+    default: "off",
     choices: ["off", "usage", "commands", "full"],
     group: "Privacy",
   },
   {
     key: "diagnosticReporting",
     label: "Problem reports",
-    description: "Send limited diagnostics automatically by default, ask first, or turn reporting off. Uses Cloud sign-in or a configured HTTPS feedback endpoint. Never includes prompts, tool arguments or output. Applies to this computer, not this project.",
+    description: "Review diagnostics before sending, send automatically, or keep reports local. Requires a configured endpoint. Off/Usage sharing sends categories only; Commands/Full can include scrubbed errors, stacks and failure output. Applies to this computer.",
     kind: "enum",
-    default: "automatic",
+    default: "ask",
     choices: ["off", "ask", "automatic"],
     group: "Privacy",
   },
@@ -758,7 +744,6 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   showRuntimeNotices: true,
   showTurnSummary: false,
   showSubagents: true,
-  showLeftSidebar: false,
   showRightSidebar: false,
   showTimestamps: false,
   showObjective: true,
@@ -770,7 +755,7 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   allowSubagentPeerMessaging: true,
   allowSubagentOperatorMessaging: true,
   transcriptStyle: "minimal",
-  roleLabelStyle: "full",
+  roleLabelStyle: "off",
   toolCardStyle: "compact",
   richToolCards: true,
   transcriptDetail: "expanded",
@@ -781,15 +766,15 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   allowDevSourceUpdates: false,
   autoEvolveFinderLenses: false,
   autoPromoteFinderLenses: false,
-  showTokenUsage: true,
-  showCost: true,
+  showTokenUsage: false,
+  showCost: false,
   showContextMeter: true,
   modelDisplay: "statusbar",
   elapsedTimer: "left",
   logoAnimation: "glitch",
   reduceMotion: false,
-  analyticsLevel: "full",
-  diagnosticReporting: "automatic",
+  analyticsLevel: "off",
+  diagnosticReporting: "ask",
   diagnosticReportingPrompted: false,
   updatePolicy: "automatic",
   symbolPreset: "unicode",
@@ -1053,9 +1038,7 @@ export function normalizeSettings(raw: unknown): TuiSettings {
     showRuntimeNotices: booleanAt(raw, "showRuntimeNotices"),
     showTurnSummary: booleanAt(raw, "showTurnSummary"),
     showSubagents: booleanAt(raw, "showSubagents"),
-    showLeftSidebar: booleanAt(raw, "showLeftSidebar"),
-    // Back-compat: the right sidebar was `showAgentRail` before it grew a
-    // context strip and a left twin. A pre-rename file keeps its choice.
+    // Back-compat: a pre-rename file keeps its agent rail visibility choice.
     showRightSidebar: booleanWithLegacy(raw, "showRightSidebar", "showAgentRail"),
     showTimestamps: booleanAt(raw, "showTimestamps"),
     showObjective: booleanAt(raw, "showObjective"),

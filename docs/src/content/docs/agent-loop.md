@@ -95,8 +95,7 @@ tasks. Separate contexts do not mean isolated host filesystems or providers.
 
 Cross-run hunt memory is off by default for local native runs. Embedded callers
 can explicitly opt in through `codebaseLearning` or an injected memory store;
-`ZERO_DISABLE_HUNT_MEMORY=1` or `true` vetoes either. Managed source research opts
-in only with a configured Cloud sink; managed verification does not. Ordinary
+`ZERO_DISABLE_HUNT_MEMORY=1` or `true` vetoes either. Ordinary
 conversation/session history is separate from cross-run learning.
 
 ### Advisory browser exploration

@@ -1365,9 +1365,9 @@ describe("context overflow recovery", () => {
     expect(isContextWindowError("maximum context length exceeded")).toBe(true);
     expect(isContextWindowError("prompt is too long for this model")).toBe(true);
     expect(isContextWindowError("429 rate limit exceeded")).toBe(false);
-    expect(isContextWindowError('0.security Cloud API error 413: {"error":{"code":"input_limit_exceeded"}}')).toBe(true);
-    expect(isContextWindowError('0.security Cloud API error 413: {"error":{"code":"payload_too_large"}}')).toBe(false);
-    expect(isContextWindowError('0.security Cloud API error 429: {"error":{"code":"input_limit_exceeded"}}')).toBe(false);
+    expect(isContextWindowError('OpenAI API error 413: {"error":{"code":"input_limit_exceeded"}}')).toBe(true);
+    expect(isContextWindowError('OpenAI API error 413: {"error":{"code":"payload_too_large"}}')).toBe(false);
+    expect(isContextWindowError('OpenAI API error 429: {"error":{"code":"input_limit_exceeded"}}')).toBe(false);
   });
 
   it("drops only old middle messages while preserving opening task, recent tail, and alternation", () => {
@@ -1399,8 +1399,8 @@ describe("context overflow recovery", () => {
     }
   });
 
-  it("prunes a long transcript after hosted input_limit_exceeded and retries with shorter context", async () => {
-    const rejected = '0.security Cloud API error 413: {"error":{"code":"input_limit_exceeded"}}';
+  it("prunes a long transcript after a context rejection and retries with shorter context", async () => {
+    const rejected = 'OpenAI API error 413: {"error":{"code":"input_limit_exceeded"}}';
     const attempts: number[] = [];
     const recoveries: unknown[] = [];
     const runtime: NativeRuntime = {
@@ -1434,8 +1434,8 @@ describe("context overflow recovery", () => {
     ))).toBe(true);
   });
 
-  it("stops after two shrinking recoveries when hosted input is still rejected", async () => {
-    const rejected = '0.security Cloud API error 413: {"error":{"code":"input_limit_exceeded"}}';
+  it("stops after two shrinking recoveries when input is still rejected", async () => {
+    const rejected = 'OpenAI API error 413: {"error":{"code":"input_limit_exceeded"}}';
     let calls = 0;
     let recoveries = 0;
     const state = await runNativeAgentLoop({
@@ -1457,10 +1457,10 @@ describe("context overflow recovery", () => {
     expect(state.errorExit?.error).toBe(rejected);
   });
 
-  it("exits after one unprunable hosted 413 rather than replaying identical input", async () => {
+  it("exits after one unprunable context rejection rather than replaying identical input", async () => {
     const executeNative = vi.fn(async (): Promise<NativeRuntimeResult> => ({
       content: [], stopReason: "error", durationMs: 1,
-      error: '0.security Cloud API error 413: {"error":{"code":"input_limit_exceeded"}}',
+      error: 'OpenAI API error 413: {"error":{"code":"input_limit_exceeded"}}',
     }));
     const state = await runNativeAgentLoop({
       config: { role: "discovery", systemPrompt: "test", tools: [], maxTurns: 20, target: "https://example.com", scanId: randomUUID() },
@@ -2250,33 +2250,9 @@ describe("isTransientLlmError", () => {
     ).toBe(false);
   });
 
-  it("fails closed for hosted outcomes unless admission was proven pre-dispatch", () => {
-    expect(isTransientLlmError("0.security Cloud API error: 0 hosted request returned HTTP 502; its outcome may be unknown. Automatic replay is disabled")).toBe(false);
-    expect(isTransientLlmError('0.security Cloud API error 429: {"error":{"code":"rate_limit"}}')).toBe(false);
-    expect(isTransientLlmError('0.security Cloud API error 429: {"error":{"code":"rate_limit"}}', true)).toBe(true);
-    expect(isTransientLlmError("OpenRouter API error 502: overloaded")).toBe(true);
-  });
 });
 
-describe("runNativeAgentLoop — hosted retry safety", () => {
-  it.each([
-    "0.security Cloud API error: 0 hosted request returned HTTP 502; its outcome may be unknown. Automatic replay is disabled; check your inference usage before retrying.",
-    '0.security Cloud API error 429: {"error":{"code":"rate_limit"}}',
-  ])("does not issue a second request after unsafe hosted failure: %s", async error => {
-    const executeNative = vi.fn(async (): Promise<NativeRuntimeResult> => ({
-      content: [], stopReason: "error", error, durationMs: 1,
-    }));
-    const retries: string[] = [];
-    const state = await runNativeAgentLoop({
-      config: { role: "discovery", systemPrompt: "test", tools: [], maxTurns: 15, target: "https://example.com", scanId: randomUUID() },
-      runtime: { type: "api", isAvailable: async () => true, executeNative }, db: null,
-      onEvent: (type, payload) => { if (type === "agent_error" && String(payload.error).startsWith("transient (retry")) retries.push(String(payload.error)); },
-    });
-    expect(executeNative).toHaveBeenCalledTimes(1);
-    expect(retries).toEqual([]);
-    expect(state.errorExit?.error).toBe(error);
-  });
-
+describe("runNativeAgentLoop — transient retry interruption", () => {
   it("stops a retry backoff on interruption without dispatching again", async () => {
     const controller = new AbortController();
     const executeNative = vi.fn(async (): Promise<NativeRuntimeResult> => ({
@@ -2295,7 +2271,7 @@ describe("runNativeAgentLoop — hosted retry safety", () => {
 
   it("treats a runtime cancellation as terminal even if its text looks retryable", async () => {
     const executeNative = vi.fn(async (): Promise<NativeRuntimeResult> => ({
-      content: [], stopReason: "error", cancelled: true, error: "0.security Cloud API error 429: rate limit", durationMs: 1,
+      content: [], stopReason: "error", cancelled: true, error: "OpenRouter API error 429: rate limit", durationMs: 1,
     }));
     const state = await runNativeAgentLoop({
       config: { role: "discovery", systemPrompt: "test", tools: [], maxTurns: 15, target: "https://example.com", scanId: randomUUID() },

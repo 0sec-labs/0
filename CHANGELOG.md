@@ -18,9 +18,29 @@ on the published npm package and the GitHub Release tag.
   only. Cloud credentials no longer select hosted inference implicitly, and
   `/connect` and `/model` no longer offer 0cloud sign-in or 0security Auto.
   Local token, context and estimated-cost reporting remains available.
-- `0dev` no longer injects a Cloud provider or credentials. Remove the
-  hosted-inference `0 models` and `0 balance` commands; keep managed-service
-  `0 auth`, `0 login`, `0 connect` and `0 service` separate from local model access.
+- Removed managed-cloud login, scans and hosted-inference commands from the CLI.
+  Provider API keys and supported provider subscriptions remain available.
+- Added automatic provider model-catalog refresh and account-specific model
+  discovery; saved model choices are retained instead of forcing GPT-5.5.
+- Reworked onboarding and dialogs with compact controls, live theme preview,
+  0security branding and optional Plugins/Hackstore choices.
+- Replaced the Audits sidebar and separate saved-audit browser with one
+  `/sessions` picker for open and saved conversations. Chat keeps one canvas,
+  a compact composer and optional right-side agent inspector panes.
+- Added `0dev --watch console` for safe frontend remounts at idle boundaries,
+  preserving conversation, drafts and runtime ownership.
+- Added reviewed `/fix` setup with private per-project inputs and a separately
+  approved, regression-verified draft-PR publication path.
+- Scope enforcement is an explicitly enabled plugin. Desktop remains alpha
+  and is excluded from normal release artifacts. Per-answer usage is off by default.
+
+### Fixed
+
+- Stop repeated NVD requests after rate limits rather than flooding the transcript.
+- Preserve model-picker selection while runtime metadata hydrates; compact
+  onboarding keeps a selectable model row instead of spending its space on chrome.
+- Fix development build failures in tool registration, plugin capabilities and
+  source-fix state handling.
 
 ## [0.21.4] - 2026-09-23
 

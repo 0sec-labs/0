@@ -20,7 +20,6 @@ import { resolveSmolvmImage } from "../packages/core/dist/runtime/smolvm.js";
 
 maybeLoadCodexAuth();
 process.env["ZERO_DISABLE_HUNT_MEMORY"] = "1";
-process.env["ZERO_CLOUD_SINK"] = "";
 const backend = process.env["ZERO_EVOLUTION_BACKEND"] ?? "docker";
 assert(["docker", "smolvm"].includes(backend), "ZERO_EVOLUTION_BACKEND must be docker or smolvm");
 const imageArchive = process.env["ZERO_SMOLVM_IMAGE_ARCHIVE"];

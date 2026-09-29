@@ -13,7 +13,6 @@ const optionDescriptions = new Map([
   ["0 review|--dry-run", "For --emit pr only: print proposed git/gh emission commands. The source review itself still executes."],
   ["0 console|--mode", "Autonomy mode: standard, recon, copilot, yolo. YOLO accepts absolute public-network targets without a launch target; explicit restrictions and exclusions still apply."],
   ["0 console|--yolo", "Shortcut for --mode yolo. Omits per-action approval prompts; explicit restrictions and exclusions still apply."],
-  ["0 service start|--cost-ceiling", "Sends secure_config.cost_ceiling, but the reviewed server expects cost_ceiling_usd. Do not rely on this flag for managed budget enforcement without confirming deployed compatibility."],
   ["0 hunt|--max-candidates", "Registered but not forwarded by the current CLI handler; do not rely on this flag to bound work."],
   ["0 secure|--cost-ceiling", "Requested model-cost limit. Current accounting checks the repair ledger separately from investigation usage; this is not a guaranteed whole-workflow spend cap."],
   ["0 secure|--max-findings", "Maximum findings selected for repair. Inspect blockedFindingIds separately from the overall run status."],

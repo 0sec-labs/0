@@ -8,6 +8,7 @@
  */
 import { lstatSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, resolve, sep } from "node:path";
+import { isScopeEnforcementEnabled } from "../../scope/activation.js";
 
 function pathEntryExists(path: string): boolean {
   try {
@@ -47,12 +48,12 @@ function isScopedPath(scopePath: string, inputPath: string): boolean {
   return candidate === root || candidate.startsWith(root + sep);
 }
 
-export function resolveScopedPath(scopePath: string, inputPath: string): string {
-  if (!isScopedPath(scopePath, inputPath)) {
+export function resolveScopedPath(scopePath: string | undefined, inputPath: string): string {
+  if (isScopeEnforcementEnabled() && (!scopePath || !isScopedPath(scopePath, inputPath))) {
     throw new Error(`Path escapes the allowed scope: ${inputPath}`);
   }
 
-  const root = realpathSync(scopePath);
+  const root = scopePath ? realpathSync(scopePath) : process.cwd();
   const logicalCandidate = isAbsolute(inputPath)
     ? resolve(inputPath)
     : resolve(root, inputPath);

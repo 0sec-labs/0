@@ -94,6 +94,12 @@ describe("findCommand", () => {
     expect(findCommand("/clear").command).toBe("clear");
   });
 
+  it("uses one canonical session picker command without the old competing commands", () => {
+    expect(findCommand("/sessions").command).toBe("sessions");
+    expect(findCommand("/resume").isUnknown).toBe(true);
+    expect(findCommand("/audits").isUnknown).toBe(true);
+  });
+
   it("recognises /capabilities by alias caps", () => {
     const result = findCommand("/caps");
     expect(result.isSlash).toBe(true);

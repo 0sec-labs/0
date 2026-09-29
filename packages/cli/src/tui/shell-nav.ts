@@ -30,6 +30,7 @@ export interface ShellNav {
   openHarness: () => void;
   /** Opens the model picker above the live conversation. */
   openModels: (chatOptions?: ChatScreenOptions) => void;
+  /** Opens Sessions: switch open native sessions or resume saved conversations. */
   openResume: (chatOptions?: ChatScreenOptions) => void;
   openOnboarding: () => void;
   /**

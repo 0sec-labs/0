@@ -1,7 +1,7 @@
 {
   "name": "@0/desktop",
   "version": "0.15.0",
-  "description": "Native desktop workspace for the 0.security cybersecurity team.",
+  "description": "Development-only alpha desktop workspace for 0.security; not part of CLI releases.",
   "author": "0.security",
   "repository": {
     "type": "git",
@@ -12,7 +12,7 @@
   "main": "dist/main/index.js",
   "desktopName": "0",
   "scripts": {
-    "build": "tsc --project tsconfig.json && tsc --project tsconfig.preload.json && tsc --project src/renderer/tsconfig.json",
+    "build": "pnpm --filter @0/dashboard build:desktop-alpha && tsc --project tsconfig.json && tsc --project tsconfig.preload.json && tsc --project src/renderer/tsconfig.json",
     "start": "pnpm run build && electron .",
     "test": "vitest run",
     "package": "pnpm run build && node scripts/prepare-desktop-resources.mjs && electron-builder --publish never",
@@ -25,11 +25,12 @@
     "appId": "com.0security.osec",
     "productName": "0security",
     "executableName": "0",
-    "artifactName": "0-${version}-${os}-${arch}.${ext}",
+    "artifactName": "0-desktop-alpha-${version}-${os}-${arch}.${ext}",
     "icon": "build/icon.png",
     "asar": true,
     "files": [
-      "dist/**/*",
+      "dist/main/**/*",
+      "dist/preload/**/*",
       "package.json"
     ],
     "extraResources": [

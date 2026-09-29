@@ -27,6 +27,7 @@
 // unit-testable without a live network or real DNS.
 
 import type { ScopePolicy } from "../scope/scope.js";
+import { getScopeEnforcementState, isScopeEnforcementEnabled, withScopeEnforcement } from "../scope/activation.js";
 import type { DiscoveredHost, ResolvedHost } from "./subdomains.js";
 
 /**
@@ -271,7 +272,11 @@ async function boundedResolveAll(
  * Any other state (disabled, no scope, invalid domain) yields `[]` without a
  * single network touch.
  */
-export async function enumerateSubdomainsActive(
+export function enumerateSubdomainsActive(opts: ActiveEnumerateOptions): Promise<DiscoveredHost[]> {
+  return withScopeEnforcement(getScopeEnforcementState(), () => enumerateSubdomainsActiveInternal(opts));
+}
+
+async function enumerateSubdomainsActiveInternal(
   opts: ActiveEnumerateOptions,
 ): Promise<DiscoveredHost[]> {
   // Rail 1: master switch, default OFF.
@@ -283,7 +288,7 @@ export async function enumerateSubdomainsActive(
   // Rail 2: an authorized-scope policy is mandatory for a live brute-force.
   // With none, deny-by-default → resolve nothing.
   const scope = opts.scope;
-  if (!scope) return [];
+  if (isScopeEnforcementEnabled() && !scope) return [];
 
   const wordlist = opts.wordlist ?? DEFAULT_SUBDOMAIN_WORDLIST;
   const concurrency = clampConcurrency(opts.concurrency);
@@ -295,7 +300,7 @@ export async function enumerateSubdomainsActive(
   // Generate, then keep only in-scope candidates. Scope is checked here (before
   // any resolution) AND it is the only path to a DNS query.
   const candidates = buildCandidateHosts(apex, wordlist, opts.knownHosts ?? []).filter(
-    (host) => scope.match(`https://${host}`).allowed,
+    (host) => !scope || scope.enforce(`https://${host}`).allowed,
   );
   if (candidates.length === 0) return [];
 

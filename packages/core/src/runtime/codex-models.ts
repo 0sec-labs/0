@@ -1,9 +1,24 @@
+import { createHash } from "node:crypto";
 import { getChatGptCodexAccessToken } from "./llm-api.js";
 
 export interface CodexCatalogModel {
   id: string;
   contextTokens?: number;
 }
+
+/** Transient failure with metadata verified for the credentials just resolved. */
+export class CodexCatalogRefreshError extends Error {
+  readonly cachedModels: readonly CodexCatalogModel[];
+
+  constructor(cachedModels: readonly CodexCatalogModel[]) {
+    super("Codex model discovery unavailable; using this account's cached models");
+    this.name = "CodexCatalogRefreshError";
+    this.cachedModels = cachedModels;
+  }
+}
+
+// Metadata only; never persist subscription catalogs or plaintext credentials.
+let cachedCatalog: { identity: string; models: CodexCatalogModel[] } | undefined;
 
 /** Account catalog used by the Codex Responses backend, also used by 0code/OMP. */
 export function parseCodexModels(raw: unknown): CodexCatalogModel[] {
@@ -16,14 +31,14 @@ export function parseCodexModels(raw: unknown): CodexCatalogModel[] {
     if (!value || typeof value !== "object") throw new Error("Invalid Codex model row");
     const row = value as Record<string, unknown>;
     const id = row.slug ?? row.id;
-    if (typeof id !== "string" || !id.trim() || /[\s\x00-\x1f\x7f]/.test(id)) {
+    if (typeof id !== "string" || !id.trim() || /[\s\x00-\x1f\x7f-\x9f]/.test(id)) {
       throw new Error("Invalid Codex model id");
     }
     if (row.visibility === "hide" || row.visibility === "hidden" || row.hidden === true) return [];
     if (seen.has(id)) return [];
     seen.add(id);
     const context = row.context_window;
-    return [{ id, ...(typeof context === "number" && Number.isFinite(context) && context > 0 ? { contextTokens: context } : {}) }];
+    return [{ id, ...(typeof context === "number" && Number.isSafeInteger(context) && context > 0 ? { contextTokens: context } : {}) }];
   });
 }
 
@@ -52,21 +67,37 @@ export async function loadCodexModelCatalog(options: {
   });
   const { accessToken, accountId } = credentials;
   signal.throwIfAborted();
-  const response = await (options.fetchImpl ?? fetch)(
-    `https://chatgpt.com/backend-api/codex/models?client_version=${version}`,
-    {
-      signal,
-      redirect: "error",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        ...(accountId ? { "ChatGPT-Account-Id": accountId } : {}),
-        "OpenAI-Beta": "responses=experimental",
-        originator: "0",
-        version,
-        Accept: "application/json",
+  const identity = createHash("sha256").update(accountId ? `account:${accountId}` : `token:${accessToken}`).digest("hex");
+  // Switching accounts invalidates the previous floor before any HTTP request.
+  if (cachedCatalog?.identity !== identity) cachedCatalog = undefined;
+  let denied = false;
+  try {
+    const response = await (options.fetchImpl ?? fetch)(
+      `https://chatgpt.com/backend-api/codex/models?client_version=${version}`,
+      {
+        signal,
+        redirect: "error",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          ...(accountId ? { "ChatGPT-Account-Id": accountId } : {}),
+          "OpenAI-Beta": "responses=experimental",
+          originator: "0",
+          version,
+          Accept: "application/json",
+        },
       },
-    },
-  );
-  if (!response.ok) throw new Error(`Codex model discovery failed (HTTP ${response.status})`);
-  return parseCodexModels(await response.json());
+    );
+    denied = response.status === 401 || response.status === 403;
+    if (!response.ok) throw new Error(`Codex model discovery failed (HTTP ${response.status})`);
+    const models = parseCodexModels(await response.json());
+    if (!signal.aborted) cachedCatalog = { identity, models };
+    return models;
+  } catch (error) {
+    if (denied && cachedCatalog?.identity === identity) cachedCatalog = undefined;
+    // A cancelled picker is not an offline refresh and must not paint cached rows.
+    if (!options.signal?.aborted && !denied && cachedCatalog?.identity === identity) {
+      throw new CodexCatalogRefreshError(cachedCatalog.models);
+    }
+    throw error;
+  }
 }

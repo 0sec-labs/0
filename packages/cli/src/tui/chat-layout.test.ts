@@ -11,7 +11,6 @@ import {
   computeCommandMenuLayout,
   computeSidebarsLayout,
   moveAgentSelection,
-  SIDEBAR_MIN_TERMINAL_WIDTH,
 } from "./chat-layout.js";
 
 /** Terminal sizes worth caring about, plus a dense sweep for invariants. */
@@ -322,116 +321,88 @@ describe("computeAgentRailLayout", () => {
 });
 
 describe("computeSidebarsLayout", () => {
-  it("is both-hidden and full-width when both settings are off", () => {
-    for (const width of WIDTHS) {
-      const layout = computeChatLayout({ width, height: 40, statusTextLength: 24 });
-      const s = computeSidebarsLayout({
-        width,
-        contentWidth: layout.contentWidth,
-        compact: layout.compact,
-        showLeft: false,
-        showRight: false,
-      });
-      expect(s.leftVisible).toBe(false);
-      expect(s.rightVisible).toBe(false);
-      expect(s.leftWidth).toBe(0);
-      expect(s.rightWidth).toBe(0);
-      expect(s.transcriptWidth).toBe(Math.max(8, layout.contentWidth - (layout.compact ? 2 : 4)));
-    }
+  it("reserves only the right reopening rail when collapsed", () => {
+    const result = computeSidebarsLayout({
+      width: 120, contentWidth: 120, height: 40, compact: false, showRight: false,
+    });
+    expect(result.rightVisible).toBe(false);
+    expect(result.rightWidth).toBe(3);
+    expect(result.centralWidth).toBe(117);
+    expect(result.transcriptWidth + 4).toBe(result.centralWidth);
+    expect(result.bodyHeight).toBe(37);
   });
 
-  it("hides both on narrow terminals even when enabled", () => {
-    for (const width of WIDTHS.filter((w) => w < SIDEBAR_MIN_TERMINAL_WIDTH)) {
-      const layout = computeChatLayout({ width, height: 40, statusTextLength: 24 });
-      const s = computeSidebarsLayout({
-        width,
-        contentWidth: layout.contentWidth,
-        compact: layout.compact,
-        showLeft: true,
-        showRight: true,
-      });
-      expect(s.leftVisible).toBe(false);
-      expect(s.rightVisible).toBe(false);
-      expect(s.leftWidth).toBe(0);
-      expect(s.rightWidth).toBe(0);
-    }
+  it("collapses responsively without forgetting a requested pane on re-expansion", () => {
+    const requested = { height: 40, compact: false, showRight: true };
+    const narrow = computeSidebarsLayout({ ...requested, width: 80, contentWidth: 80 });
+    const wide = computeSidebarsLayout({ ...requested, width: 160, contentWidth: 160 });
+    const restored = computeSidebarsLayout({ ...requested, width: 80, contentWidth: 80 });
+    expect(narrow.rightVisible).toBe(false);
+    expect(narrow.rightWidth).toBe(3);
+    expect(narrow.centralWidth).toBe(77);
+    expect(wide.rightVisible).toBe(true);
+    expect(restored).toEqual(narrow);
   });
 
-  it("never overspends the content width and keeps the transcript readable", () => {
-    for (const width of WIDTHS) {
-      for (const height of HEIGHTS) {
-        for (const [showLeft, showRight] of [
-          [true, true],
-          [true, false],
-          [false, true],
-        ] as const) {
-          const layout = computeChatLayout({ width, height, statusTextLength: 24 });
-          const pad = layout.compact ? 2 : 4;
-          const s = computeSidebarsLayout({
-            width,
-            contentWidth: layout.contentWidth,
-            compact: layout.compact,
-            showLeft,
-            showRight,
-          });
-          const transcriptOuter = s.transcriptWidth + pad;
-          const total =
-            s.leftWidth + s.leftGap + transcriptOuter + s.rightGap + s.rightWidth;
-          expect(
-            total,
-            `sidebars overflowed at ${width}x${height} L=${showLeft} R=${showRight}`,
-          ).toBeLessThanOrEqual(layout.contentWidth);
-          // A visible sidebar's inner width is real and strictly inside its column.
-          if (s.leftVisible) {
-            expect(s.leftInnerWidth).toBeGreaterThan(0);
-            expect(s.leftInnerWidth).toBeLessThan(s.leftWidth);
+  it("keeps every rectangle and its text inside the actual terminal", () => {
+    for (let width = 0; width <= 240; width += 1) {
+      for (const height of [0, 2, 10, 24, 40]) {
+        for (const showRight of [false, true]) {
+          for (const inspectorOpen of [false, true]) {
+            const result = computeSidebarsLayout({
+              width, contentWidth: width, height, compact: width < 88,
+              showRight, inspectorOpen,
+            });
+            expect(result.centralWidth + result.rightWidth).toBe(width);
+            expect(result.transcriptWidth).toBeLessThanOrEqual(result.centralWidth);
+            expect(result.transcriptWidth).toBeGreaterThanOrEqual(0);
+            expect(result.rightWidth).toBeGreaterThanOrEqual(0);
+            expect(result.bodyHeight).toBe(Math.max(0, height - 3));
+            if (result.rightVisible) {
+              expect(result.transcriptWidth).toBeGreaterThanOrEqual(44);
+              expect(result.rightInnerWidth).toBeGreaterThan(0);
+              expect(result.rightInnerWidth).toBeLessThan(result.rightWidth);
+            } else {
+              expect(result.rightWidth).toBe(Math.min(3, Math.floor(width / 2)));
+              expect(result.rightInnerWidth).toBe(0);
+            }
           }
-          if (s.rightVisible) {
-            expect(s.rightInnerWidth).toBeGreaterThan(0);
-            expect(s.rightInnerWidth).toBeLessThan(s.rightWidth);
-          }
-          // Whenever any sidebar shows, the transcript kept its floor.
-          if (s.leftVisible || s.rightVisible) {
-            expect(s.transcriptWidth).toBeGreaterThanOrEqual(44);
-          }
-          // A sidebar is never visible without the width the caller renders into.
-          expect(s.leftVisible).toBe(s.leftWidth > 0);
-          expect(s.rightVisible).toBe(s.rightWidth > 0);
         }
       }
     }
   });
 
-  it("shows both at 120 cols and shrinks the transcript between them", () => {
-    const layout = computeChatLayout({ width: 120, height: 40, statusTextLength: 24 });
-    const base = {
-      width: 120,
-      contentWidth: layout.contentWidth,
-      compact: layout.compact,
-    };
-    const none = computeSidebarsLayout({ ...base, showLeft: false, showRight: false });
-    const rightOnly = computeSidebarsLayout({ ...base, showLeft: false, showRight: true });
-    const both = computeSidebarsLayout({ ...base, showLeft: true, showRight: true });
-    expect(both.leftVisible).toBe(true);
-    expect(both.rightVisible).toBe(true);
-    expect(rightOnly.transcriptWidth).toBeLessThan(none.transcriptWidth);
-    expect(both.transcriptWidth).toBeLessThan(rightOnly.transcriptWidth);
+  it("gives conversation, composer, and status the full remaining center", () => {
+    const result = computeSidebarsLayout({
+      width: 120, contentWidth: 120, height: 40, compact: false, showRight: true,
+    });
+    expect(result.rightVisible).toBe(true);
+    expect(result.transcriptWidth + 4).toBe(result.centralWidth);
+    expect(result.centralWidth + result.rightWidth).toBe(120);
   });
 
-  it("keeps the RIGHT sidebar when both are asked for but only one fits", () => {
-    // At 100 cols two full sidebars would starve the transcript below its floor,
-    // so the transcript-priority rule drops the LEFT and keeps the RIGHT.
-    const layout = computeChatLayout({ width: 100, height: 40, statusTextLength: 24 });
-    const s = computeSidebarsLayout({
-      width: 100,
-      contentWidth: layout.contentWidth,
-      compact: layout.compact,
-      showLeft: true,
-      showRight: true,
-    });
-    expect(s.rightVisible).toBe(true);
-    expect(s.leftVisible).toBe(false);
-    expect(s.transcriptWidth).toBeGreaterThanOrEqual(44);
+  it("uses reclaimed left cells for inspection without starving the conversation", () => {
+    const base = { width: 100, height: 40, compact: false, showRight: true, inspectorOpen: true };
+    const fits = computeSidebarsLayout({ ...base, contentWidth: 88 });
+    const tooSmall = computeSidebarsLayout({ ...base, contentWidth: 87 });
+    expect(fits.rightVisible).toBe(true);
+    expect(fits.centralWidth).toBe(48);
+    expect(fits.transcriptWidth).toBe(44);
+    expect(fits.centralWidth + fits.rightWidth).toBe(88);
+    expect(tooSmall.rightVisible).toBe(false);
+    expect(tooSmall.centralWidth).toBe(84);
+    expect(tooSmall.transcriptWidth).toBe(80);
+  });
+
+  it("widens inspection without letting tool cards starve the main conversation", () => {
+    const base = { width: 120, contentWidth: 120, height: 40, compact: false, showRight: true };
+    const roster = computeSidebarsLayout(base);
+    const inspected = computeSidebarsLayout({ ...base, inspectorOpen: true });
+    expect(inspected.rightVisible).toBe(true);
+    expect(inspected.rightWidth).toBeGreaterThan(roster.rightWidth);
+    expect(inspected.transcriptWidth).toBeGreaterThanOrEqual(44);
+    expect(inspected.centralWidth + inspected.rightWidth).toBe(120);
+    expect(inspected.bodyHeight).toBe(roster.bodyHeight);
   });
 });
 

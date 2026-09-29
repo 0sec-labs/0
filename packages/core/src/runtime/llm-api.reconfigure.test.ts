@@ -13,8 +13,6 @@ type Internals = {
   apiKey: string;
   baseUrl: string;
   reasoningEffort?: string;
-  hostedCatalogPromise: Promise<void> | null;
-  hostedMaxOutputTokens: number | undefined;
   config: { agentModels?: Readonly<Record<string, string>>; singleModel?: boolean; model?: string };
 };
 const peek = (runtime: LlmApiRuntime): Internals => runtime as unknown as Internals;
@@ -70,27 +68,21 @@ describe("live runtime reconfiguration", () => {
     expect(after.reasoningEffort).toBeUndefined();
   });
 
-  it("re-detects the account and clears the hosted memo on a provider change", () => {
+  it("re-detects the provider account and endpoint after a live switch", () => {
     const runtime = new LlmApiRuntime({
       type: "api", provider: "openai", model: "primary", timeout: 1000,
       env: { ...environment(), OPENAI_API_KEY: "openai-key", OPENAI_BASE_URL: "https://openai.fixture/v1" },
     });
-    // Prime a stale hosted memo to prove reconfigure drops it.
-    peek(runtime).hostedCatalogPromise = Promise.resolve();
-    peek(runtime).hostedMaxOutputTokens = 999;
-
     runtime.reconfigure({
-      provider: "hosted",
-      env: { ...environment(), "ZERO_CLOUD_HOST": "http://127.0.0.1:12345", "ZERO_CLOUD_TOKEN": "cloud-token" },
+      provider: "deepseek",
+      model: "deepseek-v4-flash",
+      env: { ...environment(), DEEPSEEK_API_KEY: "deepseek-key", DEEPSEEK_BASE_URL: "https://deepseek.fixture/v1" },
     });
-
     const after = peek(runtime);
-    expect(after.provider).toBe("hosted");
-    expect(after.apiKey).toBe("cloud-token");
-    expect(after.baseUrl).toContain("127.0.0.1:12345");
-    // The old account's catalog ceiling must not survive the switch.
-    expect(after.hostedCatalogPromise).toBeNull();
-    expect(after.hostedMaxOutputTokens).toBeUndefined();
+    expect(after.provider).toBe("deepseek");
+    expect(after.apiKey).toBe("deepseek-key");
+    expect(after.baseUrl).toBe("https://deepseek.fixture/v1");
+    expect(after.model).toBe("deepseek-v4-flash");
   });
 });
 

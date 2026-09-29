@@ -15,7 +15,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "pnpm -r exec rm -f tsconfig.tsbuildinfo && pnpm --filter @0/shared build && pnpm --filter @0/db --filter @0/templates build && pnpm --filter '!@0/docs' -r build && pnpm run build:bundle",
+    "build": "pnpm -r exec rm -f tsconfig.tsbuildinfo && pnpm --filter @0/shared build && pnpm --filter @0/db --filter @0/templates build && pnpm --filter '!@0/docs' --filter '!@0/desktop' -r build && pnpm run build:bundle",
     "build:bundle": "node ./scripts/bundle-cli.mjs",
     "build:docs": "pnpm --filter @0/docs build",
     "docs:check": "node scripts/sync-cli-docs.mjs --check",
@@ -27,7 +27,6 @@
     "test:bundle-skills": "node --test scripts/bundle-skills-assets.test.mjs",
     "test:dsh-mcp:e2e": "node scripts/dsh-0-mcp.e2e.mjs",
     "test:install-e2e": "bash scripts/install-e2e.sh",
-    "test:cloud-e2e": "bash scripts/smoke-cloud-account.sh",
     "test:evolution:e2e": "node scripts/smoke-source-evolution.mjs && node scripts/smoke-lens-evolution.mjs && node scripts/smoke-codebase-learning.mjs && node scripts/smoke-source-citation.mjs",
     "test:smolvm:e2e": "node scripts/smoke-smolvm.mjs",
     "test:smolvm:toolbox": "node scripts/smoke-smolvm-toolbox.mjs",

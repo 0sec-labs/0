@@ -70,15 +70,15 @@ export function CommandPalette({
 
   const items = useMemo<PaletteAction[]>(() => {
     const base: PaletteAction[] = [
-      {
+      ...(import.meta.env.MODE === "desktop-alpha" ? [{
         id: "page-chat",
-        group: "Pages",
-        label: "Open chat workspace",
-        meta: "Scoped operator conversation and approvals",
+        group: "Pages" as const,
+        label: "Open chat workspace (alpha)",
+        meta: "Development-only operator conversation and approvals",
         icon: MessageSquare,
-        keywords: ["chat operator workspace session scope approvals"],
+        keywords: ["chat operator workspace session scope approvals alpha"],
         run: () => window.location.assign("/desktop.html"),
-      },
+      }] : []),
       {
         id: "page-findings",
         group: "Pages",

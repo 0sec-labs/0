@@ -422,14 +422,14 @@ describe("updateSetting for the keybindings map", () => {
     const seen: TuiSettings[] = [];
     const unsubscribe = subscribeSettings((s) => seen.push(s));
 
-    expect(updateSetting("keybindings", { "view.left-sidebar": "ctrl+j" })).toBe(true);
-    expect(getSettings().keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
-    expect(seen.at(-1)?.keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+    expect(updateSetting("keybindings", { "overlay.review-toggle": "ctrl+j" })).toBe(true);
+    expect(getSettings().keybindings).toEqual({ "overlay.review-toggle": "ctrl+j" });
+    expect(seen.at(-1)?.keybindings).toEqual({ "overlay.review-toggle": "ctrl+j" });
 
     unsubscribe();
     // Survives a reload from disk.
     reloadSettings();
-    expect(getSettings().keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+    expect(getSettings().keybindings).toEqual({ "overlay.review-toggle": "ctrl+j" });
   });
 
   it("sanitises an invalid override on the way in", () => {
@@ -437,11 +437,11 @@ describe("updateSetting for the keybindings map", () => {
     // A protected id and a reserved chord are both dropped by the store's
     // normalise-on-write, leaving only the valid entry.
     updateSetting("keybindings", {
-      "view.left-sidebar": "Ctrl+J",
+      "overlay.review-toggle": "Ctrl+J",
       "session.quit": "ctrl+x",
       "view.right-sidebar": "ctrl+c",
     } as Record<string, string>);
-    expect(getSettings().keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+    expect(getSettings().keybindings).toEqual({ "overlay.review-toggle": "ctrl+j" });
   });
 });
 
@@ -515,6 +515,7 @@ describe("analytics environment restrictions", () => {
 
   it("updates its own inherited tier but respects an external override introduced later", async () => {
     configureSettingsStore({ homeDir: makeHome() });
+    updateSetting("analyticsLevel", "full");
     await collect();
     expect(sent).toEqual([
       expect.objectContaining({ origin: "bridge-regression" }),

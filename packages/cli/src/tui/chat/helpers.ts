@@ -7,6 +7,52 @@ import {
 import type { Theme } from "../theme-context.js";
 import type { HerdDetailTone } from "../herd-layout.js";
 import type { SlashCommand } from "../slash-commands.js";
+import { fitTuiText, sanitizeTuiText } from "../text.js";
+
+const ACTIVITY_WIDTH = 88;
+const SENSITIVE_MARKER = /authorization|bearer|basic|api[\s_-]*key|access[\s_-]*key|secret|password|passwd|pwd|token|cookie|credential|passphrase/i;
+const PRIVATE_VALUE = /\b(?:sk-[A-Za-z0-9_-]{12,}|ghp_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,}|xox[bap]-[A-Za-z0-9-]{12,}|AKIA[A-Z0-9]{16})\b/;
+
+/** A bounded display-only excerpt. Tool arguments and model prose are untrusted. */
+export function activityExcerpt(value: unknown, width = ACTIVITY_WIDTH): string {
+  const text = sanitizeTuiText(value)
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF]/g, "");
+  // Unstructured commands and model prose have no reliable argument schema.
+  // Withhold the *whole* excerpt when it mentions credentials rather than
+  // guessing where an unquoted or partially streamed secret value ends.
+  if (SENSITIVE_MARKER.test(text) || PRIVATE_VALUE.test(text)) return fitTuiText("sensitive details omitted", width);
+  return fitTuiText(text
+    .replace(/\b(https?:\/\/)[^\s/@]+:[^\s/@]+@/gi, "$1[redacted]@")
+    .replace(/\b(https?:\/\/[^\s?#]+)[?#][^\s]*/gi, "$1?[redacted]"), width);
+}
+
+/**
+ * Promote complete sentences/lines from streamed reasoning, or the first
+ * seven words of a still-open fragment once they are stable. Nothing here
+ * predicts the model's next step. Settled entries can use the final fragment.
+ */
+export function reasoningExcerpt(text: string, settled = false): string {
+  const recent = text.slice(-1600);
+  let start = 0;
+  let complete = "";
+  for (const boundary of recent.matchAll(/[.!?](?=\s|$)|\n/g)) {
+    const end = boundary.index + boundary[0].length;
+    const candidate = recent.slice(start, end).trim();
+    if (candidate.length >= 12) complete = candidate;
+    start = end;
+  }
+  const fragment = recent.slice(start).trim();
+  const words = fragment.split(/\s+/);
+  const stableFragment = words.length >= 8 ? words.slice(0, 7).join(" ") : "";
+  const candidate = settled && fragment.length >= 12 ? fragment : stableFragment || complete;
+  return activityExcerpt(candidate.replace(/^[#>*\s-]+/, ""), 68);
+}
+
+export function toolActivity(name: string, args?: string): string {
+  const title = activityExcerpt(name, 40) || "tool";
+  const detail = activityExcerpt(args, 64);
+  return fitTuiText(detail ? `${title} · ${detail}` : title, ACTIVITY_WIDTH);
+}
 
 export function modeLabel(mode: ConsoleAutonomyMode): string {
   if (mode === "standard") return "Standard";

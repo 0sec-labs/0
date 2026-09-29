@@ -117,10 +117,9 @@ builds, configs, or implementations; a failed side is `inconclusive`, never
 `divergent`. Novelty providers are pluggable per ecosystem, and zero checked
 records can never produce a `novel` verdict.
 
-Research CLI paths emit evidence envelopes and can send findings through a
-configured cloud sink. Envelope availability depends on the producing path;
-do not assume a legacy finding or a different command's output has the same
-schema. Managed storage and access are outside this repository.
+Research CLI paths emit evidence envelopes. Envelope availability depends on
+the producing path; do not assume a legacy finding or a different command's
+output has the same schema. Managed storage and access are outside this repository.
 
 Two import paths handle kernel proofs the generic VM runner can't safely
 rebuild:
@@ -321,27 +320,6 @@ See [Improvement Plane](/improvement-plane/#live-harness-component-contract)
 for the exact current/planned distinction, Python support, autonomy settings,
 and long-horizon recovery requirements.
 
-### Hosted inference and evolution accounting
-
-The optional hosted provider is model transport, not managed tool execution.
-The parent-session SDK path connects plugin model calls through
-`invokePluginModel` to the parent `runtime.executeNative`; executable-plugin
-candidate generation uses the same broker and configured `costModel`.
-Local integration and historical candidate receipts do not establish what a
-production service has enabled. Model requests remain subject to the selected
-account's access and terms; self-evolution does not imply free inference.
-
-Subagents fork through the parent runtime's child-inference factory. They
-inherit its resolved account and route; the configured role-model and
-single-model policy controls child selection.
-Workspace-trusted ESM can use external clients outside SDK accounting.
-
-Hosted request admission and settlement belong to the service; local token-cost
-estimates do not establish remaining spend or commercial terms. Inference is
-separate from review, compute and engagement accounting. The internal hosted
-transport is not offered by the public console; its qualification and security
-performance require separate evidence.
-
 ## Presentation contract
 
 Every UI and output surface consumes a renderer-neutral document or event rather
@@ -366,8 +344,8 @@ when the console exits.
 
 ### Desktop control plane
 
-Desktop is **in development and not yet released.** The native application
-shell uses the same local control plane — see [Roadmap](/roadmap/#desktop) for
+Desktop is a **development-only alpha, excluded from CLI releases.** The native
+application shell uses the same local control plane — see [Roadmap](/roadmap/#desktop) for
 current status. Use the CLI [Console](/console/) for the released terminal
 interface.
 
@@ -392,7 +370,7 @@ interface over a different provider:
 
 | Adapter | Backend | How |
 |---------|---------|-----|
-| `LlmApiRuntime` | Configured API provider / hosted model transport | Direct provider requests and native tool calls |
+| `LlmApiRuntime` | Configured API provider | Direct provider requests and native tool calls |
 | `ProcessRuntime` | Claude, Codex or Gemini CLI | Subprocess adapter; distinct from a tool sandbox |
 | `CliNativeRuntime` | Supported installed coding CLI | CLI-native session execution |
 | `OpenRouterRuntime` | OpenRouter | Separate adapter with ensemble support |

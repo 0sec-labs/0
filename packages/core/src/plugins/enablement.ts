@@ -66,6 +66,7 @@ import { homeStateDir } from "@0/shared";
 
 import { isSafePluginId } from "./loader.js";
 import { PLUGIN_CAPABILITIES, type PluginCapability, type PluginManifest } from "./manifest.js";
+import { BUILTIN_PLUGINS, getBuiltinPlugin } from "./builtin.js";
 
 // ── On-disk layout / permissions ─────────────────────────────────────────────
 
@@ -110,7 +111,7 @@ export interface InstalledPluginView {
   id: string;
   version: string;
   /** Aggregated current capability set (see {@link aggregateCapabilities}). */
-  capabilities: PluginCapability[];
+  capabilities: readonly PluginCapability[];
 }
 
 export type EnablementStatus =
@@ -127,7 +128,7 @@ export interface ReconciledPlugin {
   approvedCapabilities: PluginCapability[];
   approvedVersion: string;
   /** null when the plugin is no longer installed. */
-  currentCapabilities: PluginCapability[] | null;
+  currentCapabilities: readonly PluginCapability[] | null;
   currentVersion: string | null;
   /** Human-readable explanation, present for non-`enabled` statuses. */
   reason?: string;
@@ -222,6 +223,7 @@ export function reconcile(
   installed: readonly InstalledPluginView[],
 ): ReconciledPlugin[] {
   const byId = new Map(installed.map((p) => [p.id, p]));
+  for (const plugin of BUILTIN_PLUGINS) byId.set(plugin.id, plugin);
   const out: ReconciledPlugin[] = [];
 
   for (const pluginId of Object.keys(record.enabled)) {
@@ -239,6 +241,19 @@ export function reconcile(
         reason:
           `plugin "${pluginId}" is enabled but no longer installed; ` +
           "re-install and re-enable it to approve it again",
+      });
+      continue;
+    }
+
+    if (getBuiltinPlugin(pluginId) && approval.version !== current.version) {
+      out.push({
+        pluginId,
+        status: "stale-capabilities",
+        approvedCapabilities: approval.capabilities,
+        approvedVersion: approval.version,
+        currentCapabilities: current.capabilities,
+        currentVersion: current.version,
+        reason: `First-party plugin "${pluginId}" changed version; re-enable it to approve its current behavior.`,
       });
       continue;
     }
@@ -279,7 +294,7 @@ export function reconcile(
  */
 export function loadableIds(reconciled: readonly ReconciledPlugin[]): string[] {
   return reconciled
-    .filter((r) => r.status === "enabled")
+    .filter((r) => r.status === "enabled" && !getBuiltinPlugin(r.pluginId))
     .map((r) => r.pluginId)
     .sort();
 }

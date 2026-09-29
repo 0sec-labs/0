@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/react */
 import React from "react";
-import { TextAttributes } from "@opentui/core";
+import { TextAttributes, type BorderSides } from "@opentui/core";
 import { MODEL_PRICING, type ModelRates } from "@0/shared";
 import { fitTuiText, sanitizeTuiText } from "../text.js";
 import { ShimmerText } from "./shimmer.js";
@@ -26,6 +26,9 @@ import type { ChatEntry, EntryDisplay } from "./types.js";
 import { ToolCard } from "./ToolCard.js";
 import { ImageCard } from "./ImageCard.js";
 import { toolActionTitle, toolResultLine, toolState, toolStateLabel } from "./card-layout.js";
+import { activityExcerpt, reasoningExcerpt, toolActivity } from "./helpers.js";
+
+const USER_RAIL_SIDES: BorderSides[] = ["left"];
 
 /**
  * Mouse affordances for a clickable transcript row (a collapsed fold, or a
@@ -167,8 +170,8 @@ export function renderEntry(
   if (entry.kind === "user" || entry.kind === "assistant") {
     const isUser = entry.kind === "user";
     // Keep speaker labels distinct without tinting the message body.
-    const tone = isUser ? ACCENT : PRIMARY;
-    const labelTone = isUser ? ACCENT : BRAND;
+    const tone = isUser ? PRIMARY : BORDER;
+    const labelTone = isUser ? PRIMARY : BRAND;
     const messageWidth = transcriptStyle === "bubble" && isUser && maxWidth >= 32
       ? Math.floor(maxWidth * 0.85)
       : maxWidth;
@@ -192,7 +195,9 @@ export function renderEntry(
       if (display.showCost && entry.usageInput !== undefined) {
         footerParts.push(formatTurnCost(display.model, entry.usageInput, entry.usageOutput ?? 0));
       }
-      if (entry.durationMs) footerParts.push(formatElapsed(entry.durationMs));
+      if (entry.durationMs && (display.showTokenUsage || display.showCost)) {
+        footerParts.push(formatElapsed(entry.durationMs));
+      }
     }
     const restFitted = footerParts.length ? fitTuiText(footerParts.join(" · "), bodyWidth) : "";
 
@@ -216,21 +221,16 @@ export function renderEntry(
       );
     }
 
-    // Minimal (the default): the OpenCode / oh-my-pi flat look. NO bordered
-    // bubble, NO panel fill, NO box anywhere. The operator's turn is marked only
-    // by a thin coloured accent rail (ACCENT) down its left, with a 1-cell gap;
-    // the model's answer flows as plain body text flush against the pane,
-    // distinguished only by its brand-toned speaker label. The optional footer
-    // (model/tokens/cost/elapsed) reads as a muted, italic secondary line.
+    // Flat conversation: a subtle user rail, plain assistant body, and no
+    // repeated assistant heading. Telemetry remains explicitly opt-in.
     if (transcriptStyle === "minimal") {
-      const spine = isUser ? ACCENT : BRAND;
       return (
         <box key={entry.id} flexDirection="row" width={maxWidth} flexShrink={0} minWidth={0} marginTop={marginTop}>
           {isUser && frame.railWidth > 0 ? (
-            <box width={frame.railWidth} flexShrink={0} alignSelf="stretch" backgroundColor={spine} />
+            <box width={frame.railWidth} flexShrink={0} alignSelf="stretch" border={USER_RAIL_SIDES} borderStyle="single" borderColor={PRIMARY} />
           ) : null}
           <box flexDirection="column" flexGrow={1} minWidth={0} marginLeft={isUser ? frame.contentGap : 0}>
-            {label ? <text fg={labelTone} attributes={TextAttributes.BOLD}>{label}</text> : null}
+            {label ? <text fg={labelTone}>{label}</text> : null}
             {body}
             {restFitted ? <text fg={MUTED} attributes={TextAttributes.ITALIC}>{restFitted}</text> : null}
           </box>
@@ -240,16 +240,8 @@ export function renderEntry(
 
     // Rail remains the opt-in left-spine layout rather than a bubble card.
     if (transcriptStyle === "rail") {
-      // BOTH voices are marked the same way — a thin left SPINE plus a bold label,
-      // the body sitting flat on the canvas (no panel fill). An earlier version
-      // filled each turn with PANEL_ALT so it read as a card, but with every turn
-      // carded the transcript became a stack of heavy grey rectangles ("too much
-      // card"); OpenCode's answer is a faint left bar + label, which demarcates a
-      // turn without the weight. The SPINE TONE tells the two apart: the operator
-      // turn takes the neutral ACCENT (it reads like the composer that produced
-      // it), the AI turn takes the BRAND purple (the "0" voice) and carries a
-      // small brand label so the answer announces itself.
-      const spine = isUser ? ACCENT : BRAND;
+      // The opt-in rail layout retains its card geometry without adding a
+      // redundant assistant label or heavy user-heading treatment.
       // The AI turn's footer is quiet provenance only — the per-turn telemetry
       // the operator opted into: the model when `modelDisplay` routes it here
       // (otherwise it lives in the bottom bar), tokens under `showTokenUsage`,
@@ -258,21 +250,10 @@ export function renderEntry(
       // bar, so tagging every answer with "YOLO"/"Co-pilot" was redundant noise.
       return (
         <box key={entry.id} flexDirection="column" width={maxWidth} flexShrink={0} minWidth={0} marginTop={marginTop}>
-          {/* External label row: 0 at upper-left, You at upper-right */}
           {label ? (
-            isUser ? (
-              // Operator: "You" right-aligned at top edge
-              <box flexDirection="row" minWidth={0}>
-                <box flexGrow={1} />
-                <text height={1} wrapMode="none" truncate fg={labelTone} attributes={TextAttributes.BOLD}>{fitTuiText(label, maxWidth)}</text>
-              </box>
-            ) : (
-              // Assistant: "0" left-aligned at top edge
-              <box flexDirection="row" minWidth={0}>
-                <text height={1} wrapMode="none" truncate fg={labelTone} attributes={TextAttributes.BOLD}>{fitTuiText(label, maxWidth)}</text>
-                <box flexGrow={1} />
-              </box>
-            )
+            <box flexDirection="row" minWidth={0}>
+              <text height={1} wrapMode="none" truncate fg={labelTone}>{fitTuiText(label, maxWidth)}</text>
+            </box>
           ) : null}
           {bordered ? (
             <box width={card.outerWidth} flexDirection="column" flexShrink={0} minWidth={0} border borderStyle="rounded" borderColor={tone} backgroundColor={PANEL_ALT} paddingX={1}>
@@ -445,19 +426,15 @@ export function renderEntry(
   }
 
   if (entry.kind === "reasoning") {
-    // Thinking is deliberately quieter than the answer: a dotted rail and
-    // muted text, so it reads as working-out rather than a conclusion. While the
-    // reasoning belongs to the turn STILL IN FLIGHT the "thinking" label shimmers
-    // (a bright sweep over the muted base) so a working turn always reads as
-    // alive — even when its answer hasn't started streaming yet; the instant the
-    // turn settles (or on a past turn's reasoning) it renders static/muted.
-    // Gated on BOTH `activeTurn` matching and a numeric `shimmerFrame`, so
-    // reduceMotion / settled turns keep the flat label.
-    // Only the LIVE TAIL reasoning shimmers — not every past thinking block in
-    // the working turn — so a turn shows one shimmering "thinking", not many.
-    // The label word itself is deduped per turn by the caller (which resolves
-    // "shimmer" | "static" | "none"); "none" drops the repeat while keeping the
-    // reasoning body, so the one shown label — live or settled — stands alone.
+    // Reasoning is quieter than the answer: a dotted rail and muted text.
+    // Only the live tail label shimmers. Settled entries retain a short static
+    // heading and the full body, rather than preserving a stale activity claim.
+    const live = entry.id === display.activeEntryId && entry.turn === display.activeTurn;
+    const preview = live ? reasoningExcerpt(entry.text) : "";
+    const label = fitTuiText(
+      live ? (preview ? `reasoning · ${preview}` : "reasoning in progress") : "reasoning",
+      Math.max(1, maxWidth - 2),
+    );
     return finish(
       <box key={entry.id} flexDirection="row" marginTop={display.spacing} minWidth={0}>
         <box width={1} flexShrink={0} alignSelf="stretch">
@@ -465,9 +442,9 @@ export function renderEntry(
         </box>
         <box flexDirection="column" flexGrow={1} minWidth={0} marginLeft={1}>
           {reasoningLabel === "none" ? null : reasoningLabel === "shimmer" ? (
-            <ShimmerText label="thinking" frame={display.shimmerFrame!} base={MUTED} peak={TEXT} />
+            <ShimmerText label={label} frame={display.shimmerFrame!} base={MUTED} peak={TEXT} />
           ) : (
-            <text fg={MUTED}>thinking</text>
+            <text fg={MUTED}>{label}</text>
           )}
           {renderMarkdownBlocks(
             renderMarkdown(normalizeReasoning(entry.text), Math.max(8, maxWidth - 2)),
@@ -593,24 +570,40 @@ export function renderFold(
       ? item.entries.filter((entry) => entry.kind !== "tool" && entry.kind !== "subagent")
       : item.entries;
   if (shown.length === 0) return null;
-  // When the turn has already shown its one "thinking" label, recompute the
-  // summary from `shown` with the reasoning token dropped (never reuse the
-  // precomputed `item.summary`, which still contains "thinking").
-  const summary = options?.hideReasoningLabel
+  // Preserve tool names and a safe target in mixed folds; a reasoning-only
+  // event shows its own bounded excerpt. Settled folds never claim to be busy.
+  const lastTool = shown.findLast((entry) => entry.kind === "tool");
+  const liveReasoning = shown.find((entry) => entry.kind === "reasoning" && entry.id === display.activeEntryId);
+  const reasoning = liveReasoning ?? shown.findLast((entry) => entry.kind === "reasoning");
+  const excerpt = reasoning && !options?.hideReasoningLabel && (!lastTool || liveReasoning)
+    ? reasoningExcerpt(reasoning.text, reasoning !== liveReasoning)
+    : "";
+  const base = (options?.hideReasoningLabel
     ? foldSummary(shown, { dropReasoningLabel: true })
     : shown.length === item.entries.length
       ? item.summary
-      : foldSummary(shown);
-  // A fold standing for the turn STILL IN FLIGHT must read as active even though
-  // its steps are collapsed to one line: shimmer the summary (bright sweep over
-  // the muted base) so a working-but-collapsed turn — e.g. "▸ 12 steps ·
-  // thinking, run_command" — still signals "running". A completed/past fold
-  // (its turn is not `activeTurn`) stays static muted, exactly as before. Gated
-  // on BOTH the turn match and a numeric `shimmerFrame`, so reduceMotion /
-  // settled turns keep the flat summary.
+      : foldSummary(shown)).replace(/\bthinking\b/g, "reasoning") || "1 step";
+  const summary = excerpt && shown.length === 1
+    ? `reasoning · ${excerpt}`
+    : excerpt
+      ? `${base} · ${excerpt}`
+      : lastTool && shown.length === 1
+        ? toolActivity(lastTool.text, lastTool.toolArgs)
+        : lastTool?.toolArgs
+          ? `${base} · ${activityExcerpt(lastTool.toolArgs, 48)}`
+          : base;
+  // A collapsed fold belonging to an active turn still shimmers in phase with
+  // the tool/reasoning rows; reduceMotion and settled folds stay static.
   const summaryFitted = fitTuiText(`${summary} · ${interaction?.onToggle ? "click or " : ""}[⌃R] to expand`, Math.max(1, maxWidth - 2));
   const shimmerFold =
-    item.turn === display.activeTurn && typeof display.shimmerFrame === "number";
+    item.turn === display.activeTurn &&
+    typeof display.shimmerFrame === "number" &&
+    shown.some((entry) =>
+      entry.id === display.activeEntryId &&
+      (entry.kind === "reasoning" ||
+        (entry.kind === "tool" && entry.success === undefined) ||
+        (entry.kind === "subagent" && entry.subagentOutcome === undefined))
+    );
   // A collapsed fold is clickable: mousing down toggles its turn into the
   // expanded set (chat-screen owns that state), and hovering tints the row so
   // the disclosure reads as interactive. Handlers are wired only when

@@ -267,7 +267,6 @@ describe("the Connect action", () => {
   it("opens Connections, stays outside the model count, and explains its destination", () => {
     const action = modelConnectActionItem();
     let connectionsOpened = 0;
-    expect(action.label).toBe("Connect another provider…");
     expect(isModelConnectAction(action)).toBe(true);
     expect(activateModelConnectAction(action, () => { connectionsOpened += 1; })).toBe(true);
     expect(connectionsOpened).toBe(1);

@@ -87,9 +87,9 @@ test("the single /model match leads to agents without running it; Left edits the
   expect(second).toMatch(/Running replay/i);
   expect(second).not.toBe(first);
   await tui.sendKey("return");
-  await tui.waitForText(/\[←\] Main/);
-  await tui.sendKey("left");
-  expect(tui.captureFrame()).not.toContain("[←] Main");
+  await tui.waitForText(/agent-authz/);
+  // Inspector navigation is independent of the draft; Escape returns to Main.
+  await tui.sendKey("escape");
 
   // The draft survives roster/focus navigation. Left moves the visible caret,
   // and an insertion/backspace at that boundary edits rather than appends.

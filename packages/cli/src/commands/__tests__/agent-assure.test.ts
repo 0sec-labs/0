@@ -5,7 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
 
 const loadScopeMock = vi.fn();
-vi.mock("@0/core", () => ({ loadScope: loadScopeMock }));
+vi.mock("@0/core", () => ({
+  loadScope: loadScopeMock,
+  isScopeEnforcementEnabled: () => true,
+  getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, projectPath: process.cwd(), message: "Scope plugin enabled" }),
+}));
 
 const mcpAgentTargetMock = vi.fn();
 const httpActionOracleMock = vi.fn();

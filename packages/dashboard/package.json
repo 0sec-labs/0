@@ -8,7 +8,9 @@
   ],
   "scripts": {
     "build": "vite build",
+    "build:desktop-alpha": "vite build --mode desktop-alpha",
     "dev": "vite",
+    "dev:desktop-alpha": "vite --mode desktop-alpha",
     "clean": "rm -rf dist"
   },
   "dependencies": {

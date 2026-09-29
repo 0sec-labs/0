@@ -14,6 +14,10 @@ export {
   SCOPE_GUARDS_INERT_EVENT,
 } from "./scope/scope-guard.js";
 export type { ScopeGuardStatus } from "./scope/scope-guard.js";
+export { BUILTIN_PLUGINS, getBuiltinPlugin, SCOPE_PLUGIN_ID } from "./plugins/builtin.js";
+export type { BuiltinPlugin } from "./plugins/builtin.js";
+export { getScopeEnforcementState, isScopeEnforcementEnabled, withScopeEnforcement } from "./scope/activation.js";
+export type { ScopeEnforcementState } from "./scope/activation.js";
 
 // Attribution-header injection (0#216). Builds on scope ingestion:
 // configures per-engagement headers + UA override that get merged into
@@ -64,7 +68,7 @@ export { createScanContext, addFinding, addAttackResult, finalize } from "./cont
 export { sendPrompt, extractResponseText, isMcpTarget, fetchScoped, type ScopedHttpPolicy } from "./http.js";
 export { createRuntime, ProcessRuntime, LlmApiRuntime, QuotaExhaustedError, OperatorAbortError, parseUsageLimitReached, OpenRouterRuntime, DEFAULT_ENSEMBLE_MODELS, RUNTIME_REGISTRY, pickRuntimeForStage, detectAvailableRuntimes, getRuntimeInfo } from "./runtime/index.js";
 export type { Runtime, RuntimeConfig, RuntimeContext, RuntimeResult, RuntimeType, NativeRuntime, NativeMessage, NativeContentBlock, NativeToolDef, NativeRuntimeResult, OpenRouterConfig, UsageLimitDetails } from "./runtime/index.js";
-export { loadCodexModelCatalog } from "./runtime/codex-models.js";
+export { CodexCatalogRefreshError, loadCodexModelCatalog } from "./runtime/codex-models.js";
 export type { CodexCatalogModel } from "./runtime/codex-models.js";
 export { buildDeepScanPrompt, buildMcpAuditPrompt, buildSourceAnalysisPrompt } from "./prompts.js";
 export { resolveMcpEndpoint, listMcpTools, callMcpTool, discoverMcpTarget, runMcpSecurityChecks } from "./mcp.js";
@@ -1384,12 +1388,6 @@ export {
 } from "./agent/action-log.js";
 export type { ToolCallLogEntry, ToolCallsLogPayload } from "./agent/action-log.js";
 
-// Opt-in cloud-sink: POST findings/leads to the orchestrator
-// (`POST /scans/:id/findings`) when ZERO_CLOUD_SINK + ZERO_CLOUD_SCAN_ID are
-// set. Exposed so `0 hunt` can ingest its gated leads as candidate
-// findings the same way scan/review reach the cloud (#1051).
-export { getCloudSinkConfig, postFinding } from "./cloud-sink.js";
-export type { CloudSinkConfig } from "./cloud-sink.js";
 
 // Kernel crash ingest (crash report → Finding pipeline)
 export { parseCrashReport, crashToFinding, ingestArtifactsFromDirectory, ingestArtifactsFromFile, ingestFile, ingestDirectory, crashTypeToCategory, crashSeverity, reviewKernelCrashSubsystems } from "./ingest/index.js";
@@ -1800,16 +1798,9 @@ export type {
   VerifyKernelFinding,
 } from "./cve/index.js";
 
-// Cloud event-bus sink (ZERO_CLOUD_EVENTS=1 → emit `ZERO_EVENT_<TYPE>`
-// lines on stdout for the 0-cloud worker-controller to relay).
-// The CLI entry must call `maybeSubscribeCloudEventSink()` so the sink
-// subscribes once; without that call the sink module is dead code and
-// the cloud's live-trace UI stays dark for every scan.
+// Shared scanner event bus and local presentation adapter.
 export {
   eventBus,
-  cloudEventSink,
-  maybeSubscribeCloudEventSink,
-  isCloudEventSinkActive,
   presentationEventSink,
 } from "./events/bus.js";
 // Consent-gated analytics pipeline — the single choke point that may transmit
@@ -2152,9 +2143,13 @@ export type {
 // already reproduced finding, validates it in an isolated Git worktree, then
 // optionally applies the same patch after the source contract and test command
 // both pass.
-export { runSourceFix } from "./fix/index.js";
+export { runSourceFix, planSourceFixPublication, publishSourceFixDraftPR } from "./fix/index.js";
+export { resolveSourceFixRepository, loadSourceFixProjectInputs, saveSourceFixProjectInputs } from "./fix/index.js";
+export type { SourceFixProjectInputs } from "./fix/index.js";
 export type {
   SourceFixAttempt,
+  SourceFixCandidate,
+  SourceFixPublicationPlan,
   SourceFixOptions,
   SourceFixResult,
   SourceFixStatus,
@@ -2242,31 +2237,18 @@ export type {
   H1BalanceAttributes,
 } from "./h1/index.js";
 
-// 0-cloud auth + HTTP client (CLI half of #303). The server-side
-// token-mint endpoint lives in 0-cloud and is out of scope here;
-// see ./cloud/credentials.ts and ./cloud/client.ts for details.
+// Cloud credentials and the independent Windows evidence-worker transport.
 export {
   loadCloudCredentials,
   CloudAuthMissingError,
   CloudAuthError,
   DEFAULT_CLOUD_HOST,
-  CloudClient,
-  CloudError,
-  CloudUnauthorizedError,
-  CloudForbiddenError,
-  CloudNetworkError,
   WindowsEvidenceWorkerClient,
   WindowsEvidenceWorkerTransportError,
 } from "./cloud/index.js";
 export type {
   CloudCredentials,
   LoadCloudCredentialsOptions,
-  CloudClientOptions,
-  CloudHealthResponse,
-  InferenceModel,
-  InferenceModelsResponse,
-  CreditAccount,
-  InferenceUsageResponse,
   WindowsEvidenceStoredBlob,
   WindowsEvidenceSubmissionReceipt,
   WindowsEvidenceWorkerBlob,

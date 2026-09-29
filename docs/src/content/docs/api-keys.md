@@ -4,8 +4,8 @@ description: Supported LLM providers, environment variables, credential priority
 ---
 
 The interactive 0 console uses your provider API key or supported subscription.
-0cloud authentication is only for separately authorized managed-service
-commands; it does not provide model inference to the local console.
+Managed-service access is separately arranged with the operator and does not
+provide model inference to the local console.
 
 
 ## Supported providers
@@ -33,8 +33,9 @@ does not establish a subscription entitlement or guarantee model availability.
 OpenAI, OpenRouter, xAI and Azure accept `OPENAI_WIRE_API`,
 `OPENROUTER_WIRE_API`, `XAI_WIRE_API` and `AZURE_OPENAI_WIRE_API`, respectively,
 with values `chat_completions` or `responses`. Other values are errors.
-The exact Azure `gpt-5.6-sol` and OpenAI `gpt-5.6-luna` routes upgrade to Responses
-for tool support. OpenCode determines its wire by model family: GPT/Grok/Muse
+The exact Azure `gpt-5.6-sol` route and direct OpenAI `gpt-5.6-luna`,
+`gpt-6-sol`, `gpt-6.1-sol`, and `gpt-6-luna` routes upgrade to Responses for
+tool support. OpenCode determines its wire by model family: GPT/Grok/Muse
 use Responses, Claude/Qwen use Messages, Gemini uses generateContent, and
 DeepSeek/GLM/Kimi/MiMo/Ling/Nemotron/MiniMax use Chat Completions.
 
@@ -45,10 +46,11 @@ authorization.
 
 ### Current model choices
 
-The bundled `/model` picker includes GPT-6 Astra (`gpt-6-astra`), DeepSeek V4.1
-Flash (`deepseek-flash`), Claude Fable 5.1 / Opus 5 / Sonnet 5, Gemini 3.8 Flash
-and 3.5 Flash-Lite, and GLM-5.3-Flash. Existing models remain selectable; adding
-Astra does not change the OpenAI or ChatGPT Codex default.
+The bundled `/model` picker includes GPT-6 Astra (`gpt-6-astra`), GPT-6 Sol,
+GPT-6.1 Sol, and GPT-6 Luna, alongside DeepSeek V4.1 Flash (`deepseek-flash`),
+Claude Fable 5.1 / Opus 5 / Sonnet 5, Gemini 3.8 Flash and 3.5 Flash-Lite, and
+GLM-5.3-Flash. Existing models remain selectable; the OpenAI and ChatGPT Codex
+defaults do not change.
 
 Qwen choices include `qwen3.8-max`, `qwen3.8-flash`, `qwen3.7-max`,
 `qwen3.7-plus`, `qwen3.6-plus`, and `qwen3.6-flash`. The offline catalog also
@@ -71,8 +73,12 @@ select an ID supported by that connection; a gateway catalog entry is not
 evidence that the same model is available through Code Assist.
 
 Displayed prices are estimates; reconcile charges against provider invoices.
-[Astra's published base rates](https://developers.openai.com/api/docs/models/gpt-6-astra)
-apply through 272K input tokens; longer requests and cache writes cost more.
+[GPT-6 Astra](https://developers.openai.com/api/docs/models/gpt-6-astra),
+[Sol](https://developers.openai.com/api/docs/models/gpt-6-sol),
+[6.1 Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol), and
+[Luna](https://developers.openai.com/api/docs/models/gpt-6-luna) base rates
+apply through 272K input tokens; longer requests, cache writes, and processing
+tiers cost more.
 [DeepSeek Flash](https://api-docs.deepseek.com/quick_start/pricing) is estimated
 at peak rates ($0.30 input / $1.20 output per million tokens); off-peak is half
 price. Gateway prices and subscription billing can differ from direct API rates.
@@ -111,8 +117,8 @@ An explicit `--api-key` is another input: without a provider pin, `sk-or-`
 selects OpenRouter, `sk-ant-` selects Anthropic, and other key shapes select
 OpenAI-compatible access **before** natural-model routing. Prefer environment
 credentials plus an explicit provider/model pair; command-line secrets can
-appear in process listings and shell history. `hosted` and `chatgpt-codex`
-require their own authentication and reject a generic runtime API key.
+appear in process listings and shell history. `chatgpt-codex` requires its own
+authentication and rejects a generic runtime API key.
 
 ## Model routing
 
@@ -170,11 +176,11 @@ env OPENROUTER_API_KEY="sk-or-v1-..." ZERO_SELECTED_PROVIDER=openrouter \
 `ZERO_SELECTED_PROVIDER` selects the primary provider, bypassing ambient
 credential priority. It accepts `openrouter`, `anthropic`, `openai`, `azure`,
 `deepseek`, `chatgpt-codex`, `z-ai`, `kimi`, `qwen`, `xai`, `opencode`,
-`copilot`, `google` and `hosted`.
+`copilot` and `google`.
 
-Set `ZERO_MODEL` alongside an environment provider selection; only `hosted`
-can defer its model to the service catalog. A separately configured explicit
-model can use another route, for example a cross-model verification call.
+Set `ZERO_MODEL` alongside an environment provider selection. A separately
+configured explicit model can use another route, for example a cross-model
+verification call.
 Use the selected provider's own credentials and account-supported model ID.
 
 ```bash
@@ -339,8 +345,7 @@ Each entry is `<providerId>:<model>`, comma-separated. The runtime advances
 through eligible routes sequentially and skips entries without the required
 credentials. Supported IDs are `openrouter`, `anthropic`, `openai`, `azure`,
 `deepseek`, `chatgpt-codex`, `z-ai`, `kimi`, `qwen`, `xai`, `opencode`,
-`copilot`, `google` and `hosted`. Hosted replay restrictions still apply;
-adding a fallback is not permission to retry a potentially consumed request.
+`copilot` and `google`.
 
 ## Azure OpenAI configuration
 

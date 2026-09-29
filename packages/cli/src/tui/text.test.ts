@@ -26,6 +26,14 @@ describe("sanitizeTuiText", () => {
     expect(sanitizeTuiText(`token=${encoded}`)).toBe("token=[encoded payload omitted]");
   });
 
+  it("retains path separators while omitting an explicitly encoded data URI", () => {
+    const path = `src/${"directory/".repeat(20)}handler.ts`;
+    expect(sanitizeTuiText(path)).toBe(path);
+    const payload = "SGVsbG8/".repeat(30);
+    expect(sanitizeTuiText(`data:application/octet-stream;base64,${payload}`))
+      .toBe("data:application/octet-stream;base64,[encoded payload omitted]");
+  });
+
   it("falls back to the default encoded-run limit for non-finite options", () => {
     const encoded = "A".repeat(180);
     expect(sanitizeTuiText(`token=${encoded}`, { maxEncodedRun: Number.NaN })).toBe("token=[encoded payload omitted]");

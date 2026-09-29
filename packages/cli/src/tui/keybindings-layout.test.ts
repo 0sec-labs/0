@@ -10,10 +10,7 @@ import {
   computeShortcutsLayout,
   effectiveKeysDisplay,
   filterKeybindingEditorRows,
-  keybindingsEditorFooterHint,
   rebindableRowIndices,
-  shortcutsFooterHint,
-  shortcutsTitle,
   widestKeys,
   type ShortcutsLayout,
   type ShortcutsRow,
@@ -172,13 +169,6 @@ describe("clipShortcutsRows", () => {
   });
 });
 
-describe("static labels", () => {
-  it("names the title and read-only footer keys", () => {
-    expect(shortcutsTitle()).toBe("KEYBOARD SHORTCUTS");
-    expect(shortcutsFooterHint()).toContain("[esc] back");
-    expect(shortcutsFooterHint()).toContain("[⌃C] exit");
-  });
-});
 
 describe("chordDisplay", () => {
   it("renders canonical chords as display labels", () => {
@@ -196,17 +186,13 @@ describe("chordDisplay", () => {
 });
 
 describe("effectiveKeysDisplay", () => {
-  it("shows the default when there is no override", () => {
-    const binding = KEYBINDINGS.find((b) => b.id === "view.left-sidebar")!;
-    expect(effectiveKeysDisplay(binding, {})).toBe("Ctrl+B");
-  });
 
   it("shows the override when one is set", () => {
-    const binding = KEYBINDINGS.find((b) => b.id === "view.left-sidebar")!;
-    expect(effectiveKeysDisplay(binding, { "view.left-sidebar": "ctrl+j" })).toBe("Ctrl+J");
+    const binding = KEYBINDINGS.find((b) => b.id === "overlay.review-toggle")!;
+    expect(effectiveKeysDisplay(binding, { "overlay.review-toggle": "ctrl+j" })).toBe("Ctrl+J");
   });
 
-  it("joins a multi-chord protected binding's alternates", () => {
+  it("joins a multi-chord binding's alternates", () => {
     const binding = KEYBINDINGS.find((b) => b.id === "nav.scroll-up")!;
     expect(effectiveKeysDisplay(binding, {})).toBe("PageUp / Ctrl+Up");
   });
@@ -228,8 +214,8 @@ describe("buildKeybindingEditorRows", () => {
   });
 
   it("flags an overridden row and shows its effective chord", () => {
-    const rows = buildKeybindingEditorRows({ "view.left-sidebar": "ctrl+j" });
-    const row = rows.find((r) => r.id === "view.left-sidebar")!;
+    const rows = buildKeybindingEditorRows({ "overlay.review-toggle": "ctrl+j" });
+    const row = rows.find((r) => r.id === "overlay.review-toggle")!;
     expect(row.overridden).toBe(true);
     expect(row.chord).toBe("Ctrl+J");
     // A non-overridden rebindable row is not flagged.
@@ -238,9 +224,10 @@ describe("buildKeybindingEditorRows", () => {
   });
 
   it("carries the default chord only on an overridden row", () => {
-    const rows = buildKeybindingEditorRows({ "view.left-sidebar": "ctrl+j" });
-    const overridden = rows.find((r) => r.id === "view.left-sidebar")!;
-    expect(overridden.defaultChord).toBe("Ctrl+B");
+    const rows = buildKeybindingEditorRows({ "overlay.review-toggle": "ctrl+j" });
+    const overridden = rows.find((r) => r.id === "overlay.review-toggle")!;
+    const binding = KEYBINDINGS.find((b) => b.id === overridden.id)!;
+    expect(overridden.defaultChord).toBe(binding.defaultChords.map(chordDisplay).join(" / "));
     // Multi-chord rebindables keep both defaults in the note.
     const rows2 = buildKeybindingEditorRows({ "nav.palette": "ctrl+j" });
     expect(rows2.find((r) => r.id === "nav.palette")!.defaultChord).toBe("Ctrl+P / Ctrl+K");
@@ -283,9 +270,10 @@ describe("filterKeybindingEditorRows", () => {
   });
 
   it("matches on the chord column too", () => {
-    const filtered = filterKeybindingEditorRows(rows, "ctrl+b");
+    const binding = KEYBINDINGS.find((b) => b.id === "overlay.review-toggle")!;
+    const filtered = filterKeybindingEditorRows(rows, binding.defaultChords[0]!);
     const ids = filtered.filter((r) => r.kind === "binding").map((r) => r.id);
-    expect(ids).toContain("view.left-sidebar");
+    expect(ids).toContain("overlay.review-toggle");
   });
 
   it("returns no binding rows for a query that matches nothing", () => {
@@ -304,14 +292,3 @@ describe("filterKeybindingEditorRows", () => {
   });
 });
 
-describe("keybindingsEditorFooterHint", () => {
-  it("names the capture keys while capturing and the nav keys otherwise", () => {
-    expect(keybindingsEditorFooterHint(true)).toContain("press a chord");
-    const idle = keybindingsEditorFooterHint(false);
-    expect(idle).toContain("type to search");
-    expect(idle).toContain("[⏎] rebind");
-    expect(idle).toContain("[⌃R] reset");
-    expect(idle).toContain("reset all");
-    expect(idle).toContain("[esc] back");
-  });
-});

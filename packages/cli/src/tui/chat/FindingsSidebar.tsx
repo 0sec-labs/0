@@ -16,7 +16,7 @@ import {
 /**
  * The RIGHT-sidebar variant of this run's findings: a compact section that sits
  * alongside the AGENTS / PLAN sections in the same narrow column and reads as
- * their sibling. A muted `FINDINGS n` header, then each finding as a
+ * their sibling. A muted `Findings n` header, then each finding as a
  * severity-coloured title WRAPPED across up to two rows (via {@link wrapFinding})
  * so a long title reads in full rather than being clipped — the severity riding
  * as a trailing badge on the first line (coloured by {@link severityToneFor}:
@@ -54,7 +54,7 @@ export function FindingsSidebar({
   const header = (
     <box width={width} height={1} flexShrink={0} minWidth={0} marginTop={1}>
       <text width={width} height={1} wrapMode="none" truncate fg={MUTED}>
-        {buildSidebarSectionHeader("FINDINGS", findings.length, width)}
+        {buildSidebarSectionHeader("Findings", findings.length, width)}
       </text>
     </box>
   );
