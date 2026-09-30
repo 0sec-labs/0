@@ -311,3 +311,12 @@
 .console-controls .border-dashed { border-style: none; background: var(--muted); border-radius: 16px; }
 .console-frame details:not([role]), .console-controls details { border-color: transparent; border-radius: 16px; background: color-mix(in srgb, var(--muted), transparent 35%); }
 .session-row { min-height: 40px; }
+
+/* Keep panel contents mounted so both opening and closing can finish smoothly. */
+.console-details-panel { width: 0; opacity: 0; }
+.console-details-panel[data-open="true"] { width: 20rem; opacity: 1; }
+@media (prefers-reduced-motion: no-preference) {
+  .console-details-panel {
+    transition: width 180ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 120ms ease;
+  }
+}
