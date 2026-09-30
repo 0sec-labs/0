@@ -86,7 +86,7 @@ async function runGuest(cli: boolean): Promise<number> {
             const child = spawn(process.execPath, [process.argv[1]!, "--workbench-inner", ...frame.args as string[]], { env: process.env, stdio: ["ignore", "pipe", "pipe"] });
             child.stdout.on("data", data => emit({ type: "stdout", data: Buffer.from(data).toString("base64") }));
             child.stderr.on("data", data => emit({ type: "stderr", data: Buffer.from(data).toString("base64") }));
-            child.once("error", error => emit({ type: "error", error: error.message }));
+            child.once("error", async () => { emit({ type: "exit", code: 1 }); await finish(); });
             child.once("exit", async code => { emit({ type: "exit", code: code ?? 1 }); await finish(); });
             return;
           }
@@ -135,5 +135,11 @@ async function runGuest(cli: boolean): Promise<number> {
   await new Promise<void>(resolve => process.stdin.once("close", resolve));
   await chain; return 0;
 }
-export function runWorkbenchConsoleGuest(): Promise<number> { return runGuest(false); }
-export function runWorkbenchCliGuest(): Promise<number> { return runGuest(true); }
+async function completeGuest(cli: boolean): Promise<number> {
+  const code = await runGuest(cli);
+  await new Promise<void>(resolve => { process.stdout.write("", () => resolve()); });
+  // This admitted, dedicated entry owns the process; imported engine timers must not outlive it.
+  process.exit(code);
+}
+export function runWorkbenchConsoleGuest(): Promise<number> { return completeGuest(false); }
+export function runWorkbenchCliGuest(): Promise<number> { return completeGuest(true); }

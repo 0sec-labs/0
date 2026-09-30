@@ -75,7 +75,7 @@ class Controller {
     this.ready = new Promise((resolve, reject) => { this.resolveReady = resolve; this.rejectReady = reject; });
     void this.ready.catch(() => {});
   }
-  status(status: WorkbenchExecutionSnapshot["status"], message?: string): void { this.execution = { ...this.execution, status, ...(message ? { message } : {}) }; this.options.onExecution?.(this.execution); }
+  status(status: WorkbenchExecutionSnapshot["status"], message?: string): void { const { message: _previous, ...snapshot } = this.execution; this.execution = { ...snapshot, status, ...(message ? { message } : {}) }; this.options.onExecution?.(this.execution); }
   write(frame: WorkbenchFrame): void { if (!this.input || this.abort.signal.aborted) throw new Error("Workbench VM is unavailable"); this.input.write(encodeWorkbenchFrame(frame)); }
   touch(): void { clearTimeout(this.idle); this.idle = setTimeout(() => { this.abort.abort(new Error("Workbench idle deadline expired")); }, this.options.idleMs ?? 5 * 60_000); this.idle.unref(); }
   async start(): Promise<void> {
@@ -138,7 +138,19 @@ class Controller {
     const id = randomUUID(); const result = new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
     try { this.write({ type: "request", id, op, ...values }); } catch (error) { this.pending.delete(id); throw error; } return result;
   }
-  async close(): Promise<void> { if (!this.started) return; try { await Promise.race([this.request("close"), new Promise(resolve => setTimeout(resolve, 1000))]); } finally { this.abort.abort(); await this.done; } }
+  async close(): Promise<void> {
+    if (!this.started) return;
+    let exited = false;
+    try {
+      await Promise.race([this.request("close"), new Promise(resolve => setTimeout(resolve, 1000))]);
+      await Promise.race([this.done?.then(() => { exited = true; }), new Promise(resolve => setTimeout(resolve, 1000))]);
+    } catch { /* A terminated guest still requires native teardown confirmation. */ }
+    finally {
+      if (!exited) this.abort.abort();
+      const result = await this.done;
+      if (result?.cleanupFailed) throw new Error(result.error ?? "Workbench teardown could not be confirmed");
+    }
+  }
 }
 
 export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOptions): ConsoleSession & { readonly execution: WorkbenchExecutionSnapshot } {
