@@ -45,7 +45,7 @@ export function ConsoleSessionRail({ workspace, selectedId, onCreate, onRename, 
         <SessionActivity status={session.status} />
         <DropdownMenu><DropdownMenu.Trigger aria-label={`Actions for ${session.title || "conversation"}`} title="Conversation actions" className="mr-1 flex size-7 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 opacity-0 hover:bg-background/60 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100 data-[popup-open]:opacity-100 max-lg:opacity-100"><button type="button"><MoreHorizontal className="size-4" /></button></DropdownMenu.Trigger><DropdownMenu.Content>
           <DropdownMenu.Item icon={<Pencil className="size-4" />} onClick={() => onRename(session)}>Rename</DropdownMenu.Item>
-          <DropdownMenu.Item icon={<Download className="size-4" />} onClick={() => onExport(session.id, false)}>Export</DropdownMenu.Item>
+          <DropdownMenu.Item disabled={!session.messageCount} icon={<Download className="size-4" />} onClick={() => onExport(session.id, false)}>Export</DropdownMenu.Item>
           <DropdownMenu.Item icon={<X className="size-4" />} onClick={() => onClose(session)}>Close</DropdownMenu.Item>
           <DropdownMenu.Item variant="danger" icon={<Trash2 className="size-4" />} onClick={() => onDeleteLive(session)}>Delete</DropdownMenu.Item>
         </DropdownMenu.Content></DropdownMenu>
@@ -58,6 +58,6 @@ export function ConsoleSessionRail({ workspace, selectedId, onCreate, onRename, 
         </DropdownMenu.Content></DropdownMenu>
       </div> )}{!live.length && !saved.length && <p className="px-2 py-6 text-center text-xs text-muted-foreground">{needle ? "No matching conversations." : "No conversations yet."}</p>}
     </div>
-    <div className="space-y-2 p-3"><div className="flex items-center justify-between text-sm text-muted-foreground"><Link to="/settings" className="flex items-center gap-1.5 rounded-lg px-1 py-1 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"><Settings className="size-3.5" />Settings</Link><Link to="/findings" className="flex items-center gap-1.5 rounded-lg px-1 py-1 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"><ShieldCheck className="size-3.5" />Findings</Link></div></div>
+    <div className="space-y-2 p-3 lg:hidden"><div className="flex items-center justify-between text-sm text-muted-foreground"><Link to={selectedId ? `/settings?session=${encodeURIComponent(selectedId)}&return=${encodeURIComponent(`/console/${selectedId}`)}` : "/settings"} className="flex items-center gap-1.5 rounded-lg px-1 py-1 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"><Settings className="size-3.5" />Settings</Link><Link to="/findings" className="flex items-center gap-1.5 rounded-lg px-1 py-1 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"><ShieldCheck className="size-3.5" />Findings</Link></div></div>
   </div>;
 }

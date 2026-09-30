@@ -218,7 +218,7 @@
 .console-frame textarea { border: 0; box-shadow: none; }
 [data-reduced-motion="true"] *, [data-reduced-motion="true"] .console-entry,
 [data-reduced-motion="true"] .console-spinner, [data-reduced-motion="true"] .console-skeleton,
-[data-reduced-motion="true"] .console-enter { animation: none !important; scroll-behavior: auto !important; }
+[data-reduced-motion="true"] .console-enter { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 
 .console-frame .console-composer { background: var(--muted); border: 0; border-radius: 24px; box-shadow: none; }
 .console-frame .console-composer:focus-within { background: color-mix(in srgb, var(--muted), var(--foreground) 3%); box-shadow: none; }
@@ -230,6 +230,49 @@
 [data-slot="dialog-content"], [data-slot="sheet-content"] { border-radius: 24px; }
 [data-slot="dropdown-menu-content"], [data-slot="popover-content"], [data-slot="command"] { border-radius: 16px; }
 [data-slot="dropdown-menu-item"] { border-radius: 8px; }
+/* Kumo supplies its own attributes, separate from the Radix data-slot menus. */
+[role="menu"]:has([data-kumo-component="DropdownMenu"][data-kumo-part="item"]) {
+  border-radius: 16px;
+  padding: 8px;
+  font-family: var(--font-sans);
+  transform-origin: var(--transform-origin);
+  animation: none;
+}
+[data-kumo-component="DropdownMenu"][data-kumo-part="item"],
+[data-kumo-component="DropdownMenu"][data-kumo-part="link-item"] {
+  min-height: 36px;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 20px;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+[data-kumo-component="DropdownMenu"][data-kumo-part="item"] > svg,
+[data-kumo-component="DropdownMenu"][data-kumo-part="link-item"] > svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-right: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  [role="menu"]:has([data-kumo-component="DropdownMenu"][data-kumo-part="item"]) {
+    transition: opacity 120ms ease, transform 120ms ease;
+  }
+  [role="menu"]:has([data-kumo-component="DropdownMenu"][data-kumo-part="item"])[data-starting-style],
+  [role="menu"]:has([data-kumo-component="DropdownMenu"][data-kumo-part="item"])[data-ending-style] {
+    opacity: 0;
+    transform: translateY(2px) scale(0.98);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [role="menu"]:has([data-kumo-component="DropdownMenu"][data-kumo-part="item"]),
+  [data-kumo-component="DropdownMenu"] { animation: none !important; transition: none !important; }
+}
+[data-reduced-motion="true"] [role="menu"]:has([data-kumo-component="DropdownMenu"][data-kumo-part="item"]),
+[data-reduced-motion="true"] [data-kumo-component="DropdownMenu"] { animation: none !important; transition: none !important; }
+[data-reduced-motion="true"] [role="menu"][data-starting-style],
+[data-reduced-motion="true"] [role="menu"][data-ending-style] { transform: none; }
 .console-controls .control-section { border: 0; background: transparent; box-shadow: none; border-radius: 0; padding-block: 12px; }
 .console-controls .control-section > [data-slot="card-header"], .console-controls .control-section > [data-slot="card-content"] { padding-inline: 0; }
 .console-controls input:not([type="checkbox"]), .console-controls select, .console-controls textarea { border-radius: 12px; background: var(--muted); border-color: transparent; }
