@@ -195,4 +195,49 @@ describe("agent action assurance", () => {
     };
     expect(agentActionConfigurationChanges(bundle.manifest, changed)).toContain("policy_version");
   });
+
+  it("redacts endpoint query credentials while retaining retest configuration identity", async () => {
+    const config = {
+      ...targetConfig(),
+      agentEndpoint: "https://agent.example.test/execute?token=agent-secret&token=other-secret&tenant=demo#fragment-secret",
+      mcpEndpoint: "https://mcp.example.test/mcp?api%5Fkey=mcp-secret&version=2",
+      oracleEndpoint: "https://oracle.example.test/observe?access_token=oracle-secret",
+    };
+    const runWithConfig = (target: typeof config) => runAgentActionAssurance({
+      target: {
+        name: "fixture-agent",
+        async execute() {
+          return { request: {}, response: {}, transcript: "", toolCalls: [], mcpTools: [] };
+        },
+      },
+      oracle: {
+        name: "fixture-observer",
+        async observe() {
+          return { observed: false, complete: true, raw: {} };
+        },
+      },
+      scenario: scenario(),
+      targetConfig: target,
+      canaryToken: "CANARY_assurance",
+    });
+    const run = await runWithConfig(config);
+    const output = mkdtempSync(join(tmpdir(), "0-agent-assurance-endpoints-"));
+    roots.push(output);
+    const bundle = await writeAgentActionEvidenceBundle(run, output);
+    const manifestText = readFileSync(bundle.manifestPath, "utf8");
+    for (const secret of ["agent-secret", "other-secret", "mcp-secret", "oracle-secret", "fragment-secret"]) {
+      expect(JSON.stringify(run.manifest)).not.toContain(secret);
+      expect(manifestText).not.toContain(secret);
+    }
+    expect(new URL(bundle.manifest.target.agent_endpoint).searchParams.get("tenant")).toBe("demo");
+    expect(new URL(bundle.manifest.target.mcp_endpoint).searchParams.get("version")).toBe("2");
+    expect(bundle.manifest.redaction.redacted_fields).toEqual(expect.arrayContaining([
+      "endpoint_query.token", "endpoint_query.api_key", "endpoint_query.access_token", "endpoint_fragment",
+    ]));
+    const same = await runWithConfig(config);
+    expect(agentActionConfigurationChanges(bundle.manifest, same.manifest.target)).toEqual([]);
+    const rotated = await runWithConfig({ ...config, oracleEndpoint: config.oracleEndpoint.replace("oracle-secret", "rotated-secret") });
+    expect(rotated.manifest.target.configuration_sha256).not.toBe(bundle.manifest.target.configuration_sha256);
+    expect(agentActionConfigurationChanges(bundle.manifest, rotated.manifest.target)).toContain("configuration");
+  });
 });
