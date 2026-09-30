@@ -2799,19 +2799,27 @@ describe("Console source acquisition is not target authorization", () => {
     expect(runCheckout).toHaveBeenCalledOnce();
   });
 
-  it("does not treat a product name and same-name search result as repository identity", async () => {
+  it("blocks the Muse Spark to legacy MUSE substitution before clone I/O or findings", async () => {
     const runCheckout = vi.spyOn(repositoryAcquisition, "runRepositoryAcquisition").mockResolvedValue({ success: true, output: "Checkout completed" });
     const session = createConsoleSession({
       runtime: new ScriptedRuntime([
-        checkoutTurn("git clone https://github.com/muse-spark/muse-spark.git"),
-        endTurn("Refused."),
+        checkoutTurn("git clone https://github.com/facebookresearch/MUSE.git"),
+        endTurn("Repository identity is unresolved. Provide the exact repository or official product URL."),
       ]),
       autonomyMode: "yolo",
       target: "Muse Spark",
     });
-    const checkout = await session.send("Use the same-name search result for Muse Spark");
-    expect(checkout.toolCalls[0].result.success).toBe(false);
-    expect(runCheckout).not.toHaveBeenCalled();
+    try {
+      const checkout = await session.send("Investigate Muse Spark; a search result suggests facebookresearch/MUSE");
+      expect(checkout.toolCalls[0].result.success).toBe(false);
+      expect(runCheckout).not.toHaveBeenCalled();
+      expect(session.target).toBe("Muse Spark");
+      expect(session.exportCheckpoint().sessionData.findings).toEqual([]);
+      expect(session.systemPrompt).toContain("authoritative product/publisher links");
+      expect(session.systemPrompt).toContain("archived/current status");
+      expect(session.systemPrompt).toContain("unsuccessful search proves neither");
+      expect(checkout.assistantText).toContain("exact repository or official product URL");
+    } finally { await session.cleanup(); }
   });
 
   it("does not exempt appended commands or Git configuration and submodule execution", async () => {
