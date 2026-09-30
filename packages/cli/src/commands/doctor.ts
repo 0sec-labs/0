@@ -31,14 +31,14 @@ export function registerDoctorCommand(program: Command): void {
         : apiRuntime.configured
           ? `${chalk.red("bad")}  ${apiRuntime.providerLabel}`
           : `${chalk.yellow("missing")}  not configured`;
-      console.log(`  API runtime   ${apiStatus}`);
-      console.log(`  CLI runtimes  ${availableRuntimes.length > 0 ? chalk.yellow("found") : chalk.yellow("missing")}  ${availableRuntimes.join(", ") || "none"}`);
+      console.log(`  API provider  ${apiStatus}`);
+      console.log(`  CLI providers ${availableRuntimes.length > 0 ? chalk.yellow("found") : chalk.yellow("missing")}  ${availableRuntimes.join(", ") || "none"}`);
       console.log("");
 
       if (!hasSupportedNode) {
         console.log(chalk.red("  Upgrade to Node 24+ before running 0."));
       } else if (apiRuntime.configured && !apiRuntime.valid && apiRuntime.error) {
-        console.log(chalk.red("  API runtime is configured but unusable."));
+        console.log(chalk.red("  API provider is configured but unusable."));
         console.log(chalk.gray(`  ${apiRuntime.error.split("\n").join("\n  ")}`));
       } else if (hasApiKey || availableRuntimes.length > 0) {
         console.log(chalk.yellow("  Prerequisites found. The first request verifies credentials."));

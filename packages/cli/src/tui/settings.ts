@@ -351,7 +351,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "showStatusBar",
     label: "Status bar",
-    description: "Optional bottom-bar telemetry: model, working directory, git state and token counters. Permission mode and the turn timer share that row and stay visible with this off.",
+    description: "Bottom bar with model, folder, git and token counts. Permission mode and turn timer always show.",
     kind: "boolean",
     default: true,
     group: "Display",
@@ -367,8 +367,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "composerSuggestions",
     label: "Composer autosuggestions",
-    description:
-      "Inline ghost-text continuation from your submitted-message history, accepted with the Right arrow at end-of-input.",
+    description: "Ghost-text suggestions from your past messages. Right arrow accepts.",
     kind: "boolean",
     default: true,
     group: "Display",
@@ -376,8 +375,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "mouseSupport",
     label: "Mouse support",
-    description:
-      "Scroll-wheel scrolling, click-to-select on list rows, and clickable hints. Turn off for a keyboard-only console where the terminal's own text selection works.",
+    description: "Scroll, click rows and hints. Turn off to use your terminal's own text selection.",
     kind: "boolean",
     default: true,
     group: "Display",
@@ -393,7 +391,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "showRuntimeNotices",
     label: "Runtime notices",
-    description: "Surface runtime stdout/stderr as transcript notices.",
+    description: "Show engine output (stdout/stderr) in the conversation.",
     kind: "boolean",
     default: true,
     group: "Transcript",
@@ -425,8 +423,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "showObjective",
     label: "Objective",
-    description:
-      'Bottom-bar "objective" pill: a short "what am I working on" title derived from the session\'s first message.',
+    description: "Short title for the current session in the bottom bar.",
     kind: "boolean",
     default: true,
     group: "Display",
@@ -434,7 +431,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "showScope",
     label: "Scope",
-    description: "Show the configured multi-host scope and exclusions. An absent scope is distinct from an explicit empty scope.",
+    description: "Show the target scope and exclusions. No scope is different from an empty scope.",
     kind: "boolean",
     default: true,
     group: "Display",
@@ -487,7 +484,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "transcriptStyle",
     label: "Transcript style",
-    description: "Minimal (the default) drops every bubble and box: your turns carry a thin coloured accent rail and the answer flows as plain body text, the OpenCode / oh-my-pi flat look. Bubble right-aligns your messages against left-aligned answers and titles each card on its border. Balanced: only your own messages are bubbled; everything else is flat. Rail, plain, compact and document offer alternative transcript layouts.",
+    description: "How the conversation looks. Minimal (default) is flat text; Bubble and Balanced add message bubbles; Rail, plain, compact and document are alternatives.",
     kind: "enum",
     default: "minimal",
     choices: ["minimal", "rail", "bubble", "balanced", "plain", "compact", "document"],
@@ -496,7 +493,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "roleLabelStyle",
     label: "Role label",
-    description: 'Labels your messages as "You"; assistant replies stay unlabeled. Full and short include the optional age, glyph shows the name alone, and off hides the label.',
+    description: "Label your messages as \"You\". Full and short add the age, glyph shows the name only, off hides it.",
     kind: "enum",
     default: "off",
     choices: ["full", "short", "glyph", "off"],
@@ -514,8 +511,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "richToolCards",
     label: "Rich tool cards",
-    description:
-      "Draw bash/run_command output and apply_patch edits as bordered cards (command + output + wall/exit footer, or an edit header + diff) instead of a plain line.",
+    description: "Show command output and file edits as cards instead of one line.",
     kind: "boolean",
     default: true,
     group: "Transcript",
@@ -523,8 +519,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "transcriptDetail",
     label: "Transcript detail",
-    description:
-      "Fold tool and reasoning steps. Output previews stay within 20 lines; click a card for retained detail.",
+    description: "Fold tool and reasoning steps. Click a card to see more.",
     kind: "enum",
     default: "collapsed",
     choices: ["collapsed", "expanded"],
@@ -533,8 +528,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "autoCompaction",
     label: "Auto-compaction",
-    description:
-      "Automatically summarise older turns when the conversation nears the model's context window.",
+    description: "Summarise older turns when the context window gets full.",
     kind: "boolean",
     default: true,
     group: "Context",
@@ -551,8 +545,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "theme",
     label: "Theme",
-    description:
-      "Colour palette. Slate (neutral grey, default) and Midnight (deep blue-black) and Carbon (warm dark), Standard/Paper (light), plus Contrast, Mono Dim and ANSI 16 for 16-colour terminals. Drop validated palettes in ~/.0/themes to add your own.",
+    description: "Colour theme. Contrast, Mono Dim and ANSI 16 suit 16-colour terminals. Add your own in ~/.0/themes.",
     kind: "enum",
     default: DEFAULT_THEME_NAME,
     choices: THEME_CHOICES,
@@ -561,8 +554,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "allowModelSelfExtension",
     label: "Model self-extension",
-    description:
-      "Allow new sessions to add sandboxed tools and live harness generations. Existing disabled sessions stay disabled. Trusted harness code requires separate workspace trust; development engine updates are controlled independently.",
+    description: "Let new sessions add sandboxed tools. Sessions started with this off stay off. Trusted tool code also needs workspace trust; engine updates are a separate setting.",
     kind: "boolean",
     default: DEFAULT_ALLOW_MODEL_SELF_EXTENSION,
     group: "Security",
@@ -570,8 +562,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "allowDevSourceUpdates",
     label: "Development engine updates",
-    description:
-      "0dev only. Reload changed core engine code between turns without losing the session. Runs with host privileges, including credential access; independent of sandboxed tool extension.",
+    description: "0dev only. Reload changed engine code between turns. Runs with full host access, including your credentials; separate from sandboxed tools.",
     kind: "boolean",
     default: false,
     group: "Security",
@@ -579,8 +570,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "autoEvolveFinderLenses",
     label: "Auto-evolve finder lenses",
-    description:
-      "Start the TUI watcher for ~/.0/lens-synthesis/miss-input.json (or OSEC_TUI_LENS_SYNTH_INPUT) so each new curated revision can invoke the configured model.",
+    description: "Watch ~/.0/lens-synthesis/miss-input.json (or OSEC_TUI_LENS_SYNTH_INPUT) and let the model draft new finder lenses.",
     kind: "boolean",
     default: false,
     group: "Security",
@@ -588,8 +578,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "autoPromoteFinderLenses",
     label: "Auto-promote validated lenses",
-    description:
-      "Permit the TUI watcher to persist a candidate only after its positive and negative-control corpus gate passes, otherwise automatic evaluation stays dry-run.",
+    description: "Save a drafted lens only after it passes its positive and negative test cases. Otherwise evaluation is dry-run.",
     kind: "boolean",
     default: false,
     group: "Security",
@@ -630,7 +619,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "elapsedTimer",
     label: "Elapsed timer",
-    description: "Show the running-turn elapsed time as a compact clock-glyphed pill next to the left status icon, or hide it.",
+    description: "Show how long the current turn has been running.",
     kind: "enum",
     default: "left",
     choices: ["left", "off"],
@@ -639,8 +628,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "logoAnimation",
     label: "Logo animation",
-    description:
-      'Intro animation for the "0.SECURITY" wordmark: glitch (a neon-flecked scramble that resolves — the default), rainbow (a looping hue sweep), matrix (a green matrix-rain cascade), wave (a rippling cyan wavefront), neon (a neon-sign warm-up flicker), shimmer (a bright comet with a gradient tail), pulse (the slash breathes), strike (an orange slash strikes through the 0), draw (letters draw in behind a pen tip), fade (a centre-out bloom), typein (per-cell reveal), sweep (a bright bar wipes across) or off (static).',
+    description: "Intro animation for the 0 logo, or off.",
     kind: "enum",
     default: "glitch",
     choices: [
@@ -664,8 +652,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "reduceMotion",
     label: "Reduce motion",
-    description:
-      "Master reduce-motion: the console keeps essential feedback but disables decorative animations like the logo intro, shimmers and sweeps.",
+    description: "Turn off decorative animations (logo intro, shimmers, sweeps).",
     kind: "boolean",
     default: false,
     group: "Motion",
@@ -673,8 +660,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "analyticsLevel",
     label: "Data sharing",
-    description:
-      "Usage sends pseudonymous counts, timing, cost and error categories, never tool content or code. Off disables analytics uploads. Environment opt-outs take precedence. Applies to this computer.",
+    description: "Usage shares pseudonymous counts, timing, cost and error types, never code or tool content. Off sends nothing. Environment opt-outs win. Applies to this computer.",
     kind: "enum",
     default: "off",
     choices: ["off", "usage"],
@@ -683,7 +669,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "diagnosticReporting",
     label: "Problem reports",
-    description: "Review diagnostics before sending, send automatically, or keep reports local. Requires a configured destination and is independent of usage sharing. Applies to this computer.",
+    description: "Review error reports before sending, send automatically, or keep them local. Needs a configured destination; separate from usage sharing. Applies to this computer.",
     kind: "enum",
     default: "ask",
     choices: ["off", "ask", "automatic"],
@@ -692,7 +678,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "updatePolicy",
     label: "Updates",
-    description: "Off, notify about releases, or install updates before the console starts. Applies to this computer; project settings cannot enable installation.",
+    description: "Off, notify about new releases, or install updates at startup. Applies to this computer; project settings can't turn on installing.",
     kind: "enum",
     default: "automatic",
     choices: ["off", "notify", "automatic"],
@@ -701,7 +687,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "executionProfile",
     label: "Execution profile",
-    description: "SmolVM runs the whole console, agents, browser and shell in the online Kali workbench. Prepare its approved image and explicit credential grants with 0 workbench setup. Applies to this computer on the next launch; failures never fall back to host execution.",
+    description: "SmolVM runs everything (agents, browser, shell) in the online Kali workbench. Set it up with 0 workbench setup. Applies to this computer on next launch; failures never fall back to running on your machine.",
     kind: "enum",
     default: "local",
     choices: ["local", "smolvm"],
@@ -710,7 +696,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "symbolPreset",
     label: "Symbols",
-    description: "Glyph set for icons, status marks and checkboxes: Unicode (default, works everywhere), Nerd Font (crisp patched-font icons — requires a Nerd Font terminal) or ASCII (plain, single-cell).",
+    description: "Icon set: Unicode (default), Nerd Font (needs a Nerd Font terminal) or ASCII.",
     kind: "enum",
     default: "unicode",
     choices: ["unicode", "nerd", "ascii"],
@@ -719,7 +705,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "rosterSort",
     label: "Roster order",
-    description: "Order the agent herd and comms fleet by attention (blocked and working agents float to the top — the default) or by fixed lifecycle status.",
+    description: "Sort agents by attention (blocked and working first, default) or by status.",
     kind: "enum",
     default: "attention",
     choices: ["attention", "status"],
@@ -728,7 +714,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "leaderKey",
     label: "Leader key",
-    description: "Optional tmux-style prefix chord for the roster views: press it, then a number to focus that agent, or n/p to step. Off disables it (the direct number keys work regardless).",
+    description: "Optional prefix key for agent views: press it, then a number to focus an agent or n/p to step. Number keys work either way.",
     kind: "enum",
     default: "off",
     choices: ["off", "ctrl+a", "ctrl+b", "ctrl+space"],

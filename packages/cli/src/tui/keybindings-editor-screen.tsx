@@ -122,7 +122,7 @@ export function KeybindingsEditorScreen({ frame, onBack, onExit }: KeybindingsEd
     const assessment = assessChordAssignment(id, key, overrides);
     if (!assessment) return; // a nameless key (bare modifier) — keep waiting.
     if (assessment.kind === "unassignable") {
-      setMessage({ text: "A chord must include Ctrl, Alt or Meta so it never steals typing.", tone: "error" });
+      setMessage({ text: "Include Ctrl, Alt or Meta so it doesn't block typing.", tone: "error" });
       setCapture(false);
       return;
     }
@@ -131,7 +131,7 @@ export function KeybindingsEditorScreen({ frame, onBack, onExit }: KeybindingsEd
       // the chord, so the operator sees the whole collision, not half of it.
       const mine = rows[activeRowIndex]?.description ?? id;
       setMessage({
-        text: `${assessment.chord} is already bound to "${assessment.conflictLabel}" — cannot also bind "${mine}".`,
+        text: `${assessment.chord} is already used by "${assessment.conflictLabel}".`,
         tone: "error",
       });
       setCapture(false);
@@ -153,7 +153,7 @@ export function KeybindingsEditorScreen({ frame, onBack, onExit }: KeybindingsEd
 
   const resetAll = () => {
     if (Object.keys(overrides).length === 0) {
-      setMessage({ text: "Nothing to reset — all bindings are at their defaults.", tone: "notice" });
+      setMessage({ text: "Already at defaults.", tone: "notice" });
       return;
     }
     updateSetting("keybindings", {});
@@ -270,7 +270,7 @@ export function KeybindingsEditorScreen({ frame, onBack, onExit }: KeybindingsEd
         </Cells>
         {gap > 0 ? <Cells width={gap}>{""}</Cells> : null}
         <Cells width={descriptionWidth} fg={descFg} attributes={isActive ? TextAttributes.BOLD : undefined}>
-          {isActive && capturing ? "press a chord…" : row.description ?? ""}
+          {isActive && capturing ? "press keys…" : row.description ?? ""}
         </Cells>
         {trailerWidth > 0 ? (
           <>
@@ -298,11 +298,11 @@ export function KeybindingsEditorScreen({ frame, onBack, onExit }: KeybindingsEd
         </Cells>
       </box>
       <Cells width={innerWidth} fg={query ? theme.TEXT : theme.MUTED}>
-        {query ? `search: ${query}` : "search: type to filter"}
+        {query ? `search: ${query}` : "type to search"}
       </Cells>
       {shown.length === 0 ? (
         <Cells width={innerWidth} fg={theme.MUTED}>
-          {query ? `No binding matches "${query}".` : "No bindings."}
+          {query ? "No matches." : "No bindings."}
         </Cells>
       ) : (
         shown.map((row, index) => renderRow(row, start + index))

@@ -7,6 +7,7 @@ import "./styles.css";
 
 document.documentElement.classList.add("dark");
 document.documentElement.style.colorScheme = "dark";
+document.documentElement.dataset.mode = "dark";
 
 const queryClient = new QueryClient({
   defaultOptions: {

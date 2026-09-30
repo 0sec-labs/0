@@ -28,7 +28,7 @@ export function registerJsReconCommand(program: Command): void {
   program
     .command("js-recon")
     .description(
-      "Mine live JavaScript for endpoints/API bases + redacted secrets. The optional scope plugin controls destination authorization.",
+      "Mine live JavaScript for endpoints, API bases, and redacted secrets",
     )
     .argument("<url>", "Target page URL whose <script> bundles are mined, e.g. https://app.example.com")
     .option(

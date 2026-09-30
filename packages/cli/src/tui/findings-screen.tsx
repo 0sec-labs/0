@@ -164,8 +164,7 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
         .map((row) => ({
           id: `row:${row.id}`,
           label: row.title,
-          description: `${row.category} · ${row.status} · ${row.triageStatus ?? "new"}`,
-          meta: `scan:${row.scanId.slice(0, 8)}`,
+          description: `${row.category} · ${row.status}${row.triageStatus && row.triageStatus !== "new" ? ` · ${row.triageStatus}` : ""}`,
           category: findingSeverityHeading(row.severity),
           tone: severityToneFor(theme, row.severity),
           // The gutter dot marks a family whose triage decision is in effect;
@@ -181,8 +180,8 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
       .map((group) => ({
         id: `group:${group.fingerprint}`,
         label: group.latest.title,
-        description: `${group.latest.category} · ${group.latest.status} · ${group.latest.triageStatus ?? "new"}`,
-        meta: `${group.count} hits / ${group.scans} scans`,
+        description: `${group.latest.category} · ${group.latest.status}${group.latest.triageStatus && group.latest.triageStatus !== "new" ? ` · ${group.latest.triageStatus}` : ""}`,
+        meta: group.count > 1 ? `${group.count}×` : "",
         category: findingSeverityHeading(group.latest.severity),
         tone: severityToneFor(theme, group.latest.severity),
         current: (group.latest.triageStatus ?? "new") !== "new",
@@ -231,7 +230,6 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
     applyIndex(next);
   };
   const filterSummary = describeFindingsFilters(options);
-  const itemCountLabel = options.all ? "rows " : "families ";
 
   // ── Source fix (`f`) ──
   const selectedFinding = useMemo(() => (selectedRow ? findingFromRow(selectedRow) : null), [selectedRow]);
@@ -239,36 +237,36 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
   const palette = usePaletteController([
     {
       id: "accept-finding",
-      title: "Accept finding family",
+      title: "Accept",
       category: "Triage",
-      description: "Mark the selected fingerprint family as accepted",
+      description: "Mark as accepted (all duplicates)",
       keybind: "a",
       suggested: true,
       action: () => { void mutateTriage("accepted"); },
     },
     {
       id: "suppress-finding",
-      title: "Suppress finding family",
+      title: "Suppress",
       category: "Triage",
-      description: "Suppress the selected fingerprint family",
+      description: "Hide it (all duplicates)",
       keybind: "s",
       suggested: true,
       action: () => { void mutateTriage("suppressed"); },
     },
     {
       id: "reopen-finding",
-      title: "Reopen finding family",
+      title: "Reopen",
       category: "Triage",
-      description: "Reset the selected fingerprint family back to new",
+      description: "Mark as new again (all duplicates)",
       keybind: "r",
       suggested: true,
       action: () => { void mutateTriage("new"); },
     },
     {
       id: "open-finding",
-      title: "Inspect selected finding in chat",
+      title: "Open finding",
       category: "Investigate",
-      description: "Open evidence, then investigate or request a verified source fix in chat",
+      description: "Evidence, investigate or fix",
       keybind: "enter",
       suggested: true,
       action: () => {
@@ -281,9 +279,9 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
     },
     {
       id: "fix-finding",
-      title: "Generate source fix",
+      title: "Fix",
       category: "Remediation",
-      description: "Generate and re-test a candidate source patch; never applies it",
+      description: "Write and test a patch; never applied automatically",
       keybind: "f",
       suggested: true,
       action: () => { requestSourceFix(); },
@@ -292,7 +290,7 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
       id: "back-findings",
       title: "Go back",
       category: "Navigate",
-      description: "Return to the previous console screen",
+      description: "Previous screen",
       keybind: "esc",
       suggested: true,
       action: () => leaveCurrentScreen(shell, onExit),
@@ -313,13 +311,13 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
     const selectedRow = currentFindingsRow();
     if (!selectedRow || triageBusy) return;
     if (!selectedRow.fingerprint) {
-      setError(`Finding ${selectedRow.id} has no fingerprint and cannot be triaged as a family.`);
+      setError(`Can't triage ${selectedRow.id}: it has no fingerprint.`);
       return;
     }
 
     setTriageBusy(triageStatus);
     setError(null);
-    setNotice(`Updating ${selectedRow.fingerprint.slice(0, 10)} to ${triageStatus}...`);
+    setNotice(`Marking ${triageStatus}…`);
 
     try {
       const { osecDB } = await import("@0/db");
@@ -329,7 +327,7 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
       } finally {
         db.close();
       }
-      setNotice(`Updated ${selectedRow.fingerprint.slice(0, 10)} to ${triageStatus}.`);
+      setNotice(`Marked ${triageStatus}.`);
       setReloadNonce((current) => current + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -348,7 +346,7 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
       return;
     }
     if (!onSourceFix) {
-      setFixNotice(`Open this finding in chat and use /fix ${row.id} to choose local inputs and approve execution.`);
+      setFixNotice(`Run /fix ${row.id} in chat.`);
       return;
     }
     onSourceFix(row.id);
@@ -380,7 +378,7 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
       row.evidenceResponse,
     ].join("\n");
     void copyToClipboard(text, { spawn: defaultSpawn, which: defaultWhich }).then((result) => {
-      setNotice(result.ok ? "Copied finding to clipboard" : "Could not copy finding to clipboard");
+      setNotice(result.ok ? "Copied" : "Couldn't copy");
     });
   };
 
@@ -394,9 +392,9 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
     const fixReady = fixEligibility(findingFromRow(row)).eligible;
     return [
       { label: "Open in chat", onSelect: openSelectedFinding },
-      { label: "Accept family", disabled: !canTriage, onSelect: () => void mutateTriage("accepted") },
-      { label: "Suppress family", disabled: !canTriage, onSelect: () => void mutateTriage("suppressed") },
-      { label: "Reopen family", disabled: !canTriage, onSelect: () => void mutateTriage("new") },
+      { label: "Accept", disabled: !canTriage, onSelect: () => void mutateTriage("accepted") },
+      { label: "Suppress", disabled: !canTriage, onSelect: () => void mutateTriage("suppressed") },
+      { label: "Reopen", disabled: !canTriage, onSelect: () => void mutateTriage("new") },
       { label: "Generate source fix", disabled: !fixReady, onSelect: () => requestSourceFix() },
       { label: "Copy finding", onSelect: () => copyFinding(row) },
     ];
@@ -520,8 +518,8 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
     } else {
       push(row.title, theme.TEXT);
       push(`${row.severity} · ${row.status} · ${row.triageStatus ?? "new"}`, severityToneFor(theme, row.severity));
-      if (group) push(`${group.count} hits / ${group.scans} scans`, theme.MUTED);
-      push(`finding ${row.id} · scan ${row.scanId.slice(0, 8)} · fp:${(row.fingerprint ?? row.id).slice(0, 10)}`, theme.MUTED);
+      if (group) push(`seen ${group.count}× in ${group.scans} scan${group.scans === 1 ? "" : "s"}`, theme.MUTED);
+      push(`id ${row.id}`, theme.MUTED);
       if (row.triageNote) push(row.triageNote, theme.ACCENT);
     }
 
@@ -531,7 +529,7 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
 
     lines.push({ text: "" });
     lines.push({ text: "IMPACT", fg: theme.PRIMARY });
-    for (const line of finding ? findingImpactLines(finding) : ["Not assessed — no finding selected."]) {
+    for (const line of finding ? findingImpactLines(finding) : ["—"]) {
       push(line, theme.MUTED);
     }
 
@@ -551,7 +549,7 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
       const sourceFile = findingSourcePath(finding);
       lines.push({ text: "" });
       lines.push({ text: "SOURCE FIX", fg: readiness.eligible ? theme.SUCCESS : theme.MUTED });
-      push(readiness.eligible ? "Eligible for candidate generation" : `Unavailable — ${readiness.reason}`, theme.MUTED);
+      push(readiness.eligible ? "Available — press f" : `Not available — ${readiness.reason}`, theme.MUTED);
       if (sourceFile) push(`source ${sourceFile}`, theme.MUTED);
     }
 
@@ -561,12 +559,12 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
   const findingsStatusLine = error
     ?? fixNotice
     ?? notice
-    ?? `${itemCountLabel.trim()} ${itemCount} · loaded ${rows.length}`;
+    ?? `${itemCount} ${options.all ? "findings" : "unique findings"}`;
   const findingsStatusTone = error ? theme.ERROR : fixNotice ? theme.WARNING : notice ? theme.ACCENT : theme.MUTED;
 
   return (
     <ShellFrame view="findings" dialogContent>
-      {palette.paletteOpen ? <PaletteOverlay title="Findings commands" query={palette.paletteQuery} selected={palette.paletteSelected} commands={palette.filteredPalette} /> : null}
+      {palette.paletteOpen ? <PaletteOverlay title="Findings" query={palette.paletteQuery} selected={palette.paletteSelected} commands={palette.filteredPalette} /> : null}
       {contextMenu.state.open ? (
         <ContextMenu
           items={contextMenu.state.items}
@@ -579,7 +577,7 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
         <DialogTitleRow
           screenKey="findings"
           width={width}
-          meta={`scope ${filterSummary} · limit ${options.limit} · ${triageBusy ? `updating ${triageBusy} · ` : ""}${options.all ? "raw rows" : "grouped families"}`}
+          meta={`${filterSummary}${triageBusy ? " · updating…" : ""}`}
         />
         <DialogSelectBody
           items={findingsFiltered}
@@ -587,7 +585,7 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
           panel={findingsPanel}
           query={findingsFilter}
           placeholder={findingsFiltering ? "type to filter" : "/ to filter findings"}
-          emptyText="No findings match this filter."
+          emptyText="No findings."
           gutter
           renderDetail={renderFindingsDetail}
           onActivateRow={(itemIndex) => applyIndex(itemIndex)}
@@ -607,7 +605,7 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
         <FooterBar
           hint={findingsFiltering
             ? "type to filter · [⏎] keep · [esc] clear"
-            : "[↑↓] move · [⏎] inspect · [f] fix setup · [/] filter · [esc] back"}
+            : "[⏎] open · [f] fix · [a/s/r] triage · [/] filter · [esc] back"}
         />
       </box>
     </ShellFrame>

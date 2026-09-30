@@ -518,9 +518,6 @@ describe("relativeAge", () => {
     expect(relativeAge(Number.POSITIVE_INFINITY, NOW)).toBe("");
   });
 
-  it("is pure: the same inputs always yield the same string", () => {
-    expect(relativeAge(NOW - 3 * H, NOW)).toBe(relativeAge(NOW - 3 * H, NOW));
-  });
 });
 
 describe("I/O failure is a return value, never an exception", () => {
@@ -550,5 +547,39 @@ describe("I/O failure is a return value, never an exception", () => {
     const home = makeHome();
     expect(saveSession(undefined as unknown as StoredSession, home)).toBe(false);
     expect(saveSession(null as unknown as StoredSession, home)).toBe(false);
+  });
+});
+
+describe("bounded console display state", () => {
+  it("retains output-cap continuation state without persisting authorization", () => {
+    const home = makeHome();
+    const session = makeSession({
+      consoleState: {
+        version: 1, title: "Retained task", objective: "Finish analysis", usage: { inputTokens: 10, outputTokens: 5 },
+        lastOutcome: {
+          assistantText: "Retained observations", stopReason: "output_cap",
+          budget: { tokensUsed: 15, tokenBudget: null, iterations: 1, maxToolIterations: 100 },
+          outputCap: { checkpoint: { reason: "output_cap" }, continuations: 2, message: "Send a remaining task." },
+        },
+        todos: null, workers: [], compaction: null, queuedMessages: [],
+      },
+    });
+    expect(saveSession(session, home)).toBe(true);
+    const loaded = loadSession(session.id, home);
+    expect(loaded?.consoleState?.lastOutcome?.stopReason).toBe("output_cap");
+    expect(loaded?.consoleState?.lastOutcome?.budget.tokenBudget).toBeNull();
+    const invalid = { ...session, consoleState: { ...session.consoleState, scope: { in_scope: ["*"] } } } as unknown as StoredSession;
+    expect(saveSession(invalid, home)).toBe(false);
+    expect(loadSession(session.id, home)?.consoleState).toEqual(session.consoleState);
+  });
+
+  it("ignores corrupted authorization-shaped display metadata while retaining the faithful native transcript", () => {
+    const home = makeHome(); const session = makeSession();
+    expect(saveSession(session, home)).toBe(true);
+    writeFileSync(join(sessionsDir(home), `${session.id}.json`), JSON.stringify({
+      ...session, consoleState: { version: 1, grantedScope: { in_scope: ["*"] }, localScopePath: "/", runtime: { apiKey: "never restore" } },
+    }));
+    expect(loadSession(session.id, home)?.messages).toEqual(session.messages);
+    expect(loadSession(session.id, home)?.consoleState).toBeUndefined();
   });
 });

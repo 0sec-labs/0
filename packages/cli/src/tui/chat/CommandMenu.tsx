@@ -4,7 +4,7 @@ import { fitHint, fitTuiText } from "../text.js";
 import { operatorIcon } from "../operator-icons.js";
 import { textCells } from "../primitives.js";
 import type { CommandMenuLayout } from "../chat-layout.js";
-import type { SlashCommand } from "../slash-commands.js";
+import type { SlashCommand } from "@0/shared"
 import type { Theme } from "../theme-context.js";
 import { useSymbols } from "../symbol-context.js";
 import { DialogSelectBody } from "../dialog-select.js";

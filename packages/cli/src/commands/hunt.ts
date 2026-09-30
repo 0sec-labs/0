@@ -560,10 +560,8 @@ export function registerHuntCommand(program: Command): void {
   program
     .command("hunt")
     .description(
-      "Hunt a bug CLASS across a source tree, seeded by a proven fix: " +
-        "generate variant candidate sites from the fix, fan finders out over them, " +
-        "and gate each finding through an adversarial skeptic. Emits LEADS to verify " +
-        "(not confirmed 0-days). Exit 0=lead(s), 1=none, 2=no candidates, 3=error.",
+      "Hunt a bug class across a source tree, seeded by a proven fix. " +
+        "Emits leads to verify, not confirmed bugs.",
     )
     .requiredOption("--source <path>", "Source tree to hunt in (e.g. a linux checkout)")
     .requiredOption("--seed <path>", "Fix diff / .patch whose bug class to hunt variants of")

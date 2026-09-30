@@ -43,7 +43,7 @@ export function registerCloudCommand(program: Command): void {
   const cloud = program
     .command("cloud")
     .description(
-      "Read-only S3 and AWS credential probes. Feature enablement and optional scope authorization are separate controls.",
+      "Read-only S3 and AWS credential probes",
     );
 
   cloud

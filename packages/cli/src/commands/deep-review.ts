@@ -1047,11 +1047,8 @@ export function registerDeepReviewCommand(program: Command): void {
   program
     .command("deep-review")
     .description(
-      "Seedless DEPTH review of a source tree: enumerate candidate files, re-hunt " +
-        "each through the profile's specialized finder lenses, and gate survivors " +
-        "through the multi-lens verify quorum. Emits LEADS to verify (not confirmed " +
-        "bugs). Exit 0=sweep completed (with or without leads), 2=skipped (no files / " +
-        "over the review cap), 3=error (bad flags / unreadable target / all finders failed).",
+      "Seedless deep security review of a source tree. " +
+        "Emits leads to verify, not confirmed bugs.",
     )
     .argument("<target>", "Source tree to review (a local path or a git URL)")
     .option("--profile <p>", "Lens profile: evm-onchain | solana-onchain | cardano-onchain | cairo-onchain | move-onchain (else a generic default lens set)")

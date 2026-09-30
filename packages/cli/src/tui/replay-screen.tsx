@@ -86,7 +86,7 @@ export function ReplayScreen({ dbPath, scanId, onExit, shell }: { dbPath?: strin
       id: "back-replay",
       title: "Go back",
       category: "Navigate",
-      description: "Return to the previous console screen",
+      description: "Previous screen",
       keybind: "esc",
       suggested: true,
       action: () => leaveCurrentScreen(shell, onExit),
@@ -156,7 +156,7 @@ export function ReplayScreen({ dbPath, scanId, onExit, shell }: { dbPath?: strin
       rows.push({
         id: "lane:discover",
         label: "DISCOVER",
-        description: `${scan.mode}/${scan.depth} via ${scan.runtime}`,
+        description: "Map the target",
         category: "Lane",
       });
     } else {
@@ -167,8 +167,8 @@ export function ReplayScreen({ dbPath, scanId, onExit, shell }: { dbPath?: strin
       id: "lane:attack",
       label: "ATTACK",
       description: verifiedFindings.length > 0
-        ? `${verifiedFindings.length} findings survived triage`
-        : "No confirmed findings recorded",
+        ? `${verifiedFindings.length} confirmed findings`
+        : "No confirmed findings",
       category: "Lane",
     });
     rows.push({
@@ -180,11 +180,11 @@ export function ReplayScreen({ dbPath, scanId, onExit, shell }: { dbPath?: strin
     rows.push({
       id: "lane:report",
       label: "REPORT",
-      description: `${formatDuration(scan?.durationMs)} total runtime`,
+      description: `took ${formatDuration(scan?.durationMs)}`,
       category: "Lane",
     });
     if (findings.length === 0) {
-      rows.push({ id: "finding:none", label: "No findings recorded for this scan.", category: "Findings", disabled: true });
+      rows.push({ id: "finding:none", label: "No findings.", category: "Findings", disabled: true });
     } else {
       for (const finding of findings) {
         rows.push({
@@ -198,7 +198,7 @@ export function ReplayScreen({ dbPath, scanId, onExit, shell }: { dbPath?: strin
       }
     }
     if (events.length === 0) {
-      rows.push({ id: "event:none", label: "No pipeline events captured for this scan.", category: "Events", disabled: true });
+      rows.push({ id: "event:none", label: "No events.", category: "Events", disabled: true });
     } else {
       for (const event of events) {
         const failed = /error|fail/i.test(event.eventType);
@@ -342,7 +342,6 @@ export function ReplayScreen({ dbPath, scanId, onExit, shell }: { dbPath?: strin
       lines.push(...wrapDialogLines(`events ${events.length}`, inner, theme.MUTED));
       lines.push(...wrapDialogLines(`duration ${formatDuration(scan.durationMs)}`, inner, theme.MUTED));
       lines.push(...wrapDialogLines(`started ${scan.startedAt}`, inner, theme.MUTED));
-      lines.push(...wrapDialogLines(`scan ${scan.id}`, inner, theme.MUTED));
     } else if (kind === "lane") {
       lines.push({ text: "LANE", fg: theme.PRIMARY });
       lines.push(...wrapDialogLines(item.label, inner, theme.TEXT));
@@ -387,29 +386,29 @@ export function ReplayScreen({ dbPath, scanId, onExit, shell }: { dbPath?: strin
     }
     return <DialogDetailColumn lines={lines} pane={pane} />;
   };
-  const replayCounts = `findings ${summary.totalFindings ?? `${findings.length} loaded`} · confirmed ${verifiedFindings.length} · events ${events.length}`;
+  const replayCounts = `${summary.totalFindings ?? findings.length} findings · ${verifiedFindings.length} confirmed · ${events.length} events`;
   const replayStatusLine = error
-    ?? (selectedEvent ? `${selectedEvent.stage} · ${selectedEvent.eventType} · up/down browse` : replayCounts);
+    ?? (selectedEvent ? `${selectedEvent.stage} · ${selectedEvent.eventType}` : replayCounts);
 
   return (
     <ShellFrame view="replay" dialogContent>
-      {palette.paletteOpen ? <PaletteOverlay title="Replay commands" query={palette.paletteQuery} selected={palette.paletteSelected} commands={palette.filteredPalette} /> : null}
+      {palette.paletteOpen ? <PaletteOverlay title="Replay" query={palette.paletteQuery} selected={palette.paletteSelected} commands={palette.filteredPalette} /> : null}
       <box flexDirection="column" width="100%" height="100%" minWidth={0}>
-        <DialogTitleRow screenKey="replay" width={width} meta={scan ? scan.id.slice(0, 8) : "latest scan"} />
+        <DialogTitleRow screenKey="replay" width={width} meta={scan ? scan.status : "latest scan"} />
         <DialogSelectBody
           items={replayFiltered}
           cursor={replayCursor}
           panel={replayPanel}
           query={replayFilter}
-          placeholder={replayFiltering ? "type to filter" : "/ to filter lane, findings and events"}
-          emptyText="Nothing matches this filter."
+          placeholder={replayFiltering ? "type to filter" : "/ to filter"}
+          emptyText="No matches."
           gutter
           renderDetail={renderReplayDetail}
         />
         <Cells width={width} fg={error ? theme.ERROR : theme.MUTED}>
           {replayStatusLine}
         </Cells>
-        <FooterBar hint={replayFiltering ? "type to filter · [⏎] keep · [esc] clear" : "[↑↓] move · [/] filter · [esc] back · [⌃P] commands · [⌃C] exit"} />
+        <FooterBar hint={replayFiltering ? "type to filter · [⏎] keep · [esc] clear" : "[↑↓] move · [/] filter · [⌃P] commands · [esc] back"} />
       </box>
     </ShellFrame>
   );

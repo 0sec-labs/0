@@ -184,9 +184,9 @@ export function credentialLabel(credential: ProviderCredential): string {
     case "ready":
       return "ready";
     case "missing":
-      return "no credentials";
+      return "not connected";
     default:
-      return "no setup path";
+      return "gateway only";
   }
 }
 
@@ -207,9 +207,9 @@ export function configuredProviderLabels(states: readonly ProviderState[]): stri
 export function credentialSummary(states: readonly ProviderState[]): string {
   const labels = configuredProviderLabels(states);
   if (labels.length === 0) {
-    return "credentials: none detected in this environment - see /doctor";
+    return "No provider connected · /connect to add one";
   }
-  return `credentials: ${labels.join(", ")}`;
+  return `Connected: ${labels.join(", ")}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -451,7 +451,7 @@ export function modelResultCount(items: readonly Pick<DialogItem, "id">[]): numb
 export function modelConnectDetailLines(width: number): ModelDetailLine[] {
   const limit = cells(width);
   if (limit === 0) return [];
-  return wrapCells("Opens Connections to connect another provider.", limit)
+  return wrapCells("Add a provider in Connections.", limit)
     .map((text): ModelDetailLine => ({ text, tone: "accent" }));
 }
 
@@ -624,7 +624,7 @@ export function modelDetailLines(
   if (row.kind === "heading") {
     push(group.label, "title");
     separate();
-    push(`${row.count} model${row.count === 1 ? "" : "s"} in this group`, "text");
+    push(`${row.count} model${row.count === 1 ? "" : "s"}`, "text");
   } else {
     push(row.model.id, "title");
     separate();
@@ -637,18 +637,18 @@ export function modelDetailLines(
     push(`${ICON_PRICE} Price: ${priceText}`, priceText === "not published" ? "muted" : "text");
     const contextText = formatContextTokens(contextTokens);
     push(`${ICON_CONTEXT} Context: ${contextText}`, contextText === "unknown" ? "muted" : "text");
-    if (row.active) push("Currently active", "accent");
-    else push("Enter applies this model", "accent");
+    if (row.active) push("In use", "accent");
+    else push("Enter to use", "accent");
   }
 
   separate();
 
   switch (group.credential) {
     case "ready":
-      push(`Credentials: found in ${group.via ?? "the environment"}`, "ok");
+      push(`Connected via ${group.via ?? "the environment"}`, "ok");
       break;
     case "missing":
-      push("Credentials: not found · /connect to set up", "warn");
+      push("Not connected · /connect to set up", "warn");
       if (group.envVars.length > 0) push(`Reads: ${group.envVars.join(", ")}`, "muted");
       if (group.hint) push(`Setup: ${group.hint}`, "muted");
       if (group.fileSource) {
@@ -656,32 +656,14 @@ export function modelDetailLines(
         // this provider can read as unconfigured while the runtime still finds
         // an on-disk token. Say that rather than let the pane assert a
         // reachability it did not check.
-        push(`Also read from ${group.fileSource}, which is not checked here.`, "muted");
+        push(`Also reads ${group.fileSource} (not checked).`, "muted");
       }
-      if (configured.length > 0) {
-        push(`Providers with credentials: ${configured.join(", ")}`, "muted");
-      }
+      if (configured.length > 0) push(`Connected: ${configured.join(", ")}`, "muted");
       break;
     default:
-      push("Credentials: no direct provider path", "muted");
-      push(
-        "Use a gateway such as OpenRouter or OpenCode Zen.",
-        "muted",
-      );
-      if (configured.length > 0) {
-        push(`Providers with credentials: ${configured.join(", ")}`, "muted");
-      }
+      push("No direct access. Use a gateway like OpenRouter or OpenCode Zen.", "muted");
       break;
   }
-
-  separate();
-  // The caveat that keeps every line above honest. The provider shown is the
-  // pricing table's, and the runtime resolves the backend independently
-  // (`providerForModel`), so the two can legitimately disagree.
-  push(
-    "Provider labels do not determine routing; configured credentials do.",
-    "muted",
-  );
 
   return lines;
 }
@@ -891,7 +873,7 @@ export interface ModelDialogTitleInput {
 
 /** A quiet action title; connection facts belong in the rows and status. */
 export function modelDialogTitle({ scope }: ModelDialogTitleInput): string {
-  return scope === "unknown" ? "Select model · no connection" : "Select model";
+  return scope === "unknown" ? "Select model · not connected" : "Select model";
 }
 
 /**
@@ -921,15 +903,13 @@ export interface ModelDialogHintInput {
  * `Ctrl+Backspace` is named only while a role is targeted.
  */
 export function modelDialogHint({ scope, role = null, hasFilter = false, canReload = false }: ModelDialogHintInput): string {
+  void scope;
+  void canReload;
   return [
-    "[↑↓] model",
     "[⏎] apply",
     "[⌃←→] target",
-    "[⌃S] single",
+    "[⌃S] single model",
     role !== null ? "[⌃⌫] inherit" : undefined,
-    scope === "byok" ? "[⇥] curated/all" : undefined,
-    canReload ? "[⌃R] reload" : undefined,
-    hasFilter ? "[⌃U] clear" : "type to filter",
     hasFilter ? "[esc] clear" : "[esc] back",
   ]
     .filter((part): part is string => part !== undefined)
@@ -960,7 +940,7 @@ export function modelTargetLine(
   // When single-model is on, a role pick applies but the runtime ignores it
   // (llm-api pins every role to the base model), so the line says so outright
   // rather than letting Enter look like it took effect.
-  const inert = singleModel && role !== null ? " · single-model on (role picks inert)" : "";
+  const inert = singleModel && role !== null ? " · ignored (single model on)" : "";
   return `${symbols.fieldModel} Target: ${target} → ${value}${inherits}${inert}`;
 }
 
@@ -1023,7 +1003,7 @@ export function agentRosterLines(
   if (limit <= 0 || roles.length === 0) return [];
   const tokens = roles.map((role) => agentRosterToken(role, parentModel, agentModels, role === activeRole));
   const header = singleModel
-    ? "Agents (single-model on — role picks inert): "
+    ? "Agents (ignored, single model on): "
     : "Agents: ";
   const lines: ModelDetailLine[] = [];
   wrapCells(`${header}${tokens.join("   ")}`, limit).forEach((text, index) => {
@@ -1035,8 +1015,8 @@ export function agentRosterLines(
 /** The single-model policy line, stating the policy and how to change it. */
 export function singleModelLine(enabled: boolean): string {
   return enabled
-    ? "Single model: on — role overrides are inactive"
-    : "Single model: off — explicit role overrides are honoured";
+    ? "Single model: on (role picks ignored)"
+    : "Single model: off";
 }
 
 // ---------------------------------------------------------------------------
@@ -1048,10 +1028,8 @@ export type ModelMode = "browse" | "filter";
 /** Contextual shortcuts for the model picker. */
 export function modelFooterHint(mode: ModelMode, hasFilter = false): string {
   return [
-    "[↑↓] model",
     "[⏎] select",
     "[⇥] curated/all",
-    "[⌃R] reload",
     mode === "filter" || hasFilter ? "[esc] clear" : "[esc] back",
   ].join(" · ");
 }

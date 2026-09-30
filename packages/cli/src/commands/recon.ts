@@ -13,7 +13,7 @@ export function registerReconCommand(program: Command): void {
   program
     .command("recon")
     .description(
-      "Enumerate a domain's attack surface — subdomains (passive CT/DNS, plus active DNS brute-force with --active), endpoints, OpenAPI/Swagger docs, and MCP servers — and emit a deduped asset inventory consumable as discovered_assets. Partial #769.",
+      "Map a domain's attack surface: subdomains, endpoints, API docs, and MCP servers.",
     )
     .argument("<domain>", "Target domain or origin, e.g. example.com or https://api.example.com")
     .option("--json", "Emit the asset inventory as machine-readable JSON")

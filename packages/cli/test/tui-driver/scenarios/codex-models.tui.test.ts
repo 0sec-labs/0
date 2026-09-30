@@ -82,7 +82,7 @@ test("subscription selection reaches the Codex request with its exact discovered
   await start();
   await tui!.sendKeys("/model");
   await tui!.sendKey("return");
-  await tui!.waitForText(/2 Codex account models/);
+  await tui!.waitForText(/2 Codex models/);
   await tui!.sendKeys("daybreak");
   await tui!.waitForText(/gpt-daybreak-blue-latest/);
   await tui!.sendKey("return");
@@ -111,7 +111,7 @@ test("a denied account catalog shows discovery failure rather than a public subs
   await start();
   await tui!.sendKeys("/model");
   await tui!.sendKey("return");
-  await tui!.waitForText(/Codex model discovery unavailable/);
+  await tui!.waitForText(/Codex models unavailable/);
   await tui!.sendKeys("daybreak");
   expect(tui!.captureFrame()).not.toContain("gpt-daybreak-blue-latest");
 });
@@ -122,7 +122,7 @@ test("confirming a duplicate current model keeps subscription billing when an AP
   await start("synthetic-api-key");
   await tui!.sendKeys("/model");
   await tui!.sendKey("return");
-  await tui!.waitForText(/2 Codex account models/);
+  await tui!.waitForText(/2 Codex models/);
   await tui!.sendKey("return");
   await tui!.waitForText(/◈ gpt-5\.5/);
   await tui!.sendKeys("synthetic request");
@@ -137,10 +137,10 @@ test("Ctrl+R retries account discovery after a failure", async () => {
   await start();
   await tui!.sendKeys("/model");
   await tui!.sendKey("return");
-  await tui!.waitForText(/Codex model discovery unavailable/);
+  await tui!.waitForText(/Codex models unavailable/);
   setDiscovery("ok");
   await tui!.sendKey("r", { ctrl: true });
-  await tui!.waitForText(/2 Codex account models/);
+  await tui!.waitForText(/2 Codex models/);
   await tui!.sendKeys("daybreak");
   await tui!.waitForText(/gpt-daybreak-blue-latest/);
 });
@@ -150,7 +150,7 @@ test("API-backed roles cannot pick a subscription model through the ID-only role
   await start("synthetic-api-key", "openai");
   await tui!.sendKeys("/model");
   await tui!.sendKey("return");
-  await tui!.waitForText(/2 Codex account models/);
+  await tui!.waitForText(/2 Codex models/);
   await tui!.sendKey("right", { ctrl: true });
   await tui!.sendKeys("daybreak");
   await tui!.settle();
@@ -163,11 +163,11 @@ test("Azure roles retain OpenAI-named models while excluding subscription-only r
   await start(undefined, "azure");
   await tui!.sendKeys("/model");
   await tui!.sendKey("return");
-  await tui!.waitForText(/2 Codex account models/);
+  await tui!.waitForText(/2 Codex models/);
   await tui!.sendKey("right", { ctrl: true });
   await tui!.sendKeys("gpt-5.5");
   await tui!.sendKey("return");
-  await tui!.waitForText(/discovery: gpt-5.5 applied/);
+  await tui!.waitForText(/discovery: gpt-5.5 set/);
 });
 
 test("new public models appear unfiltered, survive a forced offline reload, and keep their API route", async () => {
@@ -180,7 +180,7 @@ test("new public models appear unfiltered, survive a forced offline reload, and 
   expect(publicRequestCount()).toBe(1);
   setPublicDiscovery("denied");
   await tui!.sendKey("r", { ctrl: true });
-  await tui!.waitForText(/Public catalog unavailable/);
+  await tui!.waitForText(/Catalog offline/);
   expect(publicRequestCount()).toBe(2);
   expect(tui!.captureFrame()).toContain("aaa-automatic-model");
   await tui!.sendKey("down");

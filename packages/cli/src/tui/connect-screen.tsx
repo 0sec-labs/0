@@ -187,15 +187,15 @@ function oauthStateMeta(phase: CodexDeviceAuthUpdate["phase"]): string {
 function oauthRecoveryHint(phase: CodexDeviceAuthUpdate["phase"]): string {
   switch (phase) {
     case "running":
-      return "Complete the sign-in in your browser. Keep this pane open; Esc cancels.";
+      return "Finish signing in in your browser. Esc cancels.";
     case "failed":
-      return "Review the sign-in output, then press Enter to try again or use ↑/↓ to choose another provider.";
+      return "Enter to retry, or pick another provider.";
     case "unavailable":
-      return "Install Codex or add its directory to PATH, then restart 0. Use ↑/↓ to choose another provider.";
+      return "Install Codex (or add it to PATH), then restart 0.";
     case "connected":
-      return "The credential is loaded for this session.";
+      return "Ready to use.";
     default:
-      return "Press Enter to try again or use ↑/↓ to choose another provider.";
+      return "Enter to retry, or pick another provider.";
   }
 }
 
@@ -437,7 +437,7 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
     if (!id || !secret) return;
     const next: StoredCredentials = { ...loadCredentials(homeDir), [id]: secret };
     if (!saveCredentials(next, homeDir)) {
-      setNotice({ message: "Could not save the key. Check credential-store permissions and try again.", error: true });
+      setNotice({ message: "Couldn't save the key. Check credential-store permissions and retry.", error: true });
       return;
     }
     const reloaded = loadCredentials(homeDir);
@@ -636,7 +636,7 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
       meta = "waiting for key";
       metaFg = theme.ACCENT;
       lines.push(...wrap(`Paste your ${provider.label} API key.`, theme.ACCENT, true));
-      lines.push(...wrap("Hidden while typing. Saved owner-only on this machine.", theme.MUTED));
+      lines.push(...wrap("Hidden as you type. Saved owner-only on this machine.", theme.MUTED));
     } else {
       const codexRecovery = recovery?.providerId === "chatgpt-codex";
       title = provider?.label ?? connectDetailTitleLabel();
@@ -647,9 +647,9 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
           ? theme.SUCCESS
           : theme.MUTED;
       if (recovering) {
-        const recoveryTitle = codexRecovery ? "ChatGPT Codex needs device sign-in" : recovery?.title;
+        const recoveryTitle = codexRecovery ? "Sign in to ChatGPT Codex" : recovery?.title;
         const recoveryDetail = codexRecovery
-          ? "Use your ChatGPT subscription, not an OpenAI API key."
+          ? "Uses your ChatGPT subscription, not an OpenAI API key."
           : recovery?.detail;
         if (recoveryTitle) lines.push(...wrap(recoveryTitle, theme.ERROR, true));
         if (recoveryDetail) lines.push(...wrap(recoveryDetail, theme.TEXT));
@@ -736,8 +736,8 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
   const statusText = notice?.error ? notice.message
     : oauthVisible && oauth ? oauth.message
     : notice ? notice.message
-    : inInput ? "Enter saves the hidden key · Esc cancels"
-    : recovery ? recovery.title || "Provider credentials need attention"
+    : inInput ? "Waiting for key"
+    : recovery ? recovery.title || "Reconnect this provider"
     : connectStatusLine(rows);
   const statusFg = notice?.error || (oauthVisible && (oauth?.phase === "failed" || oauth?.phase === "unavailable")) ? theme.ERROR
     : oauthVisible && oauth ? oauthStateTone(theme, oauth.phase)
@@ -792,7 +792,7 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
             onActivateRow={pickProvider}
             onHoverRow={inInput || inOAuth ? undefined : pickProvider}
             onScroll={inInput || inOAuth ? undefined : move}
-            emptyText="no providers match this filter"
+            emptyText="No matches"
           />
         ) : null}
         {layout.stackedRows > 0 && activeItem ? (

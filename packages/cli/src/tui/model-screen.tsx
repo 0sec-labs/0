@@ -455,10 +455,10 @@ export function ModelScreen({
   // Connection failures affect only that provider's row; other connected
   // providers remain selectable.
   const baseStatusText = credentialSummary(states);
-  const catalogStatus = publicFailed ? "Public catalog unavailable · using cached models · Ctrl+R retry" : baseStatusText;
+  const catalogStatus = publicFailed ? "Catalog offline · showing cached models · Ctrl+R retry" : baseStatusText;
   const statusText = !loadCodex ? catalogStatus : `${codexFailed
-    ? `Codex model discovery unavailable${codexModels ? " · using cached account models" : ""} · Ctrl+R retry`
-    : codexModels === null ? "Loading Codex account models…" : `${codexModels.length} Codex account models`} · ${catalogStatus}`;
+    ? `Codex models unavailable${codexModels ? " · showing cached" : ""} · Ctrl+R retry`
+    : codexModels === null ? "Loading Codex models…" : `${codexModels.length} Codex models`} · ${catalogStatus}`;
 
   const currentItems = (): ModelDialogItem[] => {
     const byok = filterRef.current === filter && showAllRef.current === showAll
@@ -514,7 +514,7 @@ export function ModelScreen({
       const modelId = activeItem.row?.model.id;
       if (!modelId) return;
       onAgentModelsChange?.({ ...agentModels, [role]: modelId });
-      setNotice(`${role}: ${modelId} applied${singleModel ? "; single-model mode still takes precedence" : ""}.`);
+      setNotice(`${role}: ${modelId} set${singleModel ? " (ignored while single model is on)" : ""}.`);
       return;
     }
     const row = activeItem.row;
@@ -545,7 +545,7 @@ export function ModelScreen({
     }
     if (singleModelLive && key.ctrl && key.name === "s") {
       onSingleModelChange?.(!singleModel);
-      setNotice("Single-model policy applied to this audit.");
+      setNotice(singleModel ? "Single model off for this audit." : "Single model on for this audit.");
       return;
     }
     // Retry every catalog, bypassing the public cache's daily TTL.
@@ -657,9 +657,9 @@ export function ModelScreen({
   const titleWidth = Math.max(0, contentWidth - countWidth - (countWidth > 0 ? 1 : 0));
 
   const hint = onSkip && !filter
-    ? "[⏎] select · [⌃R] reload · [⌃N] skip · [esc] back"
+    ? "[⏎] select · [⌃N] skip · [esc] back"
     : inDialog
-      ? `[⏎] select · [⌃R] reload · [⇥] curated/all · [esc] ${filter ? "clear" : "back"}`
+      ? `[⏎] select · [⇥] curated/all · [esc] ${filter ? "clear" : "back"}`
       : rolesLive && singleModelLive
         ? modelDialogHint({ scope, role, hasFilter: filter.length > 0, canReload: true })
         : modelFooterHint(mode, filter.length > 0);
@@ -707,7 +707,7 @@ export function ModelScreen({
           onScroll={move}
           emptyText={showAll || filter.trim()
             ? "No matches. Ctrl+U clears search."
-            : "No connected models found. Open Connections or press Tab to search all."}
+            : "No connected models. Tab shows all, or connect a provider."}
         />
       )}
 

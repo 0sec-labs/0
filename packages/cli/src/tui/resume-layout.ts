@@ -336,8 +336,7 @@ export function resumeDetailLines(
     if (liveSession.activity) push(sanitizeTuiText(liveSession.activity), "text");
     separate();
     push(`Status: ${liveSession.status}${liveSession.unread ? " · unread" : ""}`, "accent");
-    push(`${ICON_PROTECTED} Open session: switching keeps its current work and transcript intact.`, "accent");
-    push("Close the session before deleting its saved history.", "muted");
+    push(`${ICON_PROTECTED} Open session. Close it before deleting.`, "accent");
     return lines;
   }
   if (!session) return lines;
@@ -364,7 +363,7 @@ export function resumeDetailLines(
   if (isProtected) {
     separate();
     push(
-      `${ICON_PROTECTED} Protected: this session is still open. Its history cannot be deleted until it closes.`,
+      `${ICON_PROTECTED} Still open. Close it before deleting.`,
       "accent",
     );
   }
@@ -588,21 +587,19 @@ export function resumeFooterHint(
   symbols: SymbolTable = DEFAULT_SYMBOLS,
 ): string {
   const ICON_PROTECTED = symbols.fieldProtected;
-  const count = sessionCount !== undefined ? `${sessionCount} session${sessionCount === 1 ? "" : "s"}` : undefined;
+  void sessionCount;
 
   switch (mode) {
     case "filter":
-      return "type to filter · [⏎] open · [esc] cancel · [⌫] delete a character";
+      return "[⏎] open · [esc] cancel";
     case "confirm-delete":
-      return "[del] confirm delete · [esc] cancel";
+      return "[del] confirm · [esc] cancel";
     default:
       return [
-        "[↑↓]",
         hasSessions ? "[⏎] open" : undefined,
         highlightProtected ? `${ICON_PROTECTED} [del] protected` : "[del] delete",
         "[/] filter",
-        `tab ${scope === "project" ? "all" : "project"}`,
-        count,
+        `[⇥] ${scope === "project" ? "all projects" : "this project"}`,
         hasFilter ? "[esc] clear" : "[esc] back",
       ]
         .filter((part): part is string => part !== undefined)

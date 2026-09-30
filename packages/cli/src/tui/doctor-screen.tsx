@@ -46,7 +46,7 @@ export function DoctorScreen({ onExit, shell }: { onExit: () => void; shell?: Sh
       id: "back-doctor",
       title: "Go back",
       category: "Navigate",
-      description: "Return to the previous console screen",
+      description: "Back to the previous screen",
       keybind: "esc",
       suggested: true,
       action: () => leaveCurrentScreen(shell, onExit),
@@ -109,14 +109,14 @@ export function DoctorScreen({ onExit, shell }: { onExit: () => void; shell?: Sh
   });
 
   const nextStep = !state
-    ? "Checking environment"
+    ? "Checking…"
     : !state.nodeOk
-      ? "Upgrade to Node 24+ before running 0."
+      ? "Upgrade to Node 24 or newer."
       : state.apiRuntime.configured && !state.apiRuntime.valid && state.apiRuntime.error
-        ? "Repair the configured API runtime before scanning."
+        ? "Fix the API provider setup before scanning."
         : state.hasApiKey || state.availableRuntimes.length > 0
-          ? "Ready to scan. Try scan, review, or audit from the launcher."
-          : "Install Claude/Codex/Gemini CLI or set an API key.";
+          ? "Ready. Try scan, review or audit."
+          : "Add an API key (/connect) or install the Claude, Codex or Gemini CLI.";
 
   // ── dialog interior ──────────────────────────────────────────────────────
   // Runtime metadata, the three environment probes, and the next-step
@@ -142,7 +142,7 @@ export function DoctorScreen({ onExit, shell }: { onExit: () => void; shell?: Sh
     },
     {
       id: "check:runtime",
-      label: "Runtime",
+      label: "Engine",
       description: state ? `${state.runtimeEngine} ${state.runtimeVersion}` : "checking",
       category: "Environment",
     },
@@ -162,7 +162,7 @@ export function DoctorScreen({ onExit, shell }: { onExit: () => void; shell?: Sh
     },
     {
       id: "check:api",
-      label: "API runtime",
+      label: "API provider",
       description: state?.apiRuntime.providerLabel ?? "checking",
       meta: apiStatus,
       category: "Environment",
@@ -170,7 +170,7 @@ export function DoctorScreen({ onExit, shell }: { onExit: () => void; shell?: Sh
     },
     {
       id: "check:cli",
-      label: "CLI runtimes",
+      label: "Agent CLIs",
       description: state ? (state.availableRuntimes.join(", ") || "none") : "checking",
       meta: cliStatus,
       category: "Environment",
@@ -215,7 +215,7 @@ export function DoctorScreen({ onExit, shell }: { onExit: () => void; shell?: Sh
       lines.push({ text: "CLI VERSION", fg: theme.PRIMARY });
       lines.push({ text: state ? `v${state.cliVersion} [${state.releaseChannel}]` : "checking", fg: theme.TEXT });
     } else if (item.id === "check:runtime") {
-      lines.push({ text: "RUNTIME", fg: theme.PRIMARY });
+      lines.push({ text: "ENGINE", fg: theme.PRIMARY });
       lines.push(...wrapDialogLines(state ? `${state.runtimeEngine} ${state.runtimeVersion}` : "checking", inner, theme.TEXT));
     } else if (item.id === "check:platform") {
       lines.push({ text: "PLATFORM", fg: theme.PRIMARY });
@@ -227,16 +227,14 @@ export function DoctorScreen({ onExit, shell }: { onExit: () => void; shell?: Sh
       lines.push(...wrapDialogLines(state ? `version ${state.nodeVersion}` : "version unknown", inner, theme.TEXT));
       lines.push(...wrapDialogLines("0 requires Node 24 or newer.", inner, theme.MUTED));
     } else if (item.id === "check:api") {
-      lines.push({ text: "API RUNTIME", fg: theme.PRIMARY });
+      lines.push({ text: "API PROVIDER", fg: theme.PRIMARY });
       lines.push({ text: apiStatus, fg: statusTone(apiStatus) ?? theme.MUTED });
       lines.push({ text: "" });
       if (!state) {
         lines.push({ text: "provider unknown", fg: theme.MUTED });
       } else {
         lines.push(...wrapDialogLines(`provider ${state.apiRuntime.providerLabel}`, inner, theme.TEXT));
-        lines.push(...wrapDialogLines(`configured ${state.apiRuntime.configured ? "yes" : "no"}`, inner, theme.MUTED));
-        lines.push(...wrapDialogLines(`valid ${state.apiRuntime.valid ? "yes" : "no"}`, inner, theme.MUTED));
-        lines.push(...wrapDialogLines(`credentials ${state.hasApiKey ? "present" : "absent"}`, inner, theme.MUTED));
+        lines.push(...wrapDialogLines(`set up ${state.apiRuntime.configured ? "yes" : "no"} · valid ${state.apiRuntime.valid ? "yes" : "no"} · key ${state.hasApiKey ? "found" : "missing"}`, inner, theme.MUTED));
         if (state.apiRuntime.error) {
           lines.push({ text: "" });
           for (const raw of String(state.apiRuntime.error).split("\n")) {
@@ -246,11 +244,11 @@ export function DoctorScreen({ onExit, shell }: { onExit: () => void; shell?: Sh
         }
       }
     } else if (item.id === "check:cli") {
-      lines.push({ text: "CLI RUNTIMES", fg: theme.PRIMARY });
+      lines.push({ text: "AGENT CLIS", fg: theme.PRIMARY });
       lines.push({ text: cliStatus, fg: statusTone(cliStatus) ?? theme.MUTED });
       lines.push({ text: "" });
       if (!state) {
-        lines.push({ text: "not probed yet", fg: theme.MUTED });
+        lines.push({ text: "checking", fg: theme.MUTED });
       } else if (state.availableRuntimes.length === 0) {
         lines.push({ text: "none detected", fg: theme.WARNING });
       } else {
@@ -261,10 +259,6 @@ export function DoctorScreen({ onExit, shell }: { onExit: () => void; shell?: Sh
     } else {
       lines.push({ text: "NEXT STEPS", fg: theme.PRIMARY });
       lines.push(...wrapDialogLines(item.label, inner, item.id === "step:next" ? theme.TEXT : theme.MUTED));
-      if (item.id !== "step:next") {
-        lines.push({ text: "" });
-        lines.push(...wrapDialogLines(nextStep, inner, theme.MUTED));
-      }
     }
     if (error) {
       lines.push({ text: "" });
@@ -289,12 +283,12 @@ export function DoctorScreen({ onExit, shell }: { onExit: () => void; shell?: Sh
           query=""
           hideSearch
           renderDetail={renderDoctorDetail}
-          emptyText="No diagnostics available."
+          emptyText="Nothing to show."
         />
         <Cells width={width} fg={doctorStatusTone}>
           {doctorStatusText}
         </Cells>
-        <FooterBar hint="[↑↓] move · [esc] back · [⌃P] commands · [⌃C] exit" />
+        <FooterBar hint="[↑↓] move · [⌃P] commands · [esc] back" />
       </box>
     </ShellFrame>
   );

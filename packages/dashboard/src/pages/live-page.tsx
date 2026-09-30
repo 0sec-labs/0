@@ -1,10 +1,11 @@
+import { eventStream } from "@/lib/event-stream";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, useSearchParams } from "react-router-dom";
-import { AlertTriangle, ArrowRight, Beaker, Bot, ChevronDown, ChevronUp, FileSearch, Radio, Target, Terminal, Zap } from "lucide-react";
+import { AlertTriangle, ArrowRight, Beaker, Bot, ChevronDown, FileSearch, Radio, Target, Terminal, Zap } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardEmpty, CardEyebrow, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardEmpty, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { extractFileLine, parseHuntEvent, type osecHuntEvent } from "@/lib/hunt-stream";
@@ -368,9 +369,9 @@ export function LivePage() {
     lastAlarmRef.current = null;
     baseTsRef.current = null;
     setConnection("connecting");
-    let source: EventSource | null = null;
+    let source: ReturnType<typeof eventStream> | null = null;
     try {
-      source = new EventSource(eventsUrl);
+      source = eventStream(eventsUrl);
     } catch (error) {
       setConnection("error");
       setLastError(error instanceof Error ? error.message : String(error));
@@ -379,7 +380,7 @@ export function LivePage() {
     source.onopen = () => setConnection("open");
     source.onerror = () => {
       setConnection("error");
-      setLastError("EventSource error (connection dropped or refused).");
+      setLastError("Lost connection to the probe stream.");
     };
     source.onmessage = (message) => {
       const data = typeof message.data === "string" ? message.data.trim() : "";
@@ -403,9 +404,9 @@ export function LivePage() {
     if (demoMode || !huntUrl) return;
     setHuntCards([]);
     setHuntConnection("connecting");
-    let source: EventSource | null = null;
+    let source: ReturnType<typeof eventStream> | null = null;
     try {
-      source = new EventSource(huntUrl);
+      source = eventStream(huntUrl);
     } catch (error) {
       setHuntConnection("error");
       setLastError(error instanceof Error ? error.message : String(error));
@@ -416,7 +417,7 @@ export function LivePage() {
       setHuntConnection("error");
       // Don't override gemmaforge-side errors with hunt-side; surface a
       // distinct message so the operator can tell the two apart.
-      setLastError("Hunt EventSource error (connection dropped or refused).");
+      setLastError("Lost connection to the 0 stream.");
     };
     const receiveHuntEvent = (message: MessageEvent) => {
       const data = typeof message.data === "string" ? message.data.trim() : "";
@@ -490,15 +491,14 @@ export function LivePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="GemmaForge × 0"
-        title="Live workflow"
-        summary="Watch the probe → seed leads → agent hunt pipeline in real time. Probe firings stream from gemmaforge.events/v1, leads accumulate to the worklist, and 0's hunters surface tool calls and findings as they happen."
+        title="Live"
+        summary=""
         actions={(
           <>
             <ConnectionPill state={combinedConnection} />
             <Button variant={demoMode ? "outline" : "accent"} onClick={startDemo}>
               <Beaker />
-              Demo replay
+              Try demo
             </Button>
             <Button variant="outline" onClick={stopAll} disabled={combinedConnection === "idle"}>
               Stop
@@ -510,20 +510,13 @@ export function LivePage() {
       <Card className="overflow-hidden">
         <CardHeader>
           <div>
-            <CardEyebrow>Event sources</CardEyebrow>
-            <CardTitle className="mt-2">SSE endpoints</CardTitle>
-            <CardDescription>
-              The probe + lead lanes consume <code className="font-mono text-xs">gemmaforge.events/v1</code>;
-              the hunt lane consumes <code className="font-mono text-xs">0.events/v1</code>. Run
-              {" "}<code className="font-mono text-xs">node scripts/serve-events.mjs &lt;gemma.ndjson&gt; --0-log &lt;0.log&gt;</code>{" "}
-              to expose both at <code className="font-mono text-xs">/events</code> and <code className="font-mono text-xs">/hunt-events</code>.
-            </CardDescription>
+            <CardTitle>Connect</CardTitle>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground/70 w-24">
-              gemmaforge
+              Probe
             </span>
             <Input
               value={urlDraft}
@@ -535,7 +528,7 @@ export function LivePage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground/70 w-24">
-              0
+              0 agent
             </span>
             <Input
               value={huntUrlDraft}
@@ -555,7 +548,6 @@ export function LivePage() {
             <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
               {scanMeta.repo ? <Badge variant="neutral">repo {scanMeta.repo}</Badge> : null}
               {scanMeta.model_id ? <Badge variant="neutral">model {scanMeta.model_id}</Badge> : null}
-              {scanMeta.layer !== undefined ? <Badge variant="neutral">layer {scanMeta.layer}</Badge> : null}
               {filesSeen.length > 0 ? (
                 <span className="text-muted-foreground">
                   files: <span className="font-mono">{filesSeen.slice(-4).join(", ")}</span>
@@ -565,7 +557,7 @@ export function LivePage() {
           ) : null}
           {endSummary ? (
             <div className="flex flex-wrap gap-2 text-xs">
-              <Badge variant="success">scan complete</Badge>
+              <Badge variant="success">done</Badge>
               <span className="text-muted-foreground">
                 {endSummary.files_seen ?? "?"} files · {endSummary.chunks_scored ?? "?"} chunks · {endSummary.leads_emitted ?? "?"} leads · {endSummary.elapsed_seconds?.toFixed(1) ?? "?"}s
               </span>
@@ -642,21 +634,17 @@ function ProbeLane({
     <Card className="flex flex-col overflow-hidden">
       <CardHeader>
         <div>
-          <CardEyebrow>Lane 1 · Probe</CardEyebrow>
-          <CardTitle className="mt-2 flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2">
             <Zap className="size-4 text-primary-text" />
-            Probe firings
+            Suspicious code
           </CardTitle>
-          <CardDescription>
-            Per-token probe scores from <code className="font-mono text-xs">stream_with_probe.py</code>. Alarms pin to the top when the rolling score crosses threshold.
-          </CardDescription>
         </div>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-3">
         {alarms.length === 0 ? null : (
           <div className="space-y-1.5">
             <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground/70">
-              Alarms <span className="text-muted-foreground/40">({alarms.length})</span>
+              Flagged <span className="text-muted-foreground/40">({alarms.length})</span>
             </div>
             <div className="space-y-1.5">
               {alarms.slice(0, 4).map((alarm) => (
@@ -679,14 +667,13 @@ function ProbeLane({
                   </div>
                   <div className="mt-1 text-[10px] text-muted-foreground">
                     {formatRelativeTs(alarm.ts, baseTs)}
-                    {highlightedAlarmId === alarm.id ? " · originating fire" : ""}
                   </div>
                 </div>
               ))}
             </div>
             {hasSelection ? (
               <Button variant="ghost" size="xs" onClick={onClearSelection}>
-                Clear lead selection
+                Clear selection
               </Button>
             ) : null}
           </div>
@@ -694,14 +681,14 @@ function ProbeLane({
 
         <div className="space-y-1.5">
           <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground/70">
-            Token stream <span className="text-muted-foreground/40">({tokens.length})</span>
+            Code <span className="text-muted-foreground/40">({tokens.length})</span>
           </div>
           <div
             ref={streamRef}
             className="max-h-[28rem] min-h-[12rem] overflow-y-auto rounded-md border border-border bg-muted/10 px-3 py-3 font-mono text-xs leading-relaxed"
           >
             {tokens.length === 0 ? (
-              <div className="text-muted-foreground">Waiting for probe.token events…</div>
+              <div className="text-muted-foreground">Waiting for code…</div>
             ) : (
               <div className="flex flex-wrap gap-x-0.5 gap-y-1">
                 {tokens.map((row) => (
@@ -755,19 +742,15 @@ function LeadLane({
     <Card className="flex flex-col overflow-hidden">
       <CardHeader>
         <div>
-          <CardEyebrow>Lane 2 · Leads</CardEyebrow>
-          <CardTitle className="mt-2 flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2">
             <FileSearch className="size-4 text-primary-text" />
-            Seed worklist
+            Leads
           </CardTitle>
-          <CardDescription>
-            Regions that passed `--min-confidence` and shipped to the leads file. Click a lead to highlight the probe firing that originated it; click a hunt tool-call to highlight the lead it cites.
-          </CardDescription>
         </div>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col">
         {leads.length === 0 ? (
-          <CardEmpty>Waiting for scan.lead events…</CardEmpty>
+          <CardEmpty>No leads yet.</CardEmpty>
         ) : (
           <div className="max-h-[36rem] space-y-2 overflow-y-auto pr-1">
             {leads.map((lead) => {
@@ -789,7 +772,6 @@ function LeadLane({
                       <div className="truncate font-mono text-xs text-foreground">{lead.file}</div>
                       <div className="mt-0.5 text-[11px] text-muted-foreground">
                         lines {lead.start_line}–{lead.end_line}
-                        {lead.rank !== null ? ` · rank #${lead.rank}` : ""}
                         {" · "}
                         {formatRelativeTs(lead.ts, baseTs)}
                       </div>
@@ -801,15 +783,6 @@ function LeadLane({
                       {lead.top_cwe ? <Badge variant="danger">{lead.top_cwe}</Badge> : null}
                     </div>
                   </div>
-                  {isSelected ? (
-                    <div className="mt-2 flex items-center gap-1 text-[10px] text-primary-text">
-                      <ChevronUp className="size-3" />
-                      probe lane is highlighting the originating fire
-                      <ArrowRight className="ml-auto size-3" />
-                      <ChevronDown className="size-3" />
-                      hunt lane is targeting this lead
-                    </div>
-                  ) : null}
                 </button>
               );
             })}
@@ -837,14 +810,10 @@ function HuntLane({
     <Card className="flex flex-col overflow-hidden">
       <CardHeader>
         <div>
-          <CardEyebrow>Lane 3 · Hunt</CardEyebrow>
-          <CardTitle className="mt-2 flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2">
             <Bot className="size-4 text-primary-text" />
-            Agent activity
+            What 0 is doing
           </CardTitle>
-          <CardDescription>
-            Live 0 scan events — tool calls, findings, and stage transitions. Click a card that cites a file:line to highlight the originating lead in lane 2.
-          </CardDescription>
         </div>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-3">
@@ -852,7 +821,7 @@ function HuntLane({
           <div className="rounded-md border border-primary/20 bg-primary/4 px-3 py-3">
             <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-widest text-primary-text">
               <Target className="size-3" />
-              Targeting lead
+              Checking lead
             </div>
             <div className="mt-1 truncate font-mono text-xs text-foreground">{selectedLead.file}</div>
             <div className="text-[11px] text-muted-foreground">
@@ -863,7 +832,7 @@ function HuntLane({
         ) : null}
 
         {cards.length === 0 ? (
-          <CardEmpty>Waiting for 0 hunt events…</CardEmpty>
+          <CardEmpty>Waiting for 0…</CardEmpty>
         ) : (
           <div className="max-h-[36rem] space-y-2 overflow-y-auto pr-1">
             {cards.map((card) => (
@@ -880,7 +849,7 @@ function HuntLane({
 
         <div className="mt-auto pt-2">
           <Button asChild variant="ghost" size="sm">
-            <NavLink to="/findings">Open findings workspace</NavLink>
+            <NavLink to="/findings">View findings</NavLink>
           </Button>
         </div>
       </CardContent>
@@ -919,10 +888,7 @@ function HuntCardView({
     <div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground">
       <span>{formatRelativeTs(card.ts, baseTs)}</span>
       {interactive ? (
-        <span className="flex items-center gap-1 text-primary-text">
-          <ArrowRight className="size-3" />
-          {highlightLead ? "linked to selected lead" : "click to highlight lead"}
-        </span>
+        <ArrowRight className="size-3 text-primary-text" aria-label="Show lead" />
       ) : null}
     </div>
   );
@@ -947,9 +913,6 @@ function ToolUseBody({ event }: { event: Extract<osecHuntEvent, { kind: "tool_us
         <div className="flex min-w-0 items-center gap-2">
           <Terminal className="size-3.5 shrink-0 text-primary-text" />
           <span className="truncate text-sm font-medium text-foreground">{event.tool}</span>
-          {typeof event.turn === "number" ? (
-            <span className="font-mono text-[10px] text-muted-foreground">turn {event.turn}</span>
-          ) : null}
         </div>
         <Badge variant={statusVariant}>{event.status ?? "running"}</Badge>
       </div>
@@ -1002,7 +965,6 @@ function StageBody({ event }: { event: Extract<osecHuntEvent, { kind: "stage" }>
         <div className="flex min-w-0 items-center gap-2">
           <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
           <span className="truncate text-sm font-medium text-foreground">{event.stage}</span>
-          {event.role ? <Badge variant="neutral">{event.role}</Badge> : null}
         </div>
         <Badge variant={variant}>{event.transition}</Badge>
       </div>

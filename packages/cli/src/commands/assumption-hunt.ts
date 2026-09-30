@@ -203,10 +203,8 @@ export function registerAssumptionHuntCommand(program: Command): void {
   program
     .command("assumption-hunt")
     .description(
-      "Seedless ASSUMPTION-MINING hunt: mine the implicit relied-on preconditions each function makes, " +
-        "cross-check enforced-vs-relied (no LLM), then scan for reachable callers that reach a relied-on " +
-        "subject WITHOUT establishing its precondition. Emits CANDIDATES to disprove (not confirmed bugs). " +
-        "Exit 0 = ran (with or without a candidate), 3 = error.",
+      "Find callers that violate a function's implied preconditions. " +
+        "Emits candidates to disprove, not confirmed bugs.",
     )
     .argument("<source-root>", "Local source tree the subsystem files live under (e.g. a kernel checkout)")
     .requiredOption("--files <a.c,b.c>", "Comma-separated subsystem source files, repo-relative to <source-root>")

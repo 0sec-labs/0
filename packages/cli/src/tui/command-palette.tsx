@@ -11,7 +11,7 @@ import { OverlayFrame, RailBar } from "./shell-frame.js";
 import { useSurfaceDimensions } from "./dialog-surface.js";
 import type { ShellNav } from "./shell-nav.js";
 import { rankFuzzy } from "./fuzzy-match.js";
-import { SLASH_COMMANDS } from "./slash-commands.js";
+import { SLASH_COMMANDS } from "@0/shared"
 import { KEYBINDINGS } from "./keybindings.js";
 import { useBlockRouteHistory } from "./route-history-keys.js";
 
@@ -84,7 +84,7 @@ export function createShellCommands(shell?: ShellNav): PaletteCommand[] {
       id: "nav-chat",
       title: "Open chat",
       category: "Navigate",
-      description: "Return to the operator conversation",
+      description: "Back to the conversation",
       keybind: "1",
       suggested: true,
       action: shell.openChat,
@@ -93,22 +93,22 @@ export function createShellCommands(shell?: ShellNav): PaletteCommand[] {
       id: "nav-new-chat",
       title: "New audit",
       category: "Audit",
-      description: "Start an independent audit with the staged model and connection",
+      description: "Start a fresh audit",
       action: shell.openNewChat,
     },
     {
       id: "nav-launcher",
       title: "Run engagement",
       category: "Engagement",
-      description: "Open the chat-owned control pane for one explicit target",
+      description: "Scan one target",
       keybind: "7",
       action: shell.openLauncher,
     },
     {
       id: "nav-ops",
-      title: "Open mission control",
+      title: "Open operations",
       category: "Navigate",
-      description: "Go to the operations overview",
+      description: "Running and recent scans",
       keybind: "2",
       suggested: true,
       action: shell.openOps,
@@ -126,7 +126,7 @@ export function createShellCommands(shell?: ShellNav): PaletteCommand[] {
       id: "nav-findings",
       title: "Open findings",
       category: "Navigate",
-      description: "Browse finding families and triage state",
+      description: "Browse and triage findings",
       keybind: "4",
       suggested: true,
       action: shell.openFindings,
@@ -135,16 +135,16 @@ export function createShellCommands(shell?: ShellNav): PaletteCommand[] {
       id: "nav-doctor",
       title: "Open doctor",
       category: "Navigate",
-      description: "Inspect runtime readiness",
+      description: "Check your setup",
       keybind: "5",
       suggested: true,
       action: shell.openDoctor,
     },
     {
       id: "nav-replay",
-      title: "Open latest replay",
+      title: "Open last scan",
       category: "Navigate",
-      description: "Review the most recent scan replay",
+      description: "Replay the most recent scan",
       keybind: "6",
       suggested: true,
       action: () => shell.openReplay(),
@@ -153,16 +153,16 @@ export function createShellCommands(shell?: ShellNav): PaletteCommand[] {
       id: "nav-settings",
       title: "Open settings",
       category: "Navigate",
-      description: "Console display, transcript and security toggles",
+      description: "Display and safety options",
       keybind: "8",
       suggested: true,
       action: shell.openSettings,
     },
     {
       id: "nav-models",
-      title: "Open model picker",
+      title: "Choose model",
       category: "Navigate",
-      description: "Browse models by provider, with credential state",
+      description: "Pick a model",
       keybind: "9",
       suggested: true,
       action: () => shell.openModels(),
@@ -171,49 +171,49 @@ export function createShellCommands(shell?: ShellNav): PaletteCommand[] {
       id: "nav-sessions",
       title: "Sessions",
       category: "Navigate",
-      description: "Switch open sessions or resume saved conversations from any project",
+      description: "Switch or resume a conversation",
       action: () => shell.openResume(),
     },
     {
       id: "nav-comms",
-      title: "Open agent comms",
+      title: "Open agents",
       category: "Navigate",
-      description: "Live fleet of sub-agents and the messages flowing between them",
+      description: "Sub-agents and their messages",
       action: shell.openComms,
     },
     {
       id: "nav-connect",
       title: "Connect a provider",
       category: "Navigate",
-      description: "Add an API key or subscription sign-in for a model provider",
+      description: "Add an API key or sign in",
       action: shell.openConnect,
     },
     {
       id: "nav-onboard",
-      title: "Run onboarding",
+      title: "Run setup",
       category: "Navigate",
-      description: "Review connection, model, and settings choices for the next audit",
+      description: "Connection, model and settings",
       action: shell.openOnboarding,
     },
     {
       id: "nav-usage",
-      title: "Open usage report",
+      title: "Open usage",
       category: "Navigate",
-      description: "Context window, token totals, cost, model and tool health",
+      description: "Tokens, cost and context",
       action: () => shell.openUsage(),
     },
     {
       id: "nav-finding",
       title: "Open finding detail",
       category: "Navigate",
-      description: "Open a finding to read its full body and act on it (fix, copy report)",
+      description: "Read, fix or copy a finding",
       action: () => shell.openFindingDetail(),
     },
     {
       id: "nav-back",
       title: "Go back",
       category: "Navigate",
-      description: "Return to the previous console route",
+      description: "Previous screen",
       keybind: "Alt+Left",
       suggested: true,
       action: shell.goBack,
@@ -222,7 +222,7 @@ export function createShellCommands(shell?: ShellNav): PaletteCommand[] {
       id: "nav-forward",
       title: "Go forward",
       category: "Navigate",
-      description: "Move to the next console route",
+      description: "Next screen",
       keybind: "Alt+Right",
       suggested: true,
       action: shell.goForward,
@@ -375,11 +375,11 @@ export function PaletteOverlay({
     : "no commands available";
 
   return (
-    <OverlayFrame title={title} footer="[⌃P] close · [⏎] run · [esc] cancel">
+    <OverlayFrame title={title} footer="[⏎] run · [esc] close">
         <box flexDirection="row" width="100%" minWidth={0}>
           <text flexShrink={0} fg={theme.MUTED}>{queryLabel}</text>
           <box width={queryWidth} flexShrink={0} minWidth={0}>
-            <text fg={theme.TEXT}>{fitTuiText(query || "type to filter commands", queryWidth)}</text>
+            <text fg={theme.TEXT}>{fitTuiText(query || "type to search", queryWidth)}</text>
           </box>
           <text width={1} flexShrink={0} fg={theme.INFO}>█</text>
         </box>

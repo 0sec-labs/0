@@ -65,9 +65,9 @@ test("a launcher-local palette blocks history until it closes", async () => {
   tui = await launch({ route: { type: "launcher" }, settings: { onboardingCompleted: true } });
   await tui.sendKeys("fixture-target");
   await tui.sendKey("p", { ctrl: true });
-  await tui.waitForText(/Control plane/);
+  await tui.waitForText(/Commands/);
   await tui.sendKey("left", { meta: true });
-  expect(tui.captureFrame()).toContain("Control plane");
+  expect(tui.captureFrame()).toContain("Commands");
   await tui.sendKey("escape");
   expect(tui.captureFrame()).toContain("fixture-target");
   await tui.sendKey("left", { meta: true });

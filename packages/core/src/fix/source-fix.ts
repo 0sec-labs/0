@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { constants, closeSync, fstatSync, fsyncSync, ftruncateSync, lstatSync, openSync, readFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
@@ -97,10 +98,14 @@ interface VerifiedCandidate {
   sourceFile: string;
   diff: string;
   testCommand: string;
+  originalSource: Buffer;
+  reviewedSource: Buffer;
   plan?: SourceFixPublicationPlan;
   commit?: string;
   branchCreated?: boolean;
   prUrl?: string;
+  verificationFailed?: boolean;
+  applied?: boolean;
 }
 
 // Publication accepts only candidates actually verified by this process, not
@@ -139,6 +144,7 @@ export interface SourceFixOptions {
   /** Preserve a validated local candidate for review and separately approved publication. */
   keepWorktree?: boolean;
   signal?: AbortSignal;
+  onProgress?: (event: { stage: string; attempt?: number; reason?: string; test?: SourceFixTestResult }) => void;
 }
 
 interface CandidateWorktree {
@@ -469,6 +475,7 @@ export async function runSourceFix(options: SourceFixOptions): Promise<SourceFix
   try {
     options.signal?.throwIfAborted();
     const candidateWorktree = await createCandidateWorktree(options.repoRoot);
+    options.onProgress?.({ stage: "preparing-candidate" });
     worktree = candidateWorktree;
     const sourceHint = sourcePathHint(options.finding);
     if (!sourceHint) {
@@ -483,8 +490,9 @@ export async function runSourceFix(options: SourceFixOptions): Promise<SourceFix
     const repoRoot = await realpath(options.repoRoot);
     const sourceAbsolutePath = resolveScopedPath(repoRoot, sourceHint);
     const sourceFile = relativeSourcePath(repoRoot, sourceAbsolutePath);
-    const source = await readFile(resolveScopedPath(candidateWorktree.root, sourceFile), "utf8");
-    if (Buffer.byteLength(source) > MAX_SOURCE_BYTES) {
+    const sourceBytes = await readFile(resolveScopedPath(candidateWorktree.root, sourceFile));
+    const source = sourceBytes.toString("utf8");
+    if (sourceBytes.length > MAX_SOURCE_BYTES) {
       return failureResult(
         options.finding,
         "precondition_failed",
@@ -511,6 +519,7 @@ export async function runSourceFix(options: SourceFixOptions): Promise<SourceFix
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       options.signal?.throwIfAborted();
+      options.onProgress?.({ stage: "generating", attempt });
       const response = await options.runtime.executeNative(
         "Generate a narrowly-scoped, testable source fix. Never claim success without using propose_fix.",
         messages,
@@ -525,6 +534,7 @@ export async function runSourceFix(options: SourceFixOptions): Promise<SourceFix
       if (!proposalResult.proposal) {
         const reason = proposalResult.error ?? "model did not submit a valid propose_fix tool call";
         attempts.push({ attempt, reason });
+        options.onProgress?.({ stage: "attempt-rejected", attempt, reason });
         if (proposalResult.toolUseId) {
           appendToolFeedback(messages, proposalResult.toolUseId, `${reason}. Submit a valid propose_fix payload.`);
         } else {
@@ -542,27 +552,34 @@ export async function runSourceFix(options: SourceFixOptions): Promise<SourceFix
       } catch (error) {
         const reason = `patch rejected: ${errorMessage(error)}`;
         attempts.push({ attempt, reason });
+        options.onProgress?.({ stage: "attempt-rejected", attempt, reason });
         await resetCandidate(candidateWorktree.root);
         appendToolFeedback(messages, proposalResult.toolUseId!, `${reason}\nProduce a different minimal patch.`);
         continue;
       }
 
       const generatedDiff = await git(candidateWorktree.root, ["diff", "--no-ext-diff", "--binary", "HEAD", "--"]);
-      const postcondition = await evaluateVerificationSpec(options.finding.verificationSpec, candidateWorktree.root);
+      options.onProgress?.({ stage: "source-recheck", attempt });
+      let postcondition = await evaluateVerificationSpec(options.finding.verificationSpec, candidateWorktree.root);
+      const generatedSourceTransition = hasSemanticFixSignal(postcondition);
+      options.onProgress?.({ stage: "regression-start", attempt });
       const test = await runTestCommand(testCommand, candidateWorktree.root, testTimeoutMs, options.signal);
+      options.onProgress?.({ stage: "regression-completed", attempt, test });
+      postcondition = await evaluateVerificationSpec(options.finding.verificationSpec, candidateWorktree.root);
       lastCandidate = { sourceFile, precondition, postcondition, test, diff: generatedDiff, patch: proposal.patch, rationale: proposal.rationale };
       options.signal?.throwIfAborted();
       const testedDiff = await git(candidateWorktree.root, ["diff", "--no-ext-diff", "--binary", "HEAD", "--"]);
       const changedByTest = generatedDiff !== testedDiff || !generatedDiff;
-      if (changedByTest || !hasSemanticFixSignal(postcondition) || test.exitCode !== 0 || test.timedOut) {
+      if (changedByTest || !generatedSourceTransition || !hasSemanticFixSignal(postcondition) || test.exitCode !== 0 || test.timedOut) {
         const reason = changedByTest
           ? "regression command changed the generated source diff, or the patch contains no change"
-          : !hasSemanticFixSignal(postcondition)
+          : !generatedSourceTransition || !hasSemanticFixSignal(postcondition)
           ? "patch did not produce a valid semantic transition out of the vulnerable-source contract"
           : test.timedOut
             ? "post-patch test command timed out"
             : `post-patch test command exited ${test.exitCode ?? "without an exit code"}`;
         attempts.push({ attempt, reason });
+        options.onProgress?.({ stage: "attempt-rejected", attempt, reason });
         await resetCandidate(candidateWorktree.root);
         const verificationDetail = postcondition.failedPredicates
           .map((predicate) => predicate.reason)
@@ -610,6 +627,8 @@ export async function runSourceFix(options: SourceFixOptions): Promise<SourceFix
           finding: structuredClone(options.finding),
           candidate: structuredClone(candidate),
           sourceFile, diff: generatedDiff, testCommand,
+          originalSource: sourceBytes,
+          reviewedSource: await readFile(resolveScopedPath(candidateWorktree.root, sourceFile)),
         });
         return result;
       }
@@ -687,6 +706,135 @@ export async function runSourceFix(options: SourceFixOptions): Promise<SourceFix
   }
 }
 
+/** The original checkout remains an unchanged clean baseline until explicit apply. */
+async function assertOriginalBaseline(verified: VerifiedCandidate): Promise<void> {
+  const root = verified.candidate.repoRoot;
+  if ((await git(root, ["rev-parse", "HEAD"])) !== verified.candidate.baseCommit) {
+    throw new Error("original repository HEAD changed after preparation; regenerate the fix");
+  }
+  if (await git(root, ["status", "--porcelain=v1", "--untracked-files=all"])) {
+    throw new Error("original repository contains concurrent changes; refusing source-fix execution");
+  }
+}
+
+async function assertRetainedCandidate(verified: VerifiedCandidate): Promise<void> {
+  const cwd = verified.candidate.worktree;
+  if ((await git(cwd, ["rev-parse", "HEAD"])) !== (verified.commit ?? verified.candidate.baseCommit)) {
+    throw new Error("candidate HEAD changed after verification; regenerate the fix");
+  }
+  if ((await git(cwd, ["diff", "--no-ext-diff", "--binary", verified.candidate.baseCommit, "--"])) !== verified.diff) {
+    throw new Error("candidate changed after review; regenerate the fix");
+  }
+  if (!(await readFile(resolveScopedPath(cwd, verified.sourceFile))).equals(verified.reviewedSource)) {
+    throw new Error("candidate source bytes differ from the validated source change");
+  }
+  if (verified.commit && await git(cwd, ["status", "--porcelain=v1", "--untracked-files=no"])) {
+    throw new Error("candidate contains concurrent tracked changes; refusing source-fix execution");
+  }
+}
+
+/** Re-test exactly the process-owned retained candidate, without generating another patch. */
+export async function verifySourceFixCandidate(
+  result: SourceFixResult,
+  options: { signal?: AbortSignal; testTimeoutMs?: number } = {},
+): Promise<SourceFixResult> {
+  const verified = verifiedCandidates.get(result);
+  if (!verified || result.status !== "validated_candidate" || verified.applied) {
+    throw new Error("only an unapplied, retained, process-verified candidate can be re-tested");
+  }
+  verified.verificationFailed = true;
+  try {
+    options.signal?.throwIfAborted();
+    await assertOriginalBaseline(verified);
+    await assertRetainedCandidate(verified);
+    const precondition = await evaluateVerificationSpec(verified.finding.verificationSpec!, verified.candidate.repoRoot);
+    if (!precondition.passed) throw new Error("original source no longer reproduces the finding's verified contract");
+    const postcondition = await evaluateVerificationSpec(verified.finding.verificationSpec!, verified.candidate.worktree);
+    if (!hasSemanticFixSignal(postcondition)) throw new Error("candidate no longer makes a valid semantic transition out of the vulnerable-source contract");
+    const test = await runTestCommand(verified.testCommand, verified.candidate.worktree, options.testTimeoutMs ?? 300_000, options.signal);
+    options.signal?.throwIfAborted();
+    if (test.exitCode !== 0 || test.timedOut) {
+      return { ...result, status: "not_fixed", precondition, postcondition, test, error: "candidate regression command failed" };
+    }
+    await assertRetainedCandidate(verified);
+    await assertOriginalBaseline(verified);
+    const finalPostcondition = await evaluateVerificationSpec(verified.finding.verificationSpec!, verified.candidate.worktree);
+    if (!hasSemanticFixSignal(finalPostcondition)) throw new Error("candidate source contract changed during the regression command");
+    verified.verificationFailed = false;
+    return { ...result, precondition, postcondition: finalPostcondition, test, error: undefined };
+  } catch (error) {
+    return { ...result, status: "not_fixed", error: errorMessage(error) };
+  }
+}
+
+/**
+ * Apply the reviewed bytes only after a fresh isolated re-test and clean baseline
+ * check. Never reset, stash, stage, or roll back the operator's concurrent work.
+ */
+export async function applySourceFixCandidate(
+  result: SourceFixResult,
+  options: { approval: "apply-to-repository"; signal?: AbortSignal },
+): Promise<SourceFixResult> {
+  if (options.approval !== "apply-to-repository") throw new Error("explicit repository application approval is required");
+  const verified = verifiedCandidates.get(result);
+  if (!verified || verified.verificationFailed || verified.applied) {
+    throw new Error("candidate is missing, failed its latest verification, or was already applied");
+  }
+  const refreshed = await verifySourceFixCandidate(result, options);
+  if (refreshed.status !== "validated_candidate") throw new Error(refreshed.error ?? "candidate re-verification failed");
+  const source = resolveScopedPath(verified.candidate.repoRoot, verified.sourceFile);
+  const candidateSource = resolveScopedPath(verified.candidate.worktree, verified.sourceFile);
+  const original = await readFile(source);
+  if (!original.equals(verified.originalSource)) throw new Error("original source differs from the reviewed baseline");
+  const replacement = await readFile(candidateSource);
+  if (!replacement.equals(verified.reviewedSource)) throw new Error("candidate source changed after review");
+  const initial = lstatSync(source);
+  if (!initial.isFile() || initial.isSymbolicLink()) throw new Error("reviewed source is no longer a regular file");
+  await assertOriginalBaseline(verified);
+  options.signal?.throwIfAborted();
+  // Open without following symlinks and compare the exact inode and bytes at
+  // the write boundary. Failure never triggers a repository-wide reset.
+  const fd = openSync(source, constants.O_RDWR | constants.O_NOFOLLOW);
+  let applicationError: string | undefined;
+  try {
+    const current = fstatSync(fd);
+    const pathState = lstatSync(source);
+    if (current.ino !== initial.ino || current.dev !== initial.dev ||
+        pathState.ino !== current.ino || pathState.dev !== current.dev ||
+        current.mtimeMs !== initial.mtimeMs || !readFileSync(fd).equals(original)) {
+      throw new Error("source changed concurrently after review; refusing to overwrite user work");
+    }
+    options.signal?.throwIfAborted();
+    verified.applied = true;
+    verified.verificationFailed = true;
+    let offset = 0;
+    while (offset < replacement.length) {
+      const written = writeSync(fd, replacement, offset, replacement.length - offset, offset);
+      if (written === 0) throw new Error("source write made no progress; repository preserved without rollback");
+      offset += written;
+    }
+    ftruncateSync(fd, replacement.length);
+    fsyncSync(fd);
+  } catch (error) {
+    if (!verified.applied) throw error;
+    applicationError = errorMessage(error);
+  } finally {
+    closeSync(fd);
+  }
+  if (applicationError) {
+    return { ...refreshed, status: "error", applied: true,
+      error: `Source application encountered an error; repository preserved without rollback: ${applicationError}` };
+  }
+  const postcondition = await evaluateVerificationSpec(verified.finding.verificationSpec!, verified.candidate.repoRoot);
+  if (!hasSemanticFixSignal(postcondition)) {
+    verified.verificationFailed = true;
+    return { ...refreshed, status: "error", applied: true, postcondition,
+      error: "reviewed source was applied but its re-check failed; repository preserved without rollback" };
+  }
+  verified.verificationFailed = false;
+  return { ...refreshed, status: "applied_and_retested", applied: true, postcondition };
+}
+
 /** Inspect local publication details without authenticating, pushing, or creating a PR. */
 export async function planSourceFixPublication(
   result: SourceFixResult,
@@ -696,6 +844,7 @@ export async function planSourceFixPublication(
   if (!verified || result.status !== "validated_candidate") {
     throw new Error("only a retained, verified source-fix candidate can publish");
   }
+  if (verified.verificationFailed) throw new Error("candidate failed its latest verification; re-verify before publication");
   if (verified.prUrl) throw new Error(`draft PR already created: ${verified.prUrl}`);
   if (verified.plan) return { ...verified.plan };
   const client = options.gitClient ?? defaultGitClient();
@@ -741,6 +890,10 @@ export async function publishSourceFixDraftPR(
     return (await client.run(args, { cwd })).stdout.trim();
   };
   options.signal?.throwIfAborted();
+  // Publication pushes only the isolated verified candidate; the user's own
+  // checkout may keep moving. A moved remote base is refused below instead.
+  await assertRetainedCandidate(verified);
+  if (verified.verificationFailed) throw new Error("candidate failed its latest verification; refusing publication");
   if ((await run(["remote", "get-url", "--push", "origin"])) !== plan.remote) {
     throw new Error("origin changed after review; refusing publication");
   }
@@ -757,6 +910,7 @@ export async function publishSourceFixDraftPR(
     throw new Error("published candidate has new tracked changes; refusing publication");
   }
   const spec = verified.finding.verificationSpec!;
+  verified.verificationFailed = true;
   const sourceCheck = await evaluateVerificationSpec(spec, cwd);
   if (!hasSemanticFixSignal(sourceCheck)) throw new Error("candidate no longer passes the source fix re-check");
   const test = await runTestCommand(verified.testCommand, cwd, 300_000, options.signal);
@@ -765,6 +919,9 @@ export async function publishSourceFixDraftPR(
   if ((await run(["diff", "--no-ext-diff", "--binary", verified.candidate.baseCommit, "--"])) !== verified.diff) {
     throw new Error("publication regression command changed the reviewed source diff");
   }
+  const testedSourceCheck = await evaluateVerificationSpec(spec, cwd);
+  if (!hasSemanticFixSignal(testedSourceCheck)) throw new Error("candidate source contract changed during publication regression");
+  verified.verificationFailed = false;
   // The remote base must be exactly the verified baseline: no unrelated local
   // commits or a moved base can sneak into this PR.
   const remoteBase = await run(["ls-remote", "--heads", plan.remote, `refs/heads/${plan.baseBranch}`]);

@@ -15,9 +15,9 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Clock3, GripVertical, ShieldQuestion, UserRound } from "lucide-react";
-import { ConsensusBadge, ReviewBadge, SeverityBadge, SignalBadge, WorkflowBadge } from "@/components/status-badges";
-import { Card, CardContent, CardDescription, CardEyebrow, CardHeader, CardTitle } from "@/components/ui/card";
+import { GripVertical } from "lucide-react";
+import { SeverityBadge } from "@/components/status-badges";
+import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { FindingGroup, FindingWorkflowPhase } from "@/types";
 
@@ -29,32 +29,32 @@ const WORKFLOW_COLUMNS: Array<{
   {
     status: "backlog",
     label: "Backlog",
-    description: "New finding families discovered by the pipeline.",
+    description: "New findings.",
   },
   {
     status: "todo",
     label: "Todo",
-    description: "Queued for a worker or follow-up pass.",
+    description: "Up next.",
   },
   {
     status: "in_progress",
     label: "In Progress",
-    description: "Autonomous execution is actively running now.",
+    description: "Being worked on.",
   },
   {
     status: "blocked",
     label: "Blocked",
-    description: "Needs more access, context, or a better PoC.",
+    description: "Stuck. Needs input.",
   },
   {
     status: "done",
     label: "Done",
-    description: "Accepted, verified, or reported.",
+    description: "Confirmed or reported.",
   },
   {
     status: "cancelled",
     label: "Cancelled",
-    description: "Suppressed or resolved as false positive.",
+    description: "Dismissed or false positive.",
   },
 ];
 
@@ -120,16 +120,7 @@ export function FindingWorkflowBoard({
 
   return (
     <Card className="overflow-hidden">
-      <CardHeader className="border-b border-border">
-        <div>
-          <CardEyebrow>Finding board</CardEyebrow>
-          <CardTitle className="mt-2">Finding workflow board</CardTitle>
-          <CardDescription>
-            Use this secondary view only when the queue does not make the next action clear.
-          </CardDescription>
-        </div>
-      </CardHeader>
-      <CardContent className="px-0 pb-0">
+      <CardContent className="px-0 pb-0 pt-4">
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <div className="overflow-x-auto pb-4">
             <div className="flex min-w-max gap-4 px-6 pb-6">
@@ -183,15 +174,12 @@ function WorkflowColumn({
 
   return (
     <section className="flex w-[20rem] shrink-0 flex-col gap-3">
-      <div className="rounded-md border border-border bg-muted/25 px-3 py-3">
+      <div className="rounded-2xl px-3 py-2">
         <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              {column.label}
-            </div>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">{column.description}</p>
+          <div className="text-sm font-medium text-muted-foreground">
+            {column.label}
           </div>
-          <div className="rounded-sm border border-border bg-background px-2 py-1 text-xs text-muted-foreground">
+          <div className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
             {groups.length}
           </div>
         </div>
@@ -200,8 +188,8 @@ function WorkflowColumn({
       <div
         ref={setNodeRef}
         className={cn(
-          "flex min-h-[20rem] flex-col gap-3 rounded-md border border-dashed border-border bg-muted/15 p-2 transition-colors",
-          isOver && "border-primary/40 bg-primary/7",
+          "flex min-h-[20rem] flex-col gap-3 rounded-2xl bg-muted/20 p-2 transition-colors duration-150 motion-reduce:transition-none",
+          isOver && "bg-primary/10 ring-1 ring-primary/30",
         )}
       >
         <SortableContext items={groups.map((group) => group.fingerprint)} strategy={verticalListSortingStrategy}>
@@ -217,8 +205,8 @@ function WorkflowColumn({
         </SortableContext>
 
         {groups.length === 0 ? (
-          <div className="flex flex-1 items-center justify-center rounded-md border border-dashed border-border/70 bg-background/70 px-4 py-8 text-center text-xs text-muted-foreground">
-            Drop a finding family here.
+          <div className="flex flex-1 items-center justify-center rounded-2xl bg-transparent px-4 py-8 text-center text-xs text-muted-foreground">
+            Drop a finding here.
           </div>
         ) : null}
       </div>
@@ -255,25 +243,18 @@ function WorkflowCard({
     transform: CSS.Transform.toString(transform),
     transition,
   };
-  const updatedLabel = saving
-    ? "Syncing workflow update..."
-    : group.workflow.updatedAt
-      ? `Updated ${new Date(group.workflow.updatedAt).toLocaleString()}`
-      : "No workflow activity yet";
-  const ownerLabel = group.workflow.assignee ?? group.workflow.activeAgentRoles[0] ?? "Unassigned";
-  const showManualWorkflow =
-    group.workflow.persistedStatus !== group.workflow.phase
-    && group.workflow.persistedStatus !== group.workflow.reviewGate;
-  const summaryLabel =
+  const summaryLabel = saving
+    ? "Saving..."
+    :
     group.workflow.reviewGate === "human_review"
-      ? "Waiting on human review"
+      ? "Needs your review"
       : group.workflow.reviewGate === "agent_review"
-        ? "Waiting on agent review"
+        ? "Agent reviewing"
         : group.workflow.phase === "in_progress"
-          ? "Execution running"
+          ? "Running"
           : group.workflow.phase === "blocked"
             ? "Blocked"
-            : `${group.count} hit${group.count > 1 ? "s" : ""} · ${group.scanCount} scan${group.scanCount > 1 ? "s" : ""}`;
+            : null;
 
   return (
     <button
@@ -284,59 +265,30 @@ function WorkflowCard({
       {...attributes}
       {...listeners}
       className={cn(
-        "rounded-md border border-border bg-card p-3 text-left transition-[border-color,background-color,box-shadow]",
-        "cursor-grab active:cursor-grabbing hover:border-primary/20 hover:bg-primary/4 hover:shadow-sm",
-        selected && "border-primary/35 bg-primary/6 shadow-sm ring-1 ring-primary/15",
+        "rounded-2xl bg-muted/30 p-3 text-left transition-[background-color,box-shadow] duration-150 motion-reduce:transition-none",
+        "cursor-grab active:cursor-grabbing hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+        selected && "bg-muted ring-1 ring-primary/35",
         isDragging && !isOverlay && "opacity-30",
         isOverlay && "shadow-lg ring-1 ring-primary/20",
-        saving && "border-primary/30 bg-primary/6",
+        saving && "bg-primary/10",
       )}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          <div className="mb-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
             <GripVertical className="size-3.5" />
             {group.latest.category}
-            {selected ? (
-              <span className="rounded-sm bg-primary/10 px-1.5 py-0.5 text-primary-text">
-                Open
-              </span>
-            ) : null}
           </div>
           <div className="line-clamp-2 text-sm font-semibold leading-5 text-foreground">
             {group.latest.title}
           </div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            {summaryLabel}
-          </div>
+          {summaryLabel ? (
+            <div className="mt-1 text-xs text-muted-foreground">
+              {summaryLabel}
+            </div>
+          ) : null}
         </div>
         <SeverityBadge severity={group.latest.severity} />
-      </div>
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        {group.workflow.reviewGate !== "none" ? (
-          <ReviewBadge value={group.workflow.reviewGate} />
-        ) : null}
-        <ConsensusBadge value={group.workflow.consensus} />
-        <SignalBadge value={group.workflow.evidenceSignal} />
-        {showManualWorkflow ? (
-          <WorkflowBadge value={group.workflow.persistedStatus} />
-        ) : null}
-      </div>
-
-      <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
-        <div className="flex items-center gap-2 rounded-sm bg-muted/35 px-2.5 py-2">
-          <ShieldQuestion className="size-3.5" />
-          <span>{group.count} hit{group.count > 1 ? "s" : ""}</span>
-        </div>
-        <div className="flex items-center gap-2 rounded-sm bg-muted/35 px-2.5 py-2">
-          <UserRound className="size-3.5" />
-          <span>{ownerLabel}</span>
-        </div>
-        <div className="flex items-center gap-2 rounded-sm bg-muted/35 px-2.5 py-2">
-          <Clock3 className="size-3.5" />
-          <span>{updatedLabel}</span>
-        </div>
       </div>
     </button>
   );
