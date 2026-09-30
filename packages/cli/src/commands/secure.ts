@@ -41,7 +41,7 @@ function positiveAmount(value: string): number {
 
 export function registerSecureCommand(program: Command): void {
   program.command("secure")
-    .description("Investigate, reproduce, repair, test, and independently verify a repository; retain evidence and optionally open repair PRs")
+    .description("Find, reproduce, fix, and verify vulnerabilities in a repo; optionally open repair PRs")
     .argument("<repo>", "Local Git repository or HTTPS Git URL; execution occurs in the current worker, not a newly provisioned sandbox")
     .requiredOption("--test-command <command>", "Operator-approved regression command; must pass before and after repair")
     .option("--setup-command <command>", "Operator-approved setup/build command run in each disposable checkout")

@@ -3,6 +3,7 @@ export {
   createConsoleSession,
   createConsoleRuntime,
   buildConsoleSystemPrompt,
+  isDangerousLocalRoot,
 } from "./turn-engine.js";
 export {
   createConsoleJevRuntime,
@@ -17,6 +18,7 @@ export type {
 } from "./jev-runtime.js";
 export type {
   ConsoleConversationHistory,
+  ConsoleEngagementSelection,
   ConsoleSession,
   ConsoleSessionConfig,
   ConsoleRenderCallbacks,

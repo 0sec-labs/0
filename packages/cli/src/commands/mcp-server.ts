@@ -268,7 +268,7 @@ function clampRateLimitToPosture(
 export function registerMcpServerCommand(program: Command): void {
   program
     .command("mcp-server")
-    .description("Run 0's MCP stdio server for live target interaction tools")
+    .description("Run the 0 MCP stdio server exposing live target tools")
     .requiredOption("--target <target>", "Target URL for this MCP session")
     .requiredOption("--scan-id <scanId>", "Scan ID to associate persisted findings and target updates with")
     .option("--db-path <path>", "Path to SQLite database")

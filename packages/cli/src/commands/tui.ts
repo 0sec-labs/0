@@ -6,7 +6,7 @@ export function registerTuiCommand(program: Command): void {
   program
     .command("tui")
     .alias("watch")
-    .description("Open the unified engagement control plane (Bun-only)")
+    .description("Open the interactive terminal UI (Bun-only)")
     .action(async () => {
       const { isBunRuntime } = await import("../tui/runtime.js");
       if (isBunRuntime()) {

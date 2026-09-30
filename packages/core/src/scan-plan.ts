@@ -100,6 +100,7 @@ export async function executeScanPlan<T extends ExecutionReport>(options: {
   signal?: AbortSignal;
   costCeilingUsd?: number;
   emitTerminalEvent?: boolean;
+  onAttempt?: (progress: { runIndex: number; phase: "started" | "settled"; outcome?: ScanAttemptOutcome }) => void;
   emptyReport: () => T;
   dispatch: (attempt: { runIndex: number; plan: ScanPlan; ledger: ScanCostLedger; signal: AbortSignal; costCeilingUsd: number }) => Promise<T>;
 }): Promise<T> {
@@ -139,11 +140,13 @@ export async function executeScanPlan<T extends ExecutionReport>(options: {
       if (stopped) {
         attempt.status = stopped;
         attempt.error = "Attempt not dispatched: shared scan plan limit or cancellation.";
+        options.onAttempt?.({ runIndex: attempt.runIndex, phase: "settled", outcome: { ...attempt } });
         continue;
       }
       const runLedger = ledger.fork();
       const runStartedAt = Date.now();
       const remainingMs = plan.timeCapMs - (runStartedAt - startedAt);
+      options.onAttempt?.({ runIndex: attempt.runIndex, phase: "started" });
       try {
         const report = await executionBudget.run({ signal, deadline: startedAt + plan.timeCapMs }, () =>
           options.dispatch({ runIndex: index + 1, plan: { ...plan, runCount: 1, timeCapMs: remainingMs }, ledger: runLedger, signal, costCeilingUsd: ceiling }));
@@ -160,6 +163,7 @@ export async function executeScanPlan<T extends ExecutionReport>(options: {
       } finally {
         attempt.durationMs = Date.now() - runStartedAt;
         attempt.costUsd = runLedger.hasUnpricedUsage() ? undefined : runLedger.runCostUsd();
+        options.onAttempt?.({ runIndex: attempt.runIndex, phase: "settled", outcome: { ...attempt } });
       }
     }
   };

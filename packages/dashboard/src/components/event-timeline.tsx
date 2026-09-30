@@ -9,8 +9,7 @@ import {
 } from "lucide-react";
 import type { ScanEventsResponse } from "@/types";
 import { formatTime, summarizePayload } from "@/lib/format";
-import { StatusBadge } from "@/components/status-badges";
-import { Card, CardContent, CardEmpty, CardEyebrow, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardEmpty, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export function EventTimeline({
@@ -22,13 +21,12 @@ export function EventTimeline({
     <Card className="overflow-hidden">
       <CardHeader>
         <div>
-          <CardEyebrow>Activity</CardEyebrow>
-          <CardTitle className="mt-2">Timeline</CardTitle>
+          <CardTitle className="mt-2">Activity</CardTitle>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {events.length === 0 ? (
-          <CardEmpty>No pipeline events recorded.</CardEmpty>
+          <CardEmpty>No activity yet.</CardEmpty>
         ) : (
           <Table>
             <TableHeader>
@@ -36,7 +34,7 @@ export function EventTimeline({
                 <TableHead>Event</TableHead>
                 <TableHead>Summary</TableHead>
                 <TableHead className="w-[10rem]">Time</TableHead>
-                <TableHead className="w-[14rem]">Payload</TableHead>
+                <TableHead className="w-[8rem]">Details</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -50,23 +48,13 @@ export function EventTimeline({
                         <div className="mt-0.5 inline-flex size-8 items-center justify-center rounded-md border border-border bg-muted text-primary-text">
                           <Icon className="size-4" />
                         </div>
-                        <div className="space-y-1">
-                          <div className="font-medium text-foreground">
-                            {event.stage} · {event.eventType}
-                          </div>
-                          {event.agentRole ? <StatusBadge value={event.agentRole} /> : null}
+                        <div className="font-medium text-foreground">
+                          {event.stage} · {event.eventType}
                         </div>
                       </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      <div className="space-y-1">
-                        <div>{summarizePayload(event.payload)}</div>
-                        {event.findingId ? (
-                          <div className="font-mono text-xs text-muted-foreground">
-                            finding {event.findingId.slice(0, 8)}
-                          </div>
-                        ) : null}
-                      </div>
+                      {summarizePayload(event.payload)}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {formatTime(event.timestamp)}
@@ -74,13 +62,13 @@ export function EventTimeline({
                     <TableCell>
                       {event.payload ? (
                         <details className="rounded-md border border-border bg-muted/50 p-2 text-sm text-muted-foreground">
-                          <summary className="cursor-pointer list-none font-medium text-foreground">View raw</summary>
+                          <summary className="cursor-pointer list-none font-medium text-foreground">Show</summary>
                           <pre className="mt-3 text-xs text-muted-foreground">
                             {JSON.stringify(event.payload, null, 2)}
                           </pre>
                         </details>
                       ) : (
-                        <span className="text-xs text-muted-foreground">No payload</span>
+                        <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </TableCell>
                   </TableRow>

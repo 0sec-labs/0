@@ -89,6 +89,7 @@ export interface Runtime {
     provider?: string;
     agentModels?: Record<string, string>;
     singleModel?: boolean;
+    autoRoute?: boolean;
     env?: NodeJS.ProcessEnv;
   }): void;
 }
@@ -288,6 +289,7 @@ export interface NativeRuntime {
     provider?: string;
     agentModels?: Record<string, string>;
     singleModel?: boolean;
+    autoRoute?: boolean;
     env?: NodeJS.ProcessEnv;
   }): void;
   /** Current model identifier; not a per-request billing identity or rate receipt. */
@@ -296,4 +298,6 @@ export interface NativeRuntime {
   resolvedProvider?(): string;
   /** Provider-qualified catalog estimate key, not a billing receipt. */
   resolvedPricingModel?(): string;
+  /** Public operator model-routing policy; deliberately excludes credential configuration. */
+  modelSelection?(): { agentModels: Record<string, string>; singleModel: boolean; autoRoute: boolean };
 }

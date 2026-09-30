@@ -140,9 +140,7 @@ export function registerXnuFuzzCommand(program: Command): void {
   const cmd = program
     .command("xnu-fuzz")
     .description(
-      "IOKit user-client fuzzer (dynamic sibling to the xnu-re review profile). " +
-        "Models the IOExternalMethodDispatch2022 gate per user client, generates " +
-        "gate-passing + structure-aware inputs, and plans the disposable macOS-VM run lane.",
+      "IOKit user-client fuzzer for macOS kernel (xnu) security research.",
     );
 
   cmd

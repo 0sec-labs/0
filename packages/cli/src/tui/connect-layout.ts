@@ -67,7 +67,7 @@ export const RECOMMENDED_IDS: readonly string[] = ["anthropic", "openai"];
 
 /** Short acquisition instructions shown in the selected provider's detail. */
 const PROVIDER_SUBTITLE: Record<string, string> = {
-  "chatgpt-codex": "Use your ChatGPT subscription through Codex device sign-in.",
+  "chatgpt-codex": "Sign in with your ChatGPT subscription.",
   anthropic: "Get a key at console.anthropic.com.",
   openai: "Get a key at platform.openai.com/api-keys.",
 };
@@ -404,23 +404,23 @@ export function connectDetailLines(
   separate();
   if (provider.connected) {
     if (provider.source === "env") {
-      push(`Credential found in ${provider.via ?? "the environment"}.`, "ok");
+      push(`Using key from ${provider.via ?? "the environment"}.`, "ok");
     } else {
-      push("Credential saved on this machine.", "ok");
+      push("Saved on this machine.", "ok");
     }
-    push("API access has not been checked.", "muted");
+    push("API access not checked yet.", "muted");
   } else {
-    push("No credential configured.", "muted");
+    push("Not set up.", "muted");
     if (!provider.subtitle && provider.hint) push(provider.hint, "text");
     if (provider.fileSource) {
-      push(`Also reads ${provider.fileSource}; not checked here.`, "muted");
+      push(`Also reads ${provider.fileSource}.`, "muted");
     }
   }
 
   separate();
   if (!provider.connected) {
     push(
-      provider.auth === "oauth" ? "Sign in opens your browser." : "Paste a key to save it securely on this machine.",
+      provider.auth === "oauth" ? "Sign in opens your browser." : "Enter to paste a key.",
       "muted",
     );
   }
@@ -505,8 +505,8 @@ export function connectConnectedCounts(rows: readonly ConnectRow[]): ConnectCoun
 export function connectStatusLine(rows: readonly ConnectRow[]): string {
   const { connected, total } = connectConnectedCounts(rows);
   if (total === 0) return "No providers match.";
-  if (connected === 0) return "Choose a provider to configure.";
-  return `${connected} of ${total} providers configured · API access not checked`;
+  if (connected === 0) return "Pick a provider.";
+  return `${connected} of ${total} set up`;
 }
 
 /** The detail pane's stable, left-aligned header label. */
@@ -540,16 +540,15 @@ export function connectInputMask(secretLength: number): string {
 
 /** The footer hint, per mode. Names the real bindings. */
 export function connectFooterHint(mode: ConnectMode, hasFilter = false, canContinue = false): string {
-  if (mode === "input") return "Paste key · Enter save · Esc cancel";
-  if (mode === "oauth") return "Sign-in running · Esc cancel";
+  if (mode === "input") return "Enter save · Esc cancel";
+  if (mode === "oauth") return "Esc cancel";
   const action = canContinue ? "continue" : "connect";
-  if (mode === "filter") return `Type to search · Enter ${action} · Esc done`;
+  if (mode === "filter") return `Enter ${action} · Esc done`;
   return [
     "↑↓ select",
     `Enter ${action}`,
     "/ search",
-    hasFilter ? "Esc clear search" : "Esc back",
-    "Tab actions",
+    hasFilter ? "Esc clear" : "Esc back",
   ].join(" · ");
 }
 

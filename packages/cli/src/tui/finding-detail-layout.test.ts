@@ -323,7 +323,6 @@ describe("buildFindingRows", () => {
       : row.kind === "text" || row.kind === "heading" ? row.text : "").join("\n");
     expect(flat.indexOf("Description:")).toBeLessThan(flat.indexOf("Impact"));
     expect(flat.indexOf("Impact")).toBeLessThan(flat.indexOf("Evidence"));
-    expect(flat).toContain("Assessment for F-impact");
     expect(flat).toContain("not reproduction proof");
     expect(flat).toContain(`Business impact: ${assessment.business_impact}`);
     expect(flat).toContain(`Reachability: ${assessment.reachability_tier}`);
@@ -396,7 +395,7 @@ describe("buildFindingRows", () => {
     const replay = rows.find((row) => row.kind === "text" && row.text.startsWith("Replay verification:"));
 
     expect(sourceCheck?.kind === "text" && sourceCheck.text).toContain(
-      "source predicates matched (1/1); source-only; behavior pending (no runtime proof)",
+      "code checks matched (1/1) — code only; not yet tested live",
     );
     expect(replay?.kind === "text" && replay.text).toBe("Replay verification: not run");
     expect(status?.kind === "kv" && status.value).toBe("discovered");
@@ -431,10 +430,10 @@ describe("buildFindingRows", () => {
     const inconclusive = inconclusiveRows.find((row) => row.kind === "text" && row.text.startsWith("Source check:"));
 
     expect(notConfirmed?.kind === "text" && notConfirmed.text).toContain(
-      "source predicates not confirmed (0/1); not proof of a fix",
+      "code checks not confirmed (0/1) — not proof of a fix",
     );
     expect(inconclusive?.kind === "text" && inconclusive.text).toContain(
-      "source predicates inconclusive (1/1 could not be evaluated)",
+      "code checks inconclusive (1/1 couldn't run)",
     );
   });
 

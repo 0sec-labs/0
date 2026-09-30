@@ -381,7 +381,10 @@ function makeRequest(opts: {
   const emitter = new EventEmitter() as unknown as import("node:http").IncomingMessage;
   (emitter as unknown as { method: string }).method = opts.method;
   (emitter as unknown as { url: string }).url = opts.url;
-  (emitter as unknown as { headers: Record<string, string> }).headers = opts.headers ?? {};
+  const binding = httpState.listenCalls.at(-1);
+  const boundHost = binding?.host ?? "127.0.0.1";
+  const authority = `${boundHost.includes(":") ? `[${boundHost}]` : boundHost}:${binding?.port === 0 ? 46123 : binding?.port ?? 48123}`;
+  (emitter as unknown as { headers: Record<string, string> }).headers = { host: authority, ...opts.headers };
   // Emit the body lazily, AFTER the handler's readJson() has registered
   // its "end" listener. We hook into .on so the emission fires exactly
   // when the consumer is ready — eager `queueMicrotask` would emit
@@ -644,7 +647,7 @@ describe("dashboard — static asset serving", () => {
   });
 
   it("GET / injects the page-bound control token into index.html", async () => {
-    // Electron loads "/" before React routes to /chat. The bootstrap document
+    // The browser loads "/" before React routes to /chat. The bootstrap document
     // therefore needs the same token as a deep-linked SPA route; otherwise the
     // renderer can render chat but every authenticated API request is rejected.
     const captured = await invokeHandler(makeRequest({ method: "GET", url: "/" }));
@@ -693,9 +696,9 @@ describe("dashboard — static asset serving", () => {
   });
 });
 
-// ── Tests: desktop console control surface ──────────────────────────────────
+// ── Tests: web console control surface ──────────────────────────────────
 
-describe("dashboard — desktop console API", () => {
+describe("dashboard — web console API", () => {
   beforeEach(async () => {
     await runCli(["dashboard", "--no-open"]);
   });
@@ -714,19 +717,19 @@ describe("dashboard — desktop console API", () => {
     const captured = await invokeHandler(
       makeRequest({
         method: "GET",
-        url: "/api/console/providers/codex",
+        url: "/api/console/providers/chatgpt-codex",
         headers: { "x-0-control-token": token },
       }),
     );
 
     expect(captured.statusCode).toBe(200);
-    expect(JSON.parse(captured.body)).toEqual({
-      status: {
-        phase: "idle",
-        message: "ChatGPT Codex is not connected.",
-        lines: [],
-      },
-    });
+    const payload = JSON.parse(captured.body);
+    expect(payload.status).toMatchObject({ phase: expect.any(String), lines: expect.any(Array) });
+    expect(payload.provider.id).toBe("chatgpt-codex");
+    expect(payload).not.toHaveProperty("credentials");
+    expect(payload.provider).not.toHaveProperty("apiKey");
+    expect(payload.provider.accounts.every((account: Record<string, unknown>) =>
+      !Object.hasOwn(account, "apiKey") && !Object.hasOwn(account, "accessToken") && !Object.hasOwn(account, "refreshToken"))).toBe(true);
   });
 
   it("creates a session and returns its renderer-safe event ledger", async () => {
@@ -784,7 +787,7 @@ describe("dashboard — read APIs", () => {
       startedAt: new Date().toISOString(),
     });
     const captured = await invokeHandler(
-      makeRequest({ method: "GET", url: "/api/dashboard" }),
+      makeRequest({ method: "GET", url: "/api/dashboard", headers: { "x-0-control-token": await getControlToken() } }),
     );
     expect(captured.statusCode).toBe(200);
     const body = JSON.parse(captured.body);
@@ -810,7 +813,7 @@ describe("dashboard — read APIs", () => {
       startedAt: new Date().toISOString(),
     });
     const captured = await invokeHandler(
-      makeRequest({ method: "GET", url: "/api/scans" }),
+      makeRequest({ method: "GET", url: "/api/scans", headers: { "x-0-control-token": await getControlToken() } }),
     );
     expect(captured.statusCode).toBe(200);
     const body = JSON.parse(captured.body);
@@ -820,7 +823,7 @@ describe("dashboard — read APIs", () => {
 
   it("GET /api/scans/:id returns 404 when scan is missing", async () => {
     const captured = await invokeHandler(
-      makeRequest({ method: "GET", url: "/api/scans/missing-id" }),
+      makeRequest({ method: "GET", url: "/api/scans/missing-id", headers: { "x-0-control-token": await getControlToken() } }),
     );
     expect(captured.statusCode).toBe(404);
     expect(JSON.parse(captured.body)).toEqual({ error: "Scan not found" });
@@ -837,7 +840,7 @@ describe("dashboard — read APIs", () => {
       startedAt: new Date().toISOString(),
     });
     const captured = await invokeHandler(
-      makeRequest({ method: "GET", url: "/api/scans/scan-7" }),
+      makeRequest({ method: "GET", url: "/api/scans/scan-7", headers: { "x-0-control-token": await getControlToken() } }),
     );
     expect(captured.statusCode).toBe(200);
     const body = JSON.parse(captured.body);
@@ -856,7 +859,7 @@ describe("dashboard — read APIs", () => {
     });
 
     const captured = await invokeHandler(
-      makeRequest({ method: "GET", url: "/api/events/recent" }),
+      makeRequest({ method: "GET", url: "/api/events/recent", headers: { "x-0-control-token": await getControlToken() } }),
     );
 
     expect(captured.statusCode).toBe(200);
@@ -880,7 +883,7 @@ describe("dashboard — read APIs", () => {
 
   it("unknown /api/* path → 404 (handler returns false, top-level falls through)", async () => {
     const captured = await invokeHandler(
-      makeRequest({ method: "GET", url: "/api/does-not-exist" }),
+      makeRequest({ method: "GET", url: "/api/does-not-exist", headers: { "x-0-control-token": await getControlToken() } }),
     );
     expect(captured.statusCode).toBe(404);
     expect(JSON.parse(captured.body)).toEqual({ error: "Not found" });
@@ -929,6 +932,7 @@ describe("dashboard — control-token gate", () => {
       makeRequest({
         method: "GET",
         url: "/api/control/recover-stale-workers",
+        headers: { "x-0-control-token": await getControlToken() },
       }),
     );
     expect(captured.statusCode).toBe(405);
@@ -948,6 +952,58 @@ describe("dashboard — control-token gate", () => {
     expect(captured.statusCode).toBe(200);
     expect(JSON.parse(captured.body)).toEqual({ ok: true, recovered: 3 });
     expect(recoverStaleWorkersMock).toHaveBeenCalledWith(undefined, 45_000);
+  });
+});
+
+describe("dashboard — browser request boundaries", () => {
+  beforeEach(async () => {
+    await runCli(["dashboard", "--no-open"]);
+  });
+
+  it.each(["/api/dashboard", "/api/scans", "/api/console/sessions", "/api/console/providers"])(
+    "refuses unauthenticated reads of %s before opening the database",
+    async (url) => {
+      const captured = await invokeHandler(makeRequest({ method: "GET", url }));
+      expect(captured.statusCode).toBe(403);
+      expect(JSON.parse(captured.body)).toEqual({ error: "Invalid or missing control token" });
+      expect(dbState.ctorPaths).toHaveLength(0);
+      expect(spawnMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["attacker.example:48123", "127.0.0.1:9000", ""])(
+    "refuses to issue a browser token for hostile or missing Host %s",
+    async (host) => {
+      const captured = await invokeHandler(makeRequest({ method: "GET", url: "/", headers: { host } }));
+      expect(captured.statusCode).toBe(403);
+      expect(captured.body).not.toContain("0-control-token");
+    },
+  );
+
+  it("refuses a foreign Origin even when the API token is valid", async () => {
+    const token = await getControlToken();
+    const captured = await invokeHandler(makeRequest({ method: "POST", url: "/api/control/recover-stale-workers",
+      headers: { "x-0-control-token": token, origin: "https://attacker.example" }, body: {} }));
+    expect(captured.statusCode).toBe(403);
+    expect(recoverStaleWorkersMock).not.toHaveBeenCalled();
+    expect(dbState.ctorPaths).toHaveLength(0);
+  });
+
+  it("refuses a cross-site read even when the API token is valid", async () => {
+    const token = await getControlToken();
+    const captured = await invokeHandler(makeRequest({ method: "GET", url: "/api/dashboard",
+      headers: { "x-0-control-token": token, "sec-fetch-site": "cross-site" } }));
+    expect(captured.statusCode).toBe(403);
+    expect(dbState.ctorPaths).toHaveLength(0);
+  });
+
+  it("accepts the browser's matching Origin and token", async () => {
+    const token = await getControlToken();
+    const captured = await invokeHandler(makeRequest({ method: "GET", url: "/api/scans",
+      headers: { "x-0-control-token": token, origin: "http://127.0.0.1:48123", "sec-fetch-site": "same-origin" } }));
+    expect(captured.statusCode).toBe(200);
+    expect(JSON.parse(captured.body)).toEqual({ scans: [] });
+    expect(dbState.closes).toBe(1);
   });
 });
 

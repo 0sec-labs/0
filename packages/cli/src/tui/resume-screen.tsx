@@ -250,7 +250,7 @@ export function ResumeScreen({
     ? (items.find((item) => item.id === pendingDelete)?.label ?? "this session")
     : "";
   const statusText = pendingDelete
-    ? `${symbols.warning} Delete "${pendingLabel}"? press del again to confirm · [esc] cancel`
+    ? `${symbols.warning} Delete "${pendingLabel}"? Press Del again to confirm, Esc to cancel.`
     : deleteError
       ? deleteError
       : "";
@@ -326,7 +326,7 @@ export function ResumeScreen({
     if (!item) return;
     if (item.kind === "live" || protectedSessionIds?.has(item.session.id)) {
       setPendingDelete(null);
-      setDeleteError(`${symbols.fieldProtected} Close the open session first — its saved history is protected`);
+      setDeleteError(`${symbols.fieldProtected} Close this session before deleting it`);
       return;
     }
     setDeleteError(null);
@@ -336,7 +336,7 @@ export function ResumeScreen({
     }
     setPendingDelete(null);
     if (!onDelete(item.session.id)) {
-      setDeleteError(`${symbols.warning} Failed to delete session — it may still be open, or file permissions prevent deletion`);
+      setDeleteError(`${symbols.warning} Couldn't delete. It may still be open, or file permissions block it`);
       return;
     }
     deletedRef.current = new Set(deletedRef.current).add(item.session.id);
@@ -349,9 +349,9 @@ export function ResumeScreen({
     setDeleteError(null);
     if (item.kind === "live") {
       if (onSelectLive) onSelectLive(item.session.id);
-      else setDeleteError(`${symbols.warning} Switching open sessions is unavailable`);
+      else setDeleteError(`${symbols.warning} Can't switch to open sessions here`);
     } else if (!onResume(item.session.id)) {
-      setDeleteError(`${symbols.warning} Could not open session — choose another saved conversation`);
+      setDeleteError(`${symbols.warning} Couldn't open this session. Try another one`);
     }
   };
   const closeLive = () => {
@@ -477,12 +477,12 @@ export function ResumeScreen({
   // Empty-state guidance text, context-aware.
   const totalAll = visibleSessions.length + liveSessions.length;
   const emptyText = (() => {
-    if (filter) return `${symbols.fieldSearch} no sessions match this filter`;
+    if (filter) return `${symbols.fieldSearch} No matches`;
     if (scopedSessions.length === 0 && liveSessions.length === 0 && scope === "project" && hasOtherSessions) {
-      return `${symbols.fieldCwd} no sessions in this project — press Tab to browse all`;
+      return `${symbols.fieldCwd} No sessions here. Tab shows all projects`;
     }
-    if (totalAll === 0) return `${symbols.fieldSearch} no open or saved sessions`;
-    return `${symbols.fieldSearch} no sessions to show`;
+    if (totalAll === 0) return `${symbols.fieldSearch} No sessions yet`;
+    return `${symbols.fieldSearch} No sessions`;
   })();
 
   // ── Title row: glyph + label on the left, the live counter on the right.
@@ -522,7 +522,7 @@ export function ResumeScreen({
           cursor={cursor}
           panel={panel}
           query={filter}
-          placeholder={`${symbols.fieldSearch} type to filter sessions`}
+          placeholder={`${symbols.fieldSearch} Search sessions`}
           gutter={items.some((item) => item.current === true)}
           isCurrent={(item) => item.current === true}
           renderDetail={renderDetail}

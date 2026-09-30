@@ -562,7 +562,7 @@ export function DialogSelect({
   const titleText = `${operatorIcon(title.toLowerCase().includes("command") ? "commands" : title, symbols)} ${title}`;
   const footerHint = multiSelect
     ? "[↑↓] move · [space] toggle · [⏎] confirm · [esc] back"
-    : "[↑↓] select · [⏎] run · [⌃U] clear · [esc] back";
+    : "[↑↓] select · [⏎] run · [esc] back";
 
   return (
     <Popup

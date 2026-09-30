@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
-import {
-  findCommand,
-  filterCommands,
-  getCommandByName,
-  SLASH_COMMANDS,
-} from "./slash-commands.js";
+import { findCommand,
+filterCommands,
+getCommandByName,
+SLASH_COMMANDS, } from "@0/shared"
 
 describe("SLASH_COMMANDS", () => {
   it("has unique canonical names", () => {

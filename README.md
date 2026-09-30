@@ -47,6 +47,18 @@ export PATH="$HOME/.0/bin:$PATH"
 ```
 
 
+### Local web app development
+
+From a source checkout with dependencies installed, run:
+
+```bash
+npm run dev
+```
+
+Open the local browser address printed by the launcher. The web app connects
+to the local engine and supports onboarding, provider connections, conversations,
+and approvals in the browser. Frontend changes reload automatically. The terminal
+console remains available separately through `0`.
 
 ## Work locally, extend deliberately
 

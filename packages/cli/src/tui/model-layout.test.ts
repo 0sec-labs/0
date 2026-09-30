@@ -274,7 +274,7 @@ describe("the Connect action", () => {
     const items = [{ id: "claude-sonnet-4-6" }, action];
     expect(modelResultCount(items)).toBe(1);
     expect(modelDialogCount(modelResultCount(items), false)).toBe("1 model");
-    expect(modelConnectDetailLines(60).map((line) => line.text).join(" ")).toContain("Opens Connections");
+    expect(modelConnectDetailLines(60).map((line) => line.text).join(" ")).toContain("Connections");
     expect(activateModelConnectAction({ id: "claude-sonnet-4-6" }, () => { connectionsOpened += 1; })).toBe(false);
     expect(connectionsOpened).toBe(1);
   });
@@ -327,7 +327,7 @@ describe("provider credential reporting", () => {
   });
 
   it("names every configured provider in the summary line", () => {
-    expect(credentialSummary(EMPTY_ENV)).toContain("none detected");
+    expect(credentialSummary(EMPTY_ENV)).toContain("No provider connected");
     expect(credentialSummary(LIT_ENV)).toContain(LIT_PROVIDER?.label ?? "");
     const activeProviders = PROVIDERS;
     const all = providerStates(
@@ -339,8 +339,8 @@ describe("provider credential reporting", () => {
 
   it("labels each credential state in words an operator can act on", () => {
     expect(credentialLabel("ready")).toBe("ready");
-    expect(credentialLabel("missing")).toBe("no credentials");
-    expect(credentialLabel("unmapped")).toBe("no setup path");
+    expect(credentialLabel("missing")).toBe("not connected");
+    expect(credentialLabel("unmapped")).toBe("gateway only");
     // The heading's state column is capped at 14 cells; none of these may be
     // truncated on a terminal wide enough to show the column at all.
     for (const state of ["ready", "missing", "unmapped"] as const) {
@@ -373,7 +373,7 @@ describe("the detail pane", () => {
       (candidate) => candidate.kind === "model" && candidate.group.id === LIT_PROVIDER?.id,
     );
     const text = textOf(modelDetailLines({ row, configured }, 60));
-    expect(text).toContain("Credentials: found in");
+    expect(text).toContain("Connected via");
     expect(text).toContain(LIT_PROVIDER?.envVars[0] ?? "");
   });
 
@@ -386,7 +386,7 @@ describe("the detail pane", () => {
       (candidate) => candidate.kind === "model" && candidate.group.id === dark?.id,
     );
     const text = textOf(modelDetailLines({ row, configured }, 80));
-    expect(text).toContain("Credentials: not found");
+    expect(text).toContain("Not connected");
     // The hint is reproduced from PROVIDERS, not paraphrased here.
     for (const word of (dark?.hint ?? "").split(" ").slice(0, 4)) expect(text).toContain(word);
     expect(text).toContain(dark?.envVars[0] ?? "");
@@ -412,14 +412,14 @@ describe("the detail pane", () => {
         80,
       ),
     );
-    expect(text).toContain("not checked here");
+    expect(text).toMatch(/not\s+checked/);
   });
 
 
   it("marks the active model", () => {
     const rows = buildModelRows({ catalog: CATALOG, activeModel: "claude-opus-4-7" });
     const active = rows.find((row) => row.kind === "model" && row.active);
-    expect(textOf(modelDetailLines({ row: active }, 48))).toContain("Currently active");
+    expect(textOf(modelDetailLines({ row: active }, 48))).toContain("In use");
   });
 
 
@@ -510,7 +510,7 @@ describe("the agent roster (per-role selection at a glance)", () => {
       { roles: ROLES, parentModel: "gpt-5", agentModels: { attack: "opus" }, activeRole: "attack", singleModel: true },
       500,
     );
-    expect(header?.text).toMatch(/single-model on/i);
+    expect(header?.text).toMatch(/single model on/i);
     expect(header?.tone).toBe("warn");
   });
 
@@ -543,9 +543,9 @@ describe("the focus / target line", () => {
   });
 
   it("marks the pick inert for a role while single-model is on", () => {
-    expect(modelTargetLine("attack", "opus", true, undefined, true)).toMatch(/single-model on/i);
+    expect(modelTargetLine("attack", "opus", true, undefined, true)).toMatch(/single model on/i);
     // The parent target is never inert — single-model pins to it.
-    expect(modelTargetLine(null, "gpt-5", false, undefined, true)).not.toMatch(/single-model on/i);
+    expect(modelTargetLine(null, "gpt-5", false, undefined, true)).not.toMatch(/single model on/i);
   });
 });
 

@@ -264,15 +264,9 @@ function detectedProviderLabels(): string[] {
 
 function providerSetupLines(labels: readonly string[], width: number): StepLine[] {
   const detected = labels.length > 0
-    ? `Detected credentials: ${labels.join(", ")}.`
-    : "No provider credentials detected.";
-  const guidance = labels.length > 0
-    ? "Connect another provider below."
-    : "Select a provider below to connect one.";
-  return [
-    ...paragraph(detected, labels.length > 0 ? "accent" : "muted", width),
-    ...paragraph(guidance, "muted", width),
-  ];
+    ? `Found keys for: ${labels.join(", ")}. Add another or press Next.`
+    : "Pick a provider to connect.";
+  return paragraph(detected, labels.length > 0 ? "accent" : "muted", width);
 }
 
 // ---------------------------------------------------------------------------
@@ -284,12 +278,12 @@ const ANALYTICS_OPTIONS = [
   {
     level: "off",
     label: "Off",
-    detail: "No analytics uploads.",
+    detail: "Nothing is sent.",
   },
   {
     level: "usage",
-    label: "Yes, I’d like to help make 0 better!",
-    detail: "Pseudonymous usage metrics to help improve 0.",
+    label: "Share usage stats",
+    detail: "Pseudonymous usage stats (no code or tool content) to help improve 0.",
   },
 ] as const satisfies readonly { level: AnalyticsLevel; label: string; detail: string }[];
 
@@ -297,7 +291,7 @@ const ANALYTICS_OPTIONS = [
 function analyticsLines(width: number): StepLine[] {
   return [
     ...paragraph("Data sharing", "title", width),
-    ...paragraph("You can change this choice in Settings.", "muted", width),
+    ...paragraph("Change anytime in Settings.", "muted", width),
   ];
 }
 
@@ -672,7 +666,7 @@ export function OnboardingScreen({
           backgroundColor={theme.PANEL_ALT}>
           {paddingX > 0 ? <box width={paddingX} flexShrink={0} /> : null}
           <Cells width={headerWidth} fg={theme.PRIMARY} attributes={TextAttributes.BOLD}>
-            {fitTuiText("0.security / setup", headerWidth)}
+            {fitTuiText("Setup", headerWidth)}
           </Cells>
           <Cells width={contentWidth - headerWidth} align="right" fg={theme.MUTED}>
             {fitTuiText(stepText, contentWidth - headerWidth)}
@@ -742,7 +736,7 @@ function PreferencesCard({
   onChoose: (index: number) => void;
   bodyRows: number;
 }) {
-  const pickerRows = Math.max(1, bodyRows - 2);
+  const pickerRows = Math.max(1, bodyRows - 1);
   const items = useMemo<DialogItem[]>(() => choices.map((choice) => ({
     id: choice,
     label: choice.replace(/-/g, " "),
@@ -762,7 +756,6 @@ function PreferencesCard({
       <Cells width={contentWidth} fg={theme.PRIMARY} attributes={TextAttributes.BOLD}>
         {`${def.label} · ${value ?? ""}`}
       </Cells>
-      <Cells width={contentWidth} fg={theme.MUTED}>{"Choose a look. Next saves this choice."}</Cells>
       <DialogSelectBody items={items} cursor={choiceIndex} panel={panel} query="" hideSearch gutter
         onActivateRow={onChoose}
         renderDetail={(_item, pane) => <SettingsPreview def={def} value={value} settings={settings}

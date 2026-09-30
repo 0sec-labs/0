@@ -10,7 +10,7 @@ function print(value: unknown): void {
 export function registerResearchCommand(program: Command): void {
   const research = program
     .command("research")
-    .description("Run target-specific engines through the shared evidence research plane");
+    .description("Run target-specific research engines");
 
   research
     .command("pipeline")

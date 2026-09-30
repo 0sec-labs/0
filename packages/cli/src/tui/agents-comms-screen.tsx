@@ -447,8 +447,8 @@ export function AgentsCommsScreen({
             height={layout.summary.height}
             innerWidth={layout.summary.innerWidth}
             bordered={layout.bordered}
-            title="TRAFFIC"
-            meta={`${edges.length} edge${edges.length === 1 ? "" : "s"}`}
+            title="WHO TALKS TO WHOM"
+            meta={`${edges.length}`}
           >
             {edges.slice(0, Math.min(MAX_EDGE_LINES, layout.summaryVisibleRows)).map((edge) => (
               <Cells key={`${edge.from}->${edge.to}`} width={layout.summary.innerWidth} fg={theme.MUTED}>

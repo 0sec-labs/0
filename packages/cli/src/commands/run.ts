@@ -212,6 +212,12 @@ export interface RunOptions {
    * the system temp dir when unset.
    */
   emitOutDir?: string;
+  /** In-process frontends receive scanner progress independently of terminal/TTY state. */
+  onEvent?: (event: unknown) => void;
+  onReport?: (report: ScanReport) => void;
+  onOutcome?: (outcome: RunOutcome) => void;
+  /** Never terminate the host process; failures reject and reports retain their exit outcome. */
+  embedded?: boolean;
   sessionUiFactory?: (options: {
     target: string;
     depth: string;
@@ -250,6 +256,10 @@ interface ResultLinePayload {
   plannedRuns?: number;
   completedRuns?: number;
   attempts?: ScanAttemptOutcome[];
+}
+
+export interface RunOutcome extends ResultLinePayload {
+  report: ScanReport;
 }
 
 function toScanReport(report: any): ScanReport {
@@ -420,6 +430,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
   if (opts.branchFromEntry !== undefined) {
     if (!effectiveResumeScanId) {
       console.error(chalk.red("--branch-from requires --resume <run-id>"));
+      if (opts.embedded) throw new Error("--branch-from requires --resume <run-id>");
       process.exit(2);
     }
     const { branchJournal } = await import("@0/core");
@@ -468,6 +479,8 @@ export async function runUnified(opts: RunOptions): Promise<void> {
   const validRuntimes = ["api", "claude", "codex", "gemini", "ollama", "auto"];
   if (!validRuntimes.includes(runtime)) {
     console.error(chalk.red(`Unknown runtime '${runtime}'. Valid: ${validRuntimes.join(", ")}`));
+    unsubscribeCost();
+    if (opts.embedded) throw new Error(`Unknown runtime '${runtime}'.`);
     process.exit(2);
   }
 
@@ -488,6 +501,8 @@ export async function runUnified(opts: RunOptions): Promise<void> {
     const available = await rt.isAvailable();
     if (!available) {
       console.error(chalk.red(`Runtime '${runtime}' not available. Is ${runtime} installed?`));
+      unsubscribeCost();
+      if (opts.embedded) throw new Error(`Runtime '${runtime}' not available.`);
       process.exit(2);
     }
   }
@@ -496,7 +511,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
 
   // Ink TUI for terminal, silent for json/md
   let inkUI: { onEvent: (event: any) => void; setReport: (report: any) => void; waitForExit: () => Promise<void>; getPendingUserMessages?: () => string[] } | null = null;
-  let eventHandler: (event: any) => void = () => {};
+  let eventHandler: (event: unknown) => void = opts.onEvent ?? (() => {});
   let getPendingUserMessages: (() => string[]) | undefined;
 
   if (format === "terminal" && process.stdout.isTTY && process.stdin.isTTY && !opts.suppressUi) {
@@ -529,7 +544,10 @@ export async function runUnified(opts: RunOptions): Promise<void> {
         inkUI = renderScanStream({ version: VERSION, target, depth, mode });
       }
     }
-    eventHandler = inkUI.onEvent;
+    eventHandler = (event) => {
+      opts.onEvent?.(event);
+      inkUI?.onEvent(event);
+    };
     getPendingUserMessages = inkUI.getPendingUserMessages;
   }
 
@@ -620,6 +638,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
 
     const reportAny = report as any;
     const canonicalReport = toScanReport(report);
+    opts.onReport?.(canonicalReport);
 
 
     if (inkUI) {
@@ -716,6 +735,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
         console.error(
           chalk.red(`Invalid --export format: '${opts.exportTarget}'. Expected: github:owner/repo`),
         );
+        if (opts.embedded) throw new Error(`Invalid export format: '${opts.exportTarget}'. Expected: github:owner/repo`);
         process.exit(2);
       }
       const repo = match[1];
@@ -765,6 +785,30 @@ export async function runUnified(opts: RunOptions): Promise<void> {
       exitCode = 1;
     }
 
+    opts.onOutcome?.({
+      ok: exitCode === 0,
+      exitCode,
+      exit_reason: reportAny.exitReason && reportAny.exitReason !== "completed" ? reportAny.exitReason
+        : exitCode === 4 ? "cost_ceiling_exceeded"
+        : exitCode === 2 ? "error"
+        : exitCode === 1 ? "findings" : "completed",
+      target,
+      targetType: getTargetType(reportAny, opts),
+      runtime,
+      format,
+      cost_usd: estimatedCostUsd,
+      token_input: usage?.inputTokens,
+      token_output: usage?.outputTokens,
+      finding_count: canonicalReport.summary.totalFindings,
+      estimatedCostUsd,
+      usage,
+      summary: canonicalReport.summary,
+      plannedRuns: reportAny.plannedRuns,
+      completedRuns: reportAny.completedRuns,
+      attempts: reportAny.attempts,
+      error: reportAny.error,
+      report: canonicalReport,
+    });
     if (!opts.suppressOutput) {
       emitResultLine({
         ok: exitCode === 0,
@@ -788,13 +832,14 @@ export async function runUnified(opts: RunOptions): Promise<void> {
       });
     }
 
-    if (exitCode !== 0 && !inkUI) process.exit(exitCode);
+    if (exitCode !== 0 && !inkUI && !opts.embedded) process.exit(exitCode);
   } catch (err) {
     // Always release the cost-bus subscription so a long-lived
     // process (test runner, future REPL) doesn't leak sinks across
     // scans.
     unsubscribeCost();
     const message = err instanceof Error ? err.message : String(err);
+    if (opts.embedded) throw err;
     if (inkUI) {
       eventHandler({
         type: "error",

@@ -194,7 +194,7 @@ function formatExecResult(
 export function registerEvolveCommand(program: Command): void {
   const evolve = program
     .command("evolve")
-    .description("Autonomous self-improvement: source-candidate proposal, lens evaluation, and automatic promotion");
+    .description("Self-improvement: propose, evaluate, and promote new detection workers");
 
   // ── run ────────────────────────────────────────────────────────────────────
 

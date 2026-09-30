@@ -169,7 +169,7 @@ function TimelineOverlay({
   );
 
   return (
-    <OverlayFrame title="TURN TIMELINE" footer="ctrl+j close · [⏎] jump · [esc] cancel">
+    <OverlayFrame title="JUMP TO TURN" footer="[⏎] jump · [esc] close">
         {turns.slice(0, visibleTurns).map((turn, index) => {
           const active = index === selected;
           return (
@@ -194,7 +194,7 @@ function ComposeOverlay({ text }: { text: string }) {
 
   return (
     <OverlayFrame title="MESSAGE TO AGENT" footer="[⏎] send · [esc] cancel">
-      <text fg={theme.MUTED} wrapMode="word">{fitTuiText("will be injected at next turn boundary", contentWidth)}</text>
+      <text fg={theme.MUTED} wrapMode="word">{fitTuiText("delivered after the current step", contentWidth)}</text>
       <box flexDirection="row" marginTop={1} width="100%" minWidth={0}>
         <text width={2} flexShrink={0} fg={theme.PRIMARY}>&gt; </text>
         <box width={inputWidth} flexShrink={0} minWidth={0}>
@@ -284,12 +284,12 @@ function formatLiveActivity(theme: Theme, state: SessionState, runningStage: Ses
   const liveTool = formatActiveToolLabel(theme, latestRunningAction);
   return {
     label: liveTool.label,
-    detail: latestRunningAction ? liveTool.detail : (runningStage?.detail ?? "waiting on the next tool…"),
+    detail: latestRunningAction ? liveTool.detail : (runningStage?.detail ?? "working…"),
   };
 }
 
 function formatActiveToolLabel(theme: Theme, action?: string): { label: string; detail?: string } {
-  if (!action) return { label: "on it", detail: "waiting on the next tool…" };
+  if (!action) return { label: "on it", detail: "working…" };
 
   const parsed = parseToolAction(theme, action);
   switch (parsed.kind) {
@@ -362,7 +362,7 @@ function renderTranscriptItem(
         <RailBar tone={theme.PRIMARY} />
         <box flexDirection="column" marginLeft={1} backgroundColor={theme.PANEL_ALT} paddingX={1} flexGrow={1} minWidth={0}>
           <text fg={theme.TEXT} wrapMode="word">{fitTuiText(item.text.toUpperCase(), paddedWidth)}</text>
-          <text fg={theme.MUTED}>{fitTuiText(`${item.stage ?? "session"}${item.turn !== undefined ? ` · operator turn ${item.turn}` : ""}`, paddedWidth)}</text>
+          <text fg={theme.MUTED}>{fitTuiText(`${item.stage ?? "session"}${item.turn !== undefined ? ` · turn ${item.turn}` : ""}`, paddedWidth)}</text>
         </box>
       </box>
     );
@@ -496,8 +496,6 @@ export function SessionScreen({ state, onExit, shell, queueUserMessage }: { stat
   // pair past the panel border; budget each value against its own label.
   const tokensValueWidth = Math.max(1, sidebarTextWidth - "tokens ".length);
   const costValueWidth = Math.max(1, sidebarTextWidth - "cost ".length);
-  const transcriptCountWidth = Math.max(1, sidebarTextWidth - "transcript ".length);
-  const turnsCountWidth = Math.max(1, sidebarTextWidth - "turns ".length);
   const findingsCountWidth = Math.max(1, sidebarTextWidth - "findings ".length);
   const transcriptContentWidth = Math.max(
     12,
@@ -536,7 +534,7 @@ export function SessionScreen({ state, onExit, shell, queueUserMessage }: { stat
       id: "expand-tools",
       title: "Expand tool cards",
       category: "Display",
-      description: "Show full details for grouped tool activity",
+      description: "Show full tool details",
       keybind: "e",
       suggested: true,
       action: () => setExpandedToolCards(new Set(toolCardIds)),
@@ -545,7 +543,7 @@ export function SessionScreen({ state, onExit, shell, queueUserMessage }: { stat
       id: "collapse-tools",
       title: "Collapse tool cards",
       category: "Display",
-      description: "Return grouped tool activity to compact previews",
+      description: "Compact tool previews",
       keybind: "shift+e",
       suggested: true,
       action: () => setExpandedToolCards(new Set()),
@@ -555,19 +553,19 @@ export function SessionScreen({ state, onExit, shell, queueUserMessage }: { stat
       title: sidebarOpen ? "Hide sidebar" : "Show sidebar",
       category: "Display",
       description: sidebarOpen
-        ? "Hide the right-hand session context"
+        ? "Hide the side panel"
         : sessionLayout.sidebarCanFit
-          ? "Show target, runtime, and pipeline context"
-          : "Sidebar is available on a wider terminal",
+          ? "Show target, model and progress"
+          : "Needs a wider terminal",
       keybind: "ctrl+\\",
       suggested: true,
       action: () => setSidebarVisible((current) => !current),
     },
     {
       id: "open-timeline",
-      title: "Open turn timeline",
+      title: "Jump to turn",
       category: "Session",
-      description: "Jump directly to a transcript turn",
+      description: "Jump to an earlier turn",
       keybind: "ctrl+j",
       suggested: true,
       action: () => {
@@ -579,15 +577,15 @@ export function SessionScreen({ state, onExit, shell, queueUserMessage }: { stat
       id: "clear-turn-focus",
       title: "Show full transcript",
       category: "Session",
-      description: "Clear the current turn jump focus",
+      description: "Undo the turn jump",
       suggested: true,
       action: () => setVisibleFromTurnId(null),
     },
     {
       id: "open-transcript-review",
-      title: "Open transcript review",
+      title: "Review transcript",
       category: "Display",
-      description: "Open the shared native transcript review surface",
+      description: "Scroll the full transcript",
       keybind: "ctrl+o",
       suggested: true,
       action: () => setReviewOpen(true),
@@ -596,16 +594,16 @@ export function SessionScreen({ state, onExit, shell, queueUserMessage }: { stat
       id: "inject-message",
       title: "Send message to agent",
       category: "Session",
-      description: "Inject a message at the next turn boundary",
+      description: "Delivered after the current step",
       keybind: "i",
       suggested: true,
       action: () => { setComposeOpen(true); setComposeText(""); },
     }] : []),
     {
       id: "close-session",
-      title: "Close engagement view",
+      title: "Close",
       category: "Engagement",
-      description: "Leave the engagement view",
+      description: "Leave this view",
       keybind: "esc",
       suggested: true,
       action: onExit,
@@ -846,7 +844,7 @@ export function SessionScreen({ state, onExit, shell, queueUserMessage }: { stat
           </PanelSection>
           <PanelSection title="Runtime" contentWidth={sidebarTextWidth} tone={state.connection.apiConnected ? theme.SUCCESS : state.connection.apiConfigured ? theme.WARNING : theme.BORDER}>
             <box flexDirection="column" minWidth={0}>
-              <text fg={theme.TEXT}>selected {fitTuiText(state.connection.runtime, Math.max(1, sidebarTextWidth - "selected ".length))}</text>
+              <text fg={theme.TEXT}>{fitTuiText(state.connection.runtime, sidebarTextWidth)}</text>
               <box flexDirection="row" width="100%" minWidth={0}>
                 <text flexShrink={0} fg={theme.TEXT}>api {apiStatus} </text>
                 <text fg={theme.MUTED}>· {fitTuiText(apiProviderLabel, apiProviderWidth)}</text>
@@ -867,7 +865,7 @@ export function SessionScreen({ state, onExit, shell, queueUserMessage }: { stat
                   </box>
                 </>
               ) : (
-                <text fg={theme.MUTED}>{fitTuiText("usage awaiting first model response", sidebarTextWidth)}</text>
+                <text fg={theme.MUTED}>{fitTuiText("no usage yet", sidebarTextWidth)}</text>
               )}
               {state.connection.model ? (
                 <box flexDirection="row" width="100%" minWidth={0}>
@@ -880,19 +878,10 @@ export function SessionScreen({ state, onExit, shell, queueUserMessage }: { stat
           <PanelSection title="Session" contentWidth={sidebarTextWidth} tone={theme.BORDER}>
             <box flexDirection="column" minWidth={0}>
               <box flexDirection="row" width="100%" minWidth={0}>
-                <text flexShrink={0} fg={theme.TEXT}>transcript </text>
-                <text fg={theme.MUTED}>{fitTuiText(`${state.transcript.length} items`, transcriptCountWidth)}</text>
-              </box>
-              <box flexDirection="row" width="100%" minWidth={0}>
-                <text flexShrink={0} fg={theme.TEXT}>turns </text>
-                <text fg={theme.MUTED}>{fitTuiText(String(turnItems.length), turnsCountWidth)}</text>
-              </box>
-              <box flexDirection="row" width="100%" minWidth={0}>
                 <text flexShrink={0} fg={theme.TEXT}>findings </text>
                 <text fg={theme.MUTED}>{fitTuiText(String(totalFindings), findingsCountWidth)}</text>
               </box>
-              <text fg={summary ? theme.SUCCESS : theme.PRIMARY}>{fitTuiText(summary ? "completed" : "running", sidebarTextWidth)}</text>
-              {visibleFromTurnId ? <text fg={theme.ACCENT}>{fitTuiText("timeline focus active", sidebarTextWidth)}</text> : null}
+              {visibleFromTurnId ? <text fg={theme.ACCENT}>{fitTuiText("showing from a jumped-to turn", sidebarTextWidth)}</text> : null}
             </box>
           </PanelSection>
           <PanelSection title="Pipeline" contentWidth={sidebarTextWidth} tone={state.stages.some((stage) => stage.status === "running") ? theme.PRIMARY : theme.BORDER}>
@@ -902,7 +891,7 @@ export function SessionScreen({ state, onExit, shell, queueUserMessage }: { stat
                   <text fg={stage.status === "running" ? theme.PRIMARY : stage.status === "done" ? theme.SUCCESS : stage.status === "error" ? theme.ERROR : theme.MUTED}>
                     {fitTuiText(`${stage.label} · ${stage.status}`, sidebarTextWidth)}
                   </text>
-                  {stage.detail ? <text fg={theme.TEXT} wrapMode="word">{fitTuiText(stage.detail, sidebarTextWidth)}</text> : stage.status === "pending" ? <text fg={theme.MUTED}>{fitTuiText("waiting for stage handoff", sidebarTextWidth)}</text> : null}
+                  {stage.detail ? <text fg={theme.TEXT} wrapMode="word">{fitTuiText(stage.detail, sidebarTextWidth)}</text> : stage.status === "pending" ? <text fg={theme.MUTED}>{fitTuiText("waiting", sidebarTextWidth)}</text> : null}
                 </box>
               ))}
             </box>
@@ -951,7 +940,7 @@ export function SessionScreen({ state, onExit, shell, queueUserMessage }: { stat
           ? "[⌃O]/[esc] live · [⇞⇟] scroll"
           : state.pendingUserMessages.length > 0
             ? `message queued (${state.pendingUserMessages.length}) · [⌃P] commands`
-            : "[i] inject message · [⌃P] commands"}
+            : "[i] message agent · [⌃P] commands"}
         status={summary ? <LiveBadge label={`ready · ${state.mode}`} active={false} /> : <LiveBadge label={`running · ${state.mode}`} />}
       />
     </ShellFrame>

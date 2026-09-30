@@ -560,7 +560,7 @@ export function MarketScreen({
   const emptyLines = rows.length === 0
     ? clipMarketDetailLines(
         filter
-          ? [{ text: "No extensions match this filter.", tone: "muted" }]
+          ? [{ text: "No matches.", tone: "muted" }]
           : !loaded
             ? [{ text: "Loading extensions…", tone: "muted" }]
             : marketEmptyLines({ registryUrl: url, error, reachableButEmpty }, layout.contentWidth),
@@ -583,7 +583,7 @@ export function MarketScreen({
         : notice
           ? notice
           : url.length === 0
-            ? "registry: not configured — set ZERO_REGISTRY_URL"
+            ? "Hackstore off · set ZERO_REGISTRY_URL"
             : `registry: ${url}`;
 
   const statusTone =
@@ -627,8 +627,8 @@ export function MarketScreen({
           cursor={dialogCursor}
           panel={panel}
           query={filter}
-          placeholder="type to filter extensions"
-          emptyText="No extensions match this filter."
+          placeholder="Search extensions"
+          emptyText="No matches."
           renderDetail={renderDetail}
           onActivateRow={(itemIndex) => {
             // Click SELECTS (highlights) a row, exactly as keyboard navigation
@@ -657,7 +657,7 @@ export function MarketScreen({
 
   const hasFilter = filter.length > 0;
   const hint = rows.length === 0 && !hasFilter && mode === "browse"
-    ? "[esc] back · [⌃C] exit"
+    ? "[esc] back"
     : marketFooterHint(mode, hasFilter, activeAction);
   return <>{frame({ body, hint })}</>;
 }

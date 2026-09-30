@@ -330,7 +330,7 @@ type LensSynthCliOptions = {
 export function registerLensSynthCommand(program: Command): void {
   program
     .command("lens-synth")
-    .description("Evolve appsec finder coverage from curated misses; promotion is corpus-gated and active reviews stay pinned")
+    .description("Improve appsec detection coverage from curated missed findings")
     .option("--miss-input <path>", "curated miss-input JSON ({ misses, corpus })")
     .option("--registry <path>", "durable overlay path (default: ~/.0/lenses/appsec-archetypes.json)")
     .option("--max-register <n>", "cap promoted champions per input revision", (value) => Number.parseInt(value, 10))

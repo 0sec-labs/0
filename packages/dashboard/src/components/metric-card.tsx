@@ -12,7 +12,7 @@ export function MetricCard({
   icon: LucideIcon;
   label: string;
   value: number | string;
-  hint: string;
+  hint?: string;
   tone?: "neutral" | "danger" | "warning" | "success" | "accent";
 }) {
   return (
@@ -36,7 +36,7 @@ export function MetricCard({
         </div>
         <div className="space-y-1">
           <div className="text-3xl font-bold tracking-tight text-foreground">{value}</div>
-          <div className="text-xs leading-5 text-muted-foreground">{hint}</div>
+          {hint ? <div className="text-xs leading-5 text-muted-foreground">{hint}</div> : null}
         </div>
       </CardContent>
     </Card>

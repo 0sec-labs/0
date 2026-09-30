@@ -56,15 +56,15 @@ test("provider step summarizes detected names without revealing credential value
     await tui.sendKey("return");
     await tui.waitForText(/Step 2 of 5/);
     const rows = tui.captureFrame().split("\n");
-    const detectedIndex = rows.findIndex((line) => line.includes("Detected credentials"));
+    const detectedIndex = rows.findIndex((line) => line.includes("Found keys for"));
     const detectedText = rows.slice(detectedIndex, detectedIndex + 5).join(" ");
     expect(detectedIndex).toBeGreaterThanOrEqual(0);
     expect(detectedText).toContain("OpenAI");
     expect(detectedText).toContain("Azure OpenAI");
     expect(detectedText).toContain("ChatGPT Codex");
     const frame = tui.captureFrame();
-    expect(frame).toContain("Connect another provider below.");
-    expect(frame).not.toMatch(/No credential configured|Get a key at|Paste a key to save it securely/);
+    expect(detectedText).toMatch(/press\s+Next\./);
+    expect(frame).not.toMatch(/Not set up\.|Get a key at|Enter to paste a key/);
     for (const secret of secrets) expect(frame).not.toContain(secret);
   } finally {
     await tui?.close();
@@ -94,9 +94,9 @@ test("first launch opens chat; optional setup returns without completing or quit
   const spans = tui.captureSpans().lines;
   const band = spans.find((line) => {
     const text = line.spans.map((span) => span.text).join("");
-    return text.includes("0.security / setup") && text.includes("Step 1 of 5 · Welcome");
+    return text.includes("Setup") && text.includes("Step 1 of 5 · Welcome");
   });
-  const titleSpan = band?.spans.find((span) => span.text.includes("0.security / setup"));
+  const titleSpan = band?.spans.find((span) => span.text.includes("Setup"));
   const greetingSpan = spans.find((line) => line.spans.some((span) => span.text.includes("Hey there! Meet Zero.")))
     ?.spans.find((span) => span.text.includes("Hey there! Meet Zero."));
   expect(titleSpan).toBeDefined();
@@ -148,7 +148,7 @@ test("fresh setup highlights usage without sending until Finish records consent"
     reloadSettings();
     await tui.sendKey("s"); // Preserve Theme; no incidental settings write.
     await tui.waitForText(/Step 5 of 5/);
-    expect(tui.captureFrame()).toContain("● Yes, I’d like to help make 0 better!");
+    expect(tui.captureFrame()).toContain("● Share usage stats");
     await tui.sendKey("up");
     await tui.sendKey("down");
     eventBus.emit("tool_call_started", { tool: "before-finish", args_preview: "before consent", turn: 0, ts: 1 });
@@ -197,9 +197,9 @@ test.each([[100, 34], [64, 24]])("Back traverses decisions, filters unwind first
   await tui.sendKey("return");
   expect(getSettings().theme).toBe(originalTheme);
   await tui.waitForText(/Step 5 of 5/);
-  expect(tui.captureFrame()).toContain("You can change this choice in Settings");
+  expect(tui.captureFrame()).toContain("Change anytime in Settings");
   expect(tui.captureFrame()).toContain("● Off");
-  expect(tui.captureFrame()).toContain("○ Yes, I’d like to help make 0 better!");
+  expect(tui.captureFrame()).toContain("○ Share usage stats");
   expect(tui.captureFrame()).not.toMatch(/Tools and code|\bFull\b|identifying content|anonymous|environment opt-outs|problem reports|Hackstore|Density|Done/);
   await tui.sendKey("escape");
   expect(tui.captureFrame()).toMatch(/Theme/);
@@ -213,7 +213,7 @@ test.each([[100, 34], [64, 24]])("Back traverses decisions, filters unwind first
   await tui.sendKey("s");
   await tui.waitForText(/Step 5 of 5/);
   await tui.sendKey("down");
-  expect(tui.captureFrame()).toContain("● Yes, I’d like to help make 0 better!");
+  expect(tui.captureFrame()).toContain("● Share usage stats");
   await tui.sendKey("up");
   expect(tui.captureFrame()).toContain("● Off");
   expect(getSettings().analyticsLevel).toBe(sharingBefore);
@@ -376,7 +376,7 @@ test.each(["keyboard", "mouse"] as const)("%s cancellation unwinds credential en
   await tui.sendKey("return");
   await tui.waitForText(/Save/);
   expect(tui.captureFrame()).toContain("Paste your Anthropic API key.");
-  expect(tui.captureFrame()).toContain("Hidden while typing. Saved");
+  expect(tui.captureFrame()).toContain("Hidden as you type. Saved");
   expect(tui.captureFrame()).toContain("owner-only on this machine.");
   expect(tui.captureFrame()).not.toContain("synthetic-unsaved-key");
   if (input === "mouse") await clickTopAction("Cancel");

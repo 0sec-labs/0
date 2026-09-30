@@ -6,21 +6,24 @@ import { defineConfig } from "vite";
 
 const rootDir = fileURLToPath(new URL(".", import.meta.url));
 
-export default defineConfig(({ mode }) => ({
+export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       "@": resolve(rootDir, "src"),
     },
   },
+  server: {
+    host: "127.0.0.1",
+    port: 5173,
+    strictPort: true,
+    hmr: { host: "127.0.0.1", clientPort: 5173 },
+  },
   build: {
-    outDir: mode === "desktop-alpha" ? resolve(rootDir, "../desktop/dist/dashboard") : "dist",
+    outDir: "dist",
     emptyOutDir: true,
     rolldownOptions: {
-      input: {
-        operations: resolve(rootDir, "index.html"),
-        ...(mode === "desktop-alpha" ? { desktop: resolve(rootDir, "desktop.html") } : {}),
-      },
+      input: { operations: resolve(rootDir, "index.html") },
     },
   },
-}));
+});

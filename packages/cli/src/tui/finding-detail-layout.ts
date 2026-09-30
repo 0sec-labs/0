@@ -200,9 +200,9 @@ export function findingImpactLines(finding: Finding): string[] {
   const assessment = finding.impactAssessment
     ? parseImpactAssessment(JSON.stringify(finding.impactAssessment))
     : null;
-  if (!assessment) return ["Not assessed — no usable stored impact assessment."];
+  if (!assessment) return ["Not assessed."];
   return [
-    `Assessment for ${finding.id} — reported assessment, not reproduction proof.`,
+    "Model's estimate — not reproduction proof.",
     `Business impact: ${assessment.business_impact}`,
     `Reachability: ${assessment.reachability_tier}`,
     `Blast radius: ${assessment.blast_radius}`,
@@ -362,19 +362,19 @@ export function buildFindingRows(
     switch (sourceVerification.status) {
       case "matched":
         sourceCheckValue =
-          `source predicates matched (${sourceVerification.matchedPredicates}/${sourceVerification.totalPredicates}); source-only`;
+          `code checks matched (${sourceVerification.matchedPredicates}/${sourceVerification.totalPredicates}) — code only`;
         break;
       case "not_confirmed":
         sourceCheckValue =
-          `source predicates not confirmed (${sourceVerification.matchedPredicates}/${sourceVerification.totalPredicates}); not proof of a fix`;
+          `code checks not confirmed (${sourceVerification.matchedPredicates}/${sourceVerification.totalPredicates}) — not proof of a fix`;
         break;
       case "inconclusive":
         sourceCheckValue =
-          `source predicates inconclusive (${sourceVerification.inconclusivePredicates}/${sourceVerification.totalPredicates} could not be evaluated)`;
+          `code checks inconclusive (${sourceVerification.inconclusivePredicates}/${sourceVerification.totalPredicates} couldn't run)`;
         break;
     }
     if (sourceVerification.behaviorPending) {
-      sourceCheckValue += "; behavior pending (no runtime proof)";
+      sourceCheckValue += "; not yet tested live";
     }
   }
   pushWrapped(
@@ -503,8 +503,8 @@ export function findingActions({
 }: FindingActionsInput = {}): FindingAction[] {
   const actions: FindingAction[] = [];
   if (canInvestigate) actions.push({ key: "i", label: "Investigate" });
-  if (canPlanFix) actions.push({ key: "f", label: "Source fix" });
-  if (canCopy) actions.push({ key: "c", label: "Copy report" });
+  if (canPlanFix) actions.push({ key: "f", label: "Fix" });
+  if (canCopy) actions.push({ key: "c", label: "Copy" });
   if (canStatus) {
     actions.push({ key: "v", label: "Verify" });
     actions.push({ key: "d", label: "Dismiss" });
@@ -732,9 +732,9 @@ export function findingDetailFooterHint({
 }: FindingFooterHintInput = {}): string {
   const parts: string[] = [];
   if (canInvestigate) parts.push("[i] investigate");
-  if (canPlanFix) parts.push("[f] source fix");
-  if (canCopy) parts.push("[c] copy report");
+  if (canPlanFix) parts.push("[f] fix");
+  if (canCopy) parts.push("[c] copy");
   if (canStatus) parts.push("[v] verify", "[d] dismiss");
-  parts.push("[↑↓] scroll", "[esc] back", "[⌃C] exit");
+  parts.push("[↑↓] scroll", "[esc] back");
   return parts.join(" · ");
 }

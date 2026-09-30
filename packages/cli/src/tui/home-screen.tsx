@@ -103,7 +103,7 @@ export function HomeScreen({
     costCapUsd,
   };
   const planText = !resolution
-    ? "Enter a URL, source path, git URL, or ecosystem-prefixed package."
+    ? "Enter a URL, path, git URL or package (npm:, pypi:, …)."
     : resolution.ok
       ? `${resolution.plan.label} · ${formatGoal(goal)} · ${depth} · ${runCount} run${runCount === 1 ? "" : "s"} · ${formatExecutionMode(executionMode)} · ${formatTimeCap(timeCapMs)} · $${costCapUsd}`
       : resolution.message;
@@ -111,7 +111,7 @@ export function HomeScreen({
 
   const submitLaunch = () => {
     if (!resolution) {
-      setNotice("Enter an engagement target first.");
+      setNotice("Enter a target first.");
       return;
     }
     if (!resolution.ok) {
@@ -120,7 +120,7 @@ export function HomeScreen({
     }
     if (!confirming) {
       setConfirming(true);
-      setNotice("Plan ready. Press enter again to confirm.");
+      setNotice("Press Enter again to start.");
       return;
     }
     setNotice(null);
@@ -135,9 +135,9 @@ export function HomeScreen({
   const palette = usePaletteController([
     {
       id: "run-engagement",
-      title: "Run engagement",
+      title: "Start scan",
       category: "Engagement",
-      description: "Review and confirm the bounded scan plan",
+      description: "Review the plan, then start",
       keybind: "enter",
       suggested: true,
       action: submitLaunch,
@@ -153,13 +153,13 @@ export function HomeScreen({
       help: "URL · path · source: · npm: · pypi: · cargo: · oci:",
       editable: true,
     },
-    { key: "goal", label: "Goal", value: formatGoal(goal), help: "left/right" },
-    { key: "runtime", label: "Runtime", value: runtime, help: "left/right" },
-    { key: "depth", label: "Depth", value: depth, help: "left/right" },
-    { key: "runs", label: "Runs", value: String(runCount), help: "left/right" },
-    { key: "mode", label: "Mode", value: formatExecutionMode(executionMode), help: "left/right" },
-    { key: "time", label: "Time cap", value: formatTimeCap(timeCapMs), help: "left/right" },
-    { key: "cost", label: "Cost cap", value: `$${costCapUsd}`, help: "left/right" },
+    { key: "goal", label: "Goal", value: formatGoal(goal) },
+    { key: "runtime", label: "Provider", value: runtime },
+    { key: "depth", label: "Depth", value: depth },
+    { key: "runs", label: "Runs", value: String(runCount) },
+    { key: "mode", label: "Mode", value: formatExecutionMode(executionMode) },
+    { key: "time", label: "Time cap", value: formatTimeCap(timeCapMs) },
+    { key: "cost", label: "Cost cap", value: `$${costCapUsd}` },
   ], [costCapUsd, depth, executionMode, goal, inputValue, runCount, runtime, timeCapMs]);
 
   const adjustFocusedOption = (delta: 1 | -1) => {
@@ -254,7 +254,7 @@ export function HomeScreen({
     ...RUNTIME_OPTIONS.map((option) => ({
       id: `runtime:${option}`,
       label: option,
-      category: "Runtime",
+      category: "Provider",
       current: option === runtime,
     })),
     ...DEPTH_OPTIONS.map((option) => ({
@@ -342,24 +342,20 @@ export function HomeScreen({
     lines.push({ text: heading, fg: theme.PRIMARY });
     lines.push(...wrapDialogLines(selectedLabel, inner, theme.TEXT));
     if (item.id.startsWith("field:target")) {
-      lines.push({ text: resolution?.ok ? "resolved" : "enter and verify target", fg: resolution?.ok ? theme.SUCCESS : theme.MUTED });
-    } else {
-      lines.push({ text: "selected", fg: theme.MUTED });
+      lines.push({ text: resolution?.ok ? "resolved" : "not resolved yet", fg: resolution?.ok ? theme.SUCCESS : theme.MUTED });
     }
     lines.push({ text: "" });
     lines.push(...wrapDialogLines(planText, inner, planTone));
     lines.push({ text: "" });
-    lines.push(...wrapDialogLines(`recommended: ${formatGoal(recommendedGoal)} · ${recommendedDepth} · ${formatTimeCap(recommendedTime)} · $5`, inner, theme.MUTED));
-    lines.push(...wrapDialogLines(`runtime ${runtime} · ${runCount} run${runCount === 1 ? "" : "s"} · ${formatExecutionMode(executionMode)}`, inner, theme.MUTED));
+    lines.push(...wrapDialogLines(`Suggested: ${formatGoal(recommendedGoal)} · ${recommendedDepth} · ${formatTimeCap(recommendedTime)} · $5`, inner, theme.MUTED));
     const help = fields[focusIndex]?.help;
     if (help) lines.push(...wrapDialogLines(help, inner, theme.MUTED));
-    if (notice) lines.push(...wrapDialogLines(notice, inner, theme.WARNING));
     if (evolutionStatus) lines.push(...wrapDialogLines(evolutionStatus.message, inner, theme.MUTED));
     return <DialogDetailColumn lines={lines} pane={pane} />;
   };
   return (
     <ShellFrame view="engagement control" dialogContent>
-      {palette.paletteOpen ? <PaletteOverlay title="Control plane" query={palette.paletteQuery} selected={palette.paletteSelected} commands={palette.filteredPalette} /> : null}
+      {palette.paletteOpen ? <PaletteOverlay title="Commands" query={palette.paletteQuery} selected={palette.paletteSelected} commands={palette.filteredPalette} /> : null}
       <box flexDirection="column" width="100%" height="100%" minWidth={0}>
         <DialogTitleRow screenKey="launcher" width={width} meta={`${formatGoal(goal)} · ${depth} · ${formatTimeCap(timeCapMs)} · $${costCapUsd}`} />
         <DialogSelectBody
@@ -370,12 +366,12 @@ export function HomeScreen({
           hideSearch
           gutter
           renderDetail={renderLaunchDetail}
-          emptyText="No engagement options."
+          emptyText="Nothing to set."
         />
         <Cells width={width} fg={notice ? theme.WARNING : planTone}>
           {notice ?? planText}
         </Cells>
-        <FooterBar hint="[⏎] review/confirm · [←→] change · [⌃P] workspace · [⌃C] exit" status={evolutionStatus ? tuiLensEvolutionStatusLabel(evolutionStatus) : undefined} />
+        <FooterBar hint="[⏎] start · [↑↓] field · [←→] change · [⌃P] commands · [esc] back" status={evolutionStatus ? tuiLensEvolutionStatusLabel(evolutionStatus) : undefined} />
       </box>
     </ShellFrame>
   );

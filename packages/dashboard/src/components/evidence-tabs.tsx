@@ -14,8 +14,8 @@ export function EvidenceTabs({
     <Tabs defaultValue="request" className="space-y-4">
       <TabsList>
         {[
-          ["request", "Evidence request"],
-          ["response", "Evidence response"],
+          ["request", "Request"],
+          ["response", "Response"],
           ["analysis", "Analysis"],
         ].map(([value, label]) => (
           <TabsTrigger key={value} value={value}>
@@ -40,7 +40,7 @@ export function EvidenceTabs({
       <TabsContent value="analysis">
         <Card>
           <CardContent className="p-4">
-            <pre className="text-sm leading-6 text-muted-foreground">{analysis ?? "No evidence analysis recorded."}</pre>
+            <pre className="text-sm leading-6 text-muted-foreground">{analysis ?? "No analysis yet."}</pre>
           </CardContent>
         </Card>
       </TabsContent>

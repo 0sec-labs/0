@@ -71,26 +71,25 @@ test.each([false, true])("persisted impact follows selection and filtered action
     route: { type: "findings", options: { dbPath: fixture.dbPath, severity: "high", limit: 10, all } },
   });
   const alpha = await tui.waitForText(/Business impact: modest/);
-  expect(alpha).toContain("Assessment for F-alpha");
+  expect(alpha).toContain("not reproduction proof");
   expect(alpha).toContain("One account cache");
   expect(alpha).not.toContain("Stale scope");
   expect(alpha).not.toContain("FILTERS");
   expect(alpha.indexOf("DESCRIPTION")).toBeLessThan(alpha.indexOf("IMPACT"));
   expect(alpha.indexOf("IMPACT")).toBeLessThan(alpha.indexOf("EVIDENCE"));
   expect(alpha.indexOf("EVIDENCE")).toBeLessThan(alpha.indexOf("SOURCE FIX"));
-  expect(alpha).toContain("scope severity:high");
-  expect(alpha).toContain("limit 10");
+  expect(alpha).toContain("severity:high");
 
   await tui.sendKey("down");
   const beta = await tui.waitForText(/Business impact: notable/);
-  expect(beta).toContain("Assessment for F-beta");
+  expect(beta).toContain("not reproduction proof");
   expect(beta).toContain("Authenticated tenant records");
   expect(beta).not.toContain("One account cache");
 
   await tui.sendKeys("/Beta");
   await tui.sendKey("return");
   await tui.sendKeys("a");
-  await tui.waitForText(/Updated/);
+  await tui.waitForText(/Marked accepted/);
   const db = new osecDB(fixture.dbPath);
   try {
     expect(db.getFinding("F-beta")?.triageStatus).toBe("accepted");
@@ -102,7 +101,7 @@ test.each([false, true])("persisted impact follows selection and filtered action
   await tui.sendKey("return");
   const detail = await tui.waitForText(/FINDING · F-beta/);
   expect(detail).toContain("Beta tenant");
-  expect(detail).toContain("Assessment for F-beta");
+  expect(detail).toContain("not reproduction proof");
   expect(detail).toContain("Business impact: notable");
   expect(detail).not.toContain("FILTERS");
   await tui.sendKey("end");

@@ -15,14 +15,17 @@
     "dist",
     "vendor"
   ],
-  "bundledDependencies": ["tree-sitter", "tree-sitter-c"],
+  "bundledDependencies": [
+    "tree-sitter",
+    "tree-sitter-c"
+  ],
   "scripts": {
-    "build": "pnpm -r exec rm -f tsconfig.tsbuildinfo && pnpm --filter @0/shared build && pnpm --filter @0/db --filter @0/templates build && pnpm --filter '!@0/docs' --filter '!@0/desktop' -r build && pnpm run build:bundle",
+    "build": "pnpm -r exec rm -f tsconfig.tsbuildinfo && pnpm --filter @0/shared build && pnpm --filter @0/db --filter @0/templates build && pnpm --filter '!@0/docs' -r build && pnpm run build:bundle",
     "build:bundle": "node ./scripts/bundle-cli.mjs",
     "build:docs": "pnpm --filter @0/docs build",
     "docs:check": "node scripts/sync-cli-docs.mjs --check",
     "docs:sync": "node scripts/sync-cli-docs.mjs --write",
-    "dev": "pnpm -r --parallel dev",
+    "dev": "node scripts/dev-web.mjs",
     "lint": "pnpm --filter '!@0/docs' -r exec tsc --noEmit",
     "test": "pnpm test:public",
     "test:public": "pnpm --filter @0/core test && pnpm --filter @0/test-targets test && pnpm --filter @0/cli test && pnpm test:runtime-lock && pnpm test:bundle-skills && pnpm test:public-source-export && pnpm test:dev-engine && node --test scripts/dsh-0-mcp.test.mjs && pnpm test:docs-pointers",
@@ -42,7 +45,8 @@
     "consolidate-xbow": "pnpm --filter @0/benchmark consolidate-xbow",
     "clean": "pnpm -r clean",
     "vulnerable": "PORT=43100 pnpm --filter @0/test-targets vulnerable",
-    "safe": "PORT=43101 pnpm --filter @0/test-targets safe"
+    "safe": "PORT=43101 pnpm --filter @0/test-targets safe",
+    "dev:packages": "pnpm -r --parallel dev"
   },
   "keywords": [
     "security",

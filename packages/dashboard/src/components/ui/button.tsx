@@ -5,17 +5,17 @@ import { Slot } from "@radix-ui/react-slot"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-sm border border-transparent text-sm font-medium whitespace-nowrap transition-[background-color,border-color,color,box-shadow] outline-none select-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button inline-flex shrink-0 items-center justify-center rounded-full border border-transparent text-sm font-medium whitespace-nowrap transition-[background-color,border-color,color,box-shadow,transform] duration-150 ease-out motion-reduce:transition-none active:scale-[0.98] motion-reduce:active:scale-100 outline-none select-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary/92",
         outline:
-          "border-border bg-background hover:border-primary/20 hover:bg-primary/6 hover:text-foreground aria-expanded:border-primary/20 aria-expanded:bg-primary/8 aria-expanded:text-foreground dark:bg-transparent",
+          "border-border bg-background hover:border-primary/20 hover:bg-muted hover:text-foreground aria-expanded:border-primary/20 aria-expanded:bg-muted aria-expanded:text-foreground dark:bg-transparent",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-secondary/85 aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
         ghost:
-          "hover:bg-primary/6 hover:text-foreground aria-expanded:bg-primary/8 aria-expanded:text-foreground",
+          "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground",
         accent: "bg-primary text-primary-foreground hover:bg-primary/92",
         success:
           "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/16 dark:bg-emerald-500/18 dark:text-emerald-200 dark:hover:bg-emerald-500/24",

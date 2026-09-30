@@ -387,9 +387,9 @@ export function renderEntry(
             <text fg={tone} attributes={failed ? TextAttributes.BOLD : undefined}>{glyph}</text>
             <text fg={MUTED}> </text>
             {shimmerRunning ? (
-              <ShimmerText label="evidence / subagent" frame={display.shimmerFrame!} base={MUTED} peak={TEXT}  />
+              <ShimmerText label="sub-agent" frame={display.shimmerFrame!} base={MUTED} peak={TEXT}  />
             ) : (
-              <text fg={BRAND}>evidence / subagent</text>
+              <text fg={BRAND}>sub-agent</text>
             )}
             <text fg={MUTED}> · {stateWord}</text>
           </box>
@@ -436,7 +436,7 @@ export function renderEntry(
     const labelExcerpt = live ? reasoningExcerpt(entry.text) : "";
     const bodyPreview = previewTranscriptText(entry.text);
     const label = fitTuiText(
-      live ? (labelExcerpt ? `reasoning · ${labelExcerpt}` : "reasoning in progress") : "reasoning",
+      live ? (labelExcerpt ? `thinking · ${labelExcerpt}` : "thinking…") : "thinking",
       Math.max(1, maxWidth - 2),
     );
     return finish(

@@ -161,7 +161,7 @@ export interface PipelineOptions extends Omit<ScanConfig, "costLedger"> {
   resumeScanId?: string;
   diffBase?: string;
   changedOnly?: boolean;
-  onEvent?: (event: { type: string; stage?: string; message: string; data?: unknown }) => void;
+  onEvent?: (event: { type: string; stage?: string; message: string; data?: unknown; runIndex?: number }) => void;
   getPendingUserMessages?: () => string[];
   dbPath?: string;
   /** Stable local execution id. Fresh runs allocate one; cloud runs use scan id. */
@@ -1256,6 +1256,11 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     signal: opts.signal,
     costCeilingUsd: opts.costCeilingUsd,
     emitTerminalEvent: opts.emitTerminalEvent,
+    onAttempt: progress => opts.onEvent?.({
+      type: progress.phase === "started" ? "stage:start" : "stage:end",
+      stage: "plan", message: `Run ${progress.runIndex}/${opts.plan!.runCount} ${progress.phase}`,
+      runIndex: progress.runIndex, data: progress,
+    }),
     emptyReport: (): PipelineReport => ({
       target: opts.target, targetType: opts.targetType ?? detectTargetType(opts.target),
       startedAt: new Date().toISOString(), completedAt: new Date().toISOString(), durationMs: 0,
@@ -1268,6 +1273,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       resumeScanId: runIndex === 1 ? opts.resumeScanId : undefined,
       runId: runIndex === 1 && opts.resumeScanId ? opts.resumeScanId : `${opts.runId ?? randomUUID()}-run-${runIndex}`,
       emitTerminalEvent: false,
+      onEvent: event => opts.onEvent?.({ ...event, runIndex }),
     }),
   });
 }
@@ -1641,7 +1647,7 @@ async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport>
   try {
     // ── PHASE 2: ANALYZE (static analysis) ──
     startPhase("analyze");
-    emit({ type: "stage:start", stage: "analyze", message: "Running static analysis..." });
+    emit({ type: "stage:start", stage: "analyze", message: "Running static analysis...", data: { scanId: persistedScanId, persisted: db !== null } });
     logPipelineEvent("analyze", "stage_start");
 
     // Intercept inner events — convert to analyze sub-actions

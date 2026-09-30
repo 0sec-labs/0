@@ -34,7 +34,8 @@ export function registerEntraGraphCommand(program: Command): void {
   program
     .command("entragraph")
     .description(
-      "Offline Microsoft Entra ID attack-path analysis over an AzureHound export already on disk — paths to Global Administrator, service-principal escalation, consent-grant abuse, owner chains, and guest escalation. Reads files only: never collects, never authenticates, never touches the network.",
+      "Offline Microsoft Entra ID attack-path analysis over an AzureHound export on disk. " +
+        "Reads files only: never collects, authenticates, or touches the network.",
     )
     .requiredOption(
       "--input <path>",

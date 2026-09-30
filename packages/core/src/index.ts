@@ -2,7 +2,7 @@
 // scope file; `ScopePolicy` is the matcher used by every URL chokepoint
 // in the agent (validateTargetUrl + 5 fetch sites + shellExec URL
 // extraction + redirect-final-URL re-check in the crawler).
-export { loadScope, matchUrl, ScopePolicy, extractUrls } from "./scope/scope.js";
+export { loadScope, matchUrl, ScopePolicy, extractUrls, normalizeScopeHostname } from "./scope/scope.js";
 export type { ScopeJson, ScopeMatch, ScopeRule } from "./scope/scope.js";
 export {
   describeScopeGuards,
@@ -2155,7 +2155,7 @@ export type {
 // already reproduced finding, validates it in an isolated Git worktree, then
 // optionally applies the same patch after the source contract and test command
 // both pass.
-export { runSourceFix, planSourceFixPublication, publishSourceFixDraftPR } from "./fix/index.js";
+export { runSourceFix, verifySourceFixCandidate, applySourceFixCandidate, planSourceFixPublication, publishSourceFixDraftPR } from "./fix/index.js";
 export { resolveSourceFixRepository, loadSourceFixProjectInputs, saveSourceFixProjectInputs } from "./fix/index.js";
 export type { SourceFixProjectInputs } from "./fix/index.js";
 export type {
@@ -2356,6 +2356,7 @@ export {
   createConsoleSession,
   createConsoleRuntime,
   buildConsoleSystemPrompt,
+  isDangerousLocalRoot,
   deriveObjectiveHeuristic,
   createSessionObjectiveService,
   MAX_OBJECTIVE_CHARS,
@@ -2366,6 +2367,7 @@ export {
 export type {
   ConsoleConversationHistory,
   ConsoleSession,
+  ConsoleEngagementSelection,
   ConsoleSessionCheckpoint,
   ConsoleSessionConfig,
   ConsoleRenderCallbacks,

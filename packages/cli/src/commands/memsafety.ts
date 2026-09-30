@@ -377,11 +377,7 @@ export function registerMemsafetyCommand(program: Command): void {
   program
     .command("memsafety")
     .description(
-      "Userspace / Rust memory-safety scan (Monty-mode): clone a source tree, " +
-        "build a fuzz/sanitizer harness, run the closed fuzz loop, and emit " +
-        "reproduced-memcorruption findings. Exit 0=loop completed (with or without " +
-        "crashes), 2=skipped (no build system detected or execution prerequisite " +
-        "unavailable), 3=error (bad flags / unreadable target).",
+      "Fuzz a C/Rust source tree for memory-safety bugs and emit reproduced crashes.",
     )
     .argument("<source>", "Source tree to fuzz (a local path or a git URL)")
     .option("--subsystem <path>", "Narrow the scanned root to a subdirectory")

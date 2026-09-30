@@ -697,13 +697,13 @@ function stateSentence(kind: MarketKind, state: MarketState): { text: string; to
     case "installed":
       return kind === "plugin"
         ? { text: "Installed — NOT enabled. No plugin code has run.", tone: "ok" }
-        : { text: "Installed. Not the active theme.", tone: "ok" };
+        : { text: "Installed, not active.", tone: "ok" };
     case "enabled":
-      return { text: "Installed and enabled for this project.", tone: "ok" };
+      return { text: "Enabled for this project.", tone: "ok" };
     case "active":
-      return { text: "Installed and active as the console theme.", tone: "ok" };
+      return { text: "Active theme.", tone: "ok" };
     default:
-      return { text: "Not installed on this machine.", tone: "muted" };
+      return { text: "Not installed.", tone: "muted" };
   }
 }
 
@@ -711,15 +711,15 @@ function stateSentence(kind: MarketKind, state: MarketState): { text: string; to
 export function actionHint(kind: MarketKind, state: MarketState): string {
   if (state === "available") {
     return kind === "plugin"
-      ? "enter to install (writes files; runs nothing; does NOT enable)"
-      : "enter to install this theme (writes a palette file; runs nothing)";
+      ? "enter to install (writes files only; does NOT enable)"
+      : "enter to install (writes a palette file only)";
   }
   if (kind === "plugin") {
     return state === "enabled"
-      ? "enter to run — loads its tools (only an enabled plugin can load)"
-      : "enter to enable — records your approval of its capabilities (runs nothing)";
+      ? "enter to run (loads its tools)"
+      : "enter to enable (approves its capabilities; runs nothing)";
   }
-  return state === "active" ? "already the active theme" : "enter to apply this theme";
+  return state === "active" ? "already active" : "enter to apply";
 }
 
 // ---------------------------------------------------------------------------
@@ -820,7 +820,7 @@ export function marketDetailLines(
     separate();
     const count = row.count;
     push(
-      `${count} ${row.group.id}${count === 1 ? "" : "s"} available in this registry`,
+      `${count} ${row.group.id}${count === 1 ? "" : "s"} available`,
       "text",
     );
     return lines;
@@ -914,33 +914,32 @@ export function marketEmptyLines(
   const configured = registryUrl.trim().length > 0;
 
   if (error) {
-    push("Could not reach the Hackstore index.", "warn");
+    push("Could not reach the Hackstore.", "warn");
     blank();
     push(`Registry: ${registryUrl}`, "muted");
     push(error, "muted");
     blank();
-    push("Check the URL and your network, then reopen this screen.", "text");
+    push("Check the URL and your network, then reopen.", "text");
     return lines;
   }
 
   if (!configured) {
     push("Hackstore disabled.", "title");
     blank();
-    push("ZERO_REGISTRY_URL is set to an empty value, so no index is fetched.", "text");
-    push("Unset it to use the default community Hackstore, or point it at an index URL you trust.", "text");
+    push("ZERO_REGISTRY_URL is empty. Unset it for the default Hackstore, or set a URL you trust.", "text");
     blank();
-    push("Installing writes files and runs nothing; it never enables a plugin.", "muted");
+    push("Installing only writes files; it runs nothing and never enables a plugin.", "muted");
     return lines;
   }
 
   if (reachableButEmpty) {
-    push("The Hackstore index has no extensions or themes to install yet.", "text");
+    push("There are no extensions or themes yet.", "text");
     blank();
     push(`Registry: ${registryUrl}`, "muted");
     return lines;
   }
 
-  push("Loading the Hackstore index…", "muted");
+  push("Loading Hackstore…", "muted");
   return lines;
 }
 
@@ -1050,10 +1049,8 @@ export function marketFooterHint(
   action: MarketAction = "install",
 ): string {
   if (mode === "filter") return [
-    "type to filter",
     action !== "none" ? `[⏎] ${actionVerb(action)}` : "",
-    "[esc] clear filter",
-    "[⌫] delete",
+    "[esc] clear",
   ].filter(Boolean).join(" · ");
   if (mode === "confirm") {
     const verb = actionVerb(action) || "install";
@@ -1063,8 +1060,7 @@ export function marketFooterHint(
     "[↑↓] move",
     action !== "none" ? `[⏎] ${actionVerb(action)}` : "",
     "[/] filter",
-    hasFilter ? "[esc] clear filter" : "[esc] back",
-    "[⌃C] exit",
+    hasFilter ? "[esc] clear" : "[esc] back",
   ].filter(Boolean).join(" · ");
 }
 

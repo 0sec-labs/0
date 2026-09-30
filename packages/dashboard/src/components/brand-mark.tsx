@@ -28,7 +28,7 @@ export function BrandMark({
   }
 
   return (
-    <div className={cn("space-y-2", className)}>
+    <div className={cn("flex flex-col items-center gap-2", className)}>
       <img
         alt="0.security"
         src={wordmarkInkUrl}
@@ -43,7 +43,6 @@ export function BrandMark({
         height={24}
         className="hidden h-auto w-48 max-w-full dark:block"
       />
-      <div className="text-sm font-medium text-foreground">0.security operator shell</div>
     </div>
   );
 }
