@@ -163,12 +163,13 @@ grep -q '"target"' "$TMP/review.out" || {
 # runs, attack agent spawns, and a report-shaped JSON document lands.
 # Guards against regressions like the v0.7.11 `ENOENT: /$bunfs/attacks`
 # crash — that bug shipped because none of the existing smoke subtests
-# exercise the attack-template loader. The agent loop will 401 on the
-# fake key, which is fine; an empty report is still a report.
+# exercise the attack-template loader. The intentionally invalid model key must
+# produce an unsuccessful report and exit 2, not a clean empty assessment.
 say "scan --mode web (template loader + pipeline)"
 # Live network targets require an engagement scope (security gate); provide one
 # so the smoke exercises the pipeline rather than tripping the scope refusal.
 printf '{ "in_scope": ["example.invalid"] }' > "$TMP/scope.json"
+scan_status=0
 run_ai_smoke scan \
     --target http://example.invalid \
     --mode web --depth quick \
@@ -177,13 +178,14 @@ run_ai_smoke scan \
     --format json \
     --db-path "$TMP/scan.db" \
     > "$TMP/scan.out" 2> "$TMP/scan.err" \
-  || {
-    echo "--- scan stdout ---" >&2
-    cat "$TMP/scan.out" >&2 || true
-    echo "--- scan stderr ---" >&2
-    cat "$TMP/scan.err" >&2 || true
-    fail "scan exited non-zero — pipeline bootstrap or template loader broken"
-  }
+  || scan_status=$?
+if [ "$scan_status" -ne 2 ]; then
+  echo "--- scan stdout ---" >&2
+  cat "$TMP/scan.out" >&2 || true
+  echo "--- scan stderr ---" >&2
+  cat "$TMP/scan.err" >&2 || true
+  fail "invalid provider credential must preserve a report and exit 2 (got $scan_status)"
+fi
 grep -q '"target"' "$TMP/scan.out" || {
   echo "--- scan stdout ---" >&2
   cat "$TMP/scan.out" >&2 || true
@@ -191,6 +193,16 @@ grep -q '"target"' "$TMP/scan.out" || {
   cat "$TMP/scan.err" >&2 || true
   fail "scan did not emit a report-shaped JSON document"
 }
+node --input-type=module -e '
+  import { readFileSync } from "node:fs";
+  const report = JSON.parse(readFileSync(process.argv[1], "utf8"));
+  if (report.target !== "http://example.invalid" || report.executionSuccessful !== false
+      || report.exitReason !== "failed" || typeof report.error !== "string" || !report.error
+      || !Array.isArray(report.findings) || !(report.summary.totalAttacks > 0)
+      || !(report.benchmarkMeta.attackTurns > 0)) {
+    throw new Error("Provider rejection must retain initialized scan evidence and an explicit failed outcome");
+  }
+' "$TMP/scan.out" || fail "scan provider-failure report violates the public outcome contract"
 # Extra guard: if the template loader is broken, the stderr typically
 # carries an ENOENT or 'Templates directory not found' message even
 # when exit-code fallback paths let the process succeed.
