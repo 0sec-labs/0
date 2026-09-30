@@ -1,3 +1,4 @@
+import { ControlDisclosure } from "./control-disclosure";
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { webFetchJson } from "@/api";
@@ -28,7 +29,7 @@ export function DiagnosticReportControl() {
     {staged?.preview && <section className="space-y-4 border-t border-border pt-4">
       <Facts entries={[["Sends to", staged.preview.url]]} />
       {staged.preview.warnings.map((warning, index) => <p key={index} className="rounded-md border border-border bg-muted/20 p-3 text-sm">{warning}</p>)}
-      <details><summary className="cursor-pointer text-sm">Headers</summary><pre className="mt-2 max-h-48 overflow-auto rounded-md border border-border bg-muted/20 p-3 text-xs">{JSON.stringify(staged.preview.headers, null, 2)}</pre></details>
+      <ControlDisclosure title={<>Headers</>}><pre className="mt-2 max-h-48 overflow-auto rounded-md border border-border bg-muted/20 p-3 text-xs">{JSON.stringify(staged.preview.headers, null, 2)}</pre></ControlDisclosure>
       <div><h3 className="mb-2 text-sm font-medium">Report contents</h3><pre className="max-h-96 overflow-auto rounded-md border border-border bg-muted/20 p-3 text-xs">{staged.preview.body}</pre></div>
       <Check checked={reviewed} onChange={setReviewed} disabled={mutation.isPending}>I reviewed this report and want to send it now (just this once).</Check>
       <div className="flex flex-wrap gap-2"><SubmitButton pending={mutation.isPending && mutation.variables === "send"} disabled={!reviewed || mutation.isPending} onClick={() => mutation.mutate("send")}>Send</SubmitButton><Button variant="outline" disabled={mutation.isPending} onClick={() => mutation.mutate("cancel")}>Don't send</Button></div>

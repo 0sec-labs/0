@@ -1,3 +1,4 @@
+import { ControlDisclosure } from "./control-disclosure";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -78,10 +79,10 @@ export function GitHubPublicationControl() {
           <Button variant="ghost" disabled={account.isFetching || mutation.isPending} onClick={() => void account.refetch()}><RefreshCcw className="size-4" />Refresh</Button>
         </div>
       </section>
-      <details><summary className="cursor-pointer text-sm text-muted-foreground">Use a token instead</summary><form className="mt-3 space-y-4" onSubmit={event => { event.preventDefault(); setMessage(null); mutation.mutate("connect"); }}>
+      <ControlDisclosure title={<>Use a token instead</>}><form className="mt-3 space-y-4" onSubmit={event => { event.preventDefault(); setMessage(null); mutation.mutate("connect"); }}>
         <TextField label="GitHub token" type="password" autoComplete="off" spellCheck={false} value={token} required maxLength={16384} disabled={mutation.isPending || running || !account.data.available} onChange={event => setToken(event.target.value)} hint="Stored locally on this computer." />
         <div className="flex flex-wrap gap-2"><SubmitButton type="submit" pending={mutation.isPending && mutation.variables === "connect"} disabled={!token.trim() || mutation.isPending || running || !account.data.available}>Connect</SubmitButton><Button type="button" variant="outline" disabled={mutation.isPending} onClick={() => { setToken(""); setMessage(null); mutation.reset(); }}>Clear</Button></div>
-      </form></details>
+      </form></ControlDisclosure>
     </>}
     <Feedback error={mutation.error} message={message} />
   </ControlCard>;
