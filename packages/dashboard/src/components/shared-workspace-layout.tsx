@@ -1,17 +1,16 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Command, LayoutDashboard, Menu, MessageSquare, Plus, Radio, Settings, ShieldCheck, Workflow } from "lucide-react";
+import { Command, Menu, MessageSquare, Plus, Plug, Settings, ShieldCheck, Workflow } from "lucide-react";
 import { ConsoleNavigationRail } from "@/console/navigation-rail";
 import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 const destinations = [
-  { to: "/console", label: "Conversations", icon: MessageSquare },
+  { to: "/console", label: "Chats", icon: MessageSquare },
   { to: "/findings", label: "Findings", icon: ShieldCheck },
-  { to: "/runs", label: "Runs", icon: Workflow },
-  { to: "/dashboard", label: "Overview", icon: LayoutDashboard },
-  { to: "/live", label: "Live activity", icon: Radio },
+  { to: "/runs", label: "Assessment history", icon: Workflow },
+  { to: "/plugins", label: "Integrations", icon: Plug },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -29,11 +28,11 @@ export function SharedWorkspaceLayout({ title, children, onNew, onSearch, onOpen
     <div className="flex min-w-0 flex-1 flex-col">
       <header className="flex shrink-0 items-center justify-between gap-2 px-3 py-3 sm:px-5">
         <div className="flex min-w-0 items-center gap-2">
-          <Button variant="ghost" size="icon-sm" aria-label="Open navigation" onClick={() => setNavigationOpen(true)}><Menu className="size-4" /></Button>
+          <Button className="lg:hidden [@media(hover:none)]:inline-flex" variant="ghost" size="icon-sm" aria-label="Open navigation" onClick={() => setNavigationOpen(true)}><Menu className="size-4" /></Button>
           <span className="truncate text-sm font-semibold">{title}</span>
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon-sm" aria-label="New session" onClick={onNew}><Plus className="size-4" /></Button>
+          <Button className="lg:hidden" variant="ghost" size="icon-sm" aria-label="New chat" onClick={onNew}><Plus className="size-4" /></Button>
           <Button variant="ghost" size="icon-sm" aria-label="Open commands" onClick={onOpenPalette}><Command className="size-4" /></Button>
         </div>
       </header>

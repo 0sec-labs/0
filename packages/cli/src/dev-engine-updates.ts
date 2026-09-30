@@ -35,7 +35,7 @@ function assertSessionContract(session: ConsoleSession): void {
   if (!session || typeof session !== "object" || !session.ready || typeof session.ready.then !== "function") {
     throw new Error("Built engine does not implement asynchronous session readiness");
   }
-  for (const method of ["send", "cleanup", "exportCheckpoint", "prepareHandoff", "setAutonomyMode", "configureEngagement", "clearConversation", "stopPersistentAgent", "stopPersistentAgents"] as const) {
+  for (const method of ["send", "cleanup", "exportCheckpoint", "prepareHandoff", "setAutonomyMode", "configureEngagement", "configureWorkspace", "clearConversation", "stopPersistentAgent", "stopPersistentAgents"] as const) {
     if (typeof session[method] !== "function") throw new Error(`Built engine omitted ${method}`);
   }
 }
@@ -251,6 +251,11 @@ export function withDevEngineUpdates(
       if (key === "setAutonomyMode") return (mode: ConsoleAutonomyMode) => {
         current.setAutonomyMode(mode);
         handoffCandidate?.setAutonomyMode(mode);
+      };
+      if (key === "configureWorkspace") return (path: string) => {
+        // An in-flight candidate is not necessarily ready. Its checkpoint comparison
+        // detects this change and safely abandons that handoff.
+        current.configureWorkspace(path);
       };
       if (key === "configureEngagement") return (selection: ConsoleEngagementSelection) => {
         current.configureEngagement(selection);

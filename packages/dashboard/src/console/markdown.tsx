@@ -11,6 +11,30 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Check, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import "./markdown.css";
+
+/** Avoid mounting an empty code panel while its fence language is arriving. */
+export function streamingMarkdown(text: string): string {
+  const lines = text.split("\n");
+  let fence: { character: string; length: number } | undefined;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!;
+    const match = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    if (!match) continue;
+    const marker = match[1]!;
+    const suffix = match[2]!;
+    if (fence) {
+      if (marker[0] === fence.character && marker.length >= fence.length && /^\s*$/.test(suffix))
+        fence = undefined;
+    } else if (marker[0] !== "`" || !suffix.includes("`")) {
+      // Hold the unfinished declaration until its first newline arrives.
+      // Final messages always use the original text, including literal fences.
+      if (index === lines.length - 1) return lines.slice(0, -1).join("\n");
+      fence = { character: marker[0]!, length: marker.length };
+    }
+  }
+  return text;
+}
 
 function textContent(children: ReactNode): string {
   let text = "";
@@ -113,11 +137,11 @@ const components: Components = {
 };
 const plugins = [remarkGfm];
 
-export const Markdown = memo(function Markdown({ text }: { text: string }) {
+export const Markdown = memo(function Markdown({ text, streaming = false }: { text: string; streaming?: boolean }) {
   return (
-    <div className="min-w-0 break-words text-sm leading-relaxed text-foreground [&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-1.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5 [&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:px-3 [&_blockquote]:py-1 [&_blockquote]:text-muted-foreground [&_h1]:my-3 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:my-3 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:my-2 [&_h3]:text-base [&_h3]:font-semibold [&_h4]:my-2 [&_h4]:font-semibold [&_h5]:my-2 [&_h5]:font-semibold [&_h6]:my-2 [&_h6]:font-semibold [&_hr]:my-4 [&_hr]:border-border">
+    <div data-streaming={streaming || undefined} className="console-markdown min-w-0 break-words text-sm leading-relaxed text-foreground [&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-1.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5 [&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:px-3 [&_blockquote]:py-1 [&_blockquote]:text-muted-foreground [&_h1]:my-3 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:my-3 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:my-2 [&_h3]:text-base [&_h3]:font-semibold [&_h4]:my-2 [&_h4]:font-semibold [&_h5]:my-2 [&_h5]:font-semibold [&_h6]:my-2 [&_h6]:font-semibold [&_hr]:my-4 [&_hr]:border-border">
       <ReactMarkdown remarkPlugins={plugins} components={components} skipHtml>
-        {text}
+        {streaming ? streamingMarkdown(text) : text}
       </ReactMarkdown>
     </div>
   );

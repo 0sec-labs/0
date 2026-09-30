@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check as CheckIcon } from "lucide-react";
 import { webFetch, webFetchJson } from "@/api";
 import { Button } from "@/components/ui/button";
+import { BrandMark } from "@/components/brand-mark";
+import zeroWaveUrl from "../../assets/zero-wave.png";
 import { cn } from "@/lib/utils";
 import { ConnectionsControl, useProviders } from "./connections-control";
 import { ThemeControl, useConsoleSettings } from "./settings-control";
@@ -20,6 +22,14 @@ const steps = [
   { id: "privacy", label: "Privacy", title: "Privacy" },
 ] as const;
 type StepId = typeof steps[number]["id"];
+const stepDescriptions: Record<StepId, string> = {
+  welcome: "Your security teammate, ready to explore.",
+  connect: "Bring the provider you already use.",
+  model: "Pick the model that fits your work.",
+  scope: "Choose what 0 can work on.",
+  look: "Make this workspace feel like yours.",
+  privacy: "Choose what you share. You stay in control.",
+};
 
 export function OnboardingControl({ sessionId, returnTo }: { sessionId?: string; returnTo: string }) {
   const navigate = useNavigate();
@@ -89,7 +99,17 @@ export function OnboardingControl({ sessionId, returnTo }: { sessionId?: string;
   };
   const reportingNeedsConsent = reportingChanged && reporting === "automatic" && settings.data?.settings.diagnosticReporting !== "automatic";
 
-  return <div className="space-y-6">
+  return <div className="mx-auto grid min-h-[calc(100dvh-160px)] w-full max-w-5xl items-center gap-8 py-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-16">
+    <aside className="text-center lg:sticky lg:top-12 lg:self-center">
+      <BrandMark className="mx-auto mb-6" />
+      <div className={cn("relative mx-auto w-40 lg:w-56", current.id !== "welcome" && "hidden lg:block")}>
+        <div aria-hidden="true" className="absolute inset-5 rounded-full bg-primary/10 blur-3xl" />
+        <img src={zeroWaveUrl} alt="" width={224} height={224} className="relative h-auto w-full" />
+      </div>
+      <p className="mx-auto mt-6 max-w-64 text-sm leading-6 text-muted-foreground">{stepDescriptions[current.id]}</p>
+      <p className="mt-3 text-xs text-muted-foreground">Step {step + 1} of {steps.length}</p>
+    </aside>
+    <div className="min-w-0 space-y-6">
     <ol ref={stepperRef} aria-label="Setup progress" className="flex gap-1.5 overflow-x-auto pb-1">{steps.map((item, index) => {
       const active = index === step;
       const finished = done[item.id] && !active;
@@ -99,17 +119,17 @@ export function OnboardingControl({ sessionId, returnTo }: { sessionId?: string;
       </button></li>;
     })}</ol>
 
-    <h2 ref={focusRef} tabIndex={-1} className="text-xl font-semibold tracking-tight outline-none">{current.title}</h2>
+    <h2 ref={focusRef} tabIndex={-1} className="text-2xl font-medium tracking-tight outline-none">{current.title}</h2>
 
     {current.id === "welcome" && (providers.isPending || settings.isPending || providers.error || settings.error
       ? <QueryState pending={providers.isPending || settings.isPending} error={providers.error ?? settings.error} retry={() => { void providers.refetch(); void settings.refetch(); }} />
       : done.welcome || connected.length > 0
         ? <div className="space-y-5">
             <Facts entries={[["Provider", preference ? providers.data?.providers.find(provider => provider.id === preference.providerId)?.label ?? preference.providerId : connected.map(provider => provider.label).join(", ") || "None"], ["Model", preference?.model ?? "Not chosen"]]} />
-            <div className="flex flex-wrap gap-2"><Button onClick={() => navigate(exitTo)}>Go to console<ArrowRight className="size-4" /></Button><Button variant="outline" onClick={() => setStep(1)}>Review setup</Button></div>
+            <div className="flex flex-wrap gap-2"><Button onClick={() => navigate(exitTo)}>Open chat<ArrowRight className="size-4" /></Button><Button variant="outline" onClick={() => setStep(1)}>Review setup</Button></div>
           </div>
         : <div className="space-y-5">
-            <p className="text-sm text-muted-foreground">Connect a provider and pick a model. Takes about a minute.</p>
+            <p className="text-sm text-muted-foreground">Connect a provider and pick a model. </p>
             <div className="flex flex-wrap gap-2"><Button onClick={() => setStep(1)}>Get started<ArrowRight className="size-4" /></Button><Button variant="ghost" onClick={() => navigate(exitTo)}>Later</Button></div>
           </div>)}
     {current.id === "connect" && <ConnectionsControl onConnected={() => setStep(step + 1)} />}
@@ -127,13 +147,14 @@ export function OnboardingControl({ sessionId, returnTo }: { sessionId?: string;
       <SubmitButton pending={complete.isPending} disabled={!consentReady || settings.isError || (reportingNeedsConsent && !automaticApproved)} onClick={() => complete.mutate()}>Finish setup<ArrowRight className="size-4" /></SubmitButton>
     </div>}
 
-    {step > 0 && <div className="sticky bottom-0 z-10 -mx-1 flex items-center justify-between gap-3 border-t border-border bg-card/95 px-1 py-3 backdrop-blur">
+    {step > 0 && <div className="sticky bottom-0 z-10 -mx-1 flex items-center justify-between gap-3 bg-background/95 px-1 py-3 backdrop-blur">
       <Button variant="ghost" disabled={complete.isPending} onClick={() => setStep(step - 1)}><ArrowLeft className="size-4" />Back</Button>
       <div className="flex gap-2">
         <Button variant="ghost" disabled={complete.isPending} onClick={() => navigate(exitTo)}>Exit</Button>
         {step < steps.length - 1 && <Button variant={done[current.id] ? "default" : "outline"} onClick={() => setStep(step + 1)}>{done[current.id] ? "Continue" : "Skip"}<ArrowRight className="size-4" /></Button>}
       </div>
     </div>}
+    </div>
   </div>;
 }
 

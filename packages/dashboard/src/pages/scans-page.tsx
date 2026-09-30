@@ -2,7 +2,7 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "rea
 import { NavLink, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Activity, AlertCircle, Siren } from "lucide-react";
-import { getScanEvents, getScanFindings } from "@/api";
+import { getScanEvents, getScanFindings, listConsoleSessions, listSavedConsoleSessions } from "@/api";
 import { useDashboardPanel } from "@/components/dashboard-panel";
 import { EntityList, EntityListItem } from "@/components/entity-list";
 import { EventTimeline } from "@/components/event-timeline";
@@ -33,9 +33,18 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
 
+  const sessionsQuery = useQuery({ queryKey: ["console-sessions"], queryFn: ({ signal }) => listConsoleSessions(signal), refetchInterval: 2000 });
+  const savedQuery = useQuery({ queryKey: ["console-saved"], queryFn: ({ signal }) => listSavedConsoleSessions(signal), refetchInterval: 5000 });
+  const conversationIds = useMemo(() => new Set([
+    ...(sessionsQuery.data ?? []).flatMap((session) => [session.id, ...(session.savedId ? [session.savedId] : [])]),
+    ...(savedQuery.data ?? []).map((session) => session.id),
+  ]), [sessionsQuery.data, savedQuery.data]);
+  // Console records share the findings database, but are conversations rather than assessments.
+  const assessments = useMemo(() => scans.filter((scan) => Boolean(scan.target.trim()) && !scan.id.startsWith("console-") && !conversationIds.has(scan.id)), [scans, conversationIds]);
+
   const groupedTargets = useMemo(() => {
     const grouped = new Map<string, ScanRecord[]>();
-    for (const scan of scans) {
+    for (const scan of assessments) {
       const existing = grouped.get(scan.target) ?? [];
       existing.push(scan);
       grouped.set(scan.target, existing);
@@ -53,7 +62,7 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
         } satisfies TargetRunGroup;
       })
       .sort((left, right) => right.latestScan.startedAt.localeCompare(left.latestScan.startedAt));
-  }, [scans]);
+  }, [assessments]);
 
   const filteredTargets = useMemo(() => {
     const normalized = deferredSearch.trim().toLowerCase();
@@ -71,16 +80,18 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
     [filteredTargets, scanId, scans],
   );
   const selectedScanId = selectedScan?.id ?? null;
+  const selectedConversation = Boolean(selectedScan && (selectedScan.id.startsWith("console-") || conversationIds.has(selectedScan.id)));
+  const liveConversation = sessionsQuery.data?.find((session) => session.id === selectedScanId || session.savedId === selectedScanId);
   const selectedTarget = useMemo(
     () => (selectedScan ? groupedTargets.find((group) => group.target === selectedScan.target) ?? null : null),
     [groupedTargets, selectedScan],
   );
 
   useEffect(() => {
-    if (!scanId && selectedScanId) {
+    if (!scanId && selectedScanId && !sessionsQuery.isPending && !savedQuery.isPending) {
       navigate(`/runs/${selectedScanId}`, { replace: true });
     }
-  }, [navigate, scanId, selectedScanId]);
+  }, [navigate, scanId, selectedScanId, sessionsQuery.isPending, savedQuery.isPending]);
 
   const eventsQuery = useQuery({
     queryKey: ["scan-events", selectedScanId],
@@ -99,11 +110,11 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
       <Workspace className="xl:grid-cols-[22rem_minmax(0,1fr)]">
         <WorkspaceSidebar>
           <EntityList
-            title={`${groupedTargets.length} targets`}
-            description=""
+            title="Assessment history"
+            description="Past assessments by target"
             searchValue={search}
             onSearchChange={setSearch}
-            searchPlaceholder="Search runs"
+            searchPlaceholder="Search assessments"
           >
             {filteredTargets.length === 0 ? (
               <CardEmpty className="py-8">No matches.</CardEmpty>
@@ -114,7 +125,7 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
                     <EntityListItem
                       selected={isActive}
                       title={group.target}
-                      description={`${group.scans.length} runs`}
+                      description={`${group.scans.length} assessment${group.scans.length === 1 ? "" : "s"}`}
                       meta={formatTime(group.latestScan.startedAt)}
                       badges={
                         <>
@@ -133,13 +144,27 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
         {!selectedScanId ? (
           <WorkspaceMain span>
             <EmptyState
-              title="No run selected"
-              body="Pick a run from the list."
+              title="No assessments yet"
+              body="Start an assessment in a chat. Its results will appear here."
+              action={<Button asChild><NavLink to="/console">Open chats</NavLink></Button>}
             />
+          </WorkspaceMain>
+        ) : selectedConversation ? (
+          <WorkspaceMain span>
+            <EmptyState
+              title="Chat activity"
+              body="This record belongs to a conversation, not a separate assessment. Open chats to continue the work and view its agents."
+              action={<Button asChild><NavLink to={liveConversation ? `/console/${liveConversation.id}` : "/console"}>Open chat</NavLink></Button>}
+            />
+            {findingsQuery.data && findingsQuery.data.groups.length > 0 ? (
+              <div className="mt-4 text-sm text-muted-foreground">
+                {findingsQuery.data.groups.length} findings recorded. <NavLink to="/findings" className="text-primary-text hover:underline">View findings</NavLink>
+              </div>
+            ) : null}
           </WorkspaceMain>
         ) : eventsQuery.isLoading || findingsQuery.isLoading ? (
           <WorkspaceMain span>
-            <LoadingState label="Run" />
+            <LoadingState label="Assessment" />
           </WorkspaceMain>
         ) : eventsQuery.error ? (
           <WorkspaceMain span>
@@ -154,8 +179,8 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
         ) : (
           <WorkspaceMain span>
             <EmptyState
-              title="Run not found"
-              body="This run couldn't be loaded."
+              title="Assessment not found"
+              body="This assessment couldn't be loaded."
             />
           </WorkspaceMain>
         )}
@@ -189,7 +214,7 @@ function ScanDetail({
             <MetaTile label="Mode" value={`${scan.mode} / ${scan.depth}`} />
             <MetaTile label="Engine" value={scan.runtime} />
             <MetaTile label="Duration" value={formatDuration(scan.durationMs)} />
-            <MetaTile label="Run ID" value={scan.id} mono />
+            <MetaTile label="Assessment ID" value={scan.id} mono />
           </CardList>
         </InspectorPane>
       </div>
@@ -273,7 +298,7 @@ function ScanDetail({
           </CardHeader>
           <CardContent>
             {findings.groups.length === 0 ? (
-              <CardEmpty>No findings in this run.</CardEmpty>
+              <CardEmpty>No findings in this assessment.</CardEmpty>
             ) : (
               <Table>
                 <TableHeader>
@@ -306,12 +331,12 @@ function ScanDetail({
         <Card className="overflow-hidden">
           <CardHeader>
             <div>
-              <CardTitle className="font-sans text-base font-medium">Other runs</CardTitle>
+              <CardTitle className="font-sans text-base font-medium">Previous assessments</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
-            {targetRuns.length <= 1 ? (
-              <CardEmpty>No other runs yet.</CardEmpty>
+            {targetRuns.filter((entry) => entry.id !== scan.id).length === 0 ? (
+              <CardEmpty>No previous assessments yet.</CardEmpty>
             ) : (
               <Table>
                 <TableHeader>
@@ -322,7 +347,7 @@ function ScanDetail({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {targetRuns.slice(0, 6).map((entry) => (
+                  {targetRuns.filter((entry) => entry.id !== scan.id).slice(0, 6).map((entry) => (
                     <TableRow key={entry.id}>
                       <TableCell className="font-medium">
                         <NavLink to={`/runs/${entry.id}`} className="text-foreground hover:text-primary-text">
