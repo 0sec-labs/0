@@ -115,7 +115,7 @@ describe("completion is written in exactly one place", () => {
 });
 
 describe("onboarding sharing choices", () => {
-  it.each(["off", "ask"] as const)("keeps existing %s Sentry consent separate from usage analytics", (reporting) => {
+  it.each(["off", "ask"] as const)("keeps existing %s problem-report consent separate from usage analytics", (reporting) => {
     configureSettingsStore({ homeDir: makeHome() });
     updateSetting("diagnosticReporting", reporting);
     recordAnalyticsConsent("usage");
@@ -127,7 +127,7 @@ describe("onboarding sharing choices", () => {
     expect(persisted.onboardingCompleted).toBe(false);
   });
 
-  it("persists an analytics opt-out without changing independent Sentry consent", () => {
+  it("persists an analytics opt-out without changing independent problem-report consent", () => {
     configureSettingsStore({ homeDir: makeHome() });
     updateSetting("diagnosticReporting", "automatic");
     recordAnalyticsConsent("off");

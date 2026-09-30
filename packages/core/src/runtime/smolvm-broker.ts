@@ -14,6 +14,8 @@ import { runSmolvmDarwinProgram, type SmolvmDarwinOwnership } from "./smolvm-dar
 
 const ADMISSION = "/run/0-workbench/admission.json";
 const GUEST_ROOT = "/run/0-workbench/broker";
+/** Guest-only scratch in each fresh sibling; never a host workspace mount. */
+export const WORKBENCH_BROKER_WORKSPACE = "/tmp/0-workspace";
 const DIGEST = /^sha256:[a-f0-9]{64}$/;
 const REFERENCE = /^(?:sha256:[a-f0-9]{64}|[a-zA-Z0-9][a-zA-Z0-9_.:/-]*@sha256:[a-f0-9]{64})$/;
 const POLL_MS = 15;
@@ -297,7 +299,10 @@ const fs = require('node:fs'), p = require('node:path'), crypto = require('node:
 const cfg = JSON.parse(fs.readFileSync('/control/program.json', 'utf8'));
 const send = value => process.stdout.write(JSON.stringify(value) + '\n');
 const digest = b => 'sha256:' + crypto.createHash('sha256').update(b).digest('hex');
-const workspace = fs.mkdtempSync('/tmp/0-workspace-');
+const workspace = ${JSON.stringify(WORKBENCH_BROKER_WORKSPACE)};
+// A fresh guest must not contain this path, including a dangling symlink.
+fs.mkdirSync(workspace,{mode:0o700});
+const workspaceInfo = fs.lstatSync(workspace);
 for (const file of cfg.files) {
  const destination = p.join(workspace,file.path);
  fs.mkdirSync(p.dirname(destination),{recursive:true,mode:0o700});
@@ -316,6 +321,8 @@ child.on('spawn',()=>send({type:'ready'}));
 child.on('close',(code,signal)=>{
  let bytes=0,files=0,entries=0;
  try {
+  const current = fs.lstatSync(workspace);
+  if(!current.isDirectory()||current.dev!==workspaceInfo.dev||current.ino!==workspaceInfo.ino)throw Error('sandbox workspace was replaced');
   const walk=dir=>{const names=fs.readdirSync(dir).sort();entries+=names.length;if(entries>cfg.maxFiles*4)throw Error('sandbox artifact entry limit');for(const name of names){const path=p.join(dir,name), rel=p.relative(workspace,path),st=fs.lstatSync(path);if(st.isDirectory()){walk(path);continue;}if(!st.isFile()||st.nlink!==1)throw Error('sandbox artifact is not a regular unlinked file');if(++files>cfg.maxFiles||bytes+st.size>cfg.maxWorkspaceBytes)throw Error('sandbox artifact limit');const fd=fs.openSync(path,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK);let b;try{const a=fs.fstatSync(fd);b=fs.readFileSync(fd);const z=fs.fstatSync(fd);if(!a.isFile()||a.nlink!==1||a.size!==z.size||a.mtimeMs!==z.mtimeMs||b.length!==a.size)throw Error('sandbox artifact changed');}finally{fs.closeSync(fd);}bytes+=b.length;send({type:'file',file:{path:rel,digest:digest(b),data:b.toString('base64'),mode:st.mode&0o111?448:384}});}};
   walk(workspace); send({type:'done',exitCode:code,error:failed?'sandbox transport failed':signal?'sandbox process signalled '+signal:undefined});
  } catch(e) { send({type:'done',exitCode:code,error:e.message}); }

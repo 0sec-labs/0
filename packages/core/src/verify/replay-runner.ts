@@ -60,7 +60,7 @@ import {
 import { ScopePolicy } from "../scope/scope.js";
 import { allowlistedChildEnv } from "../agent/sanitized-env.js";
 import { isPrivateAddress } from "../http.js";
-import { isAdmittedSmolvmWorkbench, runWorkbenchBrokerProgram } from "../runtime/smolvm-broker.js";
+import { isAdmittedSmolvmWorkbench, runWorkbenchBrokerProgram, WORKBENCH_BROKER_WORKSPACE } from "../runtime/smolvm-broker.js";
 import { acquireHostToken, markHostRateLimited, mergePersonaHeaders, resolveUrl, evaluateExpect, aggregateVerdict } from "../disclose/poc-runtime.js";
 import type { PocExecutionTarget, PocExecutionReport, PocStepResult } from "../disclose/poc-runtime.js";
 
@@ -367,9 +367,9 @@ export class SmolvmRunner implements ReplayRunner {
     switch (step.action.type) {
       case "shell": {
         const cwd = step.action.cwd ?? ".";
-        const workdir = posix.resolve("/workspace", cwd);
+        const workdir = posix.resolve(WORKBENCH_BROKER_WORKSPACE, cwd);
         if (isAbsolute(cwd) || win32.isAbsolute(cwd) || /[\\\0]/.test(cwd) ||
-            (workdir !== "/workspace" && !workdir.startsWith("/workspace/"))) {
+            (workdir !== WORKBENCH_BROKER_WORKSPACE && !workdir.startsWith(`${WORKBENCH_BROKER_WORKSPACE}/`))) {
           return failedStep(step, startedAt, "SmolVM shell cwd must be relative and remain inside the replay workspace");
         }
         command = ["/bin/sh", "-c", 'cd "$1" || exit 125; exec /bin/sh -c "$2"', "0-replay", workdir, step.action.cmd];

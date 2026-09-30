@@ -1,8 +1,9 @@
-import { getScopeEnforcementState } from "@0/core";
+import { readFileSync, writeFileSync } from "node:fs";
+import { analyticsPipeline, eventBus, getScopeEnforcementState } from "@0/core";
 import { afterEach, expect, test, vi } from "vitest";
 import { launch, type TuiHandle } from "../index.js";
-import { getSettings } from "../../../src/tui/settings-store.js";
-import { loadSettings, SETTING_DEFS } from "../../../src/tui/settings.js";
+import { getSettings, reloadSettings } from "../../../src/tui/settings-store.js";
+import { loadSettings, settingsFilePath, SETTING_DEFS } from "../../../src/tui/settings.js";
 import { modelsByokLaunch } from "./_helpers.js";
 
 
@@ -114,6 +115,59 @@ test("first launch opens chat; optional setup returns without completing or quit
   expect(process.exit).not.toHaveBeenCalled();
 });
 
+test("fresh setup highlights usage without sending until Finish records consent", async () => {
+  tui = await firstRun();
+  const sent: Record<string, unknown>[] = [];
+  try {
+    // Only this consent scenario lifts the harness restrictions. All transports
+    // remain captured and use synthetic credentials inside the throwaway home.
+    for (const name of ["ZERO_OFFLINE", "ZERO_NO_TELEMETRY", "DO_NOT_TRACK"]) vi.stubEnv(name, undefined);
+    vi.stubEnv("ZERO_ANALYTICS_LEVEL", undefined);
+    vi.stubEnv("ZERO_CLOUD_HOST", "https://analytics.test");
+    vi.stubEnv("ZERO_CLOUD_TOKEN", "test-token");
+    analyticsPipeline.__resetForTests();
+    analyticsPipeline.configure({
+      homeDir: process.env["HOME"],
+      fetchImpl: (async (_url, init) => {
+        const batch = JSON.parse(String(init?.body)).records;
+        sent.push(...batch);
+        return new Response(JSON.stringify({ ok: true, accepted: batch.length }), { status: 202 });
+      }) as typeof fetch,
+    });
+    reloadSettings();
+    const reportingBefore = getSettings().diagnosticReporting;
+    await tui.sendKey("return");
+    await tui.sendKey("n", { ctrl: true });
+    await tui.sendKey("n", { ctrl: true });
+    // Model/connection preferences use full settings writes. This scenario
+    // starts the final decision with no saved consent, not a persisted refusal.
+    const path = settingsFilePath(process.env["HOME"]);
+    const saved = JSON.parse(readFileSync(path, "utf8"));
+    delete saved.analyticsLevel;
+    writeFileSync(path, JSON.stringify(saved));
+    reloadSettings();
+    await tui.sendKey("s"); // Preserve Theme; no incidental settings write.
+    await tui.waitForText(/Step 5 of 5/);
+    expect(tui.captureFrame()).toContain("● Yes, I’d like to help make 0 better!");
+    await tui.sendKey("up");
+    await tui.sendKey("down");
+    eventBus.emit("tool_call_started", { tool: "before-finish", args_preview: "before consent", turn: 0, ts: 1 });
+    await analyticsPipeline.flushNow();
+    expect(sent).toEqual([]);
+    expect(loadSettings(process.env["HOME"], process.env["HOME"]).analyticsLevel).toBe("off");
+    await tui.sendKey("return");
+    expect(getSettings().onboardingCompleted).toBe(true);
+    expect(getSettings().diagnosticReporting).toBe(reportingBefore);
+    expect(loadSettings(process.env["HOME"], process.env["HOME"]).analyticsLevel).toBe("usage");
+    eventBus.emit("tool_call_started", { tool: "after-finish", args_preview: "after consent", turn: 0, ts: 2 });
+    await analyticsPipeline.flushNow();
+    expect(sent).toEqual([expect.objectContaining({ kind: "usage", featureCounts: { "after-finish": 1 } })]);
+  } finally {
+    analyticsPipeline.__resetForTests();
+    vi.unstubAllEnvs();
+  }
+});
+
 test.each([[100, 34], [64, 24]])("Back traverses decisions, filters unwind first, confirmed preferences survive (%ix%i)", async (cols, rows) => {
   tui = await firstRun(cols, rows);
   const sharingBefore = getSettings().analyticsLevel;
@@ -144,9 +198,8 @@ test.each([[100, 34], [64, 24]])("Back traverses decisions, filters unwind first
   expect(getSettings().theme).toBe(originalTheme);
   await tui.waitForText(/Step 5 of 5/);
   expect(tui.captureFrame()).toContain("You can change this choice in Settings");
-  expect(tui.captureFrame()).toContain("● Yes, I’d like to help make 0 better!");
-  expect(tui.captureFrame()).toContain("Pseudonymous usage metrics");
-  expect(tui.captureFrame()).toContain("○ Off");
+  expect(tui.captureFrame()).toContain("● Off");
+  expect(tui.captureFrame()).toContain("○ Yes, I’d like to help make 0 better!");
   expect(tui.captureFrame()).not.toMatch(/Tools and code|\bFull\b|identifying content|anonymous|environment opt-outs|problem reports|Hackstore|Density|Done/);
   await tui.sendKey("escape");
   expect(tui.captureFrame()).toMatch(/Theme/);
@@ -159,10 +212,10 @@ test.each([[100, 34], [64, 24]])("Back traverses decisions, filters unwind first
   expect(getSettings().theme).toBe(chosenTheme);
   await tui.sendKey("s");
   await tui.waitForText(/Step 5 of 5/);
-  await tui.sendKey("up");
-  expect(tui.captureFrame()).toContain("● Off");
   await tui.sendKey("down");
   expect(tui.captureFrame()).toContain("● Yes, I’d like to help make 0 better!");
+  await tui.sendKey("up");
+  expect(tui.captureFrame()).toContain("● Off");
   expect(getSettings().analyticsLevel).toBe(sharingBefore);
   expect(getSettings().diagnosticReporting).toBe(reportingBefore);
   await tui.sendKey("s"); // Final sharing skip completes without changing the saved tier.

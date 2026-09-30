@@ -3,12 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { analyticsPipeline } from "@0/core";
+import { analyticsPipeline, eventBus } from "@0/core";
 
-import { DEFAULT_SETTINGS, loadSettings, type TuiSettings } from "./settings.js";
+import { DEFAULT_SETTINGS, loadSettings, settingsFilePath, type TuiSettings } from "./settings.js";
 import {
   __resetSettingsStoreForTests,
   configureSettingsStore,
+  getAnalyticsSetupDraft,
   getSettings,
   previewSetting,
   reloadSettings,
@@ -491,6 +492,7 @@ describe("analytics environment restrictions", () => {
   });
 
   async function collect(): Promise<void> {
+    eventBus.emit("tool_call_started", { tool: "bridge-counter", args_preview: "usage-only fixture", turn: 0, ts: 1 });
     analyticsPipeline.recordCode({ lang: "ts", source: "export const capture = 1;", origin: "bridge-regression" });
     analyticsPipeline.recordScope({ target: "scope-marker", kind: "target" });
     await analyticsPipeline.flushNow();
@@ -499,8 +501,9 @@ describe("analytics environment restrictions", () => {
   it("preserves a shell opt-out across initial settings load and live preference changes", async () => {
     vi.stubEnv("ZERO_ANALYTICS_LEVEL", "off");
     configureSettingsStore({ homeDir: makeHome() });
+    expect(getAnalyticsSetupDraft()).toBe("off");
     await collect();
-    updateSetting("analyticsLevel", "full");
+    updateSetting("analyticsLevel", "usage");
     updateSetting("density", "compact");
     await collect();
 
@@ -508,13 +511,13 @@ describe("analytics environment restrictions", () => {
     expect(sent).toEqual([]);
   });
 
-  it("keeps a lower shell tier while allowing its authorized content", async () => {
+  it("limits a shell content-sharing grant to usage without forwarding tool content or code", async () => {
     vi.stubEnv("ZERO_ANALYTICS_LEVEL", "commands");
     configureSettingsStore({ homeDir: makeHome() });
-    updateSetting("analyticsLevel", "full");
+    updateSetting("analyticsLevel", "usage");
     await collect();
 
-    expect(sent).toEqual([expect.objectContaining({ origin: "bridge-regression" })]);
+    expect(sent).toEqual([expect.objectContaining({ kind: "usage", featureCounts: { "bridge-counter": 1 } })]);
     expect(process.env["ZERO_ANALYTICS_LEVEL"]).toBe("commands");
   });
 
@@ -525,36 +528,63 @@ describe("analytics environment restrictions", () => {
     writeProjectRaw(project, { analyticsLevel: "full" });
     vi.stubEnv("ZERO_ANALYTICS_LEVEL", "full");
     configureSettingsStore({ homeDir: home, projectDir: project });
-    expect(updateSetting("analyticsLevel", "full", { scope: "project" })).toBe(false);
+    expect(getAnalyticsSetupDraft()).toBe("off");
+    expect(updateSetting("analyticsLevel", "usage", { scope: "project" })).toBe(false);
     await collect();
 
     expect(sent).toEqual([]);
     expect(loadGlobalSettings(home).analyticsLevel).toBe("off");
   });
 
-  it("updates its own inherited tier but respects an external override introduced later", async () => {
-    configureSettingsStore({ homeDir: makeHome() });
-    updateSetting("analyticsLevel", "full");
+  it("keeps new setup drafts local until confirmation and respects a later shell refusal", async () => {
+    const home = makeHome();
+    configureSettingsStore({ homeDir: home });
+    expect(getAnalyticsSetupDraft()).toBe("usage");
+    await collect();
+    expect(sent).toEqual([]);
+    expect(loadGlobalSettings(home).analyticsLevel).toBe("off");
+    updateSetting("analyticsLevel", getAnalyticsSetupDraft());
     await collect();
     expect(sent).toEqual([
-      expect.objectContaining({ origin: "bridge-regression" }),
-      expect.objectContaining({ targetRedacted: "scope-marker" }),
+      expect.objectContaining({ kind: "usage", featureCounts: { "bridge-counter": 1 } }),
     ]);
     sent.length = 0;
     updateSetting("analyticsLevel", "off");
     await collect();
     expect(sent).toEqual([]);
-    updateSetting("analyticsLevel", "full");
+    updateSetting("analyticsLevel", "usage");
     await collect();
     expect(sent).toEqual([
-      expect.objectContaining({ origin: "bridge-regression" }),
-      expect.objectContaining({ targetRedacted: "scope-marker" }),
+      expect.objectContaining({ kind: "usage", featureCounts: { "bridge-counter": 1 } }),
     ]);
     sent.length = 0;
     vi.stubEnv("ZERO_ANALYTICS_LEVEL", "off");
-    updateSetting("analyticsLevel", "full");
+    updateSetting("analyticsLevel", "usage");
+    expect(getAnalyticsSetupDraft()).toBe("off");
     await collect();
     expect(sent).toEqual([]);
     expect(process.env["ZERO_ANALYTICS_LEVEL"]).toBe("off");
+  });
+
+  it("keeps every hard opt-out effective during setup and after a usage confirmation", async () => {
+    for (const name of ["ZERO_OFFLINE", "ZERO_NO_TELEMETRY", "DO_NOT_TRACK"]) {
+      vi.stubEnv(name, "1");
+      configureSettingsStore({ homeDir: makeHome() });
+      expect(getAnalyticsSetupDraft()).toBe("off");
+      updateSetting("analyticsLevel", "usage");
+      await collect();
+      expect(sent).toEqual([]);
+      vi.stubEnv(name, undefined);
+    }
+  });
+
+  it("does not propose usage for malformed persisted consent", async () => {
+    const home = makeHome();
+    mkdirSync(dirname(settingsFilePath(home)), { recursive: true });
+    writeFileSync(settingsFilePath(home), JSON.stringify({ analyticsLevel: "invalid" }));
+    configureSettingsStore({ homeDir: home });
+    expect(getAnalyticsSetupDraft()).toBe("off");
+    await collect();
+    expect(sent).toEqual([]);
   });
 });

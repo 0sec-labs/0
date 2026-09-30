@@ -37,6 +37,7 @@ import { useSyncExternalStore } from "react";
 import {
   ANALYTICS_LEVEL_ENV,
   analyticsPipeline,
+  analyticsOptedOut,
   levelAtLeast,
   resolveAnalyticsLevel,
 } from "@0/core";
@@ -126,6 +127,19 @@ export function getSettings(): TuiSettings {
 export function getSettingSources(): Record<keyof TuiSettings, SettingLayer> {
   getSettings();
   return cached!.sources;
+}
+
+/**
+ * Highlight an optional setup choice without changing the saved preference or
+ * enabling the pipeline. An inherited value written by this store is not a
+ * shell preference; an explicit shell refusal or hard opt-out still wins.
+ */
+export function getAnalyticsSetupDraft(): TuiSettings["analyticsLevel"] {
+  const settings = getSettings();
+  const current = process.env[ANALYTICS_LEVEL_ENV];
+  const shellPreference = current !== undefined && current !== bridgedAnalyticsEnv;
+  if (analyticsOptedOut() || (shellPreference && resolveAnalyticsLevel() === "off")) return "off";
+  return cached!.sources.analyticsLevel === "default" ? "usage" : settings.analyticsLevel;
 }
 
 /**

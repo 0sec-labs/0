@@ -30,19 +30,17 @@
  *     the existence of diagnostic or feedback data is never taken as implicit
  *     permission to transmit.
  *   - **Previewable.** {@link buildSubmitPreview} returns the literal bytes
- *     and the literal headers that would go on the wire, so the operator can
- *     read the hostname before it leaves rather than trusting a summary.
- *   - **Nothing auto-attached.** No transcript, no findings, no scan ids, no
- *     environment, no machine id. Only the fields the caller passed. The
- *     preview *is* the payload — {@link FEEDBACK_WIRE_FIELDS} is the whole
- *     list and a test asserts the serialized body carries nothing else.
- *   - **Warn, never scrub.** {@link scanForSecrets} flags credential shapes
- *     and returns the message untouched. Partial redaction was already
- *     rejected in this codebase for transcripts, for the right reason: a
- *     scrubber advertises a guarantee it cannot keep, and an operator who
- *     believes it stops reading what they are about to send. A warning that
- *     makes a human look is worth more than a filter that makes them stop
- *     looking.
+ *     and authentication-redacted headers the operator can inspect.
+ *   - **Bounded fields.** Manual feedback uses {@link FEEDBACK_WIRE_FIELDS};
+ *     it never attaches a transcript, findings, scan ids or machine identity.
+ *     Marked diagnostics can use an explicitly configured CLI Sentry DSN,
+ *     carrying finite categories/runtime labels, release/channel identity and
+ *     scrubbed built-in stack locations, never raw error messages or output.
+ *   - **Separate consent.** Diagnostic submits require a reporting preference
+ *     or individual confirmation. Analytics consent never broadens diagnostics.
+ *   - **Manual prose is previewed.** {@link scanForSecrets} warns about
+ *     credential shapes without modifying operator-authored feedback. Captured
+ *     crash feedback is scrubbed by its own builder before reaching transport.
  *   - **Centrally disableable.** See {@link submissionBlockedReason} — an
  *     organization can kill egress for every operator with one env var.
  *
@@ -52,9 +50,15 @@
  */
 
 import { appendFileSync, mkdirSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { loadCloudCredentials } from "@0/core";
+import { VERSION } from "@0/shared";
+
+// Reuse the version/build globals supplied by the existing release scripts.
+declare const __ZERO_VERSION__: string;
+declare const __ZERO_BUILD_COMMIT__: string;
 
 export interface FeedbackEntry {
   message: string;
@@ -114,13 +118,14 @@ export function appendFeedback(entry: FeedbackEntry, homeDir?: string): Feedback
 
 export type FeedbackEnv = Record<string, string | undefined>;
 
-/** The payload shape. Structurally identical to {@link FeedbackEntry}. */
+/** Feedback fields plus explicitly bounded diagnostic metadata (not feedback JSON). */
 export interface FeedbackPayload {
   message: string;
   timestamp: string;
   version?: string;
   model?: string;
   mode?: string;
+  diagnostic?: DiagnosticMetadata;
 }
 
 /**
@@ -163,7 +168,7 @@ export interface SubmitPreview {
   warnings: string[];
 }
 
-export type SubmitSkipReason = "no-endpoint" | "opt-out" | "insecure-endpoint";
+export type SubmitSkipReason = "no-endpoint" | "opt-out" | "insecure-endpoint" | "no-consent";
 
 export interface SubmitResult {
   ok: boolean;
@@ -182,6 +187,9 @@ export const DEFAULT_FEEDBACK_URL = "";
 /** Env var holding the submission endpoint. */
 export const FEEDBACK_URL_ENV = "ZERO_FEEDBACK_URL";
 
+/** Dedicated, operator-provisioned CLI Sentry DSN. No dashboard DSN fallback. */
+export const SENTRY_DSN_ENV = "ZERO_SENTRY_DSN";
+
 /** The authenticated 0cloud receiver behind the dashboard feedback channel. */
 const CLOUD_FEEDBACK_PATH = "/api/cli-feedback";
 
@@ -198,6 +206,7 @@ export interface FeedbackResolveOptions {
 interface FeedbackTarget {
   url: string;
   authorization?: string;
+  sentryKey?: string;
 }
 
 function defaultCloudCredentials(env: FeedbackEnv): { host: string; token: string } | null {
@@ -225,6 +234,35 @@ function cloudFeedbackUrl(host: string): string | null {
   } catch {
     return null;
   }
+}
+
+function resolveSentryTarget(dsn: string): FeedbackTarget {
+  try {
+    const parsed = new URL(dsn);
+    const key = parsed.username;
+    const segments = parsed.pathname.split("/").filter(Boolean);
+    const project = segments.pop();
+    if (
+      parsed.protocol !== "https:" || parsed.password || parsed.search || parsed.hash ||
+      !/^[A-Za-z0-9_-]+$/.test(key) || !project || !/^\d+$/.test(project) ||
+      segments.some((segment) => !/^[A-Za-z0-9_-]+$/.test(segment))
+    ) return { url: "" };
+    parsed.username = "";
+    parsed.pathname = `/${[...segments, "api", project, "envelope"].join("/")}/`;
+    return { url: parsed.toString(), sentryKey: key };
+  } catch {
+    // Preserve explicit invalid configuration as a blocked target, not fallback.
+    return { url: "" };
+  }
+}
+
+function resolveSubmissionTarget(
+  payload: FeedbackPayload,
+  env: FeedbackEnv,
+  options: FeedbackResolveOptions,
+): FeedbackTarget | null {
+  const dsn = env[SENTRY_DSN_ENV]?.trim();
+  return payload.diagnostic && dsn ? resolveSentryTarget(dsn) : resolveFeedbackTarget(env, options);
 }
 
 function resolveFeedbackTarget(
@@ -297,6 +335,7 @@ export function feedbackEndpoint(
 export function submissionBlockedReason(
   env: FeedbackEnv = process.env,
   options: FeedbackResolveOptions = {},
+  payload?: FeedbackPayload,
 ): SubmitSkipReason | null {
   // Opt-out is checked first and wins over everything, including an
   // explicitly configured endpoint. That precedence is the point: the org
@@ -304,7 +343,7 @@ export function submissionBlockedReason(
   for (const name of FEEDBACK_OPT_OUT_ENV) {
     if (isOptOutSet(env[name])) return "opt-out";
   }
-  return targetBlockedReason(resolveFeedbackTarget(env, options));
+  return targetBlockedReason(payload ? resolveSubmissionTarget(payload, env, options) : resolveFeedbackTarget(env, options));
 }
 
 function targetBlockedReason(target: FeedbackTarget | null): SubmitSkipReason | null {
@@ -318,7 +357,7 @@ function targetBlockedReason(target: FeedbackTarget | null): SubmitSkipReason | 
   // HTTPS only. Feedback bodies carry engagement context; plaintext would put
   // it in front of anything on the path, which is exactly the audience we are
   // trying to keep it away from.
-  if (parsed.protocol !== "https:") return "insecure-endpoint";
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.hash) return "insecure-endpoint";
   return null;
 }
 
@@ -330,7 +369,9 @@ export function describeSkip(reason: SubmitSkipReason): string {
     case "no-endpoint":
       return `No feedback endpoint configured (set ${FEEDBACK_URL_ENV}). Saved locally only.`;
     case "insecure-endpoint":
-      return `Refusing a non-HTTPS ${FEEDBACK_URL_ENV}. Saved locally only.`;
+      return "Refusing an invalid or non-HTTPS telemetry endpoint. Saved locally only.";
+    case "no-consent":
+      return "Problem report requires confirmation or an automatic-reporting preference. Saved locally only.";
   }
 }
 
@@ -409,6 +450,10 @@ function serializePayload(payload: FeedbackPayload): string {
 
 function requestHeaders(target: FeedbackTarget, redactAuthorization = false): Record<string, string> {
   const headers: Record<string, string> = { "content-type": "application/json" };
+  if (target.sentryKey) {
+    headers["content-type"] = "application/x-sentry-envelope";
+    headers["x-sentry-auth"] = `Sentry sentry_version=7,sentry_key=${redactAuthorization ? "<redacted>" : target.sentryKey},sentry_client=0-cli/${VERSION}`;
+  }
   if (target.authorization) {
     headers.authorization = redactAuthorization ? "Bearer <redacted>" : target.authorization;
   }
@@ -424,14 +469,14 @@ export function buildSubmitPreview(
   env: FeedbackEnv = process.env,
   options: FeedbackResolveOptions = {},
 ): SubmitPreview | null {
-  if (submissionBlockedReason(env, options) !== null) return null;
-  const target = resolveFeedbackTarget(env, options);
-  if (target === null) return null;
+  if (FEEDBACK_OPT_OUT_ENV.some((name) => isOptOutSet(env[name]))) return null;
+  const target = resolveSubmissionTarget(payload, env, options);
+  if (target === null || targetBlockedReason(target) !== null) return null;
   return {
     url: target.url,
-    body: serializePayload(payload),
+    body: serializeSubmission(payload, target, env),
     headers: requestHeaders(target, true),
-    warnings: scanForSecrets(payload.message),
+    warnings: target.sentryKey ? [] : scanForSecrets(payload.message),
   };
 }
 
@@ -439,6 +484,12 @@ export interface SubmitOptions extends FeedbackResolveOptions {
   /** Injected transport, matching the repo's `fetchImpl` convention. */
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  /**
+   * Diagnostics require their own consent, never an analytics tier. Read live
+   * settings at the callsite; an individually reviewed report may be confirmed
+   * even when automatic reporting is off.
+   */
+  diagnosticConsent?: { policy: "off" | "ask" | "automatic"; confirmed?: boolean };
   /**
    * When set, the transport re-derives the current endpoint, body, and
    * redacted-authorization headers and rejects (zero POST) if they differ
@@ -467,15 +518,18 @@ export async function submitFeedback(
   env: FeedbackEnv = process.env,
   opts: SubmitOptions = {},
 ): Promise<SubmitResult> {
-  const blocked = submissionBlockedReason(env, opts);
-  if (blocked !== null) return { ok: false, skipped: blocked, error: describeSkip(blocked) };
-
-  const target = resolveFeedbackTarget(env, opts);
+  if (FEEDBACK_OPT_OUT_ENV.some((name) => isOptOutSet(env[name]))) {
+    return { ok: false, skipped: "opt-out", error: describeSkip("opt-out") };
+  }
+  if (payload.diagnostic && opts.diagnosticConsent?.confirmed !== true && opts.diagnosticConsent?.policy !== "automatic") {
+    return { ok: false, skipped: "no-consent", error: describeSkip("no-consent") };
+  }
+  const target = resolveSubmissionTarget(payload, env, opts);
   const targetBlocked = targetBlockedReason(target);
   if (targetBlocked !== null) return { ok: false, skipped: targetBlocked, error: describeSkip(targetBlocked) };
   if (target === null) return { ok: false, skipped: "no-endpoint", error: describeSkip("no-endpoint") };
 
-  const body = serializePayload(payload);
+  const body = serializeSubmission(payload, target, env);
   if (Buffer.byteLength(body, "utf8") > MAX_BODY_BYTES) {
     return { ok: false, error: `Message too large to submit (limit ${MAX_BODY_BYTES} bytes).` };
   }
@@ -497,7 +551,7 @@ export async function submitFeedback(
       return {
         ok: false,
         error:
-          "Reviewed feedback destination has changed. Preview the updated submission before sending again.",
+          "Reviewed telemetry destination has changed. Preview the updated submission before sending again.",
       };
     }
   }
@@ -532,8 +586,9 @@ export async function submitFeedback(
       return response.ok
         ? { ok: true, status: response.status }
         : { ok: false, status: response.status, error: `Endpoint returned ${response.status}.` };
-    } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    } catch {
+      // Transport errors can echo DSNs, URLs or authorization headers.
+      return { ok: false, error: "Feedback submission failed." };
     }
   })();
 
@@ -557,11 +612,8 @@ export interface DiagnosticInfo {
   runtimeVersion: string;
   toolName?: string;
   /**
-   * The failure. Two uses, kept strictly apart:
-   *   - On the WIRE ({@link buildDiagnosticFeedback}) only its finite *category*
-   *     is read (via {@link diagnosticError}) — never the message/stack/output.
-   *   - LOCALLY ({@link buildDiagnosticReview}) its real text is shown to the
-   *     operator so they can see what actually failed, and decide.
+   * Only the finite failure category and allowlisted package-relative stack
+   * locations can be transmitted. Messages/output remain local review data.
    */
   error?: unknown;
   /**
@@ -572,6 +624,23 @@ export interface DiagnosticInfo {
    */
   exitOutput?: string;
   timestamp?: string;
+}
+
+interface DiagnosticFrame {
+  filename: string;
+  lineno: number;
+  colno: number;
+}
+
+interface DiagnosticMetadata {
+  eventId: string;
+  kind: string;
+  category: string;
+  platform: string;
+  arch: string;
+  runtime: string;
+  runtimeVersion: string;
+  frames: DiagnosticFrame[];
 }
 
 export const MAX_DIAGNOSTIC_MESSAGE_BYTES = 512;
@@ -635,7 +704,7 @@ function diagnosticVersion(raw: string): string {
  * paths and environment values never enter the existing feedback wire body.
  * This builder performs no I/O and grants no permission to transmit.
  */
-export function buildDiagnosticFeedback(info: DiagnosticInfo, env: NodeJS.ProcessEnv = process.env): FeedbackPayload {
+export function buildDiagnosticFeedback(info: DiagnosticInfo): FeedbackPayload {
   const kind = info.kind === "tool" ? "tool" : info.kind === "runtime" ? "runtime" : "unknown";
   const platform = DIAGNOSTIC_PLATFORMS.has(info.platform) ? info.platform : "unknown";
   const arch = DIAGNOSTIC_ARCHS.has(info.arch) ? info.arch : "unknown";
@@ -647,133 +716,90 @@ export function buildDiagnosticFeedback(info: DiagnosticInfo, env: NodeJS.Proces
     && Number.isFinite(Date.parse(info.timestamp)) ? info.timestamp : new Date().toISOString();
   // The finite header: all interpolated values are finite labels or bounded
   // numeric versions, so this stays below MAX_DIAGNOSTIC_MESSAGE_BYTES.
-  let message = `Diagnostic: ${kind} error — ${platform}/${arch} on ${runtime} ${runtimeVersion}\nVersion: ${version}\nError: ${diagnosticError(info.error)}`;
-  // When — and ONLY when — the operator has consented to sharing commands/code
-  // (analyticsLevel `commands` or `full`, surfaced to core+cli as the
-  // ZERO_ANALYTICS_LEVEL env var), append the REDACTED full failure detail:
-  // the error type, its message, the stack frames and any captured output,
-  // with credentials, API keys, tokens, private keys and emails scrubbed and
-  // home-dir usernames anonymised. Without that consent the wire body is the
-  // finite category exactly as before — byte-capped and leak-free — so the
-  // default privacy contract (and its tests) is untouched.
-  if (diagnosticDetailAllowed(env)) {
-    const detail = redactDiagnosticDetail(buildDiagnosticDetailText(info));
-    if (detail) message = capUtf8Bytes(`${message}\n\n${detail}`, MAX_DIAGNOSTIC_DETAIL_MESSAGE_BYTES);
-  }
-  return { message, timestamp, version };
+  const category = diagnosticError(info.error);
+  const message = `Diagnostic: ${kind} error — ${platform}/${arch} on ${runtime} ${runtimeVersion}\nVersion: ${version}\nError: ${category}`;
+  // Analytics consent never grants diagnostic detail consent. Neither raw
+  // messages, captured tool output nor the unredacted local review is attached.
+  return {
+    message, timestamp, version,
+    diagnostic: {
+      eventId: randomUUID().replaceAll("-", ""),
+      kind, category, platform, arch, runtime, runtimeVersion,
+      frames: diagnosticFrames(info.error),
+    },
+  };
 }
 
 /**
- * The larger wire cap for the consented, redacted detail path. Big enough for a
- * real stack trace, still bounded so a runaway error can never balloon the POST.
+ * Only built-in package-relative locations survive. No function names, source
+ * lines, arguments, absolute paths, target URLs or arbitrary stack text.
  */
-export const MAX_DIAGNOSTIC_DETAIL_MESSAGE_BYTES = 8192;
-/** Longest detail body assembled before redaction/capping. */
-const MAX_DIAGNOSTIC_DETAIL_CHARS = 6000;
-
-/**
- * True only when the operator has opted into sharing command/code-level detail
- * (analyticsLevel `commands` or `full`). Read from the env bridge the CLI sets
- * from the setting, so core and cli agree without a settings-store import. An
- * absent/`off`/`usage` value keeps diagnostics at the finite-category default.
- */
-function diagnosticDetailAllowed(env: NodeJS.ProcessEnv): boolean {
-  const level = (env["ZERO_ANALYTICS_LEVEL"] ?? "").trim().toLowerCase();
-  return level === "commands" || level === "full";
-}
-
-/**
- * Assemble the FULL failure detail (pre-redaction): tool name, error type +
- * message, stack frames, and any separately-captured exit output. Bounded to
- * {@link MAX_DIAGNOSTIC_DETAIL_CHARS}. The caller redacts before it goes on any
- * wire; this function performs no I/O.
- */
-function buildDiagnosticDetailText(info: DiagnosticInfo): string {
-  const parts: string[] = [];
-  if (info.toolName) parts.push(`Tool: ${info.toolName}`);
-  const err = info.error;
-  if (err instanceof Error) {
-    parts.push(`${err.name}: ${err.message || "(no message)"}`);
-    if (typeof err.stack === "string" && err.stack.trim()) parts.push(err.stack.trim());
-  } else {
-    const text = diagnosticErrorText(err);
-    if (text) parts.push(text);
-  }
-  const exitOutput = typeof info.exitOutput === "string" ? info.exitOutput.trim() : "";
-  if (exitOutput && !parts.some((p) => p.includes(exitOutput))) parts.push(exitOutput);
-  let detail = parts.join("\n").trim();
-  if (detail.length > MAX_DIAGNOSTIC_DETAIL_CHARS) detail = detail.slice(0, MAX_DIAGNOSTIC_DETAIL_CHARS - 1) + "…";
-  return detail;
-}
-
-/** Credential/PII patterns applied as REPLACE (the hard redaction floor). */
-const DETAIL_REDACTIONS: { re: RegExp; to: string }[] = [
-  { re: /-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----[\s\S]*?-----END (?:[A-Z0-9 ]+ )?PRIVATE KEY-----/g, to: "‹redacted:private-key›" },
-  { re: /\bsk-[A-Za-z0-9_-]{16,}/g, to: "‹redacted:key›" },
-  { re: /\bgh[pousr]_[A-Za-z0-9]{20,}/g, to: "‹redacted:gh-token›" },
-  { re: /\b(?:AKIA|ASIA|ABIA|ACCA)[0-9A-Z]{16}\b/g, to: "‹redacted:aws-key›" },
-  { re: /\bAIza[0-9A-Za-z_-]{35}\b/g, to: "‹redacted:gcp-key›" },
-  { re: /\bxox[abprs]-[A-Za-z0-9-]{10,}/g, to: "‹redacted:slack-token›" },
-  { re: /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+/g, to: "‹redacted:jwt›" },
-  { re: /authorization\s*[:=]\s*(?:bearer|basic|token|digest)\s+\S+/gi, to: "authorization: ‹redacted›" },
-  { re: /\b((?:pass(?:word|wd)?|api[_-]?key|secret|token|credentials?)\s*[:=]\s*)\S{6,}/gi, to: "$1‹redacted›" },
-  // Connection strings: keep the scheme/host shape, drop the inline credentials.
-  // MUST run before the email rule so `user:pass@host` is not mis-read as an
-  // email (which would swallow the host too).
-  { re: /([a-z][a-z0-9+.-]*:\/\/)[^\s/@:]+:[^\s/@]+@/gi, to: "$1‹redacted›@" },
-  { re: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, to: "‹redacted:email›" },
-  // Home-dir usernames in file paths — keep the path shape, anonymise the user.
-  { re: /(\/home\/)[^/\s]+/g, to: "$1‹user›" },
-  { re: /(\/Users\/)[^/\s]+/g, to: "$1‹user›" },
-  { re: /([A-Za-z]:\\Users\\)[^\\\s]+/g, to: "$1‹user›" },
-];
-
-/**
- * Redact the HARD-floor secrets and PII from the detail before it goes on the
- * wire: credentials, API keys, tokens, private keys, JWTs, auth headers, inline
- * connection-string passwords, emails and home-dir usernames. This is the
- * safety floor that always applies to the consented detail path — it does NOT
- * strip target hostnames, IPs or tool names, which the operator has opted to
- * share by enabling the commands/full tier. Never throws.
- */
-export function redactDiagnosticDetail(text: string): string {
-  if (typeof text !== "string" || text.length === 0) return "";
+function diagnosticFrames(error: unknown): DiagnosticFrame[] {
   try {
-    let out = text;
-    for (const { re, to } of DETAIL_REDACTIONS) out = out.replace(re, to);
-    return out;
+    if (!(error instanceof Error) || typeof error.stack !== "string") return [];
+    const frames: DiagnosticFrame[] = [];
+    for (const line of error.stack.slice(0, 16_384).split("\n").slice(1, 33)) {
+      const match = /(?:^|[/\\])(packages[/\\](?:cli|core|shared)[/\\](?:src|dist)[/\\][A-Za-z0-9_./\\-]+\.[cm]?[jt]sx?):(\d{1,7}):(\d{1,7})\)?$/.exec(line.trim());
+      if (!match || match[1].split(/[/\\]/).some((part) => part === "..")) continue;
+      const lineno = Number(match[2]);
+      const colno = Number(match[3]);
+      if (lineno > 0 && colno > 0) {
+        frames.push({ filename: `app:///${match[1].replaceAll("\\", "/")}`, lineno, colno });
+      }
+    }
+    return frames.reverse();
   } catch {
-    // A pathological input must never leak raw: drop it entirely.
-    return "";
+    return [];
   }
 }
 
-/** Truncate to at most `maxBytes` UTF-8 bytes without splitting a code point. */
-function capUtf8Bytes(text: string, maxBytes: number): string {
-  if (Buffer.byteLength(text, "utf8") <= maxBytes) return text;
-  let lo = 0, hi = text.length;
-  while (lo < hi) {
-    const mid = Math.ceil((lo + hi) / 2);
-    if (Buffer.byteLength(text.slice(0, mid), "utf8") <= maxBytes - 1) lo = mid;
-    else hi = mid - 1;
-  }
-  return text.slice(0, lo) + "…";
+function serializeSubmission(payload: FeedbackPayload, target: FeedbackTarget, env: FeedbackEnv): string {
+  if (!target.sentryKey || !payload.diagnostic) return serializePayload(payload);
+  const diagnostic = payload.diagnostic;
+  const cliVersion = VERSION;
+  const commit = typeof __ZERO_BUILD_COMMIT__ !== "undefined" && /^[0-9a-f]{40}$/i.test(__ZERO_BUILD_COMMIT__)
+    ? __ZERO_BUILD_COMMIT__.toLowerCase() : undefined;
+  const environment = env["NODE_ENV"] === "development" ? "development"
+    : env["NODE_ENV"] === "production" || typeof __ZERO_VERSION__ !== "undefined" ? "production" : "development";
+  const event = JSON.stringify({
+    event_id: diagnostic.eventId,
+    timestamp: Date.parse(payload.timestamp) / 1000,
+    platform: "node",
+    level: "error",
+    logger: "0.cli",
+    release: `0-cli@${cliVersion}${commit ? `+${commit}` : ""}`,
+    environment,
+    tags: {
+      cli_version: cliVersion,
+      ...(commit ? { build_commit: commit } : {}),
+      kind: diagnostic.kind,
+      platform: diagnostic.platform,
+      arch: diagnostic.arch,
+      runtime: diagnostic.runtime,
+    },
+    contexts: { runtime: { name: diagnostic.runtime, version: diagnostic.runtimeVersion } },
+    exception: {
+      values: [{
+        type: "CLIError",
+        value: diagnostic.category,
+        ...(diagnostic.frames.length ? { stacktrace: { frames: diagnostic.frames } } : {}),
+      }],
+    },
+  });
+  return `${JSON.stringify({ event_id: diagnostic.eventId })}\n${JSON.stringify({ type: "event", length: Buffer.byteLength(event, "utf8") })}\n${event}\n`;
 }
+
 
 // ---------------------------------------------------------------------------
 // Operator-facing local detail (never transmitted)
 // ---------------------------------------------------------------------------
 //
-// The wire body above is deliberately coarse: it reports a finite error
-// *category* and nothing else, because engagement data must not leave the
-// boundary. But the operator sitting at the console needs the opposite — the
-// REAL reason a tool failed, or they are back to reading "Error: unknown".
+// Diagnostic transports exclude arbitrary messages/output; configured Sentry
+// can include only scrubbed built-in stack locations. The operator still needs
+// the full failure reason locally to decide whether to send a report.
 //
-// These helpers resolve that tension: they produce the full, unredacted detail
-// for the human's REVIEW only. They perform no I/O, and nothing here is ever
-// fed to {@link serializePayload} / {@link buildSubmitPreview} — the wire
-// payload is still built solely by {@link buildDiagnosticFeedback}, so the
-// privacy guarantee (and its tests) are untouched.
+// These helpers produce unredacted detail for the human's REVIEW only. They
+// perform no I/O; localDetail is never handed to the submission serializer.
 
 /** Longest local detail we render; local-only, so generous but still bounded. */
 export const MAX_LOCAL_DETAIL_CHARS = 4000;
@@ -808,8 +834,8 @@ export function diagnosticErrorText(error: unknown): string {
 
 export interface DiagnosticReview {
   /**
-   * The privacy-bounded payload that would go on the wire — byte-identical to
-   * {@link buildDiagnosticFeedback}. Finite labels only; safe to transmit.
+   * The privacy-bounded report produced by {@link buildDiagnosticFeedback}.
+   * Finite summary and scrubbed built-in locations, never local review detail.
    */
   payload: FeedbackPayload;
   /**

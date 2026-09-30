@@ -665,6 +665,25 @@ function writeProjectRaw(projectDir: string, raw: unknown): void {
 // dirname is needed above.
 import { dirname } from "node:path";
 
+
+describe("public analytics consent", () => {
+  it("narrows legacy content-sharing consent on load and persists only usage", () => {
+    const home = makeHome();
+    const project = makeProjectDir();
+    mkdirSync(dirname(settingsFilePath(home)), { recursive: true });
+    writeFileSync(settingsFilePath(home), JSON.stringify({ analyticsLevel: "commands" }));
+    writeProjectRaw(project, { analyticsLevel: "full" });
+    const migrated = loadLayeredSettings({ homeDir: home, projectDir: project });
+    expect(migrated.settings.analyticsLevel).toBe("usage");
+    expect(migrated.sources.analyticsLevel).toBe("global");
+    expect(normalizeSettings({ analyticsLevel: "full" }).analyticsLevel).toBe("usage");
+    saveSettings(migrated.settings, home);
+    expect(JSON.parse(readFileSync(settingsFilePath(home), "utf8")).analyticsLevel).toBe("usage");
+    const optedOut = toggleSetting(migrated.settings, "analyticsLevel");
+    expect(optedOut.analyticsLevel).toBe("off");
+    expect(toggleSetting(optedOut, "analyticsLevel").analyticsLevel).toBe("usage");
+  });
+});
 describe("operator-only privacy and updates", () => {
   it("does not let a project override reporting policy or hide unanswered onboarding", () => {
     const home = makeHome();
@@ -691,6 +710,7 @@ describe("operator-only privacy and updates", () => {
     const project = makeProjectDir();
     mkdirSync(dirname(settingsFilePath(home)), { recursive: true });
     writeFileSync(settingsFilePath(home), JSON.stringify({
+      analyticsLevel: choice,
       diagnosticReporting: choice,
       diagnosticReportingPrompted: false,
       updatePolicy: false,
@@ -698,16 +718,19 @@ describe("operator-only privacy and updates", () => {
     }));
     writeProjectRaw(project, {
       diagnosticReporting: "automatic",
+      analyticsLevel: "full",
       diagnosticReportingPrompted: true,
       updatePolicy: "automatic",
       allowDevSourceUpdates: false,
     });
     const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
     expect(settings.diagnosticReporting).toBe("off");
+    expect(settings.analyticsLevel).toBe("off");
     expect(settings.diagnosticReportingPrompted).toBe(false);
     expect(settings.updatePolicy).toBe("off");
     expect(settings.allowDevSourceUpdates).toBe(true);
     expect(sources.diagnosticReporting).toBe("global");
+    expect(sources.analyticsLevel).toBe("global");
     expect(sources.updatePolicy).toBe("global");
     expect(sources.allowDevSourceUpdates).toBe("global");
   });
@@ -760,8 +783,8 @@ describe("operator-only privacy and updates", () => {
     const { setProjectOverride } = await import("./settings.js");
     expect(setProjectOverride("diagnosticReporting", "automatic", project)).toBe(false);
     expect(setProjectOverride("diagnosticReportingPrompted", true, project)).toBe(false);
-    // analyticsLevel gates the same egress grant, so a project may not broaden it.
-    expect(setProjectOverride("analyticsLevel", "full", project)).toBe(false);
+    // Usage sharing is an independent operator-owned egress grant.
+    expect(setProjectOverride("analyticsLevel", "usage", project)).toBe(false);
     expect(setProjectOverride("updatePolicy", "automatic", project)).toBe(false);
     expect(setProjectOverride("allowDevSourceUpdates", true, project)).toBe(false);
     expect(setProjectOverride("executionProfile", "local", project)).toBe(false);

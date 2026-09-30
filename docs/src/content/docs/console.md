@@ -828,20 +828,30 @@ submit never blocks the session.
 
 Problem reporting defaults to `ask`, so a diagnostic is reviewed before
 submission. Saved reporting choices remain effective. Tool and runtime failures
-can produce a diagnostic through the same feedback transport, independently of
-manually staged messages; it does not upload `~/.0/feedback.md`. At analytics levels
-`off` or `usage`, the diagnostic is limited to failure categories and runtime
-metadata. Opting into `commands` or `full` allows bounded error messages,
-stack traces and captured output after redaction. Redaction is not a guarantee
-that arbitrary engagement data is safe to share; choose the sharing level
-appropriate for your target and credentials.
+can produce a diagnostic independently of manually staged messages; it does not
+upload `~/.0/feedback.md`. Diagnostic content never broadens with analytics
+consent: error categories and runtime metadata are bounded, while error
+messages, captured output and full local review detail stay on this machine.
+
+An operator-provisioned `ZERO_SENTRY_DSN` selects a dedicated HTTPS Sentry
+envelope destination for diagnostics only. Sentry also receives at most 32
+allowlisted built-in package-relative stack locations, with no absolute paths,
+function names, source lines or arbitrary stack text. Events identify the
+actual CLI version, the existing embedded build SHA when available, and the
+development/production channel; explicit `NODE_ENV` takes precedence over the
+source/bundled default. There is no built-in DSN or dashboard DSN fallback.
+
+Without that DSN, diagnostics keep the existing HTTPS feedback route, whose
+first-party Cloud delivery goes to Slack/email rather than Sentry. Manual
+`/feedback` submissions are not rerouted to Sentry.
 
 Open `/feedback` → **Problem-report preferences** to choose `off`, `ask`, or
-`automatic`. This global preference cannot be overridden by a project. Explicit
-saved opt-outs and the environment opt-outs above remain effective. `ask`
-requires confirmation before sending. Without `ZERO_CLOUD_TOKEN` or a
-configured HTTPS endpoint, automatic reports remain local and the console
-reports submission as unavailable.
+`automatic`. This global preference cannot be overridden by a project.
+Explicit saved opt-outs and environment opt-outs remain effective. `off` and
+`ask` require individual confirmation before diagnostic transmission;
+`automatic` permits submission after the first-report consent flow.
+Without a configured Sentry DSN, Cloud token or HTTPS feedback endpoint,
+automatic reports remain local and submission is reported as unavailable.
 
 ### Secret scanning
 

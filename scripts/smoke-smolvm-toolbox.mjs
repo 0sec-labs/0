@@ -33,15 +33,15 @@ const probes = [
   ["azurehound", ["--help"]], ["foxguard", ["--version"]],
 ];
 
-async function guest(probes) {
+async function guest(probes, expectedUid, expectedGid) {
   const { default: assert } = await import("node:assert/strict");
   const { spawnSync, execFile } = await import("node:child_process");
   const { readFileSync, writeFileSync } = await import("node:fs");
   const { createServer } = await import("node:http");
   const { promisify } = await import("node:util");
   const run = promisify(execFile);
-  assert.equal(process.getuid(), 1000);
-  assert.equal(process.getgid(), 1000);
+  assert.equal(process.getuid(), expectedUid);
+  assert.equal(process.getgid(), expectedGid);
   assert.equal(Number(process.versions.node.split(".")[0]), 24);
   const results = probes.map(([command, args, statuses = [0]]) => {
     const result = spawnSync(command, args, { encoding: "utf8", timeout: 15000, maxBuffer: 1024 * 1024 });
@@ -87,7 +87,7 @@ try {
     imageArchive, imageDigest, cpus: 2, memoryMb: 3072, storageGb: 4,
     timeoutMs: 180000, maxOutputBytes: 256 * 1024,
     mounts: [{ source: root, target: "/snapshot" }],
-    command: ["node", "-e", `(${guest.toString()})(${JSON.stringify(probes)}).catch(e => { console.error(e); process.exitCode = 1; });`],
+    command: ["node", "-e", `(${guest.toString()})(${JSON.stringify(probes)},${process.platform === "darwin" ? process.getuid() : 1000},${process.platform === "darwin" ? process.getgid() : 1000}).catch(e => { console.error(e); process.exitCode = 1; });`],
   });
   process.stdout.write(result.stdout);
   process.stderr.write(result.stderr);

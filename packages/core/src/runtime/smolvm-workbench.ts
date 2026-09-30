@@ -167,7 +167,7 @@ export async function runSmolvmWorkbench(options: SmolvmWorkbenchOptions): Promi
     }), { flag: "wx", mode: 0o444 });
     // Virtiofs preserves host ownership. Match the non-root operator's numeric
     // identity rather than chmod'ing their workspace for image UID 1000.
-    const args = ["machine", "run", "--image", archive, "--max-image-size", "16GiB", "--unprivileged", "--user", `${process.getuid!()}:${process.getgid!()}`,
+    const args = ["machine", "run", "--image", archive, "--max-image-size", "8GiB", "--unprivileged", "--user", `${process.getuid!()}:${process.getgid!()}`,
       "--cpus", String(options.cpus), "--mem", String(options.memoryMb), "--storage", String(options.storageGb), "--overlay", "1",
       "--workdir", "/workspace", "--interactive", "--volume", `${workspace}:/workspace:rw`,
       "--volume", `${guestHome}:/home/zero:rw`, "--volume", `${guestState}:/home/zero/.0:rw`,

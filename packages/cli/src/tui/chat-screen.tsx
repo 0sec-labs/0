@@ -1686,7 +1686,7 @@ export function ChatScreen({
     const preview = buildSubmitPreview(payload);
     setPendingFeedback({ payload, preview });
     if (!preview) {
-      const blocked = submissionBlockedReason();
+      const blocked = submissionBlockedReason(process.env, {}, payload);
       appendEntry({
         kind: "notice",
         text: "feedback saved locally",
@@ -1718,7 +1718,7 @@ export function ChatScreen({
       state: createSelectorState("Problem reports · optional", [
         { id: "off", label: "Keep reports local", detail: "No automatic submission. You can still review and send individual reports with /feedback.", current: current === "off" },
         { id: "ask", label: "Ask before sending", detail: "Offer to review limited diagnostics after a problem. Nothing is sent until you confirm.", current: current === "ask" },
-        { id: "automatic", label: "Send diagnostics automatically", detail: "Basic diagnostics. Tools/code sharing also includes scrubbed errors, stacks and output. Uses your feedback endpoint; offline restrictions still apply.", current: current === "automatic" },
+        { id: "automatic", label: "Send diagnostics automatically", detail: "Finite error categories and runtime metadata; configured Sentry also receives scrubbed built-in stack locations. No error messages, tool output or code. Offline restrictions still apply.", current: current === "automatic" },
       ], current),
       commit: chooseReporting,
       onCancel: () => { restorePaletteDraft(); },
@@ -1762,7 +1762,7 @@ export function ChatScreen({
       showToast("Could not save the diagnostic report.");
       return;
     }
-    void submitFeedback(payload).then((result) => {
+    void submitFeedback(payload, process.env, { diagnosticConsent: { policy: settingsRef.current.diagnosticReporting } }).then((result) => {
       if (alive.current) showToast(result.ok ? "Problem report submitted" : "Problem report saved locally; submission unavailable.");
     });
   }, [showToast]);
@@ -1836,7 +1836,7 @@ export function ChatScreen({
     setFirstProblemConsent(null);
     setPicker({
       state: createSelectorState("Send problem reports to 0?", [
-        { id: "automatic", label: "Send automatically", detail: "Basic diagnostics. Tools/code sharing also includes scrubbed errors, stacks and output; identifying content may remain.", current: settings.diagnosticReporting === "automatic" },
+        { id: "automatic", label: "Send automatically", detail: "Finite categories and runtime metadata; configured Sentry also receives scrubbed built-in stack locations. Messages, tool output and code stay local.", current: settings.diagnosticReporting === "automatic" },
         { id: "ask", label: "Ask me each time", detail: "Review the exact bytes and destination before anything is sent.", current: settings.diagnosticReporting === "ask" },
         { id: "off", label: "Keep reports local", detail: "Reports stay on this machine. You can still send one explicitly with /feedback.", current: settings.diagnosticReporting === "off" },
       ], settings.diagnosticReporting),
@@ -1849,7 +1849,7 @@ export function ChatScreen({
             showToast("Could not save the diagnostic report.");
             return;
           }
-          void submitFeedback(payload).then((result) => {
+          void submitFeedback(payload, process.env, { diagnosticConsent: { policy: "automatic" } }).then((result) => {
             if (alive.current) showToast(result.ok ? "Problem report submitted" : "Problem report saved locally; submission unavailable.");
           });
         } else if (id === "ask") {
@@ -3365,7 +3365,10 @@ export function ChatScreen({
             turn: turn.current,
           });
 
-          submitFeedback(payload, process.env, { expectedPreview: preview }).then((result) => {
+          submitFeedback(payload, process.env, {
+            expectedPreview: preview,
+            diagnosticConsent: { policy: settingsRef.current.diagnosticReporting, confirmed: true },
+          }).then((result) => {
             appendEntry({
               kind: result.ok ? "notice" : "error",
               text: result.ok ? "feedback sent" : "feedback not sent",

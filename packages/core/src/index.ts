@@ -1829,6 +1829,7 @@ export {
 } from "./telemetry/analytics-pipeline.js";
 export {
   ANALYTICS_LEVEL_ENV,
+  analyticsOptedOut,
   resolveAnalyticsLevel,
   levelAtLeast,
   type AnalyticsLevel,
@@ -2530,5 +2531,5 @@ export type {
   SecureProjectResult,
 } from "./secure/types.js";
 
-export { startWorkbenchBroker, runWorkbenchBrokerProgram, isAdmittedSmolvmWorkbench, resolveWorkbenchBrokerImage, getWorkbenchBrokerLimits, DEFAULT_WORKBENCH_BROKER_LIMITS } from "./runtime/smolvm-broker.js";
+export { startWorkbenchBroker, runWorkbenchBrokerProgram, isAdmittedSmolvmWorkbench, resolveWorkbenchBrokerImage, getWorkbenchBrokerLimits, DEFAULT_WORKBENCH_BROKER_LIMITS, WORKBENCH_BROKER_WORKSPACE } from "./runtime/smolvm-broker.js";
 export type { WorkbenchBrokerProgram, WorkbenchBrokerLimits, WorkbenchBrokerImage, WorkbenchBrokerOptions, WorkbenchBrokerController, WorkbenchBrokerAdmission } from "./runtime/smolvm-broker.js";

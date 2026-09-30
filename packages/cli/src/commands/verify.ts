@@ -32,6 +32,7 @@ import {
   SmolvmRunner,
   isAdmittedSmolvmWorkbench,
   runWorkbenchBrokerProgram,
+  WORKBENCH_BROKER_WORKSPACE,
   createSmolvmPocTargetRunner,
   DockerRunner,
   QemuRunner,
@@ -745,11 +746,12 @@ export async function runVerify(opts: {
         const runDir = resolve(opts.artifactDir ?? mkdtempSync(join(tmpdir(), "0-smol-fixture-")));
         mkdirSync(runDir, { recursive: true });
         const fixtureArgv = opts.fixtureCommand.map((argument) =>
-          argument.startsWith(runDir + sep) ? `/workspace/${argument.slice(runDir.length + 1)}` : argument);
+          argument === runDir ? WORKBENCH_BROKER_WORKSPACE :
+            argument.startsWith(runDir + sep) ? `${WORKBENCH_BROKER_WORKSPACE}/${argument.slice(runDir.length + 1)}` : argument);
         const execution = await runWorkbenchBrokerProgram({
           profile: "offline", workspaceRoot: runDir,
           command: ["0", "verify", "--fixture", "cli-path-traversal", "--fixture-command", JSON.stringify(fixtureArgv),
-            "--fixture-mode", opts.fixtureMode ?? "vulnerable", "--artifact-dir", "/workspace", "--output", "/workspace/result.json"],
+            "--fixture-mode", opts.fixtureMode ?? "vulnerable", "--artifact-dir", WORKBENCH_BROKER_WORKSPACE, "--output", `${WORKBENCH_BROKER_WORKSPACE}/result.json`],
           timeoutMs: 30000, memoryMb: 512, cpus: 1, maxOutputBytes: 1024 * 1024,
         }, opts.signal);
         if (execution.error || execution.timedOut || execution.cleanupFailed) {
@@ -760,7 +762,7 @@ export async function runVerify(opts: {
           throw new Error("SmolVM fixture result does not match its process outcome");
         }
         for (const artifact of result.evidence_artifacts) {
-          const path = posix.relative("/workspace", artifact.path);
+          const path = posix.relative(WORKBENCH_BROKER_WORKSPACE, artifact.path);
           if (!path || path === ".." || path.startsWith("../") || posix.isAbsolute(path)) throw new Error("fixture artifact escaped the replay workspace");
           const returnedPath = join(runDir, path);
           const stat = lstatSync(returnedPath);

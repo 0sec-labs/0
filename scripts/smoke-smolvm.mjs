@@ -25,6 +25,7 @@ const previousSecret = process.env[secretName];
 const previousPath = process.env.PATH;
 const results = [];
 const defaults = { imageArchive, imageDigest, cpus: 2, memoryMb: 2048, storageGb: 4, timeoutMs: 60000, maxOutputBytes: 65536 };
+const expectedUid = process.platform === "darwin" ? process.getuid() : 1000;
 const fixtureServer = createServer((_request, response) => response.end("controlled host fixture"));
 
 function vmProcesses() {
@@ -93,7 +94,7 @@ try {
     const data = JSON.parse(result.stdout);
     assert.deepEqual(data.input, JSON.parse(input));
     assert.equal(data.arg, "literal ' ; $(false) 雪");
-    assert.equal(data.uid, 1000);
+    assert.equal(data.uid, expectedUid);
     assert.equal(data.cpus, 2);
     assert(data.memory <= 2048 * 1024 * 1024 && data.memory > 1024 * 1024 * 1024);
     assert.equal(data.secret, false);
@@ -124,7 +125,7 @@ try {
     assert.equal(result.timedOut, false);
   });
   await check("guest disk exhaustion stays within storage cap", async () => {
-    const result = await execute(`const fs=require('node:fs'); const home=fs.readFileSync('/etc/passwd','utf8').split('\\n').find(row=>row.split(':')[2]==='1000').split(':')[5]; const fd=fs.openSync(home+'/qualification-disk-limit','w'); const chunk=Buffer.alloc(1024*1024,1); let mib=0;
+    const result = await execute(`const fs=require('node:fs'); const fd=fs.openSync('/tmp/qualification-disk-limit','w'); const chunk=Buffer.alloc(1024*1024,1); let mib=0;
       try { for(;mib<1200;mib++) fs.writeSync(fd,chunk); throw new Error('storage cap did not stop writes'); }
       catch(e) { if(e.code!=='ENOSPC') throw e; console.log(JSON.stringify({code:e.code,mib})); } finally { fs.closeSync(fd); }`,
       { storageGb: 1 });

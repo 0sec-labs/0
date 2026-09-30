@@ -28,7 +28,7 @@ import {
 
 import { Cells, textCells } from "./primitives.js";
 import {
-  getSettingSources,
+  getAnalyticsSetupDraft,
   previewSetting,
   reloadSettings,
   updateSetting,
@@ -531,14 +531,10 @@ export function OnboardingScreen({
     if (prefChoices.length) choosePreference((choiceRef.current + delta + prefChoices.length) % prefChoices.length);
   }, [choosePreference, prefChoices.length]);
 
-  const analyticsLevelSource = getSettingSources().analyticsLevel;
-  const persistedAnalyticsIndex = ANALYTICS_OPTIONS.findIndex(
-    (option) => option.level === settings.analyticsLevel,
-  );
-  const defaultAnalyticsIndex = ANALYTICS_OPTIONS.findIndex((option) => option.level === "usage");
-  const selectedAnalyticsIndex = analyticsLevelSource === "default"
-    ? defaultAnalyticsIndex
-    : Math.max(0, persistedAnalyticsIndex);
+  const analyticsDraft = getAnalyticsSetupDraft();
+  const selectedAnalyticsIndex = Math.max(0, ANALYTICS_OPTIONS.findIndex(
+    (option) => option.level === analyticsDraft,
+  ));
   const [analyticsIndex, setAnalyticsIndex] = useState(selectedAnalyticsIndex);
   useEffect(() => {
     if (currentStep === "analytics") setAnalyticsIndex(selectedAnalyticsIndex);
@@ -778,7 +774,7 @@ function PreferencesCard({
   );
 }
 
-/** Keep the tier choices reachable alongside the training-data disclosure. */
+/** Keep both usage-sharing choices reachable in short terminals. */
 function AnalyticsCard({
   lines,
   choiceIndex,
@@ -800,7 +796,7 @@ function AnalyticsCard({
   const scroll = useRef<ScrollBoxRenderable | null>(null);
   let selectedRow = 0;
 
-  // Disclosures stay visible while the tier list scrolls in short terminals.
+  // The title and settings hint stay visible while choices scroll.
   const intro = lines.slice(0, Math.max(0, bodyRows - 3));
   const choiceRows = Math.max(1, bodyRows - intro.length);
 

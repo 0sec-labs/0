@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
+import { VERSION } from "@0/shared";
 
 import {
   DEFAULT_FEEDBACK_URL,
@@ -19,11 +20,8 @@ import {
   parseFeedbackCommand,
   submitFeedback,
   MAX_DIAGNOSTIC_MESSAGE_BYTES,
-  MAX_DIAGNOSTIC_DETAIL_MESSAGE_BYTES,
-  redactDiagnosticDetail,
   buildDiagnosticReview,
   diagnosticErrorText,
-  LOCAL_DETAIL_NOTICE,
   MAX_LOCAL_DETAIL_CHARS,
   type DiagnosticInfo,
   type FeedbackPayload,
@@ -37,6 +35,8 @@ function tempHome(): string {
 }
 
 afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   while (temps.length > 0) {
     const dir = temps.pop();
     if (dir) rmSync(dir, { recursive: true, force: true });
@@ -406,23 +406,15 @@ describe("submitFeedback", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("returns ok:false instead of throwing when the network fails", async () => {
-    const { fn } = stubFetch(() => {
-      throw new Error("getaddrinfo ENOTFOUND feedback.example.test");
-    });
+  it("does not expose credential-bearing transport errors", async () => {
+    const privateValue = "https://operator:password@feedback.example.test/private";
+    const { fn } = stubFetch(() => { throw new Error(`Network failed for ${privateValue}`); });
     const result = await submitFeedback(payload(), HTTPS_ENV, { fetchImpl: fn });
     expect(result.ok).toBe(false);
-    expect(result.error).toContain("ENOTFOUND");
+    expect(JSON.stringify(result)).not.toContain(privateValue);
     expect(result.skipped).toBeUndefined();
   });
 
-  it("returns ok:false on a rejected promise", async () => {
-    const fn = (() => Promise.reject(new Error("socket hang up"))) as unknown as typeof fetch;
-    await expect(submitFeedback(payload(), HTTPS_ENV, { fetchImpl: fn })).resolves.toEqual({
-      ok: false,
-      error: "socket hang up",
-    });
-  });
 
   it("surfaces a non-2xx response without throwing", async () => {
     const { fn } = stubFetch(() => okResponse(503));
@@ -698,7 +690,7 @@ describe("diagnosticErrorText", () => {
 
   it("survives a hostile proxy", () => {
     const hostile = new Proxy({}, { get() { throw new Error("private"); } });
-    expect(() => diagnosticErrorText(hostile)).not.toThrow();
+    expect(diagnosticErrorText(hostile)).toBe("");
   });
 });
 
@@ -721,9 +713,15 @@ describe("buildDiagnosticReview", () => {
     expect(JSON.stringify(payload)).not.toContain("foo");
   });
 
-  it("is byte-identical on the wire to buildDiagnosticFeedback", () => {
-    const info = diagInfo({ toolName: "http_request", error: "url is required" });
-    expect(buildDiagnosticReview(info).payload).toEqual(buildDiagnosticFeedback(info));
+  it("keeps the unredacted local review out of the legacy feedback wire body", () => {
+    const info = diagInfo({ toolName: "http_request", error: "private target https://customer.internal" });
+    const review = buildDiagnosticReview(info);
+    const preview = buildSubmitPreview(review.payload, HTTPS_ENV)!;
+    expect(review.localDetail).toContain("customer.internal");
+    expect(preview.body).not.toContain("customer.internal");
+    expect(JSON.parse(preview.body)).toEqual({
+      message: review.payload.message, timestamp: review.payload.timestamp, version: review.payload.version,
+    });
   });
 
   it("never shows a bare 'unknown' when a real message exists", () => {
@@ -758,78 +756,116 @@ describe("buildDiagnosticReview", () => {
     expect(localDetail.length).toBeLessThanOrEqual(MAX_LOCAL_DETAIL_CHARS);
   });
 
-  it("exposes a local-only notice for the UI to display", () => {
-    expect(LOCAL_DETAIL_NOTICE.toLowerCase()).toContain("not transmitted");
-  });
 });
 
-describe("buildDiagnosticFeedback — consented full detail (analyticsLevel commands|full)", () => {
-  const consent = { "ZERO_ANALYTICS_LEVEL": "full" } as unknown as NodeJS.ProcessEnv;
+describe("diagnostic destination and consent", () => {
+  const sentryEnv = { ZERO_SENTRY_DSN: "https://public-key@sentry.example.test/prefix/123" };
 
-  function withStack(message: string, stack: string): Error {
-    const e = new Error(message);
-    e.stack = stack;
-    return e;
-  }
-
-  it("appends the error type, message and stack frames when consented", () => {
-    const err = new TypeError("boom in the scanner");
-    err.stack = [
-      "TypeError: boom in the scanner",
-      "    at scan (/home/dev/coding/0/packages/core/src/scan.ts:42:7)",
-      "    at runAudit (/home/dev/coding/0/packages/cli/src/run.ts:10:3)",
+  it("sends a scrubbed Sentry event with actual release and build/channel identity", async () => {
+    const sha = "a".repeat(40);
+    vi.stubGlobal("__ZERO_VERSION__", VERSION);
+    vi.stubGlobal("__ZERO_BUILD_COMMIT__", sha);
+    const error = new Error("customer.internal token=private-value");
+    error.stack = [
+      "Error: customer.internal token=private-value",
+      "    at privateFunction (/Users/private-user/0/packages/core/src/agent/loop.ts:42:7)",
+      "    at exec (/Users/private-user/customer/private.ts:1:1)",
+      "    at invoke (https://customer.internal/code.js:1:1)",
     ].join("\n");
-    const result = buildDiagnosticFeedback(diagInfo({ error: err, kind: "tool" }), consent);
-    // Finite header is still present.
-    expect(result.message).toContain("Diagnostic: tool error");
-    // ...and now the real detail.
-    expect(result.message).toContain("TypeError: boom in the scanner");
-    expect(result.message).toContain("at scan (");
-    expect(result.message).toContain("scan.ts:42");
-  });
-
-  it("still redacts the hard floor — secrets, emails, home usernames — from the detail", () => {
-    const err = withStack(
-      "auth failed for ops@acme.com with sk-abcdEFGH1234ijklMNOP5678 at /home/alice/proj/x.ts",
-      "Error: auth failed\n    at f (/home/alice/proj/x.ts:1:1)",
-    );
-    const result = buildDiagnosticFeedback(diagInfo({ error: err, kind: "tool" }), consent);
-    expect(result.message).not.toContain("sk-abcdEFGH1234ijklMNOP5678");
-    expect(result.message).not.toContain("ops@acme.com");
-    expect(result.message).not.toContain("/home/alice");
-    expect(result.message).toContain("/home/‹user›");
-  });
-
-  it("bounds the consented message to the larger detail cap", () => {
-    const frames = Array.from({ length: 6000 }, (_, i) => `    at frame${i} (/home/dev/f.ts:${i}:1)`).join("\n");
-    const err = withStack("x", `Error: x\n${frames}`);
-    const result = buildDiagnosticFeedback(diagInfo({ error: err, kind: "tool" }), consent);
-    expect(Buffer.byteLength(result.message)).toBeLessThanOrEqual(MAX_DIAGNOSTIC_DETAIL_MESSAGE_BYTES);
-  });
-
-  it("appends NOTHING and stays at the finite cap without consent", () => {
-    const err = withStack("boom", "Error: boom\n    at f (/x.ts:1:1)");
-    for (const level of ["off", "usage", ""]) {
-      const env = { "ZERO_ANALYTICS_LEVEL": level } as unknown as NodeJS.ProcessEnv;
-      const result = buildDiagnosticFeedback(diagInfo({ error: err, kind: "tool" }), env);
-      expect(result.message).not.toContain("at f (");
-      expect(Buffer.byteLength(result.message)).toBeLessThanOrEqual(MAX_DIAGNOSTIC_MESSAGE_BYTES);
+    const report = buildDiagnosticReview(diagInfo({ error, exitOutput: "private command output" }));
+    const env = { ...sentryEnv, ZERO_ANALYTICS_LEVEL: "off" };
+    const preview = buildSubmitPreview(report.payload, env)!;
+    const { fn, calls } = stubFetch(() => okResponse(202));
+    const result = await submitFeedback(report.payload, env, {
+      fetchImpl: fn, expectedPreview: preview, diagnosticConsent: { policy: "ask", confirmed: true },
+    });
+    expect(result.ok).toBe(true);
+    expect(calls[0].url).toBe("https://sentry.example.test/prefix/api/123/envelope/");
+    expect(calls[0].init.redirect).toBe("error");
+    expect(calls[0].init.body).toBe(preview.body);
+    const [header, item, eventText] = preview.body.split("\n");
+    const event = JSON.parse(eventText);
+    expect(JSON.parse(header).event_id).toBe(event.event_id);
+    expect(JSON.parse(item)).toEqual({ type: "event", length: Buffer.byteLength(eventText) });
+    expect(event.release).toBe(`0-cli@${VERSION}+${sha}`);
+    expect(event.environment).toBe("production");
+    expect(event.tags).toMatchObject({ cli_version: VERSION, build_commit: sha });
+    expect(event.exception.values[0].value).toBe("Error");
+    expect(event.exception.values[0].stacktrace.frames).toEqual([
+      { filename: "app:///packages/core/src/agent/loop.ts", lineno: 42, colno: 7 },
+    ]);
+    expect(report.localDetail).toContain("customer.internal");
+    for (const privateValue of ["customer.internal", "private-user", "privateFunction", "private-value", "private command output"]) {
+      expect(preview.body).not.toContain(privateValue);
     }
+    expect(JSON.stringify(preview.headers)).not.toContain("public-key");
+    const development = JSON.parse(buildSubmitPreview(report.payload, { ...env, NODE_ENV: "development" })!.body.split("\n")[2]);
+    expect(development.environment).toBe("development");
   });
 
-  it("redactDiagnosticDetail scrubs credential shapes and private keys", () => {
-    const raw = [
-      "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
-      "-----BEGIN RSA PRIVATE KEY-----\nabcd\n-----END RSA PRIVATE KEY-----",
-      "password=hunter2xyz",
-      "postgres://dbuser:s3cr3tpw@db.internal:5432/prod",
-    ].join(" ");
-    const out = redactDiagnosticDetail(raw);
-    expect(out).not.toContain("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
-    expect(out).not.toContain("hunter2xyz");
-    expect(out).not.toContain("BEGIN RSA PRIVATE KEY");
-    expect(out).not.toContain("s3cr3tpw");
-    // Non-secret shape (host) is intentionally preserved for debuggability.
-    expect(out).toContain("db.internal");
+  it("does not turn analytics consent into diagnostic consent or content", async () => {
+    vi.stubEnv("ZERO_ANALYTICS_LEVEL", "full");
+    const error = new Error("private error message");
+    error.stack = "Error: private error message\n    at fn (/private/customer/project.ts:1:1)";
+    const report = buildDiagnosticFeedback(diagInfo({ error, exitOutput: "private command output" }));
+    const { fn, calls } = stubFetch(() => okResponse());
+    for (const policy of ["off", "ask"] as const) {
+      const result = await submitFeedback(report, { ...sentryEnv, ZERO_ANALYTICS_LEVEL: "full" }, {
+        fetchImpl: fn, diagnosticConsent: { policy },
+      });
+      expect(result.skipped).toBe("no-consent");
+    }
+    expect(calls).toHaveLength(0);
+    for (const level of ["off", "usage", "commands", "full"]) {
+      const preview = buildSubmitPreview(report, { ...sentryEnv, ZERO_ANALYTICS_LEVEL: level })!;
+      expect(preview.body).not.toContain("private error message");
+      expect(preview.body).not.toContain("private command output");
+      expect(preview.body).not.toContain("/private/customer");
+    }
+    expect((await submitFeedback(report, sentryEnv, {
+      fetchImpl: fn, diagnosticConsent: { policy: "automatic" },
+    })).ok).toBe(true);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("lets hard opt-outs beat configured Sentry and explicit confirmation", async () => {
+    const report = buildDiagnosticFeedback(diagInfo());
+    const { fn, calls } = stubFetch(() => okResponse());
+    for (const name of ["ZERO_OFFLINE", "ZERO_NO_TELEMETRY", "DO_NOT_TRACK"]) {
+      const env = { ...sentryEnv, [name]: "true" };
+      expect(buildSubmitPreview(report, env)).toBeNull();
+      expect((await submitFeedback(report, env, {
+        fetchImpl: fn, diagnosticConsent: { policy: "automatic", confirmed: true },
+      })).skipped).toBe("opt-out");
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  it("rejects invalid explicit DSNs instead of falling back to feedback", async () => {
+    const report = buildDiagnosticFeedback(diagInfo());
+    const { fn, calls } = stubFetch(() => okResponse());
+    for (const dsn of ["http://key@sentry.example.test/123", "https://key:secret@sentry.example.test/123", "https://key@sentry.example.test/123?secret=value", "not a dsn"]) {
+      const env = { ...HTTPS_ENV, ZERO_SENTRY_DSN: dsn };
+      expect(buildSubmitPreview(report, env)).toBeNull();
+      expect((await submitFeedback(report, env, {
+        fetchImpl: fn, diagnosticConsent: { policy: "automatic" },
+      })).skipped).toBe("insecure-endpoint");
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  it("preserves the first-party feedback route and does not route manual feedback to Sentry", async () => {
+    const { fn, calls } = stubFetch(() => okResponse());
+    const report = buildDiagnosticFeedback(diagInfo({ error: new Error("private error") }));
+    await submitFeedback(report, {}, {
+      ...CLOUD_CREDENTIALS, fetchImpl: fn, diagnosticConsent: { policy: "automatic" },
+    });
+    expect(calls[0].url).toBe("https://cloud.0.security/api/cli-feedback");
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({
+      message: report.message, timestamp: report.timestamp, version: report.version,
+    });
+    await submitFeedback(payload(), { ...HTTPS_ENV, ...sentryEnv }, { fetchImpl: fn });
+    expect(calls[1].url).toBe(HTTPS_ENV.ZERO_FEEDBACK_URL);
+    expect(new Headers(calls[1].init.headers).get("content-type")).toBe("application/json");
   });
 });

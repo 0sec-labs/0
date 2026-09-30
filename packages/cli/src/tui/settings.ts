@@ -219,13 +219,11 @@ export interface TuiSettings {
    */
   reduceMotion: boolean;
   /**
-   * Operator-global analytics and training-data tier; sharing is opt-in.
-   * Usage contains counters, commands adds credential-scrubbed tool content
-   * and code, and full adds scope and findings. Ordinary content is retained.
+   * Operator-global consent for pseudonymous usage metrics; sharing is opt-in.
    * Explicit environment restrictions and saved opt-outs remain effective.
    * Problem-report preferences are independent; a project cannot widen either.
    */
-  analyticsLevel: "off" | "usage" | "commands" | "full";
+  analyticsLevel: "off" | "usage";
   /** Operator-global consent; a project must never enable diagnostic egress. */
   diagnosticReporting: "off" | "ask" | "automatic";
   /** Internal first-use state, not a grant of reporting consent. */
@@ -676,16 +674,16 @@ const DEFS: readonly TuiSettingDef[] = [
     key: "analyticsLevel",
     label: "Data sharing",
     description:
-      "Usage sends counts, timing, cost and error categories. Commands adds tool inputs/outputs and code; Full adds scope and findings. Credentials are scrubbed, but identifying content may remain. Uploads require an endpoint and are not anonymous. Environment opt-outs take precedence. Applies to this computer.",
+      "Usage sends pseudonymous counts, timing, cost and error categories, never tool content or code. Off disables analytics uploads. Environment opt-outs take precedence. Applies to this computer.",
     kind: "enum",
     default: "off",
-    choices: ["off", "usage", "commands", "full"],
+    choices: ["off", "usage"],
     group: "Privacy",
   },
   {
     key: "diagnosticReporting",
     label: "Problem reports",
-    description: "Review diagnostics before sending, send automatically, or keep reports local. Requires a configured endpoint. Off/Usage sharing sends categories only; Commands/Full can include scrubbed errors, stacks and failure output. Applies to this computer.",
+    description: "Review diagnostics before sending, send automatically, or keep reports local. Requires a configured destination and is independent of usage sharing. Applies to this computer.",
     kind: "enum",
     default: "ask",
     choices: ["off", "ask", "automatic"],
@@ -971,6 +969,11 @@ function rawValue(raw: unknown, key: string): unknown {
   // behaviour we want rather than a special case.
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return undefined;
   const value = (raw as Record<string, unknown>)[key];
+  // Legacy content-sharing grants narrow to usage metrics. Refusals and malformed
+  // saved values remain explicit opt-outs rather than an unset setup decision.
+  if (key === "analyticsLevel" && value !== undefined) {
+    return value === "usage" || value === "commands" || value === "full" ? "usage" : "off";
+  }
   // A persisted `messenger` comes from installed 0.16.3, whose default it was.
   // The canonical union does not carry that name, so the value is migrated to
   // its equivalent rather than failing validation: dropping it would silently

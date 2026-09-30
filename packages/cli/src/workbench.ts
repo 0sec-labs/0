@@ -227,7 +227,6 @@ export async function launchConfiguredWorkbench(args: readonly string[]): Promis
   const workspaceRoot = realpathSync(config.workspaceRoot ?? process.cwd());
   if (!lstatSync(workspaceRoot).isDirectory()) throw new Error("The configured workbench workspace is not a directory.");
   const status = await getSmolvmWorkbenchStatus({ stateRoot: config.stateRoot, image: config.image });
-  if (status.retainedRuns.length) throw new Error("SmolVM has retained admission from an unproven cleanup. Resolve it before launching another workbench.");
   if (!status.platformSupported || !status.runtimeReady || !status.imageApproved) {
     throw new Error(status.error ?? "SmolVM runtime or approved image is unavailable. Run 0 workbench setup; host fallback is refused.");
   }

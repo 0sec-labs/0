@@ -174,12 +174,17 @@ const CRASH_REDACTION_PATTERNS: readonly RegExp[] = [
   /\bAIza[0-9A-Za-z_-]{35}\b/g,
   /\bxox[abprs]-[A-Za-z0-9-]{10,}/g,
   /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+/g,
+  /authorization\s*[:=]\s*(?:bearer|basic|token|digest)\s+\S+/gi,
+  /[a-z][a-z0-9+.-]*:\/\/[^\s/@:]+:[^\s/@]+@/gi,
+  /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,
   /\b(?:pass(?:word|wd)?|api[_-]?key|secret|token|credentials?|authorization)\s*[:=]\s*\S+/gi,
 ];
 
 export function sanitizeCrashText(text: string | undefined): string {
   let out = text ?? "";
   for (const pattern of CRASH_REDACTION_PATTERNS) out = out.replace(pattern, "[redacted]");
+  out = out.replace(/(\/(?:home|Users)\/)[^/\s]+/g, "$1[redacted]");
+  out = out.replace(/([A-Za-z]:\\Users\\)[^\\\s]+/g, "$1[redacted]");
   return out;
 }
 
@@ -201,7 +206,7 @@ export function buildCrashFeedbackMessage(note: string, crash: CrashInfo, maxSta
   const cleanMessage = sanitizeCrashText(crash.message) || "unknown TUI error";
   const stackLines = crashStackLines(crash.stack, maxStackLines);
   const parts: string[] = [];
-  const trimmedNote = note.trim();
+  const trimmedNote = sanitizeCrashText(note).trim();
   if (trimmedNote) parts.push(trimmedNote, "");
   parts.push("--- TUI crash report ---", `error: ${cleanMessage}`);
   if (stackLines.length > 0) {

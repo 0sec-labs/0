@@ -21,6 +21,17 @@ on the published npm package and the GitHub Release tag.
 - Durable evolution dispatch accounting, holdout exposure limits, observed
   provider/model provenance, and explicit interrupted-cost reconciliation.
 
+### Changed
+
+- Console data sharing offers only Off and usage metrics. Legacy content-sharing
+  preferences migrate to usage; saved refusals and environment opt-outs remain
+  effective. An unset setup choice can highlight usage without granting consent
+  until Finish. Problem-report consent remains separate.
+- Diagnostics can use an operator-provisioned `ZERO_SENTRY_DSN`, with finite
+  failure categories, bounded package-relative stack locations and CLI
+  release/build/environment tags. Raw messages, output and local review detail
+  are excluded; existing first-party feedback remains the fallback.
+
 ### Fixed
 
 - Continue safe native Responses output-cap checkpoints without losing completed
@@ -36,6 +47,16 @@ on the published npm package and the GitHub Release tag.
 - Preserve current model-selection and scope boundaries, exact repository
   identity, subsystem review scoping, and known cache-write charges. Correct
   nested private storage paths and enforce durable safety at real promotion.
+- Scrub recognized secrets, URL credentials, emails and home usernames from
+  both crash notes and captured crash text.
+- Embed the build revision in native binaries without probing Bun's virtual
+  executable path as a source checkout.
+- Use a controlled loopback model in CLI smoke checks instead of sending fake
+  credentials to a live provider; successful and rejected-provider outcomes
+  remain distinct on both bundled and native executables.
+- Align isolated sibling source and artifact paths, reject occupied scratch
+  directories, and recover retained workbench admission only after native
+  cleanup proof. Setup and execution share the eight-GiB archive ceiling.
 
 ## [0.22.1] - 2026-09-30
 

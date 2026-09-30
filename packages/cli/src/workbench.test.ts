@@ -34,7 +34,7 @@ describe("workbench authority boundary", () => {
   });
 
   it("never broadens saved consent and keeps privacy opt-outs separate from VM network policy", () => {
-    const optedIn = { ...DEFAULT_SETTINGS, analyticsLevel: "full" as const, diagnosticReporting: "automatic" as const };
+    const optedIn = { ...DEFAULT_SETTINGS, analyticsLevel: "usage" as const, diagnosticReporting: "automatic" as const };
     const limited = resolveWorkbenchGuestSettings(optedIn, { ZERO_ANALYTICS_LEVEL: "usage" });
     expect(limited.analyticsLevel).toBe("usage");
     expect(limited.diagnosticReporting).toBe("automatic");

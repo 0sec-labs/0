@@ -27,6 +27,8 @@ layout, and approves a digest-pinned local image archive. An initial image is an
 explicit operator choice (`--image`); an archive discovered in a checkout or a
 mutable registry tag is never silently trusted. Re-running setup and normal
 launches resolve the saved approved image automatically.
+Approved archives are limited to **8 GiB** for both the main guest and broker
+siblings. This compressed-archive ceiling is separate from guest storage.
 
 | Setup option | Default | Effect |
 | --- | --- | --- |
@@ -60,6 +62,10 @@ execute in that guest. Networking is online by default. An explicitly enabled
 off; `workbench status` shows the effective mode. This does **not** widen the
 separate offline evolution/sandbox policy or substitute an offline sandbox for
 the online workbench profile.
+Broker siblings copy their bounded source snapshot into fresh, guest-owned
+`/tmp/0-workspace` scratch and return verified artifacts from there. They never
+receive the main guest's writable `/workspace` mount or provider credentials.
+
 
 Container/reproduction actions that request another image use an explicit
 operator-owned catalog, not a guest-selected archive or registry pull:
@@ -90,9 +96,11 @@ back to another execution backend.
 `--provider none` revokes host provider grants. `--current-workspace` removes a
 fixed workspace choice. `0 workbench status` is read-only and never provisions or
 downloads. Runtime, image, admission or cleanup failures refuse execution rather
-than falling back to host or Docker. Retained admission after unproven cleanup
-remains visible in status. `0 workbench disable` is an explicit return to the
-local profile; it retains the approved image and guest state.
+than falling back to host or Docker. Retained admission remains visible in
+status. A subsequent launch recovers it only under the native admission lock
+with successful cleanup proof; missing or failed proof still refuses launch.
+`0 workbench disable` is an explicit return to the local profile; it retains
+the approved image and guest state.
 
 A configured workbench requires an explicit valid operator execution profile.
 Missing or malformed profile settings refuse launch instead of resetting the
@@ -316,62 +324,47 @@ automatically; collect stderr through your runner or container logging pipeline.
 ## Analytics and training data
 
 **Analytics sharing is opt-in and starts at `off`.** Optional `/onboard` setup
-and `/settings` → **Data sharing** disclose the categories and let you choose
-a tier. Skipping setup does not grant consent or change a saved choice:
+and `/settings` → **Data sharing** offer only `off` and `usage`. Skipping setup
+does not grant consent or change a saved choice. Saved legacy `commands` and
+`full` console choices migrate to `usage`; an existing opt-out remains off.
 
-| Tier | Collected records |
+| Choice | Collected records |
 | --- | --- |
-| `off` | No analytics or training uploads |
-| `usage` | Feature/finding counters, error categories, turns, duration and available cost totals; no tool content |
-| `commands` | Usage plus credential-scrubbed tool arguments/results and submitted executable-plugin files |
-| `full` | Commands plus credential-scrubbed scope entries and findings |
+| `off` | No analytics uploads |
+| `usage` | Feature/finding counters, finite error categories, turns, duration and available cost totals; no tool arguments/results, code, scope or finding content |
 
-Training records support model improvement and security research. **Ordinary
-content is retained, including emails, URLs, identifiers and opaque strings.**
-Only recognized credentials are scrubbed: authentication headers, known API-key
-and token shapes, private keys, credential-named fields and URL user/password
-information. Structured JSON is decoded before scrubbing nested values.
-This is best-effort credential protection, **not anonymization or a guarantee
-that every secret is recognized**. Requests are authenticated; random
-install/session identifiers do not make them anonymous. The v1 `*Redacted`
-field names refer to credential scrubbing, not broad PII removal. This pipeline
-does not introduce a separate conversation-transcript record.
-
-The setting is operator-global; project settings cannot broaden it. Saved
-opt-outs survive upgrades. An explicit `ZERO_ANALYTICS_LEVEL` limits the
-effective tier, even if the saved setting is higher. `ZERO_OFFLINE`,
+The preference is operator-global; project settings cannot broaden it.
+An explicit `ZERO_ANALYTICS_LEVEL` can restrict it. `ZERO_OFFLINE`,
 `ZERO_NO_TELEMETRY`, or `DO_NOT_TRACK` forces analytics off when set to a
-non-empty value other than `0`, `false`, or `no`. For example:
+non-empty value other than `0`, `false`, or `no`.
 
 ```bash
 env ZERO_ANALYTICS_LEVEL=off 0 console
 env ZERO_ANALYTICS_LEVEL=usage 0 scan https://authorized.example
 ```
 
-Sending requires a Cloud token with `analytics:submit` and uses
-`/api/cli-analytics` on the configured Cloud host. Supply
-`ZERO_CLOUD_TOKEN` explicitly and optionally `ZERO_CLOUD_HOST` for an
-operator-provided deployment. Ask the operator for a token with the required
-scope if an older grant lacks it. Organization policy can further exclude
-training records; usage is stored separately. A `202` response reports
-accepted and excluded counts, not unconditional training-data acceptance.
+Usage goes through the configured first-party Cloud host's
+`/api/cli-analytics` receiver, using an explicitly supplied `ZERO_CLOUD_TOKEN`
+with `analytics:submit`. `ZERO_CLOUD_HOST` can select an operator-provided
+deployment. The CLI does not contact PostHog directly or need a PostHog key.
+The Cloud receiver can export usage-only aggregates to PostHog when its
+deployment provides `POSTHOG_PROJECT_TOKEN` and `POSTHOG_CAPTURE_HOST`;
+vendor configuration is separate from CLI consent and credentials.
 
-Tool arguments, tool results and submitted source each have a **262,144-byte
-UTF-8 limit after redaction**. Accepted content is not cut to a short preview.
-Other metadata strings retain a 4,000-character cap, including any overflow
-marker; this does not reduce the tool/code content allowance.
-POSTs contain at most 100 records and 1,048,576 encoded JSON bytes, including
-escaping and the batch wrapper. An oversized field or single encoded record
-is skipped, not truncated or retried: stderr and
-`~/.0/analytics-outcomes.log` report only the field, byte counts, limit and
-timestamp. Post-redaction payloads attempted over HTTP are recorded in
-`~/.0/analytics-sent.log`; that log is not proof of server acceptance.
+The first-party envelope includes the running CLI version and finite OS,
+architecture and runtime labels. Authenticated delivery and random
+install/session identifiers are not anonymity. The inspected Cloud vendor
+adapter exports allowlisted counter buckets, not tool/code content, and does
+not currently forward CLI release, source revision or development/production
+labels to PostHog. Those vendor properties require a corresponding Cloud
+deployment change; CLI configuration alone cannot supply them.
 
 Consent is checked again before every POST. Lowering it discards disallowed
-pending records; re-enabling does not replay those discarded records. Skipping
-the onboarding choice leaves the current setting unchanged. Choosing `off`
-there also disables automatic problem reports; choosing a higher analytics
-tier does not re-enable an existing problem-report opt-out.
+pending records; re-enabling does not replay those discarded records.
+Post-redaction payloads attempted over HTTP are recorded in
+`~/.0/analytics-sent.log`; that log is not proof of server acceptance.
+Analytics consent does not grant automatic problem-report consent or broaden
+diagnostic content. Run contributions have their own enrollment below.
 
 ## Feedback delivery
 
@@ -412,18 +405,47 @@ Use `/feedback` → **Problem-report preferences** to select `off`, `ask`, or
 override it. An explicit saved opt-out remains off after upgrading.
 `ZERO_OFFLINE`, `ZERO_NO_TELEMETRY`, and `DO_NOT_TRACK` still block submission.
 
-Delivery requires an explicit `ZERO_CLOUD_TOKEN` accepted by the configured
-Cloud host or a configured HTTPS feedback endpoint.
-Without an available transport, the automatic report is saved locally and the
-console reports that submission is unavailable. Choosing `ask` requires review
-and confirmation before sending; `off` disables automatic submission.
-At analytics levels `off` or `usage`, the report contains bounded diagnostic
-categories. At `commands` or `full`, it may
-also include a scrubbed tool name, error message, stack and captured failure
-output, capped at 8,192 UTF-8 bytes. Recognized credentials and emails are
-redacted and home usernames masked; this is best-effort, not a guarantee that
-all sensitive content is removed. Reports do not upload the feedback file or
-enable update checks.
+With an explicitly configured `ZERO_SENTRY_DSN`, diagnostic reports use that
+operator-provisioned CLI Sentry project's HTTPS envelope endpoint. There is no
+built-in DSN and no fallback to dashboard/server/browser Sentry configuration.
+Invalid, credential-secret-bearing or non-HTTPS DSNs are refused rather than
+silently rerouted. Provision a CLI project and distribute its approved DSN to
+enable this destination; merely enabling **Problem reports** does not provision
+Sentry.
+
+When `ZERO_SENTRY_DSN` is absent, the existing `ZERO_FEEDBACK_URL` or
+authenticated Cloud `/api/cli-feedback` route remains available. That Cloud
+route delivers through first-party Slack/email feedback, **not Sentry**.
+Ordinary manually staged `/feedback` messages continue to use this feedback
+route even when a Sentry DSN is present.
+Manual crash feedback keeps its explicit HTTPS feedback action, with recognized
+credentials, authorization tokens, URL credentials, emails and home usernames
+scrubbed from the note and captured crash text. This is best-effort redaction;
+the always-on raw crash log remains local and is not uploaded.
+
+Reports contain finite failure categories and bounded runtime metadata.
+Configured Sentry additionally receives at most 32 allowlisted built-in
+package-relative stack locations with line/column numbers; absolute paths,
+function names, arbitrary stack text, error messages and captured tool output
+are excluded. The full local review detail is never passed to the transport.
+This content policy is independent of every analytics level. Reports do not
+upload the feedback file, source code, credentials or enable update checks.
+
+Sentry's `release` identifies the actual running `VERSION` as
+`0-cli@<version>`, with the existing embedded `__ZERO_BUILD_COMMIT__` SHA appended
+when available; `cli_version` and `build_commit` tags carry the same identity.
+`environment` is `development` for source execution and `production` for
+bundled releases, with an explicit `NODE_ENV=development` or
+`NODE_ENV=production` taking precedence. Unknown build revisions are omitted,
+not guessed from the working directory.
+
+Without an available transport, automatic reports are saved locally and the
+console reports submission as unavailable. `ask` and `off` cannot transmit a
+diagnostic without individual confirmation; an explicitly saved `automatic`
+preference permits automatic diagnostic submission after the first-report
+consent flow. Hard environment opt-outs still win before any request. The
+review shows the exact destination/body and redacted authentication headers;
+changes to the reviewed destination or body require a new review.
 
 ## Permissioned run contributions
 

@@ -10,7 +10,6 @@
 # @0/cli. Examples:
 #   scripts/smoke-cli.sh "node /tmp/smoke/node_modules/@0/cli/0.js"
 #   scripts/smoke-cli.sh "bun run /tmp/smoke/node_modules/@0/cli/0.js"
-#   scripts/smoke-cli.sh "docker run --rm 0-ci-smoke"
 #
 # The script exits non-zero on the first failing subtest and prints which
 # subcommand tripped.
@@ -23,8 +22,23 @@ if [ "$#" -lt 1 ]; then
 fi
 
 CLI="$1"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+mkdir -p "$TMP/bare-home"
+# No ambient API keys, OAuth stores, provider overrides, proxies or runtime
+# injection flags may influence any smoke subcommand.
+CLI_ENV=(env -i
+  PATH="${PATH:-/usr/bin:/bin}"
+  HOME="$TMP/bare-home" USERPROFILE="$TMP/bare-home"
+  XDG_CONFIG_HOME="$TMP/bare-home/config"
+  XDG_DATA_HOME="$TMP/bare-home/data"
+  XDG_CACHE_HOME="$TMP/bare-home/cache"
+  CODEX_HOME="$TMP/bare-home/codex"
+  CLAUDE_CONFIG_DIR="$TMP/bare-home/claude"
+  ZERO_CHATGPT_AUTH_FILE="$TMP/bare-home/no-auth.json"
+  ZERO_CODEX_AUTH_JSON_PATH="$TMP/bare-home/no-auth.json"
+  ZERO_NO_TELEMETRY=1 DO_NOT_TRACK=1 CI=1 NO_COLOR=1 TERM=dumb)
 
 # Pick a portable "run with timeout" helper. GH Actions ubuntu runners have
 # coreutils `timeout`; macOS devs running this locally usually don't (unless
@@ -43,28 +57,18 @@ fi
 
 say() { printf '\033[36m[smoke]\033[0m %s\n' "$*"; }
 fail() { printf '\033[31m[smoke] FAIL:\033[0m %s\n' "$*" >&2; exit 1; }
+run_cli() { "${CLI_ENV[@]}" $CLI "$@"; }
 run_ai_smoke() {
-  env \
-    ZERO_CHATGPT_ACCESS_TOKEN="" \
-    ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="" \
-    ZERO_CHATGPT_ACCOUNT_ID="" \
-    ZERO_CHATGPT_AUTH_FILE="$TMP/no-auth.json" \
-    ZERO_CODEX_AUTH_JSON_PATH="$TMP/no-auth.json" \
-    OPENAI_API_KEY="" \
-    OPENROUTER_API_KEY="" \
-    ANTHROPIC_API_KEY=fake \
-    QWEN_API_KEY="" \
-    DEEPSEEK_API_KEY="" \
-    AZURE_OPENAI_API_KEY="" \
-    KIMI_API_KEY="" \
-    $CLI "$@"
+  # The fixture owns an ephemeral loopback port, child deadline and teardown.
+  # CLI argv still uses the script's documented command-string splitting.
+  "${CLI_ENV[@]}" node "$SCRIPT_DIR/smoke-cli-provider.mjs" "$TMP" "$1" $CLI
 }
 
 
 # ── 1. --help ──────────────────────────────────────────────────────────────
 # Proves the binary loads, commander is wired, and all subcommands registered.
 say "--help"
-$CLI --help > "$TMP/help.out" 2>&1 || fail "--help exited non-zero"
+run_cli --help > "$TMP/help.out" 2>&1 || fail "--help exited non-zero"
 grep -q "security research harness" "$TMP/help.out" || fail "--help did not contain tagline"
 grep -q "scan" "$TMP/help.out" || fail "--help did not list scan subcommand"
 grep -q "mcp-server" "$TMP/help.out" || fail "--help did not list mcp-server subcommand"
@@ -73,7 +77,7 @@ grep -q "review" "$TMP/help.out" || fail "--help did not list review subcommand"
 # ── 2. doctor ──────────────────────────────────────────────────────────────
 # Proves runtime detection boots and doesn't crash on a bare environment.
 say "doctor"
-$CLI doctor > "$TMP/doctor.out" 2>&1 || fail "doctor exited non-zero"
+run_cli doctor > "$TMP/doctor.out" 2>&1 || fail "doctor exited non-zero"
 grep -q "Node.js" "$TMP/doctor.out" || fail "doctor did not produce the expected banner"
 
 # ── 3. history (DB smoke) ──────────────────────────────────────────────────
@@ -82,7 +86,7 @@ grep -q "Node.js" "$TMP/doctor.out" || fail "doctor did not produce the expected
 # listScans() query. This is the regression guard for the 0.7.0 → 0.7.1
 # native-bindings → WASM swap and the 0.7.4 WAL header migration.
 say "history (DB init)"
-if ! $CLI history --db-path "$TMP/smoke.db" > "$TMP/history.out" 2>&1; then
+if ! run_cli history --db-path "$TMP/smoke.db" > "$TMP/history.out" 2>&1; then
   # Surface the REAL underlying error instead of swallowing it (#610). The DB
   # layer is the most opaque failure mode: a corrupt node-sqlite3-wasm.wasm
   # (e.g. from a poisoned runner cache) throws a WebAssembly CompileError here,
@@ -112,7 +116,7 @@ for attempt in 1 2 3; do
   # next retry begins. Give every attempt isolated state so a slow teardown
   # cannot turn the next healthy boot into a spurious "database is locked".
   printf '%s\n' "$INIT_MSG" \
-    | timeout_cmd "$MCP_SMOKE_TIMEOUT_SECONDS" $CLI mcp-server \
+    | timeout_cmd "$MCP_SMOKE_TIMEOUT_SECONDS" "${CLI_ENV[@]}" $CLI mcp-server \
         --target https://example.invalid \
         --scan-id "ci-smoke-$attempt" \
         --db-path "$TMP/mcp-$attempt.db" 2> "$TMP/mcp.err" \
@@ -131,23 +135,22 @@ grep -q '"jsonrpc":"2.0"' "$TMP/mcp.out" || fail "mcp-server response not JSON-R
 grep -q '"result"' "$TMP/mcp.out" || fail "mcp-server initialize returned no result"
 
 # ── 5. review smoke (source-review pipeline bootstrap) ─────────────────────
-# Creates a trivially small "repo" and runs `review` against it with a fake
-# API key. We don't care if the LLM call succeeds — the smoke assertion is
-# that the review subcommand bootstraps, walks the repo, and emits a report-
-# shaped JSON document on stdout. A rejected model credential produces that
-# partial static report with exit 2; any other nonzero exit is a bootstrap
-# failure.
+# A loopback Anthropic Messages fixture exercises the real API agent: it reads
+# three local source files (satisfying the normal coverage gate), then calls
+# done. Only exit 0 is accepted; provider/bootstrap failures stay fatal.
 say "review (source pipeline bootstrap)"
 mkdir -p "$TMP/tinyrepo"
-printf 'console.log("hello");\n' > "$TMP/tinyrepo/index.js"
-if run_ai_smoke review "$TMP/tinyrepo" \
-    --format json --timeout 3000 \
-    > "$TMP/review.out" 2> "$TMP/review.err"; then
-  :
-else
-  review_status=$?
-  [ "$review_status" -eq 2 ] || fail "review exited $review_status — pipeline bootstrap broken"
-fi
+for source in index helper value; do
+  printf 'console.log("hello");\n' > "$TMP/tinyrepo/$source.js"
+done
+run_ai_smoke review > "$TMP/review.out" 2> "$TMP/review.err" || {
+  echo "--- review stdout ---" >&2
+  cat "$TMP/review.out" >&2 || true
+  echo "--- review stderr ---" >&2
+  cat "$TMP/review.err" >&2 || true
+  fail "review exited non-zero — pipeline bootstrap broken"
+}
+grep '^\[smoke\].* transport:' "$TMP/review.err"
 # The report payload should at minimum mention the target we passed.
 grep -q '"target"' "$TMP/review.out" || {
   echo "--- review stdout ---" >&2
@@ -156,27 +159,21 @@ grep -q '"target"' "$TMP/review.out" || {
   cat "$TMP/review.err" >&2 || true
   fail "review did not emit a report-shaped JSON document"
 }
+# A separate rejecting fixture must produce exit 2, authentication_error and
+# an explicitly partial report. An unrelated crash/nonzero exit cannot pass.
+run_ai_smoke review-auth-error > "$TMP/review-auth.out" 2> "$TMP/review-auth.err" || {
+  cat "$TMP/review-auth.out" "$TMP/review-auth.err" >&2 || true
+  fail "review did not preserve the provider-auth failure contract"
+}
+grep '^\[smoke\].* transport:' "$TMP/review-auth.err"
 
 # ── 6. scan --mode web (template loader + agent bootstrap) ────────────────
-# Points scan at an unreachable target with a fake API key. The assertion
-# is that the full scan pipeline bootstraps: templates load, discovery
-# runs, attack agent spawns, and a report-shaped JSON document lands.
-# Guards against regressions like the v0.7.11 `ENOENT: /$bunfs/attacks`
-# crash — that bug shipped because none of the existing smoke subtests
-# exercise the attack-template loader. The agent loop will 401 on the
-# fake key, which is fine; an empty report is still a report.
+# Discovery and attack each receive an actual Messages tool_use response that
+# calls done without target traffic. Existing offline recon switches keep the
+# bootstrap focused on agents/templates; a counted loopback target rejects any
+# unexpected request. Guards the compiled attack-template loader (/$bunfs).
 say "scan --mode web (template loader + pipeline)"
-# Live network targets require an engagement scope (security gate); provide one
-# so the smoke exercises the pipeline rather than tripping the scope refusal.
-printf '{ "in_scope": ["example.invalid"] }' > "$TMP/scope.json"
-run_ai_smoke scan \
-    --target http://example.invalid \
-    --mode web --depth quick \
-    --runtime api --timeout 3000 \
-    --scope "$TMP/scope.json" \
-    --format json \
-    --db-path "$TMP/scan.db" \
-    > "$TMP/scan.out" 2> "$TMP/scan.err" \
+run_ai_smoke scan > "$TMP/scan.out" 2> "$TMP/scan.err" \
   || {
     echo "--- scan stdout ---" >&2
     cat "$TMP/scan.out" >&2 || true
@@ -184,6 +181,7 @@ run_ai_smoke scan \
     cat "$TMP/scan.err" >&2 || true
     fail "scan exited non-zero — pipeline bootstrap or template loader broken"
   }
+grep '^\[smoke\].* transport:' "$TMP/scan.err"
 grep -q '"target"' "$TMP/scan.out" || {
   echo "--- scan stdout ---" >&2
   cat "$TMP/scan.out" >&2 || true
@@ -199,5 +197,12 @@ if grep -qE "ENOENT.*attacks|Templates directory not found" "$TMP/scan.err"; the
   cat "$TMP/scan.err" >&2
   fail "scan emitted a template-loader error to stderr"
 fi
+# Rejecting authentication is never a successful empty scan: require exit 2,
+# authentication_error and executionSuccessful:false from the real CLI.
+run_ai_smoke scan-auth-error > "$TMP/scan-auth.out" 2> "$TMP/scan-auth.err" || {
+  cat "$TMP/scan-auth.out" "$TMP/scan-auth.err" >&2 || true
+  fail "scan did not preserve the provider-auth failure contract"
+}
+grep '^\[smoke\].* transport:' "$TMP/scan-auth.err"
 
 say "all 6 subcommand smoke tests passed"

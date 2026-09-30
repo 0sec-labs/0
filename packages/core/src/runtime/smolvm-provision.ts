@@ -48,7 +48,7 @@ export async function smolvmArchiveDigest(path: string, signal?: AbortSignal): P
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const info = await file.stat();
-    if (!info.isFile() || info.size <= 0 || info.size > 16 * 1024 ** 3) throw new Error("SmolVM image must be a regular nonempty archive no larger than 16 GiB");
+    if (!info.isFile() || info.size <= 0 || info.size > 8 * 1024 ** 3) throw new Error("SmolVM image must be a regular nonempty archive no larger than 8 GiB");
     const hash = createHash("sha256");
     for await (const chunk of file.createReadStream({ autoClose: false, signal })) hash.update(chunk);
     return `sha256:${hash.digest("hex")}`;

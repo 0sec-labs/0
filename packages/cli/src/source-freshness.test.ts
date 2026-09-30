@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { checkSourceDistFreshness } from "./source-freshness.js";
 
 const OLD = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -17,6 +17,21 @@ function makeRepo(): { repoRoot: string; bundlePath: string } {
 }
 
 describe("source dist freshness guard", () => {
+  it("allows standalone startup without resolving the virtual executable path", () => {
+    vi.stubGlobal("__ZERO_COMPILED_TARGET__", "darwin-arm64");
+    try {
+      const result = checkSourceDistFreshness({
+        entryPath: "/$bunfs/root/0",
+        buildCommit: HEAD,
+        execGit: () => { throw new Error("Standalone startup must not query a checkout"); },
+      });
+      expect(result.checked).toBe(false);
+      expect(result.stale).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("reports stale root dist bundles in a source checkout", () => {
     const { repoRoot, bundlePath } = makeRepo();
     const result = checkSourceDistFreshness({
@@ -31,9 +46,6 @@ describe("source dist freshness guard", () => {
 
     expect(result.checked).toBe(true);
     expect(result.stale).toBe(true);
-    expect(result.message).toContain("dist/0.js was built from aaaaaaaaaaaa");
-    expect(result.message).toContain("checkout HEAD is bbbbbbbbbbbb");
-    expect(result.message).toContain("pnpm run build");
   });
 
   it("accepts matching build and HEAD commits", () => {

@@ -4,6 +4,7 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 declare const __ZERO_BUILD_COMMIT__: string;
+declare const __ZERO_COMPILED_TARGET__: string;
 
 const BYPASS_ENV = "ZERO_ALLOW_STALE_SOURCE_DIST";
 
@@ -59,6 +60,10 @@ function sameRealPath(a: string, b: string): boolean {
 export function checkSourceDistFreshness(
   opts: SourceDistFreshnessOptions = {},
 ): SourceDistFreshnessResult {
+  // Standalone binaries have a virtual entry path, not a source checkout bundle.
+  if (typeof __ZERO_COMPILED_TARGET__ !== "undefined") {
+    return { checked: false, stale: false, reason: "standalone-binary" };
+  }
   const env = opts.env ?? process.env;
   if (env[BYPASS_ENV] === "1") {
     return { checked: false, stale: false, reason: "bypassed" };
