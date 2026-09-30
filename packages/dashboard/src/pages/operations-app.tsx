@@ -104,7 +104,7 @@ export function OperationsApp() {
           <Route path="/" element={<Navigate to="/console" replace />} />
           <Route path="/console" element={<ConsolePage />} />
           <Route path="/console/:sessionId" element={<ConsolePage />} />
-          {["setup", "connections", "models", "settings", "plugins", "doctor", "tools", "project", "launcher", "launch", "fix"].map((route) => (
+          {["setup", "connections", "models", "settings", "plugins", "doctor", "tools", "project", "audits", "launcher", "launch", "fix"].map((route) => (
             <Route key={route} path={`/${route}`} element={<WebConsoleControlsPage />} />
           ))}
           <Route path="/dashboard" element={operations(dashboard ? <OverviewPage data={dashboard} /> : <EmptyState title="Nothing here yet" action={startChat} />)} />

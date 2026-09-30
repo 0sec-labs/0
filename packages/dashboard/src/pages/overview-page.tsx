@@ -279,7 +279,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                   disabled={!target.trim() || isMutating}
                 >
                   <Play />
-                  Start scan
+                  Start audit
                 </Button>
                 <Button
                   variant="outline"
@@ -362,7 +362,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                 disabled={!target.trim() || isMutating}
               >
                 <Play />
-                Start scan
+                Start audit
               </Button>
               <Button
                 variant={hasLiveDaemon ? "outline" : "default"}
