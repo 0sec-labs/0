@@ -14,6 +14,10 @@ on the published npm package and the GitHub Release tag.
 
 ### Added
 
+- Opt-in Jev finding prioritization (`rank`) and native EGATS methodology
+  selection (`specialist`), with bounded advisory scores, shared scan accounting,
+  and fallback that preserves vulnerability confidence and verification state.
+
 - Private, project-scoped review checks with explicit revision approval and
   advisory pass, issue, and unknown results in human and machine reports.
 - Guided scan goals, repeated sequential or parallel runs, shared priced

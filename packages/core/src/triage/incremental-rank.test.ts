@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import type { JevEvaluationRequest, JevEvaluationResult, JevEvaluator } from "@0/shared";
+import { describe, it, expect, vi } from "vitest";
 import type { NativeRuntime, NativeContentBlock } from "../runtime/types.js";
 import {
   buildRankPrompt,
@@ -495,5 +496,102 @@ describe("combined dedupe→rank shape", () => {
     // f1 ranked lowest
     expect(result.updates[3].id).toBe("f1");
     expect(result.updates[3].rank).toBe(4);
+  });
+});
+function priorityEvaluation(
+  request: JevEvaluationRequest,
+  choices: Record<string, "low" | "medium" | "high" | "insufficient"> = {},
+): JevEvaluationResult {
+  return {
+    model: "jev-rank-test",
+    answers: Object.fromEntries(Object.keys(request.questions).map((id) => {
+      const choice = choices[id] ?? "high";
+      const probabilities = { low: 0, medium: 0, high: 0, insufficient: 0 };
+      probabilities[choice] = 0.9;
+      probabilities[choice === "low" ? "high" : "low"] += 0.1;
+      return [id, { type: "choice" as const, choice, probabilities }];
+    })),
+    usage: { inputTokens: 1, outputTokens: 1, estimatedCostUsd: 0 },
+    durationMs: 1,
+  };
+}
+
+
+// ── Tests ──
+
+
+describe("advisory ranking batch fallback and cancellation", () => {
+  it("discards confident partial batches when later evidence is uncertain and reranks every target", async () => {
+    const targets = Array.from({ length: 9 }, (_, index) => makeItem(`finding-${index}`));
+    const expected = targets.map((item) => item.id).reverse();
+    const runtime = queueRuntime([JSON.stringify({
+      rankings: expected.map((id, index) => ({ id, rank: index + 1 })),
+    })]);
+    const evaluate = vi.fn<JevEvaluator["evaluate"]>().mockImplementation(async (request) => {
+      if (evaluate.mock.calls.length === 1) return priorityEvaluation(request);
+      return priorityEvaluation(request, { f0_evidence: "insufficient" });
+    });
+
+    const result = await rankIncremental(targets, runtime, { jevEvaluator: { evaluate } });
+
+    expect(result.updates.map((item) => item.id)).toEqual(expected);
+    expect(result.updates.every((item) => item.priority === undefined)).toBe(true);
+  });
+
+  it("preserves original target order for equal advisory scores and propagates cancellation without fallback", async () => {
+    const targets = [makeItem("Z"), makeItem("A"), makeItem("better")];
+    const runtime = queueRuntime([]);
+    const evaluator: JevEvaluator = {
+      evaluate: async (request) => priorityEvaluation(request, {
+        f0_exploitability: "low", f0_impact: "low", f0_evidence: "low",
+        f1_exploitability: "low", f1_impact: "low", f1_evidence: "low",
+      }),
+    };
+    const result = await rankIncremental(targets, runtime, { jevEvaluator: evaluator });
+    expect(result.updates.map((item) => item.id)).toEqual(["better", "Z", "A"]);
+    expect(result.updates[0]?.priority).toMatchObject({
+      score: 0.9, certainty: 0.9, exploitability: 0.9, impact: 0.9, evidence: 0.9,
+    });
+    expect(result.updates[1]?.priority?.score).toBeCloseTo(0.1);
+
+    const controller = new AbortController();
+    const reason = new Error("ranking cancelled");
+    const cancelledEvaluator: JevEvaluator = {
+      evaluate: async (request) => {
+        controller.abort(reason);
+        return priorityEvaluation(request);
+      },
+    };
+    await expect(rankIncremental(targets, runtime, {
+      jevEvaluator: cancelledEvaluator, signal: controller.signal,
+    })).rejects.toBe(reason);
+  });
+
+});
+
+describe("advisory ranking validation and opt-in boundaries", () => {
+  it.each(["missing", "invalid", "unknown"])("falls back completely for %s provider distributions", async (kind) => {
+    const targets = [makeItem("first"), makeItem("second")];
+    const runtime = queueRuntime([rankResponse(["second", "first"], [], targets, "full_rerank")]);
+    const result = await rankIncremental(targets, runtime, { jevEvaluator: {
+      async evaluate(request) {
+        const result = priorityEvaluation(request);
+        if (kind === "missing") delete result.answers.f0_evidence;
+        else result.answers.f0_evidence = kind === "invalid"
+          ? { type: "choice", choice: "high", probabilities: { low: 0, medium: 0, high: NaN, insufficient: 0 } }
+          : { type: "choice", choice: "invented", probabilities: { invented: 1 } };
+        return result;
+      },
+    } });
+    expect(result.updates.map(update => update.id)).toEqual(["second", "first"]);
+    expect(result.updates.every(update => update.priority === undefined)).toBe(true);
+  });
+
+  it("leaves custom rubrics on the existing ranker and does not send them to Jev", async () => {
+    const targets = [makeItem("first")];
+    const evaluate = vi.fn<JevEvaluator["evaluate"]>();
+    const runtime = queueRuntime([rankResponse(["first"], [], targets, "full_rerank")]);
+    await rankIncremental(targets, runtime, { rubric: "Prioritize by fix effort", jevEvaluator: { evaluate } });
+    expect(evaluate).not.toHaveBeenCalled();
   });
 });
