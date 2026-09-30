@@ -164,6 +164,17 @@ export interface NativeToolDef {
   };
 }
 
+/**
+ * A provider-confirmed output-token boundary, not a failed response. Content
+ * contains observations only: no function calls or opaque incomplete items may
+ * be dispatched or replayed. Consumers may continue with a NEW bounded request.
+ */
+export interface NativeOutputCapCheckpoint {
+  reason: "max_output_tokens";
+  responseId?: string;
+  discardedToolCalls: number;
+}
+
 export interface NativeRuntimeResult {
   content: NativeContentBlock[];
   stopReason: "end_turn" | "tool_use" | "max_tokens" | "error";
@@ -198,6 +209,8 @@ export interface NativeRuntimeResult {
    * A runtime that cannot abort an in-flight request simply never sets it.
    */
   cancelled?: boolean;
+  /** Present only for a safely recoverable Responses max_output_tokens boundary. */
+  checkpoint?: NativeOutputCapCheckpoint;
   /**
    * The provider's raw response items for this turn, when the wire format has
    * items worth replaying (Responses API). Callers that maintain a message

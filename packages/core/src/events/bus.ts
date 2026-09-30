@@ -508,7 +508,7 @@ export interface SubagentLifecyclePayload extends SubagentTelemetry {
   error?: string;
   /** Whether the task finished, rather than merely exhausting its run. */
   done?: boolean;
-  completion_reason?: "done" | "turn_limit" | "cost_limit" | "early_stop" | "error";
+  completion_reason?: "done" | "turn_limit" | "cost_limit" | "output_limit" | "early_stop" | "error";
   /** Scope rules inherited from the parent — only when scope is active. */
   scope_rules?: string[];
   [k: string]: unknown;
