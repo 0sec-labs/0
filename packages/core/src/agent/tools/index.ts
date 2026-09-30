@@ -23,10 +23,6 @@ import { skillsToolDefinitions } from "./skills.js";
 import { scannerToolDefinitions, SCANNER_TOOL_NAMES } from "./scanner.js";
 import { detectionToolDefinitions } from "./detections.js";
 import { cloudToolDefinitions, CLOUD_TOOL_NAMES } from "./cloud.js";
-import {
-  orchestratorToolDefinitions,
-  ORCHESTRATOR_TOOL_NAMES,
-} from "./orchestrator.js";
 import { oastToolDefinitions, OAST_TOOL_NAMES } from "./oast.js";
 import { pythonToolDefinitions } from "./python.js";
 import { binaryToolDefinitions, BINARY_TOOL_NAMES } from "./binary.js";
@@ -48,7 +44,6 @@ import { jevPrepassToolDefinition } from "./jev-prepass.js";
 export {
   SCANNER_TOOL_NAMES,
   CLOUD_TOOL_NAMES,
-  ORCHESTRATOR_TOOL_NAMES,
   OAST_TOOL_NAMES,
   BINARY_TOOL_NAMES,
   // Phase-2 offensive-engine gating name-sets (dev-live-engine-recovery).
@@ -73,7 +68,6 @@ const DOMAIN_DEFINITIONS: Record<string, ToolDefinition> = {
   ...scannerToolDefinitions,
   ...detectionToolDefinitions,
   ...cloudToolDefinitions,
-  ...orchestratorToolDefinitions,
   ...oastToolDefinitions,
   ...pythonToolDefinitions,
   ...binaryToolDefinitions,
@@ -132,7 +126,6 @@ const TOOL_REGISTRY_ORDER = [
   "auth_boundary_probe",
   "cloud_s3_probe",
   "cloud_validate_credentials",
-  "start_scan",
   "oast_register",
   "oast_poll",
   "python_exec",

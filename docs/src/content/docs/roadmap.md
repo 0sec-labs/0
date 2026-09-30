@@ -23,25 +23,23 @@ Use these guides for current instructions. The dated plans below preserve earlie
 
 ## 0cloud
 
-0cloud has implemented CLI and server integration for authentication, enrollment,
-managed scans, and schedules. A public sign-in page or implemented endpoint does
-not establish account entitlement, a compatible deployed version, or qualified
-end-to-end operation. The complete self-serve managed path has not been qualified
-by this documentation audit. [Contact the team](https://0.security/contact/?intent=contact)
-to agree access, scope, spend, and deliverables.
-
-Before automating managed work, read the concrete client/server compatibility
-limits in [`connect`](/commands/#connect) and [`service`](/commands/#service),
-especially repository schedule filtering and remote cost-ceiling enforcement.
-
-[Hosted inference](/getting-started/#hosted-models) has its own availability
-and account-compatibility boundary. Signing in does not establish hosted spend,
-managed execution or PR-review entitlement.
+Managed service integration remains separate from the local CLI. The service
+can support enrollment, scans and schedules in approved deployments, but this
+checkout no longer provides managed-service login or scan lifecycle commands.
+An implemented endpoint does not establish account entitlement, a compatible
+deployed version or qualified end-to-end operation.
+[Contact the team](https://0.security/contact/?intent=contact) to agree access,
+scope, spend and deliverables. Confirm schedule filtering and budget
+enforcement with the operator before automating managed work. A service
+token does not select a model for the local CLI.
 
 ## Desktop
 
-**Desktop remains in development**, without a public download. Use the
-[Console](/console/) for terminal work.
+**Desktop is a development-only alpha**, without a public download. Normal CLI
+builds, npm packages, the installer, and tag-triggered releases do not ship it.
+Contributor source builds are documented in
+[`desktop.md`](https://github.com/0sec-labs/0/blob/main/docs/src/content/docs/desktop.md).
+Use the [Console](/console/) for released terminal work.
 
 Documentation follows the source checkout. Check `0 --version` and
 `0 <command> --help` against your installed release before using newly

@@ -9,6 +9,7 @@ import { StringDecoder } from "node:string_decoder";
 import { setTimeout as delay } from "node:timers/promises";
 import { allowlistedChildEnv } from "../agent/sanitized-env.js";
 import type { InteractiveExecutionChannel } from "./interactive.js";
+import { runSmolvmDarwinProgram } from "./smolvm-darwin.js";
 
 const IMAGE_DIGEST = /^sha256:[a-f0-9]{64}$/;
 const MAX_IMAGE_BYTES = 8 * 1024 ** 3;
@@ -158,6 +159,7 @@ async function cleanup(root: string): Promise<void> {
  * filesystem, or host-execution fallback. Linux setpriv ties the CLI to its
  * controller; smolvm's foreground watchdog in turn ties the VM to the CLI. */
 export async function runSmolvm(options: SmolvmExecutionOptions): Promise<SmolvmExecutionResult> {
+  if (process.platform === "darwin") return runSmolvmDarwinProgram(options, false);
   validate(options);
   options.signal?.throwIfAborted();
   const start = performance.now();

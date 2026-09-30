@@ -4,7 +4,6 @@ import type { AgentOutput } from "../../agentic-scanner.js";
 import { features } from "../../agent/features.js";
 import { appendRoutingTraceRecord, type RoutingDecision } from "../../triage/index.js";
 import { resolveJournalPaths } from "../../agent/journal/writer.js";
-import { postFinalReport } from "../../cloud-sink.js";
 
 /**
  * Inputs the report stage reads from the scan closure. Everything here is
@@ -69,9 +68,7 @@ export interface ReportStageCtx {
 /**
  * Stage 4: Report. Assembles the final `ScanReport` from the accumulated
  * findings and per-stage agent output, persists scan completion, emits the
- * routing-trace dataset, streams the report to the opt-in webhook sink, and
- * fires the terminal `scan_completed` event. Behaviour-preserving extraction
- * of the inline Stage 4 block from `agenticScan`.
+ * routing-trace dataset, and fires the terminal `scan_completed` event.
  */
 export async function runReportStage(
   state: ReportStageState,
@@ -181,8 +178,6 @@ export async function runReportStage(
     message: `Report: ${summary.totalFindings} findings (${confirmed} confirmed)`,
   });
 
-  // Stream final report to the opt-in webhook sink (no-op when unset).
-  await postFinalReport(report);
 
   // If either stage's agent loop bailed because the planner LLM
   // returned an error (e.g. transient Azure OpenAI 5xx), the loop

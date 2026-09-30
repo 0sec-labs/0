@@ -17,7 +17,6 @@ import { detectAvailableRuntimes } from "./runtime/registry.js";
 // DB lazy-loaded to avoid native module issues
 import { runAgentLoop } from "./agent/loop.js";
 import { runNativeAgentLoop } from "./agent/native-loop.js";
-import { maybeStartCloudInboxPoller } from "./agent/cloud-inbox.js";
 import { toolCallPreview } from "./agent/tool-preview.js";
 import { getToolsForRole, TOOL_DEFINITIONS, parsePocStepsArg } from "./agent/tools.js";
 import {
@@ -86,7 +85,6 @@ import {
   generateStaticPoc,
   applyStaticPocResult,
 } from "./agent/static-poc-gen.js";
-import { getCloudSinkConfig, postFinding, postFinalReport } from "./cloud-sink.js";
 import { eventBus } from "./events/bus.js";
 import type { CostBreakdownEntry, CrossValidatedLeadEntry } from "./events/bus.js";
 import { modelProvider, splitCost } from "./agent/cost.js";
@@ -112,6 +110,7 @@ import {
   targetRequiresScope,
   SCOPE_GUARDS_INERT_EVENT,
 } from "./scope/scope-guard.js";
+import { getScopeEnforcementState, withScopeEnforcement } from "./scope/activation.js";
 import { isExplicitLocalTargetPath, resolveLocalTargetPath } from "./path-resolution.js";
 import { runMemSafetyScan } from "./stages/memsafety-scan.js";
 import type { MemSafetyScanOptions } from "./stages/memsafety-scan.js";
@@ -560,7 +559,11 @@ function parsePackageTarget(
   return { ecosystem, name: rest };
 }
 
-export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport> {
+export function agenticScan(opts: AgenticScanOptions): Promise<ScanReport> {
+  return withScopeEnforcement(getScopeEnforcementState(), () => agenticScanInternal(opts));
+}
+
+async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport> {
   const {
     dbPath,
     onEvent,
@@ -574,18 +577,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
     throw new Error("0 scan runId must match resumeScanId when resuming.");
   }
 
-  // #978 (ADR-060) — cloud control channel. The agent loop injects "pending
-  // user messages" each turn via getPendingUserMessages (originally the local
-  // TUI interrupt hook). In cloud mode there is no TUI; operator steers arrive
-  // in the scan inbox (the dashboard's "Steer this scan"). Default the source
-  // to a background inbox poller so a steer flips pending → consumed and lands
-  // in the agent's context mid-run. Callers that pass their own callback (TUI)
-  // keep it. The poller is unref'd, so the sandbox process still exits cleanly.
-  const cloudInbox = optsGetPendingUserMessages
-    ? null
-    : maybeStartCloudInboxPoller();
-  const getPendingUserMessages =
-    optsGetPendingUserMessages ?? cloudInbox?.drain;
+  const getPendingUserMessages = optsGetPendingUserMessages;
 
   // Memory-safety scan role ("Monty-mode", 0#700). This is the minimal
   // dispatch seam for the userspace/Rust pipeline: when a `memSafetyTarget` is
@@ -622,7 +614,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
     // `resolveScopeForConfig` for the TOCTOU rationale (0#218
     // review).
     cacheScopePolicy(config, scope);
-    const verdict = scope.match(config.target);
+    const verdict = scope.enforce(config.target);
     if (!verdict.allowed) {
       throw new Error(
         `--target ${config.target} is out of scope per ${config.scopeFile}: ${verdict.reason}`,
@@ -630,11 +622,10 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
     }
   }
 
-  // A public engine must refuse any live network target before it initializes
-  // a database, model, tool, subprocess, or network client. Local source,
-  // package, and kernel modes retain the visible inert-guard behavior below.
+  // The active scope plugin retains fail-closed live-target admission.
+  // Disabled authorization is surfaced explicitly in the run's guard status.
   const scopeGuards = describeScopeGuards(!!resolveScopeForConfig(config));
-  if (!scopeGuards.active && targetRequiresScope(config.target)) {
+  if (scopeGuards.pluginEnabled && !scopeGuards.active && targetRequiresScope(config.target)) {
     throw new Error(networkScopeRequiredRefusal(config.target));
   }
   if (!scopeGuards.active && scopeGuards.required) {
@@ -1152,7 +1143,6 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
       }
       emit({ type: "stage:end", stage: "report", message: `Report: ${summary.totalFindings} findings` });
       writeReport(report);
-      await postFinalReport(report);
       emitScanCompleted("completed", allFindings.length, { findingsForFlagCount: allFindings });
       return report;
     }
@@ -1231,9 +1221,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
       }
 
       emit({ type: "stage:end", stage: "report", message: `Report: ${summary.totalFindings} findings` });
-      // Stream final report to the opt-in webhook sink (no-op when unset).
       writeReport(report);
-      await postFinalReport(report);
       // MCP fast-path doesn't invoke a metered LLM runtime — `cost_usd`
       // is intentionally omitted (no `stages`). Still surface flag count
       // so `cost_per_flag` is null, not bogus.
@@ -1317,16 +1305,6 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
     // Merge the deterministic pre-pass findings into discovery output (once).
     if (reconFindings.length) {
       discoveryState.findings = [...reconFindings, ...discoveryState.findings];
-      // In cloud mode, findings reach the orchestrator DB only via postFinding —
-      // which is otherwise fired solely by the agent's `save_finding` tool calls.
-      // The pre-pass findings never go through that tool, so post them explicitly
-      // here, or they'd be silently dropped in cloud scans (present in the local
-      // report but absent from the 0cloud DB). postFinding no-ops when there is
-      // no cloud sink config (local CLI), so this is a safe cloud-only emission.
-      const sinkCfg = getCloudSinkConfig();
-      if (sinkCfg) {
-        for (const f of reconFindings) void postFinding(f, sinkCfg);
-      }
     }
 
     // Persist target profile
@@ -1685,7 +1663,6 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
         message: `kill_switch_triggered: aborted with ${allFindings.length} partial finding(s)`,
       });
       writeReport(killReport);
-      await postFinalReport(killReport);
       emitScanCompleted("completed", allFindings.length, {
         turnsUsed: (discoveryState?.turnCount ?? 0) + (attackState?.turnCount ?? 0),
         summary: attackState?.summary ?? discoveryState?.summary,

@@ -11,7 +11,7 @@
  * a typed list of assertions, hashed evidence-artifact descriptors so big
  * payloads (screenshots, full captures, dmesg dumps) can be stored as
  * sidecar files and referenced by sha256, and an engine_metadata block so
- * the result is self-describing across local/docker/qemu runners.
+ * the result is self-describing across local/smolvm/docker/qemu runners.
  *
  * This module is the SHAPE contract; the runner skeleton that produces it
  * lives in `@0/core/verify/replay-runner`. The two are deliberately
@@ -58,14 +58,11 @@ export type VerificationMode = z.infer<typeof VerificationModeSchema>;
 
 // ── Runner identification ───────────────────────────────────────────────────
 //
-// Which executor produced this result. `local` means the runner shelled out
-// on the host (this is the only impl shipped with #193's first slice).
-// `docker` / `qemu` are reserved for the sandbox-isolation work that the
-// issue body calls out as a follow-up. They appear in the schema today so
-// cloud-side ingest can already discriminate without a schema migration
-// later.
+// `local` executes on the invoking machine. `smolvm` uses an admitted
+// workbench's host-supervised sibling VM; it never means Docker-in-VM.
+// Docker and QEMU retain their distinct, explicit isolation identities.
 
-export const RunnerKindSchema = z.enum(["local", "docker", "qemu"]);
+export const RunnerKindSchema = z.enum(["local", "smolvm", "docker", "qemu"]);
 export type RunnerKind = z.infer<typeof RunnerKindSchema>;
 
 // ── Engine metadata ─────────────────────────────────────────────────────────
@@ -98,6 +95,8 @@ export const VerificationCommandSchema = z.object({
   stdout_excerpt: z.string().optional(),
   stderr_excerpt: z.string().optional(),
   duration_ms: z.number().nonnegative(),
+  timed_out: z.boolean().optional(),
+  cancelled: z.boolean().optional(),
 });
 
 export type VerificationCommand = z.infer<typeof VerificationCommandSchema>;

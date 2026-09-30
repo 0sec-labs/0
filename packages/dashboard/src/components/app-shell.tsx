@@ -287,7 +287,9 @@ export function AppShell({
             <BrandMark compact className="size-9" />
 
             <nav className="mt-6 flex flex-1 flex-col items-center gap-2">
-              <RailNavItem to="/desktop.html" label="Chat" icon={MessageSquare} reloadDocument />
+              {import.meta.env.MODE === "desktop-alpha" && (
+                <RailNavItem to="/desktop.html" label="Chat (alpha)" icon={MessageSquare} reloadDocument />
+              )}
               <RailNavItem to="/dashboard" label="Operations" icon={LayoutDashboard} />
               <RailNavItem to="/findings" label="Findings" icon={ShieldAlert} badge={newFamilies} />
               <RailNavItem to="/runs" label="Runs" icon={Radar} badge={activeRuns} />
@@ -373,13 +375,15 @@ export function AppShell({
                       </SheetHeader>
                       <div className="flex flex-col gap-5 px-3 py-3">
                         <div className="flex flex-col gap-0.5">
-                          <SidebarNavItem
-                            to="/desktop.html"
-                            reloadDocument
-                            label="Chat"
-                            meta="Scoped operator workspace"
-                            icon={MessageSquare}
-                          />
+                          {import.meta.env.MODE === "desktop-alpha" && (
+                            <SidebarNavItem
+                              to="/desktop.html"
+                              reloadDocument
+                              label="Chat (alpha)"
+                              meta="Development-only operator workspace"
+                              icon={MessageSquare}
+                            />
+                          )}
                           <SidebarNavItem
                             to="/dashboard"
                             label="Operations"

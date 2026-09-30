@@ -18,7 +18,7 @@
 #   AZUREHOUND_VERSION=vX  pin the AzureHound release (checksum-verified, see below)
 
 # Shared Node payload; the toolbox does not depend on application compilation.
-FROM node:24-bookworm AS node-runtime
+FROM node:24.21.0-bookworm@sha256:64af3819f9275802414d7cdc38c27e9d82bd564dec4d4da87d008255d36c63b4 AS node-runtime
 
 # ---------- Stage 1: builder ----------
 FROM node-runtime AS builder
@@ -27,7 +27,7 @@ ENV PNPM_HOME=/root/.local/share/pnpm \
     PATH=/root/.local/share/pnpm:$PATH \
     CI=1
 
-RUN corepack enable && corepack prepare pnpm@9 --activate
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
 WORKDIR /app
 
@@ -37,6 +37,7 @@ COPY tsconfig.base.json ./
 COPY scripts ./scripts
 COPY packages ./packages
 COPY assets ./assets
+COPY vendor ./vendor
 
 # Pull in any other workspace files referenced by package.json globs
 COPY LICENSE README.md ./
@@ -44,9 +45,9 @@ COPY LICENSE README.md ./
 RUN pnpm install --frozen-lockfile
 RUN pnpm build
 
-# Install the bundle's locked runtime dependencies without lifecycle scripts.
+# Install native runtime dependencies with their required build lifecycle.
 WORKDIR /app/dist
-RUN npm ci --omit=dev --ignore-scripts
+RUN npm ci --omit=dev --no-audit --no-fund
 
 # ---------- Stage 2: toolbox ----------
 FROM ubuntu:24.04 AS toolbox
@@ -72,7 +73,7 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
 # scan quality. Cheap to add (a few MB) and the agent has been
 # expecting it since the audit subcommand shipped.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates curl wget gnupg jq git unzip xz-utils \
+        ca-certificates curl wget gnupg jq git gh unzip xz-utils \
         ripgrep \
         skopeo \
         python3 python3-requests python3-bs4 \

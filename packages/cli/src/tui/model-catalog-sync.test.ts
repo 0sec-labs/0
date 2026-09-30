@@ -11,6 +11,9 @@ import {
   type CatalogCache,
 } from "./model-catalog-sync.js";
 import { catalogExtras, buildFullModelCatalog, buildModelCatalog } from "./model-catalog.js";
+import { getRates, registerModelPricing } from "@0/shared";
+import { reachableModelCatalog } from "./model-layout.js";
+import { providerStates } from "./provider-status.js";
 
 /** Minimal Models.dev-shaped payload: provider → { models: { id → {cost,limit} } }. */
 const MODELS_DEV_SAMPLE = {
@@ -65,6 +68,34 @@ describe("normalizeModelsDev", () => {
     expect(normalizeModelsDev(null)).toEqual([]);
     expect(normalizeModelsDev("nope")).toEqual([]);
     expect(normalizeModelsDev({ p: { models: 42 } })).toEqual([]);
+  });
+
+  it("keeps unsafe metadata unknown and never imports public Codex entitlement", () => {
+    expect(normalizeModelsDev({
+      openai: { models: {
+        "new-safe-model": { cost: { input: Infinity, output: -1, cache_read: NaN }, limit: { context: 0.5 } },
+        "bad\nmodel": {},
+      } },
+      "chatgpt-codex": { models: { "public-only-subscription": {} } },
+    })).toEqual([{ id: "new-safe-model", provider: "openai" }]);
+  });
+
+  it("maps only the matching coding backends, not their separate PAYG catalogs", () => {
+    const rows = normalizeModelsDev({
+      "alibaba-token-plan": { models: { "future-qwen": {} } },
+      alibaba: { models: { "payg-only-qwen": {} } },
+      "kimi-code-plan-cn": { models: { "future-kimi": {} } },
+      moonshotai: { models: { "payg-only-kimi": {} } },
+      "github-copilot": { models: { "future-copilot": {} } },
+    });
+    const env = { QWEN_API_KEY: "synthetic", KIMI_API_KEY: "synthetic", ZERO_COPILOT_GITHUB_TOKEN: "synthetic" };
+    const catalog = rows.map((row) => ({ ...row, price: "subscription" }));
+    expect(reachableModelCatalog(catalog, providerStates(env), { env }).map(({ id, provider }) => ({ id, provider })))
+      .toEqual([
+        { id: "future-qwen", provider: "qwen" },
+        { id: "future-kimi", provider: "kimi" },
+        { id: "future-copilot", provider: "copilot" },
+      ]);
   });
 });
 
@@ -129,6 +160,25 @@ describe("syncModelCatalog + cache", () => {
     });
     expect(result).toBeNull();
   });
+
+  it("makes a novel API model reachable with published cache pricing and preserves it offline", async () => {
+    const id = "gpt-automatic-discovery-fixture";
+    await syncModelCatalog({
+      cachePath,
+      fetchImpl: fakeFetch({ openai: { models: {
+        [id]: { cost: { input: 1.25, output: 7.5, cache_read: 0.125 }, limit: { context: 524288 } },
+      } } }),
+      now: () => 1000,
+    });
+    const env = { OPENAI_API_KEY: "synthetic-key" };
+    const selectable = () => reachableModelCatalog(buildFullModelCatalog(undefined, { cachePath }), providerStates(env), { env });
+    expect(selectable()).toContainEqual({ id, provider: "openai", price: "$1.25/7.5 per M" });
+    expect(getRates(id)).toEqual({ input: 1.25, output: 7.5, cachedInput: 0.125 });
+    expect(getRates(`openai/${id}`)).toEqual({ input: 1.25, output: 7.5, cachedInput: 0.125 });
+    await syncModelCatalog({ cachePath, force: true, fetchImpl: fakeFetch({}, false) });
+    expect(selectable()).toContainEqual({ id, provider: "openai", price: "$1.25/7.5 per M" });
+    expect(loadCatalogModels({ cachePath }).models[0]?.contextTokens).toBe(524288);
+  });
 });
 
 describe("loadCatalogModels fallback order", () => {
@@ -156,10 +206,25 @@ describe("loadCatalogModels fallback order", () => {
     expect(loaded.models).toEqual([{ id: "x", provider: "p" }]);
   });
 
+  it("sanitizes old cached metadata before presenting or pricing it", () => {
+    writeFileSync(cachePath, JSON.stringify({
+      fetchedAt: 5,
+      source: "old-cache",
+      models: [
+        { id: "safe-new-id", provider: "openai", input: -5, output: null, contextTokens: 0.25 },
+        { id: "bad\u001bmodel", provider: "openai" },
+        { id: "unverified-subscription", provider: "chatgpt-codex" },
+      ],
+    }));
+    expect(loadCatalogModels({ cachePath }).models).toEqual([{ id: "safe-new-id", provider: "openai" }]);
+    expect(catalogExtras({ cachePath })).toEqual([{ id: "safe-new-id", provider: "openai", price: "—" }]);
+  });
+
   it("isCacheFresh respects the TTL", () => {
     const cache: CatalogCache = { fetchedAt: 0, source: "s", models: [{ id: "x", provider: "p" }] };
     expect(isCacheFresh(cache, { now: () => CATALOG_TTL_MS - 1 })).toBe(true);
     expect(isCacheFresh(cache, { now: () => CATALOG_TTL_MS + 1 })).toBe(false);
+    expect(isCacheFresh({ ...cache, fetchedAt: CATALOG_TTL_MS }, { now: () => 0 })).toBe(false);
     expect(isCacheFresh(null)).toBe(false);
   });
 });
@@ -208,6 +273,32 @@ describe("catalog merge (priced core + synced extras)", () => {
     );
     const extras = catalogExtras({ cachePath });
     expect(extras.map((e) => e.provider)).toEqual(["opencode-go"]);
+  });
+
+  it("shows the same provider-qualified tariffs used for native and gateway estimates", () => {
+    const id = "gpt-5.5";
+    const nativeRates = getRates(id);
+    const priorOpenaiRates = getRates(`openai/${id}`);
+    const priorGatewayRates = getRates(`openrouter/${id}`);
+    try {
+      writeFileSync(cachePath, JSON.stringify({
+        fetchedAt: 5,
+        source: "provider-tariffs",
+        models: [
+          { id, provider: "openai", input: 6, output: 31 },
+          { id, provider: "openrouter", input: 11, output: 51 },
+        ],
+      }));
+      const full = buildFullModelCatalog(undefined, { cachePath });
+      expect(full.find((row) => row.id === id && row.provider === "openai")?.price).toBe("$6/31 per M");
+      expect(full.find((row) => row.id === id && row.provider === "openrouter")?.price).toBe("$11/51 per M");
+      expect(getRates(`openai/${id}`)).toEqual({ input: 6, output: 31 });
+      expect(getRates(`openrouter/${id}`)).toEqual({ input: 11, output: 51 });
+      expect(getRates(id)).toEqual(nativeRates);
+    } finally {
+      registerModelPricing(`openai/${id}`, priorOpenaiRates);
+      registerModelPricing(`openrouter/${id}`, priorGatewayRates);
+    }
   });
 
   it("full catalog is a superset of the priced catalog", () => {

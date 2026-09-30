@@ -38,6 +38,7 @@ const extractEngagementFromScopeJsonMock = vi.fn();
 const targetRequiresScopeMock = vi.fn((target: string) => /^https?:\/\//.test(target));
 const networkScopeRequiredRefusalMock = vi.fn((target: string) => `scope required for ${target}`);
 vi.mock("@0/core", () => ({
+  getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, projectPath: process.cwd(), message: "Scope plugin enabled" }),
   loadScope: loadScopeMock,
   parseRateLimitFlag: parseRateLimitFlagMock,
   resolveAttribution: resolveAttributionMock,

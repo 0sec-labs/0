@@ -3,9 +3,9 @@
  *
  * The `/model` picker (model-catalog.ts) is derived from the hand-priced table
  * in @0/shared — authoritative for cost, but narrow. This module widens the
- * picker to every model the operator's provider actually offers by pulling the
- * public Models.dev catalog, without ever coupling the picker to a live network
- * call:
+ * picker with published Models.dev metadata for connected provider routes,
+ * without treating that public feed as subscription entitlement or making a
+ * live network call:
  *
  *   1. `syncModelCatalog()` fetches Models.dev, normalizes it, and writes a
  *      cache to `~/.0/model-catalog.json`. It NEVER throws — on any failure
@@ -22,8 +22,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { homeStateDir } from "@0/shared";
-import { CloudClient, loadCloudCredentials, type InferenceModel } from "@0/core";
+import { homeStateDir, modelProvider, registerModelPricing } from "@0/shared";
 import { OFFLINE_MODEL_CATALOG } from "./model-catalog.offline.js";
 
 /** One normalized catalog entry. Prices are $/1M tokens when known. */
@@ -34,6 +33,7 @@ export interface SyncedModel {
   contextTokens?: number;
   input?: number;
   output?: number;
+  cachedInput?: number;
 }
 
 /** On-disk cache envelope. */
@@ -50,6 +50,54 @@ export const CATALOG_CACHE_FILENAME = "model-catalog.json";
 /** Refresh once a day — matches the pricing-feed cadence. */
 export const CATALOG_TTL_MS = 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 8_000;
+
+// Only aliases for the runtime's actual backends. PAYG Moonshot/Alibaba rows
+// must not become models for the distinct Kimi coding / Qwen Token Plan routes.
+const CATALOG_PROVIDER_IDS: Readonly<Record<string, string>> = {
+  "alibaba-token-plan": "qwen",
+  "kimi-code-plan-cn": "kimi",
+  "github-copilot": "copilot",
+  zai: "z-ai",
+};
+export const METERED_CATALOG_PROVIDERS: Readonly<Record<string, true>> = {
+  anthropic: true, openai: true, deepseek: true, openrouter: true, xai: true, opencode: true,
+};
+
+function catalogId(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && !/[\s\x00-\x1f\x7f-\x9f]/.test(value);
+}
+
+function finiteRate(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function contextTokens(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+
+/** Apply the same trust boundary to network metadata and an old disk cache. */
+function normalizedModel(value: unknown): SyncedModel | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  if (!catalogId(row.id) || !catalogId(row.provider) || row.provider === "chatgpt-codex") return null;
+  const provider = Object.hasOwn(CATALOG_PROVIDER_IDS, row.provider)
+    ? CATALOG_PROVIDER_IDS[row.provider] ?? row.provider
+    : row.provider;
+  const model: SyncedModel = {
+    id: row.id,
+    provider,
+    ...(finiteRate(row.input) ? { input: row.input } : {}),
+    ...(finiteRate(row.output) ? { output: row.output } : {}),
+    ...(finiteRate(row.cachedInput) ? { cachedInput: row.cachedInput } : {}),
+    ...(contextTokens(row.contextTokens) ? { contextTokens: row.contextTokens } : {}),
+  };
+  if (Object.hasOwn(METERED_CATALOG_PROVIDERS, provider) && model.input !== undefined && model.output !== undefined) {
+    const rates = { input: model.input, output: model.output, cachedInput: model.cachedInput };
+    registerModelPricing(`${provider}/${model.id}`, rates);
+    if (provider === modelProvider(model.id)) registerModelPricing(model.id, rates);
+  }
+  return model;
+}
 
 export interface CatalogSyncOptions {
   /** Injectable fetch — defaults to the global. */
@@ -81,20 +129,17 @@ export function catalogCachePath(opts: CatalogSyncOptions = {}): string {
  * gateways.
  */
 export function normalizeModelsDev(raw: unknown): SyncedModel[] {
-  if (typeof raw !== "object" || raw === null) return [];
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return [];
   const out: SyncedModel[] = [];
 
   for (const [providerId, providerVal] of Object.entries(raw as Record<string, unknown>)) {
-    if (typeof providerVal !== "object" || providerVal === null) continue;
+    if (!catalogId(providerId) || typeof providerVal !== "object" || providerVal === null || Array.isArray(providerVal)) continue;
     const models = (providerVal as Record<string, unknown>)["models"];
-    if (typeof models !== "object" || models === null) continue;
+    if (typeof models !== "object" || models === null || Array.isArray(models)) continue;
 
     for (const [modelId, modelVal] of Object.entries(models as Record<string, unknown>)) {
-      const id = typeof modelId === "string" ? modelId : undefined;
-      if (!id) continue;
-      const m = (typeof modelVal === "object" && modelVal !== null
-        ? (modelVal as Record<string, unknown>)
-        : {}) as Record<string, unknown>;
+      if (!catalogId(modelId) || typeof modelVal !== "object" || modelVal === null || Array.isArray(modelVal)) continue;
+      const m = modelVal as Record<string, unknown>;
 
       const cost = (typeof m["cost"] === "object" && m["cost"] !== null
         ? (m["cost"] as Record<string, unknown>)
@@ -103,11 +148,15 @@ export function normalizeModelsDev(raw: unknown): SyncedModel[] {
         ? (m["limit"] as Record<string, unknown>)
         : {}) as Record<string, unknown>;
 
-      const entry: SyncedModel = { id, provider: providerId };
-      if (typeof cost["input"] === "number") entry.input = cost["input"];
-      if (typeof cost["output"] === "number") entry.output = cost["output"];
-      if (typeof limit["context"] === "number") entry.contextTokens = limit["context"];
-      out.push(entry);
+      const entry = normalizedModel({
+        id: modelId,
+        provider: providerId,
+        input: cost["input"],
+        output: cost["output"],
+        cachedInput: cost["cache_read"],
+        contextTokens: limit["context"],
+      });
+      if (entry) out.push(entry);
     }
   }
   return out;
@@ -121,11 +170,18 @@ function readCache(path: string): CatalogCache | null {
       typeof parsed !== "object" ||
       parsed === null ||
       !Array.isArray((parsed as CatalogCache).models) ||
-      typeof (parsed as CatalogCache).fetchedAt !== "number"
+      !Number.isFinite((parsed as CatalogCache).fetchedAt) ||
+      (parsed as CatalogCache).fetchedAt < 0 ||
+      typeof (parsed as CatalogCache).source !== "string"
     ) {
       return null;
     }
-    return parsed as CatalogCache;
+    const cache = parsed as CatalogCache;
+    const models = cache.models.flatMap((row) => {
+      const model = normalizedModel(row);
+      return model ? [model] : [];
+    });
+    return { fetchedAt: cache.fetchedAt, source: cache.source, models };
   } catch {
     return null;
   }
@@ -145,7 +201,8 @@ export function isCacheFresh(cache: CatalogCache | null, opts: CatalogSyncOption
   if (!cache) return false;
   const now = (opts.now ?? Date.now)();
   const ttl = opts.ttlMs ?? CATALOG_TTL_MS;
-  return now - cache.fetchedAt < ttl;
+  const age = now - cache.fetchedAt;
+  return Number.isFinite(age) && age >= 0 && age < ttl;
 }
 
 /**
@@ -198,66 +255,4 @@ export async function syncModelCatalog(
   } finally {
     clearTimeout(timer);
   }
-}
-
-// ── Hosted catalogue ──────────────────────────────────────────────────────────
-//
-// Everything above is the BYOK path: a public feed, cached on disk, with a
-// bundled offline floor so the picker always has something to draw. The hosted
-// path deliberately has none of that. A hosted id names a route on the
-// operator's own account, and a Models.dev row or a stale disk cache describes
-// a different thing entirely — the public model of the same name. Letting a
-// hosted id borrow that metadata would put another vendor's numbers on screen
-// under this account's route, so there is no fallback here at all: if the live
-// catalogue cannot be read, that is an honest failure and the caller reports it.
-
-export interface HostedCatalogSnapshot {
-  /** The cloud host the catalogue was read from, as the credentials resolved it. */
-  host: string;
-  /** The service's own rows, verbatim. Projected by `buildHostedModelCatalog`. */
-  models: readonly InferenceModel[];
-  /** Epoch millis the read completed, so a caller can age its own copy. */
-  fetchedAt: number;
-}
-
-/**
- * Read the authenticated account's own model catalogue.
- *
- * Account-scoped and live-only: the catalogue endpoint returns the routes this
- * account can address, so the credentials decide the answer and there is
- * nothing to cache or fall back to. Only `GET /api/inference/v1/models` is
- * called — no inference request is made, so this costs nothing.
- *
- * Credential loading owns host selection, canonicalisation and token matching;
- * there is deliberately no second host parser here. The credentials are re-read
- * after the request and compared: if the operator reconnected to a different
- * host or token while the read was in flight, the rows that came back describe
- * someone else's account and are thrown away rather than shown.
- */
-export async function loadHostedModelCatalog(
-  opts: {
-    env?: NodeJS.ProcessEnv;
-    homeDir?: string;
-    fetchImpl?: typeof fetch;
-    now?: () => number;
-  } = {},
-): Promise<HostedCatalogSnapshot> {
-  const env = opts.env ?? process.env;
-  const credentials = loadCloudCredentials({ env, homeDir: opts.homeDir, warn: () => {} });
-  const client = new CloudClient({
-    host: credentials.host,
-    token: credentials.token,
-    fetchImpl: opts.fetchImpl,
-  });
-  const catalog = await client.getInferenceModels();
-  const current = loadCloudCredentials({ env, homeDir: opts.homeDir, warn: () => {} });
-  if (current.host !== credentials.host || current.token !== credentials.token) {
-    throw new Error("Cloud connection changed while loading models. Reload the picker.");
-  }
-  if (!Array.isArray(catalog.data)) throw new Error("Hosted model catalog is malformed");
-  return {
-    host: credentials.host,
-    models: catalog.data,
-    fetchedAt: (opts.now ?? Date.now)(),
-  };
 }

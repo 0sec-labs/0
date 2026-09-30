@@ -143,16 +143,9 @@ export interface MemSafetyOutcome {
   result: Record<string, unknown>;
 }
 
-/**
- * Run the memory-safety scan role over a prepared source tree and return a
- * JSON-ready outcome. Exposed for testing. Posts findings to the cloud-sink
- * when the sink env is set (the stage itself posts nothing), same as
- * `deep-review`.
- */
+/** Run the memory-safety scan role over a prepared source tree. */
 export async function runMemSafety(opts: RunMemSafetyOptions): Promise<MemSafetyOutcome> {
-  const { prepare, runMemSafetyScan, getCloudSinkConfig, postFinding } = await import(
-    "@0/core"
-  );
+  const { prepare, runMemSafetyScan } = await import("@0/core");
   const log = opts.log ?? (() => {});
 
   // Resolve a local path or a git URL into a local tree (same prepare() path
@@ -207,10 +200,6 @@ export async function runMemSafety(opts: RunMemSafetyOptions): Promise<MemSafety
 
     const artifactDir = resolveArtifactDir(opts.artifactDir, sourceRoot);
 
-    // Capture the cloud-sink config; the stage does NO I/O (posts nothing), so
-    // we post its findings ourselves — the same discovered-candidate path
-    // deep-review uses. No-op when not in cloud mode (sinkCfg null).
-    const sinkCfg = getCloudSinkConfig();
 
     const scan = await runMemSafetyScan({
       target,
@@ -225,14 +214,6 @@ export async function runMemSafety(opts: RunMemSafetyOptions): Promise<MemSafety
       logger: log,
     });
 
-    let ingested = 0;
-    if (sinkCfg) {
-      for (const finding of scan.findings) {
-        await postFinding(finding, sinkCfg);
-        ingested++;
-      }
-      log(`[memsafety] posted ${ingested} finding(s) to the cloud-sink`);
-    }
 
     const reproduced = scan.details.filter((d) => d.verdict.verdict === "confirmed").length;
 
@@ -277,7 +258,6 @@ export async function runMemSafety(opts: RunMemSafetyOptions): Promise<MemSafety
           primitive: d.exploitability.primitive,
           verdict: d.verdict.verdict,
         })),
-        ingested: sinkCfg ? ingested : null,
         warnings: scan.warnings.slice(0, 10),
         note:
           reproduced > 0

@@ -1,5 +1,5 @@
 /**
- * Pure, deterministic per-frame animation for the "ZEROSECURITY" block-logo intro.
+ * Pure, deterministic per-frame animation for the "0.SECURITY" block-logo intro.
  *
  * This module owns only the *logic* of the intro: given the base logo grid
  * (the three-letter colour map used by the masthead — `' '` empty, `'#'` white,

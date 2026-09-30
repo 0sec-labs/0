@@ -1,14 +1,16 @@
 import { execFile, spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { stat } from "node:fs/promises";
-import { userInfo } from "node:os";
+import { chmod, cp, mkdtemp, readdir, realpath, rm, stat } from "node:fs/promises";
+import { tmpdir, userInfo } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { StringDecoder } from "node:string_decoder";
 import { canonicalEvolutionJson, parseEvolutionConfig } from "./config.js";
 import { verifyEvolutionSnapshot } from "./registry.js";
 import { allowlistedChildEnv } from "../agent/sanitized-env.js";
 import { resolveSmolvmImage, runSmolvm } from "../runtime/smolvm.js";
+import { DEFAULT_WORKBENCH_BROKER_LIMITS, isAdmittedSmolvmWorkbench, resolveWorkbenchBrokerImage, runWorkbenchBrokerProgram } from "../runtime/smolvm-broker.js";
 import { withWorkerAdmission } from "../runtime/worker-admission.js";
 import type { EvolutionConfig, EvolutionExecution, EvolutionSandbox } from "./types.js";
 
@@ -141,6 +143,7 @@ async function control(binary: string, args: string[], timeout: number, signal?:
 
 /** Resolve a locally installed image; never pull or substitute a mutable image. */
 export async function resolveEvolutionImage(image: string, dockerBinary = "docker"): Promise<string> {
+  if (isAdmittedSmolvmWorkbench()) return resolveWorkbenchBrokerImage(image);
   if (typeof image !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_./:@-]*$/.test(image)) {
     throw new Error("invalid evolution image reference");
   }
@@ -185,6 +188,7 @@ async function runDockerSnapshot(
   { snapshot, config, input, signal, channel }: ProgramRequest,
   dockerBinary = "docker",
 ): Promise<EvolutionExecution> {
+    if (isAdmittedSmolvmWorkbench()) return runWorkbenchSnapshot({ snapshot, config, input, signal, channel });
     signal?.throwIfAborted();
     if (typeof process.getuid !== "function" || typeof process.getgid !== "function" || process.getuid() === 0) {
       throw new Error("evolution workers require a non-root POSIX host user");
@@ -312,6 +316,7 @@ async function runDockerSnapshot(
 
 /** Resolve the operator-selected backend without substituting an execution engine. */
 export async function resolveEvolutionConfigImage(config: EvolutionConfig): Promise<string> {
+  if (isAdmittedSmolvmWorkbench()) return resolveWorkbenchBrokerImage(config.image);
   if (config.backend !== "smolvm") return resolveEvolutionImage(config.image);
   if (!config.imageArchive) throw new Error("smolvm requires a local imageArchive");
   const digest = await resolveSmolvmImage(config.imageArchive);
@@ -332,6 +337,7 @@ async function runSmolvmSnapshot(
   { snapshot, config, input, signal, channel }: ProgramRequest,
   binary?: string,
 ): Promise<EvolutionExecution> {
+    if (isAdmittedSmolvmWorkbench()) return runWorkbenchSnapshot({ snapshot, config, input, signal, channel });
     if (config.backend !== "smolvm" || !config.imageArchive || !IMAGE_ID.test(config.image)) {
       throw new Error("smolvm execution requires a resolved archive identity and backend smolvm");
     }
@@ -358,18 +364,44 @@ async function runSmolvmSnapshot(
     return execution;
 }
 
+async function runWorkbenchSnapshot({ snapshot, config, input, signal, channel }: ProgramRequest): Promise<EvolutionExecution> {
+  verifyEvolutionSnapshot(snapshot);
+  if (snapshot.files.length > DEFAULT_WORKBENCH_BROKER_LIMITS.maxFiles
+    || snapshot.files.reduce((bytes, file) => bytes + file.bytes, 0) > DEFAULT_WORKBENCH_BROKER_LIMITS.maxWorkspaceBytes) {
+    throw new Error(`Snapshot exceeds the admitted workbench handoff budget (${DEFAULT_WORKBENCH_BROKER_LIMITS.maxFiles} files, ${DEFAULT_WORKBENCH_BROKER_LIMITS.maxWorkspaceBytes} bytes)`);
+  }
+  const root = await realpath(await mkdtemp(join(tmpdir(), "0-broker-source-")));
+  // cp preserves immutable directory modes. Only this private clone is unlocked.
+  async function unlock(directory: string): Promise<void> {
+    await chmod(directory, 0o700);
+    for (const entry of await readdir(directory, { withFileTypes: true })) if (entry.isDirectory()) await unlock(join(directory, entry.name));
+  }
+  try {
+    await cp(snapshot.root, root, { recursive: true, dereference: false, force: false });
+    await unlock(root);
+    const script = ["set -eu",
+      ...(config.buildCommand ? [`${quoteCommand(config.buildCommand)} >&2`] : []),
+      `exec ${quoteCommand(config.command)}`].join("\n");
+    const execution = await runWorkbenchBrokerProgram({ profile: "offline", command: ["/bin/sh", "-c", script],
+      workspaceRoot: root, stdin: canonicalEvolutionJson(input), imageReference: resolveWorkbenchBrokerImage(config.image),
+      timeoutMs: config.timeoutMs, memoryMb: config.memoryMb, cpus: config.cpus, maxOutputBytes: config.maxOutputBytes }, signal, channel);
+    verifyEvolutionSnapshot(snapshot);
+    return execution;
+  } finally { await unlock(root); await rm(root, { recursive: true, force: true }); }
+}
+
 /** Execute a controller-configured program without manufacturing evaluation cases. */
 export function executeSandboxSnapshot(request: ProgramRequest): Promise<EvolutionExecution> {
   return withWorkerAdmission(
     { memoryMb: request.config.memoryMb, cpus: request.config.cpus, timeoutMs: request.config.timeoutMs },
     request.signal,
     async (admissionSignal: AbortSignal) =>
-      request.config.backend === "smolvm"
+      isAdmittedSmolvmWorkbench() ? runWorkbenchSnapshot({ ...request, signal: admissionSignal }) : request.config.backend === "smolvm"
         ? runSmolvmSnapshot({ ...request, signal: admissionSignal })
         : runDockerSnapshot({ ...request, signal: admissionSignal }),
   );
 }
 
 export function createEvolutionSandbox(config: EvolutionConfig): EvolutionSandbox {
-  return config.backend === "smolvm" ? createSmolvmEvolutionSandbox() : createDockerEvolutionSandbox();
+  return isAdmittedSmolvmWorkbench() || config.backend === "smolvm" ? createSmolvmEvolutionSandbox() : createDockerEvolutionSandbox();
 }

@@ -95,6 +95,9 @@ describe("normalizeSettings", () => {
     const normalized = normalizeSettings({
       showStatusBar: false,
       legacyShowFooter: true,
+      showLeftSidebar: true,
+      showRightSidebar: true,
+      showAgentRail: true,
       showstatusbar: true,
       __proto__marker: "x",
     });
@@ -129,12 +132,13 @@ describe("normalizeSettings", () => {
     expect(normalized.composerStyle).toBe(DEFAULT_SETTINGS.composerStyle);
   });
 
-  it("defaults transcriptDetail to expanded and honours a valid override", () => {
-    expect(DEFAULT_SETTINGS.transcriptDetail).toBe("expanded");
-    expect(normalizeSettings({}).transcriptDetail).toBe("expanded");
+  it("defaults transcript detail to a 20-line preview and honours a valid override", () => {
+    expect(DEFAULT_SETTINGS.transcriptDetail).toBe("collapsed");
+    expect(normalizeSettings({}).transcriptDetail).toBe("collapsed");
+    expect(normalizeSettings({ transcriptDetail: "expanded" }).transcriptDetail).toBe("expanded");
     expect(normalizeSettings({ transcriptDetail: "collapsed" }).transcriptDetail).toBe("collapsed");
     // A bogus value degrades to the default rather than crashing.
-    expect(normalizeSettings({ transcriptDetail: "folded" }).transcriptDetail).toBe("expanded");
+    expect(normalizeSettings({ transcriptDetail: "folded" }).transcriptDetail).toBe("collapsed");
   });
 
   it("keeps security booleans disabled by default and accepts only explicit boolean gates", () => {
@@ -412,52 +416,12 @@ describe("subagent messaging settings", () => {
   });
 });
 
-describe("sidebar settings", () => {
-
-  it("are Display booleans", () => {
-    for (const key of ["showRightSidebar", "showLeftSidebar"] as const) {
-      const def = SETTING_DEFS.find((d) => d.key === key);
-      expect(def?.group).toBe("Display");
-      expect(def?.kind).toBe("boolean");
-    }
-  });
-
-  it("toggle on and back off", () => {
-    const on = toggleSetting({ ...DEFAULT_SETTINGS, showRightSidebar: false }, "showRightSidebar");
-    expect(on.showRightSidebar).toBe(true);
-    expect(toggleSetting(on, "showRightSidebar").showRightSidebar).toBe(false);
-
-    const left = toggleSetting(DEFAULT_SETTINGS, "showLeftSidebar");
-    expect(left.showLeftSidebar).toBe(true);
-    expect(toggleSetting(left, "showLeftSidebar").showLeftSidebar).toBe(false);
-  });
-
-  it("round-trip an enabled sidebar through save and load", () => {
-    const home = makeHome();
-    expect(
-      saveSettings(
-        { ...DEFAULT_SETTINGS, showRightSidebar: true, showLeftSidebar: true },
-        home,
-      ),
-    ).toBe(true);
-    expect(loadSettings(home).showRightSidebar).toBe(true);
-    expect(loadSettings(home).showLeftSidebar).toBe(true);
-  });
-
-  it("honours the legacy `showAgentRail` key on load", () => {
-    // A file written before the rename carries only `showAgentRail`.
-    expect(normalizeSettings({ showAgentRail: true }).showRightSidebar).toBe(true);
-    // The new key wins when both are present.
-    expect(
-      normalizeSettings({ showAgentRail: true, showRightSidebar: false }).showRightSidebar,
-    ).toBe(false);
-  });
+describe("transcript display preferences", () => {
   it("preserves saved opt-outs when missing preferences use the new defaults", () => {
     const configured = normalizeSettings({
-      showRightSidebar: false, showTokenUsage: false, showCost: false,
+      showTokenUsage: false, showCost: false,
       showContextMeter: false, transcriptStyle: "rail",
     });
-    expect(configured.showRightSidebar).toBe(false);
     expect(configured.showTokenUsage).toBe(false);
     expect(configured.showCost).toBe(false);
     expect(configured.showContextMeter).toBe(false);
@@ -713,7 +677,6 @@ describe("operator-only privacy and updates", () => {
       showLogo: false,
     });
     const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
-    expect(settings.diagnosticReporting).toBe("automatic");
     expect(settings.diagnosticReportingPrompted).toBe(false);
     expect(settings.updatePolicy).toBe("automatic");
     expect(settings.allowDevSourceUpdates).toBe(false);
@@ -777,6 +740,20 @@ describe("operator-only privacy and updates", () => {
     expect(loadSettings(home, project).updatePolicy).toBe("automatic");
   });
 
+  it("keeps the execution boundary operator-global in both directions", () => {
+    const home = makeHome();
+    const project = makeProjectDir();
+    saveSettings({ ...DEFAULT_SETTINGS, executionProfile: "smolvm" }, home);
+    writeProjectRaw(project, { executionProfile: "local" });
+    const isolated = loadLayeredSettings({ homeDir: home, projectDir: project });
+    expect(isolated.settings.executionProfile).toBe("smolvm");
+    expect(isolated.sources.executionProfile).toBe("global");
+    saveSettings({ ...DEFAULT_SETTINGS, executionProfile: "local" }, home);
+    writeProjectRaw(project, { executionProfile: "smolvm" });
+    expect(loadSettings(home, project).executionProfile).toBe("local");
+    expect(sanitizeOverrides({ executionProfile: "smolvm", showLogo: false })).toEqual({ showLogo: false });
+  });
+
   it("rejects project permission writes without changing existing project settings", async () => {
     const project = makeProjectDir();
     saveProjectOverrides({ showLogo: false }, project);
@@ -787,22 +764,10 @@ describe("operator-only privacy and updates", () => {
     expect(setProjectOverride("analyticsLevel", "full", project)).toBe(false);
     expect(setProjectOverride("updatePolicy", "automatic", project)).toBe(false);
     expect(setProjectOverride("allowDevSourceUpdates", true, project)).toBe(false);
+    expect(setProjectOverride("executionProfile", "local", project)).toBe(false);
     expect(readProjectOverrides(project)).toEqual({ showLogo: false });
   });
 
-  it("defaults analyticsLevel to full and offers off/usage/commands/full", () => {
-    expect(DEFAULT_SETTINGS.analyticsLevel).toBe("full");
-    const def = SETTING_DEFS.find((d) => d.key === "analyticsLevel");
-    expect(def?.kind).toBe("enum");
-    expect(def?.choices).toEqual(["off", "usage", "commands", "full"]);
-    // A project override may not set it (operator-owned egress grant).
-    const { settings, sources } = loadLayeredSettings({
-      homeDir: makeHome(),
-      projectDir: makeProjectDir(),
-    });
-    expect(settings.analyticsLevel).toBe("full");
-    expect(sources.analyticsLevel).toBe("default");
-  });
 });
 
 describe("two-level layering", () => {
@@ -927,6 +892,17 @@ describe("loadGlobalSettings", () => {
     writeProjectRaw(project, { showLogo: true });
     expect(loadGlobalSettings(home).showLogo).toBe(false);
   });
+
+  it("refuses corrupt or absent execution selection when a configured workbench requires an explicit choice", () => {
+    const home = makeHome();
+    expect(() => loadGlobalSettings(home, { requireExecutionProfile: true })).toThrow();
+    saveSettings({ ...DEFAULT_SETTINGS, executionProfile: "smolvm" }, home);
+    expect(loadGlobalSettings(home, { requireExecutionProfile: true }).executionProfile).toBe("smolvm");
+    writeFileSync(settingsFilePath(home), "{broken");
+    expect(() => loadGlobalSettings(home, { requireExecutionProfile: true })).toThrow();
+    saveSettings({ ...DEFAULT_SETTINGS, executionProfile: "local" }, home);
+    expect(loadGlobalSettings(home, { requireExecutionProfile: true }).executionProfile).toBe("local");
+  });
 });
 
 describe("keybindings overrides", () => {
@@ -939,13 +915,17 @@ describe("keybindings overrides", () => {
   it("keeps a valid override, canonicalised, and drops invalid ones", () => {
     const normalized = normalizeSettings({
       keybindings: {
-        "view.left-sidebar": "Ctrl+J", // valid, canonicalises to ctrl+j
+        "nav.open-comms": "Ctrl+J", // valid, canonicalises to ctrl+j
+        "overlay.review-toggle": "ctrl+k", // retired id — discarded as unknown
+        "overlay.review-top": "ctrl+l", // retired id — discarded as unknown
+        "overlay.review-bottom": "ctrl+m", // retired id — discarded as unknown
         "session.quit": "ctrl+x", // protected id — dropped
-        "view.right-sidebar": "k", // no modifier — dropped
+        "view.right-sidebar": "ctrl+j", // removed id — ignored beside the same valid chord
         "view.transcript-detail": "ctrl+c", // reserved chord — dropped
+        "view.left-sidebar": "ctrl+j", // removed id — ignored, even beside the same valid chord
       },
     });
-    expect(normalized.keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+    expect(normalized.keybindings).toEqual({ "nav.open-comms": "ctrl+j" });
   });
 
   it("tolerates a non-object keybindings value", () => {
@@ -957,29 +937,29 @@ describe("keybindings overrides", () => {
 
   it("survives a save/normalise round-trip on disk", () => {
     const home = makeHome();
-    saveSettings({ ...DEFAULT_SETTINGS, keybindings: { "view.left-sidebar": "ctrl+j" } }, home);
-    expect(loadSettings(home).keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+    saveSettings({ ...DEFAULT_SETTINGS, keybindings: { "view.transcript-detail": "ctrl+j" } }, home);
+    expect(loadSettings(home).keybindings).toEqual({ "view.transcript-detail": "ctrl+j" });
   });
 
   it("layers the map as a unit: a project map replaces the global one", () => {
     const home = makeHome();
     const project = makeProjectDir();
-    writeGlobalFull(home, { ...DEFAULT_SETTINGS, keybindings: { "view.left-sidebar": "ctrl+j" } });
-    writeProjectRaw(project, { keybindings: { "view.right-sidebar": "ctrl+shift+l" } });
+    writeGlobalFull(home, { ...DEFAULT_SETTINGS, keybindings: { "view.transcript-detail": "ctrl+j" } });
+    writeProjectRaw(project, { keybindings: { "view.transcript-detail": "ctrl+shift+l" } });
 
     const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
-    expect(settings.keybindings).toEqual({ "view.right-sidebar": "ctrl+shift+l" });
+    expect(settings.keybindings).toEqual({ "view.transcript-detail": "ctrl+shift+l" });
     expect(sources.keybindings).toBe("project");
   });
 
   it("falls through to global when the project omits the key", () => {
     const home = makeHome();
     const project = makeProjectDir();
-    writeGlobalFull(home, { ...DEFAULT_SETTINGS, keybindings: { "view.left-sidebar": "ctrl+j" } });
+    writeGlobalFull(home, { ...DEFAULT_SETTINGS, keybindings: { "view.transcript-detail": "ctrl+j" } });
     writeProjectRaw(project, { showLogo: false });
 
     const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
-    expect(settings.keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+    expect(settings.keybindings).toEqual({ "view.transcript-detail": "ctrl+j" });
     expect(sources.keybindings).toBe("global");
   });
 
@@ -993,7 +973,7 @@ describe("keybindings overrides", () => {
 
   it("is a project-overridable setting (not operator-only)", () => {
     const project = makeProjectDir();
-    expect(saveProjectOverrides({ keybindings: { "view.left-sidebar": "ctrl+j" } }, project)).toBe(true);
-    expect(readProjectOverrides(project).keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+    expect(saveProjectOverrides({ keybindings: { "view.transcript-detail": "ctrl+j" } }, project)).toBe(true);
+    expect(readProjectOverrides(project).keybindings).toEqual({ "view.transcript-detail": "ctrl+j" });
   });
 });

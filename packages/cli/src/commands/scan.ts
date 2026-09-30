@@ -3,7 +3,7 @@ import type { Command } from "commander";
 import chalk from "chalk";
 import { z } from "zod";
 import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig } from "@0/shared";
-import { networkScopeRequiredRefusal, targetRequiresScope } from "@0/core";
+import { getScopeEnforcementState, networkScopeRequiredRefusal, targetRequiresScope } from "@0/core";
 import { renderReplay } from "../formatters/replay.js";
 import { runUnified } from "./run.js";
 import { reportSummarySchema, formatZodError } from "@0/shared";
@@ -167,9 +167,9 @@ export function registerScanCommand(program: Command): void {
     .option("-m, --model <model>", "LLM model to use")
     .option("--repo <path>", "Source code path for white-box scanning (read code before attacking)")
     .option("--auth <json>", "Auth credentials as JSON string or path to JSON file (types: bearer, cookie, basic, header)")
-    .option("--scope <path>", "Path to a JSON scope file ({in_scope, out_of_scope} arrays of host / *.domain / cidr rules). Out-of-scope URLs return as ToolResult.error at every fetch site. See 0#215.")
-    .option("--allow-scanners", "Disable the generic-scanner suppression gate (0#217). When --scope is set, the agent refuses to spawn sqlmap/wpscan/nikto/gobuster/dirb/wfuzz/ffuf/`nmap -sV`/`nmap -A` by default; pass this flag only when the engagement explicitly permits generic-scanner traffic.", false)
-    .option("--require-scope", "Refuse to start unless an engagement scope is configured (0#133). The bash egress guards (out-of-scope URL refusal, http_audit path allowlist, generic-scanner suppression, auth-header injection) only run when a ScopePolicy is set; without this flag a scan with no --scope warns loudly and records a `scope_guards_inert` event but still runs. Equivalent to ZERO_REQUIRE_SCOPE=1.", false)
+    .option("--scope <path>", "JSON engagement policy ({in_scope, out_of_scope}); activate its authorization checks with `0 plugin enable scope`")
+    .option("--allow-scanners", "Expose structured scanner tools and relax generic-scanner suppression in scope-enforced engagements. Pass only when the operator permits that traffic.", false)
+    .option("--require-scope", "While the scope plugin is enabled, refuse unscoped local scans too (ZERO_REQUIRE_SCOPE=1). Does not activate the plugin.", false)
     .option(
       "--attribution-header <name=value>",
       "Attribution header to attach to in-scope outbound requests (0#216). Repeatable: pass `--attribution-header X-A=1 --attribution-header X-B=2`. Lower precedence than the scope file's `attribution.headers` block and ZERO_ATTRIBUTION_HEADERS env var. NEVER attached to out-of-scope traffic.",
@@ -358,11 +358,7 @@ export function registerScanCommand(program: Command): void {
         process.env["ZERO_FEATURE_DECOY_DETECTION"] = "0";
       }
 
-      // --require-scope → fail closed when no engagement scope is configured
-      // (0#133). Same env-var mechanism as above: the core reads
-      // ZERO_REQUIRE_SCOPE at scan boot and at the bash tool, which is also
-      // how the cloud worker (which builds argv from a fixed table) can turn
-      // strictness on without an engine release.
+      // Strictness refines the active plugin; it never activates authorization.
       if (opts.requireScope) {
         process.env["ZERO_REQUIRE_SCOPE"] = "1";
       }
@@ -419,6 +415,8 @@ export function registerScanCommand(program: Command): void {
       // a missing or malformed scope file is exactly the configuration
       // error that should block the scan from starting (see 0#215).
       let scopeFile: string | undefined;
+      const scopeEnforcement = getScopeEnforcementState();
+      console.error(chalk.dim(scopeEnforcement.message));
       if (opts.scope) {
         scopeFile = String(opts.scope);
         if (!existsSync(scopeFile)) {
@@ -432,8 +430,8 @@ export function registerScanCommand(program: Command): void {
         try {
           const { loadScope } = await import("@0/core");
           const policy = loadScope(scopeFile);
-          const verdict = policy.match(String(opts.target));
-          if (!verdict.allowed) {
+          const verdict = scopeEnforcement.enabled ? policy.match(String(opts.target)) : undefined;
+          if (verdict && !verdict.allowed) {
             console.error(
               chalk.red(
                 `--target ${opts.target} is out of scope per ${scopeFile}: ${verdict.reason}`,
@@ -448,7 +446,7 @@ export function registerScanCommand(program: Command): void {
       }
 
       const hasNetworkScope = Boolean(scopeFile) || Boolean(httpAudit?.allowedHosts.length);
-      if (targetRequiresScope(targetStr) && !hasNetworkScope) {
+      if (scopeEnforcement.enabled && targetRequiresScope(targetStr) && !hasNetworkScope) {
         console.error(chalk.red(networkScopeRequiredRefusal(targetStr)));
         process.exit(2);
         return;

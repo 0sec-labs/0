@@ -53,7 +53,6 @@ Review the destination, permissions, and sensitive evidence before use.
 ## Runtimes
 
 The model provider handles inference. The tool executor runs actions.
-Hosted model selection leaves local shell execution on your machine.
 
 [Configuration](/configuration/) documents runtime selection and fallback.
 [API Keys](/api-keys/) documents supported providers, model routing, credential
@@ -95,7 +94,7 @@ research strategies. [Agent Loop](/agent-loop/) explains the control flow;
 [Budget Management](/budget-management/) distinguishes turn limits from spend
 limits; [Configuration](/configuration/) owns feature settings and defaults.
 
-Use [Console](/console/) for interactive work. Desktop is in development; see
+Use [Console](/console/) for interactive work. Desktop is development-only alpha; see
 [Roadmap](/roadmap/#desktop) for status.
 
 ### Advisory evaluations
@@ -152,7 +151,7 @@ The shared evaluator API also recognizes the `kernel` feature, used by the
 automatic kernel prepass into the assessment commands described here.
 
 Managed workers receive a separate scan-bound capability and endpoint from
-0cloud. Installing this engine does not enable the hosted service, establish
+the service. Installing this engine does not enable managed execution, establish
 account entitlement, or prove that a deployed worker uses this version.
 
 ## Benchmarks
@@ -164,9 +163,7 @@ results are not current-target guarantees.
 <span id="unified-soc-story"></span>
 ## Related products
 
-See [Integrations](/integrations/) for connected tools.
-[Hosted inference](/getting-started/#hosted-models) leaves tools in your
-environment; [managed work](/getting-started/#managed-work-and-onboarding)
-requires separate scoping, access and terms. Neither is required to use the
-local open-source CLI with your own model connection.
+See [Integrations](/integrations/) for connected tools and
+[managed work](/getting-started/#managed-work-and-onboarding) for separate
+scoping, access and terms. The interactive console uses your model connection.
 See [Commands](/commands/) for the full CLI reference.

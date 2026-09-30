@@ -7,7 +7,7 @@ tableOfContents:
 ---
 
 Find the command, arguments, and options for your task. This reference covers
-**64 top-level commands** and their registered subcommands.
+**56 top-level commands** and their registered subcommands.
 
 For a worked example, start with [Scan Workflows](/scan-workflows/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
@@ -23,7 +23,7 @@ For a worked example, start with [Scan Workflows](/scan-workflows/),
   <section class="docs-task-card">
     <h3>Work interactively</h3>
     <p>Open the console, configure your environment, and diagnose setup.</p>
-    <p><a href="#console">console</a> · <a href="#config">config</a> · <a href="#doctor">doctor</a></p>
+    <p><a href="#console">console</a> · <a href="#workbench">workbench</a> · <a href="#config">config</a> · <a href="#doctor">doctor</a></p>
   </section>
   <section class="docs-task-card">
     <h3>Review the evidence</h3>
@@ -42,8 +42,8 @@ For a worked example, start with [Scan Workflows](/scan-workflows/),
   </section>
   <section class="docs-task-card">
     <h3>Connect and automate</h3>
-    <p>Configure integrations, queued work, and cloud authentication.</p>
-    <p><a href="#mcp-server">mcp-server</a> · <a href="#orchestrate">orchestrate</a> · <a href="#auth">auth</a></p>
+    <p>Configure integrations and queued local work.</p>
+    <p><a href="#mcp-server">mcp-server</a> · <a href="#orchestrate">orchestrate</a></p>
   </section>
 </div>
 
@@ -62,6 +62,7 @@ a handler may resolve configuration or require an explicit value. Inverse
 - Use explicit commands in automation. Recognizable bare targets are routed automatically; ambiguous input is refused.
 - Commands register `--help`; root routing can prevent reaching a registration. See the [triage routing limitation](/troubleshooting/#triage-command-reports-an-ambiguous-target).
 - Scope, provider authentication, target authentication, filesystem access, and execution isolation have independent controls. See [Scope & Authorization](/scope/).
+- The operator-global SmolVM profile runs the entire CLI inside an online Kali guest, preserving original arguments and terminal streams. `workbench` and `config` remain host management commands. No Colima/Docker daemon is needed at runtime; failures never choose host execution implicitly.
 - Check the workflow's outcome and verification status after a command completes. Verification exit codes vary by path.
 - Before exporting reports, invoking plugins, preparing disclosures, or running queued work, check the inputs and permissions. These actions can write externally or execute code.
 
@@ -216,6 +217,93 @@ Merge a shared config into the global (default) or --project layer
 | `--global` | — | Import into the global config (default) |
 | `--yes` | — | Accept changes to security-sensitive settings (required to flip them) |
 
+### workbench
+
+Set up and inspect the whole-harness online SmolVM security workbench on
+Apple Silicon macOS. The local Linux guest contains 0, the security tools and
+the browser; Docker is not required to run the workbench.
+
+```text
+0 workbench
+```
+
+Guide: [Execution profile and grants](/configuration/#whole-harness-execution-profile).
+
+Subcommands: [setup](#workbench-setup) · [status](#workbench-status) · [providers](#workbench-providers) · [configure](#workbench-configure) · [disable](#workbench-disable).
+
+#### workbench setup
+
+Verify/provision the signed native runtime, approve a local archive by digest,
+and persist the operator-global SmolVM profile.
+
+```text
+0 workbench setup [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--image <archive>` | — | Local OCI/Docker archive to digest-pin and approve; never a mutable registry tag |
+| `--state <directory>` | — | Private VM state directory (defaults to ~/.0/workbench) |
+| `--workspace <directory>` | — | Explicit workspace mount; otherwise each invocation mounts its current directory |
+| `--provider <id>` | — | Grant this provider's selected account/environment credential; repeat for multiple providers |
+| `--github` | — | Grant a GitHub token from GH_TOKEN/GITHUB_TOKEN or the existing gh account |
+| `--no-github` | — | Revoke the GitHub token grant |
+| `--cpus <count>` | — | Guest virtual CPUs |
+| `--memory <MiB>` | — | Guest RAM in MiB |
+| `--storage <GiB>` | — | Guest private writable storage in GiB |
+| `--sandbox-image <reference=archive>` | — | Approve an immutable image reference for brokered isolated container actions; repeat for multiple images |
+
+Provider/GitHub credentials resolve only for explicit grants. The host HOME,
+SSH configuration and Docker socket are not mounted into the guest.
+
+#### workbench status
+
+Read configuration, native runtime readiness, image approval, effective privacy,
+network mode, broker resource ceilings and retained guest admission. Does not
+download or launch a VM or reveal credential values.
+
+```text
+0 workbench status [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable status (no credential values) |
+
+#### workbench providers
+
+List the exact identifiers accepted by `--provider`; this does not expose credentials.
+
+```text
+0 workbench providers
+```
+
+#### workbench configure
+
+Replace integration grants or operator-approved sibling image references.
+
+```text
+0 workbench configure [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--provider <ids>` | — | Replace provider grants with comma-separated IDs, or none |
+| `--github` | — | Enable the explicit GitHub credential grant |
+| `--no-github` | — | Revoke the GitHub credential grant |
+| `--current-workspace` | — | Mount each invocation's current directory instead of a fixed saved workspace |
+| `--sandbox-image <reference=archive>` | — | Add or replace an operator-approved immutable sandbox image reference; repeat for multiple images |
+| `--clear-sandbox-images` | — | Revoke all explicit sandbox image-reference grants |
+
+#### workbench disable
+
+Explicitly switch to host-local execution. Approved image and guest state remain.
+
+```text
+0 workbench disable
+```
+
+
 ### theme
 
 List, install, apply, export, and remove console colour themes
@@ -306,7 +394,7 @@ Guide: [Read the workflow](/integrations/).
 
 Aliases: `hack`, `store`.
 
-Subcommands: [init](#hackstore-init) · [validate](#hackstore-validate).
+Subcommands: [init](#hackstore-init) · [validate](#hackstore-validate) · [prepare-submission](#hackstore-prepare-submission).
 
 #### hackstore init
 
@@ -340,6 +428,23 @@ Validate an extension manifest against the Hackstore schema
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--json` | — | Emit machine-readable JSON |
+
+#### hackstore prepare-submission
+
+Create a reviewed source bundle for a Hackstore pull request. This does not
+publish or submit the extension.
+
+```text
+0 hackstore prepare-submission [options] <path>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `path` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--out <directory>` | — | New output directory (default: &lt;id&gt;-submission) |
 
 ### upgrade
 
@@ -425,8 +530,8 @@ Guide: [Read the workflow](/scan-workflows/).
 | `-m, --model <model>` | — | LLM model to use |
 | `--repo <path>` | — | Source code path for white-box scanning (read code before attacking) |
 | `--auth <json>` | — | Auth credentials as JSON string or path to JSON file (types: bearer, cookie, basic, header) |
-| `--scope <path>` | — | Path to a JSON scope file ({in_scope, out_of_scope} arrays of host / *.domain / cidr rules). Out-of-scope URLs return as ToolResult.error at every fetch site. See 0#215. |
-| `--allow-scanners` | `false` | Disable the generic-scanner suppression gate (0#217). When --scope is set, the agent refuses to spawn sqlmap/wpscan/nikto/gobuster/dirb/wfuzz/ffuf/`nmap -sV`/`nmap -A` by default; pass this flag only when the engagement explicitly permits generic-scanner traffic. |
+| `--scope <path>` | — | JSON engagement policy ({in_scope, out_of_scope}); activate its authorization checks with `0 plugin enable scope` |
+| `--allow-scanners` | `false` | Expose structured scanner tools and relax generic-scanner suppression in scope-enforced engagements. Pass only when the operator permits that traffic. |
 | `--require-scope` | `false` | Set ZERO_REQUIRE_SCOPE for scope-aware execution paths. Ordinary live-target scan already refuses missing scope, independently of this flag. |
 | `--attribution-header <name=value>` | — | Attribution header to attach to in-scope outbound requests (0#216). Repeatable: pass `--attribution-header X-A=1 --attribution-header X-B=2`. Lower precedence than the scope file's `attribution.headers` block and ZERO_ATTRIBUTION_HEADERS env var. NEVER attached to out-of-scope traffic. |
 | `--attribution-ua <token>` | — | Engagement token to embed in the User-Agent on in-scope traffic (0#216). Resulting UA: `0/&lt;ver&gt; (engagement: &lt;token&gt;)`. Lower precedence than the scope file's `attribution.user_agent_token` and ZERO_ATTRIBUTION_UA_TOKEN env var. |
@@ -1000,15 +1105,15 @@ Guide: [Read the workflow](/verification-result/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--runner <kind>` | — | Deterministic replay runner: local\|docker\|qemu (default local). |
+| `--runner <kind>` | — | Deterministic replay runner: local\|smolvm\|docker\|qemu (default smolvm in an admitted workbench, local outside). |
 | `--docker-network <name>` | — | Docker network for --runner docker. Defaults to none; bridge/custom networks require --scope and only permit HTTP steps. |
-| `--scope <path>` | — | Engagement scope JSON required for networked Docker HTTP replay. |
+| `--scope <path>` | — | Engagement scope JSON required for HTTP replay; SmolVM also refuses private/loopback destinations. |
 | `--qemu-binary <path>` | — | QEMU emulator for --runner qemu. |
 | `--qemu-kernel <path>` | — | Guest kernel image for --runner qemu. |
 | `--qemu-busybox <path>` | — | Static BusyBox binary used to build the offline QEMU guest. |
 | `--out <dir>` | — | 0#193 run directory (artifacts go under &lt;out&gt;/artifacts/). Defaults to a fresh tmpdir. |
 | `--finding <path>` | — | Path to a finding.json. |
-| `--bundle <path>` | — | Path to a reproduction bundle directory; requires --runner local\|docker. Replays the bundle's vulnerable and patched snapshots through the configured runner and emits an aggregate ReproductionBundleResult. |
+| `--bundle <path>` | — | Path to a reproduction bundle directory; requires --runner local\|smolvm\|docker outside an admitted workbench. Replays the bundle's vulnerable and patched snapshots through the configured runner and emits an aggregate ReproductionBundleResult. |
 | `--create-bundle <plan.json>` | — | Path to a BundlePlan JSON. Creates a reproduction bundle without executing any PoC steps. Requires --out &lt;bundle-dir&gt;. |
 | `--target <path>` | — | Path to a target.json (PocExecutionTarget: baseUrl, env, cwd, timeoutMs, personas). |
 | `--fixture <name>` | — | Run a built-in deterministic replay fixture. Supported: cli-path-traversal. |
@@ -1785,7 +1890,7 @@ Guide: [Read the workflow](/research-workflows/).
 | `--mcp-endpoint <url>` **required** | — | Authorized MCP tools/list endpoint |
 | `--oracle-endpoint <url>` **required** | — | Customer-owned state-observer endpoint |
 | `--scenario <path>` **required** | — | Scenario JSON: id, title, injection_vector, benign_task, payload, prohibited_action |
-| `--scope <path>` **required** | — | Engagement scope JSON; all three endpoints must be in scope |
+| `--scope <path>` | — | Engagement scope JSON; required only while the scope plugin is enabled |
 | `--target-version <version>` **required** | — | Version or build digest of the tested agent deployment |
 | `--policy-version <version>` **required** | — | Version or digest of the agent prompt and authorization policy |
 | `--model-version <version>` **required** | — | Model deployment/version identifier |
@@ -2175,8 +2280,8 @@ Guide: [Read the workflow](/research-workflows/).
 | --- | --- | --- |
 | `--json` | — | Emit the asset inventory as machine-readable JSON |
 | `--timeout <ms>` | `10000` | Per-request probe timeout in milliseconds |
-| `--active` | — | Enable active subdomain enumeration (DNS brute-force). Touches the target's DNS, so it is deny-by-default: REQUIRES --scope &lt;file&gt; authorizing the targets. |
-| `--scope <file>` | — | Path to a JSON scope file ({in_scope, out_of_scope}). Required for --active; every candidate host is checked against it before any DNS query. |
+| `--active` | — | Enable active DNS subdomain brute-force; the optional scope plugin enforces candidate authorization. |
+| `--scope <file>` | — | JSON engagement policy; required for --active only while the scope plugin is enabled. |
 
 ### js-recon
 
@@ -2194,7 +2299,7 @@ Guide: [Read the workflow](/research-workflows/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--scope <file>` **required** | — | Path to a JSON scope file ({in_scope, out_of_scope}). REQUIRED — every JS URL is checked against it before any fetch. No scope = nothing fetched. |
+| `--scope <file>` | — | JSON engagement policy; required only while the scope plugin is enabled. |
 | `--timeout <ms>` | `10000` | Per-request fetch timeout in milliseconds |
 | `--max-files <n>` | — | Maximum JS files to fetch (clamped to [0,100]) |
 | `--json` | — | Emit the result as machine-readable JSON |
@@ -2302,7 +2407,9 @@ Probe S3 public access and takeover risks, or validate AWS credentials. Read-onl
 0 cloud
 ```
 
-These commands inspect authorized cloud infrastructure. Managed testing is documented under [0cloud](/roadmap/#0cloud); 0cloud account setup uses the [connection guide](/getting-started/#hosted-models-draft).
+These commands inspect authorized cloud infrastructure. For managed testing,
+contact the service operator; `0 cloud` is local AWS/S3 reconnaissance, not
+managed-service account setup.
 
 Guide: [Read the workflow](/research-workflows/).
 
@@ -2322,7 +2429,7 @@ Probe S3 buckets anonymously for public listing and orphaned-bucket takeover. Re
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--scope <file>` **required** | — | Path to a JSON scope file ({in_scope, out_of_scope}). REQUIRED — each bucket's S3 endpoint must be in scope or it is refused. |
+| `--scope <file>` | — | JSON engagement policy; required only while the scope plugin is enabled. |
 | `--region <region>` | — | Bucket home region (default us-east-1 / global endpoint) |
 | `--max-keys <n>` | — | Max object keys to sample from a public listing (1-100, default 10) |
 | `--json` | — | Emit results as machine-readable JSON |
@@ -2337,7 +2444,7 @@ Validate an AWS credential with `sts:GetCallerIdentity` and read-only over-privi
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--scope <file>` **required** | — | Path to a JSON scope file ({in_scope, out_of_scope}). REQUIRED — validating a credential is recon against the target org, deny-by-default. |
+| `--scope <file>` | — | JSON engagement policy; required only while the scope plugin is enabled. |
 | `--access-key-id <id>` | — | AWS access key id (defaults to $AWS_ACCESS_KEY_ID) |
 | `--secret-access-key <key>` | — | AWS secret access key (defaults to $AWS_SECRET_ACCESS_KEY) |
 | `--session-token <token>` | — | AWS session token (defaults to $AWS_SESSION_TOKEN) |
@@ -2600,16 +2707,17 @@ List everything in the configured registry
 Download, validate, and write plugin files. Installation leaves the plugin disabled and executes no code.
 
 ```text
-0 plugin install [options] <id>
+0 plugin install [options] <id-or-path>
 ```
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `id` | Yes |  |
+| `id-or-path` | Yes |  |
 
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--registry <url>` | — | Hackstore index URL (https) |
+| `--local` | — | Install a local directory containing manifest.json and plugin.js (no network) |
 
 #### plugin enable
 
@@ -2774,800 +2882,6 @@ Write a program's structured_scopes to ~/.0/scopes/<handle>.json
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--out <path>` | — | Override the output path |
-
-### login
-
-Sign in to 0cloud through the browser. This uses the same login flow as `auth login`; your own provider credentials work without a Cloud account.
-
-```text
-0 login [options]
-```
-
-Signing in authenticates the CLI; it does not establish credit eligibility or model access. The development launcher `0dev` defaults to `https://dev.cloud.0.security` and keeps its Cloud credentials separate from normal CLI credentials.
-
-Guide: [Cloud authentication](/api-keys/).
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--host <url>` | — | Cloud host (defaults to ZERO_CLOUD_HOST or production) |
-| `--token <value>` | — | Skip the browser flow and persist this token directly |
-
-### models
-
-Read the configured Cloud host's public model IDs, context windows, and output limits. `--json` prints those same fields, without supplier routing metadata or supplier prices.
-
-```text
-0 models [options]
-```
-
-Requires Cloud credentials. An empty catalog means the service listed no models for this account. A catalog entry does not establish current access, credit eligibility, or successful inference.
-
-Guide: [Hosted models](/getting-started/#hosted-models-draft).
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Output model IDs and capabilities as JSON |
-
-### balance
-
-Read the service's `usage-v2` account. The human view shows the percentage of included allowance used and its reset time. The exact prepaid USD balance appears only when prepaid fallback is enabled, including when that balance is zero. Blocked-access notices remain visible; plan and other billing metadata remain in JSON.
-
-`--json` prints the validated customer account, retaining USD amounts as decimal strings. Unknown, malformed, or legacy responses produce unavailable account data (`null` in JSON), not an inferred zero. Authenticated disabled, restricted, and unavailable states remain distinct from HTTP authentication failures.
-
-```text
-0 balance [options]
-```
-
-Requires Cloud credentials. This command reads the balance; it does not purchase or grant credits. Managed scans and review credits have separate accounting.
-
-Guide: [Cloud authentication](/api-keys/).
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Output the validated credit account as JSON |
-
-### service
-
-Managed scan lifecycle commands. These are implemented client entry points,
-not evidence that a managed service or self-serve onboarding is available.
-Use only an environment approved by the team, with Cloud credentials, repository
-access, testing authorization and agreed scope, spend and delivery terms.
-Hosted model access alone does not provide managed execution.
-
-```text
-0 service
-```
-
-These commands use the configured Cloud host's `/api/scans` and
-`/api/scan-schedules` APIs. `start`, `cancel` and `disconnect` make remote changes.
-They are separate from local `scan`, `secure` and hosted inference.
-
-:::caution[Confirm managed API compatibility before changing schedules]
-The audited client trusts the server to filter schedules by repository. The
-reviewed server source returns organization-wide schedules instead: `connect`
-can select another repository's schedule and `service disconnect` can delete
-all returned schedules. Do not use these as repository-selective operations
-until the deployed contract is confirmed. See the
-[compatibility findings and source revisions](/ci/github-action/#managed-lifecycle-compatibility).
-:::
-
-Guide: [Managed work and onboarding](/getting-started/#managed-work-and-onboarding).
-For repository enrollment and recurring schedules, see [connect](#connect).
-
-Subcommands: [start](#service-start) · [status](#service-status) · [wait](#service-wait) · [cancel](#service-cancel) · [disconnect](#service-disconnect).
-
-#### service start
-
-Submit a repository and test command to enqueue a managed `secure` scan.
-An optional setup command runs before testing in the managed workflow.
-Do not send unreviewed commands, embed secrets in repository URLs, or interpret
-an accepted request as proof of completed testing or a verified repair.
-
-```text
-0 service start [options]
-```
-
-`--json` returns the created scan ID and target ID. The current client sends
-`--cost-ceiling` as `secure_config.cost_ceiling`, while the reviewed server
-expects `secure_config.cost_ceiling_usd`. Do not rely on this flag to enforce
-a remote budget. Confirm the deployed request contract, enforcement, and
-cancellation behavior before starting work; the CLI is not a local hard stop.
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--repo <url>` **required** | — | Repository URL to scan (e.g. https://github.com/org/repo) |
-| `--test-command <cmd>` **required** | — | Test command to verify repairs (e.g. "npm test") |
-| `--setup-command <cmd>` | — | Setup command to run before the test command (e.g. "npm ci") |
-| `--model <model>` | — | Model to use for the scan (default: service-configured) |
-| `--cost-ceiling <usd>` | — | Sends secure_config.cost_ceiling, but the reviewed server expects cost_ceiling_usd. Do not rely on this flag for managed budget enforcement without confirming deployed compatibility. |
-| `--json` | — | Emit result as machine-readable JSON |
-
-#### service status
-
-Fetch the service's scan record. `--json` returns the response; the text view
-summarizes state and reported usage. Missing usage is not zero.
-
-```text
-0 service status [options] <scan-id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `scan-id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit result as machine-readable JSON |
-
-#### service wait
-
-Poll until the service reports `complete`, `failed`, `cancelled` or
-`cost_exceeded`. The default interval is five seconds.
-
-```text
-0 service wait [options] <scan-id>
-```
-
-Inspect the returned `status`: reaching a terminal state can exit successfully
-even when the scan failed or was cancelled. A “finished” message is not a
-verified finding, a verified fix or a successful security assessment.
-Interrupting this local polling command does not request remote cancellation.
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `scan-id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--interval <seconds>` | `5` | Polling interval in seconds (default 5) |
-| `--json` | — | Emit result as machine-readable JSON |
-
-#### service cancel
-
-Request cancellation of a pending or running scan.
-
-```text
-0 service cancel [options] <scan-id>
-```
-
-Check the returned state and poll status afterward. A cancellation request
-does not prove execution has stopped or that previous consumption is refunded.
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `scan-id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit result as machine-readable JSON |
-
-#### service disconnect
-
-Request schedules using a repository URL or the current checkout's `origin`
-remote, then delete every returned schedule after confirmation. The client
-does not verify each schedule's repository. **An unfiltered server response
-can therefore delete schedules for other repositories.** Confirm compatibility
-before use; do not bypass that check with `--yes`.
-
-In JSON mode, a nonempty returned list requires `--yes` rather than an
-interactive answer. An empty returned list is a no-op.
-
-```text
-0 service disconnect [options] [repo]
-```
-
-This deletes schedules, not Cloud credentials or the repository's GitHub App
-grant, and does not cancel existing scans. Deletions can partially succeed:
-inspect per-schedule errors and compare `deleted_count` with `total` in JSON
-output rather than trusting the final state label or process exit code alone.
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `repo` | No |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `-y, --yes` | — | Skip interactive confirmation |
-| `--json` | — | Emit result as machine-readable JSON |
-
-### auth
-
-Authenticate with a configured control plane.
-
-```text
-0 auth
-```
-
-These credentials authenticate to the configured 0cloud host. Hosted inference, managed scans, and repository enrollment have separate account and access requirements; signing in does not grant every capability. Other model-provider credentials are configured separately. See [0cloud's current boundaries](/roadmap/#0cloud).
-
-Guide: [Read the workflow](/api-keys/).
-
-Subcommands: [login](#auth-login) · [logout](#auth-logout) · [status](#auth-status).
-
-#### auth login
-
-Log in through the browser, or supply a credential with `--token`.
-
-```text
-0 auth login [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--host <url>` | — | Cloud host (defaults to ZERO_CLOUD_HOST or production) |
-| `--token <value>` | — | Skip the browser flow and persist this token directly |
-
-#### auth logout
-
-Delete saved credentials for the current Cloud profile. Development credentials remain separate from the normal profile; logout does not revoke repository access or delete managed schedules.
-
-```text
-0 auth logout
-```
-
-#### auth status
-
-Check configured credentials against the authenticated inference-account endpoint, not `/health`. Success establishes account-endpoint access, not available credits, successful inference, or permission to dispatch managed work.
-
-```text
-0 auth status
-```
-
-### guide
-
-Discover the installed CLI's capabilities, execution boundaries and command
-contracts. Hosted inference with local tools and managed security execution are
-separate paths. `guide` is included in the v0.19.0 release; use `0 --help` to check
-your installed build rather than assuming it matches the current source reference.
-
-```text
-0 guide [options] [topic]
-```
-
-```bash
-0 guide
-0 guide hosted-inference
-0 guide commands --json
-0 guide "auth login" --json
-```
-
-The command catalogue is generated from the registered Commander tree, including
-nested commands, arguments, options and aliases. Capability prose explains when
-to use a workflow. Refresh the guide after updating the CLI; do not infer command
-availability from a separate copied onboarding prompt.
-
-JSON output distinguishes installed capabilities, service health and account
-state. A successful health probe means only that the endpoint answered. Account
-identity, repository access, product entitlement and funding remain unknown
-until checked by their service endpoints. `guide` does not authorize or start a
-run. Unknown topics fail before probing the service.
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `topic` | No | capability id, command path, 'commands', 'architecture', or 'limits' |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--format <format>` | `human` | Output format: human or json |
-| `--json` | `false` | Shorthand for --format json |
-
-### connect
-
-Verify repository access without starting work. A managed scan requires `--run`;
-a scan with recurrence requires `--schedule`. Readiness and, for dispatch,
-schedule lookups must succeed. Unavailable APIs block dispatch.
-
-The current client takes the first returned schedule without independently
-checking its repository. Against the reviewed organization-wide list endpoint,
-`no-open` can refer to a different repository. Confirm deployed filtering
-before using this flow, and read the
-[managed compatibility warning](#service). A successful lookup is not proof
-that repository matching is correct.
-
-```text
-0 connect [options] [repo]
-```
-
-After confirming service compatibility and account access, authenticate and review the connection:
-
-```bash
-0 auth login
-0 connect https://github.com/org/repo --test-command "npm test"
-```
-
-With no repository argument, the CLI reads the current checkout's `origin`
-remote. SSH-style Git remotes are normalized to HTTPS. You must own the target
-or be authorized to assess it. When `--test-command` is omitted, the detector
-can use a temporary shallow clone to inspect Node package scripts, a Makefile,
-Python project files, Cargo or Go. Prefer an explicit regression command when
-automatic detection is unsuitable. `--setup-command` specifies setup/build work.
-
-For a noninteractive agent, request JSON and inspect any required action first:
-
-```bash
-0 connect --format json --test-command "npm test"
-# Only after confirming API compatibility and reviewing scope, cadence, budget and publication:
-0 connect --format json --test-command "npm test" --run --yes
-```
-
-For `--run` or `--schedule`, JSON mode without `--yes` returns `action-required`
-with `reason: "confirmation_required"` before starting new work. Without either
-dispatch flag, `ready` means access was checked and no scan or schedule was created.
-An existing schedule may return `no-open`. Missing GitHub App access returns an
-installation URL where available; it does not implement browser-poll enrollment.
-
-`--schedule` defaults to daily at 03:00 UTC; `--cron` changes that frequency and
-requires `--schedule`. Use `--run` for an approved one-shot request. The per-run
-`--cost-ceiling` is not a monthly subscription allowance.
-
-| JSON state | Meaning |
-| --- | --- |
-| `ready` | Access was verified without dispatch, or requested work was created. Check `scan_id` and `schedule`; readiness alone does not mean a scan exists. |
-| `no-open` | A returned schedule was selected; no new work was created. Repository identity is not independently verified by the client. |
-| `action-required` | Enrollment, authorization, approval or an operation failed; inspect `reason` and `message`. |
-
-Readiness and schedule-lookup failures exit with status 2 and create no work.
-If a scan was created but scheduling failed or no target ID was returned,
-the command exits 1 with `action-required`, `reason: "schedule-creation-failed"`
-and the existing `scan_id`. Inspect that scan before retrying; it is not rolled
-back and blindly retrying can duplicate work. Terminal mode also reports this
-partial outcome without a connected-success banner.
-
-`--publication-policy off|manual|auto` requests the service's repair-publication
-policy. Service support, access and independently verified repair evidence are
-separate requirements; the flag is not proof of a working publication path.
-This command does not directly publish a PR or automatically merge one.
-
-Guide: [Cloud authentication](/api-keys/).
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `repo` | No | HTTPS git URL of the repository (default: current directory's git remote origin) |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--test-command <command>` | — | Regression command; auto-detected from the repo when omitted |
-| `--setup-command <command>` | — | Setup/build command run before tests (e.g. pnpm install) |
-| `-m, --model <model>` | — | Model for the managed runs; defaults to the cloud routing default |
-| `--cost-ceiling <usd>` | — | Per-run model cost ceiling in USD |
-| `--setup-only` | `false` | Verify access without creating a scan or schedule |
-| `--run` | `false` | Request one managed scan after verifying repository access |
-| `--schedule` | `false` | Request a managed scan and a recurring schedule |
-| `--cron <expression>` | `0 3 * * *` | Schedule frequency in UTC; requires --schedule |
-| `--format <fmt>` | `terminal` | Output format: terminal \| json |
-| `--publication-policy <policy>` | `off` | Publication policy: off \| manual \| auto. Default: off |
-| `--yes` | — | Skip interactive confirmation before scheduling |
-
-## Codebase configuration and methodology
-
-These commands use the same authenticated cloud APIs as the dashboard. They
-require a matching deployed service and current organization access. Enroll with
-`project enroll` or the dashboard's Add action before running `project setup`.
-Saving configuration and binding a methodology do not start a scan or grant
-credits. New runs capture immutable revisions; edits do not change queued work.
-
-### project
-
-Read and edit a codebase's context, operating plan, revision history and optional
-Slack notification settings. Mutations require server-authorized access.
-
-```text
-0 project
-```
-
-Subcommands: [list](#project-list) · [show](#project-show) · [setup](#project-setup) · [enroll](#project-enroll) · [discover](#project-discover) · [save](#project-save) · [history](#project-history) · [suggestions](#project-suggestions) · [restore](#project-restore) · [start](#project-start) · [slack](#project-slack).
-
-### project list
-
-List the enrolled codebases visible to the authenticated organization.
-
-```text
-0 project list [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit machine-readable JSON |
-
-### project show
-
-Read the saved configuration. Select an enrolled UUID, GitHub repository URL,
-or omit the argument to resolve the current checkout's origin.
-
-```text
-0 project show [options] [project]
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `project` | No |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit machine-readable JSON |
-
-### project setup
-
-Prepare a source-backed proposal. Interactive mode asks before saving and asks
-separately before starting a credit-funded scan. `--json` and noninteractive
-mode return the proposal without saving or starting work.
-
-```text
-0 project setup [options] [project]
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `project` | No |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Return an editable proposal without saving or starting |
-
-### project enroll
-
-Enroll a GitHub repository through the connected GitHub App. Pass its URL or omit
-the argument to use the current checkout's origin. Enrollment does not start a
-scan or grant credits. If App access is missing, `--open` opens the installation
-link; complete that step and retry before running `project setup`.
-
-```text
-0 project enroll [options] [repository]
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `repository` | No |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--open` | — | Open the GitHub App installation link when access is missing |
-| `--json` | — | Emit machine-readable JSON |
-
-### project discover
-
-Read repository metadata at an immutable source commit. This does not execute
-repository code, persist a plan, or start a scan.
-
-```text
-0 project discover [options] [project]
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `project` | No |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit machine-readable JSON |
-
-### project save
-
-Save a reviewed JSON plan with its expected configuration revision and source
-commit. A stale revision is rejected rather than overwriting another editor.
-Saving does not authorize or start execution.
-
-```text
-0 project save [options] <project>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `project` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--file <path>` **required** | — | Operating-plan JSON file |
-| `--revision <number>` **required** | — | Expected current revision, including 0 for first save |
-| `--source <sha>` **required** | — | Reviewed immutable source commit |
-| `--json` | — | Emit machine-readable JSON |
-| `--enable-schedule` | — | Explicitly approve recurring checks at the saved daily/weekly cadence and per-run credit limit |
-
-### project history
-
-Read saved revisions, or select one historical revision for inspection.
-
-```text
-0 project history [options] <project> [revision]
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `project` | Yes |  |
-| `revision` | No |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit machine-readable JSON |
-
-### project suggestions
-
-Read observations proposed by completed scans. Suggestions are not automatically
-accepted as configuration, permissions, or verified security facts.
-
-```text
-0 project suggestions [options] <project>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `project` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit machine-readable JSON |
-
-### project restore
-
-Restore a historical plan using the expected current revision. This changes
-future configuration, not the immutable snapshots of existing runs.
-
-```text
-0 project restore [options] <project> <revision>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `project` | Yes |  |
-| `revision` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--expected-revision <number>` **required** | — | Current revision to replace |
-| `--json` | — | Emit machine-readable JSON |
-
-### project start
-
-Explicitly request execution of an approved saved revision. Review scope and
-budget first. Supply a UUID idempotency key and reuse it when recovering a lost
-response. The service checks authorization and credit funding before enqueue.
-
-```text
-0 project start [options] <project>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `project` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--revision <number>` **required** | — | Approved configuration revision |
-| `--idempotency-key <uuid>` **required** | — | Reuse this key when recovering a lost response |
-| `--json` | — | Emit machine-readable JSON |
-
-### project slack
-
-Manage optional workspace notifications through an existing Slack connection.
-This command does not install Slack or change scan authorization.
-
-```text
-0 project slack
-```
-
-Subcommands: [channels](#project-slack-channels) · [channel](#project-slack-channel) · [clear](#project-slack-clear).
-
-### project slack channels
-
-List channels available through the workspace's current Slack integration.
-
-```text
-0 project slack channels [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit machine-readable JSON |
-
-### project slack channel
-
-Select the workspace notification channel by its Slack channel ID.
-
-```text
-0 project slack channel [options] <channel-id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `channel-id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit machine-readable JSON |
-
-### project slack clear
-
-Clear the selected notification channel without disconnecting Slack.
-
-```text
-0 project slack clear [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit machine-readable JSON |
-
-### skills
-
-Manage versioned audit-methodology bundles. Cloud credentials are required;
-the service restricts mutations to authorized owners and administrators.
-Methodology content never grants additional targets, budget, or tool access.
-
-```text
-0 skills
-```
-
-Subcommands: [list](#skills-list) · [show](#skills-show) · [new](#skills-new) · [import](#skills-import) · [edit](#skills-edit) · [sync](#skills-sync) · [use](#skills-use) · [unuse](#skills-unuse) · [project](#skills-project) · [archive](#skills-archive).
-
-### skills list
-
-List the organization's available audit skills and codebases.
-
-```text
-0 skills list [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit result as machine-readable JSON |
-
-### skills show
-
-Read a skill's revisions and codebase assignments.
-
-```text
-0 skills show [options] <id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit result as machine-readable JSON |
-
-### skills new
-
-Create a Markdown bundle from relative local file paths, with `SKILL.md` first.
-Review all included files before uploading them to the workspace.
-
-```text
-0 skills new [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--name <name>` **required** | — | Skill name |
-| `--description <desc>` | — | Optional description |
-| `--file <paths...>` **required** | — | Markdown file(s) to include (SKILL.md must be first) |
-| `--json` | — | Emit result as machine-readable JSON |
-
-### skills import
-
-Import a methodology from a GitHub repository accessible to the workspace's
-current GitHub App. The service resolves the selected ref to a source commit.
-
-```text
-0 skills import [options] <owner/repo>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `owner/repo` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--ref <ref>` | — | Branch, tag, or commit SHA (default: HEAD) |
-| `--path <path>` | — | Path within the repo to the bundle folder or .md file |
-| `--name <name>` | — | Override skill name |
-| `--json` | — | Emit result as machine-readable JSON |
-
-### skills edit
-
-Create a revision from reviewed local files. Supply `--expected-revision` when
-editing a previously read version to reject stale updates.
-
-```text
-0 skills edit [options] <id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--file <paths...>` **required** | — | Markdown file(s) to include |
-| `--expected-revision <n>` | — | Expected current revision number (prevents stale overwrite) |
-| `--name <name>` | — | Update skill name |
-| `--description <desc>` | — | Update description |
-| `--json` | — | Emit result as machine-readable JSON |
-
-### skills sync
-
-Refresh a GitHub-imported skill using its expected current revision.
-
-```text
-0 skills sync [options] <id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--expected-revision <n>` **required** | — | Expected current revision number (CAS — 409 on mismatch) |
-| `--json` | — | Emit result as machine-readable JSON |
-
-### skills use
-
-Pin a revision to an authorized enrolled codebase. An omitted revision selects
-the latest available revision at assignment time; it is not a floating binding.
-
-```text
-0 skills use [options] <id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--project <owner/repo>` **required** | — | Project to assign the skill to (owner/name or UUID) |
-| `--revision <id>` | — | Revision UUID to pin (default: latest) |
-| `--json` | — | Emit result as machine-readable JSON |
-
-### skills unuse
-
-Remove a codebase assignment without deleting the skill's revision history.
-
-```text
-0 skills unuse [options] <id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--project <owner/repo>` **required** | — | Project to remove the skill from (owner/name or UUID) |
-| `--json` | — | Emit result as machine-readable JSON |
-
-### skills project
-
-Read the codebase's pinned methodology revisions and available skills.
-
-```text
-0 skills project [options] <owner/repo>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `owner/repo` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit result as machine-readable JSON |
-
-### skills archive
-
-Archive a skill for future use while preserving its revision history.
-
-```text
-0 skills archive [options] <id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit result as machine-readable JSON |
 
 ## XBOW benchmark runner
 

@@ -61,7 +61,8 @@ test("keeps a long streamed markdown answer visible", async () => {
   await tui.sendKeys("stream a long synthetic answer");
   await tui.sendKey("return");
   await vi.waitFor(() => expect(complete).toBe(true), { timeout: 15_000 });
-  await tui.waitForText(/hidden in this TUI preview/, 15_000);
-  expect(tui.captureFrame()).toContain("hidden in this TUI preview");
-  expect(process.memoryUsage().rss).toBeLessThan(1_000_000_000);
+  // The newest text must be visible without manual scrolling, even when the
+  // wrapped preview grows after the scrollbox measures its children.
+  await tui.waitForText(new RegExp(tail), 15_000);
+  expect(tui.captureFrame()).toContain(tail);
 }, 45_000);

@@ -10,7 +10,6 @@ class LinuxKernelResearchAdapterMock {}
 vi.mock("@0/core", () => ({
   LinuxKernelResearchAdapter: LinuxKernelResearchAdapterMock,
   runResearch: runResearchMock,
-  postFinding: vi.fn(),
 }));
 
 const { registerResearchCommand } = await import("../research.js");

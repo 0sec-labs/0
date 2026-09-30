@@ -406,7 +406,7 @@ export async function runCraftScan(opts: CraftScanOptions): Promise<CraftScanRes
       cwd,
       env: allowlistedChildEnv(),
     }) as string;
-  const listDir = (p: string) => sh("bash", ["-c", "ls -la --group-directories-first | head -200"], safe(p || "."));
+  const listDir = (p: string) => sh("bash", ["-c", "ls -la | head -200"], safe(p || "."));
   const readFile = (p: string, a?: number, b?: number) => {
     const abs = safe(p);
     if (!existsSync(abs) || statSync(abs).isDirectory()) return `(not a readable file: ${p})`;

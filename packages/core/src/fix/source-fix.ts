@@ -1,8 +1,10 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
+import { randomUUID } from "node:crypto";
+import { defaultGitClient, defaultGhClient, buildPrTitle, type GitClient, type GhClient } from "../emit/pr-emitter.js";
 import { z } from "zod";
 import type { Finding } from "@0/shared";
 import { applyPatchOps, parsePatch, type PatchOp } from "../agent/apply-patch.js";
@@ -71,6 +73,40 @@ export interface SourceFixAttempt {
   reason: string;
 }
 
+/** Retained isolated checkout; the operator's original worktree is never used for publication. */
+export interface SourceFixCandidate {
+  repoRoot: string;
+  worktree: string;
+  baseCommit: string;
+  baseBranch?: string;
+  recordPath: string;
+}
+
+export interface SourceFixPublicationPlan {
+  branch: string;
+  baseBranch: string;
+  remote: string;
+  title: string;
+  worktree: string;
+  diff: string;
+}
+
+interface VerifiedCandidate {
+  finding: Finding;
+  candidate: SourceFixCandidate;
+  sourceFile: string;
+  diff: string;
+  testCommand: string;
+  plan?: SourceFixPublicationPlan;
+  commit?: string;
+  branchCreated?: boolean;
+  prUrl?: string;
+}
+
+// Publication accepts only candidates actually verified by this process, not
+// template artifacts or a caller-constructed success-shaped result.
+const verifiedCandidates = new WeakMap<SourceFixResult, VerifiedCandidate>();
+
 export interface SourceFixResult {
   status: SourceFixStatus;
   findingId: string;
@@ -80,6 +116,9 @@ export interface SourceFixResult {
   postcondition?: SourceVerificationResult;
   test?: SourceFixTestResult;
   patch?: string;
+  /** Actual Git diff of the generated source change, not a template or model claim. */
+  diff?: string;
+  candidate?: SourceFixCandidate;
   rationale?: string;
   applied: boolean;
   error?: string;
@@ -97,10 +136,16 @@ export interface SourceFixOptions {
   maxAttempts?: number;
   /** Per test-command wall-clock budget. Defaults to five minutes. */
   testTimeoutMs?: number;
+  /** Preserve a validated local candidate for review and separately approved publication. */
+  keepWorktree?: boolean;
+  signal?: AbortSignal;
 }
 
 interface CandidateWorktree {
   root: string;
+  repoRoot: string;
+  baseCommit: string;
+  baseBranch?: string;
   cleanup(): Promise<void>;
 }
 
@@ -211,15 +256,16 @@ async function createCandidateWorktree(repoRoot: string): Promise<CandidateWorkt
 
   const root = await mkdtemp(`${tmpdir()}/0-fix-`);
   await rm(root, { recursive: true, force: true });
+  const baseCommit = await git(canonicalRoot, ["rev-parse", "HEAD"]);
+  const baseBranch = await git(canonicalRoot, ["branch", "--show-current"]);
   try {
-    await git(canonicalRoot, ["worktree", "add", "--detach", root, "HEAD"]);
+    await git(canonicalRoot, ["worktree", "add", "--detach", root, baseCommit]);
   } catch (error) {
     await rm(root, { recursive: true, force: true });
     throw error;
   }
-
   return {
-    root,
+    root, repoRoot: canonicalRoot, baseCommit, baseBranch: baseBranch || undefined,
     async cleanup(): Promise<void> {
       try {
         await git(canonicalRoot, ["worktree", "remove", "--force", root]);
@@ -228,6 +274,7 @@ async function createCandidateWorktree(repoRoot: string): Promise<CandidateWorkt
       }
     },
   };
+
 }
 
 async function resetCandidate(worktree: string): Promise<void> {
@@ -239,6 +286,7 @@ async function runTestCommand(
   command: string,
   cwd: string,
   timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<SourceFixTestResult> {
   const startedAt = Date.now();
   try {
@@ -246,6 +294,7 @@ async function runTestCommand(
       cwd,
       timeout: timeoutMs,
       maxBuffer: MAX_TEST_OUTPUT_BYTES,
+      signal,
     });
     return {
       command,
@@ -362,7 +411,7 @@ function failureResult(
   status: Extract<SourceFixStatus, "not_fixed" | "precondition_failed" | "error">,
   attempts: SourceFixAttempt[],
   error: string,
-  extra: Pick<SourceFixResult, "sourceFile" | "precondition"> = {},
+  extra: Pick<SourceFixResult, "sourceFile" | "precondition" | "postcondition" | "test" | "diff" | "patch" | "rationale"> = {},
 ): SourceFixResult {
   return {
     status,
@@ -381,6 +430,8 @@ function failureResult(
  */
 export async function runSourceFix(options: SourceFixOptions): Promise<SourceFixResult> {
   const attempts: SourceFixAttempt[] = [];
+  let retained = false;
+  let lastCandidate: Pick<SourceFixResult, "sourceFile" | "precondition" | "postcondition" | "test" | "diff" | "patch" | "rationale"> = {};
   const requestedAttempts = options.maxAttempts ?? MAX_ATTEMPTS;
   const maxAttempts = Number.isFinite(requestedAttempts)
     ? Math.max(1, Math.min(MAX_ATTEMPTS, Math.floor(requestedAttempts)))
@@ -416,6 +467,7 @@ export async function runSourceFix(options: SourceFixOptions): Promise<SourceFix
 
   let worktree: CandidateWorktree | undefined;
   try {
+    options.signal?.throwIfAborted();
     const candidateWorktree = await createCandidateWorktree(options.repoRoot);
     worktree = candidateWorktree;
     const sourceHint = sourcePathHint(options.finding);
@@ -431,7 +483,7 @@ export async function runSourceFix(options: SourceFixOptions): Promise<SourceFix
     const repoRoot = await realpath(options.repoRoot);
     const sourceAbsolutePath = resolveScopedPath(repoRoot, sourceHint);
     const sourceFile = relativeSourcePath(repoRoot, sourceAbsolutePath);
-    const source = await readFile(sourceAbsolutePath, "utf8");
+    const source = await readFile(resolveScopedPath(candidateWorktree.root, sourceFile), "utf8");
     if (Buffer.byteLength(source) > MAX_SOURCE_BYTES) {
       return failureResult(
         options.finding,
@@ -442,7 +494,7 @@ export async function runSourceFix(options: SourceFixOptions): Promise<SourceFix
       );
     }
 
-    const precondition = await evaluateVerificationSpec(options.finding.verificationSpec, repoRoot);
+    const precondition = await evaluateVerificationSpec(options.finding.verificationSpec, candidateWorktree.root);
     if (!precondition.passed) {
       return failureResult(
         options.finding,
@@ -458,11 +510,16 @@ export async function runSourceFix(options: SourceFixOptions): Promise<SourceFix
     const testTimeoutMs = options.testTimeoutMs ?? 300_000;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      options.signal?.throwIfAborted();
       const response = await options.runtime.executeNative(
         "Generate a narrowly-scoped, testable source fix. Never claim success without using propose_fix.",
         messages,
         [proposeFixTool],
+        undefined,
+        options.signal,
       );
+      options.signal?.throwIfAborted();
+      if (response.cancelled) throw new Error("source fix cancelled");
       messages.push(assistantMessage(response.content, response.providerRaw));
       const proposalResult = getProposal(response.content);
       if (!proposalResult.proposal) {
@@ -490,10 +547,17 @@ export async function runSourceFix(options: SourceFixOptions): Promise<SourceFix
         continue;
       }
 
+      const generatedDiff = await git(candidateWorktree.root, ["diff", "--no-ext-diff", "--binary", "HEAD", "--"]);
       const postcondition = await evaluateVerificationSpec(options.finding.verificationSpec, candidateWorktree.root);
-      const test = await runTestCommand(testCommand, candidateWorktree.root, testTimeoutMs);
-      if (!hasSemanticFixSignal(postcondition) || test.exitCode !== 0 || test.timedOut) {
-        const reason = !hasSemanticFixSignal(postcondition)
+      const test = await runTestCommand(testCommand, candidateWorktree.root, testTimeoutMs, options.signal);
+      lastCandidate = { sourceFile, precondition, postcondition, test, diff: generatedDiff, patch: proposal.patch, rationale: proposal.rationale };
+      options.signal?.throwIfAborted();
+      const testedDiff = await git(candidateWorktree.root, ["diff", "--no-ext-diff", "--binary", "HEAD", "--"]);
+      const changedByTest = generatedDiff !== testedDiff || !generatedDiff;
+      if (changedByTest || !hasSemanticFixSignal(postcondition) || test.exitCode !== 0 || test.timedOut) {
+        const reason = changedByTest
+          ? "regression command changed the generated source diff, or the patch contains no change"
+          : !hasSemanticFixSignal(postcondition)
           ? "patch did not produce a valid semantic transition out of the vulnerable-source contract"
           : test.timedOut
             ? "post-patch test command timed out"
@@ -513,7 +577,22 @@ export async function runSourceFix(options: SourceFixOptions): Promise<SourceFix
       }
 
       if (!options.apply) {
-        return {
+        let candidate: SourceFixCandidate | undefined;
+        if (options.keepWorktree) {
+          candidate = {
+            repoRoot: candidateWorktree.repoRoot,
+            worktree: candidateWorktree.root,
+            baseCommit: candidateWorktree.baseCommit,
+            baseBranch: candidateWorktree.baseBranch,
+            recordPath: `${candidateWorktree.root}.json`,
+          };
+          await writeFile(candidate.recordPath, JSON.stringify({
+            findingId: options.finding.id, sourceFile, diff: generatedDiff, test,
+            precondition, postcondition, rationale: proposal.rationale, candidate,
+          }, null, 2), { mode: 0o600 });
+          retained = true;
+        }
+        const result: SourceFixResult = {
           status: "validated_candidate",
           findingId: options.finding.id,
           sourceFile,
@@ -522,9 +601,17 @@ export async function runSourceFix(options: SourceFixOptions): Promise<SourceFix
           postcondition,
           test,
           patch: proposal.patch,
+          diff: generatedDiff,
+          candidate,
           rationale: proposal.rationale,
           applied: false,
         };
+        if (candidate) verifiedCandidates.set(result, {
+          finding: structuredClone(options.finding),
+          candidate: structuredClone(candidate),
+          sourceFile, diff: generatedDiff, testCommand,
+        });
+        return result;
       }
 
       const originalStatus = await git(repoRoot, ["status", "--porcelain=v1", "--untracked-files=all"]);
@@ -560,6 +647,7 @@ export async function runSourceFix(options: SourceFixOptions): Promise<SourceFix
           postcondition: appliedPostcondition,
           test,
           patch: proposal.patch,
+          diff: generatedDiff,
           rationale: proposal.rationale,
           applied: true,
         };
@@ -585,16 +673,139 @@ export async function runSourceFix(options: SourceFixOptions): Promise<SourceFix
       "not_fixed",
       attempts,
       "no generated patch satisfied both the source re-check and the operator test command",
-      { sourceFile, precondition },
+      { sourceFile, precondition, ...lastCandidate },
     );
   } catch (error) {
-    return failureResult(options.finding, "error", attempts, errorMessage(error));
+    return failureResult(options.finding, "error", attempts, errorMessage(error), lastCandidate);
   } finally {
     try {
-      await worktree?.cleanup();
+      if (!retained) await worktree?.cleanup();
     } catch {
       // The original worktree was never changed unless an already-validated
       // patch passed the explicit apply gate. Cleanup failure is non-fatal.
     }
   }
+}
+
+/** Inspect local publication details without authenticating, pushing, or creating a PR. */
+export async function planSourceFixPublication(
+  result: SourceFixResult,
+  options: { gitClient?: GitClient } = {},
+): Promise<SourceFixPublicationPlan> {
+  const verified = verifiedCandidates.get(result);
+  if (!verified || result.status !== "validated_candidate") {
+    throw new Error("only a retained, verified source-fix candidate can publish");
+  }
+  if (verified.prUrl) throw new Error(`draft PR already created: ${verified.prUrl}`);
+  if (verified.plan) return { ...verified.plan };
+  const client = options.gitClient ?? defaultGitClient();
+  const cwd = verified.candidate.worktree;
+  const baseBranch = verified.candidate.baseBranch;
+  if (!baseBranch) throw new Error("candidate came from detached HEAD; generate it from the intended PR base branch");
+  await client.run(["check-ref-format", "--branch", baseBranch], { cwd });
+  const { stdout } = await client.run(["remote", "get-url", "--push", "origin"], { cwd });
+  const remote = stdout.trim();
+  if (!remote) throw new Error("origin has no push URL; configure the intended GitHub repository first");
+  const fetchRemote = (await client.run(["remote", "get-url", "origin"], { cwd })).stdout.trim();
+  if (fetchRemote !== remote) throw new Error("origin fetch and push URLs differ; configure one intended PR repository before publication");
+  const pendingPlan = verifiedCandidates.get(result)?.plan;
+  if (pendingPlan) return { ...pendingPlan };
+  const branch = `0/fix-${verified.finding.id.replace(/[^a-zA-Z0-9-]/g, "-").slice(0, 32)}-${randomUUID().slice(0, 8)}`;
+  verified.plan = { branch, baseBranch, remote, title: buildPrTitle(verified.finding), worktree: cwd, diff: verified.diff };
+  return { ...verified.plan };
+}
+
+/**
+ * Explicitly publish the reviewed source change as a draft PR. Re-check the
+ * retained candidate and regression command before any network mutation.
+ * Failures preserve the candidate, review record, and any created branch.
+ */
+export async function publishSourceFixDraftPR(
+  result: SourceFixResult,
+  options: {
+    approval: "publish-draft-pr";
+    gitClient?: GitClient;
+    ghClient?: GhClient;
+    signal?: AbortSignal;
+  },
+): Promise<{ prUrl: string; branch: string; worktree: string }> {
+  if (options.approval !== "publish-draft-pr") throw new Error("explicit draft-PR publication approval is required");
+  const verified = verifiedCandidates.get(result);
+  if (!verified) throw new Error("candidate was not generated and verified by runSourceFix");
+  const plan = await planSourceFixPublication(result, options);
+  const client = options.gitClient ?? defaultGitClient();
+  const gh = options.ghClient ?? defaultGhClient();
+  const cwd = verified.candidate.worktree;
+  const run = async (args: string[]) => {
+    options.signal?.throwIfAborted();
+    return (await client.run(args, { cwd })).stdout.trim();
+  };
+  options.signal?.throwIfAborted();
+  if ((await run(["remote", "get-url", "--push", "origin"])) !== plan.remote) {
+    throw new Error("origin changed after review; refusing publication");
+  }
+  if ((await run(["remote", "get-url", "origin"])) !== plan.remote) {
+    throw new Error("origin fetch repository changed after review; refusing publication");
+  }
+  const head = await run(["rev-parse", "HEAD"]);
+  if (head !== (verified.commit ?? verified.candidate.baseCommit)) {
+    throw new Error("candidate HEAD changed after verification; regenerate the fix");
+  }
+  const currentDiff = await run(["diff", "--no-ext-diff", "--binary", verified.candidate.baseCommit, "--"]);
+  if (currentDiff !== verified.diff) throw new Error("candidate changed after review; regenerate the fix");
+  if (verified.commit && (await run(["status", "--porcelain=v1", "--untracked-files=no"]))) {
+    throw new Error("published candidate has new tracked changes; refusing publication");
+  }
+  const spec = verified.finding.verificationSpec!;
+  const sourceCheck = await evaluateVerificationSpec(spec, cwd);
+  if (!hasSemanticFixSignal(sourceCheck)) throw new Error("candidate no longer passes the source fix re-check");
+  const test = await runTestCommand(verified.testCommand, cwd, 300_000, options.signal);
+  options.signal?.throwIfAborted();
+  if (test.exitCode !== 0 || test.timedOut) throw new Error(`publication regression command failed: ${test.stderr || test.stdout || test.exitCode}`);
+  if ((await run(["diff", "--no-ext-diff", "--binary", verified.candidate.baseCommit, "--"])) !== verified.diff) {
+    throw new Error("publication regression command changed the reviewed source diff");
+  }
+  // The remote base must be exactly the verified baseline: no unrelated local
+  // commits or a moved base can sneak into this PR.
+  const remoteBase = await run(["ls-remote", "--heads", plan.remote, `refs/heads/${plan.baseBranch}`]);
+  if (remoteBase.split(/\s+/)[0] !== verified.candidate.baseCommit) {
+    throw new Error("remote base differs from the verified baseline; update the checkout and regenerate the fix");
+  }
+  if (!(await gh.isAuthenticated())) throw new Error("GitHub CLI is not authenticated; run gh auth login, then retry");
+  options.signal?.throwIfAborted();
+  if (!verified.commit) {
+    if (!verified.branchCreated) {
+      await run(["-c", "core.hooksPath=/dev/null", "switch", "-c", plan.branch]);
+      verified.branchCreated = true;
+    } else if ((await run(["branch", "--show-current"])) !== plan.branch) {
+      throw new Error("candidate branch changed after an earlier publication attempt");
+    }
+    await run(["add", "--", verified.sourceFile]);
+    await run(["-c", "core.hooksPath=/dev/null", "commit", "-m", plan.title]);
+    verified.commit = await run(["rev-parse", "HEAD"]);
+  }
+  if ((await run(["diff", "--no-ext-diff", "--binary", verified.candidate.baseCommit, "HEAD", "--"])) !== verified.diff) {
+    throw new Error("commit differs from the reviewed source diff; refusing to push");
+  }
+  await run(["-c", "core.hooksPath=/dev/null", "push", plan.remote, `HEAD:refs/heads/${plan.branch}`]);
+  options.signal?.throwIfAborted();
+  const body = [
+    "## Source fix", verified.finding.description, "",
+    `Finding: ${verified.finding.id}`, verified.finding.evidence.analysis ?? "", "",
+    "## Verification",
+    "The reproduced source contract held before patching and no longer holds after the generated source change.",
+    `Regression command: ${verified.testCommand}`,
+    `Publication re-test: exit ${test.exitCode} (${test.durationMs}ms)`, "",
+    verified.finding.evidence.request ? `Reproduction evidence:\n${verified.finding.evidence.request}` : "",
+    verified.finding.reviewAnnotation?.path ? `Source: ${verified.finding.reviewAnnotation.path}` : "",
+    verified.finding.pocSteps?.map((step, index) => `${index + 1}. ${step.summary}`).join("\n") ?? "",
+    result.rationale ?? "",
+    "", "Generated by 0; draft for human review. No starter template was published.",
+  ].join("\n");
+  const response = await gh.run([
+    "pr", "create", "--draft", "--base", plan.baseBranch, "--head", plan.branch,
+    "--title", plan.title, "--body", body,
+  ], { cwd });
+  verified.prUrl = response.stdout.trim();
+  return { prUrl: verified.prUrl, branch: plan.branch, worktree: cwd };
 }

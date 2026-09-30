@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { registerModelPricing } from "@0/shared";
 import {
   estimateCost,
   getRates,
@@ -50,6 +51,26 @@ describe("estimateCost", () => {
       .toBeCloseTo(5.0 + 30.0, 5);
     expect(estimateCost({ inputTokens: 1_000_000, outputTokens: 1_000_000 }, "glm-5.2"))
       .toBeCloseTo(1.4 + 4.4, 5);
+  });
+
+  it("prices GPT-6 Sol, 6.1 Sol, and Luna with their distinct cached-input rates", () => {
+    const usage = { inputTokens: 1_000_000, cachedInputTokens: 500_000, outputTokens: 1_000_000 };
+    expect(estimateCost(usage, "gpt-6-sol")).toBeCloseTo(0.5 * 2 + 0.5 * 0.2 + 10);
+    expect(estimateCost(usage, "gpt-6.1-sol")).toBeCloseTo(0.5 * 2 + 0.5 * 0.1 + 10);
+    expect(estimateCost(usage, "gpt-6-luna")).toBeCloseTo(0.5 * 0.1 + 0.5 * 0.01 + 0.5);
+  });
+
+  it("estimates a newly discovered model without allowing catalog data to replace bundled tariffs", () => {
+    const model = "openai/gpt-6.9-discovery-regression";
+    const rates = { input: 2, output: 12, cachedInput: 0.2 };
+    expect(registerModelPricing(model, rates)).toBe(true);
+    rates.input = 999;
+    expect(estimateCost({ inputTokens: 1_000_000, outputTokens: 500_000, cachedInputTokens: 500_000 }, model))
+      .toBeCloseTo(7.1);
+    expect(registerModelPricing(model, { input: NaN, output: 1 })).toBe(false);
+    expect(estimateCost({ inputTokens: 1_000_000, outputTokens: 0 }, model)).toBe(2);
+    expect(registerModelPricing("gpt-6.1-sol", { input: 0, output: 0 })).toBe(false);
+    expect(estimateCost({ inputTokens: 1_000_000, outputTokens: 0 }, "gpt-6.1-sol")).toBe(2);
   });
 
   it("prices the OpenCode Zen free tier at zero, not the default rate", () => {

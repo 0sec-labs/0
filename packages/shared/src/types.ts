@@ -560,6 +560,25 @@ export interface SupplyChainAttribution {
   dependencyPath?: string[];
 }
 
+/**
+ * Safe summary of code-only VerificationSpec evaluation against the scoped
+ * source workspace. This is not a behavioral replay result and must never be
+ * used as canonical reproduction evidence.
+ */
+export interface SourceVerificationSummary {
+  status: "matched" | "not_confirmed" | "inconclusive";
+  /** Number of source predicates in the spec. */
+  totalPredicates: number;
+  /** Number of predicates that matched. */
+  matchedPredicates: number;
+  /** Number evaluated but not matched. */
+  notMatchedPredicates: number;
+  /** Number the bounded evaluator could not evaluate. */
+  inconclusivePredicates: number;
+  /** True when a behavioral spec remains pending; behavior is never run here. */
+  behaviorPending: boolean;
+}
+
 export interface Finding {
   id: string;
   templateId: string;
@@ -630,6 +649,12 @@ export interface Finding {
    * a fresh checkout of the target repo. See {@link VerificationSpec}.
    */
   verificationSpec?: VerificationSpec;
+  /**
+   * Result of the safe, code-only source-predicate check performed at save
+   * time when a VerificationSpec and scoped workspace are available. Distinct
+   * from `verification_result`, which is produced by canonical replay.
+   */
+  sourceVerification?: SourceVerificationSummary;
   /**
    * Prior PoC execution report (0#171 / 0#414). Optional and
    * additive. Typed as `unknown` here because the concrete

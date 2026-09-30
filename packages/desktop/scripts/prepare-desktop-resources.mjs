@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const packageDirectory = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const workspaceRoot = resolve(packageDirectory, "../..");
 const resourcesDirectory = join(packageDirectory, "resources");
-const dashboardSource = join(workspaceRoot, "packages", "dashboard", "dist");
+const dashboardSource = join(packageDirectory, "dist", "dashboard");
 
 function sidecarFileName(platform = process.platform, arch = process.arch) {
   if (arch !== "x64" && arch !== "arm64") {
@@ -22,8 +22,8 @@ function sidecarFileName(platform = process.platform, arch = process.arch) {
   }
 }
 
-if (!existsSync(join(dashboardSource, "index.html"))) {
-  throw new Error("Dashboard build is missing. Run pnpm --filter @0/dashboard build before packaging desktop.");
+if (!existsSync(join(dashboardSource, "index.html")) || !existsSync(join(dashboardSource, "desktop.html"))) {
+  throw new Error("Desktop alpha renderer build is missing. Run pnpm --filter @0/desktop build before packaging desktop.");
 }
 
 const sidecarName = sidecarFileName();

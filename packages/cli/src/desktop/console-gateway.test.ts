@@ -37,6 +37,7 @@ function makeSession(input: GatewayFactoryInput): ConsoleSession {
     autonomyMode: input.autonomyMode,
     target: input.target,
     scope: undefined,
+    scopeEnforcement: { pluginId: "scope", enabled: false, projectPath: "/tmp", message: "Scope checks off" },
     localScopePath: undefined,
     setAutonomyMode: () => undefined,
     reconfigureRuntime: () => undefined,

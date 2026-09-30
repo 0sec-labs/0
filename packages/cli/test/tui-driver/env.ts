@@ -16,6 +16,7 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PROVIDERS } from "../../src/tui/provider-status.js";
 
 /** Env keys this harness owns. Restoring these exactly is what keeps the fork clean. */
 const MANAGED_KEYS = [
@@ -30,14 +31,22 @@ const MANAGED_KEYS = [
   "ZERO_REGISTRY_URL",
   // Belt-and-suspenders: keep the MCP autoloader from trying to connect.
   "ZERO_MCP",
-  // The default hosted runtime otherwise reaches cloud.0.ai for health,
-  // catalog and balance — and in a networked CI it actually connects, flipping
-  // the home between "connecting"/"ready"/"Usage: unavailable" run to run.
-  // Pointing the cloud host at an unroutable local port makes every cloud fetch
-  // fail FAST and DETERMINISTICALLY, so the home settles into one stable
-  // offline state (an interactive composer, "Usage: unavailable").
-  "ZERO_CLOUD_HOST",
+  // Prevent ambient Cloud credentials from leaking into isolated scenarios.
   "ZERO_CLOUD_TOKEN",
+  ...PROVIDERS.flatMap((provider) => provider.envVars),
+  "ZERO_MODEL",
+  "ZERO_SELECTED_PROVIDER",
+  "ZERO_FORCE_PROVIDER",
+  "ZERO_CHATGPT_AUTH_FILE",
+  "CODEX_HOME",
+  "ZERO_DEV_SOURCE_ROOT",
+  "ZERO_DEV_UI_WATCH",
+  "OPENAI_BASE_URL",
+  "AZURE_OPENAI_BASE_URL",
+  "AZURE_OPENAI_MODEL",
+  "ANTHROPIC_BASE_URL",
+  "DEEPSEEK_BASE_URL",
+  "OPENCODE_BASE_URL",
 ] as const;
 
 export interface DeterministicEnv {
@@ -83,7 +92,10 @@ export function withDeterministicEnv(
 
   // Snapshot every managed key so restore is exact (undefined → delete).
   const prior = new Map<string, string | undefined>();
-  for (const key of MANAGED_KEYS) prior.set(key, process.env[key]);
+  for (const key of new Set(MANAGED_KEYS)) {
+    prior.set(key, process.env[key]);
+    delete process.env[key];
+  }
 
   process.env["HOME"] = homeDir;
   process.env["ZERO_DB_PATH"] = dbPath;
@@ -93,9 +105,7 @@ export function withDeterministicEnv(
   process.env["ZERO_TUI_REDUCE_MOTION"] = "1";
   process.env["ZERO_REGISTRY_URL"] = "";
   process.env["ZERO_MCP"] = "";
-  // Unroutable: connection is refused immediately, so cloud state is stable.
-  process.env["ZERO_CLOUD_HOST"] = "http://127.0.0.1:9";
-  delete process.env["ZERO_CLOUD_TOKEN"];
+  process.env["ZERO_CHATGPT_AUTH_FILE"] = join(homeDir, "no-codex-auth.json");
 
   let restored = false;
   const restore = () => {

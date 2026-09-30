@@ -361,8 +361,6 @@ const {
   prepareMock,
   collectScopeFilesMock,
   countScopeFilesUpToMock,
-  getCloudSinkConfigMock,
-  postFindingMock,
   eventBusEmitMock,
   verifierFn,
   runThreatModelPlannerMock,
@@ -375,8 +373,6 @@ const {
     prepareMock: vi.fn(),
     collectScopeFilesMock: vi.fn(),
     countScopeFilesUpToMock: vi.fn(),
-    getCloudSinkConfigMock: vi.fn(),
-    postFindingMock: vi.fn(),
     eventBusEmitMock: vi.fn(),
     verifierFn,
     // Threat-model planner mocks: fail-closed by default (returns null → fallback to module-spread).
@@ -392,8 +388,6 @@ vi.mock("@0/core", () => ({
   prepare: prepareMock,
   collectScopeFiles: collectScopeFilesMock,
   countScopeFilesUpTo: countScopeFilesUpToMock,
-  getCloudSinkConfig: getCloudSinkConfigMock,
-  postFinding: postFindingMock,
   eventBus: { emit: eventBusEmitMock },
   ScanCostLedger: class {
     costBreakdown() { return null; }
@@ -477,8 +471,6 @@ describe("runDeepReview — seedless lens-driven review", () => {
       finderErrored: 0,
       warnings: [],
     });
-    getCloudSinkConfigMock.mockReset().mockReturnValue(null);
-    postFindingMock.mockReset().mockResolvedValue(undefined);
     eventBusEmitMock.mockReset();
   });
 
@@ -609,51 +601,6 @@ describe("runDeepReview — seedless lens-driven review", () => {
     expect(opts.lenses).toEqual([{ id: "sol-f", challengeHint: "x" }]);
   });
 
-  it("posts gated leads to the cloud sink as 'discovered' candidates when in cloud mode", async () => {
-    getCloudSinkConfigMock.mockReturnValue({ scanId: "s1", endpoint: "http://x", token: "t" });
-    const outcome = await runDeepReview({ target: "/repo", profile: "evm-onchain" });
-    expect(postFindingMock).toHaveBeenCalledOnce();
-    expect(postFindingMock.mock.calls[0]![0]).toMatchObject({ status: "discovered" });
-    expect(outcome.result).toMatchObject({ ingested: 1 });
-  });
-
-  it("persists each lead INCREMENTALLY via runHuntScan's onConfirmed hook (not only at the end)", async () => {
-    getCloudSinkConfigMock.mockReturnValue({ scanId: "s1", endpoint: "http://x", token: "t" });
-    const leadA = makeLead({ id: "lead-A", title: "A" });
-    const leadB = makeLead({ id: "lead-B", title: "B" });
-    // Simulate the real verify pool: fire onConfirmed as each lead lands, THEN
-    // resolve. Assert BOTH were already POSTed before the sweep returned — so a
-    // mid-sweep kill would still leave them persisted.
-    runHuntScanMock.mockImplementation(
-      async (opts: { onConfirmed?: (f: Finding) => void | Promise<void> }) => {
-        expect(typeof opts.onConfirmed).toBe("function");
-        await opts.onConfirmed!(leadA);
-        await opts.onConfirmed!(leadB);
-        expect(postFindingMock).toHaveBeenCalledTimes(2); // persisted mid-sweep
-        return { findings: [leadA, leadB], confirmed: [leadA, leadB], duplicates: [], dropped: [], scanned: 8, warnings: [] };
-      },
-    );
-
-    const outcome = await runDeepReview({ target: "/repo", profile: "evm-onchain" });
-
-    // Streamed 2; the end-of-run safety net did NOT double-post (deduped by id).
-    expect(postFindingMock).toHaveBeenCalledTimes(2);
-    expect(postFindingMock.mock.calls.every((c) => (c[0] as { status: string }).status === "discovered")).toBe(true);
-    expect(outcome.result).toMatchObject({ ingested: 2, confirmed: 2 });
-  });
-
-  it("does not wire onConfirmed nor post anything when NOT in cloud mode", async () => {
-    // getCloudSinkConfig returns null by default (set in beforeEach).
-    let wiredHook: unknown;
-    runHuntScanMock.mockImplementation(async (opts: { onConfirmed?: unknown }) => {
-      wiredHook = opts.onConfirmed;
-      return { findings: [makeLead()], confirmed: [makeLead()], duplicates: [], dropped: [], scanned: 8, warnings: [] };
-    });
-    const outcome = await runDeepReview({ target: "/repo", profile: "evm-onchain" });
-    expect(wiredHook).toBeUndefined();
-    expect(postFindingMock).not.toHaveBeenCalled();
-    expect(outcome.result).toMatchObject({ ingested: null });
-  });
 
   it("bounds the fan-out: caps candidates to the fast default (8), largest-first, at the wider default concurrency (8)", async () => {
     const many = Array.from({ length: 30 }, (_, i) => `/repo/src/f${String(i).padStart(2, "0")}.sol`);

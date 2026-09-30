@@ -271,9 +271,9 @@ export function compileTranscriptReview(
 }
 
 /**
- * Apply the review's final bound after its title, hints, and optional
- * pre-compaction recap have been composed. This is the exact string passed to
- * the native TextBufferView, so component chrome cannot reopen the cap.
+ * Apply the review's final bound after its title and hints have been composed.
+ * This is the exact string passed to the native TextBufferView, so component
+ * chrome cannot reopen the cap.
  */
 export function boundTranscriptReviewContent(content: string): string {
   return previewTranscriptText(content, MAX_REVIEW_CHARS).text;

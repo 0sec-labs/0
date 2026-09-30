@@ -14,6 +14,47 @@ on the published npm package and the GitHub Release tag.
 
 ### Changed
 
+- The interactive CLI now uses connected API keys or provider subscriptions
+  only. Cloud credentials no longer select hosted inference implicitly, and
+  `/connect` and `/model` no longer offer 0cloud sign-in or 0security Auto.
+  Local token, context and estimated-cost reporting remains available.
+- Removed managed-cloud login, scans and hosted-inference commands from the CLI.
+  Provider API keys and supported provider subscriptions remain available.
+- Added automatic provider model-catalog refresh and account-specific Codex
+  discovery using current protocol negotiation and backend recommendation order.
+  Successful explicit model choices persist for the same connection; CLI and
+  environment overrides win. Fresh launches no longer silently select GPT-5.5.
+- Reworked onboarding and dialogs with compact controls, live theme preview and
+  0security branding. Setup is five steps; sharing preferences remain optional
+  and editable from Settings, and completion returns directly to chat.
+- Replaced the Audits sidebar and separate saved-audit browser with one
+  `/sessions` picker for open and saved conversations. Removed both chat sidebars;
+  compact agent task rows share the main transcript and composer.
+- Added an optional local SmolVM workbench: the complete Kali-based 0 runtime,
+  browser, Linux tools and scoped GitHub CLI run in a network-enabled Linux VM on
+  Apple Silicon, without Docker/Colima at execution. Docker can still build the
+  OCI image; it is not required to run it.
+- Added safe `0dev --watch console` frontend reloads at idle boundaries, preserving
+  conversations, drafts and runtime ownership.
+- Added reviewed `/fix` setup with private per-project inputs and separately
+  approved, regression-verified draft-PR publication.
+- Scope enforcement is an explicitly enabled plugin. Desktop remains alpha and
+  is excluded from normal release artifacts. Per-answer usage is off by default.
+
+### Fixed
+
+- Stop repeated NVD requests after rate limits rather than flooding the transcript.
+- Preserve model-picker selection while runtime metadata hydrates; compact
+  onboarding keeps a selectable model row instead of spending its space on chrome.
+- Fix development build failures in tool registration, plugin capabilities and
+  source-fix state handling.
+- Publish native SmolVM cleanup proofs atomically, and make craft directory
+  listing portable without interpreting model-supplied paths as shell input.
+
+## [0.21.4] - 2026-09-23
+
+### Changed
+
 - Changed-only reviews use one bounded researcher in the shared harness, receive
   the exact patch, and inspect surrounding code only for change-related issues.
   Delegated inference is disabled. Concrete findings retain sequential,
@@ -26,6 +67,9 @@ on the published npm package and the GitHub Release tag.
   hosted customer tariffs and invoiced provider spend.
 
 ### Fixed
+
+- Show exact settled usage in `0 service status` and `0 service wait`;
+  PostgreSQL decimal values no longer crash the terminal display.
 
 - Correct the pinned tree-sitter runtime lock metadata so immutable Docker
   publication can complete `npm ci`; validate the generated runtime with npm's

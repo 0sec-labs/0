@@ -93,22 +93,14 @@ describe("compileTranscriptReview", () => {
     expect(document.text).toContain("END");
   });
 
-  it("caps composed review chrome and recap text at the native-buffer boundary", () => {
-    const document = compileTranscriptReview(createTranscriptDocument(
-      Array.from({ length: 10 }, (_, index) => entry({
-        id: `assistant-${index}`,
-        kind: "assistant",
-        text: `BODY ${index} ${"content ".repeat(1_000)} END ${index}`,
-        turn: index + 1,
-      })),
-    ), { width: 80, detail: "expanded" });
+  it("bounds composed review content while retaining its title and latest text", () => {
     const content = boundTranscriptReviewContent(
-      `RECAP START ${"recap ".repeat(4_000)} RECAP END\n${document.text}`,
+      `TRANSCRIPT REVIEW\n${"review content\n".repeat(3_000)}LATEST ENTRY`,
     );
 
     expect(content.length).toBeLessThanOrEqual(MAX_REVIEW_CHARS);
-    expect(content).toContain("RECAP START");
-    expect(content).toContain("END 9");
+    expect(content).toContain("TRANSCRIPT REVIEW");
+    expect(content).toContain("LATEST ENTRY");
     expect(content).toContain("hidden in this TUI preview");
   });
 });

@@ -2,14 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { MODEL_PRICING, modelProvider } from "@0/shared";
 
-import {
-  buildHostedModelCatalog,
-  buildModelCatalog,
-  formatModelPrice,
-  hostedModelDetails,
-  modelSelectorItems,
-  preferredHostedModel,
-} from "./model-catalog.js";
+import { buildModelCatalog, formatModelPrice, modelSelectorItems } from "./model-catalog.js";
 
 const SOME_MODEL = "gpt-5.5";
 
@@ -128,69 +121,5 @@ describe("modelSelectorItems", () => {
     const catalog = buildModelCatalog(SOME_MODEL);
     const items = modelSelectorItems(SOME_MODEL);
     expect(items[0].meta).toBe(`${catalog[0].provider} · ${catalog[0].price}`);
-  });
-});
-
-describe("Cloud model presentation boundaries", () => {
-  const cloudModel = {
-    id: SOME_MODEL,
-    object: "model" as const,
-    owned_by: "private-owner",
-    provider: "private-supplier",
-    upstream_model: "private-route",
-    wire_api: "responses" as const,
-    context_length: 128_000,
-    max_output_tokens: 8192,
-    pricing: {
-      input_per_million_usd: 13.37,
-      output_per_million_usd: 42.4242,
-      cached_input_per_million_usd: 9.9997,
-    },
-  };
-
-  it("shows Cloud capabilities without supplier metadata while BYOK retains prices", () => {
-    const cloud = hostedModelDetails(buildHostedModelCatalog([cloudModel])[0]).join("\n");
-    expect(cloud).toContain(SOME_MODEL);
-    expect(cloud).toContain("128000");
-    expect(cloud).toContain("8192");
-    for (const internal of [
-      cloudModel.owned_by,
-      cloudModel.provider,
-      cloudModel.upstream_model,
-      cloudModel.wire_api,
-      ...Object.values(cloudModel.pricing).map(String),
-    ]) {
-      expect(cloud).not.toContain(internal);
-    }
-    expect(cloud).not.toContain("$");
-    expect(modelSelectorItems(SOME_MODEL).find((item) => item.id === SOME_MODEL)?.meta)
-      .toMatch(/\$\d/);
-  });
-
-  it("does not turn zero supplier costs into a free customer offer", () => {
-    const [model] = buildHostedModelCatalog([{
-      ...cloudModel,
-      pricing: {
-        input_per_million_usd: 0,
-        output_per_million_usd: 0,
-        cached_input_per_million_usd: 0,
-      },
-    }]);
-    expect(hostedModelDetails(model).join("\n")).not.toMatch(/free|\$/i);
-  });
-
-  it("keeps account listing and capability boundaries without a BYOK fallback", () => {
-    const catalog = buildHostedModelCatalog([{
-      ...cloudModel,
-      context_length: Number.NaN,
-      max_output_tokens: 0,
-    }]);
-    expect(catalog[0].contextTokens).toBeNull();
-    expect(catalog[0].maxOutputTokens).toBeNull();
-    expect(preferredHostedModel(catalog, SOME_MODEL)?.id).toBe(SOME_MODEL);
-    expect(preferredHostedModel(catalog, undefined)).toBeUndefined();
-    expect(preferredHostedModel(catalog, "unlisted-model", SOME_MODEL)).toBeUndefined();
-    expect(preferredHostedModel(buildHostedModelCatalog([]), SOME_MODEL)).toBeUndefined();
-    expect(() => buildHostedModelCatalog([cloudModel, cloudModel])).toThrow();
   });
 });

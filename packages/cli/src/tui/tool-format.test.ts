@@ -547,12 +547,13 @@ describe("actual tool output previews — undefined vs null", () => {
 describe("capOutputLines — OMP-style head window", () => {
   const lines = Array.from({ length: 50 }, (_, i) => `line ${i + 1}`);
 
-  it("collapsed shows the first N lines and reports the remainder", () => {
+  it("caps the default collapsed output preview at twenty lines and reports the remainder", () => {
+    expect(COLLAPSED_OUTPUT_LINES).toBe(20);
     const win = capOutputLines(lines, COLLAPSED_OUTPUT_LINES);
-    expect(win.visible.length).toBe(COLLAPSED_OUTPUT_LINES);
+    expect(win.visible).toHaveLength(20);
     expect(win.visible[0]).toBe("line 1");
-    expect(win.visible.at(-1)).toBe(`line ${COLLAPSED_OUTPUT_LINES}`);
-    expect(win.hidden).toBe(50 - COLLAPSED_OUTPUT_LINES);
+    expect(win.visible.at(-1)).toBe("line 20");
+    expect(win.hidden).toBe(30);
   });
 
   it("keeps the head, not the tail (matches OMP's default renderer)", () => {

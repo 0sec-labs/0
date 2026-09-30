@@ -5,13 +5,16 @@ import React, {
   useMemo,
   useRef,
   useState,
+  type SetStateAction,
 } from "react";
 import { createLocalConsoleSession } from "../console-session.js";
+import { isDevUiRemount, useDevUiBoundary, useDevUiRef, useDevUiState } from "../dev-ui-reload.js";
 import type { AuditActivity } from "./audit-workspace.js";
-import { HarnessPresentation, useHarness } from "./harness-context.js";
-import { loadFindingFocus, buildFindingChatPrompt } from "../finding-focus.js";
+import { loadFindingFocus, buildFindingChatPrompt, type FindingFocus } from "../finding-focus.js";
 import { exportChatConversation } from "./chat-export.js";
-import { hostedBalanceState, formatHostedBalance, type HostedBalanceState } from "./hosted-balance.js";
+import { describeFixStatus, fixEligibility, fixInputEligibility, fixResultLines, fixPublicationLines, FIX_USAGE } from "./fix-action.js";
+import { runSourceFix, planSourceFixPublication, publishSourceFixDraftPR, createRuntime, resolveSourceFixRepository, loadSourceFixProjectInputs, saveSourceFixProjectInputs, type SourceFixResult, type SourceFixPublicationPlan } from "@0/core";
+import { isNativeRuntime } from "./findings-data.js";
 import {
   useKeyboard,
   usePaste,
@@ -21,11 +24,9 @@ import {
 import { DEFAULT_AUTONOMY_MODE } from "@0/shared";
 import {
   ScopePolicy,
-  CloudClient,
-  CloudError,
-  loadCloudCredentials,
   createConsoleRuntime,
   eventBus,
+  agentTaskLabel,
   type ConsoleAutonomyMode,
   type ConsoleScopeRequest,
   type ConsoleScopeResolution,
@@ -35,6 +36,7 @@ import {
   type ScopedAuditEscalationRequest,
   type ConsoleSession,
   type RuntimeConfig,
+  type LlmApiRuntime,
   type NativeMessage,
   type OperatorQuestionRequest,
   type OperatorQuestionAnswer,
@@ -58,8 +60,9 @@ import {
   previewSetting,
   reloadSettings,
 } from "./settings-store.js";
+import { createPreferredConsoleRuntime, saveAppliedModelPreference } from "./model-preference.js";
 import { useTheme, type Theme } from "./theme-context.js";
-import { createTranscriptDocument, modelProvider } from "@0/shared";
+import { modelProvider } from "@0/shared";
 import { homedir } from "node:os";
 import { existsSync } from "node:fs";
 import {
@@ -83,6 +86,7 @@ import {
   buildStatusSegments,
   fitStatusSegments,
   fitStatusPills,
+  formatTokenCount,
   pillText,
   type StatusBarUsageEntry,
   type StatusColorRole,
@@ -139,7 +143,6 @@ import {
 import {
   PROVIDERS,
   isProviderConfigured,
-  cloudConfigured as isCloudConfigured,
 } from "./provider-status.js";
 import {
   credentialEnvPatch,
@@ -192,14 +195,12 @@ import {
   commandMenuBoxHeight,
   commandMenuWindowStart,
   computeChatLayout,
-  computeSidebarsLayout,
   computeCommandMenuHeight,
   computeCommandMenuLayout,
   computeLedgerRows,
   moveAgentSelection,
 } from "./chat-layout.js";
 import {
-  agentFocusNavigationTarget,
   applySubagentLifecycle,
   applySubagentProgress,
   clipDetailLines,
@@ -245,6 +246,7 @@ import {
   deletePreviousCharacter,
   deletePreviousWord,
   deleteToLineStart,
+  stepComposerCursor,
 } from "./composer-edit.js";
 import { appendTranscriptEntry } from "./transcript.js";
 import {
@@ -277,7 +279,6 @@ import {
 import type {
   ChatEntry,
   ChatImageAttachment,
-  CompactionRecap,
   EntryDisplay,
   KeyHint,
 } from "./chat/types.js";
@@ -293,23 +294,25 @@ import {
   completionFor,
   commandMatchesPrefix,
   buildScopeResolution,
+  activityExcerpt,
+  reasoningExcerpt,
+  toolActivity,
 } from "./chat/helpers.js";
 import {
   renderEntry,
   renderFold,
 } from "./chat/TranscriptEntry.js";
-import { TranscriptReview } from "./chat/TranscriptReview.js";
-import type { TranscriptReviewRenderable } from "./transcript-review-renderable.js";
-import { Todos, TodosSidebar } from "./chat/Todos.js";
-import { FindingsSidebar, FINDINGS_SIDEBAR_HEADER_ROWS } from "./chat/FindingsSidebar.js";
+import { AgentWorkList } from "./chat/AgentChatSwitcher.js";
+import { agentWorkListHeight, agentChatSwitcherShortcut, activeAgentChatTabs, agentChatWorkItems, adjacentAgentChatTab } from "./chat/agent-chat-switcher-layout.js";
+import { replaceSubagentTurn, retainSubagentTurns } from "./chat/subagent-transcript.js";
+import { applyCommsMessage, type CommsMessage } from "./agents-comms-layout.js";
+import { DialogActionButton } from "./dialog-screen-chrome.js";
+import { Todos } from "./chat/Todos.js";
 import { ComposerFrame, ComposerInput, composerContentRows } from "./chat/Composer.js";
 import { autonomyFooterText, isAutonomyCycleKey, nextAutonomyMode } from "./composer-mode.js";
 import { matchesBinding } from "./keybindings.js";
 import { resolveContextLimit } from "./context-window.js";
-import { buildHostedModelCatalog, type HostedCatalogModel } from "./model-catalog.js";
-import { CloudHintCard, shouldOfferCloudHint } from "./chat/CloudHintCard.js";
-import { textCells } from "./primitives.js";
-import { buildSidebarSectionHeader } from "./chat/todos-sidebar-layout.js";
+import { Cells, textCells } from "./primitives.js";
 import {
   KeyHints,
   keyHintsLength,
@@ -331,17 +334,9 @@ import { OperatorQuestionCard } from "./chat/OperatorQuestionCard.js";
 import { Masthead } from "./chat/Masthead.js";
 import { ZERO_HEIGHT } from "./chat/zero-art.js";
 import { CommandMenu } from "./chat/CommandMenu.js";
-import {
-  AGENT_SIDEBAR_ROWS,
-  AgentSidebarRow,
-  AgentTreeRow,
-  type AgentRowView,
-} from "./chat/AgentRow.js";
-import { agentAccentFor } from "./agent-color.js";
-import { summarizeAgentActivity, summarizeRoster } from "./agents-panel-model.js";
 import { appendTuiCrash, appendTuiEvent, serializeError, logProblem, describeErrorForSurface, tuiLogPath } from "./tui-crash.js";
 
-export type ChatDestination = "launcher" | "ops" | "history" | "findings" | "doctor" | "replay" | "settings" | "keybindings" | "harness" | "new-chat" | "models" | "market" | "usage" | "connect" | "herd" | "comms" | "finding" | "resume" | "audits" | "onboard";
+export type ChatDestination = "launcher" | "ops" | "history" | "findings" | "doctor" | "replay" | "settings" | "keybindings" | "new-chat" | "models" | "market" | "usage" | "connect" | "comms" | "finding" | "sessions" | "onboard";
 
 function waitingForAgentsLabel(count: number): string {
   const liveCount = Math.max(0, Math.trunc(count));
@@ -626,23 +621,14 @@ function statusRoleColor(
 }
 
 function startupRecoveryText(detail: string): string {
-  if (/\bprepaid_disabled\b/.test(detail)) {
-    return "0cloud reports no usable included allowance (prepaid_disabled). Prepaid is optional: included usage works without it. Review your included allowance in /connect or with your organization owner, then check again.";
-  }
-  if (/No hosted models are available|Hosted model ".+" is unavailable/.test(detail)) {
-    return "0cloud has not provided an available service model. It selects the model automatically; you do not need to pick one. Check again or use /connect to choose another provider.";
-  }
   if (/no provider credential found/i.test(detail)) {
-    return "Use /connect to sign in to 0cloud, or use your own API key or provider subscription.";
+    return "Connect your own API key or provider subscription with /connect.";
   }
   const recovery = connectionRecoveryForError(detail);
-  if (recovery?.providerId === "hosted") {
-    return "0cloud could not verify this sign-in. Use /connect to sign in again.";
-  }
   if (recovery?.providerId === "chatgpt-codex") {
     return "ChatGPT Codex needs device OAuth. Use /connect; do not paste an OpenAI API key.";
   }
-  return detail.replaceAll("`0 models`", "`/model`");
+  return detail;
 }
 
 
@@ -651,6 +637,8 @@ export interface ChatScreenOptions {
   dbPath?: string;
   scope?: ScopePolicy;
   model?: string;
+  /** Internal inheritance guard: a model from another connection is not a new explicit choice. */
+  modelConnectionIdentity?: string;
   /** Explicit provider choice, applied only when constructing a new runtime. */
   providerId?: RuntimeConfig["provider"];
   /** Operator-approved role/model choices for new runtimes, never agent-authored consent. */
@@ -723,6 +711,7 @@ export interface ChatScreenProps {
   runtimeInfoHandle: React.MutableRefObject<{
     model: () => string;
     providerId: () => string;
+    connectionIdentity: () => string | undefined;
     codexCatalog?: (signal?: AbortSignal) => Promise<import("@0/core").CodexCatalogModel[]>;
     /**
      * Live-apply a model/provider/role-map selection to the running runtime.
@@ -738,7 +727,6 @@ export interface ChatScreenProps {
       singleModel?: boolean;
     }) => void;
   } | null>;
-  renderAuditSwitcher?: (width: number, rows: number) => React.ReactNode;
 }
 
 
@@ -761,6 +749,7 @@ type PendingToolApproval = {
   call: ToolCall;
   /** Presentation-only risk, from the core classifier at the approval boundary. */
   risk?: ToolRisk;
+  completeDetails?: boolean;
   resolve: (approved: boolean) => void;
 };
 
@@ -773,6 +762,8 @@ type PendingToolApproval = {
 type PendingOperatorQuestion = {
   request: OperatorQuestionRequest;
   resolve: (answer: OperatorQuestionAnswer | null) => void;
+  /** Host-created forms may prefill suggestions; answering still grants no execution permission. */
+  initialState?: OperatorQuestionState;
 };
 
 
@@ -910,24 +901,22 @@ export function runFindingsFromEntries(entries: readonly ChatEntry[]): RunFindin
   return out;
 }
 
-/**
- * Most subagent rows the ACTIVE SUBAGENTS block will paint.
- *
- * `spawn_agents` fans out up to 8 agents with 4 concurrent, so 4 covers the
- * steady-state fan-out and the 5th-and-beyond are reported as a count. The
- * block sits between the transcript and the composer; letting it grow to
- * eight rows would eat the transcript on any normal terminal, and the block
- * is not where an operator reads detail — `/agents` is.
- */
-const SUBAGENT_MAX_VISIBLE = 4;
+const REPOSITORY_STARTERS = [
+  {
+    label: "Deep vulnerability review",
+    prompt: "Deeply review this Git repository for exploitable security vulnerabilities. Map entry points and trust boundaries, verify findings against code or tests, and return evidence, severity, impact, and safe remediation. Read-only: do not modify files, install packages, or access the network.",
+  },
+  {
+    label: "Auth & secrets",
+    prompt: "Review authentication, authorization, tenant boundaries, and secret handling in this Git repository. Trace the relevant flows and report only evidence-backed weaknesses. Read-only: do not modify files or access the network.",
+  },
+  {
+    label: "Dependency risk",
+    prompt: "Review dependency manifests and lockfiles in this Git repository for security risk. Do not install, update, or access the network; distinguish local evidence from anything requiring a live advisory check.",
+  },
+] as const;
+const COMPACT_REPOSITORY_STARTERS = REPOSITORY_STARTERS.slice(0, 2);
 
-/**
- * Below this content width the inline AGENTS panel auto-collapses to its
- * one-line summary: a per-agent row needs room for a name, a status glyph and a
- * live-activity tail, and under ~44 cells those fuse into noise. The operator
- * can still drill in (Down) to browse the roster one selection at a time.
- */
-const SUBAGENT_PANEL_MIN_WIDTH = 44;
 
 /** Window after a first Ctrl+C in which a second Ctrl+C confirms the quit. */
 const EXIT_CONFIRM_MS = 3000;
@@ -956,6 +945,7 @@ function compactionIndicatorText(tokensBefore: number, tokensAfter?: number): st
   return `⊟ compacted · ${tokensBefore}→${tokensAfter ?? "?"} · [⌃O]`;
 }
 
+
 export function ChatScreen({
   options,
   onGoBack,
@@ -978,16 +968,15 @@ export function ChatScreen({
   closeHandle,
   herdHandle,
   runtimeInfoHandle,
-  renderAuditSwitcher,
 }: ChatScreenProps) {
-  const harness = useHarness();
-  const connectionFailureRef = useRef(onConnectionFailure);
+  const devUi = useDevUiBoundary(`chat:${messagingHomeDir}`);
+  const connectionFailureRef = useDevUiRef(devUi, "connectionFailureRef", onConnectionFailure);
   connectionFailureRef.current = onConnectionFailure;
-  const [entries, setEntries] = useState<ChatEntry[]>([]);
-  const entriesRef = useRef<ChatEntry[]>([]);
+  const [entries, setEntries] = useDevUiState<ChatEntry[]>(devUi, "entries", []);
+  const entriesRef = useDevUiRef<ChatEntry[]>(devUi, "entriesRef", []);
   entriesRef.current = entries;
-  const pendingStreamPatches = useRef<StreamPatch[]>([]);
-  const streamPresentationTimer = useRef<NodeJS.Timeout | undefined>(undefined);
+  const pendingStreamPatches = useDevUiRef<StreamPatch[]>(devUi, "pendingStreamPatches", []);
+  const streamPresentationTimer = useDevUiRef<NodeJS.Timeout | undefined>(devUi, "streamPresentationTimer", undefined);
   const flushStreamPatches = useCallback(() => {
     const pending = pendingStreamPatches.current;
     if (streamPresentationTimer.current) {
@@ -1021,36 +1010,28 @@ export function ChatScreen({
     streamPresentationTimer.current = undefined;
   }, []);
   useEffect(() => discardStreamPatches, [discardStreamPatches]);
-  const [session, setSession] = useState<ConsoleSession | null>(null);
-  const cloudSource = useRef<{ owner: ConsoleSession; isHosted: () => boolean; env: NodeJS.ProcessEnv } | null>(null);
-  const [cloudBalance, setCloudBalance] = useState<{ owner: ConsoleSession; state: HostedBalanceState } | null>(null);
-  const [hostedCatalog, setHostedCatalog] = useState<{ owner: ConsoleSession; models: readonly HostedCatalogModel[]; expiresAt: number } | null>(null);
-  // Private cache identity: never rendered or logged. A retained window belongs
-  // to the account that supplied it, not merely to this runtime's model name.
-  const hostedCatalogAccount = useRef<{ owner: ConsoleSession; host: string; token: string } | null>(null);
-  const [cloudConfigured, setCloudConfigured] = useState<boolean>();
-  const [cloudHintDismissed, setCloudHintDismissed] = useState(false);
-  const initialPromptRef = useRef(options?.initialPrompt?.trim() || null);
-  const presentationEmitterRef = useRef<PresentationEmitter | null>(null);
+  const [session, setSession] = useDevUiState<ConsoleSession | null>(devUi, "session", null);
+  const initialPromptRef = useDevUiRef(devUi, "initialPromptRef", options?.initialPrompt?.trim() || null);
+  const presentationEmitterRef = useDevUiRef<PresentationEmitter | null>(devUi, "presentationEmitterRef", null);
   if (!presentationEmitterRef.current) {
     presentationEmitterRef.current = createPresentationEmitter();
   }
-  const presentedEntriesRef = useRef(new Map<string, ChatEntry>());
-  const presentedSessionIdRef = useRef<string | undefined>(undefined);
-  const [modelId, setModelId] = useState<string | null>(null);
-  const [git, setGit] = useState<GitStatus | null>(null);
-  const [clockTick, setClockTick] = useState(() => Date.now());
-  const [animTick, setAnimTick] = useState(0);
+  const presentedEntriesRef = useDevUiRef(devUi, "presentedEntriesRef", new Map<string, ChatEntry>());
+  const presentedSessionIdRef = useDevUiRef<string | undefined>(devUi, "presentedSessionIdRef", undefined);
+  const [modelId, setModelId] = useDevUiState<string | null>(devUi, "modelId", null);
+  const [git, setGit] = useDevUiState<GitStatus | null>(devUi, "git", null);
+  const [clockTick, setClockTick] = useDevUiState(devUi, "clockTick", () => Date.now());
+  const [animTick, setAnimTick] = useDevUiState(devUi, "animTick", 0);
   /**
    * One shared frame counter for the loading shimmer, ticked at
    * `SHIMMER_TEXT_INTERVAL_MS` while a turn is running (see the effect below).
-   * The thinking indicator and every running tool/subagent row read the SAME
+   * The live activity line and every running tool/subagent row read the SAME
    * frame, so their sweeps stay in phase; it is only advanced when there is
    * something to shimmer, so an idle console costs no repaints.
    */
-  const [shimmerFrame, setShimmerFrame] = useState(0);
+  const [shimmerFrame, setShimmerFrame] = useDevUiState(devUi, "shimmerFrame", 0);
   /** Frame counter for the empty-state logo intro; driven by the ticker below. */
-  const [logoFrame, setLogoFrame] = useState(0);
+  const [logoFrame, setLogoFrame] = useDevUiState(devUi, "logoFrame", 0);
   /**
    * Masked credential entry. Held in component state only, written
    * straight to the 0600 store, and never appended to the transcript —
@@ -1079,7 +1060,6 @@ export function ChatScreen({
     PANEL,
     PANEL_ALT,
     CANVAS,
-    BORDER,
   } = theme;
   // Dark/legible text for the orange (PRIMARY) header strip — theme-picked so
   // it reads on every palette's signature colour.
@@ -1172,21 +1152,15 @@ export function ChatScreen({
    * affordance whose click removes it again). Independent of the global Ctrl+R
    * detail toggle, which flips every turn at once via the settings store.
    */
-  const [expandedTurnsByAgent, setExpandedTurnsByAgent] = useState<ReadonlyMap<string | null, ReadonlySet<number>>>(() => new Map());
-  const [reviewOpen, setReviewOpen] = useState(false);
-  const reviewRenderableRef = useRef<TranscriptReviewRenderable | null>(null);
-  const reviewEventOpenRef = useRef(false);
-  // ── Context-compaction recaps ───────────────────────────────────────────────
-  // Ctrl+O exposes only the latest recap. Retain at most that one snapshot:
-  // each pre-compaction history can contain large tool results.
-  const compactionRecapsRef = useRef<Map<number, CompactionRecap>>(new Map());
-  // The most recent compaction number, in state so the indicator + overlay
-  // recap re-render when a compaction happens. `undefined` until the first one.
-  const [latestCompaction, setLatestCompaction] = useState<number | undefined>(undefined);
-  // A compaction whose `tokensAfter` is still unknown: the NEXT planner usage
-  // sample is the post-compaction size, so we patch it into the recap + the
-  // inline indicator when that sample arrives, then clear this.
-  const pendingTokensAfterRef = useRef<number | undefined>(undefined);
+  const [expandedTurnsByAgent, setExpandedTurnsByAgent] = useDevUiState<ReadonlyMap<string | null, ReadonlySet<number>>>(devUi, "expandedTurnsByAgent", () => new Map());
+  // ── Context-compaction status ────────────────────────────────────────────────
+  // Report each compaction once to the live worker telemetry.
+  const [latestCompaction, setLatestCompaction] = useDevUiState<number | undefined>(devUi, "latestCompaction", undefined);
+  // The next planner sample replaces the estimated post-compaction size in the
+  // inline notice with measured context occupancy.
+  const pendingCompactionRef = useDevUiRef<{ compactionNumber: number; tokensBefore: number } | undefined>(
+    devUi, "pendingCompactionRef", undefined,
+  );
   useEffect(() => {
     const emitter = presentationEmitterRef.current!;
     if (!session) return;
@@ -1219,18 +1193,11 @@ export function ChatScreen({
     }
     presentedEntriesRef.current = next;
   }, [entries, session?.scanId]);
-  useEffect(() => {
-    const emitter = presentationEmitterRef.current!;
-    const sessionId = session?.scanId;
-    if (!sessionId || reviewOpen === reviewEventOpenRef.current) return;
-    reviewEventOpenRef.current = reviewOpen;
-    emitter.emit(reviewOpen ? "review.opened" : "review.closed", {}, { sessionId });
-  }, [reviewOpen, session?.scanId]);
   /** The turn currently under the mouse, for the subtle hover highlight. */
-  const [hoveredTurn, setHoveredTurn] = useState<number | null>(null);
+  const [hoveredTurn, setHoveredTurn] = useDevUiState<number | null>(devUi, "hoveredTurn", null);
   // The output-guard subscription is registered once; a ref lets it read
   // the live setting without tearing down and re-adding the listener.
-  const settingsRef = useRef(settings);
+  const settingsRef = useDevUiRef(devUi, "settingsRef", settings);
   settingsRef.current = settings;
   /**
    * Open a small inline picker. `commit` runs with the chosen item id; the
@@ -1246,7 +1213,7 @@ export function ChatScreen({
       onCancel?: () => void;
     } | null
   >(null);
-  const pickerRef = useRef(picker);
+  const pickerRef = useDevUiRef(devUi, "pickerRef", picker);
   pickerRef.current = picker;
   // Fire onHighlight whenever the highlighted row changes (incl. on open), so a
   // picker can preview the highlighted choice without committing it.
@@ -1254,81 +1221,98 @@ export function ChatScreen({
   useEffect(() => {
     if (pickerHighlightId) pickerRef.current?.onHighlight?.(pickerHighlightId);
   }, [pickerHighlightId]);
-  const [sessionTokens, setSessionTokens] = useState({ input: 0, output: 0 });
+  const [sessionTokens, setSessionTokens] = useDevUiState(devUi, "sessionTokens", { input: 0, output: 0 });
   /** Live turn-budget consumption, updated per model call. */
-  const [turnBudget, setTurnBudget] = useState<{ used: number; limit: number } | null>(null);
-  const [startupError, setStartupError] = useState<{ text: string; accountRestricted: boolean } | null>(null);
-  const [checkingModel, setCheckingModel] = useState(false);
-  const runtimeReadyRef = useRef(false);
-  const runtimeCheckEpoch = useRef(0);
-  const [mode, setMode] = useState<ConsoleAutonomyMode>(options?.autonomyMode ?? DEFAULT_AUTONOMY_MODE);
+  const [turnBudget, setTurnBudget] = useDevUiState<{ used: number; limit: number } | null>(devUi, "turnBudget", null);
+  const [startupError, setStartupError] = useDevUiState<{ text: string } | null>(devUi, "startupError", null);
+  const [checkingModel, setCheckingModel] = useDevUiState(devUi, "checkingModel", false);
+  const runtimeReadyRef = useDevUiRef(devUi, "runtimeReadyRef", false);
+  const runtimeCheckEpoch = useDevUiRef(devUi, "runtimeCheckEpoch", 0);
+  const [mode, setMode] = useDevUiState<ConsoleAutonomyMode>(devUi, "mode", options?.autonomyMode ?? DEFAULT_AUTONOMY_MODE);
   /**
    * The live autonomy mode, for callbacks that must not be rebuilt when it
    * changes. `buildSession` in particular is a `useCallback` that reruns on
    * `/model`; reading the ref is what keeps a model switch from silently
    * reverting the operator's mode.
    */
-  const modeRef = useRef<ConsoleAutonomyMode>(options?.autonomyMode ?? DEFAULT_AUTONOMY_MODE);
+  const modeRef = useDevUiRef<ConsoleAutonomyMode>(devUi, "modeRef", options?.autonomyMode ?? DEFAULT_AUTONOMY_MODE);
   modeRef.current = mode;
   const target = session?.target ?? options?.target ?? "";
-  const [scopeRules, setScopeRules] = useState<string[]>(options?.scope?.raw.in_scope ?? []);
-  const [busy, setBusy] = useState(false);
-  const activeTurnStartedAt = useRef<number | null>(null);
+  const [scopeRules, setScopeRules] = useDevUiState<string[]>(devUi, "scopeRules", options?.scope?.raw.in_scope ?? []);
+  const [busy, setBusy] = useDevUiState(devUi, "busy", false);
+  const sourceFixAbortRef = useDevUiRef<AbortController | null>(devUi, "sourceFixAbortRef", null);
+  const sourceFixPromiseRef = useDevUiRef<Promise<void> | null>(devUi, "sourceFixPromiseRef", null);
+  const sourceFixCandidatesRef = useDevUiRef(devUi, "sourceFixCandidatesRef", new Map<string, SourceFixResult>());
+  const [fixWorking, setFixWorking] = useDevUiState(devUi, "fixWorking", false);
+  useEffect(() => () => sourceFixAbortRef.current?.abort(), []);
+  const activeTurnStartedAt = useDevUiRef<number | null>(devUi, "activeTurnStartedAt", null);
   useEffect(() => {
     onSessionChange?.(session);
-    return () => onSessionChange?.(null);
+    return () => { if (!isDevUiRemount()) onSessionChange?.(null); };
   }, [onSessionChange, session]);
   useEffect(() => {
-    onWorkingChange?.(busy);
-    return () => onWorkingChange?.(false);
-  }, [onWorkingChange, busy]);
+    onWorkingChange?.(busy || fixWorking);
+    return () => { if (!isDevUiRemount()) onWorkingChange?.(false); };
+  }, [onWorkingChange, busy, fixWorking]);
   /**
    * Messages typed while a turn was in flight, delivered FIFO once it ends.
    * A ref rather than state because the keyboard handler writes it
    * synchronously; `queuedMessages` mirrors it (not just a count) so the sticky
    * queue block near the composer can show WHAT is parked, not only how much.
    */
-  const queuedRef = useRef<string[]>([]);
-  const [queuedMessages, setQueuedMessages] = useState<string[]>([]);
+  const queuedRef = useDevUiRef<string[]>(devUi, "queuedRef", []);
+  const [queuedMessages, setQueuedMessages] = useDevUiState<string[]>(devUi, "queuedMessages", []);
   const queuedCount = queuedMessages.length;
-  const [composer, setComposer] = useState("");
-  const [composing, setComposing] = useState(false);
-  const paletteDraftRef = useRef<{ text: string; composing: boolean } | null>(null);
-  const [commandMenuOpen, setCommandMenuOpen] = useState(false);
-  const [slashSelected, setSlashSelected] = useState(0);
-  const [pendingScope, setPendingScope] = useState<PendingScope | null>(null);
-  const [pendingLocalScope, setPendingLocalScope] = useState<PendingLocalScope | null>(null);
-  const [pendingEscalation, setPendingEscalation] = useState<PendingEscalation | null>(null);
-  const [pendingToolApproval, setPendingToolApproval] = useState<PendingToolApproval | null>(null);
-  const [pendingOperatorQuestion, setPendingOperatorQuestion] = useState<PendingOperatorQuestion | null>(null);
+  const [composer, setComposer] = useDevUiState(devUi, "composer", "");
+  const [composerCursor, setComposerCursor] = useDevUiState(devUi, "composerCursor", 0);
+  const [composing, setComposing] = useDevUiState(devUi, "composing", false);
+  const paletteDraftRef = useDevUiRef<{ text: string; composing: boolean } | null>(devUi, "paletteDraftRef", null);
+  const [commandMenuOpen, setCommandMenuOpen] = useDevUiState(devUi, "commandMenuOpen", false);
+  const [slashSelected, setSlashSelected] = useDevUiState(devUi, "slashSelected", 0);
+  const [pendingScope, setPendingScope] = useDevUiState<PendingScope | null>(devUi, "pendingScope", null);
+  const [pendingLocalScope, setPendingLocalScope] = useDevUiState<PendingLocalScope | null>(devUi, "pendingLocalScope", null);
+  const [pendingEscalation, setPendingEscalation] = useDevUiState<PendingEscalation | null>(devUi, "pendingEscalation", null);
+  const [pendingToolApproval, setPendingToolApproval] = useDevUiState<PendingToolApproval | null>(devUi, "pendingToolApproval", null);
+  const [pendingOperatorQuestion, setPendingOperatorQuestion] = useDevUiState<PendingOperatorQuestion | null>(devUi, "pendingOperatorQuestion", null);
   /**
    * Live edit state for the `ask_operator` modal (cursor, selections, custom
    * text). Reset from the pending request whenever a new question arrives; the
    * keyboard handler mutates it through the pure operator-question reducers.
    */
-  const [operatorState, setOperatorState] = useState<OperatorQuestionState | null>(null);
-  const [activeSubagents, setActiveSubagents] = useState<Record<string, SubagentLifecyclePayload>>({});
+  const [operatorState, setOperatorStateValue] = useDevUiState<OperatorQuestionState | null>(devUi, "operatorState", null);
+  const operatorStateRef = useDevUiRef<OperatorQuestionState | null>(devUi, "operatorStateRef", operatorState);
+  operatorStateRef.current = operatorState;
+  // A command and Enter can arrive in one terminal burst before React paints.
+  // Resolve against the synchronously edited value, never the previous frame.
+  const setOperatorState = useCallback((next: SetStateAction<OperatorQuestionState | null>) => {
+    operatorStateRef.current = typeof next === "function" ? next(operatorStateRef.current) : next;
+    setOperatorStateValue(operatorStateRef.current);
+  }, [setOperatorStateValue]);
+  const [activeSubagents, setActiveSubagents] = useDevUiState<Record<string, SubagentLifecyclePayload>>(devUi, "activeSubagents", {});
   // Live id → display-name map for agents, fed from lifecycle events. Used by the
   // peer_message (IRC) handler to resolve a message's from/to ids to the same
   // AdjectiveNoun names the roster shows, without re-reading React state inside
   // the bus callback. Main is always itself.
-  const agentNamesRef = useRef<Map<string, string>>(new Map());
+  const agentNamesRef = useDevUiRef<Map<string, string>>(devUi, "agentNamesRef", new Map());
   // Per-subagent live transcript (assistant prose + tool cards), assembled from
   // `subagent_message` events. Keyed by agent_id; rendered by the focus view via
   // the SAME planTranscript/renderEntry as the main transcript, so a drilled-in
   // child reads exactly like the main agent. Bounded per agent (the tail is what
   // fits on screen anyway).
-  const [subagentTranscripts, setSubagentTranscripts] = useState<Record<string, ChatEntry[]>>({});
-  const [workerTelemetry, setWorkerTelemetry] = useState<Record<string, SubagentMessagePayload>>({});
-  const [workerOutcomes, setWorkerOutcomes] = useState<Record<string, SubagentLifecyclePayload>>({});
-  const [lastContext, setLastContext] = useState<number>();
+  const [subagentTranscripts, setSubagentTranscripts] = useDevUiState<Record<string, ChatEntry[]>>(devUi, "subagentTranscripts", {});
+  const finalizedWorkerTurns = useDevUiRef<Map<string, Set<number>>>(devUi, "finalizedWorkerTurns", new Map());
+  const [workerTelemetry, setWorkerTelemetry] = useDevUiState<Record<string, SubagentMessagePayload>>(devUi, "workerTelemetry", {});
+  const [commsMessages, setCommsMessages] = useDevUiState<CommsMessage[]>(devUi, "commsMessages", []);
+  const commsSequenceRef = useDevUiRef(devUi, "commsSequenceRef", 0);
+  const [workerOutcomes, setWorkerOutcomes] = useDevUiState<Record<string, SubagentLifecyclePayload>>(devUi, "workerOutcomes", {});
+  const [lastContext, setLastContext] = useDevUiState<number>(devUi, "lastContext");
   /**
    * Two-press quit. Ctrl+C used to exit immediately; now the first press ARMS
    * (a toast warns, noting any running subagents that would be stopped) and a
    * second Ctrl+C within the window actually quits. Ref-based so the many
    * keyboard branches can call it without re-subscribing the handler.
    */
-  const exitArmedRef = useRef(0);
+  const exitArmedRef = useDevUiRef(devUi, "exitArmedRef", 0);
   const requestExit = useCallback((cleanup?: () => void) => {
     const now = Date.now();
     if (now - exitArmedRef.current < EXIT_CONFIRM_MS) {
@@ -1344,17 +1328,17 @@ export function ChatScreen({
         : "Press Ctrl+C again to quit",
     );
   }, [onExit, showToast, activeSubagents]);
-  const requestExitRef = useRef(requestExit);
+  const requestExitRef = useDevUiRef(devUi, "requestExitRef", requestExit);
   requestExitRef.current = requestExit;
   /** Latest plan snapshot from the `update_todos` tool (the `todos` bus event). */
-  const [todos, setTodos] = useState<TodosEventPayload | null>(null);
+  const [todos, setTodos] = useDevUiState<TodosEventPayload | null>(devUi, "todos", null);
   /** Feedback staged for /feedback send (submitPreview is null when blocked). */
   const [pendingFeedback, setPendingFeedback] = useState<{
     payload: FeedbackPayload;
     preview: { url: string; body: string; headers: Record<string, string>; warnings: string[] } | null;
   } | null>(null);
-  const latestProblemRef = useRef<FeedbackPayload | null>(null);
-  const reportedProblemsRef = useRef(new Set<string>());
+  const latestProblemRef = useDevUiRef<FeedbackPayload | null>(devUi, "latestProblemRef", null);
+  const reportedProblemsRef = useDevUiRef(devUi, "reportedProblemsRef", new Set<string>());
   const [problemReview, setProblemReview] = useState<FeedbackPayload | null>(null);
   // First-ever problem report: until the operator has answered the consent
   // prompt once (diagnosticReportingPrompted), an "automatic" policy must not
@@ -1363,10 +1347,10 @@ export function ChatScreen({
   // The OMP-style "what am I working on" objective for the bottom-bar pill.
   // Empty ("") hides the pill; the session-objective service replaces it in
   // place (heuristic first, model-refined when/if it lands).
-  const [objective, setObjective] = useState<string>("");
+  const [objective, setObjective] = useDevUiState<string>(devUi, "objective", "");
   // Read the latest objective from `send`'s finally (which is a useCallback and
   // would otherwise close over a stale value) without re-subscribing it.
-  const objectiveRef = useRef(objective);
+  const objectiveRef = useDevUiRef(devUi, "objectiveRef", objective);
   objectiveRef.current = objective;
   /**
    * The richer live-subagent model the herd view is built on: latest snapshot
@@ -1374,10 +1358,10 @@ export function ChatScreen({
    * pure reducers herd-layout exposes. This is the single source for BOTH the
    * right rail and the inline focus view, so neither reimplements the plumbing.
    */
-  const [herdAgents, setHerdAgentsState] = useState<HerdSubagentMap>({});
-  const [operatorStopped, setOperatorStopped] = useState<ReadonlySet<string>>(() => new Set());
-  const workerEpochsRef = useRef(new Map<string, number>());
-  const herdAgentsRef = useRef(herdAgents);
+  const [herdAgents, setHerdAgentsState] = useDevUiState<HerdSubagentMap>(devUi, "herdAgents", {});
+  const [operatorStopped, setOperatorStopped] = useDevUiState<ReadonlySet<string>>(devUi, "operatorStopped", () => new Set());
+  const workerEpochsRef = useDevUiRef(devUi, "workerEpochsRef", new Map<string, number>());
+  const herdAgentsRef = useDevUiRef(devUi, "herdAgentsRef", herdAgents);
   const setHerdAgents = useCallback((next: HerdSubagentMap) => {
     herdAgentsRef.current = next;
     setHerdAgentsState(next);
@@ -1393,7 +1377,7 @@ export function ChatScreen({
     }
     return projected ?? herdAgents;
   }, [herdAgents, operatorStopped, workerOutcomes]);
-  const projectedHerdRef = useRef(projectedHerdAgents);
+  const projectedHerdRef = useDevUiRef(devUi, "projectedHerdRef", projectedHerdAgents);
   projectedHerdRef.current = projectedHerdAgents;
   herdHandle.current = useCallback(() => projectedHerdRef.current, []);
   const workerRosterRecords = useMemo(() => Object.values(herdAgents).map((agent) => ({
@@ -1434,26 +1418,12 @@ export function ChatScreen({
         || (!busy && runningWorkers === 0 && parkedWorkers > 0),
     });
   }, [busy, entries, workerRoster, operatorStopped, pendingScope, pendingLocalScope, pendingEscalation, pendingToolApproval, pendingOperatorQuestion, onAuditActivity]);
-  /**
-   * Active-subagent navigation from the composer. -1 means the composer has
-   * focus; >= 0 selects a row in the ACTIVE SUBAGENTS block. Entered with Down
-   * on an empty composer (only when agents are running), left with Left/Esc.
-   */
-  const [agentNavIndex, setAgentNavIndex] = useState(-1);
-  /**
-   * Collapse toggle for the inline AGENTS panel. The panel is EXPANDED by
-   * default (running agents are visible without arrowing in); the operator can
-   * collapse it to a single summary line via its corner control (mouse) or the
-   * existing keyboard path. Session-scoped state — the choice is remembered for
-   * the life of the screen but is not persisted to disk.
-   */
-  const [agentsPanelCollapsed, setAgentsPanelCollapsed] = useState(false);
-  /**
-   * The subagent the operator drilled INTO, or null in list/composer mode. When
-   * set, the transcript region is replaced by the inline focus view (the same
-   * live meta + activity panes the herd screen's focus mode renders).
-   */
-  const [focusAgentId, setFocusAgentId] = useState<string | null>(null);
+  /** Main and workers share one chat surface; each thread keeps its own draft. */
+  const [focusAgentId, setFocusAgentId] = useDevUiState<string | null>(devUi, "focusAgentId", null);
+  const focusAgentRef = useDevUiRef<string | null>(devUi, "focusAgentRef", focusAgentId);
+  focusAgentRef.current = focusAgentId;
+  const workerDraftRef = useDevUiRef<{ text: string; cursor: number; composing: boolean } | null>(devUi, "workerDraftRef", null);
+  const workerDraftsRef = useDevUiRef<Map<string, { text: string; cursor: number; composing: boolean }>>(devUi, "workerDraftsRef", new Map());
   const expandedTurns = expandedTurnsByAgent.get(focusAgentId) ?? EMPTY_EXPANDED_TURNS;
   const toggleTurnExpanded = useCallback((turn: number) => {
     setExpandedTurnsByAgent((previous) => {
@@ -1471,16 +1441,11 @@ export function ChatScreen({
     ...(focusTask ? [{ id: `${focusAgentId}-task`, kind: "user" as const, text: focusTask, turn: 0 }] : []),
     ...(focusEntries ?? []),
   ], [focusAgentId, focusTask, focusEntries]);
-  const transcriptDocument = useMemo(
-    () => createTranscriptDocument(focusAgentId ? focusedTranscript : entries),
-    [focusAgentId, focusedTranscript, entries],
-  );
-  /** How far the inline focus transcript is scrolled back from its tail. */
-  const [focusScrollOffset, setFocusScrollOffset] = useState(0);
   const { width, height } = useTerminalDimensions();
-  const alive = useRef(true);
-  const closingRef = useRef(false);
-  const pendingCancellationsRef = useRef(new Set<() => void>());
+  const alive = useDevUiRef(devUi, "alive", true);
+  const closingRef = useDevUiRef(devUi, "closingRef", false);
+  const initializedView = useDevUiRef(devUi, "initializedView", false);
+  const pendingCancellationsRef = useDevUiRef(devUi, "pendingCancellationsRef", new Set<() => void>());
   const trackedRequest = useCallback(<T,>(denied: T) => {
     const deferred = Promise.withResolvers<T>();
     const cancel = () => deferred.resolve(denied);
@@ -1490,65 +1455,60 @@ export function ChatScreen({
   }, []);
   // Mirror the latest render values so the plugin-host effect can rebuild the
   // session in place without re-subscribing on every state change.
-  const sessionRef = useRef(session);
+  const sessionRef = useDevUiRef(devUi, "sessionRef", session);
   sessionRef.current = session;
-  const busyRef = useRef(busy);
+  const busyRef = useDevUiRef(devUi, "busyRef", busy);
   busyRef.current = busy;
-  const modelIdRef = useRef(modelId);
+  const modelIdRef = useDevUiRef(devUi, "modelIdRef", modelId);
   modelIdRef.current = modelId;
   // The live runtime for the current session, published by buildSession so the
   // live-apply path can reconfigure it in place without capturing a specific
   // runtime in a closure (a rebuild swaps the reference here).
-  const runtimeRef = useRef<ReturnType<typeof createConsoleRuntime> | null>(null);
+  const runtimeRef = useDevUiRef<ReturnType<typeof createConsoleRuntime> | null>(devUi, "runtimeRef", null);
+  const pendingModelPreferenceRef = useDevUiRef<LlmApiRuntime | null>(devUi, "pendingModelPreferenceRef", null);
+  const sessionBuildEpoch = useDevUiRef(devUi, "sessionBuildEpoch", 0);
   // A selection that arrived mid-turn. NEVER reconfigure mid-turn; this is
   // flushed to the live runtime in send()'s completion path, where busy flips
   // back to false. Last-writer-wins per field, agentModels merged.
-  const pendingSelectionRef = useRef<{
+  const pendingSelectionRef = useDevUiRef<{
     model?: string;
     providerId?: string;
     agentModels?: Record<string, string>;
     singleModel?: boolean;
-  } | null>(null);
+  } | null>(devUi, "pendingSelectionRef", null);
   // Latest idle-apply core + busy-aware handle, kept in refs so buildSession
   // and send() can reach them without dep churn or TDZ ordering constraints.
-  const applyRuntimeSelectionRef = useRef<((sel: {
+  const applyRuntimeSelectionRef = useDevUiRef<((sel: {
     model?: string;
     providerId?: string;
     agentModels?: Record<string, string>;
     singleModel?: boolean;
-  }) => void) | null>(null);
-  const applySelectionRef = useRef<((sel: {
+  }) => void) | null>(devUi, "applyRuntimeSelectionRef", null);
+  const applySelectionRef = useDevUiRef<((sel: {
     model?: string;
     providerId?: string;
     agentModels?: Record<string, string>;
     singleModel?: boolean;
-  }) => void) | null>(null);
-  const turn = useRef(0);
-  // The bottom bar's right cell (a "N turns · M tools" counter + sidebar toggle
-  // glyphs) was removed: the counter was noise and the closed-state toggle
-  // hairlines read as stray "| |". The sidebars stay on Ctrl+B / Ctrl+L, and the
-  // coloured state pills now take the full bar width.
-  // All row/column cell budgets live in chat-layout.ts, where the
-  // "a row never claims more cells than its container" invariant is
-  // covered by tests instead of by inspection.
+  }) => void) | null>(devUi, "applySelectionRef", null);
+  const turn = useDevUiRef(devUi, "turn", 0);
+  // Pane geometry reserves the central composer and independent full-height rails.
   const layout = computeChatLayout({ width, height, statusTextLength: 0 });
-  const {
-    compact,
-    contentWidth,
-    composerTextWidth,
-    approvalWidth,
-    controlsWidth,
-  } = layout;
-  const composerRef = useRef("");
+  const compact = layout.compact;
+  const contentWidth = Math.max(1, width - (compact ? 2 : 4));
+  const bodyHeight = Math.max(0, height - 3);
+  const approvalWidth = Math.max(1, contentWidth - 2);
+  const controlsWidth = contentWidth;
+  const composerRef = useDevUiRef(devUi, "composerRef", "");
+  const composerCursorRef = useDevUiRef(devUi, "composerCursorRef", 0);
   // OMP-style paste collapsing: long text and image-path pastes are stashed here
   // and represented in the composer by a compact chip marker; `pasteCounterRef`
   // is the monotonic chip number N (shared across text and image chips so their
   // store keys never collide). Expanded back to full payloads at the Enter
   // boundary — see the return handler — then the consumed keys are cleared.
-  const pasteStoreRef = useRef<PasteStore>(createPasteStore());
-  const pasteCounterRef = useRef(0);
-  const composingRef = useRef(false);
-  const commandMenuOpenRef = useRef(false);
+  const pasteStoreRef = useDevUiRef<PasteStore>(devUi, "pasteStoreRef", createPasteStore());
+  const pasteCounterRef = useDevUiRef(devUi, "pasteCounterRef", 0);
+  const composingRef = useDevUiRef(devUi, "composingRef", false);
+  const commandMenuOpenRef = useDevUiRef(devUi, "commandMenuOpenRef", false);
   /**
    * Shell-style recall of submitted operator messages. `historyRef` is the
    * ring (oldest first), `historyIndexRef` the cursor (>= length means "editing
@@ -1557,9 +1517,9 @@ export function ChatScreen({
    * composer-history.ts; these refs are written synchronously from the keyboard
    * handler, so they are refs rather than state.
    */
-  const historyRef = useRef<string[]>([]);
-  const historyIndexRef = useRef(0);
-  const historyDraftRef = useRef("");
+  const historyRef = useDevUiRef<string[]>(devUi, "historyRef", []);
+  const historyIndexRef = useDevUiRef(devUi, "historyIndexRef", 0);
+  const historyDraftRef = useDevUiRef(devUi, "historyDraftRef", "");
   /**
    * The transcript scrollbox, so PageUp/PageDown can drive it directly. The box
    * is deliberately NOT focusable (see the `focusable={false}` prop): plain
@@ -1568,7 +1528,6 @@ export function ChatScreen({
   const transcriptRef = useRef<ScrollBoxRenderable | null>(null);
   // The drilled-in subagent's transcript scrollbox (auto-follows newest, like
   // the main one); pageup/pagedown scroll it while focused.
-  const focusTranscriptRef = useRef<ScrollBoxRenderable | null>(null);
   /** The `ask_operator` modal body scrollbox, scrolled to keep the active row visible. */
   const operatorScrollRef = useRef<ScrollBoxRenderable | null>(null);
   const commandCatalog: readonly SlashCommand[] = SLASH_COMMANDS;
@@ -1612,15 +1571,44 @@ export function ChatScreen({
     setCommandMenuOpen(visible);
   }, []);
 
-  const setComposerText = useCallback((value: string) => {
+  const setComposerText = useCallback((value: string, cursor = value.length) => {
     composerRef.current = value;
+    composerCursorRef.current = cursor;
     setComposer(value);
+    setComposerCursor(cursor);
     setSlashSelected(0);
     setCommandMenuVisible(value.trimStart().startsWith("/"));
     // Any composer edit leaves history browsing and re-bases the cursor on the
     // live draft. A recall re-sets the cursor immediately after calling this.
     historyIndexRef.current = historyRef.current.length;
   }, [setCommandMenuVisible]);
+  const draftRepositorySuggestion = useCallback((prompt: string) => {
+    setComposerText(prompt);
+    composingRef.current = true;
+    setComposing(true);
+  }, [setComposerText]);
+
+  const selectAgentChat = useCallback((id: string | null) => {
+    const previousId = focusAgentRef.current;
+    if (id === previousId || (id && !herdAgentsRef.current[id])) return;
+    const draft = { text: composerRef.current, cursor: composerCursorRef.current, composing: composingRef.current };
+    if (previousId) workerDraftsRef.current.set(previousId, draft);
+    else if (id) workerDraftRef.current = draft;
+    const restored = id ? workerDraftsRef.current.get(id) : workerDraftRef.current;
+    if (!id) workerDraftRef.current = null;
+    focusAgentRef.current = id;
+    setFocusAgentId(id);
+    setComposerText(restored?.text ?? "", restored?.cursor ?? 0);
+    composingRef.current = restored?.composing ?? false;
+    setComposing(composingRef.current);
+  }, [setComposerText]);
+  const returnToConversation = useCallback(() => selectAgentChat(null), [selectAgentChat]);
+
+  const moveComposerCursor = (direction: -1 | 1) => {
+    const next = stepComposerCursor(composerRef.current, composerCursorRef.current, direction);
+    composerCursorRef.current = next;
+    setComposerCursor(next);
+  };
 
   // Drop the store entries a submit expanded, so the map does not grow without
   // bound. Called from the composer-clear branches after Enter expands markers.
@@ -1724,7 +1712,7 @@ export function ChatScreen({
       state: createSelectorState("Problem reports · optional", [
         { id: "off", label: "Keep reports local", detail: "No automatic submission. You can still review and send individual reports with /feedback.", current: current === "off" },
         { id: "ask", label: "Ask before sending", detail: "Offer to review limited diagnostics after a problem. Nothing is sent until you confirm.", current: current === "ask" },
-        { id: "automatic", label: "Send limited diagnostics automatically", detail: "Version, platform, runtime and problem category only. No prompts, tool arguments, output, paths or credentials. Uses your configured feedback endpoint; offline policies still win.", current: current === "automatic" },
+        { id: "automatic", label: "Send diagnostics automatically", detail: "Basic diagnostics. Tools/code sharing also includes scrubbed errors, stacks and output. Uses your feedback endpoint; offline restrictions still apply.", current: current === "automatic" },
       ], current),
       commit: chooseReporting,
       onCancel: () => { restorePaletteDraft(); },
@@ -1753,9 +1741,8 @@ export function ChatScreen({
     if (seen.has(key)) return;
     if (seen.size >= 64) seen.delete(seen.values().next().value!);
     seen.add(key);
-    // First-ever report: "automatic" is the shipping default, but nothing is
-    // transmitted before the operator has seen and answered the consent
-    // prompt once. Held payloads become a picker via the effect below.
+    // Ask before the first report, including installations with a saved automatic
+    // preference. Held payloads become a picker via the effect below.
     if (!settingsRef.current.diagnosticReportingPrompted) {
       setFirstProblemConsent(payload);
       return;
@@ -1799,8 +1786,8 @@ export function ChatScreen({
       },
     });
   }, [problemReview, settings.diagnosticReporting, busy, picker, pendingScope, pendingLocalScope, pendingToolApproval, pendingOperatorQuestion, stageFeedback, chooseReporting, showToast]);
-  // Resolve hosted availability before accepting a message, without sending
-  // inference. A late check from an old selection must not overwrite recovery.
+  // Check the selected provider before accepting a message. A late check from
+  // an old selection must not overwrite recovery.
   const checkRuntime = useCallback(async () => {
     const runtime = runtimeRef.current;
     if (!runtime || closingRef.current || stoppingAuditRef.current) return;
@@ -1808,32 +1795,29 @@ export function ChatScreen({
     runtimeReadyRef.current = false;
     setCheckingModel(true);
     try {
-      await runtime.prepare();
+      if (!await runtime.isAvailable()) throw new Error("Selected provider has no credentials.");
       if (!alive.current || epoch !== runtimeCheckEpoch.current || runtimeRef.current !== runtime) return;
       runtimeReadyRef.current = true;
       setStartupError(null);
       setModelId(runtime.resolvedModel());
       modelIdRef.current = runtime.resolvedModel();
+      if (pendingModelPreferenceRef.current === runtime) {
+        pendingModelPreferenceRef.current = null;
+        if (!saveAppliedModelPreference(runtime)) {
+          appendEntry({ kind: "notice", text: "Model applied for this audit but could not be saved for future launches", turn: turn.current });
+        }
+      }
     } catch (error) {
       if (!alive.current || epoch !== runtimeCheckEpoch.current || runtimeRef.current !== runtime) return;
       const detail = error instanceof Error ? error.message : String(error);
-      setStartupError({
-        text: startupRecoveryText(detail),
-        accountRestricted: error instanceof CloudError
-          && error.path === "/api/inference/account"
-          && Boolean(error.code && error.code !== "unsupported_account_data" && error.code !== "billing_unavailable"),
-      });
+      setStartupError({ text: startupRecoveryText(detail) });
       logProblem("runtime-preflight", error);
     } finally {
       if (alive.current && epoch === runtimeCheckEpoch.current) setCheckingModel(false);
     }
-  }, []);
+  }, [appendEntry]);
 
-  // First-run consent for automatic problem reports. The stored default is
-  // "automatic"; this effect converts the first held report into an explicit
-  // choice, then hands the payload to the matching path. chooseReporting
-  // persists both the policy and diagnosticReportingPrompted, so this fires
-  // once per install. Cancel defers: the next problem re-asks.
+  // First-report consent stays separate from analytics. Cancel defers the choice.
   useEffect(() => {
     if (!firstProblemConsent) return;
     if (settings.diagnosticReportingPrompted) {
@@ -1846,7 +1830,7 @@ export function ChatScreen({
     setFirstProblemConsent(null);
     setPicker({
       state: createSelectorState("Send problem reports to 0?", [
-        { id: "automatic", label: "Send automatically", detail: "Limited diagnostics only: version, platform, runtime and problem category. No prompts, tool arguments, output, paths or credentials.", current: settings.diagnosticReporting === "automatic" },
+        { id: "automatic", label: "Send automatically", detail: "Basic diagnostics. Tools/code sharing also includes scrubbed errors, stacks and output; identifying content may remain.", current: settings.diagnosticReporting === "automatic" },
         { id: "ask", label: "Ask me each time", detail: "Review the exact bytes and destination before anything is sent.", current: settings.diagnosticReporting === "ask" },
         { id: "off", label: "Keep reports local", detail: "Reports stay on this machine. You can still send one explicitly with /feedback.", current: settings.diagnosticReporting === "off" },
       ], settings.diagnosticReporting),
@@ -1873,32 +1857,31 @@ export function ChatScreen({
     });
   }, [firstProblemConsent, settings.diagnosticReportingPrompted, settings.diagnosticReporting, busy, picker, pendingScope, pendingLocalScope, pendingToolApproval, pendingOperatorQuestion, chooseReporting, stageFeedback, showToast, restorePaletteDraft]);
   /** Construct only at initial startup, explicit new chat, or failed-start recovery. */
-  const buildSession = useCallback((
+  const buildSession = useCallback(async (
     opts: { model?: string; providerId?: RuntimeConfig["provider"]; initialMessages?: NativeMessage[] } = {},
-  ): { session: ConsoleSession; model: string } => {
+  ): Promise<{ session: ConsoleSession; model: string }> => {
     if (closingRef.current || stoppingAuditRef.current) throw new Error("This audit is stopping.");
+    const buildEpoch = ++sessionBuildEpoch.current;
     // Resolve credentials into this construction only. Explicit shell exports
     // win, and changing a connection never mutates a live runtime's environment.
     const env = { ...process.env, ...credentialEnvPatch(loadCredentials(), process.env) };
-    const runtime = createConsoleRuntime({
-      model: opts.model ?? options?.model,
+    const { runtime, explicitChoice } = await createPreferredConsoleRuntime({
+      model: (opts.providerId !== undefined ? opts.model : opts.model ?? options?.model) || undefined,
       provider: opts.providerId ?? options?.providerId,
       agentModels: options?.agentModels,
       singleModel: options?.singleModel,
       env: Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined)),
+    }, {
+      inheritedConnectionIdentity: opts.model === undefined && opts.providerId === undefined ? options?.modelConnectionIdentity : undefined,
+      onDiscoveryError: (error) => recordProblem("runtime", error),
     });
+    if (!alive.current || closingRef.current || stoppingAuditRef.current) throw new Error("This audit is stopping.");
+    if (buildEpoch !== sessionBuildEpoch.current) throw new Error("This startup choice was superseded.");
     const resolvedModel = runtime.resolvedModel();
-    // Initial compaction window: resolved synchronously from the just-built
-    // runtime's model + provider. BYOK/local models resolve against the synced/
-    // offline catalog here; a hosted route's window is only in the per-account
-    // catalog (not yet loaded for this new session), so it stays undefined and
-    // is re-based by the effect below once that catalog arrives. Deliberately
-    // NOT the display-gated `contextLimit` (that goes null when the meter is
-    // hidden or a subagent is focused, which must not disable compaction).
+    // Resolve compaction from this direct/subscription runtime's model.
     const buildDiag = runtime.getConfigurationDiagnostics();
     const initialContextWindow = resolveContextLimit(
-      { modelId: resolvedModel, providerId: buildDiag.provider, hosted: buildDiag.provider === "hosted" },
-      { hostedCatalog: null },
+      { modelId: resolvedModel, providerId: buildDiag.provider },
     )?.tokens;
     const pluginLease = pluginHostManager?.acquire();
     let created: ConsoleSession;
@@ -2010,35 +1993,48 @@ export function ChatScreen({
       cleanupPromise = undefined;
       throw error;
     });
-    cloudSource.current = { owner: created, isHosted: () => runtime.getConfigurationDiagnostics().provider === "hosted", env };
     // Publish the live runtime so applyRuntimeSelection can reconfigure it in
     // place. A rebuild (provider connect from a dead session) swaps this.
     runtimeRef.current = runtime;
     runtimeInfoHandle.current = {
       model: () => runtime.resolvedModel(),
       providerId: () => runtime.getConfigurationDiagnostics().provider,
+      connectionIdentity: () => runtime.connectionIdentity(),
       codexCatalog: (signal) => runtime.codexModelCatalog(signal),
       applySelection: (sel) => applySelectionRef.current?.(sel),
     };
+    if (explicitChoice) pendingModelPreferenceRef.current = runtime;
     void checkRuntime();
     // resolvedModel() is the id the runtime actually settled on after
     // provider detection — not necessarily what was requested — so it is
     // the only value honest enough to display.
     return { session: created, model: runtime.resolvedModel() };
-  }, [options, pluginHostManager, messagingHomeDir, trackedRequest, runtimeInfoHandle, checkRuntime]);
+  }, [options, pluginHostManager, messagingHomeDir, trackedRequest, runtimeInfoHandle, checkRuntime, recordProblem, appendEntry]);
 
   useEffect(() => {
     if (closingRef.current) return;
     let created: ConsoleSession | null = null;
     alive.current = true;
+    const releaseView = () => {
+      if (isDevUiRemount()) return;
+      alive.current = false;
+      void closeHandle.current?.().catch((error: unknown) => {
+        appendTuiCrash({ source: "audit-cleanup", error: serializeError(error) });
+      });
+    };
+    // A frontend generation owns the view, not the native conversation. The
+    // stable hook cells rebind callbacks; no session/tool action is replayed.
+    if (initializedView.current) return releaseView;
+    initializedView.current = true;
 
+    void (async () => {
     try {
       // Resume: when the full-screen browser opened this chat with a stored
       // transcript, build the console around it and rehydrate the transcript
-      // silently (the restored messages ARE the context — see the /resume
+      // silently (the restored messages ARE the context — see the /sessions
       // in-place path, which does the same).
       const resumeMessages = options?.initialMessages;
-      const built = buildSession(
+      const built = await buildSession(
         resumeMessages && resumeMessages.length > 0 ? { initialMessages: resumeMessages } : {},
       );
       created = built.session;
@@ -2049,105 +2045,17 @@ export function ChatScreen({
         setEntries(entriesFromStoredMessages(resumeMessages));
       }
     } catch (error) {
+      if (!alive.current || sessionRef.current) return;
       recordProblem("runtime", error);
       const detail = error instanceof Error ? error.message : String(error);
-      setStartupError({ text: startupRecoveryText(detail), accountRestricted: false });
+      setStartupError({ text: startupRecoveryText(detail) });
       const recovery = connectionRecoveryForError(detail);
       if (recovery) connectionFailureRef.current?.(recovery);
     }
+    })();
 
-    return () => {
-      alive.current = false;
-      void closeHandle.current?.().catch((error: unknown) => {
-        appendTuiCrash({ source: "audit-cleanup", error: serializeError(error) });
-      });
-    };
+    return releaseView;
   }, []);
-  useEffect(() => {
-    if (!interactive) return;
-    try {
-      const source = cloudSource.current;
-      const env = source && source.owner === session ? source.env : { ...process.env, ...credentialEnvPatch(loadCredentials(), process.env) };
-      loadCloudCredentials({ env, warn: () => {} });
-      setCloudConfigured(true);
-    } catch (error) {
-      setCloudConfigured(error instanceof Error && error.name === "CloudAuthMissingError" ? false : undefined);
-    }
-  }, [session, startupError, interactive]);
-
-  useEffect(() => {
-    if (!interactive) return;
-    const source = cloudSource.current;
-    if (!session || !source || source.owner !== session || !source.isHosted()) {
-      setCloudBalance(null);
-      setHostedCatalog(null);
-      hostedCatalogAccount.current = null;
-      return;
-    }
-    let active = true;
-    let pending = false;
-    const refresh = async () => {
-      if (pending || !active) return;
-      // Keep still-valid metadata while refreshing. Clearing it here would
-      // disable compaction at every busy/idle transition and polling interval.
-      if (!source.isHosted()) { setCloudBalance(null); setHostedCatalog(null); return; }
-      pending = true;
-      setCloudBalance({ owner: session, state: { status: "loading" } });
-      const readCredentials = () => {
-        try {
-          const credentials = loadCloudCredentials({ env: source.env, warn: () => {} });
-          const cachedAccount = hostedCatalogAccount.current;
-          if (cachedAccount && (cachedAccount.owner !== session || cachedAccount.host !== credentials.host || cachedAccount.token !== credentials.token)) {
-            setHostedCatalog(null);
-            hostedCatalogAccount.current = null;
-          }
-          return credentials;
-        }
-        catch (error) {
-          setHostedCatalog(null);
-          hostedCatalogAccount.current = null;
-          throw error;
-        }
-      };
-      try {
-        const credentials = readCredentials();
-        const client = new CloudClient({ host: credentials.host, token: credentials.token });
-        const [account, catalog] = await Promise.all([
-          client.getInferenceAccount(),
-          // Model windows drive compaction even when the meter is hidden.
-          // Distinguish transport failure from a successful malformed payload.
-          client.getInferenceModels().then((value) => ({ ok: true as const, value }), () => ({ ok: false as const })),
-        ]);
-        if (!active || cloudSource.current !== source) return;
-        const current = readCredentials();
-        if (!source.isHosted()) { setCloudBalance(null); setHostedCatalog(null); return; }
-        const sameCredentials = current.host === credentials.host && current.token === credentials.token;
-        setCloudBalance({ owner: session, state: sameCredentials ? hostedBalanceState(account) : { status: "unavailable" } });
-        if (sameCredentials && catalog.ok) {
-          try {
-            const models = buildHostedModelCatalog(catalog.value.data);
-            hostedCatalogAccount.current = { owner: session, host: credentials.host, token: credentials.token };
-            setHostedCatalog({ owner: session, models, expiresAt: Date.now() + 60_000 });
-          } catch {
-            hostedCatalogAccount.current = null;
-            setHostedCatalog(null); // Malformed metadata cannot establish a limit.
-          }
-        } else if (!sameCredentials) {
-          hostedCatalogAccount.current = null;
-          setHostedCatalog(null);
-        }
-      } catch {
-        if (active && cloudSource.current === source) {
-          // A transport failure may coincide with logout/account replacement.
-          try { readCredentials(); } catch { /* The reader invalidates the cache. */ }
-          setCloudBalance(source.isHosted() ? { owner: session, state: { status: "unavailable" } } : null);
-        }
-      } finally { pending = false; }
-    };
-    void refresh();
-    const interval = setInterval(() => { void refresh(); }, 30_000);
-    return () => { active = false; clearInterval(interval); };
-  }, [session, busy, interactive, startupError]);
   // Marketplace changes never replace this session's runtime or live harness.
   // Its leased host remains usable until cleanup; new chats acquire the new set.
   useEffect(() => {
@@ -2175,15 +2083,10 @@ export function ChatScreen({
   }): void => {
     const runtime = runtimeRef.current;
     if (!runtime) return;
-    // Explicit shell exports win; a live switch re-resolves the account from
-    // this environment, exactly as construction does.
+    // A live switch uses the same explicit credential environment as construction.
     const env = { ...process.env, ...credentialEnvPatch(loadCredentials(), process.env) };
     const currentProvider = runtime.getConfigurationDiagnostics().provider;
-    // Which provider would this selection switch the live runtime into? An
-    // explicit hint (e.g. a 0 Cloud row's "hosted") wins over the model id,
-    // so a hosted model whose id also lives in a BYOK catalog still forces
-    // hosted; otherwise derive it from the model and only treat it as a switch
-    // when it actually differs from the running provider.
+    // Prefer the selected row's provider identity over model-family inference.
     let targetProvider: string | undefined = sel.providerId;
     if (targetProvider === undefined && sel.model !== undefined) {
       const derived = modelProvider(sel.model);
@@ -2192,14 +2095,14 @@ export function ChatScreen({
       const subscriptionModel = currentProvider === "chatgpt-codex" && derived === "openai";
       if (!subscriptionModel && derived !== currentProvider && derived !== "unknown") targetProvider = derived;
     }
+    if (targetProvider !== undefined && !PROVIDERS.some((provider) => provider.id === targetProvider)) {
+      appendEntry({ kind: "notice", text: `Unsupported provider: ${targetProvider}`, turn: turn.current });
+      return;
+    }
     if (targetProvider !== undefined && targetProvider !== currentProvider) {
-      const configured = targetProvider === "hosted"
-        ? isCloudConfigured(env)
-        : isProviderConfigured(targetProvider, env);
+      const configured = isProviderConfigured(targetProvider, env);
       if (!configured) {
-        const label = targetProvider === "hosted"
-          ? "0cloud"
-          : PROVIDERS.find((candidate) => candidate.id === targetProvider)?.label ?? targetProvider;
+        const label = PROVIDERS.find((candidate) => candidate.id === targetProvider)?.label ?? targetProvider;
         appendEntry({
           kind: "notice",
           text: `Connect ${label} to switch this audit live`,
@@ -2216,22 +2119,16 @@ export function ChatScreen({
       ...(sel.singleModel !== undefined ? { singleModel: sel.singleModel } : {}),
       env,
     });
-    void checkRuntime();
     // resolvedModel() is the id the runtime settled on after re-detection.
     const applied = runtime.resolvedModel();
     setModelId(applied);
     modelIdRef.current = applied;
     const providerNow = runtime.getConfigurationDiagnostics().provider;
-    const providerLabel = providerNow === "hosted"
-      ? "0security Auto"
-      : PROVIDERS.find((candidate) => candidate.id === providerNow)?.label ?? providerNow;
-    appendEntry({
-      kind: "notice",
-      text: `Applied to this audit: ${applied} (${providerLabel})`,
-      detail: "Live for the next turn and every new subagent. Conversation, scope and self-extension are unchanged.",
-      turn: turn.current,
-    });
-  }, [appendEntry, checkRuntime]);
+    if (sel.model !== undefined) pendingModelPreferenceRef.current = runtime;
+    void checkRuntime();
+    const providerLabel = PROVIDERS.find((candidate) => candidate.id === providerNow)?.label ?? providerNow;
+    showToast(`Model: ${applied} (${providerLabel})`);
+  }, [appendEntry, checkRuntime, showToast]);
   applyRuntimeSelectionRef.current = applyRuntimeSelection;
 
   // Busy-aware handle. Apply at once when idle; when a turn is in flight, stash
@@ -2264,26 +2161,24 @@ export function ChatScreen({
   }, [appendEntry, applyRuntimeSelection]);
   applySelectionRef.current = applySelection;
 
-  const reconnectProvider = useCallback((providerId: string) => {
+  const reconnectProvider = useCallback(async (providerId: string) => {
     const knownProvider = PROVIDERS.find((candidate) => candidate.id === providerId);
-    if (providerId !== "hosted" && !knownProvider) {
+    if (!knownProvider) {
       appendEntry({ kind: "error", text: "Unknown connection", detail: providerId, turn: turn.current });
       return;
     }
     const provider = providerId as NonNullable<RuntimeConfig["provider"]>;
-    const providerLabel = providerId === "hosted"
-      ? "0security Auto"
-      : knownProvider?.label ?? providerId;
+    const providerLabel = knownProvider.label;
     // Keep the choice staged so /new inherits it too; then apply it LIVE to
     // this audit's running runtime (deferred to the turn boundary when busy).
-    const selection = { providerId: provider, ...(provider === "hosted" ? { model: "" } : {}) };
+    const selection = { providerId: provider };
     onNextChatOptions?.(selection);
     if (sessionRef.current) {
       applySelectionRef.current?.(selection);
       return;
     }
     try {
-      const built = buildSession({ providerId: provider, model: provider === "hosted" ? "" : options?.model, initialMessages: options?.initialMessages });
+      const built = await buildSession({ providerId: provider, initialMessages: options?.initialMessages });
       sessionRef.current = built.session;
       modelIdRef.current = built.model;
       setSession(built.session);
@@ -2298,7 +2193,7 @@ export function ChatScreen({
         turn: turn.current,
       });
     }
-  }, [appendEntry, buildSession, options?.model, options?.initialMessages, onNextChatOptions]);
+  }, [appendEntry, buildSession, options?.initialMessages, onNextChatOptions]);
 
   useEffect(() => {
     if (!reconnectHandle) return;
@@ -2308,7 +2203,7 @@ export function ChatScreen({
     };
   }, [reconnectHandle, reconnectProvider]);
 
-  const selectModel = useCallback((requested: string) => {
+  const selectModel = useCallback(async (requested: string) => {
     // Stage for /new, then apply LIVE to the running audit (deferred to the
     // turn boundary when busy; kept staged only if the provider is dark).
     onNextChatOptions?.({ model: requested });
@@ -2317,7 +2212,7 @@ export function ChatScreen({
       return;
     }
     try {
-      const built = buildSession({ model: requested, initialMessages: options?.initialMessages });
+      const built = await buildSession({ model: requested, initialMessages: options?.initialMessages });
       sessionRef.current = built.session;
       modelIdRef.current = built.model;
       setSession(built.session);
@@ -2391,15 +2286,15 @@ export function ChatScreen({
   // Tell herdr when 0 is parked on a human decision, so the pane joins
   // its attention queue instead of looking busy. No-op outside herdr.
   useEffect(() => {
-    reportOperatorGate(Boolean(pendingScope || pendingLocalScope || pendingEscalation || pendingToolApproval || secretPrompt));
-  }, [pendingScope, pendingLocalScope, pendingEscalation, pendingToolApproval, secretPrompt]);
+    reportOperatorGate(Boolean(pendingScope || pendingLocalScope || pendingEscalation || pendingToolApproval || pendingOperatorQuestion || secretPrompt));
+  }, [pendingScope, pendingLocalScope, pendingEscalation, pendingToolApproval, pendingOperatorQuestion, secretPrompt]);
 
   // Seed the ask_operator modal's live edit state from each incoming request,
   // and clear it when the question is answered or dismissed.
   useEffect(() => {
     setOperatorState(
       pendingOperatorQuestion
-        ? createOperatorQuestionState(pendingOperatorQuestion.request)
+        ? pendingOperatorQuestion.initialState ?? createOperatorQuestionState(pendingOperatorQuestion.request)
         : null,
     );
   }, [pendingOperatorQuestion]);
@@ -2428,6 +2323,7 @@ export function ChatScreen({
       clearInterval(timer);
     };
   }, [interactive]);
+
 
   // Subscribe to subagent lifecycle + progress events from the core event bus.
   // Filter by this session's scanId. `activeSubagents` drives the compact
@@ -2485,18 +2381,23 @@ export function ChatScreen({
               const existing = prev[event.agent_id] ?? [];
               if (existing.some((entry) => entry.kind === "assistant" && entry.text.includes(answer))) return prev;
               const result: ChatEntry = { id: `${event.agent_id}-result-${event.turns ?? 0}`, kind: event.error ? "error" : "assistant", text: answer, turn: event.turns ?? 0, at: Date.now() };
-              return { ...prev, [event.agent_id]: [...existing, result].slice(-SUBAGENT_TRANSCRIPT_MAX) };
+              return { ...prev, [event.agent_id]: retainSubagentTurns([...existing, result], SUBAGENT_TRANSCRIPT_MAX) };
             });
           }
           if (event.name) agentNamesRef.current.set(event.agent_id, event.name);
           setActiveSubagents((prev) => reduceActiveSubagents(prev, event));
           setHerdAgents(applySubagentLifecycle(herdAgentsRef.current, eventData, Date.now()));
+          if (focusAgentRef.current === event.agent_id &&
+            (previousStatus === "running" || previousStatus === "queued") &&
+            event.status !== "running" && event.status !== "queued") returnToConversation();
         } else if (type === "peer_message") {
           // An inter-agent message crossed the hub — render it as an IRC line in
           // the transcript. Resolve both endpoints to the roster's display names
           // (Main is itself; "all" is a broadcast); the accent colouring happens
           // in the renderer.
           const p = payload as unknown as PeerMessagePayload;
+          commsSequenceRef.current += 1;
+          setCommsMessages((previous) => applyCommsMessage(previous, eventData, commsSequenceRef.current));
           const nameFor = (id: string): string =>
             id === "Main" || id === "all"
               ? id
@@ -2513,11 +2414,22 @@ export function ChatScreen({
           setHerdAgents(applySubagentProgress(herdAgentsRef.current, eventData, Date.now()));
         } else if (type === "subagent_message") {
           const p = payload as unknown as SubagentMessagePayload;
+          const finalized = finalizedWorkerTurns.current.get(p.agent_id);
+          if (p.partial && finalized?.has(p.turn)) return;
+          if (!p.partial) {
+            const settled = finalized ?? new Set<number>();
+            settled.add(p.turn);
+            finalizedWorkerTurns.current.set(p.agent_id, settled);
+          }
           setWorkerTelemetry((prev) => ({ ...prev, [p.agent_id]: p }));
           // Use the main conversation's argument formatting and rich cards,
           // retaining the complete bounded public result rather than reducing
           // tools without rich metadata to a one-line summary.
           const fresh: ChatEntry[] = [];
+          if (p.reasoning_summary) {
+            fresh.push({ id: `${p.agent_id}-t${p.turn}-r`, kind: "reasoning",
+              text: p.reasoning_summary, turn: p.turn, at: p.ts });
+          }
           if (p.assistant) {
             fresh.push({
               id: `${p.agent_id}-t${p.turn}-a`,
@@ -2527,10 +2439,10 @@ export function ChatScreen({
               at: p.ts,
             });
           }
-          (p.tools ?? []).forEach((t, i) => {
+          (p.tools ?? []).forEach((t) => {
             if (!t.running && !t.result.success) recordProblem("tool", t.result.error, t.call.name);
             fresh.push({
-              id: `${p.agent_id}-t${p.turn}-x${i}`,
+              id: `${p.agent_id}-t${p.turn}-x${t.callIndex}`,
               kind: "tool",
               text: t.call.name,
               detail: t.running ? undefined : formatToolResult(t.call, t.result),
@@ -2542,15 +2454,10 @@ export function ChatScreen({
               at: p.ts,
             });
           });
-          if (fresh.length > 0) {
-            setSubagentTranscripts((prev) => {
-              const existing = prev[p.agent_id] ?? [];
-              return {
-                ...prev,
-                [p.agent_id]: [...existing.filter((entry) => !fresh.some((next) => next.id === entry.id)), ...fresh].slice(-SUBAGENT_TRANSCRIPT_MAX),
-              };
-            });
-          }
+          setSubagentTranscripts((prev) => ({
+            ...prev,
+            [p.agent_id]: replaceSubagentTurn(prev[p.agent_id] ?? [], fresh, p.agent_id, p.turn, SUBAGENT_TRANSCRIPT_MAX),
+          }));
         } else if (type === "todos") {
           // A worker's plan must not replace this audit's root plan.
           if (producerScanId === scanId) setTodos(payload as unknown as TodosEventPayload);
@@ -2563,25 +2470,17 @@ export function ChatScreen({
       },
     });
     return unsub;
-  }, [session, setHerdAgents, recordProblem]);
+  }, [session, setHerdAgents, recordProblem, returnToConversation]);
 
 
   // A focused agent that leaves the live map (never observed, or the session
   // reset) drops focus rather than staring at a stale record.
   useEffect(() => {
     if (focusAgentId && !herdAgents[focusAgentId]) {
-      setFocusAgentId(null);
-      setFocusScrollOffset(0);
+      returnToConversation();
     }
-  }, [focusAgentId, herdAgents]);
+  }, [focusAgentId, herdAgents, returnToConversation]);
 
-  // List navigation ends the moment there is nothing left to navigate — an
-  // empty selection is never shown.
-  useEffect(() => {
-    if (agentNavIndex < 0) return;
-    const count = settings.showSubagents ? workerRoster.length : 0;
-    if (count === 0) setAgentNavIndex(-1);
-  }, [agentNavIndex, workerRoster, settings.showSubagents]);
 
   // Capture / preview seed ONLY. Guarded by an env var and never populated in a
   // normal session: it plants a deterministic set of sample agents so the right
@@ -2597,6 +2496,7 @@ export function ChatScreen({
         parentScanId: "demo",
         task: "recon web tier",
         status: "running",
+        startedAt: now - 300_000,
         maxTurns: 8,
         turn: 3,
         findings: 1,
@@ -2616,6 +2516,7 @@ export function ChatScreen({
         parentScanId: "demo",
         task: "auth & session fuzzing",
         status: "running",
+        startedAt: now - 420_000,
         maxTurns: 8,
         turn: 2,
         findings: 0,
@@ -2749,7 +2650,7 @@ export function ChatScreen({
    * of the dispatcher rather than of event timing. A WeakSet so a resolved
    * record is collectable.
    */
-  const dispatched = useRef<WeakSet<object>>(new WeakSet());
+  const dispatched = useDevUiRef<WeakSet<object>>(devUi, "dispatched", new WeakSet());
   const dispatchOnce = useCallback((owner: object, run: () => void) => {
     if (dispatched.current.has(owner)) return;
     dispatched.current.add(owner);
@@ -2862,15 +2763,17 @@ export function ChatScreen({
       const dangerLabel = danger && owner.risk?.category
         ? describeDestructiveCategory(owner.risk.category)
         : undefined;
-      const bodyLines = dangerLabel
-        ? [`Destructive action: ${dangerLabel}`, ...argumentSummaryLines(owner.call.arguments)]
+      const argumentsLines = owner.completeDetails
+        ? Object.entries(owner.call.arguments).map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
         : argumentSummaryLines(owner.call.arguments);
+      const bodyLines = dangerLabel ? [`Destructive action: ${dangerLabel}`, ...argumentsLines] : argumentsLines;
       return {
         owner,
         title: `${modeLabel(modeRef.current)} approval`,
         context: `${owner.call.name} ${JSON.stringify(owner.call.arguments)}`,
         subject: owner.call.name,
         bodyLines,
+        completeDetails: owner.completeDetails,
         borderColor: danger ? ERROR : INFO,
         titleColor: danger ? ERROR : INFO,
         severity: danger ? "danger" : undefined,
@@ -2911,7 +2814,11 @@ export function ChatScreen({
    * leave one frame in which the prompt is up and its selector is not, and
    * that frame is a keystroke the operator could lose.
    */
-  const [approvalCursor, setApprovalCursor] = useState<{ owner: object; state: SelectorState } | null>(null);
+  const [approvalCursor, setApprovalCursor] = useDevUiState<{ owner: object; state: SelectorState } | null>(devUi, "approvalCursor", null);
+  const approvalDetailsScrollRef = useDevUiRef<ScrollBoxRenderable | null>(devUi, "approvalDetailsScrollRef", null);
+  useEffect(() => {
+    if (approvalDetailsScrollRef.current) approvalDetailsScrollRef.current.scrollTop = 0;
+  }, [approvalPrompt?.owner]);
   const approvalState: SelectorState | null = approvalPrompt
     ? (approvalCursor && approvalCursor.owner === approvalPrompt.owner
         ? approvalCursor.state
@@ -2941,30 +2848,23 @@ export function ChatScreen({
    * submit a real turn. A ref breaks the cycle without reordering two
    * large callbacks or making either depend on the other's identity.
    */
-  const submitRef = useRef<((text: string) => Promise<void>) | null>(null);
-  /** True once the model has produced visible tokens in this turn. */
-  const streamingRef = useRef(false);
+  const submitRef = useDevUiRef<((text: string) => Promise<void>) | null>(devUi, "submitRef", null);
   /** Name of the tool currently executing, for the tool animation. */
-  const [runningTool, setRunningTool] = useState<string | null>(null);
+  const [runningTool, setRunningTool] = useDevUiState<string | null>(devUi, "runningTool", null);
   const waitingForSpawnResult = busy && (runningTool === "spawn_agent" || runningTool === "spawn_agents");
   const waitActivityLabel = waitingForSpawnResult
     ? waitingForAgentsLabel(runningSpawnChildren)
     : undefined;
-  useEffect(() => {
-    onAuditActivity({
-      activity: waitActivityLabel ?? (runningTool ? `Running ${runningTool}` : busy ? "Working on audit" : ""),
-    });
-  }, [waitActivityLabel, runningTool, busy, onAuditActivity]);
   /**
    * Interrupt handle for the turn in flight, or null when none is running.
    * Held in a ref because the keyboard handler must reach the CURRENT turn's
    * controller, not the one captured when the handler was built.
    */
-  const abortRef = useRef<AbortController | null>(null);
-  const turnSettledRef = useRef<Promise<void> | null>(null);
-  const stopAuditPromiseRef = useRef<Promise<void> | null>(null);
-  const closePromiseRef = useRef<Promise<void> | null>(null);
-  const stoppingAuditRef = useRef(false);
+  const abortRef = useDevUiRef<AbortController | null>(devUi, "abortRef", null);
+  const turnSettledRef = useDevUiRef<Promise<void> | null>(devUi, "turnSettledRef", null);
+  const stopAuditPromiseRef = useDevUiRef<Promise<void> | null>(devUi, "stopAuditPromiseRef", null);
+  const closePromiseRef = useDevUiRef<Promise<void> | null>(devUi, "closePromiseRef", null);
+  const stoppingAuditRef = useDevUiRef(devUi, "stoppingAuditRef", false);
 
   // Cancellation is checkpoint-based. Keep its feedback out of the transcript.
   const interruptTurn = useCallback(() => {
@@ -3046,6 +2946,8 @@ export function ChatScreen({
 
   closeHandle.current = () => closePromiseRef.current ??= (async () => {
     closingRef.current = true;
+    sourceFixAbortRef.current?.abort();
+    await sourceFixPromiseRef.current;
     alive.current = false;
     const t0 = Date.now();
     appendTuiEvent({ kind: "close-handle", stage: "stop-audit" });
@@ -3059,6 +2961,200 @@ export function ChatScreen({
     closePromiseRef.current = null;
     throw error;
   });
+
+  const showFixPanel = useCallback((title: string, lines: string[]) => {
+    appendEntry({
+      kind: "panel", text: title,
+      panel: { title, rows: lines.flatMap((line) => line.split("\n").map((value) => ({ value }))) },
+      turn: turn.current,
+    });
+  }, [appendEntry]);
+
+  const startSourceFix = useCallback((id: string) => {
+    if (busy || sourceFixAbortRef.current || pendingOperatorQuestion || pendingToolApproval) {
+      showFixPanel("Source fix not started", ["Wait for the active turn/fix, or use /fix cancel."]);
+      return;
+    }
+    let focus: FindingFocus;
+    try {
+      focus = loadFindingFocus(id, { dbPath: options?.dbPath });
+      const check = fixEligibility(focus.finding);
+      if (!check.eligible) throw new Error(check.reason);
+    } catch (error) {
+      showFixPanel("Source fix unavailable", [error instanceof Error ? error.message : String(error), FIX_USAGE]);
+      return;
+    }
+    const controller = new AbortController();
+    sourceFixAbortRef.current = controller;
+    setFixWorking(true);
+    sourceFixPromiseRef.current = (async () => {
+      try {
+        const overrideRepo = process.env["ZERO_FIX_REPO"]?.trim();
+        let repoRoot: string | undefined;
+        if (overrideRepo) repoRoot = await resolveSourceFixRepository(overrideRepo);
+        else {
+          for (const suggested of new Set([session?.localScopePath, focus.target, target, process.cwd()])) {
+            repoRoot = await resolveSourceFixRepository(suggested);
+            if (repoRoot) break;
+          }
+        }
+        let testCommand = process.env["ZERO_FIX_TEST_COMMAND"]?.trim() ?? "";
+        if (repoRoot && !testCommand) {
+          try { testCommand = loadSourceFixProjectInputs(repoRoot)?.testCommand ?? ""; }
+          catch (error) {
+            showFixPanel("Saved source-fix setup unavailable", [
+              error instanceof Error ? error.message : String(error),
+              "Enter fresh local inputs. Checked-in project configuration never approves script execution.",
+            ]);
+          }
+        }
+        let requestedRepo = repoRoot ?? overrideRepo ?? "";
+        do {
+          controller.signal.throwIfAborted();
+          const request: OperatorQuestionRequest = {
+            requestId: `source-fix-setup-${focus.finding.id}-${Date.now()}`,
+            questions: [
+              { header: "Repository", question: "Local Git checkout to fix. The selected audit/workspace root is suggested only when valid; change it if needed.", allowCustom: true },
+              { header: "Regression command", question: "Command to run in each isolated patched candidate. Enter your regression command; repository scripts are never automatically authorized.", allowCustom: true },
+            ],
+          };
+          const state = createOperatorQuestionState(request);
+          state.custom = [requestedRepo, testCommand];
+          state.index = requestedRepo ? 1 : 0;
+          const answer = trackedRequest<OperatorQuestionAnswer | null>(null);
+          const cancelQuestion = () => answer.resolve(null);
+          controller.signal.addEventListener("abort", cancelQuestion, { once: true });
+          setPendingOperatorQuestion({ request, initialState: state, resolve: answer.resolve });
+          let response: OperatorQuestionAnswer | null;
+          try { response = await answer.promise; }
+          finally {
+            controller.signal.removeEventListener("abort", cancelQuestion);
+            setPendingOperatorQuestion((pending) => pending?.request === request ? null : pending);
+          }
+          if (!response || controller.signal.aborted) {
+            showFixPanel("Source fix setup cancelled", ["No model generation, regression command, or publication ran."]);
+            return;
+          }
+          requestedRepo = response.answers.find((item) => item.header === "Repository")?.customText?.trim() ?? "";
+          testCommand = response.answers.find((item) => item.header === "Regression command")?.customText?.trim() ?? "";
+          repoRoot = await resolveSourceFixRepository(requestedRepo);
+          const inputs = fixInputEligibility({ repoRoot, testCommand });
+          if (!inputs.eligible) showFixPanel("Source fix setup needs input", [inputs.reason]);
+        } while (!repoRoot || !testCommand);
+        controller.signal.throwIfAborted();
+        const call: ToolCall = {
+          name: "run_source_fix",
+          arguments: {
+            regression_command: testCommand,
+            repository: repoRoot,
+            execution: "Generate a source-only patch and run this command in isolated candidates (up to 3 attempts). Original checkout is not changed; no push or PR.",
+          },
+        };
+        const approval = trackedRequest<boolean>(false);
+        const cancelApproval = () => approval.resolve(false);
+        controller.signal.addEventListener("abort", cancelApproval, { once: true });
+        setPendingToolApproval({ call, completeDetails: true, resolve: approval.resolve });
+        let approved: boolean;
+        try { approved = await approval.promise; }
+        finally {
+          controller.signal.removeEventListener("abort", cancelApproval);
+          setPendingToolApproval((pending) => pending?.call === call ? null : pending);
+        }
+        if (!approved || controller.signal.aborted) {
+          showFixPanel("Source fix execution declined", ["No model generation, regression command, or publication ran. Setup was not saved."]);
+          return;
+        }
+        try { saveSourceFixProjectInputs({ repoRoot, testCommand }); }
+        catch (error) {
+          showFixPanel("Source fix preferences not saved", [error instanceof Error ? error.message : String(error), "This explicitly approved run can proceed; the next run will ask for inputs again."]);
+        }
+        showFixPanel(`Generating source fix ${focus.finding.id}`, [
+          `repo ${repoRoot}`, `operator-approved regression command ${testCommand}`,
+          "Generating and re-testing in isolation. The original worktree is untouched. /fix cancel stops this run.",
+        ]);
+        const runtime = createRuntime({ type: "api", timeout: 600_000, model: modelId ?? undefined, provider: options?.providerId });
+        if (!isNativeRuntime(runtime) || !(await runtime.isAvailable())) throw new Error("selected API runtime is unavailable; connect a provider first");
+        const result = await runSourceFix({
+          repoRoot, finding: focus.finding, runtime, testCommand,
+          apply: false, keepWorktree: true, signal: controller.signal,
+        });
+        if (result.candidate) sourceFixCandidatesRef.current.set(focus.finding.id, result);
+        if (!alive.current) return;
+        showFixPanel(`Source fix ${focus.finding.id}`, [
+          controller.signal.aborted ? "Source fix cancelled; nothing published." : describeFixStatus(result.status, result),
+          ...fixResultLines(result),
+          ...(result.candidate ? [`Review above, then /fix publish ${focus.finding.id} to inspect publication details. No push has occurred.`] : []),
+        ]);
+      } catch (error) {
+        if (alive.current) showFixPanel("Source fix failed", [controller.signal.aborted ? "Source fix cancelled; nothing published." : error instanceof Error ? error.message : String(error)]);
+      } finally {
+        sourceFixAbortRef.current = null;
+        sourceFixPromiseRef.current = null;
+        if (alive.current) setFixWorking(false);
+      }
+    })();
+  }, [busy, modelId, options?.dbPath, options?.providerId, session?.localScopePath, target, pendingOperatorQuestion, pendingToolApproval, trackedRequest, showFixPanel]);
+
+  const requestFixPublication = useCallback((id: string) => {
+    if (busy || sourceFixAbortRef.current) {
+      showFixPanel("Publication not started", ["Wait for the active turn/fix before reviewing publication."]);
+      return;
+    }
+    const result = sourceFixCandidatesRef.current.get(id);
+    if (!result) {
+      showFixPanel("No verified local candidate", [`Run /fix ${id || "<finding-id>"} first. Unverified, missing-source and template-only patches cannot publish.`]);
+      return;
+    }
+    const controller = new AbortController();
+    sourceFixAbortRef.current = controller;
+    setFixWorking(true);
+    sourceFixPromiseRef.current = (async () => {
+      try {
+        const plan: SourceFixPublicationPlan = await planSourceFixPublication(result);
+        if (controller.signal.aborted || !alive.current) return;
+        showFixPanel("Review draft PR publication", [...fixPublicationLines(plan), ...fixResultLines(result)]);
+        setPicker({
+          state: createSelectorState("Publish this reviewed source fix?", [
+            { id: "keep-local", label: "Keep local — do not push", detail: "Preserve the verified candidate and review record" },
+            { id: "publish-draft", label: "Push branch and create draft PR", detail: `${plan.branch} → ${plan.baseBranch}; ${plan.remote}` },
+          ]),
+          onCancel: () => showFixPanel("Publication cancelled", ["Candidate preserved; nothing pushed."]),
+          commit: (choice) => {
+            if (choice !== "publish-draft") {
+              showFixPanel("Kept local", ["Candidate preserved; nothing pushed."]);
+              return;
+            }
+            if (sourceFixAbortRef.current) return;
+            const publishing = new AbortController();
+            sourceFixAbortRef.current = publishing;
+            setFixWorking(true);
+            showFixPanel("Publishing approved draft PR", ["Re-checking the exact reviewed source change and regression command before pushing.", ...fixPublicationLines(plan)]);
+            sourceFixPromiseRef.current = (async () => {
+              try {
+                const published = await publishSourceFixDraftPR(result, { approval: "publish-draft-pr", signal: publishing.signal });
+                if (alive.current) showFixPanel("Draft PR created", [published.prUrl, `branch ${published.branch}`, `preserved worktree ${published.worktree}`]);
+              } catch (error) {
+                if (alive.current) showFixPanel("Draft PR publication failed", [
+                  error instanceof Error ? error.message : String(error),
+                  `Candidate and branch are preserved at ${plan.worktree}. If pushing already succeeded, the remote branch remains; no PR success is claimed.`,
+                ]);
+              } finally {
+                sourceFixAbortRef.current = null;
+                sourceFixPromiseRef.current = null;
+                if (alive.current) setFixWorking(false);
+              }
+            })();
+          },
+        });
+      } catch (error) {
+        if (alive.current) showFixPanel("Publication unavailable", [error instanceof Error ? error.message : String(error), "Verified local candidate preserved; nothing pushed."]);
+      } finally {
+        sourceFixAbortRef.current = null;
+        sourceFixPromiseRef.current = null;
+        if (alive.current) setFixWorking(false);
+      }
+    })();
+  }, [busy, showFixPanel]);
 
   const routeSlashCommand = useCallback((raw: string): boolean => {
     const parsed = findCommand(raw);
@@ -3140,7 +3236,6 @@ export function ChatScreen({
           appendEntry({
             kind: "notice",
             text: "wait for the active turn before clearing",
-            detail: "The turn in flight is still appending to the conversation this would empty.",
             turn: turn.current,
           });
           return true;
@@ -3160,9 +3255,8 @@ export function ChatScreen({
         setTurnBudget(null);
         setLastContext(undefined);
         clearMarkdownCache();
-        compactionRecapsRef.current.clear();
         setLatestCompaction(undefined);
-        pendingTokensAfterRef.current = undefined;
+        pendingCompactionRef.current = undefined;
         // The live plan tree belongs to the conversation being emptied.
         setTodos(null);
         // The objective describes the conversation being emptied; drop it so a
@@ -3171,24 +3265,14 @@ export function ChatScreen({
         appendEntry({
           kind: "notice",
           text: "conversation cleared",
-          detail: session
-            ? "The model starts from an empty history. Scope, target and mode are unchanged, and nothing you previously denied has been re-allowed."
-            : "The transcript is empty. The runtime is not connected, so there was no model history to clear.",
           turn: turn.current,
         });
         return true;
       }
-      case "resume": {
-        onNavigate("resume");
+      case "sessions": {
+        onNavigate("sessions");
         return true;
       }
-      case "providers":
-        // Provider credentials, especially ChatGPT Codex device OAuth, belong
-        // to the chat-owned OpenTUI connection pane. Keeping a second inline
-        // key picker here created a divergent flow and could treat OAuth as a
-        // generic API-key field.
-        onNavigate("connect");
-        return true;
       case "feedback": {
         const feedbackCommand = parseFeedbackCommand(args);
         if (feedbackCommand.kind === "usage") {
@@ -3336,7 +3420,7 @@ export function ChatScreen({
             appendEntry({
               kind: result.ok ? "notice" : "error",
               text: result.ok
-                ? result.method === "osc52" ? "Conversation sent to terminal clipboard; clipboard contents are not verified." : "Conversation copied."
+                ? result.method === "osc52" ? "Conversation sent to terminal clipboard." : "Conversation copied."
                 : "Clipboard unavailable; conversation JSON was saved.",
               detail: `Private JSON: ${exported.path}`,
               turn: turn.current,
@@ -3347,6 +3431,32 @@ export function ChatScreen({
         } catch (error) {
           appendEntry({ kind: "error", text: "Could not export the conversation.", detail: error instanceof Error ? error.message : String(error), turn: turn.current });
         }
+        return true;
+      }
+      case "fix": {
+        if (args === "cancel") {
+          sourceFixAbortRef.current?.abort();
+          showFixPanel("Source fix cancellation", [sourceFixAbortRef.current ? "Cancellation requested. Any verified local candidate and created branch are preserved; no pending approval is published." : "No source fix is running; local candidates are preserved."]);
+          return true;
+        }
+        if (args === "publish" || args.startsWith("publish ")) {
+          const id = args.slice("publish".length).trim();
+          if (!id || /\s/.test(id)) showFixPanel("Source fix usage", [FIX_USAGE]);
+          else requestFixPublication(id);
+          return true;
+        }
+        if (args) {
+          if (/\s/.test(args)) showFixPanel("Source fix usage", [FIX_USAGE]);
+          else startSourceFix(args);
+          return true;
+        }
+        const findings = runFindingsFromEntries(entries).filter((finding) => finding.id);
+        if (!findings.length) showFixPanel("Choose a saved source finding", [FIX_USAGE, "Use /findings, open the finding, then choose Fix; or type its id here."]);
+        else setPicker({
+          state: createSelectorState("Generate verified source fix", findings.map((finding) => ({ id: finding.id!, label: finding.title, detail: finding.severity }))),
+          commit: startSourceFix,
+          onCancel: () => showFixPanel("Source fix selection cancelled", ["Nothing generated or published."]),
+        });
         return true;
       }
       case "impact": {
@@ -3407,9 +3517,6 @@ export function ChatScreen({
         void submitRef.current?.(prompt);
         return true;
       }
-      case "harness":
-        onNavigate("harness");
-        return true;
       case "settings":
         // The full screen, not the composer picker: settings want grouping,
         // real descriptions and reset affordances, none of which fit in a
@@ -3421,45 +3528,9 @@ export function ChatScreen({
         // chat just needs the nav entry (mirrors "/settings").
         onNavigate("keybindings");
         return true;
-      case "audits":
       case "onboard":
         onNavigate(parsed.command);
         return true;
-      case "stop": {
-        if (args === "audit") {
-          void stopAudit().catch((error: unknown) => {
-            appendEntry({ kind: "error", text: "Audit stop failed", detail: error instanceof Error ? error.message : String(error), turn: turn.current });
-          });
-          return true;
-        }
-        if (args !== "worker" && !args.startsWith("worker ")) {
-          appendEntry({ kind: "notice", text: "Use /stop audit or /stop worker <exact name or id>.", turn: turn.current });
-          return true;
-        }
-        const requested = args.startsWith("worker ") ? args.slice(7).trim() : "";
-        const id = requested || focusAgentId;
-        const matches = id
-          ? Object.values(herdAgentsRef.current).filter((record) => record.agentId === id || record.name === id)
-          : [];
-        if (matches.length !== 1 || !sessionRef.current) {
-          appendEntry({ kind: "notice", text: "Use /stop audit or /stop worker <exact name or id>.", detail: matches.length > 1 ? "That name is ambiguous; use the worker id from its details." : "No unique owned worker selected.", turn: turn.current });
-          return true;
-        }
-        const worker = matches[0]!;
-        const captured = captureStopScope(worker.agentId);
-        const ownedSession = sessionRef.current;
-        void ownedSession.stopPersistentAgent(worker.agentId).then((stopped) => {
-          if (stopped) {
-            confirmStopped(captured);
-            showToast(`Stopped ${worker.name || "worker"} and its descendants.`);
-          } else {
-            showToast("That worker is no longer live; no stop was confirmed.");
-          }
-        }).catch((error: unknown) => {
-          appendEntry({ kind: "error", text: "Worker stop failed", detail: error instanceof Error ? error.message : String(error), turn: turn.current });
-        });
-        return true;
-      }
       case "theme": {
         const current = settingsRef.current.theme;
         const arg = args.trim().toLowerCase();
@@ -3521,12 +3592,6 @@ export function ChatScreen({
         });
         return true;
       }
-      case "agents": {
-        setFocusAgentId(null);
-        setAgentNavIndex(workerRoster.length ? 0 : -1);
-        if (!workerRoster.length) appendEntry({ kind: "notice", text: "No workers yet. Delegated tasks will appear here.", turn: turn.current });
-        return true;
-      }
       case "chat":
         appendEntry({
           kind: "notice",
@@ -3537,15 +3602,6 @@ export function ChatScreen({
         return true;
       case "launcher":
         onNavigate("launcher");
-        return true;
-      case "herd":
-        onNavigate("herd");
-        return true;
-      case "comms":
-        // run.tsx routes the "comms" destination to the Agents Comms view (the
-        // live fleet + inter-agent message stream); chat just needs the nav
-        // entry (mirrors "/herd"/"/ops").
-        onNavigate("comms");
         return true;
       case "ops":
         onNavigate("ops");
@@ -3566,26 +3622,14 @@ export function ChatScreen({
         // Likewise for "/connect": run.tsx already routes the destination.
         onNavigate("connect");
         return true;
-      case "transcript":
-        setReviewOpen(true);
-        return true;
       case "history":
         onNavigate("history");
         return true;
       case "findings":
         onNavigate("findings");
         return true;
-      case "finding":
-        // `/finding [id]` opens the full-screen detail view. run.tsx routes the
-        // "finding" destination via its cast-guard + ShellNav.openFindingDetail;
-        // an id (when the operator typed one) is resolved from the store there.
-        onNavigate("finding", args || undefined);
-        return true;
       case "doctor":
         onNavigate("doctor");
-        return true;
-      case "replay":
-        onNavigate("replay");
         return true;
       case "back":
         onGoBack();
@@ -3604,10 +3648,15 @@ export function ChatScreen({
   }, [
     activeSubagents,
     appendEntry,
+    showFixPanel,
+    startSourceFix,
+    requestFixPublication,
+    entries,
     busy,
     captureStopScope,
     confirmStopped,
     focusAgentId,
+    returnToConversation,
     stopAudit,
     commandCatalog,
     discardStreamPatches,
@@ -3666,7 +3715,6 @@ export function ChatScreen({
     // the answer alongside the elapsed. Null until the turn returns, so a turn
     // that throws before reporting usage simply stamps nothing.
     let turnUsage: { inputTokens: number; outputTokens: number } | null = null;
-    streamingRef.current = false;
     // One controller per turn, published so Esc can reach it. It is cleared
     // in `finally`, so an Esc after the turn ended aborts nothing.
     const controller = new AbortController();
@@ -3679,7 +3727,6 @@ export function ChatScreen({
       const outcome = await session.send(text, {
         onAssistantDelta: (chunk) => {
           assistantText += chunk;
-          streamingRef.current = true;
           queueStreamPatch({
             kind: "assistant",
             text: assistantText,
@@ -3703,12 +3750,13 @@ export function ChatScreen({
           // this, the coalescing check below sees a tool entry as `last`,
           // starts a fresh entry, and re-prints the entire thought history.
           reasoningText = "";
+          const args = formatToolArgs(call);
           appendEntry({
-          kind: "tool",
-          text: call.name,
-          detail: formatToolArgs(call),
-          toolArgs: formatToolArgs(call),
-          turn: currentTurn,
+            kind: "tool",
+            text: call.name,
+            detail: args,
+            toolArgs: args,
+            turn: currentTurn,
           });
         },
         onToolResult: (call, result) => {
@@ -3788,40 +3836,25 @@ export function ChatScreen({
           if (usage.kind === "planner") {
             const planned = Number.isFinite(usage.inputTokens) && usage.inputTokens > 0 ? usage.inputTokens : undefined;
             setLastContext(planned);
-            // Replace the pending count with measured occupancy once the model
-            // actually receives the rewrite. Patch both the recap and inline
-            // indicator so the operator sees the real before→after.
-            const pending = pendingTokensAfterRef.current;
-            if (pending !== undefined && planned !== undefined) {
-              pendingTokensAfterRef.current = undefined;
-              const recap = compactionRecapsRef.current.get(pending);
-              if (recap) recap.tokensAfter = planned;
-              const before = recap?.tokensBefore ?? planned;
+            // Replace the estimated post-compaction count with measured
+            // occupancy in the inline notice.
+            const pending = pendingCompactionRef.current;
+            if (pending && planned !== undefined) {
+              pendingCompactionRef.current = undefined;
               setEntries((current) => current.map((entry) =>
-                entry.compactionNumber === pending && entry.kind === "notice"
-                  ? { ...entry, text: compactionIndicatorText(before, planned) }
+                entry.compactionNumber === pending.compactionNumber && entry.kind === "notice"
+                  ? { ...entry, text: compactionIndicatorText(pending.tokensBefore, planned) }
                   : entry));
             }
           }
         },
         onCompaction: (event) => {
-          // Release the previous full history; only the latest is reviewable.
-          // The next planner sample patches tokensAfter (see onUsage above).
-          compactionRecapsRef.current.clear();
-          compactionRecapsRef.current.set(event.compactionNumber, {
-            tokensBefore: event.tokensBefore,
-            // Core's immediate count is a local estimate. Wait for measured
-            // planner usage before presenting an exact post-compaction count.
-            tokensAfter: undefined,
-            summaryText: event.summaryText,
-            preCompactionMessages: event.preCompactionMessages,
-            degraded: event.degraded,
-          });
           setLatestCompaction(event.compactionNumber);
-          // A degraded compaction kept its history but produced no usable
-          // summary and no meaningful post size, so its indicator is a muted
-          // "summary unavailable" with no token counts to back-fill.
-          pendingTokensAfterRef.current = event.degraded ? undefined : event.compactionNumber;
+          // A degraded compaction has no usable post size to back-fill.
+          pendingCompactionRef.current = event.degraded ? undefined : {
+            compactionNumber: event.compactionNumber,
+            tokensBefore: event.tokensBefore,
+          };
           appendEntry({
             kind: "notice",
             text: event.degraded
@@ -4010,7 +4043,7 @@ export function ChatScreen({
       // Persist in `finally`, not in the success path and not in `catch`:
       // a turn that failed is exactly the one an operator wants to resume,
       // and this previously sat inside `catch`, so a SUCCESSFUL turn saved
-      // nothing at all and /resume always reported an empty history.
+      // nothing at all and the session picker always reported an empty history.
       if (session) {
         const firstUser = entriesRef.current.find((entry) => entry.kind === "user");
         saveSession({
@@ -4215,7 +4248,7 @@ export function ChatScreen({
       setOperatorState((state) => state ? operatorAppend(state, text) : state);
       return;
     }
-    if (approvalPrompt || picker || reviewOpen) return;
+    if (approvalPrompt || picker) return;
     composingRef.current = true;
     setComposing(true);
     // OMP-style collapse: an image path or a long text paste becomes a compact
@@ -4258,7 +4291,7 @@ export function ChatScreen({
         return;
       }
       if (key.name === "return") {
-        pendingOperatorQuestion.resolve(operatorState ? buildOperatorAnswer(operatorState) : null);
+        pendingOperatorQuestion.resolve(operatorStateRef.current ? buildOperatorAnswer(operatorStateRef.current) : null);
         setPendingOperatorQuestion(null);
         return;
       }
@@ -4296,6 +4329,11 @@ export function ChatScreen({
       }
       if (key.name === "escape") {
         approvalPrompt.decline();
+        return;
+      }
+      if (approvalPrompt.completeDetails && (key.name === "pageup" || key.name === "pagedown")) {
+        const body = approvalDetailsScrollRef.current;
+        if (body) body.scrollTop += (key.name === "pageup" ? -1 : 1) * Math.max(1, approvalBodyRows - 1);
         return;
       }
       if (key.name === "return") {
@@ -4402,118 +4440,19 @@ export function ChatScreen({
     // operator's persisted overrides rather than a hard-coded `key.name` literal,
     // so `/keybindings` remaps actually take effect. `matchesBinding` falls back
     // to the registry default when there is no override. The protected set
-    // (arrows, Enter, Esc, Ctrl+C, the modal scroll verbs, the review extremes
-    // and Right→accept-suggestion) keeps its literal guards on purpose.
+    // Composer navigation and protected exit/scroll keys keep literal guards.
     const keybindingOverrides = settingsRef.current.keybindings;
-    if (reviewOpen) {
-      // review-toggle is rebindable, so its close chord is resolved too (Esc
-      // always closes as well). The overlay's own scroll verbs stay literal —
-      // they are the protected modal Page/Ctrl+Home/End set.
-      if (key.name === "escape" || matchesBinding(key, "overlay.review-toggle", keybindingOverrides)) {
-        setReviewOpen(false);
-        return;
-      }
-
-      const review = reviewRenderableRef.current;
-      if (!review) return;
-      const pageRows = Math.max(1, Math.floor(review.height / 2));
-      if (key.name === "pageup" || (key.ctrl && key.name === "up")) {
-        review.scrollY -= pageRows;
-        return;
-      }
-      if (key.name === "pagedown" || (key.ctrl && key.name === "down")) {
-        review.scrollY += pageRows;
-        return;
-      }
-      if (key.ctrl && key.name === "home") {
-        review.scrollY = 0;
-        return;
-      }
-      if (key.ctrl && key.name === "end") {
-        review.scrollY = review.maxScrollY;
-      }
+    const chatShortcut = settings.showSubagents ? agentChatSwitcherShortcut(key) : null;
+    if (chatShortcut) {
+      key.preventDefault();
+      key.stopPropagation();
+      if (chatShortcut === "main") selectAgentChat(null);
+      else selectAgentChat(adjacentAgentChatTab(activeAgentChatTabs(projectedHerdRef.current),
+        focusAgentRef.current, chatShortcut === "previous" ? -1 : 1));
       return;
     }
-    if (matchesBinding(key, "overlay.review-toggle", keybindingOverrides)) {
-      setReviewOpen(true);
-      return;
-    }
-    // ── Inline subagent focus view (modal) ─────────────────────────────────────
-    // Drilled into ONE subagent: the live meta + activity panes replace the
-    // transcript. While the composer is IDLE, Up/Down (and PageUp/PageDown)
-    // scroll the activity back from its tail. Left focuses its parent (or Main
-    // for a root); Escape always returns to Main. A printable key falls through
-    // so the operator can message this worker; once composing, the composer
-    // retains its existing editing behavior.
-    if (focusAgentId && !composingRef.current) {
-      if (key.name === "escape" || key.name === "left") {
-        const focusTree = liveAgentTree.some((row) => row.item.agent_id === focusAgentId)
-          ? liveAgentTree
-          : agentTree;
-        const target = agentFocusNavigationTarget(key.name, focusTree, focusAgentId);
-        setFocusAgentId(target);
-        setFocusScrollOffset(0);
-        setAgentNavIndex(-1);
-        return;
-      }
-      if (key.name === "up") {
-        if (focusTranscriptRef.current) focusTranscriptRef.current.scrollBy(-1);
-        else setFocusScrollOffset((offset) => offset + 1);
-        return;
-      }
-      if (key.name === "down") {
-        if (focusTranscriptRef.current) focusTranscriptRef.current.scrollBy(1);
-        else setFocusScrollOffset((offset) => Math.max(0, offset - 1));
-        return;
-      }
-      if (key.name === "pageup") {
-        // Real transcript → scroll its scrollbox (like the main transcript);
-        // activity-ring fallback → step the windowed offset.
-        if (focusTranscriptRef.current) focusTranscriptRef.current.scrollBy(-0.5, "viewport");
-        else setFocusScrollOffset((offset) => offset + 5);
-        return;
-      }
-      if (key.name === "pagedown") {
-        if (focusTranscriptRef.current) focusTranscriptRef.current.scrollBy(0.5, "viewport");
-        else setFocusScrollOffset((offset) => Math.max(0, offset - 5));
-        return;
-      }
-      // No blanket return: a printable key drops through to the compose
-      // transition so typing to the subagent Just Works.
-    }
-    // ── Active-subagent list navigation (modal) ────────────────────────────────
-    // Selection has moved out of the composer and INTO the ACTIVE SUBAGENTS
-    // block. Up/Down move (wrapping) within the visible rows; Enter drills into
-    // the highlighted agent; Left or Esc returns focus to the composer. The list
-    // is the block's own visible subset, so the highlight is always on screen.
-    if (agentNavIndex >= 0) {
-      const navList = settings.showSubagents ? workerRoster : [];
-      if (navList.length === 0) {
-        setAgentNavIndex(-1);
-        return;
-      }
-      if (key.name === "escape" || key.name === "left") {
-        setAgentNavIndex(-1);
-        return;
-      }
-      if (key.name === "up") {
-        setAgentNavIndex((index) => moveAgentSelection(navList.length, index, -1));
-        return;
-      }
-      if (key.name === "down") {
-        setAgentNavIndex((index) => moveAgentSelection(navList.length, index, 1));
-        return;
-      }
-      if (key.name === "return") {
-        const selected = clampAgentSelection(navList.length, agentNavIndex);
-        const agent = selected >= 0 ? navList[selected] : undefined;
-        if (agent) {
-          setFocusAgentId(agent.agent_id);
-          setFocusScrollOffset(0);
-          setAgentNavIndex(-1);
-        }
-        return;
-      }
+    if (focusAgentId && key.name === "escape") {
+      returnToConversation();
       return;
     }
     // Transcript scrolling lives on PageUp/PageDown (and Ctrl+Up/Ctrl+Down
@@ -4523,9 +4462,8 @@ export function ChatScreen({
     // keeps the newest evidence in view the rest of the time.
     // Main-transcript scrolling is rebindable (nav.scroll-up / nav.scroll-down).
     // The default answers PageUp/Ctrl+Up and PageDown/Ctrl+Down; an override
-    // replaces those with the operator's chord. The MODAL scroll handlers inside
-    // the review overlay and the focus view above keep their literal Page/Ctrl
-    // guards — those scroll a different surface and are protected.
+    // replaces those with the operator's chord. The focused worker view keeps
+    // literal guards because it scrolls a different surface.
     if (matchesBinding(key, "nav.scroll-up", keybindingOverrides)) {
       transcriptRef.current?.scrollBy(-0.5, "viewport");
       return;
@@ -4554,24 +4492,10 @@ export function ChatScreen({
       );
       return;
     }
-    if (matchesBinding(key, "view.left-sidebar", keybindingOverrides)) {
-      updateSetting("showLeftSidebar", !settingsRef.current.showLeftSidebar);
-      return;
-    }
-    if (matchesBinding(key, "view.right-sidebar", keybindingOverrides)) {
-      updateSetting("showRightSidebar", !settingsRef.current.showRightSidebar);
-      return;
-    }
-    // nav.jump-agents (Ctrl+G) drops straight into the active-subagents list —
-    // the same affordance Down offers on an empty composer, reachable directly
-    // and while composing. Only acts when there are workers to jump to;
-    // otherwise it falls through so the chord is a harmless no-op.
     if (matchesBinding(key, "nav.jump-agents", keybindingOverrides)) {
-      const navList = settings.showSubagents ? workerRoster : [];
-      if (navList.length > 0) {
-        setAgentNavIndex(0);
-        return;
-      }
+      const tabs = activeAgentChatTabs(projectedHerdRef.current);
+      if (tabs.length) selectAgentChat(adjacentAgentChatTab(tabs, focusAgentRef.current, 1));
+      return;
     }
     // nav.open-comms (Ctrl+T) opens the agent comms view via the shell nav.
     if (matchesBinding(key, "nav.open-comms", keybindingOverrides)) {
@@ -4666,12 +4590,25 @@ export function ChatScreen({
     }
     if (composingRef.current) {
       if (commandMenuOpenRef.current && composerRef.current.trimStart().startsWith("/")) {
+        if (key.name === "left" && !key.ctrl && !key.meta && !key.option) {
+          // Leave the completion menu and put the caret inside the draft;
+          // this does not apply the command or discard its text.
+          setCommandMenuVisible(false);
+          moveComposerCursor(-1);
+          return;
+        }
         if (key.name === "up") {
           setSlashSelected((current) => Math.max(0, current - 1));
           return;
         }
         if (key.name === "down") {
-          setSlashSelected((current) => Math.min(Math.max(menuCommands.length - 1, 0), current + 1));
+          if (menuCommands.length <= 1) {
+            // There is no next command. Leave the single-result menu instead
+            // of pretending to move (or silently running its only command).
+            setCommandMenuVisible(false);
+          } else {
+            setSlashSelected((current) => Math.min(menuCommands.length - 1, current + 1));
+          }
           return;
         }
         if (key.name === "tab") {
@@ -4689,50 +4626,34 @@ export function ChatScreen({
         return;
       }
       if (key.name === "down") {
-        // The composer is append-only: the caret always sits on the LAST line,
-        // so "Down with nothing below the cursor" is the steady state while
-        // composing. When the operator is NOT browsing history back through the
-        // draft, and workers are running, that Down drops INTO the agents list —
-        // the same affordance the empty composer offers — rather than doing
-        // nothing. While browsing history, Down still walks forward toward the
-        // live draft first.
-        const browsingHistory = historyIndexRef.current < historyRef.current.length;
-        if (!browsingHistory) {
-          const navList = settings.showSubagents ? workerRoster : [];
-          if (navList.length > 0) {
-            setAgentNavIndex(0);
-            return;
-          }
-        }
         recallComposerHistory("down");
         return;
       }
-      // Right arrow accepts the inline autosuggestion (fish / Claude Code
-      // style). The composer is append-only, so the caret is ALWAYS at
-      // end-of-input while composing — the precondition for accepting — and →
-      // fills the ghost suffix into the draft WITHOUT submitting, then leaves
-      // the caret at the new end (setComposerText re-bases it there). With the
-      // feature off, a slash draft, or no matching suggestion, → falls through
-      // to its previous behaviour: a no-op, since the append-only composer has
-      // no caret to move right. Arrows are protected (non-rebindable) keys, so
-      // this is a literal key.name check like the Up/Down/Left handlers, not a
-      // matchesBinding lookup.
-      if (key.name === "right") {
+      // The suggestion is accepted only at end-of-input; otherwise the arrow
+      // moves the visible caret through the draft one grapheme at a time.
+      if (key.name === "left" && !key.ctrl && !key.meta && !key.option) {
+        moveComposerCursor(-1);
+        return;
+      }
+      if (key.name === "right" && !key.ctrl && !key.meta && !key.option) {
+        if (composerCursorRef.current < composerRef.current.length) {
+          moveComposerCursor(1);
+          return;
+        }
         const suffix = settingsRef.current.composerSuggestions
           && !composerRef.current.trimStart().startsWith("/")
           ? suggestCompletion(composerRef.current, historyRef.current)
           : null;
-        if (suffix) {
-          setComposerText(`${composerRef.current}${suffix}`);
-          return;
-        }
+        if (suffix) setComposerText(`${composerRef.current}${suffix}`);
+        return;
       }
       // Shift+Enter inserts a newline; plain Enter submits. Terminals that
       // cannot distinguish the two (no kitty keyboard protocol) fall through to
       // submit, which is the safe default. The multi-line composer renders the
       // newlines and grows to fit.
       if (key.name === "return" && key.shift) {
-        setComposerText(`${composerRef.current}\n`);
+        const at = composerCursorRef.current;
+        setComposerText(`${composerRef.current.slice(0, at)}\n${composerRef.current.slice(at)}`, at + 1);
         return;
       }
       if (key.name === "return") {
@@ -4761,15 +4682,14 @@ export function ChatScreen({
         const { text: expandedInput, consumedIds: consumedPasteIds } = expandPasteMarkers(input, pasteStoreRef.current);
         // Drilled into a subagent: a plain message is steered straight to it via
         // the hub mailbox, not sent to the main agent. Slash commands still run
-        // as commands (they fall through), so /agents, /settings, etc. keep
-        // working while focused.
+        // as commands (they fall through), so settings and tools remain usable.
         if (focusAgentId && !findCommand(input).isSlash) {
           const worker = herdAgents[focusAgentId];
-          if (worker?.status === "completed" || worker?.status === "failed") {
+          const terminalWorker = worker?.status === "completed" || worker?.status === "failed";
+          if (terminalWorker) {
             const result = renderInboundMessage({ id: `${focusAgentId}-followup`, from: focusAgentId, to: "Main", ts: Date.now(), body: worker.summary ?? worker.error ?? "" }).text;
             submitOperatorMessage(`Follow up on ${worker.name ?? focusAgentId}.\nTask: ${worker.task}\n${result}\n\nOperator request: ${expandedInput}`);
             setFocusAgentId(null);
-            setAgentNavIndex(-1);
           } else {
             const res = deliverToSubagent(focusAgentId, expandedInput);
             setSubagentTranscripts((prev) => ({ ...prev, [focusAgentId]: [...(prev[focusAgentId] ?? []), { id: `${focusAgentId}-operator-${Date.now()}`, kind: res.ok ? "user" : "error", text: res.ok ? expandedInput : `${res.reason ?? "Message could not be delivered"}. Your draft is retained; Escape returns to Main.`, turn: worker?.turn ?? 0, at: Date.now() }] }));
@@ -4777,10 +4697,14 @@ export function ChatScreen({
           }
           historyRef.current = pushHistory(historyRef.current, expandedInput);
           clearConsumedPastes(consumedPasteIds);
-          composingRef.current = false;
-          setComposerText("");
-          setComposing(false);
           setCommandMenuVisible(false);
+          if (terminalWorker) {
+            returnToConversation();
+          } else {
+            composingRef.current = false;
+            setComposerText("");
+            setComposing(false);
+          }
           return;
         }
         if (!findCommand(input).isSlash && !runtimeReadyRef.current) {
@@ -4793,8 +4717,10 @@ export function ChatScreen({
         // Done before the setComposerText("") below, which re-bases the history
         // cursor onto the freshly-grown ring.
         historyRef.current = pushHistory(historyRef.current, expandedInput);
+        const messagingWorker = Boolean(focusAgentId);
         submitOperatorMessage(expandedInput);
         clearConsumedPastes(consumedPasteIds);
+        if (messagingWorker && workerDraftRef.current === null) return;
         if (!restorePaletteDraft()) {
           composingRef.current = false;
           setComposerText("");
@@ -4803,53 +4729,53 @@ export function ChatScreen({
         }
         return;
       }
-      // Line editing. The composer is append-only — there is no caret to
-      // move — so the kill verbs that operate on the tail of the buffer are
-      // implemented and the caret-relative ones (Ctrl+A / Ctrl+E / Ctrl+K,
-      // arrows) deliberately are not; faking them would be worse than their
-      // absence. The transforms live in composer-edit.ts so word-boundary
-      // handling is unit-tested rather than inlined here.
-      //
-      // Ctrl+U — delete to start of line. This is where macOS maps
-      // Cmd+Backspace, which is the key the operator reported dead.
+      // Edit the text before the caret and keep the untouched suffix. The
+      // existing tail-oriented transforms also work on that prefix.
+      const at = composerCursorRef.current;
+      const prefix = composerRef.current.slice(0, at);
+      const suffix = composerRef.current.slice(at);
       if (key.ctrl && key.name === "u") {
-        setComposerText(deleteToLineStart(composerRef.current));
+        const next = deleteToLineStart(prefix);
+        setComposerText(next + suffix, next.length);
         return;
       }
-      // Ctrl+W, and Alt/Option+Backspace (`\x1b\x7f`, parsed as backspace
-      // with meta/option set) — delete the previous word.
-      if (key.ctrl && key.name === "w") {
-        setComposerText(deletePreviousWord(composerRef.current));
-        return;
-      }
-      if (key.name === "backspace" && (key.meta || key.option || key.ctrl)) {
-        setComposerText(deletePreviousWord(composerRef.current));
+      if ((key.ctrl && key.name === "w") || (key.name === "backspace" && (key.meta || key.option || key.ctrl))) {
+        const next = deletePreviousWord(prefix);
+        setComposerText(next + suffix, next.length);
         return;
       }
       if (key.name === "backspace") {
-        setComposerText(deletePreviousCharacter(composerRef.current));
+        const next = deletePreviousCharacter(prefix);
+        setComposerText(next + suffix, next.length);
         return;
       }
       if (key.sequence && !key.ctrl && !key.meta && !/[\x00-\x1f\x7f]/.test(key.sequence)) {
-        setComposerText(`${composerRef.current}${key.sequence}`);
+        setComposerText(`${prefix}${key.sequence}${suffix}`, at + key.sequence.length);
       }
       return;
     }
-    // Idle composer (nothing typed yet): Up recalls the most recent submission
-    // into the composer; Down moves INTO the active-subagents list when workers
-    // are running, otherwise recalls history. The trigger sits in the idle branch
-    // only, so it never fights the multiline composer, history browsing or the
-    // slash menu (all of which own Down while composing).
+    if (!composingRef.current && composerRef.current.length === 0 && settings.showSubagents) {
+      const workItems = agentChatWorkItems(projectedHerdRef.current);
+      const currentIndex = workItems.findIndex((item) => item.id === focusAgentRef.current);
+      if (key.name === "down") {
+        const next = workItems[currentIndex < 0 ? 0 : currentIndex + 1];
+        if (next) {
+          selectAgentChat(next.id);
+          return;
+        }
+        if (focusAgentRef.current) return;
+      }
+      if (key.name === "up" && focusAgentRef.current) {
+        const previous = currentIndex > 0 ? workItems[currentIndex - 1] : undefined;
+        selectAgentChat(previous?.id ?? null);
+        return;
+      }
+    }
     if (key.name === "up") {
       recallComposerHistory("up");
       return;
     }
     if (key.name === "down") {
-      const navList = settings.showSubagents ? workerRoster : [];
-      if (navList.length > 0) {
-        setAgentNavIndex(0);
-        return;
-      }
       recallComposerHistory("down");
       return;
     }
@@ -4860,9 +4786,7 @@ export function ChatScreen({
     }
   });
 
-  const hasHarnessPresentation = !harness.showConversation && harness.workspaceTrusted &&
-    harness.snapshot?.trusted === true && harness.snapshot.trustedUi.some((entry) => entry.tui);
-  const empty = entries.length === 0 && Object.keys(herdAgents).length === 0 && !hasHarnessPresentation;
+  const empty = entries.length === 0 && Object.keys(herdAgents).length === 0;
   // Parked messages are surfaced next to the working indicator, because that is
   // exactly where the operator is looking while they wait.
   const queueLabel = composerQueueLabel(queuedCount);
@@ -4872,49 +4796,71 @@ export function ChatScreen({
   const focusedTelemetry = focusAgentId ? workerTelemetry[focusAgentId] : undefined;
   const activeModel = session ? runtimeInfoHandle.current?.model() : undefined;
   const activeProvider = session ? runtimeInfoHandle.current?.providerId() : undefined;
-  const currentHostedCatalog = hostedCatalog && hostedCatalog.owner === session && hostedCatalog.expiresAt > Date.now() ? hostedCatalog.models : null;
   const contextLimit = useMemo(() => !focusAgentId && settings.showContextMeter
-    ? resolveContextLimit({ modelId: activeModel, providerId: activeProvider, hosted: activeProvider === "hosted" }, { hostedCatalog: currentHostedCatalog })
-    : null, [focusAgentId, settings.showContextMeter, activeModel, activeProvider, currentHostedCatalog]);
+    ? resolveContextLimit({ modelId: activeModel, providerId: activeProvider })
+    : null, [focusAgentId, settings.showContextMeter, activeModel, activeProvider]);
   // The window that drives context COMPACTION — resolved independently of the
   // context-METER display (which is gated by `showContextMeter` / a focused
   // subagent). Compaction must not turn off just because the meter is hidden or
   // the operator drilled into a child, so this ignores both gates.
   const compactionContextWindow = useMemo(
     () => (activeModel && activeProvider)
-      ? resolveContextLimit({ modelId: activeModel, providerId: activeProvider, hosted: activeProvider === "hosted" }, { hostedCatalog: currentHostedCatalog })?.tokens
+      ? resolveContextLimit({ modelId: activeModel, providerId: activeProvider })?.tokens
       : undefined,
-    [activeModel, activeProvider, currentHostedCatalog],
+    [activeModel, activeProvider],
   );
-  // Re-base the live session's compaction trigger whenever that window changes:
-  // a `/model` switch to a different-window model, or the per-account hosted
-  // catalog loading after the session was built (when the window was unknown).
-  // Unknown metadata explicitly clears a previous model's window. Keeping that
-  // stale limit would compact against the wrong model after a switch.
+  // Re-base the live session's compaction trigger after a model switch. An
+  // unknown window clears the previous model's threshold rather than carrying
+  // a stale limit into the next turn.
   useEffect(() => {
     sessionRef.current?.reconfigureRuntime({ contextWindowTokens: compactionContextWindow ?? null });
   }, [compactionContextWindow, activeModel, activeProvider]);
-  // The live "what it's doing" one-liner: the active tool + its args, truthfully
-  // (never fabricated). Only while the root turn is running and not focused on a
-  // worker. Computed here because the status bar is built above the later
-  // `runningEntry`.
-  const runningWorkers = Object.values(herdAgents).filter((agent) => agent.status === "running" || agent.status === "queued").length;
-  // The fleet's "running N agents" line, oh-my-pi style — a concise, TRUTHFUL
-  // count of the subagents genuinely in flight, or "" when the herd is quiet.
-  // Reused by the header status word, the below-composer working line, and the
-  // status-bar activity pill so all three read the same live fact.
-  const fleetActivityLabel = runningWorkers > 0
-    ? `running ${runningWorkers} agent${runningWorkers === 1 ? "" : "s"}`
+  // One bounded, display-only activity fact feeds the status pill, header,
+  // composer and herdr. Never promote a past tool or thought to "current".
+  const operatorQuestionOpen = Boolean(pendingOperatorQuestion && operatorState);
+  const gateOpen = Boolean(pendingScope || pendingLocalScope || pendingEscalation || pendingToolApproval || secretPrompt || operatorQuestionOpen);
+  const activeWorkers = Object.values(herdAgents).filter(
+    (agent) => !agent.operatorStopped && (agent.status === "running" || agent.status === "queued"),
+  );
+  const runningWorkers = activeWorkers.filter((agent) => agent.status === "running").length;
+  const queuedWorkers = activeWorkers.length - runningWorkers;
+  const activeAgent = activeWorkers.find((agent) => agent.agentId === focusAgentId)
+    ?? activeWorkers.find((agent) => agent.status === "running" && (agent.note || agent.tool))
+    ?? activeWorkers.find((agent) => agent.status === "running")
+    ?? activeWorkers[0];
+  const agentDetail = activeAgent
+    ? activeAgent.note
+      ? activityExcerpt(activeAgent.note, 56)
+      : activeAgent.tool
+        ? `last tool ${activityExcerpt(activeAgent.tool, 40)}`
+        : ""
     : "";
-  const statusRunningEntry = busy && !focusAgentId && runningTool
+  const agentActivity = activeAgent
+    ? activityExcerpt(
+        `${agentTaskLabel(activeAgent.task, activeAgent.name)} · ` +
+        (agentDetail || (activeAgent.status === "queued" ? "waiting to start" : "running")),
+      )
+    : "";
+  const rootTail = busy ? entries.findLast((entry) => entry.turn === turn.current) : undefined;
+  const runningEntry = runningTool
     ? entries.findLast((entry) => entry.kind === "tool" && entry.text === runningTool && entry.success === undefined)
     : undefined;
-  // The live "what it's doing" pill: the in-flight tool (+ its argument
-  // preview) while the root turn owns a call, otherwise the fleet's running
-  // count when subagents are the only thing in flight. Never fabricated.
-  const statusActivity = busy && !focusAgentId && runningTool
-    ? waitActivityLabel ?? (statusRunningEntry?.toolArgs ? `${runningTool} · ${statusRunningEntry.toolArgs}` : runningTool)
-    : fleetActivityLabel || undefined;
+  const rootActivity = busy && !focusAgentId
+    ? waitActivityLabel
+      ? activityExcerpt(waitActivityLabel)
+      : runningTool
+        ? toolActivity(runningTool, runningEntry?.toolArgs)
+        : rootTail?.kind === "reasoning"
+          ? `reasoning · ${reasoningExcerpt(rootTail.text) || "in progress"}`
+          : rootTail?.kind === "assistant"
+            ? "responding"
+            : agentActivity || "working"
+    : "";
+  const activityLabel = startupError ? "" : gateOpen ? "waiting for you" : rootActivity || agentActivity || (busy ? "working" : "");
+  const statusActivity = activityLabel || undefined;
+  useEffect(() => {
+    onAuditActivity({ activity: statusActivity ?? "" });
+  }, [statusActivity, onAuditActivity]);
   const usageByModel = useMemo(() => {
     const entries: StatusBarUsageEntry[] = [];
     if (modelId && (sessionTokens.input > 0 || sessionTokens.output > 0)) {
@@ -4944,11 +4890,10 @@ export function ChatScreen({
     }),
     { input: 0, output: 0, cached: 0 },
   );
-  const visibleModel = activeProvider === "hosted" ? "0security Auto" : modelId ?? undefined;
+  const visibleModel = modelId ?? undefined;
   const statusSegments = buildStatusSegments({
     model: focusAgentId ? focusedTelemetry?.model : visibleModel,
     mode: autonomyFooterText(mode),
-    activity: statusActivity,
     turnElapsedMs: settings.elapsedTimer !== "off" && !focusAgentId && busy && activeTurnStartedAt.current !== null
       ? Date.now() - activeTurnStartedAt.current : undefined,
     evolution: evolutionStatus,
@@ -4971,9 +4916,12 @@ export function ChatScreen({
     contextWindow: contextLimit?.tokens,
     contextUsed: !focusAgentId ? lastContext : undefined,
     showCost: settings.showCost,
-    hostedBalance: !focusAgentId && cloudBalance && cloudBalance.owner === session && cloudSource.current?.isHosted()
-      ? formatHostedBalance(cloudBalance.state) : undefined,
   });
+  // The turn timer's leading glyph uses the smooth worker spinner.
+  if (busy) {
+    const elapsed = statusSegments.find((segment) => segment.kind === "elapsed");
+    if (elapsed) elapsed.icon = spinnerGlyph(animTick, { reduceMotion: settings.reduceMotion });
+  }
   // Feed herdr the same live facts the status bar shows — model/provider,
   // context %, the target/objective topic and the current activity — so the
   // pane's sidebar chrome names 0's work. Gated on `interactive`: only the
@@ -5036,16 +4984,17 @@ export function ChatScreen({
   const approvalHasSubject = Boolean(approvalPrompt?.subject);
   const approvalBodyAll = approvalPrompt?.bodyLines ?? [];
   const approvalMaxBody = compact ? 2 : 5;
-  const approvalBodyShown = approvalBodyAll.length > approvalMaxBody
+  const approvalBodyShown = !approvalPrompt?.completeDetails && approvalBodyAll.length > approvalMaxBody
     ? [
         ...approvalBodyAll.slice(0, Math.max(0, approvalMaxBody - 1)),
         `+${approvalBodyAll.length - Math.max(0, approvalMaxBody - 1)} more`,
       ]
     : approvalBodyAll;
+  const approvalBodyRows = Math.min(approvalBodyShown.length, approvalMaxBody);
   const approvalBoxHeight = approvalPrompt
     ? approvalCardRows({
         hasSubject: approvalHasSubject,
-        bodyRows: approvalBodyShown.length,
+        bodyRows: approvalBodyRows,
         choiceRows: approvalItems.length,
       })
     : 0;
@@ -5054,7 +5003,6 @@ export function ChatScreen({
   // The body (headers + prose + option/custom rows) lives in a fixed-height
   // scrollbox, so it is bought out of the SAME column budget the picker/approval
   // use and can never over-subscribe the column, however many questions arrive.
-  const operatorQuestionOpen = Boolean(pendingOperatorQuestion && operatorState);
   const operatorRows: OperatorDisplayRow[] = operatorState ? planOperatorRows(operatorState) : [];
   // Title + footer + two border rows on top of the body viewport.
   const OPERATOR_CHROME_ROWS = 4;
@@ -5077,51 +5025,14 @@ export function ChatScreen({
   // focus view and suppresses the rail / subagent block while it is open.
   const nowMs = Date.now();
   const focusRecord = focusAgentId ? projectedHerdAgents[focusAgentId] : undefined;
-  const focusTreeRow = focusAgentId
-    ? liveAgentTree.find((row) => row.item.agent_id === focusAgentId)
-      ?? agentTree.find((row) => row.item.agent_id === focusAgentId)
-    : undefined;
-  const focusAgentName = focusRecord?.name
-    ?? agentNamesRef.current.get(focusAgentId ?? "")
-    ?? "Unnamed worker";
-  const focusParentName = focusTreeRow?.parentId
-    ? projectedHerdAgents[focusTreeRow.parentId]?.name
-      ?? agentNamesRef.current.get(focusTreeRow.parentId)
-      ?? focusTreeRow.parentId
-    : "Main";
-  const focusPeer = focusAgentId
-    ? subagentPeers(projectedHerdAgents, nowMs).find((peer) => peer.id === focusAgentId)
-    : undefined;
-  const focused = focusAgentId != null && focusRecord != null && focusPeer != null;
-  // The two sidebars' budget: each hidden while focused, on a narrow terminal,
-  // or when its setting is off — all folded into `computeSidebarsLayout`, which
-  // gives the transcript priority (it keeps its minimum width; the RIGHT
-  // sidebar wins the last column when only one fits) and hands back the
-  // transcript's text-wrap width for the frame it leaves between them.
-  const sidebars = computeSidebarsLayout({
-    width,
-    contentWidth,
-    compact,
-    showLeft: settings.showLeftSidebar && !focused && interactive && Boolean(renderAuditSwitcher),
-    showRight: settings.showRightSidebar && !focused,
-  });
-  // Usable width INSIDE the transcript panel: the ledger box adds its own
-  // paddingX (folded into the sidebar layout), which an entry's own border must
-  // live within. Shrinks to make room when a sidebar is shown.
-  const transcriptWidth = sidebars.transcriptWidth;
+  const focusAgentName = focusRecord ? agentTaskLabel(focusRecord.task, focusRecord.name) : "Worker";
+  const focused = Boolean(focusAgentId && focusRecord);
+  const transcriptWidth = Math.max(1, contentWidth - 1);
   // "0" is 4 cells. The optional objective sits at the top-right; target,
   // scope, and readiness take the remaining header cells. Autonomy mode lives
   // in the bottom status bar rather than competing with engagement posture.
-  const sidebarControlWidth = contentWidth >= 64 ? 24 : 8;
-  const headerObjective = !compact && settings.showObjective ? objective.trim() : "";
-  const headerObjectiveWidth = headerObjective
-    ? Math.max(0, Math.min(headerObjective.length, Math.floor((contentWidth - 4 - sidebarControlWidth) * 0.35)))
-    : 0;
-  const headerGapCells = headerObjectiveWidth > 0 ? 2 : 1;
-  const headerEngagementWidth = Math.max(
-    1,
-    contentWidth - 4 - headerObjectiveWidth - headerGapCells - sidebarControlWidth - 1,
-  );
+  const headerWidth = Math.max(0, width - 2);
+  const headerEngagementWidth = Math.max(1, headerWidth - 5);
   // Relative ages need a clock, but the transcript must not repaint every
   // second just to age a label. Tick only while timestamps are enabled, and
   // only at the granularity the format actually shows.
@@ -5129,14 +5040,8 @@ export function ChatScreen({
   // separately and are orthogonal to it. An env override lets a style be pinned
   // for a preview or a capture without touching the settings file.
   const transcriptStyleSettings = resolveTranscriptStyleSettings(settings, process.env);
-  // One animation kind per real state. `awaiting-operator` is deliberately
-  // NOT a busy spinner: when the human is the bottleneck the surface should
-  // look expectant, not like it is grinding. Derived above `entryDisplay` so the
-  // shimmer frame it carries can be gated on the same running-state read.
-  const gateOpen = Boolean(pendingScope || pendingLocalScope || pendingEscalation || pendingToolApproval || secretPrompt || operatorQuestionOpen);
-  useEffect(() => {
-    if (reviewOpen && gateOpen) setReviewOpen(false);
-  }, [gateOpen, reviewOpen]);
+  // The operator gate is expectant, not a busy spinner. The live tail
+  // determines whether answer tokens are actually streaming.
   const animationKind: AnimationKind | null = startupError ? null : gateOpen
     ? "awaiting-operator"
     : runningTool
@@ -5144,20 +5049,16 @@ export function ChatScreen({
       : !session
         ? "connecting"
         : busy
-          ? streamingRef.current
-            ? "streaming"
-            : "thinking"
+          ? (rootTail?.kind === "assistant" ? "streaming" : "thinking")
           : null;
   // Reset before painting so a new activity never inherits the previous timer.
   const activitySince = useMemo(() => Date.now(), [animationKind]);
   // animTick is read only to make the frame recompute on each interval.
   void animTick;
-  // The loading shimmer is alive only while a turn is genuinely WORKING —
-  // thinking, streaming, connecting or running a tool. `awaiting-operator` is
-  // the human's turn, not the machine's, so it stays static (expectant, not
-  // grinding); an idle console has nothing to shimmer. reduceMotion stills it.
+  // A genuine running state shimmers unless reduced motion is enabled. An
+  // operator gate is static because it is the human's turn, not the machine's.
   const shimmerActive =
-    !settings.reduceMotion && animationKind !== null && animationKind !== "awaiting-operator";
+    !settings.reduceMotion && !gateOpen && (animationKind !== null || runningWorkers > 0);
   const entryDisplay: EntryDisplay = {
     spacing: settings.density === "compact" ? 0 : 1,
     showTimestamps: settings.showTimestamps,
@@ -5173,28 +5074,20 @@ export function ChatScreen({
     showTokenUsage: settings.showTokenUsage,
     showCost: settings.showCost,
     transcriptDetail: settings.transcriptDetail,
-    // A number only while a turn is working (and reduceMotion is off), so running
-    // tool/subagent rows shimmer in phase with the thinking indicator and render
-    // static the instant they settle.
+    // Only live rows shimmer; reduceMotion and settled rows remain static.
     shimmerFrame: shimmerActive ? shimmerFrame : undefined,
-    // The turn currently in flight, so a collapsed fold for the WORKING turn
-    // shimmers while every past turn's stays static. Undefined when idle.
     activeTurn: busy ? turn.current : undefined,
-    // The live tail entry — only its reasoning row shimmers, so a working turn
-    // shows ONE shimmering "thinking", not every past thinking block at once.
-    activeEntryId: busy ? entries[entries.length - 1]?.id : undefined,
+    activeEntryId: busy ? rootTail?.id : undefined,
   };
   const animation = animationKind
     ? frameAt(animationKind, Date.now() - activitySince, {
-        label: animationKind === "tool" ? waitActivityLabel ?? runningTool ?? undefined : undefined,
+        label: animationKind === "awaiting-operator" ? undefined : activityLabel,
         motion: !settings.reduceMotion && animationKind !== "awaiting-operator",
       })
 : null;
   const loadingLabel = animation?.glyph ?? "";
-  // The bottom bar is telemetry-only. The live spinner already appears in
-  // `workingIndicator`; repeating its glyph before the status pills made the
-  // real activity read as an unexplained `Esc · ...` prefix in terminals that
-  // render the glyph fallback textually.
+  // The active-turn elapsed pill now carries the animated spinner; idle status
+  // has no elapsed segment and therefore no spinner.
   const statusContentWidth = controlsWidth;
   const visibleStatusSegments = settings.showStatusBar ? statusSegments
     : statusSegments.filter((segment) => segment.kind === "mode" || segment.kind === "elapsed");
@@ -5220,7 +5113,7 @@ export function ChatScreen({
     return () => clearInterval(timer);
   }, [shimmerActive, interactive]);
 
-  const menu = computeCommandMenuLayout({ width, compact });
+  const menu = computeCommandMenuLayout({ width: contentWidth + (compact ? 4 : 6), compact });
   // Height is stated explicitly so the border is drawn where the content
   // actually ends, and flexShrink is disabled so the column cannot squeeze
   // the box out from under its own children. The no-match state still needs a
@@ -5232,53 +5125,11 @@ export function ChatScreen({
 
   const commandMenuVisible = composing && commandMenuOpen && isSlashComposer;
 
-  // ACTIVE SUBAGENTS. `spawn_agents` fans out up to 8 with 4 running at
-  // once, so this block is genuinely multi-row and genuinely unbounded —
-  // and it was neither height-capped nor `flexShrink={0}`, so under column
-  // pressure Yoga collapsed it and its rows painted into each other and
-  // into the title. Cap what is shown, state the overflow, and reserve
-  // EXACTLY what is rendered.
-  // The compact ACTIVE SUBAGENTS block stays visible even while a subagent is
-  // focused, so the operator keeps sight of the whole fleet and which one they
-  // are drilled into (the focused row wears the highlight below). Its rows are
-  // reserved in the ledger via computeLedgerRows regardless of focus, so the
-  // focus transcript makes room for it.
-  const subagentTreeRows = settings.showSubagents ? liveAgentTree : [];
-  const subagentEntries = subagentTreeRows.map((row) => row.item);
-  const hasSubagents = subagentEntries.length > 0;
-  const visibleRosterLimit = Math.max(1, Math.min(SUBAGENT_MAX_VISIBLE, Math.floor(height / 5)));
-  // The panel is EXPANDED by default so running agents are visible without the
-  // operator arrowing in (the OMP-style "always show what the herd is doing").
-  // It collapses to a one-line summary when the operator toggles the corner
-  // control, and AUTO-collapses on a very narrow terminal where per-agent rows
-  // would not fit. Drilling in (agentNavIndex >= 0) always forces it open so the
-  // selection is on screen — the existing Down-arrow path keeps working.
-  const subagentPanelNarrow = contentWidth < SUBAGENT_PANEL_MIN_WIDTH;
-  const subagentPanelCollapsed = hasSubagents && agentNavIndex < 0 && (agentsPanelCollapsed || subagentPanelNarrow);
-  const rosterStart = agentNavIndex >= 0 ? Math.max(0, agentNavIndex - visibleRosterLimit + 1) : 0;
-  const subagentVisible = subagentPanelCollapsed
-    ? []
-    : agentNavIndex >= 0
-      ? subagentTreeRows.slice(rosterStart, rosterStart + visibleRosterLimit)
-      : subagentTreeRows.slice(0, visibleRosterLimit);
-  const subagentOverflow = subagentEntries.length - subagentVisible.length;
-  // Below the header: the visible rows plus a "+N more" tail whenever the
-  // roster outruns the window (both when navigating and when resting expanded).
-  const subagentOverflowRow = !subagentPanelCollapsed && subagentOverflow > 0 ? 1 : 0;
-  // Collapsed → the single summary line (the header itself). Expanded → header
-  // + rows + overflow tail.
-  const subagentBlockRows = !hasSubagents
-    ? 0
-    : subagentPanelCollapsed
-      ? 1
-      : 1 + subagentVisible.length + subagentOverflowRow;
-  // Selection within the block while navigating into it. Clamped every render so
-  // an index left dangling by a finished agent lands back on a live row.
-  const agentNavSelected =
-    agentNavIndex >= 0 ? clampAgentSelection(subagentEntries.length, agentNavIndex) : -1;
-  // The focused transcript already carries its own controls; reserve the
-  // extra hint row only while navigating the roster.
-  const showAgentNavHint = false;
+  const agentWorkCount = Object.keys(projectedHerdAgents).length;
+  const showAgentWorkList = settings.showSubagents && (Boolean(focusAgentId) || agentWorkCount > 0);
+  const agentWorkRows = showAgentWorkList
+    ? agentWorkListHeight(agentWorkCount, Math.min(12, Math.max(2, height - 16)))
+    : 0;
 
   // Every other region in the column is flexShrink={0}, so the transcript
   // absorbs all the pressure. Compute what it actually has left: a
@@ -5294,100 +5145,63 @@ export function ChatScreen({
   // followed from the same miscount.
   const composerStyle: TuiSettings["composerStyle"] =
     settings.composerStyle === "border" ? "rail" : settings.composerStyle;
-  const composerInnerTextWidth = Math.max(1, sidebars.transcriptWidth - (composerStyle === "rail" ? 5 : 3));
+  const composerInnerTextWidth = Math.max(1, contentWidth - (composerStyle === "rail" ? 5 : 3));
   const composerInputRows = composing
     ? composerContentRows(sanitizeComposerText(composer).replace(/\t/g, "    "), composerInnerTextWidth).length : 1;
   const ledgerRows = computeLedgerRows({
+    // The activity row uses this existing ticker and stays beside the composer.
     height,
     compact,
     composerRows: composerInputRows + (composerStyle === "plain" ? 0 : 2) + 1,
     // The picker and the command menu occupy the same slot and both carry a
     // marginTop, which computeLedgerRows adds for a non-zero menuRows.
     menuRows: commandMenuVisible ? commandMenuHeight : picker ? pickerBoxHeight : 0,
-    subagentRows: subagentBlockRows > 0 ? subagentBlockRows + 1 : 0,
+    subagentRows: agentWorkRows > 0 ? agentWorkRows + 1 : 0,
     approvalRows: (approvalPrompt ? approvalBoxHeight + 1 : 0)
       + (secretPrompt ? SECRET_PANEL_HEIGHT + 1 : 0)
       + (operatorQuestionOpen ? operatorBoxHeight + 1 : 0),
-    // The agent-nav hint row (+ its marginTop) below the composer.
-    hintRows: (showAgentNavHint ? 2 : 0) + 1 + (animation ? 2 : 0),
+    hintRows: 1 + (busy || gateOpen || runningWorkers > 0 ? 1 : 0),
   });
-  // Optional empty-state lines are dropped from the bottom up rather than
-  // overprinted. The mark needs the most room, so it goes first.
-  // The block mark shows whenever the column can hold it — width for the glyph,
-  // height for the mark rows — regardless of the compact flag, so a narrow-but-
-  // tall terminal still gets the real logo instead of the text fallback.
+  // Keep the brand visible when access needs repair; reserve the compact,
+  // truthful connection notice before deciding whether the block mark fits.
+  const heroRecoveryRows = startupError ? 4 : checkingModel ? 2 : 0;
+  const showRepositorySuggestions = interactive && git?.isRepo === true
+    && contentWidth >= 58 && height >= 24 && !composingRef.current;
+  const heroBrandRows = Math.max(0, ledgerRows - heroRecoveryRows - (showRepositorySuggestions ? 3 : 0));
   const showTerminalMark =
-    settings.showLogo && empty && ledgerRows >= LEDGER_MARK_ROWS && contentWidth >= TERMINAL_BLOCK_LOGO_WIDTH;
-  const showEmptyStateTagline = empty && ledgerRows >= 3;
-  // The header readiness word, oh-my-pi style: not a bare "working" but a live,
-  // informative indicator — an animated spinner glyph, the present-tense verb
-  // for what's happening (thinking / responding / a tool name), the fleet's
-  // "running N agents" when subagents are in flight, and the turn's elapsed
-  // clock ("1m 12s") once past the flicker threshold. Every piece is driven by
-  // the SAME `animTick` the below-composer indicator uses (no new interval), so
-  // the glyph advances in lock-step; reduceMotion pins the glyph to frame 0
-  // (via `motion:false` in `frameAt`) so the word stays honest but still.
-  const turnElapsedMs =
-    busy && activeTurnStartedAt.current !== null ? Date.now() - activeTurnStartedAt.current : 0;
-  const elapsedClock =
-    turnElapsedMs >= ELAPSED_VISIBLE_AFTER_MS ? formatElapsedClock(turnElapsedMs) : "";
-  const busyStatusWord = (() => {
-    // A busy machine-turn: spinner + verb (+ agents) (+ elapsed).
-    if (animation && animationKind !== "awaiting-operator") {
-      const parts = [animation.label];
-      if (fleetActivityLabel && !waitActivityLabel) parts.push(fleetActivityLabel);
-      if (elapsedClock) parts.push(elapsedClock);
-      return `${loadingLabel} ${parts.join(" · ")}`;
-    }
-    // The human's turn: expectant wording, not a grinding spinner.
-    if (animationKind === "awaiting-operator" && animation) {
-      return `${loadingLabel} ${animation.label}`;
-    }
-    // The root turn is idle but the herd is still working: keep the header
-    // alive with the smooth spinner and the running count.
-    if (!busy && fleetActivityLabel) {
-      const glyph = spinnerGlyph(animTick, { reduceMotion: settings.reduceMotion });
-      return `${glyph} ${fleetActivityLabel}`;
-    }
-    return "";
-  })();
-  const accountAdmissionBlocked = startupError?.accountRestricted ?? false;
-  const sessionState = checkingModel
-    ? "checking service"
-    : startupError ? accountAdmissionBlocked ? "account restricted" : activeProvider === "hosted" ? "service unavailable" : "needs connection"
-    : busyStatusWord || (busy ? "working" : session ? "idle" : "connecting");
+    settings.showLogo && empty && heroBrandRows >= LEDGER_MARK_ROWS && contentWidth >= TERMINAL_BLOCK_LOGO_WIDTH;
+  const activityGlyph = loadingLabel || spinnerGlyph(animTick, { reduceMotion: settings.reduceMotion });
+  const activityRowText = gateOpen ? "Waiting for you"
+    : busy ? waitActivityLabel || (runningTool ? toolActivity(runningTool, runningEntry?.toolArgs)
+      : rootTail?.kind === "assistant" ? "Responding"
+        : runningWorkers > 0 ? `Working · ${runningWorkers} ${runningWorkers === 1 ? "agent" : "agents"}` : "Working")
+    : runningWorkers > 0 || queuedWorkers > 0
+      ? [runningWorkers ? `${runningWorkers} working` : "", queuedWorkers ? `${queuedWorkers} queued` : ""].filter(Boolean).join(" · ")
+      : "";
+  const activityRow = activityRowText ? (
+    <box width="100%" height={1} flexShrink={0} minWidth={0} overflow="hidden" flexDirection="row" gap={2}>
+      <text width={GLYPH_CELLS} height={1} flexShrink={0} wrapMode="none" fg={gateOpen ? WARNING : MUTED}>
+        {activityGlyph}
+      </text>
+      <text flexGrow={1} minWidth={0} height={1} wrapMode="none" truncate fg={gateOpen ? WARNING : MUTED}>
+        {activityRowText}
+      </text>
+    </box>
+  ) : null;
   const headerSegments: string[] = [];
-  if (settings.showScope) headerSegments.push(`Scope: ${scopeLabel}`);
-  headerSegments.push(sessionState);
+  if (settings.showScope && session?.scopeEnforcement.enabled) headerSegments.push(`Scope: ${scopeLabel}`);
   // Version rides at the far left of the top bar, like the startup masthead,
   // carrying the build-channel badge right beside it: [dev] when launched from
   // a dev source checkout (the `0dev` wrapper exports ZERO_DEV_SOURCE_ROOT),
-  // else [beta] for a published build. fitTuiText truncates the MIDDLE here, so
-  // this leading segment survives even on a narrow bar.
+  // else [beta] for a published build. End fitting preserves the activity
+  // prefix when a long scope label or objective constrains the header.
   const channelBadge = process.env["ZERO_DEV_SOURCE_ROOT"]?.trim() ? "[dev]" : "[beta]";
   const headerEngagement = [`v${VERSION} ${channelBadge}`, ...headerSegments].join(" · ");
+  const mainActivity = objective.trim()
+    || entries.find((entry) => entry.kind === "user")?.text.split("\n", 1)[0].trim()
+    || (busy ? "Working" : "Current conversation");
 
 
-  // Activity comes from the real in-flight call, not an invented model intent.
-  // Its spinner lives once, below the composer in the loading/status row.
-  const runningEntry = runningTool ? entries.findLast((entry) => entry.kind === "tool" && entry.text === runningTool && entry.success === undefined) : undefined;
-  const workingLineBase = waitActivityLabel
-    ?? (runningEntry?.toolArgs ? `${runningTool} · ${runningEntry.toolArgs}` : animation?.label ?? "");
-  // Fold the live "running N agents" fact into the below-composer indicator too
-  // (unless the base already speaks about the fleet), so the most prominent
-  // "something is happening" line names what the herd is doing, not just the
-  // root turn's verb.
-  const workingLine = fleetActivityLabel && !workingLineBase.includes("agent")
-    ? (workingLineBase ? `${workingLineBase} · ${fleetActivityLabel}` : fleetActivityLabel)
-    : workingLineBase;
-  const workingLineFitted = fitTuiText(workingLine, controlsWidth);
-  const workingIndicator = animation ? (
-    <box width="100%" height={1} flexShrink={0} marginTop={1} overflow="hidden">
-      {shimmerActive
-        ? <ShimmerText label={workingLineFitted} frame={shimmerFrame} base={MUTED} peak={TEXT} />
-        : <text fg={animationKind === "awaiting-operator" ? WARNING : MUTED}>{workingLineFitted}</text>}
-    </box>
-  ) : null;
 
   // ── The composer, single-sourced ──────────────────────────────────────────
   // ONE element, rendered in the centered hero when empty and pinned above the
@@ -5409,15 +5223,14 @@ export function ChatScreen({
   // cells and grows downward up to COMPOSER_MAX_ROWS, then scrolls the oldest
   // rows out to keep the tail cursor in view. The block cursor is FILLED when
   // the composer is focused (`composerActive`) and HOLLOW when it is not.
-  // The inline autosuggestion shown as dimmed ghost text after the caret. Only
-  // while composing a non-slash draft with the feature enabled; the pure prefix
-  // match over submitted-message history lives in composer-suggest.ts. `null`
-  // (empty draft, no match, or a draft equal to a full entry) shows nothing.
-  const composerSuggestion = settings.composerSuggestions && composing && !isSlashComposer
+  // Autosuggestions appear only at the tail, never after an interior caret.
+  const composerSuggestion = settings.composerSuggestions && composing && composerCursor === composer.length && !isSlashComposer
     ? suggestCompletion(composer, historyRef.current)
     : null;
   const composerInput = (textWidth: number) => {
-    const placeholder = checkingModel
+    const placeholder = focusAgentId
+      ? `to ${focusAgentName} · [Esc] restores Main draft`
+      : checkingModel
       ? "checking service · you can keep drafting"
       : startupError
       ? "draft here · restore access to send"
@@ -5436,6 +5249,7 @@ export function ChatScreen({
         active={composerActive}
         text={composer}
         textWidth={textWidth}
+        cursorIndex={composerCursor}
         placeholder={placeholder}
         placeholderTone={startupError ? ERROR : MUTED}
         theme={theme}
@@ -5453,18 +5267,14 @@ export function ChatScreen({
     textWidth,
     outerWidth,
     padY = 0,
-    edgeToEdge = false,
-    inputInset = 0,
   }: {
     textWidth: number;
     outerWidth?: number;
     padY?: number;
-    edgeToEdge?: boolean;
-    inputInset?: number;
   }) => (
-    <box flexDirection="row" width={outerWidth ?? "100%"} flexShrink={0} marginTop={1} marginLeft={edgeToEdge ? -(compact ? 1 : 2) : 0} minWidth={0}>
-      <ComposerFrame style={composerStyle} active={composerActive} theme={theme} padY={padY}>
-        <box flexDirection="row" width="100%" minWidth={0} paddingLeft={inputInset}>
+    <box flexDirection="row" width={outerWidth ?? "100%"} flexShrink={0} marginTop={1} minWidth={0}>
+      <ComposerFrame style={composerStyle} theme={theme} padY={padY}>
+        <box flexDirection="row" width="100%" minWidth={0}>
           <text width={1} flexShrink={0} fg={composing ? PRIMARY : MUTED}>›</text>
           <text width={1} flexShrink={0} fg={MUTED}> </text>
           <box width={textWidth} flexShrink={0} minWidth={0}>
@@ -5476,9 +5286,7 @@ export function ChatScreen({
   );
   const composerNode = buildComposer({
     textWidth: composerInnerTextWidth,
-    outerWidth: width,
-    edgeToEdge: true,
-    inputInset: (compact ? 1 : 2) + (sidebars.leftVisible ? sidebars.leftWidth + sidebars.leftGap : 0),
+    outerWidth: contentWidth,
   });
 
   // ── Sticky context above the composer ──────────────────────────────────────
@@ -5524,8 +5332,11 @@ export function ChatScreen({
   // content column, clamped to a comfortable 40..72 cells and never wider than
   // the column itself. Four cells of chrome (rail + its gap + the "› " prefix)
   // come off the width for the input field.
-  const heroContentWidth = sidebars.rightVisible ? sidebars.transcriptWidth : contentWidth;
-  const heroComposerWidth = Math.min(heroContentWidth, startupError || checkingModel ? 72 : Math.max(40, Math.min(72, Math.floor(heroContentWidth * 0.6))));
+  const heroContentWidth = contentWidth;
+  const repoSuggestionItems = heroContentWidth >= 78
+    ? REPOSITORY_STARTERS
+    : COMPACT_REPOSITORY_STARTERS;
+  const heroComposerWidth = Math.min(heroContentWidth, Math.max(40, Math.min(72, Math.floor(heroContentWidth * 0.6))));
   const heroComposerTextWidth = Math.max(1, heroComposerWidth - (composerStyle === "rail" ? 5 : 3));
   const heroComposerNode = buildComposer({
     textWidth: heroComposerTextWidth,
@@ -5533,18 +5344,28 @@ export function ChatScreen({
     padY: 1,
   });
   // Centre the whole welcome group, not just the composer. Measure the actual
-  // masthead (which may omit the native image) and composer rather than assuming
-  // a fixed hero height. Retain the masthead measurement while an overlay replaces
-  // it, so filtering the slash menu cannot move the input.
-  const [heroMastheadRows, setHeroMastheadRows] = useState(0);
-  const [heroComposerRows, setHeroComposerRows] = useState(0);
+  // masthead, optional repository suggestions and composer instead of assuming
+  // a fixed hero height. Keep measuring that block while overlays replace it,
+  // so filtering the slash menu cannot move the input.
+  const [heroMastheadRows, setHeroMastheadRows] = useDevUiState(devUi, "heroMastheadRows", 0);
+  const [heroComposerRows, setHeroComposerRows] = useDevUiState(devUi, "heroComposerRows", 0);
   // Four rows belong to the outer header/footer; two to the shortcut line and
   // its margin. Keep enough room above the input for the tallest command menu.
   const heroMenuMaxRows = commandMenuBoxHeight(commandMenuLimit, commandRowsPerCommand);
   const heroBottomSpacer = Math.max(
     1,
-    Math.min(Math.floor((height - 4 - heroMastheadRows - heroComposerRows - 2) / 2), height - 12 - heroMenuMaxRows),
+    Math.min(Math.floor((height - 4 - heroMastheadRows - heroComposerRows - heroRecoveryRows - 2) / 2), height - 12 - heroMenuMaxRows),
   );
+
+  devUi.safe = () => !busyRef.current && !busy && !fixWorking && !checkingModel &&
+    !abortRef.current && !turnSettledRef.current && !sourceFixAbortRef.current &&
+    !sourceFixPromiseRef.current && !stoppingAuditRef.current && !closingRef.current &&
+    !stopAuditPromiseRef.current && !closePromiseRef.current && !pendingSelectionRef.current &&
+    queuedRef.current.length === 0 && pendingStreamPatches.current.length === 0 &&
+    pendingCancellationsRef.current.size === 0 && !pendingScope && !pendingLocalScope &&
+    !pendingEscalation && !pendingToolApproval && !pendingOperatorQuestion && !secretPrompt &&
+    !picker && !transcriptMenu.state.open && !pendingFeedback &&
+    !problemReview && !firstProblemConsent;
 
   // ── Overlays that share the slot directly above the composer ───────────────
   // Extracted so the SAME nodes render whether the composer is centered (hero)
@@ -5618,12 +5439,13 @@ export function ChatScreen({
       body={approvalBodyShown}
       choices={approvalItems}
       activeIndex={approvalState.index}
-      hint="[↑↓] choose · [⏎] confirm · [esc] decline"
+      hint={approvalPrompt.completeDetails ? "[Pg↑↓] details · [↑↓] choose · [⏎] confirm · [esc] decline" : "[↑↓] choose · [⏎] confirm · [esc] decline"}
       accent={approvalPrompt.borderColor}
       severity={approvalPrompt.severity}
       contentWidth={contentWidth}
       height={approvalBoxHeight}
       theme={theme}
+      scrollBody={approvalPrompt.completeDetails ? { rows: approvalBodyRows, ref: approvalDetailsScrollRef } : undefined}
     />
   ) : null;
 
@@ -5662,231 +5484,7 @@ export function ChatScreen({
     </>
   );
 
-  // Effective status per roster row (operator-stop and incomplete folded in),
-  // reused by the row views and the collapsed summary so both read identically.
-  const subagentEffectiveStatus = (sa: (typeof subagentEntries)[number]): string =>
-    operatorStopped.has(sa.agent_id)
-      ? "cancelled"
-      : sa.status === "completed" && sa.done === false
-        ? "incomplete"
-        : sa.status;
-  // The corner control is the "small button to expand": ▸ collapsed / ▾ open.
-  // Clicking the header toggles it (or, while navigating, backs out to the
-  // composer — the same exit the Left/Esc keys give). Collapsed, the header IS
-  // the one-line summary; expanded, it carries the roster count and hints.
-  const subagentToggleGlyph = subagentPanelCollapsed ? "▸" : "▾";
-  const subagentHeaderText = subagentPanelCollapsed
-    ? `${subagentToggleGlyph} ${summarizeRoster(subagentEntries.map(subagentEffectiveStatus))}`
-    : agentNavIndex >= 0
-      ? `${subagentToggleGlyph} agents (${subagentEntries.length}) · [↑↓] select · [⏎] open · [esc] back`
-      : `${subagentToggleGlyph} agents (${subagentEntries.length}) · ${runningWorkers} running · [↓] select`;
-  const subagentNode = subagentBlockRows > 0 ? (
-    <box flexDirection="column" width="100%" minWidth={0} height={subagentBlockRows} flexShrink={0} marginTop={1}>
-      <box width={contentWidth} flexShrink={0} onMouseDown={() => {
-        if (agentNavIndex >= 0) setAgentNavIndex(-1);
-        else setAgentsPanelCollapsed((collapsed) => !collapsed);
-      }}>
-        <text fg={agentNavIndex >= 0 ? ACCENT : MUTED}>{fitTuiText(subagentHeaderText, contentWidth)}</text>
-      </box>
-      {subagentVisible.map((treeRow, index) => {
-        const sa = treeRow.item;
-        const rec = herdAgents[sa.agent_id];
-        const status = subagentEffectiveStatus(sa);
-        // The tail is a LIVE, present-tense summary of what the agent is doing
-        // now (from its latest prose / current tool / note), NOT the raw prompt
-        // it was spawned with. `activity` is left unset so the row shows just
-        // that summary; the status badge carries running/done/failed distinctly.
-        const view: AgentRowView = {
-          id: sa.agent_id,
-          name: sa.name ?? rec?.name ?? agentNamesRef.current.get(sa.agent_id) ?? "Unnamed worker",
-          task: summarizeAgentActivity({
-            status,
-            tool: rec?.tool,
-            note: rec?.note,
-            turn: rec?.turn,
-            maxTurns: rec?.maxTurns ?? sa.max_turns,
-            ...summaryInputFromMessage(workerTelemetry[sa.agent_id]),
-          }),
-          status,
-          animationFrame: settings.reduceMotion ? undefined : animTick,
-          accent: agentAccentFor(sa.agent_id, theme.CANVAS),
-        };
-        return <AgentTreeRow key={sa.agent_id} view={view} width={contentWidth} theme={theme}
-          selected={index + rosterStart === agentNavSelected || sa.agent_id === focusAgentId}
-          isLast={treeRow.isLast}
-          ancestorContinues={treeRow.ancestorContinues}
-          onSelect={() => { setFocusAgentId(sa.agent_id); setAgentNavIndex(-1); }} />;
-      })}
-      {subagentOverflowRow > 0 ? (
-        <text fg={MUTED}>{fitTuiText(
-          agentNavIndex >= 0
-            ? `${rosterStart + 1}–${rosterStart + subagentVisible.length}/${subagentEntries.length} · [↑↓] browse all`
-            : `+${subagentOverflow} more · [↓] browse all`,
-          contentWidth,
-        )}</text>
-      ) : null}
-    </box>
-  ) : null;
 
-  // ── The RIGHT sidebar: the current run (agents + findings) ─────────────────
-  // "What's happening now": the OMP-style AGENTS tree on top, then this run's
-  // FINDINGS (title + severity, severity-coloured — red reserved for
-  // high/critical). Each section has a small muted header and is bounded to its
-  // share of the region's rows with a "+N" tail, so nothing can overflow or
-  // fuse. Whole thing flexShrink={0}. The context strip lives in the bottom
-  // status bar, not here — no duplication.
-  const rightInner = sidebars.rightInnerWidth;
-  const sidebarContentRows = Math.max(0, ledgerRows - 2);
-  const cloudHintRows = !cloudHintDismissed && shouldOfferCloudHint({ hostedConnected: cloudConfigured, rows: sidebarContentRows, width: rightInner })
-    ? Math.min(5, Math.max(0, sidebarContentRows - 8)) : 0;
-  const railTreeRows = liveAgentTree.flatMap((treeRow) => {
-    const record = herdAgents[treeRow.item.agent_id];
-    return record ? [{ treeRow, record }] : [];
-  });
-  const railRecords = railTreeRows.map((row) => row.record);
-  const runFindings = runFindingsFromEntries(entries);
-  // Header rows: AGENTS(1), FINDINGS(1 + separator), and the hide control(1).
-  // Vertical padding was deducted above. Empty sections consume only their
-  // actual placeholder rows, leaving that space available for the live plan.
-  const rightSectionRows = Math.max(0, sidebarContentRows - 4 - cloudHintRows);
-  const hasPlan = Boolean(todos?.todos.length);
-  const planMinimum = hasPlan ? Math.min(3, rightSectionRows) : 0;
-  const rightBodyRows = rightSectionRows - planMinimum;
-  const agentRowsNeeded = railRecords.length ? railRecords.length * AGENT_SIDEBAR_ROWS : 2;
-  const findingRowsNeeded = Math.max(1, runFindings.length * 2);
-  const findingsShare = Math.min(findingRowsNeeded, Math.floor(rightBodyRows * 0.4));
-  const agentsBudget = Math.min(agentRowsNeeded, Math.max(0, rightBodyRows - findingsShare));
-  const rightFindingsBudget = Math.min(findingRowsNeeded, Math.max(0, rightBodyRows - agentsBudget));
-  const rightPlanBudget = hasPlan ? rightSectionRows - agentsBudget - rightFindingsBudget : 0;
-  const railMaxAgents = Math.floor(agentsBudget / AGENT_SIDEBAR_ROWS);
-  const railCapacity =
-    railRecords.length > railMaxAgents
-      ? Math.max(0, Math.floor((agentsBudget - 1) / AGENT_SIDEBAR_ROWS))
-      : railMaxAgents;
-  const railVisible = railTreeRows.slice(0, railCapacity);
-  const railOverflow = railRecords.length - railVisible.length;
-  // FINDINGS rendering (wrapping to ≤2 lines, budget, "+N more") now lives in
-  // the FindingsSidebar component; it owns its 1-row header, so it is handed the
-  // item budget PLUS that header row.
-  const rightSidebarNode = sidebars.rightVisible ? (
-    <box
-      flexDirection="row"
-      width={sidebars.rightWidth}
-      flexShrink={0}
-      minWidth={0}
-      alignSelf="stretch"
-      marginLeft={sidebars.rightGap}
-    >
-      <box width={1} flexShrink={0} alignSelf="stretch" backgroundColor={BORDER} />
-      <box flexDirection="column" flexGrow={1} alignSelf="stretch" minHeight={0} minWidth={0} paddingX={1} paddingY={1} backgroundColor={PANEL}>
-        <box width={rightInner} flexShrink={0} minWidth={0}>
-          <text fg={MUTED}>{buildSidebarSectionHeader("AGENTS", railRecords.length, rightInner)}</text>
-        </box>
-        {railVisible.length === 0 ? (
-          <box width={rightInner} flexDirection="column" flexShrink={0} minWidth={0}>
-            <text fg={MUTED}>{fitTuiText(
-              railRecords.length > 0 ? "Open /agents" : agentsBudget >= 2 ? "Want extra eyes?" : 'Ask: "Use subagents"',
-              rightInner,
-            )}</text>
-            {railRecords.length === 0 && agentsBudget >= 2 ? (
-              <text fg={MUTED}>{fitTuiText('Ask: "Use subagents"', rightInner)}</text>
-            ) : null}
-          </box>
-        ) : (
-          railVisible.map(({ treeRow, record: rec }) => {
-            // Share the inline worker identity and truthful status presentation.
-            const railStatus = operatorStopped.has(rec.agentId) ? "cancelled" : rec.status === "completed" && workerOutcomes[rec.agentId]?.done === false ? "incomplete" : rec.status;
-            const view: AgentRowView = {
-              id: rec.agentId,
-              name: rec.name ?? agentNamesRef.current.get(rec.agentId) ?? "Unnamed worker",
-              // The task slot carries the LIVE activity summary, not the raw
-              // spawn prompt; the status badge shows running/done/failed.
-              task: summarizeAgentActivity({
-                status: railStatus,
-                tool: rec.tool,
-                note: rec.note,
-                turn: rec.turn,
-                maxTurns: rec.maxTurns,
-                ...summaryInputFromMessage(workerTelemetry[rec.agentId]),
-              }),
-              status: railStatus,
-              animationFrame: settings.reduceMotion ? undefined : animTick,
-              accent: agentAccentFor(rec.agentId, theme.CANVAS),
-            };
-            return (
-              <AgentSidebarRow
-                key={rec.agentId}
-                view={view}
-                width={rightInner}
-                theme={theme}
-                isLast={treeRow.isLast}
-                ancestorContinues={treeRow.ancestorContinues}
-                selected={workerRoster[agentNavIndex]?.agent_id === rec.agentId}
-                onSelect={() => { setFocusAgentId(rec.agentId); setAgentNavIndex(-1); }}
-              />
-            );
-          })
-        )}
-        {railOverflow > 0 ? (
-          <box width={rightInner} flexShrink={0} minWidth={0}>
-            <text fg={MUTED}>{fitTuiText(`+${railOverflow} more`, rightInner)}</text>
-          </box>
-        ) : null}
-        <FindingsSidebar
-          findings={runFindings}
-          width={rightInner}
-          rows={rightFindingsBudget + FINDINGS_SIDEBAR_HEADER_ROWS}
-          theme={theme}
-          onOpenFinding={(id) => onNavigate("finding", id)}
-        />
-        {hasPlan ? (
-          <TodosSidebar payload={todos!} width={rightInner} rows={rightPlanBudget} theme={theme} />
-        ) : null}
-        <box flexGrow={1} minHeight={0} flexShrink={1} />
-        <CloudHintCard hostedConnected={cloudConfigured} width={rightInner} rows={cloudHintRows} theme={theme}
-          dismissed={cloudHintDismissed} onDismiss={() => setCloudHintDismissed(true)} onConnect={() => onNavigate("connect")} />
-        <box width={rightInner} flexShrink={0} minWidth={0} onMouseDown={() => updateSetting("showRightSidebar", false)}>
-          <text fg={MUTED}>{fitLegend(rightInner, "Hide agents · [⌃L]")}</text>
-        </box>
-      </box>
-    </box>
-  ) : null;
-
-  const leftSidebarNode = sidebars.leftVisible && renderAuditSwitcher ? (
-    <box width={sidebars.leftWidth} flexShrink={0} minWidth={0} marginRight={sidebars.leftGap}>
-      {renderAuditSwitcher(sidebars.leftWidth, ledgerRows)}
-    </box>
-  ) : null;
-
-  // ── The inline focus view ──────────────────────────────────────────────────
-  // Reuses the herd focus PLUMBING verbatim — computeHerdFocusLayout for the
-  // vertical meta/transcript split, focusHeaderLines + renderFocusActivity for
-  // the tone-tagged lines, windowFocusTail for the scroll-back window — but
-  // wears the chat's own minimal skin: a PANEL-backed region (no bordered
-  // boxes) exactly like the transcript it replaces, so there is no border to
-  // paint a line through and no exact-fit fragility. The meta header is a
-  // flexShrink={0} block; the live transcript flexGrows to fill the rest.
-  const focusLayout = computeHerdFocusLayout({
-    width,
-    height: ledgerRows + shellChromeRows(width),
-    noticeRows: 0,
-  });
-  // Reserve panel padding and the vertical scrollbar, including when a card expands.
-  const focusInner = Math.max(8, contentWidth - (compact ? 2 : 4) - 1);
-  const focusMetaLines = focused
-    ? clipDetailLines(
-        focusHeaderLines(focusPeer, focusRecord, focusInner, nowMs, { compact: true }).slice(focusRecord ? 1 : 0),
-        Math.max(1, focusLayout.meta.bodyRows),
-        focusInner,
-      )
-    : [];
-  const focusActivityLines =
-    focused && focusRecord ? renderFocusActivity(focusRecord.activity, focusInner) : [];
-  // The focused child's REAL transcript (assistant prose + tool cards) streamed
-  // via subagent_message. When present, the focus view renders it through the
-  // SAME planTranscript/renderEntry as the main agent — so a drilled-in child
-  // reads identically. Until the first message arrives (or for a peer session
-  // with no stream), it falls back to the coarse activity ring below.
   const workerDisplay: EntryDisplay = {
     ...entryDisplay,
     model: focusedTelemetry?.model ?? "",
@@ -5960,24 +5558,19 @@ export function ChatScreen({
       richMarkdownEntryIds.add(entry.id);
       remainingRichChars -= chars;
     }
-    // "thinking" is a per-TURN label, not a per-entry one. Walk the plan once
-    // (it is already in transcript order) and record which turns have shown it,
-    // so both the expanded reasoning rows and the folded summaries emit it at
-    // most once per turn. O(1) per item — no rescans.
-    const thinkingShownForTurn = new Set<number>();
-    // The live "thinking…" indicator: the streaming reasoning entry is the tail
-    // of the transcript, so its turn is the one that should shimmer.
+    // Deduplicate settled reasoning headings per turn, but a fresh live
+    // reasoning event after a tool still identifies its current work.
+    const reasoningShownForTurn = new Set<number>();
     const tail = transcript[transcript.length - 1];
-    const liveReasoningTurn =
-      tail && tail.id === display.activeEntryId && tail.kind === "reasoning" ? tail.turn : undefined;
+    const liveReasoningId =
+      tail && tail.id === display.activeEntryId && tail.kind === "reasoning" ? tail.id : undefined;
     return planTranscript(transcript, display.transcriptDetail, expandedTurns).map((item) => {
       if (item.type === "fold") {
         const hasReasoning = item.entries.some((entry) => entry.kind === "reasoning");
-        let hideReasoningLabel = false;
-        if (hasReasoning) {
-          if (thinkingShownForTurn.has(item.turn)) hideReasoningLabel = true;
-          else thinkingShownForTurn.add(item.turn);
-        }
+        const containsLiveReasoning = item.entries.some((entry) => entry.id === liveReasoningId);
+        const hideReasoningLabel =
+          hasReasoning && reasoningShownForTurn.has(item.turn) && !containsLiveReasoning;
+        if (hasReasoning) reasoningShownForTurn.add(item.turn);
         return renderFold(
           item,
           width,
@@ -6016,14 +5609,13 @@ export function ChatScreen({
       );
       let reasoningLabel: "shimmer" | "static" | "none" = "static";
       if (entry.kind === "reasoning") {
-        if (thinkingShownForTurn.has(entry.turn)) {
+        const isLiveReasoning = entry.id === liveReasoningId;
+        if (reasoningShownForTurn.has(entry.turn) && !isLiveReasoning) {
           reasoningLabel = "none";
         } else {
-          thinkingShownForTurn.add(entry.turn);
+          reasoningShownForTurn.add(entry.turn);
           reasoningLabel =
-            entry.turn === liveReasoningTurn && typeof display.shimmerFrame === "number"
-              ? "shimmer"
-              : "static";
+            isLiveReasoning && typeof display.shimmerFrame === "number" ? "shimmer" : "static";
         }
       }
       const node = renderEntry(
@@ -6066,106 +5658,19 @@ export function ChatScreen({
       return node;
     });
   };
-  const focusHasTranscript = focused && Boolean(focusEntries?.length);
-  // The coarse activity fallback is row-windowed. Rich transcripts use their
-  // actual viewport and measured content extent instead of this estimate.
-  const focusMetaRows = focusMetaLines.length + 2;
-  const focusTranscriptCap = Math.max(1, ledgerRows - focusMetaRows - (compact ? 1 : 3));
-  const focusTail = windowFocusTail(
-    focusActivityLines.length,
-    focusTranscriptCap,
-    focusScrollOffset,
-  );
-  const focusVisibleActivity = focusActivityLines.slice(focusTail.start, focusTail.end);
-  const focusViewNode = (
-    <box
-      key={`worker-${focusAgentId}`}
-      flexDirection="column"
-      flexGrow={1}
-      minHeight={0}
-      width="100%"
-      minWidth={0}
-      overflow="hidden"
-      backgroundColor={PANEL}
-      paddingX={compact ? 1 : 2}
-      paddingY={compact ? 0 : 1}
-    >
-      <box flexDirection="column" flexShrink={0} minWidth={0}>
-        <text fg={ACCENT}>{fitTuiText(`Selected agent: ${focusAgentName}`, focusInner)}</text>
-        <text fg={MUTED}>{fitTuiText(`Parent: ${focusParentName}`, focusInner)}</text>
-        {focusMetaLines.map((line, index) => (
-          <text key={`focus-meta-${index}`} fg={herdToneColor(theme, line.tone)}>
-            {fitTuiText(line.text, focusInner)}
-          </text>
-        ))}
-      </box>
-      {focusHasTranscript ? (
-        <box flexDirection="column" height={0} flexGrow={1} minHeight={0} minWidth={0} marginTop={1} overflow="hidden">
-          <scrollbox
-            ref={focusTranscriptRef}
-            focusable={false}
-            width="100%"
-            height={0}
-            flexGrow={1}
-            minHeight={0}
-            backgroundColor={PANEL}
-            verticalScrollbarOptions={sleekScrollbar(theme, PANEL)}
-            contentOptions={{ flexDirection: "column" }}
-            stickyScroll
-            stickyStart="bottom"
-          >
-            <box flexDirection="column" width="100%" flexShrink={0} onSizeChange={function () {
-              // Nested tool/markdown rows can reflow after the scroll content was measured.
-              if (focusTranscriptRef.current) focusTranscriptRef.current.content.height = this.height;
-            }}>
-              {renderTranscriptEntries(focusedTranscript, focusInner, workerDisplay)}
-            </box>
-          </scrollbox>
-        </box>
-      ) : (
-        <box
-          flexDirection="column"
-          flexGrow={1}
-          minHeight={0}
-          minWidth={0}
-          marginTop={1}
-          onMouseScroll={(event) =>
-            setFocusScrollOffset((offset) => clampScrollOffset(offset + wheelOffsetStep(event.scroll)))
-          }
-        >
-          <text fg={MUTED}>{fitTuiText(herdFocusTranscriptTitle(focusActivityLines.length), focusInner)}</text>
-          {focusVisibleActivity.length === 0 ? (
-            <text fg={MUTED}>{fitTuiText(HERD_FOCUS_EMPTY_TEXT, focusInner)}</text>
-          ) : (
-            focusVisibleActivity.map((line, index) => (
-              <text key={`focus-live-${focusTail.start + index}`} fg={herdToneColor(theme, line.tone)}>
-                {fitTuiText(line.text, focusInner)}
-              </text>
-            ))
-          )}
-        </box>
-      )}
-      <text fg={MUTED} marginTop={1}>
-        {fitTuiText(`[←] ${focusTreeRow?.parentId ? "Parent" : "Main"} · [Esc] Main · [⌃O] ${latestCompaction !== undefined ? "recap" : "transcript"} · [⌃R] ${workerDisplay.transcriptDetail === "expanded" ? "collapse" : "expand"} details`, focusInner)}
-      </text>
-    </box>
-  );
 
   // ── The conversation region ────────────────────────────────────────────────
-  // Either the drilled-in focus view, or the transcript column between the two
-  // optional sidebars: [left][transcript][right]. The transcript column
-  // flexGrows; each sidebar is flexShrink={0} and only present when the layout
-  // found room for it, so with both hidden the transcript takes the full width
-  // exactly as before.
+  // Only the center owns transcript/focus content; its composer and status share
+  // the same rectangle. Sidebars and their collapsed rails are root siblings.
   const recoveryPanel = (
     <box flexDirection="column" width="100%" minWidth={0} flexShrink={0} padding={1} backgroundColor={PANEL}>
       <text fg={checkingModel ? MUTED : WARNING}>
-        {checkingModel ? "Checking service availability…" : accountAdmissionBlocked ? "Signed in · account access restricted" : activeProvider === "hosted" ? "0cloud needs attention" : "Connect a provider to start chatting"}
+        {checkingModel ? "Checking model availability…" : "Connect a provider to start chatting"}
       </text>
       {startupError ? <text fg={MUTED} wrapMode="word">{startupError.text}</text> : null}
       <text fg={MUTED} wrapMode="word">Draft kept. Press Enter to send after access is restored.</text>
       <box flexDirection="row" flexWrap="wrap" minWidth={0} marginTop={1} gap={1}>
-        <box onMouseDown={() => onNavigate("connect")}><text fg={PRIMARY}>{activeProvider === "hosted" ? "[Account & connections]" : "[Connect provider]"}</text></box>
+        <box onMouseDown={() => onNavigate("connect")}><text fg={PRIMARY}>[Connect provider]</text></box>
         {session && !checkingModel ? (
           <box onMouseDown={() => { void checkRuntime(); }}><text fg={PRIMARY}>[Check again]</text></box>
         ) : null}
@@ -6173,83 +5678,56 @@ export function ChatScreen({
       <text fg={MUTED} wrapMode="word">{session ? "Ctrl+R check again · Ctrl+P commands" : "Ctrl+P commands · /connect"}</text>
     </box>
   );
-
-  const conversationRegion = reviewOpen ? (
-    <TranscriptReview
-      transcript={transcriptDocument}
-      width={transcriptWidth}
-      detail={entryDisplay.transcriptDetail}
-      expandedTurns={expandedTurns}
-      theme={theme}
-      renderableRef={reviewRenderableRef}
-      recap={latestCompaction !== undefined ? compactionRecapsRef.current.get(latestCompaction) : undefined}
-    />
-  ) : focused ? (
-    focusViewNode
-  ) : (
-    <box key="main-transcript" flexDirection="row" flexGrow={1} minHeight={0} width="100%" minWidth={0}>
-      {leftSidebarNode}
-      <box
-        flexDirection="column"
-        flexGrow={1}
-        minHeight={0}
-        minWidth={0}
-        backgroundColor={PANEL}
-        paddingX={compact ? 1 : 2}
-        paddingY={1}
-      >
-        <scrollbox ref={transcriptRef} focusable={false} width="100%" flexGrow={1} minHeight={0} backgroundColor={PANEL} stickyScroll stickyStart="bottom" verticalScrollbarOptions={sleekScrollbar(theme, PANEL)}>
-          <box flexDirection="column" width="100%" onSizeChange={function () {
-            // Wrapped Markdown can grow after the scrollbox first measures its
-            // child. Update the extent so sticky-bottom follows a long reply.
-            if (transcriptRef.current) transcriptRef.current.content.height = this.height;
-          }}>
-            {renderTranscriptEntries(entries, transcriptWidth, entryDisplay)}
-            {/* The plan lives in the RIGHT sidebar now; this inline card is only
-                a fallback for when that sidebar is hidden, so the todos are
-                always visible somewhere. */}
-            {!sidebars.rightVisible && todos && todos.total > 0 ? (
-              <Todos payload={todos} width={transcriptWidth} theme={theme} />
+  const heroRecoveryNotice = (
+    <box flexDirection="column" width={heroComposerWidth} minWidth={0} flexShrink={0} marginTop={1}>
+      <Cells width={heroComposerWidth} fg={checkingModel ? MUTED : WARNING}>
+        {checkingModel ? "Checking model availability…" : "Provider unavailable"}
+      </Cells>
+      {startupError ? (
+        <>
+          <Cells width={heroComposerWidth} fg={MUTED} fit="middle">{startupError.text}</Cells>
+          <box flexDirection="row" width={heroComposerWidth} minWidth={0} flexShrink={0} gap={2}>
+            <text fg={PRIMARY} onMouseUp={(event) => { if (event.button === 0) { event.stopPropagation(); onNavigate("connect"); } }}>[/connect]</text>
+            {session && !checkingModel ? (
+              <text fg={PRIMARY} onMouseUp={(event) => { if (event.button === 0) { event.stopPropagation(); void checkRuntime(); } }}>[Ctrl+R retry]</text>
             ) : null}
-            {startupError || checkingModel ? recoveryPanel : null}
           </box>
-        </scrollbox>
-      </box>
-      {rightSidebarNode}
+        </>
+      ) : null}
     </box>
   );
 
-  // ── The agent-nav / focus hint row (below the composer) ─────────────────────
-  // Keys white, labels muted (KeyHints). Contextual: the down-into-agents
-  // affordance when idle, the list keys while navigating, the scroll keys while
-  // focused. Reserved in the ledger via `hintRows` exactly when it renders.
-  const agentNavHintPairs: KeyHint[] = focused
-    ? [
-        { key: "↑↓", label: "scroll" },
-        { key: "esc", label: "back" },
-      ]
-    : agentNavIndex >= 0
-      ? [
-          { key: "↑↓", label: "move" },
-          { key: "enter", label: "open" },
-          { key: "esc", label: "back" },
-        ]
-      : [{ key: "↓", label: "agents" }];
-  const agentNavHintNode = showAgentNavHint ? (
-    <box flexDirection="row" width="100%" minWidth={0} flexShrink={0} marginTop={1}>
-      {keyHintsLength(agentNavHintPairs, " · ") <= contentWidth ? (
-        <KeyHints pairs={agentNavHintPairs} theme={theme} />
-      ) : (
-        <text fg={MUTED}>{fitTuiText(agentNavHintPairs.map((p) => `${p.key} ${p.label}`).join(" · "), contentWidth)}</text>
-      )}
+  const conversationRegion = (
+    <box key={`chat-${focusAgentId ?? "main"}`}
+      flexDirection="column"
+      flexGrow={1}
+      minHeight={0}
+      minWidth={0}
+      backgroundColor={CANVAS}
+      paddingY={1}
+    >
+      <scrollbox ref={transcriptRef} focusable={false} width="100%" flexGrow={1} minHeight={0} backgroundColor={CANVAS} stickyScroll stickyStart="bottom" verticalScrollbarOptions={sleekScrollbar(theme, CANVAS)}>
+        <box flexDirection="column" width="100%" flexShrink={0} onSizeChange={function () {
+          // Wrapped Markdown can grow after the scrollbox first measures its
+          // child. Repair the current root/worker extent so sticky-bottom follows.
+          if (transcriptRef.current) transcriptRef.current.content.height = this.height;
+        }}>
+          {renderTranscriptEntries(focused ? focusedTranscript : entries, transcriptWidth, focused ? workerDisplay : entryDisplay)}
+          {!focused && todos && todos.total > 0 ? (
+            <Todos payload={todos} width={transcriptWidth} theme={theme} />
+          ) : null}
+          {startupError || checkingModel ? recoveryPanel : null}
+        </box>
+      </scrollbox>
     </box>
-  ) : null;
+  );
+
 
   // Keep first-use actions visible without opening a second navigation surface.
   const heroHintPairs: KeyHint[] = [
     { key: "/connect", label: "connection" },
     settings.onboardingCompleted
-      ? { key: "/resume", label: "saved audits" }
+      ? { key: "/sessions", label: "sessions" }
       : { key: "/onboard", label: "optional setup" },
     { key: "ctrl+p", label: "commands" },
   ];
@@ -6258,7 +5736,7 @@ export function ChatScreen({
   // upward into the header. The composer stays put — it is anchored by the
   // fixed bottom spacer regardless of what the region above it holds.
   const heroOverlayOpen = commandMenuVisible || Boolean(picker) || Boolean(approvalPrompt) || Boolean(secretPrompt) || operatorQuestionOpen;
-  const showMasthead = !heroOverlayOpen && !startupError && !checkingModel;
+  const showMasthead = !heroOverlayOpen;
 
   // The command menu now renders through the shared `DialogSelectBody`, which
   // windows the list around the cursor internally (see dialog-select-layout's
@@ -6326,35 +5804,15 @@ export function ChatScreen({
           <text fg={headerFg}>0</text>
         </box>
         <box width={headerEngagementWidth} flexShrink={0} minWidth={0}>
-          <text fg={headerFg}>{fitTuiText(headerEngagement, headerEngagementWidth, { mode: "middle" })}</text>
-        </box>
-        {headerObjectiveWidth > 0 ? (
-          // The async AI objective summary, right-aligned at the top-right.
-          // Legible on the orange strip via the contrast-picked header fg; the
-          // 0 voice (BRAND) reads on canvas but not on PRIMARY. Empty/compact
-          // hides it and the engagement summary reclaims the cells.
-          <box width={headerObjectiveWidth} flexShrink={0} minWidth={0} flexDirection="row" justifyContent="flex-end">
-            <text fg={headerFg}>{fitTuiText(headerObjective, headerObjectiveWidth, { mode: "end" })}</text>
-          </box>
-        ) : null}
-        <box width={sidebarControlWidth} flexDirection="row" flexShrink={0} gap={1}>
-          <box width={Math.floor((sidebarControlWidth - 1) / 2)} flexShrink={0} onMouseDown={() => updateSetting("showLeftSidebar", !settingsRef.current.showLeftSidebar)}>
-            <text fg={headerFg}>{sidebarControlWidth > 8 ? `${settings.showLeftSidebar ? "▾" : "▸"} Audits` : "◀"}</text>
-          </box>
-          <box width={Math.floor(sidebarControlWidth / 2)} flexShrink={0} onMouseDown={() => updateSetting("showRightSidebar", !settingsRef.current.showRightSidebar)}>
-            <text fg={headerFg}>{sidebarControlWidth > 8 ? `${settings.showRightSidebar ? "▾" : "▸"} Agents` : "▶"}</text>
-          </box>
+          <text fg={headerFg}>{fitTuiText(headerEngagement, headerEngagementWidth)}</text>
         </box>
       </box>
 
-      {/*
-        * The BODY wrapper carries the horizontal padding the outer frame used
-        * to own. Moving the side gutter here (rather than onto the root box)
-        * is what lets the masthead strip above bleed to both terminal edges
-        * while everything below it keeps its usual `compact ? 1 : 2` inset.
-        */}
-      <box flexDirection="column" flexGrow={1} minHeight={0} width="100%" minWidth={0} paddingLeft={compact ? 1 : 2} paddingRight={compact ? 1 : 2}>
-      {empty && !reviewOpen && !leftSidebarNode ? (
+      <box flexDirection="row" height={bodyHeight} flexShrink={0} minHeight={0} width="100%" minWidth={0} overflow="hidden">
+        <box flexDirection="column" width="100%" height={bodyHeight}
+          flexShrink={0} minHeight={0} minWidth={0} overflow="hidden"
+          paddingX={compact ? 1 : 2} backgroundColor={CANVAS}>
+      {empty ? (
         /*
          * The centered start screen: logo + captions + the COMPOSER + a dim
          * hint line render as ONE vertically-centered group (OpenCode's clean
@@ -6365,7 +5823,6 @@ export function ChatScreen({
          * exactly where it sits above the pinned composer. The bottom status bar
          * stays pinned below, outside this group.
          */
-        <box flexDirection="row" flexGrow={1} minHeight={0} width="100%" minWidth={0}>
           <box flexDirection="column" flexGrow={1} minHeight={0} width={heroContentWidth} minWidth={0} alignItems="center">
             <box flexDirection="column" flexGrow={1} minHeight={0} width="100%" minWidth={0} justifyContent="flex-end" alignItems="center">
               {showMasthead ? (
@@ -6373,62 +5830,67 @@ export function ChatScreen({
                   onSizeChange={function () { setHeroMastheadRows(this.height); }}>
                 <Masthead
                   showTerminalMark={showTerminalMark && heroContentWidth >= TERMINAL_BLOCK_LOGO_WIDTH}
-                  showMascot={ledgerRows >= LEDGER_MARK_ROWS + ZERO_HEIGHT + 1}
-                  showTagline={showEmptyStateTagline}
+                  showMascot={heroBrandRows >= LEDGER_MARK_ROWS + ZERO_HEIGHT + 1}
                   contentWidth={heroContentWidth}
                   logoFrameGrid={logoFrameGrid}
                   theme={theme}
                 />
+                {showRepositorySuggestions ? (
+                  <box flexDirection="column" width="100%" minWidth={0} flexShrink={0}
+                    marginTop={1} alignItems="center" gap={1}>
+                    <Cells width={heroContentWidth} align="center" fg={MUTED}>
+                      {"Git repository detected · review for security issues?"}
+                    </Cells>
+                    <box flexDirection="row" width="100%" minWidth={0} flexShrink={0}
+                      justifyContent="center" gap={1}>
+                      {repoSuggestionItems.map((suggestion, index) => (
+                        <DialogActionButton key={suggestion.label} label={suggestion.label}
+                          onPress={() => draftRepositorySuggestion(suggestion.prompt)}
+                          variant={index === 0 ? "primary" : "secondary"} />
+                      ))}
+                    </box>
+                  </box>
+                ) : null}
                 </box>
               ) : null}
-              {workingIndicator}
               {(startupError || checkingModel) && !heroOverlayOpen ? (
-                <box width={heroComposerWidth} minWidth={0} flexShrink={0}>{recoveryPanel}</box>
+                heroRecoveryNotice
               ) : null}
               {heroOverlaysNode}
             </box>
             <box flexDirection="column" width={heroComposerWidth} minWidth={0} flexShrink={0}
               onSizeChange={function () { setHeroComposerRows(this.height); }}>
+              {activityRow}
               {heroComposerNode}
             </box>
             <box flexShrink={0} minWidth={0} marginTop={1}>
               {keyHintsLength(heroHintPairs, " · ") <= heroContentWidth ? (
                 <KeyHints pairs={heroHintPairs} theme={theme} />
               ) : (
-                <text fg={MUTED}>{fitLegend(heroContentWidth, settings.onboardingCompleted ? "/connect · /resume · [⌃P]" : "/connect · /onboard · [⌃P]")}</text>
+                <text fg={MUTED}>{fitLegend(heroContentWidth, settings.onboardingCompleted ? "/connect · /sessions · [⌃P]" : "/connect · /onboard · [⌃P]")}</text>
               )}
             </box>
-            <box height={startupError || checkingModel ? 1 : heroBottomSpacer} flexShrink={0} minWidth={0} />
+            <box height={heroBottomSpacer} flexShrink={0} minWidth={0} />
           </box>
-          {rightSidebarNode}
-        </box>
-      ) : reviewOpen ? (
-        conversationRegion
       ) : (
         <>
-          {/*
-            * The conversation region: the drilled-in focus view, or the
-            * transcript column beside the optional agent rail. The transcript
-            * flexGrows; the rail is flexShrink={0} and sized by chat-layout.
-            */}
-          <HarnessPresentation fallback={conversationRegion} />
+          <box flexDirection="column" flexGrow={1} minHeight={0} minWidth={0}>
+            {conversationRegion}
+          </box>
 
           {overlaysNode}
           {stickyNode}
-          {workingIndicator}
+          {activityRow}
           {composerNode}
-          {/*
-            * The inline ACTIVE SUBAGENTS list sits directly BELOW the composer,
-            * so pressing Down FROM the composer reads as moving DOWN into the
-            * list (the keyboard nav target). Explicit height AND flexShrink={0}:
-            * without both, opentui defaults flexShrink to 1 for any box with no
-            * numeric width/height, so a squeezed column collapsed this block to a
-            * single row while its children kept painting. `subagentBlockRows` is
-            * the reserved count, budgeted in `computeLedgerRows` regardless of
-            * where the block is painted.
-            */}
-          {subagentNode}
-          {agentNavHintNode}
+          {showAgentWorkList ? (
+            <box width="100%" minWidth={0} flexShrink={0} marginTop={1}>
+              <AgentWorkList agents={projectedHerdAgents} selectedAgentId={focusAgentId}
+                width={contentWidth} height={agentWorkRows} theme={theme} runningGlyph={activityGlyph}
+                mainActivity={mainActivity}
+                interactive={interactive && !gateOpen && !picker && !transcriptMenu.state.open && !stoppingAuditRef.current}
+                onSelect={selectAgentChat} />
+            </box>
+          ) : null}
         </>
       )}
 
@@ -6449,6 +5911,7 @@ export function ChatScreen({
             </box>
           ) : <text fg={MUTED}>{fitTuiText(statusBarText, statusContentWidth)}</text>}
         </box>
+      </box>
       </box>
       {/*
         * The copy-on-highlight toast. Positioned absolutely with a high

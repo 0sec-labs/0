@@ -52,7 +52,7 @@ import { SECURITY_RULES, selectRules, buildRuleInjection, type EngagementPhase, 
 import { formatJitSkillsInstruction, getSkillById } from "./skills/index.js";
 import { estimateCost } from "./cost.js";
 import type { ScanCostLedger } from "./cost-ledger.js";
-import { eventBus, isCloudEventSinkActive } from "../events/bus.js";
+import { eventBus } from "../events/bus.js";
 import { diag } from "../diagnostics/channel.js";
 import {
   reduceCoordinatorState,
@@ -73,7 +73,6 @@ import {
   isUntrustedSourceTool,
   sanitizeUntrustedToolResult,
 } from "../untrusted-sanitizer.js";
-import { DeltaBatcherSet } from "./delta-batcher.js";
 import { toolCallPreview } from "./tool-preview.js";
 import {
   newCorrelationId,
@@ -169,24 +168,20 @@ export function summarizeReasoning(thinkingText: string | undefined | null): str
 const EXTERNAL_MEMORY_MAX_CHARS = 2000;
 
 /**
- * Transient provider error classifier: overload / rate-limit / 5xx / held
- * stream — failures where retrying the SAME turn after a backoff is right
- * (bounded by MAX_TRANSIENT_RETRIES, then the run exits loudly via errorExit).
- * `stall` covers the SSE idle-watchdog's error (a server that accepted the
- * request then held the stream silently; see llm-api.ts
- * consumeResponsesStream). Exported for tests.
+ * Classify transient provider overloads, rate limits and transport failures
+ * for the agent loop's bounded same-turn retry.
  */
 export function isTransientLlmError(errorMsg: string): boolean {
   return /\b(429|529|502|503|504)\b|overloaded|rate.?limit|temporarily|too many requests|ETIMEDOUT|ECONNRESET|throttl|stall/i.test(errorMsg);
 }
 
 /**
- * Provider context-window rejection classifier. This is intentionally narrower
- * than transient transport errors: pruning history changes the next request,
- * so it must never fire for a rate limit or a generic 5xx.
+ * Provider context-window rejection classifier. Pruning changes the next
+ * request; rate limits and generic 5xx never prune history.
  */
 export function isContextWindowError(errorMsg: string): boolean {
-  return /context.{0,40}(?:window|length|limit)|(?:maximum|max).{0,20}context|too many tokens|prompt.{0,30}(?:too long|too large)|input.{0,30}(?:too long|too large)/i.test(
+  if (/\bAPI error 429:/i.test(errorMsg)) return false;
+  return /context.{0,40}(?:window|length|limit)|(?:maximum|max).{0,20}context|too many tokens|prompt.{0,30}(?:too long|too large)|input.{0,30}(?:too long|too large|limit(?:_exceeded)?)/i.test(
     errorMsg,
   );
 }
@@ -416,7 +411,7 @@ export interface NativeAgentLoopOptions {
     toolCalls: ToolCall[],
     results: ToolResult[],
     assistantText: string,
-    telemetry?: { usage?: NativeAgentState["totalUsage"]; contextTokens?: number },
+    telemetry?: { usage?: NativeAgentState["totalUsage"]; contextTokens?: number; reasoning_summary?: string },
   ) => void;
   /** Visible tool snapshots before/after execution, without token-level floods. */
   onToolUpdate?: NativeAgentLoopOptions["onTurn"];
@@ -598,10 +593,10 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     inlineValidationOracle,
   } = opts;
 
-  // Hosted discovery and failover can change the model during a call.
+  // Failover can change the model during a call.
   // Price usage against its resolved identity, never the Auto routing choice.
   const pricingModel = () => {
-    const model = runtime.resolvedModel?.() || config.costModel;
+    const model = runtime.resolvedPricingModel?.() || runtime.resolvedModel?.() || config.costModel;
     return model === "auto" ? undefined : model;
   };
 
@@ -742,7 +737,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // off-ledger gap where subagent spend escaped the ceiling entirely).
     costLedger: config.costLedger,
     costCeilingUsd: config.costCeilingUsd,
-    get costModel() { return pricingModel(); },
+    get costModel() { return runtime.resolvedModel?.() || config.costModel; },
     // Tool-health aggregator (0#tool-reliability). Shared across the scan so
     // the end-of-run summary sees every tool skip/failure; each NEW distinct
     // event also fans out on the bus as `tool_health`.
@@ -1969,33 +1964,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     let streamedUsageInputTokens: number | undefined;
     let streamedUsageOutputTokens: number | undefined;
 
-    // ── Token-level delta forwarding (cloud Live Trace) ──
-    // Only wire the per-token callback when a cloud sink is actually
-    // listening. For local CLI invocations `isCloudEventSinkActive()`
-    // returns false and we leave `onDelta` undefined — the runtime then
-    // skips the delta-forwarding branch entirely, so non-cloud runs pay
-    // zero per-token overhead beyond the existing thinking-throttle path.
-    //
-    // `deltaSeq` is keyed by scope so assistant_response and reasoning
-    // each get their own monotonic counter. Resets every turn — the
-    // (turn, scope) tuple is what the dashboard renderer keys on.
-    const cloudActive = isCloudEventSinkActive();
-    const deltaSeq: Record<"assistant_response" | "reasoning", number> = {
-      assistant_response: 0,
-      reasoning: 0,
-    };
-    const deltaBatchers = cloudActive
-      ? new DeltaBatcherSet(({ scope, text }) => {
-          const seq = deltaSeq[scope]++;
-          eventBus.emit("delta", {
-            turn: state.turnCount,
-            role: config.role,
-            scope,
-            text,
-            seq,
-          });
-        })
-      : null;
 
     // Bus event: planner invocation. `tokens_est` is cumulative input
     // tokens going INTO this call — the actual response usage lands on
@@ -2051,21 +2019,10 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
             estimatedCostUsd: estimateCost(cumulativeUsage, pricingModel()),
           });
         },
-        ...(deltaBatchers
-          ? {
-              onDelta: (scope: "assistant_response" | "reasoning", text: string) => {
-                deltaBatchers.push(scope, text);
-              },
-            }
-          : {}),
       },
       executionSignal,
     );
 
-    // Drain any trailing delta buffer before the turn-completed event so
-    // the cloud sees the full streamed text BEFORE it sees the next
-    // turn's `agent_turn_started` and retires the typing cursor.
-    deltaBatchers?.flushAll();
 
     // `reasoning_summary` is emitted further down once we've also seen the
     // assistant's pre-tool-call text — that lets us fall back to summarising
@@ -2184,6 +2141,12 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // Handle error or empty response
     if (result.stopReason === "error" || result.error || (result.content.length === 0 && (!result.usage || result.usage.outputTokens === 0))) {
       const errorMsg = result.error || "API returned empty response (0 tokens) — model may be rate-limited or unavailable";
+      // Operator cancellation is terminal, even if the runtime supplied an
+      // error string that also resembles a rate limit or context rejection.
+      if (result.cancelled || executionSignal.aborted) {
+        state.summary = "Error: Agent execution cancelled.";
+        break;
+      }
       if (
         !driven &&
         result.error
@@ -2222,7 +2185,15 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         process.stderr.write(`[0] transient LLM error (retry ${transientRetries}/${MAX_TRANSIENT_RETRIES}, backoff ${backoffMs}): ${errorMsg.slice(0, 120)}\n`);
         onEvent?.("agent_error", { turn: state.turnCount, error: `transient (retry ${transientRetries}): ${errorMsg.slice(0, 200)}` });
         if (state.turnCount > 0) state.turnCount--; // a failed transient turn must not burn budget
-        await delay(backoffMs);
+        try {
+          await delay(backoffMs, undefined, { signal: executionSignal });
+        } catch (error) {
+          if (!executionSignal.aborted) throw error;
+        }
+        if (executionSignal.aborted) {
+          state.summary = "Error: Agent execution cancelled.";
+          break;
+        }
         continue;
       }
       process.stderr.write(`[0] Agent loop error on turn ${state.turnCount}: ${errorMsg}\n`);
@@ -2264,10 +2235,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       (b): b is Extract<NativeContentBlock, { type: "text" }> => b.type === "text",
     );
     const textContent = textBlocks.map((b) => b.text).join("\n");
-    const turnTelemetry = (onTurn || onToolUpdate) && (result.usage || driven) ? {
-      usage: { ...state.totalUsage },
-      ...(result.usage ? { contextTokens: result.usage.inputTokens + result.usage.outputTokens } : {}),
-    } : undefined;
     if (textContent.trim() && textContent.trim() !== streamedThinkingText.trim()) {
       onEvent?.("thinking", {
         turn: state.turnCount,
@@ -2286,12 +2253,14 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     //      sentence so it reads as a "thinking out loud" snippet.
     // Wrapped in try/catch so a bad summary never kills the scan; emitted
     // at most once per turn and only when the result is non-empty.
+    let reasoningSummary: string | undefined;
     try {
       const reasoningSource = streamedThinkingText.trim()
         ? streamedThinkingText
         : textContent;
       const summary = summarizeReasoning(reasoningSource);
       if (summary) {
+        reasoningSummary = summary;
         eventBus.emit("reasoning_summary", {
           turn: state.turnCount,
           summary,
@@ -2300,6 +2269,11 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     } catch {
       /* heuristic failure must never abort the scan */
     }
+    const turnTelemetry = (onTurn || onToolUpdate) ? {
+      ...((result.usage || driven) ? { usage: { ...state.totalUsage } } : {}),
+      ...(result.usage ? { contextTokens: result.usage.inputTokens + result.usage.outputTokens } : {}),
+      ...(reasoningSummary ? { reasoning_summary: reasoningSummary } : {}),
+    } : undefined;
 
     const toolUseBlocks = result.content.filter(
       (b): b is Extract<NativeContentBlock, { type: "tool_use" }> =>

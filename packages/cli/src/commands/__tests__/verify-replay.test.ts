@@ -63,10 +63,11 @@ describe("parseRunnerKind", () => {
   it("defaults to local when unset", () => {
     expect(parseRunnerKind(undefined)).toBe("local");
   });
-  it("accepts local / docker / qemu", () => {
+  it("accepts local / smolvm / docker / qemu", () => {
     expect(parseRunnerKind("local")).toBe("local");
     expect(parseRunnerKind("docker")).toBe("docker");
     expect(parseRunnerKind("qemu")).toBe("qemu");
+    expect(parseRunnerKind("smolvm")).toBe("smolvm");
   });
   it("rejects unknown values", () => {
     expect(() => parseRunnerKind("wasm")).toThrow(/unsupported --runner/);

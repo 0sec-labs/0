@@ -6,6 +6,8 @@ import {
   ToolExecutor,
   getToolsForRole,
   loadScope,
+  isScopeEnforcementEnabled,
+  getScopeEnforcementState,
   extractAttributionFromScopeJson,
   resolveAttribution,
   RateLimiter,
@@ -288,7 +290,8 @@ export function registerMcpServerCommand(program: Command): void {
       const target = opts.target.trim();
       const scanId = opts.scanId.trim();
       const scope = opts.scope ? loadScope(opts.scope) : undefined;
-      if (scope) {
+      console.error(getScopeEnforcementState().message);
+      if (isScopeEnforcementEnabled() && scope) {
         const verdict = scope.match(target);
         if (!verdict.allowed) {
           throw new Error(`--target ${target} is out of scope per ${opts.scope}: ${verdict.reason}`);

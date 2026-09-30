@@ -21,6 +21,7 @@ import {
 import type {
   ArtifactRecord,
   Finding,
+  SourceVerificationSummary,
   VerificationResult,
   AttackResult,
   CaseRecord,
@@ -516,6 +517,11 @@ export class osecDB {
     }
     if (!colNames.has("reviewAnnotation")) {
       this.sqlite.exec("ALTER TABLE findings ADD COLUMN reviewAnnotation TEXT");
+    }
+    // This summary is code-only source evidence, not a deterministic replay
+    // result. Older rows remain NULL and hydrate without the optional field.
+    if (!colNames.has("sourceVerification")) {
+      this.sqlite.exec("ALTER TABLE findings ADD COLUMN sourceVerification TEXT");
     }
     // Backfill NULL fingerprint / triageStatus / workflowStatus for rows
     // created before those columns existed.
@@ -1278,6 +1284,9 @@ export class osecDB {
     // manufacture a truthy-but-empty verification result.
     const verificationResultJson = serializeFindingVerificationResult(finding.verification_result);
     const reviewAnnotationJson = serializeFindingReviewAnnotation(finding.reviewAnnotation);
+    // A source-only summary has independent conservative parsing and never
+    // populates `verification_result` or the source-fix gate.
+    const sourceVerificationJson = serializeFindingSourceVerification(finding.sourceVerification);
     const candidateFindingRank = finding.findingRank;
     const findingRank =
       typeof candidateFindingRank === "number" &&
@@ -1324,6 +1333,7 @@ export class osecDB {
         findingRank,
         verificationResult: verificationResultJson,
         reviewAnnotation: reviewAnnotationJson,
+        sourceVerification: sourceVerificationJson,
         timestamp: finding.timestamp,
       })
       .onConflictDoUpdate({
@@ -1356,6 +1366,7 @@ export class osecDB {
           findingRank,
           verificationResult: verificationResultJson,
           reviewAnnotation: reviewAnnotationJson,
+          sourceVerification: sourceVerificationJson,
           timestamp: finding.timestamp,
         },
       })
@@ -1372,11 +1383,10 @@ export class osecDB {
   }
 
   /**
-   * Read path for the two source-fix gate fields. Returns the hydrated
-   * `verification_result` / `reviewAnnotation` for a finding, with each key
-   * omitted when the finding has none (including rows written before the
-   * columns existed). Callers building a `Finding` spread this over the row:
-   * `{ ...mapped, ...db.getFindingReviewFields(id) }`.
+   * Read path for the persisted `verification_result`, `reviewAnnotation`,
+   * and `sourceVerification` fields. The first two retain their existing
+   * source-fix gate semantics; a source-only check is never replay evidence.
+   * Each key is omitted when absent, including for pre-migration rows.
    */
   getFindingReviewFields(findingId: string): PersistedFindingReviewFields {
     return restoreFindingReviewFields(this.getFinding(findingId));
@@ -2386,13 +2396,14 @@ function buildFindingFingerprint(target: string, finding: Finding): string {
 export type FindingReviewAnnotation = NonNullable<Finding["reviewAnnotation"]>;
 
 /**
- * Hydrated form of the two columns. Both keys are OPTIONAL and are omitted
- * entirely when the underlying column is NULL / unusable — never present as
- * an empty object.
+ * Hydrated form of persisted finding review and source-check columns. Each key
+ * is OPTIONAL and omitted entirely when the underlying column is NULL or
+ * unusable — never present as an empty object.
  */
 export interface PersistedFindingReviewFields {
   verification_result?: VerificationResult;
   reviewAnnotation?: FindingReviewAnnotation;
+  sourceVerification?: SourceVerificationSummary;
 }
 
 /**
@@ -2460,6 +2471,62 @@ export function parseFindingReviewAnnotation(value: unknown): FindingReviewAnnot
   if (!parsed || typeof parsed.path !== "string" || parsed.path.length === 0) return undefined;
   return parsed as unknown as FindingReviewAnnotation;
 }
+/**
+ * A source-verification summary is meaningful only when its status, safe
+ * predicate counts, and behavior-pending flag agree. Unknown fields are
+ * discarded so malformed/forward data cannot leak into a Finding.
+ */
+export function parseFindingSourceVerification(value: unknown): SourceVerificationSummary | undefined {
+  const parsed = parseJsonObjectColumn(value);
+  if (!parsed) return undefined;
+  const status = parsed.status;
+  const totalPredicates = parsed.totalPredicates;
+  const matchedPredicates = parsed.matchedPredicates;
+  const notMatchedPredicates = parsed.notMatchedPredicates;
+  const inconclusivePredicates = parsed.inconclusivePredicates;
+  const behaviorPending = parsed.behaviorPending;
+  if (
+    (status !== "matched" && status !== "not_confirmed" && status !== "inconclusive") ||
+    typeof totalPredicates !== "number" ||
+    !Number.isSafeInteger(totalPredicates) ||
+    totalPredicates < 0 ||
+    typeof matchedPredicates !== "number" ||
+    !Number.isSafeInteger(matchedPredicates) ||
+    matchedPredicates < 0 ||
+    typeof notMatchedPredicates !== "number" ||
+    !Number.isSafeInteger(notMatchedPredicates) ||
+    notMatchedPredicates < 0 ||
+    typeof inconclusivePredicates !== "number" ||
+    !Number.isSafeInteger(inconclusivePredicates) ||
+    inconclusivePredicates < 0 ||
+    typeof behaviorPending !== "boolean"
+  ) {
+    return undefined;
+  }
+  const countSum = matchedPredicates + notMatchedPredicates + inconclusivePredicates;
+  if (!Number.isSafeInteger(countSum) || countSum !== totalPredicates) return undefined;
+  if (
+    (status === "matched" &&
+      (totalPredicates === 0 || matchedPredicates !== totalPredicates || notMatchedPredicates !== 0 || inconclusivePredicates !== 0)) ||
+    (status === "not_confirmed" && (notMatchedPredicates === 0 || inconclusivePredicates !== 0)) ||
+    (status === "inconclusive" && inconclusivePredicates === 0 && totalPredicates !== 0)
+  ) {
+    return undefined;
+  }
+  return {
+    status,
+    totalPredicates,
+    matchedPredicates,
+    notMatchedPredicates,
+    inconclusivePredicates,
+    behaviorPending,
+  };
+}
+
+function serializeFindingSourceVerification(value: unknown): string | null {
+  const usable = parseFindingSourceVerification(value);
+  return usable ? JSON.stringify(usable) : null;
+}
 
 function serializeFindingVerificationResult(value: unknown): string | null {
   const usable = parseFindingVerificationResult(value);
@@ -2472,24 +2539,27 @@ function serializeFindingReviewAnnotation(value: unknown): string | null {
 }
 
 /**
- * Hydrate the two columns off a persisted findings row into the shape the
- * shared `Finding` uses. Keys are OMITTED (not set to `undefined`) when the
- * column is absent, so `"verification_result" in finding` stays false for an
- * unverified finding and `{ ...row, ...restoreFindingReviewFields(row) }`
- * never overwrites a value a caller already resolved.
- *
- * Accepts a partial row so it also works against pre-migration rows read by
- * raw SQL, where the properties simply do not exist.
+ * Hydrate the persisted review, canonical replay, and source-check columns
+ * into the shared `Finding`. Keys are omitted entirely when their columns
+ * are absent or unusable, so pre-migration rows remain ordinary findings.
+ * Callers building a `Finding` spread these fields over their mapped row:
+ * `{ ...mapped, ...db.getFindingReviewFields(id) }`.
  */
 export function restoreFindingReviewFields(
-  row: { verificationResult?: unknown; reviewAnnotation?: unknown } | null | undefined,
+  row: {
+    verificationResult?: unknown;
+    reviewAnnotation?: unknown;
+    sourceVerification?: unknown;
+  } | null | undefined,
 ): PersistedFindingReviewFields {
   if (!row) return {};
   const verificationResult = parseFindingVerificationResult(row.verificationResult);
   const reviewAnnotation = parseFindingReviewAnnotation(row.reviewAnnotation);
+  const sourceVerification = parseFindingSourceVerification(row.sourceVerification);
   return {
     ...(verificationResult ? { verification_result: verificationResult } : {}),
     ...(reviewAnnotation ? { reviewAnnotation } : {}),
+    ...(sourceVerification ? { sourceVerification } : {}),
   };
 }
 
@@ -2601,6 +2671,7 @@ CREATE TABLE IF NOT EXISTS findings (
   findingRank INTEGER,
   verificationResult TEXT,
   reviewAnnotation TEXT,
+  sourceVerification TEXT,
   timestamp INTEGER NOT NULL
 );
 

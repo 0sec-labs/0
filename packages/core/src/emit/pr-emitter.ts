@@ -151,7 +151,7 @@ function evidenceArtifacts(finding: Finding): EvidenceArtifact[] {
 
 // ─── Default node-backed clients ─────────────────────────────────────────────
 
-function defaultGitClient(): GitClient {
+export function defaultGitClient(): GitClient {
   return {
     async run(args, opts) {
       const { spawn } = await import("node:child_process");
@@ -171,7 +171,7 @@ function defaultGitClient(): GitClient {
   };
 }
 
-function defaultGhClient(): GhClient {
+export function defaultGhClient(): GhClient {
   return {
     async isAuthenticated() {
       const { spawn } = await import("node:child_process");

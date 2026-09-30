@@ -82,6 +82,7 @@ import { homeStateDir } from "@0/shared";
 import { allowlistedChildEnv } from "../agent/sanitized-env.js";
 import type { ToolDefinition, ToolParam } from "../agent/types.js";
 import { sanitizeUntrustedToolResult } from "../untrusted-sanitizer.js";
+import { getBuiltinPlugin } from "./builtin.js";
 import {
   gateFlagsFor,
   validatePluginManifest,
@@ -243,6 +244,9 @@ export function readInstalledPlugin(
           "ids must match ^[a-z][a-z0-9]*([._-][a-z0-9]+)*$ and are rejected, not sanitized",
       ],
     };
+  }
+  if (getBuiltinPlugin(pluginId)) {
+    return { ok: false, errors: [`plugin "${pluginId}" is a first-party host feature and cannot be replaced by installed code`] };
   }
   if (!isAbsolute(root)) {
     return { ok: false, errors: ["plugin root must be an absolute path"] };

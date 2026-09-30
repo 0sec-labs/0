@@ -359,6 +359,22 @@ describe("store: write target", () => {
     expect(getSettings().density).toBe("compact");
   });
 
+  it("restores the whole model choice globally and rejects a repository account override", () => {
+    const home = makeHome();
+    const project = makeProjectDir();
+    const preference = { providerId: "chatgpt-codex", model: "account-selected-model", connectionIdentity: "a".repeat(64) };
+    writeProjectRaw(project, { modelPreference: { ...preference, model: "repository-model" }, density: "compact" });
+    configureSettingsStore({ homeDir: home, projectDir: project });
+    expect(getSettings().modelPreference).toBeNull();
+    expect(updateSetting("modelPreference", preference, { scope: "project" })).toBe(false);
+    expect(updateSetting("modelPreference", preference)).toBe(true);
+    __resetSettingsStoreForTests();
+    configureSettingsStore({ homeDir: home, projectDir: project });
+    expect(getSettings().modelPreference).toEqual(preference);
+    expect(getSettings().density).toBe("compact");
+    expect(loadGlobalSettings(home).density).toBe(DEFAULT_SETTINGS.density);
+  });
+
   it("persists operator consent globally even inside a configured project", () => {
     const home = makeHome();
     const project = makeProjectDir();
@@ -422,14 +438,14 @@ describe("updateSetting for the keybindings map", () => {
     const seen: TuiSettings[] = [];
     const unsubscribe = subscribeSettings((s) => seen.push(s));
 
-    expect(updateSetting("keybindings", { "view.left-sidebar": "ctrl+j" })).toBe(true);
-    expect(getSettings().keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
-    expect(seen.at(-1)?.keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+    expect(updateSetting("keybindings", { "view.transcript-detail": "ctrl+j" })).toBe(true);
+    expect(getSettings().keybindings).toEqual({ "view.transcript-detail": "ctrl+j" });
+    expect(seen.at(-1)?.keybindings).toEqual({ "view.transcript-detail": "ctrl+j" });
 
     unsubscribe();
     // Survives a reload from disk.
     reloadSettings();
-    expect(getSettings().keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+    expect(getSettings().keybindings).toEqual({ "view.transcript-detail": "ctrl+j" });
   });
 
   it("sanitises an invalid override on the way in", () => {
@@ -437,11 +453,14 @@ describe("updateSetting for the keybindings map", () => {
     // A protected id and a reserved chord are both dropped by the store's
     // normalise-on-write, leaving only the valid entry.
     updateSetting("keybindings", {
-      "view.left-sidebar": "Ctrl+J",
+      "view.transcript-detail": "Ctrl+J",
+      "overlay.review-toggle": "ctrl+k",
+      "overlay.review-top": "ctrl+l",
+      "overlay.review-bottom": "ctrl+m",
       "session.quit": "ctrl+x",
-      "view.right-sidebar": "ctrl+c",
+      "nav.open-comms": "ctrl+c",
     } as Record<string, string>);
-    expect(getSettings().keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+    expect(getSettings().keybindings).toEqual({ "view.transcript-detail": "ctrl+j" });
   });
 });
 
@@ -515,6 +534,7 @@ describe("analytics environment restrictions", () => {
 
   it("updates its own inherited tier but respects an external override introduced later", async () => {
     configureSettingsStore({ homeDir: makeHome() });
+    updateSetting("analyticsLevel", "full");
     await collect();
     expect(sent).toEqual([
       expect.objectContaining({ origin: "bridge-regression" }),

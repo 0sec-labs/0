@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://0.security/">
-    <img src="assets/readme-cover.png" alt="Software already builds software. Now it can secure itself, too." width="100%">
+    <img src="assets/readme-cover.png" alt="0security terminal security research workflow" width="100%">
   </a>
 </p>
 
@@ -13,12 +13,11 @@
 
 <p align="center">
   <strong>The open-source, self-evolving, multi-model harness for security research.</strong><br/>
-  <sub>The Swiss Applied AI &amp; Cybersecurity Research Lab</sub><br/>
+  <sub>Backed by Y Combinator · The Swiss Applied AI &amp; Cybersecurity Research Lab</sub><br/>
   <a href="https://0.security/">0.security</a> ·
   <a href="https://docs.0.security/">Documentation</a> ·
   <a href="https://github.com/0sec-labs/foxguard">FoxGuard</a>
 </p>
-
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-1A1815?style=flat-square&labelColor=1A1815" alt="License: MIT OR Apache-2.0"></a>
@@ -30,88 +29,74 @@
   <img src="assets/security-cycle-diagram.webp" alt="Zero studies, finds, fixes, reports, and improves." width="100%">
 </p>
 
+## Security research, in your workspace
 
-## The harness behind our research breakthroughs.
-
-Find novel vulnerabilities in the deepest layers of software. Explore our
-[public disclosures and upstream fixes](https://0.security/research/#disclosures),
-including research in the Linux kernel.
+0 is an open-source, multi-model harness for investigating software security:
+read code, run tools, investigate findings and review proposed fixes.
+Built by the Swiss Applied AI & Cybersecurity Research Lab, it supports our
+[public disclosures and upstream fixes](https://0.security/research/#disclosures).
 
 ## Get started
 
-### Docs for your agent
-
-Copy this prompt into your coding agent:
-
-> Set up the 0.security harness using https://0.security/harness/setup.md and read https://0.security/llms.txt for the documentation index. Confirm my targets and scope before testing, and ask before changing files.
-
-### Quick install
+Install on Apple Silicon macOS or x64/ARM64 Linux, then open 0:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash
+export PATH="$HOME/.0/bin:$PATH"
 0
 ```
 
-Bring your model access and configure connections in the terminal. Run locally
-or through the CLI in CI/CD, inspect findings and verification results, and
-export reports as JSON, Markdown or SARIF.
 
-[Setup guide](https://0.security/harness/setup.md) ·
-[Research workflows](https://docs.0.security/research-workflows/) ·
-[Documentation](https://docs.0.security/)
 
-## Built for security research
+## Work locally, extend deliberately
 
-- **Open research.** Benchmark-led agent design and A/B-tested attack strategies,
-  with public findings that others can inspect.
-- **Extensible tools.** Use the in-house security linter, connect your own tools,
-  and let agents write and run tools for the investigation.
-- **Adaptive agents.** Delegate focused investigations to subagents with fresh
-  context and bounded budgets, then collect their findings. See the
-  [agent loop](https://docs.0.security/agent-loop/) and
-  [worker monitoring](https://docs.0.security/console/#monitoring-subagents).
-- **Multi-model harness.** Bring the models you prefer into one security workflow.
-  Combine deterministic steps with adaptive investigations.
-- **Evaluated self-improvement.** Propose changes, evaluate them, and select better
-  versions for future runs. Learn more about the
-  [improvement plane](https://docs.0.security/improvement-plane/).
+- Describe an authorized repository and investigation goal in chat, or use
+  `0 review ./authorized-repo` for a source review.
+- Review findings and proposed changes.
+  Follow the [research workflows](https://docs.0.security/research-workflows/)
+  for deeper investigations.
+- Connect your tools through [MCP and integrations](https://docs.0.security/integrations/).
+  Browse `/hackstore`, or [build and locally install an extension](https://docs.0.security/hackstore/).
+  Community plugins run as local processes; review them before enabling.
 
-### Available on 0.security
+## Why 0?
 
-**Optimized Model Routing: The best LLM for each step**
+Use the models you want. Bring the tools you need. Make the workflow your own.
+0 brings security investigations and fixes into one terminal workspace, with
+focused agents and an extensible toolchain. The harness is open source and
+runs under your control.
 
-The managed service adds model routing, non-public frontier cyber models,
-a purpose-built attack runtime and a curated offensive toolchain. These hosted
-capabilities are separate from running the open-source harness with your own
-model access. [Explore 0.security](https://0.security/).
+## Guides
 
-## Make software secure itself.
+- [Quick start and installation](https://docs.0.security/getting-started/)
+- [Models and provider connections](https://docs.0.security/api-keys/)
+- [Console, sessions and agents](https://docs.0.security/console/)
+- [Plugins and Hackstore publishing](https://docs.0.security/hackstore/)
+- [Scope and authorization](https://docs.0.security/scope/)
+- [GitHub Actions](https://docs.0.security/ci/github-action/)
+- [Troubleshooting](https://docs.0.security/troubleshooting/)
 
-The world's best security should belong to everyone. Software already writes
-itself; we believe it should secure itself, too. Our goal is security that
-finds and fixes vulnerabilities as software changes, so people can focus on
-what they want to create.
+## Status and safety
 
-Research comes first. Public disclosures, upstream fixes and reproducible
-results let people check our work. Open tools let them question it, extend it
-and build something better. Self-securing software is the future we're working
-toward.
+This is a **research preview**, not a guarantee of coverage or correctness.
+Review results and generated fixes before applying them. Tool making and
+[evaluated self-improvement](https://docs.0.security/improvement-plane/) are research workflows.
 
-[Read our manifesto](https://0.security/about/) ·
-[Explore our research](https://0.security/research/)
+Only test systems you own or are authorized to assess. The optional
+[scope plugin](https://docs.0.security/scope/) is disabled by default:
+enable it explicitly with `0 plugin enable scope` and configure your boundaries.
+The default console uses YOLO mode; use `0 console --mode standard` for
 
-## Status
+## Contributing and license
 
-This is a research preview. Coverage and verification depth vary by workflow;
-inspect the evidence and review generated fixes before applying them.
-Tool making and evaluated self-improvement are developing research workflows.
-Only test systems you own or are authorized to assess.
-
-## Contributing
-
-Read [CONTRIBUTING.md](CONTRIBUTING.md) to build and extend the harness.
+Build and extend the harness with [CONTRIBUTING.md](CONTRIBUTING.md).
 Report security issues through [SECURITY.md](SECURITY.md).
+Licensed under [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE).
 
-## License
+## Acknowledgments
 
-[MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE).
+Thanks to the teams behind [OpenTUI](https://github.com/anomalyco/opentui),
+[Bun](https://bun.sh/) and [React](https://react.dev/) for the interface stack,
+and [Models.dev](https://models.dev/) and [LiteLLM](https://github.com/BerriAI/litellm)
+for model metadata and pricing estimates. Thank you to everyone contributing
+code, reporting bugs and sharing ideas.

@@ -1,50 +1,38 @@
 ---
 title: Cloud access and managed execution
-description: Distinguish local execution, hosted model access, and managed repository workflows, including current compatibility limits.
+description: Distinguish local provider access from managed repository workflows and current compatibility limits.
 draft: true
 pagefind: false
 ---
 
-Cloud is not a prerequisite for using 0. Choose the execution and model-access
-arrangement that matches your requirements:
+Cloud is not a prerequisite for using 0 locally. The public console brings
+your own model connection; managed execution is a separate service:
 
 | Arrangement | Models | Tools and execution | Setup |
 | --- | --- | --- | --- |
 | Local harness / BYOK | Your supported provider or subscription | Your configured executor | [CLI quickstart](/getting-started/) and [API Keys](/api-keys/) |
-| Local harness / hosted models | Requests through 0cloud | Still your configured executor | Cloud sign-in, compatible account and hosted model access |
-| Managed execution | As agreed for the workflow | Service-managed workers | Organization access, target authorization, supported service configuration and budget |
+| Managed execution | As agreed for the workflow | Service-managed workers | Operator-provisioned access, target authorization, supported service configuration and budget |
 
-The [pricing page](https://0.security/pricing/) separates hosted model access
-from managed execution. Free software does not mean free provider usage or
-infrastructure. Confirm current plans and access with the team; this guide does
-not promise included usage, a public production qualification, or managed
-execution for every signed-in account.
+Free software does not imply free provider usage or infrastructure. Confirm
+managed-service access, scope, budget and deployment compatibility with the
+team; an account or token alone does not authorize managed execution.
 
 ## What is implemented
 
-The public CLI implements browser authentication, hosted account/model queries,
-repository enrollment (`0 connect`), and managed lifecycle commands
-(`0 service start/status/wait/cancel/disconnect`). The Cloud integration source
-also implements scoped CLI-token authorization, GitHub App enrollment checks,
-secure-run scheduling, scan status/cancellation, and evidence delivery. These
-are real integration paths, not just editable onboarding mockups.
+The local CLI does not provide managed-service login, repository enrollment,
+scan lifecycle, codebase configuration, or methodology commands. Those workflows
+belong to the separately operated Cloud integration, which implements scoped
+token authorization, GitHub App enrollment checks, scheduling,
+status/cancellation, and evidence delivery. The local interactive console uses
+your configured API key or provider subscription for model calls.
 
-They are **not interchangeable account capabilities**. In the reviewed server
-source, an inference-only organization cannot enqueue scans, and a review-only
-organization cannot enqueue a `secure` run. A successful `0 auth status` checks
-an authenticated inference-account endpoint; it does not authorize managed
-execution or prove that a model request will be admitted.
-
-The public [Cloud login](https://cloud.0.security/login) was reachable during
-this documentation review. A reachable login page proves neither deployment
-revision nor successful enrollment, billing, worker execution, or artifact
-retrieval. Managed access should be confirmed with the team.
+When an approved service integration requires a token, the operator supplies
+`ZERO_CLOUD_TOKEN` explicitly (and `ZERO_CLOUD_HOST` if using a nondefault
+deployment). Token presence does not authorize a scan or configure a model
+provider. Confirm managed access and service compatibility with the team.
 
 ## Choose a workflow
 
-- **Use hosted models locally:** follow [Hosted models](/getting-started/#hosted-models)
-  and inspect account eligibility before making requests. Shell tools do not
-  move to the service merely because you sign in.
 - **Arrange managed testing:** [prepare an engagement](/cloud/getting-started/),
   including scope, a test command, service access and a stop procedure.
 - **Connect GitHub reviews:** use the organization's GitHub App integration and
@@ -55,45 +43,24 @@ retrieval. Managed access should be confirmed with the team.
 
 ## Compatibility before automation
 
-Do not infer service compatibility from command availability. The current CLI
-and the reviewed Cloud integration still have mismatches around repository
-schedule filtering and the one-shot service cost-ceiling field. Read the
-[onboarding compatibility checks](/cloud/getting-started/#compatibility-checks)
-before using enrollment or disconnect in an organization with schedules.
+Do not infer a deployed service's compatibility from the local CLI. Confirm
+repository schedule filtering, budget enforcement, and authorization with the
+operator before automating enrollment or schedule changes.
 
 These guides describe source-backed behavior and its limits, not an end-to-end
-production acceptance test. The review compared public CLI revision `708f0117`
-with Cloud root revision `d2cb1a38` and the newer `website-integration-20260918`
-worktree at `61e68bad`. The integration worktree contains managed APIs absent
-from the older root checkout; neither local revision establishes what is
-currently deployed. Public website and login observations were made on
-2026-09-19. No authenticated execution or billing request was performed.
+production acceptance test. The source review compared Cloud root revision
+`d2cb1a38` with the newer `website-integration-20260918` worktree at
+`61e68bad`; neither local revision establishes what is currently deployed.
+No authenticated execution or billing request was performed.
 
 ## Agent-operated codebase setup
 
-The source implementation shares saved configuration between the dashboard and
-the `project` CLI group. Check `0 guide --json` and `0 project --help` in
-the installed version before using these commands:
-
-```bash
-0 project setup owner/repository --json
-0 project show owner/repository --json
-0 project history owner/repository --json
-```
-
-A coding agent reads source-backed observations, asks about conventions, test
-commands, repair preferences and the budget, then saves an approved revision.
-The dashboard can edit the same context. Starting a scan requires separate
-approval and confirmed credit-backed admission; setup alone does not spend.
-
-Use `0 skills --help` for versioned methodology files and codebase
-assignments. Bundle file paths are relative to the working directory, with
-`SKILL.md` as the entrypoint. A queued scan keeps its captured configuration
-and methodology revisions even when a later revision is saved.
-
-Scan-derived observations stay suggestions until explicitly reviewed and saved.
-They are not automatic training. Slack notification setup remains optional.
-Source/fixture qualification does not establish endpoint or engine deployment.
+The managed dashboard and operator-approved service integrations can store
+codebase context, operating plans and methodology revisions. An agent should
+ask about conventions, test commands, repair preferences and budget before
+proposing a revision. Saving setup is separate from authorizing or starting
+a managed scan. Consult the operator for available interfaces; the local CLI
+does not expose `project` or `skills` service commands.
 
 ## Draft material
 

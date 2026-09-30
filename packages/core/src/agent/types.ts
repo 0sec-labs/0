@@ -1,5 +1,6 @@
 import type { Finding, AttackResult, TargetInfo, AuthConfig, NamedIdentity } from "@0/shared";
 import type { ScopePolicy } from "../scope/scope.js";
+import type { ScopeEnforcementState } from "../scope/activation.js";
 import type { RateLimiter } from "../scope/rate-limit.js";
 import type { AttributionConfig } from "../scope/attribution.js";
 import type { EngagementPosture } from "../scope/engagement-profile.js";
@@ -600,6 +601,8 @@ export interface ToolContext {
    * with `ToolResult.error`.
    */
   scope?: ScopePolicy;
+  /** Host-owned approval snapshot; refreshed only at scan/turn/tool boundaries. */
+  scopeEnforcement?: ScopeEnforcementState;
   /** Per-host rate limiter; see AgentConfig.rateLimiter. */
   rateLimiter?: RateLimiter;
   /**

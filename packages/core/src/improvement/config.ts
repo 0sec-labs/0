@@ -4,6 +4,7 @@ import { isAbsolute, resolve, sep } from "node:path";
 import { z } from "zod";
 import { DEFAULT_IMPROVEMENT_PROMOTION_POLICY } from "../bench/improvement-promotion.js";
 import type { EvolutionConfig } from "./types.js";
+import { isAdmittedSmolvmWorkbench } from "../runtime/smolvm-broker.js";
 
 const relativePath = z.string().min(1).max(512).refine(
   (value) => !isAbsolute(value) && !value.includes("\\") && !value.includes("\0")
@@ -71,10 +72,15 @@ export function canonicalEvolutionJson(value: unknown): string {
 
 export function parseEvolutionConfig(raw: unknown, baseDir = process.cwd()): EvolutionConfig {
   const parsed = schema.parse(raw);
+  const admitted = isAdmittedSmolvmWorkbench();
+  if (admitted) {
+    if (parsed.imageArchive) throw new Error("Admitted workbench images must use the host-approved catalog, not guest archive paths");
+    parsed.backend = "smolvm";
+  }
   if (parsed.backend === "smolvm") {
-    if (!parsed.imageArchive) throw new Error("smolvm requires a local imageArchive");
+    if (!parsed.imageArchive && !admitted) throw new Error("smolvm requires a local imageArchive");
     if (!Number.isInteger(parsed.cpus)) throw new Error("smolvm cpus must be an integer");
-    parsed.imageArchive = resolve(baseDir, parsed.imageArchive);
+    if (parsed.imageArchive) parsed.imageArchive = resolve(baseDir, parsed.imageArchive);
   } else if (parsed.imageArchive !== undefined) {
     throw new Error("imageArchive is only valid with backend smolvm");
   }

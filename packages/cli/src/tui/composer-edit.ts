@@ -1,21 +1,4 @@
-/**
- * Line-editing transforms for the chat composer.
- *
- * The composer is APPEND-ONLY: it holds a single string and a caret that is
- * always at the end. There is no cursor position to move, so the readline
- * verbs that are *relative to a caret* (Ctrl+A / Ctrl+E / Ctrl+K, left/right
- * arrows) cannot be implemented honestly here — they would either be no-ops
- * or a lie. What CAN be implemented exactly are the two kill verbs that
- * operate on the tail of the buffer, and they are what operators actually
- * reach for:
- *
- *   Ctrl+U  →  {@link deleteToLineStart}   (macOS Cmd+Backspace maps here)
- *   Ctrl+W  →  {@link deletePreviousWord}  (also Alt/Option+Backspace)
- *
- * They live here rather than inline in the key handler because word-boundary
- * handling is exactly the kind of thing that is quietly wrong forever when it
- * is three characters inside a `useKeyboard` callback.
- */
+/** Line-editing transforms for the chat composer. */
 
 const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
@@ -26,16 +9,21 @@ export function deletePreviousCharacter(text: string): string {
   return text.slice(0, last?.index ?? 0);
 }
 
-/**
- * Delete everything before the caret.
- *
- * With an append-only composer the caret is the end of the buffer, so this
- * is the whole line. It is a named function rather than a literal `""` so
- * the key handler reads as an editing verb and so the contract is pinned by
- * a test if the composer ever grows a real cursor.
- */
-export function deleteToLineStart(_text: string): string {
-  return "";
+/** Move by one visible character without splitting a joined emoji or accent. */
+export function stepComposerCursor(text: string, cursor: number, direction: -1 | 1): number {
+  const at = Math.max(0, Math.min(text.length, cursor));
+  if (direction < 0) {
+    if (at === 0) return 0;
+    return GRAPHEMES.segment(text).containing(at - 1)?.index ?? 0;
+  }
+  if (at === text.length) return at;
+  const next = GRAPHEMES.segment(text).containing(at);
+  return next ? next.index + next.segment.length : text.length;
+}
+
+/** Delete everything before the caret on the current logical line. */
+export function deleteToLineStart(text: string): string {
+  return text.slice(0, text.lastIndexOf("\n") + 1);
 }
 
 /**

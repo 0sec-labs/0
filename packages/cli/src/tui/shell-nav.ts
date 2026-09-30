@@ -27,16 +27,11 @@ export interface ShellNav {
    * rebindable View toggles can be re-captured. Persists via the settings store.
    */
   openKeybindings: () => void;
-  openHarness: () => void;
   /** Opens the model picker above the live conversation. */
   openModels: (chatOptions?: ChatScreenOptions) => void;
+  /** Opens Sessions: switch open native sessions or resume saved conversations. */
   openResume: (chatOptions?: ChatScreenOptions) => void;
   openOnboarding: () => void;
-  /**
-   * Opens the agent-herd overview: the roster of peers working this project
-   * directory. Empty by default until the roster producer is wired.
-   */
-  openHerd: () => void;
   /**
    * Opens the Agents Comms view: the live fleet of sub-agents plus the stream
    * of messages flowing between them (agent↔agent, agent↔operator). Empty by
@@ -50,10 +45,9 @@ export interface ShellNav {
    */
   openMarket: () => void;
   /**
-   * Opens the full-screen provider connect / login screen: the write side of
-   * `/providers`, where an operator connects a model provider by pasting an API
-   * key or completing a subscription sign-in. Credentials go only to the
-   * existing credential store.
+   * Opens the provider connect / login screen, where an operator connects
+   * by pasting an API key or completing a subscription sign-in. Credentials
+   * go only to the existing credential store.
    */
   openConnect: () => void;
   /**

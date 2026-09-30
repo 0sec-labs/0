@@ -277,18 +277,11 @@ function getTargetType(report: any, opts: RunOptions): string | undefined {
   return report?.targetType ?? opts.targetType;
 }
 
-function emitResultLine(payload: ResultLinePayload): void {  if (process.env["ZERO_EMIT_RESULT_LINE"] !== "1" && !process.env["ZERO_CLOUD_SINK"]) return;
+function emitResultLine(payload: ResultLinePayload): void {
+  if (process.env["ZERO_EMIT_RESULT_LINE"] !== "1") return;
   console.log(`ZERO_RESULT=${JSON.stringify(payload)}`);
 }
 
-function getCloudFinalSinkConfig(): { sinkUrl: string; scanId: string; token?: string } | null {
-  if (process.env["ZERO_FEATURE_CLOUD_SINK"] === "0") return null;
-  const sinkUrl = process.env["ZERO_CLOUD_SINK"]?.trim();
-  const scanId = process.env["ZERO_CLOUD_SCAN_ID"]?.trim();
-  if (!sinkUrl || !scanId) return null;
-  const token = process.env["ZERO_CLOUD_TOKEN"]?.trim() || undefined;
-  return { sinkUrl, scanId, token };
-}
 
 function isCostBreakdownEntry(value: unknown): value is CostBreakdownEntry {
   if (!value || typeof value !== "object") return false;
@@ -381,34 +374,6 @@ function printCrossValidatedLeads(summary: CrossValidatedLeadsSummary): void {
   }
 }
 
-async function postFinalResultToCloud(report: unknown): Promise<void> {
-  const config = getCloudFinalSinkConfig();
-  if (!config) return;
-  const url = `${config.sinkUrl.replace(/\/+$/, "")}/scans/${encodeURIComponent(config.scanId)}/findings`;
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    "X-0-Scan-Id": config.scanId,
-  };
-  if (config.token) headers.Authorization = `Bearer ${config.token}`;
-
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ report, final: true }),
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      process.stderr.write(
-        `[0 cloud-sink] report POST ${url} returned ${res.status}: ${text.slice(0, 200)}\n`,
-      );
-    }
-
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`[0 cloud-sink] report POST ${url} failed: ${msg}\n`);
-  }
-}
 export async function runUnified(opts: RunOptions): Promise<void> {
   const { target, depth, format, runtime, timeout } = opts;
   const core = await loadCoreModule();
@@ -604,9 +569,6 @@ export async function runUnified(opts: RunOptions): Promise<void> {
     const reportAny = report as any;
     const canonicalReport = toScanReport(report);
 
-    if (opts.targetType !== "url" && opts.targetType !== "web-app") {
-      await postFinalResultToCloud(reportAny);
-    }
 
     if (inkUI) {
       inkUI.setReport(report as any);

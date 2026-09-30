@@ -6,6 +6,7 @@ import chalk from "chalk";
 import {
   createConsoleRuntime,
   loadScope,
+  getScopeEnforcementState,
   parseMcpConfig,
   connectMcpServers,
   DEFAULT_MAX_TOOL_ITERATIONS,
@@ -85,8 +86,8 @@ export type ConsoleAutonomyResolution =
  *
  * Precedence: --mode > --yolo > --autonomy > default "yolo". A conflicting
  * `--mode <x> --yolo` (x !== yolo) is a clear error rather than a silent pick.
- * The interactive Bun console can ask for scope. Without that approval channel,
- * YOLO still requires a configured scope; target and SSRF protections remain.
+ * Scope admission is supplied only by the explicitly enabled scope plugin;
+ * the interactive Bun console can then request scope while headless cannot.
  */
 export function resolveConsoleAutonomyMode(opts: {
   mode?: string;
@@ -137,14 +138,14 @@ export function registerConsoleCommand(program: Command): void {
       "Interactive chat console — talk to the engine and drive the full tool registry (recon, web, source-scan, variant-hunt, verify, patch-gen) from one prompt.",
     )
     .option("--target <url>", "Engagement target the tools operate against (optional; can be named in-chat)")
-    .option("--scope <file>", "Initial authorization scope; required for the Node fallback (optional otherwise)")
+    .option("--scope <file>", "Initial policy for the optional scope plugin; activate with `0 plugin enable scope`")
     .option("--finding <id>", "Focus the chat on one persisted finding")
     .option("--finding-intent <intent>", "Finding workflow: investigate, verify, or draft_fix")
     .option("--db-path <path>", "Persistent findings database (defaults to ZERO_DB_PATH or the local store)")
     .option("-m, --model <id>", "Override the LLM model id (else provider default)")
     .option("--role <role>", "Tool set to expose: audit|review|discovery|attack|verify (default audit = every tool)")
-    .option("--mode <mode>", "Autonomy mode to start in: standard|recon|copilot|yolo (default yolo). YOLO drops per-action prompts but stays target/scope-anchored; cycle live with Shift+Tab.")
-    .option("--yolo", "Shortcut for --mode yolo — start the console in YOLO autonomy (no per-action prompts; still target-anchored and SSRF-railed).")
+    .option("--mode <mode>", "Approval/capability mode: standard|recon|copilot|yolo (default yolo). Scope authorization is a separate optional plugin; cycle mode with Shift+Tab.")
+    .option("--yolo", "Shortcut for --mode yolo (no per-action prompts; independent credential, private-network and sandbox protections remain).")
     .option("--autonomy <mode>", "Alias of --mode (standard|copilot|yolo|recon); --mode/--yolo take precedence.")
     .option("--max-tool-calls <n>", "Safety cap on tool-call rounds per operator message", String(DEFAULT_MAX_TOOL_ITERATIONS))
     .option("--allow-scanners", "Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off")
@@ -187,6 +188,8 @@ export function registerConsoleCommand(program: Command): void {
       }
       const autonomyMode: ConsoleAutonomyMode = autonomyResolution.mode;
       const useOpenTui = opts.print === undefined && isBunRuntime() && canUseOpenTui();
+      const scopeEnforcement = getScopeEnforcementState();
+      if (!useOpenTui) console.error(chalk.dim(scopeEnforcement.message));
 
       let scope;
       if (opts.scope) {
@@ -199,7 +202,7 @@ export function registerConsoleCommand(program: Command): void {
         }
       }
 
-      if (autonomyMode === "yolo" && !hasConfiguredScope(scope) && !useOpenTui) {
+      if (scopeEnforcement.enabled && autonomyMode === "yolo" && !hasConfiguredScope(scope) && !useOpenTui) {
         console.error(chalk.red("YOLO mode requires --scope <file> with at least one in_scope entry."));
         process.exitCode = 2;
         return;
@@ -358,7 +361,7 @@ export function registerConsoleCommand(program: Command): void {
         return;
       }
 
-      if (!scope) {
+      if (scopeEnforcement.enabled && !scope) {
         console.error(chalk.red("0 console under Node requires --scope <file>."));
         console.error(chalk.dim("The readline fallback cannot approve session-only scope extensions; use the Bun TUI for scope-on-demand."));
         if (mcpHost) await mcpHost.closeAll();
@@ -493,7 +496,7 @@ export function registerConsoleCommand(program: Command): void {
           }
           default: {
             // A known, non-tuiOnly command the line-mode REPL doesn't implement
-            // (e.g. model/providers/settings/resume). Say so instead of silently
+            // (e.g. model/settings/sessions). Say so instead of silently
             // ignoring it — the full set lives in the Bun TUI.
             console.log(
               chalk.yellow(
@@ -618,7 +621,7 @@ function printHelp(): void {
   console.log(chalk.dim("  Modes: Standard runs automatically in scope and can request a narrow session-only extension; Co-pilot adds approval for every non-read-only tool; YOLO runs only inside an explicit configured scope and never requests extensions."));
   console.log(chalk.dim("  The Node fallback cannot approve scope extensions or Co-pilot actions; use the Bun TUI for those approvals."));
   console.log(chalk.dim("  anything else is sent to the engine as an operator message.\n"));
-  console.log(chalk.dim("  Navigation commands (/chat, /scope, /agents, …) require the Bun TUI."));
+  console.log(chalk.dim("  Navigation commands (/chat, /scope, /sessions, …) require the Bun TUI. Switch agents in the inline chat worklist."));
   console.log(chalk.dim("  Run the bare `0` command for the full interactive experience.\n"));
 }
 
@@ -633,7 +636,7 @@ function printStatus(session: ConsoleSession): void {
   console.log(`  ${chalk.cyan("mode")}     ${modeLabel(session.autonomyMode)}`);
   console.log(`  ${chalk.cyan("target")}  ${session.target || "(not set)"}`);
   console.log(`  ${chalk.cyan("tools")}   ${session.tools.length} available`);
-  console.log(`  ${chalk.cyan("scope")}   ${hasConfiguredScope(session.scope) ? "configured" : "not configured"}`);
+  console.log(`  ${chalk.cyan("scope")}   ${session.scopeEnforcement.enabled ? (hasConfiguredScope(session.scope) ? "enforced" : "enabled; no policy") : "disabled — authorization not enforced"}`);
   console.log(`  ${chalk.cyan("turns")}   ${Math.ceil(session.messages.length / 2)}`);
   console.log("");
 }

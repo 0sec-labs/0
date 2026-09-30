@@ -68,7 +68,7 @@ import {
   isExplicitLocalTargetPath,
   resolveLocalTargetPath,
 } from "./path-resolution.js";
-import { eventBus, isCloudEventSinkActive } from "./events/bus.js";
+import { eventBus } from "./events/bus.js";
 
 /**
  * Default ceiling on how many source files a `review` (source-code) target may
@@ -324,11 +324,6 @@ export function resolveSubsystemScope(
   return existsSync(subPath) ? subPath : null;
 }
 
-function shouldEmitPipelineCloudEvents(): boolean {
-  if (isCloudEventSinkActive()) return true;
-  const flag = process.env["ZERO_CLOUD_EVENTS"];
-  return !!flag && flag !== "0" && flag.toLowerCase() !== "false";
-}
 
 /**
  * Convert external `SeedFinding[]` (from `--seed-findings`) into the
@@ -1221,16 +1216,11 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     exitReason: "completed" | "failed" | "cost_exceeded",
     payload: Record<string, unknown> = {},
   ): void => {
-    if (!shouldEmitPipelineCloudEvents()) return;
     if (emittedScanCompleted) return;
     emittedScanCompleted = true;
-    // Mirror the audit path's scan_completed field set (agentic-scanner.ts
-    // emitScanCompleted) so the cloud can populate scan detail for
-    // pipeline (review / package-audit) runs too: the engine-resolved model,
-    // cross-session turns + tool-call totals, and the ledger's true
-    // cross-session cost + per-model breakdown. cost_usd / cost_breakdown
-    // are omitted when no metered runtime ran (never a fabricated $0);
-    // model is omitted when nothing resolved one (never a guess).
+    // Include the engine-resolved model, cross-session turns and tool-call
+    // totals, and the ledger's actual cost and per-model breakdown. Omit
+    // cost/model when no metered runtime resolved them.
     const cost = costLedger.costBreakdown();
     eventBus.emit("scan_completed", {
       exit_reason: exitReason,
@@ -1317,25 +1307,21 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     | null = null;
   const finishPhase = (): void => {
     if (!openPhase) return;
-    if (shouldEmitPipelineCloudEvents()) {
-      eventBus.emit("phase_completed", {
-        name: openPhase.name,
-        index: openPhase.index,
-        duration_ms: Date.now() - openPhase.startedAt,
-        input_tokens: usageTotals.inputTokens - openPhase.usageAtStart.inputTokens,
-        output_tokens: usageTotals.outputTokens - openPhase.usageAtStart.outputTokens,
-        turns: usageTotals.turns - openPhase.usageAtStart.turns,
-      });
-    }
+    eventBus.emit("phase_completed", {
+      name: openPhase.name,
+      index: openPhase.index,
+      duration_ms: Date.now() - openPhase.startedAt,
+      input_tokens: usageTotals.inputTokens - openPhase.usageAtStart.inputTokens,
+      output_tokens: usageTotals.outputTokens - openPhase.usageAtStart.outputTokens,
+      turns: usageTotals.turns - openPhase.usageAtStart.turns,
+    });
     openPhase = null;
   };
   const startPhase = (name: string): void => {
     finishPhase();
     const index = phaseIndex++;
     openPhase = { name, index, startedAt: Date.now(), usageAtStart: { ...usageTotals } };
-    if (shouldEmitPipelineCloudEvents()) {
-      eventBus.emit("phase_started", { name, index });
-    }
+    eventBus.emit("phase_started", { name, index });
   };
 
   const runState = await (async () => {
@@ -1462,6 +1448,16 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       "diff", "--no-ext-diff", "--no-textconv", "--unified=3", `${opts.diffBase}...HEAD`,
     ], { cwd: prepared.scopePath, timeout: 30_000, encoding: "utf-8", maxBuffer: 256 * 1024 });
     if (!diffPatch.trim()) throw new Error("No reviewable diff found; refusing whole-repository fallback.");
+    // A diff is input data, not an unlimited prompt budget. Keep the initial
+    // review request below the provider context ceiling; the agent can fetch
+    // omitted hunks with read_file after the changed-path manifest is shown.
+    const maxInitialDiffChars = 64 * 1024;
+    if (Buffer.byteLength(diffPatch, "utf8") > maxInitialDiffChars) {
+      const half = Math.floor(maxInitialDiffChars / 2);
+      diffPatch = diffPatch.slice(0, half)
+        + "\n\n[0: middle of oversized diff omitted from initial prompt; inspect changed paths with read_file]\n\n"
+        + diffPatch.slice(-half);
+    }
   }
   // A routine small change gets one bounded research pass and one bounded
   // independent verification pass. Bigger diffs keep the established budget;
@@ -1787,16 +1783,14 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       semgrepFindings: semgrepFindings.length,
       npmAuditFindings: npmAuditFindings.length,
     });
-    if (shouldEmitPipelineCloudEvents()) {
-      eventBus.emit("analyze:stage_complete", {
-        stage: "static-analysis",
-        staticScanner,
-        staticScannerRan,
-        staticScannerFindings,
-        semgrepFindings: semgrepFindings.length,
-        npmAuditFindings: npmAuditFindings.length,
-      });
-    }
+    eventBus.emit("analyze:stage_complete", {
+      stage: "static-analysis",
+      staticScanner,
+      staticScannerRan,
+      staticScannerFindings,
+      semgrepFindings: semgrepFindings.length,
+      npmAuditFindings: npmAuditFindings.length,
+    });
 
     const availableRuntimes = await detectAvailableRuntimes();
     const needsApiDiagnostics =

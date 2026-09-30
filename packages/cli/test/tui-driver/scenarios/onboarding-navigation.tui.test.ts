@@ -1,16 +1,10 @@
+import { getScopeEnforcementState } from "@0/core";
 import { afterEach, expect, test, vi } from "vitest";
 import { launch, type TuiHandle } from "../index.js";
 import { getSettings } from "../../../src/tui/settings-store.js";
+import { loadSettings, SETTING_DEFS } from "../../../src/tui/settings.js";
 import { modelsByokLaunch } from "./_helpers.js";
 
-const hosted = vi.hoisted(() => ({ cancel: vi.fn() }));
-vi.mock("../../../src/tui/hosted-device-auth.js", async (original) => ({
-  ...await original<typeof import("../../../src/tui/hosted-device-auth.js")>(),
-  startHostedDeviceAuth: (options: { onUpdate: (update: unknown) => void }) => {
-    options.onUpdate({ phase: "polling", message: "Synthetic login pending" });
-    return { cancel: hosted.cancel };
-  },
-}));
 
 let tui: TuiHandle | undefined;
 afterEach(async () => {
@@ -26,25 +20,93 @@ async function firstRun(cols = 100, rows = 34, openSetup = true) {
   vi.spyOn(process, "exit").mockImplementation(() => { throw new Error("Unexpected application exit"); });
   const screen = await launch({ ...modelsByokLaunch(), route: { type: "chat" }, cols, rows,
     settings: { onboardingCompleted: false, mouseSupport: true } });
-  await screen.waitForText(/type to chat or \/ for commands/);
   if (openSetup) {
     await screen.sendKeys("/onboard");
     await screen.sendKey("return");
-    await screen.waitForText(/Step 1 of 6/);
+    await screen.waitForText(/Step 1 of 5/);
+  } else {
+    await screen.waitForText(/type to chat or \/ for commands|draft here · restore access to send|Provider unavailable/i);
   }
   return screen;
 }
 
+async function clickTopAction(label: string) {
+  const rows = tui!.rawFrame().split("\n");
+  const y = rows.findIndex((row) => row.includes(label));
+  expect(y).toBeGreaterThanOrEqual(0);
+  const x = rows[y].indexOf(label) - 1;
+  // Move first so the headless hit-grid is current after centered-layout reflow.
+  await tui!.moveMouse(x, y);
+  await tui!.click(x, y);
+}
+
+
+test("provider step summarizes detected names without revealing credential values", async () => {
+  const variables = ["OPENAI_API_KEY", "AZURE_OPENAI_API_KEY", "ZERO_CHATGPT_ACCESS_TOKEN"] as const;
+  const previous: Record<(typeof variables)[number], string | undefined> = {
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    AZURE_OPENAI_API_KEY: process.env.AZURE_OPENAI_API_KEY,
+    ZERO_CHATGPT_ACCESS_TOKEN: process.env.ZERO_CHATGPT_ACCESS_TOKEN,
+  };
+  const secrets = ["onboarding-openai-secret", "onboarding-azure-secret", "onboarding-codex-secret"];
+  try {
+    tui = await firstRun();
+    variables.forEach((name, index) => { process.env[name] = secrets[index]; });
+    await tui.sendKey("return");
+    await tui.waitForText(/Step 2 of 5/);
+    const rows = tui.captureFrame().split("\n");
+    const detectedIndex = rows.findIndex((line) => line.includes("Detected credentials"));
+    const detectedText = rows.slice(detectedIndex, detectedIndex + 5).join(" ");
+    expect(detectedIndex).toBeGreaterThanOrEqual(0);
+    expect(detectedText).toContain("OpenAI");
+    expect(detectedText).toContain("Azure OpenAI");
+    expect(detectedText).toContain("ChatGPT Codex");
+    const frame = tui.captureFrame();
+    expect(frame).toContain("Connect another provider below.");
+    expect(frame).not.toMatch(/No credential configured|Get a key at|Paste a key to save it securely/);
+    for (const secret of secrets) expect(frame).not.toContain(secret);
+  } finally {
+    await tui?.close();
+    tui = undefined;
+    variables.forEach((name) => {
+      const value = previous[name];
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    });
+  }
+});
+
 test("first launch opens chat; optional setup returns without completing or quitting", async () => {
   tui = await firstRun(100, 34, false);
-  expect(tui.captureFrame()).not.toContain("Step 1 of 6");
+  expect(tui.captureFrame()).not.toContain("Step 1 of 5");
   expect(tui.captureFrame()).not.toContain("provider initialized");
   await tui.sendKeys("/onboard");
   await tui.sendKey("return");
-  await tui.waitForText(/Step 1 of 6/);
+  await tui.waitForText(/Step 1 of 5/);
+  const frame = tui.captureFrame();
+  expect(frame).toContain("Hey there! Meet Zero.");
+  expect(frame).toContain("Skip setup");
+  expect(frame).toContain("Continue");
+  expect(frame).not.toContain("0.SECURITY · OPERATOR CONSOLE");
+  expect(frame).not.toContain("type to chat or / for commands");
+  expect(frame).not.toMatch(/Ctrl\+P commands|Ctrl\+R check again/);
+  const spans = tui.captureSpans().lines;
+  const band = spans.find((line) => {
+    const text = line.spans.map((span) => span.text).join("");
+    return text.includes("0.security / setup") && text.includes("Step 1 of 5 · Welcome");
+  });
+  const titleSpan = band?.spans.find((span) => span.text.includes("0.security / setup"));
+  const greetingSpan = spans.find((line) => line.spans.some((span) => span.text.includes("Hey there! Meet Zero.")))
+    ?.spans.find((span) => span.text.includes("Hey there! Meet Zero."));
+  expect(titleSpan).toBeDefined();
+  expect(greetingSpan).toBeDefined();
+  expect(titleSpan!.bg.toInts()).not.toEqual(greetingSpan!.bg.toInts());
+  const continueRow = tui.rawFrame().split("\n").find((row) => row.includes("Continue"));
+  expect(continueRow).toBeDefined();
+  expect(Math.abs(continueRow!.indexOf("Continue") + 4 - 50)).toBeLessThan(5);
   await tui.sendKey("escape");
   await tui.settle();
-  expect(tui.captureFrame()).not.toContain("Step 1 of 6");
+  expect(tui.captureFrame()).not.toContain("Step 1 of 5");
   expect(tui.captureFrame()).not.toMatch(/Stopping audits/);
   expect(getSettings().onboardingCompleted).toBe(false);
   await tui.sendKeys("draft survives setup");
@@ -54,11 +116,15 @@ test("first launch opens chat; optional setup returns without completing or quit
 
 test.each([[100, 34], [64, 24]])("Back traverses decisions, filters unwind first, confirmed preferences survive (%ix%i)", async (cols, rows) => {
   tui = await firstRun(cols, rows);
-  await tui.waitForText(/Step 1 of 6/);
+  const sharingBefore = getSettings().analyticsLevel;
+  const reportingBefore = getSettings().diagnosticReporting;
+  const scopeBefore = getScopeEnforcementState().enabled;
+  await tui.waitForText(/Step 1 of 5/);
+  expect(tui.captureFrame()).toContain("Hey there! Meet Zero.");
   await tui.sendKey("return");
-  await tui.waitForText(/skip/);
+  await tui.waitForText(/Step 2 of 5/);
   await tui.sendKey("escape");
-  await tui.waitForText(/Step 1 of 6/);
+  await tui.waitForText(/Step 1 of 5/);
   await tui.sendKey("return");
   await tui.sendKey("n", { ctrl: true }); // Connect → Models
   await tui.sendKeys("nonexistent-model-fixture");
@@ -68,84 +134,179 @@ test.each([[100, 34], [64, 24]])("Back traverses decisions, filters unwind first
   expect(tui.captureFrame()).toMatch(/connect/i);
   await tui.sendKey("n", { ctrl: true });
   await tui.sendKey("n", { ctrl: true }); // Models → Theme
-  await tui.waitForText(/Step 4 of 6/);
+  await tui.waitForText(/Step 4 of 5/);
   const originalTheme = getSettings().theme;
   await tui.sendKey("right");
-  expect(getSettings().theme).toBe(originalTheme); // highlighted draft only
+  expect(loadSettings(process.env["HOME"], process.env["HOME"]).theme).toBe(originalTheme);
   await tui.sendKey("escape");
   await tui.sendKey("n", { ctrl: true }); // revisit Theme; draft discarded
   await tui.sendKey("return");
   expect(getSettings().theme).toBe(originalTheme);
-  expect(tui.captureFrame()).toMatch(/Density/);
+  await tui.waitForText(/Step 5 of 5/);
+  expect(tui.captureFrame()).toContain("You can change this choice in Settings");
+  expect(tui.captureFrame()).toContain("● Yes, I’d like to help make 0 better!");
+  expect(tui.captureFrame()).toContain("Pseudonymous usage metrics");
+  expect(tui.captureFrame()).toContain("○ Off");
+  expect(tui.captureFrame()).not.toMatch(/Tools and code|\bFull\b|identifying content|anonymous|environment opt-outs|problem reports|Hackstore|Density|Done/);
   await tui.sendKey("escape");
   expect(tui.captureFrame()).toMatch(/Theme/);
   await tui.sendKey("right");
   await tui.sendKey("return");
   const chosenTheme = getSettings().theme;
   expect(chosenTheme).not.toBe(originalTheme);
-  await tui.sendKey("s"); // Density → Analytics
-  await tui.waitForText(/Step 5 of 6/);
   await tui.sendKey("escape");
-  expect(tui.captureFrame()).toMatch(/Density/);
+  expect(tui.captureFrame()).toMatch(/Theme/);
   expect(getSettings().theme).toBe(chosenTheme);
   await tui.sendKey("s");
-  await tui.sendKey("s"); // Analytics → Done, preserving saved sharing choice
-  await tui.waitForText(/Step 6 of 6/);
-  expect(getSettings().onboardingCompleted).toBe(false);
-  await tui.sendKey("escape");
-  await tui.waitForText(/Step 5 of 6/);
-  await tui.sendKey("s");
-  await tui.sendKey("return");
+  await tui.waitForText(/Step 5 of 5/);
+  await tui.sendKey("up");
+  expect(tui.captureFrame()).toContain("● Off");
+  await tui.sendKey("down");
+  expect(tui.captureFrame()).toContain("● Yes, I’d like to help make 0 better!");
+  expect(getSettings().analyticsLevel).toBe(sharingBefore);
+  expect(getSettings().diagnosticReporting).toBe(reportingBefore);
+  await tui.sendKey("s"); // Final sharing skip completes without changing the saved tier.
   expect(getSettings().onboardingCompleted).toBe(true);
+  await tui.waitForText(/type to chat or \/ for commands|draft here · restore access to send|Provider unavailable/);
+  expect(tui.captureFrame()).not.toMatch(/Step \d of \d/);
+  expect(getScopeEnforcementState().enabled).toBe(scopeBefore);
   expect(process.exit).not.toHaveBeenCalled();
 });
 
-test("mouse Back uses the same previous-step transition", async () => {
-  tui = await firstRun();
+test.each([[100, 34], [64, 24]])("compact window actions keep drafts separate from saved choices (%ix%i)", async (cols, rows) => {
+  tui = await firstRun(cols, rows);
+  const sharingBefore = getSettings().analyticsLevel;
+  const reportingBefore = getSettings().diagnosticReporting;
   await tui.sendKey("return");
-  await tui.sendKey("n", { ctrl: true });
-  await tui.sendKey("n", { ctrl: true });
-  await tui.sendKey("s"); // Density
-  const rows = tui.rawFrame().split("\n");
-  const y = rows.findIndex((row) => row.includes("[Back]"));
-  expect(y).toBeGreaterThanOrEqual(0);
-  await tui.click(rows[y].indexOf("[Back]") + 2, y);
-  expect(tui.captureFrame()).toMatch(/Theme/);
+  await tui.waitForText(/Step 2 of 5/);
+  await tui.sendKey("escape");
+  await tui.waitForText(/Step 1 of 5/);
+  await tui.sendKey("return");
+  await tui.sendKey("n", { ctrl: true }); // Provider → Models, preserving existing credentials.
+  await tui.waitForText(/deepseek-chat/);
+  await tui.sendKey("return");
+  await tui.waitForText(/Step 4 of 5/);
+  const savedTheme = loadSettings(process.env["HOME"], process.env["HOME"]).theme;
+  const choices = SETTING_DEFS.find((def) => def.key === "theme")!.choices!;
+  const draft = choices.find((choice) => choice !== savedTheme && choice !== "0")!;
+  const chooseDraft = async () => {
+    const label = draft.replace(/-/g, " ");
+    for (let attempt = 0; attempt <= choices.length; attempt++) {
+      const frame = tui!.rawFrame().split("\n");
+      const themeHeader = frame.findIndex((row) => /\bTheme ·/.test(row));
+      const listColumn = frame[themeHeader].indexOf("Theme");
+      const preview = frame.findIndex((row, index) => index > themeHeader && row.includes("PREVIEW"));
+      expect(preview).toBeGreaterThan(themeHeader);
+      const previewColumn = frame[preview].indexOf("PREVIEW");
+      const y = frame.findIndex((row, index) => index > themeHeader
+        && row.slice(listColumn, previewColumn).replace("●", "").trim() === label);
+      if (y >= 0) {
+        const x = frame[y].indexOf(label, listColumn);
+        await tui!.moveMouse(x, y);
+        expect(getSettings().theme).toBe(savedTheme);
+        await tui!.click(x, y);
+        return;
+      }
+      // Short windows may initially hide the first theme; scroll the actual
+      // picker, never mistake the mini-console's "0" for a selectable row.
+      await tui!.scroll(listColumn + 1, themeHeader + 2, -1);
+    }
+    throw new Error(`Theme row ${label} did not become visible\n${tui!.rawFrame()}`);
+  };
+  await chooseDraft();
+  expect(loadSettings(process.env["HOME"], process.env["HOME"]).theme).toBe(savedTheme);
+  await tui.sendKey("escape");
+  await tui.waitForText(/Step 3 of 5/);
+  await tui.waitForText(/deepseek-chat/);
+  await tui.sendKey("return"); // Explicitly select the highlighted real model.
+  await tui.sendKey("return"); // Commit Theme after discarding the abandoned draft.
+  expect(getSettings().theme).toBe(savedTheme);
+  await tui.sendKey("escape");
+  await tui.waitForText(/Step 4 of 5/);
+  await chooseDraft();
+  await tui.sendKey("return");
+  expect(getSettings().theme).toBe(draft);
+  expect(loadSettings(process.env["HOME"], process.env["HOME"]).theme).toBe(draft);
+  await tui.sendKey("escape");
+  expect(getSettings().theme).toBe(draft);
+  await tui.sendKey("return");
+  await tui.sendKey("s"); // Skip Theme to Data sharing.
+  expect(getSettings().analyticsLevel).toBe(sharingBefore);
+  expect(getSettings().diagnosticReporting).toBe(reportingBefore);
+  await tui.waitForText(/type to chat or \/ for commands|draft here · restore access to send|Provider unavailable/);
+  expect(getSettings().onboardingCompleted).toBe(true);
+  expect(tui.captureFrame()).not.toMatch(/Step \d of \d/);
+});
+
+test("focused keyboard actions perform the same forward, back and skip transitions", async () => {
+  tui = await firstRun();
+  await tui.sendKey("tab");
+  await tui.sendKey("right"); // Focus the centered Continue action from Skip setup.
+  await tui.sendKey("return"); // Welcome's focused Continue
+  await tui.waitForText(/Step 2 of 5/);
+  await tui.sendKey("tab", { ctrl: true }); // parent Back, not provider filter
+  await tui.sendKey("return");
+  await tui.waitForText(/Step 1 of 5/);
+  await tui.sendKey("return");
+  await tui.sendKey("tab", { ctrl: true });
+  await tui.sendKey("tab"); // Skip
+  await tui.sendKey("return");
+  await tui.waitForText(/Step 3 of 5/);
+  await tui.waitForText(/deepseek-chat/);
+  await tui.sendKey("tab", { ctrl: true });
+  await tui.sendKey("tab");
+  await tui.sendKey("tab"); // Next
+  await tui.sendKey("return");
+  await tui.waitForText(/Step 4 of 5/);
+  const saved = getSettings().theme;
+  await tui.sendKey("right");
+  expect(loadSettings(process.env["HOME"], process.env["HOME"]).theme).toBe(saved);
+  await tui.sendKey("tab", { shift: true }); // Next from body
+  await tui.sendKey("return");
+  expect(getSettings().theme).not.toBe(saved);
+  await tui.sendKey("tab"); // Back
+  await tui.sendKey("return");
+  const confirmed = getSettings().theme;
+  await tui.sendKey("right");
+  await tui.sendKey("tab"); // Back
+  await tui.sendKey("tab"); // Skip
+  await tui.sendKey("return");
+  expect(getSettings().theme).toBe(confirmed);
   expect(getSettings().onboardingCompleted).toBe(false);
 });
 
-test("theme preview colors follow the draft without saving it", async () => {
+test("theme highlight repaints the console and window without saving, then Back rolls both back", async () => {
   tui = await firstRun();
   await tui.sendKey("return");
   await tui.sendKey("n", { ctrl: true });
   await tui.sendKey("n", { ctrl: true });
-  await tui.waitForText(/Step 4 of 6/);
+  await tui.waitForText(/Step 4 of 5/);
   const originalTheme = getSettings().theme;
   const previewColors = () => {
     const lines = tui!.captureSpans().lines;
-    const sample = lines.findIndex((line) => line.spans.map((span) => span.text).join("").includes("operator warn error"));
-    expect(sample).toBeGreaterThan(0);
-    // Exclude surrounding chrome and the gaps, whose colors legitimately
-    // change only after the highlighted theme is confirmed.
-    const start = lines[sample].spans.map((span) => span.text).join("").indexOf("0 operator");
-    expect(start).toBeGreaterThanOrEqual(0);
-    const backgrounds = lines[sample - 1].spans.flatMap((span) => Array.from({ length: span.width }, () => span.bg.toInts()));
+    const sample = lines.find((line) => line.spans.map((span) => span.text).join("").includes("Findings verified."));
+    const controls = lines.find((line) => line.spans.map((span) => span.text).join("").includes("Next"));
+    expect(sample).toBeDefined();
+    expect(controls).toBeDefined();
     return {
-      swatches: Array.from({ length: 10 }, (_, i) => backgrounds[start + i * 3]),
-      sample: lines[sample].spans.filter((span) => span.text.trim()).map((span) => [span.text, span.fg.toInts()]),
+      console: sample!.spans.filter((span) => span.text.includes("Findings verified."))
+        .map((span) => [span.fg.toInts(), span.bg.toInts()]),
+      chrome: controls!.spans.filter((span) => span.text.includes("Next"))
+        .map((span) => [span.fg.toInts(), span.bg.toInts()]),
     };
   };
   const original = previewColors();
   await tui.sendKey("right");
   const draft = previewColors();
-  expect(draft.swatches).not.toEqual(original.swatches);
-  expect(draft.sample).not.toEqual(original.sample);
-  expect(getSettings().theme).toBe(originalTheme);
+  expect(draft.console).not.toEqual(original.console);
+  expect(draft.chrome).not.toEqual(original.chrome);
+  expect(getSettings().theme).not.toBe(originalTheme);
+  expect(loadSettings(process.env["HOME"], process.env["HOME"]).theme).toBe(originalTheme);
   await tui.sendKey("left");
   expect(previewColors()).toEqual(original);
   await tui.sendKey("right");
   await tui.sendKey("escape");
-  await tui.sendKey("n", { ctrl: true });
+  await tui.sendKey("n", { ctrl: true }); // Skip Model back to Theme.
   expect(previewColors()).toEqual(original);
   expect(getSettings().theme).toBe(originalTheme);
   await tui.sendKey("right");
@@ -155,127 +316,49 @@ test("theme preview colors follow the draft without saving it", async () => {
   expect(previewColors()).toEqual(draft);
 });
 
-test("credential entry cancels before the provider filter or wizard step", async () => {
+test.each(["keyboard", "mouse"] as const)("%s cancellation unwinds credential entry before provider filters or wizard steps", async (input) => {
   tui = await firstRun();
   await tui.sendKey("return");
   await tui.sendKeys("anthropic");
   await tui.sendKey("return");
-  await tui.waitForText(/save/);
-  await tui.sendKeys("synthetic-unsaved-key");
-  await tui.sendKey("escape");
-  expect(tui.captureFrame()).not.toMatch(/Step 1 of 6/);
+  await tui.waitForText(/Save/);
+  expect(tui.captureFrame()).toContain("Paste your Anthropic API key.");
+  expect(tui.captureFrame()).toContain("Hidden while typing. Saved");
+  expect(tui.captureFrame()).toContain("owner-only on this machine.");
+  expect(tui.captureFrame()).not.toContain("synthetic-unsaved-key");
+  if (input === "mouse") await clickTopAction("Cancel");
+  else await tui.sendKey("escape");
+  expect(tui.captureFrame()).not.toMatch(/Step 1 of 5/);
   expect(tui.captureFrame()).toMatch(/anthropic/i);
   // Filter mode then retained filter unwind locally before returning to Welcome.
-  await tui.sendKey("escape");
-  expect(tui.captureFrame()).not.toMatch(/Step 1 of 6/);
-  await tui.sendKey("escape");
-  expect(tui.captureFrame()).not.toMatch(/Step 1 of 6/);
-  await tui.sendKey("escape");
-  await tui.waitForText(/Step 1 of 6/);
+  if (input === "mouse") await clickTopAction("Back");
+  else await tui.sendKey("escape");
+  expect(tui.captureFrame()).not.toMatch(/Step 1 of 5/);
+  if (input === "mouse") await clickTopAction("Back");
+  else await tui.sendKey("escape");
+  expect(tui.captureFrame()).not.toMatch(/Step 1 of 5/);
+  if (input === "mouse") await clickTopAction("Back");
+  else await tui.sendKey("escape");
+  await tui.waitForText(/Step 1 of 5/);
 });
 
-test("Escape cancels Cloud login before leaving Connect", async () => {
-  hosted.cancel.mockClear();
-  tui = await firstRun();
-  await tui.sendKey("return");
-  await tui.sendKey("return"); // the Cloud row
-  await tui.waitForText(/Synthetic login pending/);
-  await tui.sendKey("escape");
-  expect(hosted.cancel).toHaveBeenCalledOnce();
-  expect(tui.captureFrame()).not.toContain("Synthetic login pending");
-  expect(tui.captureFrame()).not.toMatch(/Step 1 of 6/);
-  await tui.sendKey("escape");
-  await tui.waitForText(/Step 1 of 6/);
-});
 
-test("connected provider Continue advances to model selection", async () => {
+test("top Continue authenticates the selected saved provider and advances to model selection", async () => {
   tui = await firstRun();
   await tui.sendKey("return");
   await tui.sendKeys("/deepseek");
-  await tui.waitForText(/\[⏎\] continue/);
+  await tui.waitForText(/Continue/);
   await tui.sendKey("return");
-  await tui.waitForText(/Models/);
+  await tui.waitForText(/deepseek-chat/);
   await tui.sendKey("escape");
   await tui.waitForText(/Connections/);
 });
 
-test("connected cloud Enter invokes Continue with hosted account", async () => {
-  // Mock the account endpoint to return a verified usage-v2 account.
-  vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
-    if (String(url).includes("inference/account")) {
-      return Response.json({
-        schemaVersion: "usage-v2",
-        snapshotAt: "2026-09-22T12:00:00.000Z",
-        scope: { orgId: "test-org" },
-        state: "ready",
-        reason: null,
-        plan: { id: "pro", name: "Pro", monthlyPriceUsd: "15.00" },
-        included: { state: "active", usedPercent: 10, resetsAt: "2026-10-01T00:00:00.000Z" },
-        prepaid: { balanceUsd: "10.00", fallbackEnabled: false },
-        canManageBilling: true,
-        admission: { eligible: true, reason: null },
-      });
-    }
-    return new Response(null, { status: 503 });
-  });
-  tui = await launch({
-    ...modelsByokLaunch(),
-    route: { type: "chat" },
-    env: { ...modelsByokLaunch().env, ZERO_CLOUD_TOKEN: "sk-test-cloud" },
-    settings: { onboardingCompleted: false },
-  });
-  await tui.waitForText(/type to chat or \/ for commands/);
-  await tui.sendKeys("/onboard");
-  await tui.sendKey("return");
-  await tui.waitForText(/Step 1 of 6/);
-  // Welcome → Connect
-  await tui.sendKey("return");
-  await tui.waitForText(/\[⏎\] continue/);
-  await tui.sendKey("return");
-  // With hosted skip, should advance past Models directly to Preferences.
-  await tui.waitForText(/Step 4 of 6|Theme|Density/);
-  await tui.sendKey("escape");
-  await tui.waitForText(/Connections/);
-  await tui.sendKeys("/deepseek");
-  await tui.waitForText(/\[⏎\] continue/);
-  await tui.sendKey("return");
-  await tui.waitForText(/Models/);
-});
-
-test("rejected cloud token does not Continue; Enter re-initiates auth", async () => {
-  // Mock account endpoint to return 401 → rejected verification.
-  vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
-    if (String(url).includes("inference/account")) {
-      return Response.json({ error: "invalid_token" }, { status: 401 });
-    }
-    return new Response(null, { status: 503 });
-  });
-  tui = await launch({
-    ...modelsByokLaunch(),
-    route: { type: "chat" },
-    env: { ...modelsByokLaunch().env, ZERO_CLOUD_TOKEN: "sk-expired-test-token" },
-    settings: { onboardingCompleted: false },
-  });
-  await tui.waitForText(/type to chat or \/ for commands/);
-  await tui.sendKeys("/onboard");
-  await tui.sendKey("return");
-  await tui.waitForText(/Step 1 of 6/);
-  await tui.sendKey("return"); // Welcome → Connect
-  await tui.settle();
-  // Wait for verification to complete (rejected).
-  await tui.waitForText(/rejected/i);
-  // Cloud row is at index 0. Enter must still start hosted auth, not Continue.
-  await tui.sendKey("return");
-  await tui.waitForText(/Synthetic login pending|sign.in/i);
-  await tui.sendKey("escape"); // cancel auth
-  await tui.settle();
-  expect(hosted.cancel).toHaveBeenCalled();
-});
 
 test("rerun dismissal returns to chat without changing completion", async () => {
   vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 503 }));
   tui = await launch({ ...modelsByokLaunch(), route: { type: "onboard" }, settings: { onboardingCompleted: true } });
-  await tui.waitForText(/Step 1 of 6/);
+  await tui.waitForText(/Step 1 of 5/);
   await tui.sendKey("escape");
   await tui.sendKeys("rerun draft");
   expect(tui.captureFrame()).toContain("rerun draft");

@@ -15,13 +15,13 @@ authorization hooks, and are not automatically evaluated for improvement.
 For model-authored tools and their separate version store, see
 [Integrations](/integrations/#model-authored-executable-plugins-self-extension).
 
-Use 0 0.17.0 or newer for the authoring commands and direct `plugin run`
-workflow below. The 0.16.3 binary has a tool-registry bug in `plugin run`.
 Check `0 --version` and command-specific `--help` before following this guide.
+The local workflow below requires `plugin install --local` and
+`hackstore prepare-submission`; update 0 if your installed version lacks them.
 
 The implementation references for this guide are
 [`hackstore.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/hackstore.ts)
-(scaffolding/validation),
+(scaffolding/validation/submission preparation),
 [`plugin.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/plugin.ts)
 (installation/approval/direct calls), and
 [`loader.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/plugins/loader.ts)
@@ -46,38 +46,55 @@ my-extension/
 
 The generated `sha256` tool hashes its `input` string. It is a working protocol
 program, ready to replace with your own tool. `init --dir PATH` selects the parent
-directory. Existing non-empty directories are refused unless you pass `--force`.
+directory. Names must be a single directory component. Existing non-empty
+directories are refused unless you pass `--force`; symlinks are never overwritten.
 
 `validate` accepts a directory or a manifest file. It checks the manifest using
 `validatePluginManifest`; `--json` prints the result as JSON. It does not execute
 code, inspect dependencies, or prove that a plugin is safe. A valid manifest can
 still fail installation or loading because its entry point is missing, its core
-version is incompatible, or its handshake is invalid.
+version is incompatible, or its handshake is invalid. Built-in plugin IDs such as
+`scope` and built-in tool names cannot be used by external extensions.
 
 ## Run locally
 
-The installer writes two files: `plugin.js` and the validated manifest as
-`plugin.json`. It does not copy other files or install dependencies. The generated
-program reads `plugin.json` beside its entry point.
+Install directly from source without fetching a registry:
 
-For local development, copy those two files into a temporary home. This bypasses
-registry fetching, not the loader or approval checks. Run from the directory
-containing `my-extension`:
+```sh
+0 plugin install ./my-extension --local
+0 plugin info my-extension
+# Inspect ~/.0/plugins/my-extension/plugin.js before approving it.
+0 plugin enable my-extension
+0 plugin run my-extension sha256 input=hello
+```
+
+`--local` accepts a directory or its manifest file, validates the manifest against
+the host contract, and checks for a non-empty regular `plugin.js`. It works even
+when the registry is disabled. It copies **only** `plugin.js` and the validated
+manifest as `plugin.json`; it does not copy other files, install dependencies,
+run code, or automatically approve a new installation. Source and destination
+symlinks are refused. Manifests are limited to 256 KiB; the serialized inline
+registry entry must fit the 4 MiB index limit. Bundle dependencies into the entry
+point and keep prerequisites in the README.
+
+The generated program reads `plugin.json` beside its entry point. Enablement
+records approval for the current project, so enable it from the directory where
+you will use it. Loading executes the source under your account, not in a sandbox.
+For an isolated installation and approval store, run from the directory containing
+`my-extension`:
 
 ```sh
 (
   set -eu
-  umask 077
   source_dir="$(pwd)/my-extension"
   cli="$(command -v 0)"
   test_root="$(mktemp -d)"
   trap 'rm -rf "$test_root"' EXIT
   export HOME="$test_root/home"
-  plugin_dir="$HOME/.0/plugins/my-extension"
-  mkdir -p "$plugin_dir" "$test_root/project"
-  cp "$source_dir/manifest.json" "$plugin_dir/plugin.json"
-  cp "$source_dir/plugin.js" "$plugin_dir/plugin.js"
+  mkdir -p "$test_root/project"
   cd "$test_root/project"
+  "$cli" plugin install "$source_dir" --local
+  "$cli" plugin info my-extension
   "$cli" plugin enable my-extension
   "$cli" plugin run my-extension sha256 input=hello
 )
@@ -182,8 +199,12 @@ For combined capabilities, flags are combined: `network` or `process-exec` makes
 a tool network-capable; either filesystem capability requires local scope; a
 tool is read-only only if all capabilities are `compute`, `model-call`, or
 `filesystem-read`. Console sessions with a supplied plugin host use these flags
-in their authorization checks. Direct `plugin run` uses only the separate
-enablement and `--yes` checks described above; it has no scope-file argument.
+in their authorization checks. All scope checks are controlled by the built-in
+`scope` plugin: `0 plugin enable scope` activates them for the project, and
+`0 plugin disable scope` disables them for new sessions. Credential protection,
+sandboxing, and resource limits remain independent. Direct `plugin run` uses only
+the separate enablement and `--yes` checks described above; it has no scope-file
+argument.
 
 Declarations are not operating-system restrictions. The plugin runs under your
 user account with an allowlisted environment. It can still access resources your
@@ -260,7 +281,8 @@ the current project without starting the plugin. Direct `plugin run`, or loading
 an approved plugin for an OpenTUI chat, starts the child. Disabling removes
 project approval but keeps files.
 
-Installed files live under `~/.0/plugins/<id>/`. Project approval records live
+Installed external files live under `~/.0/plugins/<id>/`; the built-in `scope`
+plugin has no installed files or child process. Project approval records live
 under `~/.0/plugin-enablement/`, keyed by the resolved project path. A changed
 aggregate capability set requires renewed approval. Version-only changes with
 the same capabilities do not by themselves invalidate that approval.
@@ -287,6 +309,9 @@ There is no separate `plugin update` or `plugin uninstall` subcommand. Running
 configured registry, including over an existing installation. Inspect the code
 and `0 plugin info <id>` before using it. Same-capability updates do not require
 renewed approval, so capability approval is not approval of exact source bytes.
+Local updates use `0 plugin install ./my-extension --local` with the same approval
+rules. Installation reports whether existing project approval still applies or
+needs renewal; it does not silently revoke or broaden that approval.
 An already-running chat is not updated merely because files on disk changed.
 
 For the published FoxGuard adapter, install the standalone `foxguard` executable
@@ -306,12 +331,48 @@ The fetcher requires HTTPS; an explicit empty registry setting disables fetching
 The default signature verifier is unconfigured and entries are marked
 `unverified`. Do not treat an index entry or a review as a verified signature.
 
-## Publish
+## Prepare and submit
 
-Follow the [Hackstore contribution instructions](https://github.com/0sec-labs/hackstore/blob/main/CONTRIBUTING.md).
-In that separate repository, add `extensions/<name>/` with your manifest,
-`plugin.js`, and README, then run `npm run build` to regenerate `index.json`.
-Include evidence of a successful call and a failure through the real loader.
-Registry packaging checks do not execute plugin code.
+After exercising successful and failing calls through the real loader:
 
-Hackstore does not currently implement paid listings, creator balances, or payouts.
+```sh
+0 hackstore prepare-submission ./my-extension --out ./my-extension-submission
+```
+
+This validates the same local installation contract and creates:
+
+```text
+my-extension-submission/
+  extensions/
+    my-extension/
+      manifest.json
+      plugin.js
+      README.md
+```
+
+The extension directory uses the validated manifest's **ID**, which may differ
+from the source directory name. The command preserves the entry point and README,
+normalizes the manifest, and prints SHA-256 fingerprints. Identical source yields
+identical file bytes. The README must exist and be non-empty; review it for actual
+prerequisites, arguments, results, capability rationale, and limits. No other source
+files or secrets are copied. `--out` must name a new path: preparation refuses to
+overwrite an existing submission.
+
+**This is a local review artifact, not a publication.** No code is executed,
+credentials are read, or files are uploaded by preparation.
+
+Follow the [Hackstore contribution instructions](https://github.com/0sec-labs/hackstore/blob/main/CONTRIBUTING.md):
+
+1. Fork and clone `github.com/0sec-labs/hackstore`.
+2. Copy the prepared `extensions/<id>/` into that fork. Review every file.
+3. With Node.js 22 or newer, run `npm ci`, `npm run build`, `npm run check`, and
+   `npm test` in the registry checkout. These commands regenerate and check
+   `index.json`; do not hand-edit its inline JavaScript.
+4. Commit the extension directory and regenerated `index.json`, then open a pull
+   request. Include tested 0/dependency versions, commands and results for a
+   successful call and a real failure, capability rationale, prerequisites, and
+   known limits.
+
+Registry packaging checks do not execute plugin code. Review is not a sandbox,
+signature verification, or security certification. Hackstore does not currently
+implement paid listings, creator balances, or payouts.

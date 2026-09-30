@@ -4,19 +4,13 @@
  */
 
 import type { LaunchOptions, TuiHandle } from "../index.js";
+import { degradePalette, detectColorDepth, getTheme, parseHex } from "../../../src/tui/themes.js";
+import type { CapturedFrame } from "@opentui/core";
 
 /**
- * Launch options that pin the model picker onto a STABLE, deterministic BYOK
- * catalogue for keyboard/mouse navigation tests.
- *
- * Left to itself the picker's runtime resolves asynchronously to the hosted
- * lane, which — offline (see env.ts) — loads an empty "0 models" catalogue with
- * nothing to navigate, and the BYOK→hosted flip makes any assertion racy.
- * Pinning a BYOK provider + model via env keeps the picker on the curated BYOK
- * list (a fixed 66-model catalogue) that is present from the first paint and
- * does not flip. `mouseSupport` is opt-in per scenario: it defaults off in the
- * deterministic env (mouse chrome is noisy), but a hover test must turn it on
- * so the renderer arms its hit grid (see `modelsByokLaunch`).
+ * Pin a direct provider and model for deterministic picker navigation. The
+ * fixture supplies a credential and an active model from the first paint;
+ * `mouseSupport` is opt-in for scenarios that need hover hit testing.
  */
 export function modelsByokLaunch(opts: { mouse?: boolean } = {}): LaunchOptions {
   return {
@@ -30,41 +24,30 @@ export function modelsByokLaunch(opts: { mouse?: boolean } = {}): LaunchOptions 
   };
 }
 
-/**
- * The list row the picker is currently highlighting, read from the captured
- * per-cell spans.
- *
- * The active row is the only list line painted with the PRIMARY highlight
- * BACKGROUND (see dialog-select.tsx: `bg = isActive ? theme.PRIMARY`), so it is
- * found without knowing any exact colour: take the most common background as the
- * page ground, then pick the line carrying the widest run of a DIFFERENT
- * background. Full-width chrome bars (the title/status/composer rows) and the
- * empty left rail are excluded by width so only a real, partial-width list row
- * with text wins. Returns the line index and its trimmed text (`{ index: -1 }`
- * when nothing is highlighted).
+/** Route one OpenAI id through both OpenAI and Azure to exercise provider-qualified rows. */
+export function duplicateProviderModelsLaunch(opts: { mouse?: boolean } = {}): LaunchOptions {
+  return {
+    route: { type: "models" },
+    settings: opts.mouse ? { mouseSupport: true } : {},
+    env: {
+      OPENAI_API_KEY: "test-openai-key",
+      AZURE_OPENAI_API_KEY: "test-azure-key",
+      AZURE_OPENAI_BASE_URL: "https://azure.invalid",
+      ZERO_PROVIDER: "openai",
+      ZERO_MODEL: "gpt-6-luna",
+    },
+  };
+}
+
+/** Locate the selected list row, not the popup background or sidebar surface.
+ * Scenarios use the deterministic fixture's blue-team theme unless overridden.
  */
 export function highlightedRow(
-  frame: ReturnType<TuiHandle["captureSpans"]>,
+  frame: CapturedFrame,
+  themeName = "blue-team",
 ): { index: number; text: string } {
-  const bgKey = (bg: { toInts: () => number[] }): string => bg.toInts().join(",");
-
-  // Page ground = the background covering the most cells.
-  const widthByBg = new Map<string, number>();
-  for (const line of frame.lines) {
-    for (const span of line.spans) {
-      const key = bgKey(span.bg);
-      widthByBg.set(key, (widthByBg.get(key) ?? 0) + span.width);
-    }
-  }
-  let pageBg = "";
-  let widest = -1;
-  for (const [key, width] of widthByBg) {
-    if (width > widest) {
-      widest = width;
-      pageBg = key;
-    }
-  }
-
+  const color = parseHex(degradePalette(getTheme(themeName), detectColorDepth(process.env)).PRIMARY)!;
+  const highlight = `${color.r},${color.g},${color.b}`;
   let index = -1;
   let bestWidth = 0;
   let text = "";
@@ -72,7 +55,7 @@ export function highlightedRow(
     let width = 0;
     let lineText = "";
     for (const span of line.spans) {
-      if (bgKey(span.bg) !== pageBg) {
+      if (span.bg.toInts().slice(0, 3).join(",") === highlight) {
         width += span.width;
         lineText += span.text;
       }
@@ -94,13 +77,8 @@ export function modelLabel(rowText: string): string {
   return (rowText.replace(/^●\s*/, "").split(/\s{2,}|\$/)[0] ?? "").trim();
 }
 
-/**
- * The home screen is fully interactive once the composer prompt is up. Offline
- * the hosted cloud is deliberately unreachable (see env.ts), so the status line
- * settles on "Usage: unavailable"; either marker means the screen is ready to
- * drive.
- */
-export const HOME_READY = /type to chat or \/ for commands|Usage: (unavailable|Loading)/;
+/** The empty-chat landing screen exposes its always-available Connect action. */
+export const HOME_READY = /\[\/connect\]/;
 
 /** Any box-drawing glyph: light/heavy/double borders, corners, tees and dividers. */
 export const BORDER_GLYPHS =

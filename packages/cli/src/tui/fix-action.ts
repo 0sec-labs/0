@@ -24,7 +24,7 @@
  * the required `--test-command` option of `0 fix`.
  */
 
-import type { SourceFixResult, SourceFixStatus, SourceFixTestResult } from "@0/core";
+import type { SourceFixPublicationPlan, SourceFixResult, SourceFixStatus, SourceFixTestResult } from "@0/core";
 
 export type FixEligibility =
   | { eligible: true }
@@ -124,10 +124,10 @@ export function fixInputEligibility(inputs: {
   testCommand?: string | null;
 }): FixEligibility {
   if (!inputs.repoRoot || inputs.repoRoot.trim().length === 0) {
-    return ineligible("no repository path for this finding (set ZERO_FIX_REPO)");
+    return ineligible("choose a valid local Git checkout in source-fix setup");
   }
   if (!inputs.testCommand || inputs.testCommand.trim().length === 0) {
-    return ineligible("no regression command configured (set ZERO_FIX_TEST_COMMAND)");
+    return ineligible("enter a regression command in source-fix setup");
   }
   return ELIGIBLE;
 }
@@ -175,9 +175,8 @@ export function describeFixStatus(
 }
 
 /**
- * Detail rows for the fix panel. Every row is derived from a field that
- * `SourceFixResult` really carries; the patch body itself is intentionally
- * not rendered (see the Findings screen for the note on why).
+ * Detail rows for the fix panel, derived from the actual source-fix result.
+ * Diff and test output remain visible rather than substituting a summary.
  */
 export function fixResultLines(result: SourceFixResult): string[] {
   const lines: string[] = [];
@@ -187,13 +186,36 @@ export function fixResultLines(result: SourceFixResult): string[] {
     result.patch
       ? result.applied
         ? "patch applied to the working tree"
-        : "patch produced, not applied — re-run `0 fix --output` to write it out"
+        : "patch produced, not applied — original worktree unchanged"
       : "no patch produced",
   );
   if (result.rationale) lines.push(`rationale ${result.rationale}`);
+  if (result.candidate) {
+    lines.push(`candidate worktree ${result.candidate.worktree}`);
+    lines.push(`review record ${result.candidate.recordPath}`);
+  }
+  if (result.test) {
+    lines.push(`regression command ${result.test.command}`);
+    if (result.test.stdout) lines.push(`test stdout:\n${result.test.stdout}`);
+    if (result.test.stderr) lines.push(`test stderr:\n${result.test.stderr}`);
+  }
+  if (result.diff) lines.push(`generated diff:\n${result.diff}`);
   for (const attempt of result.attempts) {
     lines.push(`attempt ${attempt.attempt} rejected: ${attempt.reason}`);
   }
   if (result.error) lines.push(`error ${result.error}`);
   return lines;
+}
+
+export const FIX_USAGE = "Use /fix <finding-id> (or /fix to choose a saved finding). Source-fix setup suggests a valid audit/workspace Git checkout and lets you enter your regression command; approve the displayed command before it runs. Environment overrides are optional. Review the diff and tests, then /fix publish <finding-id>. /fix cancel stops local generation without discarding verified candidates.";
+
+export function fixPublicationLines(plan: SourceFixPublicationPlan): string[] {
+  return [
+    "Publication requires separate approval. This pushes the source-only branch and opens a draft PR.",
+    `remote ${plan.remote}`,
+    `branch ${plan.branch} → ${plan.baseBranch}`,
+    `title ${plan.title}`,
+    `preserved worktree ${plan.worktree}`,
+    `reviewed diff:\n${plan.diff}`,
+  ];
 }

@@ -19,16 +19,20 @@
  */
 
 import type { Command } from "commander";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { processPresentationOutput } from "../presentation/process-output.js";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve, posix, sep } from "node:path";
 import {
   executePocSteps,
   runCliPathTraversalReplayFixture,
   runDeterministicReplay,
   LocalShellRunner,
+  SmolvmRunner,
+  isAdmittedSmolvmWorkbench,
+  runWorkbenchBrokerProgram,
+  createSmolvmPocTargetRunner,
   DockerRunner,
   QemuRunner,
   loadScope,
@@ -171,7 +175,7 @@ function engineMetadata(): VerificationResult["engine_metadata"] {
   return {
     os: process.platform,
     arch: process.arch,
-    runner: "local",
+    runner: isAdmittedSmolvmWorkbench() ? "smolvm" : "local",
   };
 }
 
@@ -506,7 +510,7 @@ interface VerifyOpts {
   runner?: string;
   /** 0#193 run directory for the deterministic-replay runner. */
   out?: string;
-  /** Engagement scope required for networked Docker HTTP replay. */
+  /** Engagement scope required for networked HTTP replay. */
   scope?: string;
   /** Docker network; defaults to a fully disconnected container. */
   dockerNetwork?: string;
@@ -712,6 +716,8 @@ export async function runVerify(opts: {
   fixtureMode?: string;
   retainArtifacts?: boolean;
   artifactDir?: string;
+  scopeFile?: string;
+  signal?: AbortSignal;
 }): Promise<VerifyOutcome> {
   const startedAt = new Date().toISOString();
   let finding: Finding | null = null;
@@ -734,6 +740,39 @@ export async function runVerify(opts: {
       }
       if (!opts.fixtureCommand || opts.fixtureCommand.length === 0) {
         throw new Error("--fixture-command is required with --fixture");
+      }
+      if (isAdmittedSmolvmWorkbench()) {
+        const runDir = resolve(opts.artifactDir ?? mkdtempSync(join(tmpdir(), "0-smol-fixture-")));
+        mkdirSync(runDir, { recursive: true });
+        const fixtureArgv = opts.fixtureCommand.map((argument) =>
+          argument.startsWith(runDir + sep) ? `/workspace/${argument.slice(runDir.length + 1)}` : argument);
+        const execution = await runWorkbenchBrokerProgram({
+          profile: "offline", workspaceRoot: runDir,
+          command: ["0", "verify", "--fixture", "cli-path-traversal", "--fixture-command", JSON.stringify(fixtureArgv),
+            "--fixture-mode", opts.fixtureMode ?? "vulnerable", "--artifact-dir", "/workspace", "--output", "/workspace/result.json"],
+          timeoutMs: 30000, memoryMb: 512, cpus: 1, maxOutputBytes: 1024 * 1024,
+        }, opts.signal);
+        if (execution.error || execution.timedOut || execution.cleanupFailed) {
+          throw new Error(execution.error ?? (execution.timedOut ? "SmolVM fixture replay timed out" : "SmolVM fixture teardown was not confirmed"));
+        }
+        const result = VerificationResultSchema.parse(JSON.parse(readFileSync(join(runDir, "result.json"), "utf8")));
+        if (result.finding_id !== "fixture:cli-path-traversal" || execution.exitCode !== exitCodeForStatus(result.status)) {
+          throw new Error("SmolVM fixture result does not match its process outcome");
+        }
+        for (const artifact of result.evidence_artifacts) {
+          const path = posix.relative("/workspace", artifact.path);
+          if (!path || path === ".." || path.startsWith("../") || posix.isAbsolute(path)) throw new Error("fixture artifact escaped the replay workspace");
+          const returnedPath = join(runDir, path);
+          const stat = lstatSync(returnedPath);
+          if (!stat.isFile() || stat.size > 4 * 1024 * 1024) throw new Error("invalid returned fixture artifact");
+          const body = readFileSync(returnedPath);
+          if (body.length !== artifact.bytes || createHash("sha256").update(body).digest("hex") !== artifact.sha256) {
+            throw new Error("returned fixture artifact digest mismatch");
+          }
+          artifact.path = returnedPath;
+        }
+        result.engine_metadata = { os: "linux", arch: process.arch, runner: "smolvm" };
+        return { result, exitCode: exitCodeForStatus(result.status) };
       }
       const legacyResult = await runCliPathTraversalReplayFixture({
         commandArgv: opts.fixtureCommand,
@@ -789,6 +828,17 @@ export async function runVerify(opts: {
       return { result, exitCode: exitCodeForStatus(result.status) };
     }
 
+    if (isAdmittedSmolvmWorkbench()) {
+      const runner = createSmolvmPocTargetRunner(target);
+      const { result, runDir } = await runDeterministicReplay(finding, {
+        runner, runDir: target.cwd, stepTimeoutMs: target.timeoutMs, signal: opts.signal,
+        scope: opts.scopeFile ? loadScope(opts.scopeFile) : undefined,
+      });
+      cleanup = undefined;
+      for (const artifact of result.evidence_artifacts) artifact.path = join(runDir, artifact.path);
+      VerificationResultSchema.parse(result);
+      return { result, exitCode: exitCodeForStatus(result.status) };
+    }
     const report = await executePocSteps(finding, target);
     const completedAt = new Date().toISOString();
     const result = buildVerificationResult({
@@ -819,13 +869,13 @@ export async function runVerify(opts: {
 // path emits the same canonical shared-schema `VerificationResult`, so every
 // verify entry point shares one JSON contract.
 
-export type ReplayRunnerKind = "local" | "docker" | "qemu";
+export type ReplayRunnerKind = "local" | "smolvm" | "docker" | "qemu";
 
 export function parseRunnerKind(raw: string | undefined): ReplayRunnerKind {
-  const v = (raw ?? "local").toLowerCase();
-  if (v === "local" || v === "docker" || v === "qemu") return v;
+  const v = (raw ?? (isAdmittedSmolvmWorkbench() ? "smolvm" : "local")).toLowerCase();
+  if (v === "local" || v === "smolvm" || v === "docker" || v === "qemu") return v;
   throw new Error(
-    `unsupported --runner '${raw}', expected one of local|docker|qemu`,
+    `unsupported --runner '${raw}', expected one of local|smolvm|docker|qemu`,
   );
 }
 
@@ -835,14 +885,16 @@ export function parseRunnerKind(raw: string | undefined): ReplayRunnerKind {
  */
 export async function runDeterministicReplayCli(args: {
   findingPath: string;
-  runner: ReplayRunnerKind;
+  runner?: ReplayRunnerKind;
   outDir?: string;
   scopeFile?: string;
   dockerNetwork?: string;
   qemuBinary?: string;
   qemuKernel?: string;
   qemuBusybox?: string;
+  signal?: AbortSignal;
 }): Promise<{ result: SharedVerificationResult; exitCode: number }> {
+  const runnerKind = args.runner ?? parseRunnerKind(undefined);
   const rawFinding = readJson<unknown>(args.findingPath, "finding");
   let finding: Finding;
   try {
@@ -862,31 +914,34 @@ export async function runDeterministicReplayCli(args: {
     mkdirSync(runDir, { recursive: true });
   }
 
-  if (args.dockerNetwork && args.runner !== "docker") {
+  if (args.dockerNetwork && runnerKind !== "docker") {
     throw new Error("--docker-network is only valid with --runner docker");
   }
   if (
     (args.qemuBinary || args.qemuKernel || args.qemuBusybox) &&
-    args.runner !== "qemu"
+    runnerKind !== "qemu"
   ) {
     throw new Error("--qemu-binary / --qemu-kernel / --qemu-busybox require --runner qemu");
   }
   const scope = args.scopeFile ? loadScope(args.scopeFile) : undefined;
   const runner =
-    args.runner === "local"
+    runnerKind === "local"
       ? new LocalShellRunner()
-      : args.runner === "docker"
-        ? new DockerRunner({ network: args.dockerNetwork })
-        : new QemuRunner({
-            qemuBinary: args.qemuBinary,
-            kernelImage: args.qemuKernel,
-            busyboxPath: args.qemuBusybox,
-          });
+      : runnerKind === "smolvm"
+        ? new SmolvmRunner()
+        : runnerKind === "docker"
+          ? new DockerRunner({ network: args.dockerNetwork })
+          : new QemuRunner({
+              qemuBinary: args.qemuBinary,
+              kernelImage: args.qemuKernel,
+              busyboxPath: args.qemuBusybox,
+            });
 
   const { result } = await runDeterministicReplay(finding, {
     runner,
     runDir,
     scope,
+    signal: args.signal,
     engineVersion: VERSION,
   });
 
@@ -1003,7 +1058,7 @@ async function verifyAction(opts: VerifyOpts, positionalFinding?: string): Promi
 
   // Deterministic replay path: triggered by a positional finding path or an
   // explicit runner selection.
-  if (!opts.bundle && (positionalFinding || opts.runner)) {
+  if (!opts.bundle && (positionalFinding || opts.runner || (isAdmittedSmolvmWorkbench() && opts.finding && !opts.target))) {
     if (positionalFinding && opts.finding) {
       throw new Error(
         "pass a finding path EITHER as a positional argument OR via --finding, not both",
@@ -1012,7 +1067,7 @@ async function verifyAction(opts: VerifyOpts, positionalFinding?: string): Promi
     const findingPath = positionalFinding ?? opts.finding;
     if (!findingPath) {
       throw new Error(
-        "missing finding path. Usage: 0 verify <finding.json> [--runner local|docker|qemu]",
+        "missing finding path. Usage: 0 verify <finding.json> [--runner local|smolvm|docker|qemu]",
       );
     }
     const runner = parseRunnerKind(opts.runner);
@@ -1047,12 +1102,10 @@ async function verifyAction(opts: VerifyOpts, positionalFinding?: string): Promi
         "--bundle cannot be combined with --finding / --fixture / --kernel-finding / <finding> positional",
       );
     }
-    if (opts.runner !== "local" && opts.runner !== "docker") {
-      throw new Error(
-        "--bundle requires --runner local or --runner docker (qemu not supported)",
-      );
+    const bundleRunner = opts.runner ?? (isAdmittedSmolvmWorkbench() ? "smolvm" : undefined);
+    if (bundleRunner !== "local" && bundleRunner !== "smolvm" && bundleRunner !== "docker") {
+      throw new Error("--bundle requires --runner local|smolvm|docker (defaults to smolvm in an admitted workbench; qemu is not supported)");
     }
-    const bundleRunner = opts.runner;
 
     const bundleResult = await runReproductionBundle({
       bundleDir: opts.bundle,
@@ -1100,6 +1153,7 @@ async function verifyAction(opts: VerifyOpts, positionalFinding?: string): Promi
     fixtureMode: opts.fixtureMode,
     retainArtifacts: opts.retainArtifacts,
     artifactDir: opts.artifactDir,
+    scopeFile: opts.scope,
   });
 
   const json = JSON.stringify(outcome.result, null, 2);
@@ -1126,7 +1180,7 @@ export function registerVerifyCommand(program: Command): void {
     )
     .option(
       "--runner <kind>",
-      "Deterministic replay runner: local|docker|qemu (default local).",
+      "Deterministic replay runner: local|smolvm|docker|qemu (default smolvm in an admitted workbench, local outside).",
     )
     .option(
       "--docker-network <name>",
@@ -1134,7 +1188,7 @@ export function registerVerifyCommand(program: Command): void {
     )
     .option(
       "--scope <path>",
-      "Engagement scope JSON required for networked Docker HTTP replay.",
+      "Engagement scope JSON required for HTTP replay; SmolVM also refuses private/loopback destinations.",
     )
     .option("--qemu-binary <path>", "QEMU emulator for --runner qemu.")
     .option("--qemu-kernel <path>", "Guest kernel image for --runner qemu.")
@@ -1149,7 +1203,7 @@ export function registerVerifyCommand(program: Command): void {
     .option("--finding <path>", "Path to a finding.json.")
     .option(
       "--bundle <path>",
-      "Path to a reproduction bundle directory; requires --runner local|docker. " +
+      "Path to a reproduction bundle directory; requires --runner local|smolvm|docker outside an admitted workbench. " +
       "Replays the bundle's vulnerable and patched snapshots through the configured runner " +
       "and emits an aggregate ReproductionBundleResult.",
     )

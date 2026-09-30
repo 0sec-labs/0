@@ -32,7 +32,6 @@ import {
   buildAttributionForConfig,
 } from "./scan-config.js";
 import { verify } from "../triage/structured-verify.js";
-import { getCloudSinkConfig, postFinding } from "../cloud-sink.js";
 import { splitCost } from "../agent/cost.js";
 import { EnforcementTracker } from "../scope/enforcement.js";
 
@@ -316,7 +315,6 @@ export async function runNativeAttack(
   const effectiveMaxTurns =
     isWeb && config.maxAttackTurns === undefined ? Math.max(maxTurns, 15) : maxTurns;
 
-  const cloudSinkCfg = getCloudSinkConfig();
   const onTurnHandler = (turn: number, toolCalls: ToolCall[]) => {
     // One sub-action per tool call with a full preview (tool + first-order
     // argument) so the verbose TUI can show what the attack agent is
@@ -373,7 +371,6 @@ export async function runNativeAttack(
         message: `[${finding.severity}] ${finding.title}`,
         data: finding,
       });
-      void postFinding(finding, cloudSinkCfg);
     },
     onTurn: onTurnHandler,
   });
@@ -822,7 +819,6 @@ export async function runLegacyAttack(
     ? getToolsForRole("attack", { webMode: true, hasBrowser, allowScanners: config.allowScanners })
     : getToolsForRole("attack", { hasBrowser, allowScanners: config.allowScanners });
 
-  const cloudSinkCfg = getCloudSinkConfig();
   const effectiveMaxTurns =
     isWeb && config.maxAttackTurns === undefined ? Math.max(maxTurns, 25) : maxTurns;
   const state = await runAgentLoop({
@@ -873,7 +869,6 @@ export async function runLegacyAttack(
         message: `[${finding.severity}] ${finding.title}`,
         data: finding,
       });
-      void postFinding(finding, cloudSinkCfg);
     },
   });
   return {

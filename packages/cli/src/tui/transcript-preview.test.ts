@@ -20,8 +20,13 @@ describe("previewTranscriptText", () => {
   });
 
   it("does not split an emoji surrogate pair at either preview boundary", () => {
-    const preview = previewTranscriptText(`a`.repeat(4_000) + "😀" + "b".repeat(4_000) + "😀END");
-    expect(preview.text).not.toContain("\ufffd");
-    expect(preview.text).toContain("😀END");
+    // Adjacent limits force opposite UTF-16 parity at the head/tail cuts.
+    for (const limit of [200, 201]) {
+      const preview = previewTranscriptText("😀".repeat(1_000), limit);
+      expect(preview.text.length).toBeLessThanOrEqual(limit);
+      expect(preview.text).toMatch(/^😀/);
+      expect(preview.text).toMatch(/😀$/);
+      expect(preview.text).not.toMatch(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/u);
+    }
   });
 });

@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/react */
 import React from "react";
+import type { ScrollBoxRenderable } from "@opentui/core";
 import { fitLegend, fitTuiText, sanitizeTuiText } from "../text.js";
 import type { SelectorItem } from "../selector.js";
 import type { Theme } from "../theme-context.js";
@@ -68,11 +69,13 @@ export type ApprovalPrompt = {
   subject?: string;
   /**
    * Readable, one-per-row detail lines (pretty-printed `key: value` arguments,
-   * or a short human summary) — never a truncated single-line JSON blob. Each
-   * line is truncated (not wrapped) to the panel width so the card's height
-   * stays predictable.
+   * or a short human summary). Summary rows truncate to the panel width;
+   * completeDetails instead keeps full execution text in a fixed-height
+   * scrollable body.
    */
   bodyLines?: string[];
+  /** Authoritative host requests can require complete, scrollable execution details. */
+  completeDetails?: boolean;
   items: SelectorItem[];
   borderColor: string;
   titleColor: string;
@@ -161,11 +164,12 @@ export function ApprovalCard({
   contentWidth,
   height,
   theme,
+  scrollBody,
 }: {
   title: string;
   progress: string;
   subject?: string;
-  /** Already-sliced, render-ready detail rows (may end in a "+N more" line). */
+  /** Render-ready detail rows; scrollBody keeps complete execution text accessible. */
   body: string[];
   choices: SelectorItem[];
   activeIndex: number;
@@ -184,6 +188,7 @@ export function ApprovalCard({
   contentWidth: number;
   height: number;
   theme: Theme;
+  scrollBody?: { rows: number; ref: React.RefObject<ScrollBoxRenderable | null> };
 }) {
   const { PANEL_ALT, MUTED, TEXT, PRIMARY } = theme;
   // A DANGER approval marks its title with a glyph so the tier is legible
@@ -222,7 +227,15 @@ export function ApprovalCard({
         ) : null}
         {body.length > 0 ? (
           <>
-            {body.map((line, index) => (
+            {scrollBody ? (
+              <scrollbox ref={scrollBody.ref} focusable={false} scrollX={false} width={innerWidth} height={scrollBody.rows} flexShrink={0} scrollbarOptions={{ visible: false }}>
+                <box flexDirection="column" width={innerWidth} minWidth={0}>
+                  {body.map((line, index) => (
+                    <text key={`body-${index}`} width={innerWidth} flexShrink={0} wrapMode="char" fg={MUTED}>{line}</text>
+                  ))}
+                </box>
+              </scrollbox>
+            ) : body.map((line, index) => (
               <box key={`body-${index}`} width={innerWidth} flexShrink={0} minWidth={0}>
                 <text fg={MUTED}>{fitTuiText(line, innerWidth, { mode: "middle" })}</text>
               </box>

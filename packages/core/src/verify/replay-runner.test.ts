@@ -17,6 +17,7 @@
 
 import { describe, expect, it } from "vitest";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { VerificationResultSchema, type Finding, type PocStep } from "@0/shared";
@@ -589,6 +590,25 @@ printf '%s\n' "serial boot evidence"
 });
 
 describe("runDeterministicReplay — end-to-end", () => {
+  it("keeps earlier captured evidence immutable when a later PoC overwrites workspace files", async () => {
+    const runDir = mkdtempSync(join(tmpdir(), "0-replay-evidence-"));
+    try {
+      const finding = makeFinding([
+        { id: "capture", kind: "exploit", summary: "emit proof", action: { type: "shell", cmd: "printf immutable-proof" }, expect: { type: "body-contains", text: "immutable-proof" } },
+        { id: "tamper", kind: "verify", summary: "try to forge evidence", action: { type: "shell", cmd: 'for file in artifacts/*; do [ ! -f "$file" ] || printf forged > "$file"; done; printf marker > marker' }, expect: { type: "file-exists", path: "marker" } },
+      ]);
+      const { result } = await runDeterministicReplay(finding, { runDir });
+      expect(result.status).toBe("reproduced");
+      const artifact = result.evidence_artifacts.find((item) => item.kind === "stdout")!;
+      const body = readFileSync(join(runDir, artifact.path));
+      expect(body.toString("utf8")).toBe("immutable-proof");
+      expect(createHash("sha256").update(body).digest("hex")).toBe(artifact.sha256);
+      expect(body.length).toBe(artifact.bytes);
+    } finally {
+      rmSync(runDir, { recursive: true, force: true });
+    }
+  });
+
   it("produces status='reproduced' for a single-step echo PoC with a passing assertion", async () => {
     const finding = makeFinding([
       {

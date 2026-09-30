@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 import chalk from "chalk";
-import { runRecon, ScopePolicy, type ReconAsset, type ReconResult } from "@0/core";
+import { runRecon, ScopePolicy, isScopeEnforcementEnabled, getScopeEnforcementState, type ReconAsset, type ReconResult } from "@0/core";
 
 interface ReconOptions {
   json?: boolean;
@@ -20,11 +20,11 @@ export function registerReconCommand(program: Command): void {
     .option("--timeout <ms>", "Per-request probe timeout in milliseconds", "10000")
     .option(
       "--active",
-      "Enable active subdomain enumeration (DNS brute-force). Touches the target's DNS, so it is deny-by-default: REQUIRES --scope <file> authorizing the targets.",
+      "Enable active DNS subdomain brute-force; the optional scope plugin enforces candidate authorization.",
     )
     .option(
       "--scope <file>",
-      "Path to a JSON scope file ({in_scope, out_of_scope}). Required for --active; every candidate host is checked against it before any DNS query.",
+      "JSON engagement policy; required for --active only while the scope plugin is enabled.",
     )
     .action(async (domain: string, opts: ReconOptions) => {
       let timeout = 10_000;
@@ -38,10 +38,8 @@ export function registerReconCommand(program: Command): void {
         timeout = parsed;
       }
 
-      // Deny-by-default: active subdomain enumeration touches the target's DNS,
-      // so the library gates it behind a ScopePolicy and resolves nothing
-      // without one. Refuse at the CLI with a clear message rather than
-      // silently no-op'ing, so the operator knows why nothing was enumerated.
+      const scopeEnforcement = getScopeEnforcementState();
+      console.error(chalk.dim(scopeEnforcement.message));
       let scope: ScopePolicy | undefined;
       if (opts.scope) {
         try {
@@ -52,7 +50,7 @@ export function registerReconCommand(program: Command): void {
           return;
         }
       }
-      if (opts.active && !scope) {
+      if (isScopeEnforcementEnabled() && opts.active && !scope) {
         console.error(
           chalk.red(
             "--active requires --scope <file>: active subdomain enumeration is deny-by-default (it issues DNS queries against the target). Pass an authorized scope file.",
@@ -66,7 +64,7 @@ export function registerReconCommand(program: Command): void {
       try {
         result = await runRecon(domain, {
           timeout,
-          ...(opts.active && scope ? { activeSubdomains: { enabled: true, scope } } : {}),
+          ...(opts.active ? { activeSubdomains: { enabled: true, scope } } : {}),
         });
       } catch (err) {
         console.error(chalk.red(err instanceof Error ? err.message : String(err)));

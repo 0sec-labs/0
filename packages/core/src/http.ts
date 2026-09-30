@@ -5,6 +5,7 @@ import { BlockList, isIP } from "node:net";
 import { Readable, Transform, pipeline } from "node:stream";
 import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
 import { ScopePolicy, normalizeScopeHostname } from "./scope/scope.js";
+import { getScopeEnforcementState, isScopeEnforcementEnabled, withScopeEnforcement } from "./scope/activation.js";
 
 export interface ScopedHttpPolicy {
   baseUrl: string;
@@ -43,7 +44,7 @@ function isLocalHost(hostname: string): boolean {
 }
 
 function httpBase(policy: ScopedHttpPolicy): URL | undefined {
-  if (!policy.allowPublicNetwork) return new URL(policy.baseUrl);
+  if (isScopeEnforcementEnabled() && !policy.allowPublicNetwork) return new URL(policy.baseUrl);
   try {
     const base = new URL(policy.baseUrl);
     return base.protocol === "http:" || base.protocol === "https:" ? base : undefined;
@@ -63,13 +64,13 @@ function authorizeHttpUrl(input: string, policy: ScopedHttpPolicy): URL {
   if (isLocalHost(url.hostname) && (!base || !isLocalHost(base.hostname))) {
     throw new Error(`Local/internal HTTP request blocked: ${url.hostname}`);
   }
-  if (policy.deniedHosts?.has(normalizeScopeHostname(url.hostname))) {
+  if (isScopeEnforcementEnabled() && policy.deniedHosts?.has(normalizeScopeHostname(url.hostname))) {
     throw new Error(`Operator-denied HTTP host: ${url.hostname}`);
   }
   if (policy.scope) {
-    const verdict = policy.scope.match(url.href);
+    const verdict = policy.scope.enforce(url.href)
     if (!verdict.allowed) throw new Error(`Scope violation blocked: ${verdict.reason}`);
-  } else if (!policy.allowPublicNetwork && url.origin !== base!.origin) {
+  } else if (isScopeEnforcementEnabled() && !policy.allowPublicNetwork && url.origin !== base!.origin) {
     throw new Error(`Cross-origin HTTP request blocked: ${url.origin}`);
   }
   policy.validateUrl?.(url.href);
@@ -82,7 +83,7 @@ function authorizeAddress(url: URL, address: string, policy: ScopedHttpPolicy): 
   if (isPrivateAddress(address) && (!base || !isLocalHost(base.hostname))) {
     throw new Error(`Local/internal DNS address blocked for ${url.hostname}`);
   }
-  if (!policy.scope?.raw.out_of_scope?.length && !policy.deniedHosts?.size) return;
+  if (!isScopeEnforcementEnabled() || (!policy.scope?.raw.out_of_scope?.length && !policy.deniedHosts?.size)) return;
   const candidates = [address];
   if (isIP(address) === 6) {
     const canonical = new URL(`http://[${address}]/`).hostname;
@@ -106,7 +107,7 @@ function authorizeAddress(url: URL, address: string, policy: ScopedHttpPolicy): 
       ...policy.scope.raw,
       in_scope: [...(policy.scope.raw.in_scope ?? []), resolved.hostname],
     });
-    const verdict = addressScope.match(resolved.href);
+    const verdict = addressScope.enforce(resolved.href)
     if (!verdict.allowed) throw new Error(`Resolved address is excluded by scope: ${verdict.reason}`);
   }
 }
@@ -126,7 +127,11 @@ async function abortable<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
  * Redirects are manual unless explicitly requested; response bodies are streamed
  * with a decoded-byte ceiling and one deadline through DNS, headers and body.
  */
-export async function fetchScoped(
+export function fetchScoped(input: string, init: RequestInit, policy: ScopedHttpPolicy): Promise<Response> {
+  return withScopeEnforcement(getScopeEnforcementState(), () => fetchScopedInternal(input, init, policy));
+}
+
+async function fetchScopedInternal(
   input: string,
   init: RequestInit,
   policy: ScopedHttpPolicy,

@@ -1,0 +1,16 @@
+{
+  "package": "tree-sitter",
+  "version": "0.21.1",
+  "source": "https://registry.npmjs.org/tree-sitter/-/tree-sitter-0.21.1.tgz",
+  "sourceIntegrity": "sha512-7dxoA6kYvtgWw80265MyqJlkRl4yawIjO7S5MigytjELkX43fV2WsAXzsNfO7sBpPPCF5Gp0+XzHk0DwLCq3xQ==",
+  "archive": "tree-sitter-0.21.1-node24.tgz",
+  "archiveSha256": "1dd9a44e0f1d19e772c9cafade3cd20f7ef47fc003f6aad98d1210115bb30f74",
+  "patch": {
+    "file": "package/binding.gyp",
+    "reason": "Node 24 V8 requires C++20. Keep the supported tree-sitter 0.21 API and C grammar ABI unchanged.",
+    "changes": [
+      "Remove the C++ standard from cflags so C compilation remains C11.",
+      "Set cflags_cc, CLANG_CXX_LANGUAGE_STANDARD and MSVC /std to C++20."
+    ]
+  }
+}
