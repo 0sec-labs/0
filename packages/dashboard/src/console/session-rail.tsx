@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Archive, ArchiveRestore, CircleAlert, MessageCircleQuestion, SquarePen, Search, Trash2, Settings, ShieldCheck } from "lucide-react";
 import type { ConsoleSavedSession, DesktopConsoleSession } from "@0/shared";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { LoadingDots } from "./loading-state";
@@ -36,11 +35,11 @@ export function ConsoleSessionRail({ workspace, selectedId, onCreate, onArchiveL
   const [query, setQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const needle = query.trim().toLowerCase();
-  const live = workspace.sessions.filter((session) => !showArchived && session.status !== "closed" && `${session.title ?? ""} ${session.target} ${session.role} ${session.runtime?.model ?? ""} ${session.status}`.toLowerCase().includes(needle));
+  const live = workspace.sessions.filter((session) => !showArchived && session.status !== "closed" && ((session.messageCount ?? 0) > 0 || session.status !== "ready") && `${session.title ?? ""} ${session.target} ${session.role} ${session.runtime?.model ?? ""} ${session.status}`.toLowerCase().includes(needle));
   const activeIds = new Set(workspace.sessions.filter(session => session.status !== "closed").flatMap(session => [session.id, ...("savedId" in session && typeof session.savedId === "string" ? [session.savedId] : [])]));
   const saved = workspace.saved.filter(session => session.messageCount > 0 && !activeIds.has(session.id)).filter((session) => Boolean(session.archived) === showArchived).filter((session) => `${session.summary ?? ""} ${session.preview} ${session.target ?? ""} ${session.model ?? ""}`.toLowerCase().includes(needle));
   return <div className="session-rail flex h-full min-h-0 flex-col">
-    <div className="shrink-0 space-y-2 p-2"><Button variant="ghost" className="h-9 w-full justify-start gap-3 rounded-lg px-3 text-sm font-normal" disabled={workspace.busy} onClick={onCreate}><SquarePen aria-hidden="true" className="size-4" />New chat</Button><div className="relative"><Search className="pointer-events-none absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} className="h-9 pl-8 text-sm" placeholder="Search chats" aria-label="Search chats" /></div></div>
+    <div className="shrink-0 space-y-2 p-2"><button type="button" className="relative h-9 w-full rounded-lg pl-8 pr-3 text-left text-sm font-normal text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50" disabled={workspace.busy} onClick={onCreate}><SquarePen aria-hidden="true" className="pointer-events-none absolute left-2.5 top-2.5 size-3.5" />New chat</button><div className="relative"><Search className="pointer-events-none absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} className="h-9 pl-8 text-sm" placeholder="Search chats" aria-label="Search chats" /></div></div>
     <div id="chat-sidebar-list" className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2" aria-label={showArchived ? "Archived chats" : "Chats"}>
       {live.map((session) => <div key={session.id} className={cn("session-row group relative flex items-center rounded-xl", selectedId === session.id ? "bg-muted" : "hover:bg-muted/50")}>
         <Link to={`/console/${session.id}`} onClick={onSelect} className="min-w-0 flex-1 rounded-xl px-3 py-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40" title={session.target || undefined}><div className="truncate text-sm">{session.title || session.target || "Untitled chat"}</div></Link>
