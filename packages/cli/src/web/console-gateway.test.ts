@@ -51,6 +51,26 @@ async function idle(instance: ConsoleGateway, id: string): Promise<void> {
 }
 
 describe("ConsoleGateway", () => {
+  it("archives a live chat without losing history, persists across gateways, and restores it", async () => {
+    const instance = gateway();
+    const created = instance.create({ title: "Archive fixture" });
+    await instance.send(created.id, "Keep this evidence"); await idle(instance, created.id);
+    const before = instance.get(created.id).messages;
+    expect(() => instance.archiveSaved(created.id, { archived: true })).toThrow(ConsoleGatewayError);
+    const archived = await instance.archive(created.id);
+    expect(instance.get(created.id).session.status).toBe("closed");
+    expect(archived.archived).toBe(true);
+    expect(instance.loadSaved(archived.id).messages).toEqual(before);
+    const reopened = new ConsoleGateway({ homeDir: homes.at(-1), projectPath: "/fixture", createSession: engine }); gateways.push(reopened);
+    expect(reopened.listSaved().find(row => row.id === archived.id)?.archived).toBe(true);
+    expect(reopened.archiveSaved(archived.id, { archived: false }).archived).toBeUndefined();
+    expect(reopened.loadSaved(archived.id).messages).toEqual(before);
+    expect(() => reopened.archiveSaved(archived.id, { archived: "true" })).toThrow(ConsoleGatewayError);
+    reopened.archiveSaved(archived.id, { archived: true });
+    reopened.deleteSaved(archived.id);
+    expect(reopened.listSaved().find(row => row.id === archived.id)).toBeUndefined();
+  });
+
   it("uses an AI title returned by the successful accounted turn", async () => {
     const instance = gateway((input) => {
       const session = engine(input);

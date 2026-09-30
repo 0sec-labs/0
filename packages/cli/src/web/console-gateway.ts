@@ -23,7 +23,7 @@ import { buildFindingChatPrompt, loadFindingFocus, resolveFindingChatIntent } fr
 import { exportChatConversation } from "../tui/chat-export.js";
 import { getSettings } from "../tui/settings-store.js";
 import type { TuiSettings } from "../tui/settings.js";
-import { deleteSession, isValidSessionId, listSessions, loadSession, saveSession, type StoredConsoleState, type StoredSession } from "../tui/session-store.js";
+import { deleteSession, isValidSessionId, listSessions, loadSession, saveSession, setSessionArchived, type StoredConsoleState, type StoredSession } from "../tui/session-store.js";
 import { applyWebConsoleRuntimeSelection, createWebConsoleRuntime, describeWebConsoleRuntime, flushWebConsolePlugins, getWebConsolePluginHostManager } from "./operator-services.js";
 
 const MAX_EVENTS = 2_000;
@@ -429,6 +429,19 @@ export class ConsoleGateway {
   save(id: string): ConsoleSavedSession {
     const managed = this.#require(id); if (!this.#save(managed)) throw new ConsoleGatewayError("The private transcript could not be saved.", 500);
     return this.loadSaved(managed.savedId ?? managed.id).meta;
+  }
+  async archive(id: string): Promise<ConsoleSavedSession> {
+    const managed = this.#require(id);
+    await this.close(id);
+    return this.archiveSaved(managed.savedId ?? managed.id, { archived: true });
+  }
+  archiveSaved(id: string, value: unknown): ConsoleSavedSession {
+    const raw = object(value, "Archive configuration"); allowedKeys(raw, ["archived"]);
+    if (typeof raw.archived !== "boolean") throw new ConsoleGatewayError("archived must be a boolean.", 400);
+    for (const managed of this.#sessions.values()) if (managed.status !== "closed" && (managed.id === id || managed.savedId === id)) throw new ConsoleGatewayError("Close the active chat before changing its saved archive state.", 409);
+    this.#stored(id);
+    if (!setSessionArchived(id, raw.archived, this.#options.homeDir)) throw new ConsoleGatewayError("The archive state could not be saved.", 500);
+    return this.loadSaved(id).meta;
   }
   listSaved(value: unknown = {}): ConsoleSavedSession[] {
     const raw = object(value, "Saved session query"); allowedKeys(raw, ["cwd", "limit"]);

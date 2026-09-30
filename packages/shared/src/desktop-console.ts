@@ -253,6 +253,7 @@ export interface ConsoleTodos {
 }
 
 export interface ConsoleSavedSession {
+  archived?: boolean;
   id: string;
   savedAt: number;
   cwd: string;

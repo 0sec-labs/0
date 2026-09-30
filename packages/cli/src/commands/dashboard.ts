@@ -1205,6 +1205,7 @@ async function handleWebConsoleApiRequest(
         }) });
       } else if (id && parts.length === 2 && method === "GET") json(res, 200, gateway.loadSaved(id));
       else if (id && parts.length === 2 && method === "DELETE") { gateway.deleteSaved(id); json(res, 200, { ok: true }); }
+      else if (id && parts[2] === "archive" && method === "POST") json(res, 200, { session: gateway.archiveSaved(id, input) });
       else if (id && parts[2] === "resume" && method === "POST") json(res, 201, { session: await gateway.resume(id, input) });
       else if (id && parts[2] === "export" && method === "GET") json(res, 200, gateway.exportSaved(id));
       else json(res, 405, { error: "Method not allowed." });
@@ -1227,6 +1228,10 @@ async function handleWebConsoleApiRequest(
     else if (action === "continue" && method === "POST") json(res, 202, { session: await gateway.continue(id, input) });
     else if (action === "harness" && method === "POST") json(res, 200, await gateway.harness(id, input));
     else if (action === "save" && method === "POST") json(res, 200, { session: gateway.save(id) });
+    else if (action === "archive" && method === "POST") {
+      workflows.cancelSession(id);
+      json(res, 200, { session: await gateway.archive(id) });
+    }
     else if (action === "delete" && method === "POST") {
       workflows.cancelSession(id);
       json(res, 200, await gateway.delete(id));
