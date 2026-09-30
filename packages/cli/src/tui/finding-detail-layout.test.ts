@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Finding } from "@0/shared";
+import { findingFromRow } from "./findings-data.js";
 
 import {
   buildFindingRows,
@@ -292,6 +293,77 @@ describe("buildFindingRows", () => {
     const sevRow = rows.find((r) => r.kind === "kv" && r.label.includes("Severity"));
     expect(sevRow && sevRow.kind === "kv" && sevRow.tone).toBe("error");
     expect(sevRow && sevRow.kind === "kv" && sevRow.value).toBe("HIGH");
+  });
+
+  it("renders persisted code-only matches separately from replay and pending behavior", () => {
+    const rows = buildFindingRows(findingFromRow({
+      id: "F-source",
+      scanId: "scan-source",
+      title: "Source-only check",
+      severity: "high",
+      category: "missing-validation",
+      status: "discovered",
+      timestamp: 1,
+      templateId: "manual",
+      description: "An unsafe source pattern remains.",
+      evidenceRequest: "source.ts:1",
+      evidenceResponse: "Source inspection",
+      verificationResult: null,
+      sourceVerification: JSON.stringify({
+        status: "matched",
+        totalPredicates: 1,
+        matchedPredicates: 1,
+        notMatchedPredicates: 0,
+        inconclusivePredicates: 0,
+        behaviorPending: true,
+      }),
+      reviewAnnotation: null,
+    }), 200);
+    const sourceCheck = rows.find((row) => row.kind === "text" && row.text.startsWith("Source check:"));
+    const status = rows.find((row) => row.kind === "kv" && row.label.includes("Status"));
+    const replay = rows.find((row) => row.kind === "text" && row.text.startsWith("Replay verification:"));
+
+    expect(sourceCheck?.kind === "text" && sourceCheck.text).toContain(
+      "source predicates matched (1/1); source-only; behavior pending (no runtime proof)",
+    );
+    expect(replay?.kind === "text" && replay.text).toBe("Replay verification: not run");
+    expect(status?.kind === "kv" && status.value).toBe("discovered");
+  });
+
+  it("labels non-matching and unevaluable source predicates without claiming a fix", () => {
+    const notConfirmedRows = buildFindingRows({
+      ...SAMPLE,
+      status: "discovered",
+      sourceVerification: {
+        status: "not_confirmed",
+        totalPredicates: 1,
+        matchedPredicates: 0,
+        notMatchedPredicates: 1,
+        inconclusivePredicates: 0,
+        behaviorPending: false,
+      },
+    }, 200);
+    const inconclusiveRows = buildFindingRows({
+      ...SAMPLE,
+      status: "discovered",
+      sourceVerification: {
+        status: "inconclusive",
+        totalPredicates: 1,
+        matchedPredicates: 0,
+        notMatchedPredicates: 0,
+        inconclusivePredicates: 1,
+        behaviorPending: false,
+      },
+    }, 200);
+    const notConfirmed = notConfirmedRows.find((row) => row.kind === "text" && row.text.startsWith("Source check:"));
+    const inconclusive = inconclusiveRows.find((row) => row.kind === "text" && row.text.startsWith("Source check:"));
+
+    expect(notConfirmed?.kind === "text" && notConfirmed.text).toContain(
+      "source predicates not confirmed (0/1); not proof of a fix",
+    );
+    expect(inconclusive?.kind === "text" && inconclusive.text).toContain(
+      "source predicates inconclusive (1/1 could not be evaluated)",
+    );
   });
 
   it("redacts raw evidence and metadata derived from its first line", () => {

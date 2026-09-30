@@ -51,16 +51,16 @@ export function useDialogSurface(): boolean {
 // ---------------------------------------------------------------------------
 
 export type PopupVariant = "modal" | "centered" | "anchored";
-export type PopupSize = "small" | "medium" | "large";
+export type PopupSize = "small" | "medium" | "large" | "xlarge";
 export type PopupBackdrop = "dim" | "transparent" | "none";
 export type PopupTone = "default" | "danger";
 
 /** The verbatim scrim colour every dimmed popup has always used. */
 export const POPUP_BACKDROP_COLOR = RGBA.fromInts(0, 0, 0, 150);
 
-/** Compact width bands shared by generic dialog windows. */
+/** Bounded width bands for modal sizes. */
 export function popupBandWidth(size: PopupSize): number {
-  return size === "small" ? 56 : size === "medium" ? 72 : 88;
+  return size === "small" ? 56 : size === "medium" ? 72 : size === "xlarge" ? 120 : 88;
 }
 
 export interface ModalPanelGeometry {
@@ -87,7 +87,7 @@ export function modalPanelGeometry(
   dismissible = false,
 ): ModalPanelGeometry {
   const panelWidth = Math.max(1, Math.min(popupBandWidth(size), terminal.width - (terminal.width > 4 ? 4 : 0)));
-  const heightBand = size === "small" ? 20 : size === "medium" ? 24 : 28;
+  const heightBand = size === "small" ? 20 : size === "medium" ? 24 : size === "xlarge" ? 52 : 28;
   const panelHeight = Math.max(1, Math.min(heightBand, terminal.height - (terminal.height > 10 ? 4 : 0)));
   const padded = panelWidth > 8 && panelHeight > 6;
   const paddingX = padded ? 2 : 0;
@@ -225,7 +225,7 @@ export interface PopupProps {
   children: ReactNode;
   /** Placement + backdrop family. Default `"modal"`. */
   variant?: PopupVariant;
-  /** Compact width/height band for `modal`. Default `"large"`. */
+  /** Bounded width/height band for `modal`. Default `"large"`. */
   size?: PopupSize;
   /** Explicit outer width (cells). Required for `centered`/`anchored`. */
   width?: number;

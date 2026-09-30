@@ -577,64 +577,6 @@ function consoleBlocks(width: number, density: TuiSettings["density"]): PreviewB
   }];
 }
 
-/**
- * The agent-rail sample: an on/off chip when OFF; a faithful mini-sidebar when
- * ON so the operator sees the sidebar they are enabling — a dim AGENTS heading
- * over a couple of agent rows (status glyph, short label, turns), the same
- * shape the chat rail paints. Red is reserved for a failure glyph, exactly as
- * the live rail reserves it.
- */
-function rightSidebarBlocks(value: boolean, width: number): PreviewBlock[] {
-  if (!value) return [];
-  return [
-    line("rail-title", width, "AGENTS 2", (t) => t.MUTED),
-    {
-      key: "rail-a",
-      rows: 1,
-      render: (theme) => (
-        <Columns
-          available={width}
-          gap={1}
-          columns={[
-            { content: "◉", fg: theme.ACCENT, key: "glyph" },
-            { flex: 1, min: 1, text: "recon web tier", fg: theme.TEXT, key: "task" },
-            { content: "3/8", fg: theme.MUTED, key: "turns" },
-          ]}
-        />
-      ),
-    },
-    {
-      key: "rail-b",
-      rows: 1,
-      render: (theme) => (
-        <Columns
-          available={width}
-          gap={1}
-          columns={[
-            { content: "✓", fg: theme.SUCCESS, key: "glyph" },
-            { flex: 1, min: 1, text: "auth fuzzing", fg: theme.MUTED, key: "task" },
-            { content: "5/5", fg: theme.MUTED, key: "turns" },
-          ]}
-        />
-      ),
-    },
-    line("rail-findings-title", width, "FINDINGS 2", (t) => t.MUTED),
-    {
-      key: "rail-finding",
-      rows: 1,
-      render: (theme) => (
-        <Columns
-          available={width}
-          gap={1}
-          columns={[
-            { flex: 1, min: 1, text: "Auth bypass on /reset", fg: theme.TEXT, key: "title" },
-            { content: "high", fg: theme.ERROR, key: "sev" },
-          ]}
-        />
-      ),
-    },
-  ];
-}
 
 // ---------------------------------------------------------------------------
 // Assembly
@@ -686,9 +628,6 @@ export function previewBlocks({ def, value, width, settings }: PreviewInput): Pr
       break;
     case "showContextMeter":
       body = contextMeterBlocks(value === true, w);
-      break;
-    case "showRightSidebar":
-      body = rightSidebarBlocks(value === true, w);
       break;
     case "theme":
       body = consoleBlocks(w, settings.density);

@@ -13,13 +13,57 @@ Two front-ends share the same engine session (`createConsoleSession` from
 
 | Front-end | Requirement | Features |
 |-----------|-------------|----------|
-| **TUI** (full) | [Bun](https://bun.sh) runtime + TTY (`stdout.isTTY && stdin.isTTY`) | All slash commands, visual transcript, sidebars, approval prompts, scope extensions, subagent inspection, command palette, theme picker |
+| **TUI** (full) | [Bun](https://bun.sh) runtime + TTY (`stdout.isTTY && stdin.isTTY`) | All slash commands, visual transcript, approval prompts, scope extensions, subagent inspection, command palette, theme picker |
 | **readline** (Node) | Node.js 24+, `--scope <file>` required | Text-only REPL; limited command subset; scope extensions denied; no interactive tool-approval surface — see [approval limitations](#non-interactive-approval-limitations) |
 
 The runtime auto-detects Bun and uses the TUI when both Bun and a TTY are
 available, falling back to the readline console otherwise.
 The standalone release binary includes its runtime; Bun is needed separately
 when running the full terminal UI from source.
+
+### Online SmolVM workbench
+
+On Apple Silicon macOS, select the workbench profile to run the **entire**
+console inside the native SmolVM guest: agents, shell tools, browser, workspace
+operations and explicitly granted GitHub integration. This is an online Kali
+workbench, not the separate offline candidate-evaluation sandbox. No Colima or
+Docker daemon is needed at runtime; image creation can still use Docker.
+
+```bash
+0 workbench providers
+0 workbench setup --image /absolute/path/0-workbench-linux-arm64.tar \
+  --provider chatgpt-codex
+0 workbench status
+0 console
+```
+
+Setup provisions the verified signed native runtime and pins your explicitly
+approved image. Later launches resolve that saved approval automatically. The
+current invocation directory is mounted at `/workspace`; use relative source,
+scope and artifact paths within that workspace. A fixed workspace can instead
+be selected with `--workspace <directory>`.
+
+Provider grants select which existing host account credentials reach the guest.
+Only the selected account/token values are forwarded, not host login folders.
+You can also connect directly inside the guest. Add `--github` explicitly to
+grant the current `gh` token or `GH_TOKEN`/`GITHUB_TOKEN`; otherwise no GitHub
+credential crosses the boundary. Host HOME, SSH agents and Docker sockets are
+not granted. Guest session state and writable storage are private to this VM
+profile.
+
+Isolated executable and reproduction actions use bounded, host-supervised
+**sibling SmolVM guests** through private file-based admission, not nested Docker
+or KVM and not unfenced execution beside provider credentials. Setup/status show
+the concrete source, I/O, time and concurrency ceilings. Sharing and diagnostic
+opt-outs remain effective in the guest without forwarding reporting endpoint
+authority. Networking stays online by default; an explicitly enabled
+`ZERO_OFFLINE` keeps that invocation offline.
+
+The original arguments and terminal streams reach guest `0` unchanged, including
+piped prompts and resume shortcuts. Provisioning, launch and ambiguous-cleanup
+failures are refusals, never fallback to the host or Docker. `0 workbench status`
+and `0 config` remain host-side management commands; `0 workbench disable`
+explicitly selects host-local execution. See [workbench configuration](/configuration/#whole-harness-execution-profile).
 
 ## Launch
 
@@ -91,18 +135,19 @@ live `scan` targets then require a configured scope file or host policy.
 Running `0` opens the branded main console directly, including on a fresh
 installation. Setup does not block the composer. Use `/connect` for your API key
 or provider subscription, `/models` to choose a model, or `/onboard` for optional
-guided setup: Provider → Model → Display → Data sharing → Plugins.
+guided setup: Welcome → Provider → Model → Theme → Data sharing.
 
-In guided setup, Escape goes back one decision, including Density → Theme.
+In guided setup, Escape goes back one decision.
 Within a provider login or search, Escape cancels that local operation first.
-Connect and Models use Ctrl+N to skip; display, sharing and Plugins use `s`.
+Connect and Models use Ctrl+N to skip; Theme and Data sharing use `s`.
 Back, Confirm, and Skip also have clickable controls. At Welcome, Escape skips
-setup without marking it complete; only Finish does that. Ctrl+C explicitly quits.
+setup without marking it complete. Confirming or skipping Data sharing completes
+setup and returns directly to chat; there is no separate Done screen. Ctrl+C explicitly quits.
 Confirmed settings and credentials remain saved. Model selections apply to an
 available audit runtime and are also staged for the next audit. Unconfirmed
 preference previews are discarded when you go back.
 
-The optional Plugins step is an introduction, not an installation or approval.
+Plugins are configured separately, not added as a guided-setup step.
 Use `/hackstore` to browse. Installed files live under `~/.0/plugins/<id>/`.
 Start authoring with `0 hackstore init my-extension` and validate with
 `0 hackstore validate ./my-extension`; see the [Hackstore author guide](/hackstore/).
@@ -258,10 +303,10 @@ scan/review commands are a different surface; see
 
 ## First interaction
 
-On the first no-argument launch, guided setup walks through connection, model
-selection, display preferences and analytics consent. The final **Done**
-confirmation marks setup complete. Cancelling does not undo choices already
-saved, but setup appears again on the next launch.
+Running `0` opens the main composer directly. Optional `/onboard` setup walks
+through Welcome, Provider, Model, Theme and Data sharing. Confirming or skipping
+the last step marks setup complete and returns directly to chat. Cancelling does
+not undo choices already saved.
 
 For your own API key or a supported subscription connection, follow the
 [setup guide](/getting-started/#configure-a-provider). A normal `/connect`
@@ -275,11 +320,9 @@ When the TUI launches:
   centred on the screen.
 - **Status bar** — active model, mode, working directory, cost/token counters
   (when enabled).
-- **Header** — product name, configured scope, optional objective and clickable sidebar controls.
+- **Header** — product name, configured scope, and optional objective.
 - **Conversation** — Messenger framing by default: your messages align right,
   answers align left. Saved alternative styles remain effective.
-- **Agents sidebar** — visible by default on wide terminals, with worker
-  activity, plan and findings. Hide it without replacing the conversation.
 
 Type a message and press **Enter** to send it. The engine streams its response
 token-by-token. Tool calls appear as bordered cards showing the command or edit,
@@ -311,22 +354,18 @@ not a new tool-permission boundary; the session's actual mode and gates still ap
 | Operations | `/ops`, `/runs` | Active and recent operation status |
 | Doctor | `/doctor` | Runtime and configuration diagnostics |
 | History | `/history` | Scan history from the database (completed scans, not chat sessions) |
-| Findings | `/findings`, `/finds` | Session finding list with filtering |
-| Finding detail | `/finding`, `/finding-detail` | Full detail on one finding |
-| Replay | `/replay` | Event-level turn replay for a completed scan |
+| Findings | `/findings`, `/finds` | Session finding list with filtering; select a row to open full detail |
+| Replay | Command palette: **Open latest replay** | Event-level turn replay for a completed scan |
 | Settings | `/settings`, `/config`, `/prefs` | Console display settings (persist across sessions) |
 | Theme | `/theme`, `/themes` | Colour theme live preview |
 | Model | `/model`, `/models` | Select the current audit's model, worker-role overrides and single-model policy |
 | Sessions | `/sessions` | Switch open native sessions or resume saved conversations |
-| Herd | `/herd`, `/workers` | Active subagent worker overview |
 | Communications | `/comms`, `/messages` | Agent activity and messages |
 | Hackstore | `/hackstore`, `/store`, `/market`, `/marketplace` | Extension marketplace |
 | Connect | `/connect`, `/login`, `/auth` | API-key and provider-subscription connections |
 | Usage | `/usage`, `/cost`, `/tokens` | Token, cost, and context-window usage for this chat session |
-| Provider | `/providers` | Opens the same connection pane as `/connect` |
 | Scope | `/scope` | Current engagement scope view |
 | Onboarding | `/onboard` | Reopen guided setup without replacing the current audit |
-| Harness | `/harness` | Live harness controls, workspace trust and rollback |
 | Keybindings | `/keybindings`, `/keys`, `/keymap` | Inspect or rebind supported keyboard shortcuts |
 | Back | `/back` | Navigate to the previous screen |
 
@@ -341,27 +380,20 @@ the command menu. The readline console supports a subset (noted below).
 | `/capabilities` | `/caps` | info | — |
 | `/status` | — | info | ✓ |
 | `/tools` | — | info | ✓ |
-| `/agents` | — | info | — |
 | `/clear` | — | session | ✓ |
 | `/new-chat` | `/new` | navigation | — |
 | `/onboard` | — | navigation | — |
-| `/harness` | — | navigation | — |
-| `/stop` | — | session | — |
 | `/history` | — | session | — |
-| `/transcript` | `/review` | session | — |
 | `/findings` | `/finds` | session | — |
-| `/finding` | `/finding-detail` | session | — |
 | `/fix` | — | session | — |
 | `/impact` | — | session | — |
 | `/copy` | `/export`, `/dump` | session | — |
-| `/replay` | — | session | — |
 | `/sessions` | — | session | — |
 | `/explain` | `/eli5` | session | — |
 | `/model` | `/models` | session | — |
 | `/chat` | — | navigation | — |
 | `/launcher` | `/run`, `/home` | navigation | — |
 | `/ops` | `/runs` | navigation | — |
-| `/herd` | `/workers` | navigation | — |
 | `/comms` | `/messages` | navigation | — |
 | `/hackstore` | `/store`, `/market`, `/marketplace` | navigation | — |
 | `/connect` | `/login`, `/auth` | navigation | — |
@@ -374,7 +406,6 @@ the command menu. The readline console supports a subset (noted below).
 | `/theme` | `/themes` | system | — |
 | `/keybindings` | `/keys`, `/keymap` | system | — |
 | `/doctor` | — | system | — |
-| `/providers` | — | system | — |
 
 ### Verified source fixes and draft PRs
 
@@ -494,12 +525,11 @@ fixed composer and safety keys are not all rebindable.
 | **Ctrl+C** | Any modal/overlay | Exits (declines pending action, releases caller) |
 | **q** | Screens without composer | Quit (Run.tsx screens: Findings, History, Operations, …) |
 
-### Navigation and overlays
+### Navigation
 
 | Shortcut | Action |
 |----------|--------|
 | **Ctrl+P** / **Ctrl+K** | Open command palette (all screens) |
-| **Ctrl+O** | Open transcript review; in worker focus, expand/collapse its tool output |
 | **Ctrl+R** | Toggle collapsed/expanded tool call detail across the entire transcript |
 | **Ctrl+G** | Jump to agents |
 | **Ctrl+T** | Open agent communications |
@@ -527,14 +557,11 @@ fixed composer and safety keys are not all rebindable.
 |----------|--------|
 | **PageUp** / **Ctrl+Up** | Scroll transcript up (half page) |
 | **PageDown** / **Ctrl+Down** | Scroll transcript down (half page) |
-| **Ctrl+Home** | Scroll to transcript start (transcript review only) |
-| **Ctrl+End** | Scroll to transcript end (transcript review only) |
 
-### Sidebars and mode
+### Autonomy mode
 
 | Shortcut | Action |
 |----------|--------|
-| **Ctrl+L** | Toggle right sidebar (active agents + context strip) |
 | **Shift+Tab** | Cycle autonomy mode |
 
 ### Approval and picker modals
@@ -560,15 +587,6 @@ fixed composer and safety keys are not all rebindable.
 | **Ctrl+O** (focused) | Expand/collapse commands, output, diffs, and tool details |
 | Type + **Enter** (focused) | Steer a live worker; follow up with Main when a one-shot worker has finished |
 
-### Transcript review overlay (Ctrl+O)
-
-| Shortcut | Action |
-|----------|--------|
-| **PageUp** / **Ctrl+Up** | Scroll up |
-| **PageDown** / **Ctrl+Down** | Scroll down |
-| **Ctrl+Home** | Scroll to start |
-| **Ctrl+End** | Scroll to end |
-| **Ctrl+O** / **Esc** | Close review |
 
 ## Modes, approvals, and scope
 
@@ -705,13 +723,11 @@ start a new audit rather than assuming resume flags replace all saved context.
 | `/clear` | Clear the idle audit's conversation; retain target, scope, mode and prior authorization refusals |
 | `/new-chat` / `/new` | Create a separate audit using staged model/connection choices |
 | `/sessions` | Switch open sessions without cancelling workers, or browse saved conversations |
-| `/stop audit` | Stop the current audit's work |
-| `/stop worker <exact name or id>` | Stop an owned worker and its descendants |
 | `/history` | Review scan history from the database |
 
 `/clear` is not `/new` and is not saved-transcript deletion. Open sessions have
 separate conversation/runtime ownership; selecting another session does not
-stop background work. Use `/stop` deliberately, and `/sessions` for saved history.
+stop background work. Use `/sessions` to browse saved history.
 
 ### Pruning
 
@@ -742,23 +758,22 @@ approval callback and Co-pilot both bypass the per-action gate; see
 [readline and headless approval limitations](#non-interactive-approval-limitations)
 before using this path for tasks that may run tools.
 
-## Transcript vs replay
+## Saved transcripts and replay
 
-The console has two views into past data:
+Saved conversations and scan replays are separate views of past work:
 
-| Aspect | **Transcript** | **Replay** |
-|--------|----------------|------------|
-| Scope | Current session's conversation turns | Any persisted scan (by scan ID or database) |
-| Content | Operator + model turns, tool calls, outcomes | Event-level turn timeline: stages, tool calls, model output |
-| Access | `/transcript` (Ctrl+O) | `/replay` |
-| Data source | Current in-memory conversation; saved native messages can seed a resumed chat | Scan database (`--db-path` or `~/.0/0.db`) |
-| Use case | Review what was discussed and returned by tools in this chat | Inspect the events that a scan actually persisted |
+| Aspect | **Saved conversation** | **Replay** |
+|--------|------------------------|------------|
+| Scope | One stored native conversation | Any persisted scan (by scan ID or database) |
+| Content | Conversation history restored to chat from native messages | Event-level turn timeline: stages, tool calls, model output |
+| Access | `/sessions` → select a saved conversation | Command palette (**Ctrl+P** / **Ctrl+K**) → **Open latest replay** |
+| Data source | Saved conversation store (`~/.0/console-sessions`) | Scan database (`--db-path` or `~/.0/0.db`) |
+| Use case | Resume a prior conversation with its stored context | Inspect the events that a scan actually persisted |
 
-The **transcript review** (Ctrl+O) is a scrollable, virtualised rendering of
-the current conversation.
-
-The **replay screen** (`/replay`) loads a completed scan's recorded events.
-Browse scan runs, select one, and step through its events.
+Selecting a saved conversation from `/sessions` reopens the chat around its
+stored transcript. To open a replay, press **Ctrl+P** or **Ctrl+K** to open the
+command palette, choose **Open latest replay**, then browse scan runs, select
+one, and step through its recorded events.
 
 ## Feedback and secrets
 
@@ -816,8 +831,8 @@ reports submission as unavailable.
 
 ### Secret scanning
 
-When entering an API key through the TUI's credential prompt (`/connect` or
-`/providers`), the entered value is stored directly to
+When entering an API key through the TUI's credential prompt (`/connect`), the
+entered value is stored directly to
 `~/.0/credentials.json`. The store's `redactSecret` function produces a
 display form showing only a prefix and the last 4 characters (e.g.
 `sk-ant-…a4f2`) — the full key is never echoed to the transcript.
@@ -842,9 +857,13 @@ Display settings are layered: **default** → **global** (`~/.0/tui-settings.jso
 them.
 
 The full settings table lives in [Configuration](/configuration/). Key
-console-specific controls include right sidebar visibility (`showRightSidebar`),
-transcript density and style, theme, and cost display
-toggles.
+console-specific controls include transcript density and style, theme, and
+cost display toggles.
+
+Agent tasks use compact tabs above a shared, full-width chat transcript. Switching
+tasks keeps the shared composer and conversation state; there are no left or
+right sidebar visibility settings. The operator-global **Execution profile**
+setting applies on the next launch and cannot be changed by project settings.
 
 Type to search across groups, or use **/** before a query beginning with `r`.
 Bracketed paste and Unicode backspace work in search. **↑ / ↓** select a
@@ -869,44 +888,25 @@ Enable **Reduce motion** in settings for static activity glyphs, logo, and
 highlights; elapsed time remains visible. Working highlights keep their text
 stationary and use normal foreground colors rather than failure red.
 
-The right-hand plan sidebar prioritizes active tasks, then pending work, then
-completed work. Phase labels provide context when space permits; tight layouts
-favor the task itself. Overflow reports remaining/completed counts, and a fully
-completed plan collapses to a compact summary.
+## Agents in chat
+- Each delegated worker appears as a task row below the composer, with its task
+  and current status/activity. Selecting it uses the same transcript and
+  composer as Main, with a separate draft per conversation.
+- Running, queued, completed, incomplete and failed states are labeled directly.
+  Additional workers remain reachable with `+N more · Next task` and
+  `Ctrl+PageUp` / `Ctrl+PageDown`; completed output stays available.
+- Selection and browsing do not message or stop a worker. Type a follow-up to
+  message the selected active/parked worker. A finished one-shot worker returns
+  its result to Main as untrusted context. `Ctrl+Shift+Home` returns to Main.
+- Use `/comms` only when you need the separate observed peer-message history;
+  no agent roster window is required.
 
-## Monitoring subagents
+The activity row sits above the composer and names the current main action or
+agent count. The bottom status area keeps measured context, model, mode, Git and
+enabled usage indicators. Selecting a worker shows that worker's measured model
+and usage; missing measurements remain unknown.
 
-Open **/herd** or **/workers** for the worker overview. **s** searches worker
-names, identifiers, tasks, and activity. **Enter** accepts the search; another
-**Enter** opens the selected worker. The header counts agents rather than
-including group headings in the count.
-
-Worker states have distinct text/glyphs as well as color. Focus view retains
-live progress and failure details, with **↑ / ↓** scrolling, **m** for a steering
-message, and **Esc** returning to the list. Wide terminals show the overview
-and detail side by side; narrow terminals use a stacked layout.
-
-Inside chat, **/agents** opens the retained worker roster without leaving the
-conversation. Completed and failed workers stay selectable. A focused worker
-shows its task, assistant replies, tool start/completion state, and final answer.
-**Ctrl+O** or a tool card's disclosure expands the retained output rather than
-another shortened preview. Execution-level truncation limits still apply.
-
-Messages to a live or parked worker use its mailbox. A follow-up to a finished
-one-shot worker returns to Main with the worker's result quoted as untrusted
-context, instead of disappearing into a dead mailbox. Persistent workers send
-their result back to the parent; the parent consumes queued results at its next
-model-request boundary.
-
-The bottom status area distinguishes measured context from the **turn spend**
-budget. Worker focus shows that worker's reported model, input/output/cache
-tokens, and duration; missing measurements remain unknown. Main shows worker
-counts, plan progress, queued input, and measured context alongside the existing
-model, mode, directory, Git, and enabled usage indicators.
-
-Click **PLAN** in the right sidebar to expand and scroll every task, including
-full wrapped descriptions; click again to collapse it. The unabridged plan stays
-in the main transcript when the sidebar is hidden.
+The unabridged plan stays in the main transcript.
 
 ## TUI crash handling
 

@@ -70,6 +70,13 @@ export { createRuntime, ProcessRuntime, LlmApiRuntime, QuotaExhaustedError, Oper
 export type { Runtime, RuntimeConfig, RuntimeContext, RuntimeResult, RuntimeType, NativeRuntime, NativeMessage, NativeContentBlock, NativeToolDef, NativeRuntimeResult, OpenRouterConfig, UsageLimitDetails } from "./runtime/index.js";
 export { CodexCatalogRefreshError, loadCodexModelCatalog } from "./runtime/codex-models.js";
 export type { CodexCatalogModel } from "./runtime/codex-models.js";
+export { runSmolvmWorkbench } from "./runtime/smolvm-workbench.js";
+export type { SmolvmWorkbenchOptions, SmolvmWorkbenchResult, SmolvmWorkbenchApprovedImage } from "./runtime/smolvm-workbench.js";
+export { resolveSmolvmRuntime, approveSmolvmWorkbenchImage, getSmolvmWorkbenchStatus } from "./runtime/smolvm-provision.js";
+export type {
+  SmolvmRuntime, SmolvmRuntimeOptions, SmolvmWorkbenchImage, SmolvmWorkbenchImageOptions,
+  SmolvmWorkbenchStatus, SmolvmWorkbenchStatusOptions,
+} from "./runtime/smolvm-provision.js";
 export { buildDeepScanPrompt, buildMcpAuditPrompt, buildSourceAnalysisPrompt } from "./prompts.js";
 export { resolveMcpEndpoint, listMcpTools, callMcpTool, discoverMcpTarget, runMcpSecurityChecks } from "./mcp.js";
 export { runLlmIpiAudit, breakRecordToFinding } from "./llm-ipi-audit.js";
@@ -1869,6 +1876,7 @@ export {
   stripUnsafeText,
 } from "./hub/mailbox.js";
 export type { HubMessage, SendResult, SendFailure } from "./hub/mailbox.js";
+export { agentTaskLabel } from "./hub/name-generator.js";
 // Agent-to-agent addressing policy + the operator→child steering path. The
 // policy is pure and inert (it grants nothing); `sendOperatorMessage` is the
 // one supported way the console steers a specific running subagent's mailbox.
@@ -2157,7 +2165,7 @@ export type {
 } from "./fix/index.js";
 
 // Deterministic replay runner. Consumes a finding's `pocSteps`, sequentially
-// executes them through local, Docker, or QEMU isolation, and emits a canonical
+// executes them through local, SmolVM, Docker, or QEMU isolation, and emits a canonical
 // `VerificationResult` payload matching `@0/shared/verification`. Cloud's
 // worker-controller can call this directly in-process without shelling out to
 // the CLI.
@@ -2168,6 +2176,9 @@ export type {
 export {
   runDeterministicReplay,
   LocalShellRunner,
+  SmolvmRunner,
+  createSmolvmPocTargetRunner,
+  runSmolvmPocSteps,
   DockerRunner,
   QemuRunner,
   argvForStep as verifyArgvForStep,
@@ -2183,6 +2194,7 @@ export type {
   AssertionInput,
   DeterministicReplayOutcome,
   DockerRunnerOptions,
+  SmolvmRunnerOptions,
   QemuRunnerOptions,
   ReplayRunner,
   ReplayRunnerContext,
@@ -2514,3 +2526,6 @@ export type {
   SecureProjectOptions,
   SecureProjectResult,
 } from "./secure/types.js";
+
+export { startWorkbenchBroker, runWorkbenchBrokerProgram, isAdmittedSmolvmWorkbench, resolveWorkbenchBrokerImage, getWorkbenchBrokerLimits, DEFAULT_WORKBENCH_BROKER_LIMITS } from "./runtime/smolvm-broker.js";
+export type { WorkbenchBrokerProgram, WorkbenchBrokerLimits, WorkbenchBrokerImage, WorkbenchBrokerOptions, WorkbenchBrokerController, WorkbenchBrokerAdmission } from "./runtime/smolvm-broker.js";

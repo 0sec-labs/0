@@ -61,6 +61,21 @@ async function start(apiKey?: string, providerId: "chatgpt-codex" | "openai" | "
   await tui.waitForText(/type to chat/);
 }
 
+test("account-discovered subscription choices lead metered models without losing provider prices", async () => {
+  fixture("ok", "ok");
+  await start("synthetic-api-key", "openai");
+  await tui!.sendKeys("/model");
+  await tui!.sendKey("return");
+  await tui!.waitForText(/gpt-daybreak-blue-latest/);
+  await tui!.waitForText(/aaa-automatic-model/);
+
+  const frame = tui!.captureFrame();
+  expect(frame.indexOf("gpt-daybreak-blue-latest")).toBeLessThan(frame.indexOf("aaa-automatic-model"));
+  expect(frame).toContain("subscription");
+  expect(frame).toMatch(/\$1\/2 per M/);
+  expect(frame).toContain("OPENAI");
+});
+
 test("subscription selection reaches the Codex request with its exact discovered model ID", async () => {
   const { requests } = fixture();
   await start();

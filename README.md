@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://0.security/">
-    <img src="assets/readme-cover.png" alt="Software already builds software. Now it can secure itself, too." width="100%">
+    <img src="assets/readme-cover.png" alt="0security terminal security research workflow" width="100%">
   </a>
 </p>
 
@@ -13,7 +13,7 @@
 
 <p align="center">
   <strong>The open-source, self-evolving, multi-model harness for security research.</strong><br/>
-  <sub>The Swiss Applied AI &amp; Cybersecurity Research Lab</sub><br/>
+  <sub>Backed by Y Combinator · The Swiss Applied AI &amp; Cybersecurity Research Lab</sub><br/>
   <a href="https://0.security/">0.security</a> ·
   <a href="https://docs.0.security/">Documentation</a> ·
   <a href="https://github.com/0sec-labs/foxguard">FoxGuard</a>
@@ -46,9 +46,6 @@ export PATH="$HOME/.0/bin:$PATH"
 0
 ```
 
-Use `/connect` to bring your own model API key or supported provider subscription,
-then `/model` to choose a model. `/onboard` offers optional guided setup.
-No managed-service account is needed for local work.
 
 
 ## Work locally, extend deliberately
@@ -89,7 +86,6 @@ Only test systems you own or are authorized to assess. The optional
 [scope plugin](https://docs.0.security/scope/) is disabled by default:
 enable it explicitly with `0 plugin enable scope` and configure your boundaries.
 The default console uses YOLO mode; use `0 console --mode standard` for
-interactive approval prompts. Neither mode replaces authorization.
 
 ## Contributing and license
 

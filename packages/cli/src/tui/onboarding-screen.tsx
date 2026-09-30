@@ -2,8 +2,7 @@
 /**
  * Optional /onboard setup. Reuses the provider/model pickers and the settings
  * store; highlighted choices do not persist until confirmed. Back and Skip
- * retain saved choices. Only Finish marks setup complete.
- * The Plugins step is informational: it never installs or activates code.
+ * retain saved choices. The final data-sharing decision completes setup.
  */
 
 import React, {
@@ -14,28 +13,47 @@ import React, {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { sleekScrollbar } from "./scrollbar.js";
-import { AppContext, useKeyboard } from "@opentui/react";
-import { TextAttributes, type KeyEvent, type ScrollBoxRenderable } from "@opentui/core";
-import { analyticsPipeline, getScopeEnforcementState } from "@0/core";
+import { AppContext, useKeyboard, useRenderer } from "@opentui/react";
+import {
+  CliRenderEvents,
+  resolveImageRenderProtocol,
+  TextAttributes,
+  type KeyEvent,
+  type NativeImage,
+  type ScrollBoxRenderable,
+} from "@opentui/core";
 
 import { Cells, textCells } from "./primitives.js";
-import { previewSetting, reloadSettings, updateSetting, useSettings } from "./settings-store.js";
+import {
+  getSettingSources,
+  previewSetting,
+  reloadSettings,
+  updateSetting,
+  useSettings,
+} from "./settings-store.js";
 import { SETTING_DEFS, type TuiSettings } from "./settings.js";
 import { SettingsPreview } from "./settings-preview.js";
 import { SurfaceContext, useSurfaceDimensions } from "./dialog-surface.js";
 import { DialogActionButton } from "./dialog-screen-chrome.js";
 import { DialogSelectBody, type DialogItem } from "./dialog-select.js";
-import { computeDialogPanel } from "./dialog-select-layout.js";
+import { computeDialogPanel, type DialogPanel } from "./dialog-select-layout.js";
 import { Popup } from "./popup.js";
+import { buildConnectRows } from "./connect-layout.js";
+import { loadAccountStore } from "./credential-store.js";
+import { providerStates } from "./provider-status.js";
 import { wrapCells } from "./settings-layout.js";
+import { fitTuiText } from "./text.js";
 import { useTheme, type Theme } from "./theme-context.js";
-import { Masthead } from "./chat/Masthead.js";
-import { TERMINAL_BLOCK_LOGO, TERMINAL_BLOCK_LOGO_WIDTH } from "./chat/logo.js";
-import { finalLogoFrame } from "./logo-animation.js";
+import {
+  createZeroAxeImages,
+  ZERO_AXE_FRAME_DURATIONS,
+  ZERO_AXE_HEIGHT,
+  ZERO_AXE_WIDTH,
+} from "./chat/zero-axe-art.js";
 
-const ONBOARDING_LOGO_FRAME = finalLogoFrame(TERMINAL_BLOCK_LOGO);
 
 // ---------------------------------------------------------------------------
 // Steps — the state machine
@@ -46,9 +64,7 @@ export type OnboardingStep =
   | "connect"
   | "models"
   | "preferences"
-  | "analytics"
-  | "plugins"
-  | "done";
+  | "analytics";
 
 /** Metadata for a single step. */
 interface StepDef {
@@ -64,10 +80,8 @@ export const ONBOARDING_STEPS: readonly StepDef[] = [
   { key: "welcome", label: "Welcome", skippable: false },
   { key: "connect", label: "Provider", skippable: true },
   { key: "models", label: "Model", skippable: true },
-  { key: "preferences", label: "Display", skippable: true },
+  { key: "preferences", label: "Theme", skippable: true },
   { key: "analytics", label: "Data sharing", skippable: true },
-  { key: "plugins", label: "Plugins", skippable: true },
-  { key: "done", label: "Done", skippable: false },
 ];
 
 /** The step that linearly follows `step`, or `undefined` at the end. */
@@ -81,32 +95,18 @@ export function stepBefore(step: OnboardingStep): OnboardingStep | undefined {
   return idx > 0 ? ONBOARDING_STEPS[idx - 1]?.key : undefined;
 }
 
-/**
- * The setting keys the guided preferences step walks, in order. Deliberately
- * just the two most visible, lowest-risk Display cosmetics — never a Security
- * toggle, which belongs in the full Settings catalogue with its description.
- */
-export const ONBOARDING_PREFERENCE_KEYS = ["theme", "density"] as const;
-type PreferenceKey = (typeof ONBOARDING_PREFERENCE_KEYS)[number];
 
-/**
- * THE ONLY place `onboardingCompleted` is written. Called solely from the
- * `done` step's Enter — never on skip, cancel, back, or a preference set — so
- * cancelling always leaves onboarding incomplete. The write is un-scoped, so
- * the store lands it in the global layer (it is operator-owned and refused at
- * project scope).
- */
+/** Only finishing the final decision writes the operator-owned completion flag. */
 export function finalizeOnboarding(): void {
   updateSetting("onboardingCompleted", true);
 }
 
-/** The four consent tiers, matching the `analyticsLevel` setting's choices. */
-export type AnalyticsLevel = TuiSettings["analyticsLevel"];
+/** The two consent choices exposed by onboarding. */
+export type AnalyticsLevel = "off" | "usage";
 
-/** Save the sharing tier without broadening a separate problem-report choice. */
+/** Usage analytics and problem/error reports use independent consent paths. */
 export function recordAnalyticsConsent(level: AnalyticsLevel): void {
   updateSetting("analyticsLevel", level);
-  if (level === "off") updateSetting("diagnosticReporting", "off");
 }
 
 
@@ -117,6 +117,17 @@ export function recordAnalyticsConsent(level: AnalyticsLevel): void {
 export interface OnboardingFrameInput {
   body: React.ReactNode;
 }
+
+interface EmbeddedConnectFrameInput extends OnboardingFrameInput {
+  hint: string;
+  onBack?: () => void;
+  backLabel?: string;
+  onNext?: () => void;
+  nextLabel?: string;
+  nextDisabled?: boolean;
+}
+
+type EmbeddedConnectFrame = (input: EmbeddedConnectFrameInput) => React.ReactNode;
 
 /** Picker-local actions consumed by the containing window's controls. */
 interface OnboardingWindowActions {
@@ -174,9 +185,6 @@ export function OnboardingSubstep({ nav, children, ...actions }: OnboardingWindo
   return <>{children}</>;
 }
 
-// ---------------------------------------------------------------------------
-// Step copy (welcome / done prose)
-// ---------------------------------------------------------------------------
 
 type LineTone = "title" | "text" | "muted" | "accent";
 
@@ -190,87 +198,106 @@ function paragraph(text: string, tone: LineTone, width: number): StepLine[] {
   return wrapCells(text, width).map((line) => ({ text: line, tone }));
 }
 
-const BLANK: StepLine = { text: "", tone: "muted" };
-
-
-function pluginsLines(width: number): StepLine[] {
-  const scope = getScopeEnforcementState(process.cwd());
-  return [
-    ...paragraph("Plugins / Hackstore · optional", "title", width),
-    BLANK,
-    ...paragraph("/hackstore opens the plugin browser.", "accent", width),
-    ...paragraph("Install saves files; Enable approves code for new audits.", "text", width),
-    ...paragraph("Setup never installs, enables or runs plugins.", "muted", width),
-    BLANK,
-    ...paragraph(`Scope checks: ${scope.enabled ? "enabled" : "disabled"} for this project.`, scope.enabled ? "text" : "accent", width),
-    ...(scope.enabled ? [] : paragraph("Target authorization, exclusions and local-path limits are not enforced.", "text", width)),
-    ...(scope.enabled ? [] : paragraph("Enable explicitly: 0 plugin enable scope", "accent", width)),
-    ...paragraph("Credential, sandbox and resource limits are independent.", "muted", width),
-    BLANK,
-    ...paragraph("Installed files: ~/.0/plugins/<id>/", "text", width),
-    ...paragraph("Create: 0 hackstore init my-extension", "accent", width),
-    ...paragraph("Check: 0 hackstore validate ./my-extension", "accent", width),
-    ...paragraph("Try locally: 0 plugin install ./my-extension --local", "accent", width),
-    ...paragraph("Submit: 0 hackstore prepare-submission --help", "accent", width),
-    ...paragraph("Publishing is a reviewed Hackstore pull request.", "muted", width),
-    ...paragraph("Author guide: https://docs.0.security/hackstore/", "accent", width),
-  ];
+/** Suppress browse-only connection prose while preserving entry/sign-in detail. */
+function suppressConnectBrowseDetail(node: React.ReactNode): React.ReactNode {
+  if (!React.isValidElement(node)) return node;
+  const element = node as React.ReactElement<{ children?: React.ReactNode }>;
+  if (element.type === DialogSelectBody) {
+    const picker = element as React.ReactElement<React.ComponentProps<typeof DialogSelectBody>>;
+    const panel = picker.props.panel;
+    const compactPanel: DialogPanel = {
+      ...panel,
+      listWidth: panel.innerWidth,
+      rowWidth: Math.max(1, panel.innerWidth - (panel.scrolls ? 1 : 0)),
+      showDetail: false,
+      detailWidth: 0,
+      detailGap: 0,
+    };
+    return React.cloneElement(picker, { panel: compactPanel, renderDetail: undefined });
+  }
+  if (element.props.children === undefined) return element;
+  let changed = false;
+  const children = React.Children.map(element.props.children, (child) => {
+    const next = suppressConnectBrowseDetail(child);
+    if (next !== child) changed = true;
+    return next;
+  });
+  return changed
+    ? React.cloneElement(element, { children })
+    : element;
 }
 
-function doneLines(width: number): StepLine[] {
-  return [
-    ...paragraph("Setup reviewed", "title", width),
-    BLANK,
-    ...paragraph("Finish returns to your main console.", "text", width),
-    ...paragraph("Skipped choices are unchanged.", "muted", width),
-    BLANK,
-    ...paragraph("/connect · providers   /models · models", "accent", width),
-    ...paragraph("/settings · preferences   /hackstore · plugins", "accent", width),
-  ];
+/** The host's embedded ConnectScreen frame, wrapped only in provider browse mode. */
+function suppressConnectBrowseDetails(connect: React.ReactNode): React.ReactNode {
+  if (!React.isValidElement(connect)) return connect;
+  const props = connect.props;
+  if (props === null || typeof props !== "object" || !("frame" in props) || typeof props.frame !== "function") {
+    return connect;
+  }
+  // `renderConnect` is the host's ConnectScreen element by contract.
+  const frame = props.frame as EmbeddedConnectFrame;
+  return React.cloneElement(
+    connect as React.ReactElement<{ frame: EmbeddedConnectFrame }>,
+    {
+      frame: (input) => frame({
+        ...input,
+        body: suppressConnectBrowseDetail(input.body),
+      }),
+    },
+  );
 }
 
-const STEP_LINES: Partial<Record<OnboardingStep, (width: number) => StepLine[]>> = {
-  plugins: pluginsLines,
-  done: doneLines,
-};
 
+/** Return provider labels only; never carry credential values into the view. */
+function detectedProviderLabels(): string[] {
+  const accountStore = loadAccountStore();
+  const rows = buildConnectRows({
+    states: providerStates(process.env),
+    stored: Object.keys(accountStore.providers),
+  });
+  const labels: string[] = [];
+  for (const row of rows) {
+    if (row.kind === "provider" && row.provider.connected) labels.push(row.provider.label);
+  }
+  return labels;
+}
+
+function providerSetupLines(labels: readonly string[], width: number): StepLine[] {
+  const detected = labels.length > 0
+    ? `Detected credentials: ${labels.join(", ")}.`
+    : "No provider credentials detected.";
+  const guidance = labels.length > 0
+    ? "Connect another provider below."
+    : "Select a provider below to connect one.";
+  return [
+    ...paragraph(detected, labels.length > 0 ? "accent" : "muted", width),
+    ...paragraph(guidance, "muted", width),
+  ];
+}
 
 // ---------------------------------------------------------------------------
 // Analytics consent step
 // ---------------------------------------------------------------------------
 
-/** Every tier remains selectable; skipping preserves the current preference. */
+/** Only Off and pseudonymous usage metrics are offered during setup. */
 const ANALYTICS_OPTIONS = [
   {
     level: "off",
     label: "Off",
-    detail: "No analytics uploads. Also turns automatic problem reports off.",
+    detail: "No analytics uploads.",
   },
   {
     level: "usage",
-    label: "Usage metrics",
-    detail: "Counts, timing, cost and error categories. No tool content.",
-  },
-  {
-    level: "commands",
-    label: "Tools and code",
-    detail: "Usage plus tool inputs, outputs and submitted code.",
-  },
-  {
-    level: "full",
-    label: "Full",
-    detail: "Tools and code plus scope and findings.",
+    label: "Yes, I’d like to help make 0 better!",
+    detail: "Pseudonymous usage metrics to help improve 0.",
   },
 ] as const satisfies readonly { level: AnalyticsLevel; label: string; detail: string }[];
 
-/** Disclose what each tier uploads and the effective process setting. */
+/** Keep setup copy short; each choice names what it shares. */
 function analyticsLines(width: number): StepLine[] {
   return [
-    ...paragraph(`Data sharing · active: ${analyticsPipeline.getLevel()}`, "title", width),
-    ...paragraph("Shared data supports model improvement and security research.", "text", width),
-    ...paragraph("Credentials are scrubbed; identifying content may remain.", "text", width),
-    ...paragraph("Uploads require an endpoint; delivery is not anonymous.", "muted", width),
-    ...paragraph("Environment opt-outs win. Problem reports: /settings.", "muted", width),
+    ...paragraph("Data sharing", "title", width),
+    ...paragraph("You can change this choice in Settings.", "muted", width),
   ];
 }
 
@@ -285,6 +312,97 @@ function toneColor(tone: LineTone, theme: Theme): string {
     default:
       return theme.TEXT;
   }
+}
+
+function WelcomeHero({
+  contentWidth,
+  bodyRows,
+  theme,
+  reduceMotion,
+}: {
+  contentWidth: number;
+  bodyRows: number;
+  theme: Theme;
+  reduceMotion: boolean;
+}) {
+  const renderer = useRenderer();
+  const subscribe = useCallback((changed: () => void) => {
+    renderer.on(CliRenderEvents.CAPABILITIES, changed);
+    renderer.on(CliRenderEvents.RESIZE, changed);
+    renderer.on(CliRenderEvents.FRAME, changed);
+    return () => {
+      renderer.off(CliRenderEvents.CAPABILITIES, changed);
+      renderer.off(CliRenderEvents.RESIZE, changed);
+      renderer.off(CliRenderEvents.FRAME, changed);
+    };
+  }, [renderer]);
+  const getProtocol = useCallback(() => {
+    const resolution = renderer.resolution;
+    const hasResolution = renderer.terminalWidth > 0 && renderer.terminalHeight > 0
+      && Boolean(resolution && resolution.width > 0 && resolution.height > 0);
+    return resolveImageRenderProtocol("auto", renderer.capabilities, hasResolution);
+  }, [renderer]);
+  const protocol = useSyncExternalStore(subscribe, getProtocol);
+  const greetingLines = wrapCells("Hey there! Meet Zero.", contentWidth);
+  const maxImageHeight = Math.min(
+    ZERO_AXE_HEIGHT,
+    Math.max(0, bodyRows - greetingLines.length - (greetingLines.length > 0 ? 1 : 0)),
+  );
+  let imageHeight = maxImageHeight;
+  let imageWidth = Math.min(contentWidth, Math.round(imageHeight * ZERO_AXE_WIDTH / ZERO_AXE_HEIGHT));
+  imageHeight = Math.min(imageHeight, Math.round(imageWidth * ZERO_AXE_HEIGHT / ZERO_AXE_WIDTH));
+  const showImage = protocol !== "blocks" && imageWidth >= 12 && imageHeight >= 8;
+  const [imageAssets, setImageAssets] = useState<{ canvas: string; images: NativeImage[] }>();
+  const [frameIndex, setFrameIndex] = useState(0);
+
+  useEffect(() => {
+    if (!showImage) {
+      setImageAssets(undefined);
+      return;
+    }
+    const images = createZeroAxeImages(theme.PANEL);
+    setImageAssets({ canvas: theme.PANEL, images });
+    setFrameIndex(0);
+    return () => { images.forEach((image) => image.dispose()); };
+  }, [showImage, theme.PANEL]);
+
+  useEffect(() => {
+    if (!showImage || reduceMotion) {
+      setFrameIndex(0);
+      return;
+    }
+    let index = 0;
+    let timer: NodeJS.Timeout;
+    const schedule = () => {
+      timer = setTimeout(() => {
+        index = (index + 1) % ZERO_AXE_FRAME_DURATIONS.length;
+        setFrameIndex(index);
+        schedule();
+      }, ZERO_AXE_FRAME_DURATIONS[index] ?? 1000);
+    };
+    schedule();
+    return () => clearTimeout(timer);
+  }, [showImage, reduceMotion]);
+
+  const images = imageAssets?.canvas === theme.PANEL ? imageAssets.images : undefined;
+  const image = images?.[reduceMotion ? 0 : frameIndex];
+  return (
+    <box width={contentWidth} height={bodyRows} flexDirection="column" alignItems="center"
+      flexShrink={0} minWidth={0} overflow="hidden">
+      {showImage && image ? (
+        <box width={imageWidth} height={imageHeight} flexShrink={0} marginBottom={1}
+          backgroundColor={theme.PANEL}>
+          <image source={image} protocol={protocol} fit="fit"
+            width={imageWidth} height={imageHeight} flexShrink={0} />
+        </box>
+      ) : null}
+      {greetingLines.slice(0, Math.max(0, bodyRows - (showImage ? imageHeight + 1 : 0))).map((line, index) => (
+        <Cells key={`welcome-greeting-${index}`} width={contentWidth} align="center" fg={theme.TEXT}>
+          {line}
+        </Cells>
+      ))}
+    </box>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -313,7 +431,6 @@ export function OnboardingScreen({
   const theme = useTheme();
   const settings = useSettings();
   const [stepIndex, setStepIndex] = useState(0);
-  const [prefIndex, setPrefIndex] = useState(0);
   const [navFocus, setNavFocus] = useState<"back" | "skip" | "next" | null>(null);
   const registeredActions = useRef<OnboardingWindowActions | undefined>(undefined);
   const [actionMeta, setActionMeta] = useState({ backLabel: "Back", nextLabel: "Next", nextDisabled: false });
@@ -325,49 +442,50 @@ export function OnboardingScreen({
     setActionMeta((current) => current.backLabel === backLabel && current.nextLabel === nextLabel
       && current.nextDisabled === nextDisabled ? current : { backLabel, nextLabel, nextDisabled });
   }, []);
-  const currentStep = ONBOARDING_STEPS[stepIndex]?.key ?? "done";
+  const currentStep = ONBOARDING_STEPS[stepIndex]?.key ?? "welcome";
   const embedded = currentStep === "connect" || currentStep === "models";
+  const detectedProviders = useMemo(
+    () => currentStep === "connect" ? detectedProviderLabels() : [],
+    [currentStep],
+  );
   const outerWidth = Math.max(1, Math.min(currentStep === "welcome" ? 96 : 86,
     terminal.width - (terminal.width > 4 ? 4 : 0)));
-  const preferredHeight = currentStep === "welcome" ? 28 : currentStep === "done" ? 20 : 26;
+  const preferredHeight = currentStep === "welcome" ? 28 : 26;
   const outerHeight = Math.max(1, Math.min(preferredHeight,
     terminal.height - (terminal.height > 10 ? 4 : 0)));
   const padded = outerWidth > 8 && outerHeight > 6;
   const paddingX = padded ? 2 : 0;
   const paddingY = padded ? 1 : 0;
   const contentWidth = Math.max(1, outerWidth - paddingX * 2);
-  const contentHeight = Math.max(1, outerHeight - paddingY * 2);
+  const contentHeight = Math.max(1, outerHeight - paddingY);
   const actionRows = contentWidth >= 7 && contentHeight >= 2 ? 1 : 0;
-  const headerRows = contentHeight - actionRows >= 2 ? 1 : 0;
-  const separatorRows = headerRows > 0 && contentHeight - actionRows - headerRows >= 2 ? 1 : 0;
-  const bodyRows = contentHeight - actionRows - headerRows - separatorRows;
+  const primaryRows = contentWidth >= 7 && contentHeight >= 4 ? 1 : 0;
+  const headerRows = contentHeight - actionRows - primaryRows >= 2 ? 1 : 0;
+  const separatorRows = headerRows > 0 && contentHeight - actionRows - primaryRows - headerRows >= 2 ? 1 : 0;
+  const bodyRows = contentHeight - actionRows - primaryRows - headerRows - separatorRows;
   const textWidth = Math.max(1, contentWidth - 1);
+  const providerBrowseMode = currentStep === "connect"
+    && actionMeta.nextLabel !== "Save" && actionMeta.nextLabel !== "Signing in";
 
   const advanceTo = useCallback((next: OnboardingStep) => {
-    if (next === "preferences") setPrefIndex(0);
     const index = ONBOARDING_STEPS.findIndex((entry) => entry.key === next);
     if (index >= 0) setStepIndex(index);
   }, []);
   const advancePastCurrent = useCallback(() => {
     const next = stepAfter(currentStep);
     if (next) advanceTo(next);
-  }, [currentStep, advanceTo]);
+    else { finalizeOnboarding(); onComplete(); }
+  }, [currentStep, advanceTo, onComplete]);
   const goBack = useCallback(() => {
-    if (currentStep === "preferences" && prefIndex > 0) {
-      setPrefIndex(prefIndex - 1);
-      return;
-    }
-    if (currentStep === "analytics") setPrefIndex(ONBOARDING_PREFERENCE_KEYS.length - 1);
     const previous = stepBefore(currentStep);
     if (previous) setStepIndex(ONBOARDING_STEPS.findIndex((entry) => entry.key === previous));
     else onDismiss();
-  }, [currentStep, prefIndex, onDismiss]);
+  }, [currentStep, onDismiss]);
   const handleBack = useCallback(() => {
-    if (registeredActions.current?.onBack) registeredActions.current.onBack();
+    if (embedded && registeredActions.current?.onBack) registeredActions.current.onBack();
     else goBack();
-  }, [goBack]);
-  const prefKey = ONBOARDING_PREFERENCE_KEYS[prefIndex] as PreferenceKey | undefined;
-  const prefDef = useMemo(() => SETTING_DEFS.find((entry) => entry.key === prefKey), [prefKey]);
+  }, [embedded, goBack]);
+  const prefDef = useMemo(() => SETTING_DEFS.find((entry) => entry.key === "theme")!, []);
   const prefChoices = prefDef?.choices ?? [];
   const [choiceIndex, setChoiceIndex] = useState(0);
   const choiceRef = useRef(choiceIndex);
@@ -377,9 +495,9 @@ export function OnboardingScreen({
   // A reopened decision starts from its saved value, not an abandoned draft.
   useEffect(() => {
     setNavFocus(null);
-    if (!interactive || currentStep !== "preferences" || !prefKey) return;
-    if (prefKey === "theme") savedTheme.current = settings.theme;
-    const index = prefChoices.indexOf(settings[prefKey]);
+    if (!interactive || currentStep !== "preferences") return;
+    savedTheme.current = settings.theme;
+    const index = prefChoices.indexOf(settings.theme);
     choiceRef.current = index >= 0 ? index : 0;
     setChoiceIndex(choiceRef.current);
     return () => {
@@ -390,69 +508,71 @@ export function OnboardingScreen({
     };
     // Only seed on opening a decision, never on a live preview notification.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [interactive, currentStep, prefKey]);
+  }, [interactive, currentStep]);
 
   const commitPreference = useCallback(() => {
-    const value = prefChoices[choiceIndex];
+    const value = prefChoices[choiceRef.current];
     themePreviewActive.current = false;
-    if (prefKey && value !== undefined) updateSetting(prefKey, value as TuiSettings[PreferenceKey]);
-    if (prefIndex + 1 < ONBOARDING_PREFERENCE_KEYS.length) setPrefIndex(prefIndex + 1);
-    else advanceTo("analytics");
-  }, [prefKey, prefChoices, choiceIndex, prefIndex, advanceTo]);
-  const skipPreference = useCallback(() => {
-    if (prefIndex + 1 < ONBOARDING_PREFERENCE_KEYS.length) setPrefIndex(prefIndex + 1);
-    else advanceTo("analytics");
-  }, [prefIndex, advanceTo]);
+    if (value !== undefined) updateSetting("theme", value);
+    advanceTo("analytics");
+  }, [prefChoices, advanceTo]);
+  const skipPreference = useCallback(() => advanceTo("analytics"), [advanceTo]);
   const choosePreference = useCallback((index: number) => {
     choiceRef.current = index;
     setChoiceIndex(index);
     setNavFocus(null);
-    if (prefKey === "theme") {
-      const value = prefChoices[index];
-      if (value !== undefined) {
-        themePreviewActive.current = true;
-        previewSetting("theme", value);
-      }
+    const value = prefChoices[index];
+    if (value !== undefined) {
+      themePreviewActive.current = true;
+      previewSetting("theme", value);
     }
-  }, [prefKey, prefChoices]);
+  }, [prefChoices]);
   const cycleChoice = useCallback((delta: number) => {
     if (prefChoices.length) choosePreference((choiceRef.current + delta + prefChoices.length) % prefChoices.length);
   }, [choosePreference, prefChoices.length]);
 
-  const [analyticsIndex, setAnalyticsIndex] = useState(() => Math.max(0,
-    ANALYTICS_OPTIONS.findIndex((option) => option.level === settings.analyticsLevel)));
+  const analyticsLevelSource = getSettingSources().analyticsLevel;
+  const persistedAnalyticsIndex = ANALYTICS_OPTIONS.findIndex(
+    (option) => option.level === settings.analyticsLevel,
+  );
+  const defaultAnalyticsIndex = ANALYTICS_OPTIONS.findIndex((option) => option.level === "usage");
+  const selectedAnalyticsIndex = analyticsLevelSource === "default"
+    ? defaultAnalyticsIndex
+    : Math.max(0, persistedAnalyticsIndex);
+  const [analyticsIndex, setAnalyticsIndex] = useState(selectedAnalyticsIndex);
   useEffect(() => {
-    if (currentStep === "analytics") setAnalyticsIndex(Math.max(0,
-      ANALYTICS_OPTIONS.findIndex((option) => option.level === settings.analyticsLevel)));
-  }, [currentStep, settings.analyticsLevel]);
+    if (currentStep === "analytics") setAnalyticsIndex(selectedAnalyticsIndex);
+  }, [currentStep, selectedAnalyticsIndex]);
   const cycleAnalytics = useCallback((delta: number) => {
     setAnalyticsIndex((index) => (index + delta + ANALYTICS_OPTIONS.length) % ANALYTICS_OPTIONS.length);
     setNavFocus(null);
   }, []);
   const commitAnalytics = useCallback(() => {
     recordAnalyticsConsent(ANALYTICS_OPTIONS[analyticsIndex]?.level ?? "off");
-    advanceTo("plugins");
-  }, [analyticsIndex, advanceTo]);
-  const finishOrAdvance = useCallback(() => {
-    if (currentStep === "done") {
-      finalizeOnboarding();
-      onComplete();
-    } else advancePastCurrent();
-  }, [currentStep, onComplete, advancePastCurrent]);
+    advancePastCurrent();
+  }, [analyticsIndex, advancePastCurrent]);
   const onNext = currentStep === "preferences" ? commitPreference
-    : currentStep === "analytics" ? commitAnalytics : finishOrAdvance;
+    : currentStep === "analytics" ? commitAnalytics : advancePastCurrent;
   const handleNext = useCallback(() => {
+    if (!embedded) {
+      onNext();
+      return;
+    }
     const actions = registeredActions.current;
     if (actions?.nextDisabled) return;
     if (actions?.onNext) actions.onNext();
     else onNext();
-  }, [onNext]);
+  }, [embedded, onNext]);
   const onSkip = currentStep === "preferences" ? skipPreference
     : ONBOARDING_STEPS[stepIndex]?.skippable ? advancePastCurrent : undefined;
   const backButtonLabel = currentStep === "welcome" ? contentWidth < 36 ? "Skip" : "Skip setup" : actionMeta.backLabel;
-  const nextButtonLabel = currentStep === "done" ? "Finish" : embedded ? actionMeta.nextLabel : "Next";
-  const compactNavigation = contentWidth < textCells(backButtonLabel) + textCells(nextButtonLabel) + 5;
-  const visibleSkip = Boolean(onSkip) && contentWidth >= textCells(backButtonLabel) + textCells(nextButtonLabel) + 12;
+  const nextButtonLabel = currentStep === "welcome" ? "Continue"
+    : currentStep === "analytics" ? "Finish" : embedded ? actionMeta.nextLabel : "Next";
+  const visibleSkip = Boolean(onSkip)
+    && contentWidth >= textCells(backButtonLabel) + textCells("Skip") + 5;
+  const compactNavigation = contentWidth < textCells(backButtonLabel)
+    + (visibleSkip ? textCells("Skip") + 1 : 0) + 4;
+  const compactPrimary = contentWidth < textCells(nextButtonLabel) + 4;
 
   // Model Tab still switches catalogues; Ctrl+Tab enters window controls.
   // Everywhere else Tab, Shift+Tab and focused Left/Right navigate buttons.
@@ -506,68 +626,91 @@ export function OnboardingScreen({
 
   let body: React.ReactNode;
   if (currentStep === "welcome") {
-    const showMark = contentWidth >= TERMINAL_BLOCK_LOGO_WIDTH && bodyRows >= 10;
-    const showMascot = showMark && bodyRows >= 20;
-    body = <box width={contentWidth} height={bodyRows} flexDirection="column"
-      alignItems="center" flexShrink={0} minWidth={0} overflow="hidden">
-      <Masthead showTerminalMark={showMark} showMascot={showMascot} showTagline={false}
-        contentWidth={contentWidth} logoFrameGrid={ONBOARDING_LOGO_FRAME} theme={theme} />
-      {bodyRows >= (showMascot ? 20 : showMark ? 11 : 3) ? (
-        <Cells width={contentWidth} align="center" fg={theme.MUTED}>
-          {"Connect your provider. Make the console yours."}
-        </Cells>
-      ) : null}
-    </box>;
+    body = <WelcomeHero contentWidth={contentWidth} bodyRows={bodyRows}
+      theme={theme} reduceMotion={settings.reduceMotion} />;
   } else if (embedded) {
-    body = <SurfaceContext.Provider value={{ width: contentWidth, height: bodyRows }}>
-      {currentStep === "connect" ? renderConnect(subNav) : renderModels(subNav)}
-    </SurfaceContext.Provider>;
+    if (currentStep === "connect") {
+      const introLines = providerSetupLines(detectedProviders, textWidth);
+      const introRows = Math.min(introLines.length, Math.max(0, bodyRows - 1));
+      const pickerRows = bodyRows - introRows;
+      const pickerSurfaceHeight = pickerRows;
+      const connectScreen = renderConnect(subNav);
+      const visibleConnectScreen = providerBrowseMode
+        ? suppressConnectBrowseDetails(connectScreen) : connectScreen;
+      body = (
+        <box width={contentWidth} height={bodyRows} flexDirection="column" flexShrink={0}
+          minWidth={0} overflow="hidden">
+          {introLines.slice(0, introRows).map((line, index) => (
+            <Cells key={`provider-intro-${index}`} width={textWidth}
+              fg={toneColor(line.tone, theme)}>{line.text}</Cells>
+          ))}
+          <SurfaceContext.Provider value={{ width: contentWidth, height: pickerSurfaceHeight }}>
+            {visibleConnectScreen}
+          </SurfaceContext.Provider>
+        </box>
+      );
+    } else {
+      body = <SurfaceContext.Provider value={{ width: contentWidth, height: bodyRows }}>
+        {renderModels(subNav)}
+      </SurfaceContext.Provider>;
+    }
   } else if (currentStep === "analytics") {
     body = <AnalyticsCard lines={analyticsLines(textWidth)} choiceIndex={analyticsIndex}
       theme={theme} contentWidth={contentWidth} textWidth={textWidth} bodyRows={bodyRows}
       onChoose={(index) => { setNavFocus(null); setAnalyticsIndex(index); }} />;
-  } else if (currentStep === "preferences" && prefDef) {
+  } else {
     body = <PreferencesCard def={prefDef} choices={prefChoices} choiceIndex={choiceIndex}
       value={prefChoices[choiceIndex]} settings={settings} theme={theme}
       contentWidth={contentWidth} bodyRows={bodyRows}
-      savedValue={prefKey === "theme" ? savedTheme.current ?? settings.theme : prefKey ? settings[prefKey] : undefined}
+      savedValue={savedTheme.current ?? settings.theme}
       onChoose={choosePreference} />;
-  } else {
-    body = <ProseCard lines={STEP_LINES[currentStep]?.(textWidth) ?? []}
-      theme={theme} currentStep={currentStep} contentWidth={contentWidth}
-      textWidth={textWidth} bodyRows={bodyRows} />;
   }
 
   const stepLabel = ONBOARDING_STEPS[stepIndex]?.label ?? "";
   const stepText = `Step ${stepIndex + 1} of ${ONBOARDING_STEPS.length} · ${stepLabel}`;
   const headerWidth = Math.max(1, contentWidth - stepText.length - 1);
   const content = (
-    <box flexDirection="column" width={contentWidth} height={contentHeight} minWidth={0} overflow="hidden">
-      {actionRows > 0 ? (
-        <box flexDirection="row" width={contentWidth} height={1} flexShrink={0} minWidth={0} gap={1}>
-          <DialogActionButton label={compactNavigation ? "‹" : backButtonLabel}
-            onPress={handleBack} focused={navFocus === "back"} />
-          {visibleSkip ? <DialogActionButton label="Skip" onPress={onSkip!} focused={navFocus === "skip"} /> : null}
-          <DialogActionButton label={compactNavigation ? "›" : nextButtonLabel} variant="primary"
-            onPress={handleNext} focused={navFocus === "next"} disabled={embedded && actionMeta.nextDisabled} />
-        </box>
-      ) : null}
+    <box flexDirection="column" width={outerWidth} height={contentHeight} minWidth={0} overflow="hidden">
       {headerRows > 0 ? (
-        <box flexDirection="row" width={contentWidth} height={1} flexShrink={0} minWidth={0}>
-          <Cells width={headerWidth} fg={theme.PRIMARY} attributes={TextAttributes.BOLD}>{"0.security / setup"}</Cells>
-          <Cells width={contentWidth - headerWidth} align="right" fg={theme.MUTED}>{stepText}</Cells>
+        <box flexDirection="row" width={outerWidth} height={1} flexShrink={0} minWidth={0}
+          backgroundColor={theme.PANEL_ALT}>
+          {paddingX > 0 ? <box width={paddingX} flexShrink={0} /> : null}
+          <Cells width={headerWidth} fg={theme.PRIMARY} attributes={TextAttributes.BOLD}>
+            {fitTuiText("0.security / setup", headerWidth)}
+          </Cells>
+          <Cells width={contentWidth - headerWidth} align="right" fg={theme.MUTED}>
+            {fitTuiText(stepText, contentWidth - headerWidth)}
+          </Cells>
+          {paddingX > 0 ? <box width={paddingX} flexShrink={0} /> : null}
         </box>
       ) : null}
-      {separatorRows > 0 ? <box height={1} flexShrink={0} /> : null}
-      <box width={contentWidth} height={bodyRows} flexShrink={0} minWidth={0} minHeight={0} overflow="hidden">
-        {bodyRows > 0 ? body : null}
+      <box flexDirection="column" width={contentWidth} height={contentHeight - headerRows}
+        marginLeft={paddingX} flexShrink={0} minWidth={0} minHeight={0} overflow="hidden">
+        {actionRows > 0 ? (
+          <box flexDirection="row" width={contentWidth} height={1} flexShrink={0} minWidth={0} gap={1}>
+            <DialogActionButton label={compactNavigation ? "‹" : backButtonLabel}
+              onPress={handleBack} focused={navFocus === "back"} />
+            {visibleSkip ? <DialogActionButton label="Skip" onPress={onSkip!} focused={navFocus === "skip"} /> : null}
+            <box flexGrow={1} />
+          </box>
+        ) : null}
+        {separatorRows > 0 ? <box height={1} flexShrink={0} /> : null}
+        <box width={contentWidth} height={bodyRows} flexShrink={0} minWidth={0} minHeight={0} overflow="hidden">
+          {bodyRows > 0 ? body : null}
+        </box>
+        {primaryRows > 0 ? (
+          <box flexDirection="row" width={contentWidth} height={1} flexShrink={0} justifyContent="center">
+            <DialogActionButton label={compactPrimary ? "›" : nextButtonLabel} variant="primary"
+              onPress={handleNext} focused={navFocus === "next"} disabled={embedded && actionMeta.nextDisabled} />
+          </box>
+        ) : null}
       </box>
     </box>
   );
   return interactive ? (
     <Popup variant="centered" width={outerWidth} height={outerHeight}
-      paddingX={paddingX} paddingY={paddingY} dismissOnBackdrop={false}>
-      <SurfaceContext.Provider value={{ width: contentWidth, height: contentHeight }}>
+      paddingX={0} paddingY={0} dismissOnBackdrop={false}>
+      <SurfaceContext.Provider value={{ width: outerWidth, height: outerHeight }}>
         {frame({ body: content })}
       </SurfaceContext.Provider>
     </Popup>
@@ -578,67 +721,6 @@ export function OnboardingScreen({
 // Bodies
 // ---------------------------------------------------------------------------
 
-function ProseCard({
-  lines,
-  theme,
-  currentStep,
-  contentWidth,
-  textWidth,
-  bodyRows,
-}: {
-  lines: StepLine[];
-  theme: Theme;
-  currentStep: OnboardingStep;
-  contentWidth: number;
-  textWidth: number;
-  bodyRows: number;
-}) {
-  const scroll = useRef<ScrollBoxRenderable | null>(null);
-  useKeyboard((key) => {
-    if (key.name === "pageup") scroll.current?.scrollBy(-1, "viewport");
-    if (key.name === "pagedown") scroll.current?.scrollBy(1, "viewport");
-    if (key.name === "up") scroll.current?.scrollBy(-1);
-    if (key.name === "down") scroll.current?.scrollBy(1);
-  });
-  const rows = lines.map((line, index) => (
-    <Cells key={`step-${index}`} width={textWidth} fg={toneColor(line.tone, theme)}
-      attributes={line.tone === "title" ? TextAttributes.BOLD : undefined}>
-      {line.text}
-    </Cells>
-  ));
-
-  // Short cards remain top-aligned; long disclosures are scrollable.
-  if (lines.length <= bodyRows) {
-    return (
-      <box
-        flexDirection="column"
-        width={contentWidth}
-        height={bodyRows}
-        flexShrink={0}
-        minWidth={0}
-        overflow="hidden"
-      >
-        {rows}
-      </box>
-    );
-  }
-
-  return (
-    <scrollbox
-      ref={scroll}
-      key={currentStep}
-      width={contentWidth}
-      height={bodyRows}
-      flexShrink={0}
-      scrollX={false}
-      verticalScrollbarOptions={sleekScrollbar(theme)}
-    >
-      <box flexDirection="column" width={textWidth} flexShrink={0} minWidth={0}>
-        {rows}
-      </box>
-    </scrollbox>
-  );
-}
 
 /** A draft-only picker alongside the shared live console preview. */
 function PreferencesCard({
@@ -686,7 +768,7 @@ function PreferencesCard({
       </Cells>
       <Cells width={contentWidth} fg={theme.MUTED}>{"Choose a look. Next saves this choice."}</Cells>
       <DialogSelectBody items={items} cursor={choiceIndex} panel={panel} query="" hideSearch gutter
-        onActivateRow={onChoose} onHoverRow={onChoose}
+        onActivateRow={onChoose}
         renderDetail={(_item, pane) => <SettingsPreview def={def} value={value} settings={settings}
           theme={theme} width={pane.width} rowBudget={pane.height} />}
         onScroll={(delta) => onChoose((choiceIndex + delta + choices.length) % choices.length)} />

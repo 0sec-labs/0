@@ -8,6 +8,104 @@ description: Runtime modes, scan modes, depth settings, state paths, env vars, f
 Configure command options, provider credentials, console settings and run storage
 separately. Each section below gives its precedence rules.
 
+## Whole-harness execution profile
+
+`executionProfile` selects the **local execution boundary**, not the LLM backend.
+The operator-global setting is `local` by default for existing installations.
+Choose `smolvm` after provisioning the online Kali workbench:
+
+```bash
+0 workbench setup --image /absolute/path/0-workbench-linux-arm64.tar \
+  --provider openai --provider chatgpt-codex
+0 workbench status --json
+0 console
+```
+
+The native runtime is currently qualified for Apple Silicon macOS. Setup
+downloads and verifies the pinned signed SmolVM bundle, preserving its runtime
+layout, and approves a digest-pinned local image archive. An initial image is an
+explicit operator choice (`--image`); an archive discovered in a checkout or a
+mutable registry tag is never silently trusted. Re-running setup and normal
+launches resolve the saved approved image automatically.
+
+| Setup option | Default | Effect |
+| --- | --- | --- |
+| `--image <archive>` | saved approved image | Explicit local OCI/Docker archive approval |
+| `--state <directory>` | `~/.0/workbench` | Private runtime, image approval, guest state and admission |
+| `--workspace <directory>` | invocation's current directory | Selected host workspace mounted at guest `/workspace` |
+| `--provider <id>` | no host provider grants | Repeat to grant selected provider accounts; list IDs with `workbench providers` |
+| `--github` / `--no-github` | not granted | Explicit token grant from `GH_TOKEN`, `GITHUB_TOKEN`, or existing `gh` authentication |
+| `--cpus <count>` | `2` | Virtual CPUs |
+| `--memory <MiB>` | `4096` | Guest RAM |
+| `--storage <GiB>` | `20` | VM-owned writable storage |
+| `--sandbox-image <reference=archive>` | no additional images | Repeat to approve a full `repository@sha256:<64hex>` identity for isolated container actions |
+
+Operator choices live in the private, owner-only `~/.0/workbench.json`; credential
+values are not persisted there or displayed by status. Granted provider values
+are resolved only when launching. Ungranted accounts, host HOME, SSH authority,
+Docker sockets and unrelated environment variables are not forwarded. You may
+authenticate a provider directly inside the guest instead.
+
+Guest preferences preserve the more restrictive of saved sharing consent and
+explicit environment policy. `DO_NOT_TRACK` and `ZERO_NO_TELEMETRY` keep analytics
+and problem reports off without disabling ordinary workbench networking.
+Reporting endpoints, account/API authority and unrelated environment values are
+not copied into guest configuration.
+
+Guest `0` receives the original argument array and stdin/stdout/stderr, with its
+working directory at `/workspace` and private HOME at `/home/zero`. Use paths
+relative to the selected workspace. The whole console, child agents and tools
+execute in that guest. Networking is online by default. An explicitly enabled
+`ZERO_OFFLINE` starts it without networking and keeps analytics/problem reports
+off; `workbench status` shows the effective mode. This does **not** widen the
+separate offline evolution/sandbox policy or substitute an offline sandbox for
+the online workbench profile.
+
+Container/reproduction actions that request another image use an explicit
+operator-owned catalog, not a guest-selected archive or registry pull:
+
+```bash
+0 workbench configure --sandbox-image \
+  'registry.example/security/runner@sha256:<64hex>=/absolute/path/runner.tar'
+0 workbench configure --clear-sandbox-images
+```
+
+The operator asserts that this immutable OCI identity corresponds to that local
+archive. Setup also digest-pins the **archive bytes**, a distinct digest from the
+OCI identity. Only the approved reference and archive digest enter guest
+admission; host archive paths and environment authority stay host-side. Unknown
+explicit references are refused. Adding an image grant does not enable mutable
+tags, nested Docker/KVM, host sockets or unrestricted code execution in the
+credential-bearing console guest.
+
+Setup and status also show the isolated-action broker's concrete hard ceilings:
+**4 MiB workspace/source**, **256 files**, **1 MiB stdin**, **1 MiB output**,
+**2 simultaneous jobs**, **256 requests per workbench lifetime**, **600 seconds**,
+**2 CPUs** and **2048 MiB RAM**. These are separate from the outer workbench's
+resource options. A workflow's larger source/output limit does not raise this
+transport boundary; oversized inputs are refused rather than silently falling
+back to another execution backend.
+
+`0 workbench configure --provider openai,anthropic --no-github` replaces grants;
+`--provider none` revokes host provider grants. `--current-workspace` removes a
+fixed workspace choice. `0 workbench status` is read-only and never provisions or
+downloads. Runtime, image, admission or cleanup failures refuse execution rather
+than falling back to host or Docker. Retained admission after unproven cleanup
+remains visible in status. `0 workbench disable` is an explicit return to the
+local profile; it retains the approved image and guest state.
+
+A configured workbench requires an explicit valid operator execution profile.
+Missing or malformed profile settings refuse launch instead of resetting the
+choice to host-local. Use `0 workbench setup` or `0 workbench disable` to repair
+that selection explicitly; ordinary display settings retain their normal
+defaulting behavior.
+
+The host `workbench` and `config` management commands stay available to repair
+configuration. Project settings cannot select, disable or override this
+operator-owned execution boundary. Changing the settings-screen profile takes
+effect at the next process launch and does not retroactively isolate a running
+host session.
+
 ## Runtime modes
 
 `--runtime` selects the LLM backend.
@@ -423,7 +521,7 @@ Settings are resolved per-key, highest-priority first:
 
 Operator-global settings are exceptions: a project cannot override analytics,
 problem-report consent, update policy, onboarding state, or authorization for
-development-engine updates.
+development-engine updates, or the whole-harness execution profile.
 
 On load, settings are normalized against the schema: unknown keys are dropped
 and invalid values reset to defaults. Saving writes the normalized object.
@@ -433,24 +531,25 @@ Persisted `messenger` framing migrates to `bubble`; new sessions default to
 ### Security-gated import
 
 `0 config import` refuses to change security-sensitive settings, including
-`allowModelSelfExtension`, `allowDevSourceUpdates`, `allowSubagentPeerMessaging`
-and `allowSubagentOperatorMessaging`, unless `--yes` is passed. The specific
+`executionProfile`, `allowModelSelfExtension`, `allowDevSourceUpdates`,
+`allowSubagentPeerMessaging` and `allowSubagentOperatorMessaging`, unless `--yes`
+is passed. The specific
 changes are printed so you know what was rejected.
 
 ### Settings reference
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| `executionProfile` | `local`, `smolvm` | `local` | Operator-global whole-harness execution boundary; requires workbench setup before SmolVM launch |
 | `showStatusBar` | boolean | `true` | Bottom bar with model, working directory, git state and counters |
 | `showComposerHints` | boolean | `true` | Keyboard-hint line under the input |
 | `showLogo` | boolean | `true` | Product mark on an empty transcript |
-| `showRightSidebar` | boolean | `false` | Live agents, activity, plan and findings; hidden until enabled and on narrow terminals |
 | `showObjective` | boolean | `true` | Header objective derived from the first message |
 | `showScope` | boolean | `true` | Header include/exclude scope; absent and explicitly empty scope remain distinct |
 | `density` | `comfortable`, `compact` | `comfortable` | Transcript spacing |
 | `composerStyle` | `border`, `rail`, `plain` | `border` | Input frame |
 | `transcriptStyle` | `minimal`, `bubble`, `rail`, `plain`, `compact`, `document` | `minimal` | Minimal transcript by default; alternative framed and document layouts |
-| `roleLabelStyle` | `full`, `short`, `glyph`, `off` | `full` | Speaker label treatment |
+| `roleLabelStyle` | `full`, `short`, `glyph`, `off` | `off` | Speaker label treatment |
 | `toolCardStyle` | `compact`, `rail`, `inline`, `hidden` | `compact` | Successful tool/subagent-card treatment; failures always show |
 | `richToolCards` | boolean | `true` | Render shell and edit results as rich cards |
 | `transcriptDetail` | `expanded`, `collapsed` | `expanded` | Whether successful reasoning and tool steps are folded |
@@ -463,8 +562,8 @@ changes are printed so you know what was rejected.
 | `allowModelSelfExtension` | boolean | `true` | Enable sandboxed model self-extension for new sessions, subject to role and capability gates |
 | `allowDevSourceUpdates` | boolean | `false` | Globally authorize trusted development-engine replacement between turns; requires `ZERO_DEV_SOURCE_ROOT` |
 | `theme` | built-in or installed theme ID | `slate` | Colour palette; installed themes live in `~/.0/themes` |
-| `showTokenUsage` | boolean | `true` | Per-turn input/output token line |
-| `showCost` | boolean | `true` | Estimated dollar cost, per turn and in the status bar |
+| `showTokenUsage` | boolean | `false` | Per-turn input/output token line |
+| `showCost` | boolean | `false` | Estimated dollar cost, per turn and in the status bar |
 | `showContextMeter` | boolean | `true` | Context-usage bar; missing context-window data displays unavailable |
 | `modelDisplay` | `statusbar`, `message`, `off` | `statusbar` | Where the model name appears |
 | `logoAnimation` | animation name or `off` | `glitch` | Intro or idle logo effect |
@@ -474,8 +573,8 @@ Additional practical settings include `composerSuggestions: true`,
 `mouseSupport: true`, `busyInputMode: "steer"`, `autoCompaction: true`,
 `compactionThreshold: "80%"`, and `elapsedTimer: "left"`. Finder-lens
 `autoEvolveFinderLenses` and `autoPromoteFinderLenses` both default to `false`.
-Operator-global `analyticsLevel` defaults to `"full"`, `diagnosticReporting`
-to `"automatic"`, and `updatePolicy` to `"automatic"`. Use `0 config show`
+Operator-global `analyticsLevel` defaults to `"off"`, `diagnosticReporting`
+to `"ask"`, and `updatePolicy` to `"automatic"`. Use `0 config show`
 for the full effective inventory and each value's source; see the privacy
 sections above before sharing a configuration.
 
@@ -941,7 +1040,8 @@ Keep backup credentials and account limits intentional.
 
 ## Execution backends
 
-Backend selection is command-specific. It does not provide global console isolation:
+Backend selection is command-specific and separate from the whole-harness
+execution profile above:
 
 - Source evolution defaults to Docker. Set `backend: "smolvm"` and a local
   `imageArchive` in its config to use qualified Linux microVM workers. See

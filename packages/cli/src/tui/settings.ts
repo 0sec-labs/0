@@ -70,7 +70,7 @@ export interface TuiSettings {
    * works again; every keyboard path is unaffected either way.
    */
   mouseSupport: boolean;
-  /** Block "ZEROSECURITY" wordmark on the empty transcript. */
+  /** Block "0.SECURITY" wordmark on the empty transcript. */
   showLogo: boolean;
   /** Surface runtime stdout/stderr as transcript notices. */
   showRuntimeNotices: boolean;
@@ -78,12 +78,6 @@ export interface TuiSettings {
   showTurnSummary: boolean;
   /** Show the active subagent list while workers run. */
   showSubagents: boolean;
-  /**
-   * Right sidebar in the chat view: live agents + a compact context strip
-   * (model · mode · scope · context %). Auto-hidden on narrow terminals.
-   * Formerly `showAgentRail`; that key is still honoured on load.
-   */
-  showRightSidebar: boolean;
   /** Relative timestamps on transcript entries. */
   showTimestamps: boolean;
   /**
@@ -101,6 +95,8 @@ export interface TuiSettings {
   busyInputMode: "steer" | "queue";
   /** Internal first-use state, persisted only in the operator's global layer. */
   onboardingCompleted: boolean;
+  /** Operator-global execution boundary; never granted by a project checkout. */
+  executionProfile: "local" | "smolvm";
   /** Let sibling subagents message each other directly (child↔child channel). */
   allowSubagentPeerMessaging: boolean;
   /** Let a subagent send a message to the operator's transcript (child→operator). */
@@ -258,7 +254,7 @@ export interface TuiSettings {
   leaderKey: "off" | "ctrl+a" | "ctrl+b" | "ctrl+space";
   /**
    * Per-action chord overrides for the rebindable keybindings, keyed by
-   * `Keybinding.id` (e.g. `{ "view.right-sidebar": "ctrl+j" }`). NOT part of the
+   * `Keybinding.id` (e.g. `{ "view.transcript-detail": "ctrl+j" }`). NOT part of the
    * scalar `SETTING_DEFS` table — it is a map, neither a boolean nor a
    * fixed-choice enum — so it is validated by its own bespoke `keybindingsAt`
    * helper (the way `theme` uses `themeAt`) rather than the enum table. Only
@@ -308,6 +304,7 @@ type TuiSettingDef =
   | EnumSettingDef<"analyticsLevel">
   | EnumSettingDef<"diagnosticReporting">
   | EnumSettingDef<"updatePolicy">
+  | EnumSettingDef<"executionProfile">
   | EnumSettingDef<"logoAnimation">
   | EnumSettingDef<"theme">
   | EnumSettingDef<"symbolPreset">
@@ -380,7 +377,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "showLogo",
     label: "Logo",
-    description: 'Block "ZEROSECURITY" wordmark shown on an empty transcript.',
+    description: 'Block "0.SECURITY" wordmark shown on an empty transcript.',
     kind: "boolean",
     default: true,
     group: "Display",
@@ -408,15 +405,6 @@ const DEFS: readonly TuiSettingDef[] = [
     kind: "boolean",
     default: true,
     group: "Transcript",
-  },
-  {
-    key: "showRightSidebar",
-    label: "Right sidebar",
-    description:
-      "Right sidebar: live agents, their activity, the current plan and findings. Hidden on narrow terminals.",
-    kind: "boolean",
-    default: false,
-    group: "Display",
   },
   {
     key: "showTimestamps",
@@ -528,10 +516,10 @@ const DEFS: readonly TuiSettingDef[] = [
     key: "transcriptDetail",
     label: "Transcript detail",
     description:
-      "Expanded shows every step (thinking, tool calls + their output) inline — the default; collapsed folds each turn's successful steps into one-line summaries (failures always show). Ctrl+R toggles it live.",
+      "Collapsed folds successful tool/reasoning steps and caps output previews at 20 lines; Ctrl+R toggles between that preview and expanded retained detail. Failures always show.",
     kind: "enum",
-    default: "expanded",
-    choices: ["expanded", "collapsed"],
+    default: "collapsed",
+    choices: ["collapsed", "expanded"],
     group: "Transcript",
   },
   {
@@ -644,7 +632,7 @@ const DEFS: readonly TuiSettingDef[] = [
     key: "logoAnimation",
     label: "Logo animation",
     description:
-      'Intro animation for the "ZEROSECURITY" wordmark: glitch (a neon-flecked scramble that resolves — the default), rainbow (a looping hue sweep), matrix (a green matrix-rain cascade), wave (a rippling cyan wavefront), neon (a neon-sign warm-up flicker), shimmer (a bright comet with a gradient tail), pulse (the slash breathes), strike (an orange slash strikes through the 0), draw (letters draw in behind a pen tip), fade (a centre-out bloom), typein (per-cell reveal), sweep (a bright bar wipes across) or off (static).',
+      'Intro animation for the "0.SECURITY" wordmark: glitch (a neon-flecked scramble that resolves — the default), rainbow (a looping hue sweep), matrix (a green matrix-rain cascade), wave (a rippling cyan wavefront), neon (a neon-sign warm-up flicker), shimmer (a bright comet with a gradient tail), pulse (the slash breathes), strike (an orange slash strikes through the 0), draw (letters draw in behind a pen tip), fade (a centre-out bloom), typein (per-cell reveal), sweep (a bright bar wipes across) or off (static).',
     kind: "enum",
     default: "glitch",
     choices: [
@@ -703,6 +691,15 @@ const DEFS: readonly TuiSettingDef[] = [
     group: "Updates",
   },
   {
+    key: "executionProfile",
+    label: "Execution profile",
+    description: "SmolVM runs the whole console, agents, browser and shell in the online Kali workbench. Prepare its approved image and explicit credential grants with 0 workbench setup. Applies to this computer on the next launch; failures never fall back to host execution.",
+    kind: "enum",
+    default: "local",
+    choices: ["local", "smolvm"],
+    group: "Security",
+  },
+  {
     key: "symbolPreset",
     label: "Symbols",
     description: "Glyph set for icons, status marks and checkboxes: Unicode (default, works everywhere), Nerd Font (crisp patched-font icons — requires a Nerd Font terminal) or ASCII (plain, single-cell).",
@@ -744,7 +741,6 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   showRuntimeNotices: true,
   showTurnSummary: false,
   showSubagents: true,
-  showRightSidebar: false,
   showTimestamps: false,
   showObjective: true,
   showScope: true,
@@ -752,13 +748,14 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   composerStyle: "border",
   busyInputMode: "steer",
   onboardingCompleted: false,
+  executionProfile: "local",
   allowSubagentPeerMessaging: true,
   allowSubagentOperatorMessaging: true,
   transcriptStyle: "minimal",
   roleLabelStyle: "off",
   toolCardStyle: "compact",
   richToolCards: true,
-  transcriptDetail: "expanded",
+  transcriptDetail: "collapsed",
   autoCompaction: true,
   compactionThreshold: "80%",
   theme: DEFAULT_THEME_NAME,
@@ -910,7 +907,8 @@ export function isOperatorSetting(key: keyof TuiSettings): boolean {
     || key === "diagnosticReporting"
     || key === "diagnosticReportingPrompted"
     || key === "updatePolicy"
-    || key === "allowDevSourceUpdates";
+    || key === "allowDevSourceUpdates"
+    || key === "executionProfile";
 }
 
 /**
@@ -971,18 +969,6 @@ function booleanAt(raw: unknown, key: BooleanKey): boolean {
   return typeof value === "boolean" ? value : DEFAULT_SETTINGS[key];
 }
 
-/**
- * A boolean read that falls back to a renamed-away legacy key before the
- * default, so a setting that changed names still honours a hand-edited or
- * previously-saved file written under the old name.
- */
-function booleanWithLegacy(raw: unknown, key: BooleanKey, legacyKey: string): boolean {
-  const value = rawValue(raw, key);
-  if (typeof value === "boolean") return value;
-  const legacy = rawValue(raw, legacyKey);
-  if (typeof legacy === "boolean") return legacy;
-  return DEFAULT_SETTINGS[key];
-}
 
 function enumAt<K extends EnumKey>(raw: unknown, key: K): TuiSettings[K] {
   const def = DEF_BY_KEY.get(key);
@@ -1038,8 +1024,6 @@ export function normalizeSettings(raw: unknown): TuiSettings {
     showRuntimeNotices: booleanAt(raw, "showRuntimeNotices"),
     showTurnSummary: booleanAt(raw, "showTurnSummary"),
     showSubagents: booleanAt(raw, "showSubagents"),
-    // Back-compat: a pre-rename file keeps its agent rail visibility choice.
-    showRightSidebar: booleanWithLegacy(raw, "showRightSidebar", "showAgentRail"),
     showTimestamps: booleanAt(raw, "showTimestamps"),
     showObjective: booleanAt(raw, "showObjective"),
     showScope: booleanAt(raw, "showScope"),
@@ -1047,6 +1031,7 @@ export function normalizeSettings(raw: unknown): TuiSettings {
     composerStyle: enumAt(raw, "composerStyle"),
     busyInputMode: enumAt(raw, "busyInputMode"),
     onboardingCompleted: booleanAt(raw, "onboardingCompleted"),
+    executionProfile: enumAt(raw, "executionProfile"),
     allowSubagentPeerMessaging: booleanAt(raw, "allowSubagentPeerMessaging"),
     allowSubagentOperatorMessaging: booleanAt(raw, "allowSubagentOperatorMessaging"),
     transcriptStyle: enumAt(raw, "transcriptStyle"),
@@ -1094,10 +1079,16 @@ export function loadSettings(homeDir?: string, projectDir?: string): TuiSettings
  * override). Used by `config import --global`, which merges into the global file
  * rather than the effective view. Ensures installed themes are loaded so a global
  * theme id validates rather than resetting.
+ * Workbench routing may require an explicit valid profile: a corrupt/missing
+ * selection must not silently become host-local execution.
  */
-export function loadGlobalSettings(homeDir?: string): TuiSettings {
+export function loadGlobalSettings(homeDir?: string, options: { requireExecutionProfile?: boolean } = {}): TuiSettings {
   syncThemeChoices(homeDir);
-  return normalizeSettings(readRawSettingsFile(settingsFilePath(homeDir)));
+  const raw = readRawSettingsFile(settingsFilePath(homeDir));
+  if (options.requireExecutionProfile && strictValueAt(raw, "executionProfile") === undefined) {
+    throw new Error("Configured workbench execution profile is missing or invalid. Run 0 workbench setup or 0 workbench disable to make an explicit operator choice; host fallback is refused.");
+  }
+  return normalizeSettings(raw);
 }
 
 /**

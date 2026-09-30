@@ -22,17 +22,22 @@ on the published npm package and the GitHub Release tag.
   Provider API keys and supported provider subscriptions remain available.
 - Added automatic provider model-catalog refresh and account-specific model
   discovery; saved model choices are retained instead of forcing GPT-5.5.
-- Reworked onboarding and dialogs with compact controls, live theme preview,
-  0security branding and optional Plugins/Hackstore choices.
+- Reworked onboarding and dialogs with compact controls, live theme preview and
+  0security branding. Setup is five steps; sharing preferences remain optional
+  and editable from Settings, and completion returns directly to chat.
 - Replaced the Audits sidebar and separate saved-audit browser with one
-  `/sessions` picker for open and saved conversations. Chat keeps one canvas,
-  a compact composer and optional right-side agent inspector panes.
-- Added `0dev --watch console` for safe frontend remounts at idle boundaries,
-  preserving conversation, drafts and runtime ownership.
-- Added reviewed `/fix` setup with private per-project inputs and a separately
-  approved, regression-verified draft-PR publication path.
-- Scope enforcement is an explicitly enabled plugin. Desktop remains alpha
-  and is excluded from normal release artifacts. Per-answer usage is off by default.
+  `/sessions` picker for open and saved conversations. Removed both chat sidebars;
+  compact agent task rows share the main transcript and composer.
+- Added an optional local SmolVM workbench: the complete Kali-based 0 runtime,
+  browser, Linux tools and scoped GitHub CLI run in a network-enabled Linux VM on
+  Apple Silicon, without Docker/Colima at execution. Docker can still build the
+  OCI image; it is not required to run it.
+- Added safe `0dev --watch console` frontend reloads at idle boundaries, preserving
+  conversations, drafts and runtime ownership.
+- Added reviewed `/fix` setup with private per-project inputs and separately
+  approved, regression-verified draft-PR publication.
+- Scope enforcement is an explicitly enabled plugin. Desktop remains alpha and
+  is excluded from normal release artifacts. Per-answer usage is off by default.
 
 ### Fixed
 

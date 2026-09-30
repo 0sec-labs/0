@@ -406,11 +406,21 @@ bytes. The controller resolves it to the archive's SHA-256 before recording a
 version. Stored execution and approval use that recorded identity, not a newly
 resolved replacement image.
 
-This backend is qualified for **non-root Linux, KVM, Node 24+, util-linux
-`setpriv`, and smolvm 1.14.6**. Other smolvm versions and host platforms are rejected
-until their lifecycle is qualified. Install the complete upstream runtime bundle,
-not just `smolvm-bin`, and put its launcher on `PATH`. Existing processes need
-restarting after group membership changes; do not make `/dev/kvm` world-writable.
+The standalone offline backend supports **non-root Linux with KVM, Node 24+,
+util-linux `setpriv`, and SmolVM 1.14.6**, or **non-root Apple Silicon macOS with
+Node 24+ and the pinned complete SmolVM 1.14.6 bundle**. Other runtime versions and
+platforms are rejected. Linux users install the complete upstream distribution,
+not just `smolvm-bin`, and put its launcher on `PATH`; restart after KVM group
+membership changes and do not make `/dev/kvm` world-writable.
+
+Mac setup uses `resolveSmolvmRuntime` (also used by `0 workbench setup`) to
+checksum-provision the original bundle into private operator state, verify its
+existing ad-hoc code signature/Hypervisor entitlement, and compile the Darwin
+lifecycle supervisor. Xcode Command Line Tools are required for this first setup;
+no shell profile changes, KVM or runtime Docker daemon are involved.
+The online [workbench profile](/architecture/#local-smolvm-workbench-boundary) is
+separate: its generated programs are brokered into offline sibling VMs without
+the main workbench's credential/state grants.
 
 The toolbox stays an OCI image. A `docker save` archive is one way to provision
 it; Docker is not used to execute smolvm workers:
@@ -458,7 +468,8 @@ to accommodate image import and guest startup.
 Each invocation:
 
 - copies and hashes the archive into a private run directory before boot;
-- starts an offline, UID/GID 1000 guest with `--unprivileged`;
+- starts an offline, non-root guest with `--unprivileged` (UID/GID 1000 on Linux;
+  the operator's numeric UID/GID on Mac so read-only virtiofs sources are readable);
 - mounts the sealed source read-only at `/snapshot`, then copies it to writable,
   guest-local `/tmp/0-workspace` for builds and execution;
 - sends only the case input through stdin and returns bounded stdout/stderr;
@@ -475,8 +486,9 @@ SIGINT/SIGTERM into this cancellation path.
 These controls are not identical to Docker's: the guest has its own kernel and
 a disposable writable filesystem; Docker's PID limit and `noexec` tmpfs settings
 are not claimed for smolvm. VM isolation is not a proof against hypervisor escapes.
-This is the evolution-worker backend, **not a global redirection of console/PTY,
-replay, or exploit commands into a VM**.
+Selecting only this evolution backend does **not** redirect general console/PTY,
+replay or exploit commands. Use the separately configured whole-CLI workbench
+profile for that execution boundary.
 
 ### Execution protocol
 
@@ -633,16 +645,14 @@ and detection quality require their own checks.
 
 ## Live harness component contract
 
-The live-harness implementation has core and OpenTUI consumers, including
-host-owned recovery controls. Treat it as a research-preview extension surface.
-The historical candidate measurements below cover particular executions, not
-every current frontend, desktop installation, real-provider route, or hosted
-deployment.
+The live-harness implementation has core integration and a CLI checkpoint
+boundary. Treat it as a research-preview extension surface. The historical
+candidate measurements below cover particular executions, not every current
+frontend, desktop installation, real-provider route or hosted deployment.
 
 **Sources:** [`plugins/live-harness.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/plugins/live-harness.ts),
 [`console/turn-engine.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/console/turn-engine.ts),
-[`tui/harness-context.tsx`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/harness-context.tsx),
-[`tui/harness-trust-controls.tsx`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/harness-trust-controls.tsx).
+[`tui/harness-lifecycle.tsx`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/harness-lifecycle.tsx).
 
 ### Composition and language support
 
@@ -716,13 +726,9 @@ whichever plugin version is active later. Its `run` receives
 `self_extend` refuses harness actions where the caller has not supplied a live
 harness host; the ordinary native-agent tool being present is not sufficient.
 
-In the OpenTUI, `/harness` (default shortcut **Ctrl+G**) opens the host-owned
-controls. Inspect current/pending generation details, show the conversation,
-roll back, or disable a contributed generation there. The `t` action requests
-workspace trust and requires explicit confirmation of the canonical workspace;
-leave it off for sandboxed components. It authorizes **arbitrary host ESM for
-that workspace**, not just one tool call. Revoking it does not undo external
-effects already performed.
+Workspace trust is a separate authorization. It permits **arbitrary host ESM
+for the canonical workspace**, not just one tool call; revoking it does not
+undo external effects already performed.
 
 Source: [`agent/tools/system.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/agent/tools/system.ts)
 and [`agent/tools.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/agent/tools.ts).

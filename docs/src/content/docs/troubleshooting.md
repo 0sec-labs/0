@@ -468,12 +468,7 @@ See [launch and approval limitations](/console/#launch) before substituting
 readline or `--print`: Standard without an approval callback is not fail-closed,
 and Co-pilot does not prompt for each effectful call.
 
-### `/providers` command shows no options
-
-`/providers` now opens the same connection pane as `/connect`; it is not a
-read-only credential-status listing. The pane offers connections before keys
-are configured. If a provider is disconnected, choose its supported method and
-finish sign-in or key entry, then select the model again in `/model`.
+### Saved provider credential appears missing
 
 If a saved credential appears missing, check which home directory the process
 uses and whether its `~/.0/credentials.json` is readable. An explicit

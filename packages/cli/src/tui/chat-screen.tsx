@@ -10,7 +10,6 @@ import React, {
 import { createLocalConsoleSession } from "../console-session.js";
 import { isDevUiRemount, useDevUiBoundary, useDevUiRef, useDevUiState } from "../dev-ui-reload.js";
 import type { AuditActivity } from "./audit-workspace.js";
-import { HarnessPresentation, useHarness } from "./harness-context.js";
 import { loadFindingFocus, buildFindingChatPrompt, type FindingFocus } from "../finding-focus.js";
 import { exportChatConversation } from "./chat-export.js";
 import { describeFixStatus, fixEligibility, fixInputEligibility, fixResultLines, fixPublicationLines, FIX_USAGE } from "./fix-action.js";
@@ -27,6 +26,7 @@ import {
   ScopePolicy,
   createConsoleRuntime,
   eventBus,
+  agentTaskLabel,
   type ConsoleAutonomyMode,
   type ConsoleScopeRequest,
   type ConsoleScopeResolution,
@@ -60,7 +60,7 @@ import {
   reloadSettings,
 } from "./settings-store.js";
 import { useTheme, type Theme } from "./theme-context.js";
-import { createTranscriptDocument, modelProvider } from "@0/shared";
+import { modelProvider } from "@0/shared";
 import { homedir } from "node:os";
 import { existsSync } from "node:fs";
 import {
@@ -193,7 +193,6 @@ import {
   commandMenuBoxHeight,
   commandMenuWindowStart,
   computeChatLayout,
-  computeSidebarsLayout,
   computeCommandMenuHeight,
   computeCommandMenuLayout,
   computeLedgerRows,
@@ -274,7 +273,6 @@ import {
 import type {
   ChatEntry,
   ChatImageAttachment,
-  CompactionRecap,
   EntryDisplay,
   KeyHint,
 } from "./chat/types.js";
@@ -298,19 +296,17 @@ import {
   renderEntry,
   renderFold,
 } from "./chat/TranscriptEntry.js";
-import { TranscriptReview } from "./chat/TranscriptReview.js";
-import { AgentInspectorPane } from "./chat/AgentInspectorPane.js";
+import { AgentWorkList } from "./chat/AgentChatSwitcher.js";
+import { agentWorkListHeight, agentChatSwitcherShortcut, activeAgentChatTabs, agentChatWorkItems, adjacentAgentChatTab } from "./chat/agent-chat-switcher-layout.js";
+import { replaceSubagentTurn, retainSubagentTurns } from "./chat/subagent-transcript.js";
 import { applyCommsMessage, type CommsMessage } from "./agents-comms-layout.js";
-import type { TranscriptReviewRenderable } from "./transcript-review-renderable.js";
-import { Todos, TodosSidebar } from "./chat/Todos.js";
-import { FindingsSidebar, FINDINGS_SIDEBAR_HEADER_ROWS } from "./chat/FindingsSidebar.js";
+import { DialogActionButton } from "./dialog-screen-chrome.js";
+import { Todos } from "./chat/Todos.js";
 import { ComposerFrame, ComposerInput, composerContentRows } from "./chat/Composer.js";
 import { autonomyFooterText, isAutonomyCycleKey, nextAutonomyMode } from "./composer-mode.js";
-import { KEYBINDINGS, matchesBinding } from "./keybindings.js";
-import { effectiveKeysDisplay } from "./keybindings-layout.js";
+import { matchesBinding } from "./keybindings.js";
 import { resolveContextLimit } from "./context-window.js";
 import { Cells, textCells } from "./primitives.js";
-import { buildSidebarSectionHeader } from "./chat/todos-sidebar-layout.js";
 import {
   KeyHints,
   keyHintsLength,
@@ -332,17 +328,9 @@ import { OperatorQuestionCard } from "./chat/OperatorQuestionCard.js";
 import { Masthead } from "./chat/Masthead.js";
 import { ZERO_HEIGHT } from "./chat/zero-art.js";
 import { CommandMenu } from "./chat/CommandMenu.js";
-import {
-  AGENT_SIDEBAR_ROWS,
-  AgentSidebarRow,
-  AgentTreeRow,
-  type AgentRowView,
-} from "./chat/AgentRow.js";
-import { agentAccentFor } from "./agent-color.js";
-import { summarizeAgentActivity, summarizeRoster } from "./agents-panel-model.js";
 import { appendTuiCrash, appendTuiEvent, serializeError, logProblem, describeErrorForSurface, tuiLogPath } from "./tui-crash.js";
 
-export type ChatDestination = "launcher" | "ops" | "history" | "findings" | "doctor" | "replay" | "settings" | "keybindings" | "harness" | "new-chat" | "models" | "market" | "usage" | "connect" | "herd" | "comms" | "finding" | "sessions" | "onboard";
+export type ChatDestination = "launcher" | "ops" | "history" | "findings" | "doctor" | "replay" | "settings" | "keybindings" | "new-chat" | "models" | "market" | "usage" | "connect" | "comms" | "finding" | "sessions" | "onboard";
 
 function waitingForAgentsLabel(count: number): string {
   const liveCount = Math.max(0, Math.trunc(count));
@@ -904,24 +892,22 @@ export function runFindingsFromEntries(entries: readonly ChatEntry[]): RunFindin
   return out;
 }
 
-/**
- * Most subagent rows the ACTIVE SUBAGENTS block will paint.
- *
- * `spawn_agents` fans out up to 8 agents with 4 concurrent, so 4 covers the
- * steady-state fan-out and the 5th-and-beyond are reported as a count. The
- * block sits between the transcript and the composer; letting it grow to
- * eight rows would eat the transcript on any normal terminal, and the block
- * is not where an operator reads detail — `/agents` is.
- */
-const SUBAGENT_MAX_VISIBLE = 4;
+const REPOSITORY_STARTERS = [
+  {
+    label: "Deep vulnerability review",
+    prompt: "Deeply review this Git repository for exploitable security vulnerabilities. Map entry points and trust boundaries, verify findings against code or tests, and return evidence, severity, impact, and safe remediation. Read-only: do not modify files, install packages, or access the network.",
+  },
+  {
+    label: "Auth & secrets",
+    prompt: "Review authentication, authorization, tenant boundaries, and secret handling in this Git repository. Trace the relevant flows and report only evidence-backed weaknesses. Read-only: do not modify files or access the network.",
+  },
+  {
+    label: "Dependency risk",
+    prompt: "Review dependency manifests and lockfiles in this Git repository for security risk. Do not install, update, or access the network; distinguish local evidence from anything requiring a live advisory check.",
+  },
+] as const;
+const COMPACT_REPOSITORY_STARTERS = REPOSITORY_STARTERS.slice(0, 2);
 
-/**
- * Below this content width the inline AGENTS panel auto-collapses to its
- * one-line summary: a per-agent row needs room for a name, a status glyph and a
- * live-activity tail, and under ~44 cells those fuse into noise. The operator
- * can still drill in (Down) to browse the roster one selection at a time.
- */
-const SUBAGENT_PANEL_MIN_WIDTH = 44;
 
 /** Window after a first Ctrl+C in which a second Ctrl+C confirms the quit. */
 const EXIT_CONFIRM_MS = 3000;
@@ -950,7 +936,6 @@ function compactionIndicatorText(tokensBefore: number, tokensAfter?: number): st
   return `⊟ compacted · ${tokensBefore}→${tokensAfter ?? "?"} · [⌃O]`;
 }
 
-const RIGHT_SIDEBAR_BINDING = KEYBINDINGS.find((binding) => binding.id === "view.right-sidebar")!;
 
 export function ChatScreen({
   options,
@@ -976,7 +961,6 @@ export function ChatScreen({
   runtimeInfoHandle,
 }: ChatScreenProps) {
   const devUi = useDevUiBoundary(`chat:${messagingHomeDir}`);
-  const harness = useHarness();
   const connectionFailureRef = useDevUiRef(devUi, "connectionFailureRef", onConnectionFailure);
   connectionFailureRef.current = onConnectionFailure;
   const [entries, setEntries] = useDevUiState<ChatEntry[]>(devUi, "entries", []);
@@ -1160,21 +1144,14 @@ export function ChatScreen({
    * detail toggle, which flips every turn at once via the settings store.
    */
   const [expandedTurnsByAgent, setExpandedTurnsByAgent] = useDevUiState<ReadonlyMap<string | null, ReadonlySet<number>>>(devUi, "expandedTurnsByAgent", () => new Map());
-  const [reviewOpen, setReviewOpen] = useDevUiState(devUi, "reviewOpen", false);
-  const reviewRenderableRef = useRef<TranscriptReviewRenderable | null>(null);
-  const reviewEventOpenRef = useDevUiRef(devUi, "reviewEventOpenRef", false);
-  // ── Context-compaction recaps ───────────────────────────────────────────────
-  // Every compaction the core loop performs this session, keyed by its 1-based
-  // `compactionNumber`. Bounded by the (small) compaction count, so the whole
-  // set is kept for the session — the Ctrl+O overlay reads the most recent one.
-  const compactionRecapsRef = useDevUiRef<Map<number, CompactionRecap>>(devUi, "compactionRecapsRef", new Map());
-  // The most recent compaction number, in state so the indicator + overlay
-  // recap re-render when a compaction happens. `undefined` until the first one.
+  // ── Context-compaction status ────────────────────────────────────────────────
+  // Report each compaction once to the live worker telemetry.
   const [latestCompaction, setLatestCompaction] = useDevUiState<number | undefined>(devUi, "latestCompaction", undefined);
-  // A compaction whose `tokensAfter` is still unknown: the NEXT planner usage
-  // sample is the post-compaction size, so we patch it into the recap + the
-  // inline indicator when that sample arrives, then clear this.
-  const pendingTokensAfterRef = useDevUiRef<number | undefined>(devUi, "pendingTokensAfterRef", undefined);
+  // The next planner sample replaces the estimated post-compaction size in the
+  // inline notice with measured context occupancy.
+  const pendingCompactionRef = useDevUiRef<{ compactionNumber: number; tokensBefore: number } | undefined>(
+    devUi, "pendingCompactionRef", undefined,
+  );
   useEffect(() => {
     const emitter = presentationEmitterRef.current!;
     if (!session) return;
@@ -1207,13 +1184,6 @@ export function ChatScreen({
     }
     presentedEntriesRef.current = next;
   }, [entries, session?.scanId]);
-  useEffect(() => {
-    const emitter = presentationEmitterRef.current!;
-    const sessionId = session?.scanId;
-    if (!sessionId || reviewOpen === reviewEventOpenRef.current) return;
-    reviewEventOpenRef.current = reviewOpen;
-    emitter.emit(reviewOpen ? "review.opened" : "review.closed", {}, { sessionId });
-  }, [reviewOpen, session?.scanId]);
   /** The turn currently under the mouse, for the subtle hover highlight. */
   const [hoveredTurn, setHoveredTurn] = useDevUiState<number | null>(devUi, "hoveredTurn", null);
   // The output-guard subscription is registered once; a ref lets it read
@@ -1321,6 +1291,7 @@ export function ChatScreen({
   // child reads exactly like the main agent. Bounded per agent (the tail is what
   // fits on screen anyway).
   const [subagentTranscripts, setSubagentTranscripts] = useDevUiState<Record<string, ChatEntry[]>>(devUi, "subagentTranscripts", {});
+  const finalizedWorkerTurns = useDevUiRef<Map<string, Set<number>>>(devUi, "finalizedWorkerTurns", new Map());
   const [workerTelemetry, setWorkerTelemetry] = useDevUiState<Record<string, SubagentMessagePayload>>(devUi, "workerTelemetry", {});
   const [commsMessages, setCommsMessages] = useDevUiState<CommsMessage[]>(devUi, "commsMessages", []);
   const commsSequenceRef = useDevUiRef(devUi, "commsSequenceRef", 0);
@@ -1438,27 +1409,12 @@ export function ChatScreen({
         || (!busy && runningWorkers === 0 && parkedWorkers > 0),
     });
   }, [busy, entries, workerRoster, operatorStopped, pendingScope, pendingLocalScope, pendingEscalation, pendingToolApproval, pendingOperatorQuestion, onAuditActivity]);
-  /**
-   * Active-subagent navigation from the composer. -1 means the composer has
-   * focus; >= 0 selects a row in the ACTIVE SUBAGENTS block. Entered with Down
-   * on an empty composer (only when agents are running), left with Left/Esc.
-   */
-  const [agentNavIndex, setAgentNavIndex] = useDevUiState(devUi, "agentNavIndex", -1);
-  /**
-   * Collapse toggle for the inline AGENTS panel. The panel is EXPANDED by
-   * default (running agents are visible without arrowing in); the operator can
-   * collapse it to a single summary line via its corner control (mouse) or the
-   * existing keyboard path. Session-scoped state — the choice is remembered for
-   * the life of the screen but is not persisted to disk.
-   */
-  const [agentsPanelCollapsed, setAgentsPanelCollapsed] = useDevUiState(devUi, "agentsPanelCollapsed", false);
-  /** Messaging focus is entered only through an explicit operator action. */
+  /** Main and workers share one chat surface; each thread keeps its own draft. */
   const [focusAgentId, setFocusAgentId] = useDevUiState<string | null>(devUi, "focusAgentId", null);
-  const [inspectedAgentId, setInspectedAgentId] = useDevUiState<string | null>(devUi, "inspectedAgentId", null);
-  const [openAgentIds, setOpenAgentIds] = useDevUiState<string[]>(devUi, "openAgentIds", []);
-  const [inspectorFocused, setInspectorFocused] = useDevUiState(devUi, "inspectorFocused", false);
-  const [narrowSidebar, setNarrowSidebar] = useDevUiState<"right" | null>(devUi, "narrowSidebar", null);
+  const focusAgentRef = useDevUiRef<string | null>(devUi, "focusAgentRef", focusAgentId);
+  focusAgentRef.current = focusAgentId;
   const workerDraftRef = useDevUiRef<{ text: string; cursor: number; composing: boolean } | null>(devUi, "workerDraftRef", null);
+  const workerDraftsRef = useDevUiRef<Map<string, { text: string; cursor: number; composing: boolean }>>(devUi, "workerDraftsRef", new Map());
   const expandedTurns = expandedTurnsByAgent.get(focusAgentId) ?? EMPTY_EXPANDED_TURNS;
   const toggleTurnExpanded = useCallback((turn: number) => {
     setExpandedTurnsByAgent((previous) => {
@@ -1476,12 +1432,6 @@ export function ChatScreen({
     ...(focusTask ? [{ id: `${focusAgentId}-task`, kind: "user" as const, text: focusTask, turn: 0 }] : []),
     ...(focusEntries ?? []),
   ], [focusAgentId, focusTask, focusEntries]);
-  const transcriptDocument = useMemo(
-    () => createTranscriptDocument(focusAgentId ? focusedTranscript : entries),
-    [focusAgentId, focusedTranscript, entries],
-  );
-  /** How far the inline focus transcript is scrolled back from its tail. */
-  const [focusScrollOffset, setFocusScrollOffset] = useDevUiState(devUi, "focusScrollOffset", 0);
   const { width, height } = useTerminalDimensions();
   const alive = useDevUiRef(devUi, "alive", true);
   const closingRef = useDevUiRef(devUi, "closingRef", false);
@@ -1533,16 +1483,8 @@ export function ChatScreen({
   // Pane geometry reserves the central composer and independent full-height rails.
   const layout = computeChatLayout({ width, height, statusTextLength: 0 });
   const compact = layout.compact;
-  const sidebars = computeSidebarsLayout({
-    width,
-    height,
-    contentWidth: width,
-    compact,
-    showRight: settings.showRightSidebar,
-    inspectorOpen: Boolean(inspectedAgentId),
-  });
-  const narrowSidebarView = narrowSidebar === "right" && !sidebars.rightVisible ? "right" : null;
-  const contentWidth = Math.max(1, sidebars.transcriptWidth);
+  const contentWidth = Math.max(1, width - (compact ? 2 : 4));
+  const bodyHeight = Math.max(0, height - 3);
   const approvalWidth = Math.max(1, contentWidth - 2);
   const controlsWidth = contentWidth;
   const composerRef = useDevUiRef(devUi, "composerRef", "");
@@ -1575,7 +1517,6 @@ export function ChatScreen({
   const transcriptRef = useRef<ScrollBoxRenderable | null>(null);
   // The drilled-in subagent's transcript scrollbox (auto-follows newest, like
   // the main one); pageup/pagedown scroll it while focused.
-  const focusTranscriptRef = useRef<ScrollBoxRenderable | null>(null);
   /** The `ask_operator` modal body scrollbox, scrolled to keep the active row visible. */
   const operatorScrollRef = useRef<ScrollBoxRenderable | null>(null);
   const commandCatalog: readonly SlashCommand[] = SLASH_COMMANDS;
@@ -1630,63 +1571,27 @@ export function ChatScreen({
     // live draft. A recall re-sets the cursor immediately after calling this.
     historyIndexRef.current = historyRef.current.length;
   }, [setCommandMenuVisible]);
-
-  const returnToConversation = useCallback(() => {
-    setInspectorFocused(false);
-    setNarrowSidebar(null);
-    setFocusAgentId(null);
-    setAgentNavIndex(-1);
-    const draft = workerDraftRef.current;
-    if (draft) {
-      workerDraftRef.current = null;
-      setComposerText(draft.text, draft.cursor);
-      composingRef.current = draft.composing;
-      setComposing(draft.composing);
-    }
-  }, [setComposerText]);
-  const openAgentInspector = useCallback((id: string) => {
-    if (!herdAgentsRef.current[id]) return;
-    returnToConversation();
-    setInspectedAgentId(id);
-    setOpenAgentIds((previous) => previous.includes(id) ? previous : [...previous, id]);
-    setInspectorFocused(true);
-    updateSetting("showRightSidebar", true);
-  }, [returnToConversation, updateSetting]);
-  const closeAgentInspector = useCallback((id: string) => {
-    const remaining = openAgentIds.filter((openId) => openId !== id);
-    setOpenAgentIds(remaining);
-    if (inspectedAgentId === id) setInspectedAgentId(remaining.at(-1) ?? null);
-    if (remaining.length === 0) {
-      setInspectorFocused(false);
-      setNarrowSidebar(null);
-    }
-  }, [openAgentIds, inspectedAgentId]);
-  const messageInspectedAgent = useCallback(() => {
-    if (!interactive || !inspectedAgentId || !herdAgentsRef.current[inspectedAgentId]
-      || pendingScope || pendingLocalScope || pendingEscalation || pendingToolApproval
-      || pendingOperatorQuestion || secretPrompt || picker || closingRef.current) return;
-    if (!workerDraftRef.current) {
-      workerDraftRef.current = {
-        text: composerRef.current,
-        cursor: composerCursorRef.current,
-        composing: composingRef.current,
-      };
-    }
-    setComposerText("");
+  const draftRepositorySuggestion = useCallback((prompt: string) => {
+    setComposerText(prompt);
     composingRef.current = true;
     setComposing(true);
-    setFocusAgentId(inspectedAgentId);
-    setInspectorFocused(false);
-    setNarrowSidebar(null);
-  }, [interactive, inspectedAgentId, setComposerText, pendingScope, pendingLocalScope, pendingEscalation,
-    pendingToolApproval, pendingOperatorQuestion, secretPrompt, picker]);
-  const toggleSidebar = useCallback(() => {
-    const closing = sidebars.rightVisible || narrowSidebar === "right";
-    updateSetting("showRightSidebar", !closing);
-    setNarrowSidebar(closing ? null : "right");
-    setInspectorFocused(!closing && Boolean(inspectedAgentId));
-    if (!closing && !inspectedAgentId) setAgentNavIndex(workerRoster.length ? 0 : -1);
-  }, [sidebars.rightVisible, narrowSidebar, inspectedAgentId, workerRoster.length, updateSetting]);
+  }, [setComposerText]);
+
+  const selectAgentChat = useCallback((id: string | null) => {
+    const previousId = focusAgentRef.current;
+    if (id === previousId || (id && !herdAgentsRef.current[id])) return;
+    const draft = { text: composerRef.current, cursor: composerCursorRef.current, composing: composingRef.current };
+    if (previousId) workerDraftsRef.current.set(previousId, draft);
+    else if (id) workerDraftRef.current = draft;
+    const restored = id ? workerDraftsRef.current.get(id) : workerDraftRef.current;
+    if (!id) workerDraftRef.current = null;
+    focusAgentRef.current = id;
+    setFocusAgentId(id);
+    setComposerText(restored?.text ?? "", restored?.cursor ?? 0);
+    composingRef.current = restored?.composing ?? false;
+    setComposing(composingRef.current);
+  }, [setComposerText]);
+  const returnToConversation = useCallback(() => selectAgentChat(null), [selectAgentChat]);
 
   const moveComposerCursor = (direction: -1 | 1) => {
     const next = stepComposerCursor(composerRef.current, composerCursorRef.current, direction);
@@ -2390,6 +2295,7 @@ export function ChatScreen({
     };
   }, [interactive]);
 
+
   // Subscribe to subagent lifecycle + progress events from the core event bus.
   // Filter by this session's scanId. `activeSubagents` drives the compact
   // ACTIVE SUBAGENTS block (terminal states removed); `herdAgents` is the
@@ -2446,12 +2352,15 @@ export function ChatScreen({
               const existing = prev[event.agent_id] ?? [];
               if (existing.some((entry) => entry.kind === "assistant" && entry.text.includes(answer))) return prev;
               const result: ChatEntry = { id: `${event.agent_id}-result-${event.turns ?? 0}`, kind: event.error ? "error" : "assistant", text: answer, turn: event.turns ?? 0, at: Date.now() };
-              return { ...prev, [event.agent_id]: [...existing, result].slice(-SUBAGENT_TRANSCRIPT_MAX) };
+              return { ...prev, [event.agent_id]: retainSubagentTurns([...existing, result], SUBAGENT_TRANSCRIPT_MAX) };
             });
           }
           if (event.name) agentNamesRef.current.set(event.agent_id, event.name);
           setActiveSubagents((prev) => reduceActiveSubagents(prev, event));
           setHerdAgents(applySubagentLifecycle(herdAgentsRef.current, eventData, Date.now()));
+          if (focusAgentRef.current === event.agent_id &&
+            (previousStatus === "running" || previousStatus === "queued") &&
+            event.status !== "running" && event.status !== "queued") returnToConversation();
         } else if (type === "peer_message") {
           // An inter-agent message crossed the hub — render it as an IRC line in
           // the transcript. Resolve both endpoints to the roster's display names
@@ -2476,11 +2385,22 @@ export function ChatScreen({
           setHerdAgents(applySubagentProgress(herdAgentsRef.current, eventData, Date.now()));
         } else if (type === "subagent_message") {
           const p = payload as unknown as SubagentMessagePayload;
+          const finalized = finalizedWorkerTurns.current.get(p.agent_id);
+          if (p.partial && finalized?.has(p.turn)) return;
+          if (!p.partial) {
+            const settled = finalized ?? new Set<number>();
+            settled.add(p.turn);
+            finalizedWorkerTurns.current.set(p.agent_id, settled);
+          }
           setWorkerTelemetry((prev) => ({ ...prev, [p.agent_id]: p }));
           // Use the main conversation's argument formatting and rich cards,
           // retaining the complete bounded public result rather than reducing
           // tools without rich metadata to a one-line summary.
           const fresh: ChatEntry[] = [];
+          if (p.reasoning_summary) {
+            fresh.push({ id: `${p.agent_id}-t${p.turn}-r`, kind: "reasoning",
+              text: p.reasoning_summary, turn: p.turn, at: p.ts });
+          }
           if (p.assistant) {
             fresh.push({
               id: `${p.agent_id}-t${p.turn}-a`,
@@ -2490,10 +2410,10 @@ export function ChatScreen({
               at: p.ts,
             });
           }
-          (p.tools ?? []).forEach((t, i) => {
+          (p.tools ?? []).forEach((t) => {
             if (!t.running && !t.result.success) recordProblem("tool", t.result.error, t.call.name);
             fresh.push({
-              id: `${p.agent_id}-t${p.turn}-x${i}`,
+              id: `${p.agent_id}-t${p.turn}-x${t.callIndex}`,
               kind: "tool",
               text: t.call.name,
               detail: t.running ? undefined : formatToolResult(t.call, t.result),
@@ -2505,15 +2425,10 @@ export function ChatScreen({
               at: p.ts,
             });
           });
-          if (fresh.length > 0) {
-            setSubagentTranscripts((prev) => {
-              const existing = prev[p.agent_id] ?? [];
-              return {
-                ...prev,
-                [p.agent_id]: [...existing.filter((entry) => !fresh.some((next) => next.id === entry.id)), ...fresh].slice(-SUBAGENT_TRANSCRIPT_MAX),
-              };
-            });
-          }
+          setSubagentTranscripts((prev) => ({
+            ...prev,
+            [p.agent_id]: replaceSubagentTurn(prev[p.agent_id] ?? [], fresh, p.agent_id, p.turn, SUBAGENT_TRANSCRIPT_MAX),
+          }));
         } else if (type === "todos") {
           // A worker's plan must not replace this audit's root plan.
           if (producerScanId === scanId) setTodos(payload as unknown as TodosEventPayload);
@@ -2526,7 +2441,7 @@ export function ChatScreen({
       },
     });
     return unsub;
-  }, [session, setHerdAgents, recordProblem]);
+  }, [session, setHerdAgents, recordProblem, returnToConversation]);
 
 
   // A focused agent that leaves the live map (never observed, or the session
@@ -2534,17 +2449,9 @@ export function ChatScreen({
   useEffect(() => {
     if (focusAgentId && !herdAgents[focusAgentId]) {
       returnToConversation();
-      setFocusScrollOffset(0);
     }
   }, [focusAgentId, herdAgents, returnToConversation]);
 
-  // List navigation ends the moment there is nothing left to navigate — an
-  // empty selection is never shown.
-  useEffect(() => {
-    if (agentNavIndex < 0) return;
-    const count = settings.showSubagents ? workerRoster.length : 0;
-    if (count === 0) setAgentNavIndex(-1);
-  }, [agentNavIndex, workerRoster, settings.showSubagents]);
 
   // Capture / preview seed ONLY. Guarded by an env var and never populated in a
   // normal session: it plants a deterministic set of sample agents so the right
@@ -2560,6 +2467,7 @@ export function ChatScreen({
         parentScanId: "demo",
         task: "recon web tier",
         status: "running",
+        startedAt: now - 300_000,
         maxTurns: 8,
         turn: 3,
         findings: 1,
@@ -2579,6 +2487,7 @@ export function ChatScreen({
         parentScanId: "demo",
         task: "auth & session fuzzing",
         status: "running",
+        startedAt: now - 420_000,
         maxTurns: 8,
         turn: 2,
         findings: 0,
@@ -3336,13 +3245,6 @@ export function ChatScreen({
         onNavigate("sessions");
         return true;
       }
-      case "providers":
-        // Provider credentials, especially ChatGPT Codex device OAuth, belong
-        // to the chat-owned OpenTUI connection pane. Keeping a second inline
-        // key picker here created a divergent flow and could treat OAuth as a
-        // generic API-key field.
-        onNavigate("connect");
-        return true;
       case "feedback": {
         const feedbackCommand = parseFeedbackCommand(args);
         if (feedbackCommand.kind === "usage") {
@@ -3490,7 +3392,7 @@ export function ChatScreen({
             appendEntry({
               kind: result.ok ? "notice" : "error",
               text: result.ok
-                ? result.method === "osc52" ? "Conversation sent to terminal clipboard; clipboard contents are not verified." : "Conversation copied."
+                ? result.method === "osc52" ? "Conversation sent to terminal clipboard." : "Conversation copied."
                 : "Clipboard unavailable; conversation JSON was saved.",
               detail: `Private JSON: ${exported.path}`,
               turn: turn.current,
@@ -3587,9 +3489,6 @@ export function ChatScreen({
         void submitRef.current?.(prompt);
         return true;
       }
-      case "harness":
-        onNavigate("harness");
-        return true;
       case "settings":
         // The full screen, not the composer picker: settings want grouping,
         // real descriptions and reset affordances, none of which fit in a
@@ -3604,41 +3503,6 @@ export function ChatScreen({
       case "onboard":
         onNavigate(parsed.command);
         return true;
-      case "stop": {
-        if (args === "audit") {
-          void stopAudit().catch((error: unknown) => {
-            appendEntry({ kind: "error", text: "Audit stop failed", detail: error instanceof Error ? error.message : String(error), turn: turn.current });
-          });
-          return true;
-        }
-        if (args !== "worker" && !args.startsWith("worker ")) {
-          appendEntry({ kind: "notice", text: "Use /stop audit or /stop worker <exact name or id>.", turn: turn.current });
-          return true;
-        }
-        const requested = args.startsWith("worker ") ? args.slice(7).trim() : "";
-        const id = requested || focusAgentId || inspectedAgentId;
-        const matches = id
-          ? Object.values(herdAgentsRef.current).filter((record) => record.agentId === id || record.name === id)
-          : [];
-        if (matches.length !== 1 || !sessionRef.current) {
-          appendEntry({ kind: "notice", text: "Use /stop audit or /stop worker <exact name or id>.", detail: matches.length > 1 ? "That name is ambiguous; use the worker id from its details." : "No unique owned worker selected.", turn: turn.current });
-          return true;
-        }
-        const worker = matches[0]!;
-        const captured = captureStopScope(worker.agentId);
-        const ownedSession = sessionRef.current;
-        void ownedSession.stopPersistentAgent(worker.agentId).then((stopped) => {
-          if (stopped) {
-            confirmStopped(captured);
-            showToast(`Stopped ${worker.name || "worker"} and its descendants.`);
-          } else {
-            showToast("That worker is no longer live; no stop was confirmed.");
-          }
-        }).catch((error: unknown) => {
-          appendEntry({ kind: "error", text: "Worker stop failed", detail: error instanceof Error ? error.message : String(error), turn: turn.current });
-        });
-        return true;
-      }
       case "theme": {
         const current = settingsRef.current.theme;
         const arg = args.trim().toLowerCase();
@@ -3700,12 +3564,6 @@ export function ChatScreen({
         });
         return true;
       }
-      case "agents": {
-        returnToConversation();
-        setAgentNavIndex(workerRoster.length ? 0 : -1);
-        if (!workerRoster.length) appendEntry({ kind: "notice", text: "No workers yet. Delegated tasks will appear here.", turn: turn.current });
-        return true;
-      }
       case "chat":
         appendEntry({
           kind: "notice",
@@ -3716,15 +3574,6 @@ export function ChatScreen({
         return true;
       case "launcher":
         onNavigate("launcher");
-        return true;
-      case "herd":
-        onNavigate("herd");
-        return true;
-      case "comms":
-        // run.tsx routes the "comms" destination to the Agents Comms view (the
-        // live fleet + inter-agent message stream); chat just needs the nav
-        // entry (mirrors "/herd"/"/ops").
-        onNavigate("comms");
         return true;
       case "ops":
         onNavigate("ops");
@@ -3745,26 +3594,14 @@ export function ChatScreen({
         // Likewise for "/connect": run.tsx already routes the destination.
         onNavigate("connect");
         return true;
-      case "transcript":
-        setReviewOpen(true);
-        return true;
       case "history":
         onNavigate("history");
         return true;
       case "findings":
         onNavigate("findings");
         return true;
-      case "finding":
-        // `/finding [id]` opens the full-screen detail view. run.tsx routes the
-        // "finding" destination via its cast-guard + ShellNav.openFindingDetail;
-        // an id (when the operator typed one) is resolved from the store there.
-        onNavigate("finding", args || undefined);
-        return true;
       case "doctor":
         onNavigate("doctor");
-        return true;
-      case "replay":
-        onNavigate("replay");
         return true;
       case "back":
         onGoBack();
@@ -3791,7 +3628,6 @@ export function ChatScreen({
     captureStopScope,
     confirmStopped,
     focusAgentId,
-    inspectedAgentId,
     returnToConversation,
     stopAudit,
     commandCatalog,
@@ -3972,40 +3808,25 @@ export function ChatScreen({
           if (usage.kind === "planner") {
             const planned = Number.isFinite(usage.inputTokens) && usage.inputTokens > 0 ? usage.inputTokens : undefined;
             setLastContext(planned);
-            // Replace the pending count with measured occupancy once the model
-            // actually receives the rewrite. Patch both the recap and inline
-            // indicator so the operator sees the real before→after.
-            const pending = pendingTokensAfterRef.current;
-            if (pending !== undefined && planned !== undefined) {
-              pendingTokensAfterRef.current = undefined;
-              const recap = compactionRecapsRef.current.get(pending);
-              if (recap) recap.tokensAfter = planned;
-              const before = recap?.tokensBefore ?? planned;
+            // Replace the estimated post-compaction count with measured
+            // occupancy in the inline notice.
+            const pending = pendingCompactionRef.current;
+            if (pending && planned !== undefined) {
+              pendingCompactionRef.current = undefined;
               setEntries((current) => current.map((entry) =>
-                entry.compactionNumber === pending && entry.kind === "notice"
-                  ? { ...entry, text: compactionIndicatorText(before, planned) }
+                entry.compactionNumber === pending.compactionNumber && entry.kind === "notice"
+                  ? { ...entry, text: compactionIndicatorText(pending.tokensBefore, planned) }
                   : entry));
             }
           }
         },
         onCompaction: (event) => {
-          // Retain the recap for the Ctrl+O overlay (bounded by compaction
-          // count). `tokensAfter` is unknown at emit time — the next planner
-          // sample patches it in (see onUsage above).
-          compactionRecapsRef.current.set(event.compactionNumber, {
-            tokensBefore: event.tokensBefore,
-            // Core's immediate count is a local estimate. Wait for measured
-            // planner usage before presenting an exact post-compaction count.
-            tokensAfter: undefined,
-            summaryText: event.summaryText,
-            preCompactionMessages: event.preCompactionMessages,
-            degraded: event.degraded,
-          });
           setLatestCompaction(event.compactionNumber);
-          // A degraded compaction kept its history but produced no usable
-          // summary and no meaningful post size, so its indicator is a muted
-          // "summary unavailable" with no token counts to back-fill.
-          if (!event.degraded) pendingTokensAfterRef.current = event.compactionNumber;
+          // A degraded compaction has no usable post size to back-fill.
+          pendingCompactionRef.current = event.degraded ? undefined : {
+            compactionNumber: event.compactionNumber,
+            tokensBefore: event.tokensBefore,
+          };
           appendEntry({
             kind: "notice",
             text: event.degraded
@@ -4399,7 +4220,7 @@ export function ChatScreen({
       setOperatorState((state) => state ? operatorAppend(state, text) : state);
       return;
     }
-    if (approvalPrompt || picker || reviewOpen || inspectorFocused || narrowSidebarView) return;
+    if (approvalPrompt || picker) return;
     composingRef.current = true;
     setComposing(true);
     // OMP-style collapse: an image path or a long text paste becomes a compact
@@ -4591,122 +4412,19 @@ export function ChatScreen({
     // operator's persisted overrides rather than a hard-coded `key.name` literal,
     // so `/keybindings` remaps actually take effect. `matchesBinding` falls back
     // to the registry default when there is no override. The protected set
-    // (arrows, Enter, Esc, Ctrl+C, the modal scroll verbs, the review extremes
-    // and Right→accept-suggestion) keeps its literal guards on purpose.
+    // Composer navigation and protected exit/scroll keys keep literal guards.
     const keybindingOverrides = settingsRef.current.keybindings;
-    if (reviewOpen) {
-      // review-toggle is rebindable, so its close chord is resolved too (Esc
-      // always closes as well). The overlay's own scroll verbs stay literal —
-      // they are the protected modal Page/Ctrl+Home/End set.
-      if (key.name === "escape" || matchesBinding(key, "overlay.review-toggle", keybindingOverrides)) {
-        setReviewOpen(false);
-        return;
-      }
-
-      const review = reviewRenderableRef.current;
-      if (!review) return;
-      const pageRows = Math.max(1, Math.floor(review.height / 2));
-      if (key.name === "pageup" || (key.ctrl && key.name === "up")) {
-        review.scrollY -= pageRows;
-        return;
-      }
-      if (key.name === "pagedown" || (key.ctrl && key.name === "down")) {
-        review.scrollY += pageRows;
-        return;
-      }
-      if (key.ctrl && key.name === "home") {
-        review.scrollY = 0;
-        return;
-      }
-      if (key.ctrl && key.name === "end") {
-        review.scrollY = review.maxScrollY;
-      }
-      return;
-    }
-    if (matchesBinding(key, "view.right-sidebar", keybindingOverrides)) {
-      toggleSidebar();
-      return;
-    }
-    if (inspectorFocused && inspectedAgentId) return;
-    if (narrowSidebarView === "right" && agentNavIndex < 0) {
-      if (key.name === "escape") returnToConversation();
+    const chatShortcut = settings.showSubagents ? agentChatSwitcherShortcut(key) : null;
+    if (chatShortcut) {
+      key.preventDefault();
+      key.stopPropagation();
+      if (chatShortcut === "main") selectAgentChat(null);
+      else selectAgentChat(adjacentAgentChatTab(activeAgentChatTabs(projectedHerdRef.current),
+        focusAgentRef.current, chatShortcut === "previous" ? -1 : 1));
       return;
     }
     if (focusAgentId && key.name === "escape") {
       returnToConversation();
-      return;
-    }
-    if (matchesBinding(key, "overlay.review-toggle", keybindingOverrides)) {
-      setReviewOpen(true);
-      return;
-    }
-    // Explicit worker messaging retains its transcript and scroll controls.
-    // Escape restores Main's saved draft; merely inspecting never enters here.
-    if (focusAgentId && (!composingRef.current || (
-      !commandMenuOpenRef.current && composerRef.current.trimStart().startsWith("/")
-    ))) {
-      if (key.name === "escape" || key.name === "left") {
-        returnToConversation();
-        setFocusScrollOffset(0);
-        return;
-      }
-      if (key.name === "up") {
-        if (focusTranscriptRef.current) focusTranscriptRef.current.scrollBy(-1);
-        else setFocusScrollOffset((offset) => offset + 1);
-        return;
-      }
-      if (key.name === "down") {
-        if (focusTranscriptRef.current) focusTranscriptRef.current.scrollBy(1);
-        else setFocusScrollOffset((offset) => Math.max(0, offset - 1));
-        return;
-      }
-      if (key.name === "pageup") {
-        // Real transcript → scroll its scrollbox (like the main transcript);
-        // activity-ring fallback → step the windowed offset.
-        if (focusTranscriptRef.current) focusTranscriptRef.current.scrollBy(-0.5, "viewport");
-        else setFocusScrollOffset((offset) => offset + 5);
-        return;
-      }
-      if (key.name === "pagedown") {
-        if (focusTranscriptRef.current) focusTranscriptRef.current.scrollBy(0.5, "viewport");
-        else setFocusScrollOffset((offset) => Math.max(0, offset - 5));
-        return;
-      }
-      // No blanket return: a printable key drops through to the compose
-      // transition so typing to the subagent Just Works.
-    }
-    // ── Active-subagent list navigation (modal) ────────────────────────────────
-    // Selection has moved out of the composer and INTO the ACTIVE SUBAGENTS
-    // block. Up/Down move (wrapping) within the visible rows; Enter drills into
-    // the highlighted agent; Left or Esc returns focus to the composer. The list
-    // is the block's own visible subset, so the highlight is always on screen.
-    if (agentNavIndex >= 0) {
-      const navList = settings.showSubagents ? workerRoster : [];
-      if (navList.length === 0) {
-        setAgentNavIndex(-1);
-        return;
-      }
-      if (key.name === "escape" || key.name === "left") {
-        if (narrowSidebarView === "right") returnToConversation();
-        else setAgentNavIndex(-1);
-        return;
-      }
-      if (key.name === "up") {
-        setAgentNavIndex((index) => moveAgentSelection(navList.length, index, -1));
-        return;
-      }
-      if (key.name === "down") {
-        setAgentNavIndex((index) => moveAgentSelection(navList.length, index, 1));
-        return;
-      }
-      if (key.name === "return") {
-        const selected = clampAgentSelection(navList.length, agentNavIndex);
-        const agent = selected >= 0 ? navList[selected] : undefined;
-        if (agent) {
-          openAgentInspector(agent.agent_id);
-        }
-        return;
-      }
       return;
     }
     // Transcript scrolling lives on PageUp/PageDown (and Ctrl+Up/Ctrl+Down
@@ -4716,9 +4434,8 @@ export function ChatScreen({
     // keeps the newest evidence in view the rest of the time.
     // Main-transcript scrolling is rebindable (nav.scroll-up / nav.scroll-down).
     // The default answers PageUp/Ctrl+Up and PageDown/Ctrl+Down; an override
-    // replaces those with the operator's chord. The MODAL scroll handlers inside
-    // the review overlay and the focus view above keep their literal Page/Ctrl
-    // guards — those scroll a different surface and are protected.
+    // replaces those with the operator's chord. The focused worker view keeps
+    // literal guards because it scrolls a different surface.
     if (matchesBinding(key, "nav.scroll-up", keybindingOverrides)) {
       transcriptRef.current?.scrollBy(-0.5, "viewport");
       return;
@@ -4747,16 +4464,10 @@ export function ChatScreen({
       );
       return;
     }
-    // nav.jump-agents (Ctrl+G) drops straight into the active-subagents list —
-    // the same affordance Down offers on an empty composer, reachable directly
-    // and while composing. Only acts when there are workers to jump to;
-    // otherwise it falls through so the chord is a harmless no-op.
     if (matchesBinding(key, "nav.jump-agents", keybindingOverrides)) {
-      const navList = settings.showSubagents ? workerRoster : [];
-      if (navList.length > 0) {
-        setAgentNavIndex(0);
-        return;
-      }
+      const tabs = activeAgentChatTabs(projectedHerdRef.current);
+      if (tabs.length) selectAgentChat(adjacentAgentChatTab(tabs, focusAgentRef.current, 1));
+      return;
     }
     // nav.open-comms (Ctrl+T) opens the agent comms view via the shell nav.
     if (matchesBinding(key, "nav.open-comms", keybindingOverrides)) {
@@ -4867,7 +4578,6 @@ export function ChatScreen({
             // There is no next command. Leave the single-result menu instead
             // of pretending to move (or silently running its only command).
             setCommandMenuVisible(false);
-            if (settings.showSubagents && workerRoster.length > 0) setAgentNavIndex(0);
           } else {
             setSlashSelected((current) => Math.min(menuCommands.length - 1, current + 1));
           }
@@ -4888,16 +4598,6 @@ export function ChatScreen({
         return;
       }
       if (key.name === "down") {
-        // Down at the end of a draft enters the worker roster, unless history
-        // recall is in progress. Up/Down do not move the horizontal caret.
-        const browsingHistory = historyIndexRef.current < historyRef.current.length;
-        if (!browsingHistory) {
-          const navList = settings.showSubagents ? workerRoster : [];
-          if (navList.length > 0) {
-            setAgentNavIndex(0);
-            return;
-          }
-        }
         recallComposerHistory("down");
         return;
       }
@@ -4954,11 +4654,11 @@ export function ChatScreen({
         const { text: expandedInput, consumedIds: consumedPasteIds } = expandPasteMarkers(input, pasteStoreRef.current);
         // Drilled into a subagent: a plain message is steered straight to it via
         // the hub mailbox, not sent to the main agent. Slash commands still run
-        // as commands (they fall through), so /agents, /settings, etc. keep
-        // working while focused.
+        // as commands (they fall through), so settings and tools remain usable.
         if (focusAgentId && !findCommand(input).isSlash) {
           const worker = herdAgents[focusAgentId];
-          if (worker?.status === "completed" || worker?.status === "failed") {
+          const terminalWorker = worker?.status === "completed" || worker?.status === "failed";
+          if (terminalWorker) {
             const result = renderInboundMessage({ id: `${focusAgentId}-followup`, from: focusAgentId, to: "Main", ts: Date.now(), body: worker.summary ?? worker.error ?? "" }).text;
             submitOperatorMessage(`Follow up on ${worker.name ?? focusAgentId}.\nTask: ${worker.task}\n${result}\n\nOperator request: ${expandedInput}`);
             setFocusAgentId(null);
@@ -4970,7 +4670,13 @@ export function ChatScreen({
           historyRef.current = pushHistory(historyRef.current, expandedInput);
           clearConsumedPastes(consumedPasteIds);
           setCommandMenuVisible(false);
-          returnToConversation();
+          if (terminalWorker) {
+            returnToConversation();
+          } else {
+            composingRef.current = false;
+            setComposerText("");
+            setComposing(false);
+          }
           return;
         }
         if (!findCommand(input).isSlash && !runtimeReadyRef.current) {
@@ -5020,21 +4726,28 @@ export function ChatScreen({
       }
       return;
     }
-    // Idle composer (nothing typed yet): Up recalls the most recent submission
-    // into the composer; Down moves INTO the active-subagents list when workers
-    // are running, otherwise recalls history. The trigger sits in the idle branch
-    // only, so it never fights the multiline composer, history browsing or the
-    // slash menu (all of which own Down while composing).
+    if (!composingRef.current && composerRef.current.length === 0 && settings.showSubagents) {
+      const workItems = agentChatWorkItems(projectedHerdRef.current);
+      const currentIndex = workItems.findIndex((item) => item.id === focusAgentRef.current);
+      if (key.name === "down") {
+        const next = workItems[currentIndex < 0 ? 0 : currentIndex + 1];
+        if (next) {
+          selectAgentChat(next.id);
+          return;
+        }
+        if (focusAgentRef.current) return;
+      }
+      if (key.name === "up" && focusAgentRef.current) {
+        const previous = currentIndex > 0 ? workItems[currentIndex - 1] : undefined;
+        selectAgentChat(previous?.id ?? null);
+        return;
+      }
+    }
     if (key.name === "up") {
       recallComposerHistory("up");
       return;
     }
     if (key.name === "down") {
-      const navList = settings.showSubagents ? workerRoster : [];
-      if (navList.length > 0) {
-        setAgentNavIndex(0);
-        return;
-      }
       recallComposerHistory("down");
       return;
     }
@@ -5045,9 +4758,7 @@ export function ChatScreen({
     }
   });
 
-  const hasHarnessPresentation = !harness.showConversation && harness.workspaceTrusted &&
-    harness.snapshot?.trusted === true && harness.snapshot.trustedUi.some((entry) => entry.tui);
-  const empty = entries.length === 0 && Object.keys(herdAgents).length === 0 && !hasHarnessPresentation;
+  const empty = entries.length === 0 && Object.keys(herdAgents).length === 0;
   // Parked messages are surfaced next to the working indicator, because that is
   // exactly where the operator is looking while they wait.
   const queueLabel = composerQueueLabel(queuedCount);
@@ -5085,10 +4796,6 @@ export function ChatScreen({
   );
   const runningWorkers = activeWorkers.filter((agent) => agent.status === "running").length;
   const queuedWorkers = activeWorkers.length - runningWorkers;
-  const fleetActivityLabel = [
-    runningWorkers ? `${runningWorkers} running agent${runningWorkers === 1 ? "" : "s"}` : "",
-    queuedWorkers ? `${queuedWorkers} queued agent${queuedWorkers === 1 ? "" : "s"}` : "",
-  ].filter(Boolean).join(" · ");
   const activeAgent = activeWorkers.find((agent) => agent.agentId === focusAgentId)
     ?? activeWorkers.find((agent) => agent.status === "running" && (agent.note || agent.tool))
     ?? activeWorkers.find((agent) => agent.status === "running")
@@ -5098,13 +4805,11 @@ export function ChatScreen({
       ? activityExcerpt(activeAgent.note, 56)
       : activeAgent.tool
         ? `last tool ${activityExcerpt(activeAgent.tool, 40)}`
-        : activityExcerpt(activeAgent.task, 56)
+        : ""
     : "";
   const agentActivity = activeAgent
     ? activityExcerpt(
-        `${activeWorkers.length > 1 ? `${fleetActivityLabel} · ` : ""}` +
-        `${activeAgent.status === "queued" ? "queued " : ""}agent ` +
-        `${activityExcerpt(activeAgent.name || activeAgent.agentId, 24)} · ` +
+        `${agentTaskLabel(activeAgent.task, activeAgent.name)} · ` +
         (agentDetail || (activeAgent.status === "queued" ? "waiting to start" : "running")),
       )
     : "";
@@ -5114,7 +4819,7 @@ export function ChatScreen({
     : undefined;
   const rootActivity = busy && !focusAgentId
     ? waitActivityLabel
-      ? activityExcerpt(agentActivity ? `${waitActivityLabel} · ${agentActivity}` : waitActivityLabel)
+      ? activityExcerpt(waitActivityLabel)
       : runningTool
         ? toolActivity(runningTool, runningEntry?.toolArgs)
         : rootTail?.kind === "reasoning"
@@ -5161,7 +4866,6 @@ export function ChatScreen({
   const statusSegments = buildStatusSegments({
     model: focusAgentId ? focusedTelemetry?.model : visibleModel,
     mode: autonomyFooterText(mode),
-    activity: statusActivity,
     turnElapsedMs: settings.elapsedTimer !== "off" && !focusAgentId && busy && activeTurnStartedAt.current !== null
       ? Date.now() - activeTurnStartedAt.current : undefined,
     evolution: evolutionStatus,
@@ -5185,6 +4889,11 @@ export function ChatScreen({
     contextUsed: !focusAgentId ? lastContext : undefined,
     showCost: settings.showCost,
   });
+  // The turn timer's leading glyph uses the smooth worker spinner.
+  if (busy) {
+    const elapsed = statusSegments.find((segment) => segment.kind === "elapsed");
+    if (elapsed) elapsed.icon = spinnerGlyph(animTick, { reduceMotion: settings.reduceMotion });
+  }
   // Feed herdr the same live facts the status bar shows — model/provider,
   // context %, the target/objective topic and the current activity — so the
   // pane's sidebar chrome names 0's work. Gated on `interactive`: only the
@@ -5288,39 +4997,14 @@ export function ChatScreen({
   // focus view and suppresses the rail / subagent block while it is open.
   const nowMs = Date.now();
   const focusRecord = focusAgentId ? projectedHerdAgents[focusAgentId] : undefined;
-  const focusTreeRow = focusAgentId
-    ? liveAgentTree.find((row) => row.item.agent_id === focusAgentId)
-      ?? agentTree.find((row) => row.item.agent_id === focusAgentId)
-    : undefined;
-  const focusAgentName = focusRecord?.name
-    ?? agentNamesRef.current.get(focusAgentId ?? "")
-    ?? "Unnamed worker";
-  const focusParentName = focusTreeRow?.parentId
-    ? projectedHerdAgents[focusTreeRow.parentId]?.name
-      ?? agentNamesRef.current.get(focusTreeRow.parentId)
-      ?? focusTreeRow.parentId
-    : "Main";
-  const focusPeer = focusAgentId
-    ? subagentPeers(projectedHerdAgents, nowMs).find((peer) => peer.id === focusAgentId)
-    : undefined;
-  const focused = focusAgentId != null && focusRecord != null && focusPeer != null;
+  const focusAgentName = focusRecord ? agentTaskLabel(focusRecord.task, focusRecord.name) : "Worker";
+  const focused = Boolean(focusAgentId && focusRecord);
   const transcriptWidth = Math.max(1, contentWidth - 1);
-  const inspectorInteractive = interactive && inspectorFocused && Boolean(inspectedAgentId)
-    && !gateOpen && !picker && !reviewOpen && !transcriptMenu.state.open && !stoppingAuditRef.current;
-  const narrowInspector = inspectorFocused && inspectedAgentId && !sidebars.rightVisible;
   // "0" is 4 cells. The optional objective sits at the top-right; target,
   // scope, and readiness take the remaining header cells. Autonomy mode lives
   // in the bottom status bar rather than competing with engagement posture.
   const headerWidth = Math.max(0, width - 2);
-  const headerObjective = !compact && settings.showObjective ? objective.trim() : "";
-  const headerObjectiveWidth = headerObjective
-    ? Math.max(0, Math.min(headerObjective.length, Math.floor((headerWidth - 4) * 0.35)))
-    : 0;
-  const headerGapCells = headerObjectiveWidth > 0 ? 2 : 1;
-  const headerEngagementWidth = Math.max(
-    1,
-    headerWidth - 4 - headerObjectiveWidth - headerGapCells - 1,
-  );
+  const headerEngagementWidth = Math.max(1, headerWidth - 5);
   // Relative ages need a clock, but the transcript must not repaint every
   // second just to age a label. Tick only while timestamps are enabled, and
   // only at the granularity the format actually shows.
@@ -5330,13 +5014,6 @@ export function ChatScreen({
   const transcriptStyleSettings = resolveTranscriptStyleSettings(settings, process.env);
   // The operator gate is expectant, not a busy spinner. The live tail
   // determines whether answer tokens are actually streaming.
-  useEffect(() => {
-    if (reviewOpen && gateOpen) setReviewOpen(false);
-    if (gateOpen) {
-      setInspectorFocused(false);
-      setNarrowSidebar(null);
-    }
-  }, [gateOpen, reviewOpen]);
   const animationKind: AnimationKind | null = startupError ? null : gateOpen
     ? "awaiting-operator"
     : runningTool
@@ -5381,10 +5058,8 @@ export function ChatScreen({
       })
 : null;
   const loadingLabel = animation?.glyph ?? "";
-  // The bottom bar is telemetry-only. The live spinner already appears in
-  // `workingIndicator`; repeating its glyph before the status pills made the
-  // real activity read as an unexplained `Esc · ...` prefix in terminals that
-  // render the glyph fallback textually.
+  // The active-turn elapsed pill now carries the animated spinner; idle status
+  // has no elapsed segment and therefore no spinner.
   const statusContentWidth = controlsWidth;
   const visibleStatusSegments = settings.showStatusBar ? statusSegments
     : statusSegments.filter((segment) => segment.kind === "mode" || segment.kind === "elapsed");
@@ -5422,53 +5097,11 @@ export function ChatScreen({
 
   const commandMenuVisible = composing && commandMenuOpen && isSlashComposer;
 
-  // ACTIVE SUBAGENTS. `spawn_agents` fans out up to 8 with 4 running at
-  // once, so this block is genuinely multi-row and genuinely unbounded —
-  // and it was neither height-capped nor `flexShrink={0}`, so under column
-  // pressure Yoga collapsed it and its rows painted into each other and
-  // into the title. Cap what is shown, state the overflow, and reserve
-  // EXACTLY what is rendered.
-  // The compact ACTIVE SUBAGENTS block stays visible even while a subagent is
-  // focused, so the operator keeps sight of the whole fleet and which one they
-  // are drilled into (the focused row wears the highlight below). Its rows are
-  // reserved in the ledger via computeLedgerRows regardless of focus, so the
-  // focus transcript makes room for it.
-  const subagentTreeRows = settings.showSubagents ? liveAgentTree : [];
-  const subagentEntries = subagentTreeRows.map((row) => row.item);
-  const hasSubagents = subagentEntries.length > 0;
-  const visibleRosterLimit = Math.max(1, Math.min(SUBAGENT_MAX_VISIBLE, Math.floor(height / 5)));
-  // The panel is EXPANDED by default so running agents are visible without the
-  // operator arrowing in (the OMP-style "always show what the herd is doing").
-  // It collapses to a one-line summary when the operator toggles the corner
-  // control, and AUTO-collapses on a very narrow terminal where per-agent rows
-  // would not fit. Drilling in (agentNavIndex >= 0) always forces it open so the
-  // selection is on screen — the existing Down-arrow path keeps working.
-  const subagentPanelNarrow = contentWidth < SUBAGENT_PANEL_MIN_WIDTH;
-  const subagentPanelCollapsed = hasSubagents && agentNavIndex < 0 && (agentsPanelCollapsed || subagentPanelNarrow);
-  const rosterStart = agentNavIndex >= 0 ? Math.max(0, agentNavIndex - visibleRosterLimit + 1) : 0;
-  const subagentVisible = subagentPanelCollapsed
-    ? []
-    : agentNavIndex >= 0
-      ? subagentTreeRows.slice(rosterStart, rosterStart + visibleRosterLimit)
-      : subagentTreeRows.slice(0, visibleRosterLimit);
-  const subagentOverflow = subagentEntries.length - subagentVisible.length;
-  // Below the header: the visible rows plus a "+N more" tail whenever the
-  // roster outruns the window (both when navigating and when resting expanded).
-  const subagentOverflowRow = !subagentPanelCollapsed && subagentOverflow > 0 ? 1 : 0;
-  // Collapsed → the single summary line (the header itself). Expanded → header
-  // + rows + overflow tail.
-  const subagentBlockRows = !hasSubagents
-    ? 0
-    : subagentPanelCollapsed
-      ? 1
-      : 1 + subagentVisible.length + subagentOverflowRow;
-  // Selection within the block while navigating into it. Clamped every render so
-  // an index left dangling by a finished agent lands back on a live row.
-  const agentNavSelected =
-    agentNavIndex >= 0 ? clampAgentSelection(subagentEntries.length, agentNavIndex) : -1;
-  // The focused transcript already carries its own controls; reserve the
-  // extra hint row only while navigating the roster.
-  const showAgentNavHint = false;
+  const agentWorkCount = Object.keys(projectedHerdAgents).length;
+  const showAgentWorkList = settings.showSubagents && (Boolean(focusAgentId) || agentWorkCount > 0);
+  const agentWorkRows = showAgentWorkList
+    ? agentWorkListHeight(agentWorkCount, Math.min(12, Math.max(2, height - 16)))
+    : 0;
 
   // Every other region in the column is flexShrink={0}, so the transcript
   // absorbs all the pressure. Compute what it actually has left: a
@@ -5488,61 +5121,47 @@ export function ChatScreen({
   const composerInputRows = composing
     ? composerContentRows(sanitizeComposerText(composer).replace(/\t/g, "    "), composerInnerTextWidth).length : 1;
   const ledgerRows = computeLedgerRows({
+    // The activity row uses this existing ticker and stays beside the composer.
     height,
     compact,
     composerRows: composerInputRows + (composerStyle === "plain" ? 0 : 2) + 1,
     // The picker and the command menu occupy the same slot and both carry a
     // marginTop, which computeLedgerRows adds for a non-zero menuRows.
     menuRows: commandMenuVisible ? commandMenuHeight : picker ? pickerBoxHeight : 0,
-    subagentRows: subagentBlockRows > 0 ? subagentBlockRows + 1 : 0,
+    subagentRows: agentWorkRows > 0 ? agentWorkRows + 1 : 0,
     approvalRows: (approvalPrompt ? approvalBoxHeight + 1 : 0)
       + (secretPrompt ? SECRET_PANEL_HEIGHT + 1 : 0)
       + (operatorQuestionOpen ? operatorBoxHeight + 1 : 0),
-    // The agent-nav hint row (+ its marginTop) below the composer.
-    hintRows: (showAgentNavHint ? 2 : 0) + 1 + (animation || agentActivity ? 2 : 0),
+    hintRows: 1 + (busy || gateOpen || runningWorkers > 0 ? 1 : 0),
   });
   // Keep the brand visible when access needs repair; reserve the compact,
   // truthful connection notice before deciding whether the block mark fits.
   const heroRecoveryRows = startupError ? 4 : checkingModel ? 2 : 0;
-  const heroBrandRows = Math.max(0, ledgerRows - heroRecoveryRows);
+  const showRepositorySuggestions = interactive && git?.isRepo === true
+    && contentWidth >= 58 && height >= 24 && !composingRef.current;
+  const heroBrandRows = Math.max(0, ledgerRows - heroRecoveryRows - (showRepositorySuggestions ? 3 : 0));
   const showTerminalMark =
     settings.showLogo && empty && heroBrandRows >= LEDGER_MARK_ROWS && contentWidth >= TERMINAL_BLOCK_LOGO_WIDTH;
-  const showEmptyStateTagline = empty && heroBrandRows >= 3;
-  // The header uses the very same live fact as the status pill and composer.
-  // Its spinner and elapsed clock remain on the existing animation cadence.
-  const turnElapsedMs =
-    busy && activeTurnStartedAt.current !== null ? Date.now() - activeTurnStartedAt.current : 0;
-  const elapsedClock =
-    turnElapsedMs >= ELAPSED_VISIBLE_AFTER_MS ? formatElapsedClock(turnElapsedMs) : "";
-  const busyStatusWord = (() => {
-    if (animation && animationKind !== "awaiting-operator") {
-      const parts = [activityLabel];
-      if (fleetActivityLabel && !activityLabel.includes("agent")) parts.push(fleetActivityLabel);
-      if (elapsedClock) parts.push(elapsedClock);
-      return `${loadingLabel} ${parts.join(" · ")}`;
-    }
-    if (animationKind === "awaiting-operator" && animation) {
-      return `${loadingLabel} ${animation.label}`;
-    }
-    if (agentActivity) {
-      const glyph = runningWorkers
-        ? spinnerGlyph(animTick, { reduceMotion: settings.reduceMotion })
-        : "◌";
-      return `${glyph} ${agentActivity}`;
-    }
-    return "";
-  })();
-  const sessionState = checkingModel
-    ? "checking model"
-    : startupError ? "needs connection"
-    : busyStatusWord || (busy ? activityLabel || "working" : session ? "idle" : "connecting");
-  // Put live activity ahead of scope so narrow headers keep the current work.
-  const headerSegments = [sessionState];
-  if (settings.showScope) headerSegments.push(
-    session?.scopeEnforcement.enabled
-      ? `Scope checks on: ${scopeLabel}`
-      : session ? "Scope checks off" : `Scope: ${scopeLabel}`,
-  );
+  const activityGlyph = loadingLabel || spinnerGlyph(animTick, { reduceMotion: settings.reduceMotion });
+  const activityRowText = gateOpen ? "Waiting for you"
+    : busy ? waitActivityLabel || (runningTool ? toolActivity(runningTool, runningEntry?.toolArgs)
+      : rootTail?.kind === "assistant" ? "Responding"
+        : runningWorkers > 0 ? `Working · ${runningWorkers} ${runningWorkers === 1 ? "agent" : "agents"}` : "Working")
+    : runningWorkers > 0 || queuedWorkers > 0
+      ? [runningWorkers ? `${runningWorkers} working` : "", queuedWorkers ? `${queuedWorkers} queued` : ""].filter(Boolean).join(" · ")
+      : "";
+  const activityRow = activityRowText ? (
+    <box width="100%" height={1} flexShrink={0} minWidth={0} overflow="hidden" flexDirection="row" gap={2}>
+      <text width={GLYPH_CELLS} height={1} flexShrink={0} wrapMode="none" fg={gateOpen ? WARNING : MUTED}>
+        {activityGlyph}
+      </text>
+      <text flexGrow={1} minWidth={0} height={1} wrapMode="none" truncate fg={gateOpen ? WARNING : MUTED}>
+        {activityRowText}
+      </text>
+    </box>
+  ) : null;
+  const headerSegments: string[] = [];
+  if (settings.showScope && session?.scopeEnforcement.enabled) headerSegments.push(`Scope: ${scopeLabel}`);
   // Version rides at the far left of the top bar, like the startup masthead,
   // carrying the build-channel badge right beside it: [dev] when launched from
   // a dev source checkout (the `0dev` wrapper exports ZERO_DEV_SOURCE_ROOT),
@@ -5550,19 +5169,11 @@ export function ChatScreen({
   // prefix when a long scope label or objective constrains the header.
   const channelBadge = process.env["ZERO_DEV_SOURCE_ROOT"]?.trim() ? "[dev]" : "[beta]";
   const headerEngagement = [`v${VERSION} ${channelBadge}`, ...headerSegments].join(" · ");
+  const mainActivity = objective.trim()
+    || entries.find((entry) => entry.kind === "user")?.text.split("\n", 1)[0].trim()
+    || (busy ? "Working" : "Current conversation");
 
 
-  const workingLine = fleetActivityLabel && activityLabel && !activityLabel.includes("agent") && !gateOpen
-    ? `${activityLabel} · ${fleetActivityLabel}`
-    : activityLabel;
-  const workingLineFitted = fitTuiText(workingLine, controlsWidth);
-  const workingIndicator = animation || agentActivity ? (
-    <box width="100%" height={1} flexShrink={0} marginTop={1} overflow="hidden">
-      {shimmerActive
-        ? <ShimmerText label={workingLineFitted} frame={shimmerFrame} base={MUTED} peak={TEXT} />
-        : <text fg={animationKind === "awaiting-operator" ? WARNING : MUTED}>{workingLineFitted}</text>}
-    </box>
-  ) : null;
 
   // ── The composer, single-sourced ──────────────────────────────────────────
   // ONE element, rendered in the centered hero when empty and pinned above the
@@ -5573,7 +5184,7 @@ export function ChatScreen({
   // centered hero AND the pinned chat state (the start-screen look the operator
   // asked for everywhere): the stored "border" resolves to "rail", while an
   // explicit "plain" — or any deliberate non-border choice — is still honoured.
-  const composerActive = (composing || commandMenuVisible) && !inspectorInteractive && !narrowSidebarView;
+  const composerActive = composing || commandMenuVisible;
   // Real operator input is TEXT-bright; the placeholder and the parked-message
   // note are MUTED so neither reads as something typed. The working spinner is
   // deliberately NOT here — it lives once, in the transcript/hero — so the
@@ -5633,8 +5244,7 @@ export function ChatScreen({
     outerWidth?: number;
     padY?: number;
   }) => (
-    <box flexDirection="row" width={outerWidth ?? "100%"} flexShrink={0} marginTop={1} minWidth={0}
-      onMouseDown={() => { setInspectorFocused(false); setNarrowSidebar(null); }}>
+    <box flexDirection="row" width={outerWidth ?? "100%"} flexShrink={0} marginTop={1} minWidth={0}>
       <ComposerFrame style={composerStyle} theme={theme} padY={padY}>
         <box flexDirection="row" width="100%" minWidth={0}>
           <text width={1} flexShrink={0} fg={composing ? PRIMARY : MUTED}>›</text>
@@ -5695,6 +5305,9 @@ export function ChatScreen({
   // the column itself. Four cells of chrome (rail + its gap + the "› " prefix)
   // come off the width for the input field.
   const heroContentWidth = contentWidth;
+  const repoSuggestionItems = heroContentWidth >= 78
+    ? REPOSITORY_STARTERS
+    : COMPACT_REPOSITORY_STARTERS;
   const heroComposerWidth = Math.min(heroContentWidth, Math.max(40, Math.min(72, Math.floor(heroContentWidth * 0.6))));
   const heroComposerTextWidth = Math.max(1, heroComposerWidth - (composerStyle === "rail" ? 5 : 3));
   const heroComposerNode = buildComposer({
@@ -5703,9 +5316,9 @@ export function ChatScreen({
     padY: 1,
   });
   // Centre the whole welcome group, not just the composer. Measure the actual
-  // masthead (which may omit the native image) and composer rather than assuming
-  // a fixed hero height. Retain the masthead measurement while an overlay replaces
-  // it, so filtering the slash menu cannot move the input.
+  // masthead, optional repository suggestions and composer instead of assuming
+  // a fixed hero height. Keep measuring that block while overlays replace it,
+  // so filtering the slash menu cannot move the input.
   const [heroMastheadRows, setHeroMastheadRows] = useDevUiState(devUi, "heroMastheadRows", 0);
   const [heroComposerRows, setHeroComposerRows] = useDevUiState(devUi, "heroComposerRows", 0);
   // Four rows belong to the outer header/footer; two to the shortcut line and
@@ -5723,7 +5336,7 @@ export function ChatScreen({
     queuedRef.current.length === 0 && pendingStreamPatches.current.length === 0 &&
     pendingCancellationsRef.current.size === 0 && !pendingScope && !pendingLocalScope &&
     !pendingEscalation && !pendingToolApproval && !pendingOperatorQuestion && !secretPrompt &&
-    !picker && !reviewOpen && !transcriptMenu.state.open && !pendingFeedback &&
+    !picker && !transcriptMenu.state.open && !pendingFeedback &&
     !problemReview && !firstProblemConsent;
 
   // ── Overlays that share the slot directly above the composer ───────────────
@@ -5742,7 +5355,6 @@ export function ChatScreen({
       selectedIndex={slashSelected}
       visibleRows={visibleCommandRows}
       query={slashQuery}
-      hasAgentRoster={settings.showSubagents && workerRoster.length > 0}
       theme={theme}
       onActivateRow={activateSlashCommand}
       onHoverRow={hoverSlashCommand}
@@ -5844,312 +5456,7 @@ export function ChatScreen({
     </>
   );
 
-  // Effective status per roster row (operator-stop and incomplete folded in),
-  // reused by the row views and the collapsed summary so both read identically.
-  const subagentEffectiveStatus = (sa: (typeof subagentEntries)[number]): string =>
-    operatorStopped.has(sa.agent_id)
-      ? "cancelled"
-      : sa.status === "completed" && sa.done === false
-        ? "incomplete"
-        : sa.status;
-  // The corner control is the "small button to expand": ▸ collapsed / ▾ open.
-  // Clicking the header toggles it (or, while navigating, backs out to the
-  // composer — the same exit the Left/Esc keys give). Collapsed, the header IS
-  // the one-line summary; expanded, it carries the roster count and hints.
-  const subagentToggleGlyph = subagentPanelCollapsed ? "▸" : "▾";
-  const subagentHeaderText = subagentPanelCollapsed
-    ? `${subagentToggleGlyph} ${summarizeRoster(subagentEntries.map(subagentEffectiveStatus))}`
-    : agentNavIndex >= 0
-      ? `${subagentToggleGlyph} agents (${subagentEntries.length}) · [↑↓] select · [⏎] open · [esc] back`
-      : `${subagentToggleGlyph} agents (${subagentEntries.length}) · ${runningWorkers} running · [↓] select`;
-  const subagentNode = subagentBlockRows > 0 ? (
-    <box flexDirection="column" width="100%" minWidth={0} height={subagentBlockRows} flexShrink={0} marginTop={1}>
-      <box width={contentWidth} flexShrink={0} onMouseDown={() => {
-        if (agentNavIndex >= 0) setAgentNavIndex(-1);
-        else setAgentsPanelCollapsed((collapsed) => !collapsed);
-      }}>
-        <text fg={agentNavIndex >= 0 ? ACCENT : MUTED}>{fitTuiText(subagentHeaderText, contentWidth)}</text>
-      </box>
-      {subagentVisible.map((treeRow, index) => {
-        const sa = treeRow.item;
-        const rec = herdAgents[sa.agent_id];
-        const status = subagentEffectiveStatus(sa);
-        // The tail is a LIVE, present-tense summary of what the agent is doing
-        // now (from its latest prose / current tool / note), NOT the raw prompt
-        // it was spawned with. `activity` is left unset so the row shows just
-        // that summary; the status badge carries running/done/failed distinctly.
-        const view: AgentRowView = {
-          id: sa.agent_id,
-          name: sa.name ?? rec?.name ?? agentNamesRef.current.get(sa.agent_id) ?? "Unnamed worker",
-          task: summarizeAgentActivity({
-            status,
-            tool: rec?.tool,
-            note: rec?.note,
-            turn: rec?.turn,
-            maxTurns: rec?.maxTurns ?? sa.max_turns,
-            ...summaryInputFromMessage(workerTelemetry[sa.agent_id]),
-          }),
-          status,
-          animationFrame: settings.reduceMotion ? undefined : animTick,
-          accent: agentAccentFor(sa.agent_id, theme.CANVAS),
-        };
-        return <AgentTreeRow key={sa.agent_id} view={view} width={contentWidth} theme={theme}
-          selected={index + rosterStart === agentNavSelected || sa.agent_id === focusAgentId}
-          isLast={treeRow.isLast}
-          ancestorContinues={treeRow.ancestorContinues}
-          onSelect={() => openAgentInspector(sa.agent_id)} />;
-      })}
-      {subagentOverflowRow > 0 ? (
-        <text fg={MUTED}>{fitTuiText(
-          agentNavIndex >= 0
-            ? `${rosterStart + 1}–${rosterStart + subagentVisible.length}/${subagentEntries.length} · [↑↓] browse all`
-            : `+${subagentOverflow} more · [↓] browse all`,
-          contentWidth,
-        )}</text>
-      ) : null}
-    </box>
-  ) : null;
 
-  // ── The RIGHT sidebar: session facts and nonempty run sections ─────────────
-  // Session/context facts use the same live runtime and telemetry as the footer.
-  // Empty agents/findings sections spend no rows; real work keeps its bounded,
-  // interactive rows even when the terminal leaves little room for the summary.
-  const rightInner = sidebars.rightInnerWidth;
-  const sidebarHints = useMemo(() => ({
-    right: `Collapse · ${effectiveKeysDisplay(RIGHT_SIDEBAR_BINDING, settings.keybindings)}`,
-  }), [settings.keybindings]);
-  const sidebarContentRows = Math.max(0, sidebars.bodyHeight - 2);
-  const railTreeRows = liveAgentTree.flatMap((treeRow) => {
-    const record = herdAgents[treeRow.item.agent_id];
-    return record ? [{ treeRow, record }] : [];
-  });
-  const railRecords = railTreeRows.map((row) => row.record);
-  const runFindings = runFindingsFromEntries(entries);
-  const sidebarTitle = objective.trim()
-    || entries.find((entry) => entry.kind === "user")?.text.split("\n", 1)[0].trim()
-    || target.trim();
-  const sidebarProvider = activeProvider
-    ? PROVIDERS.find((provider) => provider.id === activeProvider)?.label ?? activeProvider
-    : undefined;
-  const sidebarSessionRows: { text: string; tone: string; header?: boolean }[] = [];
-  if (sidebarTitle) sidebarSessionRows.push({ text: sidebarTitle, tone: TEXT });
-  if (session?.scanId) sidebarSessionRows.push({ text: `ID ${session.scanId}`, tone: MUTED });
-  if (activeModel && settings.modelDisplay !== "off") sidebarSessionRows.push({ text: `Model ${activeModel}`, tone: TEXT });
-  if (sidebarProvider) sidebarSessionRows.push({ text: `Provider ${sidebarProvider}`, tone: MUTED });
-  if (sidebarSessionRows.length > 0) sidebarSessionRows.unshift({ text: "Session", tone: MUTED, header: true });
-  const sidebarContextRows: typeof sidebarSessionRows = [];
-  const hasContextReading = lastContext !== undefined && Number.isFinite(lastContext) && lastContext >= 0;
-  const hasContextWindow = contextLimit !== null && contextLimit.tokens > 0;
-  if (settings.showContextMeter && hasContextReading) {
-    sidebarContextRows.push({
-      text: hasContextWindow
-        ? `${formatTokenCount(lastContext!)} / ${formatTokenCount(contextLimit.tokens)} tokens`
-        : `${formatTokenCount(lastContext!)} tokens used`,
-      tone: TEXT,
-    });
-    if (hasContextWindow) sidebarContextRows.push({ text: `${Math.round(lastContext! / contextLimit.tokens * 100)}% used`, tone: MUTED });
-  } else if (settings.showContextMeter && hasContextWindow) {
-    sidebarContextRows.push({ text: `Window ${formatTokenCount(contextLimit.tokens)} tokens`, tone: MUTED });
-  }
-  const sidebarTokens = settings.showTokenUsage ? statusSegments.find((segment) => segment.kind === "tokens") : undefined;
-  const sidebarCost = settings.showCost ? statusSegments.find((segment) => segment.kind === "cost") : undefined;
-  if (sidebarTokens) sidebarContextRows.push({ text: `Tokens in/out ${sidebarTokens.text}`, tone: MUTED });
-  if (sidebarCost) sidebarContextRows.push({ text: `Cost (est.) ${sidebarCost.text}`, tone: MUTED });
-  if (sidebarContextRows.length > 0) sidebarContextRows.unshift({
-    text: settings.showContextMeter && (hasContextReading || hasContextWindow) ? "Context" : "Usage",
-    tone: MUTED,
-    header: true,
-  });
-  const hasAgents = railRecords.length > 0;
-  const hasFindings = runFindings.length > 0;
-  const hasPlan = Boolean(todos?.todos.length);
-  const agentRowsNeeded = hasAgents ? 1 + railRecords.length * AGENT_SIDEBAR_ROWS : 0;
-  // Findings owns a one-row top margin in addition to its header/item budget.
-  const findingRowsNeeded = hasFindings ? 1 + FINDINGS_SIDEBAR_HEADER_ROWS + runFindings.length * 2 : 0;
-  const sidebarRowsAvailable = Math.max(0, sidebarContentRows - 1); // Hide control.
-  const sectionMinimum = Math.min(agentRowsNeeded, 4) + Math.min(findingRowsNeeded, 5) + (hasPlan ? 3 : 0);
-  const sidebarSummaryRows = [...sidebarSessionRows, ...sidebarContextRows]
-    .slice(0, Math.max(0, sidebarRowsAvailable - sectionMinimum));
-  // Never leave a heading with no fact beneath it on a short terminal.
-  if (sidebarSummaryRows.at(-1)?.header) sidebarSummaryRows.pop();
-  const rightSectionRows = Math.max(0, sidebarRowsAvailable - sidebarSummaryRows.length);
-  const planMinimum = hasPlan && rightSectionRows >= 3 ? 3 : 0;
-  const rightBodyRows = rightSectionRows - planMinimum;
-  const findingsShare = Math.min(
-    findingRowsNeeded,
-    Math.max(0, rightBodyRows - Math.min(agentRowsNeeded, 4)),
-    Math.max(5, Math.floor(rightBodyRows * 0.4)),
-  );
-  const agentSectionRows = Math.min(agentRowsNeeded, Math.max(0, rightBodyRows - findingsShare));
-  const agentsBudget = agentSectionRows >= 2 ? agentSectionRows : 0;
-  const findingSectionRows = Math.min(findingRowsNeeded, Math.max(0, rightBodyRows - agentsBudget));
-  const rightFindingsBudget = findingSectionRows >= FINDINGS_SIDEBAR_HEADER_ROWS + 2 ? findingSectionRows : 0;
-  const rightPlanBudget = hasPlan ? rightSectionRows - agentsBudget - rightFindingsBudget : 0;
-  const agentBodyRows = Math.max(0, agentsBudget - 1);
-  const railMaxAgents = Math.floor(agentBodyRows / AGENT_SIDEBAR_ROWS);
-  const railCapacity =
-    railRecords.length > railMaxAgents
-      ? Math.max(0, Math.floor((agentBodyRows - 1) / AGENT_SIDEBAR_ROWS))
-      : railMaxAgents;
-  const railVisible = railTreeRows.slice(0, railCapacity);
-  const railOverflow = railRecords.length - railVisible.length;
-  const inspectorProps = {
-    agents: projectedHerdAgents,
-    activeAgentId: inspectedAgentId ?? "",
-    openAgentIds,
-    rootScanId: session?.scanId ?? "",
-    transcripts: subagentTranscripts,
-    messages: commsMessages,
-    display: {
-      ...entryDisplay,
-      model: inspectedAgentId ? workerTelemetry[inspectedAgentId]?.model ?? "" : "",
-    },
-    theme,
-    interactive: inspectorInteractive,
-    onSelectAgent: openAgentInspector,
-    onClose: closeAgentInspector,
-    onReturnToConversation: returnToConversation,
-  };
-  const rightEdgeRail = (
-    <box width={sidebars.rightWidth}
-      height={sidebars.bodyHeight} flexShrink={0} minWidth={0} overflow="hidden"
-      flexDirection="column" paddingTop={1} alignItems="center"
-      backgroundColor={PANEL_ALT}
-      onMouseDown={toggleSidebar}>
-      <text width={1} height={Math.min(sidebars.bodyHeight, 8)} wrapMode="none" truncate fg={MUTED}>
-        {["‹", "A", "g", "e", "n", "t", "s"].join("\n")}
-      </text>
-    </box>
-  );
-  // FindingsSidebar is handed its section budget minus its external top margin.
-  const rightSidebarNode = sidebars.rightVisible && inspectedAgentId ? (
-    <box width={sidebars.rightWidth} height={sidebars.bodyHeight} flexDirection="column"
-      flexShrink={0} minWidth={0} minHeight={0} overflow="hidden" backgroundColor={PANEL_ALT}>
-      <AgentInspectorPane {...inspectorProps} width={sidebars.rightWidth} height={Math.max(0, sidebars.bodyHeight - 2)} />
-      <box height={1} width={sidebars.rightWidth} flexShrink={0} paddingX={1} onMouseDown={messageInspectedAgent}>
-        <text fg={MUTED}>{fitTuiText("Message this worker · main draft kept", rightInner)}</text>
-      </box>
-      <box height={1} width={sidebars.rightWidth} flexShrink={0} paddingX={1} onMouseDown={toggleSidebar}>
-        <text fg={MUTED}>{fitLegend(rightInner, sidebarHints.right)}</text>
-      </box>
-    </box>
-  ) : sidebars.rightVisible ? (
-      <box width={sidebars.rightWidth} height={sidebars.bodyHeight} flexShrink={0}
-        flexDirection="column" minHeight={0} minWidth={0} overflow="hidden"
-        paddingX={1} paddingY={1} backgroundColor={PANEL_ALT}>
-        {sidebarSummaryRows.map((row, index) => (
-          <box key={`sidebar-summary-${index}`} width={rightInner} height={1} flexShrink={0} minWidth={0}>
-            <text width={rightInner} height={1} wrapMode="none" truncate fg={row.tone}>
-              {fitTuiText(row.text, rightInner, { mode: "middle" })}
-            </text>
-          </box>
-        ))}
-        {hasAgents && agentsBudget > 0 ? (
-          <box width={rightInner} height={1} flexShrink={0} minWidth={0}>
-            <text width={rightInner} height={1} wrapMode="none" truncate fg={MUTED}>{buildSidebarSectionHeader("Agents", railRecords.length, rightInner)}</text>
-          </box>
-        ) : null}
-        {railVisible.map(({ treeRow, record: rec }) => {
-            // Share the inline worker identity and truthful status presentation.
-            const railStatus = operatorStopped.has(rec.agentId) ? "cancelled" : rec.status === "completed" && workerOutcomes[rec.agentId]?.done === false ? "incomplete" : rec.status;
-            const view: AgentRowView = {
-              id: rec.agentId,
-              name: rec.name ?? agentNamesRef.current.get(rec.agentId) ?? "Unnamed worker",
-              // The task slot carries the LIVE activity summary, not the raw
-              // spawn prompt; the status badge shows running/done/failed.
-              task: summarizeAgentActivity({
-                status: railStatus,
-                tool: rec.tool,
-                note: rec.note,
-                turn: rec.turn,
-                maxTurns: rec.maxTurns,
-                ...summaryInputFromMessage(workerTelemetry[rec.agentId]),
-              }),
-              status: railStatus,
-              animationFrame: settings.reduceMotion ? undefined : animTick,
-              accent: agentAccentFor(rec.agentId, theme.CANVAS),
-            };
-            return (
-              <AgentSidebarRow
-                key={rec.agentId}
-                view={view}
-                width={rightInner}
-                theme={theme}
-                isLast={treeRow.isLast}
-                ancestorContinues={treeRow.ancestorContinues}
-                selected={workerRoster[agentNavIndex]?.agent_id === rec.agentId}
-                onSelect={() => openAgentInspector(rec.agentId)}
-              />
-            );
-        })}
-        {agentsBudget > 0 && railOverflow > 0 ? (
-          <box width={rightInner} height={1} flexShrink={0} minWidth={0}>
-            <text width={rightInner} height={1} wrapMode="none" truncate fg={MUTED}>{fitTuiText(`+${railOverflow} more`, rightInner)}</text>
-          </box>
-        ) : null}
-        {hasFindings && rightFindingsBudget > 0 ? (
-          <FindingsSidebar
-            findings={runFindings}
-            width={rightInner}
-            rows={rightFindingsBudget - 1}
-            theme={theme}
-            onOpenFinding={(id) => onNavigate("finding", id)}
-          />
-        ) : null}
-        {hasPlan ? (
-          <TodosSidebar payload={todos!} width={rightInner} rows={rightPlanBudget} theme={theme} />
-        ) : null}
-        <box flexGrow={1} minHeight={0} flexShrink={1} />
-        {sidebarContentRows > 0 ? (
-          <box width={rightInner} height={1} flexShrink={0} minWidth={0} onMouseDown={toggleSidebar}>
-            <text width={rightInner} height={1} wrapMode="none" truncate fg={MUTED}>{fitLegend(rightInner, sidebarHints.right)}</text>
-          </box>
-        ) : null}
-      </box>
-  ) : rightEdgeRail;
-
-  const narrowSidebarOpen = !narrowInspector && Boolean(narrowSidebarView);
-  const narrowViewNode = narrowInspector ? (
-    <AgentInspectorPane {...inspectorProps} width={contentWidth} height={ledgerRows} />
-  ) : narrowSidebarOpen ? (
-    <box width={contentWidth} height={ledgerRows} minHeight={0} minWidth={0}
-      flexDirection="column" overflow="hidden" backgroundColor={PANEL_ALT}>
-      <box height={1} flexShrink={0} onMouseDown={returnToConversation}>
-        <text fg={MUTED}>{fitLegend(contentWidth, "[Esc] return to conversation · draft kept")}</text>
-      </box>
-      {hasAgents ? subagentNode : <text fg={MUTED}>No workers in this session yet.</text>}
-    </box>
-  ) : null;
-
-  // ── The inline focus view ──────────────────────────────────────────────────
-  // Reuses the herd focus PLUMBING verbatim — computeHerdFocusLayout for the
-  // vertical meta/transcript split, focusHeaderLines + renderFocusActivity for
-  // the tone-tagged lines, windowFocusTail for the scroll-back window — but
-  // wears the chat's own minimal skin: a PANEL-backed region (no bordered
-  // boxes) exactly like the transcript it replaces, so there is no border to
-  // paint a line through and no exact-fit fragility. The meta header is a
-  // flexShrink={0} block; the live transcript flexGrows to fill the rest.
-  const focusLayout = computeHerdFocusLayout({
-    width,
-    height: ledgerRows + shellChromeRows(width),
-    noticeRows: 0,
-  });
-  // Reserve panel padding and the vertical scrollbar, including when a card expands.
-  const focusInner = Math.max(8, contentWidth - (compact ? 2 : 4) - 1);
-  const focusMetaLines = focused
-    ? clipDetailLines(
-        focusHeaderLines(focusPeer, focusRecord, focusInner, nowMs, { compact: true }).slice(focusRecord ? 1 : 0),
-        Math.max(1, focusLayout.meta.bodyRows),
-        focusInner,
-      )
-    : [];
-  const focusActivityLines =
-    focused && focusRecord ? renderFocusActivity(focusRecord.activity, focusInner) : [];
-  // The focused child's REAL transcript (assistant prose + tool cards) streamed
-  // via subagent_message. When present, the focus view renders it through the
-  // SAME planTranscript/renderEntry as the main agent — so a drilled-in child
-  // reads identically. Until the first message arrives (or for a peer session
-  // with no stream), it falls back to the coarse activity ring below.
   const workerDisplay: EntryDisplay = {
     ...entryDisplay,
     model: focusedTelemetry?.model ?? "",
@@ -6307,90 +5614,6 @@ export function ChatScreen({
       return node;
     });
   };
-  const focusHasTranscript = focused && Boolean(focusEntries?.length);
-  // The coarse activity fallback is row-windowed. Rich transcripts use their
-  // actual viewport and measured content extent instead of this estimate.
-  const focusMetaRows = focusMetaLines.length + 2;
-  const focusTranscriptCap = Math.max(1, ledgerRows - focusMetaRows - (compact ? 1 : 3));
-  const focusTail = windowFocusTail(
-    focusActivityLines.length,
-    focusTranscriptCap,
-    focusScrollOffset,
-  );
-  const focusVisibleActivity = focusActivityLines.slice(focusTail.start, focusTail.end);
-  const focusViewNode = (
-    <box
-      key={`worker-${focusAgentId}`}
-      flexDirection="column"
-      flexGrow={1}
-      minHeight={0}
-      width="100%"
-      minWidth={0}
-      overflow="hidden"
-      backgroundColor={CANVAS}
-      paddingX={compact ? 1 : 2}
-      paddingY={compact ? 0 : 1}
-    >
-      <box flexDirection="column" flexShrink={0} minWidth={0}>
-        <text fg={ACCENT}>{fitTuiText(`Selected agent: ${focusAgentName}`, focusInner)}</text>
-        <text fg={MUTED}>{fitTuiText(`Parent: ${focusParentName}`, focusInner)}</text>
-        {focusMetaLines.map((line, index) => (
-          <text key={`focus-meta-${index}`} fg={herdToneColor(theme, line.tone)}>
-            {fitTuiText(line.text, focusInner)}
-          </text>
-        ))}
-      </box>
-      {focusHasTranscript ? (
-        <box flexDirection="column" height={0} flexGrow={1} minHeight={0} minWidth={0} marginTop={1} overflow="hidden">
-          <scrollbox
-            ref={focusTranscriptRef}
-            focusable={false}
-            width="100%"
-            height={0}
-            flexGrow={1}
-            minHeight={0}
-            backgroundColor={CANVAS}
-            verticalScrollbarOptions={sleekScrollbar(theme, CANVAS)}
-            contentOptions={{ flexDirection: "column" }}
-            stickyScroll
-            stickyStart="bottom"
-          >
-            <box flexDirection="column" width="100%" flexShrink={0} onSizeChange={function () {
-              // Nested tool/markdown rows can reflow after the scroll content was measured.
-              if (focusTranscriptRef.current) focusTranscriptRef.current.content.height = this.height;
-            }}>
-              {renderTranscriptEntries(focusedTranscript, focusInner, workerDisplay)}
-            </box>
-          </scrollbox>
-        </box>
-      ) : (
-        <box
-          flexDirection="column"
-          flexGrow={1}
-          minHeight={0}
-          minWidth={0}
-          marginTop={1}
-          onMouseScroll={(event) =>
-            setFocusScrollOffset((offset) => clampScrollOffset(offset + wheelOffsetStep(event.scroll)))
-          }
-        >
-          <text fg={MUTED}>{fitTuiText(herdFocusTranscriptTitle(focusActivityLines.length), focusInner)}</text>
-          {focusVisibleActivity.length === 0 ? (
-            <text fg={MUTED}>{fitTuiText(HERD_FOCUS_EMPTY_TEXT, focusInner)}</text>
-          ) : (
-            focusVisibleActivity.map((line, index) => (
-              <text key={`focus-live-${focusTail.start + index}`} fg={herdToneColor(theme, line.tone)}>
-                {fitTuiText(line.text, focusInner)}
-              </text>
-            ))
-          )}
-        </box>
-      )}
-      <text fg={MUTED} marginTop={1}>
-        {fitTuiText(`[←] ${focusTreeRow?.parentId ? "Parent" : "Main"} · [Esc] Main · [⌃O] ${latestCompaction !== undefined ? "recap" : "transcript"} · [⌃R] ${workerDisplay.transcriptDetail === "expanded" ? "collapse" : "expand"} details`, focusInner)}
-      </text>
-    </box>
-  );
 
   // ── The conversation region ────────────────────────────────────────────────
   // Only the center owns transcript/focus content; its composer and status share
@@ -6430,67 +5653,27 @@ export function ChatScreen({
     </box>
   );
 
-  const conversationRegion = reviewOpen ? (
-    <TranscriptReview
-      transcript={transcriptDocument}
-      width={transcriptWidth}
-      detail={entryDisplay.transcriptDetail}
-      expandedTurns={expandedTurns}
-      theme={theme}
-      renderableRef={reviewRenderableRef}
-      recap={latestCompaction !== undefined ? compactionRecapsRef.current.get(latestCompaction) : undefined}
-    />
-  ) : focused ? (
-    focusViewNode
-  ) : (
-      <box key="main-transcript"
-        flexDirection="column"
-        flexGrow={1}
-        minHeight={0}
-        minWidth={0}
-        backgroundColor={CANVAS}
-        paddingY={1}
-      >
-        <scrollbox ref={transcriptRef} focusable={false} width="100%" flexGrow={1} minHeight={0} backgroundColor={CANVAS} stickyScroll stickyStart="bottom" verticalScrollbarOptions={sleekScrollbar(theme, CANVAS)}>
-          <box flexDirection="column" width="100%">
-            {renderTranscriptEntries(entries, transcriptWidth, entryDisplay)}
-            {/* The plan lives in the RIGHT sidebar now; this inline card is only
-                a fallback for when that sidebar is hidden, so the todos are
-                always visible somewhere. */}
-            {!sidebars.rightVisible && todos && todos.total > 0 ? (
-              <Todos payload={todos} width={transcriptWidth} theme={theme} />
-            ) : null}
-            {startupError || checkingModel ? recoveryPanel : null}
-          </box>
-        </scrollbox>
-      </box>
+  const conversationRegion = (
+    <box key={`chat-${focusAgentId ?? "main"}`}
+      flexDirection="column"
+      flexGrow={1}
+      minHeight={0}
+      minWidth={0}
+      backgroundColor={CANVAS}
+      paddingY={1}
+    >
+      <scrollbox ref={transcriptRef} focusable={false} width="100%" flexGrow={1} minHeight={0} backgroundColor={CANVAS} stickyScroll stickyStart="bottom" verticalScrollbarOptions={sleekScrollbar(theme, CANVAS)}>
+        <box flexDirection="column" width="100%">
+          {renderTranscriptEntries(focused ? focusedTranscript : entries, transcriptWidth, focused ? workerDisplay : entryDisplay)}
+          {!focused && todos && todos.total > 0 ? (
+            <Todos payload={todos} width={transcriptWidth} theme={theme} />
+          ) : null}
+          {startupError || checkingModel ? recoveryPanel : null}
+        </box>
+      </scrollbox>
+    </box>
   );
 
-  // ── The agent-nav / focus hint row (below the composer) ─────────────────────
-  // Keys white, labels muted (KeyHints). Contextual: the down-into-agents
-  // affordance when idle, the list keys while navigating, the scroll keys while
-  // focused. Reserved in the ledger via `hintRows` exactly when it renders.
-  const agentNavHintPairs: KeyHint[] = focused
-    ? [
-        { key: "↑↓", label: "scroll" },
-        { key: "esc", label: "back" },
-      ]
-    : agentNavIndex >= 0
-      ? [
-          { key: "↑↓", label: "move" },
-          { key: "enter", label: "open" },
-          { key: "esc", label: "back" },
-        ]
-      : [{ key: "↓", label: "agents" }];
-  const agentNavHintNode = showAgentNavHint ? (
-    <box flexDirection="row" width="100%" minWidth={0} flexShrink={0} marginTop={1}>
-      {keyHintsLength(agentNavHintPairs, " · ") <= contentWidth ? (
-        <KeyHints pairs={agentNavHintPairs} theme={theme} />
-      ) : (
-        <text fg={MUTED}>{fitTuiText(agentNavHintPairs.map((p) => `${p.key} ${p.label}`).join(" · "), contentWidth)}</text>
-      )}
-    </box>
-  ) : null;
 
   // Keep first-use actions visible without opening a second navigation surface.
   const heroHintPairs: KeyHint[] = [
@@ -6575,22 +5758,13 @@ export function ChatScreen({
         <box width={headerEngagementWidth} flexShrink={0} minWidth={0}>
           <text fg={headerFg}>{fitTuiText(headerEngagement, headerEngagementWidth)}</text>
         </box>
-        {headerObjectiveWidth > 0 ? (
-          // The async AI objective summary, right-aligned at the top-right.
-          // Legible on the orange strip via the contrast-picked header fg; the
-          // 0 voice (BRAND) reads on canvas but not on PRIMARY. Empty/compact
-          // hides it and the engagement summary reclaims the cells.
-          <box width={headerObjectiveWidth} flexShrink={0} minWidth={0} flexDirection="row" justifyContent="flex-end">
-            <text fg={headerFg}>{fitTuiText(headerObjective, headerObjectiveWidth, { mode: "end" })}</text>
-          </box>
-        ) : null}
       </box>
 
-      <box flexDirection="row" height={sidebars.bodyHeight} flexShrink={0} minHeight={0} width="100%" minWidth={0} overflow="hidden">
-        <box flexDirection="column" width={sidebars.centralWidth} height={sidebars.bodyHeight}
+      <box flexDirection="row" height={bodyHeight} flexShrink={0} minHeight={0} width="100%" minWidth={0} overflow="hidden">
+        <box flexDirection="column" width="100%" height={bodyHeight}
           flexShrink={0} minHeight={0} minWidth={0} overflow="hidden"
           paddingX={compact ? 1 : 2} backgroundColor={CANVAS}>
-      {empty && !reviewOpen && !narrowViewNode ? (
+      {empty ? (
         /*
          * The centered start screen: logo + captions + the COMPOSER + a dim
          * hint line render as ONE vertically-centered group (OpenCode's clean
@@ -6609,14 +5783,28 @@ export function ChatScreen({
                 <Masthead
                   showTerminalMark={showTerminalMark && heroContentWidth >= TERMINAL_BLOCK_LOGO_WIDTH}
                   showMascot={heroBrandRows >= LEDGER_MARK_ROWS + ZERO_HEIGHT + 1}
-                  showTagline={showEmptyStateTagline}
                   contentWidth={heroContentWidth}
                   logoFrameGrid={logoFrameGrid}
                   theme={theme}
                 />
+                {showRepositorySuggestions ? (
+                  <box flexDirection="column" width="100%" minWidth={0} flexShrink={0}
+                    marginTop={1} alignItems="center" gap={1}>
+                    <Cells width={heroContentWidth} align="center" fg={MUTED}>
+                      {"Git repository detected · review for security issues?"}
+                    </Cells>
+                    <box flexDirection="row" width="100%" minWidth={0} flexShrink={0}
+                      justifyContent="center" gap={1}>
+                      {repoSuggestionItems.map((suggestion, index) => (
+                        <DialogActionButton key={suggestion.label} label={suggestion.label}
+                          onPress={() => draftRepositorySuggestion(suggestion.prompt)}
+                          variant={index === 0 ? "primary" : "secondary"} />
+                      ))}
+                    </box>
+                  </box>
+                ) : null}
                 </box>
               ) : null}
-              {workingIndicator}
               {(startupError || checkingModel) && !heroOverlayOpen ? (
                 heroRecoveryNotice
               ) : null}
@@ -6624,6 +5812,7 @@ export function ChatScreen({
             </box>
             <box flexDirection="column" width={heroComposerWidth} minWidth={0} flexShrink={0}
               onSizeChange={function () { setHeroComposerRows(this.height); }}>
+              {activityRow}
               {heroComposerNode}
             </box>
             <box flexShrink={0} minWidth={0} marginTop={1}>
@@ -6635,32 +5824,25 @@ export function ChatScreen({
             </box>
             <box height={heroBottomSpacer} flexShrink={0} minWidth={0} />
           </box>
-      ) : reviewOpen ? (
-        conversationRegion
       ) : (
         <>
-          <box flexDirection="column" flexGrow={1} minHeight={0} minWidth={0}
-            visible={!narrowViewNode} onMouseDown={() => setInspectorFocused(false)}>
-            <HarnessPresentation fallback={conversationRegion} />
+          <box flexDirection="column" flexGrow={1} minHeight={0} minWidth={0}>
+            {conversationRegion}
           </box>
-          {narrowViewNode}
 
           {overlaysNode}
           {stickyNode}
-          {workingIndicator}
+          {activityRow}
           {composerNode}
-          {/*
-            * The inline ACTIVE SUBAGENTS list sits directly BELOW the composer,
-            * so pressing Down FROM the composer reads as moving DOWN into the
-            * list (the keyboard nav target). Explicit height AND flexShrink={0}:
-            * without both, opentui defaults flexShrink to 1 for any box with no
-            * numeric width/height, so a squeezed column collapsed this block to a
-            * single row while its children kept painting. `subagentBlockRows` is
-            * the reserved count, budgeted in `computeLedgerRows` regardless of
-            * where the block is painted.
-            */}
-          {narrowSidebarOpen && narrowSidebar === "right" ? null : subagentNode}
-          {agentNavHintNode}
+          {showAgentWorkList ? (
+            <box width="100%" minWidth={0} flexShrink={0} marginTop={1}>
+              <AgentWorkList agents={projectedHerdAgents} selectedAgentId={focusAgentId}
+                width={contentWidth} height={agentWorkRows} theme={theme} runningGlyph={activityGlyph}
+                mainActivity={mainActivity}
+                interactive={interactive && !gateOpen && !picker && !transcriptMenu.state.open && !stoppingAuditRef.current}
+                onSelect={selectAgentChat} />
+            </box>
+          ) : null}
         </>
       )}
 
@@ -6682,7 +5864,6 @@ export function ChatScreen({
           ) : <text fg={MUTED}>{fitTuiText(statusBarText, statusContentWidth)}</text>}
         </box>
       </box>
-        {rightSidebarNode}
       </box>
       {/*
         * The copy-on-highlight toast. Positioned absolutely with a high

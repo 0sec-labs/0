@@ -18,7 +18,6 @@ const SCREENS: Readonly<Record<string, readonly [SymbolKey, string]>> = {
   finding: ["iconFindings", "Finding details"],
   replay: ["iconReplay", "Replay"],
   settings: ["iconSettings", "Settings"],
-  harness: ["iconHarness", "Tools and permissions"],
   herd: ["iconAgents", "Agents"],
   agents: ["iconAgents", "Agents"],
   market: ["iconMarket", "Hackstore"],

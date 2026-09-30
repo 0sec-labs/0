@@ -18,7 +18,11 @@ const emptyProviderEnv = Object.fromEntries(PROVIDERS.flatMap((provider) =>
 
 async function clickAction(label: string) {
   const lines = frameLines(tui!.rawFrame());
-  const y = lines.findIndex((line) => new RegExp(`\\b${label}\\b`).test(line));
+  const action = new RegExp(`\\b${label}\\b`);
+  let y = -1;
+  for (let index = 0; index < lines.length; index += 1) {
+    if (action.test(lines[index] ?? "")) y = index;
+  }
   expect(y, `${label} action is not visible`).toBeGreaterThanOrEqual(0);
   await tui!.click(lines[y]!.indexOf(label) + 1, y);
 }
@@ -55,12 +59,12 @@ test.each([[64, 24], [40, 12]])("compact embedded controls go back or advance wi
   tui = await launch({ route: { type: "onboard" }, cols, rows,
     env: { ...emptyProviderEnv, DEEPSEEK_API_KEY: "synthetic-existing-key", ZERO_PROVIDER: "deepseek", ZERO_MODEL: "deepseek-chat" },
     settings: { onboardingCompleted: false, mouseSupport: true } });
-  await tui.waitForText(/Step 1 of 7/);
+  await tui.waitForText(/Step 1 of 5/);
   await tui.sendKey("return");
-  await tui.waitForText(/Step 2 of 7/);
+  await tui.waitForText(/Step 2 of 5/);
   await clickAction("Back");
-  await tui.waitForText(/Step 1 of 7/);
-  await clickAction("Next");
+  await tui.waitForText(/Step 1 of 5/);
+  await clickAction("Continue");
   await tui.sendKeys("/deepseek");
   await tui.waitForText(/Continue/);
   const before = loadCredentials(process.env["HOME"]!);
@@ -70,20 +74,20 @@ test.each([[64, 24], [40, 12]])("compact embedded controls go back or advance wi
   expect(getSettings().onboardingCompleted).toBe(false);
 });
 
-test("embedded top Connect stays on provider setup until Save succeeds; top Cancel does not persist a draft", async () => {
+test("embedded Connect opens the selected key form; Cancel does not persist a draft", async () => {
   vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 503 }));
   tui = await launch({ route: { type: "onboard" }, cols: 64, rows: 24,
     env: { ...emptyProviderEnv, DEEPSEEK_API_KEY: "synthetic-existing-key", ZERO_PROVIDER: "deepseek", ZERO_MODEL: "deepseek-chat" },
     settings: { onboardingCompleted: false, mouseSupport: true } });
-  await tui.waitForText(/Step 1 of 7/);
+  await tui.waitForText(/Step 1 of 5/);
   await tui.sendKey("return");
   await tui.sendKeys("/anthropic");
   await clickAction("Connect");
   await tui.waitForText(/Paste or type key/);
-  expect(tui.captureFrame()).toContain("Step 2 of 7");
+  expect(tui.captureFrame()).toContain("Step 2 of 5");
   await tui.sendPaste("unsaved-draft-key");
   await clickAction("Cancel");
-  expect(tui.captureFrame()).toContain("Step 2 of 7");
+  expect(tui.captureFrame()).toContain("Step 2 of 5");
   expect(loadCredentials(process.env["HOME"]!)).toEqual({});
   await clickAction("Connect");
   const secret = "synthetic-embedded-anthropic-key";

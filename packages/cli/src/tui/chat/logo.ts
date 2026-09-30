@@ -3,16 +3,16 @@ import type { Theme } from "../theme-context.js";
 import type { LogoCellTone } from "../logo-animation.js";
 
 /**
- * Five-row ZEROSECURITY wordmark. Every letter has an eight-cell slot and
- * two cells of tracking; the narrow I/T/Y stems keep the same two-cell weight.
- * '#' is white block art, '/' is the orange diagonal in the leading zero.
+ * Five-row 0.SECURITY wordmark. Every letter has an eight-cell slot and two
+ * cells of tracking; the baseline's single white block between 0 and S is the
+ * pixel-font separator dot. '#' is white block art, '/' is the orange slash.
  */
 export const TERMINAL_BLOCK_LOGO = [
   " ######    ######   #######    ######   ##    ##  #######    ######   ########  ##    ##",
   "##  //##  ##        ##        ##        ##    ##  ##    ##     ##        ##      ##  ## ",
   "## // ##   ######   ######    ##        ##    ##  #######      ##        ##       ####  ",
   "##//  ##        ##  ##        ##        ##    ##  ##  ##       ##        ##        ##   ",
-  " ######    ######   #######    ######    ######   ##   ##    ######      ##        ##   ",
+  " ######  # ######   #######    ######    ######   ##   ##    ######      ##        ##   ",
 ] as const;
 export const TERMINAL_BLOCK_LOGO_FULL_WIDTH = 88;
 
@@ -22,7 +22,7 @@ export const TERMINAL_BLOCK_LOGO_COMPACT = [
   "##  //##  ##       ##       ##     ",
   "## // ##  #######  #####    ##     ",
   "##//  ##       ##  ##       ##     ",
-  " ######   #######  #######   ######",
+  " ###### # #######  #######   ######",
 ] as const;
 export const TERMINAL_BLOCK_LOGO_WIDTH = 35;
 

@@ -9,6 +9,7 @@ import type { SelfExtensionRegistry } from "../plugins/self-extension.js";
 import type { NativeRuntimeResult } from "../runtime/types.js";
 import { loadEvolutionConfigFile } from "../improvement/index.js";
 import type { EvolutionConfig } from "../improvement/types.js";
+import { isAdmittedSmolvmWorkbench, resolveWorkbenchBrokerImage } from "../runtime/smolvm-broker.js";
 
 export type ExecutablePluginConfiguration = Partial<Omit<ExecutablePluginOptions, "registry">>;
 
@@ -17,15 +18,17 @@ export function createExecutablePlugins(
   registry: SelfExtensionRegistry,
   configuration: ExecutablePluginConfiguration = {},
 ): ExecutablePluginManager {
-  const backend = configuration.backend ?? process.env["ZERO_PLUGIN_BACKEND"] ?? "docker";
+  const admitted = isAdmittedSmolvmWorkbench();
+  if (admitted && configuration.backend && configuration.backend !== "smolvm") throw new Error("Admitted workbench executable plugins require host-supervised sibling SmolVM");
+  const backend = admitted ? "smolvm" : configuration.backend ?? process.env["ZERO_PLUGIN_BACKEND"] ?? "docker";
   if (backend !== "docker" && backend !== "smolvm") {
     throw new Error("ZERO_PLUGIN_BACKEND must be docker or smolvm");
   }
   return new ExecutablePluginManager({
     root: join(homeStateDir(), "executable-plugins"),
-    image: process.env["ZERO_PLUGIN_IMAGE"] ?? "0-toolbox:local",
-    imageArchive: backend === "smolvm" ? process.env["ZERO_SMOLVM_IMAGE_ARCHIVE"] : undefined,
+    image: configuration.image ?? process.env["ZERO_PLUGIN_IMAGE"] ?? (admitted ? resolveWorkbenchBrokerImage() : "0-toolbox:local"),
     ...configuration,
+    imageArchive: admitted ? undefined : configuration.imageArchive ?? (backend === "smolvm" ? process.env["ZERO_SMOLVM_IMAGE_ARCHIVE"] : undefined),
     backend,
     registry,
   });

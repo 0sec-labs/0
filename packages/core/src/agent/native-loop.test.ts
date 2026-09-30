@@ -18,7 +18,7 @@ import type { Finding } from "@0/shared";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { eventBus } from "../events/bus.js";
+import { eventBus, type SubagentMessagePayload } from "../events/bus.js";
 import {
   UNTRUSTED_OPEN,
   UNTRUSTED_CLOSE,
@@ -209,22 +209,37 @@ describe("runNativeAgentLoop", () => {
     expect(observed).toEqual([finalAnswer]);
   });
 
-  it("exposes a tool as running before execution and completed once its result arrives", async () => {
-    const states: string[] = [];
-    await runNativeAgentLoop({
+  it("keeps full public prose and emitted intent through running, settled and final tool snapshots", async () => {
+    const prose = `  I will inspect parser boundaries.\n\n${"Public source explanation.\n".repeat(500)}Final public conclusion.  `;
+    const snapshots: SubagentMessagePayload[] = [];
+    const base = { agent_id: "worker", name: "Inspect parser", parent_scan_id: "parent", task: "review", max_turns: 1 };
+    const state = await runNativeAgentLoop({
       config: { role: "discovery", systemPrompt: "test", tools: [], maxTurns: 1, target: "https://example.com", scanId: randomUUID() },
-      runtime: createMockRuntime([{
-        content: [{ type: "tool_use", id: "update", name: "update_target", input: { type: "api" } }],
-        stopReason: "tool_use", durationMs: 1,
-      }]),
+      runtime: {
+        type: "api",
+        isAvailable: async () => true,
+        executeNative: async (_system, _messages, _tools, callbacks) => {
+          callbacks?.onThinking?.("Check the parser boundary. Private provider details must not enter the public transcript.");
+          return {
+            content: [{ type: "text", text: prose }, { type: "tool_use", id: "update", name: "update_target", input: { type: "api" } }],
+            stopReason: "tool_use", durationMs: 1,
+          };
+        },
+      },
       db: null,
-      onToolUpdate: (turn, calls, results, assistant) => {
-        const message = buildSubagentMessage({ agent_id: "worker", name: "Worker", parent_scan_id: "parent", task: "review", max_turns: 1 }, turn, assistant, calls, results, Date.now(), { partial: true });
-        const tool = message.tools?.[0];
-        states.push(tool?.running ? "running" : tool?.result.success ? "completed" : "failed");
+      onToolUpdate: (turn, calls, results, assistant, telemetry) => {
+        snapshots.push(buildSubagentMessage(base, turn, assistant, calls, results, Date.now(), { ...telemetry, partial: true }));
+      },
+      onTurn: (turn, calls, results, assistant, telemetry) => {
+        snapshots.push(buildSubagentMessage(base, turn, assistant, calls, results, Date.now(), telemetry));
       },
     });
-    expect(states).toEqual(["running", "completed"]);
+    expect(snapshots.map((message) => message.tools?.[0].running ? "running" : message.tools?.[0].result.success ? "completed" : "failed")).toEqual(["running", "completed", "completed"]);
+    expect(snapshots.map((message) => message.assistant)).toEqual([prose, prose, prose]);
+    expect(snapshots.map((message) => message.reasoning_summary)).toEqual(["Check the parser boundary.", "Check the parser boundary.", "Check the parser boundary."]);
+    expect(JSON.stringify(snapshots)).not.toContain("Private provider details");
+    expect(snapshots[2].partial).not.toBe(true);
+    expect(state.done).toBe(false);
   });
 
   it("honors steering that arrives during a final tool call before retiring the worker", async () => {

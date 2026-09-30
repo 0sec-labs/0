@@ -17,7 +17,7 @@ export type { SurfaceDimensions } from "./popup.js";
 export function DialogSurface({ children, onDismiss, size = "large" }: {
   children: React.ReactNode;
   onDismiss?: () => void;
-  size?: "small" | "medium" | "large";
+  size?: "small" | "medium" | "large" | "xlarge";
 }) {
   return (
     <Popup variant="modal" size={size} zIndex={100} onClose={onDismiss}>

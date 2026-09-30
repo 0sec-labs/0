@@ -6,6 +6,7 @@ import { isAbsolute, resolve, join } from "node:path";
 
 import type {
   Finding,
+  SourceVerificationSummary,
   AttackResult,
   PocStep,
   TargetInfo,
@@ -117,6 +118,7 @@ import { extractPocStepsFromProse } from "./poc-steps-from-prose.js";
 import { isUntrustedSourceTool, sanitizeUntrustedToolResult } from "../untrusted-sanitizer.js";
 import { computeFindingConfidence } from "./finding-confidence.js";
 import { parseRepositoryAcquisition, repositoryAcquisitionAllowed, runRepositoryAcquisition } from "./repository-acquisition.js";
+import { evaluateVerificationSpec } from "../verification-spec/spec.js";
 import {
   validateFindingDraft,
   type FindingDraft,
@@ -165,7 +167,7 @@ import {
   sendMessage,
   type HubMessage,
 } from "../hub/mailbox.js";
-import { PRIMARY_AGENT_NAME, assignAgentName, uniquifyAgentName } from "../hub/name-generator.js";
+import { PRIMARY_AGENT_NAME, agentTaskLabel, assignAgentName } from "../hub/name-generator.js";
 import { runPersistentAgent } from "../hub/supervisor.js";
 import { AuditWorkerTree } from "./worker-tree.js";
 import { ProcessManager, probePort, type ReadyGate } from "./process-manager.js";
@@ -1697,6 +1699,69 @@ export function parseVerificationSpecArg(raw: unknown): VerificationSpec | null 
 }
 
 /**
+ * Summarize the bounded source evaluator without retaining predicate details.
+ * Unavailable or unsupported predicates are counted as inconclusive instead
+ * of being described as a non-match.
+ */
+async function evaluateSourceVerification(
+  spec: VerificationSpec,
+  scopePath: string,
+): Promise<SourceVerificationSummary> {
+  const totalPredicates = spec.code.length;
+  const behaviorPending = Boolean(spec.behavior);
+  const noSourcePredicates =
+    totalPredicates === 0 ||
+    !spec.code.some((predicate) => predicate.kind !== "git-diff-applies");
+
+  try {
+    const result = await evaluateVerificationSpec(spec, scopePath);
+    if (noSourcePredicates) {
+      return {
+        status: "inconclusive",
+        totalPredicates,
+        matchedPredicates: 0,
+        notMatchedPredicates: 0,
+        inconclusivePredicates: totalPredicates,
+        behaviorPending,
+      };
+    }
+
+    const cannotEvaluate =
+      /path escapes repo root or is invalid|path resolves outside repo root|file not found or unreadable|invalid regex|not yet implemented|unknown predicate kind|git repository HEAD unavailable|git diff exceeds/i;
+    const inconclusivePredicates = result.failedPredicates.filter((predicate) =>
+      cannotEvaluate.test(predicate.reason),
+    ).length;
+    const notMatchedPredicates =
+      result.failedPredicates.length - inconclusivePredicates;
+    const matchedPredicates =
+      totalPredicates - result.failedPredicates.length;
+    const status =
+      inconclusivePredicates > 0
+        ? "inconclusive"
+        : result.passed
+          ? "matched"
+          : "not_confirmed";
+    return {
+      status,
+      totalPredicates,
+      matchedPredicates,
+      notMatchedPredicates,
+      inconclusivePredicates,
+      behaviorPending,
+    };
+  } catch {
+    return {
+      status: "inconclusive",
+      totalPredicates,
+      matchedPredicates: 0,
+      notMatchedPredicates: 0,
+      inconclusivePredicates: totalPredicates,
+      behaviorPending,
+    };
+  }
+}
+
+/**
  * Parse the `poc_steps` LLM tool argument into a PocStep[] or null.
  *
  * Tolerates three wire shapes seen from real models:
@@ -2457,17 +2522,6 @@ const subagentModelSelectionSchema = z.object({
   model: z.string().min(1).optional(),
 });
 
-/**
- * First non-empty trimmed line of a subagent `task` brief, clipped to ~64 chars
- * for the Task card's sub-report bullet (mirrors OMP's `taskFirstLine`). Used
- * only for the display-only meta sidecar.
- */
-function subagentTaskFirstLine(task: string): string {
-  const trimmed = task.trim();
-  const newline = trimmed.indexOf("\n");
-  const firstLine = newline === -1 ? trimmed : trimmed.slice(0, newline);
-  return firstLine.length > 64 ? `${firstLine.slice(0, 63)}…` : firstLine;
-}
 
 /**
  * `spawn_persistent_agent` argument schema — validate-then-reject before any side
@@ -2581,7 +2635,7 @@ type SubagentRunReport = Pick<SubagentLifecyclePayload, "turns" | "summary" | "d
 /** Shared lifecycle payload base for one subagent (carries its unique id). */
 interface SubagentLifecycleBase {
   agent_id: string;
-  /** Human-friendly AdjectiveNoun name (display); see name-generator.ts. */
+  /** Unique task-derived label, independent of the opaque mailbox address. */
   name: string;
   parent_scan_id: string;
   task: string;
@@ -2670,15 +2724,16 @@ export function buildSubagentMessage(
   toolCalls: ReadonlyArray<ToolCall>,
   toolResults: ReadonlyArray<ToolResult>,
   now: number,
-  telemetry: Pick<SubagentMessagePayload, "partial" | "usage" | "contextTokens" | "durationMs" | "model"> = {},
+  telemetry: Pick<SubagentMessagePayload, "partial" | "usage" | "contextTokens" | "durationMs" | "model" | "reasoning_summary"> = {},
 ): SubagentMessagePayload {
   // Defensive against a caller that omits the newer args (older onTurn shape).
   const calls = toolCalls ?? [];
   const results = toolResults ?? [];
   const tools: SubagentToolMessage[] = calls
-    .map((call, i) => ({ call, result: results[i] }))
-    .filter(({ call }) => call.name !== "report_status" && call.name !== "done")
-    .map(({ call, result }) => ({
+    .map((call, callIndex) => ({ call, callIndex, result: results[callIndex] }))
+    .filter(({ call, result }) => call.name !== "report_status" && (call.name !== "done" || !result?.success))
+    .map(({ call, callIndex, result }) => ({
+      callIndex,
       call: { name: call.name, arguments: call.arguments ?? {} },
       ...(telemetry.partial && !result ? { running: true } : {}),
       result: result
@@ -2696,15 +2751,15 @@ export function buildSubagentMessage(
   const doneOutput = doneIndex >= 0 ? results[doneIndex]?.output : undefined;
   const summary = doneOutput && typeof doneOutput === "object" && "summary" in doneOutput && typeof doneOutput.summary === "string"
     ? doneOutput.summary.trim() : "";
-  const prose = (assistantText ?? "").trim();
-  const assistant = summary && summary !== prose ? [prose, summary].filter(Boolean).join("\n\n") : prose;
+  const prose = assistantText ?? "";
+  const assistant = summary && summary !== prose.trim() ? [prose, summary].filter((text) => text.trim()).join("\n\n") : prose;
   return {
     ...telemetry,
     agent_id: base.agent_id,
     parent_scan_id: base.parent_scan_id,
     turn,
     ts: now,
-    ...(assistant ? { assistant: formatTruncated(assistant) } : {}),
+    ...(assistant.trim() ? { assistant: formatTruncated(assistant) } : {}),
     ...(tools.length > 0 ? { tools } : {}),
   };
 }
@@ -2991,7 +3046,7 @@ export class ToolExecutor {
   /**
    * Every agent display name this executor has handed out, seeded with the
    * reserved primary name "Main". Used to uniquify each spawned agent's
-   * AdjectiveNoun name so no two agents in the fleet collide. Session-scoped.
+   * task-derived name so no two agents in the fleet collide. Session-scoped.
    */
   private _assignedAgentNames: Set<string>;
 
@@ -5986,6 +6041,7 @@ export class ToolExecutor {
   private buildSubagentLifecycleBase(
     task: string,
     maxTurns: number,
+    requestedName?: string,
   ): SubagentLifecycleBase {
     const scopeRulesArr: string[] | undefined = this.ctx.scope
       ? [
@@ -5994,10 +6050,8 @@ export class ToolExecutor {
         ]
       : undefined;
     const agent_id = `${subagentSiblingPrefix(this.ctx.scanId)}${randomUUID()}`;
-    // A stable AdjectiveNoun name from the id, uniquified against every name this
-    // executor has already handed out (which starts with the reserved "Main"), so
-    // no two agents in the fleet ever share a display name.
-    const name = assignAgentName(agent_id, this._assignedAgentNames);
+    // Task labels are readable; uniqueness is independent of opaque agent ids.
+    const name = assignAgentName(requestedName ?? task, this._assignedAgentNames);
     this._assignedAgentNames.add(name);
     return {
       agent_id,
@@ -6389,13 +6443,8 @@ export class ToolExecutor {
     const { task, name, maxTurns, role, model } = parsed.args;
     const selection: SubagentModelSelection = { role, model };
 
-    const base = this.buildSubagentLifecycleBase(task, maxTurns);
-    let displayName = base.name;
-    if (name) {
-      displayName = uniquifyAgentName(name, this._assignedAgentNames);
-      this._assignedAgentNames.add(displayName);
-    }
-    const persistentBase: SubagentLifecycleBase = { ...base, name: displayName };
+    const base = this.buildSubagentLifecycleBase(task, maxTurns, name);
+    const displayName = base.name;
 
     const parentMessaging = messagingRuntimeOf(this.ctx);
     const childMessaging: MessagingRuntime | undefined = parentMessaging
@@ -6432,11 +6481,11 @@ export class ToolExecutor {
       drain: () =>
         childMessaging ? drainInbox(childMessaging.projectPath, base.agent_id, childMessaging.homeDir) : [],
       emit: (status) => {
-        eventBus.emit("subagent_lifecycle", { ...persistentBase, ...lastRun, status });
+        eventBus.emit("subagent_lifecycle", { ...base, ...lastRun, status });
       },
       runLoop: async ({ task: t, messages }) => {
         try {
-          lastRun = await this.runPersistentLoopOnce(persistentBase, maxTurns, childMessaging, t, messages, lastRun.turns ?? 0, selection, lifetime.signal);
+          lastRun = await this.runPersistentLoopOnce(base, maxTurns, childMessaging, t, messages, lastRun.turns ?? 0, selection, lifetime.signal);
         } catch (error) {
           lastRun = { ...lastRun, done: false, completion_reason: "error", summary: error instanceof Error ? error.message : String(error) };
           throw error;
@@ -6788,7 +6837,7 @@ export class ToolExecutor {
       taskLabel: `${specs.length} ${specs.length === 1 ? "agent" : "agents"}`,
       ...(batchContext !== undefined ? { taskContext: batchContext } : {}),
       subReports: specs.map((s) => {
-        const brief = subagentTaskFirstLine(s.task);
+        const brief = agentTaskLabel(s.task);
         return {
           name: s.base.name,
           ...(s.selection.role ? { agent: s.selection.role } : {}),
@@ -7100,9 +7149,9 @@ export class ToolExecutor {
 
     // 0#193 — optional machine-executable verification spec. Same
     // wire-shape tolerance as poc_steps (object OR JSON string OR garbage).
-    // When parseable, attach to the finding so cloud's canary watcher can
-    // later evaluate it via `evaluateVerificationSpec`. Findings without a
-    // spec stay backwards-compatible (field is undefined).
+    // When parseable, attach the contract for later replay and source-fix
+    // workflows. A unique finding saved in a scoped source workspace also
+    // receives a bounded code-only check below; behavior remains unexecuted.
     const verificationSpec = parseVerificationSpecArg(args.verification_spec);
     if (verificationSpec) {
       finding.verificationSpec = verificationSpec;
@@ -7260,6 +7309,14 @@ export class ToolExecutor {
           message: `merged with existing finding ${existing.id}`,
         },
       };
+    }
+    // Evaluate only the finding that will be added. Duplicate submissions
+    // keep the existing first-write-wins record and do not trigger a check.
+    if (verificationSpec && this.ctx.scopePath) {
+      finding.sourceVerification = await evaluateSourceVerification(
+        verificationSpec,
+        this.ctx.scopePath,
+      );
     }
 
     this.ctx.findings.push(finding);

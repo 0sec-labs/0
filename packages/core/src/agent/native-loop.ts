@@ -411,7 +411,7 @@ export interface NativeAgentLoopOptions {
     toolCalls: ToolCall[],
     results: ToolResult[],
     assistantText: string,
-    telemetry?: { usage?: NativeAgentState["totalUsage"]; contextTokens?: number },
+    telemetry?: { usage?: NativeAgentState["totalUsage"]; contextTokens?: number; reasoning_summary?: string },
   ) => void;
   /** Visible tool snapshots before/after execution, without token-level floods. */
   onToolUpdate?: NativeAgentLoopOptions["onTurn"];
@@ -2235,10 +2235,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       (b): b is Extract<NativeContentBlock, { type: "text" }> => b.type === "text",
     );
     const textContent = textBlocks.map((b) => b.text).join("\n");
-    const turnTelemetry = (onTurn || onToolUpdate) && (result.usage || driven) ? {
-      usage: { ...state.totalUsage },
-      ...(result.usage ? { contextTokens: result.usage.inputTokens + result.usage.outputTokens } : {}),
-    } : undefined;
     if (textContent.trim() && textContent.trim() !== streamedThinkingText.trim()) {
       onEvent?.("thinking", {
         turn: state.turnCount,
@@ -2257,12 +2253,14 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     //      sentence so it reads as a "thinking out loud" snippet.
     // Wrapped in try/catch so a bad summary never kills the scan; emitted
     // at most once per turn and only when the result is non-empty.
+    let reasoningSummary: string | undefined;
     try {
       const reasoningSource = streamedThinkingText.trim()
         ? streamedThinkingText
         : textContent;
       const summary = summarizeReasoning(reasoningSource);
       if (summary) {
+        reasoningSummary = summary;
         eventBus.emit("reasoning_summary", {
           turn: state.turnCount,
           summary,
@@ -2271,6 +2269,11 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     } catch {
       /* heuristic failure must never abort the scan */
     }
+    const turnTelemetry = (onTurn || onToolUpdate) ? {
+      ...((result.usage || driven) ? { usage: { ...state.totalUsage } } : {}),
+      ...(result.usage ? { contextTokens: result.usage.inputTokens + result.usage.outputTokens } : {}),
+      ...(reasoningSummary ? { reasoning_summary: reasoningSummary } : {}),
+    } : undefined;
 
     const toolUseBlocks = result.content.filter(
       (b): b is Extract<NativeContentBlock, { type: "tool_use" }> =>

@@ -12,7 +12,7 @@ describe("modal panel geometry", () => {
   it("fits the viewport and child surface across terminal sizes and close modes", () => {
     for (const width of [1, 2, 3, 4, 5, 8, 9, 12, 20, 40, 80, 100, 200]) {
       for (const height of [1, 2, 3, 4, 6, 7, 8, 10, 11, 14, 24, 50, 80]) {
-        for (const size of ["small", "medium", "large"] as const) {
+        for (const size of ["small", "medium", "large", "xlarge"] as const) {
           for (const dismissible of [false, true]) {
             const g = modalPanelGeometry({ width, height }, size, dismissible);
             expect(g.left).toBeGreaterThanOrEqual(0);
@@ -33,7 +33,7 @@ describe("modal panel geometry", () => {
   });
 
   it("bounds the panel instead of growing with a roomy terminal", () => {
-    for (const size of ["small", "medium", "large"] as const) {
+    for (const size of ["small", "medium", "large", "xlarge"] as const) {
       const roomy = modalPanelGeometry({ width: 200, height: 80 }, size);
       const huge = modalPanelGeometry({ width: 400, height: 160 }, size);
       expect(huge.panelWidth).toBe(roomy.panelWidth);
@@ -41,6 +41,25 @@ describe("modal panel geometry", () => {
       expect(roomy.panelWidth).toBeLessThan(200);
       expect(roomy.panelHeight).toBeLessThan(80);
     }
+  });
+  it("gives xlarge a substantially larger panel on a roomy terminal", () => {
+    const large = modalPanelGeometry({ width: 140, height: 72 }, "large");
+    const xlarge = modalPanelGeometry({ width: 140, height: 72 }, "xlarge");
+    expect(xlarge.panelWidth).toBe(120);
+    expect(xlarge.panelHeight).toBe(52);
+    expect(xlarge.inner.width).toBeGreaterThan(large.inner.width);
+    expect(xlarge.inner.height).toBeGreaterThan(large.inner.height);
+  });
+
+  it("keeps xlarge within a compact terminal", () => {
+    const terminal = { width: 80, height: 24 };
+    const geometry = modalPanelGeometry(terminal, "xlarge");
+    expect(geometry.panelWidth).toBe(76);
+    expect(geometry.panelHeight).toBe(20);
+    expect(geometry.left).toBe(2);
+    expect(geometry.top).toBe(2);
+    expect(geometry.left + geometry.panelWidth).toBeLessThanOrEqual(terminal.width);
+    expect(geometry.top + geometry.panelHeight).toBeLessThanOrEqual(terminal.height);
   });
 
   it("reserves only one close row and retains content even in a one-row viewport", () => {

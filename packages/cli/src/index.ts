@@ -20,6 +20,18 @@ import {
   installProcessPresentationStreamBridge,
 } from "./presentation/process-output.js";
 import { setHerdrSink } from "./herdr-state.js";
+import { launchConfiguredWorkbench } from "./workbench.js";
+
+// Cross the execution boundary before reading host login state, applying updates
+// or starting the console. The guest receives the original argv and terminal.
+try {
+  const workbenchExitCode = await launchConfiguredWorkbench(process.argv.slice(2));
+  if (workbenchExitCode !== undefined) process.exit(workbenchExitCode);
+} catch (error) {
+  process.stderr.write(`[0] ${error instanceof Error ? error.message : String(error)}\n`);
+  process.exit(125);
+}
+const isWorkbenchManagement = process.argv[2] === "workbench" || process.argv[2] === "config";
 
 
 // Legacy command modules still use console methods. Bridge those bytes into
@@ -31,7 +43,7 @@ installProcessPresentationStreamBridge();
 // resolves to the chatgpt-codex provider (highest priority) instead of falling
 // through to stale AZURE_OPENAI_API_KEY / OPENAI_API_KEY. No-op in the cloud
 // worker (it sets the tokens itself) and when a token is already present.
-maybeLoadCodexAuth();
+if (!isWorkbenchManagement) maybeLoadCodexAuth();
 
 
 // The settings store initializes the pipeline and preserves explicit environment
@@ -76,7 +88,7 @@ enforceSourceDistFreshness({ entryUrl: import.meta.url });
 
 // Explicit automatic updates finish before command parsing or interactive work.
 // Notification-only checks stay in the background; unset settings remain opt-in.
-await runStartupUpdate(VERSION);
+if (!isWorkbenchManagement) await runStartupUpdate(VERSION);
 
 // The empty-argv path launches straight into the interactive TUI and needs none
 // of the subcommand modules. Importing (and registering) that barrel is the
@@ -144,6 +156,7 @@ async function buildProgram(): Promise<Command> {
   c.registerThemeCommand(program);
   c.registerEvolveCommand(program);
   c.registerConfigCommand(program);
+  c.registerWorkbenchCommand(program);
   c.registerHackstoreCommand(program);
   return program;
 }
@@ -186,7 +199,7 @@ process.once("beforeExit", () => {
 
 // ── Entry point ──
 const userArgs = process.argv.slice(2);
-const knownCommands = ["scan", "resume", "replay", "history", "findings", "secure", "review", "fix", "audit", "deps", "doctor", "dashboard", "tui", "watch", "orchestrate", "db", "mcp-server", "triage", "eval", "bench", "ingest", "kernel", "disclose", "verify", "exploit", "hunt", "recency-hunt", "deep-review", "lens-synth", "memsafety", "assumption-hunt", "specdrift", "protocol-check", "cve", "upgrade", "update", "h1", "intel", "recon", "js-recon", "npm-discovery", "identity", "adgraph", "entragraph", "cloud", "xnu-fuzz", "research", "radar", "timeline", "console", "agent-assure", "binary", "plugin", "theme", "config", "evolve", "hackstore", "hack", "store", "help"];
+const knownCommands = ["scan", "resume", "replay", "history", "findings", "secure", "review", "fix", "audit", "deps", "doctor", "dashboard", "tui", "watch", "orchestrate", "db", "mcp-server", "triage", "eval", "bench", "ingest", "kernel", "disclose", "verify", "exploit", "hunt", "recency-hunt", "deep-review", "lens-synth", "memsafety", "assumption-hunt", "specdrift", "protocol-check", "cve", "upgrade", "update", "h1", "intel", "recon", "js-recon", "npm-discovery", "identity", "adgraph", "entragraph", "cloud", "xnu-fuzz", "research", "radar", "timeline", "console", "agent-assure", "binary", "plugin", "theme", "config", "workbench", "evolve", "hackstore", "hack", "store", "help"];
 
 if (userArgs.length === 0) {
   // Fast path: straight into the TUI without ever importing the command barrel.

@@ -47,6 +47,7 @@ export interface FindingsRow {
    */
   verificationSpec?: string | null;
   verificationResult?: string | null;
+  sourceVerification?: string | null;
   reviewAnnotation?: string | null;
 }
 
@@ -147,8 +148,8 @@ function parseVerificationSpec(raw: string | null | undefined): unknown {
 }
 
 /**
- * Rebuild a finding using the database's existing source-verification field
- * hydrator. Absent or malformed persisted verdicts stay honestly ineligible.
+ * Rebuild a finding using the database's conservative review/source-check
+ * hydrator. Absent or malformed persisted fields remain absent.
  */
 export function findingFromRow(row: FindingsRow): Finding {
   const record: Record<string, unknown> = {

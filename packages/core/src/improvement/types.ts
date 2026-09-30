@@ -14,7 +14,7 @@ export interface EvolutionCase {
   expected: unknown;
 }
 
-/** Isolation provider for source evaluations; omitted backend retains Docker. */
+/** Outside an admitted workbench omission retains Docker; admission forces sibling SmolVM. */
 export type EvolutionBackend = "docker" | "smolvm";
 
 /** Operator-owned contract. Neither a generated patch nor a target can edit it. */
@@ -23,9 +23,9 @@ export interface EvolutionConfig {
   sourceRoot: string;
   storePath: string;
   image: string;
-  /** Backend isolation provider: "docker" (default) or "smolvm". */
+  /** Operator backend outside a workbench; admitted workbenches always use sibling SmolVM. */
   backend?: EvolutionBackend;
-  /** Path to the smolvm toolbox archive; required when backend is "smolvm". */
+  /** Local archive for standalone SmolVM. Admitted workbenches use only the host-approved image catalog. */
   imageArchive?: string;
   sourcePaths: string[];
   editablePaths: string[];

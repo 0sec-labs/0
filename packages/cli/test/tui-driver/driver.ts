@@ -299,6 +299,9 @@ export async function launch(opts: LaunchOptions = {}): Promise<TuiHandle> {
         else if (isEscape) setup.mockInput.pressEscape(mods);
         else if (lower === "tab") setup.mockInput.pressTab(mods);
         else if (lower === "backspace") setup.mockInput.pressBackspace(mods);
+        else if (lower === "home" || lower === "end" || /^f(?:[1-9]|1[0-2])$/.test(lower)) {
+          setup.mockInput.pressKey(lower.toUpperCase(), mods);
+        }
         else setup.mockInput.pressKey(key, mods);
       }, isEscape);
     },

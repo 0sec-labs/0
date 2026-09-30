@@ -67,6 +67,24 @@ describe("fixEligibility", () => {
     });
   });
 
+  it("does not treat a matched source check as canonical replay reproduction", () => {
+    const finding = eligibleFinding({
+      verification_result: undefined,
+      sourceVerification: {
+        status: "matched",
+        totalPredicates: 1,
+        matchedPredicates: 1,
+        notMatchedPredicates: 0,
+        inconclusivePredicates: 0,
+        behaviorPending: false,
+      },
+    });
+    expect(fixEligibility(finding)).toEqual({
+      eligible: false,
+      reason: "finding is not reproduced (verification_result.status must be reproduced)",
+    });
+  });
+
   it("rejects a finding whose verification result is not reproduced", () => {
     const finding = eligibleFinding({ verification_result: { status: "not_reproduced" } });
     expect(fixEligibility(finding)).toEqual({

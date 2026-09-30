@@ -139,9 +139,9 @@ describe("VerificationResultSchema", () => {
     );
   });
 
-  it("exposes the three runner kinds", () => {
+  it("exposes the four runner kinds", () => {
     expect(RunnerKindSchema.options.sort()).toEqual(
-      ["docker", "local", "qemu"].sort(),
+      ["docker", "local", "qemu", "smolvm"].sort(),
     );
   });
 

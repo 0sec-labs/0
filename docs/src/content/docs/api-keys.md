@@ -256,12 +256,12 @@ Codex** under **Provider subscription**. 0 runs `codex login --device-auth`,
 shows the device instructions, and reloads `~/.codex/auth.json` after success.
 Choose **OpenAI** under **Use my own API key** for `OPENAI_API_KEY` access.
 
-Every `0` run loads that file into the environment before any subcommand
-runs, so a codex-login file is picked up everywhere — the console `/providers`
-view, `0 doctor`, and scans/reviews/audits. An explicit environment value always wins,
-and a missing or malformed file is ignored quietly. The `/providers` table
-never checks the filesystem: anything reading it without the CLI's startup
-load (for example, embedded in a custom tool) shows "not configured".
+Every `0` run loads that file into the environment before any subcommand runs,
+so a codex-login file is available to the console `/connect` view, `0 doctor`
+and scans/reviews/audits. An explicit environment value always wins, and a
+missing or malformed file is ignored quietly. `/connect` reads the environment
+populated at CLI startup; provider status outside that startup path can show
+"not configured".
 
 ## Console credential store
 
@@ -286,7 +286,7 @@ The BYOK `/model` picker starts with curated models. **Tab** opens the full
 catalog; typing a query searches the full catalog from either view.
 Check credentials and account access before use. The detail pane shows setup
 hints and credential sources; missing prices remain unknown.
-Use `/connect` to add credentials and `/providers` to inspect them.
+Use `/connect` to add credentials or inspect connection state.
 Model selections apply to the current audit while idle or after its active
 turn finishes. A selection requiring an unconnected provider remains staged:
 connect the provider, then select the model again. A normal `/connect` choice

@@ -7,7 +7,7 @@ tableOfContents:
 ---
 
 Find the command, arguments, and options for your task. This reference covers
-**62 top-level commands** and their registered subcommands.
+**56 top-level commands** and their registered subcommands.
 
 For a worked example, start with [Scan Workflows](/scan-workflows/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
@@ -23,7 +23,7 @@ For a worked example, start with [Scan Workflows](/scan-workflows/),
   <section class="docs-task-card">
     <h3>Work interactively</h3>
     <p>Open the console, configure your environment, and diagnose setup.</p>
-    <p><a href="#console">console</a> · <a href="#config">config</a> · <a href="#doctor">doctor</a></p>
+    <p><a href="#console">console</a> · <a href="#workbench">workbench</a> · <a href="#config">config</a> · <a href="#doctor">doctor</a></p>
   </section>
   <section class="docs-task-card">
     <h3>Review the evidence</h3>
@@ -62,6 +62,7 @@ a handler may resolve configuration or require an explicit value. Inverse
 - Use explicit commands in automation. Recognizable bare targets are routed automatically; ambiguous input is refused.
 - Commands register `--help`; root routing can prevent reaching a registration. See the [triage routing limitation](/troubleshooting/#triage-command-reports-an-ambiguous-target).
 - Scope, provider authentication, target authentication, filesystem access, and execution isolation have independent controls. See [Scope & Authorization](/scope/).
+- The operator-global SmolVM profile runs the entire CLI inside an online Kali guest, preserving original arguments and terminal streams. `workbench` and `config` remain host management commands. No Colima/Docker daemon is needed at runtime; failures never choose host execution implicitly.
 - Check the workflow's outcome and verification status after a command completes. Verification exit codes vary by path.
 - Before exporting reports, invoking plugins, preparing disclosures, or running queued work, check the inputs and permissions. These actions can write externally or execute code.
 
@@ -216,6 +217,93 @@ Merge a shared config into the global (default) or --project layer
 | `--global` | — | Import into the global config (default) |
 | `--yes` | — | Accept changes to security-sensitive settings (required to flip them) |
 
+### workbench
+
+Set up and inspect the whole-harness online SmolVM security workbench on
+Apple Silicon macOS. The local Linux guest contains 0, the security tools and
+the browser; Docker is not required to run the workbench.
+
+```text
+0 workbench
+```
+
+Guide: [Execution profile and grants](/configuration/#whole-harness-execution-profile).
+
+Subcommands: [setup](#workbench-setup) · [status](#workbench-status) · [providers](#workbench-providers) · [configure](#workbench-configure) · [disable](#workbench-disable).
+
+#### workbench setup
+
+Verify/provision the signed native runtime, approve a local archive by digest,
+and persist the operator-global SmolVM profile.
+
+```text
+0 workbench setup [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--image <archive>` | — | Local OCI/Docker archive to digest-pin and approve; never a mutable registry tag |
+| `--state <directory>` | — | Private VM state directory (defaults to ~/.0/workbench) |
+| `--workspace <directory>` | — | Explicit workspace mount; otherwise each invocation mounts its current directory |
+| `--provider <id>` | — | Grant this provider's selected account/environment credential; repeat for multiple providers |
+| `--github` | — | Grant a GitHub token from GH_TOKEN/GITHUB_TOKEN or the existing gh account |
+| `--no-github` | — | Revoke the GitHub token grant |
+| `--cpus <count>` | — | Guest virtual CPUs |
+| `--memory <MiB>` | — | Guest RAM in MiB |
+| `--storage <GiB>` | — | Guest private writable storage in GiB |
+| `--sandbox-image <reference=archive>` | — | Approve an immutable image reference for brokered isolated container actions; repeat for multiple images |
+
+Provider/GitHub credentials resolve only for explicit grants. The host HOME,
+SSH configuration and Docker socket are not mounted into the guest.
+
+#### workbench status
+
+Read configuration, native runtime readiness, image approval, effective privacy,
+network mode, broker resource ceilings and retained guest admission. Does not
+download or launch a VM or reveal credential values.
+
+```text
+0 workbench status [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable status (no credential values) |
+
+#### workbench providers
+
+List the exact identifiers accepted by `--provider`; this does not expose credentials.
+
+```text
+0 workbench providers
+```
+
+#### workbench configure
+
+Replace integration grants or operator-approved sibling image references.
+
+```text
+0 workbench configure [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--provider <ids>` | — | Replace provider grants with comma-separated IDs, or none |
+| `--github` | — | Enable the explicit GitHub credential grant |
+| `--no-github` | — | Revoke the GitHub credential grant |
+| `--current-workspace` | — | Mount each invocation's current directory instead of a fixed saved workspace |
+| `--sandbox-image <reference=archive>` | — | Add or replace an operator-approved immutable sandbox image reference; repeat for multiple images |
+| `--clear-sandbox-images` | — | Revoke all explicit sandbox image-reference grants |
+
+#### workbench disable
+
+Explicitly switch to host-local execution. Approved image and guest state remain.
+
+```text
+0 workbench disable
+```
+
+
 ### theme
 
 List, install, apply, export, and remove console colour themes
@@ -306,7 +394,7 @@ Guide: [Read the workflow](/integrations/).
 
 Aliases: `hack`, `store`.
 
-Subcommands: [init](#hackstore-init) · [validate](#hackstore-validate).
+Subcommands: [init](#hackstore-init) · [validate](#hackstore-validate) · [prepare-submission](#hackstore-prepare-submission).
 
 #### hackstore init
 
@@ -340,6 +428,23 @@ Validate an extension manifest against the Hackstore schema
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--json` | — | Emit machine-readable JSON |
+
+#### hackstore prepare-submission
+
+Create a reviewed source bundle for a Hackstore pull request. This does not
+publish or submit the extension.
+
+```text
+0 hackstore prepare-submission [options] <path>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `path` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--out <directory>` | — | New output directory (default: &lt;id&gt;-submission) |
 
 ### upgrade
 
@@ -425,8 +530,8 @@ Guide: [Read the workflow](/scan-workflows/).
 | `-m, --model <model>` | — | LLM model to use |
 | `--repo <path>` | — | Source code path for white-box scanning (read code before attacking) |
 | `--auth <json>` | — | Auth credentials as JSON string or path to JSON file (types: bearer, cookie, basic, header) |
-| `--scope <path>` | — | Path to a JSON scope file ({in_scope, out_of_scope} arrays of host / *.domain / cidr rules). Out-of-scope URLs return as ToolResult.error at every fetch site. See 0#215. |
-| `--allow-scanners` | `false` | Disable the generic-scanner suppression gate (0#217). When --scope is set, the agent refuses to spawn sqlmap/wpscan/nikto/gobuster/dirb/wfuzz/ffuf/`nmap -sV`/`nmap -A` by default; pass this flag only when the engagement explicitly permits generic-scanner traffic. |
+| `--scope <path>` | — | JSON engagement policy ({in_scope, out_of_scope}); activate its authorization checks with `0 plugin enable scope` |
+| `--allow-scanners` | `false` | Expose structured scanner tools and relax generic-scanner suppression in scope-enforced engagements. Pass only when the operator permits that traffic. |
 | `--require-scope` | `false` | Set ZERO_REQUIRE_SCOPE for scope-aware execution paths. Ordinary live-target scan already refuses missing scope, independently of this flag. |
 | `--attribution-header <name=value>` | — | Attribution header to attach to in-scope outbound requests (0#216). Repeatable: pass `--attribution-header X-A=1 --attribution-header X-B=2`. Lower precedence than the scope file's `attribution.headers` block and ZERO_ATTRIBUTION_HEADERS env var. NEVER attached to out-of-scope traffic. |
 | `--attribution-ua <token>` | — | Engagement token to embed in the User-Agent on in-scope traffic (0#216). Resulting UA: `0/&lt;ver&gt; (engagement: &lt;token&gt;)`. Lower precedence than the scope file's `attribution.user_agent_token` and ZERO_ATTRIBUTION_UA_TOKEN env var. |
@@ -1000,15 +1105,15 @@ Guide: [Read the workflow](/verification-result/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--runner <kind>` | — | Deterministic replay runner: local\|docker\|qemu (default local). |
+| `--runner <kind>` | — | Deterministic replay runner: local\|smolvm\|docker\|qemu (default smolvm in an admitted workbench, local outside). |
 | `--docker-network <name>` | — | Docker network for --runner docker. Defaults to none; bridge/custom networks require --scope and only permit HTTP steps. |
-| `--scope <path>` | — | Engagement scope JSON required for networked Docker HTTP replay. |
+| `--scope <path>` | — | Engagement scope JSON required for HTTP replay; SmolVM also refuses private/loopback destinations. |
 | `--qemu-binary <path>` | — | QEMU emulator for --runner qemu. |
 | `--qemu-kernel <path>` | — | Guest kernel image for --runner qemu. |
 | `--qemu-busybox <path>` | — | Static BusyBox binary used to build the offline QEMU guest. |
 | `--out <dir>` | — | 0#193 run directory (artifacts go under &lt;out&gt;/artifacts/). Defaults to a fresh tmpdir. |
 | `--finding <path>` | — | Path to a finding.json. |
-| `--bundle <path>` | — | Path to a reproduction bundle directory; requires --runner local\|docker. Replays the bundle's vulnerable and patched snapshots through the configured runner and emits an aggregate ReproductionBundleResult. |
+| `--bundle <path>` | — | Path to a reproduction bundle directory; requires --runner local\|smolvm\|docker outside an admitted workbench. Replays the bundle's vulnerable and patched snapshots through the configured runner and emits an aggregate ReproductionBundleResult. |
 | `--create-bundle <plan.json>` | — | Path to a BundlePlan JSON. Creates a reproduction bundle without executing any PoC steps. Requires --out &lt;bundle-dir&gt;. |
 | `--target <path>` | — | Path to a target.json (PocExecutionTarget: baseUrl, env, cwd, timeoutMs, personas). |
 | `--fixture <name>` | — | Run a built-in deterministic replay fixture. Supported: cli-path-traversal. |
@@ -1785,7 +1890,7 @@ Guide: [Read the workflow](/research-workflows/).
 | `--mcp-endpoint <url>` **required** | — | Authorized MCP tools/list endpoint |
 | `--oracle-endpoint <url>` **required** | — | Customer-owned state-observer endpoint |
 | `--scenario <path>` **required** | — | Scenario JSON: id, title, injection_vector, benign_task, payload, prohibited_action |
-| `--scope <path>` **required** | — | Engagement scope JSON; all three endpoints must be in scope |
+| `--scope <path>` | — | Engagement scope JSON; required only while the scope plugin is enabled |
 | `--target-version <version>` **required** | — | Version or build digest of the tested agent deployment |
 | `--policy-version <version>` **required** | — | Version or digest of the agent prompt and authorization policy |
 | `--model-version <version>` **required** | — | Model deployment/version identifier |
@@ -2175,8 +2280,8 @@ Guide: [Read the workflow](/research-workflows/).
 | --- | --- | --- |
 | `--json` | — | Emit the asset inventory as machine-readable JSON |
 | `--timeout <ms>` | `10000` | Per-request probe timeout in milliseconds |
-| `--active` | — | Enable active subdomain enumeration (DNS brute-force). Touches the target's DNS, so it is deny-by-default: REQUIRES --scope &lt;file&gt; authorizing the targets. |
-| `--scope <file>` | — | Path to a JSON scope file ({in_scope, out_of_scope}). Required for --active; every candidate host is checked against it before any DNS query. |
+| `--active` | — | Enable active DNS subdomain brute-force; the optional scope plugin enforces candidate authorization. |
+| `--scope <file>` | — | JSON engagement policy; required for --active only while the scope plugin is enabled. |
 
 ### js-recon
 
@@ -2194,7 +2299,7 @@ Guide: [Read the workflow](/research-workflows/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--scope <file>` **required** | — | Path to a JSON scope file ({in_scope, out_of_scope}). REQUIRED — every JS URL is checked against it before any fetch. No scope = nothing fetched. |
+| `--scope <file>` | — | JSON engagement policy; required only while the scope plugin is enabled. |
 | `--timeout <ms>` | `10000` | Per-request fetch timeout in milliseconds |
 | `--max-files <n>` | — | Maximum JS files to fetch (clamped to [0,100]) |
 | `--json` | — | Emit the result as machine-readable JSON |
@@ -2324,7 +2429,7 @@ Probe S3 buckets anonymously for public listing and orphaned-bucket takeover. Re
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--scope <file>` **required** | — | Path to a JSON scope file ({in_scope, out_of_scope}). REQUIRED — each bucket's S3 endpoint must be in scope or it is refused. |
+| `--scope <file>` | — | JSON engagement policy; required only while the scope plugin is enabled. |
 | `--region <region>` | — | Bucket home region (default us-east-1 / global endpoint) |
 | `--max-keys <n>` | — | Max object keys to sample from a public listing (1-100, default 10) |
 | `--json` | — | Emit results as machine-readable JSON |
@@ -2339,7 +2444,7 @@ Validate an AWS credential with `sts:GetCallerIdentity` and read-only over-privi
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--scope <file>` **required** | — | Path to a JSON scope file ({in_scope, out_of_scope}). REQUIRED — validating a credential is recon against the target org, deny-by-default. |
+| `--scope <file>` | — | JSON engagement policy; required only while the scope plugin is enabled. |
 | `--access-key-id <id>` | — | AWS access key id (defaults to $AWS_ACCESS_KEY_ID) |
 | `--secret-access-key <key>` | — | AWS secret access key (defaults to $AWS_SECRET_ACCESS_KEY) |
 | `--session-token <token>` | — | AWS session token (defaults to $AWS_SESSION_TOKEN) |
@@ -2602,16 +2707,17 @@ List everything in the configured registry
 Download, validate, and write plugin files. Installation leaves the plugin disabled and executes no code.
 
 ```text
-0 plugin install [options] <id>
+0 plugin install [options] <id-or-path>
 ```
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `id` | Yes |  |
+| `id-or-path` | Yes |  |
 
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--registry <url>` | — | Hackstore index URL (https) |
+| `--local` | — | Install a local directory containing manifest.json and plugin.js (no network) |
 
 #### plugin enable
 

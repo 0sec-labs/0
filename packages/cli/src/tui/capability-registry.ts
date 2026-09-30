@@ -120,15 +120,6 @@ const CAPABILITIES: readonly CapabilityEntry[] = [
     description: "Browse active and recent engagement operations.",
   },
   {
-    id: "herd",
-    label: "Agent Herd",
-    category: "engagement",
-    route: "herd",
-    outboundOrMutating: false,
-    safetyTier: "automatic",
-    description: "Browse the roster of active subagent workers.",
-  },
-  {
     id: "comms",
     label: "Agent Comms",
     category: "engagement",

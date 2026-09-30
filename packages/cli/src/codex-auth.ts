@@ -19,7 +19,7 @@ export interface CodexAuthOptions {
 /**
  * Canonical override for the codex auth-file path. This is the variable the
  * engine reads (`packages/core/src/runtime/llm-api.ts` readChatGptCodexAuthFile)
- * and the one documented in docs/api-keys.md and the `/providers` hint, so the
+ * and the one documented in docs/api-keys.md and the `/connect` setup flow, so the
  * CLI loader has to agree with it — otherwise an operator who sets the
  * documented variable is silently ignored on this path.
  */

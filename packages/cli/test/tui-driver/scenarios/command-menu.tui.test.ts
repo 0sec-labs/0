@@ -63,6 +63,16 @@ test("the selected command wears the PRIMARY highlight, like the model picker", 
   expect(highlighted[0]!.text, "the highlighted row is not a slash command").toMatch(/^\/\S/);
 });
 
+test("removed harness/provider aliases are unknown in the composer", async () => {
+  tui = await launch();
+  await tui.waitForText(HOME_READY, 15_000);
+  for (const name of ["harness", "providers"]) {
+    await tui.sendKeys(`/${name}`);
+    await tui.sendKey("return");
+    await tui.waitForText(new RegExp(`unknown command: /${name}`), 8_000);
+  }
+});
+
 test("Left leaves a one-result slash menu at an editable caret without running it", async () => {
   tui = await launch();
   await tui.waitForText(HOME_READY, 15_000);

@@ -50,10 +50,9 @@ jobs:
           ref: ${{ github.event.inputs.tag || github.ref }}
       - uses: actions/setup-node@v5
         with:
-          # Node 22, not 24: tree-sitter@0.21.1's native addon fails to compile
-          # against Node 24's V8 (missing cppgc header) on linux-arm64, which has
-          # no prebuilt. Node 22 compiles it from source cleanly.
-          node-version: 22
+          # The vendored native parser preserves its grammar ABI while building
+          # with the C++20 standard required by our supported Node 24 runtime.
+          node-version: 24
           # Hosted runners do not expose pnpm until the next `corepack enable`
           # step. Disable setup-node's pre-Corepack cache probe.
           package-manager-cache: false
@@ -207,7 +206,7 @@ jobs:
       # rewrite. Scoped packages require --access public on publish.
       - name: Install runtime dependencies and smoke the bundle
         run: |
-          npm --prefix dist install --omit=dev --no-audit --no-fund
+          npm --prefix dist ci --omit=dev --no-audit --no-fund
           node dist/0.js --version
           bash scripts/smoke-cli.sh "node dist/0.js"
           node scripts/smoke-plugin-runtime.mjs dist/0.js

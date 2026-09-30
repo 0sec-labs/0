@@ -303,15 +303,6 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   // The only rebindable set: self-contained, stateless toggles that call
   // `updateSetting(...)` and take no part in text entry or modal cycles.
   {
-    id: "view.right-sidebar",
-    keys: "Ctrl+L",
-    defaultChords: ["ctrl+l"],
-    rebindable: true,
-    description: "Toggle the right sidebar (persists across the session).",
-    category: "View",
-    handler: 'if (matchesBinding(key, "view.right-sidebar", …)) updateSetting("showRightSidebar", …)',
-  },
-  {
     id: "view.transcript-detail",
     keys: "Ctrl+R",
     defaultChords: ["ctrl+r"],
@@ -321,36 +312,6 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     category: "View",
     handler:
       'if (matchesBinding(key, "view.transcript-detail", …)) updateSetting("transcriptDetail", …)',
-  },
-  {
-    id: "overlay.review-toggle",
-    keys: "Ctrl+O",
-    defaultChords: ["ctrl+o"],
-    rebindable: true,
-    description: "Open (and close) the full-screen transcript-review overlay.",
-    category: "View",
-    handler:
-      'if (matchesBinding(key, "overlay.review-toggle", …)) setReviewOpen(true) / (reviewOpen) close',
-  },
-  {
-    id: "overlay.review-top",
-    keys: "Ctrl+Home",
-    defaultChords: ["ctrl+home"],
-    rebindable: false,
-    description: "Jump to the top of the transcript-review overlay.",
-    category: "View",
-    lockReason: "modal",
-    handler: 'if (reviewOpen && key.ctrl && key.name === "home") review.scrollY = 0',
-  },
-  {
-    id: "overlay.review-bottom",
-    keys: "Ctrl+End",
-    defaultChords: ["ctrl+end"],
-    rebindable: false,
-    description: "Jump to the bottom of the transcript-review overlay.",
-    category: "View",
-    lockReason: "modal",
-    handler: 'if (reviewOpen && key.ctrl && key.name === "end") review.scrollY = review.maxScrollY',
   },
 
   // ── Autonomy ─────────────────────────────────────────────────────────────────

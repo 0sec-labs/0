@@ -188,18 +188,18 @@ describe("chord model", () => {
 
 describe("matchesBinding resolver", () => {
   it("matches a rebindable binding on its default chord with no override", () => {
-    const binding = KEYBINDINGS.find((b) => b.id === "overlay.review-toggle")!;
+    const binding = KEYBINDINGS.find((b) => b.id === "view.transcript-detail")!;
     const defaultKey = parseChord(binding.defaultChords[0])!;
     expect(matchesBinding(defaultKey, binding.id)).toBe(true);
     expect(matchesBinding(defaultKey, binding.id, {})).toBe(true);
-    expect(matchesBinding({ name: "x", ctrl: true }, "overlay.review-toggle")).toBe(false);
+    expect(matchesBinding({ name: "x", ctrl: true }, "view.transcript-detail")).toBe(false);
   });
 
   it("matches the override instead of the default when one is set", () => {
-    const binding = KEYBINDINGS.find((b) => b.id === "overlay.review-toggle")!;
+    const binding = KEYBINDINGS.find((b) => b.id === "view.transcript-detail")!;
     const defaultKey = parseChord(binding.defaultChords[0])!;
-    const overrides = { "overlay.review-toggle": "ctrl+j" };
-    expect(matchesBinding({ name: "j", ctrl: true }, "overlay.review-toggle", overrides)).toBe(true);
+    const overrides = { "view.transcript-detail": "ctrl+j" };
+    expect(matchesBinding({ name: "j", ctrl: true }, "view.transcript-detail", overrides)).toBe(true);
     // The old default no longer matches.
     expect(matchesBinding(defaultKey, binding.id, overrides)).toBe(false);
   });
@@ -221,7 +221,7 @@ describe("matchesBinding resolver", () => {
       ["nav.palette", { name: "p", ctrl: true }, "j"],
       ["nav.scroll-up", { name: "pageup" }, "j"],
       ["nav.scroll-down", { name: "pagedown" }, "j"],
-      ["overlay.review-toggle", { name: "o", ctrl: true }, "j"],
+      ["view.transcript-detail", { name: "r", ctrl: true }, "j"],
       ["nav.jump-agents", { name: "g", ctrl: true }, "j"],
       ["nav.open-comms", { name: "t", ctrl: true }, "j"],
     ] as const) {
@@ -236,7 +236,14 @@ describe("matchesBinding resolver", () => {
 
   it("returns false for an unknown id or nameless key", () => {
     expect(matchesBinding({ name: "b", ctrl: true }, "nope.nope")).toBe(false);
-    expect(matchesBinding({ ctrl: true }, "overlay.review-toggle")).toBe(false);
+    expect(matchesBinding({ ctrl: true }, "nope.nope")).toBe(false);
+    for (const [id, key] of [
+      ["overlay.review-toggle", { name: "o", ctrl: true }],
+      ["overlay.review-top", { name: "home", ctrl: true }],
+      ["overlay.review-bottom", { name: "end", ctrl: true }],
+    ] as const) {
+      expect(matchesBinding(key, id)).toBe(false);
+    }
   });
 });
 
@@ -275,24 +282,24 @@ describe("reserved chords + conflict detection", () => {
 
   it("flags two rebindable actions on one chord", () => {
     const conflicts = detectConflicts(KEYBINDINGS, {
-      "overlay.review-toggle": "ctrl+j",
-      "view.right-sidebar": "ctrl+j",
+      "nav.open-comms": "ctrl+j",
+      "view.transcript-detail": "ctrl+j",
     });
     expect(conflicts.length).toBe(1);
     expect(conflicts[0]!.chord).toBe("ctrl+j");
-    expect(conflicts[0]!.ids.sort()).toEqual(["overlay.review-toggle", "view.right-sidebar"]);
+    expect(conflicts[0]!.ids.sort()).toEqual(["nav.open-comms", "view.transcript-detail"]);
   });
 
   it("flags a rebindable chord landing on a reserved chord", () => {
-    const conflicts = detectConflicts(KEYBINDINGS, { "overlay.review-toggle": "ctrl+c" });
+    const conflicts = detectConflicts(KEYBINDINGS, { "nav.open-comms": "ctrl+c" });
     expect(conflicts.length).toBe(1);
     expect(conflicts[0]!.ids).toContain("session.quit");
   });
 
   it("resolves effective chords with and without an override", () => {
-    const binding = KEYBINDINGS.find((b) => b.id === "overlay.review-toggle")!;
+    const binding = KEYBINDINGS.find((b) => b.id === "nav.open-comms")!;
     expect(effectiveChords(binding, {})).toEqual(binding.defaultChords);
-    expect(effectiveChords(binding, { "overlay.review-toggle": "ctrl+j" })).toEqual(["ctrl+j"]);
+    expect(effectiveChords(binding, { "nav.open-comms": "ctrl+j" })).toEqual(["ctrl+j"]);
     // A multi-chord binding keeps all its defaults without an override.
     const scroll = KEYBINDINGS.find((b) => b.id === "nav.scroll-up")!;
     expect(effectiveChords(scroll, {})).toEqual(["pageup", "ctrl+up"]);
@@ -301,23 +308,23 @@ describe("reserved chords + conflict detection", () => {
 
 describe("assessChordAssignment", () => {
   it("accepts a free, assignable chord", () => {
-    const result = assessChordAssignment("overlay.review-toggle", { name: "j", ctrl: true }, {});
+    const result = assessChordAssignment("nav.open-comms", { name: "j", ctrl: true }, {});
     expect(result).toEqual({ kind: "ok", chord: "ctrl+j" });
   });
 
   it("rejects a chord with no modifier", () => {
-    const result = assessChordAssignment("overlay.review-toggle", { name: "j" }, {});
+    const result = assessChordAssignment("nav.open-comms", { name: "j" }, {});
     expect(result?.kind).toBe("unassignable");
   });
 
   it("rejects a chord already owned by another rebindable action", () => {
-    const result = assessChordAssignment("overlay.review-toggle", { name: "r", ctrl: true }, {});
+    const result = assessChordAssignment("nav.open-comms", { name: "r", ctrl: true }, {});
     expect(result?.kind).toBe("conflict");
     if (result?.kind === "conflict") expect(result.conflictId).toBe("view.transcript-detail");
   });
 
   it("rejects a chord owned by a protected key", () => {
-    const result = assessChordAssignment("overlay.review-toggle", { name: "c", ctrl: true }, {});
+    const result = assessChordAssignment("nav.open-comms", { name: "c", ctrl: true }, {});
     expect(result?.kind).toBe("conflict");
     if (result?.kind === "conflict") expect(result.conflictId).toBe("session.quit");
   });
@@ -335,8 +342,8 @@ describe("sanitizeKeybindingOverrides", () => {
   });
 
   it("keeps a valid override in canonical form", () => {
-    expect(sanitizeKeybindingOverrides({ "overlay.review-toggle": "Ctrl+J" })).toEqual({
-      "overlay.review-toggle": "ctrl+j",
+    expect(sanitizeKeybindingOverrides({ "nav.open-comms": "Ctrl+J" })).toEqual({
+      "nav.open-comms": "ctrl+j",
     });
   });
 
@@ -344,12 +351,22 @@ describe("sanitizeKeybindingOverrides", () => {
     expect(sanitizeKeybindingOverrides({ "nope.nope": "ctrl+j", "session.quit": "ctrl+j" })).toEqual({});
   });
 
+  it("drops retired transcript-review binding ids as unknown", () => {
+    expect(
+      sanitizeKeybindingOverrides({
+        "nav.open-comms": "ctrl+j",
+        "overlay.review-toggle": "ctrl+k",
+        "overlay.review-top": "ctrl+l",
+        "overlay.review-bottom": "ctrl+m",
+      }),
+    ).toEqual({ "nav.open-comms": "ctrl+j" });
+  });
+
   it("drops overrides on protected ids, including the registered drift", () => {
     expect(
       sanitizeKeybindingOverrides({
         "composer.accept-suggestion": "ctrl+j", // protected drift (Right)
-        "overlay.review-top": "ctrl+j", // protected (Ctrl+Home)
-        "overlay.review-bottom": "ctrl+j", // protected (Ctrl+End)
+        "session.quit": "ctrl+j", // protected
         "autonomy.cycle-mode": "ctrl+j", // protected
       }),
     ).toEqual({});
@@ -357,16 +374,16 @@ describe("sanitizeKeybindingOverrides", () => {
 
   it("keeps a valid override on a newly rebindable id", () => {
     expect(sanitizeKeybindingOverrides({ "nav.palette": "Ctrl+J" })).toEqual({ "nav.palette": "ctrl+j" });
-    expect(sanitizeKeybindingOverrides({ "overlay.review-toggle": "Alt+O" })).toEqual({
-      "overlay.review-toggle": "option+o",
+    expect(sanitizeKeybindingOverrides({ "view.transcript-detail": "Alt+O" })).toEqual({
+      "view.transcript-detail": "option+o",
     });
   });
 
   it("drops unparseable, unassignable and reserved chords", () => {
     expect(
       sanitizeKeybindingOverrides({
-        "overlay.review-toggle": "not a chord",
-        "view.right-sidebar": "j", // no modifier
+        "nav.open-comms": "not a chord",
+        "nav.palette": "j", // no modifier
         "view.transcript-detail": "ctrl+c", // reserved
       }),
     ).toEqual({});
@@ -375,25 +392,25 @@ describe("sanitizeKeybindingOverrides", () => {
   it("drops conflicting overrides, reverting them to defaults", () => {
     // Both want ctrl+j — neither is kept; each falls back to its unique default.
     const sanitized = sanitizeKeybindingOverrides({
-      "overlay.review-toggle": "ctrl+j",
-      "view.right-sidebar": "ctrl+j",
+      "nav.open-comms": "ctrl+j",
+      "view.transcript-detail": "ctrl+j",
     });
     expect(sanitized).toEqual({});
   });
 
   it("drops an override that collides with another binding's default", () => {
-    // The review toggle cannot claim transcript-detail's default chord.
-    expect(sanitizeKeybindingOverrides({ "overlay.review-toggle": "ctrl+r" })).toEqual({});
+    // The communications binding cannot claim transcript-detail's default chord.
+    expect(sanitizeKeybindingOverrides({ "nav.open-comms": "ctrl+r" })).toEqual({});
   });
 
   it("keeps a clean set of distinct overrides", () => {
     const sanitized = sanitizeKeybindingOverrides({
-      "overlay.review-toggle": "ctrl+j",
-      "view.right-sidebar": "ctrl+shift+l",
+      "nav.open-comms": "ctrl+j",
+      "view.transcript-detail": "ctrl+shift+l",
     });
     expect(sanitized).toEqual({
-      "overlay.review-toggle": "ctrl+j",
-      "view.right-sidebar": "ctrl+shift+l",
+      "nav.open-comms": "ctrl+j",
+      "view.transcript-detail": "ctrl+shift+l",
     });
     // And the result is conflict-free.
     expect(detectConflicts(KEYBINDINGS, sanitized)).toEqual([]);

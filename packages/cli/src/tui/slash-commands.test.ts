@@ -28,11 +28,15 @@ describe("SLASH_COMMANDS", () => {
     expect(exit!.aliases).toContain("quit");
   });
 
-  it("registers transcript review as a TUI-only session command", () => {
-    const transcript = getCommandByName("transcript");
-    expect(transcript?.category).toBe("session");
-    expect(transcript?.tuiOnly).toBe(true);
-    expect(getCommandByName("review")?.name).toBe("transcript");
+  it("treats removed slash commands as unknown", () => {
+    for (const input of ["/stop", "/transcript", "/review", "/finding", "/finding-detail", "/replay"]) {
+      expect(getCommandByName(input.slice(1))).toBeUndefined();
+      const result = findCommand(input);
+      expect(result.isSlash).toBe(true);
+      expect(result.isKnown).toBe(false);
+      expect(result.isUnknown).toBe(true);
+      expect(result.command).toBeUndefined();
+    }
   });
 
   it("marks navigation commands as tuiOnly", () => {
@@ -94,10 +98,18 @@ describe("findCommand", () => {
     expect(findCommand("/clear").command).toBe("clear");
   });
 
-  it("uses one canonical session picker command without the old competing commands", () => {
+  it("uses the session picker command", () => {
     expect(findCommand("/sessions").command).toBe("sessions");
     expect(findCommand("/resume").isUnknown).toBe(true);
     expect(findCommand("/audits").isUnknown).toBe(true);
+  });
+  it("rejects retired harness and provider navigation commands", () => {
+    for (const name of ["harness", "providers"]) {
+      expect(getCommandByName(name)).toBeUndefined();
+      expect(findCommand(`/${name}`).isUnknown).toBe(true);
+    }
+    expect(findCommand("/connect").command).toBe("connect");
+    expect(findCommand("/models").command).toBe("model");
   });
 
   it("recognises /capabilities by alias caps", () => {
@@ -135,11 +147,10 @@ describe("findCommand", () => {
     expect(result.command).toBe("ops");
   });
 
-  it("recognises /herd by alias workers", () => {
-    const result = findCommand("/workers");
-    expect(result.isSlash).toBe(true);
-    expect(result.isKnown).toBe(true);
-    expect(result.command).toBe("herd");
+  it("does not expose separate agent roster windows as slash commands", () => {
+    expect(findCommand("/agents").isUnknown).toBe(true);
+    expect(findCommand("/herd").isUnknown).toBe(true);
+    expect(findCommand("/workers").isUnknown).toBe(true);
   });
 
   // ── whitespace handling ───────────────────────────────────────────────

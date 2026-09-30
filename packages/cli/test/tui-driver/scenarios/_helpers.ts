@@ -24,6 +24,21 @@ export function modelsByokLaunch(opts: { mouse?: boolean } = {}): LaunchOptions 
   };
 }
 
+/** Route one OpenAI id through both OpenAI and Azure to exercise provider-qualified rows. */
+export function duplicateProviderModelsLaunch(opts: { mouse?: boolean } = {}): LaunchOptions {
+  return {
+    route: { type: "models" },
+    settings: opts.mouse ? { mouseSupport: true } : {},
+    env: {
+      OPENAI_API_KEY: "test-openai-key",
+      AZURE_OPENAI_API_KEY: "test-azure-key",
+      AZURE_OPENAI_BASE_URL: "https://azure.invalid",
+      ZERO_PROVIDER: "openai",
+      ZERO_MODEL: "gpt-6-luna",
+    },
+  };
+}
+
 /** Locate the selected list row, not the popup background or sidebar surface.
  * Scenarios use the deterministic fixture's blue-team theme unless overridden.
  */
@@ -62,8 +77,8 @@ export function modelLabel(rowText: string): string {
   return (rowText.replace(/^●\s*/, "").split(/\s{2,}|\$/)[0] ?? "").trim();
 }
 
-/** The chat composer is interactive once its prompt appears. */
-export const HOME_READY = /type to chat or \/ for commands/;
+/** The empty-chat landing screen exposes its always-available Connect action. */
+export const HOME_READY = /\[\/connect\]/;
 
 /** Any box-drawing glyph: light/heavy/double borders, corners, tees and dividers. */
 export const BORDER_GLYPHS =

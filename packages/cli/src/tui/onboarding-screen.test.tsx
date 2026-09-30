@@ -1,5 +1,5 @@
-/** Pure ordering and persistence contracts. Rendered navigation coverage lives
- * in test/tui-driver/scenarios/onboarding-navigation.tui.test.ts.
+/** Onboarding state, consent, and bundled mascot contracts. Rendered navigation
+ * coverage lives in test/tui-driver/scenarios/onboarding-navigation.tui.test.ts.
  */
 
 import { mkdtempSync, rmSync } from "node:fs";
@@ -23,6 +23,7 @@ import {
   stepBefore,
   type OnboardingStep,
 } from "./onboarding-screen.js";
+import { createZeroAxeImages } from "./chat/zero-axe-art.js";
 
 const tempHomes: string[] = [];
 
@@ -42,6 +43,23 @@ function otherThemeChoice(): string {
   return other;
 }
 
+describe("welcome mascot frames", () => {
+  it("composites transparent frame edges onto the active card canvas", () => {
+    const canvas = [16, 32, 48, 255];
+    const images = createZeroAxeImages("#102030");
+    try {
+      for (const image of images) {
+        const raw = image.raw();
+        const bottomRight = (raw.height - 1) * raw.stride + (raw.width - 1) * 4;
+        expect(Array.from(raw.data.slice(0, 4))).toEqual(canvas);
+        expect(Array.from(raw.data.slice(bottomRight, bottomRight + 4))).toEqual(canvas);
+      }
+    } finally {
+      images.forEach((image) => image.dispose());
+    }
+  });
+});
+
 beforeEach(() => {
   __resetSettingsStoreForTests();
 });
@@ -55,14 +73,12 @@ afterEach(() => {
 });
 
 describe("guided step machine", () => {
-  it("walks every optional choice before explicit completion", () => {
+  it("ends at the final data-sharing decision", () => {
     expect(stepAfter("welcome")).toBe("connect");
     expect(stepAfter("connect")).toBe("models");
     expect(stepAfter("models")).toBe("preferences");
     expect(stepAfter("preferences")).toBe("analytics");
-    expect(stepAfter("analytics")).toBe("plugins");
-    expect(stepAfter("plugins")).toBe("done");
-    expect(stepAfter("done")).toBeUndefined();
+    expect(stepAfter("analytics")).toBeUndefined();
   });
 
   it("can revisit every previous decision", () => {
@@ -71,42 +87,33 @@ describe("guided step machine", () => {
     expect(stepBefore("models")).toBe("connect");
     expect(stepBefore("preferences")).toBe("models");
     expect(stepBefore("analytics")).toBe("preferences");
-    expect(stepBefore("plugins")).toBe("analytics");
-    expect(stepBefore("done")).toBe("plugins");
   });
 
 });
 
 describe("completion is written in exactly one place", () => {
-  it("stays false through connect, model, and preference steps — set only on done", () => {
+  it("theme and sharing writes do not complete setup on their own", () => {
     configureSettingsStore({ homeDir: makeHome() });
     expect(getSettings().onboardingCompleted).toBe(false);
 
-    // Walk every intermediate step's effect. Connect/model stage on the audit
-    // owner (no settings write); preferences persist via updateSetting.
+    // Reaching and saving each decision does not complete setup until the final UI action.
     let step: OnboardingStep | undefined = "welcome";
     const theme = otherThemeChoice();
-    while (step && step !== "done") {
+    while (step) {
       if (step === "preferences") {
         expect(updateSetting("theme", theme)).toBe(true);
-        expect(updateSetting("density", "compact")).toBe(true);
       }
-      if (step === "analytics") {
-        // The analytics step's Enter persists consent — but NOT completion.
-        recordAnalyticsConsent("usage");
-      }
-      // Reaching a step, skipping it, or setting a preference/consent must NOT
-      // complete onboarding.
+      if (step === "analytics") recordAnalyticsConsent("usage");
       expect(getSettings().onboardingCompleted).toBe(false);
       step = stepAfter(step);
     }
 
     // Preferences persisted, completion still not.
     expect(getSettings().theme).toBe(theme);
-    expect(getSettings().density).toBe("compact");
+    expect(getSettings().density).toBe("comfortable");
     expect(getSettings().onboardingCompleted).toBe(false);
 
-    // Only the done step's Enter finalizes.
+    // The final confirmation writes the single operator-owned completion setting.
     finalizeOnboarding();
     expect(getSettings().onboardingCompleted).toBe(true);
   });
@@ -125,26 +132,30 @@ describe("completion is written in exactly one place", () => {
 });
 
 describe("onboarding sharing choices", () => {
-  it.each(["off", "ask"] as const)("does not broaden an existing %s problem-report preference", (reporting) => {
+  it.each(["off", "ask"] as const)("keeps existing %s Sentry consent separate from usage analytics", (reporting) => {
     configureSettingsStore({ homeDir: makeHome() });
     updateSetting("diagnosticReporting", reporting);
-    recordAnalyticsConsent("full");
+    recordAnalyticsConsent("usage");
 
     const persisted = reloadSettings();
+    expect(persisted.analyticsLevel).toBe("usage");
     expect(persisted.diagnosticReporting).toBe(reporting);
     expect(persisted.diagnosticReportingPrompted).toBe(false);
     expect(persisted.onboardingCompleted).toBe(false);
   });
 
-  it("persists a sharing opt-out and disables automatic reports without completing onboarding", () => {
+  it("persists an analytics opt-out without changing independent Sentry consent", () => {
     configureSettingsStore({ homeDir: makeHome() });
+    updateSetting("diagnosticReporting", "automatic");
     recordAnalyticsConsent("off");
 
     const persisted = reloadSettings();
     expect(persisted.analyticsLevel).toBe("off");
-    expect(persisted.diagnosticReporting).toBe("off");
+    expect(persisted.diagnosticReporting).toBe("automatic");
+    expect(persisted.diagnosticReportingPrompted).toBe(false);
     expect(persisted.onboardingCompleted).toBe(false);
   });
+
 });
 
 describe("cancel preserves choices without completing", () => {

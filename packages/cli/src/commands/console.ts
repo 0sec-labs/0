@@ -496,7 +496,7 @@ export function registerConsoleCommand(program: Command): void {
           }
           default: {
             // A known, non-tuiOnly command the line-mode REPL doesn't implement
-            // (e.g. model/providers/settings/sessions). Say so instead of silently
+            // (e.g. model/settings/sessions). Say so instead of silently
             // ignoring it — the full set lives in the Bun TUI.
             console.log(
               chalk.yellow(
@@ -621,7 +621,7 @@ function printHelp(): void {
   console.log(chalk.dim("  Modes: Standard runs automatically in scope and can request a narrow session-only extension; Co-pilot adds approval for every non-read-only tool; YOLO runs only inside an explicit configured scope and never requests extensions."));
   console.log(chalk.dim("  The Node fallback cannot approve scope extensions or Co-pilot actions; use the Bun TUI for those approvals."));
   console.log(chalk.dim("  anything else is sent to the engine as an operator message.\n"));
-  console.log(chalk.dim("  Navigation commands (/chat, /scope, /agents, …) require the Bun TUI."));
+  console.log(chalk.dim("  Navigation commands (/chat, /scope, /sessions, …) require the Bun TUI. Switch agents in the inline chat worklist."));
   console.log(chalk.dim("  Run the bare `0` command for the full interactive experience.\n"));
 }
 

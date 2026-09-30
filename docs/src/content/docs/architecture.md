@@ -391,7 +391,7 @@ The LLM adapter above is not an execution sandbox. Keep three separate choices:
 |---|---|---|
 | Controller | Provider authentication, scope, budgets, approvals, evidence and version selection | 0's TypeScript harness |
 | Toolbox artifact | Filesystem containing tools, runtimes and dependencies | OCI image, provisioned before execution |
-| Execution engine | Host/guest boundary, mounts, networking, resource limits and teardown | Docker or opt-in local smolvm for evolution workers |
+| Execution engine | Host/guest boundary, mounts, networking, resource limits and teardown | Native Apple Silicon SmolVM workbench; Docker or Linux SmolVM for separately configured offline workers |
 
 **OCI does not mean Docker execution.** It is the open image format that both
 Docker and smolvm consume. Smolvm boots the image in a microVM with a separate
@@ -400,9 +400,10 @@ archive avoids a registry or Docker daemon during smolvm execution.
 
 [Upstream smolvm](https://github.com/smol-machines/smolvm) also supports unpacked
 root filesystems, Smolfiles and packed `.smolmachine` artifacts. Those are viable
-upstream provisioning options, not additional formats qualified by 0's
-current archive-pinning adapter. A hand-maintained mutable VM is not a substitute
-for an immutable, reproducible worker artifact.
+upstream provisioning options, not operator image inputs accepted by 0's
+workbench. Workbench setup approves a local archive by SHA-256 and stores it in
+private operator state; execution stages an independently verified private copy.
+A hand-maintained mutable VM or a model-selected registry tag is not a substitute.
 
 ### Choose the image for the workload
 
@@ -420,25 +421,55 @@ Installation of a network tool does not authorize or enable target access.
 See [Improvement Plane](/improvement-plane/#local-smolvm-backend) for local
 provisioning and execution checks.
 
-### Global sandboxing: required boundary, not a shipped switch
+### Local SmolVM workbench boundary
 
-The desired default is **a trusted controller outside the guest, with
-model-directed effects inside a scoped guest executor**. Putting the entire CLI
-and its provider credentials into the same guest as arbitrary model-generated
-commands isolates execution from the host but exposes those credentials to the
-worker. Keep provider credentials in the controller instead.
+The `smolvm` execution profile starts the **whole 0 CLI inside an online Linux
+microVM**, including its shells, browser, agents and GitHub tools. This is an
+explicit operator profile, configured through workbench setup/settings, not a
+replacement of only the `bash` tool. Neither launch failure nor missing image,
+runtime or provider prerequisites falls back to host or Docker execution.
 
-A global guarantee requires every model-directed process, PTY, filesystem,
-HTTP/browser and external-tool route to cross the same enforced boundary.
-Changing just `bash` or selecting `backend: "smolvm"` for evolution is not that
-guarantee. General console and scan tools still have host execution paths.
+On Apple Silicon, setup checksum-verifies the complete pinned SmolVM 1.14.6
+release, verifies its existing code signature and Hypervisor entitlement, and
+preserves the bundled rootfs, libraries and disk templates. It does not re-sign
+the binary or change shell startup files. Docker may build/export OCI artifacts;
+no Docker daemon, Colima VM or nested KVM is required to execute this profile.
 
-Keep offline evolution and engagement workers separate: evolution gets no
-network or engagement credentials; an engagement worker needs explicit target
-egress policy and narrowly scoped engagement capabilities. Neither should
-inherit host home directories, Docker sockets or SSH-agent access by default.
-Persistent PTYs, artifact export, cancellation, and worker restart must preserve
-that boundary without a host fallback.
+The main guest receives only the explicitly selected writable workspace, private
+guest HOME/state, immutable admission marker and selected integration grants.
+Its non-root numeric UID/GID matches the operator's host ownership so virtiofs
+writes do not require changing workspace permissions. Universal host HOME, SSH
+agents and Docker sockets are not exposed. The configured online workbench is a
+trusted engagement environment: commands inside it can access its deliberately
+granted credentials. A VM boundary does not isolate those commands from one
+another or authorize targets; the existing scope/approval controls still apply.
+
+Generated executable plugins and evolution programs instead use **fresh sibling
+microVMs** through a bounded host-supervised handoff broker. Their source/control
+mounts are read-only; their writable workspace is guest-owned; networking and
+workbench credentials are absent. The separate HTTP replay profile accepts only
+the broker's validated public HTTP request contract and explicit network grant.
+Action images require an operator-approved immutable catalog entry; an unknown
+image is refused rather than silently replaced. Admission authority is the fixed
+read-only virtiofs marker and dedicated broker mount, not a forgeable environment
+flag or a file in the checkout.
+
+The Darwin supervisor uses kernel process information, exact per-run ownership
+capabilities, process-start identities and kqueue lifetime events. It never
+signals process-name guesses or an unverified PID/process group. A kernel-held
+admission lock covers reservation, execution, teardown and lease removal.
+Cancellation and abrupt controller death stop the complete owned VM family;
+teardown proof includes sibling controllers and VMMs. Unconfirmed teardown keeps
+the admission lease and recovery state instead of claiming capacity was freed.
+TTY execution inherits terminal stdio and restores terminal settings at teardown;
+non-TTY execution preserves argv, stdin and separate stdout/stderr.
+
+The complete Kali/Bun/0/Chromium archive was qualified natively with four vCPUs,
+4096 MiB RAM and 20 GiB guest storage. Its imported root filesystem uses about
+6.4 GiB; image import needs additional temporary headroom. An 8 GiB guest import
+exhausted its deadline, so small-runtime fixture budgets are not evidence that
+the complete workbench image fits. Sibling disk budgets are selected by the
+trusted host profile, never by a guest request.
 
 E2B can remain a separate cloud placement option. Local qualification does not
 establish equivalent cloud configuration, isolation or operational behavior.

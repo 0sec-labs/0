@@ -48,12 +48,10 @@ import {
 import { AuditWorkspace, type AuditRecord } from "./audit-workspace.js";
 import type { HerdSubagentMap } from "./herd-layout.js";
 import { OnboardingScreen, OnboardingSubstep } from "./onboarding-screen.js";
-import { HerdScreen } from "./herd-screen.js";
 import { AgentsCommsScreen } from "./agents-comms-screen.js";
 import { SettingsScreen } from "./settings-screen.js";
 import { KeybindingsEditorScreen } from "./keybindings-editor-screen.js";
-import { HarnessProvider } from "./harness-context.js";
-import { HarnessControlsPanel } from "./harness-trust-controls.js";
+import { HarnessLifecycle } from "./harness-lifecycle.js";
 import { ModelScreen } from "./model-screen.js";
 import { ResumeScreen } from "./resume-screen.js";
 import type { LiveSessionSummary } from "./resume-layout.js";
@@ -113,8 +111,6 @@ type ConsoleRoute = (
   | { type: "replay"; dbPath?: string; scanId?: string }
   | { type: "settings" }
   | { type: "keybindings" }
-  | { type: "harness" }
-  | { type: "herd" }
   | { type: "comms" }
   | { type: "onboard" }
   | { type: "market" }
@@ -157,7 +153,6 @@ function ConsoleSessionRoute({ route, shell }: { route: Extract<ConsoleRoute, { 
 function SettingsRoute({ onExit, shell }: { onExit: () => void; shell?: ShellNav }) {
   const theme = useTheme();
   useKeyboard((key) => {
-    if (key.ctrl && key.name === "g") shell?.openHarness();
     // Ctrl+K opens the keybinding editor. The keybindings map is not a scalar
     // settings row (it is a map, not a boolean/enum the dialog can cycle), so it
     // lives on its own capture-oriented screen rather than in the table.
@@ -171,10 +166,6 @@ function SettingsRoute({ onExit, shell }: { onExit: () => void; shell?: ShellNav
         <ShellFrame view="settings" dialogContent>
           {shell ? (
             <box flexDirection="row">
-              <text fg={theme.ACCENT} onMouseDown={() => shell.openHarness()}>
-                Live harness · [⌃G]
-              </text>
-              <text fg={theme.MUTED}>{"   "}</text>
               <text fg={theme.ACCENT} onMouseDown={() => shell.openKeybindings()}>
                 Keybindings · [⌃K]
               </text>
@@ -210,44 +201,7 @@ function KeybindingsRoute({ onExit, shell }: { onExit: () => void; shell?: Shell
   );
 }
 
-function HarnessRoute({ onBack }: { onBack: () => void }) {
-  const { width } = useSurfaceDimensions();
-  return (
-    <ShellFrame view="Live harness" dialogContent>
-      <HarnessControlsPanel contentWidth={Math.max(1, width - 4)} onBack={onBack} />
-    </ShellFrame>
-  );
-}
 
-/**
- * Routes the agent-herd overview, supplying the console shell around it.
- *
- * The active audit supplies its worker snapshot, parent identity and mailbox
- * namespace. Peer discovery remains separate from worker lifecycle ownership.
- */
-function HerdRoute({ onExit, shell, parentScanId, readAgents, messagingHomeDir }: {
-  onExit: () => void;
-  shell?: ShellNav;
-  parentScanId?: string;
-  readAgents?: () => Readonly<HerdSubagentMap>;
-  messagingHomeDir?: string;
-}) {
-  return (
-    <HerdScreen
-      onBack={() => leaveCurrentScreen(shell, onExit)}
-      onExit={onExit}
-      frame={({ body, hint }) => (
-        <ShellFrame view="herd" dialogContent>
-          {body}
-          <FooterBar hint={hint} />
-        </ShellFrame>
-      )}
-      parentScanId={parentScanId}
-      readAgents={readAgents}
-      messagingHomeDir={messagingHomeDir}
-    />
-  );
-}
 
 /**
  * Routes the Agents Comms view — the live fleet of sub-agents plus the stream
@@ -806,12 +760,6 @@ function ConsoleApp({
       showChat(records[next].id);
     }
   });
-  const stageHarnessPrompt = (text: string) => {
-    const owner = workspace.get(routeOwner?.id);
-    if (!owner || owner.closeRequested || !owner.stagePrompt.current) { reportError("This audit is not ready for input."); return; }
-    owner.stagePrompt.current(text);
-    showChat(owner.id);
-  };
   // Marketplace hosts belong to the shell; each session leases its initial
   // approved tool set. Refresh prepares the next chat without rebuilding this one.
   const [pluginHostManager, setPluginHostManager] = useDevUiState<SessionPluginHostManager | null>(devUi, "pluginHostManager", null);
@@ -912,10 +860,8 @@ function ConsoleApp({
     openReplay: (scanId) => navigate({ type: "replay", dbPath: routeOwner?.options?.dbPath, scanId }),
     openSettings: () => navigate({ type: "settings" }),
     openKeybindings: () => navigate({ type: "keybindings" }),
-    openHarness: () => navigate({ type: "harness" }),
     openModels: (chatOpts) => navigate({ type: "models", chatOptions: chatOpts ?? routeOwner?.options }),
     openResume: (chatOpts) => navigate({ type: "resume", chatOptions: chatOpts ?? routeOwner?.options }),
-    openHerd: () => navigate({ type: "herd" }),
     openComms: () => navigate({ type: "comms" }),
     openMarket: () => navigate({ type: "market" }),
     openConnect: () => navigate({ type: "connect", recovery: routeOwner?.recovery }),
@@ -933,13 +879,11 @@ function ConsoleApp({
     replay: shell.openReplay,
     settings: shell.openSettings,
     keybindings: shell.openKeybindings,
-    harness: shell.openHarness,
     "new-chat": openNewAudit,
     models: () => shell.openModels(selectedRecord?.options),
     market: shell.openMarket,
     usage: () => shell.openUsage(selectedRecord?.options),
     connect: shell.openConnect,
-    herd: shell.openHerd,
     comms: shell.openComms,
     sessions: () => shell.openResume(selectedRecord?.options),
     onboard: () => navigate({ type: "onboard" }),
@@ -1090,29 +1034,31 @@ function ConsoleApp({
   const theme = useTheme();
 
   // ── Audit chat screens ──
-  // Each audit has its own HarnessProvider and gated AppContext.Provider.
+  // Each audit has its own checkpoint lifecycle and gated AppContext.Provider.
   // Only the selected audit is interactive; hidden audits are zero-sized and
   // non-interactive, keeping React state alive without accepting input.
   const auditPanels = records.length > 0 ? (
     records.map((record) => {
       const isSelected = record.id === selectedId;
-      const interactive = isSelected && !overlayActive && !closingAll && !record.closeRequested;
+      // Reopened onboarding owns the screen; keep the chat mounted but hide
+      // its hero shortcuts behind the setup flow.
+      const visible = isSelected && routeType !== "onboard";
+      const interactive = visible && !overlayActive && !closingAll && !record.closeRequested;
       return (
         <box
           key={record.id}
           position="absolute"
           top={0}
           left={0}
-          width={isSelected ? "100%" : 0}
-          height={isSelected ? "100%" : 0}
+          width={visible ? "100%" : 0}
+          height={visible ? "100%" : 0}
           overflow="hidden"
-          zIndex={isSelected ? 1 : 0}
+          zIndex={visible ? 1 : 0}
         >
-          <HarnessProvider
+          <HarnessLifecycle
             host={record.session?.harness ?? null}
             busy={record.busy || record.stopping}
             workspaceRoot={workspaceRoot}
-            stagePrompt={(text: string) => record.stagePrompt.current?.(text)}
           >
             <AppContext.Provider
               value={interactive ? appContext : { ...appContext, keyHandler: null }}
@@ -1162,7 +1108,7 @@ function ConsoleApp({
                 </box>
               )}
             </AppContext.Provider>
-          </HarnessProvider>
+          </HarnessLifecycle>
         </box>
       );
     })
@@ -1282,8 +1228,6 @@ function ConsoleApp({
     overlay = <SettingsRoute onExit={appExit} shell={shell} />;
   } else if (routeType === "keybindings") {
     overlay = <KeybindingsRoute onExit={appExit} shell={shell} />;
-  } else if (routeType === "harness") {
-    overlay = <HarnessRoute onBack={shell.goBack} />;
   } else if (routeType === "models") {
     const sel = routeOwner;
     overlay = (
@@ -1312,10 +1256,6 @@ function ConsoleApp({
       }))}
       currentLiveId={selectedId} onSelectLive={showChat} onCreate={openNewAudit} onCloseLive={closeAudit}
       onExit={appExit} shell={shell} />;
-  } else if (routeType === "herd") {
-    const sel = routeOwner;
-    overlay = <HerdRoute onExit={appExit} shell={shell} parentScanId={sel?.session?.scanId ?? ""}
-      readAgents={sel?.herd.current ?? undefined} messagingHomeDir={sel?.messagingHomeDir} />;
   } else if (routeType === "comms") {
     const sel = routeOwner;
     overlay = <AgentsCommsRoute onExit={appExit} shell={shell} readAgents={sel?.herd.current ?? undefined} />;
@@ -1386,8 +1326,6 @@ function ConsoleApp({
   };
 
   // ── Render ──
-  const selectedHost = routeOwner?.session?.harness ?? null;
-  const selectedBusy = closingAll || (routeOwner?.busy ?? false) || (routeOwner?.stopping ?? false);
   const compactPopupWidth = Math.max(1, Math.min(routeType === "connect" ? 92 : 72, terminalWidth - 4));
   const compactPopupHeight = Math.max(1, Math.min(routeType === "connect" ? 24 : 20, terminalHeight - 4));
   const overlayPane = SCREENS_WITH_LOCAL_PALETTE[routeType] ? overlay : (
@@ -1395,12 +1333,6 @@ function ConsoleApp({
   );
   return (
     <AppContext.Provider value={closingAll ? { ...appContext, keyHandler: null } : appContext}>
-    <HarnessProvider
-      host={selectedHost}
-      busy={selectedBusy}
-      workspaceRoot={workspaceRoot}
-      stagePrompt={stageHarnessPrompt}
-    >
     <box flexDirection="column" width="100%" height="100%">
     {/* The visual popup stack lives inside the full-screen box (like the
         shutdown dialog), so pushed sub-popups (levels ≥1) render ABOVE the
@@ -1438,7 +1370,7 @@ function ConsoleApp({
             </SurfaceContext.Provider>
           </Popup>
         ) : (
-          <DialogSurface onDismiss={closingAll ? undefined : shell.goBack}>
+          <DialogSurface size={routeType === "findings" ? "xlarge" : "large"} onDismiss={closingAll ? undefined : shell.goBack}>
             {overlayPane}
           </DialogSurface>
         ) : null}
@@ -1446,7 +1378,6 @@ function ConsoleApp({
       </RouteHistoryKeys>
     </PopupStackProvider>
     </box>
-    </HarnessProvider>
     </AppContext.Provider>
   );
 }

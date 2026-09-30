@@ -160,13 +160,6 @@ export function createShellCommands(shell?: ShellNav): PaletteCommand[] {
       action: shell.openSettings,
     },
     {
-      id: "nav-harness",
-      title: "Live harness",
-      category: "Audit",
-      description: "Views, commands, settings, rollback and workspace trust",
-      action: shell.openHarness,
-    },
-    {
       id: "nav-models",
       title: "Open model picker",
       category: "Navigate",
@@ -181,15 +174,6 @@ export function createShellCommands(shell?: ShellNav): PaletteCommand[] {
       category: "Navigate",
       description: "Switch open sessions or resume saved conversations from any project",
       action: () => shell.openResume(),
-    },
-    {
-      id: "nav-herd",
-      title: "Open agent herd",
-      category: "Navigate",
-      description: "Roster of agents working this project and their status",
-      keybind: "0",
-      suggested: true,
-      action: shell.openHerd,
     },
     {
       id: "nav-comms",
