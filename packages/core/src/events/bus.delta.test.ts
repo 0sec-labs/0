@@ -41,3 +41,4 @@ describe("eventBus.emit('delta', …)", () => {
     expect(sink2[0]!.payload).toEqual(payload);
   });
 
+});
