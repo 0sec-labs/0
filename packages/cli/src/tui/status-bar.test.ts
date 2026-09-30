@@ -299,9 +299,8 @@ describe("context meter", () => {
   });
 
   it("never draws a percent/bar meter without a known window", () => {
-    // A bar/percent implies an occupancy fraction of a window. Usage alone (no
-    // window) gets the count-only fallback, asserted separately below; a KNOWN
-    // window without usage does draw a 0% bar, also asserted below.
+    // A bar/percent implies a measured occupancy fraction. Usage alone gets
+    // the count-only fallback; a capacity alone must not draw an empty bar.
     const text = textOf(buildStatusSegments({ contextUsed: 10, showContextMeter: true }), "meter");
     expect(text).toBeDefined();
     expect(text).not.toMatch(/[%▱▰]/u);
@@ -316,12 +315,11 @@ describe("context meter", () => {
     expect(text).not.toMatch(/[%▱▰]/u);
   });
 
-  it("shows the window at 0% when it is known but no usage exists yet", () => {
-    // A fresh session with a known window: the capacity is real before the
-    // first token is spent, so show it at 0% rather than "unavailable".
+  it("keeps usage unknown while displaying a known capacity", () => {
     const text = textOf(buildStatusSegments({ contextWindow: 100, showContextMeter: true }), "meter");
-    expect(text).not.toBe("Context usage unavailable");
-    expect(text).toMatch(/0%|▱/u);
+    expect(text).toMatch(/unknown/i);
+    expect(text).toContain("100");
+    expect(text).not.toMatch(/[%▱▰]/u);
   });
 
   it("still shows unavailable when neither window nor usage is known", () => {

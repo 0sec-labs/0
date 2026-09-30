@@ -1,11 +1,10 @@
 /**
  * Resolve the verified context window of the model an audit is actually running.
  *
- * The status bar needs both an exact-provider catalog window and a reported
- * planner input sample. This module resolves only the window; the chat screen
- * selects `ConsoleUsageReport.kind === "planner"` for occupancy and keeps
- * plugin samples separate. Canonical console usage currently has planner and
- * plugin emitters; compaction is a reserved kind, not a console emitter.
+ * The status bar needs an exact-provider catalog window and a measured request
+ * sample. Main selects `ConsoleUsageReport.kind === "planner"` for occupancy;
+ * focused workers retain their own latest `contextTokens` report. Billing
+ * totals and plugin calls are not context samples.
  *
  * Missing metadata or a missing/invalid planner sample remains unknown.
  *
@@ -13,6 +12,7 @@
  */
 
 import { loadCatalogModels, type CatalogSyncOptions, type SyncedModel } from "./model-catalog-sync.js";
+import type { SubagentLifecyclePayload, SubagentMessagePayload } from "@0/core";
 
 /** Source-qualified context window for the running direct-provider model. */
 export interface ContextLimit {
@@ -67,6 +67,69 @@ export interface ActiveModelIdentity {
    * across providers whose windows differ.
    */
   providerId: string | undefined;
+}
+
+/** Latest measured worker fields, kept separately from its retained transcript. */
+export type WorkerTelemetry = Pick<
+  SubagentMessagePayload,
+  "usage" | "contextTokens" | "durationMs" | "model" | "provider" | "assistant"
+> & {
+  /** Model attached to the retained billing sample, independent of context selection. */
+  usageModel?: string;
+  turn?: number;
+};
+
+/**
+ * Partial tool snapshots and lifecycle reports may omit a prior request sample.
+ * Retain it only for the same worker and model/provider; never add cumulative
+ * billing usage to context occupancy or carry occupancy across a route change.
+ */
+export function reduceWorkerTelemetry(
+  previous: Readonly<Record<string, WorkerTelemetry>>,
+  update: SubagentMessagePayload | SubagentLifecyclePayload,
+): Record<string, WorkerTelemetry> {
+  const prior = previous[update.agent_id];
+  const modelChanged = update.model !== undefined && update.model !== prior?.model;
+  const providerChanged = update.provider !== undefined && update.provider !== prior?.provider;
+  const model = update.model ?? (providerChanged ? undefined : prior?.model);
+  const provider = update.provider ?? (modelChanged ? undefined : prior?.provider);
+  const routeChanged = modelChanged || providerChanged;
+  const reportedContext = update.contextTokens;
+  const contextTokens = reportedContext !== undefined
+    ? (Number.isSafeInteger(reportedContext) && reportedContext >= 0 ? reportedContext : undefined)
+    : routeChanged ? undefined : prior?.contextTokens;
+  return {
+    ...previous,
+    [update.agent_id]: {
+      usage: update.usage ?? prior?.usage,
+      usageModel: update.usage !== undefined ? model : prior?.usageModel,
+      turn: "turn" in update && typeof update.turn === "number" ? update.turn : prior?.turn,
+      contextTokens,
+      durationMs: update.durationMs ?? prior?.durationMs,
+      model,
+      provider,
+      assistant: typeof update.assistant === "string" ? update.assistant : prior?.assistant,
+    },
+  };
+}
+
+export interface ConversationContext extends ActiveModelIdentity {
+  contextUsed?: number;
+}
+
+/** Focus selects one conversation, including its unknowns, never Main's fallback. */
+export function selectConversationContext(
+  main: ConversationContext,
+  focusAgentId: string | null | undefined,
+  workers: Readonly<Record<string, WorkerTelemetry>>,
+): ConversationContext {
+  if (!focusAgentId) return main;
+  const worker = workers[focusAgentId];
+  return {
+    modelId: worker?.model,
+    providerId: worker?.provider,
+    contextUsed: worker?.contextTokens,
+  };
 }
 
 function positiveTokens(value: unknown): number | null {

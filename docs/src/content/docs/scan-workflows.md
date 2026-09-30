@@ -110,10 +110,13 @@ Inspect per-finding triage provenance. A skipped layer and an unrecorded layer a
 
 Jev assistance is separately opt-in through `ZERO_JEV_FEATURES`, not enabled by
 possessing a provider key. In this workflow it can assist browser navigation,
-memory ranking, or semantic deduplication. It does not grant scope, confirm a
-vulnerability, or turn a duplicate match into verification. Browser assistance
-also requires explicit scope and operator-approved read-only URLs; ambiguous
-steps, forms, writes, and authentication return to the main model.
+memory ranking, semantic deduplication, or final finding prioritization (`rank`).
+Native EGATS branches (`--egats`) can also use `specialist` for methodology
+selection. These decisions do not grant scope, confirm a vulnerability, or turn
+a duplicate match into verification. Ranking changes report order, not which
+findings undergo verification. Browser assistance also requires explicit scope
+and operator-approved read-only URLs; ambiguous steps, forms, writes, and
+authentication return to the main model.
 Review data egress and the separate Jev request/cost limits in
 [Configuration](/configuration/) before enabling it.
 

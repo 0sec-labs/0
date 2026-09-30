@@ -1,3 +1,4 @@
+import { assertWorkspaceIdentity, captureWorkspaceIdentity, type WorkspaceIdentity } from "./workspace-identity.js";
 import { createHash, randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { readFileSync, statSync, existsSync, writeFileSync } from "node:fs";
@@ -2630,7 +2631,7 @@ type SubagentOutcome =
   | { ok: true; agent_id: string; findings: Finding[]; turns: number; summary: string; done: boolean }
   | { ok: false; agent_id: string; error: string; findings?: Finding[]; turns?: number };
 
-type SubagentRunReport = Pick<SubagentLifecyclePayload, "turns" | "summary" | "done" | "usage" | "durationMs" | "model" | "completion_reason">;
+type SubagentRunReport = Pick<SubagentLifecyclePayload, "turns" | "summary" | "done" | "usage" | "durationMs" | "model" | "provider" | "completion_reason">;
 
 /** Shared lifecycle payload base for one subagent (carries its unique id). */
 interface SubagentLifecycleBase {
@@ -2724,7 +2725,7 @@ export function buildSubagentMessage(
   toolCalls: ReadonlyArray<ToolCall>,
   toolResults: ReadonlyArray<ToolResult>,
   now: number,
-  telemetry: Pick<SubagentMessagePayload, "partial" | "usage" | "contextTokens" | "durationMs" | "model" | "reasoning_summary"> = {},
+  telemetry: Pick<SubagentMessagePayload, "partial" | "usage" | "contextTokens" | "durationMs" | "model" | "provider" | "reasoning_summary"> = {},
 ): SubagentMessagePayload {
   // Defensive against a caller that omits the newer args (older onTurn shape).
   const calls = toolCalls ?? [];
@@ -3114,6 +3115,7 @@ export class ToolExecutor {
    * event bus as `todos`.
    */
   private _todos: TodoTracker;
+  private _workspaceIdentity?: WorkspaceIdentity;
 
   constructor(
     ctx: ToolContext,
@@ -3123,6 +3125,7 @@ export class ToolExecutor {
     initialCheckpoint?: ToolExecutorCheckpoint,
   ) {
     this.ctx = ctx;
+    this._workspaceIdentity = ctx.workspaceIdentity ?? captureWorkspaceIdentity(ctx.scopePath);
     this._credentialTarget = initialCheckpoint?.credentialTarget ?? ctx.target;
     this._rejectedDecoyFlags = new Set(initialCheckpoint?.rejectedDecoyFlags);
     this._scopedAuditGrants = new Set(initialCheckpoint?.scopedAuditGrants);
@@ -6213,6 +6216,8 @@ export class ToolExecutor {
       // in child-visible input, not merely echoed onto the display card.
       const jobText = sharedContext ? `${sharedContext}\n\n${task}` : task;
       const delegationSystemPrompt = this.ctx.delegationSystemPrompt ?? `You are a focused ${this.ctx.role ?? "attack"} agent.`;
+      this._workspaceIdentity ??= captureWorkspaceIdentity(this.ctx.scopePath);
+      if (this._workspaceIdentity) assertWorkspaceIdentity(this._workspaceIdentity, this.ctx.scopePath);
       const state = await runNativeAgentLoop({
         config: {
           role: this.ctx.role ?? "attack",
@@ -6230,7 +6235,8 @@ export class ToolExecutor {
           requirePricedUsage: this.ctx.requirePricedUsage,
           costCeilingUsd: this.ctx.costCeilingUsd,
           costModel: rt.resolvedModel?.() ?? this.ctx.costModel,
-          scopePath: this.ctx.scopePath,
+          scopePath: this._workspaceIdentity?.scopePath ?? this.ctx.scopePath,
+          workspaceIdentity: this._workspaceIdentity,
           autonomyMode: this.ctx.autonomyMode,
           consoleSession: this.ctx.consoleSession,
           publicNetwork: this.ctx.publicNetwork,
@@ -6258,7 +6264,7 @@ export class ToolExecutor {
         onToolUpdate: (turn, toolCalls, toolResults, assistantText, telemetry) => {
           if (signal.aborted) return;
           eventBus.emit("subagent_message", buildSubagentMessage(base, turn, assistantText, toolCalls, toolResults, Date.now(), {
-            ...telemetry, partial: true, durationMs: Date.now() - startedAt, model: rt.resolvedModel?.(),
+            ...telemetry, partial: true, durationMs: Date.now() - startedAt, model: rt.resolvedModel?.(), provider: rt.resolvedProvider?.(),
           }));
         },
         // Per-turn child progress (Task 1 + Task 2). Fires ONCE per completed
@@ -6281,7 +6287,7 @@ export class ToolExecutor {
           eventBus.emit(
             "subagent_message",
             buildSubagentMessage(base, turn, assistantText, toolCalls, toolResults, Date.now(), {
-              ...telemetry, durationMs: Date.now() - startedAt, model: rt.resolvedModel?.(),
+              ...telemetry, durationMs: Date.now() - startedAt, model: rt.resolvedModel?.(), provider: rt.resolvedProvider?.(),
             }),
           );
         },
@@ -6300,7 +6306,7 @@ export class ToolExecutor {
       ...(state.errorExit ? { error: state.errorExit.error } : {}),
       ...(state.totalUsage && (state.totalUsage.inputTokens > 0 || state.totalUsage.outputTokens > 0) ? { usage: state.totalUsage } : {}),
       durationMs: Date.now() - startedAt,
-      model: rt.resolvedModel?.(), });
+      model: rt.resolvedModel?.(), provider: rt.resolvedProvider?.(), });
       if (state.errorExit) {
         return { ok: false, agent_id: base.agent_id, error: state.errorExit.error, findings: state.findings, turns: state.turnCount };
       }
@@ -6366,6 +6372,8 @@ export class ToolExecutor {
             .join("\n\n")}\n\nAct on them, reply with send_message, and call done when finished — you will PARK again afterwards.`
         : `You are ${base.name}, a persistent agent. Your task:\n\n${task ?? base.task}\n\nUse only your provided tools within the inherited scope. Delegate independent subtasks when useful. Save evidence-backed findings with save_finding and call done when finished — you will then PARK and can be revived by a message.`;
 
+    this._workspaceIdentity ??= captureWorkspaceIdentity(this.ctx.scopePath);
+    if (this._workspaceIdentity) assertWorkspaceIdentity(this._workspaceIdentity, this.ctx.scopePath);
     const state = await runNativeAgentLoop({
       config: {
         role: this.ctx.role ?? "attack",
@@ -6383,7 +6391,8 @@ export class ToolExecutor {
         requirePricedUsage: this.ctx.requirePricedUsage,
         costCeilingUsd: this.ctx.costCeilingUsd,
         costModel: rt.resolvedModel?.() ?? this.ctx.costModel,
-        scopePath: this.ctx.scopePath,
+        scopePath: this._workspaceIdentity?.scopePath ?? this.ctx.scopePath,
+        workspaceIdentity: this._workspaceIdentity,
         autonomyMode: this.ctx.autonomyMode,
         consoleSession: this.ctx.consoleSession,
         publicNetwork: this.ctx.publicNetwork,
@@ -6408,7 +6417,7 @@ export class ToolExecutor {
       onToolUpdate: (turn, toolCalls, toolResults, assistantText, telemetry) => {
         if (signal?.aborted) return;
         eventBus.emit("subagent_message", buildSubagentMessage(base, turnOffset + turn, assistantText, toolCalls, toolResults, Date.now(), {
-          ...telemetry, partial: true, durationMs: Date.now() - startedAt, model: rt.resolvedModel?.(),
+          ...telemetry, partial: true, durationMs: Date.now() - startedAt, model: rt.resolvedModel?.(), provider: rt.resolvedProvider?.(),
         }));
       },
       onTurn: (turn, toolCalls, toolResults, assistantText, telemetry) => {
@@ -6417,7 +6426,7 @@ export class ToolExecutor {
         eventBus.emit(
           "subagent_message",
           buildSubagentMessage(base, turnOffset + turn, assistantText, toolCalls, toolResults, Date.now(), {
-            ...telemetry, durationMs: Date.now() - startedAt, model: rt.resolvedModel?.(),
+            ...telemetry, durationMs: Date.now() - startedAt, model: rt.resolvedModel?.(), provider: rt.resolvedProvider?.(),
           }),
         );
       },
@@ -6429,7 +6438,7 @@ export class ToolExecutor {
     return {
       turns: turnOffset + state.turnCount, summary: state.summary, done: state.done,
       ...(state.totalUsage && (state.totalUsage.inputTokens > 0 || state.totalUsage.outputTokens > 0) ? { usage: state.totalUsage } : {}),
-      durationMs: Date.now() - startedAt, model: rt.resolvedModel?.(),
+      durationMs: Date.now() - startedAt, model: rt.resolvedModel?.(), provider: rt.resolvedProvider?.(),
       completion_reason: state.costCeilingExceeded ? "cost_limit" : state.outputCapExit ? "output_limit" : state.earlyStopNoProgress ? "early_stop" : state.done ? "done" : "turn_limit",
     };
   }

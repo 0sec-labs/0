@@ -466,6 +466,8 @@ interface SubagentTelemetry {
   contextTokens?: number;
   durationMs?: number;
   model?: string;
+  /** Runtime provider discriminator, never inferred from a model prefix. */
+  provider?: string;
 }
 
 /**

@@ -17,7 +17,7 @@ import { detectPlaybooks, buildPlaybookInjection, PLAYBOOKS } from "./playbooks.
 import type { NativeRuntime, NativeRuntimeResult, NativeMessage, NativeToolDef } from "../runtime/types.js";
 import type { Finding } from "@0/shared";
 import { EnforcementTracker, PathPolicy } from "../scope/enforcement.js";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, realpathSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { eventBus, type SubagentMessagePayload } from "../events/bus.js";
@@ -2737,7 +2737,7 @@ describe("runNativeAgentLoop — hunt memory integration", () => {
       }]),
     });
     const reopened = new HuntMemoryStore({ path });
-    expect(reopened.recallCodebase(tmp)[0]?.codebase?.root).toBe(tmp);
+    expect(reopened.recallCodebase(tmp)[0]?.codebase?.root).toBe(realpathSync(tmp));
     const seen: string[] = [];
     const reader: NativeRuntime = {
       type: "api", isAvailable: async () => true,

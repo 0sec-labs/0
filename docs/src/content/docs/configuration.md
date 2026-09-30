@@ -994,7 +994,8 @@ scope, toolchain, or other prerequisites.
 Jev is a bounded advisory evaluator, not a chat-provider replacement. No feature
 is enabled merely by having a key. `ZERO_JEV_FEATURES` explicitly opts selected
 workflows into sending evaluation state to the selected provider:
-`browser`, `memory`, `dedupe`, `redteam`, and `kernel` (comma-separated).
+`browser`, `memory`, `dedupe`, `rank`, `specialist`, `redteam`, `kernel`, `crash`,
+`radar`, and `foxguard` (comma-separated).
 Probabilities do not authorize actions, establish an exploit, or replace
 deterministic verification. Unknown feature/provider names are configuration
 errors.
@@ -1004,11 +1005,12 @@ errors.
 | `vercel` (default when enabled) | `AI_GATEWAY_API_KEY` | Vercel AI Gateway evaluation model `typesafe-ai/jev`, billed to your own gateway key |
 | `cloud` | `ZERO_JEV_CLOUD_TOKEN` and `ZERO_JEV_CLOUD_URL` | Your evaluation endpoint, which reaches the same upstream model and bills workspace credits; HTTPS except loopback HTTP |
 
-Current production consumers are the browser
-helper, agentic-scan memory/deduplication, and the indirect-prompt-injection
-red-team path. Enable only a feature your chosen workflow actually calls;
-putting `memory,dedupe` on a source `review` does not add those agentic-scan
-consumers to the source pipeline.
+Consumers are workflow-specific. Agentic scans use memory ranking, deduplication,
+and final finding prioritization (`rank`); `specialist` selects methodologies only
+inside native EGATS branches (`scan --egats`). Browser and red-team helpers have
+their own entry points, as do explicit kernel, crash-triage, and radar commands.
+Putting agentic-scan selectors on a source `review` does not add those consumers
+to the source pipeline.
 
 For example, opt only the browser helper in, through the gateway:
 
@@ -1018,6 +1020,25 @@ env ZERO_JEV_FEATURES=browser ZERO_JEV_PROVIDER=vercel \
   ZERO_JEV_BROWSER_READ_ONLY_URLS=https://authorized.example/docs \
   0 console --scope ./scope.json
 ```
+
+To pilot finding prioritization and EGATS specialist selection after configuring
+`AI_GATEWAY_API_KEY`:
+
+```bash
+env ZERO_JEV_FEATURES=rank,specialist ZERO_JEV_PROVIDER=vercel \
+  0 scan --mode web --egats --target https://authorized.example \
+  --scope ./scope.json
+```
+
+`rank` orders final canonical findings before reporting; it does not skip
+investigation or verification. Scores and model provenance are recorded as
+`finding_priority` events, separately from vulnerability confidence. Uncertain
+or unavailable ranking evaluations return the complete set to the existing
+generative ranker. `specialist` selects from existing methodologies only when
+the chosen probability is at least `0.8`; generic or uncertain answers remain
+generic, while request failures retain the prior flag-gated regex path. This
+threshold is a conservative pilot policy, not demonstrated security-domain
+calibration. Each workflow shares one evaluator budget across its batches/nodes.
 
 `ZERO_JEV_BROWSER_READ_ONLY_URLS` is a comma-separated list of exact normalized
 URLs required for assisted navigation, in addition to explicit scope. Jev never

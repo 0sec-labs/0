@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { classifyHypothesis, runEGATS } from "./egats.js";
+import type { EGATSConfig } from "./egats.js";
+import type { JevEvaluationResult } from "@0/shared";
 import { runNativeAgentLoop } from "./native-loop.js";
+import { estimateCost } from "./cost.js";
 import type {
   NativeRuntime,
   NativeRuntimeResult,
@@ -43,6 +46,7 @@ function createRecordingRuntime(): {
         ],
         stopReason: "tool_use",
         durationMs: 1,
+        usage: { inputTokens: 1_000, outputTokens: 100 },
       };
     },
     async isAvailable() {
@@ -50,6 +54,20 @@ function createRecordingRuntime(): {
     },
   };
   return { runtime, calls };
+}
+
+function routingEvaluation(choice: "sqli" | "generic", probability: number): JevEvaluationResult {
+  const probabilities = {
+    sqli: 0, xss: 0, ssrf: 0, ssti: 0, idor: 0, "auth-bypass": 0, generic: 0,
+  };
+  probabilities[choice] = probability;
+  probabilities[choice === "generic" ? "sqli" : "generic"] = 1 - probability;
+  return {
+    model: "jev-specialist-test",
+    answers: { route: { type: "choice", choice, probabilities } },
+    usage: { inputTokens: 50, outputTokens: 0, estimatedCostUsd: 0.002 },
+    durationMs: 1,
+  };
 }
 
 // ── classifyHypothesis (pure routing decision) ──
@@ -101,7 +119,10 @@ describe("EGATS specialist routing", () => {
     else process.env[FLAG] = prev;
   });
 
-  async function runRoot(rootHypothesis: string) {
+  async function runRoot(
+    rootHypothesis: string,
+    options: Pick<EGATSConfig, "jevSpecialistEvaluator" | "signal"> = {},
+  ) {
     const { runtime, calls } = createRecordingRuntime();
     const events: Array<{ type: string; payload: Record<string, unknown> }> = [];
     const result = await runEGATS(
@@ -114,6 +135,7 @@ describe("EGATS specialist routing", () => {
         beamWidth: 1,
         target: "http://target.test",
         scanId: "test-scan",
+        ...options,
       },
       runtime,
       null,
@@ -122,7 +144,7 @@ describe("EGATS specialist routing", () => {
     return { calls, events, result };
   }
 
-  it("fires specialist routing for a named class: prompt, skill, tools, and event", async () => {
+  it("routes a named class with its methodology skill and existing specialist tools", async () => {
     process.env[FLAG] = "1";
     const { calls, events } = await runRoot("SQLi via username param on POST /login");
 
@@ -132,13 +154,8 @@ describe("EGATS specialist routing", () => {
     expect(specialist!.payload.vulnClass).toBe("sqli");
     expect(specialist!.payload.skillId).toBe("sqli-advanced");
 
-    // The branch loop ran with the SQLi specialist system prompt + auto-loaded
-    // SQLi skill content + SQLi-tuned tools.
     expect(calls).toHaveLength(1);
-    const { system, toolNames } = calls[0]!;
-    expect(system).toContain("EGATS Specialist Branch — SQL Injection");
-    expect(system).toContain("### SQL Injection"); // class technique section
-    expect(system).toContain("## Loaded Skill: Advanced SQL Injection"); // auto-loaded skill
+    const { toolNames } = calls[0]!;
     expect(toolNames).toContain("http_request"); // class-tuned extra tool
     expect(toolNames).toContain("save_finding");
   });
@@ -150,10 +167,7 @@ describe("EGATS specialist routing", () => {
     );
 
     expect(events.find((e) => e.type === "egats_specialist")).toBeUndefined();
-    const { system, toolNames } = calls[0]!;
-    expect(system).toContain("## EGATS Branch Focus"); // generic branch header
-    expect(system).not.toContain("EGATS Specialist Branch");
-    // Generic branch keeps the minimal tool set — no http_request injected.
+    const { toolNames } = calls[0]!;
     expect(toolNames).not.toContain("http_request");
   });
 
@@ -162,8 +176,90 @@ describe("EGATS specialist routing", () => {
     const { calls, events } = await runRoot("SQLi via username param on POST /login");
 
     expect(events.find((e) => e.type === "egats_specialist")).toBeUndefined();
-    expect(calls[0]!.system).toContain("## EGATS Branch Focus");
-    expect(calls[0]!.system).not.toContain("EGATS Specialist Branch");
+    expect(calls[0]!.toolNames).not.toContain("http_request");
+  });
+
+  it("selects a semantic paraphrase with regex routing disabled without losing branch cost", async () => {
+    delete process.env[FLAG];
+    const hypothesis = "The surname field may be spliced into a backend data lookup as operators rather than compared as a value.";
+    expect(classifyHypothesis(hypothesis)).toBeNull();
+    const baseline = await runRoot(hypothesis);
+    const { calls, events, result } = await runRoot(hypothesis, {
+      jevSpecialistEvaluator: {
+        async evaluate() { return routingEvaluation("sqli", 0.93); },
+      },
+    });
+
+    expect(events.find((event) => event.type === "egats_specialist")?.payload).toMatchObject({
+      vulnClass: "sqli",
+      skillId: "sqli-advanced",
+      routingSource: "jev",
+      routingModel: "jev-specialist-test",
+      routingProbability: 0.93,
+    });
+    expect(calls[0]!.toolNames).toContain("http_request");
+    expect(calls).toHaveLength(1);
+    expect(result.totalCostUsd).toBeCloseTo(
+      0.002 + estimateCost({ inputTokens: 1_000, outputTokens: 100 }), 10,
+    );
+    expect(result.root.score).toBe(baseline.result.root.score);
+    expect(result.root.evidence).toEqual(baseline.result.root.evidence);
+    expect(result.root.status).toBe(baseline.result.root.status);
+    expect(result.findings).toEqual([]);
+  });
+
+  it("keeps explicit generic, low-certainty, and malformed decisions generic despite a keyword", async () => {
+    process.env[FLAG] = "1";
+    const malformed = routingEvaluation("sqli", 0.95);
+    malformed.answers.route = {
+      type: "choice", choice: "sqli", probabilities: { sqli: 0.95, generic: 0.05 },
+    };
+    const missingDistribution = routingEvaluation("sqli", 0.95);
+    missingDistribution.answers.route = { type: "choice", choice: "sqli", probabilities: null } as unknown as JevEvaluationResult["answers"][string];
+    for (const decision of [routingEvaluation("generic", 0.9), routingEvaluation("sqli", 0.79), malformed, missingDistribution]) {
+      const { calls, events, result } = await runRoot("SQLi via username param on POST /login", {
+        jevSpecialistEvaluator: { async evaluate() { return decision; } },
+      });
+      expect(events.find((event) => event.type === "egats_specialist")).toBeUndefined();
+      expect(events.find((event) => event.type === "egats_node_done")?.payload.routingSource).toBe("jev");
+      expect(calls).toHaveLength(1);
+      expect(calls[0]!.toolNames).not.toContain("http_request");
+      expect(result.totalCostUsd).toBeGreaterThan(0.002);
+    }
+  });
+
+  it("propagates cancellation during classification without running a branch", async () => {
+    process.env[FLAG] = "1";
+    const controller = new AbortController();
+    const reason = new Error("classification cancelled");
+    await expect(runRoot("SQLi via username parameter", {
+      signal: controller.signal,
+      jevSpecialistEvaluator: { async evaluate() {
+        controller.abort(reason);
+        return routingEvaluation("sqli", 0.95);
+      } },
+    })).rejects.toBe(reason);
+  });
+
+  it("retains flag-gated regex routing on provider failure without exposing provider errors", async () => {
+    const providerError = "secret-provider-body";
+    const options = {
+      jevSpecialistEvaluator: { async evaluate(): Promise<JevEvaluationResult> { throw new Error(providerError); } },
+    };
+    process.env[FLAG] = "1";
+    const enabled = await runRoot("SQLi via username param on POST /login", options);
+    expect(enabled.events.find((event) => event.type === "egats_specialist")?.payload).toMatchObject({
+      vulnClass: "sqli", routingSource: "regex-fallback",
+    });
+    expect(enabled.calls[0]!.toolNames).toContain("http_request");
+    expect(JSON.stringify(enabled.events)).not.toContain(providerError);
+    expect(enabled.result.root.summary).not.toContain(providerError);
+
+    delete process.env[FLAG];
+    const disabled = await runRoot("SQLi via username param on POST /login", options);
+    expect(disabled.events.find((event) => event.type === "egats_specialist")).toBeUndefined();
+    expect(disabled.calls[0]!.toolNames).not.toContain("http_request");
+    expect(JSON.stringify(disabled.events)).not.toContain(providerError);
   });
 });
 

@@ -299,6 +299,10 @@ export async function launch(opts: LaunchOptions = {}): Promise<TuiHandle> {
         else if (isEscape) setup.mockInput.pressEscape(mods);
         else if (lower === "tab") setup.mockInput.pressTab(mods);
         else if (lower === "backspace") setup.mockInput.pressBackspace(mods);
+        else if (lower === "pageup" || lower === "pagedown") {
+          const modifier = 1 + (mods?.shift ? 1 : 0) + (mods?.meta ? 2 : 0) + (mods?.ctrl ? 4 : 0);
+          return setup.mockInput.pressKeys([`\x1b[${lower === "pageup" ? 5 : 6}${modifier > 1 ? `;${modifier}` : ""}~`]);
+        }
         else if (lower === "home" || lower === "end" || /^f(?:[1-9]|1[0-2])$/.test(lower)) {
           setup.mockInput.pressKey(lower.toUpperCase(), mods);
         }

@@ -61,6 +61,75 @@ function endTurn(text: string): NativeRuntimeResult {
   return { content: [{ type: "text", text }], stopReason: "end_turn", durationMs: 1 };
 }
 
+describe("YOLO finding verification workflow", () => {
+  it.each([false, true])("continues from a saved source lead without approval (missing runtime: %s)", async (missingRuntime) => {
+    const root = mkdtempSync(join(tmpdir(), "0-yolo-verification-"));
+    const source = join(root, "parser.cjs");
+    writeFileSync(source, "module.exports = input => parseInt(input, 10);\n");
+    const command = missingRuntime
+      ? "0_nonexistent_poc_runtime_147 --version"
+      : `node -e 'const parse = require(${JSON.stringify(source)}); require("node:assert/strict").equal(parse("42admin"), 42); console.log("runtime-reproduced: malformed integer accepted")'`;
+    let round = 0;
+    const runtime: NativeRuntime = {
+      type: "api",
+      async isAvailable() { return true; },
+      async executeNative(_system, messages) {
+        round++;
+        const tool = (name: string, input: Record<string, unknown>): NativeRuntimeResult => ({
+          content: [{ type: "tool_use", id: `verification-${round}`, name, input }],
+          stopReason: "tool_use", durationMs: 1,
+        });
+        if (round === 1) return tool("read_file", { path: source });
+        if (round === 2) return tool("save_finding", {
+          title: "Parser accepts malformed integer", category: "missing-validation", severity: "low",
+          description: "parser.cjs accepts nonnumeric suffixes instead of rejecting invalid input. Runtime impact is unverified.",
+          evidence_request: "parseInt(input, 10)", evidence_response: "Source inspected only; no runtime reproduction yet.",
+          verification_spec: JSON.stringify({ code: [{ kind: "file-contains", file: "parser.cjs", pattern: "parseInt" }] }),
+        });
+        if (round === 3) {
+          const receipt = messages.at(-1)?.content.find((item) => item.type === "tool_result");
+          if (receipt?.type !== "tool_result" || !receipt.content.includes("verification_workflow")) {
+            return endTurn("Should I test this?");
+          }
+          // The planning fixture responds to the host's workflow handoff; the
+          // console must execute the real verification through normal gates.
+          expect(receipt.content).toContain('"source_status":"matched"');
+          expect(receipt.content).toContain('"replay_status":"not_run"');
+          return tool("bash", { command, timeout: 5 });
+        }
+        const receipt = messages.at(-1)?.content.find((item) => item.type === "tool_result");
+        expect(receipt?.type).toBe("tool_result");
+        if (receipt?.type === "tool_result") {
+          expect(receipt.content).toContain(missingRuntime ? "not found" : "runtime-reproduced");
+        }
+        return endTurn(missingRuntime
+          ? "Source-verified only. Runtime verification failed: 0_nonexistent_poc_runtime_147 is unavailable. No runtime reproduction."
+          : "Runtime-reproduced: malformed integer accepted. Local parser PoC executed; caller impact still requires investigation.");
+      },
+    };
+    const approveTool = vi.fn(async () => { throw new Error("Routine YOLO verification must not request approval"); });
+    const askOperator = vi.fn(async () => { throw new Error("Routine YOLO verification must not ask whether to test"); });
+    const session = createConsoleSession({ runtime, autonomyMode: "yolo", approveTool, askOperator,
+      allowModelSelfExtension: false, refineObjective: false });
+    try {
+      const outcome = await session.send(`Investigate and verify the local parser in ${root}`);
+      expect(outcome.stopReason).toBe("end_turn");
+      expect(outcome.toolCalls.map(({ call }) => call.name)).toEqual(["read_file", "save_finding", "bash"]);
+      // bash can successfully return stderr for a nonzero exit. Use the
+      // actual process receipt, not the transport success bit, as evidence.
+      expect(outcome.toolCalls[2].result.meta?.exitCode).toBe(missingRuntime ? 127 : 0);
+      expect(outcome.assistantText).not.toContain("Should I test");
+      expect(approveTool).not.toHaveBeenCalled();
+      expect(askOperator).not.toHaveBeenCalled();
+      expect(session.exportCheckpoint().sessionData.findings[0].status).not.toBe("verified");
+    } finally { await session.cleanup(); rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it.each(["recon", "standard", "copilot"] as const)("does not prescribe automatic PoCs in %s mode", (autonomyMode) => {
+    expect(buildConsoleSystemPrompt({ scanId: "workflow-test", autonomyMode })).not.toContain("YOLO verification workflow");
+  });
+});
+
 
 describe("createConsoleSession", () => {
   it("generates title metadata inside accounted planner rounds without executing a tool", async () => {
@@ -2749,19 +2818,27 @@ describe("Console source acquisition is not target authorization", () => {
     expect(runCheckout).toHaveBeenCalledOnce();
   });
 
-  it("does not treat a product name and same-name search result as repository identity", async () => {
+  it("blocks the Muse Spark to legacy MUSE substitution before clone I/O or findings", async () => {
     const runCheckout = vi.spyOn(repositoryAcquisition, "runRepositoryAcquisition").mockResolvedValue({ success: true, output: "Checkout completed" });
     const session = createConsoleSession({
       runtime: new ScriptedRuntime([
-        checkoutTurn("git clone https://github.com/muse-spark/muse-spark.git"),
-        endTurn("Refused."),
+        checkoutTurn("git clone https://github.com/facebookresearch/MUSE.git"),
+        endTurn("Repository identity is unresolved. Provide the exact repository or official product URL."),
       ]),
       autonomyMode: "yolo",
       target: "Muse Spark",
     });
-    const checkout = await session.send("Use the same-name search result for Muse Spark");
-    expect(checkout.toolCalls[0].result.success).toBe(false);
-    expect(runCheckout).not.toHaveBeenCalled();
+    try {
+      const checkout = await session.send("Investigate Muse Spark; a search result suggests facebookresearch/MUSE");
+      expect(checkout.toolCalls[0].result.success).toBe(false);
+      expect(runCheckout).not.toHaveBeenCalled();
+      expect(session.target).toBe("Muse Spark");
+      expect(session.exportCheckpoint().sessionData.findings).toEqual([]);
+      expect(session.systemPrompt).toContain("authoritative product/publisher links");
+      expect(session.systemPrompt).toContain("archived/current status");
+      expect(session.systemPrompt).toContain("unsuccessful search proves neither");
+      expect(checkout.assistantText).toContain("exact repository or official product URL");
+    } finally { await session.cleanup(); }
   });
 
   it("does not exempt appended commands or Git configuration and submodule execution", async () => {

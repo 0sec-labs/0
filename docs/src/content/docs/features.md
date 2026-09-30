@@ -100,11 +100,13 @@ Use [Console](/console/) for interactive work. Desktop is development-only alpha
 ### Advisory evaluations
 
 Jev assistance is opt-in for browser exploration, memory ranking, duplicate
-assessment, and red-team feedback. It does not verify a vulnerability, authorize
-an action, or replace the existing verification path.
+assessment, finding prioritization, EGATS specialist selection, and red-team
+feedback. It does not verify a vulnerability, authorize an action, or replace
+the existing verification path.
 
 Set `ZERO_JEV_FEATURES` to the selected comma-separated features: `browser`,
-`memory`, `dedupe`, or `redteam`. Credentials alone do not enable assistance.
+`memory`, `dedupe`, `rank`, `specialist`, `redteam`, `kernel`, `crash`, `radar`, or `foxguard`.
+Credentials alone do not enable assistance.
 
 | Setting | Behavior |
 | --- | --- |
@@ -127,7 +129,7 @@ hands forms, authentication, writes, and ambiguous decisions back to the main
 agent. Unavailable evaluations retain the existing decision path rather than
 inventing a result.
 
-The four wired paths have different effects:
+These paths have different effects:
 
 - **Browser:** `browser` action `assist` follows captured links only when the
   exact URL is operator-approved and in scope, the page is unchanged, and the
@@ -137,14 +139,29 @@ The four wired paths have different effects:
 - **Dedupe:** can add canonical/cluster mappings for high-confidence
   exact-location, same-defect, same-fix pairs. Original evidence is retained;
   ambiguous pairs use the existing model dedupe path.
+- **Rank:** scores exploitability, impact, and evidence strength independently,
+  then orders final canonical findings by their equal-weight mean. Duplicates
+  stay with their canonical. All selected levels must have probability at least
+  `0.8`; an uncertain or failed batch abandons all partial Jev scores and uses
+  the existing generative ranker. Vulnerability confidence and verification
+  state are unchanged. `finding_priority` events retain scores/model provenance.
+- **Specialist:** inside native `scan --egats`, selects one of the existing six
+  methodologies or stays generic. Specialist selection requires probability
+  at least `0.8`. Generic, uncertain, or malformed answers are not overridden
+  by keyword matches; request failures retain the existing flag-gated regex
+  route. Selection changes methodology, not scope or exploit evidence.
 - **Redteam:** records advisory attempt labels and evaluator usage. Regex/LLM
   judges, or the separate action oracle in agent assurance, retain the verdict.
 
 Invalid feature names, missing credentials and invalid budgets are configuration
 errors, not a promise of silent fallback. Request failures have no automatic
 retry or substitute chat-model fallback. Evaluator usage is separate from
-main-model usage; the cost ceiling reserves estimated request cost and is not a
-whole-engagement accounting limit.
+main-model usage; evaluator request budgets reserve estimated request cost.
+Agentic ranking and specialist evaluations also contribute to the shared scan
+token-based cost ledger and obey scan cancellation and its total spend ceiling.
+Ledger pricing uses its model price table and falls back to default token rates
+when an evaluator model is absent; reconcile against provider invoices. The `0.8`
+gates are pilot policies, not measured security-domain calibration.
 
 The shared evaluator API also recognizes the `kernel` feature, used by the
 `0sec kernel jev-prepass` command. That support alone does not wire an

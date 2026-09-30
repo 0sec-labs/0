@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /** Advisory evaluations only: probabilities never grant authority or verify an exploit. */
-export type JevFeature = "browser" | "memory" | "dedupe" | "redteam" | "kernel" | "crash" | "radar" | "foxguard";
+export type JevFeature = "browser" | "memory" | "dedupe" | "rank" | "specialist" | "redteam" | "kernel" | "crash" | "radar" | "foxguard";
 export type JevQuestion =
   | { type: "boolean"; instructions: string; criteria?: { true: string; false: string } }
   | { type: "choice"; instructions: string; criteria: Record<string, string> };
@@ -113,7 +113,7 @@ export interface ConsoleJevActivity {
   message?: string;
 }
 
-const FEATURES: readonly JevFeature[] = ["browser", "memory", "dedupe", "redteam", "kernel", "crash", "radar", "foxguard"];
+const FEATURES: readonly JevFeature[] = ["browser", "memory", "dedupe", "rank", "specialist", "redteam", "kernel", "crash", "radar", "foxguard"];
 const INPUT_USD_PER_TOKEN = 0.042 / 1_000_000;
 // Reserve the provider's full documented context before dispatch, including concurrent calls.
 const MAX_INPUT_TOKENS = 65_536;
