@@ -890,7 +890,8 @@ export async function publishSourceFixDraftPR(
     return (await client.run(args, { cwd })).stdout.trim();
   };
   options.signal?.throwIfAborted();
-  await assertOriginalBaseline(verified);
+  // Publication pushes only the isolated verified candidate; the user's own
+  // checkout may keep moving. A moved remote base is refused below instead.
   await assertRetainedCandidate(verified);
   if (verified.verificationFailed) throw new Error("candidate failed its latest verification; refusing publication");
   if ((await run(["remote", "get-url", "--push", "origin"])) !== plan.remote) {
@@ -918,7 +919,6 @@ export async function publishSourceFixDraftPR(
   if ((await run(["diff", "--no-ext-diff", "--binary", verified.candidate.baseCommit, "--"])) !== verified.diff) {
     throw new Error("publication regression command changed the reviewed source diff");
   }
-  await assertOriginalBaseline(verified);
   const testedSourceCheck = await evaluateVerificationSpec(spec, cwd);
   if (!hasSemanticFixSignal(testedSourceCheck)) throw new Error("candidate source contract changed during publication regression");
   verified.verificationFailed = false;
