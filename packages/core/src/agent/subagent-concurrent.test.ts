@@ -1,3 +1,7 @@
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, realpathSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Shared controller for the mocked native loop. `vi.hoisted` runs before the
@@ -77,6 +81,45 @@ describe("spawn_agents — concurrent subagent dispatch", () => {
   afterEach(() => {
     eventBus.clear();
     delete process.env["ZERO_SUBAGENT_CONCURRENCY"];
+  });
+
+  it("inherits absolute repo B identity in a batch and rejects repo A substitution before analysis", async () => {
+    const root = mkdtempSync(join(tmpdir(), "0-worker-target-"));
+    const createRepo = (name: string) => {
+      const dir = join(root, name); mkdirSync(dir);
+      const git = (args: string[]) => execFileSync("git", args, { cwd: dir, stdio: "ignore" });
+      git(["init", "-q"]);
+      git(["remote", "add", "origin", `https://example.test/${name}.git`]);
+      writeFileSync(join(dir, `${name}.txt`), name);
+      git(["add", "."]);
+      git(["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", name]);
+      return dir;
+    };
+    try {
+      const a = createRepo("a"); const b = createRepo("b");
+      h.impl = async () => fakeState([]);
+      const ctx = toolContext({ role: "audit", scopePath: b, workspaceRoot: a });
+      const executor = new ToolExecutor(ctx, undefined, undefined, fakeRuntime);
+      const result = await executor.execute({ name: "spawn_agents", arguments: { tasks: [{ task: "alpha" }, { task: "beta" }] } });
+      expect(result.output).toMatchObject({ succeeded: 2, failed: 0 });
+      expect(h.configs).toHaveLength(2);
+      for (const config of h.configs) {
+        expect(config.scopePath).toBe(realpathSync(b));
+        expect(config.workspaceRoot).toBe(a);
+        expect(config.workspaceIdentity).toMatchObject({ scopePath: realpathSync(b), origin: "https://example.test/b.git" });
+      }
+      expect(h.configs[0].workspaceIdentity).toBe(h.configs[1].workspaceIdentity);
+
+      h.configs = [];
+      const remapped = new ToolExecutor(ctx, undefined, undefined, async () => {
+        ctx.scopePath = a;
+        return fakeRuntime();
+      });
+      const rejected = await remapped.execute({ name: "spawn_agents", arguments: { tasks: [{ task: "alpha" }, { task: "beta" }] } });
+      expect(rejected.output).toMatchObject({ succeeded: 0, failed: 2 });
+      expect(JSON.stringify(rejected.output)).toContain("workspace_mismatch");
+      expect(h.configs).toHaveLength(0);
+    } finally { rmSync(root, { recursive: true, force: true }); }
   });
 
   it("(1) runs two children to completion, merges findings, distinct agent_ids", async () => {

@@ -1,3 +1,4 @@
+import type { WorkspaceIdentity } from "./workspace-identity.js";
 import type { Finding, AttackResult, TargetInfo, AuthConfig, NamedIdentity, ScanCostLedgerLike } from "@0/shared";
 import type { ScopePolicy } from "../scope/scope.js";
 import type { ScopeEnforcementState } from "../scope/activation.js";
@@ -504,6 +505,8 @@ export interface ToolContext {
   /** Current parent instructions, inherited by delegated agent sessions. */
   delegationSystemPrompt?: string;
   scopePath?: string;
+  /** Immutable parent-observed Git identity for delegated source reviews. */
+  workspaceIdentity?: WorkspaceIdentity;
   /** Session policy registry and durable, isolated executable implementation. */
   selfExtension?: SelfExtensionRegistry;
   executablePlugins?: ExecutablePluginManager;

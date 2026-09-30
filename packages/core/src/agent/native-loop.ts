@@ -1,3 +1,4 @@
+import { assertWorkspaceIdentity, type WorkspaceIdentity } from "./workspace-identity.js";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
@@ -272,6 +273,8 @@ export interface NativeAgentConfig {
   workerTree?: ToolContext["workerTree"];
   workerFindings?: ToolContext["findings"];
   scopePath?: string;
+  /** Inherited parent identity; validated before the child starts analysis. */
+  workspaceIdentity?: WorkspaceIdentity;
   sessionId?: string; // Resume from existing session
   /** Which retry attempt this is (0 = first attempt). Used by early-stop logic. */
   retryCount?: number;
@@ -612,6 +615,8 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     inlineValidationOracle,
   } = opts;
 
+  if (config.workspaceIdentity) assertWorkspaceIdentity(config.workspaceIdentity, config.scopePath);
+
   // Failover can change the model during a call.
   // Price usage against its resolved identity, never the Auto routing choice.
   const pricingModel = () => {
@@ -727,6 +732,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     attackResults: [],
     targetInfo: {},
     scopePath: config.scopePath,
+    workspaceIdentity: config.workspaceIdentity,
     persistFindings: db !== null,
     authConfig: config.authConfig,
     identities,
