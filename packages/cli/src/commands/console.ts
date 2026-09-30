@@ -14,6 +14,7 @@ import {
 import type {
   ConsoleAutonomyMode,
   ConsoleSession,
+  ConsoleTurnOutcome,
   NativeMessage,
   ToolCall,
   ToolResult,
@@ -309,7 +310,8 @@ export function registerConsoleCommand(program: Command): void {
           const request = findingPrompt
             ? `${findingPrompt}\n\nOperator request:\n${promptText}`
             : promptText;
-          await runTurn(printSession, request, processPresentationOutput);
+          const outcome = await runTurn(printSession, request, processPresentationOutput);
+          if (outcome.stopReason === "error") process.exitCode = 1;
           process.stdout.write("\n");
         } catch (err) {
           console.error(chalk.red(`\nturn failed: ${err instanceof Error ? err.message : String(err)}`));
@@ -517,7 +519,7 @@ async function runTurn(
   session: ConsoleSession,
   text: string,
   output: ProcessPresentationOutput,
-): Promise<void> {
+): Promise<ConsoleTurnOutcome> {
   let streamedAny = false;
   output.stdout("\n" + chalk.bold.green("engine › "), "console.assistant.prefix");
 
@@ -553,7 +555,11 @@ async function runTurn(
 
   if (outcome.stopReason === "error") {
     output.stderr(chalk.red(`\nengine error: ${outcome.error ?? "unknown"}\n`), "console.turn.error");
+    if (/ChatGPT.*model.*not supported/i.test(outcome.error ?? "")) {
+      output.stderr(chalk.dim("Choose an available account/provider model with --model; the interactive /model picker lists the current account catalog. Alternatively configure a provider that supports the requested model. No replacement model was selected.\n"), "console.turn.model_unavailable");
+    }
   }
+  return outcome;
 }
 
 function previewArgs(args: Record<string, unknown>): string {

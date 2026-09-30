@@ -18,7 +18,7 @@ The original work is preserved on local branch `recovery/local-work-20260930` an
 
 Reviewed changes include endpoint query-credential redaction in exported assurance manifests, a real restricted-PATH Codex renderer regression, inherited Git repository identity checks before worker inference, bounded YOLO verification guidance and host-generated source/replay receipts, and opt-in Jev ranking and specialist routing. Jev thresholds are uncalibrated; unknown evaluator model IDs retain existing fallback token pricing. The broken registration of a missing benchmark command, credential-retention characterization test, and alternative UI cosmetics remain in the recovery snapshot.
 
-GitHub's 18 open dependency alerts map to three packages: PyJWT, urllib3 and ip-address. The updated locks resolve PyJWT 2.14.0, urllib3 2.8.0 and ip-address 10.7.2 with minimum security floors. Frozen installs and relevant Python/MCP/IP checks pass. Alert dismissal depends on GitHub rescanning the merged lockfiles.
+GitHub's 18 open dependency alerts map to three packages: PyJWT, urllib3 and ip-address. The first updates resolved PyJWT 2.14.0, urllib3 2.8.0 and ip-address 10.7.2. A subsequent GitHub rescan disclosed two additional alerts; follow-up locks now resolve PyJWT 2.15.0 and DOMPurify 3.4.16 with minimum security floors. Frozen installs and relevant Python/MCP/IP checks pass. Alert dismissal depends on GitHub rescanning the merged lockfiles.
 
 ## Per-issue findings
 
