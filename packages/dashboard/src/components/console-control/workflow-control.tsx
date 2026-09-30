@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient, type UseMutationResult, type Use
 import { validateScanPlan } from "@0/shared/dist/types.js";
 import type { ScanPlan } from "@0/shared";
 import { ArrowUpRight, Download } from "lucide-react";
-import { webFetchJson } from "@/api";
+import { listConsoleSessions, webFetchJson } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -19,7 +19,7 @@ const activeStatuses: Record<string, true> = { queued: true, running: true, canc
 interface WorkflowOwnerState {
   owner: string;
   providers: UseQueryResult<ProvidersResponse, Error>;
-  sessions: UseQueryResult<{ sessions: SessionSummary[] }, Error>;
+  sessions: UseQueryResult<SessionSummary[], Error>;
   select: (id: string) => void;
   create: UseMutationResult<{ session: SessionSummary }, Error, void, unknown>;
   snapshot: UseQueryResult<SessionSnapshot, Error>;
@@ -32,7 +32,7 @@ function useWorkflowOwner(provided?: string) {
   const queryClient = useQueryClient();
   const owner = provided ?? new URLSearchParams(location.search).get("session") ?? "";
   const providers = useProviders();
-  const sessions = useQuery({ queryKey: ["console-sessions"], queryFn: ({ signal }) => webFetchJson<{ sessions: SessionSummary[] }>("/api/console/sessions", { signal }), refetchInterval: 3000 });
+  const sessions = useQuery({ queryKey: ["console-sessions"], queryFn: ({ signal }) => listConsoleSessions(signal), refetchInterval: 3000 });
   const select = (id: string) => { const params = new URLSearchParams(location.search); params.set("session", id); params.set("return", `/console/${id}`); navigate(`${location.pathname}?${params}`, { replace: true }); };
   const create = useMutation({ mutationFn: () => webFetchJson<{ session: SessionSummary }>("/api/console/sessions", jsonBody({})), onSuccess: async data => { await queryClient.invalidateQueries({ queryKey: ["console-sessions"] }); select(data.session.id); } });
   const snapshot = useQuery({ queryKey: ["console-control-session", owner], enabled: !!owner, queryFn: async ({ signal }) => (await webFetchJson<{ snapshot: SessionSnapshot }>(`/api/console/sessions/${encodeURIComponent(owner)}`, { signal })).snapshot, refetchInterval: 3000 });
@@ -41,7 +41,7 @@ function useWorkflowOwner(provided?: string) {
 }
 
 function WorkflowOwner({ state }: { state: WorkflowOwnerState }) {
-  return <ControlCard title="Session"><QueryState pending={state.sessions.isPending || state.providers.isPending} error={state.sessions.error ?? state.providers.error} retry={() => { void state.sessions.refetch(); void state.providers.refetch(); }} /><div className="flex flex-col items-end gap-3 sm:flex-row"><div className="w-full"><Field label="Session"><Select aria-label="Session" value={state.owner} onValueChange={state.select} options={[{ value: "", label: "Choose a session" }, ...(state.sessions.data?.sessions.filter(session => session.status !== "closed").map(session => ({ value: session.id, label: `${session.title ?? session.target ?? session.id} · ${session.status}` })) ?? [])]} /></Field></div><SubmitButton pending={state.create.isPending} disabled={!state.connected} onClick={() => state.create.mutate()}>New session</SubmitButton></div><Feedback error={state.create.error ?? state.snapshot.error} />{state.snapshot.data && <p className="text-sm text-muted-foreground">{state.snapshot.data.runtime?.providerLabel ?? "No provider"} · {state.snapshot.data.runtime?.model ?? "Default model"} · {state.snapshot.data.session.autonomyMode}</p>}{state.snapshot.data && !state.snapshot.data.scopeEnforcement.enabled && <Feedback error={state.snapshot.data.scopeEnforcement.message || "Scope checks are off."} />}{state.owner && <Link to={`/console/${encodeURIComponent(state.owner)}`} className="inline-flex items-center gap-1 text-sm underline">Open session<ArrowUpRight className="size-3" /></Link>}</ControlCard>;
+  return <ControlCard title="Session"><QueryState pending={state.sessions.isPending || state.providers.isPending} error={state.sessions.error ?? state.providers.error} retry={() => { void state.sessions.refetch(); void state.providers.refetch(); }} /><div className="flex flex-col items-end gap-3 sm:flex-row"><div className="w-full"><Field label="Session"><Select aria-label="Session" value={state.owner} onValueChange={state.select} options={[{ value: "", label: "Choose a session" }, ...(state.sessions.data?.filter(session => session.status !== "closed").map(session => ({ value: session.id, label: `${session.title ?? session.target ?? session.id} · ${session.status}` })) ?? [])]} /></Field></div><SubmitButton pending={state.create.isPending} disabled={!state.connected} onClick={() => state.create.mutate()}>New session</SubmitButton></div><Feedback error={state.create.error ?? state.snapshot.error} />{state.snapshot.data && <p className="text-sm text-muted-foreground">{state.snapshot.data.runtime?.providerLabel ?? "No provider"} · {state.snapshot.data.runtime?.model ?? "Default model"} · {state.snapshot.data.session.autonomyMode}</p>}{state.snapshot.data && !state.snapshot.data.scopeEnforcement.enabled && <Feedback error={state.snapshot.data.scopeEnforcement.message || "Scope checks are off."} />}{state.owner && <Link to={`/console/${encodeURIComponent(state.owner)}`} className="inline-flex items-center gap-1 text-sm underline">Open session<ArrowUpRight className="size-3" /></Link>}</ControlCard>;
 }
 
 function DataDisclosure({ title, value }: { title: string; value: unknown }) {
