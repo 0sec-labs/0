@@ -43,7 +43,7 @@ function latestProgressActivity(agent: HerdSubagentRecord): string {
 /** Every retained worker is reachable from the transcript list, including terminal work. */
 export function agentChatWorkItems(agents: Readonly<HerdSubagentMap>): AgentChatTab[] {
   return Object.values(agents).map((agent) => {
-    const label = sanitizeHerdText(agentTaskLabel(agent.task));
+    const label = sanitizeHerdText(agentTaskLabel(agent.task, undefined, Infinity));
     let activity: string;
     switch (agent.status) {
       case "queued":

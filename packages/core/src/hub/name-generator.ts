@@ -10,8 +10,9 @@ export const PRIMARY_AGENT_NAME = "Main";
  * One bounded, readable label for both live workers and retained task cards.
  * Structured assignments prefer the goal/change over generic Markdown headings
  * or acceptance instructions. Older records can supply their name as a fallback.
+ * Size-owning surfaces can request an unbounded label with maxLength=Infinity.
  */
-export function agentTaskLabel(task: string, fallbackName?: string): string {
+export function agentTaskLabel(task: string, fallbackName?: string, maxLength = 64): string {
   let label = "";
   let priority = 5;
   let sectionPriority = 4;
@@ -56,9 +57,11 @@ export function agentTaskLabel(task: string, fallbackName?: string): string {
       .replace(/\s+/g, " ")
       .trim() || "Worker";
   }
-  if (label.length <= 64) return label;
+  const limit = maxLength > 0 ? Math.max(1, Math.floor(maxLength)) : 64;
+  if (label.length <= limit) return label;
   // Never split a surrogate pair at the label boundary.
-  const end = /[\ud800-\udbff]/.test(label[62]!) ? 62 : 63;
+  let end = limit - 1;
+  if (/[\ud800-\udbff]/.test(label[end - 1] ?? "")) end--;
   return `${label.slice(0, end).trimEnd()}…`;
 }
 

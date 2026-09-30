@@ -25,6 +25,11 @@ describe("agentTaskLabel", () => {
     const label = agentTaskLabel(`${"x".repeat(62)}😀 inspect parser flow`);
     expect(label).toBe(`${"x".repeat(62)}…`);
   });
+
+  it("retains full task titles when the consuming surface owns its width", () => {
+    const title = "Review authentication, authorization, tenant boundaries and session secrets across the complete repository";
+    expect(agentTaskLabel(`# Goal\n${title}`, undefined, Infinity)).toBe(title);
+  });
 });
 
 describe("uniquifyAgentName", () => {
