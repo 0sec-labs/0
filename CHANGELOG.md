@@ -12,6 +12,8 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-09-30
+
 ### Changed
 
 - The interactive CLI now uses connected API keys or provider subscriptions
@@ -25,7 +27,7 @@ on the published npm package and the GitHub Release tag.
   Successful explicit model choices persist for the same connection; CLI and
   environment overrides win. Fresh launches no longer silently select GPT-5.5.
 - Reworked onboarding and dialogs with compact controls, live theme preview and
-  0security branding. Setup is five steps; sharing preferences remain optional
+  0.security branding. Setup is five steps; sharing preferences remain optional
   and editable from Settings, and completion returns directly to chat.
 - Replaced the Audits sidebar and separate saved-audit browser with one
   `/sessions` picker for open and saved conversations. Removed both chat sidebars;
@@ -50,6 +52,8 @@ on the published npm package and the GitHub Release tag.
   source-fix state handling.
 - Publish native SmolVM cleanup proofs atomically, and make craft directory
   listing portable without interpreting model-supplied paths as shell input.
+- Let worker task titles use the available row width instead of truncating them
+  at the compact agent-name limit.
 
 ## [0.21.4] - 2026-09-23
 

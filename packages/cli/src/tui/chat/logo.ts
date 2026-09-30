@@ -3,28 +3,28 @@ import type { Theme } from "../theme-context.js";
 import type { LogoCellTone } from "../logo-animation.js";
 
 /**
- * Five-row 0.SECURITY wordmark. Every letter has an eight-cell slot and two
- * cells of tracking; the baseline's single white block between 0 and S is the
- * pixel-font separator dot. '#' is white block art, '/' is the orange slash.
+ * Five-row 0.SECURITY wordmark. Extra tracking isolates the square separator
+ * from both letters. Two white baseline cells match the terminal's tall-cell
+ * aspect ratio. '#' is white art, '/' the orange slash.
  */
 export const TERMINAL_BLOCK_LOGO = [
-  " ######    ######   #######    ######   ##    ##  #######    ######   ########  ##    ##",
-  "##  //##  ##        ##        ##        ##    ##  ##    ##     ##        ##      ##  ## ",
-  "## // ##   ######   ######    ##        ##    ##  #######      ##        ##       ####  ",
-  "##//  ##        ##  ##        ##        ##    ##  ##  ##       ##        ##        ##   ",
-  " ######  # ######   #######    ######    ######   ##   ##    ######      ##        ##   ",
+  " ######      ######   #######    ######   ##    ##  #######    ######   ########  ##    ##",
+  "##  //##    ##        ##        ##        ##    ##  ##    ##     ##        ##      ##  ## ",
+  "## // ##     ######   ######    ##        ##    ##  #######      ##        ##       ####  ",
+  "##//  ##          ##  ##        ##        ##    ##  ##  ##       ##        ##        ##   ",
+  " ######  ##  ######   #######    ######    ######   ##   ##    ######      ##        ##   ",
 ] as const;
-export const TERMINAL_BLOCK_LOGO_FULL_WIDTH = 88;
+export const TERMINAL_BLOCK_LOGO_FULL_WIDTH = 90;
 
 /** Compact abbreviation (first letters) for columns too narrow for the full wordmark. */
 export const TERMINAL_BLOCK_LOGO_COMPACT = [
-  " ######   #######  #######   ######",
-  "##  //##  ##       ##       ##     ",
-  "## // ##  #######  #####    ##     ",
-  "##//  ##       ##  ##       ##     ",
-  " ###### # #######  #######   ######",
+  " ######      #######  #######   ######",
+  "##  //##     ##       ##       ##     ",
+  "## // ##     #######  #####    ##     ",
+  "##//  ##          ##  ##       ##     ",
+  " ######  ##  #######  #######   ######",
 ] as const;
-export const TERMINAL_BLOCK_LOGO_WIDTH = 35;
+export const TERMINAL_BLOCK_LOGO_WIDTH = 38;
 
 /**
  * Milliseconds between logo intro frames. One rate for every style — the frame
