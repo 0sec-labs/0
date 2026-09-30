@@ -6,15 +6,18 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, parse, resolve, sep } from "node:path";
 import { z } from "zod";
-import { findingSchema, VERSION, type Finding, type VerificationResult } from "@0sec/shared";
+import { findingSchema, VERSION, type Finding, type VerificationResult } from "@0/shared";
 import type { ScopePolicy } from "../scope/scope.js";
-import { DockerRunner, LocalShellRunner, runDeterministicReplay, type ReplayRunner } from "./replay-runner.js";
+import { DockerRunner, LocalShellRunner, SmolvmRunner, runDeterministicReplay, type ReplayRunner } from "./replay-runner.js";
+import { isAdmittedSmolvmWorkbench, resolveWorkbenchBrokerImage } from "../runtime/smolvm-broker.js";
 
 // Snapshots are bounded and read once, before any PoC executes. The cached bytes
 // prevent a vulnerable-side process from changing the patched-side snapshot.
 const MAX_SNAPSHOT_BYTES = 256 * 1024 * 1024;
 const MAX_MANIFEST_BYTES = 4 * 1024 * 1024;
 const imageReference = z.string().regex(/^[^\s@]+@sha256:[a-f0-9]{64}$/);
+const smolvmImageReference = z.union([imageReference, z.string().regex(/^sha256:[a-f0-9]{64}$/)]);
+const archiveDigest = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 const fileEntrySchema = z.object({
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
   size: z.number().int().nonnegative().max(MAX_SNAPSHOT_BYTES),
@@ -23,12 +26,17 @@ const fileEntrySchema = z.object({
 const filesSchema = z.record(fileEntrySchema).refine((files) => Object.keys(files).length > 0, "file allowlist is empty");
 const sideSchema = z.object({ cwd: z.string(), files: filesSchema }).strict();
 const compatibilitySchema = z.object({
-  runner: z.enum(["local", "docker"]),
+  runner: z.enum(["local", "smolvm", "docker"]),
   platform: z.array(z.string()).min(1),
   arch: z.array(z.string()).min(1),
   node_version: z.string().min(1),
   docker_shell_image_digest: imageReference.optional(),
   docker_http_image_digest: imageReference.optional(),
+  smolvm_shell_image_digest: smolvmImageReference.optional(),
+  smolvm_http_image_digest: smolvmImageReference.optional(),
+  smolvm_shell_archive_digest: archiveDigest.optional(),
+  smolvm_http_archive_digest: archiveDigest.optional(),
+  smolvm_container_archive_digests: z.record(archiveDigest).optional(),
 }).strict();
 const planSchema = z.object({
   version: z.literal(1),
@@ -40,9 +48,11 @@ const planSchema = z.object({
     vulnerable: z.array(z.string().min(1)).min(1),
     patched: z.array(z.string().min(1)).min(1),
   }).strict(),
-  runner: z.enum(["local", "docker"]),
+  runner: z.enum(["local", "smolvm", "docker"]),
   docker_shell_image: imageReference.optional(),
   docker_http_image: imageReference.optional(),
+  smolvm_shell_image: smolvmImageReference.optional(),
+  smolvm_http_image: smolvmImageReference.optional(),
 }).strict().refine((p) => (p.finding !== undefined) !== (p.finding_path !== undefined),
   "exactly one of finding or finding_path is required");
 const manifestSchema = z.object({
@@ -117,6 +127,9 @@ function freshDirectory(path: string): void {
 }
 
 function validateSteps(finding: Finding, compatibility: RunnerCompatibility): void {
+  if (compatibility.runner === "smolvm" && !isAdmittedSmolvmWorkbench()) {
+    throw new Error("SmolVM reproduction requires a validated workbench admission and approved image catalog");
+  }
   const steps = finding.pocSteps ?? [];
   if (!steps.length || !steps.some((step) => step.expect)) throw new Error("bundle requires executable PoC steps and assertions");
   const ids = new Set<string>();
@@ -129,9 +142,25 @@ function validateSteps(finding: Finding, compatibility: RunnerCompatibility): vo
     if (step.action.type === "shell") {
       relativePath(step.action.cwd ?? ".", true);
       if (compatibility.runner === "docker" && !compatibility.docker_shell_image_digest) throw new Error("docker shell steps require a digest-pinned docker_shell_image");
+      if (compatibility.runner === "smolvm" &&
+          (!compatibility.smolvm_shell_image_digest || !compatibility.smolvm_shell_archive_digest)) {
+        throw new Error("SmolVM shell steps require an exact approved image and archive-byte identity");
+      }
     }
-    if (step.action.type === "http" && !compatibility.docker_http_image_digest) throw new Error("docker HTTP steps require a digest-pinned docker_http_image");
-    if (step.action.type === "docker") imageReference.parse(step.action.image);
+    if (step.action.type === "http") {
+      if (compatibility.runner === "docker" && !compatibility.docker_http_image_digest) throw new Error("docker HTTP steps require a digest-pinned docker_http_image");
+      if (compatibility.runner === "smolvm" &&
+          (!compatibility.smolvm_http_image_digest || !compatibility.smolvm_http_archive_digest)) {
+        throw new Error("SmolVM HTTP steps require an exact approved image and archive-byte identity");
+      }
+    }
+    if (step.action.type === "docker") {
+      (compatibility.runner === "smolvm" ? smolvmImageReference : imageReference).parse(step.action.image);
+      if (compatibility.runner === "smolvm" && !step.action.args.length) throw new Error("SmolVM container steps require explicit command argv");
+      if (compatibility.runner === "smolvm" && !compatibility.smolvm_container_archive_digests?.[step.action.image]) {
+        throw new Error("SmolVM container steps require the approved archive-byte identity in the bundle");
+      }
+    }
     if (step.expect?.type === "file-exists") relativePath(step.expect.path);
     if (step.expect?.type === "body-matches") new RegExp(step.expect.pattern);
   }
@@ -150,10 +179,26 @@ export async function createReproductionBundle(planPath: string, outputPath: str
     noSymlinks(path);
     if (overlaps(path, bundleDir)) throw new Error("bundle output overlaps a source root or input file");
   }
+  const needsShell = finding.pocSteps?.some((step) => step.action.type === "shell") === true;
+  const needsHttp = finding.pocSteps?.some((step) => step.action.type === "http") === true;
+  if (plan.runner === "smolvm" && !isAdmittedSmolvmWorkbench()) {
+    throw new Error("Create SmolVM bundles inside the admitted workbench so approved archive identities and Linux platform are verified");
+  }
+  const smolShellDigest = plan.runner === "smolvm" && needsShell ? resolveWorkbenchBrokerImage(plan.smolvm_shell_image) : undefined;
+  const smolHttpDigest = plan.runner === "smolvm" && needsHttp ? resolveWorkbenchBrokerImage(plan.smolvm_http_image) : undefined;
+  const smolContainerDigests = Object.create(null) as Record<string, string>;
+  if (plan.runner === "smolvm") {
+    for (const step of finding.pocSteps ?? []) {
+      if (step.action.type === "docker") smolContainerDigests[step.action.image] = resolveWorkbenchBrokerImage(step.action.image);
+    }
+  }
   const compatibility: RunnerCompatibility = {
     runner: plan.runner, platform: [process.platform], arch: [process.arch], node_version: process.version,
     ...(plan.docker_shell_image ? { docker_shell_image_digest: plan.docker_shell_image } : {}),
     ...(plan.docker_http_image ? { docker_http_image_digest: plan.docker_http_image } : {}),
+    ...(smolShellDigest ? { smolvm_shell_image_digest: plan.smolvm_shell_image ?? smolShellDigest, smolvm_shell_archive_digest: smolShellDigest } : {}),
+    ...(smolHttpDigest ? { smolvm_http_image_digest: plan.smolvm_http_image ?? smolHttpDigest, smolvm_http_archive_digest: smolHttpDigest } : {}),
+    ...(Object.keys(smolContainerDigests).length ? { smolvm_container_archive_digests: smolContainerDigests } : {}),
   };
   validateSteps(finding as Finding, compatibility);
   const snapshots = new Map<string, Buffer>();
@@ -192,26 +237,41 @@ export async function createReproductionBundle(planPath: string, outputPath: str
 /** Explicit runner choice is consent to execute trusted PoC code, not an authenticity check. */
 export async function runReproductionBundle(opts: {
   bundleDir: string;
-  runner: "local" | "docker";
+  runner?: "local" | "smolvm" | "docker";
   outDir?: string;
   scope?: ScopePolicy;
   dockerNetwork?: string;
+  signal?: AbortSignal;
 }): Promise<ReproductionBundleResult> {
+  const runnerKind = opts.runner ?? (isAdmittedSmolvmWorkbench() ? "smolvm" : undefined);
   let findingId = "unknown";
   try {
     const bundleDir = resolve(opts.bundleDir);
     const manifest = manifestSchema.parse(JSON.parse(readRegular(join(bundleDir, "manifest.json"), MAX_MANIFEST_BYTES).toString("utf8")));
     findingId = manifest.finding.id;
     const compat = manifest.runner_compatibility;
-    if (opts.runner !== compat.runner) throw new Error(`bundle requires runner ${compat.runner}`);
+    if (!runnerKind) throw new Error("Reproduction bundles require an explicit runner outside an admitted workbench");
+    if (runnerKind !== compat.runner) throw new Error(`bundle requires runner ${compat.runner}`);
     if (!compat.platform.includes(process.platform) || !compat.arch.includes(process.arch)) throw new Error("bundle platform or architecture does not match this host");
     if (manifest.engine_version !== VERSION) throw new Error("bundle engine version does not match this verifier");
-    if (opts.runner === "local" && compat.node_version !== process.version) throw new Error("bundle Node version does not match this local runtime");
-    if (opts.dockerNetwork && opts.runner !== "docker") throw new Error("dockerNetwork requires the docker runner");
+    if (runnerKind === "local" && compat.node_version !== process.version) throw new Error("bundle Node version does not match this local runtime");
+    if (opts.dockerNetwork && runnerKind !== "docker") throw new Error("dockerNetwork requires the docker runner");
+    if (runnerKind === "smolvm") {
+      for (const [reference, expected] of [
+        [compat.smolvm_shell_image_digest, compat.smolvm_shell_archive_digest],
+        [compat.smolvm_http_image_digest, compat.smolvm_http_archive_digest],
+      ]) {
+        if (reference && resolveWorkbenchBrokerImage(reference) !== expected) throw new Error(`approved SmolVM archive identity does not match the bundle: ${reference}`);
+      }
+      for (const [reference, expected] of Object.entries(compat.smolvm_container_archive_digests ?? {})) {
+        if (resolveWorkbenchBrokerImage(reference) !== expected) throw new Error(`approved SmolVM container archive identity does not match the bundle: ${reference}`);
+      }
+    }
     const finding = manifest.finding as Finding;
     validateSteps(finding, compat);
-    if (finding.pocSteps!.some((step) => step.action.type === "http") && (!opts.scope || !opts.dockerNetwork || opts.dockerNetwork === "none")) {
-      throw new Error("HTTP replay requires explicit scope and docker network");
+    if (finding.pocSteps!.some((step) => step.action.type === "http") &&
+        (!opts.scope || (runnerKind === "docker" && (!opts.dockerNetwork || opts.dockerNetwork === "none")))) {
+      throw new Error("HTTP replay requires explicit scope and, for Docker only, an enabled docker network");
     }
     const snapshots = new Map<string, Buffer>();
     let totalBytes = 0;
@@ -233,7 +293,7 @@ export async function runReproductionBundle(opts: {
         if (bytes.length !== entry.size) throw new Error(`snapshot size mismatch: ${path}`);
       }
     }
-    const resultsDir = opts.outDir ? resolve(opts.outDir) : mkdtempSync(join(tmpdir(), "0sec-repro-"));
+    const resultsDir = opts.outDir ? resolve(opts.outDir) : mkdtempSync(join(tmpdir(), "0-repro-"));
     if (overlaps(bundleDir, resultsDir)) throw new Error("replay output overlaps the bundle");
     freshDirectory(resultsDir);
     async function replay(side: "vulnerable" | "patched"): Promise<VerificationResult> {
@@ -248,9 +308,9 @@ export async function runReproductionBundle(opts: {
         writeFileSync(destination, snapshots.get(entry.sha256)!, { flag: "wx", mode: 0o600 });
         chmodSync(destination, 0o600 | (entry.mode & 0o111));
       }
-      const delegate = opts.runner === "local" ? new LocalShellRunner() : new DockerRunner({
-        shellImage: compat.docker_shell_image_digest, httpImage: compat.docker_http_image_digest, network: opts.dockerNetwork,
-      });
+      const delegate = runnerKind === "local" ? new LocalShellRunner() : runnerKind === "smolvm"
+        ? new SmolvmRunner({ shellImageReference: compat.smolvm_shell_image_digest, httpImageReference: compat.smolvm_http_image_digest })
+        : new DockerRunner({ shellImage: compat.docker_shell_image_digest, httpImage: compat.docker_http_image_digest, network: opts.dockerNetwork });
       const runner: ReplayRunner = {
         kind: delegate.kind,
         async exec(step, context) {
@@ -266,7 +326,7 @@ export async function runReproductionBundle(opts: {
       const scopedFinding: Finding = { ...finding, pocSteps: finding.pocSteps!.map((step) => ({
         ...step, expect: step.expect?.type === "file-exists" ? { ...step.expect, path: join(runDir, step.expect.path) } : step.expect,
       })) };
-      const { result } = await runDeterministicReplay(scopedFinding, { runner, runDir, scope: opts.scope, engineVersion: VERSION });
+      const { result } = await runDeterministicReplay(scopedFinding, { runner, runDir, scope: opts.scope, signal: opts.signal, engineVersion: VERSION });
       writeFileSync(join(resultsDir, `${side}.json`), JSON.stringify(result, null, 2) + "\n", { flag: "wx" });
       return result;
     }
@@ -289,7 +349,7 @@ export async function runReproductionBundle(opts: {
     const failure: VerificationResult = {
       status: "error", mode: "deterministic_replay", finding_id: findingId, engine_version: VERSION,
       started_at: now, completed_at: now, duration_ms: 0, commands: [], assertions: [], evidence_artifacts: [],
-      engine_metadata: { os: process.platform, arch: process.arch, runner: opts.runner }, error_reason: reason, summary: reason,
+      engine_metadata: { os: process.platform, arch: process.arch, runner: runnerKind ?? "local" }, error_reason: reason, summary: reason,
     };
     return { status: "error", exitCode: 3, vulnerable: failure, patched: failure, summary: reason };
   }

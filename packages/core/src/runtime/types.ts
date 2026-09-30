@@ -1,4 +1,4 @@
-import type { AuthConfig } from "@0sec/shared";
+import type { AuthConfig, TokenUsageForPricing, ModelTokenUsage } from "@0/shared";
 
 export type RuntimeType = "api" | "claude" | "codex" | "gemini" | "ollama";
 
@@ -32,7 +32,7 @@ export interface RuntimeConfig {
   /** Force children to use the resolved parent model regardless of selection. */
   singleModel?: boolean;
   /** Explicit provider for this new runtime; conflicting FORCE pins fail closed. */
-  provider?: "openrouter" | "anthropic" | "openai" | "azure" | "deepseek" | "chatgpt-codex" | "z-ai" | "kimi" | "qwen" | "xai" | "opencode" | "copilot" | "google" | "hosted";
+  provider?: "openrouter" | "anthropic" | "openai" | "azure" | "deepseek" | "chatgpt-codex" | "z-ai" | "kimi" | "qwen" | "xai" | "opencode" | "copilot" | "google";
   apiKey?: string;
   /** Called when the subprocess executes a tool (read file, run command, etc.) */
   onToolCall?: (name: string, detail: string) => void;
@@ -58,7 +58,8 @@ export interface RuntimeResult {
   exitCode: number | null;
   timedOut: boolean;
   durationMs: number;
-  usage?: { inputTokens: number; outputTokens: number };
+  usage?: TokenUsageForPricing;
+  usageByModel?: ModelTokenUsage[];
   error?: string;
 }
 
@@ -66,6 +67,8 @@ export interface Runtime {
   readonly type: RuntimeType;
   execute(prompt: string, context?: RuntimeContext): Promise<RuntimeResult>;
   isAvailable(): Promise<boolean>;
+  /** Current model identifier; not a per-request billing identity or rate receipt. */
+  resolvedModel?(): string;
   /** Fork the parent account; model overrides require operator consent, never account failover. */
   forkForSubagent?(timeoutMs: number, selection?: SubagentModelSelection): Promise<NativeRuntime>;
   /**
@@ -96,6 +99,7 @@ export interface RuntimeContext {
   templateId?: string;
   systemPrompt?: string;
   scanId?: string;
+  signal?: AbortSignal;
   mcp?: {
     enableTargetTools?: boolean;
     dbPath?: string;
@@ -183,6 +187,7 @@ export interface NativeRuntimeResult {
     /** Prompt tokens written to cache this request (~1.25x input price). */
     cacheWriteTokens?: number;
   };
+  usageByModel?: ModelTokenUsage[];
   durationMs: number;
   error?: string;
   /**
@@ -207,7 +212,7 @@ export interface NativeRuntimeResult {
 
 export interface NativeStreamCallbacks {
   onThinking?: (text: string) => void;
-  onUsage?: (usage: { inputTokens: number; outputTokens: number }) => void;
+  onUsage?: (usage: TokenUsageForPricing) => void;
   /**
    * Token-level streaming hook. Fired for every SSE delta event while the
    * runtime is still streaming the response. `text` is just the incremental
@@ -274,4 +279,8 @@ export interface NativeRuntime {
   }): void;
   /** Current model identifier; not a per-request billing identity or rate receipt. */
   resolvedModel?(): string;
+  /** Provider selected by the runtime, never inferred from a requested model. */
+  resolvedProvider?(): string;
+  /** Provider-qualified catalog estimate key, not a billing receipt. */
+  resolvedPricingModel?(): string;
 }

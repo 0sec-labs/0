@@ -4,7 +4,7 @@
  * The status bar mirrors the compact prompt other tools show — branch name
  * plus a count of modified and untracked files, e.g.
  *
- *     ~/coding/0sec-labs/0sec   publish/main-integration *54 ?29
+ *     ~/coding/0sec-labs/0   publish/main-integration *54 ?29
  *
  * Two constraints shape this module. First, the numbers must come from git
  * itself, not a hand-rolled directory walk, because git already knows the

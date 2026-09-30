@@ -31,7 +31,7 @@ import {
 
 const temps: string[] = [];
 function tempHome(): string {
-  const dir = mkdtempSync(join(tmpdir(), "0sec-feedback-"));
+  const dir = mkdtempSync(join(tmpdir(), "0-feedback-"));
   temps.push(dir);
   return dir;
 }
@@ -44,8 +44,8 @@ afterEach(() => {
 });
 
 describe("feedbackFilePath", () => {
-  it("lives under the operator's own 0sec directory", () => {
-    expect(feedbackFilePath("/home/op")).toBe("/home/op/.0sec/feedback.md");
+  it("lives under the operator's own 0 directory", () => {
+    expect(feedbackFilePath("/home/op")).toBe("/home/op/.0/feedback.md");
   });
 });
 
@@ -93,8 +93,8 @@ describe("appendFeedback", () => {
 
   it("reports failure instead of throwing when the path is unwritable", () => {
     const home = tempHome();
-    // A regular file where the .0sec directory needs to be.
-    writeFileSync(join(home, ".0sec"), "not a directory", "utf8");
+    // A regular file where the .0 directory needs to be.
+    writeFileSync(join(home, ".0"), "not a directory", "utf8");
     const result = appendFeedback({ message: "nope", timestamp: "t" }, home);
     expect(result.ok).toBe(false);
     expect(result.error).toBeTruthy();
@@ -127,11 +127,11 @@ describe("parseFeedbackCommand", () => {
 // Opt-in submission
 // ---------------------------------------------------------------------------
 
-const HTTPS_ENV = { "0SEC_FEEDBACK_URL": "https://feedback.example.test/v1/feedback" };
+const HTTPS_ENV = { "ZERO_FEEDBACK_URL": "https://feedback.example.test/v1/feedback" };
 const NO_CLOUD = { cloudCredentials: () => null };
 const CLOUD_CREDENTIALS = {
   cloudCredentials: () => ({
-    host: "https://cloud.0sec.ai",
+    host: "https://cloud.0.ai",
     token: "cloud-feedback-token",
   }),
 };
@@ -170,7 +170,7 @@ describe("feedbackEndpoint", () => {
   });
 
   it("ignores a blank or whitespace-only setting", () => {
-    expect(feedbackEndpoint({ "0SEC_FEEDBACK_URL": "   " }, NO_CLOUD)).toBeNull();
+    expect(feedbackEndpoint({ "ZERO_FEEDBACK_URL": "   " }, NO_CLOUD)).toBeNull();
   });
 
   it("derives the canonical authenticated cloud receiver from CLI credentials", () => {
@@ -180,7 +180,7 @@ describe("feedbackEndpoint", () => {
   it("can disable cloud fallback for a flow without a reviewed preview", () => {
     expect(feedbackEndpoint({}, { ...CLOUD_CREDENTIALS, allowCloud: false })).toBeNull();
     expect(
-      feedbackEndpoint({ "0SEC_FEEDBACK_URL": "https://self-hosted.example/feedback" }, {
+      feedbackEndpoint({ "ZERO_FEEDBACK_URL": "https://self-hosted.example/feedback" }, {
         ...CLOUD_CREDENTIALS,
         allowCloud: false,
       }),
@@ -198,16 +198,16 @@ describe("submissionBlockedReason", () => {
   });
 
   it("refuses plaintext http", () => {
-    expect(submissionBlockedReason({ "0SEC_FEEDBACK_URL": "http://feedback.example.test" })).toBe(
+    expect(submissionBlockedReason({ "ZERO_FEEDBACK_URL": "http://feedback.example.test" })).toBe(
       "insecure-endpoint",
     );
   });
 
   it("refuses an unparseable endpoint", () => {
-    expect(submissionBlockedReason({ "0SEC_FEEDBACK_URL": "not a url" })).toBe("insecure-endpoint");
+    expect(submissionBlockedReason({ "ZERO_FEEDBACK_URL": "not a url" })).toBe("insecure-endpoint");
   });
 
-  it.each(["0SEC_OFFLINE", "0SEC_NO_TELEMETRY", "DO_NOT_TRACK"])(
+  it.each(["ZERO_OFFLINE", "ZERO_NO_TELEMETRY", "DO_NOT_TRACK"])(
     "%s wins over a configured endpoint",
     (name) => {
       expect(submissionBlockedReason({ ...HTTPS_ENV, [name]: "1" })).toBe("opt-out");
@@ -215,11 +215,11 @@ describe("submissionBlockedReason", () => {
   );
 
   it.each(["1", "true", "yes", "on"])("treats %s as opt-out", (value) => {
-    expect(submissionBlockedReason({ ...HTTPS_ENV, "0SEC_OFFLINE": value })).toBe("opt-out");
+    expect(submissionBlockedReason({ ...HTTPS_ENV, "ZERO_OFFLINE": value })).toBe("opt-out");
   });
 
   it.each(["0", "false", "no", "", "  "])("does not treat %s as opt-out", (value) => {
-    expect(submissionBlockedReason({ ...HTTPS_ENV, "0SEC_OFFLINE": value })).toBeNull();
+    expect(submissionBlockedReason({ ...HTTPS_ENV, "ZERO_OFFLINE": value })).toBeNull();
   });
 });
 
@@ -306,8 +306,8 @@ describe("buildSubmitPreview", () => {
 
   it("is null when submission is blocked", () => {
     expect(buildSubmitPreview(payload(), {}, NO_CLOUD)).toBeNull();
-    expect(buildSubmitPreview(payload(), { ...HTTPS_ENV, "0SEC_OFFLINE": "1" })).toBeNull();
-    expect(buildSubmitPreview(payload(), { "0SEC_FEEDBACK_URL": "http://x.test" })).toBeNull();
+    expect(buildSubmitPreview(payload(), { ...HTTPS_ENV, "ZERO_OFFLINE": "1" })).toBeNull();
+    expect(buildSubmitPreview(payload(), { "ZERO_FEEDBACK_URL": "http://x.test" })).toBeNull();
   });
 
   it("matches the bytes actually transmitted", async () => {
@@ -375,7 +375,7 @@ describe("submitFeedback", () => {
 
   it("refuses when opted out, even though sending was explicitly requested", async () => {
     const { fn, calls } = stubFetch(() => okResponse());
-    for (const name of ["0SEC_OFFLINE", "0SEC_NO_TELEMETRY", "DO_NOT_TRACK"]) {
+    for (const name of ["ZERO_OFFLINE", "ZERO_NO_TELEMETRY", "DO_NOT_TRACK"]) {
       const result = await submitFeedback(payload(), { ...HTTPS_ENV, [name]: "1" }, { fetchImpl: fn });
       expect(result.ok).toBe(false);
       expect(result.skipped).toBe("opt-out");
@@ -390,7 +390,7 @@ describe("submitFeedback", () => {
     const result = await submitFeedback(payload(), {}, { fetchImpl: fn, cloudCredentials: () => null });
     expect(result.ok).toBe(false);
     expect(result.skipped).toBe("no-endpoint");
-    expect(result.error).toContain("0SEC_FEEDBACK_URL");
+    expect(result.error).toContain("ZERO_FEEDBACK_URL");
     expect(calls).toHaveLength(0);
   });
 
@@ -398,7 +398,7 @@ describe("submitFeedback", () => {
     const { fn, calls } = stubFetch(() => okResponse());
     const result = await submitFeedback(
       payload(),
-      { "0SEC_FEEDBACK_URL": "http://feedback.example.test" },
+      { "ZERO_FEEDBACK_URL": "http://feedback.example.test" },
       { fetchImpl: fn },
     );
     expect(result.ok).toBe(false);
@@ -455,7 +455,7 @@ describe("submitFeedback", () => {
     try {
       await new Promise<void>((resolve) => destination.listen(0, "127.0.0.1", resolve));
       await new Promise<void>((resolve) => source.listen(0, "127.0.0.1", resolve));
-      const env = { "0SEC_FEEDBACK_URL": `https://127.0.0.1:${(source.address() as AddressInfo).port}/reviewed` };
+      const env = { "ZERO_FEEDBACK_URL": `https://127.0.0.1:${(source.address() as AddressInfo).port}/reviewed` };
       const report = payload();
       // Map the initial TLS address to the HTTP-only local fixture. Native
       // fetch owns redirect handling; no response or redirect is mocked.
@@ -764,7 +764,7 @@ describe("buildDiagnosticReview", () => {
 });
 
 describe("buildDiagnosticFeedback — consented full detail (analyticsLevel commands|full)", () => {
-  const consent = { "0SEC_ANALYTICS_LEVEL": "full" } as unknown as NodeJS.ProcessEnv;
+  const consent = { "ZERO_ANALYTICS_LEVEL": "full" } as unknown as NodeJS.ProcessEnv;
 
   function withStack(message: string, stack: string): Error {
     const e = new Error(message);
@@ -776,8 +776,8 @@ describe("buildDiagnosticFeedback — consented full detail (analyticsLevel comm
     const err = new TypeError("boom in the scanner");
     err.stack = [
       "TypeError: boom in the scanner",
-      "    at scan (/home/dev/coding/0sec/packages/core/src/scan.ts:42:7)",
-      "    at runAudit (/home/dev/coding/0sec/packages/cli/src/run.ts:10:3)",
+      "    at scan (/home/dev/coding/0/packages/core/src/scan.ts:42:7)",
+      "    at runAudit (/home/dev/coding/0/packages/cli/src/run.ts:10:3)",
     ].join("\n");
     const result = buildDiagnosticFeedback(diagInfo({ error: err, kind: "tool" }), consent);
     // Finite header is still present.
@@ -810,7 +810,7 @@ describe("buildDiagnosticFeedback — consented full detail (analyticsLevel comm
   it("appends NOTHING and stays at the finite cap without consent", () => {
     const err = withStack("boom", "Error: boom\n    at f (/x.ts:1:1)");
     for (const level of ["off", "usage", ""]) {
-      const env = { "0SEC_ANALYTICS_LEVEL": level } as unknown as NodeJS.ProcessEnv;
+      const env = { "ZERO_ANALYTICS_LEVEL": level } as unknown as NodeJS.ProcessEnv;
       const result = buildDiagnosticFeedback(diagInfo({ error: err, kind: "tool" }), env);
       expect(result.message).not.toContain("at f (");
       expect(Buffer.byteLength(result.message)).toBeLessThanOrEqual(MAX_DIAGNOSTIC_MESSAGE_BYTES);

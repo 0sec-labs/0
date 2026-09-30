@@ -14,7 +14,7 @@ export interface EvolutionCase {
   expected: unknown;
 }
 
-/** Isolation provider for source evaluations; omitted backend retains Docker. */
+/** Outside an admitted workbench omission retains Docker; admission forces sibling SmolVM. */
 export type EvolutionBackend = "docker" | "smolvm";
 
 /** Operator-owned contract. Neither a generated patch nor a target can edit it. */
@@ -23,9 +23,9 @@ export interface EvolutionConfig {
   sourceRoot: string;
   storePath: string;
   image: string;
-  /** Backend isolation provider: "docker" (default) or "smolvm". */
+  /** Operator backend outside a workbench; admitted workbenches always use sibling SmolVM. */
   backend?: EvolutionBackend;
-  /** Path to the smolvm toolbox archive; required when backend is "smolvm". */
+  /** Local archive for standalone SmolVM. Admitted workbenches use only the host-approved image catalog. */
   imageArchive?: string;
   sourcePaths: string[];
   editablePaths: string[];
@@ -87,6 +87,8 @@ export interface EvolutionProposal {
   rationale: string;
   edits: EvolutionEdit[];
   modelCostUsd: number;
+  /** Observed generator identity, not the operator's requested model text. */
+  modelIdentity?: EvolutionModelIdentity;
 }
 
 export interface EvolutionExecution {
@@ -192,9 +194,22 @@ export interface EvolutionRunResult {
   evaluationCostUsd: number;
 }
 
+export interface EvolutionModelIdentity {
+  provider: string;
+  model: string;
+  pricingModel?: string;
+}
+
 export interface EvolutionDependencies {
   model?: EvolutionModel;
+  /** Controller observation for injected model implementations. */
+  modelIdentity?: () => EvolutionModelIdentity;
   sandbox?: EvolutionSandbox;
+  /** Shared pass/canary budget. Known execution cost settles before charge can reject. */
+  evaluationBudget?: {
+    remainingUsd: () => number;
+    charge: (costUsd: number) => void;
+  };
   signal?: AbortSignal;
   log?: (message: string) => void;
   /** Parent run pins the version once; child runIds reuse the same pinned version across the engagement. */

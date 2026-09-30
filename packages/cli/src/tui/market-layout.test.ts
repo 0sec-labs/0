@@ -645,7 +645,7 @@ describe("the empty / error state", () => {
   it("guides a disabled (empty-URL) Hackstore rather than reading as a crash", () => {
     const text = textOf(marketEmptyLines({ registryUrl: "" }, 60));
     expect(text).toContain("Hackstore disabled");
-    expect(text).toContain("0SEC_REGISTRY_URL");
+    expect(text).toContain("ZERO_REGISTRY_URL");
     expect(text).toContain("runs nothing");
   });
 

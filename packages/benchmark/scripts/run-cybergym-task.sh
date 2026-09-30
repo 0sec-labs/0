@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Generate one official CyberGym task on the host, scope a one-use oracle
-# capability to it, and execute the 0sec agent in the isolated container.
+# capability to it, and execute the 0 agent in the isolated container.
 set -euo pipefail
 
 if (($# < 1)); then
@@ -12,7 +12,7 @@ task_id="$1"
 shift
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-OSEC_ROOT="$(printenv 0SEC_ROOT 2>/dev/null || true)"
+OSEC_ROOT="$(printenv ZERO_ROOT 2>/dev/null || true)"
 : "${OSEC_ROOT:=$(cd -- "${script_dir}/../../.." && pwd)}"
 : "${CYBERGYM_ROOT:=/srv/cybergym}"
 : "${CYBERGYM_PYTHON:=${CYBERGYM_ROOT}/venv/bin/python}"

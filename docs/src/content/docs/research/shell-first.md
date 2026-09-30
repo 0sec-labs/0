@@ -24,7 +24,7 @@ LLMs have seen millions of curl-based exploits, CTF writeups, and pentest report
 
 A single curl command handles login, cookies, redirects, and response parsing. With structured tools, that is 4 separate calls with state management. The agent can also run sqlmap, write Python exploit scripts, use jq, chain pipes.
 
-<span id="the-0sec-tool-set"></span>
+<span id="the-0-tool-set"></span>
 ## The 0 tool set
 
 | Tool | Purpose | When to use |

@@ -18,7 +18,7 @@
  * Verification-oriented: a verdict is only `confirmed` when a payload that is
  * expected to be syntactically valid produces NO error while a deliberately
  * broken sibling DID — i.e. the key is being parsed as SQL, not as data. This
- * is authorized tooling for 0sec's own pentest product.
+ * is authorized tooling for 0's own pentest product.
  */
 
 export type SqlDialect = "mysql" | "postgres" | "mssql" | "oracle" | "sqlite";

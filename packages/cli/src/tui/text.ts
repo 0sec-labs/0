@@ -9,6 +9,8 @@ const DEFAULT_ENCODED_RUN_MAX = 140;
 const ENCODED_RUN_MAX_CAP = 1_000_000;
 const ELLIPSIS = "...";
 const ENCODED_PLACEHOLDER = "[encoded payload omitted]";
+const DEFAULT_ENCODED_SEGMENT = new RegExp(`[A-Za-z0-9+_-]{${DEFAULT_ENCODED_RUN_MAX},}={0,2}`, "g");
+const DEFAULT_ENCODED_DATA_URI = new RegExp(`(data:[^\\s,]*;base64,)[A-Za-z0-9+/_-]{${DEFAULT_ENCODED_RUN_MAX},}={0,2}`, "gi");
 
 function stripTerminalControl(text: string): string {
   return text
@@ -22,7 +24,16 @@ function replaceLargeEncodedChunks(text: string, maxEncodedRun: number): string 
     ? Math.trunc(maxEncodedRun)
     : DEFAULT_ENCODED_RUN_MAX;
   const minRun = Math.min(Math.max(32, normalized), ENCODED_RUN_MAX_CAP);
-  return text.replace(new RegExp(`[A-Za-z0-9+/_-]{${minRun},}={0,2}`, "g"), ENCODED_PLACEHOLDER);
+  if (text.length < minRun) return text;
+  // Slashes delimit ordinary paths, not opaque values. Explicit data URIs still
+  // accept the full Base64 alphabet, including slash-containing payloads.
+  const segment = minRun === DEFAULT_ENCODED_RUN_MAX
+    ? DEFAULT_ENCODED_SEGMENT
+    : new RegExp(`[A-Za-z0-9+_-]{${minRun},}={0,2}`, "g");
+  const dataUri = minRun === DEFAULT_ENCODED_RUN_MAX
+    ? DEFAULT_ENCODED_DATA_URI
+    : new RegExp(`(data:[^\\s,]*;base64,)[A-Za-z0-9+/_-]{${minRun},}={0,2}`, "gi");
+  return text.replace(dataUri, `$1${ENCODED_PLACEHOLDER}`).replace(segment, ENCODED_PLACEHOLDER);
 }
 
 export function sanitizeTuiText(value: unknown, options: TuiTextFitOptions = {}): string {

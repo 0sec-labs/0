@@ -4,13 +4,13 @@ import { wilson95 } from "../bench/scorecard.js";
 import { canonicalEvolutionJson, parseEvolutionConfig } from "./config.js";
 import { evolutionDigest, verifyEvolutionSnapshot } from "./registry.js";
 import {
-  campaignPromotionAllowed, createEvolutionComparisonIdentity, createOrLoadEvolutionCampaign,
-  reserveHoldoutExposure,
+  assertEvolutionCampaignMode, campaignPromotionAllowed, compareEvolutionIdentities, createEvolutionComparisonIdentity, createOrLoadEvolutionCampaign,
+  loadEvolutionCampaign, reserveCampaignDispatch, reserveHoldoutExposure, settleCampaignDispatch,
 } from "./safety.js";
 import { createEvolutionSandbox, resolveEvolutionConfigImage } from "./sandbox.js";
 import type {
-  EvolutionAttempt, EvolutionConfig, EvolutionDependencies, EvolutionEvaluation,
-  EvolutionLane, EvolutionSnapshot,
+  EvolutionAttempt, EvolutionConfig, EvolutionDependencies, EvolutionEvaluation, EvolutionExecution,
+  EvolutionLane, EvolutionModelIdentity, EvolutionSnapshot,
 } from "./types.js";
 
 function score(attempts: EvolutionAttempt[], lane: EvolutionLane): ResearchScoreSnapshot {
@@ -41,6 +41,30 @@ function score(attempts: EvolutionAttempt[], lane: EvolutionLane): ResearchScore
   };
 }
 
+/** Oracle implementation identity deliberately excludes labels, ordering and budgets. */
+export function evolutionEvaluatorDigest(): string {
+  return evolutionDigest({
+    protocol: "0-evolution-exact-json-v1",
+    implementation: [
+      evaluateEvolutionCandidate.toString(), score.toString(), wilson95.toString(),
+      canonicalEvolutionJson.toString(), evaluateImprovementPromotion.toString(),
+      evolutionComparisonIdentity.toString(), createEvolutionComparisonIdentity.toString(),
+      compareEvolutionIdentities.toString(),
+    ],
+  });
+}
+
+export function evolutionComparisonIdentity(config: EvolutionConfig, observed?: EvolutionModelIdentity) {
+  return createEvolutionComparisonIdentity(config, evolutionEvaluatorDigest(), {
+    evaluatorSemantics: evolutionDigest({
+      protocol: "0-evolution-exact-json-v1",
+      kind: config.kind, repeats: config.repeats, promotionPolicy: config.promotionPolicy,
+    }),
+    resolvedModel: observed?.model ?? null,
+    provider: observed?.provider ?? null,
+  });
+}
+
 /** Host-owned exact JSON oracle. Candidate output is data, never an evaluator receipt. */
 export async function evaluateEvolutionCandidate(
   baseline: EvolutionSnapshot,
@@ -50,6 +74,7 @@ export async function evaluateEvolutionCandidate(
 ): Promise<EvolutionEvaluation> {
   const config = parseEvolutionConfig(rawConfig);
   deps.signal?.throwIfAborted();
+  assertEvolutionCampaignMode(config);
   if (!deps.sandbox) config.image = await resolveEvolutionConfigImage(config);
   const configDigest = evolutionDigest(config);
   if (baseline.digest === candidate.digest) throw new Error("candidate does not change the baseline artifact");
@@ -58,27 +83,27 @@ export async function evaluateEvolutionCandidate(
   const sandbox = deps.sandbox ?? createEvolutionSandbox(config);
   const attempts: EvolutionEvaluation["attempts"] = { baseline: [], candidate: [] };
   let spent = 0;
-  const evaluatorIdentity = {
-    protocol: "0sec-evolution-exact-json-v1",
-    configDigest,
-    implementation: [
-      evaluateEvolutionCandidate.toString(), score.toString(), wilson95.toString(),
-      canonicalEvolutionJson.toString(), evaluateImprovementPromotion.toString(),
-    ],
-  };
-  const evaluatorDigest = evolutionDigest(evaluatorIdentity);
-  const provenance = createEvolutionComparisonIdentity(config, evaluatorDigest, {
-    resolvedModel: config.model ?? null,
-    provider: config.model ? "configured" : null,
-  });
-  let campaignGate: { allowed: boolean; reason?: string } | undefined;
+  const evaluatorDigest = evolutionEvaluatorDigest();
+  let observed = deps.modelIdentity?.();
+  if (!observed && config.safety?.enabled) {
+    // Approval/canaries reuse the generator observation retained in the durable
+    // campaign, not a guessed identity reconstructed from config.model.
+    try {
+      const identity = loadEvolutionCampaign(config.storePath).comparisonIdentity;
+      if (identity.provider && identity.resolvedModel) observed = { provider: identity.provider, model: identity.resolvedModel };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
+  const provenance = evolutionComparisonIdentity(config, observed);
   if (config.safety?.enabled) {
-    createOrLoadEvolutionCampaign(config.storePath, provenance);
-    const allowed = campaignPromotionAllowed(config.storePath);
+    const campaign = createOrLoadEvolutionCampaign(config.storePath, provenance, "evolution", config);
+    const comparison = compareEvolutionIdentities(campaign.comparisonIdentity, provenance);
+    provenance.compatibilityStatus = comparison.status;
+    const allowed = campaignPromotionAllowed(config.storePath, provenance);
     if (!allowed.allowed) throw new Error(allowed.reason ?? "campaign safety gate blocked evaluation");
-    const heldOutQueries = config.cases.filter((entry) => entry.lane === "held-out").length * config.repeats * 2;
-    reserveHoldoutExposure(config.storePath, provenance, heldOutQueries, config.safety.holdoutExposureLimit);
-    campaignGate = { allowed: true };
+  } else if (observed) {
+    provenance.compatibilityStatus = compareEvolutionIdentities(provenance, provenance).status;
   }
   // Alternate the order to avoid consistently giving one variant a warm-cache advantage.
   evaluation: for (let repeat = 0; repeat < config.repeats; repeat++) {
@@ -86,12 +111,34 @@ export async function evaluateEvolutionCandidate(
       for (const variant of repeat % 2 === 0 ? ["baseline", "candidate"] as const : ["candidate", "baseline"] as const) {
         deps.signal?.throwIfAborted();
         const maximumNextCost = config.timeoutMs / 1000 * config.computeUsdPerSecond;
-        if (spent + maximumNextCost > config.maxEvaluationCostUsd) {
+        if (spent + maximumNextCost > config.maxEvaluationCostUsd
+          || (deps.evaluationBudget && maximumNextCost > deps.evaluationBudget.remainingUsd())) {
           throw new Error("evaluation budget cannot cover the next bounded execution");
         }
         const snapshot = variant === "baseline" ? baseline : candidate;
         verifyEvolutionSnapshot(snapshot);
-        const execution = await sandbox({ snapshot, config, input: fixture.input, signal: deps.signal });
+        const reservation = config.safety?.enabled
+          ? reserveCampaignDispatch(config.storePath, "evaluation", maximumNextCost) : undefined;
+        let execution: EvolutionExecution;
+        if (config.safety?.enabled && fixture.lane === "held-out") {
+          try { reserveHoldoutExposure(config.storePath, provenance, 1, config.safety.holdoutExposureLimit); }
+          catch (error) {
+            if (reservation) settleCampaignDispatch(config.storePath, reservation.id, 0);
+            throw error;
+          }
+        }
+        try {
+          execution = await sandbox({ snapshot, config, input: fixture.input, signal: deps.signal });
+        } catch (error) {
+          if (reservation) settleCampaignDispatch(config.storePath, reservation.id, null);
+          throw error;
+        }
+        const observedCost = Number.isFinite(execution.durationMs) && execution.durationMs >= 0 && !execution.cleanupFailed
+          ? execution.durationMs / 1000 * config.computeUsdPerSecond : null;
+        if (reservation) settleCampaignDispatch(config.storePath, reservation.id, observedCost, evolutionDigest(execution));
+        if (observedCost === null) throw new Error("evaluation cost is unknown; execution reconciliation required");
+        spent += observedCost;
+        deps.evaluationBudget?.charge(observedCost);
         verifyEvolutionSnapshot(snapshot);
         let inconclusive = execution.exitCode !== 0 || execution.timedOut || Boolean(execution.error)
           || !Number.isFinite(execution.durationMs) || execution.durationMs < 0;
@@ -104,8 +151,7 @@ export async function evaluateEvolutionCandidate(
             inconclusive = true;
           }
         }
-        const costUsd = Number.isFinite(execution.durationMs) && execution.durationMs >= 0
-          ? execution.durationMs / 1000 * config.computeUsdPerSecond : 0;
+        const costUsd = observedCost;
         const executionRecord = {
           exitCode: execution.exitCode,
           stdout: execution.stdout,
@@ -144,13 +190,13 @@ export async function evaluateEvolutionCandidate(
     schemaVersion: 1,
     candidateId: candidate.id,
     manifestId: `evolution:${configDigest}`,
-    developmentCorpusDigest: evolutionDigest(config.cases.filter((entry) => entry.lane === "development")),
-    heldOutCorpusDigest: evolutionDigest(config.cases.filter((entry) => entry.lane === "held-out")),
-    negativeControlCorpusDigest: evolutionDigest(config.cases.filter((entry) => entry.lane === "negative-control")),
-    ...(campaignGate === undefined ? {} : { campaignGate }),
+    developmentCorpusDigest: provenance.development.digest,
+    heldOutCorpusDigest: provenance.heldOut.digest,
+    negativeControlCorpusDigest: provenance.negativeControl.digest,
+    ...(config.safety?.enabled ? { campaignGate: campaignPromotionAllowed(config.storePath, provenance) } : {}),
     evaluatorDigestBefore: evaluatorDigest,
-    evaluatorDigestAfter: evolutionDigest(evaluatorIdentity),
-    provenance,
+    evaluatorDigestAfter: evolutionEvaluatorDigest(),
+    ...(config.safety?.enabled || observed ? { provenance } : {}),
     ciPassed: baselineBehaviorRetained && repeatedResultsStable
       && [...attempts.baseline, ...attempts.candidate].every((entry) => !entry.inconclusive),
     development: { champion: score(attempts.baseline, "development"), challenger: score(attempts.candidate, "development") },

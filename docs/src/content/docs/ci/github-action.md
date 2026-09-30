@@ -31,17 +31,14 @@ revision context, and the integration posts review status/results back to
 GitHub. Do not infer that every GitHub event causes a scan or that a successful
 review means every finding has a reproduced exploit.
 
-Hosted-model access is a separate account capability: an inference-only
-organization cannot enqueue managed reviews. The existence of the public
-[Cloud login](https://cloud.0.security/login) is not proof of your organization's
-App enrollment, worker readiness or plan entitlement. Use
-[Contact](https://0.security/contact/?intent=contact) to confirm current access;
-[pricing](https://0.security/pricing/) distinguishes hosted models from managed
-execution.
+Managed review access requires an approved organization, compatible service
+deployment, and repository policy. Contact the
+[team](https://0.security/contact/?intent=contact) to confirm current access;
+the local CLI does not enroll repositories in the managed GitHub App.
 
 ## Container-based workflow
 
-The `ghcr.io/0sec-labs/0sec` image includes the CLI, Node 24, FoxGuard, pentest
+The `ghcr.io/0sec-labs/0` image includes the CLI, Node 24, FoxGuard, pentest
 and identity tooling. A job container uses shell steps; the image's normal
 `docker run` entrypoint invokes the CLI directly.
 
@@ -49,7 +46,7 @@ This minimal example is **manually dispatched from a trusted workflow/ref**.
 It is not a policy for executing arbitrary contributor code:
 
 ```yaml
-# .github/workflows/0sec.yml
+# .github/workflows/0.yml
 name: "0 security review"
 on:
   workflow_dispatch:
@@ -62,7 +59,7 @@ jobs:
   review:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    container: ghcr.io/0sec-labs/0sec:latest
+    container: ghcr.io/0sec-labs/0:latest
     steps:
       - uses: actions/checkout@v6
         with:
@@ -75,7 +72,7 @@ jobs:
         if: always() && hashFiles('results.sarif') != ''
         uses: actions/upload-artifact@v7
         with:
-          name: 0sec-results
+          name: 0-results
           path: results.sarif
           retention-days: 14
       - name: Upload SARIF
@@ -122,8 +119,8 @@ installation directory to `PATH`:
 ```yaml
 - name: Install 0
   run: |
-    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0sec/main/install.sh | bash
-    echo "$HOME/.0sec/bin" >> "$GITHUB_PATH"
+    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash
+    echo "$HOME/.0/bin" >> "$GITHUB_PATH"
 - name: Run review
   run: 0 review . --runtime api --cost-ceiling 5 --format sarif > results.sarif
   env:
@@ -159,9 +156,9 @@ from the code under review, but does not by itself isolate later tool execution.
 remain in the repository as integration helpers. They are not the active
 self-review workflow or a published composite action.
 
-The wrapper expects `0sec-cli` on `PATH`, Node, `GITHUB_OUTPUT`, and an action
-root through `0SEC_ACTION_ROOT` or `GITHUB_ACTION_PATH`. The release installer
-and current container expose `0`/`0sec`, not `0sec-cli`; copying this script into
+The wrapper expects `@0/cli` on `PATH`, Node, `GITHUB_OUTPUT`, and an action
+root through `ZERO_ACTION_ROOT` or `GITHUB_ACTION_PATH`. The release installer
+and current container expose `0`/`0`, not `@0/cli`; copying this script into
 an ordinary installed-CLI job is therefore not a turnkey integration. Prefer
 the direct commands above unless you deliberately provide its expected runner
 layout.
@@ -181,9 +178,9 @@ layout.
 | `INPUT_FORMAT` | `json` | Select primary output: `json` or `sarif`; both files are generated |
 | `INPUT_SEVERITY_THRESHOLD` | `high` | `critical`, `high`, `medium`, `low`, `info`, `none` |
 | `INPUT_THRESHOLD` | `0` | Allowed count at or above the severity threshold |
-| `INPUT_REPORT_DIR` | `0sec-report` | Output directory |
+| `INPUT_REPORT_DIR` | `0-report` | Output directory |
 
-The wrapper stores `report.json`, `report.sarif` and `0sec.stderr.log`. The
+The wrapper stores `report.json`, `report.sarif` and `0.stderr.log`. The
 renderer writes `report-file`, `json-report-file`, `sarif-report-file`,
 `total-findings`, `qualifying-findings`, `should-fail`, `gate-message` and
 `comment-body` to `GITHUB_OUTPUT`. It does **not** post a PR comment or write the
@@ -210,12 +207,12 @@ multiple credentials are present so CI does not depend on accidental fallback.
 | Azure OpenAI | `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_BASE_URL`, `AZURE_OPENAI_MODEL` |
 | Z.ai | `Z_AI_API_KEY` |
 | DeepSeek | `DEEPSEEK_API_KEY` |
-| ChatGPT Codex | `0SEC_CHATGPT_OAUTH_REFRESH_TOKEN` |
+| ChatGPT Codex | `ZERO_CHATGPT_OAUTH_REFRESH_TOKEN` |
 
 See [API Keys](/api-keys/) for provider requirements, account restrictions and
 fallback order. Subscription authentication is not a promise that unattended
-CI is permitted by that provider. Hosted model access requires separate Cloud
-account compatibility; it still does not move local tools off the runner.
+CI is permitted by that provider. Managed App reviews have separate service
+access; local CI tools continue running on your runner.
 
 ## Example: full diff-aware PR review
 
@@ -309,39 +306,15 @@ GitHub App's deployed repository policy.
 
 ## Known limitations
 
-- The composite action `0sec-labs/0sec/.github/actions/0sec-scan` is not shipped.
+- The composite action `0sec-labs/0/.github/actions/0-scan` is not shipped.
   Proposed action inputs are not a supported public contract.
-- Managed App enrollment and service execution depend on the account and
-  deployed backend, not merely a successful browser login.
+- Managed App enrollment and service execution depend on account access and
+  the deployed backend, not merely a provider credential.
 - Live target scans need runner-side reachability and authorized scope.
 - `claude`, `codex` and `gemini` runtimes need their CLI subprocesses and
   authentication on the runner. `api` is the straightforward unattended path.
 - A finding, a SARIF upload and a successful job are not interchangeable with
   verified exploitability or complete security coverage.
-
-### Managed lifecycle compatibility
-
-The `connect` / `service` commands are separate from App-triggered reviews.
-Before using them for CI-managed recurrence, confirm the deployed API contract:
-
-- The reviewed Cloud schedule-list handler returns the whole organization's
-  schedules and does not filter the CLI's `?target=` query. `connect` can
-  mistake another repository's schedule for the requested one, while
-  `service disconnect` deletes every returned schedule. Do not use that
-  disconnect path as a repository-selective operation until compatibility is
-  confirmed.
-- `service start --cost-ceiling` currently sends `secure_config.cost_ceiling`,
-  while the reviewed server accepts `secure_config.cost_ceiling_usd`. Do not
-  assume the one-shot flag enforces a managed-service budget.
-- `service wait` returns terminal scan records, including failures, without
-  making a failed scan itself a nonzero CLI exit. Check the returned `status`
-  and `final_report`.
-
-These findings compare public CLI `708f0117` with Cloud integration source
-`61e68bad` (`website-integration-20260918`), not an authenticated production
-acceptance test. The older Cloud root checkout `d2cb1a38` lacks some newer
-managed integration contracts; neither checkout identifies the deployed
-revision. Confirm account access and deployment with the team before dispatch.
 
 ## See also
 
@@ -351,4 +324,4 @@ revision. Confirm account access and deployment with the team before dispatch.
 - [API Keys](/api-keys/) — authentication and provider choice
 - [Budget Management](/budget-management/) — cost controls and interrupted runs
 - [Scope & Authorization](/scope/) — explicit target policy
-- [Commands](/commands/) — CLI reference and managed-service compatibility
+- [Commands](/commands/) — local CLI reference

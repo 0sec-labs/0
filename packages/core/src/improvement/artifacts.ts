@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { closeSync, constants, fchmodSync, fstatSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, parse, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, parse, resolve, sep } from "node:path";
 import { canonicalEvolutionJson } from "./config.js";
 
 const MAX_ARTIFACT_BYTES = 128 * 1024 * 1024;
@@ -9,30 +9,39 @@ function hasCode(error: unknown, code: string): boolean {
   return error instanceof Error && "code" in error && error.code === code;
 }
 
-function canonicalStoragePath(path: string): string {
+export function resolveEvolutionDirectoryPath(path: string): string {
   const requested = resolve(path);
-  let cursor = requested;
-  const suffix: string[] = [];
-  while (true) {
-    try {
-      const stat = lstatSync(cursor);
-      if (cursor === requested && stat.isSymbolicLink()) {
+  const root = parse(requested).root;
+  let cursor = root;
+  const components = requested.slice(root.length).split(sep).filter(Boolean);
+  for (let index = 0; index < components.length; index++) {
+    cursor = join(cursor, components[index]!);
+    let stat;
+    try { stat = lstatSync(cursor); }
+    catch (error) {
+      if (!hasCode(error, "ENOENT")) throw error;
+      return join(cursor, ...components.slice(index + 1));
+    }
+    if (stat.isSymbolicLink()) {
+      // Darwin's system-owned root aliases are trusted; arbitrary ancestor
+      // aliases, including aliases inside an operator's store, are not.
+      const trustedTarget = process.platform === "darwin"
+        ? ({ "/tmp": "/private/tmp", "/var": "/private/var", "/etc": "/private/etc" } as Record<string, string>)[cursor]
+        : undefined;
+      if (!trustedTarget || stat.uid !== 0 || realpathSync(cursor) !== trustedTarget || index === components.length - 1) {
         throw new Error(`unsafe evolution directory: ${cursor}`);
       }
-      return join(realpathSync(cursor), ...suffix.reverse());
-    } catch (error) {
-      if (!hasCode(error, "ENOENT")) throw error;
-      const parent = dirname(cursor);
-      if (parent === cursor) throw error;
-      suffix.unshift(basename(cursor));
-      cursor = parent;
+      cursor = trustedTarget;
+    } else if (!stat.isDirectory()) {
+      throw new Error(`unsafe evolution directory: ${cursor}`);
     }
   }
+  return cursor;
 }
 
 function inspectDirectories(path: string, create: boolean): string {
   if (!isAbsolute(path)) throw new Error("evolution storage paths must be absolute");
-  const absolute = canonicalStoragePath(path);
+  const absolute = resolveEvolutionDirectoryPath(path);
   const root = parse(absolute).root;
   let cursor = root;
   for (const component of absolute.slice(root.length).split(sep).filter(Boolean)) {

@@ -1,7 +1,7 @@
 /**
- * 0sec#171 — PoC execution runtime.
+ * 0#171 — PoC execution runtime.
  *
- * Given a {@link Finding} with a `pocSteps` graph (formalised in 0sec#170)
+ * Given a {@link Finding} with a `pocSteps` graph (formalised in 0#170)
  * plus a {@link PocExecutionTarget} pointing at a live, operator-provisioned
  * instance, run each step in order and capture its observable effect:
  *
@@ -13,7 +13,7 @@
  * After each step the runtime evaluates the optional {@link PocStepExpect}
  * predicate from #170 and records the per-step verdict. The aggregate
  * verdict (`exploit_still_works` / `exploit_broken` / `could_not_run`) is
- * what the cloud's pre-file gate (0sec-cloud#109) uses to decide whether
+ * what the cloud's pre-file gate (0-cloud#109) uses to decide whether
  * a finding is still viable to disclose.
  *
  * Design notes:
@@ -32,7 +32,7 @@
 
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import type { Finding, PocStep, PocStepAction, PocStepExpect } from "@0sec/shared";
+import type { Finding, PocStep, PocStepAction, PocStepExpect } from "@0/shared";
 
 // ── Public types ────────────────────────────────────────────────────────────
 
@@ -41,7 +41,7 @@ export interface PocExecutionTarget {
   baseUrl?: string;
   /**
    * Pre-resolved auth context keyed by persona name. Steps can opt into a
-   * persona by setting an `X-0sec-Persona: <name>` header on an http
+   * persona by setting an `X-0-Persona: <name>` header on an http
    * action; the runtime will then merge in that persona's cookies/headers
    * before sending and strip the marker header.
    */
@@ -113,7 +113,7 @@ export const MAX_CAPTURE_BYTES = 1024 * 1024;
 /** Default per-step timeout, 30 seconds. */
 export const DEFAULT_STEP_TIMEOUT_MS = 30_000;
 /** Header marker that selects a persona from `target.personas`. */
-const PERSONA_HEADER = "X-0sec-Persona";
+const PERSONA_HEADER = "X-0-Persona";
 /** Marker appended when a captured stream is truncated. */
 const TRUNCATION_MARKER = "\n…[truncated at 1MiB]";
 
@@ -178,7 +178,7 @@ function refill(bucket: HostBucket): void {
  * Block until 1 token is available for `host`, then consume it. Honours
  * `retryUntil` (set on 429) by sleeping until the deadline first.
  */
-async function acquireHostToken(host: string, rps: number): Promise<void> {
+export async function acquireHostToken(host: string, rps: number): Promise<void> {
   const bucket = getOrInitBucket(host, rps);
   // 429-induced cool-off: hard sleep until retryUntil before doing anything.
   while (Date.now() < bucket.retryUntil) {
@@ -205,7 +205,7 @@ async function acquireHostToken(host: string, rps: number): Promise<void> {
  * Mark a host as 429-rate-limited until the given deadline. Subsequent
  * `acquireHostToken(host)` calls will block until `retryUntil`.
  */
-function markHostRateLimited(host: string, retryAfterHeader: string | null): void {
+export function markHostRateLimited(host: string, retryAfterHeader: string | null): void {
   const bucket = hostBuckets.get(host);
   if (!bucket) return;
   const parsed = retryAfterHeader ? parseInt(retryAfterHeader, 10) : NaN;
@@ -697,7 +697,7 @@ async function runHttpStep(
   };
 }
 
-function resolveUrl(stepUrl: string, baseUrl: string | undefined): string | null {
+export function resolveUrl(stepUrl: string, baseUrl: string | undefined): string | null {
   // Absolute URL passes through unchanged.
   try {
     new URL(stepUrl);
@@ -713,7 +713,7 @@ function resolveUrl(stepUrl: string, baseUrl: string | undefined): string | null
   }
 }
 
-function mergePersonaHeaders(
+export function mergePersonaHeaders(
   stepHeaders: Record<string, string>,
   target: PocExecutionTarget,
 ): Record<string, string> {
@@ -944,7 +944,7 @@ interface VerdictResult {
   error?: string;
 }
 
-function evaluateExpect(
+export function evaluateExpect(
   expect: PocStepExpect | undefined,
   obs: Observation,
 ): VerdictResult {
@@ -1017,7 +1017,7 @@ function evaluateExpect(
 
 // ── Aggregate verdict ───────────────────────────────────────────────────────
 
-function aggregateVerdict(
+export function aggregateVerdict(
   graph: PocStep[],
   steps: PocStepResult[],
 ): PocOverallVerdict {

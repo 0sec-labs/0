@@ -9,8 +9,8 @@ import type {
   NativeRuntimeResult,
 } from "../runtime/types.js";
 import { join, resolve } from "node:path";
-import type { AuthConfig, HarnessUiInput, HarnessSnapshot } from "@0sec/shared";
-import { resolveIdentities, DEFAULT_AUTONOMY_MODE, DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir } from "@0sec/shared";
+import type { AuthConfig, HarnessUiInput, HarnessSnapshot } from "@0/shared";
+import { resolveIdentities, DEFAULT_AUTONOMY_MODE, DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir } from "@0/shared";
 import { LiveHarnessHost } from "../plugins/live-harness.js";
 import { getWorkspaceHarnessTrust } from "../plugins/harness-trust.js";
 import type { ToolDefinition, ToolCall, ToolResult, ToolResultMeta, ToolContext, AgentRole } from "./types.js";
@@ -52,7 +52,8 @@ import { SECURITY_RULES, selectRules, buildRuleInjection, type EngagementPhase, 
 import { formatJitSkillsInstruction, getSkillById } from "./skills/index.js";
 import { estimateCost } from "./cost.js";
 import type { ScanCostLedger } from "./cost-ledger.js";
-import { eventBus, isCloudEventSinkActive } from "../events/bus.js";
+import { addRuntimeUsage } from "./cost-ledger.js";
+import { eventBus } from "../events/bus.js";
 import { diag } from "../diagnostics/channel.js";
 import {
   reduceCoordinatorState,
@@ -73,7 +74,6 @@ import {
   isUntrustedSourceTool,
   sanitizeUntrustedToolResult,
 } from "../untrusted-sanitizer.js";
-import { DeltaBatcherSet } from "./delta-batcher.js";
 import { toolCallPreview } from "./tool-preview.js";
 import {
   newCorrelationId,
@@ -89,18 +89,18 @@ import {
   type InlineOracle,
   type InlineValidationOutcome,
 } from "./inline-validation.js";
-import type { osecDB } from "@0sec/db";
-import type { Finding, AttackResult, TargetInfo } from "@0sec/shared";
+import type { osecDB } from "@0/db";
+import type { Finding, AttackResult, TargetInfo } from "@0/shared";
 
 // ── External Memory ──
 // The agent can persist working state (creds, endpoints, attack plans) to this
 // file via bash. At reflection checkpoints the contents are injected back into
 // the conversation so the agent doesn't lose track of discoveries.
 function externalMemoryPath(scanId?: string): string {
-  return `/tmp/0sec-state-${scanId ?? randomUUID()}.json`;
+  return `/tmp/0-state-${scanId ?? randomUUID()}.json`;
 }
 
-// ── Loot harvesting (0sec#567) ──
+// ── Loot harvesting (0#567) ──
 // Tools whose result text reflects target data worth mining for footholds.
 // `isUntrustedSourceTool` already covers http_request / crawl / read_file /
 // send_prompt / submit_form / browser; bash + run_command are added because
@@ -169,24 +169,20 @@ export function summarizeReasoning(thinkingText: string | undefined | null): str
 const EXTERNAL_MEMORY_MAX_CHARS = 2000;
 
 /**
- * Transient provider error classifier: overload / rate-limit / 5xx / held
- * stream — failures where retrying the SAME turn after a backoff is right
- * (bounded by MAX_TRANSIENT_RETRIES, then the run exits loudly via errorExit).
- * `stall` covers the SSE idle-watchdog's error (a server that accepted the
- * request then held the stream silently; see llm-api.ts
- * consumeResponsesStream). Exported for tests.
+ * Classify transient provider overloads, rate limits and transport failures
+ * for the agent loop's bounded same-turn retry.
  */
 export function isTransientLlmError(errorMsg: string): boolean {
   return /\b(429|529|502|503|504)\b|overloaded|rate.?limit|temporarily|too many requests|ETIMEDOUT|ECONNRESET|throttl|stall/i.test(errorMsg);
 }
 
 /**
- * Provider context-window rejection classifier. This is intentionally narrower
- * than transient transport errors: pruning history changes the next request,
- * so it must never fire for a rate limit or a generic 5xx.
+ * Provider context-window rejection classifier. Pruning changes the next
+ * request; rate limits and generic 5xx never prune history.
  */
 export function isContextWindowError(errorMsg: string): boolean {
-  return /context.{0,40}(?:window|length|limit)|(?:maximum|max).{0,20}context|too many tokens|prompt.{0,30}(?:too long|too large)|input.{0,30}(?:too long|too large)/i.test(
+  if (/\bAPI error 429:/i.test(errorMsg)) return false;
+  return /context.{0,40}(?:window|length|limit)|(?:maximum|max).{0,20}context|too many tokens|prompt.{0,30}(?:too long|too large)|input.{0,30}(?:too long|too large|limit(?:_exceeded)?)/i.test(
     errorMsg,
   );
 }
@@ -241,6 +237,8 @@ export function toolFailureText(toolName: string, result: ToolResult): string {
 // ── Native Agent Loop Config ──
 
 export interface NativeAgentConfig {
+  /** Preserve exact target identity guards when delegating from the console. */
+  consoleSession?: boolean;
   /**
    * Agent-to-agent messaging identity and policy, propagated to the tool
    * context so the child messaging tools know who they are and whom they
@@ -251,6 +249,12 @@ export interface NativeAgentConfig {
   systemPrompt: string;
   tools: ToolDefinition[];
   maxTurns: number;
+  /** Disable delegation, including unadvertised calls to spawn tools. */
+  singleAgent?: boolean;
+  /** Bound diff base for exact source-line suggestions. */
+  reviewDiffBase?: string;
+  /** Blind verification may assess findings but must not publish a second copy. */
+  suppressFindingEvents?: boolean;
   target: string;
   scanId: string;
   workerTree?: ToolContext["workerTree"];
@@ -262,15 +266,15 @@ export interface NativeAgentConfig {
   /** Authentication credentials to inject into tool context */
   authConfig?: AuthConfig;
   /**
-   * Resolved named identities for access-control testing (0sec#564). When
+   * Resolved named identities for access-control testing (0#564). When
    * present, the loop builds a stateful per-identity `SessionEngine` and
    * threads it onto the ToolContext so cookies persist and access_control_probe
    * can replay as each principal. Reconciled from the legacy `authConfig` when
    * omitted.
    */
-  identities?: import("@0sec/shared").NamedIdentity[];
+  identities?: import("@0/shared").NamedIdentity[];
   /**
-   * Pre-built session engine (0sec#564). Normally left unset — the loop
+   * Pre-built session engine (0#564). Normally left unset — the loop
    * constructs one from `identities`/`authConfig`. Provided only when a caller
    * wants cookie state to persist across multiple loop invocations.
    */
@@ -303,12 +307,13 @@ export interface NativeAgentConfig {
    * independently. Omit to keep the legacy per-session accounting.
    */
   costLedger?: ScanCostLedger;
+  requirePricedUsage?: boolean;
   /** Root policy inherited by descendants without accumulating ancestor tasks.
    * Defaults to systemPrompt for a non-delegated root.
    */
   delegationSystemPrompt?: string;
   /**
-   * Programmatic engagement scope (0sec#215). When set, every URL the
+   * Programmatic engagement scope (0#215). When set, every URL the
    * agent touches is checked against this policy and out-of-scope URLs
    * return as `ToolResult.error`. Same-origin checks remain enforced ON
    * TOP of this; scope is additive, never substitutive.
@@ -324,19 +329,19 @@ export interface NativeAgentConfig {
    */
   enforcement?: EnforcementTracker;
   /**
-   * WAF detection + adaptive evasion aggregator (0sec#568). When omitted
+   * WAF detection + adaptive evasion aggregator (0#568). When omitted
    * but the scan carries an engagement scope (`scope`/`enforcement` set), one
    * is created automatically so authorized engagements get WAF fingerprinting
    * and adaptive evasion by default. Pass `null` to disable explicitly.
    */
   wafDetector?: WafDetector | null;
   /**
-   * Generic-scanner-traffic suppression opt-out (0sec#217). Defaults
+   * Generic-scanner-traffic suppression opt-out (0#217). Defaults
    * to false. Only consulted when `scope` is set.
    */
   allowScanners?: boolean;
   /**
-   * Resolved attribution-header config (0sec#216). Same propagation
+   * Resolved attribution-header config (0#216). Same propagation
    * shape as `scope` — set once at agentic-scanner top-level and passed
    * through to every fetch site so in-scope traffic is identifiable
    * without leaking attribution to out-of-scope hosts.
@@ -362,7 +367,7 @@ export interface NativeAgentConfig {
    */
   preloadedSkillIds?: string[];
   /**
-   * Durable cross-scan credential store wiring (0sec#771, connects #786 +
+   * Durable cross-scan credential store wiring (0#771, connects #786 +
    * #780). OPT-IN and OFF BY DEFAULT: when omitted, the loop behaves exactly as
    * today — no durable store is constructed, no prior footholds are loaded, the
    * ledger is never persisted, and no `credential_shared` journal entry is
@@ -410,7 +415,7 @@ export interface NativeAgentLoopOptions {
     toolCalls: ToolCall[],
     results: ToolResult[],
     assistantText: string,
-    telemetry?: { usage?: NativeAgentState["totalUsage"]; contextTokens?: number },
+    telemetry?: { usage?: NativeAgentState["totalUsage"]; contextTokens?: number; reasoning_summary?: string },
   ) => void;
   /** Visible tool snapshots before/after execution, without token-level floods. */
   onToolUpdate?: NativeAgentLoopOptions["onTurn"];
@@ -429,7 +434,7 @@ export interface NativeAgentLoopOptions {
   /**
    * Optional store override; supplying one opts into cross-scan hunt memory.
    * Otherwise persistent hunt memory is disabled unless codebaseLearning is
-   * true. 0SEC_DISABLE_HUNT_MEMORY=1/true vetoes either opt-in.
+   * true. ZERO_DISABLE_HUNT_MEMORY=1/true vetoes either opt-in.
    */
   huntMemoryStore?: HuntMemoryStore;
 }
@@ -451,7 +456,7 @@ export interface NativeAgentState {
    * full price — without it, a well-cached run would report roughly 10x its
    * actual input spend.
    */
-  totalUsage: { inputTokens: number; outputTokens: number; cachedInputTokens: number };
+  totalUsage: { inputTokens: number; outputTokens: number; cachedInputTokens: number; cacheWriteTokens?: number };
   /** Set to true when the loop stopped early because no save_finding was called by the halfway point. */
   earlyStopNoProgress: boolean;
   /** Brief description of tools/approaches used before the early stop (for retry context). */
@@ -494,7 +499,7 @@ export interface NativeAgentState {
    */
   inlineValidations: InlineValidationOutcome[];
   /**
-   * Tool-health roll-up for this run (0sec#tool-reliability): the deduped set
+   * Tool-health roll-up for this run (0#tool-reliability): the deduped set
    * of tool skips / failures (missing binary, buffer limit, wrong lockfile,
    * policy/scope denial) with a concise `line` the CLI can surface as
    * "N tool issues (missing: semgrep; …)". `total: 0` when nothing degraded.
@@ -539,7 +544,7 @@ export async function runNativeAgentLoop(
         objective: opts.config.systemPrompt, versions: { loop: "native-v1", runtime: opts.runtime.type },
         authSecretValues: secrets,
       }) ?? undefined;
-    } catch { process.stderr.write("[0sec] Run contribution unavailable: private spool or enrollment could not be opened.\n"); }
+    } catch { process.stderr.write("[0] Run contribution unavailable: private spool or enrollment could not be opened.\n"); }
   }
   if (!capture) return runNativeAgentLoopInternal(opts);
   capture.protectSecrets(secrets);
@@ -592,6 +597,13 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     inlineValidationOracle,
   } = opts;
 
+  // Failover can change the model during a call.
+  // Price usage against its resolved identity, never the Auto routing choice.
+  const pricingModel = () => {
+    const model = runtime.resolvedPricingModel?.() || runtime.resolvedModel?.() || config.costModel;
+    return model === "auto" ? undefined : model;
+  };
+
   const memoryPath = externalMemoryPath(config.scanId);
 
   // Substitute external memory placeholder in system prompt
@@ -599,7 +611,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     config.systemPrompt = config.systemPrompt.replaceAll("{{EXTERNAL_MEMORY_PATH}}", memoryPath);
   }
 
-  // 0sec#567 — loot / foothold ledger. Created only when the feature is on;
+  // 0#567 — loot / foothold ledger. Created only when the feature is on;
   // threaded through ToolContext so save_finding harvests into it and use_loot
   // reads from it. The loop below also harvests from evidence-bearing tool
   // results and re-injects a compact "known footholds" block each turn.
@@ -631,13 +643,13 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       })
     : undefined;
 
-  // 0sec#659 — hosted OAST interaction collaborator. Built only when the
-  // feature is on AND a collaborator server is configured (0SEC_OAST_URL);
+  // 0#659 — hosted OAST interaction collaborator. Built only when the
+  // feature is on AND a collaborator server is configured (ZERO_OAST_URL);
   // `createCollaborator` returns undefined otherwise, in which case the
   // oast_register / oast_poll tools return a graceful "not deployed" result.
   const oast = features.oastCollaborator ? createCollaborator() : undefined;
 
-  // 0sec#771 (extends #687, connects #786 + #780) — durable cross-scan
+  // 0#771 (extends #687, connects #786 + #780) — durable cross-scan
   // credential store wiring. OPT-IN: `config.trustGraph` is undefined by default,
   // in which case `maybeCreateTrustGraphSession` returns undefined and every
   // `trustGraph?.` call site below is a no-op — the loop is byte-identical to the
@@ -650,7 +662,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   // (the default journal sink for credential_shared entries).
   let trustGraph: ReturnType<typeof maybeCreateTrustGraphSession>;
 
-  // Stateful access-control session (0sec#564). Reconcile the legacy singular
+  // Stateful access-control session (0#564). Reconcile the legacy singular
   // `authConfig` with the multi-identity `identities` list, then build (or
   // reuse) a SessionEngine so HTTP tools persist cookies across turns and the
   // access_control_probe can replay as each principal. No identities → no
@@ -690,6 +702,9 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     target: config.target,
     scanId: config.scanId,
     role: config.role,
+    consoleSession: config.consoleSession,
+    diffScopedReview: config.role === "review" && config.singleAgent === true,
+    reviewDiffBase: config.reviewDiffBase,
     delegationSystemPrompt: config.delegationSystemPrompt ?? config.systemPrompt,
     autonomyMode: config.autonomyMode ?? DEFAULT_AUTONOMY_MODE,
     publicNetwork: config.publicNetwork,
@@ -707,7 +722,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     agentMessaging: config.agentMessaging,
     workerTree: config.workerTree,
     workerFindings: config.workerTree ? config.workerFindings : undefined,
-    // WAF detection + adaptive evasion (0sec#568). Auto-enabled for
+    // WAF detection + adaptive evasion (0#568). Auto-enabled for
     // authorized engagements (scope/enforcement configured) unless the caller
     // passed `wafDetector: null` to opt out.
     wafDetector:
@@ -726,9 +741,10 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // the SAME scan-wide ledger and ceiling as this session (closing the
     // off-ledger gap where subagent spend escaped the ceiling entirely).
     costLedger: config.costLedger,
+    requirePricedUsage: config.requirePricedUsage,
     costCeilingUsd: config.costCeilingUsd,
-    costModel: config.costModel,
-    // Tool-health aggregator (0sec#tool-reliability). Shared across the scan so
+    get costModel() { return runtime.resolvedModel?.() || config.costModel; },
+    // Tool-health aggregator (0#tool-reliability). Shared across the scan so
     // the end-of-run summary sees every tool skip/failure; each NEW distinct
     // event also fans out on the bus as `tool_health`.
     toolHealth: new ToolHealthTracker({
@@ -774,7 +790,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     ? resolveExecutableEvolutionProfiles(config.executableEvolutionProfiles)
     : {};
 
-  const disableHuntMemory = process.env["0SEC_DISABLE_HUNT_MEMORY"];
+  const disableHuntMemory = process.env["ZERO_DISABLE_HUNT_MEMORY"];
   const huntMemoryEnabled =
     (opts.huntMemoryStore !== undefined || config.codebaseLearning === true) &&
     disableHuntMemory !== "1" && disableHuntMemory !== "true";
@@ -804,8 +820,12 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     }
     return huntMemory;
   }
-  const executor = new ToolExecutor(toolCtx, db, undefined, runtime.forkForSubagent?.bind(runtime));
-  const baseTools = config.tools.length > 0 ? config.tools : getToolsForRole(config.role, { hasScope: !!config.scopePath, allowScanners: config.allowScanners });
+  const executor = new ToolExecutor(toolCtx, db, undefined,
+    config.singleAgent ? undefined : runtime.forkForSubagent?.bind(runtime));
+  const roleTools = config.tools.length > 0 ? config.tools : getToolsForRole(config.role, { hasScope: !!config.scopePath, allowScanners: config.allowScanners });
+  const baseTools = config.singleAgent
+    ? roleTools.filter(tool => tool.name !== "spawn_agent" && tool.name !== "spawn_agents" && tool.name !== "spawn_persistent_agent")
+    : roleTools;
 
   // ── Codebase learning (source-grounded hunt memory) ──
   // Eligible when hunt memory is available AND either the caller explicitly
@@ -873,8 +893,8 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   let turnCount = 0;
 
   // ── Execution-journal shadow mode (#494, flag-gated, default OFF) ──
-  // When 0SEC_FEATURE_EXECUTION_JOURNAL is on, mirror this run's steps into
-  // an append-only journal at ~/.0sec/runs/<scanId>/journal.jsonl. This is
+  // When ZERO_FEATURE_EXECUTION_JOURNAL is on, mirror this run's steps into
+  // an append-only journal at ~/.0/runs/<scanId>/journal.jsonl. This is
   // strictly additive: the loop still drives off its own conversation window,
   // the journal is write-only here, and createShadowJournal returns a no-op
   // (no I/O) when the flag is off. The run id is the scanId — the same
@@ -889,7 +909,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     });
   }
 
-  // 0sec#771 — construct the trust-graph session iff opted in (above). The
+  // 0#771 — construct the trust-graph session iff opted in (above). The
   // shadow journal is the default sink for `credential_shared` entries. Loading
   // prior footholds is the ONLY store read here; it happens once. Best-effort:
   // a store failure here must never abort the loop, so it falls back to no
@@ -906,7 +926,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   }
 
   // ── Execution-journal context routing (#494, slice 2, flag-gated, OFF) ──
-  // When 0SEC_FEATURE_JOURNAL_REHYDRATE is on, seed the loop's context off
+  // When ZERO_FEATURE_JOURNAL_REHYDRATE is on, seed the loop's context off
   // the durable on-disk journal (rehydrateContext + renderSeedMessages)
   // instead of the truncated 40-message DB session blob. This is the slice
   // that routes the loop OFF the journal. Independent of the shadow-WRITE flag
@@ -984,7 +1004,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       }
     }
 
-    // 0sec#771 — on a fresh start, inject this target's prior-scan footholds
+    // 0#771 — on a fresh start, inject this target's prior-scan footholds
     // (hash + redacted preview only) alongside the normal in-scan loot render.
     // Gated on the opt-in `trustGraph` session: when absent this whole block is
     // skipped, so the fresh-start prompt is byte-identical to today. "" render
@@ -1046,7 +1066,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     const parsed = parseExecutableModelRequest(request);
     const signal = requestSignal ? AbortSignal.any([executionSignal, requestSignal]) : executionSignal;
     signal.throwIfAborted();
-    const runningCost = config.costLedger?.totalCostUsd() ?? estimateCost(state.totalUsage, config.costModel);
+    const runningCost = config.costLedger?.totalCostUsd() ?? estimateCost(state.totalUsage, pricingModel());
     if (config.costCeilingUsd && runningCost >= config.costCeilingUsd) {
       state.costCeilingExceeded = true;
       throw new Error("Parent scan cost ceiling is exhausted.");
@@ -1058,12 +1078,18 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       { onUsage: (usage) => { streamedUsage = usage; } }, signal,
     );
     const usage = result.usage ?? streamedUsage;
+    if (config.requirePricedUsage && !usage) {
+      config.costLedger?.markUnpricedUsage();
+      throw new Error("Executable model response did not report usage; cannot continue a cost-bounded scan.");
+    }
     if (usage) {
       state.totalUsage.inputTokens += usage.inputTokens;
       state.totalUsage.outputTokens += usage.outputTokens;
       state.totalUsage.cachedInputTokens += usage.cachedInputTokens ?? 0;
-      config.costLedger?.add(usage, config.costModel);
-      state.estimatedCostUsd = estimateCost(state.totalUsage, config.costModel);
+      if (usage.cacheWriteTokens !== undefined) state.totalUsage.cacheWriteTokens = (state.totalUsage.cacheWriteTokens ?? 0) + usage.cacheWriteTokens;
+      if (!result.usage) result.usage = usage;
+      addRuntimeUsage(config.costLedger, result, pricingModel());
+      state.estimatedCostUsd = estimateCost(state.totalUsage, pricingModel());
       onEvent?.("usage", {
         turn: state.turnCount, inputTokens: state.totalUsage.inputTokens,
         outputTokens: state.totalUsage.outputTokens, estimatedCostUsd: state.estimatedCostUsd,
@@ -1197,7 +1223,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   // CI heartbeat: one stderr line per turn so a CI log of a hung scan
   // tells us at which turn / on which tool we stopped making progress.
   // Gated on CI / explicit opt-in so local TUI runs stay quiet.
-  const heartbeatEnabled = !!(process.env.CI || process.env["0SEC_HEARTBEAT"] || process.env["0SEC_DEBUG"]);
+  const heartbeatEnabled = !!(process.env.CI || process.env["ZERO_HEARTBEAT"] || process.env["ZERO_DEBUG"]);
   const loopStartedAt = Date.now();
   let lastToolName: string | null = null;
   let lastHeartbeatAt = 0;
@@ -1218,7 +1244,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   let injectedPlaybookTypes: string[] = [];
   const recentToolResultTexts: string[] = [];
 
-  // 0sec#567 — loot-injection cadence. Re-surface the "known footholds"
+  // 0#567 — loot-injection cadence. Re-surface the "known footholds"
   // block when the ledger grew since the last injection, or at least every
   // LOOT_REINJECT_INTERVAL turns so a foothold captured early stays in the
   // recent context window even after the original tool result scrolls/compacts
@@ -1268,7 +1294,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   // Loop / oscillation detection (BoxPwnr-inspired)
   const loopDetector = new LoopDetector();
 
-  // Two-stage budget warnings (Strix-inspired, 0sec#408). Each warning
+  // Two-stage budget warnings (Strix-inspired, 0#408). Each warning
   // fires at most once per run. Thresholds are precomputed so the test
   // suite can assert the exact turn numbers.
   const budgetThresholds = computeBudgetWarningTurns(config.maxTurns);
@@ -1313,7 +1339,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   const unregisterSignalCleanup = registerSignalCleanup(cleanupResources);
 
   // ── Coordinator rails (multi-agent supervisor) ──
-  // Additive, feature-flagged (0SEC_FEATURE_COORDINATOR_RAILS, default OFF /
+  // Additive, feature-flagged (ZERO_FEATURE_COORDINATOR_RAILS, default OFF /
   // opt-IN). Set the env var to "1"/"true" to enable. Default off so the
   // supervisor's nudge/intervention events never surface as transcript noise
   // unless the operator opts in. When on, this loop's
@@ -1334,8 +1360,8 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   // nothing subscribes and the supervise step is skipped, so behavior is
   // byte-identical to the legacy path.
   const coordinatorRailsEnabled =
-    process.env["0SEC_FEATURE_COORDINATOR_RAILS"] === "1" ||
-    process.env["0SEC_FEATURE_COORDINATOR_RAILS"] === "true";
+    process.env["ZERO_FEATURE_COORDINATOR_RAILS"] === "1" ||
+    process.env["ZERO_FEATURE_COORDINATOR_RAILS"] === "true";
   let coordinatorState: CoordinatorState = {};
   // Log each (agent, kind, action) transition once so a persistent condition
   // does not spam the diagnostics channel every turn.
@@ -1517,7 +1543,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   }
 
   // ── Hunt memory (cross-scan pattern DB) ──
-  // Explicit opt-in only; 0SEC_DISABLE_HUNT_MEMORY vetoes it. On each saved finding
+  // Explicit opt-in only; ZERO_DISABLE_HUNT_MEMORY vetoes it. On each saved finding
   // we append a REDACTED HuntRecord (the store redacts every persisted string;
   // `evidenceRef` is a POINTER, never raw evidence), and once at loop start we
   // surface a concise "prior findings for similar targets" count via `onEvent`
@@ -1664,7 +1690,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
           typeof input.confidence === "number" && Number.isFinite(input.confidence)
             ? input.confidence
             : undefined;
-        eventBus.emit("finding_ingested", {
+        if (!config.suppressFindingEvents && f?.message === "Finding saved") eventBus.emit("finding_ingested", {
           finding_id: typeof f?.id === "string" ? f.id : typeof f?.findingId === "string" ? f.findingId : undefined,
           severity: typeof input.severity === "string" ? input.severity : undefined,
           title: typeof input.title === "string" ? input.title : undefined,
@@ -1712,7 +1738,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
           finding: { ...(f ?? {}), ...input },
         });
 
-        // 0sec#771/#773 — cross-target `credential_shared` emit is now wired
+        // 0#771/#773 — cross-target `credential_shared` emit is now wired
         // (opt-in) at the loot-harvest site: when `config.trustGraph` is set, a
         // newly-harvested value whose hash matches a prior scan's credential
         // from a DIFFERENT source target emits a `credential_shared` entry via
@@ -1829,6 +1855,12 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       state.summary = "Error: Agent execution cancelled.";
       break;
     }
+    const costBeforeDispatch = config.costLedger?.totalCostUsd() ?? estimateCost(state.totalUsage, pricingModel());
+    if (config.costCeilingUsd !== undefined && costBeforeDispatch >= config.costCeilingUsd) {
+      state.costCeilingExceeded = true;
+      state.summary = `Shared scan cost ceiling exhausted before turn ${state.turnCount + 1}.`;
+      break;
+    }
     // ── Coordinator rails: supervise sub-agents BETWEEN iterations ──
     // No-op unless the feature flag is on. Read-only observation + logging.
     runCoordinatorSupervisor();
@@ -1897,7 +1929,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         const outTok = state.totalUsage.outputTokens;
         const cost = state.estimatedCostUsd.toFixed(4);
         process.stderr.write(
-          `[0sec:hb] t=${elapsed}s role=${config.role} turn=${state.turnCount}/${config.maxTurns} tokens=${inTok}/${outTok} cost=$${cost} last_tool=${lastToolName ?? "-"}\n`,
+          `[0:hb] t=${elapsed}s role=${config.role} turn=${state.turnCount}/${config.maxTurns} tokens=${inTok}/${outTok} cost=$${cost} last_tool=${lastToolName ?? "-"}\n`,
         );
       }
     }
@@ -1950,40 +1982,13 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     let streamedUsageInputTokens: number | undefined;
     let streamedUsageOutputTokens: number | undefined;
 
-    // ── Token-level delta forwarding (cloud Live Trace) ──
-    // Only wire the per-token callback when a cloud sink is actually
-    // listening. For local CLI invocations `isCloudEventSinkActive()`
-    // returns false and we leave `onDelta` undefined — the runtime then
-    // skips the delta-forwarding branch entirely, so non-cloud runs pay
-    // zero per-token overhead beyond the existing thinking-throttle path.
-    //
-    // `deltaSeq` is keyed by scope so assistant_response and reasoning
-    // each get their own monotonic counter. Resets every turn — the
-    // (turn, scope) tuple is what the dashboard renderer keys on.
-    const cloudActive = isCloudEventSinkActive();
-    const deltaSeq: Record<"assistant_response" | "reasoning", number> = {
-      assistant_response: 0,
-      reasoning: 0,
-    };
-    const deltaBatchers = cloudActive
-      ? new DeltaBatcherSet(({ scope, text }) => {
-          const seq = deltaSeq[scope]++;
-          eventBus.emit("delta", {
-            turn: state.turnCount,
-            role: config.role,
-            scope,
-            text,
-            seq,
-          });
-        })
-      : null;
 
     // Bus event: planner invocation. `tokens_est` is cumulative input
     // tokens going INTO this call — the actual response usage lands on
     // `cost_update` below once the runtime returns.
     eventBus.emit("llm_planner_invoked", {
       turn: state.turnCount,
-      model: config.costModel,
+      model: pricingModel(),
       tokens_est: state.totalUsage.inputTokens,
       role: config.role,
     });
@@ -2029,24 +2034,13 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
             turn: state.turnCount,
             inputTokens: cumulativeUsage.inputTokens,
             outputTokens: cumulativeUsage.outputTokens,
-            estimatedCostUsd: estimateCost(cumulativeUsage, config.costModel),
+            estimatedCostUsd: estimateCost(cumulativeUsage, pricingModel()),
           });
         },
-        ...(deltaBatchers
-          ? {
-              onDelta: (scope: "assistant_response" | "reasoning", text: string) => {
-                deltaBatchers.push(scope, text);
-              },
-            }
-          : {}),
       },
       executionSignal,
     );
 
-    // Drain any trailing delta buffer before the turn-completed event so
-    // the cloud sees the full streamed text BEFORE it sees the next
-    // turn's `agent_turn_started` and retires the typing cursor.
-    deltaBatchers?.flushAll();
 
     // `reasoning_summary` is emitted further down once we've also seen the
     // assistant's pre-tool-call text — that lets us fall back to summarising
@@ -2060,12 +2054,13 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       state.totalUsage.inputTokens += result.usage.inputTokens;
       state.totalUsage.outputTokens += result.usage.outputTokens;
       state.totalUsage.cachedInputTokens += result.usage.cachedInputTokens ?? 0;
+      if (result.usage.cacheWriteTokens !== undefined) state.totalUsage.cacheWriteTokens = (state.totalUsage.cacheWriteTokens ?? 0) + result.usage.cacheWriteTokens;
       // Fold this turn into the shared per-scan ledger (when threaded) so
       // sibling agent sessions see this spend in their own ceiling checks.
       // The session's pricing model keys the ledger's per-model buckets,
       // which the scan_completed cost_breakdown is derived from.
-      config.costLedger?.add(result.usage, config.costModel);
-      state.estimatedCostUsd = estimateCost(state.totalUsage, config.costModel);
+      addRuntimeUsage(config.costLedger, result, pricingModel());
+      state.estimatedCostUsd = estimateCost(state.totalUsage, pricingModel());
       if (
         streamedUsageInputTokens !== result.usage.inputTokens
         || streamedUsageOutputTokens !== result.usage.outputTokens
@@ -2093,6 +2088,12 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         token_output: state.totalUsage.outputTokens,
         turn: state.turnCount,
       });
+    }
+    if (config.requirePricedUsage && !result.usage) {
+      config.costLedger?.markUnpricedUsage();
+      state.errorExit = { error: result.error ?? "Runtime did not report usage; cannot continue a cost-bounded scan.", turn: state.turnCount };
+      state.summary = `Error: ${state.errorExit.error}`;
+      break;
     }
 
     // ── Context window compaction (BoxPwnr-inspired) ──
@@ -2165,6 +2166,12 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // Handle error or empty response
     if (result.stopReason === "error" || result.error || (result.content.length === 0 && (!result.usage || result.usage.outputTokens === 0))) {
       const errorMsg = result.error || "API returned empty response (0 tokens) — model may be rate-limited or unavailable";
+      // Operator cancellation is terminal, even if the runtime supplied an
+      // error string that also resembles a rate limit or context rejection.
+      if (result.cancelled || executionSignal.aborted) {
+        state.summary = "Error: Agent execution cancelled.";
+        break;
+      }
       if (
         !driven &&
         result.error
@@ -2180,7 +2187,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
           currentRunContribution()?.record("truncation", { reason: "context_overflow", messagesBefore: beforeCount, messagesAfter: pruned.length, preserveTailCount });
           tokensAtLastCompaction = state.totalUsage.inputTokens;
           process.stderr.write(
-            `[0sec] context overflow: pruned ${beforeCount - pruned.length} old messages `
+            `[0] context overflow: pruned ${beforeCount - pruned.length} old messages `
             + `(recovery ${contextOverflowRecoveries}/2)\n`,
           );
           onEvent?.("context_overflow_recovered", {
@@ -2200,13 +2207,21 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       if (transient && transientRetries < MAX_TRANSIENT_RETRIES) {
         transientRetries++;
         const backoffMs = Math.min(20_000, 500 * 2 ** transientRetries);
-        process.stderr.write(`[0sec] transient LLM error (retry ${transientRetries}/${MAX_TRANSIENT_RETRIES}, backoff ${backoffMs}): ${errorMsg.slice(0, 120)}\n`);
+        process.stderr.write(`[0] transient LLM error (retry ${transientRetries}/${MAX_TRANSIENT_RETRIES}, backoff ${backoffMs}): ${errorMsg.slice(0, 120)}\n`);
         onEvent?.("agent_error", { turn: state.turnCount, error: `transient (retry ${transientRetries}): ${errorMsg.slice(0, 200)}` });
         if (state.turnCount > 0) state.turnCount--; // a failed transient turn must not burn budget
-        await delay(backoffMs);
+        try {
+          await delay(backoffMs, undefined, { signal: executionSignal });
+        } catch (error) {
+          if (!executionSignal.aborted) throw error;
+        }
+        if (executionSignal.aborted) {
+          state.summary = "Error: Agent execution cancelled.";
+          break;
+        }
         continue;
       }
-      process.stderr.write(`[0sec] Agent loop error on turn ${state.turnCount}: ${errorMsg}\n`);
+      process.stderr.write(`[0] Agent loop error on turn ${state.turnCount}: ${errorMsg}\n`);
       onEvent?.("agent_error", { turn: state.turnCount, error: errorMsg });
       // Preserve the legacy summary marker — downstream readers (cloud
       // relay legacy paths, CLI TUI) still key on the "Error: " prefix
@@ -2245,10 +2260,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       (b): b is Extract<NativeContentBlock, { type: "text" }> => b.type === "text",
     );
     const textContent = textBlocks.map((b) => b.text).join("\n");
-    const turnTelemetry = (onTurn || onToolUpdate) && (result.usage || driven) ? {
-      usage: { ...state.totalUsage },
-      ...(result.usage ? { contextTokens: result.usage.inputTokens + result.usage.outputTokens } : {}),
-    } : undefined;
     if (textContent.trim() && textContent.trim() !== streamedThinkingText.trim()) {
       onEvent?.("thinking", {
         turn: state.turnCount,
@@ -2267,12 +2278,14 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     //      sentence so it reads as a "thinking out loud" snippet.
     // Wrapped in try/catch so a bad summary never kills the scan; emitted
     // at most once per turn and only when the result is non-empty.
+    let reasoningSummary: string | undefined;
     try {
       const reasoningSource = streamedThinkingText.trim()
         ? streamedThinkingText
         : textContent;
       const summary = summarizeReasoning(reasoningSource);
       if (summary) {
+        reasoningSummary = summary;
         eventBus.emit("reasoning_summary", {
           turn: state.turnCount,
           summary,
@@ -2281,6 +2294,11 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     } catch {
       /* heuristic failure must never abort the scan */
     }
+    const turnTelemetry = (onTurn || onToolUpdate) ? {
+      ...((result.usage || driven) ? { usage: { ...state.totalUsage } } : {}),
+      ...(result.usage ? { contextTokens: result.usage.inputTokens + result.usage.outputTokens } : {}),
+      ...(reasoningSummary ? { reasoning_summary: reasoningSummary } : {}),
+    } : undefined;
 
     const toolUseBlocks = result.content.filter(
       (b): b is Extract<NativeContentBlock, { type: "tool_use" }> =>
@@ -2524,7 +2542,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       let resultContent = toolResult.success
         ? JSON.stringify(toolResult.output)
         : `Error: ${toolResult.error}`;
-      // 0sec#567 — harvest reusable footholds from evidence-bearing tool
+      // 0#567 — harvest reusable footholds from evidence-bearing tool
       // results into the loot ledger. Done on the RAW output (before the
       // injection-marker sanitizer rewrites it) and only for tools whose
       // output reflects target data — never our own trusted bookkeeping
@@ -2533,7 +2551,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       if (loot && toolResult.success && shouldHarvestLoot(block.name)) {
         try {
           const harvested = loot.harvest(resultContent, block.name, state.turnCount);
-          // 0sec#771 — if any newly-harvested value matches a credential a
+          // 0#771 — if any newly-harvested value matches a credential a
           // PRIOR scan recovered from a DIFFERENT source target, that's a
           // cross-target reuse → emit a `credential_shared` journal entry. No-op
           // when trustGraph is not opted in. Best-effort: never abort the loop.
@@ -2600,7 +2618,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // so it lands next turn, then reset the window so it warns once per streak.
     const doom = detectDoomLoop(toolCallLog);
     if (doom.looping && doom.signature) {
-      toolResultBlocks.push({ type: "text", text: `[0sec] ${doomLoopNudge(doom.signature, doom.count ?? 0)}` });
+      toolResultBlocks.push({ type: "text", text: `[0] ${doomLoopNudge(doom.signature, doom.count ?? 0)}` });
       onEvent?.("doom_loop", { turn: state.turnCount, signature: doom.signature, count: doom.count ?? 0 });
       if (db) {
         db.logEvent({
@@ -2721,7 +2739,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       }
     }
 
-    // ── Known-footholds (loot) injection (0sec#567) ──
+    // ── Known-footholds (loot) injection (0#567) ──
     // Re-surface captured footholds so the agent reuses them to chain to
     // higher impact. The block is re-rendered from the structured ledger (not
     // the original tool result), so it survives context compaction. Throttled:
@@ -2886,7 +2904,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         try {
           state.progressSummary = await generateProgressSummary(state.messages, runtime);
           // Optionally export to disk for cross-session handoff
-          const progressDir = `/tmp/0sec-progress-${config.scanId}`;
+          const progressDir = `/tmp/0-progress-${config.scanId}`;
           try {
             fs.mkdirSync(progressDir, { recursive: true });
             const progressFile = `${progressDir}/progress.json`;
@@ -2951,7 +2969,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     if (config.costCeilingUsd !== undefined && config.costCeilingUsd > 0) {
       const runningCost = config.costLedger
         ? config.costLedger.totalCostUsd()
-        : estimateCost(state.totalUsage, config.costModel);
+        : estimateCost(state.totalUsage, pricingModel());
       if (runningCost >= config.costCeilingUsd) {
         state.costCeilingExceeded = true;
         state.estimatedCostUsd = runningCost;
@@ -3019,7 +3037,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   state.attackResults = toolCtx.attackResults;
   state.targetInfo = toolCtx.targetInfo;
 
-  // 0sec#771 — on loop completion, persist this scan's in-memory loot ledger
+  // 0#771 — on loop completion, persist this scan's in-memory loot ledger
   // to the durable store (hash + redacted preview only; the plaintext never
   // leaves the in-memory ledger). No-op when trustGraph is not opted in or the
   // ledger is empty. Best-effort: a persist failure must never break the return
@@ -3040,9 +3058,9 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   }
 
   // Keep the final return value on the same model-specific rate used for every
-  // turn and cost-ceiling check; dropping costModel here reprices Azure runs at
-  // the generic fallback after the loop completes.
-  state.estimatedCostUsd = estimateCost(state.totalUsage, config.costModel);
+  // turn and cost-ceiling check; dropping the pricing model here reprices Azure
+  // runs at the generic fallback after the loop completes.
+  state.estimatedCostUsd = estimateCost(state.totalUsage, pricingModel());
 
   // If none of the break paths set a summary, the loop exited naturally by
   // completing all maxTurns iterations. Only in that case do we stamp the
@@ -3091,7 +3109,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     });
   }
 
-  // Tool-health roll-up (0sec#tool-reliability): attach the deduped summary to
+  // Tool-health roll-up (0#tool-reliability): attach the deduped summary to
   // the returned state and log a concise "N tool issues" line so the operator
   // sees WHY a tool didn't run. Non-blocking / fail-soft.
   try {
@@ -3169,7 +3187,7 @@ const CRITICAL_PATTERNS = [
 /**
  * Critical-message regex used by `compactMessagesWithLLM` to decide which
  * middle messages to preserve verbatim alongside the LLM summary, gated
- * behind `features.preserveCriticalMessages` (0sec#229, BoxPwnr-inspired).
+ * behind `features.preserveCriticalMessages` (0#229, BoxPwnr-inspired).
  *
  * Tuned to high-signal tokens that survive paraphrasing poorly — the
  * literal credential string is what matters, not the model's recap of it.
@@ -3257,8 +3275,8 @@ export const DEFAULT_COMPACTION_REGROW = 30_000;
 /**
  * Resolve the compaction thresholds from the environment so an operator can tune
  * them to the model's real context window (there is no context-window catalog to
- * derive a fraction from). `0SEC_COMPACTION_THRESHOLD` sets when compaction
- * fires; `0SEC_COMPACTION_REGROW` sets how much new context must accrue before it
+ * derive a fraction from). `ZERO_COMPACTION_THRESHOLD` sets when compaction
+ * fires; `ZERO_COMPACTION_REGROW` sets how much new context must accrue before it
  * fires again. Both are clamped to sane positive floors; a malformed value falls
  * back to the default. Pure — the env is passed in.
  */
@@ -3270,8 +3288,8 @@ export function resolveCompactionThresholds(
     return Number.isFinite(n) && n >= floor ? Math.floor(n) : fallback;
   };
   return {
-    threshold: parse(env["0SEC_COMPACTION_THRESHOLD"], DEFAULT_COMPACTION_THRESHOLD, 1_000),
-    regrow: parse(env["0SEC_COMPACTION_REGROW"], DEFAULT_COMPACTION_REGROW, 500),
+    threshold: parse(env["ZERO_COMPACTION_THRESHOLD"], DEFAULT_COMPACTION_THRESHOLD, 1_000),
+    regrow: parse(env["ZERO_COMPACTION_REGROW"], DEFAULT_COMPACTION_REGROW, 500),
   };
 }
 
@@ -3410,7 +3428,7 @@ export async function compactMessagesWithLLM(
     summaryText += `\n\n### Additional extracted context:\n${regexFindings}`;
   }
 
-  // 0sec#229: append credential / exploit-bearing middle messages verbatim,
+  // 0#229: append credential / exploit-bearing middle messages verbatim,
   // because LLM paraphrasing routinely drops the literal string
   // ("Found admin password: hunter2" → "discovered admin credentials"), which
   // breaks long-tail challenges where the agent recovers a credential early
@@ -3725,7 +3743,7 @@ const LOOP_WARNING =
   "⚠ You appear stuck in a loop repeating the same commands. " +
   "Try a COMPLETELY DIFFERENT approach — different tool, different endpoint, different payload.";
 
-// ── Two-stage budget warnings (Strix-inspired, 0sec#408) ──
+// ── Two-stage budget warnings (Strix-inspired, 0#408) ──
 //
 // Distinct from the existing `buildContinuePrompt` checkpoints (which only
 // fire when the model emits zero tool calls and the loop has to nudge it):
@@ -3744,11 +3762,11 @@ const LOOP_WARNING =
 
 /** Soft warning injected at ~85% of the turn budget. */
 export const BUDGET_WARNING_SOFT =
-  "[0sec budget] You have used ~85% of your turn budget. If you have a credible finding, call `save_finding` now and then `done`. Otherwise prepare a clean handoff — summarize what you tried and what looks most promising for a follow-up agent. Do NOT start a new exploration thread.";
+  "[0 budget] You have used ~85% of your turn budget. If you have a credible finding, call `save_finding` now and then `done`. Otherwise prepare a clean handoff — summarize what you tried and what looks most promising for a follow-up agent. Do NOT start a new exploration thread.";
 
 /** Hard warning injected at `maxTurns − 3`. */
 export const BUDGET_WARNING_HARD =
-  "[0sec budget] Only 3 turns remaining. Submit your best finding now or call `done`. Further exploration won't fit — wrap up cleanly.";
+  "[0 budget] Only 3 turns remaining. Submit your best finding now or call `done`. Further exploration won't fit — wrap up cleanly.";
 
 /**
  * Compute the two budget-warning turn thresholds for a given `maxTurns`.
@@ -3875,7 +3893,7 @@ function buildInitialPrompt(config: NativeAgentConfig): string {
     config.tools.some((tool) => tool.name === "load_skill");
 
   return [
-    `You are a ${config.role} agent for 0sec, an AI red-teaming toolkit.`,
+    `You are a ${config.role} agent for 0, an AI red-teaming toolkit.`,
     `Target: ${config.target}`,
     `Scan ID: ${config.scanId}`,
     "",

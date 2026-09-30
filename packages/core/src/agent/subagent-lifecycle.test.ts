@@ -80,8 +80,8 @@ describe("spawn_agent lifecycle events", () => {
   });
 
   it("fails closed when no child runtime factory is provided", async () => {
-    vi.stubEnv("0SEC_FORCE_PROVIDER", "openai");
-    vi.stubEnv("0SEC_SELECTED_PROVIDER", "");
+    vi.stubEnv("ZERO_FORCE_PROVIDER", "openai");
+    vi.stubEnv("ZERO_SELECTED_PROVIDER", "");
     vi.stubEnv("OPENAI_API_KEY", "ambient-fixture-key");
     const events: SubagentLifecyclePayload[] = [];
     const unsubscribe = eventBus.subscribe({

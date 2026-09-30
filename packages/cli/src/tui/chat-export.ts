@@ -89,7 +89,7 @@ export function exportChatConversation(messages: readonly unknown[]): { text: st
     return `${message.role === "user" ? "User" : "Assistant"}\n${body}`;
   }).join("\n\n");
   const json = JSON.stringify(publicMessages, null, 2);
-  const directory = mkdtempSync(join(tmpdir(), "0sec-chat-export-"));
+  const directory = mkdtempSync(join(tmpdir(), "0-chat-export-"));
   const path = join(directory, "conversation.json");
   let created = false;
   try {

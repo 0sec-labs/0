@@ -8,9 +8,9 @@ import type {
 import { ToolExecutor, getToolsForRole } from "./tools.js";
 import { WafDetector } from "../scope/waf-detect.js";
 import type { ToolContext } from "./types.js";
-import type { osecDB } from "@0sec/db";
+import type { osecDB } from "@0/db";
 import type { Runtime } from "../runtime/types.js";
-import type { Finding, TargetInfo } from "@0sec/shared";
+import type { Finding, TargetInfo } from "@0/shared";
 import {
   resolveDispatchMode,
   parseXmlDispatch,
@@ -32,6 +32,8 @@ import {
   BUDGET_WARNING_HARD,
 } from "./native-loop.js";
 import { estimateCost } from "./cost.js";
+import type { ScanCostLedger } from "./cost-ledger.js";
+import { addRuntimeUsage } from "./cost-ledger.js";
 
 export interface AgentLoopOptions {
   config: AgentConfig;
@@ -76,7 +78,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
     session: config.session,
     scope: config.scope,
     rateLimiter: config.rateLimiter,
-    // WAF detection + adaptive evasion (0sec#568). Auto-enabled for
+    // WAF detection + adaptive evasion (0#568). Auto-enabled for
     // authorized engagements (scope/enforcement set) unless explicitly
     // disabled with `wafDetector: null`.
     wafDetector:
@@ -88,6 +90,10 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
     attribution: config.attribution,
     engagement: config.engagement,
     recentToolResultTexts,
+    costLedger: config.costLedger as ScanCostLedger | undefined,
+    costCeilingUsd: config.costCeilingUsd,
+    get costModel() { return runtime.resolvedModel?.() || config.costModel; },
+    requirePricedUsage: config.requirePricedUsage,
     loadedSkills: new Set<string>(),
   };
 
@@ -99,7 +105,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
     tools.some((tool) => tool.name === "list_skills") &&
     tools.some((tool) => tool.name === "load_skill");
   const sessionId = config.sessionId ?? randomUUID();
-  // 0sec#232: pick JSON or XML dispatch protocol. JSON is the legacy
+  // 0#232: pick JSON or XML dispatch protocol. JSON is the legacy
   // path; XML is the cheap-model fallback (DeepSeek / Gemini / OpenRouter
   // routinely emit malformed JSON tool calls under load). The runtime
   // model identifier (when known) feeds the auto-detector.
@@ -135,7 +141,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
   // Build the initial user message with tool descriptions
   let initialPrompt: string;
   if (dispatchMode === "xml") {
-    // 0sec#232: XML dispatch ships a deliberately narrower action
+    // 0#232: XML dispatch ships a deliberately narrower action
     // surface (bash / save_finding / done / note). The full tool catalog
     // would just confuse cheap models — BoxPwnr's whole point is that
     // narrowing wins.
@@ -156,7 +162,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
       .join("\n\n");
 
     initialPrompt = [
-      `You are a ${config.role} agent for 0sec, an AI red-teaming toolkit.`,
+      `You are a ${config.role} agent for 0, an AI red-teaming toolkit.`,
       `Target: ${config.target}`,
       `Scan ID: ${config.scanId}`,
       "Authorization: The operator has confirmed this target is owned by them or explicitly authorized for this assessment.",
@@ -202,17 +208,16 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
   // CI heartbeat: one stderr line per turn so a CI log of a hung scan
   // tells us at which turn / on which tool we stopped making progress.
   // Gated on CI / explicit opt-in so local TUI runs stay quiet.
-  const heartbeatEnabled = !!(process.env.CI || process.env["0SEC_HEARTBEAT"] || process.env["0SEC_DEBUG"]);
+  const heartbeatEnabled = !!(process.env.CI || process.env["ZERO_HEARTBEAT"] || process.env["ZERO_DEBUG"]);
   const loopStartedAt = Date.now();
   let lastToolName: string | null = null;
   let lastHeartbeatAt = 0;
 
-  // Running token usage for cost-ceiling termination (#S1, mirrors
-  // native-loop.ts). RuntimeResult.usage carries no cached-token field, so
-  // cached stays 0; estimateCost tolerates that.
-  const totalUsage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
+  // Runtime usage is normalized to include cache reads and writes in prompt
+  // tokens, while carrying their separate counts for the shared tariff.
+  const totalUsage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, cacheWriteTokens: 0 };
 
-  // Two-stage budget warnings (Strix-inspired, 0sec#408). Same
+  // Two-stage budget warnings (Strix-inspired, 0#408). Same
   // closure-state pattern as native-loop.ts so unit tests share the
   // computeBudgetWarningTurns helper.
   const budgetThresholds = computeBudgetWarningTurns(config.maxTurns);
@@ -225,16 +230,20 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
 
   try {
   while (!state.done && state.turnCount < config.maxTurns) {
+    if (config.signal?.aborted) {
+      state.summary = "Agent execution cancelled.";
+      break;
+    }
     // Budget-bound termination (#S1): before spending another turn, stop if the
     // running cost estimate has reached the ceiling. `maxTurns` (the while
     // guard) stays the runaway backstop. Mirrors native-loop.ts:1042.
-    if (
-      config.costCeilingUsd &&
-      estimateCost(totalUsage, config.costModel) >= config.costCeilingUsd
-    ) {
-      state.costCeilingExceeded = true;
-      state.summary = `Agent reached cost ceiling ($${config.costCeilingUsd}) after ${state.turnCount} turns.`;
-      break;
+    if (config.costCeilingUsd) {
+      const model = runtime.resolvedModel?.() || config.costModel;
+      if ((config.costLedger?.totalCostUsd() ?? estimateCost(totalUsage, model === "auto" ? undefined : model)) >= config.costCeilingUsd) {
+        state.costCeilingExceeded = true;
+        state.summary = `Agent reached cost ceiling ($${config.costCeilingUsd}) after ${state.turnCount} turns.`;
+        break;
+      }
     }
     state.turnCount++;
 
@@ -244,7 +253,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
         lastHeartbeatAt = now;
         const elapsed = ((now - loopStartedAt) / 1000).toFixed(1);
         process.stderr.write(
-          `[0sec:hb] t=${elapsed}s role=${config.role} turn=${state.turnCount}/${config.maxTurns} runtime=${runtime.type} last_tool=${lastToolName ?? "-"}\n`,
+          `[0:hb] t=${elapsed}s role=${config.role} turn=${state.turnCount}/${config.maxTurns} runtime=${runtime.type} last_tool=${lastToolName ?? "-"}\n`,
         );
       }
     }
@@ -269,6 +278,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
 
     // Execute via runtime
     const result = await runtime.execute(prompt, {
+      signal: config.signal,
       target: config.target,
       findings: JSON.stringify(toolCtx.findings.slice(-10)),
       systemPrompt: config.systemPrompt,
@@ -280,6 +290,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
           }
         : undefined,
     });
+    if (config.requirePricedUsage && !result.usage) config.costLedger?.markUnpricedUsage();
 
     if (result.error && !result.output) {
       state.messages.push({
@@ -287,6 +298,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
         content: `Error from runtime: ${result.error}`,
       });
       state.summary = `Error: ${result.error}`;
+      state.errorExit = { error: result.error, turn: state.turnCount };
       if (db) {
         db.logEvent({
           scanId: config.scanId,
@@ -301,13 +313,22 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
       break;
     }
 
-    // Accumulate this turn's token usage for the cost-ceiling gate at the top
-    // of the next iteration (#S1). RuntimeResult.usage has no cached field.
+    // Record the real response, including opaque CLI per-model breakdowns.
     if (result.usage) {
       totalUsage.inputTokens += result.usage.inputTokens;
       totalUsage.outputTokens += result.usage.outputTokens;
+      totalUsage.cachedInputTokens += result.usage.cachedInputTokens ?? 0;
+      totalUsage.cacheWriteTokens += result.usage.cacheWriteTokens ?? 0;
+      addRuntimeUsage(config.costLedger as ScanCostLedger | undefined, result, runtime.resolvedModel?.() || config.costModel);
+    }
+    if (config.requirePricedUsage && !result.usage) {
+      config.costLedger?.markUnpricedUsage();
+      state.errorExit = { error: "Runtime did not report usage; cannot continue a cost-bounded scan.", turn: state.turnCount };
+      state.summary = `Error: ${state.errorExit.error}`;
+      break;
     }
 
+    if (config.signal?.aborted) break;
     const assistantContent = result.output;
     let toolCalls: ToolCall[];
     let xmlParseError: string | undefined;
@@ -396,7 +417,8 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
     for (const call of toolCalls) {
       const correlationId = newCorrelationId();
       const toolStartedAt = Date.now();
-      const toolResult = await executor.execute(call, { correlationId });
+      if (config.signal?.aborted) break;
+      const toolResult = await executor.execute(call, { correlationId, signal: config.signal });
       const toolEndedAt = Date.now();
       toolResults.push({ name: call.name, result: toolResult });
       actionLog.push(
@@ -482,7 +504,9 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
   state.attackResults = toolCtx.attackResults;
   state.targetInfo = toolCtx.targetInfo;
 
-  if (!state.done && !state.costCeilingExceeded) {
+  state.totalUsage = totalUsage;
+  state.estimatedCostUsd = estimateCost(totalUsage, runtime.resolvedModel?.() || config.costModel);
+  if (!state.done && !state.costCeilingExceeded && !state.errorExit && !config.signal?.aborted) {
     state.summary = `Agent reached max turns (${config.maxTurns}) without completing.`;
   }
 

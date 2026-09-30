@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
-import { PROVIDERS, cloudConfigured, isProviderConfigured, providerStates, providerSupportsMethod } from "./provider-status.js";
+import { PROVIDERS, isProviderConfigured, providerStates, providerSupportsMethod } from "./provider-status.js";
 
 /** No env at all — the state of a fresh container. */
 const EMPTY: Record<string, string | undefined> = {};
@@ -153,31 +150,31 @@ describe("providerStates", () => {
   });
 
   it("is satisfied by EITHER of a multi-var provider's accepted vars", () => {
-    const viaAccess = stateFor("chatgpt-codex", { "0SEC_CHATGPT_ACCESS_TOKEN": "at-1" });
+    const viaAccess = stateFor("chatgpt-codex", { "ZERO_CHATGPT_ACCESS_TOKEN": "at-1" });
     expect(viaAccess.configured).toBe(true);
-    expect(viaAccess.via).toBe("0SEC_CHATGPT_ACCESS_TOKEN");
+    expect(viaAccess.via).toBe("ZERO_CHATGPT_ACCESS_TOKEN");
 
-    const viaRefresh = stateFor("chatgpt-codex", { "0SEC_CHATGPT_OAUTH_REFRESH_TOKEN": "rt-1" });
+    const viaRefresh = stateFor("chatgpt-codex", { "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN": "rt-1" });
     expect(viaRefresh.configured).toBe(true);
-    expect(viaRefresh.via).toBe("0SEC_CHATGPT_OAUTH_REFRESH_TOKEN");
+    expect(viaRefresh.via).toBe("ZERO_CHATGPT_OAUTH_REFRESH_TOKEN");
   });
 
   it("reports the most-preferred var in `via` when several are set", () => {
     const state = stateFor("chatgpt-codex", {
-      "0SEC_CHATGPT_ACCESS_TOKEN": "at-1",
-      "0SEC_CHATGPT_OAUTH_REFRESH_TOKEN": "rt-1",
+      "ZERO_CHATGPT_ACCESS_TOKEN": "at-1",
+      "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN": "rt-1",
     });
     expect(state.via).toBe(PROVIDERS.find((provider) => provider.id === "chatgpt-codex")?.envVars[0]);
-    expect(state.via).toBe("0SEC_CHATGPT_ACCESS_TOKEN");
+    expect(state.via).toBe("ZERO_CHATGPT_ACCESS_TOKEN");
   });
 
   it("skips a blank preferred var and falls through to the next one", () => {
     const state = stateFor("chatgpt-codex", {
-      "0SEC_CHATGPT_ACCESS_TOKEN": "  ",
-      "0SEC_CHATGPT_OAUTH_REFRESH_TOKEN": "rt-1",
+      "ZERO_CHATGPT_ACCESS_TOKEN": "  ",
+      "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN": "rt-1",
     });
     expect(state.configured).toBe(true);
-    expect(state.via).toBe("0SEC_CHATGPT_OAUTH_REFRESH_TOKEN");
+    expect(state.via).toBe("ZERO_CHATGPT_OAUTH_REFRESH_TOKEN");
   });
 
   it("configures each provider from its own documented var", () => {
@@ -224,34 +221,5 @@ describe("isProviderConfigured", () => {
     for (const state of providerStates(env)) {
       expect(isProviderConfigured(state.id, env)).toBe(state.configured);
     }
-  });
-});
-
-describe("cloudConfigured", () => {
-  // A home with no ~/.0sec/cloud.env, so only the injected env can supply a
-  // token — the real user's cloud.env can never leak into these assertions.
-  const emptyHome = mkdtempSync(join(tmpdir(), "0sec-cloud-test-"));
-
-  it("is true when 0SEC_CLOUD_TOKEN is set in env (host optional)", () => {
-    expect(cloudConfigured({ "0SEC_CLOUD_TOKEN": "tok-123" }, emptyHome)).toBe(true);
-  });
-
-  it("honours an explicit cloud host alongside the token", () => {
-    expect(
-      cloudConfigured({ "0SEC_CLOUD_TOKEN": "tok", "0SEC_CLOUD_HOST": "https://staging.example" }, emptyHome),
-    ).toBe(true);
-  });
-
-  it("is false with no token and no cloud.env on disk", () => {
-    expect(cloudConfigured({}, emptyHome)).toBe(false);
-  });
-
-  it("treats a whitespace-only token as no token", () => {
-    expect(cloudConfigured({ "0SEC_CLOUD_TOKEN": "   " }, emptyHome)).toBe(false);
-  });
-
-  it("never throws — a malformed host with no usable token is just false", () => {
-    expect(() => cloudConfigured({ "0SEC_CLOUD_HOST": "not-a-url" }, emptyHome)).not.toThrow();
-    expect(cloudConfigured({ "0SEC_CLOUD_HOST": "not-a-url" }, emptyHome)).toBe(false);
   });
 });

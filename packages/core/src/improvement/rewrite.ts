@@ -1,13 +1,18 @@
 import { createHash } from "node:crypto";
 import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { estimateCost, getRates, MODEL_PRICING } from "@0sec/shared";
+import { estimateCost, getRates, MODEL_PRICING } from "@0/shared";
 import { z } from "zod";
 import { LlmApiRuntime } from "../runtime/llm-api.js";
 import { loadEvolutionRegistry, verifyEvolutionSnapshot } from "./registry.js";
 import { canonicalEvolutionJson, parseEvolutionConfig } from "./config.js";
-import type { NativeMessage, NativeToolDef } from "../runtime/types.js";
-import type { EvolutionConfig, EvolutionDependencies, EvolutionEdit, EvolutionFile, EvolutionProposal, EvolutionSnapshot } from "./types.js";
+import { evolutionComparisonIdentity } from "./evaluation.js";
+import {
+  assertEvolutionCampaignMode, blockEvolutionCampaign, compareEvolutionIdentities, createOrLoadEvolutionCampaign,
+  loadEvolutionCampaign, reserveCampaignDispatch, settleCampaignDispatch,
+} from "./safety.js";
+import type { NativeMessage, NativeRuntimeResult, NativeToolDef } from "../runtime/types.js";
+import type { EvolutionConfig, EvolutionDependencies, EvolutionEdit, EvolutionFile, EvolutionModelIdentity, EvolutionProposal, EvolutionSnapshot } from "./types.js";
 
 const MAX_READ_BYTES = 128 * 1024;
 const pathSchema = z.string().min(1).max(512).refine((path) => !path.startsWith("/") && !path.includes("\\") && !path.includes("\0")
@@ -89,10 +94,18 @@ export async function proposeEvolutionEdits(
   const config = parseEvolutionConfig(rawConfig);
   if (!config.allowModelSourceAccess) throw new Error("source rewriting requires allowModelSourceAccess consent");
   deps.signal?.throwIfAborted();
+  assertEvolutionCampaignMode(config);
   verifyEvolutionSnapshot(snapshot);
   const runtime = deps.model ? undefined : new LlmApiRuntime({ type: "api", timeout: 300000, ...(config.model ? { model: config.model } : {}) });
+  const observedIdentity = (): EvolutionModelIdentity | undefined => runtime
+    ? { provider: runtime.resolvedProvider(), model: runtime.resolvedModel(), pricingModel: runtime.resolvedPricingModel() }
+    : deps.modelIdentity?.();
+  let modelIdentity = observedIdentity();
+  const provenance = evolutionComparisonIdentity(config, modelIdentity);
+  if (config.safety?.enabled) createOrLoadEvolutionCampaign(config.storePath, provenance, "evolution", config);
   const modelId = (): string => {
-    const id = runtime?.resolvedModel() ?? config.model;
+    const observed = observedIdentity();
+    const id = observed?.pricingModel ?? runtime?.resolvedPricingModel() ?? observed?.model ?? config.model;
     if (!id) throw new Error("an injected evolution model requires config.model for pricing");
     const rates = getRates(id);
     if (rates === MODEL_PRICING.default || !Number.isFinite(rates.input) || !Number.isFinite(rates.output)) {
@@ -126,15 +139,47 @@ export async function proposeEvolutionEdits(
       deps.signal?.throwIfAborted();
       if (modelCostUsd >= config.maxModelCostUsd) throw new Error("source generation cost ceiling reached");
       modelId();
+      let reservationId: string | undefined;
+      if (config.safety?.enabled) {
+        const campaign = loadEvolutionCampaign(config.storePath);
+        const remaining = Math.min(config.maxModelCostUsd - modelCostUsd, campaign.maxModelCostUsd - campaign.cumulativeModelCostUsd);
+        reservationId = reserveCampaignDispatch(config.storePath, "model", remaining).id;
+      }
       meteringIncomplete = true;
-      const result = await model(system, messages, tools, deps.signal);
-      if (result.stopReason === "error" && !result.usage) throw new Error(result.error ?? "source generation failed without usage accounting");
-      const usage = usageSchema.parse(result.usage);
-      const actualModel = modelId();
-      const charge = estimateCost(usage, actualModel) + (usage.cacheWriteTokens ?? 0) / 1000000 * getRates(actualModel).input * 0.25;
-      if (!Number.isFinite(charge) || charge < 0) throw new Error("invalid model pricing");
+      let result: NativeRuntimeResult;
+      let charge: number;
+      let actualIdentity: EvolutionModelIdentity | undefined;
+      try {
+        result = await model(system, messages, tools, deps.signal);
+        if (result.stopReason === "error" && !result.usage) throw new Error(result.error ?? "source generation failed without usage accounting");
+        const usage = usageSchema.parse(result.usage);
+        const resolved = observedIdentity();
+        actualIdentity = result.providerRaw
+          ? { provider: result.providerRaw.provider, model: result.providerRaw.model,
+            ...(resolved?.provider === result.providerRaw.provider && resolved.model === result.providerRaw.model && resolved.pricingModel ? { pricingModel: resolved.pricingModel } : {}) }
+          : resolved;
+        const actualModel = actualIdentity?.pricingModel ?? (actualIdentity ? `${actualIdentity.provider}/${actualIdentity.model}` : modelId());
+        const rates = getRates(actualModel);
+        if (rates === MODEL_PRICING.default || !Number.isFinite(rates.input) || !Number.isFinite(rates.output)) throw new Error(`unknown observed evolution model pricing: ${actualModel}`);
+        charge = estimateCost(usage, actualModel);
+        if (!Number.isFinite(charge) || charge < 0) throw new Error("invalid model pricing");
+        if (reservationId) settleCampaignDispatch(config.storePath, reservationId, charge, `sha256:${createHash("sha256").update(canonicalEvolutionJson({ usage, model: actualModel, provider: actualIdentity?.provider ?? null })).digest("hex")}`);
+      } catch (error) {
+        if (reservationId) settleCampaignDispatch(config.storePath, reservationId, null);
+        throw error;
+      }
       modelCostUsd += charge;
       meteringIncomplete = false;
+      if (config.safety?.enabled) {
+        const comparison = compareEvolutionIdentities(provenance, {
+          ...provenance, resolvedModel: actualIdentity?.model ?? null, provider: actualIdentity?.provider ?? null,
+        });
+        if (comparison.status !== "compatible") {
+          blockEvolutionCampaign(config.storePath, `generator provenance ${comparison.status}: ${comparison.reasons.join("; ")}`);
+          throw new Error("generator provider/model changed or is unresolved");
+        }
+      }
+      modelIdentity = actualIdentity;
       if (modelCostUsd > config.maxModelCostUsd) throw new Error("source generation cost ceiling exceeded");
       if (result.stopReason === "error" || result.cancelled) throw new Error(result.error ?? "source generation cancelled");
       messages.push({ role: "assistant", content: result.content, ...(result.providerRaw ? { providerRaw: result.providerRaw } : {}) });
@@ -148,7 +193,7 @@ export async function proposeEvolutionEdits(
             const proposal = proposalSchema.parse(call.input);
             validateEdits(proposal.edits, files, config);
             verifyEvolutionSnapshot(snapshot);
-            return { ...proposal, modelCostUsd };
+            return { ...proposal, modelCostUsd, ...(modelIdentity ? { modelIdentity } : {}) };
           }
           if (call.name !== "read_source") throw new Error(`unknown evolution tool: ${call.name}`);
           const request = readSchema.parse(call.input);

@@ -3,7 +3,7 @@
  *
  * WHY THIS EXISTS
  * ---------------
- * 0sec already authorizes tool calls through the name-keyed gates in
+ * 0 already authorizes tool calls through the name-keyed gates in
  * `console/turn-engine.ts` (`NETWORK_CAPABLE_TOOLS`, `LOCAL_SCOPE_TOOLS`,
  * `READ_ONLY_TOOLS`), fed by the single capability translation `gateFlagsFor`
  * in `plugins/manifest.ts`. Those gates decide, per tool NAME, whether a call
@@ -237,7 +237,7 @@ export function composeGuards(...groups: readonly (readonly ToolGuard[])[]): Too
   return out;
 }
 
-// ── Built-in guards: 0sec's existing invariants, encoded once ─────────────────
+// ── Built-in guards: 0's existing invariants, encoded once ─────────────────
 //
 // Each built-in is DERIVED from a real gate in `turn-engine.ts` — it never
 // invents policy that contradicts the gates. They are exported individually so
@@ -330,7 +330,7 @@ export function guardUnresolvedCapabilities(ctx: GuardContext): string | null | 
 }
 
 /**
- * The default built-in guard set, encoding 0sec's CURRENT invariants so the
+ * The default built-in guard set, encoding 0's CURRENT invariants so the
  * layer is useful immediately. Frozen so a consumer cannot mutate the shared
  * default (which would silently change policy for everyone).
  *

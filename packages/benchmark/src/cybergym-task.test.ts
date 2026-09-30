@@ -21,7 +21,7 @@ describe("run-cybergym-task.sh", () => {
     roots.push(root);
     const bin = join(root, "bin");
     const cybergymRoot = join(root, "cybergym");
-    const osecRoot = join(root, "0sec");
+    const osecRoot = join(root, "0");
     const auth = join(root, "auth.json");
     const pythonCalls = join(root, "python-calls.txt");
     mkdirSync(bin);
@@ -47,7 +47,7 @@ exit 99
       env: {
         ...process.env,
         PATH: `${bin}:${process.env.PATH}`,
-        "0SEC_ROOT": osecRoot,
+        "ZERO_ROOT": osecRoot,
         CYBERGYM_ROOT: cybergymRoot,
         CYBERGYM_PYTHON: fakePython,
         CYBERGYM_AUTH_FILE: auth,
@@ -65,7 +65,7 @@ exit 99
     roots.push(root);
     const bin = join(root, "bin");
     const cybergymRoot = join(root, "cybergym");
-    const osecRoot = join(root, "0sec");
+    const osecRoot = join(root, "0");
     const auth = join(root, "auth.json");
     const dockerCalls = join(root, "docker-calls.txt");
     const containerCalls = join(root, "container-calls.txt");
@@ -129,7 +129,7 @@ cp "\${args[$((n - 2))]}" "\${args[$((n - 1))]}"
       env: {
         ...process.env,
         PATH: `${bin}:${process.env.PATH}`,
-        "0SEC_ROOT": osecRoot,
+        "ZERO_ROOT": osecRoot,
         CYBERGYM_ROOT: cybergymRoot,
         CYBERGYM_PYTHON: fakePython,
         CYBERGYM_AUTH_FILE: auth,

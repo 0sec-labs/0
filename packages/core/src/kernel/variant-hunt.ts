@@ -5,7 +5,7 @@ import { promises as fsp } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { promisify } from "node:util";
-import type { AttackCategory, Finding, ScanWarning, Severity } from "@0sec/shared";
+import type { AttackCategory, Finding, ScanWarning, Severity } from "@0/shared";
 import {
   detectFoxguard,
   inferCategoryFromRule,
@@ -269,7 +269,7 @@ async function runFoxguardSarifScan(args: {
 
   const outPath = join(
     tmpdir(),
-    `0sec-kernel-variant-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.sarif`,
+    `0-kernel-variant-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.sarif`,
   );
   const cmdArgs = [args.tree];
   if (args.rules) cmdArgs.push("--rules", args.rules);

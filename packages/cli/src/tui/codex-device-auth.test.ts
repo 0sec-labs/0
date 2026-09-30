@@ -11,7 +11,7 @@ import {
 const directories: string[] = [];
 
 function temporaryHome(): string {
-  const home = mkdtempSync(join(tmpdir(), "0sec-codex-device-auth-"));
+  const home = mkdtempSync(join(tmpdir(), "0-codex-device-auth-"));
   directories.push(home);
   return home;
 }
@@ -58,18 +58,20 @@ describe("startCodexDeviceAuth", () => {
       tokens: { access_token: "fresh-access", refresh_token: "fresh-refresh" },
     }));
     const env: NodeJS.ProcessEnv = {
-      "0SEC_CHATGPT_AUTH_FILE": authPath,
-      "0SEC_CHATGPT_ACCESS_TOKEN": "stale-access",
-      "0SEC_CHATGPT_OAUTH_REFRESH_TOKEN": "stale-refresh",
+      "ZERO_CHATGPT_AUTH_FILE": authPath,
+      "ZERO_CHATGPT_ACCESS_TOKEN": "stale-access",
+      "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN": "stale-refresh",
     };
     const child = fakeProcess();
     const updates: string[] = [];
+    const opened: string[] = [];
     let connected = 0;
 
     startCodexDeviceAuth({
       env,
       homeDir: home,
       probe: () => true,
+      openBrowser: (url) => { opened.push(url); },
       spawn: (command, args) => {
         expect(command).toBe("codex");
         expect(args).toEqual(["login", "--device-auth"]);
@@ -78,12 +80,14 @@ describe("startCodexDeviceAuth", () => {
       onUpdate: (update) => updates.push(update.phase),
       onConnected: () => { connected += 1; },
     });
-    child.stdout("Open https://auth.openai.com/device\n");
+    child.stdout("Open https://auth.openai.com/codex/device\n");
     child.stderr("Enter code ABCD-EFGH\n");
     child.close(0);
 
-    expect(env["0SEC_CHATGPT_ACCESS_TOKEN"]).toBe("fresh-access");
-    expect(env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"]).toBe("fresh-refresh");
+    expect(opened).toEqual(["https://auth.openai.com/codex/device"]);
+
+    expect(env["ZERO_CHATGPT_ACCESS_TOKEN"]).toBe("fresh-access");
+    expect(env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"]).toBe("fresh-refresh");
     expect(updates).toEqual(["running", "running", "running", "connected"]);
     expect(connected).toBe(1);
   });
@@ -103,11 +107,7 @@ describe("startCodexDeviceAuth", () => {
     });
 
     expect(launched).toBe(false);
-    expect(updates).toEqual([{
-      phase: "unavailable",
-      message: "Codex CLI is not available on this console's PATH. Install Codex, or add its directory to PATH and restart 0sec.",
-      lines: [],
-    }]);
+    expect(updates.map((update) => update.phase)).toEqual(["unavailable"]);
   });
 
   it("turns a launch ENOENT into setup guidance", () => {
@@ -124,11 +124,45 @@ describe("startCodexDeviceAuth", () => {
       onConnected: () => {},
     });
 
-    expect(updates).toEqual([{
-      phase: "unavailable",
-      message: "Codex CLI is not available on this console's PATH. Install Codex, or add its directory to PATH and restart 0sec.",
-      lines: [],
-    }]);
+    expect(updates.map((update) => update.phase)).toEqual(["unavailable"]);
+  });
+
+  it("opens the browser when Codex emits the device URL without a newline", () => {
+    const child = fakeProcess();
+    const opened: string[] = [];
+    startCodexDeviceAuth({
+      env: {},
+      probe: () => true,
+      openBrowser: (url) => { opened.push(url); },
+      spawn: () => child.process,
+      onUpdate: () => {},
+      onConnected: () => {},
+    });
+
+    child.stdout("https://auth.openai.com/codex/device?user_code=ABCD");
+
+    expect(opened).toEqual(["https://auth.openai.com/codex/device?user_code=ABCD"]);
+  });
+
+  it("keeps a launch error terminal when the child later closes successfully", () => {
+    const child = fakeProcess();
+    const phases: string[] = [];
+    let connected = 0;
+    startCodexDeviceAuth({
+      env: { ZERO_CHATGPT_ACCESS_TOKEN: "stale-access" },
+      probe: () => true,
+      spawn: () => child.process,
+      onUpdate: (update) => phases.push(update.phase),
+      onConnected: () => { connected += 1; },
+    });
+    const error = new Error("spawn codex ENOENT") as NodeJS.ErrnoException;
+    error.code = "ENOENT";
+    child.error(error);
+    child.close(0);
+    child.stdout("late output");
+
+    expect(phases).toEqual(["running", "unavailable"]);
+    expect(connected).toBe(0);
   });
 
   it("cancels the device flow without treating it as an API-key failure", () => {

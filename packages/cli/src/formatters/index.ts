@@ -7,7 +7,7 @@ import {
   type PresentationReportDocument,
   type ReviewReport,
   type ScanReport,
-} from "@0sec/shared";
+} from "@0/shared";
 import { formatTerminal } from "./terminal.js";
 import { formatJson } from "./json.js";
 import { formatMarkdown } from "./markdown.js";

@@ -34,7 +34,7 @@ copyByExt("src/stages", ".cjs", "dist/stages");
 
 // JIT methodology skills: the loader (src/agent/skills/index.ts) walks its own
 // module directory for *.yaml and validates each as a skill. Mirror the yaml
-// tree into dist/agent/skills so a consumer importing the built @0sec/core (not
+// tree into dist/agent/skills so a consumer importing the built @0/core (not
 // the CLI bundle, which copies these separately in scripts/bundle-cli.mjs) also
 // resolves every pack. Copy ONLY *.yaml — a stray non-skill yaml would fail
 // validation. Recurses through frameworks/, techniques/, vulnerabilities/.

@@ -1,10 +1,10 @@
 /**
- * 0sec#193 — Deterministic replay runner.
+ * 0#193 — Deterministic replay runner.
  *
  * It consumes a finding's `pocSteps`, executes each through a selected local,
- * Docker, or QEMU runner, evaluates declared assertions, and emits a
+ * SmolVM, Docker, or QEMU runner, evaluates declared assertions, and emits a
  * `VerificationResult` matching the canonical schema in
- * `@0sec/shared/verification`.
+ * `@0/shared/verification`.
  *
  * Design notes:
  *
@@ -42,12 +42,13 @@ import {
   statSync,
   readFileSync,
   rmSync,
+  lstatSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve, isAbsolute, posix, win32 } from "node:path";
+import { join, resolve, isAbsolute, posix, win32, sep } from "node:path";
 import { arch as nodeArch, platform as nodePlatform } from "node:process";
 import { gzipSync } from "node:zlib";
-import type { Finding, PocStep, PocStepExpect } from "@0sec/shared";
+import type { Finding, PocStep, PocStepExpect } from "@0/shared";
 import {
   VERSION,
   type EvidenceArtifact,
@@ -55,9 +56,13 @@ import {
   type VerificationAssertion,
   type VerificationCommand,
   type VerificationResult,
-} from "@0sec/shared";
-import type { ScopePolicy } from "../scope/scope.js";
+} from "@0/shared";
+import { ScopePolicy } from "../scope/scope.js";
 import { allowlistedChildEnv } from "../agent/sanitized-env.js";
+import { isPrivateAddress } from "../http.js";
+import { isAdmittedSmolvmWorkbench, runWorkbenchBrokerProgram } from "../runtime/smolvm-broker.js";
+import { acquireHostToken, markHostRateLimited, mergePersonaHeaders, resolveUrl, evaluateExpect, aggregateVerdict } from "../disclose/poc-runtime.js";
+import type { PocExecutionTarget, PocExecutionReport, PocStepResult } from "../disclose/poc-runtime.js";
 
 // ── Tunables ────────────────────────────────────────────────────────────────
 
@@ -116,6 +121,8 @@ export interface StepResult {
   launchError?: string;
   /** HTTP status emitted by an HTTP-aware sandbox runner. */
   httpStatus?: number;
+  /** Cancellation is separate from timeout and a process's nonzero exit. */
+  cancelled?: boolean;
 }
 
 export interface ReplayRunnerContext {
@@ -124,10 +131,11 @@ export interface ReplayRunnerContext {
   /** Per-step timeout the caller configured. */
   stepTimeoutMs: number;
   /**
-   * Engagement scope. A Docker runner refuses networked replay without this
-   * policy and checks every declarative HTTP target before container launch.
+   * Engagement scope. Network-capable runners check every declarative HTTP
+   * target before asking their sandbox to launch.
    */
   scope?: ScopePolicy;
+  signal?: AbortSignal;
 }
 
 /**
@@ -160,6 +168,9 @@ export class LocalShellRunner implements ReplayRunner {
 
   async exec(step: PocStep, ctx: ReplayRunnerContext): Promise<StepResult> {
     const start = Date.now();
+    if (isAdmittedSmolvmWorkbench()) {
+      return failedStep(step, start, "Local replay is refused inside a SmolVM workbench; use the host-supervised smolvm runner");
+    }
 
     // Shell steps are the only kind the local runner actually executes in
     // this slice. Everything else is recorded so the result is complete
@@ -197,7 +208,7 @@ export class LocalShellRunner implements ReplayRunner {
           // child must not inherit the harness's provider/cloud credentials.
           // Build from the allowlist (PATH/HOME/TMPDIR + target-auth vars a
           // reproduction legitimately needs) rather than copying process.env.
-          env: allowlistedChildEnv({ "0SEC_VERIFY": "1" }),
+          env: allowlistedChildEnv({ "ZERO_VERIFY": "1" }),
           stdio: ["ignore", "pipe", "pipe"],
           // On POSIX, isolate the shell and all descendants into a process
           // group so a timeout cannot leave a grandchild holding stdout open.
@@ -294,6 +305,232 @@ function resolveStepCwd(cwd: string, runDir: string): string {
   return resolved;
 }
 
+// ── SmolvmRunner ────────────────────────────────────────────────────────────
+//
+// The admitted workbench never launches another VM or an untrusted host
+// process. The private broker copies only this replay's bounded workspace,
+// executes a sibling VM, and validates returned files before materializing
+// them back into runDir. Arbitrary commands remain offline; only a checked
+// declarative curl request receives the HTTP profile.
+
+export interface SmolvmRunnerOptions {
+  /** Exact operator-approved catalog reference. Omit for the approved workbench image. */
+  shellImageReference?: string;
+  httpImageReference?: string;
+  memoryMb?: number;
+  cpus?: number;
+  /** Explicit target-auth environment, never inherited from the workbench. */
+  environment?: Readonly<Record<string, string>>;
+}
+
+export class SmolvmRunner implements ReplayRunner {
+  readonly kind: RunnerKind = "smolvm";
+  private readonly memoryMb: number;
+  private readonly cpus: number;
+
+  constructor(private readonly options: SmolvmRunnerOptions = {}) {
+    this.memoryMb = options.memoryMb ?? 512;
+    this.cpus = options.cpus ?? 1;
+    if (!Number.isSafeInteger(this.memoryMb) || this.memoryMb < 32 || this.memoryMb > 16384 ||
+        !Number.isSafeInteger(this.cpus) || this.cpus < 1 || this.cpus > 16 ||
+        [options.shellImageReference, options.httpImageReference].some((reference) =>
+          reference !== undefined && (!reference || /[\0\r\n]/.test(reference)))) {
+      throw new Error("invalid SmolvmRunner configuration");
+    }
+  }
+
+  async exec(step: PocStep, ctx: ReplayRunnerContext): Promise<StepResult> {
+    const startedAt = Date.now();
+    if (!isAdmittedSmolvmWorkbench()) {
+      return failedStep(step, startedAt, "SmolVM replay requires a validated workbench admission and host-supervised broker");
+    }
+    if (ctx.signal?.aborted) {
+      return { ...failedStep(step, startedAt, "SmolVM replay cancelled before launch"), cancelled: true };
+    }
+    if (step.expect?.type === "file-exists") {
+      const path = resolve(ctx.runDir, step.expect.path);
+      const root = resolve(ctx.runDir);
+      if (!path.startsWith(root + sep)) return failedStep(step, startedAt, "SmolVM file assertions must remain inside the replay workspace");
+    }
+    if (!Number.isSafeInteger(ctx.stepTimeoutMs) || ctx.stepTimeoutMs < 100 || ctx.stepTimeoutMs > 600000) {
+      return failedStep(step, startedAt, "SmolVM replay timeout must be between 100 and 600000 milliseconds");
+    }
+    if (Object.entries(this.options.environment ?? {}).some(([name, value]) =>
+      !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || value.includes("\0"))) {
+      return failedStep(step, startedAt, "invalid explicit replay environment");
+    }
+    let command: string[];
+    let profile: "offline" | "http" = "offline";
+    let imageReference: string | undefined;
+    let stdin: string | undefined;
+    let httpTarget: string | undefined;
+    switch (step.action.type) {
+      case "shell": {
+        const cwd = step.action.cwd ?? ".";
+        const workdir = posix.resolve("/workspace", cwd);
+        if (isAbsolute(cwd) || win32.isAbsolute(cwd) || /[\\\0]/.test(cwd) ||
+            (workdir !== "/workspace" && !workdir.startsWith("/workspace/"))) {
+          return failedStep(step, startedAt, "SmolVM shell cwd must be relative and remain inside the replay workspace");
+        }
+        command = ["/bin/sh", "-c", 'cd "$1" || exit 125; exec /bin/sh -c "$2"', "0-replay", workdir, step.action.cmd];
+        imageReference = this.options.shellImageReference;
+        break;
+      }
+      case "docker":
+        if (!step.action.image.trim() || step.action.image.trimStart().startsWith("-")) {
+          return failedStep(step, startedAt, "SmolVM container action requires an exact approved image reference");
+        }
+        if (!step.action.args.length || !step.action.args[0]) {
+          return failedStep(step, startedAt, "SmolVM container action requires explicit command argv; an implicit image entrypoint is not supported");
+        }
+        command = [...step.action.args];
+        imageReference = step.action.image;
+        break;
+      case "http": {
+        let url: URL;
+        try { url = new URL(step.action.url); }
+        catch { return failedStep(step, startedAt, "invalid HTTP replay URL"); }
+        if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) {
+          return failedStep(step, startedAt, "SmolVM HTTP replay requires an HTTP(S) URL without embedded credentials");
+        }
+        if (!ctx.scope) return failedStep(step, startedAt, "SmolVM HTTP replay requires an explicit engagement scope");
+        const match = ctx.scope.match(step.action.url);
+        if (!match.allowed) return failedStep(step, startedAt, `SmolVM replay refused ${step.action.url}: ${match.reason}`);
+        const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
+        if (hostname === "localhost" || hostname.endsWith(".localhost") || isPrivateAddress(hostname)) {
+          return failedStep(step, startedAt, "SmolVM HTTP replay refuses private and loopback destinations even when listed in scope");
+        }
+        const method = step.action.method.trim().toUpperCase();
+        if (!/^[A-Z]{1,32}$/.test(method)) return failedStep(step, startedAt, "invalid HTTP replay method");
+        const headers = Object.entries(step.action.headers ?? {});
+        if (headers.length > 64 || headers.some(([name, value]) =>
+          !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name) || /[\0\r\n]/.test(value)) ||
+          headers.reduce((bytes, [name, value]) => bytes + Buffer.byteLength(name) + Buffer.byteLength(value) + 2, 0) > 65536) {
+          return failedStep(step, startedAt, "HTTP replay requires at most 64 single-line headers totaling at most 64 KiB");
+        }
+        if (step.action.body !== undefined && Buffer.byteLength(step.action.body) > MAX_STREAM_CAPTURE_BYTES) {
+          return failedStep(step, startedAt, "HTTP replay body exceeds 1 MiB");
+        }
+        command = ["curl", "--disable", "--globoff", "--silent", "--show-error", "--request", method,
+          "--max-time", String(ctx.stepTimeoutMs / 1000),
+          "--proto", "=http,https", "--proto-redir", "=http,https", "--max-redirs", "0",
+          "--noproxy", "*", "--output", "-", "--write-out", `%{stderr}${HTTP_STATUS_MARKER}%{http_code}\n`];
+        for (const [name, value] of headers) command.push("--header", `${name}: ${value}`);
+        if (step.action.body !== undefined) {
+          command.push("--data-binary", "@-");
+          stdin = step.action.body;
+        }
+        command.push("--", step.action.url);
+        profile = "http";
+        imageReference = this.options.httpImageReference;
+        httpTarget = step.action.url;
+        break;
+      }
+      case "note":
+        return failedStep(step, startedAt, "SmolvmRunner only executes shell, docker, and http steps");
+      default: {
+        const exhaustive: never = step.action;
+        void exhaustive;
+        return failedStep(step, startedAt, "unsupported SmolVM replay action");
+      }
+    }
+    try {
+      if (profile === "offline" && Object.keys(this.options.environment ?? {}).length) {
+        command = ["/usr/bin/env", ...Object.entries(this.options.environment!).map(([name, value]) => `${name}=${value}`), ...command];
+      }
+      const execution = await runWorkbenchBrokerProgram({
+        profile, command, workspaceRoot: resolve(ctx.runDir), stdin,
+        timeoutMs: ctx.stepTimeoutMs, memoryMb: this.memoryMb, cpus: this.cpus,
+        maxOutputBytes: MAX_STREAM_CAPTURE_BYTES, imageReference, httpTarget,
+      }, ctx.signal);
+      const stdout = Buffer.from(execution.stdout).subarray(0, MAX_STREAM_CAPTURE_BYTES).toString("utf8");
+      const stderr = Buffer.from(execution.stderr).subarray(0, MAX_STREAM_CAPTURE_BYTES).toString("utf8");
+      const parsed: { stdout: string; httpStatus?: number } = profile === "http" ? parseHttpStatus(stderr) : { stdout: stderr };
+      const cancelled = ctx.signal?.aborted === true;
+      const launchError = execution.error ?? (execution.cleanupFailed ? "SmolVM sibling teardown could not be confirmed" :
+        execution.timedOut ? "SmolVM replay timed out" : cancelled ? "SmolVM replay cancelled" :
+        profile === "http" && execution.exitCode !== 0 ? `SmolVM HTTP transport failed (exit ${execution.exitCode})` :
+        profile === "http" && (parsed.httpStatus === undefined || parsed.httpStatus < 100 || parsed.httpStatus > 599)
+          ? "SmolVM HTTP replay did not emit a valid status record" : undefined);
+      return {
+        argv: command, exitCode: execution.exitCode, stdoutFull: stdout,
+        stderrFull: parsed.stdout,
+        durationMs: execution.durationMs, timedOut: execution.timedOut,
+        ...(parsed.httpStatus === undefined ? {} : { httpStatus: parsed.httpStatus }),
+        ...(cancelled ? { cancelled: true } : {}),
+        ...(launchError ? { launchError } : {}),
+      };
+    } catch (error) {
+      return { ...failedStep(step, startedAt, error instanceof Error ? error.message : String(error)),
+        ...(ctx.signal?.aborted ? { cancelled: true } : {}) };
+    }
+  }
+}
+
+/** Preserve legacy target URL/persona/rate semantics without host execution. */
+export function createSmolvmPocTargetRunner(target: PocExecutionTarget): ReplayRunner {
+  const targetScope = ScopePolicy.fromJson({ in_scope: target.scopeAllowlist ?? [] });
+  const delegate = new SmolvmRunner({ environment: target.env });
+  const rps = target.rpsPerHost ?? 2;
+  if (!Number.isFinite(rps) || rps <= 0) throw new Error("HTTP replay rpsPerHost must be positive");
+  return {
+    kind: delegate.kind,
+    async exec(step, context) {
+      if (!target.scopeAllowlist?.length && !context.scope) return failedStep(step, Date.now(), "legacy target replay requires an explicit scopeAllowlist or scope file");
+      const scope = context.scope ?? targetScope;
+      let effective = step;
+      if (step.action.type === "http") {
+        const url = resolveUrl(step.action.url, target.baseUrl);
+        if (!url) return failedStep(step, Date.now(), "relative HTTP replay URL requires target.baseUrl");
+        const match = scope.match(url);
+        if (!match.allowed) return failedStep(step, Date.now(), `SmolVM replay refused ${url}: ${match.reason}`);
+        if (target.scopeAllowlist?.length && !targetScope.match(url).allowed) return failedStep(step, Date.now(), "SmolVM replay URL is outside target.scopeAllowlist");
+        effective = { ...step, action: { ...step.action, url, headers: mergePersonaHeaders(step.action.headers ?? {}, target) } };
+        await acquireHostToken(new URL(url).host, rps);
+      }
+      const result = await delegate.exec(effective, { ...context, scope });
+      if (effective.action.type === "http" && result.httpStatus === 429) markHostRateLimited(new URL(effective.action.url).host, null);
+      return result;
+    },
+  };
+}
+
+/** Legacy behavioural replay, with the same predicates/verdict aggregation. */
+export async function runSmolvmPocSteps(
+  finding: Finding,
+  target: PocExecutionTarget,
+  signal?: AbortSignal,
+): Promise<PocExecutionReport> {
+  const startedAt = new Date().toISOString();
+  const runDir = resolve(target.cwd ?? mkdtempSync(join(tmpdir(), "0-smol-poc-")));
+  mkdirSync(runDir, { recursive: true });
+  const runner = createSmolvmPocTargetRunner(target);
+  const graph = finding.pocSteps ?? [];
+  const steps: PocStepResult[] = [];
+  let stopped = false;
+  for (const step of graph) {
+    if (stopped || step.action.type === "note") {
+      steps.push({ stepId: step.id, kind: "skipped", durationMs: 0, ...(stopped ? { error: "skipped: an earlier step errored" } : {}) });
+      continue;
+    }
+    const observed = await runner.exec(step, { runDir, stepTimeoutMs: target.timeoutMs ?? DEFAULT_STEP_TIMEOUT_MS, signal });
+    const verdict = observed.launchError || observed.timedOut || observed.cancelled
+      ? { kind: "errored" as const, error: observed.launchError ?? (observed.timedOut ? "replay timed out" : "replay cancelled") }
+      : evaluateExpect(step.expect, { exitCode: observed.exitCode, stdout: observed.stdoutFull,
+          ...(observed.httpStatus === undefined ? {} : { status: observed.httpStatus, body: observed.stdoutFull }) });
+    steps.push({
+      stepId: step.id, kind: verdict.kind, durationMs: observed.durationMs,
+      observedStdout: observed.stdoutFull, observedStderr: observed.stderrFull,
+      ...(observed.exitCode === null ? {} : { observedExit: observed.exitCode }),
+      ...(observed.httpStatus === undefined ? {} : { observedStatus: observed.httpStatus, observedResponseBody: observed.stdoutFull }),
+      ...(verdict.error ? { error: verdict.error } : {}),
+    });
+    if (verdict.kind === "errored" && step.kind !== "verify") stopped = true;
+    if (signal?.aborted) stopped = true;
+  }
+  return { findingId: finding.id, startedAt, endedAt: new Date().toISOString(), steps, overallVerdict: aggregateVerdict(graph, steps) };
+}
+
 // ── DockerRunner ────────────────────────────────────────────────────────────
 //
 // Each executable step gets a fresh, unprivileged, read-only container. The
@@ -307,7 +544,7 @@ function resolveStepCwd(cwd: string, runDir: string): string {
 export const DEFAULT_DOCKER_SHELL_IMAGE = "alpine:3.20";
 export const DEFAULT_DOCKER_HTTP_IMAGE = "curlimages/curl:8.12.1";
 
-const DOCKER_HTTP_STATUS_MARKER = "\n__0SEC_HTTP_STATUS__:";
+const HTTP_STATUS_MARKER = "\n__ZERO_HTTP_STATUS__:";
 const CONTAINER_ID_RE = /^[a-f0-9]{12,64}$/i;
 const DOCKER_NETWORK_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
 
@@ -387,6 +624,9 @@ export class DockerRunner implements ReplayRunner {
 
   async exec(step: PocStep, ctx: ReplayRunnerContext): Promise<StepResult> {
     const startedAt = Date.now();
+    if (isAdmittedSmolvmWorkbench()) {
+      return failedStep(step, startedAt, "Docker replay is refused inside a SmolVM workbench; use exact operator-approved images with the smolvm runner");
+    }
     const preflightError = this.networkPreflight(step, ctx.scope);
     if (preflightError) {
       return failedStep(step, startedAt, preflightError);
@@ -401,7 +641,7 @@ export class DockerRunner implements ReplayRunner {
       step.id.replace(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 64) || "step";
     const cidPath = join(
       ctx.runDir,
-      `.0sec-docker-${safeStepId}-${randomUUID()}.cid`,
+      `.0-docker-${safeStepId}-${randomUUID()}.cid`,
     );
     const args = this.dockerRunArgs(command, ctx.runDir, cidPath);
     const result = await runDockerCommand({
@@ -413,7 +653,7 @@ export class DockerRunner implements ReplayRunner {
     });
 
     if (!command.parseHttpStatus) return result;
-    const parsed = parseDockerHttpStatus(result.stdoutFull);
+    const parsed = parseHttpStatus(result.stdoutFull);
     return {
       ...result,
       stdoutFull: parsed.stdout,
@@ -499,7 +739,7 @@ export class DockerRunner implements ReplayRunner {
           "--output",
           "-",
           "--write-out",
-          `${DOCKER_HTTP_STATUS_MARKER}%{http_code}\n`,
+          `${HTTP_STATUS_MARKER}%{http_code}\n`,
         ];
         for (const [name, value] of headers) {
           command.push("--header", `${name}: ${value}`);
@@ -579,14 +819,14 @@ function failedStep(step: PocStep, startedAt: number, launchError: string): Step
   };
 }
 
-function parseDockerHttpStatus(stdout: string): {
+function parseHttpStatus(stdout: string): {
   stdout: string;
   httpStatus?: number;
 } {
-  const markerIndex = stdout.lastIndexOf(DOCKER_HTTP_STATUS_MARKER);
+  const markerIndex = stdout.lastIndexOf(HTTP_STATUS_MARKER);
   if (markerIndex === -1) return { stdout };
   const status = /^(\d{3})\r?\n?$/.exec(
-    stdout.slice(markerIndex + DOCKER_HTTP_STATUS_MARKER.length),
+    stdout.slice(markerIndex + HTTP_STATUS_MARKER.length),
   );
   if (!status) return { stdout };
   return {
@@ -642,7 +882,7 @@ async function runDockerCommand(args: {
   try {
     child = spawn(args.dockerBinary, args.args, {
       cwd: args.runDir,
-      env: allowlistedChildEnv({ "0SEC_VERIFY": "1" }),
+      env: allowlistedChildEnv({ "ZERO_VERIFY": "1" }),
       stdio: ["ignore", "pipe", "pipe"],
       detached: nodePlatform !== "win32",
     });
@@ -718,7 +958,7 @@ function runDockerControl(
   try {
     child = spawn(dockerBinary, args, {
       cwd,
-      env: allowlistedChildEnv({ "0SEC_VERIFY": "1" }),
+      env: allowlistedChildEnv({ "ZERO_VERIFY": "1" }),
       stdio: "ignore",
       detached: nodePlatform !== "win32",
     });
@@ -798,12 +1038,12 @@ export class QemuRunner implements ReplayRunner {
   constructor(options: QemuRunnerOptions = {}) {
     this.qemuBinary =
       options.qemuBinary ??
-      process.env["0SEC_REPLAY_QEMU_BINARY"]?.trim() ??
+      process.env["ZERO_REPLAY_QEMU_BINARY"]?.trim() ??
       (nodeArch === "arm64" ? "qemu-system-aarch64" : "qemu-system-x86_64");
     this.kernelImage =
-      options.kernelImage ?? process.env["0SEC_REPLAY_QEMU_KERNEL"]?.trim() ?? "";
+      options.kernelImage ?? process.env["ZERO_REPLAY_QEMU_KERNEL"]?.trim() ?? "";
     this.busyboxPath =
-      options.busyboxPath ?? process.env["0SEC_REPLAY_QEMU_BUSYBOX"]?.trim() ?? "";
+      options.busyboxPath ?? process.env["ZERO_REPLAY_QEMU_BUSYBOX"]?.trim() ?? "";
     this.memoryMb = options.memoryMb ?? 512;
     this.cpus = options.cpus ?? 1;
 
@@ -820,11 +1060,14 @@ export class QemuRunner implements ReplayRunner {
 
   async exec(step: PocStep, ctx: ReplayRunnerContext): Promise<StepResult> {
     const startedAt = Date.now();
+    if (isAdmittedSmolvmWorkbench()) {
+      return failedStep(step, startedAt, "QEMU kernel replay has no qualified host-supervised Mac backend; nested KVM and guest-side QEMU are not admitted");
+    }
     if (!this.kernelImage || !this.busyboxPath) {
       return failedStep(
         step,
         startedAt,
-        "QEMU replay requires kernelImage and busyboxPath (or 0SEC_REPLAY_QEMU_KERNEL and 0SEC_REPLAY_QEMU_BUSYBOX)",
+        "QEMU replay requires kernelImage and busyboxPath (or ZERO_REPLAY_QEMU_KERNEL and ZERO_REPLAY_QEMU_BUSYBOX)",
       );
     }
     if (!existsSync(this.kernelImage) || !statSync(this.kernelImage).isFile()) {
@@ -847,7 +1090,7 @@ export class QemuRunner implements ReplayRunner {
     }
     const safeStepId =
       step.id.replace(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 64) || "step";
-    const workspaceName = `.0sec-qemu-${safeStepId}-${randomUUID()}`;
+    const workspaceName = `.0-qemu-${safeStepId}-${randomUUID()}`;
     const workspace = join(ctx.runDir, workspaceName);
     mkdirSync(workspace, { recursive: true });
     writeFileSync(join(workspace, "step.sh"), step.action.cmd, "utf8");
@@ -911,7 +1154,7 @@ export class QemuRunner implements ReplayRunner {
       "-append",
       "console=ttyS0 rdinit=/init panic=-1",
       "-virtfs",
-      `local,path=${resolve(runDir)},mount_tag=0sec-replay,security_model=none,id=osecshare`,
+      `local,path=${resolve(runDir)},mount_tag=0-replay,security_model=none,id=osecshare`,
       "-net",
       "none",
       "-sandbox",
@@ -921,10 +1164,10 @@ export class QemuRunner implements ReplayRunner {
 }
 
 function qemuGuestWorkingDirectory(cwd: string | undefined): string | undefined {
-  if (!cwd) return "/mnt/0sec";
+  if (!cwd) return "/mnt/0";
   if (isAbsolute(cwd)) return undefined;
   const relative = resolve("/", cwd).slice(1);
-  return relative ? `/mnt/0sec/${relative}` : "/mnt/0sec";
+  return relative ? `/mnt/0/${relative}` : "/mnt/0";
 }
 
 function buildQemuInitramfs(args: {
@@ -939,7 +1182,7 @@ function buildQemuInitramfs(args: {
     { name: "bin", mode: 0o040755, body: empty },
     { name: "dev", mode: 0o040755, body: empty },
     { name: "mnt", mode: 0o040755, body: empty },
-    { name: "mnt/0sec", mode: 0o040755, body: empty },
+    { name: "mnt/0", mode: 0o040755, body: empty },
     { name: "proc", mode: 0o040755, body: empty },
     { name: "sys", mode: 0o040755, body: empty },
     { name: "tmp", mode: 0o040755, body: empty },
@@ -951,7 +1194,7 @@ function buildQemuInitramfs(args: {
     appendNewcEntry(chunks, entries[index], index + 1);
   }
   appendNewcEntry(chunks, { name: "TRAILER!!!", mode: 0, body: empty }, 0);
-  const initrdPath = join(args.runDir, `.0sec-qemu-initrd-${randomUUID()}.cpio.gz`);
+  const initrdPath = join(args.runDir, `.0-qemu-initrd-${randomUUID()}.cpio.gz`);
   writeFileSync(initrdPath, gzipSync(Buffer.concat(chunks)));
   return initrdPath;
 }
@@ -986,19 +1229,19 @@ function appendNewcEntry(chunks: Buffer[], entry: CpioEntry, inode: number): voi
 }
 
 function renderQemuInit(workspaceName: string, guestCwd: string): string {
-  const workspace = `/mnt/0sec/${workspaceName}`;
+  const workspace = `/mnt/0/${workspaceName}`;
   const step = `${workspace}/step.sh`;
   const stdout = `${workspace}/stdout.log`;
   const stderr = `${workspace}/stderr.log`;
   const exitCode = `${workspace}/exit-code`;
   return [
     "#!/bin/busybox sh",
-    "/bin/busybox mkdir -p /proc /sys /dev /tmp /mnt/0sec",
+    "/bin/busybox mkdir -p /proc /sys /dev /tmp /mnt/0",
     "/bin/busybox mount -t proc proc /proc",
     "/bin/busybox mount -t sysfs sysfs /sys",
     "/bin/busybox mount -t devtmpfs devtmpfs /dev 2>/dev/null || true",
-    "if ! /bin/busybox mount -t 9p -o trans=virtio,version=9p2000.L 0sec-replay /mnt/0sec; then",
-    '  echo "__0SEC_QEMU_MOUNT_FAILED__"',
+    "if ! /bin/busybox mount -t 9p -o trans=virtio,version=9p2000.L 0-replay /mnt/0; then",
+    '  echo "__ZERO_QEMU_MOUNT_FAILED__"',
     "  /bin/busybox poweroff -f",
     "fi",
     `(
@@ -1070,7 +1313,7 @@ function runQemuCommand(args: {
   try {
     child = spawn(args.qemuBinary, args.args, {
       cwd: args.runDir,
-      env: allowlistedChildEnv({ "0SEC_VERIFY": "1" }),
+      env: allowlistedChildEnv({ "ZERO_VERIFY": "1" }),
       stdio: ["ignore", "pipe", "pipe"],
       detached: nodePlatform !== "win32",
     });
@@ -1314,9 +1557,6 @@ export function excerpt(text: string, max = STREAM_EXCERPT_BYTES): string {
   return buf.subarray(0, max).toString("utf8") + "…[truncated]";
 }
 
-function sha256Hex(input: string): string {
-  return createHash("sha256").update(input).digest("hex");
-}
 
 /**
  * Persist a stream capture as a sidecar artifact under `<runDir>/artifacts/`
@@ -1328,12 +1568,12 @@ export function persistArtifact(args: {
   runDir: string;
   kind: string;
   filenameHint: string;
-  body: string;
+  body: string | Buffer;
 }): EvidenceArtifact | null {
-  if (!args.body) return null;
+  if (typeof args.body === "string" && args.body.length === 0) return null;
   const artifactsDir = join(args.runDir, "artifacts");
   mkdirSync(artifactsDir, { recursive: true });
-  const sha = sha256Hex(args.body);
+  const sha = createHash("sha256").update(args.body).digest("hex");
   // Embed the sha in the filename so collisions across step ids don't
   // overwrite each other and so a content-addressed lookup is trivial.
   const safeHint = args.filenameHint.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -1351,7 +1591,7 @@ export function persistArtifact(args: {
 // ── Orchestrator ────────────────────────────────────────────────────────────
 
 export interface RunDeterministicReplayOpts {
-  /** Pluggable runner. Defaults to {@link LocalShellRunner}. */
+  /** Defaults to SmolVM in an admitted workbench, local outside it. */
   runner?: ReplayRunner;
   /** Where to put the run dir. Defaults to a fresh tmpdir. */
   runDir?: string;
@@ -1361,6 +1601,7 @@ export interface RunDeterministicReplayOpts {
   assertions?: AssertionInput[];
   /** Scope enforced by network-capable sandbox runners. */
   scope?: ScopePolicy;
+  signal?: AbortSignal;
   /** Engine version stamp; defaults to the shared `VERSION` constant. */
   engineVersion?: string;
 }
@@ -1381,11 +1622,10 @@ export async function runDeterministicReplay(
   finding: Finding,
   opts: RunDeterministicReplayOpts = {},
 ): Promise<DeterministicReplayOutcome> {
-  const runner = opts.runner ?? new LocalShellRunner();
+  const runner = opts.runner ?? (isAdmittedSmolvmWorkbench() ? new SmolvmRunner() : new LocalShellRunner());
   const stepTimeoutMs = opts.stepTimeoutMs ?? DEFAULT_STEP_TIMEOUT_MS;
   const engineVersion = opts.engineVersion ?? VERSION;
-  const runDir =
-    opts.runDir ?? mkdtempSync(join(tmpdir(), "0sec-replay-"));
+  const runDir = resolve(opts.runDir ?? mkdtempSync(join(tmpdir(), "0-replay-")));
   mkdirSync(runDir, { recursive: true });
 
   const startedAt = new Date();
@@ -1394,6 +1634,9 @@ export async function runDeterministicReplay(
   const commands: VerificationCommand[] = [];
   const assertions: VerificationAssertion[] = [];
   const evidenceArtifacts: EvidenceArtifact[] = [];
+  // Hold canonical capture bytes outside the writable replay workspace until
+  // every step has finished, so a later PoC cannot rewrite earlier evidence.
+  const captures: Array<{ kind: string; filenameHint: string; body: string | Buffer }> = [];
 
   const steps = finding.pocSteps ?? [];
 
@@ -1431,7 +1674,11 @@ export async function runDeterministicReplay(
   for (const step of steps) {
     let stepResult: StepResult;
     try {
-      stepResult = await runner.exec(step, { runDir, stepTimeoutMs, scope: opts.scope });
+      if (runner.kind === "smolvm" && (opts.assertions ?? []).some((assertion) =>
+        assertion.kind === "file_exists" && !resolve(runDir, assertion.target).startsWith(runDir + sep))) {
+        throw new Error("SmolVM file assertions must remain inside the replay workspace");
+      }
+      stepResult = await runner.exec(step, { runDir, stepTimeoutMs, scope: opts.scope, signal: opts.signal });
     } catch (err) {
       // Runner-level failures are recorded as a synthetic command so the
       // canonical result remains attributable to the finding and runner.
@@ -1451,6 +1698,8 @@ export async function runDeterministicReplay(
     if (stepResult.launchError) {
       runnerLaunchError = stepResult.launchError;
     }
+    if (stepResult.timedOut) runnerLaunchError ??= "replay step timed out";
+    if (stepResult.cancelled) runnerLaunchError ??= "replay step cancelled";
     lastHttpStatus = stepResult.httpStatus ?? null;
 
     commands.push({
@@ -1459,28 +1708,30 @@ export async function runDeterministicReplay(
       stdout_excerpt: excerpt(stepResult.stdoutFull),
       stderr_excerpt: excerpt(stepResult.stderrFull),
       duration_ms: stepResult.durationMs,
+      ...(stepResult.timedOut ? { timed_out: true } : {}),
+      ...(stepResult.cancelled ? { cancelled: true } : {}),
     });
 
-    // Persist full captures as evidence artifacts (sidecar files) so the
-    // 8 KiB excerpt above isn't the end of the story.
-    const stdoutArt = persistArtifact({
-      runDir,
-      kind: "stdout",
-      filenameHint: `step-${step.id}.stdout`,
-      body: stepResult.stdoutFull,
-    });
-    if (stdoutArt) evidenceArtifacts.push(stdoutArt);
-    const stderrArt = persistArtifact({
-      runDir,
-      kind: "stderr",
-      filenameHint: `step-${step.id}.stderr`,
-      body: stepResult.stderrFull,
-    });
-    if (stderrArt) evidenceArtifacts.push(stderrArt);
+    captures.push(
+      { kind: "stdout", filenameHint: `step-${step.id}.stdout`, body: stepResult.stdoutFull },
+      { kind: "stderr", filenameHint: `step-${step.id}.stderr`, body: stepResult.stderrFull },
+    );
 
     // Per-step assertion derived from the step's declared `expect`.
     if (step.expect) {
-      assertions.push(assertionFromStepExpect(step, step.expect, stepResult));
+      const expect = step.expect.type === "file-exists" && !isAbsolute(step.expect.path)
+        ? { ...step.expect, path: join(runDir, step.expect.path) } : step.expect;
+      const outsideWorkspace = runner.kind === "smolvm" && expect.type === "file-exists" &&
+        !resolve(expect.path).startsWith(runDir + sep);
+      assertions.push(outsideWorkspace
+        ? { kind: "file_exists", target: expect.path, expected: true, actual: false, passed: false }
+        : assertionFromStepExpect(step, expect, stepResult));
+      if (!outsideWorkspace && runner.kind === "smolvm" && expect.type === "file-exists") {
+        const stat = lstatSync(expect.path, { throwIfNoEntry: false });
+        if (stat?.isFile() && stat.size <= 4 * 1024 * 1024) {
+          captures.push({ kind: "file", filenameHint: `step-${step.id}.file`, body: readFileSync(expect.path) });
+        }
+      }
     }
 
     if (runnerLaunchError) break;
@@ -1488,6 +1739,11 @@ export async function runDeterministicReplay(
 
   // Freestanding assertions evaluated after all steps ran.
   for (const a of opts.assertions ?? []) {
+    if (runner.kind === "smolvm" && a.kind === "file_exists" &&
+        !resolve(runDir, a.target).startsWith(runDir + sep)) {
+      assertions.push({ ...a, actual: false, passed: false });
+      continue;
+    }
     assertions.push(
       evaluateAssertion(a, {
         lastExitCode: lastExit,
@@ -1496,6 +1752,21 @@ export async function runDeterministicReplay(
         lastHttpStatus,
       }),
     );
+  }
+  if (runner.kind === "smolvm") {
+    for (const assertion of opts.assertions ?? []) {
+      if (assertion.kind !== "file_exists") continue;
+      const path = resolve(runDir, assertion.target);
+      if (!path.startsWith(runDir + sep)) continue;
+      const stat = lstatSync(path, { throwIfNoEntry: false });
+      if (stat?.isFile() && stat.size <= 4 * 1024 * 1024) {
+        captures.push({ kind: "file", filenameHint: "assertion.file", body: readFileSync(path) });
+      }
+    }
+  }
+  for (const capture of captures) {
+    const artifact = persistArtifact({ runDir, ...capture });
+    if (artifact) evidenceArtifacts.push(artifact);
   }
 
   const completedAt = new Date();

@@ -1,6 +1,6 @@
 import { readFileSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import type { Finding, JevAnswer, JevEvaluator, JevUsage } from "@0sec/shared";
+import type { Finding, JevAnswer, JevEvaluator, JevUsage } from "@0/shared";
 
 const BATCH_SIZE = 16;
 const SOURCE_RADIUS = 28;

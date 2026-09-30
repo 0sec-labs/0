@@ -1,4 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+vi.mock("../plugins/enablement.js", async (importOriginal) => ({
+  ...await importOriginal<object>(),
+  readEnablement: () => ({ schema: 1, project: process.cwd(), enabled: { scope: { version: "1.0.0", capabilities: [], enabledAt: 1 } } }),
+}));
 import { ToolExecutor, getToolsForRole } from "./tools.js";
 import type { ToolContext, ToolResultMeta } from "./types.js";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -22,7 +26,7 @@ describe("str_replace (executor-level integration)", () => {
   let scopedExecutor: ToolExecutor;
 
   beforeEach(() => {
-    tmp = mkdtempSync(join(tmpdir(), "0sec-str-replace-"));
+    tmp = mkdtempSync(join(tmpdir(), "0-str-replace-"));
     scopedExecutor = new ToolExecutor({ ...baseCtx, scopePath: tmp }, null);
   });
 
@@ -154,7 +158,7 @@ describe("str_replace (executor-level integration)", () => {
   });
 
   it("refuses a path that escapes the scope", async () => {
-    const outside = mkdtempSync(join(tmpdir(), "0sec-str-replace-out-"));
+    const outside = mkdtempSync(join(tmpdir(), "0-str-replace-out-"));
     const secret = join(outside, "secret.txt");
     writeFileSync(secret, "top secret\n");
     try {
@@ -179,7 +183,7 @@ describe("str_replace (executor-level integration)", () => {
   });
 
   it("does not follow a symlink pointing outside the scope", async () => {
-    const outside = mkdtempSync(join(tmpdir(), "0sec-str-replace-symout-"));
+    const outside = mkdtempSync(join(tmpdir(), "0-str-replace-symout-"));
     const secret = join(outside, "creds.txt");
     writeFileSync(secret, "aws_key\n");
     try {

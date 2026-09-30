@@ -10,20 +10,20 @@ import { cn } from "@/lib/utils";
 import { extractFileLine, parseHuntEvent, type osecHuntEvent } from "@/lib/hunt-stream";
 
 /**
- * GemmaForge × 0sec live workflow view.
+ * GemmaForge × 0 live workflow view.
  *
  * Wires three parallel event streams into three lanes:
  *   1. Probe  — probe.token + probe.alarm  (raw model-internal probe firings)
  *   2. Lead   — scan.lead                  (regions that crossed the threshold)
- *   3. Hunt   — 0sec.events/v1            (agent tool calls, findings, stages)
+ *   3. Hunt   — 0.events/v1            (agent tool calls, findings, stages)
  *
  * Event-source resolution (URL query params):
  *   ?events=<URL>       → SSE endpoint emitting ND-JSON `gemmaforge.events/v1`
  *                          (Probe + Lead lanes).
- *   ?huntEvents=<URL>   → SSE endpoint emitting ND-JSON `0sec.events/v1`
+ *   ?huntEvents=<URL>   → SSE endpoint emitting ND-JSON `0.events/v1`
  *                          (Hunt lane). Produced by `scripts/serve-events.mjs
- *                          --0sec-log <stdout.log>` tailing a 0sec scan run
- *                          with `0SEC_CLOUD_EVENTS=1`.
+ *                          --0-log <stdout.log>` tailing a 0 scan run
+ *                          with `ZERO_CLOUD_EVENTS=1`.
  *   ?demo=1             → in-memory demo replay, no backend required. Drives
  *                          all three lanes off the same synthetic timeline.
  *
@@ -172,13 +172,13 @@ function demoEvents(): GemmaForgeEvent[] {
 /** Synthetic Hunt-lane events for the demo replay path. */
 function demoHuntEvents(t0: number): osecHuntEvent[] {
   return [
-    { schema: "0sec.events/v1", kind: "stage", ts: t0 + 1.2, stage: "audit", transition: "started", role: "attack" },
-    { schema: "0sec.events/v1", kind: "tool_use", ts: t0 + 1.3, tool: "read_file", turn: 1, args_preview: "src/router.js:38", file: "src/router.js", line: 38, status: "ok", duration_ms: 14 },
-    { schema: "0sec.events/v1", kind: "tool_use", ts: t0 + 1.5, tool: "shell", turn: 1, args_preview: "grep -n 'db.query' src/router.js", status: "ok", duration_ms: 47 },
-    { schema: "0sec.events/v1", kind: "finding", ts: t0 + 1.9, finding_id: "f-001", title: "SQL injection via req.params.id", severity: "high", category: "injection", confidence: 0.92, file: "src/router.js", line: 42 },
-    { schema: "0sec.events/v1", kind: "tool_use", ts: t0 + 2.0, tool: "read_file", turn: 2, args_preview: "src/exec.js:12", file: "src/exec.js", line: 12, status: "ok", duration_ms: 9 },
-    { schema: "0sec.events/v1", kind: "finding", ts: t0 + 2.3, finding_id: "f-002", title: "Command injection in ping handler", severity: "critical", category: "rce", confidence: 0.88, file: "src/exec.js", line: 17 },
-    { schema: "0sec.events/v1", kind: "stage", ts: t0 + 2.5, stage: "audit", transition: "completed", role: "attack", duration_ms: 1300 },
+    { schema: "0.events/v1", kind: "stage", ts: t0 + 1.2, stage: "audit", transition: "started", role: "attack" },
+    { schema: "0.events/v1", kind: "tool_use", ts: t0 + 1.3, tool: "read_file", turn: 1, args_preview: "src/router.js:38", file: "src/router.js", line: 38, status: "ok", duration_ms: 14 },
+    { schema: "0.events/v1", kind: "tool_use", ts: t0 + 1.5, tool: "shell", turn: 1, args_preview: "grep -n 'db.query' src/router.js", status: "ok", duration_ms: 47 },
+    { schema: "0.events/v1", kind: "finding", ts: t0 + 1.9, finding_id: "f-001", title: "SQL injection via req.params.id", severity: "high", category: "injection", confidence: 0.92, file: "src/router.js", line: 42 },
+    { schema: "0.events/v1", kind: "tool_use", ts: t0 + 2.0, tool: "read_file", turn: 2, args_preview: "src/exec.js:12", file: "src/exec.js", line: 12, status: "ok", duration_ms: 9 },
+    { schema: "0.events/v1", kind: "finding", ts: t0 + 2.3, finding_id: "f-002", title: "Command injection in ping handler", severity: "critical", category: "rce", confidence: 0.88, file: "src/exec.js", line: 17 },
+    { schema: "0.events/v1", kind: "stage", ts: t0 + 2.5, stage: "audit", transition: "completed", role: "attack", duration_ms: 1300 },
   ];
 }
 
@@ -398,7 +398,7 @@ export function LivePage() {
     };
   }, [demoMode, eventsUrl, ingest]);
 
-  // 0sec SSE subscription (Hunt lane).
+  // 0 SSE subscription (Hunt lane).
   useEffect(() => {
     if (demoMode || !huntUrl) return;
     setHuntCards([]);
@@ -490,9 +490,9 @@ export function LivePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="GemmaForge × 0sec"
+        eyebrow="GemmaForge × 0"
         title="Live workflow"
-        summary="Watch the probe → seed leads → agent hunt pipeline in real time. Probe firings stream from gemmaforge.events/v1, leads accumulate to the worklist, and 0sec's hunters surface tool calls and findings as they happen."
+        summary="Watch the probe → seed leads → agent hunt pipeline in real time. Probe firings stream from gemmaforge.events/v1, leads accumulate to the worklist, and 0's hunters surface tool calls and findings as they happen."
         actions={(
           <>
             <ConnectionPill state={combinedConnection} />
@@ -514,8 +514,8 @@ export function LivePage() {
             <CardTitle className="mt-2">SSE endpoints</CardTitle>
             <CardDescription>
               The probe + lead lanes consume <code className="font-mono text-xs">gemmaforge.events/v1</code>;
-              the hunt lane consumes <code className="font-mono text-xs">0sec.events/v1</code>. Run
-              {" "}<code className="font-mono text-xs">node scripts/serve-events.mjs &lt;gemma.ndjson&gt; --0sec-log &lt;0sec.log&gt;</code>{" "}
+              the hunt lane consumes <code className="font-mono text-xs">0.events/v1</code>. Run
+              {" "}<code className="font-mono text-xs">node scripts/serve-events.mjs &lt;gemma.ndjson&gt; --0-log &lt;0.log&gt;</code>{" "}
               to expose both at <code className="font-mono text-xs">/events</code> and <code className="font-mono text-xs">/hunt-events</code>.
             </CardDescription>
           </div>
@@ -535,7 +535,7 @@ export function LivePage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground/70 w-24">
-              0sec
+              0
             </span>
             <Input
               value={huntUrlDraft}
@@ -843,7 +843,7 @@ function HuntLane({
             Agent activity
           </CardTitle>
           <CardDescription>
-            Live 0sec scan events — tool calls, findings, and stage transitions. Click a card that cites a file:line to highlight the originating lead in lane 2.
+            Live 0 scan events — tool calls, findings, and stage transitions. Click a card that cites a file:line to highlight the originating lead in lane 2.
           </CardDescription>
         </div>
       </CardHeader>
@@ -863,7 +863,7 @@ function HuntLane({
         ) : null}
 
         {cards.length === 0 ? (
-          <CardEmpty>Waiting for 0sec hunt events…</CardEmpty>
+          <CardEmpty>Waiting for 0 hunt events…</CardEmpty>
         ) : (
           <div className="max-h-[36rem] space-y-2 overflow-y-auto pr-1">
             {cards.map((card) => (

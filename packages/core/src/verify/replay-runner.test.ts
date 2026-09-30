@@ -1,5 +1,5 @@
 /**
- * 0sec#193 — Deterministic replay runner tests.
+ * 0#193 — Deterministic replay runner tests.
  *
  * Covers:
  *   • LocalShellRunner: timeout enforcement, exit-code capture, excerpt
@@ -17,9 +17,10 @@
 
 import { describe, expect, it } from "vitest";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { VerificationResultSchema, type Finding, type PocStep } from "@0sec/shared";
+import { VerificationResultSchema, type Finding, type PocStep } from "@0/shared";
 import { ScopePolicy } from "../scope/scope.js";
 import {
   LocalShellRunner,
@@ -58,7 +59,7 @@ function writeFakeExecutable(runDir: string, name: string, body: string): string
 describe("LocalShellRunner", () => {
   it("captures stdout and exit code for a successful command", async () => {
     const runner = new LocalShellRunner();
-    const runDir = mkdtempSync(join(tmpdir(), "0sec-runner-test-"));
+    const runDir = mkdtempSync(join(tmpdir(), "0-runner-test-"));
     const step: PocStep = {
       id: "s1",
       kind: "exploit",
@@ -72,20 +73,20 @@ describe("LocalShellRunner", () => {
     expect(r.timedOut).toBeFalsy();
   });
 
-  it("does not leak harness credentials into the PoC shell, but keeps PATH + 0SEC_VERIFY", async () => {
+  it("does not leak harness credentials into the PoC shell, but keeps PATH + ZERO_VERIFY", async () => {
     const prevAnthropic = process.env.ANTHROPIC_API_KEY;
     const prevGithub = process.env.GITHUB_TOKEN;
     process.env.ANTHROPIC_API_KEY = "sk-ant-should-not-leak";
     process.env.GITHUB_TOKEN = "ghp_should_not_leak";
     try {
       const runner = new LocalShellRunner();
-      const runDir = mkdtempSync(join(tmpdir(), "0sec-runner-env-"));
+      const runDir = mkdtempSync(join(tmpdir(), "0-runner-env-"));
       const step: PocStep = {
         id: "s-env",
         kind: "exploit",
         summary: "print sensitive + required env vars",
         action: {
-          // `env` lists the child's full environment. `0SEC_VERIFY` cannot be
+          // `env` lists the child's full environment. `ZERO_VERIFY` cannot be
           // referenced via `$`-expansion (identifiers may not start with a
           // digit), so we inspect the raw listing instead.
           type: "shell",
@@ -99,7 +100,7 @@ describe("LocalShellRunner", () => {
       expect(r.stdoutFull).not.toContain("GITHUB_TOKEN");
       expect(r.stdoutFull).not.toContain("sk-ant-should-not-leak");
       expect(r.stdoutFull).not.toContain("ghp_should_not_leak");
-      // What the child legitimately needs is still present. (Note: 0SEC_VERIFY
+      // What the child legitimately needs is still present. (Note: ZERO_VERIFY
       // is passed to the spawn but /bin/sh strips digit-prefixed names on
       // startup, so it is deliberately not asserted via `env` here.)
       expect(r.stdoutFull).toMatch(/^PATH=/m);
@@ -113,7 +114,7 @@ describe("LocalShellRunner", () => {
 
   it("captures non-zero exit codes faithfully", async () => {
     const runner = new LocalShellRunner();
-    const runDir = mkdtempSync(join(tmpdir(), "0sec-runner-test-"));
+    const runDir = mkdtempSync(join(tmpdir(), "0-runner-test-"));
     const step: PocStep = {
       id: "s1",
       kind: "exploit",
@@ -126,7 +127,7 @@ describe("LocalShellRunner", () => {
 
   it("enforces the per-step wallclock timeout", async () => {
     const runner = new LocalShellRunner();
-    const runDir = mkdtempSync(join(tmpdir(), "0sec-runner-test-"));
+    const runDir = mkdtempSync(join(tmpdir(), "0-runner-test-"));
     const step: PocStep = {
       id: "s1",
       kind: "exploit",
@@ -145,7 +146,7 @@ describe("LocalShellRunner", () => {
 
   it("isolates working directory to the supplied runDir", async () => {
     const runner = new LocalShellRunner();
-    const runDir = mkdtempSync(join(tmpdir(), "0sec-runner-test-"));
+    const runDir = mkdtempSync(join(tmpdir(), "0-runner-test-"));
     const step: PocStep = {
       id: "s1",
       kind: "exploit",
@@ -162,7 +163,7 @@ describe("LocalShellRunner", () => {
 
   it("ignores absolute step.action.cwd and falls back to runDir", async () => {
     const runner = new LocalShellRunner();
-    const runDir = mkdtempSync(join(tmpdir(), "0sec-runner-test-"));
+    const runDir = mkdtempSync(join(tmpdir(), "0-runner-test-"));
     const step: PocStep = {
       id: "s1",
       kind: "exploit",
@@ -176,7 +177,7 @@ describe("LocalShellRunner", () => {
 
   it("records non-shell step kinds with a launchError marker", async () => {
     const runner = new LocalShellRunner();
-    const runDir = mkdtempSync(join(tmpdir(), "0sec-runner-test-"));
+    const runDir = mkdtempSync(join(tmpdir(), "0-runner-test-"));
     const step: PocStep = {
       id: "s1",
       kind: "exploit",
@@ -281,7 +282,7 @@ describe("assertion evaluation — pass + fail per kind", () => {
   });
 
   it("file_exists pass + fail", () => {
-    const runDir = mkdtempSync(join(tmpdir(), "0sec-runner-assert-"));
+    const runDir = mkdtempSync(join(tmpdir(), "0-runner-assert-"));
     const target = join(runDir, "loot.txt");
     writeFileSync(target, "stolen");
     const passResult = {
@@ -332,7 +333,7 @@ describe("assertion evaluation — pass + fail per kind", () => {
   });
 
   it("evaluateAssertion handles file_exists relative to runDir", () => {
-    const runDir = mkdtempSync(join(tmpdir(), "0sec-runner-assert-"));
+    const runDir = mkdtempSync(join(tmpdir(), "0-runner-assert-"));
     writeFileSync(join(runDir, "marker"), "x");
     const pass = evaluateAssertion(
       { kind: "file_exists", target: "marker", expected: true },
@@ -344,7 +345,7 @@ describe("assertion evaluation — pass + fail per kind", () => {
 
 describe("sandbox replay runners", () => {
   it("rejects an option-shaped Docker image before invoking the container engine", async () => {
-    const runDir = mkdtempSync(join(tmpdir(), "0sec-docker-image-boundary-"));
+    const runDir = mkdtempSync(join(tmpdir(), "0-docker-image-boundary-"));
     try {
       const docker = writeFakeExecutable(runDir, "fake-docker", "touch docker-invoked");
       const result = await new DockerRunner({ dockerBinary: docker }).exec(
@@ -364,7 +365,7 @@ describe("sandbox replay runners", () => {
   });
 
   it("builds a credential-free, hardened, offline Docker invocation", async () => {
-    const runDir = mkdtempSync(join(tmpdir(), "0sec-docker-runner-"));
+    const runDir = mkdtempSync(join(tmpdir(), "0-docker-runner-"));
     const docker = writeFakeExecutable(
       runDir,
       "fake-docker",
@@ -429,7 +430,7 @@ fi
   });
 
   it("replays scoped HTTP actions in a networked Docker sandbox", async () => {
-    const runDir = mkdtempSync(join(tmpdir(), "0sec-docker-http-"));
+    const runDir = mkdtempSync(join(tmpdir(), "0-docker-http-"));
     const docker = writeFakeExecutable(
       runDir,
       "fake-docker",
@@ -444,7 +445,7 @@ if [ "$1" = "run" ]; then
     fi
     shift
   done
-  printf 'response-body\n__0SEC_HTTP_STATUS__:201\n'
+  printf 'response-body\n__ZERO_HTTP_STATUS__:201\n'
 fi
 `,
     );
@@ -474,7 +475,7 @@ fi
   });
 
   it("refuses networked Docker replay without an engagement scope", async () => {
-    const runDir = mkdtempSync(join(tmpdir(), "0sec-docker-scope-"));
+    const runDir = mkdtempSync(join(tmpdir(), "0-docker-scope-"));
     const docker = writeFakeExecutable(runDir, "fake-docker", "touch should-not-run");
     const result = await new DockerRunner({ dockerBinary: docker, network: "bridge" }).exec(
       {
@@ -490,7 +491,7 @@ fi
   });
 
   it("kills a timed-out Docker container through its cidfile", async () => {
-    const runDir = mkdtempSync(join(tmpdir(), "0sec-docker-timeout-"));
+    const runDir = mkdtempSync(join(tmpdir(), "0-docker-timeout-"));
     const docker = writeFakeExecutable(
       runDir,
       "fake-docker",
@@ -525,7 +526,7 @@ fi
   });
 
   it("runs shell PoCs in a configured, offline QEMU guest", async () => {
-    const runDir = mkdtempSync(join(tmpdir(), "0sec-qemu-runner-"));
+    const runDir = mkdtempSync(join(tmpdir(), "0-qemu-runner-"));
     const kernelImage = join(runDir, "vmlinuz");
     const busybox = join(runDir, "busybox");
     writeFileSync(kernelImage, "synthetic kernel");
@@ -546,7 +547,7 @@ done
 share=$(printf '%s' "$share" | sed 's/^local,path=//; s/,.*$//')
 printf '%s\n' "$@" > "$share/qemu.args"
 workspace=
-for candidate in "$share"/.0sec-qemu-*; do
+for candidate in "$share"/.0-qemu-*; do
   if [ -d "$candidate" ]; then
     workspace="$candidate"
     break
@@ -582,13 +583,32 @@ printf '%s\n' "serial boot evidence"
   it("reports missing QEMU guest prerequisites as a structured launch error", async () => {
     const result = await new QemuRunner().exec(
       { id: "guest", kind: "exploit", summary: "", action: { type: "shell", cmd: "id" } },
-      { runDir: mkdtempSync(join(tmpdir(), "0sec-qemu-unconfigured-")), stepTimeoutMs: 1_000 },
+      { runDir: mkdtempSync(join(tmpdir(), "0-qemu-unconfigured-")), stepTimeoutMs: 1_000 },
     );
     expect(result.launchError).toMatch(/requires kernelImage and busyboxPath/);
   });
 });
 
 describe("runDeterministicReplay — end-to-end", () => {
+  it("keeps earlier captured evidence immutable when a later PoC overwrites workspace files", async () => {
+    const runDir = mkdtempSync(join(tmpdir(), "0-replay-evidence-"));
+    try {
+      const finding = makeFinding([
+        { id: "capture", kind: "exploit", summary: "emit proof", action: { type: "shell", cmd: "printf immutable-proof" }, expect: { type: "body-contains", text: "immutable-proof" } },
+        { id: "tamper", kind: "verify", summary: "try to forge evidence", action: { type: "shell", cmd: 'for file in artifacts/*; do [ ! -f "$file" ] || printf forged > "$file"; done; printf marker > marker' }, expect: { type: "file-exists", path: "marker" } },
+      ]);
+      const { result } = await runDeterministicReplay(finding, { runDir });
+      expect(result.status).toBe("reproduced");
+      const artifact = result.evidence_artifacts.find((item) => item.kind === "stdout")!;
+      const body = readFileSync(join(runDir, artifact.path));
+      expect(body.toString("utf8")).toBe("immutable-proof");
+      expect(createHash("sha256").update(body).digest("hex")).toBe(artifact.sha256);
+      expect(body.length).toBe(artifact.bytes);
+    } finally {
+      rmSync(runDir, { recursive: true, force: true });
+    }
+  });
+
   it("produces status='reproduced' for a single-step echo PoC with a passing assertion", async () => {
     const finding = makeFinding([
       {

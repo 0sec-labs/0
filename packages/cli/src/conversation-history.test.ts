@@ -7,7 +7,7 @@ import { saveSession } from "./tui/session-store.js";
 
 const homes: string[] = [];
 function fixture() {
-  const home = mkdtempSync(join(tmpdir(), "0sec-conversation-history-"));
+  const home = mkdtempSync(join(tmpdir(), "0-conversation-history-"));
   homes.push(home);
   const save = (id: string, cwd: string, messages: unknown[], preview = "") => {
     if (!saveSession({ id, cwd, savedAt: 1, preview, messageCount: messages.length, messages }, home)) throw new Error("Cannot save fixture");

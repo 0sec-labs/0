@@ -9,7 +9,7 @@
  *
  * This module ports the kernel-relevant slice of 0verse's 90-archetype,
  * CVE-grounded bug-pattern registry (`bench:/root/0verse/src/zeroverse/
- * seedcatalog.py` + `data/archetypes.json`) into 0sec as a standing LIBRARY
+ * seedcatalog.py` + `data/archetypes.json`) into 0 as a standing LIBRARY
  * of kernel bug-class archetypes (`data/kernel-archetypes.json`, 34 entries).
  * Instead of one hand-picked seed, a hunt can now draw a `HuntBrief` from ANY
  * archetype in the library — or sweep several at once — so one invocation
@@ -23,12 +23,12 @@
  *     mapping, exactly like `seedcatalog.load_archetypes()`.
  *   - `planArchetypeSweep` actually touches the filesystem (greps the source
  *     tree) and is gated by `archetypeSweepEnabled()` /
- *     `0SEC_ARCHETYPE_SWEEP=1` (default OFF), mirroring 0verse's
+ *     `ZERO_ARCHETYPE_SWEEP=1` (default OFF), mirroring 0verse's
  *     `ZEROVERSE_FLYWHEEL` opt-in discipline for anything that runs.
  *
  * IMPORTANT DIFFERENCE FROM 0VERSE: 0verse's `route` field
  * (`kernel-static` / `kernel-verify` / `not-binary-detectable`) classifies
- * detectability on a STRIPPED BINARY with no source. 0sec's kernel hunt runs
+ * detectability on a STRIPPED BINARY with no source. 0's kernel hunt runs
  * against the actual kernel SOURCE TREE (a git checkout), so the grep-ability
  * of an archetype here is NOT gated by its 0verse `route` — a `kernel-verify`
  * archetype (e.g. a UAF/race) can still have a perfectly grep-able source
@@ -58,7 +58,7 @@ import type { HuntBrief, HuntCandidate } from "./hunt-scan.js";
  * classification; see file header), extended with `"source-static"` for the
  * Chromium pack: unlike the kernel/FreeBSD packs (which distinguish a
  * grep-able static shape from one that needs a build+boot+KASAN prover),
- * 0sec has NO Chromium build/execution lane at all today — every Chromium
+ * 0 has NO Chromium build/execution lane at all today — every Chromium
  * archetype is source-static-only by construction, so this single value
  * covers the whole pack rather than splitting it into static/verify like the
  * kernel packs do.
@@ -409,7 +409,7 @@ export function generateArchetypeCandidates(
 
 /** Opt-in gate. Default OFF — mirrors 0verse's `ZEROVERSE_FLYWHEEL=1` discipline. */
 export function archetypeSweepEnabled(): boolean {
-  return !["", "0", "false", "no"].includes((process.env["0SEC_ARCHETYPE_SWEEP"] ?? "").toLowerCase());
+  return !["", "0", "false", "no"].includes((process.env["ZERO_ARCHETYPE_SWEEP"] ?? "").toLowerCase());
 }
 
 export interface ArchetypeSweepPlan {
@@ -456,7 +456,7 @@ export function planArchetypeSweep(opts: ArchetypeSweepOptions): ArchetypeSweepR
   if (!opts.force && !archetypeSweepEnabled()) {
     return {
       plans: [],
-      warnings: ["archetype sweep disabled (set 0SEC_ARCHETYPE_SWEEP=1 to enable, or pass force:true)"],
+      warnings: ["archetype sweep disabled (set ZERO_ARCHETYPE_SWEEP=1 to enable, or pass force:true)"],
     };
   }
   const warnings: string[] = [];

@@ -1,5 +1,5 @@
 /**
- * 0sec#193 / 0sec-cloud#111 — Finding.verificationSpec wire contract.
+ * 0#193 / 0-cloud#111 — Finding.verificationSpec wire contract.
  *
  * Coverage:
  *   1. Type narrowing on the VerificationCodePredicate discriminated union.
@@ -21,9 +21,8 @@ import type {
   Finding,
   VerificationCodePredicate,
   VerificationSpec,
-} from "@0sec/shared";
+} from "@0/shared";
 import { parseVerificationSpecArg } from "./agent/tools.js";
-import { normalizeFinding } from "./cloud-sink.js";
 
 function makeSpec(): VerificationSpec {
   return {
@@ -48,7 +47,7 @@ function makeSpec(): VerificationSpec {
   };
 }
 
-describe("VerificationCodePredicate types (0sec#193)", () => {
+describe("VerificationCodePredicate types (0#193)", () => {
   it("narrows kind to the right predicate fields", () => {
     const fc: VerificationCodePredicate = {
       kind: "file-contains",
@@ -81,7 +80,7 @@ describe("VerificationCodePredicate types (0sec#193)", () => {
   });
 });
 
-describe("Finding.verificationSpec backward compatibility (0sec#193)", () => {
+describe("Finding.verificationSpec backward compatibility (0#193)", () => {
   it("a Finding without verificationSpec is still a valid Finding", () => {
     // Legacy shape: prose evidence only, no spec. Every renderer / sink /
     // DB writer must keep working when verificationSpec is undefined.
@@ -141,7 +140,7 @@ describe("Finding.verificationSpec backward compatibility (0sec#193)", () => {
   });
 });
 
-describe("parseVerificationSpecArg (agent tool wire shape, 0sec#193)", () => {
+describe("parseVerificationSpecArg (agent tool wire shape, 0#193)", () => {
   it("returns null for nullish / empty / wrong-type input", () => {
     expect(parseVerificationSpecArg(null)).toBeNull();
     expect(parseVerificationSpecArg(undefined)).toBeNull();
@@ -257,49 +256,3 @@ describe("parseVerificationSpecArg (agent tool wire shape, 0sec#193)", () => {
   });
 });
 
-describe("cloud-sink normalizeFinding pass-through of verificationSpec (0sec#193)", () => {
-  it("passes a structured verificationSpec through unchanged", () => {
-    const spec = makeSpec();
-    const out = normalizeFinding({
-      id: "f-1",
-      title: "SQLi",
-      severity: "critical",
-      evidence: { request: "x", response: "y" },
-      verificationSpec: spec,
-    });
-    expect(out.verificationSpec).toEqual(spec);
-  });
-
-  it("parses a JSON-encoded verification_spec string (LLM tool-call shape)", () => {
-    const spec = makeSpec();
-    const out = normalizeFinding({
-      title: "SQLi",
-      severity: "high",
-      evidence_request: "x",
-      evidence_response: "y",
-      verification_spec: JSON.stringify(spec),
-    });
-    expect(out.verificationSpec).toBeDefined();
-    expect(out.verificationSpec).toEqual(spec);
-  });
-
-  it("drops a malformed verificationSpec without dropping the finding", () => {
-    const out = normalizeFinding({
-      title: "still useful",
-      severity: "high",
-      evidence: { request: "x", response: "y" },
-      verificationSpec: "not json [",
-    });
-    expect(out.verificationSpec).toBeUndefined();
-    expect(out.title).toBe("still useful");
-  });
-
-  it("omits verificationSpec when the input has none (legacy findings)", () => {
-    const out = normalizeFinding({
-      title: "legacy",
-      severity: "low",
-      evidence: { request: "x", response: "y" },
-    });
-    expect(out.verificationSpec).toBeUndefined();
-  });
-});

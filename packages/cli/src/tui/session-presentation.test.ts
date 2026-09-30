@@ -24,7 +24,7 @@ describe("createSessionTranscriptDocument", () => {
     const document = createSessionTranscriptDocument(state);
 
     expect(document).toMatchObject({
-      protocol: "0sec.presentation/v1",
+      protocol: "0.presentation/v1",
       documentType: "transcript",
       entries: [
         { id: "thinking", kind: "reasoning", text: "checking flow", turn: 2 },

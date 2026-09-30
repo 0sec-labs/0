@@ -42,6 +42,7 @@
  * out-of-scope host is refused with a `ToolResult.error` and never contacted.
  */
 import type { ScopePolicy } from "../../scope/scope.js";
+import type { ScopeEnforcementState } from "../../scope/activation.js";
 import type { ToolDefinition, ToolResult } from "../types.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -131,7 +132,7 @@ export const proxyToolDefinitions: Record<string, ToolDefinition> = {
 };
 
 /**
- * Tool-name → ToolExecutor handler-method name (0sec#614). Assembled by
+ * Tool-name → ToolExecutor handler-method name (0#614). Assembled by
  * ./dispatch.ts; resolved off the executor instance in agent/tools.ts. The
  * handler is a thin delegate that calls {@link executeProxy} (mirrors
  * `startScan → executeStartScan`), holding the cross-turn {@link ProxyHost}.
@@ -420,6 +421,7 @@ export const createProxyDriver: ProxyDriverFactory = async (opts) => {
 export interface ProxyToolContext {
   target: string;
   scope?: ScopePolicy;
+  scopeEnforcement?: ScopeEnforcementState;
   publicNetwork?: { readonly scope?: ScopePolicy };
 }
 
@@ -460,7 +462,7 @@ function effectiveScope(ctx: ProxyToolContext): ScopePolicy | undefined {
 function gateUrl(ctx: ProxyToolContext, url: string): { ok: true } | { ok: false; reason: string } {
   const scope = effectiveScope(ctx);
   if (!scope) return { ok: true };
-  const verdict = scope.match(url);
+  const verdict = scope.enforce(url, ctx.scopeEnforcement);
   if (!verdict.allowed) return { ok: false, reason: verdict.reason };
   return { ok: true };
 }
@@ -470,7 +472,7 @@ function hostAllowed(ctx: ProxyToolContext, host: string): boolean {
   const scope = effectiveScope(ctx);
   if (!scope) return true;
   // Probe with a canonical https URL so the scope host-matcher sees the host.
-  return scope.match(`https://${host}/`).allowed;
+  return scope.enforce(`https://${host}/`, ctx.scopeEnforcement).allowed;
 }
 
 function ensureStore(host: ProxyHost): ProxyHistoryStore {

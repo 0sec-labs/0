@@ -2,14 +2,14 @@
 //
 // Resolution order (first match wins):
 //   1. Environment: H1_API_IDENTIFIER + H1_API_TOKEN
-//   2. ~/.0sec/h1.env  (line-by-line `KEY=VALUE`, no `dotenv` dep)
+//   2. ~/.0/h1.env  (line-by-line `KEY=VALUE`, no `dotenv` dep)
 //
 // The identifier is the friendly name the operator typed at token
 // creation (NOT their H1 handle, NOT the token value). H1 enforces
 // `^[A-Za-z0-9][A-Za-z0-9_-]*$`. We re-validate locally to fail fast
 // before sending a request that will 401 server-side anyway.
 //
-// `~/.0sec/h1.env` MUST be chmod 600. We warn (stderr) when it isn't,
+// `~/.0/h1.env` MUST be chmod 600. We warn (stderr) when it isn't,
 // but we don't refuse to load — the user might be debugging on a system
 // where mode bits are not enforceable (Docker volume, network share).
 //
@@ -19,7 +19,7 @@
 // likewise never echo the token back.
 
 import { readFileSync, statSync } from "node:fs";
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -62,7 +62,7 @@ export function loadH1Credentials(opts: LoadH1CredentialsOptions = {}): H1Creden
     return { identifier: envId, token: envTok, source: "env" };
   }
 
-  // 2. ~/.0sec/h1.env fallback.
+  // 2. ~/.0/h1.env fallback.
   const path = join(homeStateDir(opts.homeDir), "h1.env");
   let raw: string;
   try {
@@ -84,7 +84,7 @@ export function loadH1Credentials(opts: LoadH1CredentialsOptions = {}): H1Creden
     const mode = st.mode & 0o777;
     if (mode !== 0o600) {
       warn(
-        `[0sec h1] WARNING: ${path} mode is ${mode.toString(8).padStart(3, "0")} (expected 600). ` +
+        `[0 h1] WARNING: ${path} mode is ${mode.toString(8).padStart(3, "0")} (expected 600). ` +
           `Run: chmod 600 ${path}`,
       );
     }

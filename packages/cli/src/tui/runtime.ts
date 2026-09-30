@@ -4,7 +4,7 @@
  * callers can check Bun-availability without eagerly loading a chunk
  * that only resolves cleanly under Bun.
  */
-import { VERSION } from "@0sec/shared";
+import { VERSION } from "@0/shared";
 
 export type CliReleaseChannel = "dev" | "beta";
 
@@ -21,7 +21,7 @@ export function getRuntimeMetadata(): RuntimeMetadata {
   const bun = isBunRuntime();
   return {
     cliVersion: VERSION,
-    releaseChannel: process.env["0SEC_DEV_SOURCE_ROOT"]?.trim() ? "dev" : "beta",
+    releaseChannel: process.env["ZERO_DEV_SOURCE_ROOT"]?.trim() ? "dev" : "beta",
     engine: bun ? "Bun" : "Node.js",
     engineVersion: bun ? (process.versions.bun ?? "unknown") : process.version,
     platform: process.platform,

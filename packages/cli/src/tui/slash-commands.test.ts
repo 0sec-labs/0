@@ -28,11 +28,15 @@ describe("SLASH_COMMANDS", () => {
     expect(exit!.aliases).toContain("quit");
   });
 
-  it("registers transcript review as a TUI-only session command", () => {
-    const transcript = getCommandByName("transcript");
-    expect(transcript?.category).toBe("session");
-    expect(transcript?.tuiOnly).toBe(true);
-    expect(getCommandByName("review")?.name).toBe("transcript");
+  it("treats removed slash commands as unknown", () => {
+    for (const input of ["/stop", "/transcript", "/review", "/finding", "/finding-detail", "/replay"]) {
+      expect(getCommandByName(input.slice(1))).toBeUndefined();
+      const result = findCommand(input);
+      expect(result.isSlash).toBe(true);
+      expect(result.isKnown).toBe(false);
+      expect(result.isUnknown).toBe(true);
+      expect(result.command).toBeUndefined();
+    }
   });
 
   it("marks navigation commands as tuiOnly", () => {
@@ -94,6 +98,20 @@ describe("findCommand", () => {
     expect(findCommand("/clear").command).toBe("clear");
   });
 
+  it("uses the session picker command", () => {
+    expect(findCommand("/sessions").command).toBe("sessions");
+    expect(findCommand("/resume").isUnknown).toBe(true);
+    expect(findCommand("/audits").isUnknown).toBe(true);
+  });
+  it("rejects retired harness and provider navigation commands", () => {
+    for (const name of ["harness", "providers"]) {
+      expect(getCommandByName(name)).toBeUndefined();
+      expect(findCommand(`/${name}`).isUnknown).toBe(true);
+    }
+    expect(findCommand("/connect").command).toBe("connect");
+    expect(findCommand("/models").command).toBe("model");
+  });
+
   it("recognises /capabilities by alias caps", () => {
     const result = findCommand("/caps");
     expect(result.isSlash).toBe(true);
@@ -129,11 +147,10 @@ describe("findCommand", () => {
     expect(result.command).toBe("ops");
   });
 
-  it("recognises /herd by alias workers", () => {
-    const result = findCommand("/workers");
-    expect(result.isSlash).toBe(true);
-    expect(result.isKnown).toBe(true);
-    expect(result.command).toBe("herd");
+  it("does not expose separate agent roster windows as slash commands", () => {
+    expect(findCommand("/agents").isUnknown).toBe(true);
+    expect(findCommand("/herd").isUnknown).toBe(true);
+    expect(findCommand("/workers").isUnknown).toBe(true);
   });
 
   // ── whitespace handling ───────────────────────────────────────────────
@@ -144,19 +161,9 @@ describe("findCommand", () => {
     expect(result.command).toBe("help");
   });
 
-  it("extracts arguments after command name", () => {
-    const result = findCommand("/mode copilot");
-    expect(result.isSlash).toBe(true);
-    expect(result.isKnown).toBe(true);
-    expect(result.command).toBe("mode");
-    expect(result.rawName).toBe("mode");
-    expect(result.args).toBe("copilot");
-  });
-
-  it("handles multiple space-separated arguments", () => {
-    const result = findCommand("/mode yolo  --force");
-    expect(result.command).toBe("mode");
-    expect(result.args).toBe("yolo  --force");
+  it("does not register autonomy mode as a slash command", () => {
+    expect(findCommand("/mode").isUnknown).toBe(true);
+    expect(findCommand("/mode copilot").isUnknown).toBe(true);
   });
 
   it("handles trailing whitespace in args", () => {
@@ -237,8 +244,8 @@ describe("filterCommands", () => {
   it("filters case-insensitively", () => {
     const upper = filterCommands("M");
     const lower = filterCommands("m");
-    // Both should return mode
-    expect(upper.map((c) => c.name)).toContain("mode");
+    // The model command remains searchable; autonomy is Shift+Tab only.
+    expect(upper.map((c) => c.name)).toContain("model");
     expect(lower.map((c) => c.name)).toEqual(upper.map((c) => c.name));
   });
 

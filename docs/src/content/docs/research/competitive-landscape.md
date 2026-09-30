@@ -30,7 +30,7 @@ Two distinctions:
 - **White-box ≠ black-box.** Shannon reads source, which lifts the
   ceiling on challenges with no web-facing vector. Not directly comparable to black-box-only runs.
 
-<span id="what-actually-differentiates-0sec"></span>
+<span id="what-actually-differentiates-0"></span>
 ## Implementation differences
 
 - **Blind verification:** an independent agent re-exercises candidates on the

@@ -1,4 +1,4 @@
-/* Synthetic vulnerable library — 0sec C/C++ review profile fixture.
+/* Synthetic vulnerable library — 0 C/C++ review profile fixture.
  *
  * This is a deliberate, contrived target used by review-profile tests
  * and demos. Do NOT use this code anywhere. The bugs are intentional.

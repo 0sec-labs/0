@@ -42,7 +42,7 @@ import {
 } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { hostname } from "node:os";
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared";
 import type { LensValidationReport, RegisteredLens, ValidationFixture, ValidationCorpus } from "./types.js";
 import { ensureEvolutionDirectory, readEvolutionArtifact } from "../../improvement/artifacts.js";
 import { prepareValidationCorpus } from "./validate.js";

@@ -4,6 +4,17 @@ export {
   createConsoleRuntime,
   buildConsoleSystemPrompt,
 } from "./turn-engine.js";
+export {
+  createConsoleJevRuntime,
+  toToolContextJevRuntime,
+  JevBudgetError,
+  JevCache,
+} from "./jev-runtime.js";
+export type {
+  ConsoleJevRuntime,
+  ToolContextJevRuntime,
+  SessionBudget,
+} from "./jev-runtime.js";
 export type {
   ConsoleConversationHistory,
   ConsoleSession,

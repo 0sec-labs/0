@@ -166,7 +166,7 @@ Recorded so the next contributor doesn't re-derive them:
   `b70c687b7cf267fb08586667a3946c8851cad672`, shipped in 6.12.94. Syzkaller
   could not minimize the historical crash, and the current campaign kernel
   already contains the sentinel check. Verdict: known/fixed duplicate, not a
-  0sec finding and not a bounty candidate.
+  0 finding and not a bounty candidate.
 - **2026-07-12 KCSAN AF_ALG revalidation background reports:** the temporary
   one-VM setuid manager recorded one report each for
   `d_lru_del / proc_sys_compare`, `process_one_work`, and
@@ -216,7 +216,7 @@ Recorded so the next contributor doesn't re-derive them:
   has a public C reproducer and hundreds of upstream occurrences dating from
   2024. The report also depends on an ext4 filesystem state outside the pipe
   lane's intended attack surface. Verdict: known public duplicate, not a novel
-  0sec finding or bounty candidate. Preserve the snapshot on `fuzzer` for local
+  0 finding or bounty candidate. Preserve the snapshot on `fuzzer` for local
   deduplication.
 - **Historical pipe/driver `INFO: rcu detected stall in corrupted`:** the trace
   is from the older root/sandbox campaign and stalls in `vga_put()` while

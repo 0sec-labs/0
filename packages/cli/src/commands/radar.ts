@@ -1,12 +1,12 @@
 /**
- * `0sec radar` — Continuous "diff radar": score recent commits for silent
+ * `0 radar` — Continuous "diff radar": score recent commits for silent
  * security-fix signals via Jev. Only survivors consume deep review / variant-
  * hunt spend. Jev is advisory only — never removes candidates, never grants
  * authority, never verifies/dismisses a vulnerability.
  *
  * Exit codes:
  *   0 → completed (results may be empty)
- *   1 → Jev not enabled (missing 0SEC_JEV_FEATURES=radar or provider)
+ *   1 → Jev not enabled (missing ZERO_JEV_FEATURES=radar or provider)
  */
 
 import { Command } from "commander";
@@ -16,11 +16,11 @@ import { resolve } from "node:path";
 import {
   createJevEvaluator,
   jevConfigFromEnvironment,
-} from "@0sec/shared";
+} from "@0/shared";
 import {
   radarCandidatesToSeedFindings,
   scanRepoCommitsWithJev,
-} from "@0sec/core";
+} from "@0/core";
 
 interface RadarOpts {
   repo?: string;
@@ -50,7 +50,7 @@ async function radarAction(opts: RadarOpts): Promise<void> {
   const config = jevConfigFromEnvironment("radar", process.env);
   if (!config) {
     process.stderr.write(
-      "Jev commit radar requires 0SEC_JEV_FEATURES=radar and a configured provider\n",
+      "Jev commit radar requires ZERO_JEV_FEATURES=radar and a configured provider\n",
     );
     process.exitCode = 1;
     return;
@@ -91,7 +91,7 @@ export const radarCommand = new Command("radar")
   .description(
     "Score recent commits in a git repo for silent security-fix signals " +
       "using Jev. Only survivors consume deep review / variant-hunt spend. " +
-      "Jev is advisory only. Requires 0SEC_JEV_FEATURES=radar.",
+      "Jev is advisory only. Requires ZERO_JEV_FEATURES=radar.",
   )
   .requiredOption("--repo <path>", "Path to a valid git working tree")
   .option("--since <date-or-ref>", "Git since-format constraint (e.g. '7 days ago', 'HEAD~50')")

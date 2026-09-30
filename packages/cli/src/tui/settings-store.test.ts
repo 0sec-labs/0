@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { analyticsPipeline } from "@0sec/core";
+import { analyticsPipeline } from "@0/core";
 
 import { DEFAULT_SETTINGS, loadSettings, type TuiSettings } from "./settings.js";
 import {
@@ -22,14 +22,14 @@ import {
 const tempHomes: string[] = [];
 
 function makeHome(): string {
-  const dir = mkdtempSync(join(tmpdir(), "0sec-settings-store-"));
+  const dir = mkdtempSync(join(tmpdir(), "0-settings-store-"));
   tempHomes.push(dir);
   return dir;
 }
 
 /**
  * A home path that is actually a *file*, so `saveSettings`' `mkdirSync` of the
- * `.0sec` directory underneath it throws (ENOTDIR) and the save reports false —
+ * `.0` directory underneath it throws (ENOTDIR) and the save reports false —
  * while `loadSettings` still degrades to defaults without throwing.
  */
 function makeUnwritableHome(): string {
@@ -186,14 +186,14 @@ describe("reloadSettings", () => {
   it("re-reads disk and notifies", () => {
     const home = makeHome();
     configureSettingsStore({ homeDir: home });
-    // Persist once so the `.0sec` directory and file exist on disk.
+    // Persist once so the `.0` directory and file exist on disk.
     setSettings({ ...DEFAULT_SETTINGS, theme: "dark" });
     const fn = vi.fn();
     subscribeSettings(fn);
 
     // An external edit to the file the store is not aware of.
     writeFileSync(
-      join(home, ".0sec", "tui-settings.json"),
+      join(home, ".0", "tui-settings.json"),
       JSON.stringify({ ...DEFAULT_SETTINGS, theme: "ansi" }),
       "utf8",
     );
@@ -273,7 +273,7 @@ import {
 import { defaultWriteLayer, getSettingSources } from "./settings-store.js";
 
 function makeProjectDir(): string {
-  const dir = mkdtempSync(join(tmpdir(), "0sec-store-project-"));
+  const dir = mkdtempSync(join(tmpdir(), "0-store-project-"));
   tempHomes.push(dir);
   return dir;
 }
@@ -359,6 +359,22 @@ describe("store: write target", () => {
     expect(getSettings().density).toBe("compact");
   });
 
+  it("restores the whole model choice globally and rejects a repository account override", () => {
+    const home = makeHome();
+    const project = makeProjectDir();
+    const preference = { providerId: "chatgpt-codex", model: "account-selected-model", connectionIdentity: "a".repeat(64) };
+    writeProjectRaw(project, { modelPreference: { ...preference, model: "repository-model" }, density: "compact" });
+    configureSettingsStore({ homeDir: home, projectDir: project });
+    expect(getSettings().modelPreference).toBeNull();
+    expect(updateSetting("modelPreference", preference, { scope: "project" })).toBe(false);
+    expect(updateSetting("modelPreference", preference)).toBe(true);
+    __resetSettingsStoreForTests();
+    configureSettingsStore({ homeDir: home, projectDir: project });
+    expect(getSettings().modelPreference).toEqual(preference);
+    expect(getSettings().density).toBe("compact");
+    expect(loadGlobalSettings(home).density).toBe(DEFAULT_SETTINGS.density);
+  });
+
   it("persists operator consent globally even inside a configured project", () => {
     const home = makeHome();
     const project = makeProjectDir();
@@ -422,14 +438,14 @@ describe("updateSetting for the keybindings map", () => {
     const seen: TuiSettings[] = [];
     const unsubscribe = subscribeSettings((s) => seen.push(s));
 
-    expect(updateSetting("keybindings", { "view.left-sidebar": "ctrl+j" })).toBe(true);
-    expect(getSettings().keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
-    expect(seen.at(-1)?.keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+    expect(updateSetting("keybindings", { "view.transcript-detail": "ctrl+j" })).toBe(true);
+    expect(getSettings().keybindings).toEqual({ "view.transcript-detail": "ctrl+j" });
+    expect(seen.at(-1)?.keybindings).toEqual({ "view.transcript-detail": "ctrl+j" });
 
     unsubscribe();
     // Survives a reload from disk.
     reloadSettings();
-    expect(getSettings().keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+    expect(getSettings().keybindings).toEqual({ "view.transcript-detail": "ctrl+j" });
   });
 
   it("sanitises an invalid override on the way in", () => {
@@ -437,11 +453,14 @@ describe("updateSetting for the keybindings map", () => {
     // A protected id and a reserved chord are both dropped by the store's
     // normalise-on-write, leaving only the valid entry.
     updateSetting("keybindings", {
-      "view.left-sidebar": "Ctrl+J",
+      "view.transcript-detail": "Ctrl+J",
+      "overlay.review-toggle": "ctrl+k",
+      "overlay.review-top": "ctrl+l",
+      "overlay.review-bottom": "ctrl+m",
       "session.quit": "ctrl+x",
-      "view.right-sidebar": "ctrl+c",
+      "nav.open-comms": "ctrl+c",
     } as Record<string, string>);
-    expect(getSettings().keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+    expect(getSettings().keybindings).toEqual({ "view.transcript-detail": "ctrl+j" });
   });
 });
 
@@ -451,11 +470,11 @@ describe("analytics environment restrictions", () => {
   beforeEach(() => {
     analyticsPipeline.__resetForTests();
     sent = [];
-    for (const name of ["0SEC_ANALYTICS_LEVEL", "0SEC_OFFLINE", "0SEC_NO_TELEMETRY", "DO_NOT_TRACK"]) {
+    for (const name of ["ZERO_ANALYTICS_LEVEL", "ZERO_OFFLINE", "ZERO_NO_TELEMETRY", "DO_NOT_TRACK"]) {
       vi.stubEnv(name, undefined);
     }
-    vi.stubEnv("0SEC_CLOUD_HOST", "https://analytics.test");
-    vi.stubEnv("0SEC_CLOUD_TOKEN", "test-token");
+    vi.stubEnv("ZERO_CLOUD_HOST", "https://analytics.test");
+    vi.stubEnv("ZERO_CLOUD_TOKEN", "test-token");
     analyticsPipeline.configure({
       homeDir: makeHome(),
       fetchImpl: (async (_url, init) => {
@@ -478,25 +497,25 @@ describe("analytics environment restrictions", () => {
   }
 
   it("preserves a shell opt-out across initial settings load and live preference changes", async () => {
-    vi.stubEnv("0SEC_ANALYTICS_LEVEL", "off");
+    vi.stubEnv("ZERO_ANALYTICS_LEVEL", "off");
     configureSettingsStore({ homeDir: makeHome() });
     await collect();
     updateSetting("analyticsLevel", "full");
     updateSetting("density", "compact");
     await collect();
 
-    expect(process.env["0SEC_ANALYTICS_LEVEL"]).toBe("off");
+    expect(process.env["ZERO_ANALYTICS_LEVEL"]).toBe("off");
     expect(sent).toEqual([]);
   });
 
   it("keeps a lower shell tier while allowing its authorized content", async () => {
-    vi.stubEnv("0SEC_ANALYTICS_LEVEL", "commands");
+    vi.stubEnv("ZERO_ANALYTICS_LEVEL", "commands");
     configureSettingsStore({ homeDir: makeHome() });
     updateSetting("analyticsLevel", "full");
     await collect();
 
     expect(sent).toEqual([expect.objectContaining({ origin: "bridge-regression" })]);
-    expect(process.env["0SEC_ANALYTICS_LEVEL"]).toBe("commands");
+    expect(process.env["ZERO_ANALYTICS_LEVEL"]).toBe("commands");
   });
 
   it("does not broaden a saved opt-out through environment or project settings", async () => {
@@ -504,7 +523,7 @@ describe("analytics environment restrictions", () => {
     const project = makeProjectDir();
     saveGlobalSettings({ ...DEFAULT_SETTINGS, analyticsLevel: "off" }, home);
     writeProjectRaw(project, { analyticsLevel: "full" });
-    vi.stubEnv("0SEC_ANALYTICS_LEVEL", "full");
+    vi.stubEnv("ZERO_ANALYTICS_LEVEL", "full");
     configureSettingsStore({ homeDir: home, projectDir: project });
     expect(updateSetting("analyticsLevel", "full", { scope: "project" })).toBe(false);
     await collect();
@@ -515,6 +534,7 @@ describe("analytics environment restrictions", () => {
 
   it("updates its own inherited tier but respects an external override introduced later", async () => {
     configureSettingsStore({ homeDir: makeHome() });
+    updateSetting("analyticsLevel", "full");
     await collect();
     expect(sent).toEqual([
       expect.objectContaining({ origin: "bridge-regression" }),
@@ -531,10 +551,10 @@ describe("analytics environment restrictions", () => {
       expect.objectContaining({ targetRedacted: "scope-marker" }),
     ]);
     sent.length = 0;
-    vi.stubEnv("0SEC_ANALYTICS_LEVEL", "off");
+    vi.stubEnv("ZERO_ANALYTICS_LEVEL", "off");
     updateSetting("analyticsLevel", "full");
     await collect();
     expect(sent).toEqual([]);
-    expect(process.env["0SEC_ANALYTICS_LEVEL"]).toBe("off");
+    expect(process.env["ZERO_ANALYTICS_LEVEL"]).toBe("off");
   });
 });

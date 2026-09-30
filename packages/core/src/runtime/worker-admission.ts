@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { availableParallelism, freemem } from "node:os";
+import { getWorkbenchBrokerLimits, isAdmittedSmolvmWorkbench } from "./smolvm-broker.js";
 
 export interface WorkerAdmissionLimits {
   maxActive: number;
@@ -150,16 +151,23 @@ export class WorkerAdmission {
 }
 
 function defaultLimits(): WorkerAdmissionLimits {
+  if (isAdmittedSmolvmWorkbench()) {
+    const limits = getWorkbenchBrokerLimits();
+    // The guest only controls handoffs; sibling VM allocations live on the
+    // host. Keep a bounded local queue using the host's immutable policy.
+    return { maxActive: limits.maxJobs, maxQueued: Math.min(64, limits.maxRequests),
+      memoryMb: limits.memoryMb * limits.maxJobs, cpus: limits.cpus * limits.maxJobs };
+  }
   const override = (name: string, fallback: number, integer = true): number => {
     const value = process.env[name];
     return value === undefined ? fallback : positive(Number(value), name, integer);
   };
   const available = typeof process.availableMemory === "function" ? process.availableMemory() : freemem();
   return {
-    maxActive: override("0SEC_WORKER_MAX_ACTIVE", 4),
-    maxQueued: override("0SEC_WORKER_MAX_QUEUED", 64),
-    memoryMb: override("0SEC_WORKER_MEMORY_MB", Math.max(32, Math.min(8192, Math.floor(available / 2 / 1048576)))),
-    cpus: override("0SEC_WORKER_CPUS", availableParallelism(), false),
+    maxActive: override("ZERO_WORKER_MAX_ACTIVE", 4),
+    maxQueued: override("ZERO_WORKER_MAX_QUEUED", 64),
+    memoryMb: override("ZERO_WORKER_MEMORY_MB", Math.max(32, Math.min(8192, Math.floor(available / 2 / 1048576)))),
+    cpus: override("ZERO_WORKER_CPUS", availableParallelism(), false),
   };
 }
 

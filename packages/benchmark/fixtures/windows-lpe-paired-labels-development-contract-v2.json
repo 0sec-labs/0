@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "0sec.windows-lpe-evaluator-labels/v2",
+  "schemaVersion": "0.windows-lpe-evaluator-labels/v2",
   "corpusId": "windows-lpe-paired-contract-v2",
   "split": "development",
   "inventorySha256": "117bfa8baec51b6f07350982004902572aff610d2ebb20a3d369d43c728f95cc",

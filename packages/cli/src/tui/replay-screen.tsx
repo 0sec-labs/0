@@ -98,7 +98,7 @@ export function ReplayScreen({ dbPath, scanId, onExit, shell }: { dbPath?: strin
     let alive = true;
     const load = async () => {
       try {
-        const { osecDB } = await import("@0sec/db");
+        const { osecDB } = await import("@0/db");
         const db = new osecDB(dbPath);
         try {
           let selected = scanId ? db.getScan(scanId) as ReplayScanRow | undefined : undefined;

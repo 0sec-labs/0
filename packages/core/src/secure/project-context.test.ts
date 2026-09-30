@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { captureProjectSuggestions, parseProjectObservations, prepareProjectContext } from "./project-context.js";
 
-const snapshot = { schema: "0sec-project-context-v1", repositoryId: "57bde9ba-c509-4dbd-8bc0-43d19e9e7024",
+const snapshot = { schema: "0-project-context-v1", repositoryId: "57bde9ba-c509-4dbd-8bc0-43d19e9e7024",
   revision: 1, sourceRevision: "a".repeat(40), context: { summary: "Service", instructions: "Preserve public APIs", observations: [] } };
 let directory: string | undefined;
 afterEach(() => { if (directory) rmSync(directory, { recursive: true, force: true }); directory = undefined; });

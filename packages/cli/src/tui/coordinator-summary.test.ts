@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SubagentLifecyclePayload, TodosEventPayload } from "@0sec/core";
+import type { SubagentLifecyclePayload, TodosEventPayload } from "@0/core";
 import { buildCoordinatorSummary, COORDINATOR_SUMMARY_ROWS } from "./coordinator-summary.js";
 
 const plan = (overrides: Partial<TodosEventPayload> = {}): TodosEventPayload => ({
@@ -63,15 +63,33 @@ describe("buildCoordinatorSummary", () => {
     expect(summary.lines[5]).toContain("Could not check private data");
   });
 
-  it("makes both missing-input fallbacks explicit", () => {
-    const noPlan = buildCoordinatorSummary();
+  it("shows completed child evidence without inventing a root task count", () => {
+    const noPlan = buildCoordinatorSummary({ directChildren: [child({ status: "completed", summary: "Finished checking private data." })] });
     expect(noPlan.state).toBe("planning");
-    expect(noPlan.lines[1]).toContain("count is not known");
-    expect(noPlan.lines[2]).toContain("No main-task plan is available yet.");
+    expect(noPlan.hasRootPlan).toBe(false);
+    expect(noPlan.total).toBe(0);
+    expect(noPlan.lines[2]).toContain("Finished checking private data");
+  });
 
-    const noChild = buildCoordinatorSummary({ rootPlan: plan(), rootScanId: "root" });
-    expect(noChild.hasDirectChildren).toBe(false);
-    expect(noChild.lines[3]).toContain("No direct main-task lead is reporting");
+  it("keeps an incomplete terminal child actionable even after the root plan is complete", () => {
+    const summary = buildCoordinatorSummary({
+      rootPlan: plan({ todos: [{ id: "a", content: "Check private data", status: "completed" }], done: 1, total: 1 }),
+      rootScanId: "root",
+      directChildren: [child({ status: "completed", done: false, error: "Coverage was interrupted." })],
+    });
+    expect(summary.state).toBe("needs-attention");
+    expect(summary.completed).toBe(1);
+    expect(summary.lines[5]).toContain("Coverage was interrupted");
+  });
+
+  it("surfaces failed child action even before the root plan exists", () => {
+    const summary = buildCoordinatorSummary({
+      rootScanId: "root",
+      directChildren: [child({ status: "failed", error: "Repository acquisition was refused." })],
+    });
+    expect(summary.state).toBe("needs-attention");
+    expect(summary.total).toBe(0);
+    expect(summary.lines[5]).toContain("Repository acquisition was refused");
   });
 
   it("deduplicates repeated lifecycle records by child id", () => {

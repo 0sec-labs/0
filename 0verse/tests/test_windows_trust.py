@@ -49,7 +49,7 @@ def _fixture(
         json.dumps(
             {
                 "schema_version": "0verse.windows-trust-root-policy/v1",
-                "policy_id": "0sec-windows-roots-2026-07",
+                "policy_id": "0-windows-roots-2026-07",
                 "allowed_root_cert_sha256": ["c" * 64],
                 "allowed_signtool_sha256": [_sha(signtool)],
                 "proof_limit": TRUST_POLICY_PROOF_LIMIT,
@@ -97,7 +97,7 @@ def _fixture(
                 "receipt_signer_identity": _signer_identity(),
                 "artifact": _ref(artifact),
                 "catalog": catalog_ref,
-                "root_policy": {**_ref(policy), "policy_id": "0sec-windows-roots-2026-07"},
+                "root_policy": {**_ref(policy), "policy_id": "0-windows-roots-2026-07"},
                 "signtool": {**_ref(signtool), "file_version": "10.0.26100.0"},
                 "verification": {
                     "mode": mode,

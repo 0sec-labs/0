@@ -1,5 +1,5 @@
 /**
- * #151 — CLI integration tests for `0sec disclose review`.
+ * #151 — CLI integration tests for `0 disclose review`.
  *
  * Tests the CLI subcommand end-to-end through the real
  * `registerDiscloseCommand` and `assembleReproducibilityManifest` /
@@ -29,7 +29,7 @@ async function runCli(argv: string[]): Promise<void> {
   const program = new Command();
   program.exitOverride();
   registerDiscloseCommand(program);
-  await program.parseAsync(["node", "0sec-cli", ...argv]);
+  await program.parseAsync(["node", "@0/cli", ...argv]);
 }
 
 function verifiedFinding() {
@@ -79,7 +79,7 @@ function verifiedFinding() {
   };
 }
 
-describe("0sec disclose review", () => {
+describe("0 disclose review", () => {
   let io: ReturnType<typeof captureIO>;
   let dir: string;
 
@@ -173,10 +173,10 @@ describe("0sec disclose review", () => {
   it("accepts --tool-version override", async () => {
     const fp = join(dir, "finding.json");
     writeFileSync(fp, JSON.stringify(verifiedFinding()));
-    await runCli(["disclose", "review", fp, "--tool-version", "0sec/0.2.0-test", "--timestamp", "2026-08-02T12:00:00.000Z"]);
+    await runCli(["disclose", "review", fp, "--tool-version", "0/0.2.0-test", "--timestamp", "2026-08-02T12:00:00.000Z"]);
 
     const out = io.stdout.join("\n");
-    expect(out).toContain("0sec/0.2.0-test");
+    expect(out).toContain("0/0.2.0-test");
   });
 
   it("renders model config when --model-config is provided", async () => {

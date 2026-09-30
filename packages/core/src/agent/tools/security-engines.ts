@@ -35,7 +35,7 @@ export const securityEngineToolDefinitions: Record<string, ToolDefinition> = {
   entra_posture: {
     name: "entra_posture",
     description:
-      "Read-only posture assessment of a Microsoft Entra ID (Azure AD) tenant — privileged role assignments, conditional-access coverage, app registrations, service principals, and federated-domain trust. Read-only Microsoft Graph API. The Graph access token is read from the 0SEC_GRAPH_ACCESS_TOKEN environment variable ONLY; it is never accepted as an argument. Returns a graceful error when the token is absent.",
+      "Read-only posture assessment of a Microsoft Entra ID (Azure AD) tenant — privileged role assignments, conditional-access coverage, app registrations, service principals, and federated-domain trust. Read-only Microsoft Graph API. The Graph access token is read from the ZERO_GRAPH_ACCESS_TOKEN environment variable ONLY; it is never accepted as an argument. Returns a graceful error when the token is absent.",
     parameters: {
       tenant: { type: "string", description: "Optional Entra tenant id (GUID) the token is expected to belong to; a mismatch is reported rather than silently assessed." },
       scope: { type: "string", description: "Optional path to a JSON scope file ({in_scope,out_of_scope}); when supplied, graph.microsoft.com must be explicitly in scope or no request goes out." },
@@ -49,7 +49,7 @@ export const securityEngineToolDefinitions: Record<string, ToolDefinition> = {
     parameters: {
       finding_id: { type: "string", description: "Finding id (or unique prefix). Omit to pick the most recent finding that is not discovered/false-positive." },
       scan_id: { type: "string", description: "Optional: restrict the lookup to findings from this scan." },
-      db_path: { type: "string", description: "Optional path to the findings SQLite database (defaults to the standard 0sec DB)." },
+      db_path: { type: "string", description: "Optional path to the findings SQLite database (defaults to the standard 0 DB)." },
       allow_unreproduced: { type: "boolean", description: "Also stage the vendor-notification draft for an unreproduced finding (default false)." },
     },
   },
@@ -66,7 +66,7 @@ export const securityEngineToolDefinitions: Record<string, ToolDefinition> = {
   },
 };
 
-// Tool-name → ToolExecutor handler-method name (0sec#614). Assembled by
+// Tool-name → ToolExecutor handler-method name (0#614). Assembled by
 // ./dispatch.ts; the executor's same-named methods delegate to the free
 // functions below.
 export const securityEngineDispatch: Record<string, string> = {
@@ -276,7 +276,7 @@ export async function executeEntraAttackPaths(
 
 // Environment variable name, not the directory access token it indexes.
 // foxguard: ignore[js/no-hardcoded-secret]
-const GRAPH_TOKEN_ENV = "0SEC_GRAPH_ACCESS_TOKEN";
+const GRAPH_TOKEN_ENV = "ZERO_GRAPH_ACCESS_TOKEN";
 
 export async function executeEntraPosture(
   ctx: ToolContext,
@@ -288,7 +288,7 @@ export async function executeEntraPosture(
   if (!accessToken) {
     return errResult(
       `Missing ${GRAPH_TOKEN_ENV}. Export a Microsoft Graph access token with directory read scopes; ` +
-        "0sec never accepts it as an argument.",
+        "0 never accepts it as an argument.",
     );
   }
 
@@ -378,7 +378,7 @@ export async function executeAssembleAdvisory(
   _ctx: ToolContext,
   args: Record<string, unknown>,
 ): Promise<ToolResult> {
-  const { osecDB } = await import("@0sec/db");
+  const { osecDB } = await import("@0/db");
   const {
     renderAdvisoryMarkdown,
     assembleEvidencePack,
@@ -473,15 +473,15 @@ export async function executeAssembleAdvisory(
 }
 
 /** Compact DB-row → Finding conversion for the disclose renderers. */
-function rowToAdvisoryFinding(row: AdvisoryFindingRow): import("@0sec/shared").Finding {
-  const finding: import("@0sec/shared").Finding = {
+function rowToAdvisoryFinding(row: AdvisoryFindingRow): import("@0/shared").Finding {
+  const finding: import("@0/shared").Finding = {
     id: row.id,
     templateId: row.templateId,
     title: row.title,
     description: row.description,
-    severity: row.severity as import("@0sec/shared").Severity,
-    category: row.category as import("@0sec/shared").AttackCategory,
-    status: row.status as import("@0sec/shared").FindingStatus,
+    severity: row.severity as import("@0/shared").Severity,
+    category: row.category as import("@0/shared").AttackCategory,
+    status: row.status as import("@0/shared").FindingStatus,
     evidence: {
       request: row.evidenceRequest,
       response: row.evidenceResponse,
@@ -494,7 +494,7 @@ function rowToAdvisoryFinding(row: AdvisoryFindingRow): import("@0sec/shared").F
   if (row.cvssScore !== null && row.cvssScore !== undefined) finding.cvssScore = row.cvssScore;
   if (row.pocSteps) {
     try {
-      const parsed = JSON.parse(row.pocSteps) as import("@0sec/shared").PocStep[];
+      const parsed = JSON.parse(row.pocSteps) as import("@0/shared").PocStep[];
       if (Array.isArray(parsed) && parsed.length > 0) finding.pocSteps = parsed;
     } catch {
       // Fall back to evidence prose — malformed pocSteps must not abort drafting.

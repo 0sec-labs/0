@@ -1,21 +1,21 @@
 /**
- * Multi-Modal Agreement — foxguard × 0sec cross-validation.
+ * Multi-Modal Agreement — foxguard × 0 cross-validation.
  *
  * Endor Labs achieves ~95% false-positive elimination by running BOTH a neural
  * classifier AND pattern-based rules, then requiring agreement before
- * auto-triaging. 0sec (AI agent) + foxguard (Rust pattern scanner) is exactly
+ * auto-triaging. 0 (AI agent) + foxguard (Rust pattern scanner) is exactly
  * the same pattern: combine agentic discovery with deterministic scanner
  * agreement before auto-triage.
  *
- * For every finding 0sec discovers, we also run foxguard against the same
+ * For every finding 0 discovers, we also run foxguard against the same
  * source tree. If foxguard has a rule that fires on the same file (and ideally
  * the same category) → strong signal the finding is real. If foxguard scanned
  * the file but found nothing → likely false positive.
  *
- * 0sec detects; foxguard cross-checks.
+ * 0 detects; foxguard cross-checks.
  */
 
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync, readFileSync } from "node:fs";
@@ -43,7 +43,7 @@ export type Agreement =
 
 export interface MultiModalResult {
   agreement: Agreement;
-  /** 0-1 confidence that the 0sec finding represents a real vulnerability. */
+  /** 0-1 confidence that the 0 finding represents a real vulnerability. */
   confidence: number;
   /** Foxguard findings (parsed from SARIF) that matched the same file. */
   foxguardFindings: FoxguardFinding[];
@@ -84,7 +84,7 @@ export async function detectFoxguard(): Promise<string | null> {
 // ────────────────────────────────────────────────────────────────────
 
 /**
- * Pull any file-ish tokens out of a 0sec Finding. Findings don't carry a
+ * Pull any file-ish tokens out of a 0 Finding. Findings don't carry a
  * structured file/line field today, so we scan title/description/analysis for
  * anything that looks like a source path.
  */
@@ -130,14 +130,14 @@ export function computeAgreement(
   });
 
   if (matchedByFile.length === 0) {
-    // Foxguard scanned but had no finding in 0sec's file. Weak FP signal.
+    // Foxguard scanned but had no finding in 0's file. Weak FP signal.
     return {
       agreement: "only_Osec",
       confidence: 0.4,
       foxguardFindings: [],
       reasoning:
         osecFiles.length === 0
-          ? "0sec finding has no extractable file path; foxguard has no matching rule"
+          ? "0 finding has no extractable file path; foxguard has no matching rule"
           : `foxguard scanned but reported no finding in ${osecFiles.join(", ")}`,
     };
   }
@@ -160,7 +160,7 @@ export function computeAgreement(
     agreement: "both_fire",
     confidence: 0.8,
     foxguardFindings: matchedByFile,
-    reasoning: `foxguard fired on ${matchedByFile[0]!.file} (rule ${matchedByFile[0]!.ruleId}) but category differs from 0sec's ${finding.category}`,
+    reasoning: `foxguard fired on ${matchedByFile[0]!.file} (rule ${matchedByFile[0]!.ruleId}) but category differs from 0's ${finding.category}`,
   };
 }
 

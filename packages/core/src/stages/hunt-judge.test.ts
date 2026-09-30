@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared";
 import type { HuntBrief } from "./hunt-scan.js";
 
 const executeNativeMock = vi.fn();

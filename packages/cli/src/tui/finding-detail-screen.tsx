@@ -4,7 +4,7 @@
  *
  * Open one finding, see its title, severity, category, location, description,
  * redacted evidence, remediation, CVSS and references — then investigate or
- * plan a fix in the scoped chat, copy a submission-ready report, or move its
+ * request a verified source fix in chat, copy a submission-ready report, or move its
  * status. It is the console's read+act companion to the `/findings` list.
  *
  * Three properties are load-bearing, all inherited from `usage-screen.tsx` and
@@ -31,8 +31,8 @@
 import React, { useMemo, useState } from "react";
 import { useKeyboard } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
-import type { Finding } from "@0sec/shared";
-import { renderPlatformReport, renderCvssSection, redactSensitiveHeaders } from "@0sec/core";
+import type { Finding } from "@0/shared";
+import { renderPlatformReport, renderCvssSection, redactSensitiveHeaders } from "@0/core";
 
 import { useTheme, type Theme } from "./theme-context.js";
 import { useSymbols, type SymbolTable } from "./symbol-context.js";
@@ -82,8 +82,8 @@ export interface FindingDetailScreenProps {
   /** Open a safe, evidence-grounded investigation in the persistent chat. */
   onInvestigate?: (finding: Finding) => void;
   /**
-   * Open a proposal-only remediation discussion in the persistent chat. It
-   * never applies a patch; a separate explicit operator action is required.
+   * Request a verified local source-fix candidate in the persistent chat.
+   * Never applies a patch or publishes without separate operator approval.
    */
   onPlanFix?: (finding: Finding) => void;
   /**
@@ -389,7 +389,7 @@ export function FindingDetailScreen({
   const planFix = () => {
     if (!finding || !onPlanFix) return;
     onPlanFix(finding);
-    setNotice(`Fix planning opened for ${finding.id}.`);
+    setNotice(`Source fix requested for ${finding.id}; review its diff and regression result in chat.`);
   };
 
   const copyReport = () => {

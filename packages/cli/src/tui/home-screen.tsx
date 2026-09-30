@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/react */
 import { useEffect, useMemo, useState } from "react";
 import { useKeyboard } from "@opentui/react";
-import type { ScanExecutionMode, ScanGoal } from "@0sec/shared";
+import type { ScanExecutionMode, ScanGoal, ScanPlan } from "@0/shared";
 import { resolveEngagement } from "../engagement-plan.js";
 import { useTheme } from "./theme-context.js";
 import { DialogSelectBody, type DialogItem } from "./dialog-select.js";
@@ -35,7 +35,6 @@ import {
   SCAN_GOAL_OPTIONS,
   SCAN_RUN_COUNT_OPTIONS,
   SCAN_TIME_CAP_OPTIONS_MS,
-  createScanPlan,
   formatExecutionMode,
   formatGoal,
   formatTimeCap,
@@ -95,14 +94,14 @@ export function HomeScreen({
   useEffect(() => {
     if (!timeEdited) setTimeCapMs(recommendedTime as (typeof SCAN_TIME_CAP_OPTIONS_MS)[number]);
   }, [recommendedTime, timeEdited]);
-  const plan = createScanPlan({
+  const plan: ScanPlan = {
     goal,
     depth,
     runCount,
     executionMode,
     timeCapMs,
     costCapUsd,
-  });
+  };
   const planText = !resolution
     ? "Enter a URL, source path, git URL, or ecosystem-prefixed package."
     : resolution.ok

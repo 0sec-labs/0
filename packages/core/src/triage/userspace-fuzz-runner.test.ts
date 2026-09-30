@@ -212,7 +212,7 @@ function useFakeCargo(
   harnesses: string[],
   runOutput = "Done. 1000 iterations, 0 crashes.\n",
 ): string {
-  const fixtureDir = mkdtempSync(join(tmpdir(), "0sec-fake-cargo-"));
+  const fixtureDir = mkdtempSync(join(tmpdir(), "0-fake-cargo-"));
   fakeCargoDirs.push(fixtureDir);
   const sourceRoot = join(fixtureDir, "source");
   mkdirSync(sourceRoot);
@@ -263,7 +263,7 @@ describe("runUserspaceFuzzLoop — cargo-fuzz harness discovery", () => {
 
   it("removes an empty persistent artifact directory after a no-crash run", async () => {
     const sourceRoot = useFakeCargo(["only_target"]);
-    const retainedRoot = mkdtempSync(join(tmpdir(), "0sec-retained-artifacts-"));
+    const retainedRoot = mkdtempSync(join(tmpdir(), "0-retained-artifacts-"));
     fakeCargoDirs.push(retainedRoot);
 
     await runUserspaceFuzzLoop({
@@ -273,7 +273,7 @@ describe("runUserspaceFuzzLoop — cargo-fuzz harness discovery", () => {
     });
 
     expect(readdirSync(retainedRoot)).not.toContainEqual(
-      expect.stringMatching(/^0sec-uf-/),
+      expect.stringMatching(/^0-uf-/),
     );
   });
 
@@ -288,7 +288,7 @@ describe("runUserspaceFuzzLoop — cargo-fuzz harness discovery", () => {
     const sourceInputPath = join(sourceArtifactDir, "crash-deadbeef");
     mkdirSync(sourceArtifactDir, { recursive: true });
     writeFileSync(sourceInputPath, "reproducer", "utf8");
-    const retainedRoot = mkdtempSync(join(tmpdir(), "0sec-retained-proof-"));
+    const retainedRoot = mkdtempSync(join(tmpdir(), "0-retained-proof-"));
     fakeCargoDirs.push(retainedRoot);
 
     const result = await runUserspaceFuzzLoop({
@@ -301,7 +301,7 @@ describe("runUserspaceFuzzLoop — cargo-fuzz harness discovery", () => {
     expect(result.crashes).toHaveLength(1);
     expect(result.crashes[0]!.kind).toBe("asan");
     expect(result.crashes[0]!.inputPath).toContain(
-      `${retainedRoot}/0sec-uf-`,
+      `${retainedRoot}/0-uf-`,
     );
   });
 
@@ -311,7 +311,7 @@ describe("runUserspaceFuzzLoop — cargo-fuzz harness discovery", () => {
     const sourceInput = join(sourceArtifactDir, "crash-deadbeef");
     mkdirSync(sourceArtifactDir, { recursive: true });
     writeFileSync(sourceInput, "reproducer", "utf8");
-    const retainedRoot = mkdtempSync(join(tmpdir(), "0sec-retained-artifacts-"));
+    const retainedRoot = mkdtempSync(join(tmpdir(), "0-retained-artifacts-"));
     fakeCargoDirs.push(retainedRoot);
 
     const result = await runUserspaceFuzzLoop({
@@ -322,7 +322,7 @@ describe("runUserspaceFuzzLoop — cargo-fuzz harness discovery", () => {
 
     const crash = result.crashes[0]!;
     const runName = readdirSync(retainedRoot).find((name) =>
-      name.startsWith("0sec-uf-"),
+      name.startsWith("0-uf-"),
     )!;
     const reproducerRef = `${runName}/reproducers/${crash.signature}.input`;
     const reproducerPath = join(retainedRoot, reproducerRef);
@@ -335,7 +335,7 @@ describe("runUserspaceFuzzLoop — cargo-fuzz harness discovery", () => {
     expect(
       JSON.parse(readFileSync(join(retainedRoot, runName, "manifest.json"), "utf8")),
     ).toMatchObject({
-      schema: "0sec-memsafety-artifacts/v1",
+      schema: "0-memsafety-artifacts/v1",
       crashes: [
         {
           signature: crash.signature,
@@ -348,12 +348,12 @@ describe("runUserspaceFuzzLoop — cargo-fuzz harness discovery", () => {
   it("does not follow a source-tree reproducer symlink into retained evidence", async () => {
     const sourceRoot = useFakeCargo(["only_target"], ASAN_OOB_WRITE);
     const sourceArtifactDir = join(sourceRoot, "fuzz", "artifacts", "only_target");
-    const outside = join(tmpdir(), `0sec-outside-${Date.now()}`);
+    const outside = join(tmpdir(), `0-outside-${Date.now()}`);
     const sourceInput = join(sourceArtifactDir, "crash-deadbeef");
     mkdirSync(sourceArtifactDir, { recursive: true });
     writeFileSync(outside, "must not retain", "utf8");
     symlinkSync(outside, sourceInput);
-    const retainedRoot = mkdtempSync(join(tmpdir(), "0sec-retained-artifacts-"));
+    const retainedRoot = mkdtempSync(join(tmpdir(), "0-retained-artifacts-"));
     fakeCargoDirs.push(retainedRoot, outside);
 
     const result = await runUserspaceFuzzLoop({
@@ -364,7 +364,7 @@ describe("runUserspaceFuzzLoop — cargo-fuzz harness discovery", () => {
 
     expect(result.crashes[0]!.artifactRef).toBeUndefined();
     const runName = readdirSync(retainedRoot).find((name) =>
-      name.startsWith("0sec-uf-"),
+      name.startsWith("0-uf-"),
     )!;
     const manifest = JSON.parse(
       readFileSync(join(retainedRoot, runName, "manifest.json"), "utf8"),
@@ -375,11 +375,11 @@ describe("runUserspaceFuzzLoop — cargo-fuzz harness discovery", () => {
   it("does not follow a symlinked artifact-directory ancestor into retained evidence", async () => {
     const sourceRoot = useFakeCargo(["only_target"], ASAN_OOB_WRITE);
     const sourceArtifactRoot = join(sourceRoot, "fuzz", "artifacts");
-    const outsideDir = mkdtempSync(join(tmpdir(), "0sec-outside-artifacts-"));
+    const outsideDir = mkdtempSync(join(tmpdir(), "0-outside-artifacts-"));
     mkdirSync(sourceArtifactRoot, { recursive: true });
     writeFileSync(join(outsideDir, "crash-deadbeef"), "must not retain", "utf8");
     symlinkSync(outsideDir, join(sourceArtifactRoot, "only_target"));
-    const retainedRoot = mkdtempSync(join(tmpdir(), "0sec-retained-artifacts-"));
+    const retainedRoot = mkdtempSync(join(tmpdir(), "0-retained-artifacts-"));
     fakeCargoDirs.push(retainedRoot, outsideDir);
 
     const result = await runUserspaceFuzzLoop({
@@ -390,7 +390,7 @@ describe("runUserspaceFuzzLoop — cargo-fuzz harness discovery", () => {
 
     expect(result.crashes[0]!.artifactRef).toBeUndefined();
     const runName = readdirSync(retainedRoot).find((name) =>
-      name.startsWith("0sec-uf-"),
+      name.startsWith("0-uf-"),
     )!;
     const manifest = JSON.parse(
       readFileSync(join(retainedRoot, runName, "manifest.json"), "utf8"),
@@ -404,7 +404,7 @@ describe("runUserspaceFuzzLoop — cargo-fuzz harness discovery", () => {
     const sourceInput = join(sourceArtifactDir, "crash-deadbeef");
     mkdirSync(sourceArtifactDir, { recursive: true });
     writeFileSync(sourceInput, Buffer.alloc(128 * 1024, 7));
-    const retainedRoot = mkdtempSync(join(tmpdir(), "0sec-retained-artifacts-"));
+    const retainedRoot = mkdtempSync(join(tmpdir(), "0-retained-artifacts-"));
     fakeCargoDirs.push(retainedRoot);
 
     const result = await runUserspaceFuzzLoop({
@@ -416,7 +416,7 @@ describe("runUserspaceFuzzLoop — cargo-fuzz harness discovery", () => {
 
     const crash = result.crashes[0]!;
     const runName = readdirSync(retainedRoot).find((name) =>
-      name.startsWith("0sec-uf-"),
+      name.startsWith("0-uf-"),
     )!;
     const manifest = JSON.parse(
       readFileSync(join(retainedRoot, runName, "manifest.json"), "utf8"),
@@ -521,13 +521,13 @@ describe("runUserspaceFuzzLoop — tooling-absent contract", () => {
 
   function withoutToolchain<T>(fn: () => Promise<T>): Promise<T> {
     // Point PATH at a directory with no executables so every probe ENOENTs.
-    process.env.PATH = "/nonexistent-0sec-test-path";
+    process.env.PATH = "/nonexistent-0-test-path";
     return fn();
   }
 
   const rustTarget: MemSafetyTarget = {
     language: "rust",
-    sourceRoot: "/tmp/0sec-no-such-rust-target",
+    sourceRoot: "/tmp/0-no-such-rust-target",
     buildSystem: "cargo",
     harnessEntry: "fuzz_target_1",
   };
@@ -546,7 +546,7 @@ describe("runUserspaceFuzzLoop — tooling-absent contract", () => {
   it("C/C++ target with clang absent → iterations:0, no crashes, clang missing", async () => {
     const cTarget: MemSafetyTarget = {
       language: "c",
-      sourceRoot: "/tmp/0sec-no-such-c-target",
+      sourceRoot: "/tmp/0-no-such-c-target",
       buildSystem: "make",
     };
     const result = await withoutToolchain(() =>
@@ -569,7 +569,7 @@ describe("runUserspaceFuzzLoop — tooling-absent contract", () => {
   it("C/C++ target with NO tier2 artifact → honest empty result, never a fake crash", async () => {
     const cTarget: MemSafetyTarget = {
       language: "c",
-      sourceRoot: "/tmp/0sec-no-such-c-target",
+      sourceRoot: "/tmp/0-no-such-c-target",
       buildSystem: "make",
     };
     const result = await runUserspaceFuzzLoop({ target: cTarget, logger: () => {} });
@@ -603,7 +603,7 @@ describe("runUserspaceFuzzLoop — tooling-absent contract", () => {
  * the fuzz subprocess actually received in its environment.
  */
 function useEnvDumpingCargo(dumpPath: string): string {
-  const fixtureDir = mkdtempSync(join(tmpdir(), "0sec-envdump-cargo-"));
+  const fixtureDir = mkdtempSync(join(tmpdir(), "0-envdump-cargo-"));
   fakeCargoDirs.push(fixtureDir);
   const sourceRoot = join(fixtureDir, "source");
   mkdirSync(join(sourceRoot, "fuzz"), { recursive: true });
@@ -644,7 +644,7 @@ describe("runUserspaceFuzzLoop — env isolation", () => {
     const prevGithub = process.env.GITHUB_TOKEN;
     process.env.ANTHROPIC_API_KEY = "sk-ant-should-not-leak";
     process.env.GITHUB_TOKEN = "ghp_should_not_leak";
-    const dumpDir = mkdtempSync(join(tmpdir(), "0sec-fuzz-envdump-"));
+    const dumpDir = mkdtempSync(join(tmpdir(), "0-fuzz-envdump-"));
     fakeCargoDirs.push(dumpDir);
     const dumpPath = join(dumpDir, "child-env.json");
     try {

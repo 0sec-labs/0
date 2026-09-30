@@ -1,8 +1,4 @@
-// 0sec-cloud client surface.
-//
-// The CLI half of issue #303. The server-side mint endpoint that issues
-// scoped tokens after a better-auth flow lives in 0sec-cloud and is
-// out of scope for this PR.
+// Cloud worker transports and analytics credentials; no CLI account client.
 
 export {
   loadCloudCredentials,
@@ -12,43 +8,6 @@ export {
 } from "./credentials.js";
 export type { CloudCredentials, LoadCloudCredentialsOptions } from "./credentials.js";
 
-export {
-  CloudClient,
-  CloudError,
-  CloudUnauthorizedError,
-  CloudForbiddenError,
-  CloudNetworkError,
-} from "./client.js";
-export type {
-  CloudClientOptions,
-  CloudHealthResponse,
-  FetchImpl,
-  InferenceModel,
-  InferenceModelsResponse,
-  CreditAccount,
-  CreditAccountFree,
-  CreditAccountSubscription,
-  CreditAccountSubscriptionWindow,
-  CreditAccountPrepaid,
-  CreditAccountPurchase,
-  CreditAccountPurchasePreset,
-  CreditAccountAdmission,
-  InferenceUsageResponse,
-  AuditSkillSource,
-  AuditSkillFile,
-  AuditSkillSnapshot,
-  AuditSkillSummary,
-  AuditSkillsListResponse,
-  AuditSkillDetailResponse,
-  AuditSkillCreateInput,
-  AuditSkillImportInput,
-  AuditSkillRevisionInput,
-  AuditSkillSyncInput,
-  AuditSkillAssignInput,
-  AuditSkillCreateResponse,
-  AuditSkillBindResponse,
-  AuditSkillsByProjectResponse,
-} from "./client.js";
 
 export {
   WindowsEvidenceWorkerClient,

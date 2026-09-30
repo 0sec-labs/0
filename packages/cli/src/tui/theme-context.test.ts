@@ -17,7 +17,7 @@ import { activeTheme, useTheme } from "./theme-context.js";
 const tempHomes: string[] = [];
 
 function makeHome(): string {
-  const dir = mkdtempSync(join(tmpdir(), "0sec-theme-context-"));
+  const dir = mkdtempSync(join(tmpdir(), "0-theme-context-"));
   tempHomes.push(dir);
   return dir;
 }

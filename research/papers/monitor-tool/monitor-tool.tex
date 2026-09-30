@@ -25,8 +25,8 @@
 \title{The Monitor Tool: Supervising Long-Running Processes}
 
 \author{
-  0sec Labs \\
-  \texttt{github.com/0sec-labs/0sec}
+  0 Labs \\
+  \texttt{github.com/0sec-labs/0}
 }
 
 \date{}
@@ -36,7 +36,7 @@
 \maketitle
 
 \begin{abstract}
-0sec's agent can run commands, but it cannot \textit{supervise} a process that
+0's agent can run commands, but it cannot \textit{supervise} a process that
 outlives a single tool call. Every execution primitive shipped today is built
 around ``run to completion within a timeout, then hand back the whole output,'' a
 model that breaks the moment the agent must stand up a dev server and then attack
@@ -57,7 +57,7 @@ reporting. Every repository claim is anchored to a
 
 \section{Problem}
 
-0sec's agent can run commands, but it cannot \textit{supervise} a process that
+0's agent can run commands, but it cannot \textit{supervise} a process that
 outlives a single tool call. Every execution primitive we ship today is built
 around ``run to completion within a timeout, then hand back the whole output.''
 That model breaks the moment the agent needs to:
@@ -415,7 +415,7 @@ security boundary:
 \section{Integration notes}
 
 \begin{itemize}[leftmargin=*]
-  \item \textbf{Zod-validate then reject.} 0sec tools validate their payload
+  \item \textbf{Zod-validate then reject.} 0 tools validate their payload
   against an explicit Zod schema and \textbf{reject on mismatch before any side
   effect} --- \texttt{kernel\_run} is the reference implementation
   (\texttt{packages/core/src/agent/tools/kernel-run.ts}; see

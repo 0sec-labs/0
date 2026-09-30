@@ -124,7 +124,7 @@ interface BlockBearingMessage {
  * to accept — let alone act on — `cache_control`. An unknown field on a
  * compatible-but-not-identical endpoint is a request-rejection risk on the hot
  * path of every scan, so they are opt-in via
- * `0SEC_PROMPT_CACHE_EXTRA_PROVIDERS` rather than assumed. Every other
+ * `ZERO_PROMPT_CACHE_EXTRA_PROVIDERS` rather than assumed. Every other
  * provider (`openai`, `azure`, `openrouter`, `chatgpt-codex`) speaks a
  * different wire entirely and is structurally excluded: their request bodies
  * are built in separate branches that never call into this module.
@@ -146,13 +146,13 @@ export function providerSupportsPromptCache(provider: string): boolean {
 }
 
 /**
- * Parse `0SEC_PROMPT_CACHE_EXTRA_PROVIDERS` (comma-separated provider ids).
+ * Parse `ZERO_PROMPT_CACHE_EXTRA_PROVIDERS` (comma-separated provider ids).
  * Read per call rather than cached at import so the CLI `--features`-style
  * late env mutation is honoured, matching the getter convention in
  * `agent/features.ts`.
  */
 function readExtraCacheProviders(): ReadonlySet<string> {
-  const raw = process.env["0SEC_PROMPT_CACHE_EXTRA_PROVIDERS"];
+  const raw = process.env["ZERO_PROMPT_CACHE_EXTRA_PROVIDERS"];
   if (!raw) return new Set();
   return new Set(
     raw
@@ -261,14 +261,9 @@ export interface CacheUsage {
  * Returns `undefined` when there is no usage to report, matching the existing
  * `NativeRuntimeResult.usage` optionality.
  *
- * COST NOTE: `cacheWriteTokens` is folded into `inputTokens` and billed at the
- * full input rate by `estimateCost`, which under-reports a cache WRITE by its
- * 1.25x premium. `TokenUsageForPricing` has no cache-write field to express
- * that, and the error is bounded and conservative in the direction that
- * matters: writes happen once per prefix while reads happen every turn after,
- * so the read discount (correctly modelled, ~0.9x saved) dominates the
- * unmodelled write premium (~0.25x paid once) by a wide margin on any run
- * longer than two turns.
+ * Cache reads and writes are included in total prompt size but priced separately
+ * by the canonical shared tariff. Five-minute writes use the 1.25x input rate;
+ * cache reads use the model's cached-input rate.
  */
 export function readCacheUsage(raw: unknown): CacheUsage | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;

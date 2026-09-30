@@ -1,5 +1,5 @@
 /**
- * Out-of-band application security testing (OAST) — shared types (0sec#659).
+ * Out-of-band application security testing (OAST) — shared types (0#659).
  *
  * These types describe a hosted *interaction collaborator* (an interactsh-style
  * DNS + HTTP callback server we control) and the handles/interactions it hands
@@ -96,7 +96,7 @@ export interface OastProbe {
  * the collaborator holds no per-scan state beyond the interactions it records.
  */
 export interface OastCollaborator {
-  /** Base domain interactions are addressed under (e.g. `oast.0sec.ai`). */
+  /** Base domain interactions are addressed under (e.g. `oast.0.ai`). */
   readonly baseDomain: string;
   /** Mint a fresh unique handle (unique subdomain + correlation token). */
   register(): Promise<OastHandle>;

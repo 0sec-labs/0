@@ -69,7 +69,7 @@ import {
 } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { dirname, isAbsolute, join, sep } from "node:path";
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared";
 
 /** Bumped when the on-disk record shape changes incompatibly. */
 export const HUNT_MEMORY_SCHEMA_VERSION = 1;
@@ -200,7 +200,7 @@ export interface HuntStats {
 export interface HuntMemoryOptions {
   /** Full path to the JSONL file. Overrides `home`. */
   path?: string;
-  /** Home dir root; the store lives at `<home>/.0sec/hunt-memory/patterns.jsonl`. */
+  /** Home dir root; the store lives at `<home>/.0/hunt-memory/patterns.jsonl`. */
   home?: string;
   /** Max retained records before oldest-out rotation. Default 5000. */
   maxRecords?: number;

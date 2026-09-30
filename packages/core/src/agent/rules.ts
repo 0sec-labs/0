@@ -1,7 +1,7 @@
 /**
  * Just-in-time rule injection.
  *
- * 0sec already has two JIT layers, but both deliver LARGE methodology documents:
+ * 0 already has two JIT layers, but both deliver LARGE methodology documents:
  * dynamic playbooks (vuln-class methodology, ~3.6k tokens) and JIT skills
  * (model-pulled full guides). Neither delivers a small, atomic DO/DON'T rule at
  * the moment of the offending ACTION — scoped by phase / language / the specific
@@ -136,7 +136,7 @@ export function selectRules(
 export function buildRuleInjection(rules: readonly Rule[]): string {
   if (rules.length === 0) return "";
   const lines = rules.map((r) => `<rule id="${r.id}">${r.rule}</rule>`);
-  return `[0sec rules — apply to what you're doing now]\n${lines.join("\n")}`;
+  return `[0 rules — apply to what you're doing now]\n${lines.join("\n")}`;
 }
 
 /**

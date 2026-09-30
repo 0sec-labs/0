@@ -5,7 +5,7 @@ Skill self-improvement loop — a `/refine` flywheel for JIT skills.
 This is the skill-side sibling of `active_learning_loop.py`. That loop closes
 the feedback cycle for the triage *router* (operator labels -> retrain ->
 A/B-gated promote). This loop closes the same cycle for the ONLY other already-
-versioned, hot-loaded-from-disk surface 0sec has: the JIT methodology skills
+versioned, hot-loaded-from-disk surface 0 has: the JIT methodology skills
 (`packages/core/src/agent/skills/{frameworks,vulnerabilities,techniques}/*.yaml`,
 loaded by `loadSkillRegistry()`; each has an integer `version`).
 
@@ -482,7 +482,7 @@ def _gate_promotion(args, entries: list[dict], now: str) -> list[dict]:
 
     When --promote is passed, --evolution-store, --evolution-version, and
     --evolution-artifact are MANDATORY. Without them the script exits with
-    actionable instructions to use the `0sec evolve` workflow."""
+    actionable instructions to use the `0 evolve` workflow."""
     cand = args.candidate_yaml
     ok, msg = load_check(cand, args.core_dist)
     # Resolve which skill this refines: explicit flag or the YAML's id line.
@@ -540,8 +540,8 @@ def _gate_promotion(args, entries: list[dict], now: str) -> list[dict]:
             "  --evolution-artifact to verify the candidate's artifact identity against\n"
             "  the evolution registry.  A load-check alone is insufficient proof of\n"
             "  evaluated behavior.\n\n"
-            "  To promote through the 0sec evolution lifecycle, run:\n"
-            "    0sec evolve promote <store-path> <version-id>\n\n"
+            "  To promote through the 0 evolution lifecycle, run:\n"
+            "    0 evolve promote <store-path> <version-id>\n\n"
             "  Or use the standalone tool with a valid evaluated version:\n"
             "    node scripts/train/artifact-bridge.mjs authorize …\n",
             file=sys.stderr,
@@ -617,7 +617,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     ap.add_argument(
         "--core-dist",
         type=Path,
-        help="Path to @0sec/core build (for the load-check). Defaults to sibling.",
+        help="Path to @0/core build (for the load-check). Defaults to sibling.",
     )
     ap.add_argument(
         "--check-skill",

@@ -23,7 +23,7 @@
  * suppress a finding off this signal.
  */
 
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared";
 import { verifyOracleByCategory, type OracleResult } from "../triage/oracles.js";
 
 /** Signature of a category oracle (matches `verifyOracleByCategory`). */

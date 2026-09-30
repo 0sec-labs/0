@@ -1,5 +1,5 @@
 /**
- * Race-widening smell-hunter candidate generation — 0sec's kernelCTF Pipeline #3.
+ * Race-widening smell-hunter candidate generation — 0's kernelCTF Pipeline #3.
  *
  * A sibling of `generateVariantCandidates` (variant-candidates.ts) and
  * `generateInvariantCandidates` (invariant-candidates.ts). This hunts the ONE
@@ -33,7 +33,7 @@
  * Same shape/interface as its siblings (returns a `brief` + `HuntCandidate[]`)
  * so it drops straight into `runHuntScan`; it additionally returns the rich
  * smell candidates, and — the new part — a `widenEnv` per candidate that maps
- * the `widen_hint` onto the existing `0SEC_KERNEL_QEMU_WIDEN_*` prover knobs
+ * the `widen_hint` onto the existing `ZERO_KERNEL_QEMU_WIDEN_*` prover knobs
  * (kernel-vm-runner.ts), i.e. WHERE to inject the `mdelay()` kprobe to widen
  * THIS specific window.
  *
@@ -46,7 +46,7 @@
 
 import { readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
-import type { RuntimeMode } from "@0sec/shared";
+import type { RuntimeMode } from "@0/shared";
 import { LlmApiRuntime } from "../runtime/llm-api.js";
 import type { HuntBrief, HuntCandidate } from "./hunt-scan.js";
 
@@ -99,7 +99,7 @@ export interface RaceSmellHuntInput {
  * A hint for WHERE to widen this specific window. `injectSymbol` is the kernel
  * symbol (function) the race-widening kprobe should probe; `suggestedDelayMs`
  * is how long to stall there; `rationale` says why that point widens the gap.
- * Mapped onto the `0SEC_KERNEL_QEMU_WIDEN_*` runner knobs by {@link widenEnvFor}.
+ * Mapped onto the `ZERO_KERNEL_QEMU_WIDEN_*` runner knobs by {@link widenEnvFor}.
  */
 export interface RaceWidenHint {
   /** Kernel function to probe with the mdelay() kprobe (usually the enclosing fn of `sleep_point`). */
@@ -129,14 +129,14 @@ export interface RaceSmellCandidate {
 }
 
 /**
- * The concrete `0SEC_KERNEL_QEMU_WIDEN_*` env the kernel-vm-runner reads to
+ * The concrete `ZERO_KERNEL_QEMU_WIDEN_*` env the kernel-vm-runner reads to
  * insmod the race-widening kprobe for this candidate. `OFFSET` is intentionally
  * absent — the exact `symbol+offset` is resolved at repro time against the
  * booted vmlinux; the symbol + delay is what the static smell can pin.
  */
 export interface RaceWidenEnv {
-  "0SEC_KERNEL_QEMU_WIDEN_SYMBOL": string;
-  "0SEC_KERNEL_QEMU_WIDEN_DELAY_MS": string;
+  "ZERO_KERNEL_QEMU_WIDEN_SYMBOL": string;
+  "ZERO_KERNEL_QEMU_WIDEN_DELAY_MS": string;
 }
 
 export interface RaceSmellHuntPlan {
@@ -177,7 +177,7 @@ function siteFile(site: string | undefined): string | undefined {
 }
 
 /**
- * Map a candidate's `widenHint` onto the runner's `0SEC_KERNEL_QEMU_WIDEN_*`
+ * Map a candidate's `widenHint` onto the runner's `ZERO_KERNEL_QEMU_WIDEN_*`
  * knobs (kernel-vm-runner.ts). This is the bridge that tells the prover WHERE to
  * inject the mdelay() kprobe to widen THIS window from ns to seconds.
  */
@@ -187,8 +187,8 @@ export function widenEnvFor(candidate: RaceSmellCandidate, defaultDelayMs: numbe
       ? Math.floor(candidate.widenHint.suggestedDelayMs)
       : defaultDelayMs;
   return {
-    "0SEC_KERNEL_QEMU_WIDEN_SYMBOL": candidate.widenHint.injectSymbol,
-    "0SEC_KERNEL_QEMU_WIDEN_DELAY_MS": String(delay),
+    "ZERO_KERNEL_QEMU_WIDEN_SYMBOL": candidate.widenHint.injectSymbol,
+    "ZERO_KERNEL_QEMU_WIDEN_DELAY_MS": String(delay),
   };
 }
 
@@ -353,7 +353,7 @@ export async function generateRaceSmellCandidates(input: RaceSmellHuntInput): Pr
       `RACE-WIDENING smell. Sequence: unlock(${c.lockA}) -> ${c.sleepPoint} -> lock(${c.lockB}). ` +
       `Attacker state '${c.attackerState}' is used across the sleeping gap — hypothesized ${c.hypothesizedPrimitive}. ` +
       `Confirm the gap is SLEEPABLE (mutex/alloc/copy/sleep, not spinlock-only) and that a 2nd thread can tear the state ` +
-      `during the widened window. Widen via kprobe on ${env["0SEC_KERNEL_QEMU_WIDEN_SYMBOL"]} (mdelay ${env["0SEC_KERNEL_QEMU_WIDEN_DELAY_MS"]}ms): ${c.widenHint.rationale}`;
+      `during the widened window. Widen via kprobe on ${env["ZERO_KERNEL_QEMU_WIDEN_SYMBOL"]} (mdelay ${env["ZERO_KERNEL_QEMU_WIDEN_DELAY_MS"]}ms): ${c.widenHint.rationale}`;
     const existing = bySite.get(path);
     if (existing) existing.hint = `${existing.hint}\n---\n${hint}`;
     else bySite.set(path, { path, hint });

@@ -1,8 +1,8 @@
-// `0sec config` — inspect, export, and import the console configuration.
+// `0 config` — inspect, export, and import the console configuration.
 //
 // Configuration is TWO-LEVEL (see tui/settings.ts): a per-user GLOBAL file
-// (`~/.0sec/tui-settings.json`) with a per-project OVERRIDE
-// (`<cwd>/.0sec/tui-settings.json`) layered on top, per key, falling through to
+// (`~/.0/tui-settings.json`) with a per-project OVERRIDE
+// (`<cwd>/.0/tui-settings.json`) layered on top, per key, falling through to
 // the built-in defaults. This command is the operator surface over that model:
 //
 //   show           the effective config, each key labelled default/global/project
@@ -162,6 +162,15 @@ export function runConfigImport(
   // Drop unknown/invalid keys up front — never blindly overwrite. What survives
   // is a sparse, validated patch of known settings.
   const patch = sanitizeOverrides(bag);
+  // Project patches cannot carry operator authority. The global import surface
+  // may select this execution boundary only through the security gate below.
+  const profile = typeof bag === "object" && bag !== null
+    ? (bag as Record<string, unknown>)["executionProfile"]
+    : undefined;
+  const profileChoices = SETTING_DEFS.find((def) => def.key === "executionProfile")?.choices;
+  if (scope === "global" && typeof profile === "string" && profileChoices?.includes(profile)) {
+    patch.executionProfile = profile as TuiSettings["executionProfile"];
+  }
   const patchKeys = Object.keys(patch) as (keyof TuiSettings)[];
   const skipped =
     typeof bag === "object" && bag !== null && !Array.isArray(bag)

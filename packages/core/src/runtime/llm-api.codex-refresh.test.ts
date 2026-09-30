@@ -20,14 +20,14 @@ describe("Codex refresh-token rotation write-back", () => {
   let authPath: string;
 
   const CODEX_ENV = [
-    "0SEC_CHATGPT_ACCESS_TOKEN",
-    "0SEC_CHATGPT_OAUTH_REFRESH_TOKEN",
-    "0SEC_CHATGPT_ACCOUNT_ID",
-    "0SEC_CHATGPT_AUTH_FILE",
+    "ZERO_CHATGPT_ACCESS_TOKEN",
+    "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN",
+    "ZERO_CHATGPT_ACCOUNT_ID",
+    "ZERO_CHATGPT_AUTH_FILE",
   ];
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "0sec-codex-auth-"));
+    dir = mkdtempSync(join(tmpdir(), "0-codex-auth-"));
     authPath = join(dir, "auth.json");
     for (const k of CODEX_ENV) delete process.env[k];
     __resetChatGptCodexAuthStateForTests();
@@ -58,7 +58,7 @@ describe("Codex refresh-token rotation write-back", () => {
     );
 
   it("isolates two credential snapshots while sharing refresh for the same credential", async () => {
-    process.env["0SEC_CHATGPT_AUTH_FILE"] = authPath;
+    process.env["ZERO_CHATGPT_AUTH_FILE"] = authPath;
     const refreshes: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
       const refresh = new URLSearchParams(String(init.body)).get("refresh_token")!;
@@ -68,8 +68,8 @@ describe("Codex refresh-token rotation write-back", () => {
         access_token: `access-for-${refresh}`, refresh_token: `rotated-${refresh}`, expires_in: 3600,
       }), { headers: { "content-type": "application/json" } });
     }));
-    const firstEnv = { "0SEC_CHATGPT_OAUTH_REFRESH_TOKEN": "first-fixture", "0SEC_CHATGPT_ACCOUNT_ID": "first-account" };
-    const secondEnv = { "0SEC_CHATGPT_OAUTH_REFRESH_TOKEN": "second-fixture", "0SEC_CHATGPT_ACCOUNT_ID": "second-account" };
+    const firstEnv = { "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN": "first-fixture", "ZERO_CHATGPT_ACCOUNT_ID": "first-account" };
+    const secondEnv = { "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN": "second-fixture", "ZERO_CHATGPT_ACCOUNT_ID": "second-account" };
     const [first, same, second] = await Promise.all([
       getChatGptCodexAccessToken(firstEnv),
       getChatGptCodexAccessToken({ ...firstEnv }),
@@ -87,9 +87,9 @@ describe("Codex refresh-token rotation write-back", () => {
     const runtime = new LlmApiRuntime({
       type: "api", timeout: 5000, provider: "chatgpt-codex", model: "gpt-fixture",
       env: {
-        "0SEC_CHATGPT_AUTH_FILE": authPath, "0SEC_CHATGPT_ACCESS_TOKEN": "",
-        "0SEC_CHATGPT_OAUTH_REFRESH_TOKEN": "", "0SEC_FORCE_PROVIDER": "",
-        "0SEC_LLM_FALLBACK": "", "0SEC_SKIP_PROVIDER_BANNER": "1",
+        "ZERO_CHATGPT_AUTH_FILE": authPath, "ZERO_CHATGPT_ACCESS_TOKEN": "",
+        "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN": "", "ZERO_FORCE_PROVIDER": "",
+        "ZERO_LLM_FALLBACK": "", "ZERO_SKIP_PROVIDER_BANNER": "1",
       },
     });
     const laterLogin = JSON.stringify({ tokens: { refresh_token: "later-fixture", account_id: "later-account" } });
@@ -118,7 +118,7 @@ describe("Codex refresh-token rotation write-back", () => {
         tokens: { refresh_token: "old-refresh", account_id: "acct-123" },
       }),
     );
-    process.env["0SEC_CHATGPT_AUTH_FILE"] = authPath;
+    process.env["ZERO_CHATGPT_AUTH_FILE"] = authPath;
     mockRefresh("rotated-refresh-1");
 
     const out = await getChatGptCodexAccessToken();
@@ -137,7 +137,7 @@ describe("Codex refresh-token rotation write-back", () => {
       authPath,
       JSON.stringify({ tokens: { refresh_token: "old-refresh" } }),
     );
-    process.env["0SEC_CHATGPT_AUTH_FILE"] = authPath;
+    process.env["ZERO_CHATGPT_AUTH_FILE"] = authPath;
 
     const seen: string[] = [];
     vi.stubGlobal(
@@ -169,8 +169,8 @@ describe("Codex refresh-token rotation write-back", () => {
 
   it("does NOT write a file on the env-forwarded path (no authFilePath)", async () => {
     // Env-forwarded refresh token (worker-controller/cloud path).
-    process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"] = "env-refresh";
-    process.env["0SEC_CHATGPT_AUTH_FILE"] = authPath; // present but must stay untouched
+    process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"] = "env-refresh";
+    process.env["ZERO_CHATGPT_AUTH_FILE"] = authPath; // present but must stay untouched
     mockRefresh("rotated-env");
 
     await getChatGptCodexAccessToken();

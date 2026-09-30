@@ -3,7 +3,7 @@
  *
  * Append ONE validated champion to the operator-owned appsec overlay. The
  * bundled registry remains immutable: a promotion creates or updates
- * `~/.0sec/lenses/appsec-archetypes.json` by default.
+ * `~/.0/lenses/appsec-archetypes.json` by default.
  *
  * Each transition is written atomically with a hash-linked ledger. The runtime
  * loader admits only ledger-bound synthesized entries, so a partial write,
@@ -184,7 +184,7 @@ function ensureRegistry(path: string): void {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const initial: RegistryFile = {
     schemaVersion: 1,
-    provenance: "0sec validated self-evolving appsec lens overlay",
+    provenance: "0 validated self-evolving appsec lens overlay",
     archetypes: [],
     ledger: [],
   };

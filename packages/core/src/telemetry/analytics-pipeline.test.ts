@@ -13,7 +13,7 @@ import { MAX_CONTENT_BYTES, REDACTED_OPENAI, REDACTED_SECRET } from "./redaction
 
 const dirs: string[] = [];
 function tmpHome(): string {
-  const d = mkdtempSync(join(tmpdir(), "0sec-analytics-pipeline-"));
+  const d = mkdtempSync(join(tmpdir(), "0-analytics-pipeline-"));
   dirs.push(d);
   return d;
 }
@@ -35,7 +35,7 @@ function capturingFetch(): typeof fetch {
 }
 
 function logPath(): string {
-  return join(home, ".0sec", ANALYTICS_SENT_LOG_FILENAME);
+  return join(home, ".0", ANALYTICS_SENT_LOG_FILENAME);
 }
 
 /** Parse the single record from the most recent captured POST body. */
@@ -49,11 +49,11 @@ beforeEach(() => {
   analyticsPipeline.__resetForTests();
   captured = [];
   home = tmpHome();
-  vi.stubEnv("0SEC_CLOUD_TOKEN", "test-token");
-  vi.stubEnv("0SEC_CLOUD_HOST", "https://analytics.test");
-  vi.stubEnv("0SEC_ANALYTICS_LEVEL", undefined);
-  vi.stubEnv("0SEC_OFFLINE", undefined);
-  vi.stubEnv("0SEC_NO_TELEMETRY", undefined);
+  vi.stubEnv("ZERO_CLOUD_TOKEN", "test-token");
+  vi.stubEnv("ZERO_CLOUD_HOST", "https://analytics.test");
+  vi.stubEnv("ZERO_ANALYTICS_LEVEL", undefined);
+  vi.stubEnv("ZERO_OFFLINE", undefined);
+  vi.stubEnv("ZERO_NO_TELEMETRY", undefined);
   vi.stubEnv("DO_NOT_TRACK", undefined);
   analyticsPipeline.configure({ homeDir: home, fetchImpl: capturingFetch() });
 });
@@ -161,8 +161,8 @@ describe("bus-derived usage feed", () => {
 
 describe("fail-soft transport", () => {
   it("never throws when the cloud is offline (no credentials)", async () => {
-    delete process.env["0SEC_CLOUD_TOKEN"];
-    delete process.env["0SEC_CLOUD_HOST"];
+    delete process.env["ZERO_CLOUD_TOKEN"];
+    delete process.env["ZERO_CLOUD_HOST"];
     // Point at a fresh empty home so no cloud.env file is found either.
     analyticsPipeline.configure({ homeDir: tmpHome(), fetchImpl: capturingFetch() });
     analyticsPipeline.setLevel("usage");
@@ -340,11 +340,11 @@ describe("consent changes with pending records", () => {
   it("honors an environment opt-out and clears earlier accumulated usage", async () => {
     analyticsPipeline.setLevel("full");
     eventBus.emit("tool_call_started", { tool: "before_off", turn: 0, ts: Date.now() });
-    process.env["0SEC_ANALYTICS_LEVEL"] = "off";
+    process.env["ZERO_ANALYTICS_LEVEL"] = "off";
     eventBus.emit("tool_call_started", { tool: "while_off", turn: 0, ts: Date.now() });
     await analyticsPipeline.flushNow();
     expect(captured).toEqual([]);
-    delete process.env["0SEC_ANALYTICS_LEVEL"];
+    delete process.env["ZERO_ANALYTICS_LEVEL"];
     eventBus.emit("tool_call_started", { tool: "after_on", turn: 1, ts: Date.now() });
     await analyticsPipeline.flushNow();
     expect(lastRecord()["featureCounts"]).toEqual({ after_on: 1 });
@@ -355,7 +355,7 @@ describe("consent changes with pending records", () => {
     const capture = capturingFetch();
     analyticsPipeline.configure({ fetchImpl: (async (...args: Parameters<typeof fetch>) => {
       const response = await capture(...args);
-      process.env["0SEC_ANALYTICS_LEVEL"] = "usage";
+      process.env["ZERO_ANALYTICS_LEVEL"] = "usage";
       return response;
     }) as typeof fetch });
     for (let i = 0; i < 100; i++) analyticsPipeline.recordCode({ lang: "ts", source: `code ${i}`, origin: "test" });
@@ -422,7 +422,7 @@ describe("receiver byte and record limits", () => {
       await analyticsPipeline.flushNow();
       expect(JSON.parse(captured[0]!.body).records.map((record: Record<string, unknown>) => record.sourceRedacted)).toEqual([boundary, REDACTED_OPENAI]);
       expect(captured).toHaveLength(1);
-      const outcomes = readFileSync(join(home, ".0sec", "analytics-outcomes.log"), "utf8").trim().split("\n").map((line) => JSON.parse(line));
+      const outcomes = readFileSync(join(home, ".0", "analytics-outcomes.log"), "utf8").trim().split("\n").map((line) => JSON.parse(line));
       expect(outcomes.map((outcome) => outcome.field)).toEqual(["sourceRedacted", "record"]);
       for (const outcome of outcomes) {
         expect(Object.keys(outcome).sort()).toEqual(["bytes", "field", "maxBytes", "outcome", "ts"]);

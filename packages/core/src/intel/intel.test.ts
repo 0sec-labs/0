@@ -98,7 +98,7 @@ describe("vulnerability intel", () => {
   let cacheDir: string;
 
   beforeEach(() => {
-    cacheDir = mkdtempSync(join(tmpdir(), "0sec-intel-test-"));
+    cacheDir = mkdtempSync(join(tmpdir(), "0-intel-test-"));
   });
 
   afterEach(() => {
@@ -142,6 +142,33 @@ describe("vulnerability intel", () => {
     expect(result?.id).toBe("CVE-2024-0001");
     expect(result?.cvss?.score).toBe(8.1);
     expect(result?.kev?.dateAdded).toBe("2024-02-01");
+  });
+
+  it("opens a shared NVD cooldown after 429 without flooding parallel lookups or poisoning the cache", async () => {
+    let now = 1_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    let nvdCalls = 0;
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.startsWith("https://www.cisa.gov/")) return json({ vulnerabilities: [] });
+      if (url.startsWith("https://services.nvd.nist.gov/")) {
+        nvdCalls++;
+        return nvdCalls === 1 ? new Response(null, { status: 429 }) : json(NVD_RESPONSE);
+      }
+      throw new Error(`unexpected URL ${url}`);
+    }) as unknown as typeof fetch;
+
+    const requests = Array.from({ length: 12 }, (_, index) =>
+      lookupCve({ cveId: `CVE-2024-${String(index + 1).padStart(4, "0")}`, cacheDir }, { fetchImpl: fetchMock }));
+    expect(await Promise.all(requests)).toEqual(Array(12).fill(null));
+    expect(nvdCalls).toBe(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    now += 30_001;
+    const resumed = await lookupCve({ cveId: "CVE-2024-0001", cacheDir }, { fetchImpl: fetchMock });
+    expect(resumed?.cvss?.score).toBe(8.1);
+    expect(nvdCalls).toBe(2);
   });
 
   it("searches similar advisories through NVD keyword search", async () => {
@@ -324,7 +351,7 @@ describe("vulnerability intel", () => {
   });
 
   it("infers target-history hints from local repo metadata", () => {
-    const repo = mkdtempSync(join(tmpdir(), "0sec-intel-repo-"));
+    const repo = mkdtempSync(join(tmpdir(), "0-intel-repo-"));
     try {
       mkdirSync(join(repo, ".git"), { recursive: true });
       writeFileSync(join(repo, "package.json"), JSON.stringify({
@@ -352,7 +379,7 @@ describe("vulnerability intel", () => {
   });
 
   it("infers target-history hints from pyproject.toml", () => {
-    const repo = mkdtempSync(join(tmpdir(), "0sec-intel-repo-"));
+    const repo = mkdtempSync(join(tmpdir(), "0-intel-repo-"));
     try {
       writeFileSync(join(repo, "pyproject.toml"), [
         "[project]",
@@ -376,7 +403,7 @@ describe("vulnerability intel", () => {
   });
 
   it("infers target-history hints from Cargo.toml", () => {
-    const repo = mkdtempSync(join(tmpdir(), "0sec-intel-repo-"));
+    const repo = mkdtempSync(join(tmpdir(), "0-intel-repo-"));
     try {
       writeFileSync(join(repo, "Cargo.toml"), [
         "[package]",
@@ -398,7 +425,7 @@ describe("vulnerability intel", () => {
   });
 
   it("infers target-history hints from go.mod", () => {
-    const repo = mkdtempSync(join(tmpdir(), "0sec-intel-repo-"));
+    const repo = mkdtempSync(join(tmpdir(), "0-intel-repo-"));
     try {
       writeFileSync(join(repo, "go.mod"), [
         "module github.com/gin-gonic/gin",
@@ -420,7 +447,7 @@ describe("vulnerability intel", () => {
   });
 
   it("infers target-history hints from .git/config alone", () => {
-    const repo = mkdtempSync(join(tmpdir(), "0sec-intel-repo-"));
+    const repo = mkdtempSync(join(tmpdir(), "0-intel-repo-"));
     try {
       mkdirSync(join(repo, ".git"), { recursive: true });
       writeFileSync(join(repo, ".git", "config"), [
@@ -440,7 +467,7 @@ describe("vulnerability intel", () => {
   });
 
   it("prefers package.json ecosystem over pyproject.toml when both exist", () => {
-    const repo = mkdtempSync(join(tmpdir(), "0sec-intel-repo-"));
+    const repo = mkdtempSync(join(tmpdir(), "0-intel-repo-"));
     try {
       writeFileSync(join(repo, "package.json"), JSON.stringify({
         name: "my-tool",
@@ -463,8 +490,8 @@ describe("vulnerability intel", () => {
   });
 
   it("rejects leaf symlink that resolves outside repo root", () => {
-    const repo = mkdtempSync(join(tmpdir(), "0sec-intel-repo-"));
-    const outsideDir = mkdtempSync(join(tmpdir(), "0sec-intel-outside-"));
+    const repo = mkdtempSync(join(tmpdir(), "0-intel-repo-"));
+    const outsideDir = mkdtempSync(join(tmpdir(), "0-intel-outside-"));
     try {
       // Create a legitimate-looking external metadata file
       writeFileSync(join(outsideDir, "package.json"), JSON.stringify({
@@ -490,8 +517,8 @@ describe("vulnerability intel", () => {
   });
 
   it("rejects intermediate directory symlink that escapes repo root", () => {
-    const repo = mkdtempSync(join(tmpdir(), "0sec-intel-repo-"));
-    const outsideDir = mkdtempSync(join(tmpdir(), "0sec-intel-outside-"));
+    const repo = mkdtempSync(join(tmpdir(), "0-intel-repo-"));
+    const outsideDir = mkdtempSync(join(tmpdir(), "0-intel-outside-"));
     try {
       // External metadata file
       writeFileSync(join(outsideDir, "Cargo.toml"), [
@@ -515,8 +542,8 @@ describe("vulnerability intel", () => {
   });
 
   it("preserves normal in-root inference alongside symlink rejections", () => {
-    const repo = mkdtempSync(join(tmpdir(), "0sec-intel-repo-"));
-    const outsideDir = mkdtempSync(join(tmpdir(), "0sec-intel-outside-"));
+    const repo = mkdtempSync(join(tmpdir(), "0-intel-repo-"));
+    const outsideDir = mkdtempSync(join(tmpdir(), "0-intel-outside-"));
     try {
       // A legitimate in-root package.json
       mkdirSync(join(repo, ".git"), { recursive: true });
@@ -559,7 +586,7 @@ describe("vulnerability intel", () => {
   });
 
   it("uses inferred repo metadata for target-history searches while preserving overrides", async () => {
-    const repo = mkdtempSync(join(tmpdir(), "0sec-intel-repo-"));
+    const repo = mkdtempSync(join(tmpdir(), "0-intel-repo-"));
     try {
       writeFileSync(join(repo, "package.json"), JSON.stringify({
         name: "@org/zipper",

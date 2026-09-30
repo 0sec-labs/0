@@ -18,7 +18,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { Finding, VerificationResult } from "@0sec/shared";
+import type { Finding, VerificationResult } from "@0/shared";
 import { osecDB, restoreFindingReviewFields } from "./database.js";
 import { createShimmedDatabase } from "./wasm-shim.js";
 
@@ -54,7 +54,7 @@ function reproducedResult(findingId: string): VerificationResult {
 }
 
 function withTempDir(fn: (dir: string) => void): void {
-  const dir = mkdtempSync(join(tmpdir(), "0sec-db-review-fields-"));
+  const dir = mkdtempSync(join(tmpdir(), "0-db-review-fields-"));
   try {
     fn(dir);
   } finally {
@@ -253,11 +253,79 @@ describe("findings.reviewAnnotation round-trip", () => {
   });
 });
 
+describe("findings.sourceVerification round-trip", () => {
+  it("persists source-only counts separately from canonical replay status", () => {
+    withTempDb((db) => {
+      const scanId = seedScan(db);
+      const finding = makeFinding({ id: "f-sv-1" });
+      const sourceVerification: NonNullable<Finding["sourceVerification"]> = {
+        status: "matched",
+        totalPredicates: 2,
+        matchedPredicates: 2,
+        notMatchedPredicates: 0,
+        inconclusivePredicates: 0,
+        behaviorPending: true,
+      };
+      db.saveFinding(scanId, {
+        ...finding,
+        verification_result: {
+          ...reproducedResult(finding.id),
+          status: "not_reproduced",
+        } as VerificationResult,
+        sourceVerification,
+      });
+
+      const hydrated = db.getFindingReviewFields(finding.id);
+      expect(hydrated.sourceVerification).toEqual(sourceVerification);
+      expect(hydrated.verification_result?.status).toBe("not_reproduced");
+      const [row] = db.getScanFindings(scanId);
+      expect(JSON.parse(row.sourceVerification!)).toEqual(sourceVerification);
+      expect(restoreFindingReviewFields(row).sourceVerification).toEqual(sourceVerification);
+    });
+  });
+
+  it("keeps absent and malformed source summaries absent", () => {
+    withTempDb((db) => {
+      const scanId = seedScan(db);
+      db.saveFinding(scanId, makeFinding({ id: "f-sv-2" }));
+      const [row] = db.getScanFindings(scanId);
+      expect(row.sourceVerification).toBeNull();
+      expect("sourceVerification" in db.getFindingReviewFields("f-sv-2")).toBe(false);
+      expect(
+        restoreFindingReviewFields({
+          sourceVerification: JSON.stringify({
+            status: "matched",
+            totalPredicates: 1,
+            matchedPredicates: 0,
+            notMatchedPredicates: 0,
+            inconclusivePredicates: 0,
+            behaviorPending: false,
+          }),
+        }).sourceVerification,
+      ).toBeUndefined();
+      expect(restoreFindingReviewFields({ sourceVerification: "{not json [" }).sourceVerification).toBeUndefined();
+
+      db.saveFinding(scanId, {
+        ...makeFinding({ id: "f-sv-3" }),
+        sourceVerification: {
+          status: "matched",
+          totalPredicates: 1,
+          matchedPredicates: 0,
+          notMatchedPredicates: 0,
+          inconclusivePredicates: 0,
+          behaviorPending: false,
+        },
+      });
+      expect(db.getFinding("f-sv-3")?.sourceVerification).toBeNull();
+    });
+  });
+});
+
 describe("pre-migration database files", () => {
   /**
-   * Build a database whose `findings` table predates verificationResult /
-   * reviewAnnotation (the shape shipped alongside findingRank), insert a row,
-   * then open it through the normal `osecDB` code path.
+   * Build a database whose `findings` table predates verificationResult,
+   * reviewAnnotation, and sourceVerification, insert a row, then open it
+   * through the normal `osecDB` code path.
    */
   it("opens a database created without the new columns and reads absent values", () => {
     withTempDir((dir) => {
@@ -329,8 +397,17 @@ describe("pre-migration database files", () => {
       );
       expect(legacyCols.has("verificationResult")).toBe(false);
       expect(legacyCols.has("reviewAnnotation")).toBe(false);
+      expect(legacyCols.has("sourceVerification")).toBe(false);
       legacy.close();
 
+      const sourceVerification: NonNullable<Finding["sourceVerification"]> = {
+        status: "matched",
+        totalPredicates: 1,
+        matchedPredicates: 1,
+        notMatchedPredicates: 0,
+        inconclusivePredicates: 0,
+        behaviorPending: true,
+      };
       // Normal open path: must migrate rather than fail.
       const db = new osecDB(path);
       try {
@@ -339,21 +416,24 @@ describe("pre-migration database files", () => {
         expect(rows[0].title).toBe("Legacy");
         expect(rows[0].verificationResult).toBeNull();
         expect(rows[0].reviewAnnotation).toBeNull();
+        expect(rows[0].sourceVerification).toBeNull();
 
         const hydrated = db.getFindingReviewFields("legacy-finding");
         expect(hydrated).toEqual({});
         expect(hydrated.verification_result).toBeUndefined();
         expect(hydrated.reviewAnnotation).toBeUndefined();
+        expect(hydrated.sourceVerification).toBeUndefined();
 
-        // A migrated file also accepts writes to the new columns.
         db.saveFinding("legacy-scan", {
           ...makeFinding({ id: "legacy-finding-2" }),
           verification_result: reproducedResult("legacy-finding-2"),
           reviewAnnotation: { path: "src/a.ts", startLine: 1 },
+          sourceVerification,
         });
         const after = db.getFindingReviewFields("legacy-finding-2");
         expect(after.verification_result?.status).toBe("reproduced");
         expect(after.reviewAnnotation?.path).toBe("src/a.ts");
+        expect(after.sourceVerification).toEqual(sourceVerification);
       } finally {
         db.close();
       }
@@ -363,6 +443,9 @@ describe("pre-migration database files", () => {
       try {
         expect(reopened.getFindingReviewFields("legacy-finding-2").verification_result?.status).toBe(
           "reproduced",
+        );
+        expect(reopened.getFindingReviewFields("legacy-finding-2").sourceVerification).toEqual(
+          sourceVerification,
         );
         expect(reopened.getFindingReviewFields("legacy-finding")).toEqual({});
       } finally {

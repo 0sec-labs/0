@@ -11,7 +11,7 @@ const execute = promisify(execFile);
 const builder = fileURLToPath(new URL("./build-dev-engine.mjs", import.meta.url));
 
 async function fixture(t) {
-  const root = await mkdtemp(join(tmpdir(), "0sec-engine-generation-test-"));
+  const root = await mkdtemp(join(tmpdir(), "0-engine-generation-test-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const source = join(root, "source");
   const output = join(root, "generation");
@@ -24,7 +24,7 @@ async function fixture(t) {
   `);
   return {
     root, source,
-    build: () => execute(process.execPath, [builder, source, output], { timeout: 15_000 }),
+    build: (sourcePath = source) => execute(process.execPath, [builder, sourcePath, output], { timeout: 15_000 }),
   };
 }
 
@@ -48,4 +48,11 @@ test("a directory alias cannot introduce a recursive source walk", async (t) => 
   const f = await fixture(t);
   await symlink(".", join(f.source, "cycle"), "dir");
   await assert.rejects(f.build(), (error) => error.code === 1);
+});
+
+test("a checkout-controlled source-root directory alias is rejected", async (t) => {
+  const f = await fixture(t);
+  const alias = join(f.root, "source-alias");
+  await symlink("source", alias, "dir");
+  await assert.rejects(f.build(alias), (error) => error.code === 1);
 });

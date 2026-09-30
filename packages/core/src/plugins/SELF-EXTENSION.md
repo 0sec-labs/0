@@ -35,7 +35,7 @@ the agent itself. Its waterfall listeners can delegate with `next()` or replace
 the result. That flexibility is useful for behavior composition, but is not an
 authorization boundary against code running with host permissions.
 
-0sec separates those responsibilities. Live component composition can replace
+0 separates those responsibilities. Live component composition can replace
 agent behavior; this particular registry's guard interface remains deny-only.
 Sandboxed components use brokered capabilities. Separately trusted host
 components require an explicit workspace grant and are not made safe merely

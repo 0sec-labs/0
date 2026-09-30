@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Finding } from "@0sec/shared";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,8 +14,6 @@ const {
   syncLoreMirrorMock,
   makeLloreJudgeMock,
   prepareMock,
-  getCloudSinkConfigMock,
-  postFindingMock,
   makeHuntProveStageMock,
   noveltyJudge,
   proveStage,
@@ -38,14 +35,12 @@ const {
     syncLoreMirrorMock: vi.fn(),
     makeLloreJudgeMock: vi.fn(() => noveltyJudge),
     prepareMock: vi.fn(),
-    getCloudSinkConfigMock: vi.fn(),
-    postFindingMock: vi.fn(),
     skepticVerifier,
     noveltyJudge,
   };
 });
 
-vi.mock("@0sec/core", () => ({
+vi.mock("@0/core", () => ({
   generateVariantCandidates: generateVariantCandidatesMock,
   runHuntScan: runHuntScanMock,
   makeSkepticVerifier: makeSkepticVerifierMock,
@@ -57,160 +52,17 @@ vi.mock("@0sec/core", () => ({
   makeLloreJudge: makeLloreJudgeMock,
   makeHuntProveStage: makeHuntProveStageMock,
   prepare: prepareMock,
-  getCloudSinkConfig: getCloudSinkConfigMock,
-  postFinding: postFindingMock,
-  // #1215 — leadToCandidateFinding calls stampDeploymentContext when a
-  // candidatePath is provided. The real classification + cap logic is tested
-  // in deployment-context.test.ts; this mock stamps the context field and
-  // applies the severity cap so the leadToCandidateFinding tests exercise
-  // the full wiring end-to-end at the CLI level.
-  stampDeploymentContext: vi.fn((f: Record<string, unknown>, path?: string) => {
-    if (!path) return;
-    const p = String(path).replace(/\\/g, "/");
-    const ctx =
-      /\.test\.(ts|js|tsx|jsx|py|go|rs|rb|java|kt)$/i.test(p) ||
-      /\/__tests__\//.test(p) ||
-      /\/test[s]?\//.test(p)
-        ? "test_only"
-        : /\/\.dev\.vars/.test(p) || /\/seed[s]?\//.test(p) || /\/dev[-_]/.test(p)
-          ? "dev_only"
-          : /\/node_modules\//.test(p) || /\/dist\//.test(p) || /\/build\//.test(p) || /\/\.next\//.test(p)
-            ? "build_only"
-            : "prod_reachable";
-    f.deploymentContext = ctx;
-    // Severity cap (subset of the real logic — enough for the wiring tests)
-    const sev = String(f.severity);
-    const cap =
-      ctx === "dev_only" ? "info" :
-      ctx === "test_only" ? "low" :
-      ctx === "build_only" ? "info" :
-      null;
-    const ranks: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1, info: 0 };
-    if (cap && (ranks[sev] ?? 2) > (ranks[cap] ?? 0)) {
-      f.severity = cap;
-    }
-  }),
 }));
 
-const { leadToCandidateFinding, runHunt, parseCeiling } = await import("../hunt.js");
+const { runHunt, parseCeiling } = await import("../hunt.js");
 
-function makeLead(overrides: Partial<Finding> = {}): Finding {
-  return {
-    id: "lead-1",
-    templateId: "variant-hunt",
-    title: "Possible UAF in foo_release()",
-    description: "The release path frees obj without clearing the dangling ref.",
-    severity: "high",
-    category: "memory-safety" as Finding["category"],
-    status: "confirmed", // finder/skeptic-confirmed — must be downgraded
-    evidence: {
-      request: "n/a",
-      response: "drivers/foo/foo.c:120",
-      analysis: "skeptic survived the refute pass",
-    },
-    ...overrides,
-  } as Finding;
-}
-
-describe("leadToCandidateFinding (#1051)", () => {
-  it("forces status to 'discovered' — never confirmed/sendable", () => {
-    const out = leadToCandidateFinding(makeLead(), "use-after-free", "abc123 fix");
-    expect(out.status).toBe("discovered");
-  });
-
-  it("preserves the finder's honest severity (no inflation/deflation)", () => {
-    expect(leadToCandidateFinding(makeLead({ severity: "high" }), "uaf", "ref").severity).toBe("high");
-    expect(leadToCandidateFinding(makeLead({ severity: "medium" }), "uaf", "ref").severity).toBe("medium");
-  });
-
-  it("stamps lead provenance (bug class + seed) into evidence.analysis", () => {
-    const out = leadToCandidateFinding(makeLead(), "use-after-free", "abc123 fix the UAF");
-    const evidence = out.evidence as { analysis: string };
-    expect(evidence.analysis).toContain("use-after-free");
-    expect(evidence.analysis).toContain("abc123 fix the UAF");
-    expect(evidence.analysis).toMatch(/LEAD|HYPOTHESIS/);
-    expect(evidence.analysis).toContain("skeptic survived the refute pass");
-  });
-
-  it("marks the candidate with the recency-hunt template id and keeps title/description", () => {
-    const out = leadToCandidateFinding(makeLead(), "uaf", "ref");
-    expect(out.templateId).toBe("recency-hunt-lead");
-    expect(out.title).toBe("Possible UAF in foo_release()");
-    expect(out.description).toContain("dangling ref");
-  });
-
-  it("never carries a 'confirmed' status through even when the lead has no analysis", () => {
-    const lead = makeLead({ evidence: { request: "", response: "" } });
-    const out = leadToCandidateFinding(lead, "uaf", "ref");
-    expect(out.status).toBe("discovered");
-    const evidence = out.evidence as { analysis: string };
-    expect(evidence.analysis).toMatch(/LEAD|HYPOTHESIS/);
-  });
-
-  // ── #1215 deployment-context tests ───────────────────────────────────────
-
-  it("stamps deploymentContext from an optional candidate path", () => {
-    const out = leadToCandidateFinding(
-      makeLead({ severity: "critical" }),
-      "uaf",
-      "ref",
-      "/app/tests/api.test.ts",
-    ) as unknown as Finding;
-    expect(out.deploymentContext).toBe("test_only");
-  });
-
-  it("caps severity for test-only findings by path", () => {
-    const out = leadToCandidateFinding(
-      makeLead({ severity: "critical" }),
-      "uaf",
-      "ref",
-      "/app/tests/api.test.ts",
-    ) as unknown as Finding;
-    expect(out.severity).toBe("low");
-  });
-
-  it("caps severity for dev-only findings by path", () => {
-    const out = leadToCandidateFinding(
-      makeLead({ severity: "high" }),
-      "uaf",
-      "ref",
-      "/app/.dev.vars",
-    ) as unknown as Finding;
-    expect(out.severity).toBe("info");
-  });
-
-  it("caps severity for build-only findings by path", () => {
-    const out = leadToCandidateFinding(
-      makeLead({ severity: "medium" }),
-      "uaf",
-      "ref",
-      "/app/node_modules/pkg/index.js",
-    ) as unknown as Finding;
-    expect(out.severity).toBe("info");
-  });
-
-  it("does NOT cap severity when candidatePath is omitted", () => {
-    const out = leadToCandidateFinding(makeLead({ severity: "high" }), "uaf", "ref");
-    expect(out.severity).toBe("high");
-  });
-
-  it("does NOT cap prod_reachable severity", () => {
-    const out = leadToCandidateFinding(
-      makeLead({ severity: "high" }),
-      "uaf",
-      "ref",
-      "/app/src/routes/api.ts",
-    ) as unknown as Finding;
-    expect(out.severity).toBe("high");
-  });
-});
 
 describe("runHunt — novelty gate wiring", () => {
   let tmpRoot: string;
   let seedPath: string;
 
   beforeEach(() => {
-    tmpRoot = mkdtempSync(join(tmpdir(), "0sec-hunt-test-"));
+    tmpRoot = mkdtempSync(join(tmpdir(), "0-hunt-test-"));
     seedPath = join(tmpRoot, "seed.patch");
     writeFileSync(seedPath, "diff --git a/foo.c b/foo.c\n", "utf8");
 
@@ -247,8 +99,6 @@ describe("runHunt — novelty gate wiring", () => {
     makeLloreJudgeMock.mockClear();
     buildInvariantHuntContextMock.mockReset().mockResolvedValue(null);
     buildGraphSliceHuntContextMock.mockReset().mockReturnValue(null);
-    getCloudSinkConfigMock.mockReset().mockReturnValue(null);
-    postFindingMock.mockReset().mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -421,8 +271,8 @@ describe("runHunt — novelty gate wiring", () => {
     const cleanup = vi.fn();
     prepareMock.mockResolvedValueOnce({
       targetType: "source-code",
-      resolvedTarget: "/tmp/0sec-review/repo",
-      repoPath: "/tmp/0sec-review/repo",
+      resolvedTarget: "/tmp/0-review/repo",
+      repoPath: "/tmp/0-review/repo",
       cleanup,
     });
 
@@ -439,7 +289,7 @@ describe("runHunt — novelty gate wiring", () => {
       expect.any(Function),
     );
     expect(generateVariantCandidatesMock).toHaveBeenCalledWith(expect.objectContaining({
-      sourceRoot: "/tmp/0sec-review/repo",
+      sourceRoot: "/tmp/0-review/repo",
     }));
     expect(cleanup).toHaveBeenCalledOnce();
   });
@@ -448,7 +298,7 @@ describe("runHunt — novelty gate wiring", () => {
     buildInvariantHuntContextMock.mockResolvedValueOnce({
       subsystem: "net/unix",
       subsystemFiles: ["net/unix/af_unix.c"],
-      modelPath: `${tmpRoot}/.0sec/invariant-models/net__unix.json`,
+      modelPath: `${tmpRoot}/.0/invariant-models/net__unix.json`,
       modelLoaded: true,
       model: { objects: [{ object: "struct unix_sock" }] },
       violations: [{ kind: "unlocked-field-access" }],
@@ -500,7 +350,7 @@ describe("runHunt — novelty gate wiring", () => {
   it("injects the graph-slice prompt block into the finder brief when --graph-slice is set", async () => {
     buildGraphSliceHuntContextMock.mockReturnValueOnce({
       subsystem: "net/unix",
-      cpgPath: `${tmpRoot}/.0sec/cpg/net__unix.json`,
+      cpgPath: `${tmpRoot}/.0/cpg/net__unix.json`,
       targetFunctions: ["unix_attach_fds"],
       resolvedTargets: 1,
       opsEdges: 2,
@@ -614,7 +464,7 @@ describe("runHunt — PROVE stage (--exploitability) dispatch", () => {
   let seedPath: string;
 
   beforeEach(() => {
-    tmpRoot = mkdtempSync(join(tmpdir(), "0sec-hunt-prove-"));
+    tmpRoot = mkdtempSync(join(tmpdir(), "0-hunt-prove-"));
     seedPath = join(tmpRoot, "seed.patch");
     writeFileSync(seedPath, "diff --git a/foo.c b/foo.c\n", "utf8");
 
@@ -639,7 +489,6 @@ describe("runHunt — PROVE stage (--exploitability) dispatch", () => {
       repoPath: target,
       cleanup: vi.fn(),
     }));
-    getCloudSinkConfigMock.mockReset().mockReturnValue(null);
     localMirrorsMock.mockReset().mockResolvedValue([]);
   });
 

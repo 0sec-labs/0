@@ -1,5 +1,5 @@
 /**
- * Flywheel connector: benchmark MISS → lens-synth curated-miss input (0sec).
+ * Flywheel connector: benchmark MISS → lens-synth curated-miss input (0).
  *
  * The self-improvement flywheel already has two halves:
  *   - bench:     tournament → scorecard → champion (the falsifiable capability

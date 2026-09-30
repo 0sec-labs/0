@@ -2,7 +2,7 @@
  * Diagnostic loader for user-supplied themes.
  *
  * A user drops theme JSON files into their per-user themes directory
- * (`~/.0sec/themes/<id>.json` — the same dir `themes.ts` calls "installed
+ * (`~/.0/themes/<id>.json` — the same dir `themes.ts` calls "installed
  * themes"; this module is the human-facing view over it). Each file is a
  * palette (a token->hex map under `palette`) plus optional display metadata.
  *
@@ -43,10 +43,10 @@ import {
 
 /**
  * Absolute path to the per-user themes directory. Deliberately the SAME dir
- * `themes.ts` resolves installed themes from (`~/.0sec/themes`), so "user
+ * `themes.ts` resolves installed themes from (`~/.0/themes`), so "user
  * theme" and "installed theme" are one concept, resolved from one place —
  * mirroring the per-user state-dir convention that plugins and the session
- * store use (`homeStateDir` -> `~/.0sec`).
+ * store use (`homeStateDir` -> `~/.0`).
  */
 export function userThemesDir(homeDir?: string): string {
   return installedThemesDir(homeDir);

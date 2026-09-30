@@ -1,4 +1,4 @@
-// JavaScript artifact scanning — gap E (0sec web recon).
+// JavaScript artifact scanning — gap E (0 web recon).
 //
 // For a web target, this module does two things against already-enumerated
 // JS bundles (the chunk URLs you get from stack fingerprinting):
@@ -40,7 +40,7 @@ export interface SecretPattern {
  * Each `source` is written without the `g` flag here; `scanBody` clones it
  * with `g` so a shared definition is never mutated by `lastIndex`.
  *
- * CANONICAL SOURCE: foxguard (the 0sec Rust scanner, `src/secrets.rs`) holds
+ * CANONICAL SOURCE: foxguard (the 0 Rust scanner, `src/secrets.rs`) holds
  * the authoritative, maintained secret-rule catalog. We cannot import Rust
  * into this TS engine, so the high-signal patterns below are PORTED from
  * foxguard v0.9.0 (AWS AKIA + secret key, GitHub/GitLab/npm/Slack/Stripe

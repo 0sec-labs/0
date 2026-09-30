@@ -62,9 +62,9 @@ describe("prompt caching on the wire", () => {
   }
 
   beforeEach(() => {
-    process.env["0SEC_SKIP_PROVIDER_BANNER"] = "1";
-    delete process.env["0SEC_FEATURE_PROMPT_CACHE"];
-    delete process.env["0SEC_PROMPT_CACHE_EXTRA_PROVIDERS"];
+    process.env["ZERO_SKIP_PROVIDER_BANNER"] = "1";
+    delete process.env["ZERO_FEATURE_PROMPT_CACHE"];
+    delete process.env["ZERO_PROMPT_CACHE_EXTRA_PROVIDERS"];
 
     capturedBody = {};
     vi.stubGlobal(
@@ -160,7 +160,7 @@ describe("prompt caching on the wire", () => {
   });
 
   it("caches an Anthropic-compatible provider once explicitly opted in", async () => {
-    process.env["0SEC_PROMPT_CACHE_EXTRA_PROVIDERS"] = "z-ai";
+    process.env["ZERO_PROMPT_CACHE_EXTRA_PROVIDERS"] = "z-ai";
     const rt = runtimeFor("z-ai");
     await rt.executeNative("sys", longConversation(2), []);
 
@@ -168,7 +168,7 @@ describe("prompt caching on the wire", () => {
   });
 
   it("emits nothing when the feature flag is off", async () => {
-    process.env["0SEC_FEATURE_PROMPT_CACHE"] = "0";
+    process.env["ZERO_FEATURE_PROMPT_CACHE"] = "0";
     const rt = runtimeFor("anthropic");
     await rt.executeNative("sys", longConversation(30), []);
 

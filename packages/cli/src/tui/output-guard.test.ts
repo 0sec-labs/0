@@ -14,12 +14,12 @@ describe("installTuiOutputGuard", () => {
     });
     try {
       expect(process.stderr.write).not.toBe(originalWrite);
-      process.stderr.write("[0sec] plan quota exhausted\n");
+      process.stderr.write("[0] plan quota exhausted\n");
     } finally {
       guard.restore();
     }
 
-    expect(lines).toEqual(["stderr:[0sec] plan quota exhausted"]);
+    expect(lines).toEqual(["stderr:[0] plan quota exhausted"]);
     expect(process.stderr.write).toBe(originalWrite);
   });
 
@@ -55,7 +55,7 @@ describe("installTuiOutputGuard", () => {
     });
     const guard = installTuiOutputGuard();
     try {
-      process.stdout.write('0SEC_EVENT_TOOL_CALL_STARTED {"tool":"read"}\n');
+      process.stdout.write('ZERO_EVENT_TOOL_CALL_STARTED {"tool":"read"}\n');
     } finally {
       guard.restore();
       unsubscribe();

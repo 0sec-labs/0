@@ -37,7 +37,7 @@ import {
   type RecordHuntClaimInput,
 } from "./hunt-evidence-ledger.js";
 import { loadKnownNegativesFromLedger, matchNegative, negativeContext } from "./hunt-negatives.js";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 

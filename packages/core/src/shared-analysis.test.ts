@@ -101,7 +101,7 @@ it("does not expand an empty file selection into a full scan", () => {
 
 const nativeAvailable = spawnSync("foxguard", ["--version"], { stdio: "ignore", timeout: 5000 }).status === 0;
 it.skipIf(!nativeAvailable)("resolves selected files from the source root with the real native scanner", () => {
-  const root = mkdtempSync(join(tmpdir(), "0sec-native-selection-"));
+  const root = mkdtempSync(join(tmpdir(), "0-native-selection-"));
   const source = join(root, "node_modules", "fixture-package");
   mkdirSync(source, { recursive: true });
   writeFileSync(join(source, "vulnerable.js"), "function handle(req) { return eval(req.body.code); }\n");
@@ -188,7 +188,7 @@ describe("translateFoxguardJson", () => {
     expect(findings[0]!.ruleId).toBe("good");
   });
 
-  it("normalizes severity values into 0sec's vocabulary (low/medium/high/critical/info)", () => {
+  it("normalizes severity values into 0's vocabulary (low/medium/high/critical/info)", () => {
     const json = JSON.stringify([
       { rule_id: "a", severity: "low", description: "", file: "a", line: 1 },
       { rule_id: "b", severity: "medium", description: "", file: "a", line: 1 },

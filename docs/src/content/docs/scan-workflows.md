@@ -30,8 +30,7 @@ taxonomy describes missions, not a single scan that covers every layer.
 Choose the command and its evidence contract: identity/graph analysis does not
 exploit a network service; a source-review lead does not establish a live exploit;
 kernel/VM execution needs separately provisioned artifacts. These CLI workflows
-run in your environment. Hosted model transport does not provision a managed
-execution worker.
+run in your environment. Managed-service access is a separate workflow.
 
 ## Authorization and scope
 
@@ -58,7 +57,8 @@ The conservative posture changes request behavior, rate defaults, and WAF-evasio
 
 ## Authentication and runtime
 
-Provider credentials pay for model calls. Target credentials authenticate to the assessed application. Cloud login is a separate credential flow.
+Provider credentials pay for model calls. Target credentials authenticate to
+the assessed application. Managed-service tokens do not configure a model provider.
 
 ```bash
 0 scan --target https://staging.example.com --scope ./scope.json \
@@ -108,7 +108,7 @@ it does not claim every layer ran or that all remaining findings are reproduced.
 
 Inspect per-finding triage provenance. A skipped layer and an unrecorded layer are different. [Features](/features/) lists current toggles; [Finding Triage](/triage/) explains the evidence gates.
 
-Jev assistance is separately opt-in through `0SEC_JEV_FEATURES`, not enabled by
+Jev assistance is separately opt-in through `ZERO_JEV_FEATURES`, not enabled by
 possessing a provider key. In this workflow it can assist browser navigation,
 memory ranking, or semantic deduplication. It does not grant scope, confirm a
 vulnerability, or turn a duplicate match into verification. Browser assistance
@@ -131,7 +131,7 @@ HTML and PDF output write a timestamped report under the system temporary direct
 
 ### SQLite database
 
-Current scan storage is run-local: by default `~/.0sec/runs/<scan-id>/state.db`, subject to the configured state root. `--db-path` selects an explicit database. Do not assume every command uses a single `~/.0sec/0sec.db`.
+Current scan storage is run-local: by default `~/.0/runs/<scan-id>/state.db`, subject to the configured state root. `--db-path` selects an explicit database. Do not assume every command uses a single `~/.0/0.db`.
 
 ```bash
 0 scan --target https://staging.example.com --scope ./scope.json \
@@ -209,7 +209,7 @@ verification. Deterministic replay executes a finding, fixture, or reproduction
 bundle and records concrete assertions. Verification availability depends on the
 selected path.
 
-<span id="explicit-verification-with-0sec-verify"></span>
+<span id="explicit-verification-with-0-verify"></span>
 ### Explicit verification with `0 verify`
 
 ```bash
@@ -220,7 +220,7 @@ selected path.
 0 verify --bundle ./bundle-dir --runner docker
 
 # Use the separate kernel-finding verification path.
-env 0SEC_KERNEL_VERIFY=1 0 verify \
+env ZERO_KERNEL_VERIFY=1 0 verify \
   --kernel-finding finding.json --kernel-tree ./linux
 ```
 
@@ -301,8 +301,8 @@ status can coexist with explicitly blocked findings or retained errors; exit
 `0` is not an all-findings-fixed certificate. CLI exits are `0` completed,
 `2` blocked, `3` failed, and `130` cancelled.
 
-`costUsd` reports available metered model usage, not a hosted-service price or
-proof of completion. Investigation completion now supplies metered cost, but
+`costUsd` reports available metered model usage, not proof of completion.
+Investigation completion now supplies metered cost, but
 the current repair loop replaces that total with its own ledger; totals across
 phases/resumes can therefore be incomplete. Repair ceiling checks occur between
 findings and do not include all investigation/prior-run spend. Missing usage is
@@ -370,7 +370,7 @@ GitHub export and PR emission are external writes and require repository authori
 
 - **Scope refusal:** supply a valid engagement scope; do not remove the target protocol to bypass authorization checks.
 - **Missing findings or scan:** check the run ID, state root, and selected `--db-path`.
-- **Provider error:** use [API Keys](/api-keys/) and [Configuration](/configuration/); cloud login does not automatically configure a model provider.
+- **Provider error:** use [API Keys](/api-keys/) and [Configuration](/configuration/); managed-service tokens do not configure a model provider.
 - **Interrupted or budget-limited run:** inspect completion/error state and retained artifacts before deciding whether resume is supported. Zero findings from an incomplete run is not a clean pass.
 - **Verification cannot execute:** inspect the mode's prerequisites and errors. Changing a finding's human triage state will not repair an executable verification contract.
 - **Fix refuses:** check the clean Git worktree, source finding, verification evidence, and explicit regression command. Do not bypass preconditions by relabeling a finding.

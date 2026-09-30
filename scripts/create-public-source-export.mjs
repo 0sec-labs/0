@@ -42,14 +42,15 @@ const publicRoots = [
   "scripts/create-public-source-export.mjs",
   "scripts/create-public-source-export.test.mjs",
   "Dockerfile",
+  "Dockerfile.workbench",
   "LICENSE",
   "LICENSE-MIT",
   "NOTICE",
   "README.md",
   "SECURITY.md",
-  "assets/0sec-icon.gif",
-  "assets/0sec-aperture-ink.svg",
-  "assets/0sec-aperture-white.svg",
+  "assets/0-icon.gif",
+  "assets/0-aperture-ink.svg",
+  "assets/0-aperture-white.svg",
   "package.json",
   "packages",
   "pnpm-lock.yaml",
@@ -58,6 +59,8 @@ const publicRoots = [
   "scripts/bundle-cli.mjs",
   "scripts/dist-package-lock.json",
   "scripts/runtime-lock.test.mjs",
+  "scripts/workbench-tools.json",
+  "scripts/workbench-agents",
   "scripts/ci-runner-bootstrap.sh",
   "scripts/smoke-cli.sh",
   "scripts/smoke-source-evolution.mjs",
@@ -65,6 +68,7 @@ const publicRoots = [
   "test-targets",
   "tsconfig.base.json",
   "vitest.workspace-aliases.ts",
+  "vendor",
   ".github/workflows/public-pr.yml",
   ".github/workflows/main.yml",
   ".github/workflows/docker-publish.yml",
@@ -148,9 +152,12 @@ if (tracked) {
   for (const sourceRelative of tracked) {
     if (!isPublic(sourceRelative) || isExcluded(sourceRelative) || isGenerated(sourceRelative)) continue;
 
+    const source = join(repoRoot, sourceRelative);
+    if (!(await exists(source))) continue;
+
     const destination = join(outputDir, sourceRelative);
     await mkdir(dirname(destination), { recursive: true });
-    await cp(join(repoRoot, sourceRelative), destination, { dereference: false });
+    await cp(source, destination, { dereference: false });
   }
 } else {
   for (const root of publicRoots) await copyPublicRoot(root);

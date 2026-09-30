@@ -1,4 +1,4 @@
-import type { Evidence, PocStep } from "@0sec/shared";
+import type { Evidence, PocStep } from "@0/shared";
 
 function looksLikeHttpRequest(text: string): boolean {
   return /^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+/i.test(text.trim());

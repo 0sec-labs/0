@@ -10,7 +10,7 @@ import { loadUserThemes, loadUserThemesForHome, userThemesDir } from "./user-the
 const dirs: string[] = [];
 
 function makeDir(): string {
-  const dir = mkdtempSync(join(tmpdir(), "0sec-user-themes-"));
+  const dir = mkdtempSync(join(tmpdir(), "0-user-themes-"));
   dirs.push(dir);
   return dir;
 }
@@ -30,8 +30,8 @@ function writeTheme(dir: string, file: string, body: unknown): void {
 }
 
 describe("userThemesDir", () => {
-  it("resolves under the per-user 0sec state dir (same as installed themes)", () => {
-    expect(userThemesDir("/home/x")).toBe("/home/x/.0sec/themes");
+  it("resolves under the per-user 0 state dir (same as installed themes)", () => {
+    expect(userThemesDir("/home/x")).toBe("/home/x/.0/themes");
   });
 });
 

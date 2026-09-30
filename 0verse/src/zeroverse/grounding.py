@@ -8,7 +8,7 @@ halves a struct offset can make the LLM read a false premise and inflate severit
 on an unconfirmed finding.
 
 This module ports the G1 structural-grounding gate
-(``research/g1-structural-grounding/`` in the 0sec monorepo) and binds it to the
+(``research/g1-structural-grounding/`` in the 0 monorepo) and binds it to the
 call graph 0verse ALREADY recovered in ``backends.ghidra.ProgramMeta.callgraph``
 (the disassembly-level ``FunctionManager`` graph, authoritative over pseudo-C) —
 no second Ghidra run, no KD dependency.

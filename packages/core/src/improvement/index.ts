@@ -1,7 +1,7 @@
 export type {
   EvolutionArtifactKind, EvolutionAttempt, EvolutionBackend, EvolutionCase, EvolutionConfig,
   EvolutionDependencies, EvolutionEdit, EvolutionEvaluation, EvolutionExecution,
-  EvolutionFile, EvolutionLane, EvolutionModel, EvolutionProposal, EvolutionRegistry,
+  EvolutionFile, EvolutionLane, EvolutionModel, EvolutionModelIdentity, EvolutionProposal, EvolutionRegistry,
   EvolutionRegistryEvent, EvolutionRunResult, EvolutionSandbox, EvolutionSandboxRequest,
   EvolutionSnapshot, EvolutionVersion,
 } from "./types.js";
@@ -24,6 +24,7 @@ export {
 export { proposeEvolutionEdits } from "./rewrite.js";
 export {
   campaignPromotionAllowed,
+  blockEvolutionCampaign,
   compareEvolutionIdentities,
   createOrLoadEvolutionCampaign,
   createEvolutionComparisonIdentity,
@@ -32,6 +33,7 @@ export {
   holdoutExposureIdentity,
   loadEvolutionCampaign,
   reserveCampaignDispatch,
+  reconcileCampaignDispatch,
   reserveHoldoutExposure,
   settleCampaignDispatch,
 } from "./safety.js";

@@ -37,7 +37,7 @@ export interface MastheadEngagement {
 }
 
 /**
- * The centered empty-state hero: a muted EYEBROW (the lab name) above the 0sec
+ * The centered empty-state hero: a muted EYEBROW (the lab name) above the 0
  * block mark, then the tagline, then — when and only when the host supplies
  * them — the engagement facts. The caller still gates the whole unit behind
  * `showMasthead`.
@@ -48,7 +48,6 @@ export interface MastheadEngagement {
 export function Masthead({
   showTerminalMark,
   showMascot = true,
-  showTagline,
   contentWidth,
   logoFrameGrid,
   engagement,
@@ -56,7 +55,6 @@ export function Masthead({
 }: {
   showTerminalMark: boolean;
   showMascot?: boolean;
-  showTagline: boolean;
   contentWidth: number;
   logoFrameGrid: LogoFrame;
   /** Real engagement facts from the host; anything absent is simply not drawn. */
@@ -148,9 +146,6 @@ export function Masthead({
         <box flexDirection="row" width={9} height={1} flexShrink={0} marginTop={1}>
           <text width={9} flexShrink={0} fg="#FD802E">━━━━━━━━━</text>
         </box>
-      ) : null}
-      {showTagline ? (
-        <text fg={TEXT} marginTop={1}>{fitTuiText("Make software secure itself.", contentWidth, { mode: "middle" })}</text>
       ) : null}
       {facts.length > 0 ? (
         <box flexDirection="column" width={contentWidth} flexShrink={0} minWidth={0} marginTop={1} alignItems="center">

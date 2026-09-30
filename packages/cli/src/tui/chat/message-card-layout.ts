@@ -47,7 +47,7 @@ export interface DeliveryReceipt {
 /**
  * The minimal message shape both adapters accept — a structural subset of the
  * bus `PeerMessagePayload` and the mailbox `HubMessage`, declared locally so
- * this module stays self-contained (no `@0sec/core` import).
+ * this module stays self-contained (no `@0/core` import).
  */
 export interface PeerMessageLike {
   from: string;

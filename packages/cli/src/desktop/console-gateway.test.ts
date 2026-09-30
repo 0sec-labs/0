@@ -6,7 +6,7 @@ import type {
   ConsoleTurnOutcome,
   ScopePolicy,
   ToolCall,
-} from "@0sec/core";
+} from "@0/core";
 import { DesktopConsoleGateway, DesktopConsoleGatewayError } from "./console-gateway.js";
 
 type GatewayFactoryInput = {
@@ -37,6 +37,7 @@ function makeSession(input: GatewayFactoryInput): ConsoleSession {
     autonomyMode: input.autonomyMode,
     target: input.target,
     scope: undefined,
+    scopeEnforcement: { pluginId: "scope", enabled: false, projectPath: "/tmp", message: "Scope checks off" },
     localScopePath: undefined,
     setAutonomyMode: () => undefined,
     reconfigureRuntime: () => undefined,

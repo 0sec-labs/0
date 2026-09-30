@@ -92,9 +92,9 @@ describe("parseInline", () => {
   });
 
   it("styles inline code", () => {
-    expect(styled(parseInline("run `0sec scan` now"))).toEqual([
+    expect(styled(parseInline("run `0 scan` now"))).toEqual([
       ["run ", "text"],
-      ["0sec scan", "code"],
+      ["0 scan", "code"],
       [" now", "text"],
     ]);
   });
@@ -108,16 +108,16 @@ describe("parseInline", () => {
   });
 
   it("renders a link label plus a muted destination", () => {
-    expect(styled(parseInline("see [docs](https://0sec.dev)"))).toEqual([
+    expect(styled(parseInline("see [docs](https://0.dev)"))).toEqual([
       ["see ", "text"],
       ["docs", "link"],
-      [" (https://0sec.dev)", "muted"],
+      [" (https://0.dev)", "muted"],
     ]);
   });
 
   it("does not repeat the destination when it equals the label", () => {
-    expect(styled(parseInline("[https://0sec.dev](https://0sec.dev)"))).toEqual([
-      ["https://0sec.dev", "link"],
+    expect(styled(parseInline("[https://0.dev](https://0.dev)"))).toEqual([
+      ["https://0.dev", "link"],
     ]);
   });
 
@@ -291,10 +291,10 @@ describe("lists", () => {
   });
 
   it("parses inline markup inside a list body", () => {
-    const [block] = parseMarkdownBlocks("- run `0sec` on **the repo**");
+    const [block] = parseMarkdownBlocks("- run `0` on **the repo**");
     expect(styled((block as { lines: MdSpan[][] }).lines[0]!)).toEqual([
       ["run ", "text"],
-      ["0sec", "code"],
+      ["0", "code"],
       [" on ", "text"],
       ["the repo", "bold"],
     ]);
@@ -431,8 +431,8 @@ describe("code blocks", () => {
   });
 
   it("leaves a short code line untouched", () => {
-    const [block] = renderMarkdown("```sh\n0sec scan\n```", 40);
-    expect(block).toEqual({ kind: "code", language: "sh", lines: ["0sec scan"] });
+    const [block] = renderMarkdown("```sh\n0 scan\n```", 40);
+    expect(block).toEqual({ kind: "code", language: "sh", lines: ["0 scan"] });
   });
 
   it("preserves interior indentation", () => {

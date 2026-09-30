@@ -10,7 +10,7 @@ const roots: string[] = [];
 const digest = (character: string) => `sha256:${character.repeat(64)}`;
 
 function root(): string {
-  const value = mkdtempSync(join(tmpdir(), "0sec-improvement-assess-"));
+  const value = mkdtempSync(join(tmpdir(), "0-improvement-assess-"));
   roots.push(value);
   return value;
 }
@@ -66,7 +66,7 @@ describe("bench improvement-assess", () => {
     registerBenchImprovementCommand(bench);
     await program.parseAsync([
       "node",
-      "0sec",
+      "0",
       "bench",
       "improvement-assess",
       "--result",

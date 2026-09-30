@@ -1,7 +1,7 @@
-# Related Work Notes for 0sec Paper Draft
+# Related Work Notes for 0 Paper Draft
 
 This file captures comparable systems and references already discussed in the
-0sec docs, reformatted for paper writing.
+0 docs, reformatted for paper writing.
 
 ## 1) Agentic Pentesting Systems
 
@@ -33,13 +33,13 @@ Patterns that recur across disclosed systems:
 3. LLM-assisted or model-assisted triage,
 4. memory/feedback loops from prior analyst decisions.
 
-Within 0sec docs, Endor Labs and Semgrep Assistant are used as reference
+Within 0 docs, Endor Labs and Semgrep Assistant are used as reference
 points for this shape (with caveats that the exact commercial internals are
 not fully open).
 
 ## 3) Hybrid Feature + Model Signals
 
-0sec docs cite VulnBERT-style hybrid thinking (handcrafted features plus
+0 docs cite VulnBERT-style hybrid thinking (handcrafted features plus
 model features) as motivation for triage routing and classifier design.
 
 Important writing constraint: frame this as architectural inspiration rather
@@ -59,9 +59,9 @@ implementation and benchmark comparison is shown.
 
 ## 5) Positioning Statement (Draft)
 
-Suggested concise positioning for 0sec:
+Suggested concise positioning for 0:
 
-"Relative to prior open and closed systems, 0sec's primary contribution is
+"Relative to prior open and closed systems, 0's primary contribution is
 not a novel single triage primitive but an open, end-to-end integration of
 shell-first exploitation, layered verification, and methodology-explicit
 benchmark accounting with retained artifact lineage."

@@ -1,5 +1,5 @@
 /**
- * Tool registry barrel (0sec#611).
+ * Tool registry barrel (0#611).
  *
  * Assembles the canonical `TOOL_DEFINITIONS` map from the per-domain
  * definition modules. Splitting the old 600-line object literal into
@@ -23,10 +23,6 @@ import { skillsToolDefinitions } from "./skills.js";
 import { scannerToolDefinitions, SCANNER_TOOL_NAMES } from "./scanner.js";
 import { detectionToolDefinitions } from "./detections.js";
 import { cloudToolDefinitions, CLOUD_TOOL_NAMES } from "./cloud.js";
-import {
-  orchestratorToolDefinitions,
-  ORCHESTRATOR_TOOL_NAMES,
-} from "./orchestrator.js";
 import { oastToolDefinitions, OAST_TOOL_NAMES } from "./oast.js";
 import { pythonToolDefinitions } from "./python.js";
 import { binaryToolDefinitions, BINARY_TOOL_NAMES } from "./binary.js";
@@ -43,11 +39,11 @@ import {
   KERNEL_WEAPONIZE_TOOL_NAMES,
   CVE_ADAPT_TOOL_NAMES,
 } from "./offensive-engines.js";
+import { jevPrepassToolDefinition } from "./jev-prepass.js";
 
 export {
   SCANNER_TOOL_NAMES,
   CLOUD_TOOL_NAMES,
-  ORCHESTRATOR_TOOL_NAMES,
   OAST_TOOL_NAMES,
   BINARY_TOOL_NAMES,
   // Phase-2 offensive-engine gating name-sets (dev-live-engine-recovery).
@@ -72,7 +68,6 @@ const DOMAIN_DEFINITIONS: Record<string, ToolDefinition> = {
   ...scannerToolDefinitions,
   ...detectionToolDefinitions,
   ...cloudToolDefinitions,
-  ...orchestratorToolDefinitions,
   ...oastToolDefinitions,
   ...pythonToolDefinitions,
   ...binaryToolDefinitions,
@@ -82,6 +77,8 @@ const DOMAIN_DEFINITIONS: Record<string, ToolDefinition> = {
   ...proxyToolDefinitions,
   ...securityEngineToolDefinitions,
   ...offensiveEngineToolDefinitions,
+  // Jev-powered security prepass (console runtime).
+  jev_prepass: jevPrepassToolDefinition,
 };
 
 // Canonical registry order. getToolsForRole("audit"/"review") enumerates
@@ -129,7 +126,6 @@ const TOOL_REGISTRY_ORDER = [
   "auth_boundary_probe",
   "cloud_s3_probe",
   "cloud_validate_credentials",
-  "start_scan",
   "oast_register",
   "oast_poll",
   "python_exec",
@@ -139,7 +135,7 @@ const TOOL_REGISTRY_ORDER = [
   "ask_operator",
   "update_todos",
   "write_todos",
-  // Model self-extension front door (0sec self-extension). In the registry so it
+  // Model self-extension front door (0 self-extension). In the registry so it
   // is a first-class, dispatchable, tested tool — but deliberately kept OUT of
   // every getToolsForRole set; native-loop injects it into the model-facing tool
   // set only when the operator enabled `allowModelSelfExtension` (default OFF).
@@ -154,6 +150,8 @@ const TOOL_REGISTRY_ORDER = [
   "entra_posture",
   "assemble_advisory",
   "cve_lookup",
+  // Jev-powered security prepass (console runtime).
+  "jev_prepass",
   // Phase-2 offensive / active security engines (dev-live-engine-recovery).
   // GROUP 1 (offline) join SCOPED_SOURCE_AUDIT_TOOLS; GROUP 2 are scope-gated;
   // GROUP 3 are feature-flag + scope gated, deny-by-default. See tools.ts

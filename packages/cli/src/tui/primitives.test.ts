@@ -89,7 +89,7 @@ const CASES: Case[] = [
     name: "mixed (composer footer)",
     columns: [
       { flex: 1, priority: 1 },
-      { content: "sonnet · ~/src/0sec · main · 4 turns", max: 40, priority: 0 },
+      { content: "sonnet · ~/src/0 · main · 4 turns", max: 40, priority: 0 },
     ],
   },
   {
@@ -272,8 +272,8 @@ describe("column allocation behaviour", () => {
   });
 
   it("drops the lowest-priority column first, then the rightmost", () => {
-    // The chat header: "0sec" and the mode badge outrank the engagement
-    // summary, which is why "0sec / chat" never bleeds into "target: none".
+    // The chat header: "0" and the mode badge outrank the engagement
+    // summary, which is why "0 / chat" never bleeds into "target: none".
     const columns: ColumnSpec[] = [
       { fixed: 4, priority: 2 },
       { flex: 1, min: 12, priority: 0 },

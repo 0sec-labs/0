@@ -180,7 +180,12 @@ export function evaluateImprovementPromotion(
   const provenance = result.provenance;
   checks.push({
     id: "comparison_compatibility",
-    passed: provenance === undefined || provenance.compatibilityStatus === "compatible",
+    passed: provenance === undefined || (provenance.compatibilityStatus === "compatible"
+      && Boolean(provenance.resolvedModel) && Boolean(provenance.provider)
+      && provenance.evaluatorDigest === result.evaluatorDigestBefore
+      && provenance.development.digest === result.developmentCorpusDigest
+      && provenance.heldOut.digest === result.heldOutCorpusDigest
+      && provenance.negativeControl.digest === result.negativeControlCorpusDigest),
     detail: provenance === undefined
       ? "legacy result has no comparison provenance; explicit provenance enables longitudinal gating"
       : provenance.compatibilityStatus === "compatible"

@@ -1,5 +1,5 @@
 /**
- * 0sec#193 — `VerificationResultSchema` tests.
+ * 0#193 — `VerificationResultSchema` tests.
  *
  * Two contracts to lock in:
  *   1. A valid result round-trips: parse → re-stringify → parse again
@@ -139,9 +139,9 @@ describe("VerificationResultSchema", () => {
     );
   });
 
-  it("exposes the three runner kinds", () => {
+  it("exposes the four runner kinds", () => {
     expect(RunnerKindSchema.options.sort()).toEqual(
-      ["docker", "local", "qemu"].sort(),
+      ["docker", "local", "qemu", "smolvm"].sort(),
     );
   });
 

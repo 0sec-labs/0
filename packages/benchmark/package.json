@@ -1,5 +1,5 @@
 {
-  "name": "@0sec/benchmark",
+  "name": "@0/benchmark",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -127,9 +127,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@0sec/core": "workspace:*",
-    "@0sec/shared": "workspace:*",
-    "@0sec/test-targets": "workspace:*",
+    "@0/core": "workspace:*",
+    "@0/shared": "workspace:*",
+    "@0/test-targets": "workspace:*",
     "express": "^4.22.1"
   },
   "devDependencies": {

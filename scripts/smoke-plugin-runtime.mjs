@@ -9,12 +9,12 @@ if (!entry) throw new Error("Usage: node scripts/smoke-plugin-runtime.mjs <CLI J
 const cli = realpathSync(resolve(entry));
 const command = cli.endsWith(".js") ? process.execPath : cli;
 const prefix = cli.endsWith(".js") ? [cli] : [];
-const root = mkdtempSync(join(tmpdir(), "0sec-plugin-runtime-"));
+const root = mkdtempSync(join(tmpdir(), "0-plugin-runtime-"));
 const home = join(root, "home");
 const project = join(root, "project");
 const emptyPath = join(root, "no-executables");
 const pluginId = "release-smoke";
-const pluginDir = join(home, ".0sec", "plugins", pluginId);
+const pluginDir = join(home, ".0", "plugins", pluginId);
 for (const dir of [home, project, emptyPath, pluginDir]) mkdirSync(dir, { recursive: true });
 
 // No external Node/Bun executable is discoverable. A standalone CLI must use
@@ -25,7 +25,7 @@ const env = {
   USERPROFILE: home,
   XDG_CONFIG_HOME: join(home, ".config"),
   PATH: emptyPath,
-  "0SEC_REGISTRY_URL": "",
+  "ZERO_REGISTRY_URL": "",
 };
 function run(args) {
   try {

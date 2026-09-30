@@ -3,7 +3,7 @@
  *
  * These exercise real filesystem behaviour — append-only JSONL, permission
  * bits, oldest-out rotation, atomic compaction — under a temp "home" root, so
- * no test ever touches the operator's real `~/.0sec`. Time is always injected
+ * no test ever touches the operator's real `~/.0`. Time is always injected
  * via `createdAt` / `now`; ids are injected too, so everything is deterministic.
  */
 
@@ -227,7 +227,7 @@ describe("GC / rotation", () => {
 
 describe("totality", () => {
   it("skips corrupt / partial lines without throwing", () => {
-    mkdirSync(join(home, ".0sec", "hunt-memory"), { recursive: true });
+    mkdirSync(join(home, ".0", "hunt-memory"), { recursive: true });
     const good = JSON.stringify({
       id: "id-good",
       kind: "finding",
@@ -292,7 +292,7 @@ describe("permissions", () => {
   it("creates the dir 0700 and file 0600", () => {
     const store = new HuntMemoryStore({ home, idFactory: seqIds() });
     store.append(baseInput());
-    const dirMode = statSync(join(home, ".0sec", "hunt-memory")).mode & 0o777;
+    const dirMode = statSync(join(home, ".0", "hunt-memory")).mode & 0o777;
     const fileMode = statSync(storePath).mode & 0o777;
     expect(dirMode).toBe(0o700);
     expect(fileMode).toBe(0o600);

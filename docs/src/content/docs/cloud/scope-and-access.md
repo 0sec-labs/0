@@ -34,12 +34,12 @@ boundary. Identify those cases explicitly.
 
 ## Organization and GitHub App access
 
-For managed repository enrollment, sign in to the correct Cloud organization,
-then configure its GitHub App integration. Grant access only to the intended
+For managed repository enrollment, coordinate organization access and the GitHub
+App integration with the service operator. Grant access only to the intended
 repositories. GitHub sign-in authenticates an identity; it does not itself
 install the App or make private repositories available to workers.
 
-The enrollment endpoint checks a nonrevoked CLI token with `scans:dispatch`,
+The enrollment endpoint checks a nonrevoked service token with `scans:dispatch`,
 current organization membership, and a nonsuspended, nonremoved installation.
 Repository access is checked against the synchronized installation inventory;
 an all-repositories installation can also cover a matching owner before the
@@ -51,11 +51,11 @@ URL. If it returns `repo-not-accessible`, check repository selection, owner and
 installation state. Do not widen an installation to all repositories merely
 to silence a failed readiness check.
 
-These are access checks, not a complete legal authorization or runtime scope
-policy. The CLI's `connect` and `service start` commands submit repository and
-test/setup configuration; they do not upload a local `--scope` file or your
-engagement brief. Agree separately on the permitted behavior of tests, setup
-scripts, network access, repair publication and recurring runs.
+These are access checks, not complete legal authorization or runtime scope
+policy. Managed enrollment must agree on repository and test/setup
+configuration separately from a local `--scope` file or engagement brief.
+Agree on the permitted behavior of tests, setup scripts, network access,
+repair publication and recurring runs with the operator.
 
 GitHub App reviews are also distinct from recurring `secure` runs. App
 repository policy can control whether reviews run on pull requests or pushes,
@@ -112,11 +112,11 @@ known, and the stop contact is available. Record unresolved blockers as coverage
 limits, not clean results.
 
 Before enabling recurrence, confirm its target ID, cron/timezone, per-run and
-organization budgets, publication policy and schedule-removal procedure. The
-current [client/server compatibility warnings](/cloud/getting-started/#compatibility-checks)
-include an unfiltered schedule-list response: do not use repository disconnect
-as a safe selective stop until that contract is resolved. Cancelling a scan
-and disabling future schedules are separate operations.
+organization budgets, publication policy and schedule-removal procedure with
+the operator. An unfiltered schedule-list response can affect unrelated
+repositories; do not assume disconnect is a safe selective stop until the
+deployed contract is confirmed. Cancelling a scan and disabling future
+schedules are separate operations.
 
 For a scan you operate yourself, use the [CLI quickstart scope example](/getting-started/#run-your-first-scan)
 and [Authorized Engagements](/engagements/) for engine-level controls. A managed

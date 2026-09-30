@@ -76,7 +76,7 @@ describe("spawn_agents — concurrent subagent dispatch", () => {
 
   afterEach(() => {
     eventBus.clear();
-    delete process.env["0SEC_SUBAGENT_CONCURRENCY"];
+    delete process.env["ZERO_SUBAGENT_CONCURRENCY"];
   });
 
   it("(1) runs two children to completion, merges findings, distinct agent_ids", async () => {

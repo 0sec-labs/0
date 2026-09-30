@@ -1,13 +1,13 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type { Command } from "commander";
-import { loadScope, type ScopePolicy } from "@0sec/core";
+import { loadScope, isScopeEnforcementEnabled, getScopeEnforcementState, type ScopePolicy } from "@0/core";
 import {
   AgentActionScenarioSchema,
   parseAgentActionEvidenceManifest,
   type AgentActionEvidenceManifest,
   type AgentActionScenario,
-} from "@0sec/shared";
+} from "@0/shared";
 import {
   agentActionConfigurationChanges,
   agentActionManifestSha256,
@@ -15,14 +15,14 @@ import {
   mcpAgentTarget,
   runAgentActionAssurance,
   writeAgentActionEvidenceBundle,
-} from "@0sec/llm-redteam";
+} from "@0/llm-redteam";
 
 interface AgentAssureOptions {
   agentEndpoint: string;
   mcpEndpoint: string;
   oracleEndpoint: string;
   scenario: string;
-  scope: string;
+  scope?: string;
   output?: string;
   baseline?: string;
   environment: "local" | "test" | "staging";
@@ -101,7 +101,9 @@ function parsePositiveMilliseconds(raw: string, field: string): number {
   return value;
 }
 
-function assertInScope(scope: ScopePolicy, endpoint: string, label: string): void {
+function assertInScope(scope: ScopePolicy | undefined, endpoint: string, label: string): void {
+  if (!isScopeEnforcementEnabled()) return;
+  if (!scope) throw new Error("agent-assure requires --scope while the scope plugin is enabled");
   const match = scope.match(endpoint);
   if (!match.allowed) {
     throw new Error(`agent-assure: ${label} is ${match.reason}`);
@@ -125,7 +127,7 @@ export function registerAgentAssureCommand(program: Command): void {
     .requiredOption("--mcp-endpoint <url>", "Authorized MCP tools/list endpoint")
     .requiredOption("--oracle-endpoint <url>", "Customer-owned state-observer endpoint")
     .requiredOption("--scenario <path>", "Scenario JSON: id, title, injection_vector, benign_task, payload, prohibited_action")
-    .requiredOption("--scope <path>", "Engagement scope JSON; all three endpoints must be in scope")
+    .option("--scope <path>", "Engagement scope JSON; required only while the scope plugin is enabled")
     .requiredOption("--target-version <version>", "Version or build digest of the tested agent deployment")
     .requiredOption("--policy-version <version>", "Version or digest of the agent prompt and authorization policy")
     .requiredOption("--model-version <version>", "Model deployment/version identifier")
@@ -144,7 +146,8 @@ export function registerAgentAssureCommand(program: Command): void {
       if (!(["local", "test", "staging"] as const).includes(opts.environment)) {
         throw new Error("agent-assure: --environment must be local, test, or staging");
       }
-      const scope = loadScope(opts.scope);
+      console.error(getScopeEnforcementState().message);
+      const scope = opts.scope ? loadScope(opts.scope) : undefined;
       assertInScope(scope, opts.agentEndpoint, "agent endpoint");
       assertInScope(scope, opts.mcpEndpoint, "MCP endpoint");
       assertInScope(scope, opts.oracleEndpoint, "oracle endpoint");
@@ -158,7 +161,7 @@ export function registerAgentAssureCommand(program: Command): void {
         throw new Error("agent-assure: --baseline must describe the same scenario id and payload");
       }
 
-      const scopeRaw = readFileSync(opts.scope, "utf8");
+      const scopeRaw = opts.scope ? readFileSync(opts.scope, "utf8") : "";
       const timeoutMs = parsePositiveMilliseconds(opts.timeout, "--timeout");
       const oracleTimeoutMs = parsePositiveMilliseconds(opts.oracleTimeout, "--oracle-timeout");
       const run = await runAgentActionAssurance({

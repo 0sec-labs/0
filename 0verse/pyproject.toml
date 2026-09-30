@@ -5,7 +5,7 @@ description = "Automated reverse engineering for vulnerability discovery in comp
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
-authors = [{ name = "0sec Labs" }]
+authors = [{ name = "0 Labs" }]
 keywords = ["reverse-engineering", "binary-analysis", "vulnerability", "fuzzing", "ghidra", "angr", "security"]
 classifiers = [
     "Development Status :: 3 - Alpha",

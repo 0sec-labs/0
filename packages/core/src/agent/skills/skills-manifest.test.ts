@@ -42,7 +42,7 @@ describe("embedded skill manifest", () => {
       const rel = relative(SKILLS_DIR, abs).split("\\").join("/");
       expect(
         EMBEDDED_SKILL_YAML[rel],
-        `${rel} drifted — run: pnpm --filter @0sec/core generate-skills`,
+        `${rel} drifted — run: pnpm --filter @0/core generate-skills`,
       ).toBe(readFileSync(abs, "utf8"));
     }
   });

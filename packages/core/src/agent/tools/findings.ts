@@ -1,5 +1,5 @@
 /**
- * Findings / reporting tool definitions (0sec#611 — split out of the monolithic
+ * Findings / reporting tool definitions (0#611 — split out of the monolithic
  * agent/tools.ts registry).
  *
  * Tools that read and write the findings ledger, loot store, and the
@@ -38,7 +38,7 @@ export const findingsToolDefinitions: Record<string, ToolDefinition> = {
           "output-manipulation",
           "encoding-bypass",
           "multi-turn",
-          // Source-code audit categories (0sec audit)
+          // Source-code audit categories (0 audit)
           "prototype-pollution",
           "path-traversal",
           "command-injection",
@@ -98,23 +98,28 @@ export const findingsToolDefinitions: Record<string, ToolDefinition> = {
         description:
           "OPTIONAL inclusive 1-based end line. Must be >= source_start_line.",
       },
+      source_original: {
+        type: "string",
+        description:
+          "For a diff-scoped suggested_replacement, REQUIRED exact current text of the cited source lines, including indentation but without the read_file line-number prefixes. The tool compares these bytes before allowing a GitHub suggestion.",
+      },
       suggested_replacement: {
         type: "string",
         description:
-          "OPTIONAL exact replacement text for source_start_line..source_end_line. Do not send a unified diff or markdown fence.",
+          "OPTIONAL exact replacement text for source_start_line..source_end_line. For a diff review, every cited line must be added in the bound patch; read the numbered source before citing it. Do not send a unified diff or markdown fence.",
       },
-      // 0sec#170 — optional structured proof-of-concept step graph. When the
+      // 0#170 — optional structured proof-of-concept step graph. When the
       // agent has structured execution data (e.g. it actually ran the curl /
       // docker steps and observed predictable outputs), it can pass them as a
       // JSON string here. Each step has { id, kind, summary, action, expect? }.
-      // See PocStep / PocStepKind in @0sec/shared/types.ts. Optional —
+      // See PocStep / PocStepKind in @0/shared/types.ts. Optional —
       // findings with prose-only evidence MUST leave this unset.
       poc_steps: {
         type: "string",
         description:
-          "OPTIONAL JSON-encoded PocStep[] array (0sec#170). Each step: { id, kind: setup|auth|prerequisite|exploit|verify, summary, action: { type: shell|http|docker|note, ... }, expect?: { type: ... } }. Leave unset when you only have prose evidence.",
+          "OPTIONAL JSON-encoded PocStep[] array (0#170). Each step: { id, kind: setup|auth|prerequisite|exploit|verify, summary, action: { type: shell|http|docker|note, ... }, expect?: { type: ... } }. Leave unset when you only have prose evidence.",
       },
-      // 0sec#193 — optional machine-executable verification contract. When
+      // 0#193 — optional machine-executable verification contract. When
       // the agent has cited concrete file:line evidence, it should populate
       // `code[]` predicates so cloud's canary watcher can later re-evaluate
       // the finding deterministically. Each predicate is one of:
@@ -133,7 +138,20 @@ export const findingsToolDefinitions: Record<string, ToolDefinition> = {
       verification_spec: {
         type: "string",
         description:
-          "OPTIONAL JSON-encoded VerificationSpec (0sec#193). Shape: { code: Array<{ kind:'file-contains'|'file-missing-pattern'|'file-exists'|'ast-shape'|'git-diff-applies', file?, pattern?, flags?, query?, baseCommit?, diff? }>, behavior?: { steps: Array<{ method, path, body?, expect: 'success'|'forbidden'|{status:number} }> } }. Populate code[] predicates from the file:line evidence you cited so cloud can re-verify the finding deterministically. Use git-diff-applies only as a companion to an independent code or behavioural predicate: it confirms a unified diff you generated against the exact full HEAD commit is compatible, never that the exploit works. Example for a SQLi at app/users.ts:43: code:[{kind:'file-contains',file:'app/users.ts',pattern:'db\\\\.query.*req\\\\.body'}]. Leave unset when you cannot pin the vulnerable shape to a regex.",
+          "OPTIONAL JSON-encoded VerificationSpec (0#193). Shape: { code: Array<{ kind:'file-contains'|'file-missing-pattern'|'file-exists'|'ast-shape'|'git-diff-applies', file?, pattern?, flags?, query?, baseCommit?, diff? }>, behavior?: { steps: Array<{ method, path, body?, expect: 'success'|'forbidden'|{status:number} }> } }. Populate code[] predicates from the file:line evidence you cited so cloud can re-verify the finding deterministically. Use git-diff-applies only as a companion to an independent code or behavioural predicate: it confirms a unified diff you generated against the exact full HEAD commit is compatible, never that the exploit works. Example for a SQLi at app/users.ts:43: code:[{kind:'file-contains',file:'app/users.ts',pattern:'db\\\\.query.*req\\\\.body'}]. Leave unset when you cannot pin the vulnerable shape to a regex.",
+      },
+      // 0#1103 — optional business-impact assessment. When the evidence
+      // supports it (you observed reachability, blast radius, and whether
+      // the bug is weaponizable), supply a JSON-encoded ImpactAssessment.
+      // Required fields: reachability_tier, blast_radius, weaponizability,
+      // business_impact, rationale. Leave unset when you lack concrete
+      // evidence for any of these dimensions — the field remains undefined
+      // and downstream consumers (CVSS, advisory templates) handle absence
+      // gracefully. Do NOT supply default values.
+      impact_assessment: {
+        type: "string",
+        description:
+          'OPTIONAL JSON-encoded ImpactAssessment. Shape: { reachability_tier: "remote-unauth"|"remote-auth"|"proximity-rf"|"local-unpriv"|"local-priv"|"needs-hardware"|"needs-host-migration", blast_radius: string, weaponizability: "dos-crash"|"info-leak"|"integrity-tampering"|"lpe-to-root"|"rce", business_impact: "headline"|"notable"|"modest"|"noise", rationale: string }. Supply ONLY when evidence supports it. Leave unset when you lack concrete reachability or blast-radius facts.',
       },
       // Self-reported calibration of how confident the agent is that this
       // finding is a true positive. The cloud DB stores it in
@@ -148,7 +166,7 @@ export const findingsToolDefinitions: Record<string, ToolDefinition> = {
         description:
           "OPTIONAL self-reported confidence in [0,1]. Use 0.9+ only when the PoC actually executed and produced the expected output. 0.6–0.8 for solid evidence without execution. 0.3–0.5 for plausible but unverified leads. Leave unset when you have no signal.",
       },
-      // 0sec#409 — structural validation at the report-creation boundary.
+      // 0#409 — structural validation at the report-creation boundary.
       // CVE / CWE / CVSS are shape-checked before persistence by
       // `validateFindingDraft` (agent/finding-validator.ts). Malformed values
       // come back to the agent as `validation_failed` so it can fix and
@@ -186,7 +204,7 @@ export const findingsToolDefinitions: Record<string, ToolDefinition> = {
   query_findings: {
     name: "query_findings",
     description:
-      "Query existing findings from the database. Defaults to the current scan/session; set all_sessions=true to search across sessions, or pass scan_id to inspect a specific prior session.",
+      "Query existing findings. Defaults to the current scan/session; set all_sessions=true or pass scan_id to query other sessions (requires the persistent findings database). Workers without database access should ask their parent to run cross-session queries.",
     parameters: {
       scan_id: {
         type: "string",
@@ -196,7 +214,7 @@ export const findingsToolDefinitions: Record<string, ToolDefinition> = {
       all_sessions: {
         type: "boolean",
         description:
-          "Optional: when true, query findings across all sessions/scans instead of only the current session.",
+          "Optional: when true, query findings across all sessions/scans instead of only the current session; requires a persistent findings database.",
       },
       severity: {
         type: "string",
@@ -213,7 +231,7 @@ export const findingsToolDefinitions: Record<string, ToolDefinition> = {
     },
   }, 
 
-  // 0sec#567 — retrieve previously captured footholds for exploit chaining.
+  // 0#567 — retrieve previously captured footholds for exploit chaining.
   use_loot: {
     name: "use_loot",
     description:
@@ -294,7 +312,7 @@ export const findingsToolDefinitions: Record<string, ToolDefinition> = {
   },
 };
 
-// Tool-name → ToolExecutor handler-method name (0sec#614). Co-located with
+// Tool-name → ToolExecutor handler-method name (0#614). Co-located with
 // this domain's definitions so a new tool adds its route here, not in a
 // shared dispatch switch. Assembled by ./dispatch.ts; resolved off the
 // executor instance in agent/tools.ts (handler bodies stay private methods).

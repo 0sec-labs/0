@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build 0sec kernel VM artifacts from a local Linux source tree.
+# Build 0 kernel VM artifacts from a local Linux source tree.
 #
 # Usage:
 #   build-from-tree.sh <kernel-tree> <out-dir> [kasan|kcsan]
@@ -25,12 +25,12 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p "${OUT_DIR}"
-KERNEL_MAKE_JOBS="$(printenv 0SEC_KERNEL_VM_MAKE_JOBS 2>/dev/null || true)"
+KERNEL_MAKE_JOBS="$(printenv ZERO_KERNEL_VM_MAKE_JOBS 2>/dev/null || true)"
 : "${KERNEL_MAKE_JOBS:=4}"
 
 docker build \
   --build-arg "KERNEL_MAKE_JOBS=${KERNEL_MAKE_JOBS}" \
-  -t 0sec-kernel-builder-local \
+  -t 0-kernel-builder-local \
   -f "${SCRIPT_DIR}/Dockerfile.local-tree" \
   "${SCRIPT_DIR}"
 
@@ -41,4 +41,4 @@ docker run --rm \
   -e CONFIG_PROFILE="${CONFIG_PROFILE}" \
   -v "${KERNEL_TREE}:/src/linux:ro" \
   -v "${OUT_DIR}:/out" \
-  0sec-kernel-builder-local
+  0-kernel-builder-local

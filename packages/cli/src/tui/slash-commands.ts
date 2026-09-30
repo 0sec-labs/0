@@ -1,7 +1,7 @@
 /**
  * Shared pure slash-command registry, parser, and filter.
  *
- * Portable — no React, OpenTUI, or @0sec/core imports. Usable by both
+ * Portable — no React, OpenTUI, or @0/core imports. Usable by both
  * the Bun TUI (ChatScreen) and the Node readline console.
  *
  * A "slash command" is any input starting with `/` followed by a name
@@ -22,7 +22,6 @@ export type CommandCategory =
   | "navigation"
   | "session"
   | "info"
-  | "mode"
   | "system";
 
 export interface SlashCommand {
@@ -33,7 +32,7 @@ export interface SlashCommand {
   readonly category: CommandCategory;
   /** One-line description for help output. */
   readonly description: string;
-  /** Usage hint, e.g. "/mode [standard|copilot|yolo]". Omitted when blank. */
+  /** Usage hint, e.g. "/model <id>". Omitted when blank. */
   readonly usage?: string;
   /**
    * Commands that only make sense in the Bun TUI (navigation/routing).
@@ -52,7 +51,7 @@ export interface ParsedSlashInput {
   readonly command: string | undefined;
   /**
    * The raw name extracted from input: everything between the leading `/`
-   * and the first space (or end of string). E.g. "/mode copilot" → "mode".
+   * and the first space (or end of string). E.g. "/model gpt-5.5" → "model".
    */
   readonly rawName: string;
   /**
@@ -98,21 +97,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     category: "info",
     description: "List available tools",
   },
-  {
-    name: "agents",
-    aliases: [],
-    category: "info",
-    description: "List available agents",
-    tuiOnly: true,
-  },
 
-  {
-    name: "harness",
-    aliases: [],
-    category: "navigation",
-    description: "Live harness: views, commands, settings, rollback and workspace trust",
-    tuiOnly: true,
-  },
   {
     name: "new-chat",
     aliases: ["new"],
@@ -121,25 +106,10 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     tuiOnly: true,
   },
   {
-    name: "audits",
-    aliases: [],
-    category: "navigation",
-    description: "Switch between live audits without stopping their work",
-    tuiOnly: true,
-  },
-  {
     name: "onboard",
     aliases: [],
     category: "navigation",
     description: "Reopen guided setup without replacing the current audit",
-    tuiOnly: true,
-  },
-  {
-    name: "stop",
-    aliases: [],
-    category: "session",
-    description: "Stop this audit's work or one owned worker and its descendants",
-    usage: "/stop audit | /stop worker <exact name or id>",
     tuiOnly: true,
   },
 
@@ -158,13 +128,6 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     tuiOnly: true,
   },
   {
-    name: "transcript",
-    aliases: ["review"],
-    category: "session",
-    description: "Show this conversation, including tool details",
-    tuiOnly: true,
-  },
-  {
     name: "findings",
     aliases: ["finds"],
     category: "session",
@@ -172,11 +135,11 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     tuiOnly: true,
   },
   {
-    name: "finding",
-    aliases: ["finding-detail"],
+    name: "fix",
+    aliases: [],
     category: "session",
-    description: "Open one finding in full detail to read and act on it",
-    usage: "/finding [id]",
+    description: "Generate a verified local source fix; review before explicitly publishing a draft PR",
+    usage: "/fix [finding-id] | /fix publish <finding-id> | /fix cancel",
     tuiOnly: true,
   },
   {
@@ -195,35 +158,13 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     usage: "/copy",
     tuiOnly: true,
   },
-  {
-    name: "replay",
-    aliases: [],
-    category: "session",
-    description: "Replay a previous turn or session",
-    tuiOnly: true,
-  },
 
-  // ── mode ────────────────────────────────────────────────────────────────
   {
-    name: "mode",
+    name: "sessions",
     aliases: [],
-    category: "mode",
-    description: "Set Standard (approve actions), Co-pilot (in scope), YOLO (public-network autonomy), or Recon (passive)",
-    usage: "/mode [standard|copilot|yolo|recon]",
-  },
-  {
-    name: "resume",
-    aliases: ["sessions"],
     category: "session",
-    description: "Find and resume saved conversations",
-    usage: "/resume",
-  },
-  {
-    name: "providers",
-    aliases: [],
-    category: "system",
-    description: "Connection: 0cloud, API keys, or provider subscriptions",
-    usage: "/providers",
+    description: "Switch open sessions or resume saved conversations",
+    usage: "/sessions",
     tuiOnly: true,
   },
   {
@@ -237,7 +178,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     name: "feedback",
     aliases: [],
     category: "system",
-    description: "Record feedback about 0sec to a local file you control, with optional HTTPS submission",
+    description: "Record feedback about 0 to a local file you control, with optional HTTPS submission",
     usage: "/feedback <message> | /feedback submit <message> | /feedback send | /feedback cancel",
   },
   {
@@ -266,7 +207,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
   {
     name: "model",
     aliases: ["models"],
-    category: "mode",
+    category: "session",
     description: "Show or select a model (TUI: applies to New chat)",
     usage: "/model [id]",
   },
@@ -294,13 +235,6 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     tuiOnly: true,
   },
   {
-    name: "herd",
-    aliases: ["workers"],
-    category: "navigation",
-    description: "Inspect the active harness worker herd",
-    tuiOnly: true,
-  },
-  {
     name: "comms",
     aliases: ["messages"],
     category: "navigation",
@@ -316,9 +250,9 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
   },
   {
     name: "connect",
-    aliases: ["login", "auth"],
+    aliases: [],
     category: "navigation",
-    description: "Connect to 0cloud, or use your own API key or provider subscription",
+    description: "Connect your API key or provider subscription",
     usage: "/connect",
     tuiOnly: true,
   },

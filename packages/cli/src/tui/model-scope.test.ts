@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { MODEL_PRICING } from "@0sec/shared";
+import { MODEL_PRICING } from "@0/shared";
 
 import {
   buildModelCatalog,

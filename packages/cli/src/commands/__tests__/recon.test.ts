@@ -6,10 +6,12 @@ import { join } from "node:path";
 
 const runReconMock = vi.fn();
 
-vi.mock("@0sec/core", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@0sec/core")>();
+vi.mock("@0/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@0/core")>();
   return {
     ...actual,
+    getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, projectPath: process.cwd(), message: "Scope plugin enabled" }),
+    isScopeEnforcementEnabled: () => true,
     runRecon: runReconMock,
   };
 });
@@ -28,12 +30,12 @@ async function runCli(argv: string[]): Promise<void> {
   const program = new Command();
   program.exitOverride();
   registerReconCommand(program);
-  await program.parseAsync(["node", "0sec-cli", ...argv]);
+  await program.parseAsync(["node", "@0/cli", ...argv]);
 }
 
 const EMPTY_RESULT = { domain: "https://example.com", generatedAt: "t", assets: [], summary: { total: 0, byKind: {} }, warnings: [] };
 
-describe("0sec recon --active", () => {
+describe("0 recon --active", () => {
   let io: ReturnType<typeof captureIO>;
   let dir: string;
 

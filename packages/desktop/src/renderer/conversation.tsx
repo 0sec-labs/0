@@ -10,7 +10,7 @@ import type {
   DesktopConsoleEvent,
   DesktopConsoleSession,
   DesktopConsoleUsage,
-} from "@0sec/shared";
+} from "@0/shared";
 import {
   AlertCircle,
   ArrowDown,

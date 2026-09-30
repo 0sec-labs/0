@@ -55,11 +55,11 @@ evaluation or [executable-plugin setup](/integrations/#model-authored-executable
 for session tools. Model credentials configure proposal generation; guest
 images configure execution. Neither substitutes for the other.
 
-**Implementation map:** [`improvement/config.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/improvement/config.ts),
-[`improvement/loop.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/improvement/loop.ts),
-[`commands/evolve.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/commands/evolve.ts),
-[`plugins/executable.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/plugins/executable.ts),
-[`console/turn-engine.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/console/turn-engine.ts).
+**Implementation map:** [`improvement/config.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/improvement/config.ts),
+[`improvement/loop.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/improvement/loop.ts),
+[`commands/evolve.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/evolve.ts),
+[`plugins/executable.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/plugins/executable.ts),
+[`console/turn-engine.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/console/turn-engine.ts).
 
 ## Engagement boundary
 
@@ -83,7 +83,7 @@ The development console can reload trusted `packages/core/src` changes without
 discarding its conversation. This host-code path is not the sandboxed source
 evaluator or executable-plugin admission path.
 
-It requires a console started with `0SEC_DEV_SOURCE_ROOT` and the global
+It requires a console started with `ZERO_DEV_SOURCE_ROOT` and the global
 `allowDevSourceUpdates` setting. The setting defaults off, cannot be granted by
 a project override, and is independent of `allowModelSelfExtension`.
 
@@ -95,9 +95,11 @@ and aliases escaping Core source are rejected. Failed builds or incompatible
 checkpoints retain the current engine. Turning the setting off prevents later
 replacement without reverting the active generation.
 
-The UI shell, injected provider/MCP clients and shared dependencies stay pinned.
-Rebuild and restart for changes to those components. A development engine runs
-with the host process's permissions; source replacement is not a sandbox grant.
+Engine replacement alone keeps the UI shell, injected clients and shared
+dependencies pinned. Separately, `0dev --watch console` can safely remount TUI
+generations while keeping the live engines and drafts. Startup, native/reload
+integration and Core/shared changes still need a coherent restart. These are
+trusted host-development paths, not sandbox grants.
 
 Local qualification exercised a continuing session across source activation,
 broken-source rollback and flag disablement, with retained scope metadata and
@@ -128,7 +130,7 @@ Changed, missing, out-of-scope, symlinked, or multiply linked evidence invalidat
 the note. Hashes identify source versions; interpretations still need verification.
 
 Verification runs neither receive these notes nor get the learning capability.
-`0SEC_DISABLE_HUNT_MEMORY=1` disables recall and persistence. Resumed runs keep
+`ZERO_DISABLE_HUNT_MEMORY=1` disables recall and persistence. Resumed runs keep
 their existing context rather than silently receiving new notes.
 
 ### Source access consent
@@ -244,7 +246,7 @@ review. Each case input has exactly these fields:
 
 ```json
 {
-  "schemaVersion": "0sec.finder.input/v1",
+  "schemaVersion": "0.finder.input/v1",
   "file": { "path": "src/handler.js", "content": "db.query(req.query.sql);\n" },
   "lensId": "injection",
   "challengeHint": "Inspect whether untrusted input reaches SQL execution."
@@ -255,7 +257,7 @@ The command emits one JSON value with exactly these fields:
 
 ```json
 {
-  "schemaVersion": "0sec.finder.output/v1",
+  "schemaVersion": "0.finder.output/v1",
   "findings": [{
     "title": "Potential SQL injection",
     "severity": "high",
@@ -314,10 +316,10 @@ Set these environment variables before the controller's first worker starts:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `0SEC_WORKER_MAX_ACTIVE` | `4` | Maximum active guest reservations |
-| `0SEC_WORKER_MAX_QUEUED` | `64` | Maximum waiting root calls |
-| `0SEC_WORKER_MEMORY_MB` | Half of available process memory, capped at `8192` MiB and floored at `32` MiB | Aggregate guest-memory budget |
-| `0SEC_WORKER_CPUS` | Node's available parallelism | Aggregate configured guest CPU budget |
+| `ZERO_WORKER_MAX_ACTIVE` | `4` | Maximum active guest reservations |
+| `ZERO_WORKER_MAX_QUEUED` | `64` | Maximum waiting root calls |
+| `ZERO_WORKER_MEMORY_MB` | Half of available process memory, capped at `8192` MiB and floored at `32` MiB | Aggregate guest-memory budget |
+| `ZERO_WORKER_CPUS` | Node's available parallelism | Aggregate configured guest CPU budget |
 
 Overrides must be positive finite numbers; all except CPU must be integers.
 A request larger than its resource budget fails immediately. Root calls wait
@@ -404,11 +406,21 @@ bytes. The controller resolves it to the archive's SHA-256 before recording a
 version. Stored execution and approval use that recorded identity, not a newly
 resolved replacement image.
 
-This backend is qualified for **non-root Linux, KVM, Node 24+, util-linux
-`setpriv`, and smolvm 1.14.6**. Other smolvm versions and host platforms are rejected
-until their lifecycle is qualified. Install the complete upstream runtime bundle,
-not just `smolvm-bin`, and put its launcher on `PATH`. Existing processes need
-restarting after group membership changes; do not make `/dev/kvm` world-writable.
+The standalone offline backend supports **non-root Linux with KVM, Node 24+,
+util-linux `setpriv`, and SmolVM 1.14.6**, or **non-root Apple Silicon macOS with
+Node 24+ and the pinned complete SmolVM 1.14.6 bundle**. Other runtime versions and
+platforms are rejected. Linux users install the complete upstream distribution,
+not just `smolvm-bin`, and put its launcher on `PATH`; restart after KVM group
+membership changes and do not make `/dev/kvm` world-writable.
+
+Mac setup uses `resolveSmolvmRuntime` (also used by `0 workbench setup`) to
+checksum-provision the original bundle into private operator state, verify its
+existing ad-hoc code signature/Hypervisor entitlement, and compile the Darwin
+lifecycle supervisor. Xcode Command Line Tools are required for this first setup;
+no shell profile changes, KVM or runtime Docker daemon are involved.
+The online [workbench profile](/architecture/#local-smolvm-workbench-boundary) is
+separate: its generated programs are brokered into offline sibling VMs without
+the main workbench's credential/state grants.
 
 The toolbox stays an OCI image. A `docker save` archive is one way to provision
 it; Docker is not used to execute smolvm workers:
@@ -422,8 +434,8 @@ That is a small Node worker image, not the security toolbox. To provision the
 declared pentest/identity/Foxguard inventory without building the CLI application:
 
 ```bash
-docker build --target toolbox -t 0sec-toolbox:local .
-docker save 0sec-toolbox:local -o toolbox.tar
+docker build --target toolbox -t 0-toolbox:local .
+docker save 0-toolbox:local -o toolbox.tar
 node scripts/smoke-smolvm-toolbox.mjs ./toolbox.tar
 ```
 
@@ -456,9 +468,10 @@ to accommodate image import and guest startup.
 Each invocation:
 
 - copies and hashes the archive into a private run directory before boot;
-- starts an offline, UID/GID 1000 guest with `--unprivileged`;
+- starts an offline, non-root guest with `--unprivileged` (UID/GID 1000 on Linux;
+  the operator's numeric UID/GID on Mac so read-only virtiofs sources are readable);
 - mounts the sealed source read-only at `/snapshot`, then copies it to writable,
-  guest-local `/tmp/0sec-workspace` for builds and execution;
+  guest-local `/tmp/0-workspace` for builds and execution;
 - sends only the case input through stdin and returns bounded stdout/stderr;
 - uses 4 GiB writable storage and a 1 GiB VM overlay, with configured CPU/RAM limits;
 - ignores ambient project Smolfiles and isolates host runtime state and caches;
@@ -473,8 +486,9 @@ SIGINT/SIGTERM into this cancellation path.
 These controls are not identical to Docker's: the guest has its own kernel and
 a disposable writable filesystem; Docker's PID limit and `noexec` tmpfs settings
 are not claimed for smolvm. VM isolation is not a proof against hypervisor escapes.
-This is the evolution-worker backend, **not a global redirection of console/PTY,
-replay, or exploit commands into a VM**.
+Selecting only this evolution backend does **not** redirect general console/PTY,
+replay or exploit commands. Use the separately configured whole-CLI workbench
+profile for that execution boundary.
 
 ### Execution protocol
 
@@ -598,11 +612,11 @@ gains remain unestablished.
 
 Tracked implementation work:
 
-- [Crash-safe campaigns and feedback-driven resume (#41)](https://github.com/0sec-labs/0sec/issues/41)
-- [Longitudinal capability retention (#37)](https://github.com/0sec-labs/0sec/issues/37)
-- [Adaptive holdout exposure and rotation (#40)](https://github.com/0sec-labs/0sec/issues/40)
-- [Measured, development-only archive search (#39)](https://github.com/0sec-labs/0sec/issues/39)
-- [Evidence provenance and incompatible comparisons (#38)](https://github.com/0sec-labs/0sec/issues/38)
+- [Crash-safe campaigns and feedback-driven resume (#41)](https://github.com/0sec-labs/0/issues/41)
+- [Longitudinal capability retention (#37)](https://github.com/0sec-labs/0/issues/37)
+- [Adaptive holdout exposure and rotation (#40)](https://github.com/0sec-labs/0/issues/40)
+- [Measured, development-only archive search (#39)](https://github.com/0sec-labs/0/issues/39)
+- [Evidence provenance and incompatible comparisons (#38)](https://github.com/0sec-labs/0/issues/38)
 
 ## Autonomy and hot-reload boundaries
 
@@ -618,6 +632,7 @@ replacement for the stock target-facing 0 process.
 | Skill/router installation | Training loops install exact authorized artifact bytes. | Authorization does not hot-swap a model already loaded by another process. |
 | Executable plugin | An enabled agent submits or evolves actual code; later calls select the active retained version. | An invocation pins its version and declared capabilities; structural admission is not measured improvement. |
 | Development engine replacement | An explicitly enabled development console loads changed Core source between turns without losing the session. | Trusted host execution; UI shell, injected clients and shared dependencies stay pinned. Build and checkpoint failures retain the current engine. |
+| Development frontend watch | `0dev --watch console` rebuilds immutable TUI generations and remounts at a safe idle boundary. | One renderer and live engines remain; conversations, drafts, routes and audits stay in memory. Auth/approval/work gates defer reload; failed candidates retain the old UI. |
 | Live harness generation | Core/OpenTUI support replacing `agent.driver` and `ui.view`, including namespaced UI commands/settings, in the same session. | Session history and accounting survive; generation changes wait for a defined checkpoint. This is not durable campaign recovery. |
 
 Observation capture is not independent truth: source consent and operator-curated
@@ -630,16 +645,14 @@ and detection quality require their own checks.
 
 ## Live harness component contract
 
-The live-harness implementation has core and OpenTUI consumers, including
-host-owned recovery controls. Treat it as a research-preview extension surface.
-The historical candidate measurements below cover particular executions, not
-every current frontend, desktop installation, real-provider route, or hosted
-deployment.
+The live-harness implementation has core integration and a CLI checkpoint
+boundary. Treat it as a research-preview extension surface. The historical
+candidate measurements below cover particular executions, not every current
+frontend, desktop installation, real-provider route or hosted deployment.
 
-**Sources:** [`plugins/live-harness.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/plugins/live-harness.ts),
-[`console/turn-engine.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/console/turn-engine.ts),
-[`tui/harness-context.tsx`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/tui/harness-context.tsx),
-[`tui/harness-trust-controls.tsx`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/tui/harness-trust-controls.tsx).
+**Sources:** [`plugins/live-harness.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/plugins/live-harness.ts),
+[`console/turn-engine.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/console/turn-engine.ts),
+[`tui/harness-lifecycle.tsx`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/harness-lifecycle.tsx).
 
 ### Composition and language support
 
@@ -713,16 +726,12 @@ whichever plugin version is active later. Its `run` receives
 `self_extend` refuses harness actions where the caller has not supplied a live
 harness host; the ordinary native-agent tool being present is not sufficient.
 
-In the OpenTUI, `/harness` (default shortcut **Ctrl+G**) opens the host-owned
-controls. Inspect current/pending generation details, show the conversation,
-roll back, or disable a contributed generation there. The `t` action requests
-workspace trust and requires explicit confirmation of the canonical workspace;
-leave it off for sandboxed components. It authorizes **arbitrary host ESM for
-that workspace**, not just one tool call. Revoking it does not undo external
-effects already performed.
+Workspace trust is a separate authorization. It permits **arbitrary host ESM
+for the canonical workspace**, not just one tool call; revoking it does not
+undo external effects already performed.
 
-Source: [`agent/tools/system.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/agent/tools/system.ts)
-and [`agent/tools.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/agent/tools.ts).
+Source: [`agent/tools/system.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/agent/tools/system.ts)
+and [`agent/tools.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/agent/tools.ts).
 
 ### Autonomy without a second permission system
 
@@ -790,7 +799,7 @@ goals. Ordinary session history, task ledgers, retained plugin versions and
 development-engine checkpoints are useful but do not constitute durable
 evolution spending, holdout-exposure accounting, or exactly-once tool effects.
 See [feedback across passes](#feedback-across-evolution-passes) and the
-[campaign work](https://github.com/0sec-labs/0sec/issues/41).
+[campaign work](https://github.com/0sec-labs/0/issues/41).
 First-class Python components require further implementation.
 
 ### Local candidate measurements
@@ -828,7 +837,7 @@ apply to the earlier candidate, independently of frontend and installation check
 
 ## CLI reference
 
-<span id="0sec-evolve"></span>
+<span id="0-evolve"></span>
 ### 0 evolve
 
 ```text
@@ -880,7 +889,7 @@ apply to the earlier candidate, independently of frontend and installation check
 
 **Error codes:** 0 = success, 1 = user error, 2 = runtime error, 3 = interrupt.
 
-<span id="0sec-lens-synth"></span>
+<span id="0-lens-synth"></span>
 ### 0 lens-synth
 
 Finder-lens evolution remains a separate command — see [lens-synth help](/commands/#lens-synth).
@@ -888,7 +897,7 @@ Finder-lens evolution remains a separate command — see [lens-synth help](/comm
 ```text
 0 lens-synth                   Evolve appsec finder coverage from curated misses
   --miss-input <path>                Curated miss-input JSON ({ misses, corpus })
-  --registry <path>                  Durable overlay path (~/.0sec/lenses/...)
+  --registry <path>                  Durable overlay path (~/.0/lenses/...)
   --max-register <n>                 Cap promoted champions per input revision
   -m, --model <id>                   Synthesis model override
   --promote                          Persist a validated champion to the durable overlay
@@ -1129,8 +1138,8 @@ them is not. The mutable registry instead uses a serialized temporary-file
 write and rename. Its event chain and artifact digests detect inconsistent
 local changes, not an attacker who can rewrite the entire store.
 
-Sources: [`artifacts.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/improvement/artifacts.ts)
-and [`registry.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/improvement/registry.ts).
+Sources: [`artifacts.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/improvement/artifacts.ts)
+and [`registry.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/improvement/registry.ts).
 
 ## Promotion gates
 
@@ -1177,7 +1186,7 @@ runner executes candidate code separately under this worker contract:
 Finder-lens evolution (`0 lens-synth`) works alongside the evolve system but
 remains a separate command. It evolves **additive appsec finder lenses** from
 curated misses into a user-owned registry. Promotions go to
-`~/.0sec/lenses/appsec-archetypes.json`, never the bundled registry. Each
+`~/.0/lenses/appsec-archetypes.json`, never the bundled registry. Each
 promotion or retirement is recorded in the registry's hash-linked ledger.
 
 ### TUI automatic mode
@@ -1200,7 +1209,7 @@ This is a TUI settings file, **not** the source-worker `evolution.json` above.
 Evaluation can consume model usage even with promotion disabled.
 
 The watcher reads the curated inbox at
-`~/.0sec/lens-synthesis/miss-input.json` and approved observations from the
+`~/.0/lens-synthesis/miss-input.json` and approved observations from the
 feedback queue. Enabling it does not manufacture fixtures or approve captured
 misses. Use `0 evolve feedback capture`, then operator-curated
 `0 evolve feedback approve`, as described in the [CLI reference](#0-evolve).
@@ -1208,7 +1217,7 @@ After reviewing validation evidence, enable `autoPromoteFinderLenses` if desired
 
 Status distinguishes `evolve:dry-run`, `evolve:auto`, `evolve:waiting input`,
 `evolve:promoted`, and `evolve:error`. Source:
-[`tui/lens-evolution.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/tui/lens-evolution.ts).
+[`tui/lens-evolution.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/lens-evolution.ts).
 
 ### Lens corpus and receipts
 
@@ -1375,13 +1384,13 @@ approval, canaries, deployment, existing-reader pinning, and rollback using a
 small credential-detector benchmark. It does not measure general scanner quality.
 
 The executable plugin smoke check (`smoke-executable-plugins.mjs`) requires the
-built `@0sec/core` package and a local Docker daemon (or smolvm with
-`0SEC_SMOLVM_IMAGE_ARCHIVE`). It exercises the full lifecycle: submission,
+built `@0/core` package and a local Docker daemon (or smolvm with
+`ZERO_SMOLVM_IMAGE_ARCHIVE`). It exercises the full lifecycle: submission,
 execution, TypeScript argument passing, multi-owner plugins, skill composition
 with `Promise.all` broker calls, source replacement, retained version discovery,
 persisted failure counters, cold manager restore, rollback, nested call-budget
 termination, and malformed-source rejection. An optional
-`0SEC_EVOLVE_REAL=1` flag enables a real provider evolution stage using the
+`ZERO_EVOLVE_REAL=1` flag enables a real provider evolution stage using the
 configured model.
 
 This smoke does not yet qualify live root-driver replacement, browser/desktop
@@ -1390,14 +1399,11 @@ Those need their own real integration scenarios, including a task that
 continues across generation changes without reconstructing its session.
 
 A local plugin smoke or a provider-backed candidate-generation check does not
-qualify this lifecycle with hosted inference. Hosted model transport is separate
-from local Docker/smolvm execution and from a managed worker service. Parent SDK
-model calls use the parent's configured runtime; that is not a blanket guarantee
-for arbitrary trusted ESM clients or every child route. See
-[hosted inference and evolution accounting](/architecture/#hosted-inference-and-evolution-accounting)
-for routing, pricing and qualification boundaries. The historical checks here
-establish neither current production availability nor launched billing, and
-Self-Harness's model-specific results establish no universal gains.
+qualify a managed worker service. Parent SDK model calls use the parent's
+configured runtime; that is not a blanket guarantee for arbitrary trusted ESM
+clients or every child route. The historical checks here establish neither
+current production availability nor launched billing, and Self-Harness's
+model-specific results establish no universal gains.
 
 If the account already has approved Docker group membership but a persistent
 process predates it, the Docker backend can use that existing group through
@@ -1416,8 +1422,8 @@ To exercise that same source lifecycle with smolvm, use `env` (the setting names
 start with a digit and therefore are not POSIX shell variable identifiers):
 
 ```bash
-env 0SEC_EVOLUTION_BACKEND=smolvm \
-  0SEC_SMOLVM_IMAGE_ARCHIVE=/absolute/path/to/node.tar \
+env ZERO_EVOLUTION_BACKEND=smolvm \
+  ZERO_SMOLVM_IMAGE_ARCHIVE=/absolute/path/to/node.tar \
   node scripts/smoke-source-evolution.mjs
 ```
 
@@ -1432,7 +1438,7 @@ protection, fresh workspaces, credentials, ambient configuration, host loopback
 denial, storage exhaustion, identity mismatch, absent runtimes, cancellation,
 deadlines, output floods, and process teardown. It does not skip missing runtime
 prerequisites. `pnpm test:smolvm:e2e` runs it when
-`0SEC_SMOLVM_IMAGE_ARCHIVE` is set in the process environment.
+`ZERO_SMOLVM_IMAGE_ARCHIVE` is set in the process environment.
 
 The lens check exercises synthesis, labelled positive/held-out/clean fixtures,
 promotion, next-reader reload, and retirement. Both consume real provider usage,

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -72,6 +72,12 @@ export async function cachedJson<T>(
   return value;
 }
 
+export class HttpStatusError extends Error {
+  constructor(readonly status: number, url: string) {
+    super(`HTTP ${status} for ${url}`);
+  }
+}
+
 export async function fetchJson(
   url: string,
   init: RequestInit = {},
@@ -85,7 +91,7 @@ export async function fetchJson(
       signal: controller.signal,
     });
     if (!res.ok) {
-      throw new Error(`HTTP ${res.status} for ${url}`);
+      throw new HttpStatusError(res.status, url);
     }
     return await res.json();
   } finally {

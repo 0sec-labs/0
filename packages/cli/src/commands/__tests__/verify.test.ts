@@ -1,5 +1,5 @@
 /**
- * 0sec#194 — `0sec verify` CLI tests.
+ * 0#194 — `0 verify` CLI tests.
  *
  * Strategy: drive `runVerify` directly (the same entry point the commander
  * action uses) and assert on (a) the resolved {@link VerificationResult}
@@ -18,14 +18,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventEmitter } from "node:events";
 import { Command } from "commander";
-import { setRuntimeDeps } from "@0sec/core";
+import { setRuntimeDeps } from "@0/core";
 import {
   VerificationResultSchema,
   type Finding,
   type LayerVerdict,
   type PocStep,
   type VerificationResult,
-} from "@0sec/shared";
+} from "@0/shared";
 import {
   runVerify,
   registerVerifyCommand,
@@ -44,7 +44,7 @@ import {
 let tmpRoot: string;
 
 beforeEach(() => {
-  tmpRoot = mkdtempSync(join(tmpdir(), "0sec-verify-test-"));
+  tmpRoot = mkdtempSync(join(tmpdir(), "0-verify-test-"));
 });
 
 afterEach(() => {
@@ -173,7 +173,7 @@ describe("verify pure helpers", () => {
     expect(statusFromVerdict("could_not_run")).toBe("skipped");
   });
 
-  it("exitCodeForStatus follows 0sec#194 spec", () => {
+  it("exitCodeForStatus follows 0#194 spec", () => {
     expect(exitCodeForStatus("reproduced")).toBe(0);
     expect(exitCodeForStatus("not_reproduced")).toBe(1);
     expect(exitCodeForStatus("skipped")).toBe(2);
@@ -243,7 +243,7 @@ describe("verify pure helpers", () => {
   });
 });
 
-// ── OAST out-of-band evidence provenance (0sec#659 / #1278) ────────────────
+// ── OAST out-of-band evidence provenance (0#659 / #1278) ────────────────
 //
 // The deterministic replay can't re-fire an out-of-band callback, so an OAST
 // proof is scan-time provenance carried on the finding. These lock the two
@@ -252,7 +252,7 @@ describe("verify pure helpers", () => {
 describe("OAST evidence provenance", () => {
   // command-injection (makeFinding's default) maps to the oast-callback oracle.
   // Typed as LayerVerdict so `layer` narrows to TriageLayerName (not widened to
-  // string) — 0sec main tightened LayerVerdict.layer to the closed enum.
+  // string) — 0 main tightened LayerVerdict.layer to the closed enum.
   const passLayerVerdict: LayerVerdict = {
     layer: "pov_gate",
     verdict: "pass" as const,
@@ -312,7 +312,7 @@ describe("OAST evidence provenance", () => {
         id: "s1",
         kind: "exploit",
         summary: "inject oast payload",
-        action: { type: "http", method: "GET", url: "http://t/?u=http://x.oast.0sec.ai" },
+        action: { type: "http", method: "GET", url: "http://t/?u=http://x.oast.0.ai" },
         expect: { type: "http-status", status: 200 },
       },
     ]);
@@ -612,7 +612,7 @@ describe("runVerify process-action containment", () => {
   });
 
   it("does not let a target file re-enable persisted shell execution", async () => {
-    const callerCwd = mkdtempSync(join(tmpdir(), "0sec-verify-caller-"));
+    const callerCwd = mkdtempSync(join(tmpdir(), "0-verify-caller-"));
     try {
       const calls: string[] = [];
       restore = setRuntimeDeps({
@@ -660,7 +660,7 @@ describe("verify.ts uses process.exitCode (no process.exit in the action)", () =
   });
 });
 
-describe("parseDurationMs (0sec#271)", () => {
+describe("parseDurationMs (0#271)", () => {
   it("parses bare integers as milliseconds", () => {
     expect(parseDurationMs("1500")).toBe(1500);
   });

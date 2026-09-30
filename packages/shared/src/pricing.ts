@@ -5,15 +5,24 @@ export interface ModelRates {
   output: number;
   /** Cached-input rate ($/1M). Falls back to `input` if absent. */
   cachedInput?: number;
+  /** Cache-write rate ($/1M); default is the five-minute Anthropic 1.25x input rate. */
+  cacheWrite?: number;
 }
 
 export interface TokenUsageForPricing {
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens?: number;
+  /** Cache-creation tokens included in inputTokens, not additional prompt tokens. */
+  cacheWriteTokens?: number;
+}
+/** Observed per-model usage from a runtime that performs several requests internally. */
+export interface ModelTokenUsage {
+  model: string;
+  usage: TokenUsageForPricing;
 }
 
-export const PRICING_SNAPSHOT_DATE = "2026-09-11";
+export const PRICING_SNAPSHOT_DATE = "2026-09-29";
 
 /**
  * The IRREDUCIBLE manual residue: models no public pricing feed (LiteLLM, and by
@@ -30,6 +39,8 @@ export const MANUAL_PRICING: Record<string, ModelRates> = {
   "claude-haiku-4-5": { input: 0.80, output: 4.00, cachedInput: 0.08 },
   // OpenAI codex alias — mirrors gpt-5.5 (OSS feed has only the bare key)
   "gpt-5.5-codex": { input: 5.00, output: 30.00 },
+  // LiteLLM no longer carries this exact key; retain its last published rate.
+  "gemini-2.0-flash": { input: 0.10, output: 0.40, cachedInput: 0.025 },
   // Meta (hosted) — not in the OSS feed
   "llama-4-maverick": { input: 0.50, output: 0.77 },
   "llama-4-scout": { input: 0.20, output: 0.35 },
@@ -104,17 +115,18 @@ export const MANUAL_PRICING: Record<string, ModelRates> = {
   // which this schema cannot represent.
   "DeepSeek-V4-Pro": { input: 1.74, output: 3.48 },
   "DeepSeek-V4-Flash": { input: 0.19, output: 0.51 },
-  // Fireworks-on-Foundry Global meters (verified 2026-09-17 against the Azure
-  // Retail Prices API): input $0.375/M, cached input $0.008/M, output $1.50/M.
-  // The deployment name is the lowercase "deepseek-v4.1-flash" — cannot reuse
-  // the direct "deepseek-flash" $0.30/$1.20 tariff because Azure Foundry billing
-  // differs from DeepSeek's own API invoice.
+  // Fireworks Priority list-rate estimate, not an Azure invoice.
+  // The cache estimate remains rounded; don't substitute direct API pricing
+  // for the separately metered Foundry deployment.
   "deepseek-v4.1-flash": { input: 0.375, output: 1.5, cachedInput: 0.008 },
   "Kimi-K2.7-Code": { input: 0.95, output: 4.00, cachedInput: 0.19 },
   "gpt-oss-120b": { input: 0.15, output: 0.60 },
   "gpt-5.6-sol": { input: 5.00, output: 30.00, cachedInput: 0.50 },
   "gpt-5.6-luna": { input: 1.00, output: 6.00, cachedInput: 0.10 },
   "gpt-5.6-terra": { input: 2.50, output: 15.00, cachedInput: 0.25 },
+  // Azure Global Standard short-context list estimate (2026-09-23).
+  // Hosted settlement separately meters cache writes and bounds input context.
+  "gpt-6-luna": { input: 0.10, output: 0.50, cachedInput: 0.01 },
   default: { input: 3.00, output: 15.00 },
 };
 
@@ -122,13 +134,34 @@ export const MANUAL_PRICING: Record<string, ModelRates> = {
  * Effective price table = the auto-generated OSS rates (source of truth for every
  * model the feed covers) overlaid with the manual residue. OSS wins where it has
  * data, so refreshing the generated file is the only "maintenance" for those
- * models — no hand-typed rates. Run `pnpm --filter @0sec/shared sync-pricing`
+ * models — no hand-typed rates. Run `pnpm --filter @0/shared sync-pricing`
  * to check drift, `--write` to refresh.
  */
 export const MODEL_PRICING: Record<string, ModelRates> = {
   ...MANUAL_PRICING,
   ...OSS_PRICING,
 };
+
+const DISCOVERED_PRICING = new Map<string, Readonly<ModelRates>>();
+
+/** Add validated catalog estimates for new IDs without replacing bundled tariffs. */
+export function registerModelPricing(model: string, rates: ModelRates): boolean {
+  if (!model || model !== model.trim() || /[\s\x00-\x1f\x7f]/.test(model) ||
+    Object.hasOwn(MODEL_PRICING, model) ||
+    !Number.isFinite(rates.input) || rates.input < 0 ||
+    !Number.isFinite(rates.output) || rates.output < 0 ||
+    (rates.cachedInput !== undefined && (!Number.isFinite(rates.cachedInput) || rates.cachedInput < 0)) ||
+    (rates.cacheWrite !== undefined && (!Number.isFinite(rates.cacheWrite) || rates.cacheWrite < 0))) {
+    return false;
+  }
+  DISCOVERED_PRICING.set(model, Object.freeze({
+    input: rates.input,
+    output: rates.output,
+    ...(rates.cachedInput !== undefined ? { cachedInput: rates.cachedInput } : {}),
+    ...(rates.cacheWrite !== undefined ? { cacheWrite: rates.cacheWrite } : {}),
+  }));
+  return true;
+}
 
 // Azure's runtime model id is the operator deployment name. Accept casing
 // differences and Azure's version suffixes while keeping all other pricing
@@ -144,6 +177,7 @@ const AZURE_DEPLOYMENT_PRICE_ALIASES = new Map<string, string>([
   ["gpt-5.6-sol", "gpt-5.6-sol"],
   ["gpt-5.6-luna", "gpt-5.6-luna"],
   ["gpt-5.6-terra", "gpt-5.6-terra"],
+  ["gpt-6-luna", "gpt-6-luna"],
 ]);
 
 function azureDeploymentPriceKey(model: string): string | null {
@@ -155,33 +189,35 @@ function azureDeploymentPriceKey(model: string): string | null {
 }
 
 /** Known vendor prefixes to strip (e.g. "openai/gpt-4o" -> "gpt-4o"). */
+const MODEL_VENDOR_PREFIXES = [
+  "openai/", "azure/", "anthropic/", "google/", "deepseek/", "meta/", "mistral/",
+  "z-ai/", "zai/", "kimi/", "moonshot/", "qwen/", "openrouter/", "opencode/",
+  "xai/", "x-ai/",
+];
+
 function normalizeModel(model: string): string {
-  const prefixes = [
-    "openai/",
-    "anthropic/",
-    "google/",
-    "deepseek/",
-    "meta/",
-    "mistral/",
-    "z-ai/",
-    "zai/",
-    "kimi/",
-    "moonshot/",
-    "openrouter/",
-    "opencode/",
-  ];
-  for (const prefix of prefixes) {
-    if (model.startsWith(prefix)) return model.slice(prefix.length);
+  let key = model;
+  for (;;) {
+    let stripped = false;
+    for (const prefix of MODEL_VENDOR_PREFIXES) {
+      if (!key.startsWith(prefix)) continue;
+      key = key.slice(prefix.length);
+      stripped = true;
+      break;
+    }
+    if (!stripped) return key;
   }
-  return model;
 }
 
 export function getRates(model?: string): ModelRates {
   const key = model ? normalizeModel(model) : "";
   const aliasKey = azureDeploymentPriceKey(key);
-  const rates = MODEL_PRICING[key] ?? (aliasKey ? MODEL_PRICING[aliasKey] : undefined);
+  const rates = (model && Object.hasOwn(MODEL_PRICING, model) ? MODEL_PRICING[model] : undefined) ??
+    (model ? DISCOVERED_PRICING.get(model) : undefined) ??
+    (Object.hasOwn(MODEL_PRICING, key) ? MODEL_PRICING[key] : undefined) ??
+    (aliasKey ? MODEL_PRICING[aliasKey] : undefined) ?? DISCOVERED_PRICING.get(key);
   if (!rates) {
-    if (model) console.warn(`[0sec] Unknown model for cost estimation: ${model}`);
+    if (model) console.warn(`[0] Unknown model for cost estimation: ${model}`);
     return MODEL_PRICING.default;
   }
   return rates;
@@ -191,10 +227,12 @@ export function estimateCost(usage: TokenUsageForPricing, model?: string): numbe
   const rates = getRates(model);
   const cachedInputRate = rates.cachedInput ?? rates.input;
   const cached = usage.cachedInputTokens ?? 0;
-  const uncachedInput = Math.max(0, usage.inputTokens - cached);
+  const writes = usage.cacheWriteTokens ?? 0;
+  const uncachedInput = Math.max(0, usage.inputTokens - cached - writes);
   return (
     (uncachedInput / 1_000_000) * rates.input +
     (cached / 1_000_000) * cachedInputRate +
+    (writes / 1_000_000) * (rates.cacheWrite ?? rates.input * 1.25) +
     (usage.outputTokens / 1_000_000) * rates.output
   );
 }
@@ -207,6 +245,7 @@ export function modelProvider(model?: string): string {
   if (!model) return "unknown";
   const lowered = model.toLowerCase();
   if (lowered.startsWith("openai/")) return "openai";
+  if (lowered.startsWith("azure/")) return "azure";
   if (lowered.startsWith("anthropic/")) return "anthropic";
   if (lowered.startsWith("google/")) return "google";
   if (lowered.startsWith("deepseek/")) return "deepseek";
@@ -244,9 +283,10 @@ export function splitCost(usage: TokenUsageForPricing, model?: string): CostSpli
   const rates = getRates(model);
   const cachedInputRate = rates.cachedInput ?? rates.input;
   const cached = usage.cachedInputTokens ?? 0;
-  const uncachedInput = Math.max(0, usage.inputTokens - cached);
+  const writes = usage.cacheWriteTokens ?? 0;
+  const uncachedInput = Math.max(0, usage.inputTokens - cached - writes);
   const split: CostSplit = {
-    cost_in: (uncachedInput / 1_000_000) * rates.input,
+    cost_in: (uncachedInput / 1_000_000) * rates.input + (writes / 1_000_000) * (rates.cacheWrite ?? rates.input * 1.25),
     cost_out: (usage.outputTokens / 1_000_000) * rates.output,
   };
   if (usage.cachedInputTokens !== undefined) {

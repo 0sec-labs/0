@@ -71,8 +71,8 @@ EVOLUTION REQUIREMENTS (with --promote):
   The promoted model must be the EXACT one that was evaluated (trained
   on the train split only, NOT retrained on all data).  The artifact
   bytes must match what the evolution registry's active version recorded
-  in its snapshot.  Use the controlled 0sec evolution lifecycle:
-    0sec evolve run --config config.json
+  in its snapshot.  Use the controlled 0 evolution lifecycle:
+    0 evolve run --config config.json
   to create, evaluate, and promote a candidate through the evolution
   pipeline, then reference that version here.
 
@@ -100,7 +100,7 @@ from sklearn.utils.class_weight import compute_sample_weight
 HERE = Path(__file__).resolve().parent
 # scripts/train -> scripts -> benchmark
 BENCH_ROOT = HERE.parent.parent
-# benchmark -> packages -> 0sec -> repo root
+# benchmark -> packages -> 0 -> repo root
 REPO_ROOT = BENCH_ROOT.parent.parent.parent
 
 # The production router is a 45-feature binary:logistic XGBoost model.
@@ -491,8 +491,8 @@ def main() -> int:
             "  --evolution-artifact to verify the candidate's artifact identity against\n"
             "  the evolution registry.  The A/B signal alone is insufficient proof of\n"
             "  evaluated behavior across the full evolution pipeline.\n\n"
-            "  To promote through the 0sec evolution lifecycle, run:\n"
-            "    0sec evolve promote --store <store-path> --version <version-id>\n\n"
+            "  To promote through the 0 evolution lifecycle, run:\n"
+            "    0 evolve promote --store <store-path> --version <version-id>\n\n"
             "  Or use the standalone tool with a valid evaluated version:\n"
             "    node scripts/train/artifact-bridge.mjs authorize …\n",
             file=sys.stderr,
@@ -504,7 +504,7 @@ def main() -> int:
     # Export into a private temporary directory. Authorize the FINAL runtime
     # representation and install only those exact bytes, with atomic replacement.
     install_dest = args.orchestrator_model or DEFAULT_ORCHESTRATOR_MODEL
-    with tempfile.TemporaryDirectory(prefix="0sec-router-export-") as staging_dir:
+    with tempfile.TemporaryDirectory(prefix="0-router-export-") as staging_dir:
         staging_export = Path(staging_dir) / "runtime.json"
         if not reexport_runtime_artifact(args.out_model, args.dataset, staging_export):
             entry["decision"] = "promotion_export_failed"

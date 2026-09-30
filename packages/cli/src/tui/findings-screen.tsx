@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/react */
 import { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { useKeyboard } from "@opentui/react";
-import type { Finding, FindingTriageStatus } from "@0sec/shared";
+import type { FindingTriageStatus } from "@0/shared";
 import { useTheme } from "./theme-context.js";
 import { useSettings } from "./settings-store.js";
 import { severityToneFor } from "./themes.js";
@@ -29,19 +29,13 @@ import {
   describeFindingsFilters,
   findingFromRow,
   groupFindings,
-  isNativeRuntime,
-  resolveFixRepoRoot,
   type FindingsRow,
   type FindingsScreenOptions,
-  type FixRunState,
 } from "./findings-data.js";
 import { useSurfaceDimensions } from "./dialog-surface.js";
 import {
-  describeFixStatus,
   findingSourcePath,
   fixEligibility,
-  fixInputEligibility,
-  fixResultLines,
 } from "./fix-action.js";
 import {
   DialogDetailColumn,
@@ -51,17 +45,6 @@ import {
   type DialogDetailLine,
 } from "./dialog-screen-chrome.js";
 
-// ── Source-fix action (`f` on the Findings screen) ──
-//
-// These mirror the defaults of `0sec fix` (packages/cli/src/commands/fix.ts)
-// so the TUI and the CLI behave identically. `apply` is deliberately absent:
-// the CLI defaults `--apply` to false and applying stays an explicit,
-// separate operator action.
-const FIX_MODEL_TIMEOUT_MS = 600_000;
-const FIX_TEST_TIMEOUT_MS = 300_000;
-const FIX_MAX_ATTEMPTS = 3;
-/** Operator-owned regression command; `0sec fix` requires --test-command. */
-const FIX_TEST_COMMAND_ENV = "0SEC_FIX_TEST_COMMAND";
 
 // Upper bound on how far a wrapped finding detail may run inside its
 // scrolling pane, expressed in rows of the pane's own width.
@@ -85,7 +68,7 @@ function findingSeverityHeading(severity: string): string {
   return value.length === 0 ? "unrated" : value.toUpperCase();
 }
 
-export function FindingsScreen({ options, onExit, shell }: { options: FindingsScreenOptions; onExit: () => void; shell?: ShellNav }) {
+export function FindingsScreen({ options, onExit, shell, onSourceFix }: { options: FindingsScreenOptions; onExit: () => void; shell?: ShellNav; onSourceFix?: (findingId: string) => void }) {
   const theme = useTheme();
   const { mouseSupport } = useSettings();
   // Right-click context menu over a finding row. Opens only on a right press
@@ -97,8 +80,6 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
   const [reloadNonce, setReloadNonce] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [triageBusy, setTriageBusy] = useState<FindingTriageStatus | null>(null);
-  const [scanTargets, setScanTargets] = useState<Record<string, string>>({});
-  const [fixRun, setFixRun] = useState<FixRunState | null>(null);
   const [fixNotice, setFixNotice] = useState<string | null>(null);
   // The picker cursor and its filter; `index` is the cursor.
   const [findingsFilter, setFindingsFilter] = useState("");
@@ -128,17 +109,6 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
     indexRef.current = next;
     setIndex(next);
   };
-  // State updates are batched, so the re-entry guard cannot read `fixRun`:
-  // two `f` presses in the same frame would both see `null`. The ref flips
-  // synchronously inside the key handler instead.
-  const fixBusyRef = useRef(false);
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
   const { width, height } = useSurfaceDimensions();
   // The detail pane has no border or padding of its own; its PanelSections
   // supply the chrome, and the pane's scrollbar takes the remaining column.
@@ -147,7 +117,7 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
     let alive = true;
     const load = async () => {
       try {
-        const { osecDB } = await import("@0sec/db");
+        const { osecDB } = await import("@0/db");
         const db = new osecDB(options.dbPath);
         try {
           const findings = db.listFindings({
@@ -158,16 +128,8 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
             triageStatus: options.triage,
             limit: options.all ? options.limit : 1000,
           }) as FindingsRow[];
-          // The scan's target doubles as the repo the source-fix action runs
-          // in, mirroring the `<repo>` argument of `0sec fix`.
-          const targets: Record<string, string> = {};
-          for (const scanId of new Set(findings.map((row) => row.scanId))) {
-            const scan = db.getScan(scanId);
-            if (scan?.target) targets[scanId] = scan.target;
-          }
           if (!alive) return;
           setRows(findings);
-          setScanTargets(targets);
           applyIndex(0);
           setError(null);
         } finally {
@@ -279,25 +241,9 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
 
   // ── Source fix (`f`) ──
   const selectedFinding = useMemo(() => (selectedRow ? findingFromRow(selectedRow) : null), [selectedRow]);
-  const fixRepoRoot = useMemo(() => resolveFixRepoRoot(selectedRow, scanTargets), [selectedRow, scanTargets]);
-  const fixTestCommand = process.env[FIX_TEST_COMMAND_ENV] ?? "";
   const fixSourceFile = useMemo(() => findingSourcePath(selectedFinding), [selectedFinding]);
-  // The finding-level predicate runs first so the operator sees the same
-  // reason `0sec fix` would report first.
-  const fixReadiness = useMemo(() => {
-    const findingCheck = fixEligibility(selectedFinding);
-    if (!findingCheck.eligible) return findingCheck;
-    return fixInputEligibility({ repoRoot: fixRepoRoot, testCommand: fixTestCommand });
-  }, [selectedFinding, fixRepoRoot, fixTestCommand]);
-  const activeFixRun = fixRun && selectedRow && fixRun.findingId === selectedRow.id ? fixRun : null;
-  const fixRunning = fixRun?.status === "running";
-  const fixPanelTone = !activeFixRun
-    ? theme.BORDER
-    : activeFixRun.status === "running"
-      ? theme.PRIMARY
-      : activeFixRun.status === "validated_candidate" || activeFixRun.status === "applied_and_retested"
-        ? theme.SUCCESS
-        : theme.ERROR;
+  const fixReadiness = useMemo(() => fixEligibility(selectedFinding), [selectedFinding]);
+  const fixPanelTone = fixReadiness.eligible ? theme.SUCCESS : theme.MUTED;
 
   const palette = usePaletteController([
     {
@@ -331,7 +277,7 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
       id: "open-finding",
       title: "Inspect selected finding in chat",
       category: "Investigate",
-      description: "Open evidence, then investigate or plan a fix in the persistent chat",
+      description: "Open evidence, then investigate or request a verified source fix in chat",
       keybind: "enter",
       suggested: true,
       action: () => {
@@ -385,7 +331,7 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
     setNotice(`Updating ${selectedRow.fingerprint.slice(0, 10)} to ${triageStatus}...`);
 
     try {
-      const { osecDB } = await import("@0sec/db");
+      const { osecDB } = await import("@0/db");
       const db = new osecDB(options.dbPath);
       try {
         db.updateFindingTriageByFingerprint(selectedRow.fingerprint, triageStatus);
@@ -401,88 +347,22 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
     }
   };
 
-  /**
-   * Run `runSourceFix` exactly as `0sec fix` does, minus `--apply`. The await
-   * chain yields to the event loop, so the renderer keeps painting while the
-   * model call and the regression command run.
-   */
-  const runSourceFixForRow = async (
-    row: FindingsRow,
-    finding: Finding,
-    repoRoot: string,
-    testCommand: string,
-  ): Promise<void> => {
-    try {
-      const { createRuntime, runSourceFix } = await import("@0sec/core");
-      const runtime = createRuntime({ type: "api", timeout: FIX_MODEL_TIMEOUT_MS });
-      if (!isNativeRuntime(runtime)) {
-        throw new Error("runtime 'api' does not support structured source remediation");
-      }
-      if (!(await runtime.isAvailable())) {
-        throw new Error("runtime 'api' is not available");
-      }
-      const result = await runSourceFix({
-        repoRoot,
-        finding,
-        runtime,
-        testCommand,
-        // `0sec fix` defaults --apply to false. Applying a validated patch
-        // stays an explicit, separate operator action; the TUI never widens
-        // that gate.
-        apply: false,
-        maxAttempts: FIX_MAX_ATTEMPTS,
-        testTimeoutMs: FIX_TEST_TIMEOUT_MS,
-      });
-      if (!mountedRef.current) return;
-      setFixRun({ findingId: row.id, status: result.status, result });
-    } catch (err) {
-      if (!mountedRef.current) return;
-      setFixRun({
-        findingId: row.id,
-        status: "error",
-        error: err instanceof Error ? err.message : String(err),
-      });
-    } finally {
-      fixBusyRef.current = false;
-    }
-  };
 
   const requestSourceFix = (): void => {
-    if (fixBusyRef.current) {
-      setFixNotice("a fix run is already in progress");
-      return;
-    }
-    // The row this runs against is resolved from the ref-derived list at press
-    // time. When that agrees with the render-time selection the memos above are
-    // reused verbatim; when a burst has moved the cursor, the same predicates
-    // run again over the same inputs in the same order — `fixEligibility`
-    // first, then `fixInputEligibility` — so the gate is identical either way.
     const row = currentFindingsRow();
-    const rendered = row === selectedRow;
-    const finding = rendered ? selectedFinding : row ? findingFromRow(row) : null;
-    if (!row || !finding) {
-      setFixNotice("no finding selected");
+    const finding = row === selectedRow ? selectedFinding : row ? findingFromRow(row) : null;
+    const readiness = fixEligibility(finding);
+    if (!readiness.eligible || !row) {
+      setFixNotice(readiness.eligible ? "no finding selected" : readiness.reason);
       return;
     }
-    const repoRoot = rendered ? fixRepoRoot : resolveFixRepoRoot(row, scanTargets);
-    const testCommand = fixTestCommand;
-    const findingCheck = rendered ? fixReadiness : fixEligibility(finding);
-    const readiness = findingCheck.eligible && !rendered
-      ? fixInputEligibility({ repoRoot, testCommand })
-      : findingCheck;
-    if (!readiness.eligible) {
-      setFixNotice(readiness.reason);
+    if (!onSourceFix) {
+      setFixNotice(`Open this finding in chat and use /fix ${row.id} to choose local inputs and approve execution.`);
       return;
     }
-    if (!repoRoot || !testCommand) {
-      setFixNotice("fix inputs went missing before the run started");
-      return;
-    }
-    fixBusyRef.current = true;
-    setFixNotice(null);
-    setFixRun({ findingId: row.id, status: "running" });
-    void runSourceFixForRow(row, finding, repoRoot, testCommand);
+    onSourceFix(row.id);
   };
+
 
   // Open the highlighted finding in the persistent chat — the same action the
   // Enter key and the "open-finding" palette command perform.
@@ -656,39 +536,25 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
       if (row.triageNote) push(row.triageNote, theme.ACCENT);
     }
 
-    // Source fix. The candidate patch body and the pre/postcondition
-    // predicate arrays stay out for the same reason the legacy pane kept
-    // them out: `0sec fix --output` is the supported way to get them.
+    // Show the real source diff and regression output, not a template summary.
     lines.push({ text: "" });
     lines.push({ text: "SOURCE FIX", fg: fixPanelTone });
     push(
       fixReadiness.eligible
-        ? "ready — press f to generate a candidate fix"
+        ? "press f to choose local inputs and approve source verification in chat"
         : `unavailable — ${fixReadiness.reason}`,
       fixReadiness.eligible ? theme.SUCCESS : theme.MUTED,
     );
     if (fixSourceFile) push(`source ${fixSourceFile}`, theme.MUTED);
-    if (fixRepoRoot) push(`repo ${fixRepoRoot}`, theme.MUTED);
     if (fixNotice) push(fixNotice, theme.WARNING);
-    if (activeFixRun) {
-      push(describeFixStatus(activeFixRun.status, activeFixRun.result), fixPanelTone);
-      if (activeFixRun.error) push(`error ${activeFixRun.error}`, theme.ERROR);
-      if (activeFixRun.result) {
-        for (const line of fixResultLines(activeFixRun.result)) push(line, theme.MUTED);
-      }
-    } else {
-      // A finding whose fix has not run says exactly that, uncoloured: it
-      // must never read like one that produced a validated candidate.
-      push("no fix run for this finding", theme.MUTED);
-    }
-    if (fixRunning && !activeFixRun) push("a fix is running for another finding", theme.MUTED);
+    push("The actual generated diff, test result and publication approval appear in the owning audit chat.", theme.MUTED);
 
     lines.push({ text: "" });
     lines.push({ text: "FILTERS", fg: theme.PRIMARY });
     push(filterSummary, theme.MUTED);
     push(`limit ${options.limit}`, theme.MUTED);
     push(`mode ${options.all ? "raw rows" : "grouped families"}`, theme.MUTED);
-    push("[⏎] inspect/chat · [a] accept · [s] suppress · [r] reopen · [f] generate candidate", theme.MUTED);
+    push("[⏎] inspect/chat · [a] accept · [s] suppress · [r] reopen · [f] generate candidate · [p] review draft PR", theme.MUTED);
 
     lines.push({ text: "" });
     lines.push({ text: "DESCRIPTION", fg: theme.PRIMARY });
@@ -725,7 +591,7 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
         <DialogTitleRow
           screenKey="findings"
           width={width}
-          meta={fixRunning ? "generating fix" : triageBusy ? `updating ${triageBusy}` : options.all ? "raw rows" : "grouped families"}
+          meta={triageBusy ? `updating ${triageBusy}` : options.all ? "raw rows" : "grouped families"}
         />
         <DialogSelectBody
           items={findingsFiltered}
@@ -753,7 +619,7 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
         <FooterBar
           hint={findingsFiltering
             ? "type to filter · [⏎] keep · [esc] clear"
-            : "[↑↓] move · [⏎] inspect · [a] accept · [s] suppress · [r] reopen · [f] fix · [/] filter · [esc] back"}
+            : "[↑↓] move · [⏎] inspect · [f] fix setup · [/] filter · [esc] back"}
         />
       </box>
     </ShellFrame>

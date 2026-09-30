@@ -4,8 +4,9 @@
  * the driver lifecycle and the scope-pinned network interceptor.
  */
 import { z } from "zod";
-import type { JevEvaluator } from "@0sec/shared";
+import type { JevEvaluator } from "@0/shared";
 import type { ScopePolicy } from "../../scope/scope.js";
+import type { ScopeEnforcementState } from "../../scope/activation.js";
 import type { ToolDefinition, ToolResult } from "../types.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -144,7 +145,7 @@ export interface BrowserDriver {
 
 /** Options handed to the backend factory. */
 export interface BrowserDriverOptions {
-  /** UA string to pin (attribution token or the "0sec-browser/1.0" default). */
+  /** UA string to pin (attribution token or the "0-browser/1.0" default). */
   userAgent?: string;
   /** Extra headers Chrome attaches to every outgoing request (attribution). */
   extraHeaders?: Record<string, string>;
@@ -480,6 +481,7 @@ export class PlaywrightDriver implements BrowserDriver {
 export interface BrowserToolContext {
   target: string;
   scope?: ScopePolicy;
+  scopeEnforcement?: ScopeEnforcementState;
   publicNetwork?: { readonly scope?: ScopePolicy };
 }
 
@@ -499,7 +501,7 @@ export interface BrowserToolDeps {
   actionTimeoutMs?: number;
   /**
    * UA to pin on the browser context (attribution token, or the executor's
-   * `0sec-browser/1.0` default). Threaded straight into
+   * `0-browser/1.0` default). Threaded straight into
    * {@link BrowserDriverOptions.userAgent} on the first driver acquisition.
    */
   userAgent?: string;
@@ -543,7 +545,7 @@ function effectiveScope(ctx: BrowserToolContext): ScopePolicy | undefined {
 function gateUrl(ctx: BrowserToolContext, url: string): { ok: true } | { ok: false; reason: string } {
   const scope = effectiveScope(ctx);
   if (!scope) return { ok: true }; // unscoped scans keep today's behaviour
-  const verdict = scope.match(url);
+  const verdict = scope.enforce(url, ctx.scopeEnforcement);
   if (!verdict.allowed) return { ok: false, reason: verdict.reason };
   return { ok: true };
 }
@@ -867,7 +869,7 @@ export async function executeBrowser(
         const rawUrl = args.url as string;
         const page = await driver.tab(tabName);
         const nav = await page.goto(rawUrl, { timeoutMs });
-        // Post-navigation redirect re-check (0sec#218): goto follows redirects,
+        // Post-navigation redirect re-check (0#218): goto follows redirects,
         // so an in-scope URL that 302s off-origin must be refused before any
         // subsequent action operates on a foreign page.
         const post = gateUrl(ctx, nav.url);

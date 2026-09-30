@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync, existsSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared";
 import type { ProjectContextSuggestions } from "./project-context.js";
 import type {
   SecurePhase,

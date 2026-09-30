@@ -1,5 +1,5 @@
 {
-  "provenance": "0sec-authored appsec bug-class registry, 2026-07-21. Mirrors the SCHEMA of kernel-archetypes.json but is a SEPARATE, cross-language application-security pack (domain: appsec), NOT ported from 0verse (0verse's registry is Linux-kernel-only). Grounded in OWASP Top-10 / CWE and in the concrete misses these lenses were built to close: the Swiss engagement's gever OS-command-injection CRITICAL and the sibling-route authz / template-XSS / SSO-trust / resource-exhaustion classes the four generic finder lenses (memory-safety, input-validation, auth-logic, secrets-crypto) under-weighted. Unlike the kernel pack there is NO build/boot/sanitizer lane for these — every entry is route 'appsec-source-static': a grep/read hit is a hypothesis for the skeptic + multi-lens verify quorum, never an auto-confirmed finding. The load-bearing field for the finder surface is 'challenge_hint' (the cross-language, sink-shape-citing hunt angle), which the loader maps directly onto FinderLens.challengeHint; 'detection_signature' is the human/skeptic-facing grep evidence. 'engine_lens' is null for every entry (no pre-existing engine lens implements these — this registry IS their implementation).",
+  "provenance": "0-authored appsec bug-class registry, 2026-07-21. Mirrors the SCHEMA of kernel-archetypes.json but is a SEPARATE, cross-language application-security pack (domain: appsec), NOT ported from 0verse (0verse's registry is Linux-kernel-only). Grounded in OWASP Top-10 / CWE and in the concrete misses these lenses were built to close: the Swiss engagement's gever OS-command-injection CRITICAL and the sibling-route authz / template-XSS / SSO-trust / resource-exhaustion classes the four generic finder lenses (memory-safety, input-validation, auth-logic, secrets-crypto) under-weighted. Unlike the kernel pack there is NO build/boot/sanitizer lane for these — every entry is route 'appsec-source-static': a grep/read hit is a hypothesis for the skeptic + multi-lens verify quorum, never an auto-confirmed finding. The load-bearing field for the finder surface is 'challenge_hint' (the cross-language, sink-shape-citing hunt angle), which the loader maps directly onto FinderLens.challengeHint; 'detection_signature' is the human/skeptic-facing grep evidence. 'engine_lens' is null for every entry (no pre-existing engine lens implements these — this registry IS their implementation).",
   "archetypes": [
     {
       "id": "os-command-injection",
@@ -13,7 +13,7 @@
       "grounding": [
         "CWE-78: Improper Neutralization of Special Elements used in an OS Command",
         "OWASP Top 10 A03:2021 Injection",
-        "0sec Swiss engagement: gever OS-command-injection CRITICAL (missed by the generic input-validation lens)"
+        "0 Swiss engagement: gever OS-command-injection CRITICAL (missed by the generic input-validation lens)"
       ],
       "confirmable": "Source-static hypothesis. A grep/read hit needs the skeptic + multi-lens verify quorum to confirm the argument is genuinely attacker-reachable and not escaped/tokenized upstream; no build/exec lane proves it in this repo.",
       "uid": "appsec/os-command-injection",

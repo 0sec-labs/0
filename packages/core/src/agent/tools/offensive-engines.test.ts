@@ -1,4 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+vi.mock("../../plugins/enablement.js", async (importOriginal) => ({
+  ...await importOriginal<object>(),
+  readEnablement: () => ({ schema: 1, project: process.cwd(), enabled: { scope: { version: "1.0.0", capabilities: [], enabledAt: 1 } } }),
+}));
 import { TOOL_DEFINITIONS } from "./index.js";
 import { TOOL_DISPATCH } from "./dispatch.js";
 import {
@@ -22,10 +26,10 @@ const GROUP1_TOOLS = ["variant_hunt", "assumption_hunt", "generate_fix"] as cons
 const GROUP2_TOOLS = ["verify_finding", "protocol_conformance", "spec_drift", "safety_eval"] as const;
 // GROUP 3 — feature-flag + scope gated, deny-by-default. tool → env flag.
 const GROUP3_FLAGGED: Array<{ tool: string; flag: string }> = [
-  { tool: "memsafety_fuzz", flag: "0SEC_FEATURE_MEMSAFETY" },
-  { tool: "npm_dynamic_discovery", flag: "0SEC_FEATURE_NPM_DISCOVERY" },
-  { tool: "weaponize_kernel", flag: "0SEC_FEATURE_KERNEL_WEAPONIZE" },
-  { tool: "cve_adapt", flag: "0SEC_FEATURE_CVE_ADAPT" },
+  { tool: "memsafety_fuzz", flag: "ZERO_FEATURE_MEMSAFETY" },
+  { tool: "npm_dynamic_discovery", flag: "ZERO_FEATURE_NPM_DISCOVERY" },
+  { tool: "weaponize_kernel", flag: "ZERO_FEATURE_KERNEL_WEAPONIZE" },
+  { tool: "cve_adapt", flag: "ZERO_FEATURE_CVE_ADAPT" },
 ];
 
 const ALL_TOOLS = [...GROUP1_TOOLS, ...GROUP2_TOOLS, ...GROUP3_FLAGGED.map((g) => g.tool)];

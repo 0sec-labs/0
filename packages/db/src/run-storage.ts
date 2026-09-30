@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { homeStateDir, runStateDir } from "@0sec/shared";
+import { homeStateDir, runStateDir } from "@0/shared";
 
 const STATE_DB_FILE = "state.db";
 const REPORT_FILE = "report.json";
@@ -34,14 +34,14 @@ export interface ResolveOsecRunStorageOptions {
   resume?: boolean;
   /** Test seam; production uses the process environment. */
   env?: NodeJS.ProcessEnv;
-  /** Test seam; production uses the operator's 0sec state directory. */
+  /** Test seam; production uses the operator's 0 state directory. */
   homeDir?: string;
 }
 
 
 function normalizeRunId(value: string): string {
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value)) {
-    throw new Error(`Invalid 0sec run id ${JSON.stringify(value)}.`);
+    throw new Error(`Invalid 0 run id ${JSON.stringify(value)}.`);
   }
   return value;
 }
@@ -52,25 +52,25 @@ function normalizeRunId(value: string): string {
  *
  * A local SQLite database is execution state, not a multi-worker system of
  * record. Fresh runs therefore receive distinct paths. Managed workers pass
- * their orchestrator scan id through `0SEC_CLOUD_SCAN_ID`, making the local
+ * their orchestrator scan id through `ZERO_CLOUD_SCAN_ID`, making the local
  * run directory and the remote scan correlate without sharing a database.
  */
 export function resolveOsecRunStorage(
   options: ResolveOsecRunStorageOptions = {},
 ): OsecRunStorage {
   const env = options.env ?? process.env;
-  const cloudRunId = env["0SEC_CLOUD_SCAN_ID"]?.trim() || undefined;
+  const cloudRunId = env["ZERO_CLOUD_SCAN_ID"]?.trim() || undefined;
   let runId = normalizeRunId(options.runId ?? cloudRunId ?? randomUUID());
   const stateDir = homeStateDir(options.homeDir);
-  const configuredRunDir = env["0SEC_RUN_DIR"]?.trim() || undefined;
+  const configuredRunDir = env["ZERO_RUN_DIR"]?.trim() || undefined;
   const configuredDbPath =
-    options.dbPath ?? (env["0SEC_DB_PATH"]?.trim() || undefined);
+    options.dbPath ?? (env["ZERO_DB_PATH"]?.trim() || undefined);
   let runDir = configuredRunDir
     ? resolve(configuredRunDir)
     : runStateDir(runId, options.homeDir);
 
   // New runs use their exact run id. A resume may receive the short id printed
-  // by `0sec history`, so resolve one unambiguous run directory before falling
+  // by `0 history`, so resolve one unambiguous run directory before falling
   // back to the pre-run-scoped monolithic database.
   if (
     options.resume &&
@@ -84,7 +84,7 @@ export function resolveOsecRunStorage(
         (entry) => entry.isDirectory() && entry.name.startsWith(runId),
       );
       if (matches.length > 1) {
-        throw new Error(`0sec run id prefix '${runId}' is ambiguous.`);
+        throw new Error(`0 run id prefix '${runId}' is ambiguous.`);
       }
       const match = matches[0];
       if (match) {
@@ -95,13 +95,13 @@ export function resolveOsecRunStorage(
   }
 
   if (!isAbsolute(runDir)) {
-    throw new Error(`0sec run directory must be absolute: ${JSON.stringify(runDir)}.`);
+    throw new Error(`0 run directory must be absolute: ${JSON.stringify(runDir)}.`);
   }
 
   let dbPath = configuredDbPath
     ? configuredDbPath === ":memory:" ? configuredDbPath : resolve(configuredDbPath)
     : join(runDir, STATE_DB_FILE);
-  const configuredReportPath = env["0SEC_REPORT_PATH"]?.trim() || undefined;
+  const configuredReportPath = env["ZERO_REPORT_PATH"]?.trim() || undefined;
   const reportPath = configuredReportPath
     ? resolve(configuredReportPath)
     : !configuredDbPath || configuredRunDir
@@ -111,7 +111,7 @@ export function resolveOsecRunStorage(
   // Existing releases kept every scan in one state DB. Preserve the ability to
   // resume that history, but never send a fresh run back to the shared file.
   if (options.resume && !configuredDbPath && !existsSync(dbPath)) {
-    const legacyDbPath = join(stateDir, "0sec.db");
+    const legacyDbPath = join(stateDir, "0.db");
     if (existsSync(legacyDbPath)) dbPath = legacyDbPath;
   }
   if (!configuredDbPath || configuredRunDir || reportPath) {

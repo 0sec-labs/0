@@ -1,4 +1,4 @@
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared";
 import type { ChatScreenOptions } from "./chat-screen.js";
 
 export interface ShellNav {
@@ -27,16 +27,11 @@ export interface ShellNav {
    * rebindable View toggles can be re-captured. Persists via the settings store.
    */
   openKeybindings: () => void;
-  openHarness: () => void;
   /** Opens the model picker above the live conversation. */
   openModels: (chatOptions?: ChatScreenOptions) => void;
+  /** Opens Sessions: switch open native sessions or resume saved conversations. */
   openResume: (chatOptions?: ChatScreenOptions) => void;
   openOnboarding: () => void;
-  /**
-   * Opens the agent-herd overview: the roster of peers working this project
-   * directory. Empty by default until the roster producer is wired.
-   */
-  openHerd: () => void;
   /**
    * Opens the Agents Comms view: the live fleet of sub-agents plus the stream
    * of messages flowing between them (agent↔agent, agent↔operator). Empty by
@@ -46,14 +41,13 @@ export interface ShellNav {
   /**
    * Opens the full-screen marketplace browser: plugins and themes from the
    * configured registry. The Hackstore community index ships as the default, so it opens on
-   * empty state until `$0SEC_REGISTRY_URL` points at a registry the operator trusts.
+   * empty state until `$ZERO_REGISTRY_URL` points at a registry the operator trusts.
    */
   openMarket: () => void;
   /**
-   * Opens the full-screen provider connect / login screen: the write side of
-   * `/providers`, where an operator connects a model provider by pasting an API
-   * key or completing a subscription sign-in. Credentials go only to the
-   * existing credential store.
+   * Opens the provider connect / login screen, where an operator connects
+   * by pasting an API key or completing a subscription sign-in. Credentials
+   * go only to the existing credential store.
    */
   openConnect: () => void;
   /**

@@ -12,10 +12,8 @@ Choose the integration direction first:
 | Give 0 tools from another MCP server | [MCP client configuration](#connect-external-mcp-tools-to-0) | 0 launches operator-configured stdio servers |
 | Install a third-party tool | [Hackstore plugins](#cli-managed-operator-plugins) | Enabled JavaScript runs as a local child process, not in a sandbox |
 | Let the model author executable tools | [Self-extension](#model-authored-executable-plugins-self-extension) | Generated TypeScript runs in disposable Docker or smolvm guests |
-| Connect organization credentials | [Cloud auth](#cloud-auth) | Authentication and hosted model transport are separate from managed execution |
 
-Local tools and BYOK workflows do not require a cloud account. Selecting hosted
-models does not move your tool execution to a managed worker. The
+Local tools and BYOK workflows do not require a cloud account. The
 [website](https://0.security/harness/) describes the product organization;
 the command and runtime sources linked below define these integration contracts.
 
@@ -51,7 +49,7 @@ Use an MCP client that supports launching local stdio servers. Client-specific
 configuration formats differ; the example below uses the common `mcpServers`
 shape, not a claim of qualification for every named client.
 
-**Source:** [`mcp-server.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/commands/mcp-server.ts)
+**Source:** [`mcp-server.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/mcp-server.ts)
 
 ### Usage
 
@@ -104,7 +102,7 @@ Use `--tools` to select from these live-attack tools:
 
 ### Auth configuration
 
-Target authentication is provided via the `0SEC_MCP_AUTH_JSON` environment
+Target authentication is provided via the `ZERO_MCP_AUTH_JSON` environment
 variable. Set it to a JSON object with one of these shapes:
 
 ```json
@@ -146,9 +144,9 @@ create a complete scan pipeline or run an independent verifier.
 
 MCP supports attribution headers for authorized engagements:
 
-- `0SEC_MCP_ATTRIBUTION_HEADERS_JSON` — JSON array of `"Header-Name: value"`
+- `ZERO_MCP_ATTRIBUTION_HEADERS_JSON` — JSON array of `"Header-Name: value"`
   strings
-- `0SEC_MCP_ATTRIBUTION_UA_TOKEN` — free-form User-Agent token appended to the
+- `ZERO_MCP_ATTRIBUTION_UA_TOKEN` — free-form User-Agent token appended to the
   default UA string
 
 ### Client setup
@@ -175,7 +173,7 @@ For a client accepting `mcpServers` (for example Claude Desktop), add:
 Use an absolute path for `command` if a GUI-launched client cannot find `0` on
 its `PATH`. This server does not need an `ANTHROPIC_API_KEY` to expose tools:
 the MCP client supplies the reasoning model. If the target needs authentication,
-provide `0SEC_MCP_AUTH_JSON` through that client's secret/environment mechanism.
+provide `ZERO_MCP_AUTH_JSON` through that client's secret/environment mechanism.
 `send_prompt` sends a prompt to the **target under test**, not a provider model.
 
 The MCP transport is stdio-only; stdout is reserved for protocol frames and
@@ -187,11 +185,11 @@ systems you do not own or have permission to assess.
 ## Connect external MCP tools to 0
 
 This is the reverse direction: `0 console` and the OpenTUI connect external
-stdio servers from the **JSON array** in `0SEC_MCP`. It is not a
+stdio servers from the **JSON array** in `ZERO_MCP`. It is not a
 `{"mcpServers": ...}` object or a config-file path:
 
 ```bash
-env '0SEC_MCP=[{"id":"workspace","command":"node","args":["/absolute/path/to/mcp-server.js"],"cwd":"/absolute/path/to/workspace"}]' \
+env 'ZERO_MCP=[{"id":"workspace","command":"node","args":["/absolute/path/to/mcp-server.js"],"cwd":"/absolute/path/to/workspace"}]' \
   0 console
 ```
 
@@ -214,15 +212,15 @@ server connected successfully. The CLI configuration here supports stdio,
 not an HTTP/SSE URL. An SDK caller can supply its own transport to
 `McpHost.register`; that does not create a remote-transport CLI option.
 
-**Sources:** [`mcp-host.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/agent/mcp-host.ts),
-[`console.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/commands/console.ts),
-[`tui/run.tsx`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/tui/run.tsx).
+**Sources:** [`mcp-host.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/agent/mcp-host.ts),
+[`console.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/console.ts),
+[`tui/run.tsx`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/run.tsx).
 
 ## Native workers and multiple models
 
 Native sessions can use `spawn_agent` for one focused task or `spawn_agents`
 for a batch of up to eight. Batches default to four concurrent children;
-`env 0SEC_SUBAGENT_CONCURRENCY=2 0 tui` lowers that concurrency. Each task
+`env ZERO_SUBAGENT_CONCURRENCY=2 0 tui` lowers that concurrency. Each task
 gets fresh context and its own turn budget, while scope, rate limits and the
 parent's shared cost ceiling remain in force. Children do not receive recursive
 spawn tools. Findings merge back through the parent; a child failure is not
@@ -240,13 +238,13 @@ This is not a stock CLI `--auto-route` flag. Crucially, forked children still
 inherit the parent's **provider, endpoint and account**, with no cross-account
 fallback chain. Use model IDs that account or gateway actually serves; the
 presence of another provider's ambient credentials does not reroute a fork to
-it. Hosted children must pass the hosted model catalog check. Model selection
-does not change tool permissions or establish that a model is better at
-verification. Ordinary worker consensus is not independent reproduction.
+it. Model selection does not change tool permissions or establish that a
+model is better at verification. Ordinary worker consensus is not independent
+reproduction.
 
-**Sources:** [`tools.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/agent/tools.ts),
-[`runtime/types.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/runtime/types.ts),
-[`llm-api.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/runtime/llm-api.ts).
+**Sources:** [`tools.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/agent/tools.ts),
+[`runtime/types.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/runtime/types.ts),
+[`llm-api.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/runtime/llm-api.ts).
 
 ## HackerOne integration
 
@@ -267,7 +265,7 @@ discovery and scope enumeration.
 ### Credentials
 
 Set `H1_API_IDENTIFIER` and `H1_API_TOKEN` in the environment, or save the same
-unquoted `KEY=VALUE` pairs in `~/.0sec/h1.env` with mode `0600`. A complete
+unquoted `KEY=VALUE` pairs in `~/.0/h1.env` with mode `0600`. A complete
 environment pair takes precedence. The identifier is the name entered at token
 creation, **not your HackerOne handle**. The API uses Basic authentication;
 `0 h1 auth` verifies existing credentials and does not perform a login flow.
@@ -278,7 +276,7 @@ H1_API_TOKEN=your-api-token
 ```
 
 Do not add `export` prefixes, shell quoting, or multiline values to this file.
-See [`h1/credentials.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/h1/credentials.ts).
+See [`h1/credentials.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/h1/credentials.ts).
 
 ### Exit codes
 
@@ -309,50 +307,6 @@ Review the program's current policy and automation restrictions before using
 an exported scope. Scope enumeration is not permission to automate testing.
 This integration does not submit HackerOne reports, rank program fit, or ingest
 hacktivity; disclosure drafts below are a separate local workflow.
-
-## Cloud auth
-
-`0 auth` manages scoped organization credentials. For 0cloud availability and operator-host setup, see [Getting started](/getting-started/#hosted-models-draft). Local API-key and subscription use require no 0cloud account.
-
-**Source:** `packages/cli/src/commands/auth.ts`
-
-### Subcommands
-
-| Subcommand | Description |
-|------------|-------------|
-| `0 auth login` | Open browser at the cloud host's `/cli-auth` page, poll for a scoped token |
-| `0 auth login --token <value>` | Manual credential path — persist a token directly |
-| `0 auth login --host <url>` | Point at a self-hosted cloud host |
-| `0 auth logout` | Delete `~/.0sec/cloud.env` and `~/.0cloud/credentials.json` |
-| `0 auth status` | Verify cloud credentials against the authenticated inference-account endpoint |
-
-### Credential storage
-
-Credentials persist to `~/.0sec/cloud.env` (mode `0600`) with the format:
-
-```text
-# DO NOT commit this file or share its contents.
-0SEC_CLOUD_HOST=https://cloud.0.security
-0SEC_CLOUD_TOKEN=scoped-token-here
-```
-
-Normal login also best-effort writes compatible credentials to
-`~/.0cloud/credentials.json`; normal logout removes both files. Development-state
-login/logout keeps production-compatible credentials separate. Cloud auth uses
-Bearer tokens. Successful login or status verifies credentials, not the
-availability of every model or a managed execution environment.
-
-### Manual token path
-
-For self-hosted or recovery use, pass a token directly:
-
-```bash
-0 auth login --token "your-token" --host "https://your-host.example.com"
-```
-
-This skips the browser flow entirely and persists the token immediately.
-Run `0 auth status` afterward to verify it; manual persistence does not validate
-the token with the server. Avoid putting real tokens in shared shell history.
 
 ## Report formats
 
@@ -403,13 +357,13 @@ Container Registry. The Dockerfile contains some architecture-aware dependency
 provisioning, but the current publisher is not multi-architecture:
 
 ```
-ghcr.io/0sec-labs/0sec:latest
-ghcr.io/0sec-labs/0sec:<sha>
-ghcr.io/0sec-labs/0sec:main
+ghcr.io/0sec-labs/0:latest
+ghcr.io/0sec-labs/0:<sha>
+ghcr.io/0sec-labs/0:main
 ```
 
-**Sources:** [`Dockerfile`](https://github.com/0sec-labs/0sec/blob/main/Dockerfile),
-[`docker-publish.yml`](https://github.com/0sec-labs/0sec/blob/main/.github/workflows/docker-publish.yml).
+**Sources:** [`Dockerfile`](https://github.com/0sec-labs/0/blob/main/Dockerfile),
+[`docker-publish.yml`](https://github.com/0sec-labs/0/blob/main/.github/workflows/docker-publish.yml).
 Use a digest or the published short-SHA tag when repeatability matters;
 `latest` follows eligible main builds, not a promise of a stable release.
 
@@ -435,13 +389,13 @@ The runtime image (based on `ubuntu:24.04`) includes:
 docker run --rm \
   -e ANTHROPIC_API_KEY=$KEY \
   -v "$PWD:/work" -w /work \
-  ghcr.io/0sec-labs/0sec:latest review .
+  ghcr.io/0sec-labs/0:latest review .
 
 # Scan a web target
 docker run --rm \
   -e OPENAI_API_KEY=$KEY \
   -v "$PWD:/work:ro" -w /work \
-  ghcr.io/0sec-labs/0sec:latest scan \
+  ghcr.io/0sec-labs/0:latest scan \
     --target https://example.com \
     --scope /work/scope.json
 ```
@@ -462,8 +416,8 @@ at `/work` if you need the container to read source code or write reports.
 ### Build your own
 
 ```bash
-docker build -t 0sec:local .
-docker build --build-arg INSTALL_SECLISTS=1 -t 0sec:full .
+docker build -t 0:local .
+docker build --build-arg INSTALL_SECLISTS=1 -t 0:full .
 ```
 
 ## Plugin system
@@ -536,7 +490,7 @@ Node 24 strips erasable TypeScript syntax. Provision dependencies in the toolbox
 7. **Close** — releases the manager and aborts pending operations.
 
 For the model-facing lifecycle, use `self_extend` with `action` set to `submit`,
-`list`, `evolve`, or `rollback`. Point `0SEC_PLUGIN_EVOLUTION_CONFIG` at an
+`list`, `evolve`, or `rollback`. Point `ZERO_PLUGIN_EVOLUTION_CONFIG` at an
 operator-owned [source-evolution config](/improvement-plane/#config-shape) to
 expose the `default` evaluation profile. It must use the same backend and pinned
 image as the executable. Creation and replacement work without a profile;
@@ -550,8 +504,8 @@ evolution requires the improvement loop.
 To provision the default guest and start a session:
 
 ```bash
-docker build --target toolbox -t 0sec-toolbox:local .
-env 0SEC_PLUGIN_BACKEND=docker 0SEC_PLUGIN_IMAGE=0sec-toolbox:local 0 tui
+docker build --target toolbox -t 0-toolbox:local .
+env ZERO_PLUGIN_BACKEND=docker ZERO_PLUGIN_IMAGE=0-toolbox:local 0 tui
 ```
 
 Self-extension is enabled by default for non-verifier sessions; an explicit
@@ -560,17 +514,17 @@ enablement does not install Docker or pull the guest image. Ask the agent to
 submit an executable through `self_extend`, inspect `list` for the retained
 version, and call its declared tool by name. There is no `0 plugin submit`
 command for this path. For measured evolution, start the session with
-`env 0SEC_PLUGIN_EVOLUTION_CONFIG=/absolute/path/to/evolution.json 0 tui`
+`env ZERO_PLUGIN_EVOLUTION_CONFIG=/absolute/path/to/evolution.json 0 tui`
 and use the `default` profile. Source-access consent and promotion settings in
 that operator-owned config are separate from self-extension enablement.
 
-**Sources:** [`agent/executable-plugins.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/agent/executable-plugins.ts),
-[`plugins/executable.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/plugins/executable.ts).
+**Sources:** [`agent/executable-plugins.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/agent/executable-plugins.ts),
+[`plugins/executable.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/plugins/executable.ts).
 
 #### Storage
 
-The default store is `~/.0sec/executable-plugins/`, separate from Hackstore's
-`~/.0sec/plugins/`. `registry.json` retains snapshot UUIDs under `snapshots/<uuid>`,
+The default store is `~/.0/executable-plugins/`, separate from Hackstore's
+`~/.0/plugins/`. `registry.json` retains snapshot UUIDs under `snapshots/<uuid>`,
 content digests, immutable image identity, manifest digests and evolved-version
 receipt digests. Registry provenance is checked on read; snapshot contents are
 verified at refresh/admission/execution boundaries. These are local integrity
@@ -583,9 +537,9 @@ checks, not registry signatures or an external attestation.
 | `docker` (default) | Local Docker daemon; configured Node 24 toolbox image | `--network none`, read-only root, cap-drop all, no-new-privs, PIDs limit, bounded memory/CPU |
 | `smolvm` | KVM, smolvm **1.14.6**, Node 24 toolbox archive | MicroVM with dedicated kernel; bounded resources and no guest network |
 
-Default image for agent-created submissions is `0sec-toolbox:local`, overridable
-with `0SEC_PLUGIN_IMAGE`; the smoke script defaults to `0sec-toolbox:qualification`.
-For smolvm, configure `0SEC_SMOLVM_IMAGE_ARCHIVE`. The image is resolved to an immutable digest
+Default image for agent-created submissions is `0-toolbox:local`, overridable
+with `ZERO_PLUGIN_IMAGE`; the smoke script defaults to `0-toolbox:qualification`.
+For smolvm, configure `ZERO_SMOLVM_IMAGE_ARCHIVE`. The image is resolved to an immutable digest
 on first use; resumed/promoted versions retain that digest, not a retagged
 reference.
 
@@ -623,33 +577,38 @@ evolve            │
 
 **Source:** `packages/cli/src/commands/plugin.ts`
 
-Hackstore is the default community registry. Override it with `0SEC_REGISTRY_URL`
+Hackstore is the default community registry. Override it with `ZERO_REGISTRY_URL`
 or `--registry` on browse, search, and install. An explicit empty setting disables
 fetching. Entries use the unconfigured signature verifier and are marked
 `unverified`.
 
-The [author guide](/hackstore/)
-covers executable scaffolding, the manifest, and a local two-file installation
-in an isolated home. The installer writes `plugin.js` and `plugin.json` only.
-Use 0 0.17.0 or newer for direct plugin calls. The 0.16.3 binary has a
-tool-registry bug in `plugin run`.
+The [author guide](/hackstore/) covers scaffolding, shared manifest validation,
+offline installation with `0 plugin install ./extension --local`, approval, real
+tool calls, and `0 hackstore prepare-submission ./extension`. Submission preparation
+produces a reproducible source bundle for a reviewed Hackstore pull request; it
+does not upload or publish. The installer writes `plugin.js` and `plugin.json`
+only. Check command-specific `--help` and update 0 if these commands are missing.
 
 #### Subcommands
 
 | Subcommand | Description |
 |------------|-------------|
-| `0 plugin list` | List installed plugins |
+| `0 plugin list` | List installed code and built-in authorization plugins with project activation state |
 | `0 plugin browse` | List the configured registry |
 | `0 plugin search <query>` | Search the configured registry |
-| `0 plugin install <id>` | Write plugin files to disk (does not execute) |
-| `0 plugin enable <id>` | Record operator decision to permit the plugin |
-| `0 plugin disable <id>` | Revoke enablement |
-| `0 plugin info <id>` | Show plugin manifest and capabilities |
+| `0 plugin install <id>` | Fetch, validate, and write registry code without executing it |
+| `0 plugin install <path> --local` | Validate and install offline source; never execute it or approve a new installation |
+| `0 plugin enable <id>` | Approve installed code or activate built-in `scope` enforcement for this project |
+| `0 plugin disable <id>` | Revoke project approval or disable built-in scope enforcement |
+| `0 plugin info <id>` | Inspect the manifest/capabilities or built-in authorization state |
 | `0 plugin run <id> <tool> [pairs...]` | Invoke a tool; name it explicitly before `key=value` arguments. Effectful calls require `--yes`. |
+| `0 hackstore init <name>` | Scaffold a working example tool and author instructions |
+| `0 hackstore validate <path>` | Validate the shared manifest contract without executing code |
+| `0 hackstore prepare-submission <path> --out <directory>` | Prepare reviewed source under `extensions/<id>/`; no publication side effects |
 
 #### Security model
 
-CLI-managed plugins have three distinct states:
+External CLI-managed plugins have three distinct states:
 
 | State | Description |
 |-------|-------------|
@@ -663,6 +622,11 @@ approval decisions; they do not enforce operating-system restrictions. A plugin
 runs under the operator's account. Review code before enabling it. Omitting
 `--yes` for an effectful call prevents the call, not the preceding plugin load.
 
+The first-party `scope` plugin is a host authorization feature, not external
+code: it has no installed entry point or child process. It is disabled until
+`0 plugin enable scope` explicitly activates it for the project. Read
+[Scope](/scope/) for the boundaries it controls.
+
 Use `0 plugin enable <id>` from the intended project, then launch `0 tui`
 there for agent access. The OpenTUI pins the approved plugin host for each chat;
 marketplace changes prepare future chats rather than replacing a live chat's
@@ -672,7 +636,7 @@ Direct `plugin run` reloads and checks the current approval on each invocation.
 Do not assume every batch command or the readline console auto-loads Hackstore
 plugins merely because the core supports a `PluginHost`.
 
-**Source:** [`session-plugin-host.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/tui/session-plugin-host.ts).
+**Source:** [`session-plugin-host.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/session-plugin-host.ts).
 
 ## Disclose and evidence
 
@@ -715,7 +679,7 @@ Options:
 ### Disclosure tracking
 
 The `track` subcommand drives a state machine through statuses defined in
-`@0sec/core`:
+`@0/core`:
 
 ```bash
 # Open a fresh draft record

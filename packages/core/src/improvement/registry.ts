@@ -23,10 +23,13 @@ import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep 
 
 import { canonicalEvolutionJson, parseEvolutionConfig } from "./config.js";
 import { acquireEvolutionController, EvolutionControllerBusyError } from "./controller-lock.js";
+import { evolutionComparisonIdentity } from "./evaluation.js";
+import { assertEvolutionCampaignMode, campaignPromotionAllowed, compareEvolutionIdentities } from "./safety.js";
 import {
   ensureEvolutionDirectory,
   publishEvolutionArtifact,
   readEvolutionArtifact,
+  resolveEvolutionDirectoryPath,
 } from "./artifacts.js";
 import type {
   EvolutionArtifactKind,
@@ -700,6 +703,39 @@ function assertPromotableReceipt(receipt: EvolutionEvaluation, versionId: string
   }
 }
 
+/** Hold the ledger lease through the registry CAS publication. */
+function acquireEvolutionPromotionGate(storePath: string, receipt: EvolutionEvaluation): (() => void) | undefined {
+  const stored = readEvolutionArtifact(join(configsDir(storePath), `${configHexDigest(receipt.configDigest)}.json`));
+  if (evolutionDigest(stored) !== receipt.configDigest) throw new Error("promotion configuration digest mismatch");
+  const config = parseEvolutionConfig(stored);
+  assertEvolutionCampaignMode(config);
+  if (!config.safety?.enabled) return undefined;
+  const provenance = receipt.result.provenance;
+  if (!provenance || provenance.compatibilityStatus !== "compatible" || !provenance.provider || !provenance.resolvedModel) {
+    throw new Error("promotion requires observed compatible generator/evaluator provenance");
+  }
+  const expected = evolutionComparisonIdentity(config, { provider: provenance.provider, model: provenance.resolvedModel });
+  const comparison = compareEvolutionIdentities(expected, provenance);
+  expected.compatibilityStatus = comparison.status;
+  if (comparison.status !== "compatible"
+    || receipt.result.evaluatorDigestBefore !== expected.evaluatorDigest
+    || receipt.result.evaluatorDigestAfter !== expected.evaluatorDigest
+    || receipt.result.developmentCorpusDigest !== expected.development.digest
+    || receipt.result.heldOutCorpusDigest !== expected.heldOut.digest
+    || receipt.result.negativeControlCorpusDigest !== expected.negativeControl.digest) {
+    throw new Error("promotion receipt does not match the current evaluator/corpus provenance");
+  }
+  const release = acquireEvolutionController(join(storePath, "campaign"));
+  try {
+    const gate = campaignPromotionAllowed(storePath, expected);
+    if (!gate.allowed) throw new Error(gate.reason ?? "durable campaign blocks promotion");
+    return release;
+  } catch (error) {
+    release();
+    throw error;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -713,7 +749,7 @@ export async function snapshotEvolutionSource(config: Pick<EvolutionConfig, "sou
   for (const d of [storePath, snapshotsDir(storePath), receiptsDir(storePath), configsDir(storePath)]) {
     ensureEvolutionDirectory(d);
   }
-  const physicalSourceRoot = realpathSync(sourceRoot);
+  const physicalSourceRoot = resolveEvolutionDirectoryPath(sourceRoot);
   const physicalStorePath = dirname(realpathSync(snapshotsDir(storePath)));
   const id = randomUUID();
   const { sourceAbsPaths, files } = indexSourceFiles(physicalSourceRoot, sourcePaths, physicalStorePath, maxSourceBytes);
@@ -798,6 +834,7 @@ export async function startEvolutionCanary(
   storePath: string, id: string, expectedActiveId: string | null, signal?: AbortSignal,
 ): Promise<void> {
   const unlock = await acquireLock(storePath, signal);
+  let releaseCampaign: (() => void) | undefined;
   try {
     const registry = loadRegistryRaw(storePath);
     if (registry.activeId !== expectedActiveId) {
@@ -812,7 +849,8 @@ export async function startEvolutionCanary(
 
     // Comprehensive receipt validation (baseline digest from registry)
     const baselineVersion = baselineId ? registry.versions.find((v) => v.id === baselineId) : undefined;
-    verifyEvolutionReceipt(storePath, id, version, baselineVersion?.snapshot.digest);
+    const receipt = verifyEvolutionReceipt(storePath, id, version, baselineVersion?.snapshot.digest);
+    releaseCampaign = acquireEvolutionPromotionGate(storePath, receipt);
 
     // Reject altered code before exposing it as a canary.
     verifyEvolutionSnapshot(version.snapshot);
@@ -822,7 +860,7 @@ export async function startEvolutionCanary(
     registry.canaryId = id;
     registry.events.push(makeRegistryEvent(registry, "canary_started", id, "Canary trial started"));
     saveRegistryRaw(storePath, registry);
-  } finally { unlock(); }
+  } finally { releaseCampaign?.(); unlock(); }
 }
 
 /**
@@ -834,6 +872,7 @@ export async function promoteEvolutionVersion(
   storePath: string, id: string, expectedActiveId: string | null, signal?: AbortSignal,
 ): Promise<void> {
   const unlock = await acquireLock(storePath, signal);
+  let releaseCampaign: (() => void) | undefined;
   try {
     const registry = loadRegistryRaw(storePath);
     if (registry.activeId !== expectedActiveId) {
@@ -848,7 +887,8 @@ export async function promoteEvolutionVersion(
 
     // Comprehensive receipt validation with baseline digest from registry
     const baselineVersion = baselineId ? registry.versions.find((v) => v.id === baselineId) : undefined;
-    verifyEvolutionReceipt(storePath, id, version, baselineVersion?.snapshot.digest);
+    const receipt = verifyEvolutionReceipt(storePath, id, version, baselineVersion?.snapshot.digest);
+    releaseCampaign = acquireEvolutionPromotionGate(storePath, receipt);
 
     // Load config to derive canaryTrials (immutable stored config; fail closed if missing or mismatched)
     const configHex = configHexDigest(version.configDigest);
@@ -869,7 +909,16 @@ export async function promoteEvolutionVersion(
 
     // Verify all canary trial proofs exist and are valid
     for (let i = 0; i < canaryTrials; i++) {
-      verifyEvolutionReceipt(storePath, id, version, baselineVersion?.snapshot.digest, i);
+      const trial = verifyEvolutionReceipt(storePath, id, version, baselineVersion?.snapshot.digest, i);
+      if (validatedConfig.safety?.enabled) {
+        const comparison = trial.result.provenance && receipt.result.provenance
+          ? compareEvolutionIdentities(receipt.result.provenance, trial.result.provenance) : undefined;
+        if (comparison?.status !== "compatible" || trial.result.provenance?.compatibilityStatus !== "compatible"
+          || trial.result.evaluatorDigestBefore !== receipt.result.evaluatorDigestBefore
+          || trial.result.evaluatorDigestAfter !== receipt.result.evaluatorDigestAfter) {
+          throw new Error("canary provenance differs from the promoted candidate");
+        }
+      }
     }
     verifyEvolutionSnapshot(version.snapshot);
 
@@ -886,7 +935,7 @@ export async function promoteEvolutionVersion(
     registry.canaryId = null;
     registry.events.push(makeRegistryEvent(registry, "promoted", id, "Promoted to active"));
     saveRegistryRaw(storePath, registry);
-  } finally { unlock(); }
+  } finally { releaseCampaign?.(); unlock(); }
 }
 
 /** Rollback a version (retire it) and restore parent as active. */

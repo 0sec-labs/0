@@ -1,6 +1,6 @@
 /**
- * `0sec memsafety <source>` — the userspace / Rust memory-safety scan role
- * ("Monty-mode", docs/0sec-rust-memsafety-pipeline.md) exposed as a
+ * `0 memsafety <source>` — the userspace / Rust memory-safety scan role
+ * ("Monty-mode", docs/0-rust-memsafety-pipeline.md) exposed as a
  * dispatchable CLI entrypoint.
  *
  * This is the standalone command the cloud `memsafety` scan_mode gate
@@ -17,7 +17,7 @@
  * run", NOT a clean pass — we surface it and exit 2 (skipped) so a dashboard
  * scan that never actually fuzzed is never reported as a clean green result.
  * Live memory-corruption-repro validation of this pipeline is still pending
- * (0sec-labs/0sec#702); this command does not fabricate a crash or a repro.
+ * (0sec-labs/0#702); this command does not fabricate a crash or a repro.
  *
  * Exit codes (aligned with `deep-review`):
  *   0 → the fuzz loop RAN (with or without captured crashes/findings). A clean
@@ -30,8 +30,8 @@
 import type { Command } from "commander";
 import { existsSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { resolve, join, sep } from "node:path";
-import type { RuntimeMode } from "@0sec/shared";
-import type { MemSafetyTarget } from "@0sec/core";
+import type { RuntimeMode } from "@0/shared";
+import type { MemSafetyTarget } from "@0/core";
 
 type MemLanguage = MemSafetyTarget["language"];
 type MemBuildSystem = MemSafetyTarget["buildSystem"];
@@ -143,16 +143,9 @@ export interface MemSafetyOutcome {
   result: Record<string, unknown>;
 }
 
-/**
- * Run the memory-safety scan role over a prepared source tree and return a
- * JSON-ready outcome. Exposed for testing. Posts findings to the cloud-sink
- * when the sink env is set (the stage itself posts nothing), same as
- * `deep-review`.
- */
+/** Run the memory-safety scan role over a prepared source tree. */
 export async function runMemSafety(opts: RunMemSafetyOptions): Promise<MemSafetyOutcome> {
-  const { prepare, runMemSafetyScan, getCloudSinkConfig, postFinding } = await import(
-    "@0sec/core"
-  );
+  const { prepare, runMemSafetyScan } = await import("@0/core");
   const log = opts.log ?? (() => {});
 
   // Resolve a local path or a git URL into a local tree (same prepare() path
@@ -207,10 +200,6 @@ export async function runMemSafety(opts: RunMemSafetyOptions): Promise<MemSafety
 
     const artifactDir = resolveArtifactDir(opts.artifactDir, sourceRoot);
 
-    // Capture the cloud-sink config; the stage does NO I/O (posts nothing), so
-    // we post its findings ourselves — the same discovered-candidate path
-    // deep-review uses. No-op when not in cloud mode (sinkCfg null).
-    const sinkCfg = getCloudSinkConfig();
 
     const scan = await runMemSafetyScan({
       target,
@@ -225,14 +214,6 @@ export async function runMemSafety(opts: RunMemSafetyOptions): Promise<MemSafety
       logger: log,
     });
 
-    let ingested = 0;
-    if (sinkCfg) {
-      for (const finding of scan.findings) {
-        await postFinding(finding, sinkCfg);
-        ingested++;
-      }
-      log(`[memsafety] posted ${ingested} finding(s) to the cloud-sink`);
-    }
 
     const reproduced = scan.details.filter((d) => d.verdict.verdict === "confirmed").length;
 
@@ -277,7 +258,6 @@ export async function runMemSafety(opts: RunMemSafetyOptions): Promise<MemSafety
           primitive: d.exploitability.primitive,
           verdict: d.verdict.verdict,
         })),
-        ingested: sinkCfg ? ingested : null,
         warnings: scan.warnings.slice(0, 10),
         note:
           reproduced > 0

@@ -22,7 +22,7 @@ def scope(**updates: object) -> dict[str, object]:
         "scope_url": "https://www.microsoft.com/en-us/msrc/bounty-windows-insider-preview",
         "target_feature": "Windows Imaging Component",
         "reachability": "attacker-supplied image opened through serviced Explorer preview",
-        "authorization": "published MSRC bounty scope; 0sec-owned VM",
+        "authorization": "published MSRC bounty scope; 0-owned VM",
         "worker": "worker-01.example.test",
         "latest_build_verified_at": now,
         "latest_build_number": "29617.1000",

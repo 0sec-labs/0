@@ -12,7 +12,7 @@ import type {
   VulnerabilityIntel,
 } from "./types.js";
 
-/** Loose free-text keywords must be at least this long to be matched (0sec#intel-advisories). */
+/** Loose free-text keywords must be at least this long to be matched (0#intel-advisories). */
 const MIN_LOOSE_HINT_LENGTH = 4;
 /** Structured names (repo/package/product) can be shorter (e.g. "gin"). */
 const MIN_STRONG_HINT_LENGTH = 3;
@@ -31,7 +31,7 @@ export function buildTargetHistoryResult(
   const matcher = buildTargetMatcher(input);
   // Score every candidate; drop advisories that match no target token at all
   // (the old plain-substring filter let "ADR" hit "adreno" and "kraken" hit
-  // "KrakenD" — 0sec#intel-advisories), and annotate survivors with confidence.
+  // "KrakenD" — 0#intel-advisories), and annotate survivors with confidence.
   const filtered = mergeIntel(advisories)
     .flatMap((advisory) => {
       const confidence = scoreTargetMatch(advisory, matcher);
@@ -175,7 +175,7 @@ export interface TargetMatcher {
 }
 
 /**
- * Turn a target into a structured matcher (0sec#intel-advisories). Splits
+ * Turn a target into a structured matcher (0#intel-advisories). Splits
  * high-signal identifiers (repository, package name, product) from loose
  * free-text keywords so we can score each advisory by how strongly it matches
  * instead of doing an arbitrary substring test.
@@ -270,7 +270,7 @@ export function normalizeRepositoryHint(value: string | undefined): string | und
 }
 
 /**
- * Score how strongly an advisory matches the target (0sec#intel-advisories):
+ * Score how strongly an advisory matches the target (0#intel-advisories):
  *   high   — exact repository (reference URL) or package-name match
  *   medium — a structured token (repo/package/product) appears as a whole word
  *   low    — only a loose keyword appears as a whole word

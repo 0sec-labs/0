@@ -6,14 +6,14 @@ TMP_DIR="$(mktemp -d)"
 RESULT_JSON="${TMP_DIR}/kernel-validator-result.json"
 RAW_OUTPUT="${TMP_DIR}/kernel-validator-raw.txt"
 
-REPORT_URL="$(printenv 0SEC_KERNEL_E2E_REPORT_URL 2>/dev/null || true)"
+REPORT_URL="$(printenv ZERO_KERNEL_E2E_REPORT_URL 2>/dev/null || true)"
 : "${REPORT_URL:=https://syzkaller.appspot.com/text?tag=CrashReport&x=144881ca580000}"
-REPRO_URL="$(printenv 0SEC_KERNEL_E2E_REPRO_URL 2>/dev/null || true)"
+REPRO_URL="$(printenv ZERO_KERNEL_E2E_REPRO_URL 2>/dev/null || true)"
 : "${REPRO_URL:=https://syzkaller.appspot.com/text?tag=ReproC&x=1253b3d6580000}"
 INPUT_DIR="${TMP_DIR}/input"
-ARTIFACT_DIR="$(printenv 0SEC_KERNEL_QEMU_ARTIFACT_DIR 2>/dev/null || true)"
+ARTIFACT_DIR="$(printenv ZERO_KERNEL_QEMU_ARTIFACT_DIR 2>/dev/null || true)"
 : "${ARTIFACT_DIR:=${TMP_DIR}/vm-artifacts}"
-OSEC_KERNEL_SOURCE_TREE="$(printenv 0SEC_KERNEL_SOURCE_TREE 2>/dev/null || true)"
+OSEC_KERNEL_SOURCE_TREE="$(printenv ZERO_KERNEL_SOURCE_TREE 2>/dev/null || true)"
 
 mkdir -p "${INPUT_DIR}" "${ARTIFACT_DIR}"
 
@@ -21,8 +21,8 @@ curl -fL --retry 3 --retry-delay 2 -s "${REPORT_URL}" > "${INPUT_DIR}/sample.log
 curl -fL --retry 3 --retry-delay 2 -s "${REPRO_URL}" > "${INPUT_DIR}/sample.c"
 
 env \
-  "0SEC_KERNEL_QEMU=1" \
-  "0SEC_KERNEL_QEMU_ARTIFACT_DIR=${ARTIFACT_DIR}" \
+  "ZERO_KERNEL_QEMU=1" \
+  "ZERO_KERNEL_QEMU_ARTIFACT_DIR=${ARTIFACT_DIR}" \
   node "${ROOT_DIR}/packages/cli/dist/index.js" ingest "${INPUT_DIR}" --verify -o json > "${RAW_OUTPUT}"
 
 node - "${RAW_OUTPUT}" "${RESULT_JSON}" <<'EOF'

@@ -45,8 +45,8 @@ let home: string;
 let project: string;
 
 beforeEach(() => {
-  home = mkdtempSync(join(tmpdir(), "0sec-enable-home-"));
-  project = mkdtempSync(join(tmpdir(), "0sec-enable-proj-"));
+  home = mkdtempSync(join(tmpdir(), "0-enable-home-"));
+  project = mkdtempSync(join(tmpdir(), "0-enable-proj-"));
 });
 afterEach(() => {
   rmSync(home, { recursive: true, force: true });
@@ -198,14 +198,14 @@ describe("fs layer", () => {
 
     const path = enablementFilePath(project, home);
     expect(statSync(path).mode & 0o777).toBe(ENABLEMENT_FILE_MODE);
-    expect(statSync(join(home, ".0sec", "plugin-enablement")).mode & 0o777).toBe(
+    expect(statSync(join(home, ".0", "plugin-enablement")).mode & 0o777).toBe(
       ENABLEMENT_DIR_MODE,
     );
   });
 
   it("readEnablement degrades to empty on corrupt / non-JSON files", () => {
     const path = enablementFilePath(project, home);
-    mkdirSync(join(home, ".0sec", "plugin-enablement"), { recursive: true });
+    mkdirSync(join(home, ".0", "plugin-enablement"), { recursive: true });
     writeFileSync(path, "this is not json {{{");
     expect(readEnablement(project, home).enabled).toEqual({});
   });
@@ -234,7 +234,7 @@ describe("fs layer", () => {
   });
 
   it("writeEnablement writes a distinct file per project realpath", () => {
-    const other = mkdtempSync(join(tmpdir(), "0sec-enable-proj2-"));
+    const other = mkdtempSync(join(tmpdir(), "0-enable-proj2-"));
     try {
       expect(enablementFilePath(project, home)).not.toBe(enablementFilePath(other, home));
     } finally {

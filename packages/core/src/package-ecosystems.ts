@@ -3,11 +3,12 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, wri
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
-import type { NpmAuditFinding, Severity } from "@0sec/shared";
+import type { NpmAuditFinding, Severity } from "@0/shared";
 import type { ScanListener } from "./scanner.js";
 import { restoreHistoricalPackageFixture, shouldUseHistoricalPackageFallback } from "./historical-package-fallback.js";
 import { bufferToString } from "./shared-analysis.js";
 import type { RegistryProbeResult, TransitivePackage } from "./malicious-detector.js";
+import { scanExecutionTimeout } from "./scan-plan.js";
 
 /**
  * Heuristic to spot npm's ERESOLVE peer-dependency conflict from a captured
@@ -266,7 +267,7 @@ function queryOsvAdvisoriesSync(
       {
         input: body,
         encoding: "utf8",
-        timeout: 60_000,
+        timeout: scanExecutionTimeout(60_000),
         stdio: ["pipe", "pipe", "ignore"],
       },
     );
@@ -295,7 +296,7 @@ function splitPackageSpec(rawPackageName: string, requestedVersion: string | und
 function writeMinimalPackageJson(tempDir: string): void {
   execFileSync("npm", ["init", "-y", "--silent"], {
     cwd: tempDir,
-    timeout: 15_000,
+    timeout: scanExecutionTimeout(15_000),
     stdio: "pipe",
   });
 }
@@ -325,7 +326,7 @@ function installNpmPackage(
   requestedVersion: string | undefined,
   emit: ScanListener,
 ): InstalledPackage {
-  const tempDir = join(tmpdir(), `0sec-audit-${randomUUID().slice(0, 8)}`);
+  const tempDir = join(tmpdir(), `0-audit-${randomUUID().slice(0, 8)}`);
   mkdirSync(tempDir, { recursive: true });
 
   const spec = requestedVersion ? `${packageName}@${requestedVersion}` : `${packageName}@latest`;
@@ -336,7 +337,7 @@ function installNpmPackage(
     try {
       execFileSync("npm", ["install", spec, "--ignore-scripts", "--no-audit", "--no-fund"], {
         cwd: tempDir,
-        timeout: 120_000,
+        timeout: scanExecutionTimeout(120_000),
         stdio: "pipe",
       });
     } catch (firstErr) {
@@ -368,7 +369,7 @@ function installNpmPackage(
         ["install", "--legacy-peer-deps", spec, "--ignore-scripts", "--no-audit", "--no-fund"],
         {
           cwd: tempDir,
-          timeout: 120_000,
+          timeout: scanExecutionTimeout(120_000),
           stdio: "pipe",
         },
       );
@@ -437,7 +438,7 @@ else:
                 raise RuntimeError(f"unsafe archive link member: {member.name}")
         tf.extractall(out)
 `, archivePath, outputDir],
-    { stdio: "pipe", timeout: 60_000 },
+    { stdio: "pipe", timeout: scanExecutionTimeout(60_000) },
   );
 }
 
@@ -535,7 +536,7 @@ if not choices:
 choice = choices[0]
 filename = choice.get("filename") or pathlib.PurePosixPath(urllib.parse.urlparse(choice["url"]).path).name
 archive_path = download_dir / filename
-request = urllib.request.Request(choice["url"], headers={"User-Agent": "0sec-ci/0.1 (+https://github.com/0sec-labs/0sec)"})
+request = urllib.request.Request(choice["url"], headers={"User-Agent": "0-ci/0.1 (+https://github.com/0sec-labs/0)"})
 with urllib.request.urlopen(request, timeout=120) as response, archive_path.open("wb") as handle:
     handle.write(response.read())
 
@@ -546,7 +547,7 @@ print(json.dumps({"archivePath": str(archive_path), "resolvedVersion": metadata.
     ["-c", script, packageName, requestedVersion ?? "", downloadDir],
     {
       encoding: "utf8",
-      timeout: 180_000,
+      timeout: scanExecutionTimeout(180_000),
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
@@ -558,7 +559,7 @@ function installPypiPackage(
   requestedVersion: string | undefined,
   emit: ScanListener,
 ): InstalledPackage {
-  const tempDir = join(tmpdir(), `0sec-audit-${randomUUID().slice(0, 8)}`);
+  const tempDir = join(tmpdir(), `0-audit-${randomUUID().slice(0, 8)}`);
   const downloadDir = join(tempDir, "downloads");
   const extractDir = join(tempDir, "src");
   mkdirSync(downloadDir, { recursive: true });
@@ -620,7 +621,7 @@ function resolveCargoVersion(packageName: string, requestedVersion: string | und
   const raw = execFileSync("curl", buildCratesIoCurlArgs(`https://crates.io/api/v1/crates/${packageName}`), {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
-    timeout: 60_000,
+    timeout: scanExecutionTimeout(60_000),
   });
   const parsed = JSON.parse(raw) as {
     crate?: { max_stable_version?: string; max_version?: string; newest_version?: string };
@@ -638,7 +639,7 @@ function installCargoPackage(
   requestedVersion: string | undefined,
   emit: ScanListener,
 ): InstalledPackage {
-  const tempDir = join(tmpdir(), `0sec-audit-${randomUUID().slice(0, 8)}`);
+  const tempDir = join(tmpdir(), `0-audit-${randomUUID().slice(0, 8)}`);
   const downloadDir = join(tempDir, "downloads");
   const extractDir = join(tempDir, "src");
   mkdirSync(downloadDir, { recursive: true });
@@ -657,7 +658,7 @@ function installCargoPackage(
       ],
       {
         cwd: tempDir,
-        timeout: 120_000,
+        timeout: scanExecutionTimeout(120_000),
         stdio: "pipe",
       },
     );
@@ -681,7 +682,7 @@ function installCargoPackage(
 
   writeFileSync(
     join(tempDir, "Cargo.toml"),
-    `[package]\nname = "0sec-cargo-audit"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n${packageName} = "${resolvedVersion}"\n`,
+    `[package]\nname = "0-cargo-audit"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n${packageName} = "${resolvedVersion}"\n`,
     "utf8",
   );
   mkdirSync(join(tempDir, "src"), { recursive: true });
@@ -689,7 +690,7 @@ function installCargoPackage(
   try {
     execFileSync("cargo", ["generate-lockfile"], {
       cwd: tempDir,
-      timeout: 180_000,
+      timeout: scanExecutionTimeout(180_000),
       stdio: "pipe",
     });
   } catch {
@@ -717,7 +718,7 @@ function buildCratesIoCurlArgs(url: string): string[] {
     "--connect-timeout",
     "20",
     "-H",
-    "User-Agent: 0sec-ci/0.1 (+https://github.com/0sec-labs/0sec)",
+    "User-Agent: 0-ci/0.1 (+https://github.com/0sec-labs/0)",
     url,
   ];
 }
@@ -766,7 +767,7 @@ function resolveOciImageRef(rawImageRef: string, requestedVersion: string | unde
 function hasExecutable(command: string, args: string[] = ["--version"]): boolean {
   try {
     execFileSync(command, args, {
-      timeout: 10_000,
+      timeout: scanExecutionTimeout(10_000),
       stdio: "ignore",
     });
     return true;
@@ -819,7 +820,7 @@ for layer in layers:
             layer_tar.extract(member, rootfs)
 `;
   execFileSync("python3", ["-c", script, archivePath, rootfsDir], {
-    timeout: 300_000,
+    timeout: scanExecutionTimeout(300_000),
     stdio: "pipe",
   });
 }
@@ -829,7 +830,7 @@ function installOciImage(
   requestedVersion: string | undefined,
   emit: ScanListener,
 ): InstalledPackage {
-  const tempDir = join(tmpdir(), `0sec-audit-${randomUUID().slice(0, 8)}`);
+  const tempDir = join(tmpdir(), `0-audit-${randomUUID().slice(0, 8)}`);
   const rootfsDir = join(tempDir, "rootfs");
   const exportTar = join(tempDir, "image.tar");
   mkdirSync(rootfsDir, { recursive: true });
@@ -849,27 +850,27 @@ function installOciImage(
           `docker-archive:${exportTar}:${imageRef}`,
         ],
         {
-          timeout: 300_000,
+          timeout: scanExecutionTimeout(300_000),
           stdio: "pipe",
         },
       );
       extractDockerArchiveLayers(exportTar, rootfsDir);
     } else {
       execFileSync("docker", ["pull", imageRef], {
-        timeout: 300_000,
+        timeout: scanExecutionTimeout(300_000),
         stdio: "pipe",
       });
       containerId = execFileSync("docker", ["create", imageRef], {
         encoding: "utf8",
-        timeout: 60_000,
+        timeout: scanExecutionTimeout(60_000),
         stdio: ["pipe", "pipe", "pipe"],
       }).trim();
       execFileSync("docker", ["export", containerId, "-o", exportTar], {
-        timeout: 300_000,
+        timeout: scanExecutionTimeout(300_000),
         stdio: "pipe",
       });
       execFileSync("tar", ["-xf", exportTar, "-C", rootfsDir], {
-        timeout: 300_000,
+        timeout: scanExecutionTimeout(300_000),
         stdio: "pipe",
       });
     }
@@ -948,7 +949,7 @@ export function runDependencyAuditForEcosystem(
   try {
     rawOutput = execSync("npm audit --json", {
       cwd: projectDir,
-      timeout: 120_000,
+      timeout: scanExecutionTimeout(120_000),
       stdio: "pipe",
     }).toString("utf-8");
   } catch (err) {
@@ -1097,7 +1098,7 @@ export async function probePublicNpmRegistry(
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 15_000);
   try {
     const res = await fetchImpl(url, {
-      headers: { Accept: "application/json", "User-Agent": "0sec-supply-chain/0.1" },
+      headers: { Accept: "application/json", "User-Agent": "0-supply-chain/0.1" },
       signal: controller.signal,
     });
     if (res.status === 404) return { exists: false };

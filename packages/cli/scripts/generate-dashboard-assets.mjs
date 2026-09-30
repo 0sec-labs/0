@@ -5,7 +5,7 @@ const [sourceDir = "packages/dashboard/dist", outputFile = "packages/cli/src/das
 const sourceRoot = sourceDir.replace(/[\\/]$/, "");
 
 if (!existsSync(join(sourceRoot, "index.html"))) {
-  throw new Error(`Dashboard assets not found at ${sourceRoot}; build @0sec/dashboard first.`);
+  throw new Error(`Dashboard assets not found at ${sourceRoot}; build @0/dashboard first.`);
 }
 
 function listFiles(dir) {

@@ -34,12 +34,12 @@ describe("runCraftScan cost ceiling", () => {
       "int LLVMFuzzerTestOneInput(const unsigned char *data, unsigned long size) { return size ? data[0] : 0; }\n",
     );
     const executeNative = vi.spyOn(LlmApiRuntime.prototype, "executeNative");
-    const savedForceProvider = process.env["0SEC_FORCE_PROVIDER"];
+    const savedForceProvider = process.env["ZERO_FORCE_PROVIDER"];
     const savedOpenAiKey = process.env.OPENAI_API_KEY;
-    const savedSkipBanner = process.env["0SEC_SKIP_PROVIDER_BANNER"];
-    process.env["0SEC_FORCE_PROVIDER"] = "openai";
+    const savedSkipBanner = process.env["ZERO_SKIP_PROVIDER_BANNER"];
+    process.env["ZERO_FORCE_PROVIDER"] = "openai";
     process.env.OPENAI_API_KEY = "test-key";
-    process.env["0SEC_SKIP_PROVIDER_BANNER"] = "1";
+    process.env["ZERO_SKIP_PROVIDER_BANNER"] = "1";
 
     try {
       const result = await runCraftScan({
@@ -56,12 +56,12 @@ describe("runCraftScan cost ceiling", () => {
       expect(result.steps).toBe(0);
       expect(result.warnings.join("\n")).toContain("would be exceeded before step 1");
     } finally {
-      if (savedForceProvider === undefined) delete process.env["0SEC_FORCE_PROVIDER"];
-      else process.env["0SEC_FORCE_PROVIDER"] = savedForceProvider;
+      if (savedForceProvider === undefined) delete process.env["ZERO_FORCE_PROVIDER"];
+      else process.env["ZERO_FORCE_PROVIDER"] = savedForceProvider;
       if (savedOpenAiKey === undefined) delete process.env.OPENAI_API_KEY;
       else process.env.OPENAI_API_KEY = savedOpenAiKey;
-      if (savedSkipBanner === undefined) delete process.env["0SEC_SKIP_PROVIDER_BANNER"];
-      else process.env["0SEC_SKIP_PROVIDER_BANNER"] = savedSkipBanner;
+      if (savedSkipBanner === undefined) delete process.env["ZERO_SKIP_PROVIDER_BANNER"];
+      else process.env["ZERO_SKIP_PROVIDER_BANNER"] = savedSkipBanner;
     }
   });
 });
@@ -173,7 +173,9 @@ describe("runCraftScan self-test executor outage", () => {
     }));
 
     const prevKey = process.env.OPENAI_API_KEY;
+    const prevProvider = process.env["ZERO_FORCE_PROVIDER"];
     process.env.OPENAI_API_KEY = "test-key";
+    process.env["ZERO_FORCE_PROVIDER"] = "openai";
     let oracleCalls = 0;
     try {
       const result = await runCraftScan({
@@ -192,13 +194,15 @@ describe("runCraftScan self-test executor outage", () => {
         },
       });
 
-      expect(oracleCalls).toBe(3); // 3 strikes, not the full 24-test budget
+      expect(oracleCalls, result.warnings.join("\n")).toBe(3); // 3 strikes, not the full 24-test budget
       expect(result.passed).toBe(false);
       expect(result.warnings.some((w) => w.includes("ORACLE UNREACHABLE"))).toBe(true);
       expect(result.warnings.some((w) => w.includes("NOT a capability fail"))).toBe(true);
     } finally {
       if (prevKey === undefined) delete process.env.OPENAI_API_KEY;
       else process.env.OPENAI_API_KEY = prevKey;
+      if (prevProvider === undefined) delete process.env["ZERO_FORCE_PROVIDER"];
+      else process.env["ZERO_FORCE_PROVIDER"] = prevProvider;
       vi.unstubAllGlobals();
     }
   });

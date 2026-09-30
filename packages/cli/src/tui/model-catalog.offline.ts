@@ -1,7 +1,7 @@
 /**
  * Bundled offline snapshot of the model catalog.
  *
- * The `/model` picker is derived from the local pricing table in @0sec/shared,
+ * The `/model` picker is derived from the local pricing table in @0/shared,
  * which only lists ids the engine has hand-priced. That table is authoritative
  * for cost but deliberately narrow, so the picker never shows a model the
  * operator's provider offers that we simply haven't priced yet.
@@ -31,6 +31,9 @@ export const OFFLINE_MODEL_CATALOG: SyncedModel[] = [
   // OpenAI
   // Astra standard short-context rates; >272K input has a separate price tier.
   { id: "gpt-6-astra", provider: "openai", contextTokens: 1_050_000, input: 10, output: 50 },
+  { id: "gpt-6.1-sol", provider: "openai", contextTokens: 1_050_000, input: 2, output: 10 },
+  { id: "gpt-6-sol", provider: "openai", contextTokens: 1_050_000, input: 2, output: 10 },
+  { id: "gpt-6-luna", provider: "openai", contextTokens: 1_050_000, input: 0.1, output: 0.5 },
   { id: "gpt-5.5", provider: "openai", contextTokens: 400_000, input: 5, output: 30 },
   { id: "gpt-5.6-sol", provider: "openai", contextTokens: 1_050_000 },
   { id: "gpt-5.6-terra", provider: "openai", contextTokens: 1_050_000 },

@@ -1,10 +1,10 @@
 /**
  * Tests for the SeedFinding -> SemgrepFinding converter used by the review
- * pipeline (`unified-pipeline.ts`). Closes 0sec#368: external seeds must
+ * pipeline (`unified-pipeline.ts`). Closes 0#368: external seeds must
  * reach the agent's prompt-builder via the same shape semgrep produces.
  */
 import { describe, it, expect } from "vitest";
-import type { SeedFinding } from "@0sec/shared";
+import type { SeedFinding } from "@0/shared";
 import { seedFindingsToSemgrepShape } from "./unified-pipeline.js";
 
 function seed(overrides: Partial<SeedFinding> = {}): SeedFinding {

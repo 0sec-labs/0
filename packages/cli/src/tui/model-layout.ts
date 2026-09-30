@@ -62,9 +62,8 @@
  * `shell-geometry.ts`, and this import is the marker for that move.
  */
 
-import { computeDialogPanel, type DialogPanel } from "./dialog-select-layout.js";
+import { computeDialogPanel, type DialogItem, type DialogPanel } from "./dialog-select-layout.js";
 import { buildModelCatalog, type CatalogModel } from "./model-catalog.js";
-import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import { PROVIDERS, providerStates, type ProviderState } from "./provider-status.js";
 import { shellChromeRows, wrapCells } from "./settings-layout.js";
 import { getSymbols, type SymbolTable } from "./symbols.js";
@@ -234,6 +233,53 @@ export interface ModelRowsInput {
   filter?: string;
   /** The model the session is currently running. */
   activeModel?: string;
+  /** Runtime connection identity disambiguates duplicate IDs across accounts. */
+  activeProvider?: string;
+}
+
+export interface ReachableModelCatalogOptions {
+  /** Environment used to derive the provider inventory. */
+  env: Readonly<Record<string, string | undefined>>;
+  /** Runtime's current route, when this picker is changing an active session. */
+  providerId?: string;
+  /** Model ids returned by successful Codex account discovery. */
+  codexModelIds?: ReadonlySet<string>;
+}
+
+/**
+ * Keep only catalogue rows with a route the current screen can establish.
+ * Azure uses OpenAI-named model ids, so those rows map to Azure only when the
+ * Azure key and endpoint (or the current runtime's Azure route) are present.
+ */
+export function reachableModelCatalog(
+  catalog: readonly CatalogModel[],
+  states: readonly ProviderState[],
+  { env, providerId, codexModelIds }: ReachableModelCatalogOptions,
+): CatalogModel[] {
+  const configured = new Set(states.filter((state) => state.configured).map((state) => state.id));
+  const azureReady = configured.has("azure") &&
+    (providerId === "azure" || !!(env.AZURE_OPENAI_BASE_URL?.trim() || env.OPENAI_BASE_URL?.trim()));
+  const codexReady = configured.has("chatgpt-codex") && codexModelIds !== undefined;
+  const reachable: CatalogModel[] = [];
+
+  for (const model of catalog) {
+    if (!model || typeof model.id !== "string" || model.id.length === 0) continue;
+    const provider = typeof model.provider === "string" ? model.provider : "";
+    if (provider === "chatgpt-codex") {
+      if (codexReady && codexModelIds?.has(model.id)) reachable.push(model);
+    } else if (provider === "azure") {
+      if (azureReady) reachable.push(model);
+    } else if (provider === "openai") {
+      if (configured.has("openai")) reachable.push(model);
+      // One public model id may be reachable through both API-key routes.
+      // Keep two provider-qualified rows so selecting Azure cannot silently
+      // switch an OpenAI key (or vice versa).
+      if (azureReady) reachable.push({ ...model, provider: "azure" });
+    } else if (configured.has(provider)) {
+      reachable.push(model);
+    }
+  }
+  return reachable;
 }
 
 /** Byte-order compare: locale-independent so the order never shifts. */
@@ -287,6 +333,7 @@ export function buildModelRows({
   states = providerStates({}),
   filter = "",
   activeModel,
+  activeProvider: selectedProvider,
 }: ModelRowsInput = {}): ModelRow[] {
   const terms = sanitizeTuiText(filter).toLowerCase().split(" ").filter(Boolean);
   const groups = new Map<string, ModelProviderGroup>();
@@ -309,7 +356,7 @@ export function buildModelRows({
     else byProvider.set(providerId, [model]);
   }
 
-  const activeProvider = [...byProvider.entries()].find(([, models]) =>
+  const activeProvider = selectedProvider ?? [...byProvider.entries()].find(([, models]) =>
     models.some((model) => model.id === activeModel),
   )?.[0];
 
@@ -340,7 +387,7 @@ export function buildModelRows({
     });
     rows.push({ kind: "heading", group, count: sorted.length });
     for (const model of sorted) {
-      rows.push({ kind: "model", group, model, active: model.id === activeModel });
+      rows.push({ kind: "model", group, model, active: model.id === activeModel && providerId === activeProvider });
     }
   }
   return rows;
@@ -370,6 +417,42 @@ export type ModelDetailTone = "title" | "text" | "muted" | "accent" | "ok" | "wa
 export interface ModelDetailLine {
   readonly text: string;
   readonly tone: ModelDetailTone;
+}
+
+/** Reserved id for the selectable Connections action, never a model id. */
+export const MODEL_CONNECT_ACTION_ID = "\u0000model-connect";
+
+export function modelConnectActionItem(): DialogItem {
+  return {
+    id: MODEL_CONNECT_ACTION_ID,
+    label: "Connect another provider…",
+    description: "Open Connections",
+    category: "Connections",
+  };
+}
+
+export function isModelConnectAction(item: Pick<DialogItem, "id">): boolean {
+  return item.id === MODEL_CONNECT_ACTION_ID;
+}
+
+/** Activate the connection action without passing it to model selection. */
+export function activateModelConnectAction(item: Pick<DialogItem, "id">, onConnect?: () => void): boolean {
+  if (!isModelConnectAction(item)) return false;
+  onConnect?.();
+  return true;
+}
+
+/** The dialog count includes model results, never the appended action row. */
+export function modelResultCount(items: readonly Pick<DialogItem, "id">[]): number {
+  return items.reduce((count, item) => count + (isModelConnectAction(item) ? 0 : 1), 0);
+}
+
+/** Clear action detail copy, wrapped to the pane width. */
+export function modelConnectDetailLines(width: number): ModelDetailLine[] {
+  const limit = cells(width);
+  if (limit === 0) return [];
+  return wrapCells("Opens Connections to connect another provider.", limit)
+    .map((text): ModelDetailLine => ({ text, tone: "accent" }));
 }
 
 export interface ModelDetailInput {
@@ -645,53 +728,6 @@ export function clipModelDetailLines(
 }
 
 // ---------------------------------------------------------------------------
-// Hosted detail pane
-// ---------------------------------------------------------------------------
-
-/**
- * Tone-tags and wraps the hosted service's own description of a model.
- *
- * The strings come from `hostedModelDetails` in `model-catalog.ts`, which is
- * the authoritative projection of what the account's catalogue and allowance
- * actually reported. Nothing is added here and nothing is rewritten: this
- * function only decides which rows read as a heading, which read as an absent
- * value, and which read as a failure, then wraps them to the pane.
- *
- * An absent value is muted rather than hidden, because on this screen "the
- * hosted service did not report a context window" is itself the fact the
- * operator needs; dropping the row would leave a gap that reads as though the
- * field were never asked for.
- */
-const HOSTED_ABSENT = /\b(unknown|none reported|not established|no evidence reference|unavailable)\b/i;
-
-export function hostedDetailLines(
-  details: readonly string[],
-  width: number,
-  compact = false,
-): ModelDetailLine[] {
-  const limit = cells(width);
-  if (limit <= 0) return [];
-  const lines: ModelDetailLine[] = [];
-  details.forEach((detail, index) => {
-    const value = sanitizeTuiText(detail);
-    if (value.length === 0) return;
-    const tone: ModelDetailTone =
-      index === 0
-        ? "title"
-        : /^State: available$/i.test(value)
-          ? "ok"
-          : /^State:/i.test(value)
-            ? "warn"
-            : HOSTED_ABSENT.test(value)
-              ? "muted"
-              : "text";
-    for (const text of wrapCells(value, limit)) lines.push({ text, tone });
-    if (!compact && index === 0) lines.push({ text: "", tone: "blank" });
-  });
-  return lines;
-}
-
-// ---------------------------------------------------------------------------
 // Dialog geometry
 // ---------------------------------------------------------------------------
 
@@ -722,6 +758,8 @@ export interface ModelDialogLayoutInput {
   totalRows: number;
   /** True when the screen is mounted inside a `DialogSurface` panel. */
   inDialog?: boolean;
+  /** A compact modal spends all picker rows on search and results, not detail. */
+  compact?: boolean;
   /** Override the rows reserved for the host frame inside a dialog panel. */
   hostChromeRows?: number;
   /**
@@ -788,6 +826,7 @@ export function computeModelDialogLayout({
   height,
   totalRows,
   inDialog = false,
+  compact = false,
   hostChromeRows,
   metaLineCount,
 }: ModelDialogLayoutInput): ModelDialogLayout {
@@ -820,13 +859,14 @@ export function computeModelDialogLayout({
       height: surfaceHeight,
       size: "large",
       totalRows,
-      withDetail: true,
+      withDetail: !compact,
       bodyRows: rows,
     });
 
   let panel = panelFor(bodyRows);
   let stackedRows = 0;
   if (
+    !compact &&
     !panel.showDetail &&
     contentWidth >= STACKED_MIN_WIDTH &&
     bodyRows >= STACKED_MIN_LIST_ROWS + 3
@@ -842,39 +882,16 @@ export function computeModelDialogLayout({
 // Title, scope and hints
 // ---------------------------------------------------------------------------
 
-/** Which catalogue the screen is actually looking at. */
-export type ModelCatalogScope = "hosted" | "byok" | "unknown";
+/** Which connection state the screen is looking at. */
+export type ModelCatalogScope = "byok" | "unknown";
 
 export interface ModelDialogTitleInput {
   scope: ModelCatalogScope;
-  /** The BYOK connection id, when there is one. Never invented. */
-  providerId?: string;
-  /** BYOK only: whether the full synced superset is on show. */
-  showAll?: boolean;
-  /**
-   * BYOK only: whether 0sec Cloud routes are being folded in as an extra group.
-   * Reflected in the title so an operator can see the list is not BYOK-only.
-   */
-  cloudMerged?: boolean;
 }
 
-/**
- * The dialog's title row: the shared glyph, the shared label, then which
- * catalogue is on screen.
- *
- * The glyph and label come from `operator-icons.ts` so this dialog is stamped
- * exactly like every other one, and the label is always beside the glyph —
- * there is no icon font behind these code points.
- */
-export function modelDialogTitle({ scope, providerId, showAll = false, cloudMerged = false }: ModelDialogTitleInput): string {
-  const head = `${operatorIcon("models")} ${operatorTitle("models")}`;
-  if (scope === "hosted") return `${head} · Hosted catalog`;
-  if (scope === "unknown") return `${head} · no connection`;
-  const connection = sanitizeTuiText(providerId ?? "");
-  const source = cloudMerged
-    ? `${connection.length > 0 ? connection : "BYOK"} + 0cloud`
-    : connection.length > 0 ? connection : "BYOK";
-  return `${head} · ${source} · ${showAll ? "all synced" : "curated"}`;
+/** A quiet action title; connection facts belong in the rows and status. */
+export function modelDialogTitle({ scope }: ModelDialogTitleInput): string {
+  return scope === "unknown" ? "Select model · no connection" : "Select model";
 }
 
 /**
@@ -894,23 +911,16 @@ export interface ModelDialogHintInput {
   /** Null when the parent model is the target; otherwise the role being set. */
   role?: string | null;
   hasFilter?: boolean;
-  /**
-   * Whether Ctrl+R reloads a live hosted catalogue. True on the hosted lane,
-   * and on the BYOK lane while 0sec Cloud routes are merged (a dark cloud is
-   * retried without disturbing the BYOK list). Defaults to `scope === "hosted"`.
-   */
+  /** Whether Ctrl+R retries public and account model discovery. */
   canReload?: boolean;
 }
 
 /**
  * The footer hints, naming only bindings this screen actually implements.
- *
- * `Ctrl+R` exists only on the hosted path and `Tab` only on the BYOK path, so
- * each is named only where it works; `Ctrl+Backspace` is named only while a
- * role is targeted, because that is the only state in which it does anything.
+ * `Ctrl+R` refreshes public and account catalogs, and
+ * `Ctrl+Backspace` is named only while a role is targeted.
  */
-export function modelDialogHint({ scope, role = null, hasFilter = false, canReload }: ModelDialogHintInput): string {
-  const reload = canReload ?? scope === "hosted";
+export function modelDialogHint({ scope, role = null, hasFilter = false, canReload = false }: ModelDialogHintInput): string {
   return [
     "[↑↓] model",
     "[⏎] apply",
@@ -918,7 +928,7 @@ export function modelDialogHint({ scope, role = null, hasFilter = false, canRelo
     "[⌃S] single",
     role !== null ? "[⌃⌫] inherit" : undefined,
     scope === "byok" ? "[⇥] curated/all" : undefined,
-    reload ? "[⌃R] reload" : undefined,
+    canReload ? "[⌃R] reload" : undefined,
     hasFilter ? "[⌃U] clear" : "type to filter",
     hasFilter ? "[esc] clear" : "[esc] back",
   ]
@@ -1038,9 +1048,10 @@ export type ModelMode = "browse" | "filter";
 /** Contextual shortcuts for the model picker. */
 export function modelFooterHint(mode: ModelMode, hasFilter = false): string {
   return [
-    "[↑↓] select",
-    "[⏎] select for new chat",
+    "[↑↓] model",
+    "[⏎] select",
     "[⇥] curated/all",
+    "[⌃R] reload",
     mode === "filter" || hasFilter ? "[esc] clear" : "[esc] back",
   ].join(" · ");
 }

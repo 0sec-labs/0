@@ -10,7 +10,7 @@ function numberedFile(lineCount: number): string {
   return Array.from({ length: lineCount }, (_, i) => `line ${i + 1}`).join("\n");
 }
 
-/** The content minus any appended `[0sec:read_file]` status lines. */
+/** The content minus any appended `[0:read_file]` status lines. */
 function bodyLines(content: string): string[] {
   return content.split("\n").filter((l) => !l.startsWith(READ_FILE_NOTE_PREFIX));
 }
@@ -66,6 +66,17 @@ describe("windowFileContent — offset windows", () => {
     expect(result.startLine).toBe(3380);
     expect(result.endLine).toBe(3384);
     expect(result.totalLines).toBe(5000);
+  });
+
+  it("shows exact absolute line numbers for diff-scoped review, including blank lines", () => {
+    const result = windowFileContent("one\ntwo\n\nunsafe()\n", {
+      offset: 2, maxLines: 3, numberLines: true,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(bodyLines(result.content)).toEqual(["2: two", "3: ", "4: unsafe()"]);
+    expect(result.startLine).toBe(2);
+    expect(result.endLine).toBe(4);
   });
 
   it("offset=1 is identical to omitting offset", () => {

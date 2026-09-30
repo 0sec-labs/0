@@ -2,41 +2,40 @@
 set -euo pipefail
 
 DEV_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-O_SEC_BIN="${O_SEC_BIN:-$HOME/.local/bin/0sec}"
+DEV_ENTRY="$DEV_ROOT/packages/cli/dist/index.js"
 
-# --build flag: force source build + bun invocation (useful when iterating on
-# core/cli TypeScript).
-if [ "${1:-}" = "--build" ]; then
-  shift
-  DEV_ENTRY="$DEV_ROOT/packages/cli/dist/index.js"
-  if ! command -v pnpm >/dev/null 2>&1; then
-    echo "0dev: pnpm is required to build the development CLI" >&2
-    exit 1
+DEV_UI_WATCH=0
+DEV_ARGS=()
+PARSE_DEV_OPTIONS=1
+for argument in "$@"; do
+  if [ "$PARSE_DEV_OPTIONS" -eq 1 ] && [ "$argument" = "--watch" ]; then
+    DEV_UI_WATCH=1
+  else
+    DEV_ARGS+=("$argument")
+    PARSE_DEV_OPTIONS=0
   fi
-  pnpm --dir "$DEV_ROOT" --filter 0sec-cli... build
-  if [ ! -f "$DEV_ENTRY" ]; then
-    echo "0dev: build did not produce $DEV_ENTRY" >&2
-    exit 1
-  fi
-  if ! command -v bun >/dev/null 2>&1; then
-    echo "0dev: bun is required; install from https://bun.sh" >&2
-    exit 1
-  fi
-  exec env 0SEC_DEV_SOURCE_ROOT="$DEV_ROOT" \
-    0SEC_CLOUD_HOST=https://dev.cloud.0.security 0SEC_CLOUD_TOKEN= \
-    bun "$DEV_ENTRY" "$@"
+done
+
+# Always rebuild the checkout and its workspace dependencies. Never fall back to
+# an installed release or stale dist output when the source build fails.
+if ! command -v pnpm >/dev/null 2>&1; then
+  echo "0dev: pnpm is required to build the development CLI" >&2
+  exit 1
 fi
-
-# Default: use the installed packaged 0sec binary (coherent release build).
-# The empty 0SEC_CLOUD_TOKEN override prevents any env-level production token
-# from leaking in; the binary uses its saved DEV credentials.
-if [ ! -x "$O_SEC_BIN" ]; then
-  echo "0dev: packaged 0sec binary not found at $O_SEC_BIN" >&2
-  echo "0dev:   install the latest release from https://github.com/0sec-labs/0sec" >&2
-  echo "0dev:   or use --build to run from source" >&2
+if ! command -v bun >/dev/null 2>&1; then
+  echo "0dev: bun is required; install from https://bun.sh" >&2
+  exit 1
+fi
+pnpm --dir "$DEV_ROOT" --filter @0/cli... build >&2
+if [ ! -f "$DEV_ENTRY" ]; then
+  echo "0dev: build did not produce $DEV_ENTRY" >&2
   exit 1
 fi
 
-exec env \
-  0SEC_CLOUD_HOST=https://dev.cloud.0.security 0SEC_CLOUD_TOKEN= \
-  "$O_SEC_BIN" "$@"
+# Pass through the caller's provider, model, and credentials unchanged. The
+# runtime chooses a BYOK or subscription provider as it does for the normal CLI.
+# --watch is a safe frontend remount on the existing renderer, not bun --hot or
+# component FastRefresh. Core/shared dependencies, startup and the reload ABI
+# require this full coherent build again. Engine updates remain a separate option.
+# macOS's Bash 3 treats an empty array as unset under nounset.
+exec env ZERO_DEV_SOURCE_ROOT="$DEV_ROOT" ZERO_DEV_UI_WATCH="$DEV_UI_WATCH" bun "$DEV_ENTRY" ${DEV_ARGS[@]+"${DEV_ARGS[@]}"}

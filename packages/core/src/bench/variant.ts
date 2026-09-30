@@ -1,5 +1,5 @@
 /**
- * Bench variant descriptor + default variant→scan factory (0sec#656).
+ * Bench variant descriptor + default variant→scan factory (0#656).
  *
  * A *variant* is one configuration of the engine under test — a model, a
  * runtime, a scan depth, prompt overrides, feature flags. The A/B tournament
@@ -14,7 +14,7 @@
  * and is the "batteries included" path, exactly like adapters.ts.
  */
 
-import type { RuntimeMode, ScanDepth } from "@0sec/shared";
+import type { RuntimeMode, ScanDepth } from "@0/shared";
 import type { BenchScan } from "./runner.js";
 import {
   createAgenticScanAdapter,
@@ -30,7 +30,7 @@ export interface BenchVariant {
   label?: string;
   /**
    * Agent implementation selected by an integration. The core default is
-   * `0sec-agentic`; external integrations may reject unsupported ids.
+   * `0-agentic`; external integrations may reject unsupported ids.
    */
   harnessId?: string;
   /** Model override forwarded to the engine (e.g. a cheaper/stronger model). */
@@ -136,7 +136,7 @@ function featureEnvironmentName(name: string): string {
   if (!/^[a-z0-9_]+$/.test(name)) {
     throw new Error(`invalid feature flag "${name}"; use lowercase CLI/env-style names`);
   }
-  return `0SEC_FEATURE_${name.toUpperCase()}`;
+  return `ZERO_FEATURE_${name.toUpperCase()}`;
 }
 
 // Feature flags use process.env throughout the engine. Serialize scoped
@@ -231,7 +231,7 @@ export function createDefaultVariantScan(
           ...result.benchmarkMeta,
           execution: {
             ...result.benchmarkMeta?.execution,
-            harnessId: variant.harnessId ?? "0sec-agentic",
+            harnessId: variant.harnessId ?? "0-agentic",
             ...(variant.model ? { model: variant.model } : {}),
             ...(variant.runtime ? { runtime: variant.runtime } : {}),
           },

@@ -501,7 +501,7 @@ def test_pack_v3_manifest_and_policy_are_strict_additive_schemas(tmp_path: Path)
     manifest["signerPolicies"]["lpacBrokerReceipt"] = broker_policy_ref
     manifest["signerPolicies"]["lpacLaunchReceipt"] = launch_policy_ref
     parsed = token_pack_module._parse_manifest(_pack_canonical(manifest))
-    assert parsed["schemaVersion"] == "0sec.windows-token-evidence-pack/v3"
+    assert parsed["schemaVersion"] == "0.windows-token-evidence-pack/v3"
 
     missing_launch = json.loads(json.dumps(manifest))
     missing_launch.pop("launchReceipts")
@@ -514,7 +514,7 @@ def test_pack_v3_manifest_and_policy_are_strict_additive_schemas(tmp_path: Path)
     policy["allowedLpacLaunchReceiptSignerPolicySha256"] = [str(launch_policy_ref["sha256"])]
     policy["allowedLpacLaunchProfileSha256"] = ["a" * 64]
     parsed_policy = token_pack_module._parse_policy(policy)
-    assert parsed_policy["schemaVersion"] == "0sec.windows-token-evidence-acceptance-policy/v3"
+    assert parsed_policy["schemaVersion"] == "0.windows-token-evidence-acceptance-policy/v3"
     policy.pop("allowedLpacLaunchReceiptSignerPolicySha256")
     policy.pop("allowedLpacLaunchProfileSha256")
     with pytest.raises(ValueError, match="schema is unsupported"):

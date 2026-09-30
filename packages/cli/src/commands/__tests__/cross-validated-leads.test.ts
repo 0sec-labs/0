@@ -1,5 +1,5 @@
 /**
- * Unit tests for the pure `cross_validated_leads` formatter (0sec FoxGuard
+ * Unit tests for the pure `cross_validated_leads` formatter (0 FoxGuard
  * Phase 4). Covers ordering, capping, singular/plural + percentage rendering,
  * and — critically — fail-soft handling of malformed payloads (the formatter
  * must never throw, so a bad bus payload can never crash the scan output).

@@ -19,7 +19,7 @@ afterEach(() => {
 });
 
 async function fixture() {
-  const directory = mkdtempSync(join(tmpdir(), "0sec-source-generation-"));
+  const directory = mkdtempSync(join(tmpdir(), "0-source-generation-"));
   directories.push(directory);
   const sourceRoot = join(directory, "source");
   mkdirSync(join(sourceRoot, "src"), { recursive: true });

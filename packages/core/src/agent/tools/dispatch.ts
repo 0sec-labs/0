@@ -1,5 +1,5 @@
 /**
- * Tool dispatch table (0sec#614).
+ * Tool dispatch table (0#614).
  *
  * Merges every per-domain `*Dispatch` map (tool name → ToolExecutor handler
  * method name) into one lookup table. `ToolExecutor._dispatch` resolves the
@@ -21,7 +21,6 @@ import { skillsDispatch } from "./skills.js";
 import { scannerDispatch } from "./scanner.js";
 import { detectionDispatch } from "./detections.js";
 import { cloudDispatch } from "./cloud.js";
-import { orchestratorDispatch } from "./orchestrator.js";
 import { oastDispatch } from "./oast.js";
 import { pythonDispatch } from "./python.js";
 import { binaryDispatch } from "./binary.js";
@@ -31,6 +30,7 @@ import { evalDispatch } from "./eval.js";
 import { proxyDispatch } from "./proxy.js";
 import { securityEngineDispatch } from "./security-engines.js";
 import { offensiveEngineDispatch } from "./offensive-engines.js";
+import { jevPrepassDispatch } from "./jev-prepass.js";
 
 export const TOOL_DISPATCH: Record<string, string> = {
   ...reconDispatch,
@@ -44,7 +44,6 @@ export const TOOL_DISPATCH: Record<string, string> = {
   ...scannerDispatch,
   ...detectionDispatch,
   ...cloudDispatch,
-  ...orchestratorDispatch,
   ...oastDispatch,
   ...pythonDispatch,
   ...binaryDispatch,
@@ -54,4 +53,5 @@ export const TOOL_DISPATCH: Record<string, string> = {
   ...proxyDispatch,
   ...securityEngineDispatch,
   ...offensiveEngineDispatch,
+  ...jevPrepassDispatch,
 };

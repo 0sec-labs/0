@@ -54,7 +54,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join, isAbsolute, resolve } from "node:path";
 import { randomUUID, createHash } from "node:crypto";
-import type { Finding, ScanDepth, TokenUsageForPricing } from "@0sec/shared";
+import type { Finding, ScanDepth, TokenUsageForPricing } from "@0/shared";
 import type { PipelineOptions } from "../unified-pipeline.js";
 import { runPipeline } from "../unified-pipeline.js";
 import { recallRepairLearnings, recordRepairLearning } from "./project-memory.js";
@@ -172,7 +172,7 @@ async function resolveNativeRuntime(
     const key = apiKey ??
       process.env["ANTHROPIC_API_KEY"] ??
       process.env["OPENAI_API_KEY"] ??
-      process.env["0SEC_API_KEY"];
+      process.env["ZERO_API_KEY"];
     return {
       runtime: new LlmApiRuntime({
         type: "api",
@@ -189,7 +189,7 @@ async function resolveNativeRuntime(
       const key = apiKey ??
         process.env["ANTHROPIC_API_KEY"] ??
         process.env["OPENAI_API_KEY"] ??
-        process.env["0SEC_API_KEY"];
+        process.env["ZERO_API_KEY"];
       return {
         runtime: new LlmApiRuntime({
           type: "api",
@@ -202,7 +202,7 @@ async function resolveNativeRuntime(
     return {
       runtime: null,
       blockedReason:
-        "No API credentials available (set ANTHROPIC_API_KEY, OPENAI_API_KEY, or 0SEC_API_KEY). " +
+        "No API credentials available (set ANTHROPIC_API_KEY, OPENAI_API_KEY, or ZERO_API_KEY). " +
         "CLI-native runtimes (claude/codex/gemini/ollama) are not yet wired through the secure lifecycle path.",
     };
   }
@@ -461,7 +461,7 @@ async function publishRepairPatches(
       }
     }
 
-    const branch = `0sec/repair/${safeFindingDir(finding.id)}`;
+    const branch = `0/repair/${safeFindingDir(finding.id)}`;
 
     // Dedup: check for existing open PR with this head branch.
     try {
@@ -496,7 +496,7 @@ async function publishRepairPatches(
         "git",
         [
           "commit", "-m",
-          `fix: ${finding.title}\n\nAutomated repair by 0sec secure lifecycle.`,
+          `fix: ${finding.title}\n\nAutomated repair by 0 secure lifecycle.`,
           "--no-verify",
         ],
         { cwd: checkoutPath, timeout: 15_000, stdio: "pipe" },
@@ -514,7 +514,7 @@ async function publishRepairPatches(
           "--title", `fix: ${finding.title}`,
           "--body",
           [
-            "Automated security repair by 0sec secure lifecycle.",
+            "Automated security repair by 0 secure lifecycle.",
             "",
             `Finding: ${finding.id}`,
             `Severity: ${finding.severity}`,
@@ -525,7 +525,7 @@ async function publishRepairPatches(
             // Machine-readable attribution marker: the cloud learning loop parses
             // this from PR webhooks to link merged/closed/edited outcomes back to
             // the exact run, finding, and verified patch.
-            `<!-- 0sec:repair ${JSON.stringify({ runId, findingId: finding.id, patchSha256: repair.patchSha256 ?? null, baseRevision: revision })} -->`,
+            `<!-- 0:repair ${JSON.stringify({ runId, findingId: finding.id, patchSha256: repair.patchSha256 ?? null, baseRevision: revision })} -->`,
           ].join("\n"),
           "--repo", repoSlash,
         ],
@@ -616,7 +616,7 @@ export async function runSecureProject(
   const runId = randomUUID();
   let projectContext: PreparedProjectContext | undefined;
   try {
-    projectContext = prepareProjectContext(process.env["0SEC_PROJECT_CONTEXT"]);
+    projectContext = prepareProjectContext(process.env["ZERO_PROJECT_CONTEXT"]);
   } catch (error) {
     return resultFromPhase(runId, repoRoot, "prepare", "blocked", [
       error instanceof Error ? error.message : "Invalid project context.",
@@ -957,7 +957,7 @@ export async function runSecureProject(
         // tenant's recorded PR outcomes. Parse defensively: a malformed or
         // oversized env degrades to no guidance, never a failed run.
         let priorOutcomes: BehavioralRepairOptions["priorOutcomes"];
-        const priorRaw = process.env["0SEC_SECURE_PRIOR_OUTCOMES"];
+        const priorRaw = process.env["ZERO_SECURE_PRIOR_OUTCOMES"];
         if (priorRaw && priorRaw.length <= 8192) {
           try {
             const parsed = JSON.parse(priorRaw);
@@ -983,10 +983,10 @@ export async function runSecureProject(
         }
         repairOptions.priorOutcomes = priorOutcomes;
         // Team standards: option wins; env (cloud secure_config.rules) fills in.
-        repairOptions.rules = options.rules?.trim() || process.env["0SEC_SECURE_RULES"]?.trim().slice(0, 4000) || undefined;
+        repairOptions.rules = options.rules?.trim() || process.env["ZERO_SECURE_RULES"]?.trim().slice(0, 4000) || undefined;
         // Reviewer comments from past repair PRs (cloud injects). Defensive
         // parse: malformed or oversized input degrades to no guidance.
-        const guidanceRaw = process.env["0SEC_SECURE_GUIDANCE"];
+        const guidanceRaw = process.env["ZERO_SECURE_GUIDANCE"];
         if (guidanceRaw && guidanceRaw.length <= 4096) {
           try {
             const parsed = JSON.parse(guidanceRaw);

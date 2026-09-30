@@ -1,11 +1,11 @@
 /**
- * `0sec hunt` — novel-bug variant hunt CLI (the `runHuntScan` engine stage).
+ * `0 hunt` — novel-bug variant hunt CLI (the `runHuntScan` engine stage).
  *
  * Turns a proven fix into a tree-wide hunt for the SAME bug class at OTHER
  * sites: seed diff → `generateVariantCandidates` (LLM bug-class + grep'd
  * candidate sites) → `runHuntScan` (parallel finders → adversarial skeptic
- * gate). The discovery sibling of `0sec exploit` (weaponize) and
- * `0sec scan` (single-target). Engine-driven; this command is the surface.
+ * gate). The discovery sibling of `0 exploit` (weaponize) and
+ * `0 scan` (single-target). Engine-driven; this command is the surface.
  *
  * `--invariant` (Engine A) layers the seed-touched subsystem's stored invariant
  * model on top: before candidate generation it builds (or loads) the model and
@@ -18,7 +18,7 @@
  * fixed?) is a downstream gate. Treat `confirmed` as "worth verifying", and
  * verify the real sink + upstream-fix status before any disclosure.
  *
- * Exit codes (mirroring `0sec exploit`/`verify` so dispatchers branch on code):
+ * Exit codes (mirroring `0 exploit`/`verify` so dispatchers branch on code):
  *   0 → ≥1 finding survived the skeptic gate (leads to verify)
  *   1 → ran, no finding survived the gate
  *   2 → skipped (no candidate sites generated from the seed)
@@ -28,58 +28,8 @@
 import type { Command } from "commander";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { Finding, RuntimeMode } from "@0sec/shared";
-import type { ImpactCeiling } from "@0sec/core";
-import { stampDeploymentContext } from "@0sec/core";
-
-/**
- * #1051 — map a gated hunt LEAD onto the cloud-sink finding shape as a
- * CANDIDATE: status forced to `discovered` (never `confirmed`/sendable — these
- * are hypotheses, not proven bugs) and a provenance note stamped into
- * `evidence.analysis`. The orchestrator sets verify_status server-side, so a
- * `discovered` lead enters the verify queue as a candidate; sendability stays
- * gated behind the cloud's own adversarial verify (verify_status='verified').
- * Returned as a plain object — `postFinding` normalizes it to CloudSinkFinding.
- *
- * When `candidatePath` is provided, the finding gets a deployment-context
- * classification via mechanical path heuristics (issue #1215), with severity
- * capped at low/info for dev-only/test-only/build-only code unless the evidence
- * shows a trust-boundary bypass from production.
- *
- * Exposed for unit testing the lead → finding mapping.
- */
-export function leadToCandidateFinding(
-  finding: Finding,
-  bugClass: string,
-  seedRef: string,
-  candidatePath?: string,
-): Record<string, unknown> {
-  const evidence =
-    (finding.evidence as { request?: string; response?: string; analysis?: string } | undefined) ??
-    {};
-  const provenance =
-    `Variant-hunt LEAD (bug class: ${bugClass}; seed: ${seedRef}). ` +
-    `Surfaced by the recency hunt and gated by the adversarial skeptic — a HYPOTHESIS, ` +
-    `not a confirmed bug. Verify the real sink + upstream-fix status (novelty) before any disclosure.`;
-
-  // #1215 — stamp deployment context and apply severity cap BEFORE serialising
-  // the finding. The path heuristic is the deterministic floor; the model lens
-  // (deployment-context verify lens) may overlap but never overrides it.
-  if (candidatePath) stampDeploymentContext(finding, candidatePath);
-
-  return {
-    ...finding,
-    // LEADS are never confirmed/sendable: force candidate status so the cloud
-    // ingests them as verify candidates, never as confirmed findings.
-    status: "discovered",
-    templateId: "recency-hunt-lead",
-    evidence: {
-      request: evidence.request ?? "",
-      response: evidence.response ?? "",
-      analysis: evidence.analysis ? `${evidence.analysis}\n\n${provenance}` : provenance,
-    },
-  };
-}
+import type { RuntimeMode } from "@0/shared";
+import type { ImpactCeiling } from "@0/core";
 
 interface HuntOpts {
   source?: string;
@@ -199,7 +149,7 @@ export async function runHunt(opts: {
    * Fail-open — no CPG / no scope degrades to the flat-text finder.
    */
   graphSlice?: boolean;
-  /** Explicit CPG graphson JSON path (overrides the `.0sec/cpg/<subsystem>.json` convention). */
+  /** Explicit CPG graphson JSON path (overrides the `.0/cpg/<subsystem>.json` convention). */
   cpgPath?: string;
   /**
    * Optional comma-separated repo-relative C source files whose static
@@ -240,9 +190,7 @@ export async function runHunt(opts: {
     makeLloreJudge,
     makeHuntProveStage,
     prepare,
-    getCloudSinkConfig,
-    postFinding,
-  } = await import("@0sec/core");
+  } = await import("@0/core");
   const log = opts.log ?? (() => {});
   const runtime: RuntimeMode = opts.runtime ?? "api";
   const seedDiff = readFileSync(resolve(opts.seedPath), "utf8");
@@ -258,23 +206,11 @@ export async function runHunt(opts: {
     if (e.message) log(`[hunt:source] ${e.message}`);
   });
   const sourceRoot = resolve(prepared.resolvedTarget);
-  const noveltyRoot = opts.novelty?.rootDir ?? process.env["0SEC_LORE_MIRROR_ROOT"] ?? "/root/lore-mirror";
-  const noveltyLists = opts.novelty?.lists ?? (process.env["0SEC_LORE_LISTS"] ?? "linux-media").split(",").map((s) => s.trim()).filter(Boolean);
+  const noveltyRoot = opts.novelty?.rootDir ?? process.env["ZERO_LORE_MIRROR_ROOT"] ?? "/root/lore-mirror";
+  const noveltyLists = opts.novelty?.lists ?? (process.env["ZERO_LORE_LISTS"] ?? "linux-media").split(",").map((s) => s.trim()).filter(Boolean);
   const noveltyRecentEpochs = opts.novelty?.recentEpochs ?? 1;
   const noveltyWarnings: string[] = [];
 
-  // #1051 — capture the cloud-sink config BEFORE suppressing the env below.
-  // In cloud mode (0SEC_CLOUD_SINK + scan id set) the inner finder/skeptic
-  // agenticScan passes would auto-POST their RAW, pre-gate findings (status
-  // 'confirmed') straight to the orchestrator — flooding the scan with
-  // unverified, mislabeled findings. We instead post ONLY the gated leads
-  // ourselves (as honest 'discovered' candidates) after the gate.
-  // getCloudSinkConfig() reads 0SEC_CLOUD_SINK at call time, so clearing it
-  // for the duration of the finder runs disables that inner auto-post; the env
-  // is restored in the finally and the captured config is used for our own post.
-  const sinkCfg = getCloudSinkConfig();
-  const savedCloudSink = process.env["0SEC_CLOUD_SINK"];
-  if (sinkCfg) delete process.env["0SEC_CLOUD_SINK"];
 
   try {
     let noveltyMirrors: Awaited<ReturnType<typeof localMirrors>> = [];
@@ -490,25 +426,6 @@ export async function runHunt(opts: {
     const gated = opts.verify !== false;
     const leads = gated ? res.confirmed : res.findings;
 
-    // 3. #1051 — post the gated leads to the cloud-sink as CANDIDATE findings so
-    // they flow through the cloud's existing adversarial gate + verify, the same
-    // way scan/review reach the cloud (postFinding → POST /scans/:id/findings).
-    // No-op when not in cloud mode (sinkCfg null). Honest: leadToCandidateFinding
-    // forces status 'discovered' (never confirmed/sendable).
-    let ingested = 0;
-    if (sinkCfg) {
-      const seedRef = opts.ref ?? opts.seedPath;
-      // #1215 — build a finding-id → candidate-path lookup from the scan records
-      // so leadToCandidateFinding can stamp the deployment context from the path.
-      const pathForId = new Map<string, string>();
-      for (const rec of res.records) pathForId.set(rec.finding.id, rec.candidatePath);
-      for (const lead of leads) {
-        const candidatePath = pathForId.get(lead.id);
-        await postFinding(leadToCandidateFinding(lead, plan.brief.bugClass, seedRef, candidatePath), sinkCfg);
-        ingested++;
-      }
-      log(`[hunt] posted ${ingested} lead(s) to the cloud-sink as candidate findings`);
-    }
 
     return {
       exitCode: leads.length > 0 ? 0 : 1,
@@ -572,7 +489,6 @@ export async function runHunt(opts: {
               slice_chars: graphSliceCtx.stats.chars,
             }
           : { enabled: false },
-        ingested: sinkCfg ? ingested : null,
         gated,
         methodology: opts.methodology === true,
         warnings: [...invariantWarnings, ...graphSliceWarnings, ...noveltyWarnings, ...plan.warnings, ...res.warnings].slice(0, 10),
@@ -582,7 +498,6 @@ export async function runHunt(opts: {
       },
     };
   } finally {
-    if (savedCloudSink !== undefined) process.env["0SEC_CLOUD_SINK"] = savedCloudSink;
     prepared.cleanup();
   }
 }
@@ -661,8 +576,8 @@ export function registerHuntCommand(program: Command): void {
     .option("--reachable-prefer", "Sort kernelCTF-reachable candidates first, without dropping any (default: HUNT_REACHABLE_PREFER env)")
     .option("--no-verify", "Skip the skeptic gate (emit all raw findings — triage only, never disclosure)")
     .option("--novelty", "Require lore.kernel.org duplicate suppression; abort before discovery when evidence is unavailable")
-    .option("--novelty-root <path>", "Lore mirror root (default: 0SEC_LORE_MIRROR_ROOT or /root/lore-mirror)")
-    .option("--novelty-lists <a,b>", "Comma-separated lore lists to search (default: 0SEC_LORE_LISTS or linux-media)")
+    .option("--novelty-root <path>", "Lore mirror root (default: ZERO_LORE_MIRROR_ROOT or /root/lore-mirror)")
+    .option("--novelty-lists <a,b>", "Comma-separated lore lists to search (default: ZERO_LORE_LISTS or linux-media)")
     .option("--novelty-recent-epochs <N>", "Newest public-inbox epochs to sync per list when --novelty-sync is set (default 1)")
     .option("--novelty-sync", "Clone/fetch lore mirrors before running the novelty gate")
     .option("--novelty-model <model>", "Optional model override for the lore duplicate judge")
@@ -670,7 +585,7 @@ export function registerHuntCommand(program: Command): void {
     .option("--methodology", "Use the kernel-LPE methodology preset: lifecycle/provenance lenses, best-of-4, top-2 skeptic gate, reachable-first")
     .option("--invariant", "Engine A: build (or load) the seed-touched subsystem's stored invariant model and inject its rules + deterministic violation hypotheses into every finder prompt")
     .option("--graph-slice", "Load the seed-touched subsystem's pre-exported Joern CPG and inject a compact interprocedural reachability slice around the fix site into every finder prompt (needs scripts/provision-cpg.sh; fail-open to flat-text)")
-    .option("--cpg <path>", "Explicit CPG graphson JSON path for --graph-slice (default: <source>/.0sec/cpg/<subsystem>.json)")
+    .option("--cpg <path>", "Explicit CPG graphson JSON path for --graph-slice (default: <source>/.0/cpg/<subsystem>.json)")
     .option(
       "--ops-harvest <paths>",
       "[--graph-slice] Comma-separated repo-relative C files to harvest static ops-struct initializers from; overrides a precomputed .ops.json",

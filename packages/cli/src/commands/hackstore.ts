@@ -1,19 +1,20 @@
-// `0sec hackstore` creates extension source and validates manifests.
-// These authoring commands do not install, enable, or execute plugin code.
-// `0sec plugin` handles installation, project approval, and direct tool calls.
+// `0 hackstore` creates, validates, and prepares extension source for review.
+// These authoring commands do not install, enable, publish, or execute plugin code.
+// `0 plugin` handles installation, project approval, and direct tool calls.
 // Manifest validation is shared with the loader; runnable code is checked
 // separately by loading and calling the installed plugin.
 //
 // HackstoreCorePort lets command tests use the real validator without importing
-// the full core barrel. Production resolves it lazily from @0sec/core.
+// the full core barrel. Production resolves it lazily from @0/core.
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { constants, closeSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 
 import chalk from "chalk";
 import type { Command } from "commander";
 
-import type { ValidationResult } from "@0sec/core";
+import type { PluginManifest, ValidationResult } from "@0/core";
 
 // ── Decided constants ─────────────────────────────────────────────────────────
 
@@ -29,11 +30,14 @@ export const HACKSTORE_SCHEMA_ID =
 const MANIFEST_FILE = "manifest.json";
 const EXIT_OK = 0;
 const EXIT_USER_ERROR = 1;
+// Bound author-controlled files before reading; installed manifests have the same limit.
+const MAX_MANIFEST_BYTES = 256 * 1024;
+const MAX_SOURCE_BYTES = 4 * 1024 * 1024;
 
 // ── Core port ─────────────────────────────────────────────────────────────────
 
 /**
- * Everything this command needs from `@0sec/core`. Injected so tests supply the
+ * Everything this command needs from `@0/core`. Injected so tests supply the
  * real validator from core source; {@link defaultCorePort} lazily imports the
  * barrel in production.
  */
@@ -42,13 +46,20 @@ export interface HackstoreCorePort {
     raw: unknown,
     opts?: { reservedToolNames?: readonly string[] },
   ): ValidationResult;
+  reservedToolNames?: readonly string[];
+  reservedPluginIds?: readonly string[];
 }
 
 let cachedCore: HackstoreCorePort | undefined;
 async function defaultCorePort(): Promise<HackstoreCorePort> {
   if (cachedCore) return cachedCore;
-  const mod = (await import("@0sec/core")) as unknown as HackstoreCorePort;
-  cachedCore = { validatePluginManifest: mod.validatePluginManifest };
+  // Keep command registration/help independent of core's native DB/provider initialization.
+  const mod = await import("@0/core");
+  cachedCore = {
+    validatePluginManifest: mod.validatePluginManifest,
+    reservedToolNames: Object.values(mod.TOOL_DEFINITIONS).map((tool) => tool.name),
+    reservedPluginIds: mod.BUILTIN_PLUGINS.map((plugin) => plugin.id),
+  };
   return cachedCore;
 }
 
@@ -66,19 +77,63 @@ export interface ValidateDeps {
  */
 function resolveManifestPath(pathArg: string): { ok: true; file: string } | { ok: false; error: string } {
   const target = resolve(pathArg);
-  if (!existsSync(target)) {
-    return { ok: false, error: `path does not exist: ${target}` };
+  try {
+    const stat = lstatSync(target);
+    if (stat.isSymbolicLink()) return { ok: false, error: `refusing symbolic link: ${target}` };
+    return { ok: true, file: stat.isDirectory() ? join(target, MANIFEST_FILE) : target };
+  } catch (error) {
+    return { ok: false, error: `cannot locate manifest at ${target}: ${error instanceof Error ? error.message : String(error)}` };
   }
-  const stat = statSync(target);
-  const file = stat.isDirectory() ? join(target, MANIFEST_FILE) : target;
-  if (!existsSync(file)) {
-    return { ok: false, error: `no ${MANIFEST_FILE} found at: ${file}` };
+}
+
+/** Read only bounded, regular files, without following an author-controlled symlink. */
+function readAuthorFile(file: string, maxBytes: number): string {
+  const fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const stat = fstatSync(fd);
+    if (!stat.isFile()) throw new Error(`${file} is not a regular file`);
+    if (stat.size > maxBytes) throw new Error(`${file} exceeds ${maxBytes} bytes`);
+    return readFileSync(fd, "utf8");
+  } finally {
+    closeSync(fd);
   }
-  return { ok: true, file };
+}
+
+export type LocalExtensionResult =
+  | { ok: true; dir: string; manifest: PluginManifest; source: string }
+  | { ok: false; errors: string[] };
+
+/** The same manifest checks as the host, plus the fixed two-file install contract. */
+export function readLocalExtension(pathArg: string, core: HackstoreCorePort): LocalExtensionResult {
+  const located = resolveManifestPath(pathArg);
+  if (!located.ok) return { ok: false, errors: [located.error] };
+  try {
+    const result = core.validatePluginManifest(
+      JSON.parse(readAuthorFile(located.file, MAX_MANIFEST_BYTES)),
+      { reservedToolNames: core.reservedToolNames },
+    );
+    if (!result.ok) return result;
+    const dir = dirname(located.file);
+    if (core.reservedPluginIds?.includes(result.manifest.id)) {
+      return { ok: false, errors: [`"${result.manifest.id}" is reserved for built-in host authorization`] };
+    }
+    const source = readAuthorFile(join(dir, "plugin.js"), MAX_SOURCE_BYTES);
+    if (source.trim().length === 0) return { ok: false, errors: ["plugin.js must not be empty"] };
+    const index = { entries: [{
+      id: result.manifest.id, version: result.manifest.version, manifest: result.manifest,
+      source: { kind: "inline", files: { "plugin.js": source } },
+    }] };
+    if (Buffer.byteLength(JSON.stringify(index), "utf8") > MAX_SOURCE_BYTES) {
+      return { ok: false, errors: ["extension exceeds the registry's 4 MiB inline index limit"] };
+    }
+    return { ok: true, dir, manifest: result.manifest, source };
+  } catch (error) {
+    return { ok: false, errors: [error instanceof Error ? error.message : String(error)] };
+  }
 }
 
 /**
- * `0sec hackstore validate <path>` — read + parse + validate a manifest against
+ * `0 hackstore validate <path>` — read + parse + validate a manifest against
  * the same contract the store enforces. Sets a non-zero exit code on any
  * failure (missing file, bad JSON, invalid manifest).
  */
@@ -102,19 +157,23 @@ export function runValidate(pathArg: string, deps: ValidateDeps): void {
 
   let raw: unknown;
   try {
-    raw = JSON.parse(readFileSync(located.file, "utf8"));
+    raw = JSON.parse(readAuthorFile(located.file, MAX_MANIFEST_BYTES));
   } catch (err) {
-    fail([`${MANIFEST_FILE} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`]);
+    fail([`cannot read manifest: ${err instanceof Error ? err.message : String(err)}`]);
     return;
   }
 
-  const result = deps.core.validatePluginManifest(raw);
+  const result = deps.core.validatePluginManifest(raw, { reservedToolNames: deps.core.reservedToolNames });
   if (!result.ok) {
     fail(result.errors);
     return;
   }
 
   const { id, version, tools } = result.manifest;
+  if (deps.core.reservedPluginIds?.includes(result.manifest.id)) {
+    fail([`"${result.manifest.id}" is reserved for built-in host authorization`]);
+    return;
+  }
   const n = tools.length;
   if (asJson) {
     console.log(
@@ -137,6 +196,7 @@ export interface InitDeps {
   dir?: string;
   /** Overwrite / write into a non-empty target directory. */
   force?: boolean;
+  reservedPluginIds?: readonly string[];
 }
 
 /**
@@ -151,11 +211,11 @@ export function slugifyId(name: string): string {
     .replace(/-{2,}/g, "-")
     .replace(/^-+|-+$/g, "");
   if (!s || !/^[a-z]/.test(s)) s = `ext-${s}`.replace(/-+$/g, "");
-  return s;
+  return s.slice(0, 64).replace(/-+$/g, "");
 }
 
 /** The scaffolded manifest — a minimal, VALID PluginManifest with one tool. */
-function scaffoldManifest(name: string): Record<string, unknown> {
+function scaffoldManifest(name: string): PluginManifest & { $schema: string } {
   return {
     $schema: HACKSTORE_SCHEMA_ID,
     id: slugifyId(name),
@@ -182,7 +242,7 @@ function scaffoldManifest(name: string): Record<string, unknown> {
 function scaffoldReadme(name: string, id: string): string {
   return `# ${name}
 
-A [Hackstore](https://${HACKSTORE_REGISTRY_REPO}) extension for 0sec.
+A [Hackstore](https://${HACKSTORE_REGISTRY_REPO}) extension for 0.
 The included \`sha256\` tool hashes its \`input\` string.
 
 ## Develop and test
@@ -191,25 +251,36 @@ Edit \`manifest.json\` and \`plugin.js\` together. The installer writes the
 manifest as \`plugin.json\`; the program reads that file when it starts.
 
 \`\`\`sh
-0sec hackstore validate .
+0 hackstore validate .
+0 plugin install . --local
+0 plugin info ${id}
+0 plugin enable ${id}
+0 plugin run ${id} sha256 input=hello
 \`\`\`
 
-Follow the [local installation guide](https://docs.0.security/hackstore/#run-locally)
-to test with an isolated home and project. After installing and enabling:
-
-\`\`\`sh
-0sec plugin run ${id} sha256 input=hello
-\`\`\`
-
+Installation copies only the manifest and entry point; it neither runs nor enables
+code. Enablement approves this code for the current project. The plugin runs under
+your account, not in an OS sandbox. Use an isolated home/project for untrusted code.
 Name the tool before passing arguments. Validate arguments in the implementation,
 return failures explicitly, and keep stdout for protocol frames. Capability
 declarations inform approvals; they do not sandbox the code.
 
-## Publish
+Full author guide: https://docs.0.security/hackstore/
 
-Follow the [submission instructions](https://${HACKSTORE_REGISTRY_REPO}/blob/main/CONTRIBUTING.md).
-Add the source under \`extensions/\` in that repository and run \`npm run build\`
-to generate the registry entry. Do not hand-copy source into \`index.json\`.
+## Prepare and submit
+
+\`\`\`sh
+0 hackstore prepare-submission . --out ../${id}-submission
+\`\`\`
+
+This creates \`extensions/${id}/\` with the validated manifest, source, and this
+README. Nothing is uploaded or published. Inspect the files, fork and clone
+[Hackstore](https://${HACKSTORE_REGISTRY_REPO}), copy that extension directory into
+the fork, and follow its [contribution instructions](https://${HACKSTORE_REGISTRY_REPO}/blob/main/CONTRIBUTING.md).
+Run \`npm ci\`, \`npm run build\`, \`npm run check\`, and \`npm test\` there, then
+submit the extension and rebuilt \`index.json\` in a pull request.
+Include evidence of a successful call and a real failure, prerequisites, limits,
+and the reason for each capability. Do not hand-copy source into \`index.json\`.
 `;
 }
 
@@ -251,45 +322,53 @@ input.on("line", (line) => {
 `;
 }
 
-/** Is `dir` an existing, non-empty directory? */
-function isNonEmptyDir(dir: string): boolean {
-  if (!existsSync(dir)) return false;
-  const stat = statSync(dir);
-  if (!stat.isDirectory()) return true; // a file at that path counts as "occupied"
-  return readdirSync(dir).length > 0;
-}
 
 /**
- * `0sec hackstore init <name>` — scaffold a new extension directory `<name>/`
+ * `0 hackstore init <name>` — scaffold a new extension directory `<name>/`
  * containing a minimal valid manifest.json, a README, and an example tool
  * source file. Refuses to write into a non-empty directory unless `--force`.
  */
 export function runInit(name: string, deps: InitDeps): void {
   const base = deps.dir ? resolve(deps.dir) : process.cwd();
+  if (!name.trim() || name.length > 2000 || name === "." || name === ".." || /[/\\\0]/.test(name)) {
+    console.error(chalk.red("Extension name must be a single non-empty directory name (at most 2000 characters)."));
+    process.exitCode = EXIT_USER_ERROR;
+    return;
+  }
   const targetDir = join(base, name);
-
-  if (existsSync(targetDir) && statSync(targetDir).isFile()) {
-    console.error(chalk.red(`Cannot scaffold: a file already exists at ${targetDir}`));
-    process.exitCode = EXIT_USER_ERROR;
-    return;
-  }
-  if (deps.force !== true && isNonEmptyDir(targetDir)) {
-    console.error(
-      chalk.red(`Refusing to overwrite non-empty directory: ${targetDir}`) +
-        chalk.dim("\n  Pass --force to write into it anyway."),
-    );
-    process.exitCode = EXIT_USER_ERROR;
-    return;
-  }
-
   const manifest = scaffoldManifest(name);
-  const id = manifest.id as string;
-
-  mkdirSync(targetDir, { recursive: true });
-  writeFileSync(join(targetDir, MANIFEST_FILE), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
-  writeFileSync(join(targetDir, "README.md"), scaffoldReadme(name, id), "utf8");
-  writeFileSync(join(targetDir, "plugin.js"), scaffoldPluginSource(), "utf8");
-
+  const id = manifest.id;
+  if (deps.reservedPluginIds?.includes(id)) {
+    console.error(chalk.red(`"${id}" is reserved for built-in host authorization; choose another extension name.`));
+    process.exitCode = EXIT_USER_ERROR;
+    return;
+  }
+  try {
+    const target = lstatSync(targetDir, { throwIfNoEntry: false });
+    if (target && !target.isDirectory()) throw new Error(`refusing non-directory or symbolic link: ${targetDir}`);
+    if (deps.force !== true && target && readdirSync(targetDir).length > 0) {
+      throw new Error(`refusing to overwrite non-empty directory: ${targetDir}; pass --force to replace scaffold files`);
+    }
+    const files = {
+      [MANIFEST_FILE]: `${JSON.stringify(manifest, null, 2)}\n`,
+      "README.md": scaffoldReadme(name, id),
+      "plugin.js": scaffoldPluginSource(),
+    };
+    for (const filename of Object.keys(files)) {
+      const file = join(targetDir, filename);
+      const existing = lstatSync(file, { throwIfNoEntry: false });
+      if (existing && !existing.isFile()) throw new Error(`refusing non-regular file or symbolic link: ${file}`);
+    }
+    mkdirSync(targetDir, { recursive: true });
+    for (const [filename, content] of Object.entries(files)) {
+      const fd = openSync(join(targetDir, filename), constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW, 0o600);
+      try { writeFileSync(fd, content); } finally { closeSync(fd); }
+    }
+  } catch (error) {
+    console.error(chalk.red(`Cannot scaffold: ${error instanceof Error ? error.message : String(error)}`));
+    process.exitCode = EXIT_USER_ERROR;
+    return;
+  }
   console.log(chalk.green(`Scaffolded Hackstore extension ${chalk.bold(id)} in ${targetDir}`));
   console.log("");
   console.log(chalk.bold("  Files:"));
@@ -298,10 +377,60 @@ export function runInit(name: string, deps: InitDeps): void {
   console.log(`    plugin.js          self-contained plugin (NDJSON protocol over stdio)`);
   console.log("");
   console.log(chalk.bold("  Next steps:"));
-  console.log(`    1. Edit ${join(name, MANIFEST_FILE)} — declare your tools + capabilities`);
-  console.log(`    2. Validate:  ${chalk.cyan(`0sec hackstore validate ${name}`)}`);
-  console.log(`    3. Test locally and submit: https://${HACKSTORE_REGISTRY_REPO}/blob/main/CONTRIBUTING.md`);
+  console.log(`    1. Edit ${join(name, MANIFEST_FILE)} and plugin.js — declare actual tools + capabilities`);
+  console.log(`    2. Validate: ${chalk.cyan(`0 hackstore validate ${JSON.stringify(name)}`)}`);
+  console.log(`    3. Install locally: ${chalk.cyan(`0 plugin install ${JSON.stringify(name)} --local`)}`);
+  console.log(`    4. Inspect and approve: ${chalk.cyan(`0 plugin info ${id} && 0 plugin enable ${id}`)}`);
+  console.log(`    5. Run: ${chalk.cyan(`0 plugin run ${id} sha256 input=hello`)}`);
+  console.log(`    6. Prepare review: ${chalk.cyan(`0 hackstore prepare-submission ${JSON.stringify(name)}`)}`);
   process.exitCode = EXIT_OK;
+}
+
+/** Produce only the source layout accepted by Hackstore; publishing remains a reviewed PR. */
+export function runPrepareSubmission(pathArg: string, deps: { core: HackstoreCorePort; out?: string }): void {
+  const extension = readLocalExtension(pathArg, deps.core);
+  if (!extension.ok) {
+    for (const error of extension.errors) console.error(chalk.red(error));
+    process.exitCode = EXIT_USER_ERROR;
+    return;
+  }
+  const output = resolve(deps.out ?? `${extension.manifest.id}-submission`);
+  let created = false;
+  try {
+    const readme = readAuthorFile(join(extension.dir, "README.md"), MAX_MANIFEST_BYTES);
+    if (!readme.trim()) throw new Error("README.md must explain prerequisites, arguments, results, and limits");
+    if (existsSync(output) || lstatSync(output, { throwIfNoEntry: false })) {
+      throw new Error(`refusing to overwrite existing submission path: ${output}`);
+    }
+    mkdirSync(dirname(output), { recursive: true });
+    mkdirSync(output, { mode: 0o700 });
+    created = true;
+    const target = join(output, "extensions", extension.manifest.id);
+    mkdirSync(target, { recursive: true, mode: 0o700 });
+    const files = {
+      "manifest.json": `${JSON.stringify({ $schema: HACKSTORE_SCHEMA_ID, ...extension.manifest }, null, 2)}\n`,
+      "plugin.js": extension.source,
+      "README.md": readme,
+    };
+    for (const [name, content] of Object.entries(files)) {
+      writeFileSync(join(target, name), content, { mode: 0o600, flag: "wx" });
+    }
+    console.log(chalk.green(`Prepared ${extension.manifest.id}@${extension.manifest.version}: ${target}`));
+    for (const [name, content] of Object.entries(files)) {
+      console.log(`  SHA-256 ${name}: ${createHash("sha256").update(content).digest("hex")}`);
+    }
+    console.log("Not published. No code was executed and nothing was uploaded.");
+    console.log(`Fork and clone https://${HACKSTORE_REGISTRY_REPO}, then copy this extensions directory into your fork.`);
+    console.log("In the fork: npm ci && npm run build && npm run check && npm test");
+    console.log("Review and commit extensions/<id>/ plus the rebuilt index.json, then open a pull request.");
+    console.log("Include tested versions, successful and failing tool calls, capability rationale, prerequisites, and limits.");
+    console.log(`Submission policy: https://${HACKSTORE_REGISTRY_REPO}/blob/main/CONTRIBUTING.md`);
+    process.exitCode = EXIT_OK;
+  } catch (error) {
+    if (created) rmSync(output, { recursive: true, force: true });
+    console.error(chalk.red(`Could not prepare submission: ${error instanceof Error ? error.message : String(error)}`));
+    process.exitCode = EXIT_USER_ERROR;
+  }
 }
 
 // ── Registration ────────────────────────────────────────────────────────────
@@ -310,15 +439,16 @@ export function registerHackstoreCommand(program: Command): void {
   const hackstore = program
     .command("hackstore")
     .aliases(["hack", "store"])
-    .description("Author extensions for Hackstore, the 0sec extension store");
+    .description("Author extensions for Hackstore, the 0 extension store");
 
   hackstore
     .command("init <name>")
     .description("Scaffold a new extension directory ready to edit, validate, and submit")
     .option("--dir <path>", "Parent directory to create the extension in (default: cwd)")
     .option("--force", "Write into a non-empty target directory")
-    .action((name: string, opts: { dir?: string; force?: boolean }) => {
-      runInit(name, { dir: opts.dir, force: opts.force === true });
+    .action(async (name: string, opts: { dir?: string; force?: boolean }) => {
+      const core = await defaultCorePort();
+      runInit(name, { dir: opts.dir, force: opts.force === true, reservedPluginIds: core.reservedPluginIds });
     });
 
   hackstore
@@ -327,5 +457,13 @@ export function registerHackstoreCommand(program: Command): void {
     .option("--json", "Emit machine-readable JSON")
     .action(async (pathArg: string, opts: { json?: boolean }) => {
       runValidate(pathArg, { core: await defaultCorePort(), json: opts.json === true });
+    });
+
+  hackstore
+    .command("prepare-submission <path>")
+    .description("Create a reproducible extensions/<id> source bundle for a reviewed Hackstore PR (does not publish)")
+    .option("--out <directory>", "New output directory (default: <id>-submission)")
+    .action(async (pathArg: string, opts: { out?: string }) => {
+      runPrepareSubmission(pathArg, { core: await defaultCorePort(), out: opts.out });
     });
 }

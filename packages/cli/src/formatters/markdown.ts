@@ -1,4 +1,4 @@
-import type { ScanReport, Finding, FindingRemediation, PocStep } from "@0sec/shared";
+import type { ScanReport, Finding, FindingRemediation, PocStep } from "@0/shared";
 
 /**
  * Per-block cap on raw request/response evidence in the markdown report.
@@ -22,7 +22,7 @@ const POC_STEP_LIMIT = 20;
 export function formatMarkdown(report: ScanReport): string {
   const lines: string[] = [];
 
-  lines.push("# 0sec Scan Report");
+  lines.push("# 0 Scan Report");
   lines.push("");
   lines.push(`| Field | Value |`);
   lines.push(`|-------|-------|`);

@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import type { CreditAccount } from "@0sec/core";
 
 import {
   RECOMMENDED_IDS,
@@ -11,11 +10,8 @@ import {
   computeConnectTitleLayout,
   connectConnectedCounts,
   connectDetailLines,
-  connectDetailTitleLabel,
-  connectDetailTitleMeta,
   connectDialogItems,
   connectDisplayRowCount,
-  connectFooterHint,
   connectInputMask,
   connectRowForId,
   hasAnyConnection,
@@ -27,52 +23,6 @@ import {
 } from "./connect-layout.js";
 import { PROVIDERS, providerStates } from "./provider-status.js";
 
-/** Minimal CreditAccount fixture for dialog items tests. */
-const cloudAcct: CreditAccount = {
-  schemaVersion: "credits-v1",
-  snapshotAt: "2026-09-18T12:00:00.000Z",
-  policyVersion: "credits-v1",
-  scope: { orgId: "test-org" },
-  state: "ready" as const,
-  reason: null,
-  free: {
-    state: "active" as const,
-    claimableCreditNanos: "0",
-    spendableCreditNanos: "90000000000",
-    heldCreditNanos: "10000000000",
-    resetAt: "2026-10-01T00:00:00.000Z",
-  },
-  subscription: {
-    state: "none" as const,
-    priceCents: 1500 as const,
-    periodStart: null,
-    periodEnd: null,
-    windows: [] as Array<{
-      kind: "monthly" | "weekly" | "five_hour";
-      limitCreditNanos: string | null;
-      settledCreditNanos: string | null;
-      heldCreditNanos: string | null;
-      availableCreditNanos: string | null;
-      resetsAt: string;
-    }>,
-  },
-  prepaid: {
-    spendableCreditNanos: "0",
-    heldCreditNanos: "0",
-    settledDeficitCreditNanos: "0",
-    holdShortfallCreditNanos: "0",
-    consentEnabled: false,
-  },
-  purchase: {
-    enabled: true,
-    presets: [{ principalCents: 1000, creditNanos: "1000000000000" }],
-    customMinCents: 1000,
-    customMaxCents: 100000,
-    stepCents: 100 as const,
-    currency: "usd" as const,
-  },
-  admission: { eligible: true, reason: null },
-};
 
 const isInteger = (value: number): boolean => Number.isInteger(value) && value >= 0;
 
@@ -97,7 +47,7 @@ describe("computeConnectLayout — the dialog sweep", () => {
     for (const width of sweepAxis(0, 200, 3)) {
       for (const height of sweepAxis(0, 80, 2)) {
         // In a dialog the host spends one row on its footer and nothing else.
-        for (const options of [undefined, { chromeRows: 1, chromeColumns: 0 }]) {
+        for (const options of [undefined, { chromeRows: 1, chromeColumns: 0 }, { chromeRows: 0, chromeColumns: 0, embedded: true }]) {
           const layout = computeConnectLayout(width, height, 40, options);
           const at = `${width}x${height} ${options ? "in a dialog" : "on a terminal"}`;
           for (const [name, value] of Object.entries(layout)) {
@@ -107,7 +57,7 @@ describe("computeConnectLayout — the dialog sweep", () => {
           expect(layout.contentWidth, `content wider than the surface at ${at}`)
             .toBeLessThanOrEqual(Math.max(0, width));
           expect(
-            layout.titleRows + layout.bodyRows + layout.statusRows,
+            layout.navigationRows + layout.titleRows + layout.bodyRows + layout.statusRows,
             `rows did not sum to the budget at ${at}`,
           ).toBe(layout.availableRows);
           expect(layout.availableRows, `body taller than the surface at ${at}`)
@@ -194,35 +144,16 @@ describe("computeConnectTitleLayout — the header sweep", () => {
   });
 });
 
-describe("pane header labels and meta", () => {
-  const rows = buildConnectRows({ states: LIT });
-
-
-  it("summarises the highlighted provider's connection state for the detail header", () => {
-    expect(connectDetailTitleLabel()).toBe("PROVIDER");
-    const connected = rows.find(
-      (r) => r.kind === "provider" && r.provider.id === LIT_PROVIDER?.id,
-    );
-    expect(connectDetailTitleMeta(connected)).toBe("connected");
-    const dark = rows.find((r) => r.kind === "provider" && !r.provider.connected);
-    expect(connectDetailTitleMeta(dark)).toBe("not connected");
-    // No provider highlighted -> no meta.
-    expect(connectDetailTitleMeta(rows.find((r) => r.kind === "heading"))).toBe("");
-    expect(connectDetailTitleMeta(undefined)).toBe("");
-  });
-});
 
 describe("buildConnectRows", () => {
-  it("keeps Cloud first, BYOK second and subscription sign-in independent", () => {
+  it("groups API-key providers independently from genuine account sign-in", () => {
     const rows = buildConnectRows({ states: EMPTY });
-    expect(rows[0]?.kind).toBe("cloud");
     const providers = rows.filter((row) => row.kind === "provider");
     expect(providers[0]?.provider.auth).toBe("api-key");
     expect(new Set(providers.map((row) => row.provider.id))).toEqual(new Set(PROVIDERS.map((provider) => provider.id)));
     expect(providers.length).toBe(PROVIDERS.length);
     const subscription = providers.filter((row) => row.group.id === "subscription");
-    // Every OAuth-preferred provider lands in the subscription group, in the
-    // PROVIDERS table order: chatgpt-codex, openrouter, kimi, xai, copilot, google.
+    // Account sign-in comes only from the provider table's supported methods.
     expect(subscription.map((row) => row.provider.id)).toEqual(["chatgpt-codex", "openrouter", "kimi", "xai", "copilot", "google"]);
     expect(providers.filter((row) => row.group.id !== "subscription").every((row) => row.provider.auth === "api-key")).toBe(true);
     expect(providers.every((row) => !row.provider.connected)).toBe(true);
@@ -241,17 +172,6 @@ describe("buildConnectRows", () => {
     expect([...popular, ...all].filter((id) => subscription.some((row) => row.provider.id === id))).toEqual([]);
   });
 
-  it("emits a subtitle row under recommended providers that have one", () => {
-    const rows = buildConnectRows({ states: EMPTY });
-    const at = rows.findIndex(
-      (row) => row.kind === "provider" && row.provider.id === RECOMMENDED_IDS[0],
-    );
-    expect(rows[at + 1]?.kind).toBe("subtitle");
-    // Subtitles never appear in the All group.
-    for (const row of rows) {
-      if (row.kind === "subtitle") expect(row.group.id).toBe("popular");
-    }
-  });
 
   it("marks a provider connected when the environment holds a credential", () => {
     const rows = buildConnectRows({ states: LIT });
@@ -306,33 +226,29 @@ describe("buildConnectRows", () => {
 // ---------------------------------------------------------------------------
 
 describe("connectDialogItems — the projection onto the shared picker", () => {
-  it("keeps Cloud first and groups every provider under its own category", () => {
+  it("groups every provider under its own category without a hosted row", () => {
     const rows = buildConnectRows({ states: EMPTY });
     const items = connectDialogItems({ rows });
-    expect(items[0]?.id).toBe("hosted");
-    // Every provider row reaches the picker exactly once, under its group.
     const providers = rows.filter((row) => row.kind === "provider");
-    expect(items).toHaveLength(providers.length + 1);
+    expect(items).toHaveLength(providers.length);
+    expect(items.some((item) => item.id === "hosted")).toBe(false);
     for (const row of providers) {
       const item = items.find((candidate) => candidate.id === row.provider.id);
       expect(item, `${row.provider.id} never reached the picker`).toBeDefined();
       expect(item?.category).toBe(row.group.label);
       expect(item?.label).toBe(row.provider.label);
     }
-    // A subtitle row becomes the item's description, not a row of its own.
-    const recommended = items.find((item) => item.id === RECOMMENDED_IDS[0]);
-    expect(recommended?.description).toBeTruthy();
   });
 
-  it("marks an item connected only when a credential was actually found", () => {
+  it("reports credential presence without claiming successful authentication", () => {
     const items = connectDialogItems({ rows: buildConnectRows({ states: LIT }) });
     const lit = items.find((item) => item.id === LIT_PROVIDER?.id);
     expect(lit?.current).toBe(true);
-    expect(lit?.meta).toBe("connected");
+    expect(lit?.meta).toBe("configured");
     for (const item of items) {
-      if (item.id === LIT_PROVIDER?.id || item.id === "hosted") continue;
+      if (item.id === LIT_PROVIDER?.id) continue;
       expect(item.current, `${item.id} claimed a connection it does not have`).toBe(false);
-      expect(item.meta).not.toBe("connected");
+      expect(item.meta).not.toBe("configured");
     }
   });
 
@@ -344,50 +260,7 @@ describe("connectDialogItems — the projection onto the shared picker", () => {
     expect(lit?.meta).toBe("reconnect");
   });
 
-  it("counts remote authentication independently of credit readiness", () => {
-    const rows = buildConnectRows({ states: EMPTY });
-    expect(connectConnectedCounts(rows).connected).toBe(0);
-    expect(connectConnectedCounts(rows, { kind: "pending" }).connected).toBe(0);
-    for (const account of [
-      null,
-      cloudAcct,
-      ...(["disabled", "unavailable", "restricted"] as const).map((state) => ({ ...cloudAcct, state })),
-    ]) {
-      const verification = { kind: "verified" as const, account };
-      const item = connectDialogItems({ rows, cloudConnected: true, hostedVerification: verification })[0];
-      expect(item?.current).toBe(true);
-      expect(connectConnectedCounts(rows, verification).connected).toBe(1);
-    }
-    for (const kind of ["rejected", "unreachable"] as const) {
-      const verification = { kind };
-      expect(connectDialogItems({ rows, cloudConnected: true, hostedVerification: verification })[0]?.current).toBe(false);
-      expect(connectConnectedCounts(rows, verification).connected).toBe(0);
-    }
-    expect(connectDialogItems({
-      rows, cloudConnected: true, recoveryProviderId: "hosted", hostedVerification: { kind: "verified" },
-    })[0]?.current).toBe(false);
-  });
 
-  it("carries the two lifecycle colours the list used to draw, and only those", () => {
-    const rows = buildConnectRows({ states: LIT });
-    const items = connectDialogItems({
-      rows,
-      tones: { connected: "#green", recovering: "#red" },
-    });
-    expect(items.find((item) => item.id === LIT_PROVIDER?.id)?.tone).toBe("#green");
-    for (const item of items) {
-      if (item.current) continue;
-      expect(item.tone, `${item.id} was coloured without a state to justify it`).toBeUndefined();
-    }
-    const repairing = connectDialogItems({
-      rows,
-      tones: { connected: "#green", recovering: "#red" },
-      recoveryProviderId: LIT_PROVIDER?.id,
-    });
-    expect(repairing.find((item) => item.id === LIT_PROVIDER?.id)?.tone).toBe("#red");
-    // No palette supplied -> no colour invented.
-    expect(connectDialogItems({ rows }).every((item) => item.tone === undefined)).toBe(true);
-  });
 
   it("carries no secret onto an item", () => {
     const items = connectDialogItems({ rows: buildConnectRows({ states: LIT }) });
@@ -402,9 +275,9 @@ describe("connectDialogItems — the projection onto the shared picker", () => {
     expect(connectDisplayRowCount([])).toBe(0);
   });
 
-  it("finds the row behind an item id, cloud included", () => {
+  it("finds the row behind a direct provider item id", () => {
     const rows = buildConnectRows({ states: LIT });
-    expect(connectRowForId(rows, "hosted")?.kind).toBe("cloud");
+    expect(connectRowForId(rows, "hosted")).toBeUndefined();
     const row = connectRowForId(rows, LIT_PROVIDER?.id);
     expect(row?.kind === "provider" && row.provider.id).toBe(LIT_PROVIDER?.id);
     expect(connectRowForId(rows, undefined)).toBeUndefined();
@@ -418,27 +291,29 @@ describe("the detail pane", () => {
   const rows = buildConnectRows({ states: LIT });
   const textOf = (lines: { text: string }[]): string => lines.map((line) => line.text).join("\n");
 
-  it("describes a connected provider with its live source", () => {
+  it("shows credential presence and its source without claiming API validity", () => {
     const row = rows.find((r) => r.kind === "provider" && r.provider.id === LIT_PROVIDER?.id);
-    const text = textOf(connectDetailLines({ row }, 60));
-    expect(text).toContain(LIT_PROVIDER?.label ?? "");
-    expect(text).toContain("Connected:");
+    const text = textOf(connectDetailLines({ row }, 80));
     expect(text).toContain(LIT_PROVIDER?.envVars[0] ?? "");
+    expect(text).toMatch(/access.*not.*checked/i);
   });
 
-  it("gives the exact setup hint for a provider with no credentials", () => {
-    const dark = PROVIDERS.find((info) => info.id !== LIT_PROVIDER?.id);
-    const row = rows.find((r) => r.kind === "provider" && r.provider.id === dark?.id);
-    const text = textOf(connectDetailLines({ row }, 80));
-    expect(text).toContain("Not connected");
-    for (const word of (dark?.hint ?? "").split(" ").slice(0, 3)) expect(text).toContain(word);
-    expect(text).toContain(dark?.envVars[0] ?? "");
+  it("offers API keys rather than OAuth or subscription sign-in for key-only providers", () => {
+    for (const id of ["anthropic", "openai"]) {
+      const row = buildConnectRows({ states: EMPTY }).find((r) => r.kind === "provider" && r.provider.id === id);
+      const text = textOf(connectDetailLines({ row }, 80));
+      expect(text).toMatch(/API key/);
+      expect(text).not.toMatch(/OAuth|subscription|device sign-in/);
+    }
   });
 
-  it("names the device OAuth path for ChatGPT Codex", () => {
-    const row = rows.find((r) => r.kind === "provider" && r.provider.auth === "oauth");
-    const text = textOf(connectDetailLines({ row }, 80));
-    expect(text.toLowerCase()).toContain("oauth");
+  it("distinguishes Codex device sign-in from OpenRouter browser sign-in", () => {
+    const providerText = (id: string) => textOf(connectDetailLines({
+      row: rows.find((r) => r.kind === "provider" && r.provider.id === id),
+    }, 100));
+    expect(providerText("chatgpt-codex")).toMatch(/OAuth.*device sign-in/);
+    expect(providerText("openrouter")).toMatch(/OAuth.*browser sign-in/);
+    expect(providerText("openrouter")).not.toMatch(/device sign-in/);
   });
 
   it("keeps every detail line inside the pane it was measured for", () => {
@@ -490,23 +365,10 @@ describe("connected reporting, masks and hints", () => {
     expect(hasAnyConnection({ states: EMPTY, stored: new Set(["kimi"]) })).toBe(true);
   });
 
-  it("counts Cloud only after verification and removes it on rejection", () => {
-    const rows = buildConnectRows({ states: EMPTY }).filter((row) =>
-      row.kind === "cloud" || (row.kind === "provider" && row.provider.id === "openai"),
-    );
-    expect(connectConnectedCounts(rows, { kind: "pending" })).toEqual({ connected: 0, total: 2 });
-    expect(connectConnectedCounts(rows, { kind: "verified" })).toEqual({ connected: 1, total: 2 });
-    expect(connectConnectedCounts(rows, { kind: "rejected" })).toEqual({ connected: 0, total: 2 });
-  });
-
-  it("does not double-count repeated provider or Cloud rows", () => {
-    const rows = buildConnectRows({ states: LIT }).filter((row) =>
-      row.kind === "cloud" || (row.kind === "provider" && row.provider.connected),
-    );
-    expect(connectConnectedCounts([...rows, ...rows], { kind: "verified" }))
-      .toEqual({ connected: 2, total: 2 });
-    expect(connectConnectedCounts([], { kind: "verified" }))
-      .toEqual({ connected: 0, total: 0 });
+  it("counts distinct direct connections without double-counting repeated rows", () => {
+    const rows = buildConnectRows({ states: LIT }).filter((row) => row.kind === "provider" && row.provider.connected);
+    expect(connectConnectedCounts([...rows, ...rows])).toEqual({ connected: 1, total: 1 });
+    expect(connectConnectedCounts([])).toEqual({ connected: 0, total: 0 });
   });
 
   it("never echoes the credential and caps the mask length it leaks", () => {
@@ -530,16 +392,6 @@ describe("connected reporting, masks and hints", () => {
     for (const kind of ["oauth", "api-key"] as const) {
       expect(authHintLabel(kind).length).toBeLessThanOrEqual(12);
     }
-  });
-
-  it("names the real keys in the footer hints", () => {
-    expect(connectFooterHint("browse")).toContain("[⏎] connect");
-    expect(connectFooterHint("browse")).toContain("[↑↓] select");
-    expect(connectFooterHint("browse", false)).toContain("[esc] back");
-    expect(connectFooterHint("browse", true)).toContain("[esc] clear filter");
-    expect(connectFooterHint("filter")).toContain("[⌫]");
-    expect(connectFooterHint("input")).toContain("save");
-    expect(connectFooterHint("input")).toContain("cancel");
   });
 
   it("routes printable characters to filter and input, control keys to neither", () => {
@@ -566,47 +418,5 @@ describe("connected reporting, masks and hints", () => {
     for (const id of RECOMMENDED_IDS) {
       expect(PROVIDERS.some((info) => info.id === id), `${id} is not a real provider`).toBe(true);
     }
-  });
-});
-
-
-describe("cloud verification in the detail pane", () => {
-  const row = { kind: "cloud" as const };
-
-  it("retains authenticated presentation when credit data is unavailable", () => {
-    for (const account of [
-      null,
-      ...(["disabled", "unavailable", "restricted"] as const).map((state) => ({
-        ...cloudAcct, state, reason: "fixture-credit-reason",
-      })),
-    ]) {
-      const lines = connectDetailLines({
-        row, cloudConnected: true, hostedVerification: { kind: "verified", account },
-      }, 80);
-      expect(lines.some((line) => line.tone === "ok")).toBe(true);
-      expect(lines.some((line) => line.tone === "warn")).toBe(false);
-      if (account) expect(lines.map((line) => line.text).join("\n")).toContain(account.reason);
-    }
-  });
-
-  it("does not present pending or rejected credentials as authenticated", () => {
-    for (const kind of ["pending", "rejected", "unreachable"] as const) {
-      const lines = connectDetailLines({ row, cloudConnected: true, hostedVerification: { kind } }, 80);
-      expect(lines.some((line) => line.tone === "ok")).toBe(false);
-      expect(lines.some((line) => line.tone === "warn")).toBe(kind === "rejected");
-    }
-  });
-
-  it("keeps exact customer amounts in the connection detail", () => {
-    const account: CreditAccount = {
-      ...cloudAcct,
-      prepaid: { ...cloudAcct.prepaid, spendableCreditNanos: "123456789012345678" },
-    };
-    const lines = connectDetailLines({
-      row, cloudConnected: true, hostedVerification: { kind: "verified", account },
-    }, 100);
-    const text = lines.map((line) => line.text).join("\n");
-    expect(text).toContain("123456789.012345678 credits");
-    expect(text).toContain("Spendable: 90 credits");
   });
 });

@@ -25,7 +25,11 @@ describe("deleteToLineStart", () => {
   });
 
   it("does not spare a leading slash command", () => {
-    expect(deleteToLineStart("/mode copilot")).toBe("");
+    expect(deleteToLineStart("/model gpt-5.5")).toBe("");
+  });
+
+  it("preserves previous lines when deleting before an interior caret", () => {
+    expect(deleteToLineStart("first line\nsecond line")).toBe("first line\n");
   });
 });
 

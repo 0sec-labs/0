@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 #
-# smoke-cli.sh — runtime-agnostic install-smoke for 0sec-cli.
+# smoke-cli.sh — runtime-agnostic install-smoke for @0/cli.
 #
 # Used by .github/workflows/ci.yml to guard against regressions in the
 # subcommands that are most likely to silently break: the DB layer (history),
 # the MCP stdio server, and the source-review pipeline.
 #
 # Call this with a single argument: the full command string that invokes
-# 0sec-cli. Examples:
-#   scripts/smoke-cli.sh "node /tmp/smoke/node_modules/0sec-cli/0sec.js"
-#   scripts/smoke-cli.sh "bun run /tmp/smoke/node_modules/0sec-cli/0sec.js"
-#   scripts/smoke-cli.sh "docker run --rm 0sec-ci-smoke"
+# @0/cli. Examples:
+#   scripts/smoke-cli.sh "node /tmp/smoke/node_modules/@0/cli/0.js"
+#   scripts/smoke-cli.sh "bun run /tmp/smoke/node_modules/@0/cli/0.js"
+#   scripts/smoke-cli.sh "docker run --rm 0-ci-smoke"
 #
 # The script exits non-zero on the first failing subtest and prints which
 # subcommand tripped.
@@ -18,7 +18,7 @@
 set -euo pipefail
 
 if [ "$#" -lt 1 ]; then
-  echo "usage: $0 '<command to invoke 0sec-cli>'" >&2
+  echo "usage: $0 '<command to invoke @0/cli>'" >&2
   exit 2
 fi
 
@@ -45,11 +45,11 @@ say() { printf '\033[36m[smoke]\033[0m %s\n' "$*"; }
 fail() { printf '\033[31m[smoke] FAIL:\033[0m %s\n' "$*" >&2; exit 1; }
 run_ai_smoke() {
   env \
-    0SEC_CHATGPT_ACCESS_TOKEN="" \
-    0SEC_CHATGPT_OAUTH_REFRESH_TOKEN="" \
-    0SEC_CHATGPT_ACCOUNT_ID="" \
-    0SEC_CHATGPT_AUTH_FILE="$TMP/no-auth.json" \
-    0SEC_CODEX_AUTH_JSON_PATH="$TMP/no-auth.json" \
+    ZERO_CHATGPT_ACCESS_TOKEN="" \
+    ZERO_CHATGPT_OAUTH_REFRESH_TOKEN="" \
+    ZERO_CHATGPT_ACCOUNT_ID="" \
+    ZERO_CHATGPT_AUTH_FILE="$TMP/no-auth.json" \
+    ZERO_CODEX_AUTH_JSON_PATH="$TMP/no-auth.json" \
     OPENAI_API_KEY="" \
     OPENROUTER_API_KEY="" \
     ANTHROPIC_API_KEY=fake \
@@ -99,7 +99,7 @@ fi
 # with a valid JSON-RPC 2.0 reply. Bounded by `timeout` in case the server
 # hangs (we don't want this to stall CI forever).
 say "mcp-server initialize"
-INIT_MSG='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"0sec-ci-smoke","version":"0.0.0"}}}'
+INIT_MSG='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"0-ci-smoke","version":"0.0.0"}}}'
 # The mcp-server boots the full CLI + stdio transport + DB before it can
 # answer `initialize`; under CI load that can exceed a fixed 10s window, which
 # made this subtest the #1 flake source (and, because the image publish gates

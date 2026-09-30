@@ -6,6 +6,7 @@ import { isAbsolute, resolve, join } from "node:path";
 
 import type {
   Finding,
+  SourceVerificationSummary,
   AttackResult,
   PocStep,
   TargetInfo,
@@ -14,8 +15,11 @@ import type {
   VerificationBehavior,
   VerificationBehaviorStep,
   NamedIdentity,
-} from "@0sec/shared";
-import { resolveIdentities, compareRoles, DEFAULT_AUTONOMY_MODE, createJevEvaluator, jevConfigFromEnvironment, type JevEvaluator } from "@0sec/shared";
+  ReachabilityTier,
+  Weaponizability,
+  BusinessImpact,
+} from "@0/shared";
+import { resolveIdentities, compareRoles, DEFAULT_AUTONOMY_MODE, createJevEvaluator, jevConfigFromEnvironment, type JevEvaluator } from "@0/shared";
 import type { ToolDefinition, ToolCall, ToolResult, ToolResultMeta, ToolContext, AgentRole } from "./types.js";
 import type {
   OperatorQuestion,
@@ -44,6 +48,7 @@ import {
 } from "../scope/waf-detect.js";
 import { detectScannerBinary } from "../scope/scanner-binaries.js";
 import { describeScopeGuards, scopeRequiredRefusal } from "../scope/scope-guard.js";
+import { getScopeEnforcementState, isScopeEnforcementEnabled, withScopeEnforcement } from "../scope/activation.js";
 import { isWafEvasionLadderEnabled } from "../scope/engagement-profile.js";
 import { applyAttribution, formatUserAgent } from "../scope/attribution.js";
 import { sendPrompt, extractResponseText, fetchScoped, isPrivateAddress } from "../http.js";
@@ -66,13 +71,6 @@ import {
 } from "./auth-boundary-prober.js";
 import { runRecon } from "../recon/recon.js";
 import { runJsRecon } from "../recon/js-recon.js";
-import type { ReconAsset } from "../recon/recon.js";
-import {
-  getCloudSinkConfig,
-  postAssets,
-  reconAssetToCloudSinkAsset,
-  type CloudSinkAsset,
-} from "../cloud-sink.js";
 import {
   isRepoRelativePath,
   isSuggestionAcceptable,
@@ -89,7 +87,7 @@ import {
   classifyPromptLayerImpact,
   type PromptLayerAsset,
 } from "./playbooks.js";
-import type { osecDB } from "@0sec/db";
+import type { osecDB } from "@0/db";
 import { features as featureFlags } from "./features.js";
 import { PtySessionManager } from "./pty-session.js";
 import { sanitizedEnv } from "./sanitized-env.js";
@@ -120,6 +118,7 @@ import { extractPocStepsFromProse } from "./poc-steps-from-prose.js";
 import { isUntrustedSourceTool, sanitizeUntrustedToolResult } from "../untrusted-sanitizer.js";
 import { computeFindingConfidence } from "./finding-confidence.js";
 import { parseRepositoryAcquisition, repositoryAcquisitionAllowed, repositoryIdentityMatchesTarget, runRepositoryAcquisition } from "./repository-acquisition.js";
+import { evaluateVerificationSpec } from "../verification-spec/spec.js";
 import {
   validateFindingDraft,
   type FindingDraft,
@@ -168,7 +167,7 @@ import {
   sendMessage,
   type HubMessage,
 } from "../hub/mailbox.js";
-import { PRIMARY_AGENT_NAME, assignAgentName, uniquifyAgentName } from "../hub/name-generator.js";
+import { PRIMARY_AGENT_NAME, agentTaskLabel, assignAgentName } from "../hub/name-generator.js";
 import { runPersistentAgent } from "../hub/supervisor.js";
 import { AuditWorkerTree } from "./worker-tree.js";
 import { ProcessManager, probePort, type ReadyGate } from "./process-manager.js";
@@ -215,9 +214,10 @@ import { resolveScopedPath } from "./tools/scope-path.js";
 import { windowFileContent } from "./tools/read-file-window.js";
 import { buildEvalCommand, parseEvalArgs, type EvalLanguage } from "./tools/eval.js";
 import { executeOverseScan, validateOverseArgs } from "./tools/0verse.js";
+import { executeJevPrepass } from "./tools/jev-prepass.js";
 
 
-// ── Tool registry (0sec#611) ──
+// ── Tool registry (0#611) ──
 // The per-tool ToolDefinition objects now live in per-domain modules under
 // ./tools/ and are assembled — in canonical order — by the ./tools/index.ts
 // barrel. They are re-exported here so every existing importer of
@@ -230,7 +230,6 @@ import {
   TOOL_DEFINITIONS,
   SCANNER_TOOL_NAMES,
   CLOUD_TOOL_NAMES,
-  ORCHESTRATOR_TOOL_NAMES,
   OAST_TOOL_NAMES,
   BINARY_TOOL_NAMES,
   OFFENSIVE_SCOPED_TOOL_NAMES,
@@ -243,7 +242,6 @@ export {
   TOOL_DEFINITIONS,
   SCANNER_TOOL_NAMES,
   CLOUD_TOOL_NAMES,
-  ORCHESTRATOR_TOOL_NAMES,
   OAST_TOOL_NAMES,
   BINARY_TOOL_NAMES,
   OFFENSIVE_SCOPED_TOOL_NAMES,
@@ -252,10 +250,9 @@ export {
   KERNEL_WEAPONIZE_TOOL_NAMES,
   CVE_ADAPT_TOOL_NAMES,
 };
-import { executeStartScan } from "./tools/orchestrator.js";
 import { executeProxy, type ProxyHost } from "./tools/proxy.js";
 
-// Tool-name → handler-method-name routing table (0sec#614), assembled from
+// Tool-name → handler-method-name routing table (0#614), assembled from
 // per-domain `*Dispatch` maps. `ToolExecutor._dispatch` resolves the handler
 // off the instance by this name, replacing the hand-written switch so adding a
 // tool no longer edits a shared dispatch chokepoint.
@@ -345,22 +342,6 @@ export function selfExtensionRegistryOf(ctx: ToolContext): SelfExtensionRegistry
   return ctx.selfExtension;
 }
 
-/**
- * Normalize a recon target/origin/URL into the host used as the
- * `discovered_assets.ecosystem` value (0sec#768). recon emits `domain` as an
- * `https://host` origin; this strips the scheme/path down to the bare host so
- * every asset from one target shares a stable ecosystem key. Falls back to the
- * trimmed input when it isn't URL-parseable.
- */
-function reconEcosystem(target: string | undefined): string {
-  const t = (target ?? "").trim();
-  if (!t) return "unknown";
-  try {
-    return new URL(/^https?:\/\//i.test(t) ? t : `https://${t}`).host || t;
-  } catch {
-    return t;
-  }
-}
 
 // ── Bash tool wallclock ceiling ──
 //
@@ -370,13 +351,13 @@ function reconEcosystem(target: string | undefined): string {
 // the canonical case being `python3 -c 'requests.post(…)'`, where `requests`
 // has no default timeout and a hung remote can wedge the agent indefinitely.
 //
-// See https://github.com/0sec-labs/0sec/issues/181
+// See https://github.com/0sec-labs/0/issues/181
 
 const DEFAULT_BASH_WALLCLOCK_MS = 120_000;
 const BASH_GRACE_MS = 2_000;
 
 function resolveBashWallclockCeilingMs(): number {
-  const raw = process.env["0SEC_BASH_TIMEOUT_MS"]?.trim();
+  const raw = process.env["ZERO_BASH_TIMEOUT_MS"]?.trim();
   if (!raw) return DEFAULT_BASH_WALLCLOCK_MS;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_BASH_WALLCLOCK_MS;
@@ -724,7 +705,7 @@ export function splitOnTopLevelPipes(command: string): string[] {
   return out;
 }
 
-// ── Auth injection in shell commands (0sec#282) ──────────────────
+// ── Auth injection in shell commands (0#282) ──────────────────
 //
 // Surfaced by the 2026-05-07 control-flow audit: `http_request`/`crawl`/
 // `submit_form` inject auth headers automatically, but `shellExec` only
@@ -1077,7 +1058,7 @@ function tokenizeCommand(command: string): string[] {
   return tokens;
 }
 
-// ── Dependency-audit lockfile detection (0sec#tool-reliability) ──────────────
+// ── Dependency-audit lockfile detection (0#tool-reliability) ──────────────
 //
 // `npm audit` requires a package-lock.json and ENOLOCKs ("requires an existing
 // lockfile") on a pnpm/yarn repo. We detect the package manager from the
@@ -1375,6 +1356,7 @@ function buildStrReplaceMeta(
 }
 
 function validateScopedCommand(tokens: string[], scopePath?: string): string[] {
+  if (!isScopeEnforcementEnabled()) return tokens;
   return tokens.map((token, index) => {
     if (index === 0) return token;
     if (isAbsolute(token)) {
@@ -1413,7 +1395,7 @@ function validateTargetUrl(
   publicNetwork?: ToolContext["publicNetwork"],
 ): string {
   let base: URL | undefined;
-  if (publicNetwork) {
+  if (publicNetwork || !isScopeEnforcementEnabled()) {
     try {
       const parsed = new URL(baseUrl);
       if (parsed.protocol === "http:" || parsed.protocol === "https:") base = parsed;
@@ -1443,12 +1425,12 @@ function validateTargetUrl(
   }
 
   const candidateUrl = candidate.toString();
-  if (publicNetwork?.deniedHosts?.has(hostname)) {
+  if (isScopeEnforcementEnabled() && publicNetwork?.deniedHosts?.has(hostname)) {
     throw new Error(`Operator-denied HTTP host: ${hostname}`);
   }
   const effectiveScope = publicNetwork ? publicNetwork.scope : scope;
 
-  // Cross-origin / scope authorization (0sec#215, cross-origin-in-scope fix).
+  // Cross-origin / scope authorization (0#215, cross-origin-in-scope fix).
   //
   // The same-origin rail is the correct default for a *scopeless* console:
   // with no operator-approved scope, never wander off the single named
@@ -1466,14 +1448,14 @@ function validateTargetUrl(
   // The private-network guard above already ran, so scope can never
   // authorize an SSRF target.
   if (effectiveScope) {
-    const verdict = effectiveScope.match(candidateUrl);
+    const verdict = effectiveScope.enforce(candidateUrl)
     if (!verdict.allowed) {
       enforcement?.noteOutOfScopeBlocked();
       throw new Error(`Scope violation blocked: ${verdict.reason}`);
     }
     // In scope → the scope check is the authority; the same-origin rail
     // does not override an explicitly-approved in-scope host.
-  } else if (!publicNetwork && candidate.origin !== base!.origin) {
+  } else if (isScopeEnforcementEnabled() && !publicNetwork && candidate.origin !== base!.origin) {
     // Scopeless default: same-origin only. Identical error/message/caller
     // contract as before the fix.
     throw new Error(`Cross-origin http_request blocked: ${candidate.origin}`);
@@ -1483,8 +1465,8 @@ function validateTargetUrl(
   // the host scope above: a URL must pass BOTH the host check and the path
   // check. Empty path allowlist = allow all paths. Out-of-scope path is
   // counted as a blocked request, same as a host violation.
-  if (enforcement) {
-    const pathVerdict = enforcement.pathPolicy.match(candidateUrl);
+  if (isScopeEnforcementEnabled() && enforcement) {
+    const pathVerdict = enforcement.pathPolicy.enforce(candidateUrl);
     if (!pathVerdict.allowed) {
       enforcement.noteOutOfScopeBlocked();
       throw new Error(`Scope violation blocked: ${pathVerdict.reason}`);
@@ -1495,7 +1477,7 @@ function validateTargetUrl(
   return candidateUrl;
 }
 
-// ── PoC step graph helpers (0sec#170) ──
+// ── PoC step graph helpers (0#170) ──
 
 const POC_STEP_KINDS: ReadonlySet<string> = new Set([
   "setup",
@@ -1551,7 +1533,7 @@ function validatePocStep(raw: unknown): PocStep | null {
   return step;
 }
 
-// ── Verification spec helpers (0sec#193) ──
+// ── Verification spec helpers (0#193) ──
 //
 // Mirrors the PoC-step parser pattern above: tolerate already-parsed objects
 // AND JSON strings, validate strictly, and return null on anything malformed
@@ -1717,6 +1699,69 @@ export function parseVerificationSpecArg(raw: unknown): VerificationSpec | null 
 }
 
 /**
+ * Summarize the bounded source evaluator without retaining predicate details.
+ * Unavailable or unsupported predicates are counted as inconclusive instead
+ * of being described as a non-match.
+ */
+async function evaluateSourceVerification(
+  spec: VerificationSpec,
+  scopePath: string,
+): Promise<SourceVerificationSummary> {
+  const totalPredicates = spec.code.length;
+  const behaviorPending = Boolean(spec.behavior);
+  const noSourcePredicates =
+    totalPredicates === 0 ||
+    !spec.code.some((predicate) => predicate.kind !== "git-diff-applies");
+
+  try {
+    const result = await evaluateVerificationSpec(spec, scopePath);
+    if (noSourcePredicates) {
+      return {
+        status: "inconclusive",
+        totalPredicates,
+        matchedPredicates: 0,
+        notMatchedPredicates: 0,
+        inconclusivePredicates: totalPredicates,
+        behaviorPending,
+      };
+    }
+
+    const cannotEvaluate =
+      /path escapes repo root or is invalid|path resolves outside repo root|file not found or unreadable|invalid regex|not yet implemented|unknown predicate kind|git repository HEAD unavailable|git diff exceeds/i;
+    const inconclusivePredicates = result.failedPredicates.filter((predicate) =>
+      cannotEvaluate.test(predicate.reason),
+    ).length;
+    const notMatchedPredicates =
+      result.failedPredicates.length - inconclusivePredicates;
+    const matchedPredicates =
+      totalPredicates - result.failedPredicates.length;
+    const status =
+      inconclusivePredicates > 0
+        ? "inconclusive"
+        : result.passed
+          ? "matched"
+          : "not_confirmed";
+    return {
+      status,
+      totalPredicates,
+      matchedPredicates,
+      notMatchedPredicates,
+      inconclusivePredicates,
+      behaviorPending,
+    };
+  } catch {
+    return {
+      status: "inconclusive",
+      totalPredicates,
+      matchedPredicates: 0,
+      notMatchedPredicates: 0,
+      inconclusivePredicates: totalPredicates,
+      behaviorPending,
+    };
+  }
+}
+
+/**
  * Parse the `poc_steps` LLM tool argument into a PocStep[] or null.
  *
  * Tolerates three wire shapes seen from real models:
@@ -1746,7 +1791,7 @@ export function parsePocStepsArg(raw: unknown): PocStep[] | null {
   return out.length > 0 ? out : null;
 }
 
-// ── Evidence-paths parsing & validation-failure response (0sec#409) ──
+// ── Evidence-paths parsing & validation-failure response (0#409) ──
 
 /**
  * Coerce the `evidence_paths` tool arg into the `FindingDraft.evidence`
@@ -1856,9 +1901,9 @@ export interface CoverageGateDecision {
  * unit-testable without spinning up a ToolExecutor.
  *
  * Default thresholds (override via env):
- *   - `0SEC_AUDIT_MIN_COVERAGE_FILES` (default 3): minimum distinct
+ *   - `ZERO_AUDIT_MIN_COVERAGE_FILES` (default 3): minimum distinct
  *     source files read.
- *   - `0SEC_AUDIT_DONE_GATE=0`: disable the gate entirely.
+ *   - `ZERO_AUDIT_DONE_GATE=0`: disable the gate entirely.
  *
  * Pass conditions (any of):
  *   1. At least N distinct source files read.
@@ -1869,7 +1914,7 @@ export interface CoverageGateDecision {
  */
 export function evaluateDoneCoverageGate(input: CoverageGateInput, env: NodeJS.ProcessEnv = process.env): CoverageGateDecision {
   // Operator-tunable kill switch.
-  if (env["0SEC_AUDIT_DONE_GATE"] === "0" || env["0SEC_AUDIT_DONE_GATE"] === "false") {
+  if (env["ZERO_AUDIT_DONE_GATE"] === "0" || env["ZERO_AUDIT_DONE_GATE"] === "false") {
     return { pass: true };
   }
 
@@ -1880,7 +1925,7 @@ export function evaluateDoneCoverageGate(input: CoverageGateInput, env: NodeJS.P
   }
 
   const minFiles = (() => {
-    const raw = env["0SEC_AUDIT_MIN_COVERAGE_FILES"];
+    const raw = env["ZERO_AUDIT_MIN_COVERAGE_FILES"];
     const n = raw === undefined ? NaN : Number.parseInt(raw, 10);
     return Number.isFinite(n) && n >= 0 ? n : 3;
   })();
@@ -1905,7 +1950,7 @@ export function evaluateDoneCoverageGate(input: CoverageGateInput, env: NodeJS.P
   return { pass: false, reason: parts.join(" ") };
 }
 
-// ── Access-control probe helpers (0sec#564) ──
+// ── Access-control probe helpers (0#564) ──
 
 /** A principal the access-control probe can issue requests as. */
 interface ProbePrincipal {
@@ -2121,12 +2166,12 @@ const SUBAGENT_MAX_FANOUT = 8;
 // This bounds the RATE only: every requested child still runs, and findings
 // merge back in input order with identical behavior — matching the
 // VERIFY_CONCURRENCY pattern in unified-pipeline.ts. Override via
-// `0SEC_SUBAGENT_CONCURRENCY`.
+// `ZERO_SUBAGENT_CONCURRENCY`.
 const SUBAGENT_CONCURRENCY = 4;
 
-/** Resolve the subagent fan-out limit, honoring `0SEC_SUBAGENT_CONCURRENCY`. */
+/** Resolve the subagent fan-out limit, honoring `ZERO_SUBAGENT_CONCURRENCY`. */
 function subagentConcurrency(): number {
-  const raw = process.env["0SEC_SUBAGENT_CONCURRENCY"];
+  const raw = process.env["ZERO_SUBAGENT_CONCURRENCY"];
   if (raw !== undefined) {
     const parsed = Number.parseInt(raw, 10);
     if (Number.isFinite(parsed) && parsed > 0) return parsed;
@@ -2477,17 +2522,6 @@ const subagentModelSelectionSchema = z.object({
   model: z.string().min(1).optional(),
 });
 
-/**
- * First non-empty trimmed line of a subagent `task` brief, clipped to ~64 chars
- * for the Task card's sub-report bullet (mirrors OMP's `taskFirstLine`). Used
- * only for the display-only meta sidecar.
- */
-function subagentTaskFirstLine(task: string): string {
-  const trimmed = task.trim();
-  const newline = trimmed.indexOf("\n");
-  const firstLine = newline === -1 ? trimmed : trimmed.slice(0, newline);
-  return firstLine.length > 64 ? `${firstLine.slice(0, 63)}…` : firstLine;
-}
 
 /**
  * `spawn_persistent_agent` argument schema — validate-then-reject before any side
@@ -2601,7 +2635,7 @@ type SubagentRunReport = Pick<SubagentLifecyclePayload, "turns" | "summary" | "d
 /** Shared lifecycle payload base for one subagent (carries its unique id). */
 interface SubagentLifecycleBase {
   agent_id: string;
-  /** Human-friendly AdjectiveNoun name (display); see name-generator.ts. */
+  /** Unique task-derived label, independent of the opaque mailbox address. */
   name: string;
   parent_scan_id: string;
   task: string;
@@ -2690,15 +2724,16 @@ export function buildSubagentMessage(
   toolCalls: ReadonlyArray<ToolCall>,
   toolResults: ReadonlyArray<ToolResult>,
   now: number,
-  telemetry: Pick<SubagentMessagePayload, "partial" | "usage" | "contextTokens" | "durationMs" | "model"> = {},
+  telemetry: Pick<SubagentMessagePayload, "partial" | "usage" | "contextTokens" | "durationMs" | "model" | "reasoning_summary"> = {},
 ): SubagentMessagePayload {
   // Defensive against a caller that omits the newer args (older onTurn shape).
   const calls = toolCalls ?? [];
   const results = toolResults ?? [];
   const tools: SubagentToolMessage[] = calls
-    .map((call, i) => ({ call, result: results[i] }))
-    .filter(({ call }) => call.name !== "report_status" && call.name !== "done")
-    .map(({ call, result }) => ({
+    .map((call, callIndex) => ({ call, callIndex, result: results[callIndex] }))
+    .filter(({ call, result }) => call.name !== "report_status" && (call.name !== "done" || !result?.success))
+    .map(({ call, callIndex, result }) => ({
+      callIndex,
       call: { name: call.name, arguments: call.arguments ?? {} },
       ...(telemetry.partial && !result ? { running: true } : {}),
       result: result
@@ -2716,15 +2751,15 @@ export function buildSubagentMessage(
   const doneOutput = doneIndex >= 0 ? results[doneIndex]?.output : undefined;
   const summary = doneOutput && typeof doneOutput === "object" && "summary" in doneOutput && typeof doneOutput.summary === "string"
     ? doneOutput.summary.trim() : "";
-  const prose = (assistantText ?? "").trim();
-  const assistant = summary && summary !== prose ? [prose, summary].filter(Boolean).join("\n\n") : prose;
+  const prose = assistantText ?? "";
+  const assistant = summary && summary !== prose.trim() ? [prose, summary].filter((text) => text.trim()).join("\n\n") : prose;
   return {
     ...telemetry,
     agent_id: base.agent_id,
     parent_scan_id: base.parent_scan_id,
     turn,
     ts: now,
-    ...(assistant ? { assistant: formatTruncated(assistant) } : {}),
+    ...(assistant.trim() ? { assistant: formatTruncated(assistant) } : {}),
     ...(tools.length > 0 ? { tools } : {}),
   };
 }
@@ -2915,6 +2950,29 @@ export const toolExecutorCheckpointSchema = z.object({
 
 export type ToolExecutorCheckpoint = z.infer<typeof toolExecutorCheckpointSchema>;
 
+// ── Impact-assessment enum validation (0#1103) ─────────────────────────
+// Module-level constants (never recreated per call) with safe `hasOwn`
+// property lookup to block prototype-pollution via `__proto__` keys.
+
+const IMPACT_REACHABILITY_TIERS: Record<string, true> = {
+  "remote-unauth": true, "remote-auth": true, "proximity-rf": true,
+  "local-unpriv": true, "local-priv": true, "needs-hardware": true,
+  "needs-host-migration": true,
+};
+
+const IMPACT_WEAPONIZABILITY: Record<string, true> = {
+  "dos-crash": true, "info-leak": true, "integrity-tampering": true,
+  "lpe-to-root": true, "rce": true,
+};
+
+const IMPACT_BUSINESS_IMPACTS: Record<string, true> = {
+  headline: true, notable: true, modest: true, noise: true,
+};
+
+/** Max chars for blast_radius and rationale in an inline impact assessment. */
+const IMPACT_BLAST_RADIUS_MAX = 1000;
+const IMPACT_RATIONALE_MAX = 1000;
+
 export class ToolExecutor {
   private db: osecDB | null;
   private ctx: ToolContext;
@@ -2956,7 +3014,7 @@ export class ToolExecutor {
   private _rejectedDecoyFlags: Set<string>;
 
   /**
-   * Lazily loaded cloud audit-skill bundle from 0SEC_AUDIT_SKILLS_MANIFEST.
+   * Lazily loaded cloud audit-skill bundle from ZERO_AUDIT_SKILLS_MANIFEST.
    * null = env not set (no cloud skills); Map = already loaded and cached.
    * Populated on first listSkills/loadSkill call that finds the env var.
    */
@@ -2988,7 +3046,7 @@ export class ToolExecutor {
   /**
    * Every agent display name this executor has handed out, seeded with the
    * reserved primary name "Main". Used to uniquify each spawned agent's
-   * AdjectiveNoun name so no two agents in the fleet collide. Session-scoped.
+   * task-derived name so no two agents in the fleet collide. Session-scoped.
    */
   private _assignedAgentNames: Set<string>;
 
@@ -3041,7 +3099,7 @@ export class ToolExecutor {
   private _childRuntimeFactory: NativeRuntime["forkForSubagent"];
 
   /**
-   * Tool-health recorder (0sec#tool-reliability). Uses the shared tracker on
+   * Tool-health recorder (0#tool-reliability). Uses the shared tracker on
    * the ToolContext when the caller wired one (so the run summary sees the same
    * events), else a private per-executor tracker so recording is always safe.
    * Either way, new distinct events fan out on the event bus as `tool_health`.
@@ -3252,7 +3310,7 @@ export class ToolExecutor {
   }
 
   /**
-   * Outbound auth headers for the CURRENTLY ACTIVE identity (0sec#564).
+   * Outbound auth headers for the CURRENTLY ACTIVE identity (0#564).
    *
    * When a stateful `SessionEngine` is wired into the context, this returns the
    * active identity's static credential merged with any cookies its jar has
@@ -3272,7 +3330,7 @@ export class ToolExecutor {
 
   /**
    * Capture `Set-Cookie` from a response into the active identity's jar and
-   * run the 401/403 re-auth handler (0sec#564). No-op without a session.
+   * run the 401/403 re-auth handler (0#564). No-op without a session.
    */
   private captureActiveCookies(res: Response, url = this.ctx.target): void {
     if (!this.usesTargetIdentity(url)) return;
@@ -3362,7 +3420,9 @@ export class ToolExecutor {
     const assertAuthority = ownAuthority && inheritedAuthority && ownAuthority !== inheritedAuthority
       ? () => { inheritedAuthority(); ownAuthority(); }
       : ownAuthority ?? inheritedAuthority;
-    return this._executionContext.run({ correlationId: opts?.correlationId, signal, assertAuthority }, async () => {
+    const scopeEnforcement = getScopeEnforcementState();
+    this.ctx.scopeEnforcement = scopeEnforcement;
+    return withScopeEnforcement(scopeEnforcement, () => this._executionContext.run({ correlationId: opts?.correlationId, signal, assertAuthority }, async () => {
     try {
       signal?.throwIfAborted();
       assertAuthority?.();
@@ -3403,7 +3463,7 @@ export class ToolExecutor {
       const msg = err instanceof Error ? err.message : String(err);
       return { success: false, output: null, error: msg };
     }
-    });
+    }));
   }
 
   /**
@@ -3686,7 +3746,7 @@ export class ToolExecutor {
     const signal = execution?.signal && init.signal
       ? AbortSignal.any([execution.signal, init.signal])
       : execution?.signal ?? init.signal;
-    return fetchScoped(url, { ...init, signal }, {
+    return withScopeEnforcement(this.ctx.scopeEnforcement ?? getScopeEnforcementState(), () => fetchScoped(url, { ...init, signal }, {
       baseUrl: this.ctx.target,
       scope: this.ctx.publicNetwork ? this.ctx.publicNetwork.scope : this.ctx.scope,
       allowPublicNetwork: this.ctx.publicNetwork !== undefined,
@@ -3706,13 +3766,13 @@ export class ToolExecutor {
             }
           }
         }
-        const path = this.ctx.enforcement?.pathPolicy.match(candidate);
+        const path = this.ctx.enforcement?.pathPolicy.enforce(candidate);
         if (path && !path.allowed) {
           this.ctx.enforcement?.noteOutOfScopeBlocked();
           throw new Error(`Scope violation blocked: ${path.reason}`);
         }
       },
-    });
+    }));
   }
 
   private async httpRequest(args: Record<string, unknown>): Promise<ToolResult> {
@@ -3764,11 +3824,11 @@ export class ToolExecutor {
         // above (same-origin + scope + private-IP/localhost block + http_audit
         // path allowlist), re-validated for the baseline AND every evasion
         // variant before egress. Fetching the in-scope authorized target is
-        // intended 0sec behaviour.
+        // intended 0 behaviour.
         // foxguard:ignore
         const res = await this.fetchTarget(safeUrl, fetchInit);
         if (this.ctx.rateLimiter) this.ctx.rateLimiter.noteResponse(safeUrl, res);
-        // Persist session state (0sec#564): capture Set-Cookie for the active
+        // Persist session state (0#564): capture Set-Cookie for the active
         // identity. No-op when no SessionEngine is wired. Runs for the baseline
         // AND every evasion variant so session cookies stay current.
         this.captureActiveCookies(res, safeUrl);
@@ -3783,7 +3843,7 @@ export class ToolExecutor {
     const first = await sendHttp(baseParts);
     let chosen = first;
 
-    // ── WAF detection + adaptive evasion (0sec#568) ──
+    // ── WAF detection + adaptive evasion (0#568) ──
     // Passive fingerprinting is cheap and ALWAYS runs, so a WAF block is
     // reported as such instead of being mistaken for "not vulnerable" (the
     // silent-false-negative gap). When a block is detected AND a WafDetector
@@ -3792,7 +3852,7 @@ export class ToolExecutor {
     // path, recording every attempt as evidence.
     //
     // The ladder is opt-out: an engagement hardening profile (or the standalone
-    // `--no-waf-evasion` / `0SEC_WAF_EVASION=0`) turns it off, because
+    // `--no-waf-evasion` / `ZERO_WAF_EVASION=0`) turns it off, because
     // auto-escalating a WAF block into encoded/mutated retries is what turns a
     // routine block into a SOC incident. Detection still runs — we report the
     // block, we just don't try to beat it. See `scope/engagement-profile.ts`.
@@ -3947,43 +4007,6 @@ export class ToolExecutor {
     }
   }
 
-  /**
-   * Bridge recon output into the orchestrator's `discovered_assets` inventory
-   * (0sec#768 / #761). Maps each `ReconAsset` to the `POST /assets` wire
-   * shape and pushes it through the SAME authenticated cloud-sink client the
-   * findings use (same bearer token + org resolution). No-ops when the sink is
-   * unconfigured (local-only runs). Fire-and-forget and NON-FATAL: a push
-   * failure is swallowed inside `postAssets`/`postAsset` and never aborts the
-   * tool call or the scan.
-   *
-   * `ecosystem` is the recon target/host the assets belong to. `opts.fromJs`
-   * tags js-recon endpoints (`discovery_source: js-recon`); `opts.secretHits`
-   * stamps a per-asset `secret_hits` count so the dashboard's secret-hit badge
-   * lights up.
-   */
-  private pushReconAssets(
-    assets: readonly ReconAsset[],
-    ecosystem: string,
-    opts: { fromJs?: boolean; secretHits?: number } = {},
-  ): void {
-    const cfg = getCloudSinkConfig();
-    if (!cfg || assets.length === 0) return;
-    const payloads = assets.map((a) => reconAssetToCloudSinkAsset(a, ecosystem, opts));
-    // Detached: never await on the tool's critical path; postAssets swallows
-    // every per-asset error internally.
-    void postAssets(payloads, cfg);
-  }
-
-  /**
-   * Push non-ReconAsset discovered assets (e.g. cloud-surface bucket probes)
-   * already shaped as `CloudSinkAsset`. Same best-effort, non-fatal posture as
-   * {@link pushReconAssets}.
-   */
-  private pushAssets(assets: readonly CloudSinkAsset[]): void {
-    const cfg = getCloudSinkConfig();
-    if (!cfg || assets.length === 0) return;
-    void postAssets(assets, cfg);
-  }
 
   // ── Crawl helpers ──
 
@@ -4079,7 +4102,7 @@ export class ToolExecutor {
 
     const crawlScope = this.ctx.publicNetwork ? this.ctx.publicNetwork.scope : this.ctx.scope;
     if (crawlScope) {
-      const verdict = crawlScope.match(resolved.toString());
+      const verdict = crawlScope.enforce(resolved.toString())
       if (!verdict.allowed) {
         this.ctx.enforcement?.noteOutOfScopeBlocked();
         return { success: false, output: null, error: `crawl refused: ${verdict.reason}` };
@@ -4087,7 +4110,7 @@ export class ToolExecutor {
     }
     // http_audit path allowlist on the crawl seed URL (FROZEN CONTRACT).
     if (this.ctx.enforcement) {
-      const pathVerdict = this.ctx.enforcement.pathPolicy.match(resolved.toString());
+      const pathVerdict = this.ctx.enforcement.pathPolicy.enforce(resolved.toString());
       if (!pathVerdict.allowed) {
         this.ctx.enforcement.noteOutOfScopeBlocked();
         return { success: false, output: null, error: `crawl refused: ${pathVerdict.reason}` };
@@ -4121,12 +4144,12 @@ export class ToolExecutor {
       } catch { continue; }
       if (parsed.hostname !== originHost) continue;
 
-      // Scope enforcement (0sec#215). Same-origin already restricts the
+      // Scope enforcement (0#215). Same-origin already restricts the
       // crawl to one host, but if that host is out of scope we still must
       // refuse — operators sometimes scan dev.example.com against a scope
       // that only allows prod.example.com.
       if (crawlScope) {
-        const verdict = crawlScope.match(normalizedUrl);
+        const verdict = crawlScope.enforce(normalizedUrl)
         if (!verdict.allowed) {
           this.ctx.enforcement?.noteOutOfScopeBlocked();
           continue;
@@ -4136,7 +4159,7 @@ export class ToolExecutor {
       // page about to be fetched counts as one in-scope or out-of-scope
       // request for the enforcement_summary.
       if (this.ctx.enforcement) {
-        const pathVerdict = this.ctx.enforcement.pathPolicy.match(normalizedUrl);
+        const pathVerdict = this.ctx.enforcement.pathPolicy.enforce(normalizedUrl);
         if (!pathVerdict.allowed) {
           this.ctx.enforcement.noteOutOfScopeBlocked();
           continue;
@@ -4149,13 +4172,13 @@ export class ToolExecutor {
 
       try {
         const crawlAuthHeaders = this.activeAuthHeaders(normalizedUrl);
-        // Attribution-header injection (0sec#216). Crawler hits every
+        // Attribution-header injection (0#216). Crawler hits every
         // discovered link, so this is the highest-volume fetch site —
         // attribution here is what most defenders will see in their logs.
-        // The default `0sec-crawler/1.0` UA is replaced with the
+        // The default `0-crawler/1.0` UA is replaced with the
         // engagement-tagged UA inside applyAttribution when configured.
         //
-        // Manual redirect handling (0sec#238). `redirect: "manual"` and
+        // Manual redirect handling (0#238). `redirect: "manual"` and
         // a per-hop scope+origin check below stop attribution headers
         // from leaking to a 3xx target on a different host. Each Location
         // is validated BEFORE the next fetch, so the next request only
@@ -4167,7 +4190,7 @@ export class ToolExecutor {
               method: "GET",
               signal: controller.signal,
               redirect: "manual",
-              headers: { "User-Agent": "0sec-crawler/1.0", ...this.activeAuthHeaders(urlForAttribution) },
+              headers: { "User-Agent": "0-crawler/1.0", ...this.activeAuthHeaders(urlForAttribution) },
             },
             this.usesTargetIdentity(urlForAttribution) ? this.ctx.attribution : undefined,
             crawlScope,
@@ -4195,12 +4218,12 @@ export class ToolExecutor {
           // js/no-ssrf FP: `currentUrl` is the validated crawl seed (or a
           // same-origin, in-scope redirect target re-validated each hop below);
           // cross-origin / out-of-scope / private-IP hops are refused. Crawling
-          // the in-scope target is intended 0sec behaviour.
+          // the in-scope target is intended 0 behaviour.
           // foxguard:ignore
           res = await this.fetchTarget(currentUrl, buildCrawlInit(currentUrl));
           if (this.ctx.rateLimiter) this.ctx.rateLimiter.noteResponse(currentUrl, res);
           // Capture cookies on every hop so authenticated crawls persist
-          // session state across pages (0sec#564).
+          // session state across pages (0#564).
           this.captureActiveCookies(res, currentUrl);
 
           if (res.status < 300 || res.status >= 400) break;
@@ -4223,12 +4246,12 @@ export class ToolExecutor {
             redirectBailReason = "non-http redirect target";
             break;
           }
-          if (!this.ctx.publicNetwork && next.hostname !== originHost) {
+          if (isScopeEnforcementEnabled() && !this.ctx.publicNetwork && next.hostname !== originHost) {
             redirectBailReason = "cross-origin redirect target";
             break;
           }
           if (crawlScope) {
-            const verdict = crawlScope.match(next.toString());
+            const verdict = crawlScope.enforce(next.toString())
             if (!verdict.allowed) {
               redirectBailReason = `out-of-scope redirect target: ${verdict.reason}`;
               break;
@@ -4378,7 +4401,7 @@ export class ToolExecutor {
     const timer = setTimeout(() => controller.abort(), 10_000);
 
     try {
-      // Attribution-header injection (0sec#216). submit_form is one
+      // Attribution-header injection (0#216). submit_form is one
       // of the noisier fetch sites in pen-test contexts (login attempts,
       // CSRF probes), so attribution here is critical for deconfliction.
       const submitInit = applyAttribution(fetchUrl, fetchOpts, this.usesTargetIdentity(fetchUrl) ? this.ctx.attribution : undefined, this.ctx.scope)!;
@@ -4386,12 +4409,12 @@ export class ToolExecutor {
       if (this.ctx.rateLimiter) await this.ctx.rateLimiter.acquire(fetchUrl);
       // js/no-ssrf FP: `fetchUrl` derives from validateTargetUrl() above
       // (same-origin + scope + private-IP/localhost block). Submitting forms to
-      // the in-scope target is intended 0sec behaviour.
+      // the in-scope target is intended 0 behaviour.
       // foxguard:ignore
       const res = await this.fetchTarget(fetchUrl, submitInit);
       if (this.ctx.rateLimiter) this.ctx.rateLimiter.noteResponse(fetchUrl, res);
       // Capture the session cookie a login form sets, so the very next
-      // request is authenticated without manual `curl -c/-b` jars (0sec#564).
+      // request is authenticated without manual `curl -c/-b` jars (0#564).
       this.captureActiveCookies(res, fetchUrl);
       clearTimeout(timer);
       const text = await res.text();
@@ -4423,7 +4446,7 @@ export class ToolExecutor {
     }
   }
 
-  // ── Access-control probe (0sec#564) ──
+  // ── Access-control probe (0#564) ──
 
   /**
    * Resolve the principals this probe can act as. Prefers the live
@@ -5048,9 +5071,6 @@ export class ToolExecutor {
       by_kind: result.summary.byKind,
     });
 
-    // #768 — bridge the recon inventory into discovered_assets. Best-effort,
-    // non-fatal: a sink failure never affects the tool result.
-    this.pushReconAssets(result.assets, reconEcosystem(result.domain));
 
     const endpoints = result.assets.filter((a) => a.kind === "endpoint").length;
     const specs = result.assets.filter((a) => a.kind === "openapi_spec").length;
@@ -5129,9 +5149,6 @@ export class ToolExecutor {
 
     // No endpoints to probe — return the surface map alone.
     if (endpoints.length === 0) {
-      // #768 — still bridge whatever surface recon mapped (subdomains, spec,
-      // mcp) into discovered_assets even when there's nothing to auth-probe.
-      this.pushReconAssets(recon.assets, reconEcosystem(recon.domain));
       return {
         success: true,
         output: {
@@ -5184,8 +5201,6 @@ export class ToolExecutor {
       unauth_reachable: report.unauthReachableCount,
     });
 
-    // #768 — bridge the swept recon inventory into discovered_assets.
-    this.pushReconAssets(recon.assets, reconEcosystem(recon.domain));
 
     const leaks = report.results.filter((r) => r.unauthReachable);
     const suggested_findings = leaks.map((l) => ({
@@ -5303,14 +5318,6 @@ export class ToolExecutor {
       secrets: recon.secrets.length,
     });
 
-    // #768 — bridge js-recon endpoints into discovered_assets, tagged
-    // discovery_source=js-recon and carrying the high-confidence secret-hit
-    // count so the dashboard's secret-hit badge lights up. Best-effort.
-    const jsSecretHits = recon.secrets.filter((s) => s.confidence === "high").length;
-    this.pushReconAssets(recon.endpoints, reconEcosystem(this.ctx.target), {
-      fromJs: true,
-      secretHits: jsSecretHits,
-    });
 
     // Auto-probe the discovered endpoints for unauthenticated reachability —
     // the issue's acceptance criterion ("then auto-probes the discovered
@@ -5422,17 +5429,6 @@ export class ToolExecutor {
     };
   }
 
-  /**
-   * #978 (ADR-060) — fan out a CHILD scan. Thin delegate to executeStartScan
-   * (agent/tools/orchestrator.ts), which POSTs /scans on the cloud sink tagged
-   * with this scan as parent. Gated into the tool set by featureFlags.agentFanout
-   * (getToolsForRole), so it only reaches the model when fan-out is enabled.
-   */
-  private async startScan(
-    args: Record<string, unknown>,
-  ): Promise<ToolResult> {
-    return executeStartScan(args);
-  }
 
   /**
    * burp-network-20260913 — Burp-style intercepting HTTP(S) proxy. Thin
@@ -5451,7 +5447,7 @@ export class ToolExecutor {
    * #925 — test S3 buckets for public access + orphaned-bucket takeover.
    * Anonymous, read-only: GET / and GET /?acl per bucket. NoSuchBucket (404)
    * is classified as takeover-able (the BCG orphaned-integration finding) but
-   * the bucket is never re-created — 0sec only flags it. Returns per-bucket
+   * the bucket is never re-created — 0 only flags it. Returns per-bucket
    * verdicts + pre-drafted findings for public buckets and takeover-able refs.
    *
    * SCOPE-GATED, deny-by-default (#924 parity): probing a target org's bucket
@@ -5463,7 +5459,7 @@ export class ToolExecutor {
    */
   private async cloudS3Probe(args: Record<string, unknown>): Promise<ToolResult> {
     if (!featureFlags.cloudSurface) {
-      return { success: false, output: null, error: "cloud_s3_probe is disabled. Set 0SEC_FEATURE_CLOUD_SURFACE=1 to enable." };
+      return { success: false, output: null, error: "cloud_s3_probe is disabled. Set ZERO_FEATURE_CLOUD_SURFACE=1 to enable." };
     }
     const rawBuckets = args.buckets;
     if (!Array.isArray(rawBuckets) || rawBuckets.length === 0) {
@@ -5503,26 +5499,6 @@ export class ToolExecutor {
       skipped_count: skipped.length,
     });
 
-    // #768 — bridge probed buckets into discovered_assets (discovery_source=
-    // cloud). These are NOT ReconAssets, so they're mapped directly to the
-    // CloudSinkAsset wire shape with a cloud-specific metadata bag
-    // (service, url, verdict, takeover_status). Best-effort, non-fatal.
-    if (results.length > 0) {
-      const bucketAssets: CloudSinkAsset[] = results.map((r) => ({
-        discovery_source: "cloud",
-        ecosystem: this.ctx.target ? reconEcosystem(this.ctx.target) : "aws-s3",
-        name: r.bucket,
-        metadata: {
-          kind: "s3_bucket",
-          service: "s3",
-          url: r.endpoint,
-          verdict: r.verdict,
-          takeover_status: r.takeoverable ? "takeoverable" : "owned",
-          ...(r.aclReadable ? { acl_readable: true } : {}),
-        },
-      }));
-      this.pushAssets(bucketAssets);
-    }
 
     const suggested_findings = [
       ...publicBuckets.map((r) => ({
@@ -5588,9 +5564,9 @@ export class ToolExecutor {
    */
   private async cloudValidateCredentials(args: Record<string, unknown>): Promise<ToolResult> {
     if (!featureFlags.cloudSurface) {
-      return { success: false, output: null, error: "cloud_validate_credentials is disabled. Set 0SEC_FEATURE_CLOUD_SURFACE=1 to enable." };
+      return { success: false, output: null, error: "cloud_validate_credentials is disabled. Set ZERO_FEATURE_CLOUD_SURFACE=1 to enable." };
     }
-    if (!this.ctx.scope) {
+    if (isScopeEnforcementEnabled() && !this.ctx.scope) {
       return {
         success: false,
         output: null,
@@ -5660,7 +5636,7 @@ export class ToolExecutor {
       return {
         success: false,
         output: null,
-        error: "Console repository acquisition refused: provide the exact official HTTPS repository URL as the current target before cloning or reviewing source.",
+        error: "Console repository acquisition refused: provide the exact HTTPS repository URL as the current target before cloning or reviewing source.",
       };
     }
 
@@ -5682,17 +5658,17 @@ export class ToolExecutor {
       }
     }
 
-    // Programmatic scope pre-flight (0sec#215). The bash subprocess can
+    // Programmatic scope pre-flight (0#215). The bash subprocess can
     // reach out to anywhere — we don't have an egress proxy yet (issue
     // is acknowledged in the DoD), so the best we can do is grep the
     // command for obvious URLs and refuse if any are out of scope. This
     // catches the common case (`curl https://evil.com/x`); a cleverer
     // agent that hides the URL behind base64 / DNS / a temp file is NOT
     // caught here, and that gap is documented as a follow-up.
-    if (networkScope) {
+    if (isScopeEnforcementEnabled() && networkScope) {
       const urls = extractUrls(command);
       for (const url of urls) {
-        const verdict = networkScope.match(url);
+        const verdict = networkScope.enforce(url)
         if (!verdict.allowed) {
           this.ctx.enforcement?.noteOutOfScopeBlocked();
           return {
@@ -5703,7 +5679,7 @@ export class ToolExecutor {
         }
         // http_audit path allowlist on bash-extracted URLs (FROZEN CONTRACT).
         if (this.ctx.enforcement) {
-          const pathVerdict = this.ctx.enforcement.pathPolicy.match(url);
+          const pathVerdict = this.ctx.enforcement.pathPolicy.enforce(url);
           if (!pathVerdict.allowed) {
             this.ctx.enforcement.noteOutOfScopeBlocked();
             return {
@@ -5715,7 +5691,7 @@ export class ToolExecutor {
         }
       }
 
-      // Generic-scanner-traffic suppression (0sec#217). When scope is
+      // Generic-scanner-traffic suppression (0#217). When scope is
       // loaded the engagement is presumed to be a coordinated-disclosure
       // run, and most venue policies explicitly forbid the named
       // generic scanners (sqlmap/nikto/gobuster/…) because they
@@ -5735,18 +5711,8 @@ export class ToolExecutor {
         }
       }
     } else {
-      // ── No engagement scope: make the inert guards VISIBLE (0sec#133) ──
-      // Everything above is nested in `if (this.ctx.scope)`, and `ctx.scope`
-      // is undefined on every local run without `--scope` and on every cloud
-      // scan mode except http_audit (the dispatcher emits no `--scope`). The
-      // guards silently not running is the actual defect: a reviewer reading
-      // the block above concludes bash egress is checked when it is not.
-      //
-      // Fail-loud by default (see `agenticScan`'s boot warning for the
-      // reasoning), fail-closed under 0SEC_REQUIRE_SCOPE. Here we record
-      // the destinations of any command that actually reaches the network
-      // with the guards off, so the scan event log answers "what did unscoped
-      // bash talk to?" instead of nothing at all.
+      // Record disabled or unconfigured authorization honestly; resource and
+      // credential controls below are independent of scope activation.
       const guards = describeScopeGuards(false);
       if (guards.required) {
         return { success: false, output: null, error: scopeRequiredRefusal("bash") };
@@ -5773,7 +5739,7 @@ export class ToolExecutor {
     // refused fail-closed — its destination can't be audited, which defeats
     // the bounded-egress guarantee of http_audit. Non-egress bash is
     // untouched. Only active in http_audit mode (enforcement set).
-    if (this.ctx.enforcement) {
+    if (isScopeEnforcementEnabled() && this.ctx.enforcement) {
       const egressSegments = detectHttpEgressSegments(command);
       for (const segment of egressSegments) {
         const urlsInSegment = extractUrls(segment);
@@ -5793,7 +5759,7 @@ export class ToolExecutor {
       }
     }
 
-    // ── Close the bash rate-limiter bypass (0sec#568) ──
+    // ── Close the bash rate-limiter bypass (0#568) ──
     // The bash subprocess shells out to curl/wget/python-http, which bypass
     // node's `fetch` and therefore the per-host RateLimiter (#214) that the
     // http_request / crawl / submit_form tools pace against. Without an egress
@@ -5813,12 +5779,12 @@ export class ToolExecutor {
           if (pacedUrls.has(egressUrl)) continue;
           pacedUrls.add(egressUrl);
           if (this.ctx.rateLimiter) await this.ctx.rateLimiter.acquire(egressUrl);
-          this.ctx.enforcement?.noteInScope();
+          if (isScopeEnforcementEnabled()) this.ctx.enforcement?.noteInScope();
         }
       }
     }
 
-    // Deterministic auth-header injection (0sec#282). When `authConfig`
+    // Deterministic auth-header injection (0#282). When `authConfig`
     // is set, rewrite curl/wget invocations whose URL is in scope and
     // which don't already carry explicit auth, so the env-var
     // indirection (`$AUTH_CURL_FLAG` / `$AUTH_HEADER:$AUTH_VALUE`) lands
@@ -5868,7 +5834,7 @@ export class ToolExecutor {
       return {
         success: false,
         output: null,
-        error: `bash tool timed out after ${Math.round(timeoutMs / 1000)}s (0SEC_BASH_TIMEOUT_MS=${ceilingMs})`,
+        error: `bash tool timed out after ${Math.round(timeoutMs / 1000)}s (ZERO_BASH_TIMEOUT_MS=${ceilingMs})`,
         // Display-only card sidecar (never seen by the model): the partial
         // output plus the wall clock, so a timed-out run still renders a card.
         meta: {
@@ -6021,7 +5987,7 @@ export class ToolExecutor {
    * `_browserHost` and passing the scope-pinned interceptor + attribution
    * UA/headers. The method name is unchanged so dispatch (`browser ->
    * browserAction`) is untouched. Scope gating (pre-`goto` + post-redirect
-   * re-check, 0sec#218) lives inside `executeBrowser`, and a missing backend
+   * re-check, 0#218) lives inside `executeBrowser`, and a missing backend
    * degrades to a clear install hint there rather than throwing here.
    */
   private async browserAction(args: Record<string, unknown>): Promise<ToolResult> {
@@ -6032,7 +5998,7 @@ export class ToolExecutor {
     const attribution = this.ctx.publicNetwork ? undefined : this.ctx.attribution;
     const userAgent = attribution?.userAgentToken
       ? formatUserAgent(attribution.userAgentToken)
-      : "0sec-browser/1.0";
+      : "0-browser/1.0";
     const extraHeaders =
       attribution && Object.keys(attribution.headers).length > 0 ? attribution.headers : undefined;
     if (this._browserJev === undefined) {
@@ -6041,7 +6007,7 @@ export class ToolExecutor {
       try {
         const config = jevConfigFromEnvironment("browser", process.env);
         this._browserJev = config ? createJevEvaluator(config) : null;
-        this._browserReadOnlyUrls = new Set((process.env["0SEC_JEV_BROWSER_READ_ONLY_URLS"] ?? "")
+        this._browserReadOnlyUrls = new Set((process.env["ZERO_JEV_BROWSER_READ_ONLY_URLS"] ?? "")
           .split(",").map(url => url.trim()).filter(Boolean).map(url => new URL(url).href));
       } catch {
         this._browserJev = null;
@@ -6082,6 +6048,7 @@ export class ToolExecutor {
   private buildSubagentLifecycleBase(
     task: string,
     maxTurns: number,
+    requestedName?: string,
   ): SubagentLifecycleBase {
     const scopeRulesArr: string[] | undefined = this.ctx.scope
       ? [
@@ -6090,10 +6057,8 @@ export class ToolExecutor {
         ]
       : undefined;
     const agent_id = `${subagentSiblingPrefix(this.ctx.scanId)}${randomUUID()}`;
-    // A stable AdjectiveNoun name from the id, uniquified against every name this
-    // executor has already handed out (which starts with the reserved "Main"), so
-    // no two agents in the fleet ever share a display name.
-    const name = assignAgentName(agent_id, this._assignedAgentNames);
+    // Task labels are readable; uniqueness is independent of opaque agent ids.
+    const name = assignAgentName(requestedName ?? task, this._assignedAgentNames);
     this._assignedAgentNames.add(name);
     return {
       agent_id,
@@ -6229,7 +6194,7 @@ export class ToolExecutor {
       eventBus.emit("subagent_lifecycle", { ...base,
       status: "running" as const, });
 
-      // 0sec#218 review: propagate scope + auth to the spawned loop so
+      // 0#218 review: propagate scope + auth to the spawned loop so
       // the sub-agent's bash/http_request gates use the same policy as
       // the parent. Without this, a parent scan locked to in-scope hosts
       // could spawn a child that hits arbitrary URLs via bash/curl.
@@ -6262,10 +6227,12 @@ export class ToolExecutor {
           scope: this.ctx.scope,
           authConfig: this.usesTargetIdentity(this.ctx.target) ? this.ctx.authConfig : undefined,
           costLedger: this.ctx.costLedger,
+          requirePricedUsage: this.ctx.requirePricedUsage,
           costCeilingUsd: this.ctx.costCeilingUsd,
           costModel: rt.resolvedModel?.() ?? this.ctx.costModel,
           scopePath: this.ctx.scopePath,
           autonomyMode: this.ctx.autonomyMode,
+          consoleSession: this.ctx.consoleSession,
           publicNetwork: this.ctx.publicNetwork,
           allowScanners: this.ctx.allowScanners,
           attribution: this.ctx.attribution,
@@ -6413,10 +6380,12 @@ export class ToolExecutor {
         scope: this.ctx.scope,
         authConfig: this.usesTargetIdentity(this.ctx.target) ? this.ctx.authConfig : undefined,
         costLedger: this.ctx.costLedger,
+        requirePricedUsage: this.ctx.requirePricedUsage,
         costCeilingUsd: this.ctx.costCeilingUsd,
         costModel: rt.resolvedModel?.() ?? this.ctx.costModel,
         scopePath: this.ctx.scopePath,
         autonomyMode: this.ctx.autonomyMode,
+        consoleSession: this.ctx.consoleSession,
         publicNetwork: this.ctx.publicNetwork,
         allowScanners: this.ctx.allowScanners,
         attribution: this.ctx.attribution,
@@ -6485,13 +6454,8 @@ export class ToolExecutor {
     const { task, name, maxTurns, role, model } = parsed.args;
     const selection: SubagentModelSelection = { role, model };
 
-    const base = this.buildSubagentLifecycleBase(task, maxTurns);
-    let displayName = base.name;
-    if (name) {
-      displayName = uniquifyAgentName(name, this._assignedAgentNames);
-      this._assignedAgentNames.add(displayName);
-    }
-    const persistentBase: SubagentLifecycleBase = { ...base, name: displayName };
+    const base = this.buildSubagentLifecycleBase(task, maxTurns, name);
+    const displayName = base.name;
 
     const parentMessaging = messagingRuntimeOf(this.ctx);
     const childMessaging: MessagingRuntime | undefined = parentMessaging
@@ -6528,11 +6492,11 @@ export class ToolExecutor {
       drain: () =>
         childMessaging ? drainInbox(childMessaging.projectPath, base.agent_id, childMessaging.homeDir) : [],
       emit: (status) => {
-        eventBus.emit("subagent_lifecycle", { ...persistentBase, ...lastRun, status });
+        eventBus.emit("subagent_lifecycle", { ...base, ...lastRun, status });
       },
       runLoop: async ({ task: t, messages }) => {
         try {
-          lastRun = await this.runPersistentLoopOnce(persistentBase, maxTurns, childMessaging, t, messages, lastRun.turns ?? 0, selection, lifetime.signal);
+          lastRun = await this.runPersistentLoopOnce(base, maxTurns, childMessaging, t, messages, lastRun.turns ?? 0, selection, lifetime.signal);
         } catch (error) {
           lastRun = { ...lastRun, done: false, completion_reason: "error", summary: error instanceof Error ? error.message : String(error) };
           throw error;
@@ -6884,7 +6848,7 @@ export class ToolExecutor {
       taskLabel: `${specs.length} ${specs.length === 1 ? "agent" : "agents"}`,
       ...(batchContext !== undefined ? { taskContext: batchContext } : {}),
       subReports: specs.map((s) => {
-        const brief = subagentTaskFirstLine(s.task);
+        const brief = agentTaskLabel(s.task);
         return {
           name: s.base.name,
           ...(s.selection.role ? { agent: s.selection.role } : {}),
@@ -6909,7 +6873,7 @@ export class ToolExecutor {
   }
 
   private async saveFinding(args: Record<string, unknown>): Promise<ToolResult> {
-    // 0sec#283 — refuse empty-PoC findings upstream. Disclose already
+    // 0#283 — refuse empty-PoC findings upstream. Disclose already
     // refuses empty PoCs at render time (`disclose/template.ts` EmptyPocError),
     // but accepting them here silently inflates mid-scan telemetry and burns
     // turns on findings that will be `_dropped/`'d at disclose time. Pull the
@@ -6939,7 +6903,7 @@ export class ToolExecutor {
       };
     }
 
-    // 0sec#409 — structural validation at the report-creation boundary.
+    // 0#409 — structural validation at the report-creation boundary.
     // CVE/CWE/CVSS shape + evidence-path traversal/symlink-escape guards.
     // Failures return as a structured `validation_failed` tool result so the
     // agent can self-correct on the same turn (same UX as flag-validator at
@@ -7097,6 +7061,48 @@ export class ToolExecutor {
           },
         ]);
       }
+      // GitHub can only apply a replacement to right-side added lines. Check
+      // the exact bound base/head diff here, before saving a suggestion, so a
+      // mistaken citation returns a correction to the agent instead of silently
+      // disappearing from the PR. Never shift an off-by-one line automatically:
+      // the neighbouring line may contain a different security decision.
+      if (typeof args.suggested_replacement === "string" &&
+          args.suggested_replacement.length > 0 && this.ctx.reviewDiffBase) {
+        const diff = spawnSync("git", [
+          "diff", "--no-ext-diff", "--no-textconv", "--unified=0",
+          `${this.ctx.reviewDiffBase}...HEAD`, "--", sourcePath,
+        ], { cwd: this.ctx.scopePath, encoding: "utf8", timeout: 30_000, maxBuffer: 256 * 1024 });
+        const changed = new Set<number>();
+        if (diff.status === 0 && !diff.error) {
+          for (const line of diff.stdout.split("\n")) {
+            const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
+            if (!hunk) continue;
+            const start = Number(hunk[1]), count = Number(hunk[2] ?? 1);
+            if (count > 20_000) break;
+            for (let offset = 0; offset < count; offset++) changed.add(start + offset);
+          }
+        }
+        let allAdded = true;
+        for (let line = startLine as number; line <= lastLine; line++) {
+          if (!changed.has(line)) { allAdded = false; break; }
+        }
+        if (diff.status !== 0 || diff.error || !allAdded) {
+          return buildValidationFailureResult([{
+            field: "source_start_line",
+            reason: `suggested_replacement must cite added lines in the bound diff; ${sourcePath} changed at ${[...changed].slice(0, 20).join(", ") || "no verifiable added lines"}. Read the numbered source and cite the exact changed line, or omit the replacement.`,
+          }]);
+        }
+        const original = args.source_original;
+        if (typeof original !== "string" || !original ||
+            statSync(sourceAbsolute).size > 2 * 1024 * 1024 ||
+            readFileSync(sourceAbsolute, "utf8").replace(/\r\n/g, "\n")
+              .split("\n").slice((startLine as number) - 1, lastLine).join("\n") !== original) {
+          return buildValidationFailureResult([{
+            field: "source_original",
+            reason: "suggested_replacement requires the exact current text of the cited changed lines, including indentation and without line-number prefixes. Re-read the source and correct the citation or omit the replacement.",
+          }]);
+        }
+      }
       // Oversized / fenced / unified-diff suggestions are dropped (never
       // truncated), keeping the location — same gate as the CLI parser and
       // the cloud sink (findings-parser.ts isSuggestionAcceptable).
@@ -7131,7 +7137,7 @@ export class ToolExecutor {
       ]);
     }
 
-    // 0sec#170 — optional structured PoC step graph. The agent passes
+    // 0#170 — optional structured PoC step graph. The agent passes
     // `poc_steps` as a JSON-encoded string (LLM tool call wire format). We
     // tolerate already-parsed arrays too. Anything malformed is silently
     // dropped so a bad payload never blocks the finding from being saved.
@@ -7139,7 +7145,7 @@ export class ToolExecutor {
     if (pocSteps && pocSteps.length > 0) {
       finding.pocSteps = pocSteps;
     } else {
-      // 0sec#179 — fall back to a prose-derived heuristic graph when the
+      // 0#179 — fall back to a prose-derived heuristic graph when the
       // agent didn't supply one explicitly. The heuristic is conservative:
       // it returns undefined whenever it can't extract ≥ 2 steps cleanly,
       // and we leave `pocSteps` undefined in that case (downstream consumers
@@ -7152,22 +7158,22 @@ export class ToolExecutor {
       if (inferred && inferred.length >= 2) finding.pocSteps = inferred;
     }
 
-    // 0sec#193 — optional machine-executable verification spec. Same
+    // 0#193 — optional machine-executable verification spec. Same
     // wire-shape tolerance as poc_steps (object OR JSON string OR garbage).
-    // When parseable, attach to the finding so cloud's canary watcher can
-    // later evaluate it via `evaluateVerificationSpec`. Findings without a
-    // spec stay backwards-compatible (field is undefined).
+    // When parseable, attach the contract for later replay and source-fix
+    // workflows. A unique finding saved in a scoped source workspace also
+    // receives a bounded code-only check below; behavior remains unexecuted.
     const verificationSpec = parseVerificationSpecArg(args.verification_spec);
     if (verificationSpec) {
       finding.verificationSpec = verificationSpec;
     }
 
-    // 0sec#409 — propagate the validated CVE / CWE / CVSS values to the
+    // 0#409 — propagate the validated CVE / CWE / CVSS values to the
     // Finding. The fields are already shape-checked above, so we attach as-is
     // (no auto-uppercase / canonicalisation — the agent submitted clean
     // values or we'd have returned validation_failed already). `Finding`
     // doesn't carry a top-level `cve` / `cwe` field today (the schema work
-    // is tracked separately under 0sec#382), so we attach to the closest
+    // is tracked separately under 0#382), so we attach to the closest
     // existing slots: `cvssVector` / `cvssScore` for CVSS, and stash CVE /
     // CWE on the evidence.analysis prefix as a structured tag the disclose
     // renderer can pluck later. When the Finding schema grows first-class
@@ -7184,13 +7190,60 @@ export class ToolExecutor {
         : prefix;
     }
 
-    // Hybrid confidence (LLM self-report + PoC-status floor). Closes the gap
-    // where every cloud-side `findings.confidence` row was NULL because the
-    // OSS engine never emitted a value. We mutate the call args in-place so
-    // downstream readers — agent-runner's `postFinding(call.arguments)`
-    // mid-scan webhook and the native-loop's `finding_ingested` bus event
-    // (which reads from `block.input`, the same dict) — all see the same
-    // computed value rather than the raw, possibly-absent LLM-reported one.
+    // 0#1103 — optional evidence-grounded business-impact assessment. The LLM
+    // supplies this JSON-encoded string at save_finding time rather than via a
+    // separate report-time LLM call. Parse, validate enums against the
+    // vocabulary shared with impact-assessment.ts, and stamp on the Finding.
+    // When absent (the common case) the finding carries no assessment —
+    // consumers (CVSS, advisory templates) handle an undefined field gracefully.
+    const impactRaw = args.impact_assessment;
+    if (typeof impactRaw === "string" && impactRaw.trim().length > 0) {
+      let parsed: Record<string, unknown>;
+      try { parsed = JSON.parse(impactRaw); } catch {
+        return buildValidationFailureResult([
+          { field: "impact_assessment", reason: "must be valid JSON" },
+        ]);
+      }
+      if (typeof parsed !== "object" || parsed === null) {
+        return buildValidationFailureResult([
+          { field: "impact_assessment", reason: "must be a JSON object" },
+        ]);
+      }
+      const rt = parsed.reachability_tier;
+      const br = parsed.blast_radius;
+      const wz = parsed.weaponizability;
+      const bi = parsed.business_impact;
+      const rn = parsed.rationale;
+      const errors: Array<{ field: string; reason: string }> = [];
+      // Safe property lookup via Object.hasOwn — guards against
+      // prototype-pollution through `__proto__` in the key.
+      if (typeof rt !== "string" || !Object.hasOwn(IMPACT_REACHABILITY_TIERS, rt))
+        errors.push({ field: "impact_assessment.reachability_tier", reason: "must be one of: remote-unauth|remote-auth|proximity-rf|local-unpriv|local-priv|needs-hardware|needs-host-migration" });
+      if (typeof br !== "string" || br.trim().length === 0)
+        errors.push({ field: "impact_assessment.blast_radius", reason: "must be a non-empty string" });
+      else if (br.length > IMPACT_BLAST_RADIUS_MAX)
+        errors.push({ field: "impact_assessment.blast_radius", reason: `must not exceed ${IMPACT_BLAST_RADIUS_MAX} characters` });
+      if (typeof wz !== "string" || !Object.hasOwn(IMPACT_WEAPONIZABILITY, wz))
+        errors.push({ field: "impact_assessment.weaponizability", reason: "must be one of: dos-crash|info-leak|integrity-tampering|lpe-to-root|rce" });
+      if (typeof bi !== "string" || !Object.hasOwn(IMPACT_BUSINESS_IMPACTS, bi))
+        errors.push({ field: "impact_assessment.business_impact", reason: "must be one of: headline|notable|modest|noise" });
+      if (typeof rn !== "string" || rn.trim().length === 0)
+        errors.push({ field: "impact_assessment.rationale", reason: "must be a non-empty string" });
+      else if (rn.length > IMPACT_RATIONALE_MAX)
+        errors.push({ field: "impact_assessment.rationale", reason: `must not exceed ${IMPACT_RATIONALE_MAX} characters` });
+      if (errors.length > 0) return buildValidationFailureResult(errors);
+      finding.impactAssessment = {
+        reachability_tier: rt as ReachabilityTier,
+        blast_radius: br as string,
+        weaponizability: wz as Weaponizability,
+        business_impact: bi as BusinessImpact,
+        rationale: rn as string,
+      };
+    }
+
+    // Hybrid confidence (LLM self-report + PoC-status floor). Mutate call
+    // arguments in place so the native-loop's finding_ingested event reads
+    // the computed value rather than the raw LLM-reported value.
     // See finding-confidence.ts for the heuristic.
     const confidence = computeFindingConfidence(args.confidence, finding.pocSteps);
     if (confidence !== undefined) {
@@ -7228,7 +7281,7 @@ export class ToolExecutor {
       args.evidence_analysis = finding.evidence.analysis ?? "";
     }
 
-    // 0sec#281 — dedup against in-memory ctx.findings before append.
+    // 0#281 — dedup against in-memory ctx.findings before append.
     // Surfaced by the 2026-05-07 control-flow audit (§H3 "prompt doing what
     // code should do"). The agent prompt already asks the model to query
     // existing findings before saving, but nothing enforces it; the same
@@ -7268,13 +7321,21 @@ export class ToolExecutor {
         },
       };
     }
+    // Evaluate only the finding that will be added. Duplicate submissions
+    // keep the existing first-write-wins record and do not trigger a check.
+    if (verificationSpec && this.ctx.scopePath) {
+      finding.sourceVerification = await evaluateSourceVerification(
+        verificationSpec,
+        this.ctx.scopePath,
+      );
+    }
 
     this.ctx.findings.push(finding);
     if (this.db && this.ctx.persistFindings !== false) {
       this.db.saveFinding(this.ctx.scanId, finding);
     }
 
-    // 0sec#567 — harvest reusable footholds (credentials/tokens/cookies/…)
+    // 0#567 — harvest reusable footholds (credentials/tokens/cookies/…)
     // out of this finding's evidence into the loot ledger so the agent can
     // chain them into follow-up requests via `use_loot`. No-op when the loot
     // feature is off (ctx.loot undefined). Best-effort: a harvest failure must
@@ -7289,7 +7350,7 @@ export class ToolExecutor {
   }
 
   /**
-   * `use_loot` (0sec#567) — return previously captured footholds so the agent
+   * `use_loot` (0#567) — return previously captured footholds so the agent
    * can replay a leaked credential / token / cookie / endpoint / hash / path in
    * a follow-up request. Read-only and TRUSTED (we construct the output). When
    * the loot feature is off (no ledger), returns an empty, explanatory result
@@ -7389,10 +7450,10 @@ export class ToolExecutor {
   }
 
   /**
-   * `oast_register` (0sec#659) — mint a unique out-of-band interaction handle
+   * `oast_register` (0#659) — mint a unique out-of-band interaction handle
    * from the hosted collaborator. Returns a unique subdomain + correlation
    * token + ready-to-inject payload URLs. When no collaborator is configured
-   * (feature off or 0SEC_OAST_URL unset), returns a graceful, explanatory
+   * (feature off or ZERO_OAST_URL unset), returns a graceful, explanatory
    * result rather than an error — the agent should fall back to in-band proof.
    */
   private async oastRegister(args: Record<string, unknown>): Promise<ToolResult> {
@@ -7431,7 +7492,7 @@ export class ToolExecutor {
   }
 
   /**
-   * `oast_poll` (0sec#659) — poll the collaborator for a handle and run the
+   * `oast_poll` (0#659) — poll the collaborator for a handle and run the
    * OAST oracle (correlation-token matching) to return a confirmed/inconclusive
    * verdict. A confirmed callback is added to the loot ledger so the interaction
    * host can be chained. Trusted output (we construct it).
@@ -7535,7 +7596,7 @@ export class ToolExecutor {
       return {
         success: false,
         output: null,
-        error: "query_findings across sessions requires the persistent findings database",
+        error: "Cross-session findings are unavailable because no persistent database is attached. In a subagent, ask the parent to run this query; otherwise configure the persistent findings database.",
       };
     }
 
@@ -7562,7 +7623,7 @@ export class ToolExecutor {
   }
 
   private readFile(args: Record<string, unknown>): ToolResult {
-    if (!this.ctx.scopePath) {
+    if (isScopeEnforcementEnabled() && !this.ctx.scopePath) {
       return {
         success: false,
         output: null,
@@ -7581,6 +7642,7 @@ export class ToolExecutor {
     const window = windowFileContent(raw, {
       offset: args.offset,
       maxLines: args.max_lines,
+      numberLines: this.ctx.diffScopedReview,
     });
     if (!window.ok) {
       return { success: false, output: null, error: window.error };
@@ -7600,7 +7662,7 @@ export class ToolExecutor {
   }
 
   private listFiles(args: Record<string, unknown>): ToolResult {
-    if (!this.ctx.scopePath) {
+    if (isScopeEnforcementEnabled() && !this.ctx.scopePath) {
       return {
         success: false,
         output: null,
@@ -7608,11 +7670,11 @@ export class ToolExecutor {
       };
     }
 
-    return { success: true, output: listScopedFiles(this.ctx.scopePath, args) };
+    return { success: true, output: listScopedFiles(this.ctx.scopePath ?? process.cwd(), args) };
   }
 
   private searchFiles(args: Record<string, unknown>): ToolResult {
-    if (!this.ctx.scopePath) {
+    if (isScopeEnforcementEnabled() && !this.ctx.scopePath) {
       return {
         success: false,
         output: null,
@@ -7620,18 +7682,18 @@ export class ToolExecutor {
       };
     }
 
-    return { success: true, output: searchScopedFiles(this.ctx.scopePath, args) };
+    return { success: true, output: searchScopedFiles(this.ctx.scopePath ?? process.cwd(), args) };
   }
 
   /**
-   * apply_patch — 0sec#230. Structured DSL for reliable file edits.
+   * apply_patch — 0#230. Structured DSL for reliable file edits.
    * Refuses to run without a scopePath (same gate as read_file/run_command);
    * paths are resolved through `resolveScopedPath` so patches cannot escape
    * the audit directory. The actual parsing and apply logic lives in
    * `apply-patch.ts` so it can be unit-tested without a ToolExecutor.
    */
   private applyPatch(args: Record<string, unknown>): ToolResult {
-    if (!this.ctx.scopePath) {
+    if (isScopeEnforcementEnabled() && !this.ctx.scopePath) {
       return {
         success: false,
         output: null,
@@ -7648,7 +7710,7 @@ export class ToolExecutor {
       };
     }
 
-    const scopePath = this.ctx.scopePath;
+    const scopePath = this.ctx.scopePath ?? process.cwd();
     try {
       const ops = parsePatch(patchInput);
       const result = applyPatchOps(ops, (logical) => resolveScopedPath(scopePath, logical));
@@ -7675,7 +7737,7 @@ export class ToolExecutor {
    * self-correctable message, never a thrown exception or a silent no-op.
    */
   private strReplace(args: Record<string, unknown>): ToolResult {
-    if (!this.ctx.scopePath) {
+    if (isScopeEnforcementEnabled() && !this.ctx.scopePath) {
       return {
         success: false,
         output: null,
@@ -7810,7 +7872,7 @@ export class ToolExecutor {
       return this.shellExec(args);
     }
 
-    if (!this.ctx.scopePath) {
+    if (isScopeEnforcementEnabled() && !this.ctx.scopePath) {
       return {
         success: false,
         output: null,
@@ -7885,7 +7947,7 @@ export class ToolExecutor {
     const timeout = (args.timeout as number) ?? 30_000;
     const cwd = resolveScopedPath(this.ctx.scopePath, requestedCwd ?? ".");
 
-    // Dependency-audit lockfile reconciliation (0sec#tool-reliability): an
+    // Dependency-audit lockfile reconciliation (0#tool-reliability): an
     // `npm audit` on a pnpm/yarn repo ENOLOCKs. Detect the real package
     // manager from the lockfile and either redirect to the matching audit or
     // skip non-fatally when no lockfile exists.
@@ -7974,7 +8036,7 @@ export class ToolExecutor {
 
   private async ptySession(args: Record<string, unknown>): Promise<ToolResult> {
     if (!featureFlags.ptySession) {
-      return { success: false, output: null, error: "pty_session is disabled. Set 0SEC_FEATURE_PTY_SESSION=1 to enable." };
+      return { success: false, output: null, error: "pty_session is disabled. Set ZERO_FEATURE_PTY_SESSION=1 to enable." };
     }
 
     const action = (args.action as string ?? "").trim();
@@ -8082,7 +8144,7 @@ export class ToolExecutor {
    */
   private async pythonExec(args: Record<string, unknown>): Promise<ToolResult> {
     if (!featureFlags.pythonExec) {
-      return { success: false, output: null, error: "python_exec is disabled. Set 0SEC_FEATURE_PYTHON_EXEC=1 to enable." };
+      return { success: false, output: null, error: "python_exec is disabled. Set ZERO_FEATURE_PYTHON_EXEC=1 to enable." };
     }
 
     const code = (args.code as string) ?? "";
@@ -8154,10 +8216,10 @@ export class ToolExecutor {
       return {
         success: false,
         output: null,
-        error: "analyze_binary is disabled. Set 0SEC_FEATURE_ZEROVERSE=1 to enable.",
+        error: "analyze_binary is disabled. Set ZERO_FEATURE_ZEROVERSE=1 to enable.",
       };
     }
-    if (!this.ctx.scopePath) {
+    if (isScopeEnforcementEnabled() && !this.ctx.scopePath) {
       return {
         success: false,
         output: null,
@@ -8199,7 +8261,7 @@ export class ToolExecutor {
 
   private async webSearch(args: Record<string, unknown>): Promise<ToolResult> {
     if (!featureFlags.webSearch) {
-      return { success: false, output: null, error: "web_search is disabled. Set 0SEC_FEATURE_WEB_SEARCH=1 to enable." };
+      return { success: false, output: null, error: "web_search is disabled. Set ZERO_FEATURE_WEB_SEARCH=1 to enable." };
     }
 
     const query = (args.query as string ?? "").trim();
@@ -8230,7 +8292,7 @@ export class ToolExecutor {
       if (this.ctx.rateLimiter) await this.ctx.rateLimiter.acquire(url);
       const execution = this._executionContext.getStore();
       const res = await fetchScoped(url, {
-        headers: { "User-Agent": "0sec/1.0" },
+        headers: { "User-Agent": "0/1.0" },
         signal: execution?.signal ? AbortSignal.any([controller.signal, execution.signal]) : controller.signal,
         redirect: "follow",
       }, {
@@ -8300,16 +8362,20 @@ export class ToolExecutor {
     }
   }
 
-  // 0sec#1284 — intel handler bodies extracted to ./tools/intel.ts as free
+  // 0#1284 — intel handler bodies extracted to ./tools/intel.ts as free
   // functions; these stay as thin delegates so tools/dispatch.test.ts keeps
   // resolving each tool name to a real ToolExecutor method.
   private intelTool(args: Record<string, unknown>): Promise<ToolResult> {
     return executeIntel(this.ctx, args);
   }
+  private jevPrepassTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeJevPrepass(this.ctx, args);
+  }
+
 
   // ── Offline / read-only security engines (dev-live-engine-recovery) ──
   // Thin delegates to the free-function handlers in tools/security-engines.ts,
-  // mirroring the intelTool → executeIntel shape (0sec#1284).
+  // mirroring the intelTool → executeIntel shape (0#1284).
   private adAttackPathsTool(args: Record<string, unknown>): Promise<ToolResult> {
     return executeAdAttackPaths(this.ctx, args);
   }
@@ -8417,7 +8483,7 @@ export class ToolExecutor {
         success: false,
         output: null,
         error:
-          "wp_fingerprint is disabled. Enable with --features wp_fingerprint or 0SEC_FEATURE_WP_FINGERPRINT=1.",
+          "wp_fingerprint is disabled. Enable with --features wp_fingerprint or ZERO_FEATURE_WP_FINGERPRINT=1.",
       };
     }
 
@@ -8425,19 +8491,19 @@ export class ToolExecutor {
     const base = validateTargetUrl(this.ctx.target, this.ctx.target, this.ctx.scope, undefined, this.ctx.publicNetwork);
 
     // Build an auth-aware fetch wrapper that reuses the active identity's
-    // credentials + captured session cookies (0sec#564).
+    // credentials + captured session cookies (0#564).
     const authHeaders = this.activeAuthHeaders();
     const scope = this.ctx.scope;
     const rateLimiter = this.ctx.rateLimiter;
     const attribution = this.ctx.attribution;
     const wrappedFetch: FetchLike = async (url, init) => {
-      // Scope check (0sec#215). runWpFingerprint walks the WP plugin
+      // Scope check (0#215). runWpFingerprint walks the WP plugin
       // namespace by appending paths to `target`; under same-origin that
       // can't escape the host, but if the host itself is out-of-scope —
       // e.g. operator passed --scope without including the WP target —
       // we refuse here rather than fetching anyway.
       if (scope) {
-        const verdict = scope.match(url);
+        const verdict = scope.enforce(url)
         if (!verdict.allowed) {
           throw new Error(`wp_fingerprint scope violation: ${verdict.reason}`);
         }
@@ -8446,7 +8512,7 @@ export class ToolExecutor {
         ...authHeaders,
         ...(init?.headers ?? {}),
       };
-      // Attribution-header injection (0sec#216). wp_fingerprint runs
+      // Attribution-header injection (0#216). wp_fingerprint runs
       // dozens of plugin probes in a tight loop, so attribution on
       // every probe is what tells defenders this is engagement traffic
       // rather than a botnet pulling /wp-content/plugins/* paths.
@@ -8501,7 +8567,7 @@ export class ToolExecutor {
         skipOsv: (args.skip_osv as boolean) ?? false,
         wpScanApiToken: (args.wpscan_api_token as string | undefined)
           ?? process.env.WPSCAN_API_TOKEN
-          ?? process.env["0SEC_WPSCAN_API_TOKEN"],
+          ?? process.env["ZERO_WPSCAN_API_TOKEN"],
       });
       return {
         success: true,
@@ -8516,7 +8582,7 @@ export class ToolExecutor {
     }
   }
 
-  // ── Engagement-gated structured scanner wrappers (0sec#555) ──
+  // ── Engagement-gated structured scanner wrappers (0#555) ──
   //
   // Shared glue for run_sqlmap / run_nmap / run_ffuf / run_nuclei. Each public
   // method validates the target against scope, acquires a rate-limit token,
@@ -8528,7 +8594,7 @@ export class ToolExecutor {
 
   /**
    * Common preflight for every scanner wrapper — the authorized-engagement
-   * profile gate (0sec#926). Delegates the allow/deny decision to the pure
+   * profile gate (0#926). Delegates the allow/deny decision to the pure
    * `scannerEngagementGate`, which enforces, in order:
    *   - ctx.allowScanners must be true (defense-in-depth; the tool is also
    *     absent from the tool set otherwise — see getToolsForRole);
@@ -8817,7 +8883,7 @@ export class ToolExecutor {
         success: false,
         output: null,
         error:
-          "mongo_objectid is disabled. Enable with --features mongo_objectid_forge or 0SEC_FEATURE_MONGO_OBJECTID_FORGE=1.",
+          "mongo_objectid is disabled. Enable with --features mongo_objectid_forge or ZERO_FEATURE_MONGO_OBJECTID_FORGE=1.",
       };
     }
 
@@ -8866,7 +8932,7 @@ export class ToolExecutor {
 
   /**
    * Lazily load and cache the cloud audit-skills bundle from the
-   * 0SEC_AUDIT_SKILLS_MANIFEST environment variable. Returns null when
+   * ZERO_AUDIT_SKILLS_MANIFEST environment variable. Returns null when
    * the env var is unset (no cloud skills configured); returns an empty
    * Map for valid manifests with zero skills; returns the loaded Map for
    * a populated bundle. Cache lives for the lifetime of this ToolExecutor.
@@ -8874,7 +8940,7 @@ export class ToolExecutor {
   private ensureCloudSkillBundle(): Map<string, SkillDefinition> | null {
     // undefined = not yet checked; null = env unset; Map = loaded
     if (this._cloudSkillBundle !== undefined) return this._cloudSkillBundle;
-    const manifestPath = process.env["0SEC_AUDIT_SKILLS_MANIFEST"];
+    const manifestPath = process.env["ZERO_AUDIT_SKILLS_MANIFEST"];
     if (!manifestPath) {
       this._cloudSkillBundle = null;
       return null;
@@ -9276,13 +9342,13 @@ export class ToolExecutor {
     // @vercel/og bug. Audit-role flag-hunting (no scopePath) is skipped
     // because there's no local source to read; the agent is talking to a
     // remote target. See `evaluateDoneCoverageGate` for the policy and
-    // `0SEC_AUDIT_MIN_COVERAGE_FILES` / `0SEC_AUDIT_DONE_GATE` for
+    // `ZERO_AUDIT_MIN_COVERAGE_FILES` / `ZERO_AUDIT_DONE_GATE` for
     // operator overrides.
     const isSourceAudit =
       (this.ctx.role === "audit" || this.ctx.role === "review")
       && typeof this.ctx.scopePath === "string"
       && this.ctx.scopePath.length > 0;
-    if (isSourceAudit) {
+    if (isSourceAudit && !this.ctx.diffScopedReview) {
       const decision = evaluateDoneCoverageGate({
         sourceFilesRead: this._sourceFilesRead.size,
         totalToolCalls: this._totalNonDoneToolCalls,
@@ -9339,6 +9405,7 @@ export class ToolExecutor {
 // ── Helper: get tools for a specific agent role ──
 
 export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMode?: boolean; hasBrowser?: boolean; allowScanners?: boolean }): ToolDefinition[] {
+  const authorized = !isScopeEnforcementEnabled() || opts?.hasScope === true;
   // `update_todos` (structured full-state plan) is offered to every role: it
   // authorizes nothing and only records the model's declared plan. The
   // `write_todos` alias stays registered/dispatchable but out of the advertised
@@ -9356,37 +9423,29 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
   const wpTools = featureFlags.wpFingerprint ? ["wp_fingerprint"] : [];
   const mongoTools = featureFlags.mongoObjectIdForge ? ["mongo_objectid"] : [];
   const skillTools = featureFlags.jitSkills ? ["list_skills", "load_skill"] : [];
-  // 0sec#567 — loot retrieval tool, only when the ledger feature is on.
+  // 0#567 — loot retrieval tool, only when the ledger feature is on.
   const lootTools = featureFlags.lootLedger ? ["use_loot"] : [];
   // Typed TODO ledger — the `plan` tool, only when the feature is on.
   const planTools = featureFlags.agentPlan ? ["plan"] : [];
-  // 0sec#555: scanner wrappers only when the engagement explicitly permits
-  // generic-scanner traffic. Default-off preserves 0sec#217 stealth.
+  // 0#555: scanner wrappers only when the engagement explicitly permits
+  // generic-scanner traffic. Default-off preserves 0#217 stealth.
   const scannerTools = opts?.allowScanners ? [...SCANNER_TOOL_NAMES] : [];
-  // 0sec#925: live cloud-surface tools (S3 public/takeover + read-only cred
+  // 0#925: live cloud-surface tools (S3 public/takeover + read-only cred
   // validation), gated behind the cloud-surface feature flag (default on).
   const cloudTools = featureFlags.cloudSurface ? [...CLOUD_TOOL_NAMES] : [];
-  // #978 — agent fan-out (start_scan), opt-in (default off). Server enforces
-  // budget + tree cap; default-off keeps existing scans unchanged.
-  const orchestratorTools = featureFlags.agentFanout
-    ? [...ORCHESTRATOR_TOOL_NAMES]
-    : [];
   // #659 — OAST out-of-band interaction tools, opt-in (default off; inert
   // without a deployed collaborator). Confirm blind SSRF/XSS, OOB RCE/SQLi.
   const oastTools = featureFlags.oastCollaborator ? [...OAST_TOOL_NAMES] : [];
-  // Phase-2 GROUP 2 (dev-live-engine-recovery): offensive engines that touch a
-  // target — verify_finding (loop-closer), protocol_conformance, spec_drift,
-  // safety_eval. Offered ONLY when an engagement scope is active, mirroring the
-  // target-touching precedent: a no-scope session never sees them.
-  const offensiveScopedTools = opts?.hasScope ? [...OFFENSIVE_SCOPED_TOOL_NAMES] : [];
+  // Scope authorization gates tool availability only while its plugin is active.
+  const offensiveScopedTools = authorized ? [...OFFENSIVE_SCOPED_TOOL_NAMES] : [];
   // Phase-2 GROUP 3: engines that RUN/BUILD untrusted code or weaponize.
   // Deny-by-default — each needs its named feature flag AND an active scope
-  // (0SEC_FEATURE_CLOUD_SURFACE parity). weaponize_kernel / cve_adapt add a
+  // (ZERO_FEATURE_CLOUD_SURFACE parity). weaponize_kernel / cve_adapt add a
   // runtime kernel-VM-artifact check in their handlers on top of this.
-  const memsafetyTools = featureFlags.memsafetyFuzz && opts?.hasScope ? [...MEMSAFETY_TOOL_NAMES] : [];
-  const npmDiscoveryTools = featureFlags.npmDynamicDiscovery && opts?.hasScope ? [...NPM_DISCOVERY_TOOL_NAMES] : [];
-  const kernelWeaponizeTools = featureFlags.kernelWeaponize && opts?.hasScope ? [...KERNEL_WEAPONIZE_TOOL_NAMES] : [];
-  const cveAdaptTools = featureFlags.cveAdapt && opts?.hasScope ? [...CVE_ADAPT_TOOL_NAMES] : [];
+  const memsafetyTools = featureFlags.memsafetyFuzz && authorized ? [...MEMSAFETY_TOOL_NAMES] : [];
+  const npmDiscoveryTools = featureFlags.npmDynamicDiscovery && authorized ? [...NPM_DISCOVERY_TOOL_NAMES] : [];
+  const kernelWeaponizeTools = featureFlags.kernelWeaponize && authorized ? [...KERNEL_WEAPONIZE_TOOL_NAMES] : [];
+  const cveAdaptTools = featureFlags.cveAdapt && authorized ? [...CVE_ADAPT_TOOL_NAMES] : [];
   const networkTools = [
     "http_request",
     "crawl",
@@ -9411,7 +9470,6 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     ...planTools,
     ...scannerTools,
     ...cloudTools,
-    ...orchestratorTools,
     ...oastTools,
     ...offensiveScopedTools,
     ...memsafetyTools,
@@ -9435,13 +9493,11 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     && (featureFlags.agentPlan || name !== "plan")
     // Scanner wrappers stay out of the audit/review "everything" set too,
     // unless the engagement opted in. Without this they'd leak into
-    // allEnabledTools regardless of allowScanners (regression of 0sec#217).
+    // allEnabledTools regardless of allowScanners (regression of 0#217).
     && (opts?.allowScanners || !SCANNER_TOOL_NAMES.includes(name))
     // Cloud-surface tools follow the same gating: out of the audit/review
-    // "everything" set when the feature flag is off (0sec#925).
+    // "everything" set when the feature flag is off (0#925).
     && (featureFlags.cloudSurface || !CLOUD_TOOL_NAMES.includes(name))
-    // #978 — fan-out (start_scan) likewise stays out unless agentFanout is on.
-    && (featureFlags.agentFanout || !ORCHESTRATOR_TOOL_NAMES.includes(name))
     // #659 — OAST tools stay out of the audit/review "everything" set unless the
     // collaborator feature is on (parity with the gating above).
     && (featureFlags.oastCollaborator || !OAST_TOOL_NAMES.includes(name))
@@ -9471,17 +9527,12 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     // `featureFlags.proxy` gate + `"proxy"` to networkTools). Excluded by
     // omission here so it never leaks into the audit/review "everything" set.
     && name !== "proxy"
-    // Phase-2 GROUP 2 (dev-live-engine-recovery): target-touching offensive
-    // engines stay out of the audit/review "everything" set unless a scope is
-    // active (parity with the scanner gating above — no scope ⇒ not offered).
-    && (opts?.hasScope || !OFFENSIVE_SCOPED_TOOL_NAMES.includes(name))
-    // Phase-2 GROUP 3: untrusted-exec / weaponization engines stay out unless
-    // BOTH their feature flag AND a scope are present (0SEC_FEATURE_CLOUD_SURFACE
-    // parity). Absent flag ⇒ never offered, even in the "everything" set.
-    && ((featureFlags.memsafetyFuzz && opts?.hasScope) || !MEMSAFETY_TOOL_NAMES.includes(name))
-    && ((featureFlags.npmDynamicDiscovery && opts?.hasScope) || !NPM_DISCOVERY_TOOL_NAMES.includes(name))
-    && ((featureFlags.kernelWeaponize && opts?.hasScope) || !KERNEL_WEAPONIZE_TOOL_NAMES.includes(name))
-    && ((featureFlags.cveAdapt && opts?.hasScope) || !CVE_ADAPT_TOOL_NAMES.includes(name)),
+    // Feature/resource/sandbox gates remain independent of authorization.
+    && (authorized || !OFFENSIVE_SCOPED_TOOL_NAMES.includes(name))
+    && ((featureFlags.memsafetyFuzz && authorized) || !MEMSAFETY_TOOL_NAMES.includes(name))
+    && ((featureFlags.npmDynamicDiscovery && authorized) || !NPM_DISCOVERY_TOOL_NAMES.includes(name))
+    && ((featureFlags.kernelWeaponize && authorized) || !KERNEL_WEAPONIZE_TOOL_NAMES.includes(name))
+    && ((featureFlags.cveAdapt && authorized) || !CVE_ADAPT_TOOL_NAMES.includes(name)),
   );
   const scopedSourceTools = Object.keys(SCOPED_SOURCE_AUDIT_TOOLS).filter((name) =>
     name !== "remember_codebase" && (featureFlags.zeroverse || name !== "analyze_binary")
@@ -9493,7 +9544,7 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     discovery: networkTools,
     attack: networkTools,
     // Verify agent gets file tools when there's a local scope (audit/review mode)
-    verify: opts?.hasScope ? [...networkTools, ...fileTools] : networkTools,
+    verify: authorized ? [...networkTools, ...fileTools] : networkTools,
     report: [...common],
     audit: opts?.hasScope ? scopedSourceTools : allEnabledTools,
     review: opts?.hasScope ? scopedSourceTools : allEnabledTools,

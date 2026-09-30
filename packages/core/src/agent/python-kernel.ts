@@ -88,7 +88,7 @@ _stdin = sys.stdin.buffer
 # 'class SSLSocket(socket)' at import time) but raises on instantiation, and
 # socket.create_connection raises directly. Together this makes raw sockets,
 # urllib, requests, and http.client all fail closed.
-if os.environ.get("0SEC_KERNEL_BLOCK_NET") == "1":
+if os.environ.get("ZERO_KERNEL_BLOCK_NET") == "1":
     import socket as _socket
     _NET_MSG = "networking is disabled in this compute-only kernel (engagement active)"
     _RealSocket = _socket.socket
@@ -360,12 +360,12 @@ export class PythonKernelManager {
       // readable with one `os.environ` call, and the code that reads it can be
       // steered by prompt injection in scanned content. Inheriting
       // `process.env` wholesale exposed every provider key, GITHUB_TOKEN and
-      // 0SEC_CLOUD_TOKEN to that code. The allowlist keeps the handful of
+      // ZERO_CLOUD_TOKEN to that code. The allowlist keeps the handful of
       // variables a Python REPL legitimately needs (PATH, HOME, TMPDIR, LANG …)
       // and drops the rest; extras are screened so the block-net flag cannot
       // smuggle a secret shape back in.
       env: allowlistedChildEnv({
-        "0SEC_KERNEL_BLOCK_NET": this.blockNetworking ? "1" : "0",
+        "ZERO_KERNEL_BLOCK_NET": this.blockNetworking ? "1" : "0",
       }),
       stdio: ["pipe", "pipe", "pipe"],
     });

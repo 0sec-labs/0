@@ -1,17 +1,17 @@
 /**
  * Hunt-lane event types and parsing helpers.
  *
- * `0sec.events/v1` record per `data:` frame. Three upstream shapes are
+ * `0.events/v1` record per `data:` frame. Three upstream shapes are
  * accepted, all normalised into {@link osecHuntEvent} for the renderer:
  *
- *   1. Native `0sec.events/v1` JSON — what `scripts/serve-events.mjs`
- *      produces when tailing a 0sec event log (`0SEC_EVENT_*` lines).
- *   2. Raw 0sec eventBus payloads tagged with `{type, payload}` —
+ *   1. Native `0.events/v1` JSON — what `scripts/serve-events.mjs`
+ *      produces when tailing a 0 event log (`ZERO_EVENT_*` lines).
+ *   2. Raw 0 eventBus payloads tagged with `{type, payload}` —
  *      forwarded by future in-process bridges.
- *   3. Canonical `0sec.presentation/v1` event envelopes emitted by the
+ *   3. Canonical `0.presentation/v1` event envelopes emitted by the
  *      local dashboard stream.
  *
- * The schema is intentionally a subset of 0sec's full eventBus
+ * The schema is intentionally a subset of 0's full eventBus
  * taxonomy — only the event types the Hunt lane actually renders are
  * surfaced. Unknown/irrelevant events are silently dropped by the parser
  * (see {@link parseHuntEvent}) so the upstream wire format can evolve
@@ -20,7 +20,7 @@
 
 export type osecHuntEvent =
   | {
-      schema: "0sec.events/v1";
+      schema: "0.events/v1";
       kind: "tool_use";
       ts: number;
       tool: string;
@@ -33,7 +33,7 @@ export type osecHuntEvent =
       duration_ms?: number;
     }
   | {
-      schema: "0sec.events/v1";
+      schema: "0.events/v1";
       kind: "finding";
       ts: number;
       finding_id?: string;
@@ -45,7 +45,7 @@ export type osecHuntEvent =
       line?: number;
     }
   | {
-      schema: "0sec.events/v1";
+      schema: "0.events/v1";
       kind: "stage";
       ts: number;
       stage: string;
@@ -89,10 +89,10 @@ export function extractFileLine(text: string | undefined): { file: string; line:
  * skip silently.
  *
  * Accepts:
- *   - `{"schema":"0sec.events/v1", "kind":"…", …}` — native v1 record.
+ *   - `{"schema":"0.events/v1", "kind":"…", …}` — native v1 record.
  *   - `{"type":"tool_call_started"|"finding_ingested"|…, "payload":{…}}`
  *     — raw eventBus shape, translated to v1 on the fly.
- *   - `{"protocol":"0sec.presentation/v1", "kind":"event", "eventType":"…"}`
+ *   - `{"protocol":"0.presentation/v1", "kind":"event", "eventType":"…"}`
  *     — canonical presentation event, translated from its semantic payload.
  */
 export function parseHuntEvent(raw: string): osecHuntEvent | null {
@@ -106,12 +106,12 @@ export function parseHuntEvent(raw: string): osecHuntEvent | null {
   const obj = data as Record<string, unknown>;
 
   // Native v1 shape — trust the schema marker and pass through.
-  if (obj.schema === "0sec.events/v1" && typeof obj.kind === "string") {
+  if (obj.schema === "0.events/v1" && typeof obj.kind === "string") {
     return normaliseV1(obj);
   }
 
   if (
-    obj.protocol === "0sec.presentation/v1" &&
+    obj.protocol === "0.presentation/v1" &&
     obj.kind === "event" &&
     typeof obj.eventType === "string" &&
     obj.payload &&
@@ -142,7 +142,7 @@ function normaliseV1(obj: Record<string, unknown>): osecHuntEvent | null {
     const argsPreview = typeof obj.args_preview === "string" ? obj.args_preview : undefined;
     const fileLine = extractFileLine(argsPreview);
     return {
-      schema: "0sec.events/v1",
+      schema: "0.events/v1",
       kind: "tool_use",
       ts,
       tool: typeof obj.tool === "string" ? obj.tool : "?",
@@ -157,7 +157,7 @@ function normaliseV1(obj: Record<string, unknown>): osecHuntEvent | null {
 
   if (kind === "finding") {
     return {
-      schema: "0sec.events/v1",
+      schema: "0.events/v1",
       kind: "finding",
       ts,
       finding_id: typeof obj.finding_id === "string" ? obj.finding_id : undefined,
@@ -173,7 +173,7 @@ function normaliseV1(obj: Record<string, unknown>): osecHuntEvent | null {
   if (kind === "stage") {
     const transition = obj.transition === "completed" ? "completed" : "started";
     return {
-      schema: "0sec.events/v1",
+      schema: "0.events/v1",
       kind: "stage",
       ts,
       stage: typeof obj.stage === "string" ? obj.stage : "stage",
@@ -189,7 +189,7 @@ function normaliseV1(obj: Record<string, unknown>): osecHuntEvent | null {
 
 /**
  * Translate a raw eventBus emission into the v1 hunt shape. Mirrors the
- * mapping `scripts/serve-events.mjs` does for `0SEC_EVENT_*` lines so
+ * mapping `scripts/serve-events.mjs` does for `ZERO_EVENT_*` lines so
  * both transport paths land on the same renderer.
  */
 function translateRawEvent(type: string, payload: Record<string, unknown>): osecHuntEvent | null {
@@ -205,7 +205,7 @@ function translateRawEvent(type: string, payload: Record<string, unknown>): osec
           ? "error"
           : "ok";
     return {
-      schema: "0sec.events/v1",
+      schema: "0.events/v1",
       kind: "tool_use",
       ts,
       tool: typeof payload.tool === "string" ? payload.tool : "?",
@@ -220,7 +220,7 @@ function translateRawEvent(type: string, payload: Record<string, unknown>): osec
 
   if (type === "finding_ingested") {
     return {
-      schema: "0sec.events/v1",
+      schema: "0.events/v1",
       kind: "finding",
       ts,
       finding_id: typeof payload.finding_id === "string" ? payload.finding_id : undefined,
@@ -235,7 +235,7 @@ function translateRawEvent(type: string, payload: Record<string, unknown>): osec
 
   if (type === "step_started" || type === "step_completed") {
     return {
-      schema: "0sec.events/v1",
+      schema: "0.events/v1",
       kind: "stage",
       ts,
       stage: typeof payload.step === "string" ? payload.step : "stage",
@@ -246,7 +246,7 @@ function translateRawEvent(type: string, payload: Record<string, unknown>): osec
 
   if (type === "agent_turn_started" || type === "agent_turn_completed") {
     return {
-      schema: "0sec.events/v1",
+      schema: "0.events/v1",
       kind: "stage",
       ts,
       stage: `turn ${typeof payload.turn === "number" ? payload.turn : "?"}`,

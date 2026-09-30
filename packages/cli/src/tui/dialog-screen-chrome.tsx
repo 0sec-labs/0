@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/react */
 import { TextAttributes } from "@opentui/core";
+import { useState } from "react";
 import { useTheme, type Theme } from "./theme-context.js";
 import { useSymbols } from "./symbol-context.js";
 import { Cells, textCells } from "./primitives.js";
@@ -7,6 +8,48 @@ import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import type { DialogItem } from "./dialog-select.js";
 import { SCROLLBAR_COLUMN } from "./shell-geometry.js";
 import { sleekScrollbar } from "./scrollbar.js";
+
+/** Compact dialog action; the containing screen owns keyboard focus. */
+export function DialogActionButton({
+  label,
+  onPress,
+  variant = "secondary",
+  disabled = false,
+  focused = false,
+}: {
+  label: string;
+  onPress: () => void;
+  variant?: "primary" | "secondary";
+  disabled?: boolean;
+  focused?: boolean;
+}) {
+  const theme = useTheme();
+  const [hovered, setHovered] = useState(false);
+  const active = !disabled && (focused || hovered);
+  const labelWidth = textCells(label);
+  return (
+    <box
+      width={labelWidth + 2}
+      height={1}
+      paddingX={1}
+      paddingY={0}
+      flexShrink={0}
+      backgroundColor={active ? theme.BORDER : theme.PANEL_ALT}
+      onMouseOver={() => setHovered(true)}
+      onMouseOut={() => setHovered(false)}
+      onMouseUp={(event) => {
+        event.stopPropagation();
+        if (!disabled && event.button === 0) onPress();
+      }}
+    >
+      <Cells width={labelWidth}
+        fg={disabled ? theme.MUTED : variant === "primary" ? theme.PRIMARY : theme.TEXT}
+        attributes={variant === "primary" || focused ? TextAttributes.BOLD : undefined}>
+        {label}
+      </Cells>
+    </box>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Dialog-interior helpers (presentation only)

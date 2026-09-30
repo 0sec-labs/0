@@ -22,12 +22,12 @@
   urlcolor=blue!60!black,
 }
 
-\title{An MCP Client for 0sec: Attaching External Tool Servers\\
+\title{An MCP Client for 0: Attaching External Tool Servers\\
 Without Bloating the Tool Surface or the Trust Boundary}
 
 \author{
-  0sec Labs \\
-  \texttt{github.com/0sec-labs/0sec}
+  0 Labs \\
+  \texttt{github.com/0sec-labs/0}
 }
 
 \date{}
@@ -39,16 +39,16 @@ Without Bloating the Tool Surface or the Trust Boundary}
 \begin{abstract}
 The Model Context Protocol (MCP) lets an agent attach external tool servers ---
 a filesystem server, a Burp or Nuclei bridge, a ticketing system, a cloud API
---- over a small JSON-RPC protocol. 0sec has no MCP client today, and a naive one
-would fight two properties 0sec has deliberately built. First, MCP tool schemas
+--- over a small JSON-RPC protocol. 0 has no MCP client today, and a naive one
+would fight two properties 0 has deliberately built. First, MCP tool schemas
 are re-sent every turn and a handful of servers can spend tens of thousands of
 tokens on definitions before any work happens, undoing the 10--20-tool
-always-loaded budget 0sec has just adopted. Second, and more seriously, an
+always-loaded budget 0 has just adopted. Second, and more seriously, an
 attached server is an untrusted party: its results are attacker-influenceable
 text fed straight to the model (prompt injection), and a remote server drives the
 client to fetch URLs it chooses (SSRF, confused deputy, token passthrough). This
 paper surveys how MCP works and how OpenCode and Claude Code expose it, then
-designs an MCP-client layer built entirely from machinery 0sec already owns: an
+designs an MCP-client layer built entirely from machinery 0 already owns: an
 \texttt{McpHost} modeled on the existing out-of-process \texttt{PluginHost};
 server declarations in the two-level settings under a gated \texttt{Security}
 group; discovered tools capability-gated through the same
@@ -57,7 +57,7 @@ routed through the existing \texttt{ScopePolicy} / \texttt{PathPolicy} /
 \texttt{RateLimiter} chokepoint; results neutralized by the already-MCP-aware
 \texttt{untrusted-sanitizer}; and every MCP tool placed behind the deferred
 loader, opt-in and off by default. The guiding principle: an MCP tool is an
-externally-hosted tool, and 0sec already has a security model for that. This is a
+externally-hosted tool, and 0 already has a security model for that. This is a
 design and decision log dated 2026-08-30. No code is written here.
 \end{abstract}
 
@@ -72,14 +72,14 @@ protocol that a growing ecosystem of servers already speaks
 Desktop) act as MCP \emph{hosts}; attaching a server is a config edit
 \cite{mcp-arch,claudecode-mcp,opencode-mcp}.
 
-0sec is not an MCP host. It ships a fixed registry of model-facing tools
+0 is not an MCP host. It ships a fixed registry of model-facing tools
 (\texttt{TOOL\_REGISTRY\_ORDER} in
 \texttt{packages/core/src/agent/tools/index.ts}) assembled from per-domain
 modules, and the only way to add a tool at runtime is \texttt{self\_extend},
 which registers \emph{model-authored} tools into a single session
 (\texttt{packages/core/src/agent/tools/system.ts}). There is no way to attach an
 \emph{externally hosted} tool server. This paper asks what it would take to add
-one without regressing the two things 0sec has spent effort getting right: a
+one without regressing the two things 0 has spent effort getting right: a
 small, well-selected tool surface, and a hard trust boundary around live
 targets.
 
@@ -90,7 +90,7 @@ frame the whole design:
   \item \textbf{Context cost.} MCP tool definitions are standing context. A
   setup wiring in a few servers can spend on the order of tens of thousands of
   tokens on tool schemas re-sent every turn, degrading both selection accuracy
-  and cost \cite{mcp-clientbp,anthropic-toolsearch}. 0sec's companion
+  and cost \cite{mcp-clientbp,anthropic-toolsearch}. 0's companion
   tool-curation work \cite{tool-curation} sets a 10--20-tool budget per
   reasoning context and commits to a deferred loader; MCP must ride that, not
   bypass it.
@@ -98,7 +98,7 @@ frame the whole design:
   tool results are attacker-influenceable text that flows straight into the
   model's context (prompt injection), and a remote server chooses the URLs the
   client fetches during discovery and auth (SSRF, confused deputy)
-  \cite{mcp-security}. 0sec already treats live-target egress as a guarded
+  \cite{mcp-security}. 0 already treats live-target egress as a guarded
   chokepoint; MCP must be forced through the same gate, not around it.
 \end{itemize}
 
@@ -140,7 +140,7 @@ same JSON-RPC \cite{mcp-arch}:
 \end{enumerate}
 
 Servers can also expose \emph{resources} (readable context) and \emph{prompts}
-(templates); for a first 0sec integration only \emph{tools} matter, so the rest
+(templates); for a first 0 integration only \emph{tools} matter, so the rest
 of this paper scopes to tools.
 
 \paragraph{Auth.} Remote servers authenticate with bearer tokens or API keys in
@@ -152,7 +152,7 @@ chains \cite{mcp-security}.
 
 \section{Prior art: OpenCode and Claude Code}
 
-Both of the agents 0sec most resembles already ship MCP clients, and their
+Both of the agents 0 most resembles already ship MCP clients, and their
 choices are worth borrowing.
 
 \paragraph{OpenCode.} Servers are declared under an \texttt{mcp} key in
@@ -178,7 +178,7 @@ claude mcp add --transport http github --scope project https://.../mcp/\\
 claude mcp add --transport stdio airtable -- npx -y airtable-mcp-server
 \end{quote}
 
-Three lessons carry directly into the 0sec design:
+Three lessons carry directly into the 0 design:
 \begin{itemize}[leftmargin=*]
   \item \textbf{Namespacing.} MCP tools are surfaced to the model as
   \texttt{mcp\_\_<server>\_\_<tool>}, so a server's tools cannot collide with
@@ -206,7 +206,7 @@ lightweight \texttt{search\_tools} meta-tool, and load full schemas only when th
 model asks. It recommends switching to this mode once tool definitions exceed
 roughly 1--5\% of the context window \cite{mcp-clientbp}.
 
-This is the same conclusion 0sec's tool-curation work reached from the other
+This is the same conclusion 0's tool-curation work reached from the other
 direction \cite{tool-curation}: reliable selection lives in a 10--20 always-loaded
 tool band, accuracy collapses non-linearly past 30--50 tools, and the fix is a
 deferred \texttt{list\_tools} / \texttt{load\_tool} layer mirroring the existing
@@ -226,9 +226,9 @@ well with prompt caching --- appending a newly loaded definition after the cache
 breakpoint, rather than re-sorting the whole \texttt{tools} array, avoids
 invalidating the cached prefix \cite{mcp-clientbp}.
 
-\section{0sec today: the parts we build on}
+\section{0 today: the parts we build on}
 
-The integration is far cheaper than it looks because 0sec already contains a
+The integration is far cheaper than it looks because 0 already contains a
 near-exact blueprint: an out-of-process, capability-gated tool \emph{provider}.
 Six pieces do the work.
 
@@ -246,7 +246,7 @@ mirror: \texttt{toolDefinitions()}, \texttt{gateMaps()},
 \texttt{capabilityFlagsFor(name)}, \texttt{ownsTool(name)},
 \texttt{call(name, args)}. Notably, the \texttt{@modelcontextprotocol/sdk}
 dependency is \emph{already present}: \texttt{packages/cli/src/commands/mcp-server.ts}
-uses it to expose 0sec's own tools \emph{as} an MCP server (behind an
+uses it to expose 0's own tools \emph{as} an MCP server (behind an
 \texttt{MCP\_LIVE\_TOOL\_NAMES} allowlist). The client proposed here is the
 inverse direction and can share the SDK and naming conventions already
 established there.
@@ -265,7 +265,7 @@ advertised set. An \texttt{McpHost} folds into that same seam via a new
 \texttt{config.mcpHost?}, which is what makes it reuse the authorization path for
 free.
 
-\paragraph{The capability model.} 0sec already admits externally-authored tools
+\paragraph{The capability model.} 0 already admits externally-authored tools
 at runtime, and the capability vocabulary is a closed set in
 \texttt{plugins/manifest.ts}: \texttt{PluginCapability} is one of
 \texttt{network}, \texttt{filesystem-read}, \texttt{filesystem-write},
@@ -300,7 +300,7 @@ stack under \texttt{packages/core/src/scope/}: a host allowlist
 chokepoint mutates the same counters''
 (\texttt{scope/enforcement.ts}). \texttt{scope-guard.ts} makes the absence of a
 scope \emph{visible} (emitting a \texttt{scope\_guards\_inert} event) and
-\texttt{0SEC\_REQUIRE\_SCOPE} makes every mode fail closed;
+\texttt{ZERO\_REQUIRE\_SCOPE} makes every mode fail closed;
 \texttt{agenticScan()} refuses a live network target before initializing any
 client when no scope is configured. This is the machinery a remote MCP server's
 egress must be forced through.
@@ -310,7 +310,7 @@ convenient fact for this design: \texttt{packages/core/src/untrusted-sanitizer.t
 already anticipates MCP. \texttt{isUntrustedSourceTool(name)} returns true for
 network/read tools \emph{and for any name beginning with} \texttt{mcp\_\_}, and
 \texttt{sanitizeUntrustedToolResult} deterministically neutralizes injection
-patterns, wrapping output in \texttt{[[0SEC\_UNTRUSTED\_DATA]]} with a
+patterns, wrapping output in \texttt{[[ZERO\_UNTRUSTED\_DATA]]} with a
 DATA-not-instructions note. It is already wired into
 \texttt{agent/native-loop.ts} (which emits an \texttt{untrusted\_input\_sanitized}
 event), its module header explicitly lists ``MCP tool outputs'' as a target, and
@@ -319,10 +319,10 @@ defense for free simply by using the \texttt{mcp\_\_<server>\_\_<tool>} naming
 convention.
 
 \paragraph{The config surface.} Configuration is a two-level settings file: a
-per-user global (\texttt{\textasciitilde/.0sec/tui-settings.json}) with a
-per-project override (\texttt{<cwd>/.0sec/tui-settings.json}), described by
+per-user global (\texttt{\textasciitilde/.0/tui-settings.json}) with a
+per-project override (\texttt{<cwd>/.0/tui-settings.json}), described by
 \texttt{SETTING\_DEFS} in \texttt{packages/cli/src/tui/settings.ts} and operated
-by \texttt{0sec config show/export/import}
+by \texttt{0 config show/export/import}
 (\texttt{packages/cli/src/commands/config.ts}). Settings carry a \texttt{group}
 label, and keys in the \texttt{Security} group (e.g.
 \texttt{allowModelSelfExtension}) get special handling: \texttt{config import}
@@ -330,18 +330,18 @@ refuses to silently enable a Security-group key unless \texttt{--yes} is passed,
 prints the specific change, drops unknown keys, and validates every value
 through a sanitiser before it lands on disk. Feature flags themselves are
 env-driven getters in \texttt{packages/core/src/agent/features.ts}
-(\texttt{0SEC\_FEATURE\_*}), most defaulting off.
+(\texttt{ZERO\_FEATURE\_*}), most defaulting off.
 
 \section{Design}
 
 The design principle in one line: \textbf{an MCP tool is a model-facing,
-externally-hosted tool, and 0sec already has a security model for
+externally-hosted tool, and 0 already has a security model for
 externally-authored tools --- reuse it, do not invent a second one.}
 
 \subsection{Where servers are declared}
 
 Add an \texttt{mcp} block to the two-level settings, following OpenCode's shape
-but living inside 0sec's existing layered config so global/project precedence and
+but living inside 0's existing layered config so global/project precedence and
 the import-consent gate apply for free:
 
 \begin{quote}
@@ -364,7 +364,7 @@ ceiling (see 6.3), a \texttt{tools} glob allow/deny map (borrowed from OpenCode)
 and \texttt{scope\_bound} declaring that a remote server's egress must satisfy
 the active \texttt{ScopePolicy}. The whole \texttt{mcp} block is a
 \texttt{Security}-group key, so importing a shared config can never silently
-attach a server; and a new master flag \texttt{0SEC\_FEATURE\_MCP\_CLIENT}
+attach a server; and a new master flag \texttt{ZERO\_FEATURE\_MCP\_CLIENT}
 (default off) gates the subsystem entirely, matching how every other sharp
 feature ships.
 
@@ -373,7 +373,7 @@ feature ships.
 Support \texttt{stdio} and streamable \texttt{http} first; pure SSE is deprecated
 upstream \cite{claudecode-mcp} and can wait. stdio servers are local child
 processes --- treat their \texttt{command} exactly as OpenCode/Claude Code do,
-but spawn them with the same hardened child environment 0sec already builds for
+but spawn them with the same hardened child environment 0 already builds for
 plugins (\texttt{buildPluginEnv} over \texttt{allowlistedChildEnv} in
 \texttt{agent/sanitized-env.ts}, which never inherits provider/cloud credentials
 or the target-auth block), and see Section 7 for the consent requirement before
@@ -388,7 +388,7 @@ caching \cite{mcp-clientbp}.
 On connect, the client runs \texttt{server/discover} then \texttt{tools/list},
 applies the server's \texttt{tools} glob filter, and produces registry entries
 named \texttt{mcp\_\_<server>\_\_<tool>} --- the Claude Code convention
-\cite{claudecode-mcp} --- so MCP tools never collide with 0sec built-ins and are
+\cite{claudecode-mcp} --- so MCP tools never collide with 0 built-ins and are
 addressable by full name in any allow/deny rule. Each entry's
 \texttt{inputSchema} becomes its parameter schema; its dispatch route points at a
 single generic executor that marshals \texttt{tools/call} to the owning client.
@@ -405,7 +405,7 @@ Three constraints on admission:
   declared \texttt{capabilities} ceiling, run through \texttt{gateFlagsFor} so it
   lands in the same \texttt{NETWORK\_CAPABLE\_TOOLS} / \texttt{LOCAL\_SCOPE\_TOOLS}
   / \texttt{READ\_ONLY\_TOOLS} maps as every other gated tool. MCP schemas carry
-  no 0sec capabilities, so the client must \emph{assign} them, and to avoid the
+  no 0 capabilities, so the client must \emph{assign} them, and to avoid the
   ``danger by omission'' hole every MCP tool defaults to at least
   \texttt{network} (it egresses to a server by definition) --- never the
   least-dangerous class by accident. A server declared \texttt{["network"]}
@@ -418,7 +418,7 @@ Three constraints on admission:
 
 \subsection{Fitting the security posture}
 
-Two 0sec chokepoints do the heavy lifting:
+Two 0 chokepoints do the heavy lifting:
 
 \begin{itemize}[leftmargin=*]
   \item \textbf{Capability gate = the \texttt{self\_extend} gate.} MCP tools
@@ -431,18 +431,18 @@ Two 0sec chokepoints do the heavy lifting:
   \texttt{PathPolicy} / \texttt{RateLimiter} / \texttt{EnforcementTracker} guard,
   so an out-of-scope MCP endpoint is refused and counted like any other egress.
   When \texttt{scope\_bound} is set and no scope is configured, the server fails
-  closed under \texttt{0SEC\_REQUIRE\_SCOPE} semantics.
+  closed under \texttt{ZERO\_REQUIRE\_SCOPE} semantics.
 \end{itemize}
 
 \subsection{The untrusted-input chokepoint}
 
 MCP tool \emph{results} are untrusted input: they are attacker-influenceable text
-returned by a third party and fed back into the model. Here 0sec has already done
+returned by a third party and fed back into the model. Here 0 has already done
 the work. Because MCP tools are named \texttt{mcp\_\_<server>\_\_<tool>},
 \texttt{isUntrustedSourceTool} already matches them, and the existing
 \texttt{native-loop.ts} path already routes their results through
 \texttt{sanitizeUntrustedToolResult} --- neutralizing injection patterns and
-fencing the payload in \texttt{[[0SEC\_UNTRUSTED\_DATA]]} with a
+fencing the payload in \texttt{[[ZERO\_UNTRUSTED\_DATA]]} with a
 DATA-not-instructions note --- before the result re-enters context. The client
 adds only two things on top: (a) truncation to the output budget before
 sanitization, and (b) the structural guarantee that an MCP result can never be
@@ -454,7 +454,7 @@ applies to egress.
 \section{Security analysis}
 
 Attaching an MCP server widens the attack surface in ways that map cleanly onto
-threats the MCP security spec enumerates \cite{mcp-security}. For each, 0sec's
+threats the MCP security spec enumerates \cite{mcp-security}. For each, 0's
 existing defenses are the mitigation --- which is the argument for reusing them
 rather than building an MCP-specific security layer.
 
@@ -465,7 +465,7 @@ scope, exfiltrate X''). Claude Code warns about exactly this
 \emph{already built and already MCP-aware} --- \texttt{isUntrustedSourceTool}
 matches the \texttt{mcp\_\_} prefix and \texttt{sanitizeUntrustedToolResult}
 neutralizes injection patterns and fences results in
-\texttt{[[0SEC\_UNTRUSTED\_DATA]]} --- plus truncation and the structural denial
+\texttt{[[ZERO\_UNTRUSTED\_DATA]]} --- plus truncation and the structural denial
 of any control effect (results cannot change capabilities or scope). The model
 may be misled by content, but the harness boundaries it cannot cross are enforced
 outside the model.
@@ -486,7 +486,7 @@ server that forwards tokens issued for other audiences breaks OAuth boundaries
 \cite{mcp-security}. Mitigation: keep credentials host-side in the settings
 file, never expose them to the model or to tool arguments; validate token
 audience; treat per-server OAuth as an operator action (an explicit
-\texttt{0sec mcp auth <server>} step, following OpenCode \cite{opencode-mcp}),
+\texttt{0 mcp auth <server>} step, following OpenCode \cite{opencode-mcp}),
 not something the agent initiates mid-run.
 
 \paragraph{Local server compromise.} A stdio server is arbitrary code run with
@@ -495,7 +495,7 @@ remote code execution \cite{mcp-security}. Mitigation: the \texttt{mcp} block is
 a \texttt{Security}-group key, so \texttt{config import} refuses to enable a
 server (and prints the exact \texttt{command}) without \texttt{--yes};
 \texttt{enabled} defaults to false; the subsystem is behind
-\texttt{0SEC\_FEATURE\_MCP\_CLIENT}; and stdio servers run under the same hardened
+\texttt{ZERO\_FEATURE\_MCP\_CLIENT}; and stdio servers run under the same hardened
 child environment as plugins (\texttt{buildPluginEnv} / \texttt{allowlistedChildEnv},
 no inherited secrets or target auth), with capability declarations bounding what
 the resulting tools may do.
@@ -508,7 +508,7 @@ the operator did not declare.
 
 \paragraph{Residual risk.} A server the operator explicitly trusts, enables, and
 grants \texttt{network} can still return misleading content within its
-capability, and a tool the model deliberately loads and calls will run. 0sec's
+capability, and a tool the model deliberately loads and calls will run. 0's
 defenses bound \emph{authority}, not \emph{truthfulness}; the untrusted-content
 framing and human-in-the-loop enable/consent steps are what keep a bad server
 from silently escalating. This is the same residual-trust posture that governs
@@ -518,7 +518,7 @@ from silently escalating. This is the same residual-trust posture that governs
 
 We will:
 \begin{enumerate}[leftmargin=*]
-  \item \textbf{Add an opt-in MCP client} behind \texttt{0SEC\_FEATURE\_MCP\_CLIENT}
+  \item \textbf{Add an opt-in MCP client} behind \texttt{ZERO\_FEATURE\_MCP\_CLIENT}
   (default off), built as an \texttt{McpHost} sibling of the existing
   \texttt{PluginHost} and folded into \texttt{refreshInjectedTools()} via a new
   \texttt{config.mcpHost?}, supporting \texttt{stdio} and streamable \texttt{http}
@@ -538,7 +538,7 @@ We will:
   (\texttt{ScopePolicy} / \texttt{PathPolicy} / \texttt{RateLimiter} /
   \texttt{EnforcementTracker}), with HTTPS-only and private-range blocking for
   discovery/auth URLs, and \texttt{scope\_bound} servers failing closed under
-  \texttt{0SEC\_REQUIRE\_SCOPE}.
+  \texttt{ZERO\_REQUIRE\_SCOPE}.
   \item \textbf{Fence MCP tool results as untrusted content} at one chokepoint in
   the generic \texttt{tools/call} executor: truncate to an output budget, label
   provenance, and deny any control effect.
@@ -547,7 +547,7 @@ We will:
 \textbf{Why.} MCP is worth having --- it lets operators extend the agent without
 core-team shipping --- but a naive client would regress both the tool-surface
 discipline we just established \cite{tool-curation} and the trust boundary the
-scope stack enforces. Every requirement above is satisfied by machinery 0sec
+scope stack enforces. Every requirement above is satisfied by machinery 0
 already owns: an out-of-process capability-gated tool provider
 (\texttt{PluginHost}) whose shape the client copies, a shared capability
 vocabulary and gate translation (\texttt{plugins/manifest.ts},
@@ -578,11 +578,11 @@ exactly why it is safe to do.
   HTTP transport with egress routed through the scope chokepoint, HTTPS-only and
   private-range blocking on discovery/auth URLs, and \texttt{scope\_bound}
   fail-closed semantics.
-  \item \textbf{Phase 4 --- remote auth.} Add \texttt{0sec mcp auth <server>} for
+  \item \textbf{Phase 4 --- remote auth.} Add \texttt{0 mcp auth <server>} for
   operator-driven OAuth/token setup, credentials stored host-side and never
   exposed to the model, with audience validation and no token passthrough.
   \item \textbf{Phase 5 --- lifecycle polish.} Honor \texttt{tools/list\_changed}
-  as a catalog-refresh (cache-friendly), add \texttt{0sec mcp list/get/remove}
+  as a catalog-refresh (cache-friendly), add \texttt{0 mcp list/get/remove}
   management commands, and surface per-server enforcement counters in the run
   log alongside the existing scope counters.
 \end{enumerate}
@@ -642,7 +642,7 @@ Anthropic. \textit{Tool search tool}. Claude Platform Documentation.
 \url{https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool}
 
 \bibitem{tool-curation}
-0sec Labs. \textit{Tool Curation for Security Agents}.
+0 Labs. \textit{Tool Curation for Security Agents}.
 \texttt{research/papers/tool-curation/tool-curation.tex}, 2026.
 
 \end{thebibliography}

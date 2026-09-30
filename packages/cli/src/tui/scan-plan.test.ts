@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  createScanPlan,
   formatExecutionMode,
   formatGoal,
   formatTimeCap,
@@ -21,26 +20,10 @@ describe("scan plan recommendations", () => {
     expect(recommendedScanDepth("known-vulnerabilities")).toBe("default");
   });
 
-  it("keeps plan values explicit and formats operator-facing limits", () => {
-    const plan = createScanPlan({
-      goal: "misconfigurations",
-      depth: "default",
-      runCount: 2,
-      executionMode: "parallel",
-      timeCapMs: 600_000,
-      costCapUsd: 5,
-    });
-    expect(plan).toEqual({
-      goal: "misconfigurations",
-      depth: "default",
-      runCount: 2,
-      executionMode: "parallel",
-      timeCapMs: 600_000,
-      costCapUsd: 5,
-    });
-    expect(formatGoal(plan.goal)).toBe("misconfigurations");
-    expect(formatExecutionMode(plan.executionMode)).toContain("parallel");
-    expect(formatTimeCap(plan.timeCapMs)).toBe("10m");
+  it("formats operator-facing limits", () => {
+    expect(formatGoal("misconfigurations")).toBe("misconfigurations");
+    expect(formatExecutionMode("parallel")).toContain("parallel");
+    expect(formatTimeCap(600_000)).toBe("10m");
     expect(recommendedTimeCapMs("web", "quick")).toBe(30_000);
   });
 });

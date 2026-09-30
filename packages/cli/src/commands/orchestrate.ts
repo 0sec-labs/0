@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import type { Command } from "commander";
 import chalk from "chalk";
-import { agenticScan, createRuntime, LlmApiRuntime, runAgentLoop, getToolsForRole } from "@0sec/core";
-import { osecDB } from "@0sec/db";
-import type { Finding, RuntimeMode, ScanDepth, ScanMode, WorkItemKind, WorkItemRecord, WorkerRecord, WorkerStatus } from "@0sec/shared";
+import { agenticScan, createRuntime, LlmApiRuntime, runAgentLoop, getToolsForRole } from "@0/core";
+import { osecDB } from "@0/db";
+import type { Finding, RuntimeMode, ScanDepth, ScanMode, WorkItemKind, WorkItemRecord, WorkerRecord, WorkerStatus } from "@0/shared";
 
 type OrchestrateOptions = {
   dbPath?: string;
@@ -511,7 +511,7 @@ function familyAttackPrompt(
   fingerprint: string,
   latest: Finding,
 ): string {
-  return `You are 0sec's family execution agent.
+  return `You are 0's family execution agent.
 
 Target: ${target}
 Finding family fingerprint: ${fingerprint}
@@ -544,7 +544,7 @@ function familyVerifyPrompt(target: string, findings: Finding[]): string {
     )
     .join("\n\n");
 
-  return `You are 0sec's blind family verification agent.
+  return `You are 0's blind family verification agent.
 
 Target: ${target}
 
@@ -734,7 +734,7 @@ export function registerOrchestrateCommand(program: Command): void {
         }
       }, Math.min(pollInterval, 5_000));
 
-      console.log(chalk.red.bold("◆ 0sec") + chalk.gray(opts.watch ? ` daemon ${label} online` : ` worker ${label} starting`));
+      console.log(chalk.red.bold("◆ 0") + chalk.gray(opts.watch ? ` daemon ${label} online` : ` worker ${label} starting`));
 
       try {
         do {

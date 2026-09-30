@@ -2,64 +2,49 @@ import { describe, expect, it } from "vitest";
 
 import {
   PRIMARY_AGENT_NAME,
+  agentTaskLabel,
   assignAgentName,
-  baseAgentName,
   uniquifyAgentName,
 } from "./name-generator.js";
 
-describe("baseAgentName", () => {
-  it("is a stable AdjectiveNoun for an id", () => {
-    const a = baseAgentName("subagent-abc");
-    expect(a).toBe(baseAgentName("subagent-abc"));
-    expect(a).toMatch(/^[A-Z][a-z]+[A-Z][a-z]+$/);
+describe("agentTaskLabel", () => {
+  it("shows the actual change rather than structural headings or acceptance instructions", () => {
+    const task = "# Target\n`src/parser.ts`\n\n# Change\n- Preserve full assistant prose\n\n# Acceptance\nRun the consumer smoke";
+    expect(agentTaskLabel(task, "QuietBeacon")).toBe("Preserve full assistant prose");
   });
 
-  it("varies across ids", () => {
-    const names = new Set(
-      Array.from({ length: 50 }, (_, i) => baseAgentName(`agent-${i}`)),
-    );
-    // Not necessarily 50 distinct (hash collisions possible), but should be many.
-    expect(names.size).toBeGreaterThan(30);
+  it("prefers the goal and strips display controls without flattening the task body into a label", () => {
+    expect(agentTaskLabel("# Constraints\nDo not edit UI\n# Goal — **Review** parser\u202e boundaries\nSecond paragraph")).toBe("Review parser boundaries");
   });
 
-  it("never throws on a degenerate id", () => {
-    expect(baseAgentName("")).toMatch(/^[A-Z][a-z]+[A-Z][a-z]+$/);
+  it("uses the stored name only when the task has no meaningful label", () => {
+    expect(agentTaskLabel("# Target\n\n# Acceptance\nMust pass", "ParserReview")).toBe("ParserReview");
+  });
+
+  it("bounds long task labels without splitting a Unicode character", () => {
+    const label = agentTaskLabel(`${"x".repeat(62)}😀 inspect parser flow`);
+    expect(label).toBe(`${"x".repeat(62)}…`);
   });
 });
 
 describe("uniquifyAgentName", () => {
-  it("returns the name unchanged when free", () => {
-    expect(uniquifyAgentName("Explorer", ["Main"])).toBe("Explorer");
-  });
-
-  it("suffixes on a case-insensitive collision", () => {
+  it("suffixes on a case-insensitive collision without changing an available name", () => {
+    expect(uniquifyAgentName("ParserReview", ["Main"])).toBe("ParserReview");
     expect(uniquifyAgentName("Main", ["main"])).toBe("Main-2");
-    expect(uniquifyAgentName("Scout", ["Scout", "scout-2"])).toBe("Scout-3");
+    expect(uniquifyAgentName("Review parser", ["Review parser", "review parser-2"])).toBe("Review parser-3");
   });
 });
 
 describe("assignAgentName", () => {
-  it("never collides with Main", () => {
-    // Find an id whose base name would be Main-ish is impossible (Main isn't in
-    // the banks), but assigning against a taken set including Main is safe.
-    const name = assignAgentName("x", [PRIMARY_AGENT_NAME]);
-    expect(name).not.toBe(PRIMARY_AGENT_NAME);
+  it("keeps task meaning while reserving Main and distinguishing repeated assignments", () => {
+    expect(assignAgentName("Main", [PRIMARY_AGENT_NAME])).toBe("Main-2");
+    const first = assignAgentName("Review parser", [PRIMARY_AGENT_NAME]);
+    expect(first).toBe("Review parser");
+    expect(assignAgentName("Review parser", [PRIMARY_AGENT_NAME, first])).toBe("Review parser-2");
   });
 
-  it("dot-qualifies a child under a non-Main parent", () => {
-    const name = assignAgentName("child-1", ["Main"], "Explorer");
-    expect(name.startsWith("Explorer.")).toBe(true);
-  });
-
-  it("does not dot-qualify direct children of Main", () => {
-    const name = assignAgentName("child-1", ["Main"], "Main");
-    expect(name.includes(".")).toBe(false);
-  });
-
-  it("uniquifies siblings that hash to the same base", () => {
-    // Two different ids, force a taken set that already holds the first's name.
-    const first = assignAgentName("id-1", ["Main"]);
-    const second = assignAgentName("id-1", ["Main", first]); // same id → same base → must suffix
-    expect(second).toBe(`${first}-2`);
+  it("qualifies nested workers without qualifying Main's direct children", () => {
+    expect(assignAgentName("Inspect parser", ["Main"], "Review")).toBe("Review.Inspect parser");
+    expect(assignAgentName("Inspect parser", ["Main"], "Main")).toBe("Inspect parser");
   });
 });

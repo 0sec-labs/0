@@ -4,7 +4,7 @@ import { TOOL_DEFINITIONS } from "./index.js";
 import { ToolExecutor } from "../tools.js";
 import type { ToolContext } from "../types.js";
 
-describe("TOOL_DISPATCH (0sec#614)", () => {
+describe("TOOL_DISPATCH (0#614)", () => {
   it("covers exactly the registry — no orphan routes, no unrouted tools", () => {
     expect(Object.keys(TOOL_DISPATCH).sort()).toEqual(Object.keys(TOOL_DEFINITIONS).sort());
   });

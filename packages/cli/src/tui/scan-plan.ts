@@ -2,8 +2,7 @@ import type {
   ScanDepth,
   ScanExecutionMode,
   ScanGoal,
-  ScanPlan,
-} from "@0sec/shared";
+} from "@0/shared";
 
 export type PlannerTargetKind = "web" | "source" | "package";
 
@@ -47,23 +46,6 @@ export function recommendedTimeCapMs(
   return depth === "deep" ? 1_800_000 : depth === "default" ? 600_000 : 300_000;
 }
 
-export function createScanPlan(input: {
-  goal: ScanGoal;
-  depth: ScanDepth;
-  runCount: number;
-  executionMode: ScanExecutionMode;
-  timeCapMs: number;
-  costCapUsd: number;
-}): ScanPlan {
-  return {
-    goal: input.goal,
-    depth: input.depth,
-    runCount: input.runCount,
-    executionMode: input.executionMode,
-    timeCapMs: input.timeCapMs,
-    costCapUsd: input.costCapUsd,
-  };
-}
 
 export function formatTimeCap(ms: number): string {
   if (ms < 60_000) return `${Math.round(ms / 1_000)}s`;

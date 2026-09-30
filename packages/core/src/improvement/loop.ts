@@ -233,16 +233,17 @@ async function runEvolutionPass(config: EvolutionConfig, deps: EvolutionDependen
   }
   const runId = randomUUID();
   const sandbox = deps.sandbox ?? createEvolutionSandbox(config);
-  const budgetedSandbox: NonNullable<EvolutionDependencies["sandbox"]> = async (request) => {
-    const reserve = config.timeoutMs / 1000 * config.computeUsdPerSecond;
-    if (result.evaluationCostUsd + reserve > config.maxEvaluationCostUsd) throw new Error("run evaluation budget cannot cover another execution");
-    const execution = await sandbox(request);
-    if (!Number.isFinite(execution.durationMs) || execution.durationMs < 0) throw new Error("sandbox returned invalid elapsed time");
-    result.evaluationCostUsd += execution.durationMs / 1000 * config.computeUsdPerSecond;
-    if (result.evaluationCostUsd > config.maxEvaluationCostUsd) throw new Error("run evaluation cost ceiling exceeded");
-    return execution;
+  const evaluationDeps: EvolutionDependencies = {
+    ...deps, sandbox,
+    evaluationBudget: {
+      remainingUsd: () => Math.min(config.maxEvaluationCostUsd - result.evaluationCostUsd, deps.evaluationBudget?.remainingUsd() ?? Infinity),
+      charge: (costUsd) => {
+        result.evaluationCostUsd += costUsd;
+        deps.evaluationBudget?.charge(costUsd);
+        if (result.evaluationCostUsd > config.maxEvaluationCostUsd) throw new Error("run evaluation cost ceiling exceeded");
+      },
+    },
   };
-  const evaluationDeps = { ...deps, sandbox: budgetedSandbox };
   try {
     for (let iteration = 0; iteration < config.maxIterations; iteration++) {
       deps.signal?.throwIfAborted();
@@ -262,7 +263,9 @@ async function runEvolutionPass(config: EvolutionConfig, deps: EvolutionDependen
       }
       const candidate = await createEvolutionCandidate(generationSnapshot, proposal, config);
       deps.log?.(`[evolve] evaluating source version ${candidate.id} against ${active.id}`);
-      const evaluation = await evaluateEvolutionCandidate(active.snapshot, candidate, config, evaluationDeps);
+      const evaluation = await evaluateEvolutionCandidate(active.snapshot, candidate, config, {
+        ...evaluationDeps, ...(proposal.modelIdentity ? { modelIdentity: () => proposal.modelIdentity! } : {}),
+      });
       feedback = developmentFeedback(evaluation, proposal);
       const receiptPath = join(config.storePath, "receipts", `${candidate.id}.json`);
       publishEvolutionArtifact(receiptPath, evaluation);
@@ -366,19 +369,21 @@ export async function approveEvolutionCandidate(
     if (!deps.sandbox && !/^sha256:[a-f0-9]{64}$/.test(config.image)) throw new Error("candidate is missing an immutable sandbox image identity");
     const sandbox = deps.sandbox ?? createEvolutionSandbox(config);
     let evaluationCostUsd = 0;
-    const budgetedSandbox: NonNullable<EvolutionDependencies["sandbox"]> = async (request) => {
-      const reserve = config.timeoutMs / 1000 * config.computeUsdPerSecond;
-      if (evaluationCostUsd + reserve > config.maxEvaluationCostUsd) throw new Error("approval evaluation budget cannot cover another execution");
-      const execution = await sandbox(request);
-      if (!Number.isFinite(execution.durationMs) || execution.durationMs < 0) throw new Error("sandbox returned invalid elapsed time");
-      evaluationCostUsd += execution.durationMs / 1000 * config.computeUsdPerSecond;
-      if (evaluationCostUsd > config.maxEvaluationCostUsd) throw new Error("approval evaluation cost ceiling exceeded");
-      return execution;
+    const evaluationDeps: EvolutionDependencies = {
+      ...deps, sandbox,
+      evaluationBudget: {
+        remainingUsd: () => Math.min(config.maxEvaluationCostUsd - evaluationCostUsd, deps.evaluationBudget?.remainingUsd() ?? Infinity),
+        charge: (costUsd) => {
+          evaluationCostUsd += costUsd;
+          deps.evaluationBudget?.charge(costUsd);
+          if (evaluationCostUsd > config.maxEvaluationCostUsd) throw new Error("approval evaluation cost ceiling exceeded");
+        },
+      },
     };
     await startEvolutionCanary(root, candidate.id, baseline.id, deps.signal);
     let approved = false;
     try {
-      if (!await evaluateCanaryTrials(config, baseline, candidate, { ...deps, sandbox: budgetedSandbox })) {
+      if (!await evaluateCanaryTrials(config, baseline, candidate, evaluationDeps)) {
         throw new Error("independent canary evaluation regressed");
       }
       await promoteEvolutionVersion(root, candidate.id, baseline.id, deps.signal);

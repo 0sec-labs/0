@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import type { Finding, ImpactAssessment } from "@0sec/shared";
+import type { Finding, ImpactAssessment } from "@0/shared";
 import {
   computeCvss4BaseScore,
   parseCvss4Vector,
@@ -137,6 +137,12 @@ describe("suggestCvss4 — finding → 4.0 vector", () => {
     expect(s.vector).toContain("/AV:N/");
     expect(s.score).toBeGreaterThan(0);
   });
+  it("keeps remote authenticated reachability network-scoped with low privileges", () => {
+    const s = suggestCvss4(mkFinding({ impactAssessment: { ...REMOTE, reachability_tier: "remote-auth" } }));
+    expect(s.vector).toContain("/AV:N/");
+    expect(s.vector).toContain("/PR:L/");
+  });
+
 
   it("does not perturb the 3.1 suggestion (both are independent)", () => {
     const f = mkFinding({ impactAssessment: REMOTE });

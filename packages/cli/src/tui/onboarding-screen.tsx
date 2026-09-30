@@ -1,67 +1,59 @@
 /** @jsxImportSource @opentui/react */
 /**
- * The guided first-run onboarding dialog.
- *
- * A GUIDED, one-decision-per-step first run: welcome → connect → models →
- * preferences → analytics → done. Each step explains itself and collects its
- * own answer inline; onboarding never hands the operator the whole Settings
- * catalogue.
- *
- * It is a pop-up rather than a full-screen route: the host wraps it in
- * `DialogSurface`, `useSurfaceDimensions` reports that panel's inner box, and
- * the body is a dialog card — an icon+title row that names the step, a step
- * rail showing where in the flow the operator is, and the step's own prose,
- * selector and preview. The footer of bindings is the HOST's single row, drawn
- * from the `hint` this card returns through `frame`, so it is not drawn twice.
- *
- * Two of the steps ARE genuine one-decision pickers already, so this screen
- * reuses them verbatim instead of reimplementing them: the `connect` step
- * embeds the existing `ConnectScreen` (advancing on its `onConnected`), and the
- * `models` step embeds the existing `ModelScreen` (advancing on its
- * `onSelect`). The host supplies each through `renderConnect`/`renderModels`,
- * so this file owns the step machine and the host owns the runtime wiring
- * (which credentials, which audit's staged model) exactly as its `ConnectRoute`
- * and `ModelRoute` already do. The `preferences` step is built from the SAME
- * pieces the Settings screen is made of — `SETTING_DEFS` for the definition,
- * `updateSetting` to persist, `SettingsPreview` for a live preview — over just
- * `theme` and `density`, so it stays a focused two-decision pass and NEVER
- * mounts the full `SettingsScreen`.
- *
- * COMPLETION IS WRITTEN IN EXACTLY ONE PLACE. `onboardingCompleted` is set only
- * by `finalizeOnboarding()`, called only from the `done` step's Enter. Every
- * confirmed preference or connection persists independently of completion.
- * Model choices are staged on the audit and applied on Finish or Skip setup.
- * Escape goes back one decision; at Welcome it skips into chat without marking
- * setup complete. Ctrl+C quits; confirmed disk writes remain, while staged
- * audit choices last only for this process. `onboardingCompleted` is operator-owned
- * and refused at project scope by the store; the completion write below is
- * un-scoped, so it always lands in the global layer.
+ * Optional /onboard setup. Reuses the provider/model pickers and the settings
+ * store; highlighted choices do not persist until confirmed. Back and Skip
+ * retain saved choices. The final data-sharing decision completes setup.
  */
 
 import React, {
   useCallback,
+  useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { sleekScrollbar } from "./scrollbar.js";
-import { useKeyboard } from "@opentui/react";
-import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core";
-import { analyticsPipeline } from "@0sec/core";
+import { AppContext, useKeyboard, useRenderer } from "@opentui/react";
+import {
+  CliRenderEvents,
+  resolveImageRenderProtocol,
+  TextAttributes,
+  type KeyEvent,
+  type NativeImage,
+  type ScrollBoxRenderable,
+} from "@opentui/core";
 
 import { Cells, textCells } from "./primitives.js";
-import { updateSetting, useSettings } from "./settings-store.js";
-import { SETTING_DEFS, type TuiSettings } from "./settings.js";
-import { SettingsPreview, previewRowCount } from "./settings-preview.js";
-import { SurfaceContext, useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
-import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import {
-  DIALOG_HOST_FOOTER_ROWS,
-  shellChromeRows,
-  wrapCells,
-} from "./settings-layout.js";
+  getSettingSources,
+  previewSetting,
+  reloadSettings,
+  updateSetting,
+  useSettings,
+} from "./settings-store.js";
+import { SETTING_DEFS, type TuiSettings } from "./settings.js";
+import { SettingsPreview } from "./settings-preview.js";
+import { SurfaceContext, useSurfaceDimensions } from "./dialog-surface.js";
+import { DialogActionButton } from "./dialog-screen-chrome.js";
+import { DialogSelectBody, type DialogItem } from "./dialog-select.js";
+import { computeDialogPanel, type DialogPanel } from "./dialog-select-layout.js";
+import { Popup } from "./popup.js";
+import { buildConnectRows } from "./connect-layout.js";
+import { loadAccountStore } from "./credential-store.js";
+import { providerStates } from "./provider-status.js";
+import { wrapCells } from "./settings-layout.js";
+import { fitTuiText } from "./text.js";
 import { useTheme, type Theme } from "./theme-context.js";
+import {
+  createZeroAxeImages,
+  ZERO_AXE_FRAME_DURATIONS,
+  ZERO_AXE_HEIGHT,
+  ZERO_AXE_WIDTH,
+} from "./chat/zero-axe-art.js";
+
 
 // ---------------------------------------------------------------------------
 // Steps — the state machine
@@ -72,8 +64,7 @@ export type OnboardingStep =
   | "connect"
   | "models"
   | "preferences"
-  | "analytics"
-  | "done";
+  | "analytics";
 
 /** Metadata for a single step. */
 interface StepDef {
@@ -83,17 +74,14 @@ interface StepDef {
 }
 
 /**
- * The guided flow, in order. The rail draws one dot per entry; the machine
- * walks it linearly (`stepAfter`). Exported so a test can assert the order and
- * labels without rendering the dialog.
+ * The guided flow, in order. Each window header names its current decision.
  */
 export const ONBOARDING_STEPS: readonly StepDef[] = [
   { key: "welcome", label: "Welcome", skippable: false },
-  { key: "connect", label: "Connect", skippable: true },
-  { key: "models", label: "Models", skippable: true },
-  { key: "preferences", label: "Preferences", skippable: true },
-  { key: "analytics", label: "Analytics", skippable: true },
-  { key: "done", label: "Done", skippable: false },
+  { key: "connect", label: "Provider", skippable: true },
+  { key: "models", label: "Model", skippable: true },
+  { key: "preferences", label: "Theme", skippable: true },
+  { key: "analytics", label: "Data sharing", skippable: true },
 ];
 
 /** The step that linearly follows `step`, or `undefined` at the end. */
@@ -107,32 +95,18 @@ export function stepBefore(step: OnboardingStep): OnboardingStep | undefined {
   return idx > 0 ? ONBOARDING_STEPS[idx - 1]?.key : undefined;
 }
 
-/**
- * The setting keys the guided preferences step walks, in order. Deliberately
- * just the two most visible, lowest-risk Display cosmetics — never a Security
- * toggle, which belongs in the full Settings catalogue with its description.
- */
-export const ONBOARDING_PREFERENCE_KEYS = ["theme", "density"] as const;
-type PreferenceKey = (typeof ONBOARDING_PREFERENCE_KEYS)[number];
 
-/**
- * THE ONLY place `onboardingCompleted` is written. Called solely from the
- * `done` step's Enter — never on skip, cancel, back, or a preference set — so
- * cancelling always leaves onboarding incomplete. The write is un-scoped, so
- * the store lands it in the global layer (it is operator-owned and refused at
- * project scope).
- */
+/** Only finishing the final decision writes the operator-owned completion flag. */
 export function finalizeOnboarding(): void {
   updateSetting("onboardingCompleted", true);
 }
 
-/** The four consent tiers, matching the `analyticsLevel` setting's choices. */
-export type AnalyticsLevel = TuiSettings["analyticsLevel"];
+/** The two consent choices exposed by onboarding. */
+export type AnalyticsLevel = "off" | "usage";
 
-/** Save the sharing tier without broadening a separate problem-report choice. */
+/** Usage analytics and problem/error reports use independent consent paths. */
 export function recordAnalyticsConsent(level: AnalyticsLevel): void {
   updateSetting("analyticsLevel", level);
-  if (level === "off") updateSetting("diagnosticReporting", "off");
 }
 
 
@@ -142,25 +116,39 @@ export function recordAnalyticsConsent(level: AnalyticsLevel): void {
 
 export interface OnboardingFrameInput {
   body: React.ReactNode;
-  hint: string;
-  actions: React.ReactNode;
 }
 
-/**
- * How an embedded sub-step (connect/models) reports back to the machine. The
- * host wires the real screen's callbacks to these: a made decision → `onDone`
- * (advance), an explicit skip → `onSkip` (advance without a choice), Back
- * → `onBack`, and an explicit quit → `onExit`.
- */
+interface EmbeddedConnectFrameInput extends OnboardingFrameInput {
+  hint: string;
+  onBack?: () => void;
+  backLabel?: string;
+  onNext?: () => void;
+  nextLabel?: string;
+  nextDisabled?: boolean;
+}
+
+type EmbeddedConnectFrame = (input: EmbeddedConnectFrameInput) => React.ReactNode;
+
+/** Picker-local actions consumed by the containing window's controls. */
+interface OnboardingWindowActions {
+  onBack?: () => void;
+  backLabel?: string;
+  onNext?: () => void;
+  nextLabel?: string;
+  nextDisabled?: boolean;
+}
+
 export interface OnboardingSubNav {
   /** Return to the previous decision without undoing confirmed choices. */
   onBack: () => void;
   /** The sub-step's decision was made (and already persisted/staged by the host). */
   onDone: () => void;
-  /** Skip this step, keeping defaults, and advance. */
+  /** Skip this step, keeping saved choices, and advance. */
   onSkip: () => void;
   /** Leave onboarding entirely, without completing it. */
   onExit: () => void;
+  /** Expose the picker’s actual cancel and activation actions to the window. */
+  registerActions: (actions?: OnboardingWindowActions) => void;
 }
 
 export interface OnboardingScreenProps {
@@ -187,9 +175,16 @@ export interface OnboardingScreenProps {
   interactive: boolean;
 }
 
-// ---------------------------------------------------------------------------
-// Step copy (welcome / done prose)
-// ---------------------------------------------------------------------------
+/** Register real picker actions without adding a second navigation row. */
+export function OnboardingSubstep({ nav, children, ...actions }: OnboardingWindowActions & {
+  nav: OnboardingSubNav;
+  children: React.ReactNode;
+}) {
+  useLayoutEffect(() => { nav.registerActions(actions); });
+  useLayoutEffect(() => () => { nav.registerActions(); }, [nav.registerActions]);
+  return <>{children}</>;
+}
+
 
 type LineTone = "title" | "text" | "muted" | "accent";
 
@@ -203,132 +198,106 @@ function paragraph(text: string, tone: LineTone, width: number): StepLine[] {
   return wrapCells(text, width).map((line) => ({ text: line, tone }));
 }
 
-const BLANK: StepLine = { text: "", tone: "muted" };
+/** Suppress browse-only connection prose while preserving entry/sign-in detail. */
+function suppressConnectBrowseDetail(node: React.ReactNode): React.ReactNode {
+  if (!React.isValidElement(node)) return node;
+  const element = node as React.ReactElement<{ children?: React.ReactNode }>;
+  if (element.type === DialogSelectBody) {
+    const picker = element as React.ReactElement<React.ComponentProps<typeof DialogSelectBody>>;
+    const panel = picker.props.panel;
+    const compactPanel: DialogPanel = {
+      ...panel,
+      listWidth: panel.innerWidth,
+      rowWidth: Math.max(1, panel.innerWidth - (panel.scrolls ? 1 : 0)),
+      showDetail: false,
+      detailWidth: 0,
+      detailGap: 0,
+    };
+    return React.cloneElement(picker, { panel: compactPanel, renderDetail: undefined });
+  }
+  if (element.props.children === undefined) return element;
+  let changed = false;
+  const children = React.Children.map(element.props.children, (child) => {
+    const next = suppressConnectBrowseDetail(child);
+    if (next !== child) changed = true;
+    return next;
+  });
+  return changed
+    ? React.cloneElement(element, { children })
+    : element;
+}
 
-function welcomeLines(width: number): StepLine[] {
+/** The host's embedded ConnectScreen frame, wrapped only in provider browse mode. */
+function suppressConnectBrowseDetails(connect: React.ReactNode): React.ReactNode {
+  if (!React.isValidElement(connect)) return connect;
+  const props = connect.props;
+  if (props === null || typeof props !== "object" || !("frame" in props) || typeof props.frame !== "function") {
+    return connect;
+  }
+  // `renderConnect` is the host's ConnectScreen element by contract.
+  const frame = props.frame as EmbeddedConnectFrame;
+  return React.cloneElement(
+    connect as React.ReactElement<{ frame: EmbeddedConnectFrame }>,
+    {
+      frame: (input) => frame({
+        ...input,
+        body: suppressConnectBrowseDetail(input.body),
+      }),
+    },
+  );
+}
+
+
+/** Return provider labels only; never carry credential values into the view. */
+function detectedProviderLabels(): string[] {
+  const accountStore = loadAccountStore();
+  const rows = buildConnectRows({
+    states: providerStates(process.env),
+    stored: Object.keys(accountStore.providers),
+  });
+  const labels: string[] = [];
+  for (const row of rows) {
+    if (row.kind === "provider" && row.provider.connected) labels.push(row.provider.label);
+  }
+  return labels;
+}
+
+function providerSetupLines(labels: readonly string[], width: number): StepLine[] {
+  const detected = labels.length > 0
+    ? `Detected credentials: ${labels.join(", ")}.`
+    : "No provider credentials detected.";
+  const guidance = labels.length > 0
+    ? "Connect another provider below."
+    : "Select a provider below to connect one.";
   return [
-    ...paragraph("Welcome to 0.security", "title", width),
-    BLANK,
-    ...paragraph(
-      "This console is your command center for self-improving, open-source security workflows.",
-      "text",
-      width,
-    ),
-    BLANK,
-    ...paragraph(
-      "A few quick steps set you up: connect a provider, pick a model, and choose a couple of display preferences. One decision at a time.",
-      "text",
-      width,
-    ),
-    BLANK,
-    ...paragraph("Enter → begin", "accent", width),
-    ...paragraph("Esc → skip onboarding for now", "muted", width),
+    ...paragraph(detected, labels.length > 0 ? "accent" : "muted", width),
+    ...paragraph(guidance, "muted", width),
   ];
-}
-
-function doneLines(width: number): StepLine[] {
-  return [
-    ...paragraph("You're all set", "title", width),
-    BLANK,
-    ...paragraph(
-      "Start an audit when you're ready. Revisit your connection, model, and every display setting anytime with /settings from the chat view.",
-      "text",
-      width,
-    ),
-    BLANK,
-    ...paragraph("Enter → start working", "accent", width),
-  ];
-}
-
-const STEP_LINES: Partial<Record<OnboardingStep, (width: number) => StepLine[]>> = {
-  welcome: welcomeLines,
-  done: doneLines,
-};
-
-const STEP_HINT: Record<OnboardingStep, string> = {
-  welcome: "[⏎] begin · [esc] skip onboarding",
-  connect: "[esc] back · [⌃N] skip · [⌃C] quit",
-  models: "[esc] back · [⌃N] skip · [⌃C] quit",
-  preferences: "[←→] change · [⏎] confirm · [s] skip · [esc] back",
-  analytics: "[↑↓] choose · [PgUp/PgDn] read · [⏎] confirm · [s] skip · [esc] back",
-  done: "[⏎] start working · [esc] back",
-};
-
-/** Visible mouse controls share exactly the keyboard's transition callbacks. */
-export function OnboardingActions({ onBack, onNext, onSkip, backLabel = "Back", nextLabel = "Next" }: {
-  onBack: () => void;
-  onNext?: () => void;
-  onSkip?: () => void;
-  backLabel?: string;
-  nextLabel?: string;
-}) {
-  const theme = useTheme();
-  return <box height={1} flexShrink={0} flexDirection="row" gap={2}>
-    <text fg={theme.ACCENT} onMouseUp={(event) => { if (event.button === 0) { event.stopPropagation(); onBack(); } }}>[{backLabel}]</text>
-    {onNext ? <text fg={theme.ACCENT} onMouseUp={(event) => { if (event.button === 0) { event.stopPropagation(); onNext(); } }}>[{nextLabel}]</text> : null}
-    {onSkip ? <text fg={theme.MUTED} onMouseUp={(event) => { if (event.button === 0) { event.stopPropagation(); onSkip(); } }}>[Skip]</text> : null}
-  </box>;
-}
-
-/** Budget one extra row for wizard controls around an existing picker. */
-export function OnboardingSubstep({ nav, children }: { nav: OnboardingSubNav; children: React.ReactNode }) {
-  const { width, height } = useSurfaceDimensions();
-  const pickerHeight = Math.max(1, height - 1);
-  return <box flexDirection="column" width="100%" height="100%">
-    <SurfaceContext.Provider value={{ width, height: pickerHeight }}>
-      <box height={pickerHeight} flexShrink={0}>{children}</box>
-    </SurfaceContext.Provider>
-    <OnboardingActions onBack={nav.onBack} onSkip={nav.onSkip} />
-  </box>;
 }
 
 // ---------------------------------------------------------------------------
 // Analytics consent step
 // ---------------------------------------------------------------------------
 
-/** Every tier remains selectable; skipping preserves the current preference. */
+/** Only Off and pseudonymous usage metrics are offered during setup. */
 const ANALYTICS_OPTIONS = [
-  {
-    level: "usage",
-    label: "Usage metrics only",
-    detail:
-      "Feature counters and error categories. No tool content, code, scope or findings.",
-  },
-  {
-    level: "commands",
-    label: "Tool content and code",
-    detail:
-      "Also tool arguments/results and submitted code for training, with recognized credentials scrubbed.",
-  },
-  {
-    level: "full",
-    label: "Full training data (new-install default)",
-    detail:
-      "Usage, tool arguments/results, submitted code, scope and findings; recognized credentials scrubbed.",
-  },
   {
     level: "off",
     label: "Off",
-    detail: "No analytics or training uploads. Also turns automatic problem reports off.",
+    detail: "No analytics uploads.",
+  },
+  {
+    level: "usage",
+    label: "Yes, I’d like to help make 0 better!",
+    detail: "Pseudonymous usage metrics to help improve 0.",
   },
 ] as const satisfies readonly { level: AnalyticsLevel; label: string; detail: string }[];
 
-/** Disclose the default, actual data categories, and independent restrictions. */
+/** Keep setup copy short; each choice names what it shares. */
 function analyticsLines(width: number): StepLine[] {
   return [
-    ...paragraph("Analytics and training data", "title", width),
-    BLANK,
-    ...paragraph(
-      "Full sharing is on by default for new installs. Usage metrics are separate from training data: tool arguments/results, submitted code, scope and findings for model improvement and security research. Recognized credentials are scrubbed; emails, URLs, identifiers and other content are retained. This is not anonymous. Sending requires Cloud sign-in.",
-      "text",
-      width,
-    ),
-    BLANK,
-    ...paragraph(
-      `Active in this process: ${analyticsPipeline.getLevel()}. Saved choices and environment restrictions are preserved. 0SEC_ANALYTICS_LEVEL, 0SEC_OFFLINE, 0SEC_NO_TELEMETRY and DO_NOT_TRACK can restrict collection. Skip keeps the current setting; change it anytime in /settings.`,
-      "muted",
-      width,
-    ),
+    ...paragraph("Data sharing", "title", width),
+    ...paragraph("You can change this choice in Settings.", "muted", width),
   ];
 }
 
@@ -345,6 +314,97 @@ function toneColor(tone: LineTone, theme: Theme): string {
   }
 }
 
+function WelcomeHero({
+  contentWidth,
+  bodyRows,
+  theme,
+  reduceMotion,
+}: {
+  contentWidth: number;
+  bodyRows: number;
+  theme: Theme;
+  reduceMotion: boolean;
+}) {
+  const renderer = useRenderer();
+  const subscribe = useCallback((changed: () => void) => {
+    renderer.on(CliRenderEvents.CAPABILITIES, changed);
+    renderer.on(CliRenderEvents.RESIZE, changed);
+    renderer.on(CliRenderEvents.FRAME, changed);
+    return () => {
+      renderer.off(CliRenderEvents.CAPABILITIES, changed);
+      renderer.off(CliRenderEvents.RESIZE, changed);
+      renderer.off(CliRenderEvents.FRAME, changed);
+    };
+  }, [renderer]);
+  const getProtocol = useCallback(() => {
+    const resolution = renderer.resolution;
+    const hasResolution = renderer.terminalWidth > 0 && renderer.terminalHeight > 0
+      && Boolean(resolution && resolution.width > 0 && resolution.height > 0);
+    return resolveImageRenderProtocol("auto", renderer.capabilities, hasResolution);
+  }, [renderer]);
+  const protocol = useSyncExternalStore(subscribe, getProtocol);
+  const greetingLines = wrapCells("Hey there! Meet Zero.", contentWidth);
+  const maxImageHeight = Math.min(
+    ZERO_AXE_HEIGHT,
+    Math.max(0, bodyRows - greetingLines.length - (greetingLines.length > 0 ? 1 : 0)),
+  );
+  let imageHeight = maxImageHeight;
+  let imageWidth = Math.min(contentWidth, Math.round(imageHeight * ZERO_AXE_WIDTH / ZERO_AXE_HEIGHT));
+  imageHeight = Math.min(imageHeight, Math.round(imageWidth * ZERO_AXE_HEIGHT / ZERO_AXE_WIDTH));
+  const showImage = protocol !== "blocks" && imageWidth >= 12 && imageHeight >= 8;
+  const [imageAssets, setImageAssets] = useState<{ canvas: string; images: NativeImage[] }>();
+  const [frameIndex, setFrameIndex] = useState(0);
+
+  useEffect(() => {
+    if (!showImage) {
+      setImageAssets(undefined);
+      return;
+    }
+    const images = createZeroAxeImages(theme.PANEL);
+    setImageAssets({ canvas: theme.PANEL, images });
+    setFrameIndex(0);
+    return () => { images.forEach((image) => image.dispose()); };
+  }, [showImage, theme.PANEL]);
+
+  useEffect(() => {
+    if (!showImage || reduceMotion) {
+      setFrameIndex(0);
+      return;
+    }
+    let index = 0;
+    let timer: NodeJS.Timeout;
+    const schedule = () => {
+      timer = setTimeout(() => {
+        index = (index + 1) % ZERO_AXE_FRAME_DURATIONS.length;
+        setFrameIndex(index);
+        schedule();
+      }, ZERO_AXE_FRAME_DURATIONS[index] ?? 1000);
+    };
+    schedule();
+    return () => clearTimeout(timer);
+  }, [showImage, reduceMotion]);
+
+  const images = imageAssets?.canvas === theme.PANEL ? imageAssets.images : undefined;
+  const image = images?.[reduceMotion ? 0 : frameIndex];
+  return (
+    <box width={contentWidth} height={bodyRows} flexDirection="column" alignItems="center"
+      flexShrink={0} minWidth={0} overflow="hidden">
+      {showImage && image ? (
+        <box width={imageWidth} height={imageHeight} flexShrink={0} marginBottom={1}
+          backgroundColor={theme.PANEL}>
+          <image source={image} protocol={protocol} fit="fit"
+            width={imageWidth} height={imageHeight} flexShrink={0} />
+        </box>
+      ) : null}
+      {greetingLines.slice(0, Math.max(0, bodyRows - (showImage ? imageHeight + 1 : 0))).map((line, index) => (
+        <Cells key={`welcome-greeting-${index}`} width={contentWidth} align="center" fg={theme.TEXT}>
+          {line}
+        </Cells>
+      ))}
+    </box>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Step rail
 // ---------------------------------------------------------------------------
@@ -352,48 +412,6 @@ function toneColor(tone: LineTone, theme: Theme): string {
 const FILLED = "●";
 const HOLLOW = "○";
 
-/** Upper bound on the card's width: past this a wizard reads better centered
- *  with generous side gutters than stretched edge-to-edge, exactly the way the
- *  overlay caps and centers its own body. */
-const CARD_MAX_WIDTH = 72;
-
-/**
- * A centered progress row: a dot per step — filled for the steps reached,
- * hollow for the ones ahead — followed by a muted "Step X of N · Label"
- * counter. Everything is budgeted before it is painted; pieces drop (counter
- * first, then the whole row) rather than being squeezed when the surface cannot
- * pay for them, and the group is centered within `width`.
- */
-function StepRail({ current, width, theme }: { current: number; width: number; theme: Theme }) {
-  const total = ONBOARDING_STEPS.length;
-  const done = Math.max(0, Math.min(current, total - 1)) + 1;
-  const filled = Array.from({ length: done }, () => FILLED).join(" ");
-  const rest = Array.from({ length: Math.max(0, total - done) }, () => HOLLOW).join(" ");
-  const filledWidth = textCells(filled);
-  const restWidth = textCells(rest);
-  const gap = restWidth > 0 ? 1 : 0;
-  const dots = filledWidth + gap + restWidth;
-  if (width < dots) return null;
-
-  const label = ONBOARDING_STEPS[current]?.label ?? "";
-  const counter = `Step ${current + 1} of ${total}${label ? ` · ${label}` : ""}`;
-  const sep = 2; // "  " between the dots and the counter
-  const counterWidth = width >= dots + sep + counter.length ? counter.length : 0;
-
-  return (
-    <box flexDirection="row" width={width} justifyContent="center" flexShrink={0} minWidth={0}>
-      <Cells width={filledWidth} fg={theme.ACCENT}>{filled}</Cells>
-      {gap > 0 ? <Cells width={gap}>{""}</Cells> : null}
-      {restWidth > 0 ? <Cells width={restWidth} fg={theme.MUTED}>{rest}</Cells> : null}
-      {counterWidth > 0 ? (
-        <>
-          <Cells width={sep}>{""}</Cells>
-          <Cells width={counterWidth} fg={theme.MUTED}>{counter}</Cells>
-        </>
-      ) : null}
-    </box>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -408,379 +426,354 @@ export function OnboardingScreen({
   onExit,
   interactive,
 }: OnboardingScreenProps) {
-  const { width, height } = useSurfaceDimensions();
-  const inDialog = useDialogSurface();
+  const terminal = useSurfaceDimensions();
+  const { keyHandler } = useContext(AppContext);
   const theme = useTheme();
   const settings = useSettings();
-
-  // Inside a dialog the surface IS the panel's inner box — no header, no
-  // padding — and the only row the host still spends is its single footer,
-  // drawn from the `hint` this card returns. Outside a dialog the legacy shell
-  // chrome applies.
-  const contentWidth = Math.max(1, width - (inDialog ? 0 : 4));
-  const availableRows = Math.max(
-    0,
-    height - (inDialog ? DIALOG_HOST_FOOTER_ROWS : shellChromeRows(width)) - 1,
-  );
   const [stepIndex, setStepIndex] = useState(0);
-  const [prefIndex, setPrefIndex] = useState(0);
-  const currentStep = ONBOARDING_STEPS[stepIndex]?.key ?? "done";
+  const [navFocus, setNavFocus] = useState<"back" | "skip" | "next" | null>(null);
+  const registeredActions = useRef<OnboardingWindowActions | undefined>(undefined);
+  const [actionMeta, setActionMeta] = useState({ backLabel: "Back", nextLabel: "Next", nextDisabled: false });
+  const registerActions = useCallback((actions?: OnboardingWindowActions) => {
+    registeredActions.current = actions;
+    const backLabel = actions?.backLabel ?? "Back";
+    const nextLabel = actions?.nextLabel ?? "Next";
+    const nextDisabled = actions?.nextDisabled ?? false;
+    setActionMeta((current) => current.backLabel === backLabel && current.nextLabel === nextLabel
+      && current.nextDisabled === nextDisabled ? current : { backLabel, nextLabel, nextDisabled });
+  }, []);
+  const currentStep = ONBOARDING_STEPS[stepIndex]?.key ?? "welcome";
+  const embedded = currentStep === "connect" || currentStep === "models";
+  const detectedProviders = useMemo(
+    () => currentStep === "connect" ? detectedProviderLabels() : [],
+    [currentStep],
+  );
+  const outerWidth = Math.max(1, Math.min(currentStep === "welcome" ? 96 : 86,
+    terminal.width - (terminal.width > 4 ? 4 : 0)));
+  const preferredHeight = currentStep === "welcome" ? 28 : 26;
+  const outerHeight = Math.max(1, Math.min(preferredHeight,
+    terminal.height - (terminal.height > 10 ? 4 : 0)));
+  const padded = outerWidth > 8 && outerHeight > 6;
+  const paddingX = padded ? 2 : 0;
+  const paddingY = padded ? 1 : 0;
+  const contentWidth = Math.max(1, outerWidth - paddingX * 2);
+  const contentHeight = Math.max(1, outerHeight - paddingY);
+  const actionRows = contentWidth >= 7 && contentHeight >= 2 ? 1 : 0;
+  const primaryRows = contentWidth >= 7 && contentHeight >= 4 ? 1 : 0;
+  const headerRows = contentHeight - actionRows - primaryRows >= 2 ? 1 : 0;
+  const separatorRows = headerRows > 0 && contentHeight - actionRows - primaryRows - headerRows >= 2 ? 1 : 0;
+  const bodyRows = contentHeight - actionRows - primaryRows - headerRows - separatorRows;
+  const textWidth = Math.max(1, contentWidth - 1);
+  const providerBrowseMode = currentStep === "connect"
+    && actionMeta.nextLabel !== "Save" && actionMeta.nextLabel !== "Signing in";
 
   const advanceTo = useCallback((next: OnboardingStep) => {
-    if (next === "preferences") setPrefIndex(0);
-    const idx = ONBOARDING_STEPS.findIndex((s) => s.key === next);
-    if (idx >= 0) setStepIndex(idx);
+    const index = ONBOARDING_STEPS.findIndex((entry) => entry.key === next);
+    if (index >= 0) setStepIndex(index);
   }, []);
-
   const advancePastCurrent = useCallback(() => {
     const next = stepAfter(currentStep);
     if (next) advanceTo(next);
-  }, [currentStep, advanceTo]);
-
-  // Preferences step: which key we are on, and which of its choices is
-  // highlighted. Nothing is persisted while cycling — only Enter writes — so a
-  // skip or cancel leaves the on-disk value untouched.
+    else { finalizeOnboarding(); onComplete(); }
+  }, [currentStep, advanceTo, onComplete]);
   const goBack = useCallback(() => {
-    if (currentStep === "preferences" && prefIndex > 0) {
-      setPrefIndex(prefIndex - 1);
-      return;
-    }
-    if (currentStep === "analytics") setPrefIndex(ONBOARDING_PREFERENCE_KEYS.length - 1);
     const previous = stepBefore(currentStep);
-    if (previous) setStepIndex(ONBOARDING_STEPS.findIndex((step) => step.key === previous));
+    if (previous) setStepIndex(ONBOARDING_STEPS.findIndex((entry) => entry.key === previous));
     else onDismiss();
-  }, [currentStep, prefIndex, onDismiss]);
-  const prefKey: PreferenceKey | undefined = ONBOARDING_PREFERENCE_KEYS[prefIndex];
-  const prefDef = useMemo(
-    () => SETTING_DEFS.find((d) => d.key === prefKey),
-    [prefKey],
-  );
+  }, [currentStep, onDismiss]);
+  const handleBack = useCallback(() => {
+    if (embedded && registeredActions.current?.onBack) registeredActions.current.onBack();
+    else goBack();
+  }, [embedded, goBack]);
+  const prefDef = useMemo(() => SETTING_DEFS.find((entry) => entry.key === "theme")!, []);
   const prefChoices = prefDef?.choices ?? [];
   const [choiceIndex, setChoiceIndex] = useState(0);
+  const choiceRef = useRef(choiceIndex);
+  const themePreviewActive = useRef(false);
+  const savedTheme = useRef<string | undefined>(undefined);
 
-  // When we arrive at a preference (or open the step), start the highlight on
-  // the value currently in effect, so Enter-through-defaults is a no-op change.
+  // A reopened decision starts from its saved value, not an abandoned draft.
   useEffect(() => {
-    if (currentStep !== "preferences" || !prefKey) return;
-    const current = settings[prefKey] as string;
-    const idx = prefChoices.indexOf(current);
-    setChoiceIndex(idx >= 0 ? idx : 0);
-    // Only re-seed when the target key changes or the step opens; not on every
-    // settings notification (that would fight the operator's cycling).
+    setNavFocus(null);
+    if (!interactive || currentStep !== "preferences") return;
+    savedTheme.current = settings.theme;
+    const index = prefChoices.indexOf(settings.theme);
+    choiceRef.current = index >= 0 ? index : 0;
+    setChoiceIndex(choiceRef.current);
+    return () => {
+      if (themePreviewActive.current) {
+        themePreviewActive.current = false;
+        reloadSettings();
+      }
+    };
+    // Only seed on opening a decision, never on a live preview notification.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStep, prefKey]);
-
-  const handleEnter = useCallback(() => {
-    if (currentStep === "welcome") {
-      advanceTo("connect");
-    } else if (currentStep === "done") {
-      finalizeOnboarding();
-      onComplete();
-    }
-  }, [currentStep, advanceTo, onComplete]);
+  }, [interactive, currentStep]);
 
   const commitPreference = useCallback(() => {
-    if (prefKey) {
-      const value = prefChoices[choiceIndex];
-      if (value !== undefined) {
-        // Persist immediately, exactly as the Settings screen does. This is
-        // independent of completion, so a later cancel keeps it.
-        updateSetting(prefKey, value as TuiSettings[PreferenceKey]);
-      }
+    const value = prefChoices[choiceRef.current];
+    themePreviewActive.current = false;
+    if (value !== undefined) updateSetting("theme", value);
+    advanceTo("analytics");
+  }, [prefChoices, advanceTo]);
+  const skipPreference = useCallback(() => advanceTo("analytics"), [advanceTo]);
+  const choosePreference = useCallback((index: number) => {
+    choiceRef.current = index;
+    setChoiceIndex(index);
+    setNavFocus(null);
+    const value = prefChoices[index];
+    if (value !== undefined) {
+      themePreviewActive.current = true;
+      previewSetting("theme", value);
     }
-    const next = prefIndex + 1;
-    if (next < ONBOARDING_PREFERENCE_KEYS.length) {
-      setPrefIndex(next);
-    } else {
-      advanceTo("analytics");
-    }
-  }, [prefKey, prefChoices, choiceIndex, prefIndex, advanceTo]);
-
-  const skipPreference = useCallback(() => {
-    if (prefIndex + 1 < ONBOARDING_PREFERENCE_KEYS.length) setPrefIndex(prefIndex + 1);
-    else advanceTo("analytics");
-  }, [prefIndex, advanceTo]);
-
+  }, [prefChoices]);
   const cycleChoice = useCallback((delta: number) => {
-    const n = prefChoices.length;
-    if (n === 0) return;
-    setChoiceIndex((i) => ((i + delta) % n + n) % n);
-  }, [prefChoices.length]);
+    if (prefChoices.length) choosePreference((choiceRef.current + delta + prefChoices.length) % prefChoices.length);
+  }, [choosePreference, prefChoices.length]);
 
-  // Analytics consent: which tier is highlighted. Seeded from the current
-  // stored setting (full on a fresh install). Moving or skipping writes nothing.
-  const [analyticsIndex, setAnalyticsIndex] = useState(() => {
-    const idx = ANALYTICS_OPTIONS.findIndex((o) => o.level === settings.analyticsLevel);
-    return idx >= 0 ? idx : 2; // index 2 = "full"
-  });
+  const analyticsLevelSource = getSettingSources().analyticsLevel;
+  const persistedAnalyticsIndex = ANALYTICS_OPTIONS.findIndex(
+    (option) => option.level === settings.analyticsLevel,
+  );
+  const defaultAnalyticsIndex = ANALYTICS_OPTIONS.findIndex((option) => option.level === "usage");
+  const selectedAnalyticsIndex = analyticsLevelSource === "default"
+    ? defaultAnalyticsIndex
+    : Math.max(0, persistedAnalyticsIndex);
+  const [analyticsIndex, setAnalyticsIndex] = useState(selectedAnalyticsIndex);
   useEffect(() => {
-    if (currentStep === "analytics") {
-      setAnalyticsIndex(ANALYTICS_OPTIONS.findIndex((option) => option.level === settings.analyticsLevel));
-    }
-  }, [currentStep, settings.analyticsLevel]);
-
+    if (currentStep === "analytics") setAnalyticsIndex(selectedAnalyticsIndex);
+  }, [currentStep, selectedAnalyticsIndex]);
   const cycleAnalytics = useCallback((delta: number) => {
-    const n = ANALYTICS_OPTIONS.length;
-    setAnalyticsIndex((i) => ((i + delta) % n + n) % n);
+    setAnalyticsIndex((index) => (index + delta + ANALYTICS_OPTIONS.length) % ANALYTICS_OPTIONS.length);
+    setNavFocus(null);
   }, []);
-
   const commitAnalytics = useCallback(() => {
-    const level = ANALYTICS_OPTIONS[analyticsIndex]?.level ?? "off";
-    recordAnalyticsConsent(level);
-    advanceTo("done");
-  }, [analyticsIndex, advanceTo]);
+    recordAnalyticsConsent(ANALYTICS_OPTIONS[analyticsIndex]?.level ?? "off");
+    advancePastCurrent();
+  }, [analyticsIndex, advancePastCurrent]);
+  const onNext = currentStep === "preferences" ? commitPreference
+    : currentStep === "analytics" ? commitAnalytics : advancePastCurrent;
+  const handleNext = useCallback(() => {
+    if (!embedded) {
+      onNext();
+      return;
+    }
+    const actions = registeredActions.current;
+    if (actions?.nextDisabled) return;
+    if (actions?.onNext) actions.onNext();
+    else onNext();
+  }, [embedded, onNext]);
+  const onSkip = currentStep === "preferences" ? skipPreference
+    : ONBOARDING_STEPS[stepIndex]?.skippable ? advancePastCurrent : undefined;
+  const backButtonLabel = currentStep === "welcome" ? contentWidth < 36 ? "Skip" : "Skip setup" : actionMeta.backLabel;
+  const nextButtonLabel = currentStep === "welcome" ? "Continue"
+    : currentStep === "analytics" ? "Finish" : embedded ? actionMeta.nextLabel : "Next";
+  const visibleSkip = Boolean(onSkip)
+    && contentWidth >= textCells(backButtonLabel) + textCells("Skip") + 5;
+  const compactNavigation = contentWidth < textCells(backButtonLabel)
+    + (visibleSkip ? textCells("Skip") + 1 : 0) + 4;
+  const compactPrimary = contentWidth < textCells(nextButtonLabel) + 4;
 
-  const skipAnalytics = useCallback(() => {
-    advanceTo("done");
-  }, [advanceTo]);
+  // Model Tab still switches catalogues; Ctrl+Tab enters window controls.
+  // Everywhere else Tab, Shift+Tab and focused Left/Right navigate buttons.
+  useEffect(() => {
+    if (!interactive || !keyHandler) return;
+    const handle = (key: KeyEvent) => {
+      if (key.name === "tab" && (currentStep !== "models" || key.ctrl || navFocus !== null)) {
+        const controls: Array<"back" | "skip" | "next" | null> = visibleSkip
+          ? ["back", "skip", "next", null] : ["back", "next", null];
+        const index = controls.indexOf(navFocus);
+        setNavFocus(controls[(index + (key.shift ? -1 : 1) + controls.length) % controls.length] ?? null);
+      } else if (navFocus !== null && key.name === "return") {
+        if (navFocus === "back") handleBack();
+        else if (navFocus === "skip") onSkip?.();
+        else handleNext();
+      } else if (navFocus !== null && !key.ctrl && !key.meta && !key.option
+        && (key.name === "left" || key.name === "right")) {
+        const controls: Array<"back" | "skip" | "next"> = visibleSkip
+          ? ["back", "skip", "next"] : ["back", "next"];
+        const index = controls.indexOf(navFocus);
+        setNavFocus(controls[(index + (key.name === "right" ? 1 : -1) + controls.length) % controls.length] ?? null);
+      } else if (navFocus !== null && key.name === "escape") {
+        setNavFocus(null);
+      } else return;
+      key.preventDefault();
+      key.stopPropagation();
+    };
+    keyHandler.prependListener("keypress", handle);
+    return () => { keyHandler.off("keypress", handle); };
+  }, [interactive, keyHandler, currentStep, navFocus, visibleSkip, handleBack, onSkip, handleNext]);
 
   useKeyboard((key) => {
-    if (!interactive) return;
-    // During an embedded sub-step, the mounted ConnectScreen/ModelScreen owns
-    // every key. Handling them here too would double-fire.
-    if (currentStep === "connect" || currentStep === "models") return;
-
+    if (!interactive || embedded) return;
     if (key.ctrl && key.name === "c") { onExit(); return; }
     if (key.name === "escape") { goBack(); return; }
+    if (key.ctrl && key.name === "n") { onSkip?.(); return; }
     if (key.ctrl || key.meta || key.option) return;
-
+    if (key.name === "return" && !key.shift) { onNext(); return; }
+    if (key.name === "s") { onSkip?.(); return; }
     if (currentStep === "preferences") {
-      if (key.name === "left" || key.name === "h") cycleChoice(-1);
-      else if (key.name === "right" || key.name === "l") cycleChoice(1);
-      else if (key.name === "return" && !key.shift) commitPreference();
-      else if (key.name === "s") skipPreference();
-      return;
+      if (key.name === "left" || key.name === "up" || key.name === "h" || key.name === "k") cycleChoice(-1);
+      else if (key.name === "right" || key.name === "down" || key.name === "l" || key.name === "j") cycleChoice(1);
+    } else if (currentStep === "analytics") {
+      if (key.name === "up" || key.name === "left" || key.name === "k" || key.name === "h") cycleAnalytics(-1);
+      else if (key.name === "down" || key.name === "right" || key.name === "j" || key.name === "l") cycleAnalytics(1);
     }
-
-    if (currentStep === "analytics") {
-      if (key.name === "up" || key.name === "k" || key.name === "left" || key.name === "h") cycleAnalytics(-1);
-      else if (key.name === "down" || key.name === "j" || key.name === "right" || key.name === "l") cycleAnalytics(1);
-      else if (key.name === "return" && !key.shift) commitAnalytics();
-      else if (key.name === "s") skipAnalytics();
-      return;
-    }
-
-    // welcome / done
-    if (key.name === "return" && !key.shift) handleEnter();
   });
-
-  // The nav an embedded sub-step reports through: a decision or a skip both
-  // move forward; Back revisits a decision; Quit exits the application.
-  const subNav: OnboardingSubNav = useMemo(() => ({
-    onBack: goBack,
-    onDone: advancePastCurrent,
-    onSkip: advancePastCurrent,
-    onExit,
-  }), [advancePastCurrent, goBack, onExit]);
-
-  // Embedded pickers render themselves (they carry their own frame + footer);
-  // only build the node when interactive so a hidden onboarding never mounts a
-  // second keyboard.
-  if (currentStep === "connect") {
-    return interactive ? (renderConnect(subNav) as React.ReactElement) : null;
-  }
-  if (currentStep === "models") {
-    return interactive ? (renderModels(subNav) as React.ReactElement) : null;
-  }
-
-  const hint = STEP_HINT[currentStep] ?? "[esc] to dismiss";
-
-  // Cap the card and center it on a wide surface, the way the overlay does, so
-  // no line runs edge-to-edge. Fully responsive: on a narrow (~60 col) dialog
-  // the cap simply IS the whole width and the gutters vanish.
-  const cardWidth = Math.min(contentWidth, CARD_MAX_WIDTH);
-  const cardTextWidth = Math.max(1, cardWidth - 1);
-  const sideGutter = Math.max(0, Math.floor((contentWidth - cardWidth) / 2));
-
-  // Row budget: the title, the rail and the gap under them all give way before
-  // the step's own content.
-  const titleRows = availableRows >= 3 ? 1 : 0;
-  const railRows = availableRows >= 7 ? 1 : 0;
-  const headerRows = titleRows + railRows;
-  const gapRow = headerRows > 0 && availableRows >= 9 ? 1 : 0;
-  const bodyRows = Math.max(0, availableRows - headerRows - gapRow);
-
-  const titleText = `${operatorIcon("onboarding")} ${operatorTitle("onboarding")}`;
-
-  const chrome = (content: React.ReactNode) => (
-    <box flexDirection="row" width={contentWidth} flexGrow={1} minWidth={0} overflow="hidden">
-      {sideGutter > 0 ? <box width={sideGutter} flexShrink={0} /> : null}
-      <box flexDirection="column" width={cardWidth} flexGrow={1} minWidth={0} overflow="hidden">
-        {titleRows > 0 ? (
-          <Cells width={cardWidth} align="center" fg={theme.PRIMARY} attributes={TextAttributes.BOLD}>
-            {titleText}
-          </Cells>
-        ) : null}
-        {railRows > 0 ? <StepRail current={stepIndex} width={cardWidth} theme={theme} /> : null}
-        {gapRow > 0 ? <Cells width={cardWidth}>{""}</Cells> : null}
-        {bodyRows > 0 ? content : null}
-      </box>
-      {sideGutter > 0 ? <box width={sideGutter} flexShrink={0} /> : null}
-    </box>
-  );
+  const subNav = useMemo<OnboardingSubNav>(() => ({
+    onBack: goBack, onDone: advancePastCurrent, onSkip: advancePastCurrent, onExit, registerActions,
+  }), [goBack, advancePastCurrent, onExit, registerActions]);
 
   let body: React.ReactNode;
-  if (currentStep === "analytics") {
-    body = <AnalyticsCard
-      lines={analyticsLines(cardTextWidth)}
-      choiceIndex={analyticsIndex}
-      theme={theme}
-      contentWidth={cardWidth}
-      textWidth={cardTextWidth}
-      bodyRows={bodyRows}
-    />;
-  } else if (currentStep === "preferences" && prefDef) {
-    body = renderPreferences({
-      def: prefDef,
-      choices: prefChoices,
-      choiceIndex,
-      value: prefChoices[choiceIndex],
-      settings,
-      theme,
-      contentWidth: cardWidth,
-      textWidth: cardTextWidth,
-      bodyRows,
-    });
+  if (currentStep === "welcome") {
+    body = <WelcomeHero contentWidth={contentWidth} bodyRows={bodyRows}
+      theme={theme} reduceMotion={settings.reduceMotion} />;
+  } else if (embedded) {
+    if (currentStep === "connect") {
+      const introLines = providerSetupLines(detectedProviders, textWidth);
+      const introRows = Math.min(introLines.length, Math.max(0, bodyRows - 1));
+      const pickerRows = bodyRows - introRows;
+      const pickerSurfaceHeight = pickerRows;
+      const connectScreen = renderConnect(subNav);
+      const visibleConnectScreen = providerBrowseMode
+        ? suppressConnectBrowseDetails(connectScreen) : connectScreen;
+      body = (
+        <box width={contentWidth} height={bodyRows} flexDirection="column" flexShrink={0}
+          minWidth={0} overflow="hidden">
+          {introLines.slice(0, introRows).map((line, index) => (
+            <Cells key={`provider-intro-${index}`} width={textWidth}
+              fg={toneColor(line.tone, theme)}>{line.text}</Cells>
+          ))}
+          <SurfaceContext.Provider value={{ width: contentWidth, height: pickerSurfaceHeight }}>
+            {visibleConnectScreen}
+          </SurfaceContext.Provider>
+        </box>
+      );
+    } else {
+      body = <SurfaceContext.Provider value={{ width: contentWidth, height: bodyRows }}>
+        {renderModels(subNav)}
+      </SurfaceContext.Provider>;
+    }
+  } else if (currentStep === "analytics") {
+    body = <AnalyticsCard lines={analyticsLines(textWidth)} choiceIndex={analyticsIndex}
+      theme={theme} contentWidth={contentWidth} textWidth={textWidth} bodyRows={bodyRows}
+      onChoose={(index) => { setNavFocus(null); setAnalyticsIndex(index); }} />;
   } else {
-    const render = STEP_LINES[currentStep];
-    const lines = render ? render(cardTextWidth) : [];
-    body = renderProse({ lines, theme, currentStep, contentWidth: cardWidth, textWidth: cardTextWidth, bodyRows });
+    body = <PreferencesCard def={prefDef} choices={prefChoices} choiceIndex={choiceIndex}
+      value={prefChoices[choiceIndex]} settings={settings} theme={theme}
+      contentWidth={contentWidth} bodyRows={bodyRows}
+      savedValue={savedTheme.current ?? settings.theme}
+      onChoose={choosePreference} />;
   }
 
-  const actions = <OnboardingActions
-    onBack={goBack}
-    backLabel={currentStep === "welcome" ? "Skip setup" : "Back"}
-    onNext={currentStep === "preferences" ? commitPreference : currentStep === "analytics" ? commitAnalytics : handleEnter}
-    nextLabel={currentStep === "done" ? "Start working" : currentStep === "welcome" ? "Begin" : "Confirm"}
-    onSkip={currentStep === "preferences" ? skipPreference : currentStep === "analytics" ? skipAnalytics : undefined}
-  />;
-  return interactive ? (frame({ body: chrome(body), hint, actions }) as React.ReactElement) : null;
+  const stepLabel = ONBOARDING_STEPS[stepIndex]?.label ?? "";
+  const stepText = `Step ${stepIndex + 1} of ${ONBOARDING_STEPS.length} · ${stepLabel}`;
+  const headerWidth = Math.max(1, contentWidth - stepText.length - 1);
+  const content = (
+    <box flexDirection="column" width={outerWidth} height={contentHeight} minWidth={0} overflow="hidden">
+      {headerRows > 0 ? (
+        <box flexDirection="row" width={outerWidth} height={1} flexShrink={0} minWidth={0}
+          backgroundColor={theme.PANEL_ALT}>
+          {paddingX > 0 ? <box width={paddingX} flexShrink={0} /> : null}
+          <Cells width={headerWidth} fg={theme.PRIMARY} attributes={TextAttributes.BOLD}>
+            {fitTuiText("0.security / setup", headerWidth)}
+          </Cells>
+          <Cells width={contentWidth - headerWidth} align="right" fg={theme.MUTED}>
+            {fitTuiText(stepText, contentWidth - headerWidth)}
+          </Cells>
+          {paddingX > 0 ? <box width={paddingX} flexShrink={0} /> : null}
+        </box>
+      ) : null}
+      <box flexDirection="column" width={contentWidth} height={contentHeight - headerRows}
+        marginLeft={paddingX} flexShrink={0} minWidth={0} minHeight={0} overflow="hidden">
+        {actionRows > 0 ? (
+          <box flexDirection="row" width={contentWidth} height={1} flexShrink={0} minWidth={0} gap={1}>
+            <DialogActionButton label={compactNavigation ? "‹" : backButtonLabel}
+              onPress={handleBack} focused={navFocus === "back"} />
+            {visibleSkip ? <DialogActionButton label="Skip" onPress={onSkip!} focused={navFocus === "skip"} /> : null}
+            <box flexGrow={1} />
+          </box>
+        ) : null}
+        {separatorRows > 0 ? <box height={1} flexShrink={0} /> : null}
+        <box width={contentWidth} height={bodyRows} flexShrink={0} minWidth={0} minHeight={0} overflow="hidden">
+          {bodyRows > 0 ? body : null}
+        </box>
+        {primaryRows > 0 ? (
+          <box flexDirection="row" width={contentWidth} height={1} flexShrink={0} justifyContent="center">
+            <DialogActionButton label={compactPrimary ? "›" : nextButtonLabel} variant="primary"
+              onPress={handleNext} focused={navFocus === "next"} disabled={embedded && actionMeta.nextDisabled} />
+          </box>
+        ) : null}
+      </box>
+    </box>
+  );
+  return interactive ? (
+    <Popup variant="centered" width={outerWidth} height={outerHeight}
+      paddingX={0} paddingY={0} dismissOnBackdrop={false}>
+      <SurfaceContext.Provider value={{ width: outerWidth, height: outerHeight }}>
+        {frame({ body: content })}
+      </SurfaceContext.Provider>
+    </Popup>
+  ) : null;
 }
 
 // ---------------------------------------------------------------------------
 // Bodies
 // ---------------------------------------------------------------------------
 
-function renderProse({
-  lines,
-  theme,
-  currentStep,
-  contentWidth,
-  textWidth,
-  bodyRows,
-}: {
-  lines: StepLine[];
-  theme: Theme;
-  currentStep: OnboardingStep;
-  contentWidth: number;
-  textWidth: number;
-  bodyRows: number;
-}) {
-  const rows = lines.map((line, index) => (
-    <Cells key={`step-${index}`} width={textWidth} align="center" fg={toneColor(line.tone, theme)}
-      attributes={line.tone === "title" ? TextAttributes.BOLD : undefined}>
-      {line.text}
-    </Cells>
-  ));
 
-  // When the prose fits, center it vertically for a polished hero look; only
-  // when it overflows does it fall back to a top-anchored scrollbox.
-  if (lines.length <= bodyRows) {
-    return (
-      <box
-        flexDirection="column"
-        width={contentWidth}
-        height={bodyRows}
-        justifyContent="center"
-        alignItems="center"
-        flexShrink={0}
-        minWidth={0}
-        overflow="hidden"
-      >
-        {rows}
-      </box>
-    );
-  }
-
-  return (
-    <scrollbox
-      key={currentStep}
-      width={contentWidth}
-      height={bodyRows}
-      flexShrink={0}
-      scrollX={false}
-      verticalScrollbarOptions={sleekScrollbar(theme)}
-    >
-      <box flexDirection="column" width={textWidth} flexShrink={0} minWidth={0}>
-        {rows}
-      </box>
-    </scrollbox>
-  );
-}
-
-/**
- * The inline one-decision preference picker. Built entirely from the pieces the
- * Settings screen is made of — the `SETTING_DEFS` entry (`def`) for the label,
- * description and choices, and `SettingsPreview` for a live preview of the
- * highlighted value — with a simple left/right cycle over `def.choices`. It
- * writes nothing itself; the component's Enter handler calls `updateSetting`.
- */
-function renderPreferences({
+/** A draft-only picker alongside the shared live console preview. */
+function PreferencesCard({
   def,
   choices,
   choiceIndex,
   value,
+  savedValue,
   settings,
   theme,
   contentWidth,
-  textWidth,
+  onChoose,
   bodyRows,
 }: {
   def: (typeof SETTING_DEFS)[number];
   choices: readonly string[];
   choiceIndex: number;
   value: string | undefined;
+  savedValue: unknown;
   settings: TuiSettings;
   theme: Theme;
   contentWidth: number;
-  textWidth: number;
+  onChoose: (index: number) => void;
   bodyRows: number;
 }) {
-  const descLines = wrapCells(def.description, textWidth);
-  const selectorLine = `‹ ${value ?? "—"} ›`;
-  const counter = `${choiceIndex + 1} of ${choices.length}`;
-
-  // Header (label) + description + selector row consume the top of the body;
-  // whatever remains under a small floor goes to the live preview.
-  const headerRows = 1 + descLines.length + 2; // label, desc, blank, selector
-  const previewBudget = Math.max(0, bodyRows - headerRows - 1);
-  const previewRows = previewBudget > 0
-    ? Math.min(previewBudget, previewRowCount({ def, value, width: contentWidth, settings }))
-    : 0;
-
+  const pickerRows = Math.max(1, bodyRows - 2);
+  const items = useMemo<DialogItem[]>(() => choices.map((choice) => ({
+    id: choice,
+    label: choice.replace(/-/g, " "),
+    current: choice === savedValue,
+  })), [choices, savedValue]);
+  const fullPanel = computeDialogPanel({
+    width: contentWidth, height: pickerRows, totalRows: choices.length,
+    bodyRows: pickerRows + 1, withDetail: true,
+  });
+  const stackedPreview = !fullPanel.showDetail && pickerRows >= 12;
+  const listRows = stackedPreview ? Math.max(2, pickerRows - 10) : pickerRows;
+  const panel = stackedPreview ? computeDialogPanel({
+    width: contentWidth, height: listRows, totalRows: choices.length, bodyRows: listRows + 1,
+  }) : fullPanel;
   return (
     <box flexDirection="column" width={contentWidth} height={bodyRows} flexShrink={0} minWidth={0} overflow="hidden">
-      <Cells width={textWidth} fg={theme.PRIMARY} attributes={TextAttributes.BOLD}>{def.label}</Cells>
-      {descLines.map((line, index) => (
-        <Cells key={`desc-${index}`} width={textWidth} fg={theme.TEXT}>{line}</Cells>
-      ))}
-      <Cells width={textWidth}>{""}</Cells>
-      <box flexDirection="row" width={textWidth} flexShrink={0} minWidth={0}>
-        <Cells width={Math.max(1, textWidth - counter.length - 1)} fg={theme.ACCENT} attributes={TextAttributes.BOLD}>
-          {selectorLine}
-        </Cells>
-        <Cells width={counter.length} align="right" fg={theme.MUTED}>{counter}</Cells>
-      </box>
-      {previewRows > 0 ? (
-        <SettingsPreview
-          def={def}
-          value={value}
-          width={contentWidth}
-          settings={settings}
-          rowBudget={previewRows}
-          theme={theme}
-        />
-      ) : null}
+      <Cells width={contentWidth} fg={theme.PRIMARY} attributes={TextAttributes.BOLD}>
+        {`${def.label} · ${value ?? ""}`}
+      </Cells>
+      <Cells width={contentWidth} fg={theme.MUTED}>{"Choose a look. Next saves this choice."}</Cells>
+      <DialogSelectBody items={items} cursor={choiceIndex} panel={panel} query="" hideSearch gutter
+        onActivateRow={onChoose}
+        renderDetail={(_item, pane) => <SettingsPreview def={def} value={value} settings={settings}
+          theme={theme} width={pane.width} rowBudget={pane.height} />}
+        onScroll={(delta) => onChoose((choiceIndex + delta + choices.length) % choices.length)} />
+      {stackedPreview ? <SettingsPreview def={def} value={value} settings={settings} theme={theme}
+        width={contentWidth} rowBudget={Math.max(0, pickerRows - listRows)} /> : null}
     </box>
   );
 }
@@ -793,6 +786,7 @@ function AnalyticsCard({
   contentWidth,
   textWidth,
   bodyRows,
+  onChoose,
 }: {
   lines: StepLine[];
   choiceIndex: number;
@@ -800,20 +794,15 @@ function AnalyticsCard({
   contentWidth: number;
   textWidth: number;
   bodyRows: number;
+  onChoose: (index: number) => void;
 }) {
   const rows: React.ReactNode[] = [];
   const scroll = useRef<ScrollBoxRenderable | null>(null);
   let selectedRow = 0;
 
-  lines.forEach((line, index) => {
-    rows.push(
-      <Cells key={`analytics-intro-${index}`} width={textWidth} align="center" fg={toneColor(line.tone, theme)}
-        attributes={line.tone === "title" ? TextAttributes.BOLD : undefined}>
-        {line.text}
-      </Cells>,
-    );
-  });
-  rows.push(<Cells key="analytics-gap" width={textWidth}>{""}</Cells>);
+  // Disclosures stay visible while the tier list scrolls in short terminals.
+  const intro = lines.slice(0, Math.max(0, bodyRows - 3));
+  const choiceRows = Math.max(1, bodyRows - intro.length);
 
   const detailWidth = Math.max(1, textWidth - 2);
   ANALYTICS_OPTIONS.forEach((option, index) => {
@@ -825,6 +814,7 @@ function AnalyticsCard({
         width={textWidth}
         fg={active ? theme.ACCENT : theme.TEXT}
         attributes={active ? TextAttributes.BOLD : undefined}
+        onMouseDown={() => onChoose(index)}
       >
         {`${active ? FILLED : HOLLOW} ${option.label}`}
       </Cells>,
@@ -843,32 +833,31 @@ function AnalyticsCard({
   useEffect(() => {
     const viewport = scroll.current;
     if (!viewport) return;
-    viewport.scrollTo(Math.min(selectedRow, Math.max(0, rows.length - bodyRows)));
-  }, [choiceIndex, selectedRow, rows.length, bodyRows]);
+    viewport.scrollTo(Math.min(selectedRow, Math.max(0, rows.length - choiceRows)));
+  }, [choiceIndex, selectedRow, rows.length, choiceRows]);
   useKeyboard((key) => {
     if (key.name === "pageup") scroll.current?.scrollBy(-1, "viewport");
     if (key.name === "pagedown") scroll.current?.scrollBy(1, "viewport");
   });
 
-  if (rows.length > bodyRows) {
-    return (
-      <scrollbox ref={scroll} width={contentWidth} height={bodyRows} flexShrink={0}
-        scrollX={false} verticalScrollbarOptions={sleekScrollbar(theme)}>
-        <box flexDirection="column" width={textWidth} flexShrink={0}>{rows}</box>
-      </scrollbox>
-    );
-  }
   return (
-    <box
-      flexDirection="column"
-      width={contentWidth}
-      height={bodyRows}
-      justifyContent={rows.length <= bodyRows ? "center" : "flex-start"}
-      flexShrink={0}
-      minWidth={0}
-      overflow="hidden"
-    >
-      {rows}
+    <box flexDirection="column" width={contentWidth} height={bodyRows} flexShrink={0} minWidth={0} overflow="hidden">
+      {intro.map((line, index) => (
+        <Cells key={`analytics-intro-${index}`} width={textWidth} fg={toneColor(line.tone, theme)}
+          attributes={line.tone === "title" ? TextAttributes.BOLD : undefined}>
+          {line.text}
+        </Cells>
+      ))}
+      {rows.length > choiceRows ? (
+        <scrollbox ref={scroll} width={contentWidth} height={choiceRows} flexShrink={0}
+          scrollX={false} verticalScrollbarOptions={sleekScrollbar(theme)}>
+          <box flexDirection="column" width={textWidth} flexShrink={0}>{rows}</box>
+        </scrollbox>
+      ) : (
+        <box flexDirection="column" width={contentWidth} height={choiceRows} flexShrink={0} minWidth={0}>
+          {rows}
+        </box>
+      )}
     </box>
   );
 }

@@ -9,7 +9,7 @@ import type {
 } from "./types.js";
 
 /**
- * "Layer 3" public-report search (0sec#intel-advisories).
+ * "Layer 3" public-report search (0#intel-advisories).
  *
  * For a candidate finding, searching GitHub ISSUES and PRs by specific code
  * terms (e.g. `repo:uber/kraken ReplicateToRemote remote blob replicate`)

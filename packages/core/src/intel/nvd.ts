@@ -1,4 +1,4 @@
-import { cachedJson, fetchJson, IntelCache } from "./cache.js";
+import { cachedJson, fetchJson, HttpStatusError, IntelCache } from "./cache.js";
 import {
   normalizeCveId,
   normalizeSeverity,
@@ -55,24 +55,57 @@ interface NvdResponse {
   vulnerabilities?: Array<{ cve?: NvdCve }>;
 }
 
+// NVD's rate limit is shared by every lookup in this process. Serialize uncached
+// requests so a 429 stops the queue rather than flooding it from parallel agents.
+const NVD_COOLDOWN_MS = 30_000;
+const nvdRequests = new WeakMap<typeof fetch, { tail: Promise<void>; blockedUntil: number }>();
+
+class NvdRateLimitedError extends Error {}
+
+async function nvdJson(url: string, opts: FetchOptions): Promise<NvdResponse> {
+  const transport = opts.fetchImpl ?? globalThis.fetch;
+  let state = nvdRequests.get(transport);
+  if (!state) {
+    state = { tail: Promise.resolve(), blockedUntil: 0 };
+    nvdRequests.set(transport, state);
+  }
+  const queue = state;
+  const request = queue.tail.then(async () => {
+    if (Date.now() < queue.blockedUntil) throw new NvdRateLimitedError();
+    try {
+      return await fetchJson(url, { headers: nvdHeaders(opts.headers) }, opts) as NvdResponse;
+    } catch (error) {
+      if (error instanceof HttpStatusError && error.status === 429) {
+        queue.blockedUntil = Date.now() + NVD_COOLDOWN_MS;
+        console.warn("[intel] NVD rate limited; pausing requests for 30s");
+        throw new NvdRateLimitedError();
+      }
+      throw error;
+    }
+  });
+  queue.tail = request.then(() => undefined, () => undefined);
+  return request;
+}
+
 export async function lookupNvdCve(
   input: CveLookupInput,
   opts: FetchOptions = {},
 ): Promise<VulnerabilityIntel | null> {
   const cveId = normalizeCveId(input.cveId);
   const cache = new IntelCache(input.cacheDir);
-  const raw = await cachedJson<NvdResponse>(
-    cache,
-    "nvd-cve",
-    cveId,
-    async () => await fetchJson(
-      `https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=${encodeURIComponent(cveId)}`,
-      { headers: nvdHeaders(opts.headers) },
-      opts,
-    ) as NvdResponse,
-    { offline: input.offline, ttlMs: input.ttlMs },
-  );
-  return parseNvdResponse(raw)[0] ?? null;
+  try {
+    const raw = await cachedJson<NvdResponse>(
+      cache,
+      "nvd-cve",
+      cveId,
+      () => nvdJson(`https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=${encodeURIComponent(cveId)}`, opts),
+      { offline: input.offline, ttlMs: input.ttlMs },
+    );
+    return parseNvdResponse(raw)[0] ?? null;
+  } catch (error) {
+    if (error instanceof NvdRateLimitedError) return null;
+    throw error;
+  }
 }
 
 export async function searchNvdSimilar(
@@ -88,18 +121,19 @@ export async function searchNvdSimilar(
     keywordSearch: terms.join(" "),
     resultsPerPage: String(limit),
   });
-  const raw = await cachedJson<NvdResponse>(
-    cache,
-    "nvd-search",
-    key,
-    async () => await fetchJson(
-      `https://services.nvd.nist.gov/rest/json/cves/2.0?${query}`,
-      { headers: nvdHeaders(opts.headers) },
-      opts,
-    ) as NvdResponse,
-    { offline: input.offline, ttlMs: input.ttlMs },
-  );
-  return parseNvdResponse(raw);
+  try {
+    const raw = await cachedJson<NvdResponse>(
+      cache,
+      "nvd-search",
+      key,
+      () => nvdJson(`https://services.nvd.nist.gov/rest/json/cves/2.0?${query}`, opts),
+      { offline: input.offline, ttlMs: input.ttlMs },
+    );
+    return parseNvdResponse(raw);
+  } catch (error) {
+    if (error instanceof NvdRateLimitedError) return [];
+    throw error;
+  }
 }
 
 export async function searchNvdTargetHistory(
@@ -117,18 +151,19 @@ export async function searchNvdTargetHistory(
         keywordSearch: term,
         resultsPerPage: String(limit),
       });
-      const raw = await cachedJson<NvdResponse>(
-        cache,
-        "nvd-target-history",
-        key,
-        async () => await fetchJson(
-          `https://services.nvd.nist.gov/rest/json/cves/2.0?${query}`,
-          { headers: nvdHeaders(opts.headers) },
-          opts,
-        ) as NvdResponse,
-        { offline: input.offline, ttlMs: input.ttlMs },
-      );
-      return parseNvdResponse(raw);
+      try {
+        const raw = await cachedJson<NvdResponse>(
+          cache,
+          "nvd-target-history",
+          key,
+          () => nvdJson(`https://services.nvd.nist.gov/rest/json/cves/2.0?${query}`, opts),
+          { offline: input.offline, ttlMs: input.ttlMs },
+        );
+        return parseNvdResponse(raw);
+      } catch (error) {
+        if (error instanceof NvdRateLimitedError) return [];
+        throw error;
+      }
     }),
   );
   return results.flat();
@@ -211,7 +246,7 @@ function pickMetric(cve: NvdCve): NvdMetric | undefined {
 
 function nvdHeaders(extra: Record<string, string> | undefined): Record<string, string> {
   const headers: Record<string, string> = {
-    "User-Agent": "0sec-intel/0.1",
+    "User-Agent": "0-intel/0.1",
     ...(extra ?? {}),
   };
   if (process.env.NVD_API_KEY) headers.apiKey = process.env.NVD_API_KEY;

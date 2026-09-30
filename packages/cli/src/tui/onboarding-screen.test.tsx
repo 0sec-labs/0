@@ -1,5 +1,6 @@
-/** Pure ordering and persistence contracts. Rendered navigation coverage lives
- * in test/tui-driver/scenarios/onboarding-navigation.tui.test.ts.
+/** Onboarding state and consent contracts. Rendered navigation
+ * coverage lives in test/tui-driver/scenarios/onboarding-navigation.tui.test.ts.
+ * Native mascot contracts live in test/tui-driver/scenarios/mascot.tui.test.ts.
  */
 
 import { mkdtempSync, rmSync } from "node:fs";
@@ -17,8 +18,6 @@ import {
   updateSetting,
 } from "./settings-store.js";
 import {
-  ONBOARDING_PREFERENCE_KEYS,
-  ONBOARDING_STEPS,
   finalizeOnboarding,
   recordAnalyticsConsent,
   stepAfter,
@@ -29,7 +28,7 @@ import {
 const tempHomes: string[] = [];
 
 function makeHome(): string {
-  const dir = mkdtempSync(join(tmpdir(), "0sec-onboarding-"));
+  const dir = mkdtempSync(join(tmpdir(), "0-onboarding-"));
   tempHomes.push(dir);
   return dir;
 }
@@ -57,29 +56,12 @@ afterEach(() => {
 });
 
 describe("guided step machine", () => {
-  it("walks welcome → connect → models → preferences → analytics → done", () => {
-    expect(ONBOARDING_STEPS.map((s) => s.key)).toEqual([
-      "welcome",
-      "connect",
-      "models",
-      "preferences",
-      "analytics",
-      "done",
-    ]);
-
-    // Analytics is skippable; only welcome and done are not.
-    const analytics = ONBOARDING_STEPS.find((s) => s.key === "analytics");
-    expect(analytics?.skippable).toBe(true);
-
-    // Linear transitions — the same chain the embedded ConnectScreen.onConnected
-    // and ModelScreen.onSelect advance along. Analytics sits between the
-    // preferences step and completion.
+  it("ends at the final data-sharing decision", () => {
     expect(stepAfter("welcome")).toBe("connect");
     expect(stepAfter("connect")).toBe("models");
     expect(stepAfter("models")).toBe("preferences");
     expect(stepAfter("preferences")).toBe("analytics");
-    expect(stepAfter("analytics")).toBe("done");
-    expect(stepAfter("done")).toBeUndefined();
+    expect(stepAfter("analytics")).toBeUndefined();
   });
 
   it("can revisit every previous decision", () => {
@@ -88,51 +70,33 @@ describe("guided step machine", () => {
     expect(stepBefore("models")).toBe("connect");
     expect(stepBefore("preferences")).toBe("models");
     expect(stepBefore("analytics")).toBe("preferences");
-    expect(stepBefore("done")).toBe("analytics");
   });
 
-  it("never mounts the full Settings catalogue — preferences are two safe Display cosmetics", () => {
-    expect(ONBOARDING_PREFERENCE_KEYS).toEqual(["theme", "density"]);
-    for (const key of ONBOARDING_PREFERENCE_KEYS) {
-      const def = SETTING_DEFS.find((d) => d.key === key);
-      expect(def, `SETTING_DEFS must define ${key}`).toBeDefined();
-      expect(def?.kind).toBe("enum");
-      expect(def?.group).toBe("Display");
-      expect((def?.choices?.length ?? 0)).toBeGreaterThan(1);
-    }
-  });
 });
 
 describe("completion is written in exactly one place", () => {
-  it("stays false through connect, model, and preference steps — set only on done", () => {
+  it("theme and sharing writes do not complete setup on their own", () => {
     configureSettingsStore({ homeDir: makeHome() });
     expect(getSettings().onboardingCompleted).toBe(false);
 
-    // Walk every intermediate step's effect. Connect/model stage on the audit
-    // owner (no settings write); preferences persist via updateSetting.
+    // Reaching and saving each decision does not complete setup until the final UI action.
     let step: OnboardingStep | undefined = "welcome";
     const theme = otherThemeChoice();
-    while (step && step !== "done") {
+    while (step) {
       if (step === "preferences") {
         expect(updateSetting("theme", theme)).toBe(true);
-        expect(updateSetting("density", "compact")).toBe(true);
       }
-      if (step === "analytics") {
-        // The analytics step's Enter persists consent — but NOT completion.
-        recordAnalyticsConsent("usage");
-      }
-      // Reaching a step, skipping it, or setting a preference/consent must NOT
-      // complete onboarding.
+      if (step === "analytics") recordAnalyticsConsent("usage");
       expect(getSettings().onboardingCompleted).toBe(false);
       step = stepAfter(step);
     }
 
     // Preferences persisted, completion still not.
     expect(getSettings().theme).toBe(theme);
-    expect(getSettings().density).toBe("compact");
+    expect(getSettings().density).toBe("comfortable");
     expect(getSettings().onboardingCompleted).toBe(false);
 
-    // Only the done step's Enter finalizes.
+    // The final confirmation writes the single operator-owned completion setting.
     finalizeOnboarding();
     expect(getSettings().onboardingCompleted).toBe(true);
   });
@@ -151,26 +115,30 @@ describe("completion is written in exactly one place", () => {
 });
 
 describe("onboarding sharing choices", () => {
-  it.each(["off", "ask"] as const)("does not broaden an existing %s problem-report preference", (reporting) => {
+  it.each(["off", "ask"] as const)("keeps existing %s Sentry consent separate from usage analytics", (reporting) => {
     configureSettingsStore({ homeDir: makeHome() });
     updateSetting("diagnosticReporting", reporting);
-    recordAnalyticsConsent("full");
+    recordAnalyticsConsent("usage");
 
     const persisted = reloadSettings();
+    expect(persisted.analyticsLevel).toBe("usage");
     expect(persisted.diagnosticReporting).toBe(reporting);
     expect(persisted.diagnosticReportingPrompted).toBe(false);
     expect(persisted.onboardingCompleted).toBe(false);
   });
 
-  it("persists a sharing opt-out and disables automatic reports without completing onboarding", () => {
+  it("persists an analytics opt-out without changing independent Sentry consent", () => {
     configureSettingsStore({ homeDir: makeHome() });
+    updateSetting("diagnosticReporting", "automatic");
     recordAnalyticsConsent("off");
 
     const persisted = reloadSettings();
     expect(persisted.analyticsLevel).toBe("off");
-    expect(persisted.diagnosticReporting).toBe("off");
+    expect(persisted.diagnosticReporting).toBe("automatic");
+    expect(persisted.diagnosticReportingPrompted).toBe(false);
     expect(persisted.onboardingCompleted).toBe(false);
   });
+
 });
 
 describe("cancel preserves choices without completing", () => {
@@ -185,7 +153,7 @@ describe("cancel preserves choices without completing", () => {
     // Cancel = leave the wizard. finalizeOnboarding is NEVER called on cancel,
     // so nothing writes onboardingCompleted.
 
-    // The next session re-reads disk: choices survive, onboarding shows again.
+    // The next session re-reads disk: choices survive without completing setup.
     const persisted = reloadSettings();
     expect(persisted.theme).toBe(theme);
     expect(persisted.density).toBe("compact");

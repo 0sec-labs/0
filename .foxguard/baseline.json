@@ -4618,13 +4618,13 @@
     {
       "fingerprint": "eea138157d8a5b008339e9ba16203f42a81567d155d3e748966e5e397fa6791c",
       "rule_id": "js/no-command-injection",
-      "file": "scripts/dsh-0sec-mcp.e2e.mjs",
+      "file": "scripts/dsh-0-mcp.e2e.mjs",
       "line": 118
     },
     {
       "fingerprint": "8762542eb5196fc61adc11c561d1dd5d3397560224c19ce1eaf4c236143800fe",
       "rule_id": "js/no-command-injection",
-      "file": "scripts/dsh-0sec-mcp.mjs",
+      "file": "scripts/dsh-0-mcp.mjs",
       "line": 221
     },
     {

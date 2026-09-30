@@ -1,7 +1,7 @@
 /**
- * Live cloud-surface prober (0sec#925, part of #923 CodeWall parity).
+ * Live cloud-surface prober (0#925, part of #923 CodeWall parity).
  *
- * What this module answers — the BCG-post cloud angle that 0sec was blind to.
+ * What this module answers — the BCG-post cloud angle that 0 was blind to.
  * Today the engine only spots hardcoded AWS keys *in source*
  * (`malicious-detector.ts`) and harvests `AKIA…` ids into the loot ledger
  * (`loot.ts`). It never *touches* the cloud. This module adds three live,
@@ -55,6 +55,7 @@
  */
 
 import { createHmac, createHash } from "node:crypto";
+import { isScopeEnforcementEnabled } from "../scope/activation.js";
 
 // ── Injectable fetch (mirrors auth-boundary-prober.FetchLike) ──
 
@@ -189,6 +190,7 @@ export function bucketInScope(
   scope: CloudScopeMatcher | undefined,
   region?: string,
 ): { allowed: boolean; reason: string } {
+  if (!isScopeEnforcementEnabled()) return { allowed: true, reason: "scope plugin disabled; cloud authorization not enforced" };
   if (!scope) {
     return { allowed: false, reason: "denied: no engagement scope configured (cloud probing is deny-by-default)" };
   }
@@ -284,7 +286,7 @@ export function classifyTakeover(probe: BucketProbeResult): TakeoverVerdict {
       note:
         `Bucket "${probe.bucket}" is referenced but does not exist (NoSuchBucket). ` +
         `An attacker can re-create it in the same partition and intercept data the orphaned integration writes/reads. ` +
-        `Re-creation is an operator decision — 0sec only flags it.`,
+        `Re-creation is an operator decision — 0 only flags it.`,
     };
   }
   return {

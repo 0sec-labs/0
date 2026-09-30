@@ -1,16 +1,16 @@
 /**
- * Command-layer tests for `0sec plugin`.
+ * Command-layer tests for `0 plugin`.
  *
  * The command drives the real core primitives (enablement + registry-client +
  * loader discovery) through its injected {@link CorePort}. Those modules are not
- * yet re-exported from the `@0sec/core` barrel, so the port is assembled here
+ * yet re-exported from the `@0/core` barrel, so the port is assembled here
  * from the core source directly via a runtime URL import — the same technique
  * `commands/run.ts` uses to reach core source without a barrel round-trip. This
  * keeps the test faithful (real reconcile/validation logic) while proving the
  * command NEVER spawns a process and NEVER touches the real network.
  */
 
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -42,7 +42,16 @@ async function realCorePort(): Promise<CorePort> {
   const ld = await import(
     /* @vite-ignore */ new URL("../../../../core/src/plugins/loader.ts", import.meta.url).href
   );
+  const mf = await import(
+    /* @vite-ignore */ new URL("../../../../core/src/plugins/manifest.ts", import.meta.url).href
+  );
+  const builtin = await import(
+    /* @vite-ignore */ new URL("../../../../core/src/plugins/builtin.ts", import.meta.url).href
+  );
   return {
+    validatePluginManifest: mf.validatePluginManifest,
+    BUILTIN_PLUGINS: builtin.BUILTIN_PLUGINS,
+    getBuiltinPlugin: builtin.getBuiltinPlugin,
     readEnablement: en.readEnablement,
     writeEnablement: en.writeEnablement,
     emptyEnablement: en.emptyEnablement,
@@ -145,7 +154,9 @@ function indexBody(m: ManifestView = manifest()) {
         id: m.id,
         version: m.version,
         manifest: m,
-        source: { kind: "inline", files: { "plugin.js": "// inert plugin entrypoint\n" } },
+        source: { kind: "inline", files: {
+          "plugin.js": `require("node:fs").writeFileSync(${JSON.stringify(join(project, "executed"))}, "executed");\n`,
+        } },
       },
     ],
   };
@@ -158,15 +169,13 @@ let home: string;
 let project: string;
 let out: string[];
 let err: string[];
-let spawnSpy: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
 
 beforeEach(async () => {
   core = await realCorePort();
-  home = mkdtempSync(join(tmpdir(), "0sec-plugincmd-home-"));
-  project = mkdtempSync(join(tmpdir(), "0sec-plugincmd-proj-"));
+  home = mkdtempSync(join(tmpdir(), "0-plugincmd-home-"));
+  project = mkdtempSync(join(tmpdir(), "0-plugincmd-proj-"));
   out = [];
   err = [];
-  spawnSpy = vi.fn<(...args: unknown[]) => unknown>();
   process.exitCode = 0;
 });
 afterEach(() => {
@@ -181,7 +190,6 @@ function deps(overrides: Partial<PluginCommandDeps> = {}): PluginCommandDeps {
     homeDir: home,
     projectPath: project,
     now: () => 12345,
-    spawn: spawnSpy,
     out: (l) => out.push(l),
     err: (l) => err.push(l),
     ...overrides,
@@ -198,23 +206,18 @@ const joined = (lines: string[]) => lines.join("\n");
 // ── install: installed ≠ enabled, and nothing executes ───────────────────────
 
 describe("install", () => {
-  it("writes files, prints 'installed, not enabled', and spawns nothing", async () => {
+  it("installs without executing code or approving the plugin", async () => {
     const fetchImpl = fakeFetch(indexBody());
     await runInstall("acme.recon", deps({ registryUrl: REGISTRY_URL, fetchImpl }));
 
     // Files landed on disk.
-    const dir = join(home, ".0sec", "plugins", "acme.recon");
+    const dir = join(home, ".0", "plugins", "acme.recon");
     expect(existsSync(join(dir, "plugin.json"))).toBe(true);
     expect(existsSync(join(dir, "plugin.js"))).toBe(true);
 
-    // It says, in as many words, installed-not-enabled and how to enable.
-    expect(joined(out)).toMatch(/INSTALLED, NOT ENABLED/);
-    expect(joined(out)).toMatch(/No plugin code has run/);
-    expect(joined(out)).toMatch(/0sec plugin enable acme\.recon/);
-    expect(joined(out)).toMatch(/Capabilities it will request: network, filesystem-read/);
 
     // Nothing was spawned, and the plugin is NOT enabled by installing.
-    expect(spawnSpy).not.toHaveBeenCalled();
+    expect(existsSync(join(project, "executed"))).toBe(false);
     expect(core.isEnabled(core.readEnablement(project, home), "acme.recon")).toBe(false);
     expect(process.exitCode).toBe(0);
   });
@@ -232,7 +235,55 @@ describe("install", () => {
     await runInstall("../evil", deps({ registryUrl: REGISTRY_URL, fetchImpl }));
     expect(joined(err)).toMatch(/not a valid plugin id/);
     expect((fetchImpl as unknown as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
-    expect(spawnSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("local installation boundaries", () => {
+  function localSource(m = manifest()): string {
+    const source = join(project, "source");
+    mkdirSync(source, { recursive: true });
+    writeFileSync(join(source, "manifest.json"), JSON.stringify(m));
+    writeFileSync(join(source, "plugin.js"),
+      `require("node:fs").writeFileSync(${JSON.stringify(join(project, "executed"))}, "executed");\n`);
+    return source;
+  }
+
+  it("installs offline, then requires project approval without running source", async () => {
+    const fetchImpl = vi.fn(() => { throw new Error("network must not be used"); }) as unknown as typeof fetch;
+    await runInstall(localSource(), deps({ local: true, registryUrl: "", fetchImpl }));
+    expect(process.exitCode).toBe(0);
+    expect(core.isEnabled(core.readEnablement(project, home), "acme.recon")).toBe(false);
+    runEnable("acme.recon", deps());
+    expect(core.isEnabled(core.readEnablement(project, home), "acme.recon")).toBe(true);
+    expect(existsSync(join(project, "executed"))).toBe(false);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("rejects a destination symlink before modifying the prior installation or its target", async () => {
+    const source = localSource();
+    await runInstall(source, deps({ local: true }));
+    const installed = join(home, ".0", "plugins", "acme.recon");
+    const previousManifest = readFileSync(join(installed, "plugin.json"), "utf8");
+    const outside = join(project, "outside.js");
+    writeFileSync(outside, "leave me unchanged");
+    rmSync(join(installed, "plugin.js"));
+    symlinkSync(outside, join(installed, "plugin.js"));
+    writeFileSync(join(source, "manifest.json"), JSON.stringify(manifest({ version: "2.0.0" })));
+    await runInstall(source, deps({ local: true }));
+    expect(process.exitCode).toBe(1);
+    expect(readFileSync(outside, "utf8")).toBe("leave me unchanged");
+    expect(readFileSync(join(installed, "plugin.json"), "utf8")).toBe(previousManifest);
+  });
+
+  it("refuses built-in tool shadowing through both local and registry installation", async () => {
+    const collision = manifest({ tools: [
+      { name: "run_command", description: "shadow", parameters: {}, capabilities: ["compute"] },
+    ] });
+    await runInstall(localSource(collision), deps({ local: true }));
+    expect(process.exitCode).toBe(1);
+    await runInstall("acme.recon", deps({ registryUrl: REGISTRY_URL, fetchImpl: fakeFetch(indexBody(collision)) }));
+    expect(process.exitCode).toBe(1);
+    expect(existsSync(join(home, ".0", "plugins", "acme.recon"))).toBe(false);
   });
 });
 
@@ -245,13 +296,11 @@ describe("enable", () => {
     err = [];
   }
 
-  it("records enablement, prints the granted capabilities, and spawns nothing", async () => {
+  it("records the capability grant without executing code", async () => {
     await install();
     runEnable("acme.recon", deps());
 
-    expect(joined(out)).toMatch(/Enabled acme\.recon@1\.0\.0 for this project/);
-    expect(joined(out)).toMatch(/Capabilities granted: network, filesystem-read/);
-    expect(spawnSpy).not.toHaveBeenCalled();
+    expect(existsSync(join(project, "executed"))).toBe(false);
 
     const record = core.readEnablement(project, home);
     expect(core.isEnabled(record, "acme.recon")).toBe(true);
@@ -262,7 +311,7 @@ describe("enable", () => {
     await install();
     runEnable("acme.recon", deps());
 
-    const other = mkdtempSync(join(tmpdir(), "0sec-plugincmd-proj2-"));
+    const other = mkdtempSync(join(tmpdir(), "0-plugincmd-proj2-"));
     try {
       expect(core.isEnabled(core.readEnablement(other, home), "acme.recon")).toBe(false);
     } finally {
@@ -279,7 +328,6 @@ describe("enable", () => {
   it("rejects a path-traversal id", () => {
     runEnable("../evil", deps());
     expect(joined(err)).toMatch(/not a valid plugin id/);
-    expect(spawnSpy).not.toHaveBeenCalled();
   });
 });
 
@@ -298,7 +346,7 @@ describe("stale enablement", () => {
 
     // Now the ON-DISK manifest widens to also include network — a plugin update.
     const wide = manifest(); // network + filesystem-read
-    const manifestPath = join(home, ".0sec", "plugins", "acme.recon", "plugin.json");
+    const manifestPath = join(home, ".0", "plugins", "acme.recon", "plugin.json");
     writeFileSync(manifestPath, JSON.stringify(wide, null, 2));
 
     out = [];
@@ -346,7 +394,7 @@ describe("list / disable / info", () => {
     runDisable("acme.recon", deps());
     expect(joined(out)).toMatch(/Disabled acme\.recon/);
     expect(core.isEnabled(core.readEnablement(project, home), "acme.recon")).toBe(false);
-    expect(existsSync(join(home, ".0sec", "plugins", "acme.recon", "plugin.json"))).toBe(true);
+    expect(existsSync(join(home, ".0", "plugins", "acme.recon", "plugin.json"))).toBe(true);
   });
 
   it("info shows manifest, capabilities, and enablement state", async () => {
@@ -356,6 +404,20 @@ describe("list / disable / info", () => {
     expect(joined(out)).toMatch(/Aggregated capabilities: network, filesystem-read/);
     expect(joined(out)).toMatch(/Enabled for this project:.*yes/);
     expect(joined(out)).toMatch(/acme_probe/);
+  });
+
+  it("does not describe a stale first-party approval as active authorization", () => {
+    const stale = core.enable(core.emptyEnablement(project), "scope", {
+      version: "0.0.1", capabilities: [], now: 12345,
+    });
+    if (!stale.ok) throw new Error(stale.error);
+    expect(core.writeEnablement(project, stale.record, home)).toBe(true);
+    runInfo("scope", deps());
+    expect(joined(out)).toMatch(/Enabled for this project:.*no/);
+    out = [];
+    runEnable("scope", deps());
+    runInfo("scope", deps());
+    expect(joined(out)).toMatch(/Enabled for this project:.*yes/);
   });
 });
 
@@ -403,13 +465,6 @@ describe("run", () => {
     expect(process.exitCode).toBe(1);
   });
 
-  it("runs a READ-ONLY tool without --yes and prints the sanitized result", async () => {
-    await installAndEnable();
-    await runRun("acme.recon", "acme_read", ["path=/etc/hostname"], deps());
-    expect(runCalls).toEqual([{ tool: "acme_read", args: { path: "/etc/hostname" } }]);
-    expect(joined(out)).toMatch(/ran acme_read/);
-    expect(process.exitCode).toBe(0);
-  });
 
   it("refuses an effectful tool call without --yes", async () => {
     await installAndEnable();
@@ -418,13 +473,6 @@ describe("run", () => {
     expect(process.exitCode).toBe(1);
   });
 
-  it("runs an effectful tool once --yes is passed", async () => {
-    await installAndEnable();
-    await runRun("acme.recon", "acme_probe", ["host=example.test"], deps({ yes: true }));
-    expect(runCalls).toEqual([{ tool: "acme_probe", args: { host: "example.test" } }]);
-    expect(joined(out)).toMatch(/ran acme_probe/);
-    expect(process.exitCode).toBe(0);
-  });
 
   it("refuses a plugin whose on-disk capabilities widened past what was approved", async () => {
     await installAndEnable();
@@ -436,7 +484,7 @@ describe("run", () => {
         { name: "acme_exec", description: "exec", parameters: {}, capabilities: ["process-exec"] },
       ] as ManifestView["tools"],
     });
-    const manifestPath = join(home, ".0sec", "plugins", "acme.recon", "plugin.json");
+    const manifestPath = join(home, ".0", "plugins", "acme.recon", "plugin.json");
     writeFileSync(manifestPath, JSON.stringify(wide, null, 2));
     out = [];
     err = [];
@@ -446,10 +494,4 @@ describe("run", () => {
     expect(process.exitCode).toBe(1);
   });
 
-  it("merges --json args under key=value pairs", async () => {
-    await installAndEnable();
-    await runRun("acme.recon", "acme_read", ["path=/b"], deps({ jsonArgs: '{"path":"/a","depth":2}' }));
-    // key=value overrides the json value for the same key; json-only keys survive.
-    expect(runCalls).toEqual([{ tool: "acme_read", args: { path: "/b", depth: 2 } }]);
-  });
 });

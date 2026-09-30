@@ -12,7 +12,13 @@
  * A fake driver stands in for the real http/https backend so replay + start
  * routing can be exercised deterministically without opening a socket.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+vi.mock("../../plugins/enablement.js", async (importOriginal) => ({
+  ...await importOriginal<object>(),
+  readEnablement: () => ({ schema: 1, project: process.cwd(), enabled: { scope: { version: "1.0.0", capabilities: [], enabledAt: 1 } } }),
+}));
+import { ScopePolicy } from "../../scope/scope.js";
+import { withScopeEnforcement, type ScopeEnforcementState } from "../../scope/activation.js";
 import {
   PROXY_ACTIONS,
   PROXY_INSTALL_HINT,
@@ -36,7 +42,7 @@ function fakeDriver(): ProxyDriver {
   return {
     async start(opts) {
       running = true;
-      return { port: opts.port, caCertPath: "/tmp/0sec-proxy-ca.pem" };
+      return { port: opts.port, caCertPath: "/tmp/0-proxy-ca.pem" };
     },
     isRunning: () => running,
     async send(req) {
@@ -58,15 +64,11 @@ const missingBackendFactory: ProxyDriverFactory = async () => ({ error: PROXY_IN
 
 const unscopedCtx: ProxyToolContext = { target: "https://target.test" };
 
-// A scope stub matching only *.target.test — enough for gateUrl / hostAllowed.
 function scopedCtx(): ProxyToolContext {
-  const scope = {
-    match(url: string) {
-      const allowed = /^https?:\/\/([a-z0-9-]+\.)?target\.test(\/|:|$)/.test(url);
-      return { allowed, reason: allowed ? "in scope" : "host not in scope" };
-    },
-  } as unknown as NonNullable<ProxyToolContext["scope"]>;
-  return { target: "https://target.test", scope };
+  return {
+    target: "https://target.test",
+    scope: ScopePolicy.fromJson({ in_scope: ["target.test", "*.target.test"] }),
+  };
 }
 
 function seededHost(): ProxyHost {
@@ -83,6 +85,28 @@ function seededHost(): ProxyHost {
   });
   return { store };
 }
+
+it("a retained proxy listener honors the next host-owned activation snapshot, not its creation context", async () => {
+  const enabled: ScopeEnforcementState = { pluginId: "scope", enabled: true, projectPath: "/fixture", message: "enabled" };
+  const disabled: ScopeEnforcementState = { ...enabled, enabled: false, message: "disabled" };
+  const ctx = { ...scopedCtx(), scopeEnforcement: enabled };
+  let gate: ((host: string) => boolean) | undefined;
+  const driver = fakeDriver();
+  driver.start = async opts => {
+    gate = opts.allowHost;
+    return { port: opts.port, caCertPath: "/tmp/fixture-ca.pem" };
+  };
+  await withScopeEnforcement(enabled, async () => {
+    const started = await executeProxy(ctx, { action: "start" }, { createDriver: async () => ({ driver }) });
+    expect(started.success).toBe(true);
+    expect(gate?.("excluded.example")).toBe(false);
+    ctx.scopeEnforcement = disabled;
+    expect(gate?.("excluded.example")).toBe(true);
+    ctx.scopeEnforcement = enabled;
+    expect(gate?.("excluded.example")).toBe(false);
+  });
+  await driver.stop();
+});
 
 // ── Definition / dispatch shape ───────────────────────────────────────────────
 

@@ -1,6 +1,6 @@
 /**
  * The bridge between the marketplace UI (`market-screen.tsx`) and the plugin
- * machinery in `@0sec/core` (`plugins/registry-client.ts`, `plugins/loader.ts`,
+ * machinery in `@0/core` (`plugins/registry-client.ts`, `plugins/loader.ts`,
  * `plugins/enablement.ts`, `plugins/manifest.ts`).
  *
  * The screen does no policy of its own: it renders a {@link MarketState} per row
@@ -36,10 +36,10 @@
  *      reimplements the palette swap — that belongs to `themes.ts`.
  *
  *   5. **Fail-soft, always.** A bad manifest, a registry error, an unreadable
- *      plugins dir, or a `@0sec/core` import failure all resolve to an `ok:false`
+ *      plugins dir, or a `@0/core` import failure all resolve to an `ok:false`
  *      result carrying a one-line message. Nothing here throws into the screen.
  *
- * Every dependency on `@0sec/core`, the filesystem, and the theme setting is
+ * Every dependency on `@0/core`, the filesystem, and the theme setting is
  * INJECTED with a real default, so the service can be exercised under a unit test
  * without a network, a spawned subprocess, or a real state dir.
  */
@@ -124,7 +124,7 @@ interface RawPluginEntry {
 }
 
 // ---------------------------------------------------------------------------
-// The subset of @0sec/core this bridge drives (injected; real default below)
+// The subset of @0/core this bridge drives (injected; real default below)
 // ---------------------------------------------------------------------------
 
 /** A validated manifest, as far as this bridge needs to see it. */
@@ -194,7 +194,7 @@ export interface PluginHostManagerLike {
   runPlugin(pluginId: string): Promise<CoreLoadResult>;
 }
 
-/** Everything this bridge imports from `@0sec/core`. Injected for tests. */
+/** Everything this bridge imports from `@0/core`. Injected for tests. */
 export interface CorePluginApi {
   // registry
   fetchRegistryIndex(
@@ -249,7 +249,7 @@ export interface PluginServiceDeps {
   projectPath?: string;
   /** Built-in tool names a plugin may not shadow, forwarded to load/read. */
   reservedToolNames?: readonly string[];
-  /** Running @0sec/core version, for `minCoreVersion` enforcement on load. */
+  /** Running @0/core version, for `minCoreVersion` enforcement on load. */
   coreVersion?: string;
   /** Injected clock (ms). Defaults to `Date.now`. */
   now?: () => number;
@@ -268,7 +268,7 @@ export interface PluginServiceDeps {
    * itself; `themes.ts` owns that.
    */
   applyTheme?: (themeId: string) => boolean;
-  /** Injected @0sec/core. Defaults to a lazy `import("@0sec/core")`. */
+  /** Injected @0/core. Defaults to a lazy `import("@0/core")`. */
   core?: CorePluginApi | (() => Promise<CorePluginApi>);
   /** Injected host factory. Defaults to `new core.PluginHost(...)`. */
   hostFactory?: (opts: {
@@ -323,7 +323,7 @@ export interface PluginService {
 // Factory
 // ---------------------------------------------------------------------------
 
-/** Lazily import @0sec/core once, honouring an injected override. */
+/** Lazily import @0/core once, honouring an injected override. */
 function coreLoader(
   injected: PluginServiceDeps["core"],
 ): () => Promise<CorePluginApi> {
@@ -331,7 +331,7 @@ function coreLoader(
   if (injected) return async () => injected;
   let cached: Promise<CorePluginApi> | undefined;
   return () => {
-    if (!cached) cached = import("@0sec/core") as unknown as Promise<CorePluginApi>;
+    if (!cached) cached = import("@0/core") as unknown as Promise<CorePluginApi>;
     return cached;
   };
 }

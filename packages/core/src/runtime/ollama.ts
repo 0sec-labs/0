@@ -1,12 +1,12 @@
 /**
- * Ollama runtime — drives the 0sec agent loop against a locally-served
+ * Ollama runtime — drives the 0 agent loop against a locally-served
  * Gemma 4 (or any tool-calling-capable Ollama model) via Ollama's `/api/chat`
- * endpoint. Closes 0sec#369.
+ * endpoint. Closes 0#369.
  *
  * Why this runtime exists
  * -----------------------
  * GemmaForge's small probe (8B Gemma 4 E2B-it) generates ND-JSON leads via
- * `gemmaforge scan` and 0sec consumes them with `--seed-findings` (#368).
+ * `gemmaforge scan` and 0 consumes them with `--seed-findings` (#368).
  * The natural finishing move is to also run the *hunt* phase locally on a
  * bigger Gemma 4 (e.g. 27B) — no cloud spend, no key juggling, native
  * function-calling. That's what this runtime is.
@@ -28,7 +28,7 @@
  *   builds — they arrive whole on the final frame.
  *
  * Gemma 4 returns assistant turns with optional `tool_calls`, each carrying
- * `{ function: { name, arguments } }`. We translate that into 0sec's
+ * `{ function: { name, arguments } }`. We translate that into 0's
  * NativeContentBlock shape (`tool_use` blocks) so the existing agent loop
  * can dispatch tool calls without caring which runtime produced them.
  */
@@ -97,7 +97,7 @@ function resolveHost(explicit?: string): string {
 }
 
 /**
- * Translate a `NativeMessage` (0sec's structured turn) into the wire shape
+ * Translate a `NativeMessage` (0's structured turn) into the wire shape
  * Ollama expects on `/api/chat`. Tool results become `role: "tool"` turns;
  * everything else maps to `role: "user" | "assistant"` with a flat string body.
  */
@@ -208,7 +208,7 @@ export class OllamaRuntime implements Runtime, NativeRuntime {
   }
 
   /** Legacy text-in/text-out path. Used by stages that haven't migrated to NativeRuntime. */
-  async execute(prompt: string, _context?: RuntimeContext): Promise<RuntimeResult> {
+  async execute(prompt: string, context?: RuntimeContext): Promise<RuntimeResult> {
     const start = Date.now();
     try {
       const body = {
@@ -217,7 +217,7 @@ export class OllamaRuntime implements Runtime, NativeRuntime {
         stream: false,
         options: { temperature: this.temperature },
       };
-      const res = await this.postChat(body);
+      const res = await this.postChat(body, context?.signal);
       const usage = readUsage(res);
       return {
         output: res.message.content,
@@ -243,6 +243,7 @@ export class OllamaRuntime implements Runtime, NativeRuntime {
     messages: NativeMessage[],
     tools: NativeToolDef[],
     callbacks?: NativeStreamCallbacks,
+    signal?: AbortSignal,
   ): Promise<NativeRuntimeResult> {
     const start = Date.now();
     const useStream = this.stream;
@@ -256,8 +257,8 @@ export class OllamaRuntime implements Runtime, NativeRuntime {
       };
 
       const aggregate = useStream
-        ? await this.streamChat(body, callbacks)
-        : await this.postChat(body);
+        ? await this.streamChat(body, callbacks, signal)
+        : await this.postChat(body, signal);
       const usage = readUsage(aggregate);
       if (callbacks?.onUsage && usage) callbacks.onUsage(usage);
 
@@ -268,7 +269,7 @@ export class OllamaRuntime implements Runtime, NativeRuntime {
       const toolBlocks = parseToolCalls(aggregate.message.tool_calls);
       content.push(...toolBlocks);
 
-      // 0sec's NativeRuntimeResult.stopReason taxonomy:
+      // 0's NativeRuntimeResult.stopReason taxonomy:
       //   - "tool_use" when the model emitted at least one tool call
       //   - "max_tokens" when Ollama signals length truncation
       //   - "end_turn" otherwise (clean completion)
@@ -291,19 +292,21 @@ export class OllamaRuntime implements Runtime, NativeRuntime {
         stopReason: "error",
         durationMs: Date.now() - start,
         error: msg,
+        ...(signal?.aborted ? { cancelled: true } : {}),
       };
     }
   }
 
-  private async postChat(body: unknown): Promise<OllamaChatResponse> {
+  private async postChat(body: unknown, signal?: AbortSignal): Promise<OllamaChatResponse> {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), this.timeout);
     try {
+      signal?.throwIfAborted();
       const res = await this.fetchImpl(`${this.host}/api/chat`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
-        signal: ctl.signal,
+        signal: signal ? AbortSignal.any([ctl.signal, signal]) : ctl.signal,
       });
       if (!res.ok) {
         const text = await res.text().catch(() => "");
@@ -321,7 +324,7 @@ export class OllamaRuntime implements Runtime, NativeRuntime {
    * Behaviour:
    *  - Each non-terminal frame's `message.content` is treated as a delta and
    *    forwarded to `callbacks.onDelta("assistant_response", delta)` exactly
-   *    once (no accumulation passed to the callback — 0sec's contract is
+   *    once (no accumulation passed to the callback — 0's contract is
    *    "incremental fragment only", see types.ts:88).
    *  - The terminal frame (`done: true`) is taken as authoritative for
    *    `tool_calls`, `done_reason`, and usage stats. Tool-call shape across
@@ -334,15 +337,17 @@ export class OllamaRuntime implements Runtime, NativeRuntime {
   private async streamChat(
     body: unknown,
     callbacks?: NativeStreamCallbacks,
+    signal?: AbortSignal,
   ): Promise<OllamaChatResponse> {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), this.timeout);
     try {
+      signal?.throwIfAborted();
       const res = await this.fetchImpl(`${this.host}/api/chat`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
-        signal: ctl.signal,
+        signal: signal ? AbortSignal.any([ctl.signal, signal]) : ctl.signal,
       });
       if (!res.ok) {
         const text = await res.text().catch(() => "");

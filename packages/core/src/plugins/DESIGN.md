@@ -1,4 +1,4 @@
-# 0sec plugin system — original design rationale
+# 0 plugin system — original design rationale
 
 Status: **historical design, not the current implementation inventory.**
 `manifest.ts`, `loader.ts`, `protocol.ts`, `enablement.ts`, and
@@ -18,7 +18,7 @@ point, not a prohibition on agent-authored code or live self-evolution.
 
 ## 1. Original baseline (the three seams)
 
-At the time of this design, 0sec had one runtime-pluggable seam and two
+At the time of this design, 0 had one runtime-pluggable seam and two
 compile-time extension points. The following analysis explains why new
 registrations needed to join the existing authorization path.
 
@@ -155,8 +155,8 @@ copilot-gated.
 
 ## 3. Loading and isolation options
 
-The hard constraint: 0sec runs untrusted *target* code and does not sandbox by
-default. A plugin author is **less** trusted than 0sec itself and **more**
+The hard constraint: 0 runs untrusted *target* code and does not sandbox by
+default. A plugin author is **less** trusted than 0 itself and **more**
 trusted than a scan target — but a malicious or compromised plugin is a real
 threat, and "we don't sandbox the target anyway" is not a reason to also not
 contain the plugin. The isolation question is: *what does each option actually
@@ -165,7 +165,7 @@ contain?*
 ### Option A — in-process ESM `import()`
 
 - **Mechanism**: dynamically import the plugin module; it registers tools whose
-  handlers are plain functions running in the 0sec process.
+  handlers are plain functions running in the 0 process.
 - **Contains**: nothing. Full access to the process — env vars (API keys),
   `fs`, `net`, `child_process`, the event bus, other plugins' state, and it can
   monkey-patch the gate maps themselves. A capability declaration becomes a
@@ -192,7 +192,7 @@ contain?*
   the capability gates to those requests.
 - **Cost**: an IPC protocol, lifecycle management, serialization of tool I/O,
   and per-call latency. Moderate.
-- **Verdict**: the right default. It matches 0sec's existing fail-soft
+- **Verdict**: the right default. It matches 0's existing fail-soft
   subprocess-over-stdio idiom, gives a real trust boundary, and keeps *one*
   authorization path: the child can request egress, but core's
   `NETWORK_CAPABLE_TOOLS` gate (fed by the manifest's `network` capability)

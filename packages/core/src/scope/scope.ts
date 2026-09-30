@@ -1,10 +1,9 @@
-// ── Programmatic scope ingestion (0sec#215) ──
+// ── Programmatic scope ingestion (0#215) ──
 //
-// Loads a JSON scope file ({ in_scope, out_of_scope }) and exposes a single
-// matcher used by every URL-touching code path in the agent (validateTargetUrl,
-// shellExec URL extraction, the 5 fetch sites). Three rule shapes are
-// recognised, all venue-agnostic so cloud products can transform venue-
-// specific scope formats into this primitive:
+// Loads JSON scope policy ({ in_scope, out_of_scope }) into one matcher.
+// `match` is pure (including credential/attribution boundaries); runtime
+// authorization uses `enforce`, controlled by the first-party scope plugin.
+// Three venue-independent rule shapes are recognized:
 //
 //   1. Exact host        — "api.example.com" matches `api.example.com`
 //                          (and ONLY that hostname; not subdomains, not apex).
@@ -24,6 +23,7 @@
 
 import { readFileSync } from "node:fs";
 import { isIP } from "node:net";
+import { isScopeEnforcementEnabled, type ScopeEnforcementState } from "./activation.js";
 
 export type ScopeRule = string;
 
@@ -31,7 +31,7 @@ export interface ScopeJson {
   in_scope?: ScopeRule[];
   out_of_scope?: ScopeRule[];
   /**
-   * Optional attribution block (0sec#216). Format and semantics live in
+   * Optional attribution block (0#216). Format and semantics live in
    * `attribution.ts`; declared here so the JSON schema is co-located with
    * the rest of the scope file shape. Callers that don't care about
    * attribution (most of the codebase) can ignore this field.
@@ -60,7 +60,7 @@ export class ScopePolicy {
   private readonly outOfScope: ParsedRule[];
   /**
    * Original JSON the policy was constructed from. Exposed read-only so
-   * downstream features (0sec#216 attribution headers) can pull their
+   * downstream features (0#216 attribution headers) can pull their
    * own optional blocks out of the same file without re-reading it.
    */
   readonly raw: ScopeJson;
@@ -69,6 +69,13 @@ export class ScopePolicy {
     this.inScope = (json.in_scope ?? []).map(parseRule);
     this.outOfScope = (json.out_of_scope ?? []).map(parseRule);
     this.raw = json;
+  }
+
+  /** Authorization verdict; pure `match` remains available for credential boundaries. */
+  enforce(url: string, state?: ScopeEnforcementState): ScopeMatch {
+    return (state?.enabled ?? isScopeEnforcementEnabled())
+      ? this.match(url)
+      : { allowed: true, reason: "scope plugin disabled; authorization not enforced" };
   }
 
   /**
@@ -204,7 +211,7 @@ function parseRule(raw: unknown): ParsedRule {
   // because the spec deferred it and silently accepting "::/0" would be
   // a disaster.
   //
-  // Parsing is intentionally strict (0sec#218 review): destructuring a
+  // Parsing is intentionally strict (0#218 review): destructuring a
   // bare `rule.split("/")` plus `Number()` accepts "10.0.0.0/" as /0 and
   // silently drops extra segments in "10.0.0.0/8/anything". Both are
   // operator typos that would fail open to "match every IPv4". We reject

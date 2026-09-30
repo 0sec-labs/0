@@ -2,9 +2,10 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import type { SemgrepFinding } from "@0sec/shared";
+import type { SemgrepFinding } from "@0/shared";
 import type { RuntimeType } from "./runtime/index.js";
 import type { ScanListener } from "./scanner.js";
+import { scanExecutionTimeout } from "./scan-plan.js";
 
 /**
  * Release used by the npm launcher when Foxguard is not provisioned locally.
@@ -88,7 +89,7 @@ export function runSemgrepScan(
   let rawOutput: string;
   try {
     rawOutput = execFileSync("semgrep", args, {
-      timeout: 300_000,
+      timeout: scanExecutionTimeout(300_000),
       stdio: "pipe",
       encoding: "utf-8",
       env: { ...process.env, SEMGREP_SEND_METRICS: "off" },
@@ -132,7 +133,7 @@ export interface StaticScannerOptions {
 }
 
 export function selectedStaticScanner(): "foxguard" | "semgrep" {
-  return process.env["0SEC_STATIC"] === "semgrep" ? "semgrep" : "foxguard";
+  return process.env["ZERO_STATIC"] === "semgrep" ? "semgrep" : "foxguard";
 }
 
 /**
@@ -169,12 +170,12 @@ interface FoxguardJsonFinding {
 
 /**
  * Run foxguard as a sibling source analyzer and translate its JSON output
- * into 0sec's `SemgrepFinding` shape so the existing review pipeline can
+ * into 0's `SemgrepFinding` shape so the existing review pipeline can
  * consume either scanner without changing prompt/report contracts.
  *
  * Uses an installed Foxguard binary when available, otherwise the pinned npm
  * release. Scanner failure always propagates — no Semgrep fallback path.
- * Set `0SEC_STATIC=semgrep` (via {@link runSelectedStaticScan}) to use
+ * Set `ZERO_STATIC=semgrep` (via {@link runSelectedStaticScan}) to use
  * Semgrep instead.
  *
  * @param targetPath  Absolute path to scan.
@@ -234,7 +235,7 @@ export function runFoxguardScan(
         }
         return selected.split(sep).join("/");
       });
-      selectionDir = mkdtempSync(join(tmpdir(), "0sec-foxguard-"));
+      selectionDir = mkdtempSync(join(tmpdir(), "0-foxguard-"));
       selectionFile = join(selectionDir, "changed-files.txt");
       writeFileSync(selectionFile, `${paths.join("\n")}\n`, { mode: 0o600 });
     }
@@ -252,7 +253,7 @@ export function runFoxguardScan(
             useNpm ? ["--yes", `foxguard@${foxguardTag}`, ...args] : args,
             {
               cwd,
-              timeout: 300_000,
+              timeout: scanExecutionTimeout(300_000),
               maxBuffer: 64 * 1024 * 1024,
               stdio: "pipe",
               encoding: "utf-8",
@@ -290,8 +291,8 @@ export function runFoxguardScan(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger(
-      `[0sec] foxguard scan failed (${message}). ` +
-        `Npm pin: foxguard@${foxguardTag}. Set 0SEC_STATIC=semgrep to use semgrep.`,
+      `[0] foxguard scan failed (${message}). ` +
+        `Npm pin: foxguard@${foxguardTag}. Set ZERO_STATIC=semgrep to use semgrep.`,
     );
     emit({ type: "error", stage: "source-analysis", message: `Foxguard scan failed: ${message}` });
     throw err;
@@ -326,7 +327,7 @@ export function runSelectedStaticScan(
  *   - `line` / `end_line` → `startLine` / `endLine` (end_line defaults
  *                          to startLine when missing — Foxguard omits
  *                          it for some single-line patterns)
- *   - `severity`          → `severity` (already in 0sec's 4-tier
+ *   - `severity`          → `severity` (already in 0's 4-tier
  *                          vocabulary; we normalize via
  *                          `mapFoxguardSeverity` so unexpected values
  *                          land on `info` instead of leaking through)

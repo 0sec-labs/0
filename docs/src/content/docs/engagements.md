@@ -44,11 +44,11 @@ encoding-mutated payloads (detection and block reporting are unaffected):
 ```bash
 0 scan --target https://app.example.com --scope ./engagement-scope.json --no-waf-evasion
 # or
-env 0SEC_WAF_EVASION=0 0 scan --target https://app.example.com --scope ./engagement-scope.json
+env ZERO_WAF_EVASION=0 0 scan --target https://app.example.com --scope ./engagement-scope.json
 ```
 
-Env vars: `0SEC_ENGAGEMENT_PROFILE`, `0SEC_WAF_EVASION`,
-`0SEC_ENGAGEMENT_RATE_RPS`, `0SEC_ENGAGEMENT_JITTER_MS`. The corresponding
+Env vars: `ZERO_ENGAGEMENT_PROFILE`, `ZERO_WAF_EVASION`,
+`ZERO_ENGAGEMENT_RATE_RPS`, `ZERO_ENGAGEMENT_JITTER_MS`. The corresponding
 scope-file fields use snake case:
 
 ```json
@@ -81,11 +81,11 @@ trail. It uses the selected SQLite database (not all run-local databases).
 Pass `--db-path` for the inspected run:
 
 ```bash
-0 timeline <scanId> --db-path ~/.0sec/runs/<scanId>/state.db
-0 timeline <scanId> --db-path ~/.0sec/runs/<scanId>/state.db --format json
-0 timeline <scanId> --db-path ~/.0sec/runs/<scanId>/state.db --format csv
-0 timeline <scanId> --db-path ~/.0sec/runs/<scanId>/state.db --attack-only
-0 timeline <scanId> --db-path ~/.0sec/runs/<scanId>/state.db \
+0 timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db
+0 timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db --format json
+0 timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db --format csv
+0 timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db --attack-only
+0 timeline <scanId> --db-path ~/.0/runs/<scanId>/state.db \
   --since 2026-09-01T09:00:00Z --until 2026-09-01T17:00:00Z
 ```
 
@@ -126,7 +126,7 @@ The Graph client structurally hard-codes `GET`; this is read-only collection,
 not credential testing, directory exploitation, or an offline command.
 
 Save a separate scope file allowing `graph.microsoft.com`, and supply a Graph
-directory-read token via the `0SEC_GRAPH_ACCESS_TOKEN` environment variable from
+directory-read token via the `ZERO_GRAPH_ACCESS_TOKEN` environment variable from
 your approved credential mechanism. It is not accepted as a CLI argument.
 
 ```bash
@@ -142,7 +142,7 @@ zero collected objects, a confirmed tenant mismatch, or a timeout exits `2`;
 partial collection warnings are not a clean-tenant verdict.
 
 Offline JWT/SAML analysis is a separate **library API**
-(`analyzeToken`, `analyzeJwt`, `analyzeSamlAssertion` from `@0sec/core`), not an
+(`analyzeToken`, `analyzeJwt`, `analyzeSamlAssertion` from `@0/core`), not an
 automatic part of `0 identity`. It checks operator-supplied material without
 network calls, including:
 
@@ -194,7 +194,7 @@ result as a clean tenant. AzureHound exports also carry no conditional-access,
 federation, or PIM data — run `0 identity` against a live tenant for those.
 :::
 
-<span id="what-0sec-does-not-do"></span>
+<span id="what-0-does-not-do"></span>
 ## Limitations
 
 - Domain recon starts from supplied domains; it is not an org-name-driven
@@ -239,7 +239,7 @@ The header is diagnostic evidence, not a residency attestation.
 3. Pin `--runtime api` when relying on API-provider configuration. The `claude`,
    `codex`, and `gemini` runtimes shell out to third-party binaries whose egress
    0 does not control.
-4. Jev features are separately opt-in with `0SEC_JEV_FEATURES`; enabling one
+4. Jev features are separately opt-in with `ZERO_JEV_FEATURES`; enabling one
    consents to sending its advisory input to the configured evaluator. Keep
    them disabled unless that transport is permitted by the engagement.
 

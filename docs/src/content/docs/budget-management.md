@@ -1,12 +1,12 @@
 ---
 title: Budget Management
-description: Workflow-specific turn limits, shared cost ceilings, model-price estimates, hosted credits, and separate Jev budgets.
+description: Workflow-specific turn limits, shared cost ceilings, model-price estimates, and separate Jev budgets.
 ---
 
-0 has several independent limits: agent turns, request timeouts, estimated model
-cost, and (for hosted access) service-side credit admission. None is a substitute
-for the others. The open-source harness has no software charge; provider,
-subscription and execution-infrastructure costs still apply.
+0 has several independent limits: agent turns, request timeouts and estimated
+model cost. None is a substitute for the others. The open-source harness has no
+software charge; provider, subscription and execution-infrastructure costs still
+apply.
 
 ## Turn budgets
 
@@ -34,16 +34,16 @@ The shared source/package agent runner accepts positive-integer overrides:
 
 | Variable | Applies to |
 | --- | --- |
-| `0SEC_MAX_TURNS` | Shared runner research and verification sessions |
-| `0SEC_MAX_TURNS_AUDIT` | Audit research; overrides the global value |
-| `0SEC_MAX_TURNS_REVIEW` | Review research; overrides the global value |
-| `0SEC_MAX_TURNS_VERIFY` | Verification; overrides the global value |
+| `ZERO_MAX_TURNS` | Shared runner research and verification sessions |
+| `ZERO_MAX_TURNS_AUDIT` | Audit research; overrides the global value |
+| `ZERO_MAX_TURNS_REVIEW` | Review research; overrides the global value |
+| `ZERO_MAX_TURNS_VERIFY` | Verification; overrides the global value |
 
 Invalid, zero, or negative values are ignored. These are not universal limits
 on every command or the web attack loop. For a bounded source review:
 
 ```bash
-env 0SEC_MAX_TURNS_REVIEW=30 0SEC_MAX_TURNS_VERIFY=12 \
+env ZERO_MAX_TURNS_REVIEW=30 ZERO_MAX_TURNS_VERIFY=12 \
   0 review ./authorized-repo --runtime api --depth default --cost-ceiling 5
 ```
 
@@ -81,7 +81,7 @@ tool calls and the loop decides it must continue:
 These are conditional nudges, not four guaranteed extra model calls. Separately,
 both native and legacy loops inject two one-time warnings on ordinary turns:
 at `ceil(maxTurns × 0.85)` and `max(1, maxTurns − 3)`. They are enabled by default;
-`0SEC_FEATURE_BUDGET_WARNINGS=0` disables those two warnings, not the hard turn
+`ZERO_FEATURE_BUDGET_WARNINGS=0` disables those two warnings, not the hard turn
 limit. For a 40-turn session they fire at turns 34 and 37.
 
 ## When budget runs out
@@ -100,13 +100,13 @@ resume paths and retained evidence.
 ## Cost ceiling
 
 `scan`, `audit`, and `review` accept `--cost-ceiling <usd>`. The flag takes
-precedence over `0SEC_COST_CEILING_USD`; the value must be positive and finite.
+precedence over `ZERO_COST_CEILING_USD`; the value must be positive and finite.
 There is no default dollar ceiling when neither is supplied.
 
 ```bash
 0 review ./authorized-repo --runtime api --cost-ceiling 5
 0 audit lodash --runtime api --cost-ceiling 2
-env 0SEC_COST_CEILING_USD=3 \
+env ZERO_COST_CEILING_USD=3 \
   0 scan --target https://authorized.example --scope ./scope.json --runtime api
 ```
 
@@ -119,7 +119,7 @@ overshoot the ceiling, including one outstanding turn per active session.
 
 On a reported ceiling breach, these CLI commands retain partial results, exit
 with code `4`, and use `exit_reason: "cost_ceiling_exceeded"` in the optional
-machine-readable result line (`0SEC_EMIT_RESULT_LINE=1`). A cost stop is not a
+machine-readable result line (`ZERO_EMIT_RESULT_LINE=1`). A cost stop is not a
 clean security result. External clients, tool services, infrastructure and
 separate advisory integrations are not automatically covered by this ledger.
 
@@ -158,24 +158,18 @@ Important boundaries:
 - Failed or cancelled requests can consume provider work without complete usage
   reaching the CLI. Reconcile with the provider invoice or service ledger.
 
-For hosted access, `0 balance` reports a separate `credits-v1` account.
-Claimable free credits are not spendable credits; overlapping subscription
-windows must not be added together; held credits are not available balance.
-Neither login nor a local dollar ceiling authorizes prepaid spending or managed
-security execution. See [hosted billing and interrupted requests](/api-keys/#charging-and-interrupted-requests).
-
 ## Jev advisory budgets
 
 Opt-in Jev evaluations have a separate budget per evaluator/workflow instance:
-`0SEC_JEV_MAX_REQUESTS=100`, `0SEC_JEV_MAX_COST_USD=0.10`, and
-`0SEC_JEV_TIMEOUT_MS=10000` by default. These are not a process-wide or hosted
-account ceiling. The estimator uses $0.042 per million input tokens and reserves
+`ZERO_JEV_MAX_REQUESTS=100`, `ZERO_JEV_MAX_COST_USD=0.10`, and
+`ZERO_JEV_TIMEOUT_MS=10000` by default. These are not process-wide limits.
+The estimator uses $0.042 per million input tokens and reserves
 the full 65,536-token input allowance before dispatch, including concurrent
 calls. Known usage settles that reservation; unknown failed-request usage keeps
 it reserved. There are no implicit retries or fallback to the chat model.
 
 The accepted kernel-only `classifier` adapter instead enforces request/classification
-counts (`0SEC_JEV_MAX_CLASSIFICATIONS=1000` by default). Its returned zero usage
+counts (`ZERO_JEV_MAX_CLASSIFICATIONS=1000` by default). Its returned zero usage
 does not meter external service costs. Adapter support is not a wired kernel
 command prepass. Enabling a consumed feature authorizes sending its bounded
 evaluation state to that provider. See
@@ -199,4 +193,3 @@ A run with no findings does not prove a target secure.
 
 Provider timeout/retry settings are documented under
 [runtime resilience](/configuration/#runtime-resilience-and-retries).
-Hosted requests with an unknown outcome are not automatically replayed.

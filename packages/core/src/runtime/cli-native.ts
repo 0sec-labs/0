@@ -9,6 +9,8 @@ import type {
   RuntimeConfig,
   RuntimeType,
 } from "./types.js";
+import type { SubagentModelSelection } from "./types.js";
+import { readCacheUsage } from "./prompt-cache.js";
 
 /**
  * CliNativeRuntime — wraps a CLI runtime (`claude`, `codex`, `gemini`) so
@@ -39,10 +41,10 @@ import type {
  * ## Known tradeoffs (called out in the bounty discussion)
  *
  * - **Dual context windows.** Claude Code manages its own context
- *   internally; 0sec's native loop also manages context (compaction,
+ *   internally; 0's native loop also manages context (compaction,
  *   message history). Both are running, side-by-side, on the same
  *   conversation. This is acceptable: Claude Code's own compaction
- *   prevents the subprocess from blowing up, and 0sec's native-loop
+ *   prevents the subprocess from blowing up, and 0's native-loop
  *   features (loop detection, early-stop, playbook injection) still
  *   fire on top of whatever Claude Code returns.
  * - **Token usage opacity.** stream-json reports the same token counts
@@ -58,6 +60,7 @@ export class CliNativeRuntime implements NativeRuntime {
   private command: string;
   /** Populated from the first turn's stream-json `system` event. */
   private sessionId: string | undefined;
+  private observedModel: string | undefined;
 
   constructor(config: RuntimeConfig) {
     if (config.type === "api") {
@@ -76,6 +79,17 @@ export class CliNativeRuntime implements NativeRuntime {
    */
   resetSession(): void {
     this.sessionId = undefined;
+  }
+  resolvedModel(): string { return this.observedModel ?? this.config.model ?? "unknown"; }
+
+  async forkForSubagent(timeout: number, selection?: SubagentModelSelection): Promise<NativeRuntime> {
+    const pin = selection?.role && Object.hasOwn(this.config.agentModels ?? {}, selection.role) ? this.config.agentModels?.[selection.role] : undefined;
+    const parentModel = this.observedModel ?? this.config.model;
+    const model = this.config.singleModel ? parentModel : selection?.model ?? (pin && pin !== "auto" ? pin : parentModel);
+    if (model !== parentModel && !Object.values(this.config.agentModels ?? {}).some(approved => approved !== "auto" && approved === model)) {
+      throw new Error(`Model '${model}' was not approved for this CLI runtime.`);
+    }
+    return new CliNativeRuntime({ ...this.config, timeout, model });
   }
 
   async isAvailable(): Promise<boolean> {
@@ -105,8 +119,10 @@ export class CliNativeRuntime implements NativeRuntime {
     messages: NativeMessage[],
     _tools: NativeToolDef[],
     callbacks?: NativeStreamCallbacks,
+    signal?: AbortSignal,
   ): Promise<NativeRuntimeResult> {
     const start = Date.now();
+    if (signal?.aborted) return { content: [], stopReason: "error", durationMs: 0, cancelled: true, error: "CLI execution cancelled." };
 
     if (this.type !== "claude") {
       return {
@@ -135,6 +151,7 @@ export class CliNativeRuntime implements NativeRuntime {
     }
 
     const args: string[] = ["-p", promptText, "--verbose", "--output-format", "stream-json"];
+    if (this.config.model) args.push("--model", this.config.model);
     if (this.sessionId) {
       args.push("--resume", this.sessionId);
     } else if (system && system.trim().length > 0) {
@@ -151,13 +168,14 @@ export class CliNativeRuntime implements NativeRuntime {
       let timedOut = false;
       const content: NativeContentBlock[] = [];
       let stopReason: NativeRuntimeResult["stopReason"] = "end_turn";
-      let usage: { inputTokens: number; outputTokens: number } | undefined;
+      let usage: NativeRuntimeResult["usage"];
       let sawAssistantEnd = false;
 
       const proc: ChildProcess = spawn(this.command, args, {
         cwd: this.config.cwd ?? process.cwd(),
         env: { ...process.env, ...this.config.env },
         stdio: ["ignore", "pipe", "pipe"],
+        detached: process.platform !== "win32",
       });
 
       proc.stdout?.on("data", (chunk: Buffer) => {
@@ -217,6 +235,7 @@ export class CliNativeRuntime implements NativeRuntime {
               if (partial) callbacks?.onUsage?.(partial);
             }
           }
+          if (typeof event.message?.model === "string") this.observedModel = event.message.model;
 
           // ── Final result event ──
           if (event.type === "result") {
@@ -232,14 +251,25 @@ export class CliNativeRuntime implements NativeRuntime {
         stderrBuf += chunk.toString("utf-8");
       });
 
-      const timer = setTimeout(() => {
-        timedOut = true;
-        proc.kill("SIGTERM");
-        setTimeout(() => proc.kill("SIGKILL"), 5_000).unref();
-      }, this.config.timeout || 600_000);
+      let killTimer: NodeJS.Timeout | undefined;
+      const terminate = () => {
+        if (proc.pid && process.platform !== "win32") {
+          try { process.kill(-proc.pid, "SIGTERM"); } catch { proc.kill("SIGTERM"); }
+        } else proc.kill("SIGTERM");
+        killTimer ??= setTimeout(() => {
+          if (proc.pid && process.platform !== "win32") {
+            try { process.kill(-proc.pid, "SIGKILL"); } catch { proc.kill("SIGKILL"); }
+          } else proc.kill("SIGKILL");
+        }, 1_000);
+      };
+      const timer = setTimeout(() => { timedOut = true; terminate(); }, this.config.timeout || 600_000);
+      signal?.addEventListener("abort", terminate, { once: true });
+      if (signal?.aborted) terminate();
 
       proc.on("error", (err) => {
         clearTimeout(timer);
+        clearTimeout(killTimer);
+        signal?.removeEventListener("abort", terminate);
         // Spawn-level failure also invalidates any cached session id —
         // see the `close` handlers below for the same rationale.
         this.sessionId = undefined;
@@ -253,6 +283,13 @@ export class CliNativeRuntime implements NativeRuntime {
 
       proc.on("close", (code) => {
         clearTimeout(timer);
+        clearTimeout(killTimer);
+        signal?.removeEventListener("abort", terminate);
+        if (signal?.aborted) {
+          this.sessionId = undefined;
+          resolve({ content, stopReason: "error", usage, durationMs: Date.now() - start, cancelled: true, error: "CLI execution cancelled." });
+          return;
+        }
 
         if (timedOut) {
           // A timed-out resume often means Claude Code lost the session
@@ -348,7 +385,7 @@ export function buildClaudePromptFromLastUser(messages: NativeMessage[]): string
   const parts: string[] = [];
   if (toolResults.length > 0) {
     parts.push(
-      `[0sec:tool_results]\n${JSON.stringify(toolResults, null, 2)}`,
+      `[0:tool_results]\n${JSON.stringify(toolResults, null, 2)}`,
     );
   }
   if (textParts.length > 0) {
@@ -404,10 +441,13 @@ function tryParseJson(line: string): Record<string, any> | null {
 
 function readUsage(
   u: Record<string, unknown>,
-): { inputTokens: number; outputTokens: number } | undefined {
+): NativeRuntimeResult["usage"] {
   const input = num(u.input_tokens) ?? num(u.prompt_tokens);
   const output = num(u.output_tokens) ?? num(u.completion_tokens);
-  if (input === undefined && output === undefined) return undefined;
+  if (input === undefined && output === undefined && num(u.cache_read_input_tokens) === undefined && num(u.cache_creation_input_tokens) === undefined) return undefined;
+  if (u.input_tokens !== undefined || u.cache_read_input_tokens !== undefined || u.cache_creation_input_tokens !== undefined) {
+    return readCacheUsage({ ...u, input_tokens: input ?? 0, output_tokens: output ?? 0 });
+  }
   return { inputTokens: input ?? 0, outputTokens: output ?? 0 };
 }
 

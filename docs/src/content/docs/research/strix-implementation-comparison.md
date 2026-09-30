@@ -1,11 +1,11 @@
 ---
 title: "Strix Agent: Technical Implementation Comparison"
-description: "Code-level comparison of the open-source Strix pentesting agent (Apache-2.0, github.com/usestrix/strix, v0.8.3) against 0's own architecture. Covers agent loop, prompts, tools, planning, context compression, finding verification, isolation, telemetry, and CI. Closes 0sec#404."
+description: "Code-level comparison of the open-source Strix pentesting agent (Apache-2.0, github.com/usestrix/strix, v0.8.3) against 0's own architecture. Covers agent loop, prompts, tools, planning, context compression, finding verification, isolation, telemetry, and CI. Closes 0#404."
 ---
 
 > **Historical comparison, 2026-05-23.** Findings apply to the inspected source snapshots.
 
-Read of `usestrix/strix@HEAD` (Apache-2.0, ~18.7k LOC Python) on 2026-05-23, mapped against `0sec-labs/0sec@research/strix-comparison`. Every claim below is anchored to a `strix/<path>:<line>` or `0sec packages/<path>:<line>` reference; sections marked "not observed in public repo" are exactly that.
+Read of `usestrix/strix@HEAD` (Apache-2.0, ~18.7k LOC Python) on 2026-05-23, mapped against `0sec-labs/0@research/strix-comparison`. Every claim below is anchored to a `strix/<path>:<line>` or `0 packages/<path>:<line>` reference; sections marked "not observed in public repo" are exactly that.
 
 ## 1. Executive summary
 
@@ -219,7 +219,7 @@ Two layers:
 
 A first-run anonymous-id file at `~/.strix/.seen` (`posthog.py:25-34`) seeds a `first_run: true` event on first scan.
 
-<span id="10-per-section-comparison-vs-0sec"></span>
+<span id="10-per-section-comparison-vs-0"></span>
 ## 10. Per-section comparison vs 0
 
 | Concern | Strix | 0 |
@@ -290,7 +290,7 @@ Strix references (all on `usestrix/strix@HEAD`, cloned 2026-05-23):
 - CI: `.github/workflows/build-release.yml`
 - Tests: `tests/` (totals from `wc -l`, no integration tests in `tests/agents/`)
 
-0 references (all on `0sec-labs/0sec@research/strix-comparison`):
+0 references (all on `0sec-labs/0@research/strix-comparison`):
 
 - Agent loop: `packages/core/src/agent/loop.ts:38-120`, `:350`
 - Native loop: `packages/core/src/agent/native-loop.ts` (1449 LOC)

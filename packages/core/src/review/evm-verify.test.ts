@@ -218,16 +218,16 @@ describe("evmVerifyCacheKey", () => {
 });
 
 describe("env gate", () => {
-  const saved = { verify: process.env["0SEC_EVM_VERIFY"], rpc: process.env["0SEC_EVM_FORK_RPC"] };
+  const saved = { verify: process.env["ZERO_EVM_VERIFY"], rpc: process.env["ZERO_EVM_FORK_RPC"] };
   beforeEach(() => {
-    delete process.env["0SEC_EVM_VERIFY"];
-    delete process.env["0SEC_EVM_FORK_RPC"];
+    delete process.env["ZERO_EVM_VERIFY"];
+    delete process.env["ZERO_EVM_FORK_RPC"];
   });
   afterEach(() => {
-    if (saved.verify === undefined) delete process.env["0SEC_EVM_VERIFY"];
-    else process.env["0SEC_EVM_VERIFY"] = saved.verify;
-    if (saved.rpc === undefined) delete process.env["0SEC_EVM_FORK_RPC"];
-    else process.env["0SEC_EVM_FORK_RPC"] = saved.rpc;
+    if (saved.verify === undefined) delete process.env["ZERO_EVM_VERIFY"];
+    else process.env["ZERO_EVM_VERIFY"] = saved.verify;
+    if (saved.rpc === undefined) delete process.env["ZERO_EVM_FORK_RPC"];
+    else process.env["ZERO_EVM_FORK_RPC"] = saved.rpc;
   });
 
   it("is OFF by default", () => {
@@ -235,21 +235,21 @@ describe("env gate", () => {
     expect(forgeAvailable()).toBe(false);
   });
 
-  it("respects 0SEC_EVM_VERIFY truthiness (mirrors archetypeSweepEnabled)", () => {
+  it("respects ZERO_EVM_VERIFY truthiness (mirrors archetypeSweepEnabled)", () => {
     for (const off of ["", "0", "false", "no"]) {
-      process.env["0SEC_EVM_VERIFY"] = off;
+      process.env["ZERO_EVM_VERIFY"] = off;
       expect(evmVerifyEnabled()).toBe(false);
     }
     for (const on of ["1", "true", "yes"]) {
-      process.env["0SEC_EVM_VERIFY"] = on;
+      process.env["ZERO_EVM_VERIFY"] = on;
       expect(evmVerifyEnabled()).toBe(true);
     }
   });
 
   it("forgeAvailable requires both the gate ON and a fork RPC", () => {
-    process.env["0SEC_EVM_VERIFY"] = "1";
+    process.env["ZERO_EVM_VERIFY"] = "1";
     expect(forgeAvailable()).toBe(false); // no RPC yet
-    process.env["0SEC_EVM_FORK_RPC"] = "https://rpc.example/archive";
+    process.env["ZERO_EVM_FORK_RPC"] = "https://rpc.example/archive";
     expect(forgeAvailable()).toBe(true);
     expect(evmForkRpc()).toBe("https://rpc.example/archive");
   });
@@ -279,10 +279,10 @@ describe("planEvmVerify", () => {
   });
 
   it("warns (but still plans) when the gate is off — like planArchetypeSweep", () => {
-    delete process.env["0SEC_EVM_VERIFY"];
+    delete process.env["ZERO_EVM_VERIFY"];
     const { plan, warnings } = planEvmVerify(req);
     expect(plan).toBeDefined();
-    expect(warnings.some((w) => /0SEC_EVM_VERIFY/.test(w))).toBe(true);
+    expect(warnings.some((w) => /ZERO_EVM_VERIFY/.test(w))).toBe(true);
   });
 
   it("omits the plan and warns when no fork RPC is resolvable", () => {
@@ -315,14 +315,14 @@ describe("planEvmVerify", () => {
 });
 
 describe("runEvmVerify (default-safe gate)", () => {
-  const saved = process.env["0SEC_EVM_VERIFY"];
+  const saved = process.env["ZERO_EVM_VERIFY"];
   afterEach(() => {
-    if (saved === undefined) delete process.env["0SEC_EVM_VERIFY"];
-    else process.env["0SEC_EVM_VERIFY"] = saved;
+    if (saved === undefined) delete process.env["ZERO_EVM_VERIFY"];
+    else process.env["ZERO_EVM_VERIFY"] = saved;
   });
 
   it("is a no-op that never runs when the gate is off", async () => {
-    delete process.env["0SEC_EVM_VERIFY"];
+    delete process.env["ZERO_EVM_VERIFY"];
     const result = await runEvmVerify({
       targetRepo: "/tmp/t",
       testSource: "contract T {}",

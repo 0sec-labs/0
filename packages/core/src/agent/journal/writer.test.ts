@@ -41,7 +41,7 @@ async function collectStream(path: string, options?: Parameters<typeof streamJou
 
 describe("journal writer", () => {
   beforeEach(() => {
-    tmpRoot = mkdtempSync(join(tmpdir(), "0sec-journal-"));
+    tmpRoot = mkdtempSync(join(tmpdir(), "0-journal-"));
     id = 0;
   });
 
@@ -219,7 +219,7 @@ describe("journal writer", () => {
 
 describe("loadJournal(path) replay", () => {
   beforeEach(() => {
-    tmpRoot = mkdtempSync(join(tmpdir(), "0sec-journal-load-"));
+    tmpRoot = mkdtempSync(join(tmpdir(), "0-journal-load-"));
     id = 0;
   });
 
@@ -504,7 +504,7 @@ describe("loadJournal(path) replay", () => {
 
 describe("atomicAppendJsonLine (O_APPEND fast path) — #415", () => {
   beforeEach(() => {
-    tmpRoot = mkdtempSync(join(tmpdir(), "0sec-journal-append-"));
+    tmpRoot = mkdtempSync(join(tmpdir(), "0-journal-append-"));
     id = 0;
   });
 
@@ -605,9 +605,9 @@ describe("atomicAppendJsonLine (O_APPEND fast path) — #415", () => {
         const child = fork(childScript, {
           env: {
             ...process.env,
-            "0SEC_TEST_RUN_DIR": runDir,
-            "0SEC_TEST_WRITER_ID": writerId,
-            "0SEC_TEST_ITERATIONS": "100",
+            "ZERO_TEST_RUN_DIR": runDir,
+            "ZERO_TEST_WRITER_ID": writerId,
+            "ZERO_TEST_ITERATIONS": "100",
           },
           stdio: ["ignore", "ignore", "pipe", "ipc"],
         });
@@ -657,7 +657,7 @@ describe("atomicAppendJsonLine (O_APPEND fast path) — #415", () => {
         options && typeof options === "object" && "code" in options
           ? (options as { code?: string }).code
           : undefined;
-      if (code === "0SEC_JOURNAL_LINE_TOO_LARGE") {
+      if (code === "ZERO_JOURNAL_LINE_TOO_LARGE") {
         warnings.push(typeof warning === "string" ? warning : warning.message);
         return;
       }
@@ -696,7 +696,7 @@ describe("atomicAppendJsonLine (O_APPEND fast path) — #415", () => {
         options && typeof options === "object" && "code" in options
           ? (options as { code?: string }).code
           : undefined;
-      if (code === "0SEC_JOURNAL_LINE_TOO_LARGE") {
+      if (code === "ZERO_JOURNAL_LINE_TOO_LARGE") {
         warnings.push(typeof warning === "string" ? warning : warning.message);
         return;
       }
@@ -717,9 +717,9 @@ describe("atomicAppendJsonLine (O_APPEND fast path) — #415", () => {
   });
 });
 
-describe("branchJournal (0sec#250)", () => {
+describe("branchJournal (0#250)", () => {
   beforeEach(() => {
-    tmpRoot = mkdtempSync(join(tmpdir(), "0sec-journal-branch-"));
+    tmpRoot = mkdtempSync(join(tmpdir(), "0-journal-branch-"));
     id = 0;
   });
 

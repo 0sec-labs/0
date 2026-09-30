@@ -12,7 +12,7 @@ export interface ResearchExecutionLane {
   challengerRuns: number;
 }
 
-/** Portable execution receipt consumed by 0brain without importing 0sec code. */
+/** Portable execution receipt consumed by 0brain without importing 0 code. */
 export interface ResearchExecutionEvidence {
   schemaVersion: 2 | 3;
   candidateId: string;
@@ -168,7 +168,7 @@ function validateCandidateVariantChange(
   challenger: ResearchVariantDescriptor,
 ): void {
   const keys = Object.keys(change.knobs).sort();
-  if (keys.length !== 1) throw new Error("0sec candidate changes must isolate exactly one knob");
+  if (keys.length !== 1) throw new Error("0 candidate changes must isolate exactly one knob");
   const expected = structuredClone(champion);
   expected.id = challenger.id;
   const key = keys[0];
@@ -394,7 +394,7 @@ export function projectResearchExecutionEvidence(
   };
   let variantBinding: ResearchExecutionEvidence["variantBinding"];
   if (options.candidateChange && options.producer) {
-    if (options.producer.repository !== "0sec-labs/0sec") throw new Error("schema-v3 producer repository must be 0sec-labs/0sec");
+    if (options.producer.repository !== "0sec-labs/0") throw new Error("schema-v3 producer repository must be 0sec-labs/0");
     if (!/^[0-9a-f]{40}$/.test(options.producer.commitSha)) throw new Error("schema-v3 producer commit must be a full lowercase SHA");
     if (!/^sha256:[0-9a-f]{64}$/.test(options.producer.treeDigest)) throw new Error("schema-v3 producer tree digest is invalid");
     const descriptorPair = (run: ResearchTournamentRun) => ({

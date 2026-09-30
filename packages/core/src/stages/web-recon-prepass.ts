@@ -1,4 +1,4 @@
-// Deterministic web-recon pre-pass (0sec web-recon integration).
+// Deterministic web-recon pre-pass (0 web-recon integration).
 //
 // This stage wires the seven standalone web-recon modules into a single
 // deterministic pass that runs BEFORE the attack agent's first turn on web
@@ -24,7 +24,7 @@ import type {
   ScanConfig,
   ScanContext,
   Severity,
-} from "@0sec/shared";
+} from "@0/shared";
 import { runBaselineWebChecks } from "./web.js";
 import {
   enumerateJsChunkUrls,
@@ -109,6 +109,7 @@ export async function runWebReconPrePass(
 
   // A local, non-destructive GET wrapper used by every fetch-driven module.
   const fetchResponse = async (url: string): Promise<ReconResponse> => {
+    config.signal?.throwIfAborted();
     // SSRF guard: never follow a target-derived URL (JS chunk src, etc.) off the
     // target's own host/domain or into private address space. Out-of-scope URLs
     // are treated as a failed fetch so callers skip them gracefully.
@@ -126,7 +127,7 @@ export async function runWebReconPrePass(
         method: "GET",
         headers: { Accept: "*/*" },
         redirect: "manual",
-        signal: controller.signal,
+        signal: config.signal ? AbortSignal.any([controller.signal, config.signal]) : controller.signal,
       });
       limiter?.noteResponse(url, res);
       const body = await res.text();
@@ -205,6 +206,7 @@ export async function runWebReconPrePass(
             return { status: 0, headers: {}, body: "" };
           }
           if (limiter) await limiter.acquire(url);
+          config.signal?.throwIfAborted();
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), timeout);
           try {
@@ -215,7 +217,7 @@ export async function runWebReconPrePass(
               method: "GET",
               headers: { Accept: "*/*", ...(headers ?? {}) },
               redirect: "manual",
-              signal: controller.signal,
+              signal: config.signal ? AbortSignal.any([controller.signal, config.signal]) : controller.signal,
             });
             limiter?.noteResponse(url, res);
             const body = await res.text();
@@ -407,9 +409,10 @@ export async function runWebReconPrePass(
   // host/domain — never one a hostile target's HTML steered us to off-scope.
   if (resetBurstProbeAllowed && resetEndpoint && isInScopeUrl(resetEndpoint, targetHost, domain)) {
     try {
-      const invalidEmail = `0sec-noreply-${randomUUID().slice(0, 8)}@invalid.example`;
+      const invalidEmail = `0-noreply-${randomUUID().slice(0, 8)}@invalid.example`;
       const probe = await probeRateLimit({
         request: async () => {
+          config.signal?.throwIfAborted();
           if (limiter) await limiter.acquire(resetEndpoint);
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), timeout);
@@ -422,7 +425,7 @@ export async function runWebReconPrePass(
               headers: { "content-type": "application/json", Accept: "*/*" },
               body: JSON.stringify({ email: invalidEmail }),
               redirect: "manual",
-              signal: controller.signal,
+              signal: config.signal ? AbortSignal.any([controller.signal, config.signal]) : controller.signal,
             });
             return { status: res.status };
           } finally {

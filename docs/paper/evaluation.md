@@ -1,10 +1,10 @@
-# Evaluation Notes for 0sec Paper Draft
+# Evaluation Notes for 0 Paper Draft
 
-This file is a paper-support companion for `docs/paper/0sec.md`.
+This file is a paper-support companion for `docs/paper/0.md`.
 
 It consolidates **historical** measured snapshots and their source paths. The
 April 10 table below intentionally differs from the later May snapshot in
-`0sec.md`; neither is a current leaderboard. Preserve the original dates and
+`0.md`; neither is a current leaderboard. Preserve the original dates and
 receipts when quoting a table rather than silently substituting the latest ledger.
 
 ## 1) XBOW Ledger Snapshot (as-of 2026-04-10)

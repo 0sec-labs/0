@@ -56,7 +56,7 @@ export const READ_FILE_DEFAULT_MAX_LINES = 500;
  * spoofing this line buys an attacker nothing they cannot already do by
  * writing "ignore previous instructions" into the same file.
  */
-export const READ_FILE_NOTE_PREFIX = "[0sec:read_file]";
+export const READ_FILE_NOTE_PREFIX = "[0:read_file]";
 
 /** A resolved window over a file's lines, or a rejected request. */
 export type ReadFileWindow =
@@ -134,7 +134,7 @@ function parsePositiveIntArg(
  */
 export function windowFileContent(
   fileContent: string,
-  args: { offset?: unknown; maxLines?: unknown },
+  args: { offset?: unknown; maxLines?: unknown; numberLines?: boolean },
 ): ReadFileWindow {
   const offsetArg = parsePositiveIntArg(args.offset, "offset", 1);
   if (!offsetArg.ok) return { ok: false, error: offsetArg.error };
@@ -187,7 +187,10 @@ export function windowFileContent(
     );
   }
 
-  const content = notes.length > 0 ? [...selected, ...notes].join("\n") : selected.join("\n");
+  const body = args.numberLines
+    ? selected.map((line, index) => `${startLine + index}: ${line}`)
+    : selected;
+  const content = notes.length > 0 ? [...body, ...notes].join("\n") : body.join("\n");
 
   return {
     ok: true,

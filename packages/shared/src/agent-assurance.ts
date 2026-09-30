@@ -2,7 +2,7 @@ import { z } from "zod";
 import { EvidenceArtifactSchema } from "./verification.js";
 
 /** Versioned, machine-readable evidence contract for a tool-using agent test. */
-export const AGENT_ACTION_ASSURANCE_SCHEMA_VERSION = "0sec.agent-action-assurance/v1" as const;
+export const AGENT_ACTION_ASSURANCE_SCHEMA_VERSION = "0.agent-action-assurance/v1" as const;
 
 /** Untrusted surface through which a test payload reaches the agent. */
 export const AgentInjectionVectorSchema = z.enum([

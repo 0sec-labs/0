@@ -6,10 +6,11 @@
  * here reads progress events, tool calls, tokens, or nested descendants.
  */
 
-import type { SubagentLifecyclePayload, TodosEventPayload } from "@0sec/core";
+import type { SubagentLifecyclePayload, TodosEventPayload } from "@0/core";
 import { deriveAgentSummary } from "./subagent-card.js";
+import { activityExcerpt } from "./chat/helpers.js";
 
-/** Exactly the rows painted by `CoordinatorSummary` in the right rail. */
+/** Exactly the rows painted by the coordinator overview in the conversation. */
 export const COORDINATOR_SUMMARY_ROWS = 6;
 const PROGRESS_BAR_CELLS = 12;
 const SUMMARY_TEXT_MAX = 72;
@@ -47,7 +48,7 @@ export interface CoordinatorSummary {
 }
 
 function oneLine(value: unknown): string {
-  return typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+  return typeof value === "string" ? activityExcerpt(value, SUMMARY_TEXT_MAX) : "";
 }
 
 function words(value: string, max = SUMMARY_WORD_LIMIT): string {
@@ -83,7 +84,7 @@ function uniqueChildren(input: CoordinatorSummaryInput): ChildLifecycle[] {
   const byId = new Map<string, ChildLifecycle>();
   for (const child of input.directChildren ?? []) {
     if (!child || typeof child !== "object") continue;
-    const id = oneLine(child.agent_id);
+    const id = typeof child.agent_id === "string" ? child.agent_id.trim() : "";
     if (!id) continue;
     if (input.rootScanId && child.parent_scan_id !== input.rootScanId) continue;
     // A repeated lifecycle report replaces the old record instead of adding a
@@ -105,10 +106,10 @@ export function buildCoordinatorSummary(input: CoordinatorSummaryInput = {}): Co
   const remaining = Math.max(0, total - completed);
   const blockers = children.filter((child) => child.status === "failed" || (child.status === "completed" && child.done === false));
   const active = children.filter((child) => child.status === "queued" || child.status === "running");
-  const state: CoordinatorSummaryState = !hasRootPlan
-    ? "planning"
-    : blockers.length > 0
-      ? "needs-attention"
+  const state: CoordinatorSummaryState = blockers.length > 0
+    ? "needs-attention"
+    : !hasRootPlan
+      ? "planning"
       : completed === total
         ? "complete"
         : active.length > 0 || plan.todos.some((todo) => todo.status === "in_progress")
@@ -123,10 +124,10 @@ export function buildCoordinatorSummary(input: CoordinatorSummaryInput = {}): Co
     : `${progressBar(completed, total)} ${completed} of ${total} main tasks done`;
 
   const completedLead = children.find((child) => child.status === "completed" && child.done !== false);
-  const done = !hasRootPlan
-    ? "No main-task plan is available yet."
-    : completedLead
-      ? childLabel(completedLead)
+  const done = completedLead
+    ? childLabel(completedLead)
+    : !hasRootPlan
+      ? "No main-task plan is available yet."
       : completed > 0
         ? `${completed} main task${completed === 1 ? "" : "s"} finished.`
         : "No main-task lead has finished yet.";
@@ -169,5 +170,3 @@ export function buildCoordinatorSummary(input: CoordinatorSummaryInput = {}): Co
   };
 }
 
-/** Short alias for callers that prefer the noun-first naming convention. */
-export const summarizeCoordinator = buildCoordinatorSummary;

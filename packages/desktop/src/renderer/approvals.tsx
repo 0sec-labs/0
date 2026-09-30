@@ -6,7 +6,7 @@ import type {
   DesktopConsoleOperatorAnswer,
   DesktopConsoleOperatorQuestion,
   DesktopConsoleToolCall,
-} from "@0sec/shared";
+} from "@0/shared";
 import {
   Check,
   ChevronDown,

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** Qualify a provisioned toolbox archive in a real offline, non-root microVM.
- * Build first: docker build --target toolbox -t 0sec-toolbox .
+ * Build first: docker build --target toolbox -t 0-toolbox .
  * Run: node scripts/smoke-smolvm-toolbox.mjs /absolute/path/to/toolbox.tar
  * This checks tool startup and local behavior, not authenticated engagements.
  */
@@ -10,11 +10,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { runSmolvm, resolveSmolvmImage } from "../packages/core/dist/runtime/smolvm.js";
 
-const archive = process.env["0SEC_SMOLVM_IMAGE_ARCHIVE"] || process.argv[2];
-assert(archive, "provide a toolbox image archive via argv or 0SEC_SMOLVM_IMAGE_ARCHIVE");
+const archive = process.env["ZERO_SMOLVM_IMAGE_ARCHIVE"] || process.argv[2];
+assert(archive, "provide a toolbox image archive via argv or ZERO_SMOLVM_IMAGE_ARCHIVE");
 const imageArchive = resolve(archive);
 const imageDigest = await resolveSmolvmImage(imageArchive);
-const root = mkdtempSync(join(tmpdir(), "0sec-toolbox-qualification-"));
+const root = mkdtempSync(join(tmpdir(), "0-toolbox-qualification-"));
 
 // Nonzero usage exits are explicitly listed and must actually print usage.
 const probes = [

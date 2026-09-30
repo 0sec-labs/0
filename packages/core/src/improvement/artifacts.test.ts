@@ -10,7 +10,7 @@ afterEach(() => {
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 function directory(): string {
-  const path = mkdtempSync(join(tmpdir(), "0sec-evolution-artifacts-"));
+  const path = mkdtempSync(join(tmpdir(), "0-evolution-artifacts-"));
   directories.push(path);
   return path;
 }
@@ -22,6 +22,23 @@ describe("immutable evolution evidence", () => {
     publishEvolutionArtifact(path, { passed: true, candidateId: "one" });
     expect(() => publishEvolutionArtifact(path, { candidateId: "two", passed: true })).toThrow(/collision/);
     expect(readEvolutionArtifact(path)).toEqual({ candidateId: "one", passed: true });
+  });
+
+  it("publishes into a fresh multi-level store without reversing missing components", () => {
+    const root = directory();
+    const path = join(root, "store", "snapshots", "receipts", "candidate.json");
+    publishEvolutionArtifact(path, { candidateId: "nested" });
+    expect(readEvolutionArtifact(path)).toEqual({ candidateId: "nested" });
+  });
+
+  it("rejects attacker-controlled ancestor aliases even when their target is private", () => {
+    const root = directory();
+    const outside = join(root, "outside", "receipt.json");
+    publishEvolutionArtifact(outside, { secret: true });
+    symlinkSync(join(root, "outside"), join(root, "alias"));
+    expect(() => readEvolutionArtifact(join(root, "alias", "receipt.json"))).toThrow(/unsafe evolution directory/);
+    expect(() => publishEvolutionArtifact(join(root, "alias", "nested", "receipt.json"), { secret: false })).toThrow(/unsafe evolution directory/);
+    expect(readEvolutionArtifact(outside)).toEqual({ secret: true });
   });
 
   it("never reads or overwrites artifacts through symbolic links", () => {

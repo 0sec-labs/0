@@ -14,7 +14,7 @@
  *
  * ## What this screen is a view over
  *
- * The hub peer roster (`packages/core/src/hub/registry.ts`): the set of 0sec
+ * The hub peer roster (`packages/core/src/hub/registry.ts`): the set of 0
  * peers — sessions and subagents — working the same project directory. That
  * module is a PURE data model; the filesystem/socket transport that persists
  * and gossips the roster is a later increment and **is not wired yet**. There
@@ -26,7 +26,7 @@
  * ## Reuse note (registry symbols are not exported)
  *
  * `registry.ts`'s `PeerRecord` / `statusOf` / `DEFAULT_PEER_TTL_MS` are NOT
- * re-exported from `@0sec/core` (only the mailbox's `peekInbox` / `hubDir` are),
+ * re-exported from `@0/core` (only the mailbox's `peekInbox` / `hubDir` are),
  * and this package may not edit core to add the export. So the peer SHAPE and
  * the TTL/status derivation are mirrored here: {@link HerdPeer} is structurally
  * a `PeerRecord` (a real record assigns to it with no cast), {@link isPeerStale}
@@ -1120,6 +1120,137 @@ export function herdComposerVisibleDraft(draft: unknown, contentWidth: number): 
 /** The four lifecycle states a subagent moves through. Mirrors the bus. */
 export type SubagentStatus = "queued" | "running" | "completed" | "failed" | "parked";
 
+/** A lifecycle row's identity fields, used to project the chat roster as a tree. */
+export interface AgentTreeRecord {
+  readonly agent_id: string;
+  readonly parent_scan_id?: string;
+}
+
+/** One preorder row in the stable agent forest projection. */
+export interface AgentTreeRow<T extends AgentTreeRecord> {
+  readonly item: T;
+  /** Present only when this row has a visible worker parent. */
+  readonly parentId: string | null;
+  readonly depth: number;
+  readonly isLast: boolean;
+  /** One entry per ancestor; true keeps that ancestor's vertical tree rail. */
+  readonly ancestorContinues: readonly boolean[];
+  /** Visible worker ancestors, from the root down to the direct parent. */
+  readonly ancestorIds: readonly string[];
+}
+
+/**
+ * Turn lifecycle records into a stable preorder forest. A direct child points
+ * at its parent's agent id in `parent_scan_id`; the root scan id itself is not
+ * a roster row. Missing parents (including records observed before their
+ * parent) remain visible as roots. Malformed cycles are broken at the earliest
+ * input row so every record remains reachable exactly once.
+ */
+export function projectAgentForest<T extends AgentTreeRecord>(
+  records: readonly T[],
+  rootScanId?: string,
+): AgentTreeRow<T>[] {
+  if (records.length === 0) return [];
+  const indexById = new Map<string, number>();
+  for (let i = 0; i < records.length; i += 1) {
+    const record = records[i]!;
+    if (!indexById.has(record.agent_id)) indexById.set(record.agent_id, i);
+  }
+
+  const parentById = new Map<string, string>();
+  for (const record of records) {
+    const parent = record.parent_scan_id;
+    if (parent && parent !== rootScanId && parent !== record.agent_id && indexById.has(parent)) {
+      parentById.set(record.agent_id, parent);
+    }
+  }
+
+  const resolved = new Set<string>();
+  for (const record of records) {
+    const path: string[] = [];
+    const pathIndex = new Map<string, number>();
+    let cursor = record.agent_id;
+    while (parentById.has(cursor) && !resolved.has(cursor)) {
+      const cycleStart = pathIndex.get(cursor);
+      if (cycleStart !== undefined) {
+        let root = path[cycleStart]!;
+        for (let i = cycleStart + 1; i < path.length; i += 1) {
+          const candidate = path[i]!;
+          if (indexById.get(candidate)! < indexById.get(root)!) root = candidate;
+        }
+        parentById.delete(root);
+        break;
+      }
+      pathIndex.set(cursor, path.length);
+      path.push(cursor);
+      cursor = parentById.get(cursor)!;
+    }
+    for (const id of path) resolved.add(id);
+  }
+
+  const roots: T[] = [];
+  const children = new Map<string, T[]>();
+  for (const record of records) {
+    const parent = parentById.get(record.agent_id);
+    if (!parent) {
+      roots.push(record);
+      continue;
+    }
+    const siblings = children.get(parent);
+    if (siblings) siblings.push(record);
+    else children.set(parent, [record]);
+  }
+
+  const rows: AgentTreeRow<T>[] = [];
+  const append = (
+    siblings: readonly T[],
+    ancestorContinues: readonly boolean[],
+    ancestorIds: readonly string[],
+  ) => {
+    for (let i = 0; i < siblings.length; i += 1) {
+      const item = siblings[i]!;
+      const isLast = i === siblings.length - 1;
+      rows.push({
+        item,
+        parentId: parentById.get(item.agent_id) ?? null,
+        depth: ancestorIds.length,
+        isLast,
+        ancestorContinues,
+        ancestorIds,
+      });
+      const descendants = children.get(item.agent_id);
+      if (descendants?.length) {
+        append(descendants, [...ancestorContinues, !isLast], [...ancestorIds, item.agent_id]);
+      }
+    }
+  };
+  append(roots, [], []);
+  return rows;
+}
+
+/**
+ * The live roster omits successful completions but retains failures and
+ * incomplete completions. Projection happens after filtering, so children of
+ * a hidden completed parent remain visible as roots.
+ */
+export function projectLiveAgentForest<
+  T extends AgentTreeRecord & { readonly status: string; readonly done?: boolean },
+>(records: readonly T[], rootScanId?: string): AgentTreeRow<T>[] {
+  const live = records.filter((record) => record.status !== "completed" || record.done === false);
+  return projectAgentForest(live, rootScanId);
+}
+
+/** Focus-left enters the projected parent; Escape always returns to Main. */
+export function agentFocusNavigationTarget(
+  key: "left" | "escape",
+  rows: readonly AgentTreeRow<AgentTreeRecord>[],
+  agentId: string,
+): string | null {
+  if (key === "escape") return null;
+  return rows.find((row) => row.item.agent_id === agentId)?.parentId ?? null;
+}
+
+
 /** How many activity entries a single agent's ring buffer retains. */
 export const HERD_ACTIVITY_MAX = 200;
 
@@ -1188,6 +1319,8 @@ export interface HerdSubagentRecord {
   readonly tool?: string;
   /** Latest note the child authored. */
   readonly note?: string;
+  /** Local epoch-ms arrival time when this worker first entered running. */
+  readonly startedAt?: number;
   /** Epoch ms of the last event for this agent — drives age/staleness. */
   readonly lastSeen: number;
   readonly activity: readonly SubagentActivityEntry[];
@@ -1280,6 +1413,9 @@ export function applySubagentLifecycle(
   const ts = Number.isFinite(now) ? now : 0;
   const prev = map[agentId];
   const status = pickStatus(payload["status"]) ?? prev?.status ?? "queued";
+  const startedAt = status === "running"
+    ? prev?.status === "running" ? prev.startedAt ?? ts : ts
+    : status === "queued" ? undefined : prev?.startedAt;
   const task = pickString(payload["task"]) ?? prev?.task ?? "";
   const maxTurns = pickFiniteInt(payload["max_turns"]) ?? prev?.maxTurns ?? 0;
   const turns = pickFiniteInt(payload["turns"]) ?? prev?.turns;
@@ -1311,6 +1447,7 @@ export function applySubagentLifecycle(
     error,
     ...(completionReason ? { completionReason } : {}),
     tool: prev?.tool,
+    ...(startedAt !== undefined ? { startedAt } : {}),
     note: prev?.note,
     lastSeen: ts,
     activity: boundActivity(prev?.activity ?? [], entry, maxLines),
@@ -1339,6 +1476,10 @@ export function applySubagentProgress(
   const maxTurns = pickFiniteInt(payload["max_turns"]) ?? prev?.maxTurns ?? 0;
   const tool = pickString(payload["tool"]);
   const note = pickString(payload["note"]);
+  const status = prev?.status === "completed" || prev?.status === "failed" ? prev.status : "running";
+  const startedAt = status === "running"
+    ? prev?.status === "running" ? prev.startedAt ?? ts : ts
+    : prev?.startedAt;
 
   const entry: SubagentActivityEntry = { kind: "progress", ts, turn, maxTurns, tool, note };
 
@@ -1351,7 +1492,7 @@ export function applySubagentProgress(
     task: prev?.task ?? "",
     // A child still emitting turns is running, unless it already reached a
     // terminal state we recorded (a late progress event never resurrects it).
-    status: prev?.status === "completed" || prev?.status === "failed" ? prev.status : "running",
+    status,
     maxTurns,
     turn: turn ?? prev?.turn,
     turns: prev?.turns,
@@ -1359,6 +1500,7 @@ export function applySubagentProgress(
     summary: prev?.summary,
     error: prev?.error,
     ...(prev?.completionReason ? { completionReason: prev.completionReason } : {}),
+    ...(startedAt !== undefined ? { startedAt } : {}),
     tool: tool ?? prev?.tool,
     note: note ?? prev?.note,
     lastSeen: ts,
@@ -1573,7 +1715,7 @@ export function focusHeaderLines(
     if (record.tool) push(`Tool: ${record.tool}`, "text");
     if (record.note) push(`Note: ${record.note}`, "text");
     // MEASURED telemetry — every line only when the datum was actually reported
-    // (never a zero). No cost/$ line: 0sec has no pricing, so it is not shown.
+    // (never a zero). No cost/$ line: 0 has no pricing, so it is not shown.
     if (telemetry?.model) push(`Model: ${telemetry.model}`, "muted");
     if (typeof telemetry?.inputTokens === "number" || typeof telemetry?.outputTokens === "number") {
       const inTok = formatTokens(telemetry.inputTokens);

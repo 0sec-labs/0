@@ -18,12 +18,10 @@ import {
 } from "../memsafety.js";
 
 const core = vi.hoisted(() => ({
-  getCloudSinkConfig: vi.fn(),
-  postFinding: vi.fn(),
   prepare: vi.fn(),
   runMemSafetyScan: vi.fn(),
 }));
-vi.mock("@0sec/core", () => core);
+vi.mock("@0/core", () => core);
 
 /** Build an `exists` probe that returns true only for the given relative paths. */
 function existsFor(root: string, present: string[]): (path: string) => boolean {
@@ -38,8 +36,6 @@ afterEach(() => {
     rmSync(dir, { recursive: true, force: true });
   }
   vi.restoreAllMocks();
-  core.getCloudSinkConfig.mockReset();
-  core.postFinding.mockReset();
   core.prepare.mockReset();
   core.runMemSafetyScan.mockReset();
   process.exitCode = undefined;
@@ -96,14 +92,13 @@ describe("registerMemsafetyCommand", () => {
   });
 
   it("forwards a paired bounded artifact destination to the fuzz stage", async () => {
-    const sourceRoot = mkdtempSync(join(tmpdir(), "0sec-memsafety-cli-"));
+    const sourceRoot = mkdtempSync(join(tmpdir(), "0-memsafety-cli-"));
     temporaryDirs.push(sourceRoot);
     writeFileSync(join(sourceRoot, "Cargo.toml"), "[package]\nname = \"fixture\"\n");
     core.prepare.mockResolvedValue({
       resolvedTarget: sourceRoot,
       cleanup: vi.fn(),
     });
-    core.getCloudSinkConfig.mockReturnValue(null);
     core.runMemSafetyScan.mockResolvedValue({
       findings: [],
       details: [],
@@ -141,7 +136,7 @@ describe("registerMemsafetyCommand", () => {
 
 describe("resolveArtifactDir", () => {
   it("rejects a symlinked artifact root that resolves into prepared source", () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-memsafety-artifact-"));
+    const root = mkdtempSync(join(tmpdir(), "0-memsafety-artifact-"));
     const sourceRoot = join(root, "source");
     const outsideRoot = join(root, "outside");
     const artifactLink = join(outsideRoot, "retained");
@@ -159,7 +154,7 @@ describe("resolveArtifactDir", () => {
   });
 
   it("keeps an ordinary external artifact root", () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-memsafety-artifact-"));
+    const root = mkdtempSync(join(tmpdir(), "0-memsafety-artifact-"));
     const sourceRoot = join(root, "source");
     const artifactRoot = join(root, "artifacts");
     try {

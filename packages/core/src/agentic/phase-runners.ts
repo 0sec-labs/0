@@ -1,6 +1,6 @@
 // Extracted verbatim from agentic-scanner.ts (S3 cleanup, pure relocation — no logic changes).
-import type { ScanConfig, Finding, LayerVerdict, PocStep } from "@0sec/shared";
-import { resolveIdentities } from "@0sec/shared";
+import type { ScanConfig, Finding, LayerVerdict, PocStep } from "@0/shared";
+import { resolveIdentities } from "@0/shared";
 import { runAgentLoop } from "../agent/loop.js";
 import { runNativeAgentLoop } from "../agent/native-loop.js";
 import { toolCallPreview } from "../agent/tool-preview.js";
@@ -32,16 +32,16 @@ import {
   buildAttributionForConfig,
 } from "./scan-config.js";
 import { verify } from "../triage/structured-verify.js";
-import { getCloudSinkConfig, postFinding } from "../cloud-sink.js";
 import { splitCost } from "../agent/cost.js";
 import { EnforcementTracker } from "../scope/enforcement.js";
 import type { ScanCostLedger } from "../agent/cost-ledger.js";
+import { scanGoalPrompt } from "../scan-plan.js";
 
 // ── Shared state type for agent outputs ──
 
 export interface AgentOutput {
   findings: Finding[];
-  targetInfo: Partial<import("@0sec/shared").TargetInfo>;
+  targetInfo: Partial<import("@0/shared").TargetInfo>;
   summary: string;
   turnCount: number;
   estimatedCostUsd: number;
@@ -49,7 +49,7 @@ export interface AgentOutput {
    * Raw token-usage tally from the loop state. Surfaced separately
    * from `estimatedCostUsd` so the `scan_completed` event payload
    * can build per-(provider, model) cost splits via `splitCost()`
-   * (0sec#231) instead of just emitting a fused dollar total.
+   * (0#231) instead of just emitting a fused dollar total.
    * Optional for back-compat with legacy CLI runtimes that don't
    * report tokens.
    */
@@ -60,6 +60,7 @@ export interface AgentOutput {
   };
   /** True when this stage terminated because the cost ceiling was hit. */
   costCeilingExceeded?: boolean;
+  executionSuccessful?: boolean;
   /**
    * Set when the agent loop bailed because the planner LLM returned an
    * error (or empty response). Propagated up from `NativeAgentState.errorExit`
@@ -89,7 +90,7 @@ export async function runNativeDiscovery(
   // additions are the env-driven scope/path/rate/kill enforcement layered on
   // via the EnforcementTracker. So it is "web" for every prompt/tool decision.
   const isWeb = config.mode === "web" || config.mode === "http_audit";
-  // Multi-identity access-control testing (0sec#564): reconcile legacy
+  // Multi-identity access-control testing (0#564): reconcile legacy
   // `auth` with `identities` and surface the access_control_probe guidance.
   const identities = resolveIdentities(config);
   const basePrompt = isWeb
@@ -111,7 +112,7 @@ export async function runNativeDiscovery(
       role: "discovery",
       systemPrompt,
       tools,
-      maxTurns: isWeb ? 12 : 8,
+      maxTurns: config.depth === "quick" ? 4 : config.depth === "deep" ? 12 : isWeb ? 8 : 6,
       target: config.target,
       scanId,
       sessionId: db.getSession(scanId, "discovery")?.id,
@@ -128,6 +129,7 @@ export async function runNativeDiscovery(
       costLedger,
     },
     runtime,
+    signal: config.signal,
     db,
     getPendingUserMessages,
     onEvent: (eventType, payload) => {
@@ -162,7 +164,9 @@ export async function runNativeDiscovery(
     turnCount: state.turnCount,
     estimatedCostUsd: state.estimatedCostUsd,
     totalUsage: state.totalUsage,
+    costCeilingExceeded: state.costCeilingExceeded,
     errorExit: state.errorExit,
+    executionSuccessful: config.plan ? state.done && !state.errorExit : undefined,
     messages: state.messages,
   };
 }
@@ -172,7 +176,7 @@ export async function runNativeAttack(
   db: any,
   config: ScanConfig,
   scanId: string,
-  targetInfo: Partial<import("@0sec/shared").TargetInfo>,
+  targetInfo: Partial<import("@0/shared").TargetInfo>,
   categories: string[],
   maxTurns: number,
   emit: ScanListener,
@@ -208,7 +212,7 @@ export async function runNativeAttack(
   // prompt. Defends against expensive thrash on CVE-tagged challenges
   // like XBEN-030 / XBEN-034 where the agent had source access but no
   // concrete leads and burned $6+ producing 0 findings.
-  // Gated behind 0SEC_FEATURE_PRE_RECON_CVE (default ON in white-box).
+  // Gated behind ZERO_FEATURE_PRE_RECON_CVE (default ON in white-box).
   let preReconBlock = "";
   if (hasSource && config.repoPath && features.preReconCve) {
     try {
@@ -320,7 +324,6 @@ export async function runNativeAttack(
   const effectiveMaxTurns =
     isWeb && config.maxAttackTurns === undefined ? Math.max(maxTurns, 15) : maxTurns;
 
-  const cloudSinkCfg = getCloudSinkConfig();
   const onTurnHandler = (turn: number, toolCalls: ToolCall[]) => {
     // One sub-action per tool call with a full preview (tool + first-order
     // argument) so the verbose TUI can show what the attack agent is
@@ -365,6 +368,7 @@ export async function runNativeAttack(
       costLedger,
     },
     runtime,
+    signal: config.signal,
     db,
     getPendingUserMessages,
     onEvent: (eventType, payload) => {
@@ -378,13 +382,12 @@ export async function runNativeAttack(
         message: `[${finding.severity}] ${finding.title}`,
         data: finding,
       });
-      void postFinding(finding, cloudSinkCfg);
     },
     onTurn: onTurnHandler,
   });
 
   // ── Early-stop retry: if no findings by halfway, retry with a different strategy ──
-  if (features.earlyStopRetry && state.earlyStopNoProgress) {
+  if (features.earlyStopRetry && state.earlyStopNoProgress && !config.signal?.aborted && !state.costCeilingExceeded) {
     const remainingBudget = effectiveMaxTurns - state.turnCount;
 
     emit({
@@ -443,6 +446,7 @@ export async function runNativeAttack(
         costLedger,
       },
       runtime,
+      signal: config.signal,
       db,
       getPendingUserMessages,
       onEvent: (eventType, payload) => {
@@ -479,6 +483,7 @@ export async function runNativeAttack(
           (retryState.totalUsage?.outputTokens ?? 0),
       },
       costCeilingExceeded: state.costCeilingExceeded || retryState.costCeilingExceeded,
+      executionSuccessful: config.plan ? retryState.done && !retryState.errorExit : undefined,
       // If either attempt bailed on a planner error, surface the latest
       // one (retry takes precedence — it ran most recently).
       errorExit: retryState.errorExit ?? state.errorExit,
@@ -497,6 +502,7 @@ export async function runNativeAttack(
     totalUsage: state.totalUsage,
     costCeilingExceeded: state.costCeilingExceeded,
     errorExit: state.errorExit,
+    executionSuccessful: config.plan ? state.done && !state.errorExit : undefined,
     messages: state.messages,
   };
 }
@@ -630,7 +636,7 @@ function formatProgressHandoff(progress: AttemptProgress): string {
 }
 
 /** Format targetInfo from the discovery stage into a human-readable summary for the web attack prompt. */
-function formatWebDiscoveryInfo(targetInfo: Partial<import("@0sec/shared").TargetInfo>): string {
+function formatWebDiscoveryInfo(targetInfo: Partial<import("@0/shared").TargetInfo>): string {
   const parts: string[] = [];
   if (targetInfo.type) parts.push(`Type: ${targetInfo.type}`);
   if (targetInfo.model) parts.push(`Server/Framework: ${targetInfo.model}`);
@@ -667,24 +673,26 @@ export async function runNativeVerify(
   findings: Finding[],
   emit: ScanListener,
   costLedger?: ScanCostLedger,
-): Promise<void> {
+): Promise<number> {
   // Per-finding verify loop (#285). One agent session per finding so each
   // gets its own turn budget — N findings → N runtime calls, never a shared
   // pool the model can starve from.
   const memoryStore = db ? createScanMemoryStore(db) : undefined;
+  let turns = 0;
   for (const finding of findings) {
+    config.signal?.throwIfAborted();
     let memoryContext = "";
     if (memoryStore) {
       try {
         memoryContext = await memoryStore.formatForPrompt(await memoryStore.getRelevantMemories(finding, config.target));
       } catch { /* Historical context never replaces independent verification. */ }
     }
-    await runNativeAgentLoop({
+    const state = await runNativeAgentLoop({
       config: {
         role: "verify",
         systemPrompt: verifyPromptSingleFinding(config.target, finding, config.auth) + "\n\n" + memoryContext,
         tools: getToolsForRole("verify", { hasScope: !!config.repoPath, allowScanners: config.allowScanners }),
-        maxTurns: VERIFY_TURNS_PER_FINDING,
+        maxTurns: config.depth === "quick" ? 3 : config.depth === "deep" ? 8 : VERIFY_TURNS_PER_FINDING,
         target: config.target,
         scanId,
         sessionId: db?.getSession?.(scanId, "verify")?.id,
@@ -701,6 +709,7 @@ export async function runNativeVerify(
         costLedger,
       },
       runtime,
+      signal: config.signal,
       db,
       onTurn: (turn, toolCalls) => {
         // One sub-action per tool call with a full preview, matching the
@@ -723,7 +732,13 @@ export async function runNativeVerify(
         }
       },
     });
+    turns += state.turnCount;
+    if (state.errorExit) throw new Error(state.errorExit.error);
+    if (config.plan && !state.done && !state.costCeilingExceeded && !config.signal?.aborted) {
+      throw new Error("Verification exhausted its turn budget before resolving the finding.");
+    }
   }
+  return turns;
 }
 
 // ── Legacy (text-based) stage runners ──
@@ -756,9 +771,9 @@ export async function runLegacyDiscovery(
   const state = await runAgentLoop({
     config: {
       role: "discovery",
-      systemPrompt,
+      systemPrompt: systemPrompt + scanGoalPrompt(config.plan),
       tools,
-      maxTurns: isWeb ? 12 : 8,
+      maxTurns: config.depth === "quick" ? 4 : config.depth === "deep" ? 12 : isWeb ? 8 : 6,
       target: config.target,
       scanId,
       sessionId: db?.getSession(scanId, "discovery")?.id,
@@ -774,6 +789,8 @@ export async function runLegacyDiscovery(
       engagement: resolveEngagementForConfig(config),
       dispatchMode: config.dispatchMode,
       modelHint: config.model,
+      costLedger: config.costLedger, costCeilingUsd: config.costCeilingUsd, costModel: config.model, signal: config.signal,
+      requirePricedUsage: Boolean(config.plan),
     },
     runtime,
     db,
@@ -793,7 +810,9 @@ export async function runLegacyDiscovery(
     targetInfo: state.targetInfo,
     summary: state.summary,
     turnCount: state.turnCount,
-    estimatedCostUsd: 0, // Legacy runtime does not track token usage
+    estimatedCostUsd: state.estimatedCostUsd ?? 0,
+    totalUsage: state.totalUsage, costCeilingExceeded: state.costCeilingExceeded, errorExit: state.errorExit,
+    executionSuccessful: config.plan ? state.done && !state.errorExit : undefined,
   };
 }
 
@@ -802,7 +821,7 @@ export async function runLegacyAttack(
   db: any,
   config: ScanConfig,
   scanId: string,
-  targetInfo: Partial<import("@0sec/shared").TargetInfo>,
+  targetInfo: Partial<import("@0/shared").TargetInfo>,
   categories: string[],
   maxTurns: number,
   emit: ScanListener,
@@ -830,13 +849,12 @@ export async function runLegacyAttack(
     ? getToolsForRole("attack", { webMode: true, hasBrowser, allowScanners: config.allowScanners })
     : getToolsForRole("attack", { hasBrowser, allowScanners: config.allowScanners });
 
-  const cloudSinkCfg = getCloudSinkConfig();
   const effectiveMaxTurns =
     isWeb && config.maxAttackTurns === undefined ? Math.max(maxTurns, 25) : maxTurns;
   const state = await runAgentLoop({
     config: {
       role: "attack",
-      systemPrompt,
+      systemPrompt: systemPrompt + scanGoalPrompt(config.plan),
       tools,
       maxTurns: effectiveMaxTurns,
       target: config.target,
@@ -854,6 +872,8 @@ export async function runLegacyAttack(
       engagement: resolveEngagementForConfig(config),
       dispatchMode: config.dispatchMode,
       modelHint: config.model,
+      costLedger: config.costLedger, costCeilingUsd: config.costCeilingUsd, costModel: config.model, signal: config.signal,
+      requirePricedUsage: Boolean(config.plan),
     },
     runtime,
     db,
@@ -881,7 +901,6 @@ export async function runLegacyAttack(
         message: `[${finding.severity}] ${finding.title}`,
         data: finding,
       });
-      void postFinding(finding, cloudSinkCfg);
     },
   });
   return {
@@ -889,7 +908,9 @@ export async function runLegacyAttack(
     targetInfo: state.targetInfo,
     summary: state.summary,
     turnCount: state.turnCount,
-    estimatedCostUsd: 0, // Legacy runtime does not track token usage
+    estimatedCostUsd: state.estimatedCostUsd ?? 0,
+    totalUsage: state.totalUsage, costCeilingExceeded: state.costCeilingExceeded, errorExit: state.errorExit,
+    executionSuccessful: config.plan ? state.done && !state.errorExit : undefined,
   };
 }
 
@@ -901,11 +922,11 @@ export async function runLegacyVerify(
   findings: Finding[],
   _emit: ScanListener,
   dbPath?: string,
-): Promise<void> {
-  await runAgentLoop({
+): Promise<number> {
+  const state = await runAgentLoop({
     config: {
       role: "verify",
-      systemPrompt: verifyPrompt(config.target, findings, config.auth),
+      systemPrompt: verifyPrompt(config.target, findings, config.auth) + scanGoalPrompt(config.plan),
       tools: getToolsForRole("verify", { hasScope: !!config.repoPath, allowScanners: config.allowScanners }),
       maxTurns: Math.min(findings.length * 3, 15),
       target: config.target,
@@ -923,10 +944,17 @@ export async function runLegacyVerify(
       engagement: resolveEngagementForConfig(config),
       dispatchMode: config.dispatchMode,
       modelHint: config.model,
+      costLedger: config.costLedger, costCeilingUsd: config.costCeilingUsd, costModel: config.model, signal: config.signal,
+      requirePricedUsage: Boolean(config.plan),
     },
     runtime,
     db,
   });
+  if (state.errorExit) throw new Error(state.errorExit.error);
+  if (config.plan && !state.done && !state.costCeilingExceeded && !config.signal?.aborted) {
+    throw new Error("Verification exhausted its turn budget before resolving findings.");
+  }
+  return state.turnCount;
 }
 
 // ── Helper: convert DB finding row to Finding type ──

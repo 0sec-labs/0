@@ -1,11 +1,12 @@
 import { spawn, spawnSync } from "node:child_process";
 
+import { defaultOpenBrowser } from "../open-browser.js";
 import { maybeLoadCodexAuth } from "../codex-auth.js";
 import { sanitizeTuiText } from "./text.js";
 
 const MAX_VISIBLE_LINES = 8;
 const CODEX_UNAVAILABLE_MESSAGE =
-  "Codex CLI is not available on this console's PATH. Install Codex, or add its directory to PATH and restart 0sec.";
+  "Codex CLI is not available on this console's PATH. Install Codex, or add its directory to PATH and restart 0.";
 
 export type CodexDeviceAuthPhase = "running" | "connected" | "cancelled" | "failed" | "unavailable";
 
@@ -36,6 +37,8 @@ export interface StartCodexDeviceAuthOptions {
   env?: NodeJS.ProcessEnv;
   spawn?: SpawnCodexDeviceAuth;
   probe?: ProbeCodexExecutable;
+  /** Test seam; defaults to the platform browser opener. */
+  openBrowser?: (url: string) => void | Promise<void>;
   onUpdate: (update: CodexDeviceAuthUpdate) => void;
   onConnected: () => void;
 }
@@ -71,7 +74,7 @@ function isMissingCodexExecutable(error: unknown): boolean {
 
 /**
  * Run Codex's official device-auth flow without ever asking the operator to
- * paste a ChatGPT API key or OAuth token into 0sec. The Codex CLI owns the
+ * paste a ChatGPT API key or OAuth token into 0. The Codex CLI owns the
  * browser/device protocol and writes ~/.codex/auth.json; on success we reload
  * that file explicitly, replacing only this process's stale Codex tokens.
  */
@@ -86,23 +89,45 @@ export function startCodexDeviceAuth(options: StartCodexDeviceAuthOptions): Code
     return { cancel: () => {} };
   }
   const launch = options.spawn ?? defaultSpawnCodexDeviceAuth;
+  const openBrowser = options.openBrowser ?? defaultOpenBrowser;
   const lines: string[] = [];
   let pending = "";
   let settled = false;
   let cancelled = false;
+  let browserOpened = false;
 
   const publish = (phase: CodexDeviceAuthPhase, message: string): void => {
     options.onUpdate({ phase, lines: [...lines], message });
   };
+  const tryOpenBrowser = (text: string): void => {
+    if (browserOpened) return;
+    // Codex may emit the URL without a trailing newline, or redraw the line
+    // with carriage returns. Scan each chunk before line buffering so browser
+    // launch does not depend on terminal formatting.
+    const rawUrl = text.match(/https:\/\/auth\.openai\.com\/codex\/device[^\s\x1b]*/)?.[0];
+    if (!rawUrl) return;
+    const url = rawUrl.replace(/[),.;]+$/, "");
+    browserOpened = true;
+    void Promise.resolve(openBrowser(url)).catch(() => {
+      if (settled) return;
+      lines.push("Could not open a browser automatically; open the URL above.");
+      if (lines.length > MAX_VISIBLE_LINES) lines.shift();
+      publish("running", "Complete the ChatGPT Codex device sign-in in your browser.");
+    });
+  };
   const pushOutput = (chunk: Buffer): void => {
-    const normalized = sanitizeTuiText(`${pending}${chunk.toString("utf8")}`);
-    const parts = normalized.split("\n");
+    if (settled) return;
+    const text = chunk.toString("utf8");
+    tryOpenBrowser(text);
+    const raw = `${pending}${text}`;
+    const parts = raw.split(/\r?\n/);
     pending = parts.pop() ?? "";
     for (const line of parts) {
-      const value = line.trim();
+      const value = sanitizeTuiText(line);
       if (value.length === 0) continue;
       lines.push(value);
       if (lines.length > MAX_VISIBLE_LINES) lines.shift();
+      tryOpenBrowser(value);
     }
     publish("running", "Complete the ChatGPT Codex device sign-in in your browser.");
   };
@@ -136,6 +161,7 @@ export function startCodexDeviceAuth(options: StartCodexDeviceAuthOptions): Code
     );
   });
   child.on("close", (code) => {
+    if (settled) return;
     if (cancelled) {
       finish("cancelled", "Codex device sign-in cancelled.");
       return;
@@ -145,7 +171,7 @@ export function startCodexDeviceAuth(options: StartCodexDeviceAuthOptions): Code
       return;
     }
     maybeLoadCodexAuth({ env, home: options.homeDir, force: true });
-    if (!env["0SEC_CHATGPT_ACCESS_TOKEN"] && !env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"]) {
+    if (!env["ZERO_CHATGPT_ACCESS_TOKEN"] && !env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"]) {
       finish("failed", "Codex completed without a readable ChatGPT subscription credential.");
       return;
     }

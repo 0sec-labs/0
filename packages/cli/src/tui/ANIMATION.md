@@ -223,7 +223,7 @@ Two places in `chat-screen.tsx` want this today:
   `◌ evidence collection in progress` while `busy`. That line should become
   `{glyph} {label} {elapsedLabel}`, with the glyph in a `GLYPH_CELLS`-wide
   box and the elapsed in `MUTED` so it stays subordinate to the label.
-- The composer placeholder currently reads `0sec is working…` while busy and
+- The composer placeholder currently reads `0 is working…` while busy and
   `connecting runtime…` before a session exists. Both are the same idea at
   different phases: `frameAt("connecting" | …)`, with elapsed appended only
   in the transcript, not in the composer — two counters ticking on one screen

@@ -7,7 +7,7 @@ import { LlmApiRuntime } from "../runtime/llm-api.js";
 import { resolveCompactionThresholds } from "../agent/native-loop.js";
 import { contextOverflow, estimatePromptTokens, maintainContext, outputHeadroom } from "./context-maintenance.js";
 import { diag } from "../diagnostics/channel.js";
-import { DEFAULT_AUTONOMY_MODE, DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir, type HarnessSnapshot } from "@0sec/shared";
+import { DEFAULT_AUTONOMY_MODE, DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir, type HarnessSnapshot } from "@0/shared";
 import type {
   NativeContentBlock,
   NativeMessage,
@@ -33,7 +33,7 @@ import {
   listToolsDef,
   loadToolDef,
 } from "../agent/deferred-tools.js";
-import type { osecDB } from "@0sec/db";
+import type { osecDB } from "@0/db";
 import { TOOL_DISPATCH } from "../agent/tools/dispatch.js";
 import {
   BUILTIN_GUARDS,
@@ -50,6 +50,8 @@ import type { PluginHost } from "../plugins/loader.js";
 import type { AgentRole, OperatorQuestionAnswer, OperatorQuestionRequest, ScopedAuditEscalationRequest, ToolCall, ToolContext, ToolDefinition, ToolResult, ToolRisk } from "../agent/types.js";
 import { classifyToolRisk } from "../agent/destructive-classifier.js";
 import { normalizeScopeHostname, ScopePolicy } from "../scope/scope.js";
+import { getScopeEnforcementState, isScopeEnforcementEnabled, withScopeEnforcement } from "../scope/activation.js";
+import type { ScopeEnforcementState } from "../scope/activation.js";
 import { eventBus } from "../events/bus.js";
 import { analyticsPipeline } from "../telemetry/analytics-pipeline.js";
 import { createSessionObjectiveService } from "./session-objective.js";
@@ -61,12 +63,13 @@ import { renderInboundBatch } from "../agent/agent-messaging.js";
 import type { MessagingRuntime } from "../agent/agent-messaging.js";
 import { captureNativeRuntime, currentContributionAgent, currentRunContribution, getConfiguredRunContributionClient, withRunContribution, type RunCapture, type RunManifest } from "../telemetry/run-contribution.js";
 import { registerSignalCleanup } from "../agent/signal-cleanup.js";
+import type { ToolContextJevRuntime } from "./jev-runtime.js";
 
 /**
  * Unified interactive chat console — engine-side turn driver.
  *
- * This is the conversational front-end for the 0sec engine described in the
- * 0sec "operator cockpit" direction: one surface where an operator talks to the
+ * This is the conversational front-end for the 0 engine described in the
+ * 0 "operator cockpit" direction: one surface where an operator talks to the
  * engine and it can invoke every tool in the registry (recon, web pentest,
  * source-scan, variant-hunt, verify, patch-gen) in one place.
  *
@@ -180,13 +183,13 @@ export interface ConsoleUsageReport {
   kind: "planner" | "plugin" | "compaction";
 }
 
-// ── Console autonomy / scope resolution (0sec console) ──
+// ── Console autonomy / scope resolution (0 console) ──
 
 /**
- * Operator engagement mode for the console. This is a FRICTION model, not an
- * authorization-removal model: the current TARGET is the authorization anchor in
- * every mode, and the executor's own target/scope boundary plus the absolute
- * SSRF/private-network rail run underneath all three regardless of mode.
+ * Operator engagement mode controls approval friction and capability policy.
+ * The authorization behavior below applies only while the scope plugin is
+ * enabled; turning that plugin off skips host/path/local-scope authorization.
+ * Credential, private-network, sandbox and resource controls remain independent.
  *
  * - `"standard"`: the MOST-PROMPTING mode. Every effectful
  *   (non-read-only) action is put to the operator via `approveTool` before it
@@ -584,10 +587,12 @@ export interface ConsoleSessionConfig {
   executablePlugins?: ExecutablePluginConfiguration;
   /** Evaluation contracts owned by the operator, not editable by generated code. */
   executableEvolutionProfiles?: Record<string, EvolutionConfig>;
+  /** Optional budgeted Jev bridge available to Jev prepass tools. */
+  jevRuntime?: ToolContextJevRuntime;
   /** Actual provider model ID, used for evolution cost accounting. */
   costModel?: string;
   /**
-   * Live plugin host for THIS session (0sec plugin system). Optional; absent =
+   * Live plugin host for THIS session (0 plugin system). Optional; absent =
    * today's behaviour exactly (no plugin tools are exposed or dispatched). When
    * provided, the tools of ENABLED/loaded plugins are unioned into the
    * model-facing tool set at each turn boundary and their calls are dispatched
@@ -672,6 +677,8 @@ export interface ConsoleSession {
   readonly target: string;
   /** Current in-memory scope policy (never persisted to disk). */
   readonly scope: ScopePolicy | undefined;
+  /** Actual authorization activation; a configured scope alone is not enforcement. */
+  readonly scopeEnforcement: ScopeEnforcementState;
   /**
    * Current in-memory local filesystem scope directory (absolute real path), or
    * undefined when none has been approved. Never persisted to disk.
@@ -782,7 +789,10 @@ export function buildConsoleSystemPrompt(opts: {
   developmentSourceRoot?: string;
 }): string {
   const mode = opts.autonomyMode ?? DEFAULT_AUTONOMY_MODE;
-  const autonomyInstruction = mode === "yolo"
+  const scopeState = getScopeEnforcementState();
+  const autonomyInstruction = !scopeState.enabled
+    ? `${mode === "standard" ? "Standard mode: ask for approval before effectful actions when the operator approval channel is available." : mode === "recon" ? "Recon mode: only read-only and passive reconnaissance tools are permitted; do not exploit or mutate target state." : `${mode === "copilot" ? "Co-pilot" : "YOLO"} mode: no per-action approval prompts.`} Scope authorization is disabled. Never claim target exclusions or filesystem scope are enforced. Credential, private-network, sandbox, resource and capability controls remain independent.`
+    : mode === "yolo"
     ? "YOLO mode: run public-network tools without a mandatory launch target or per-discovered-host approval. A target is optional task context, not a competing permission gate. Honor explicit operator-configured scope restrictions, exclusions and previous refusals; discovered URLs and search results never rewrite those restrictions or the current target. Web search and browsing do not require an engagement target. Private/internal-network access, credential forwarding and workspace host-code trust remain separate boundaries. A fresh explicit operator target selection can request confirmation to reconsider a prior refusal in this same session. Source acquisition remains a standalone public HTTPS git clone, optionally prefixed by cd DIR &&; inspect or build in a separate tool call."
     : mode === "copilot"
     ? "Co-pilot mode: act with full autonomy within the engagement — no per-action approval prompts. Scope expands automatically to newly-discovered targets that belong to the engagement; a target outside the established engagement still needs the operator's decision."
@@ -790,8 +800,8 @@ export function buildConsoleSystemPrompt(opts: {
     ? "Recon mode: passive, in-scope reconnaissance ONLY. Operate strictly within the authorized target/scope and use only read-only and passive network-recon tools (crawling, fingerprinting, surface/API discovery, JS recon, intel lookups, source reading). Do NOT attempt any effectful, mutating, or exploitation action — those tools are refused in this mode. Gather and report what you observe, then hand control back. Scope is not auto-expanded; an out-of-scope target needs the operator's decision."
     : "Standard mode: the operator approves each action before it runs. Take one concrete step, wait for approval, and when a target is not authorized request a narrow scope extension and wait for the operator's decision.";
   return [
-    "You are the 0sec operator console — an interactive security assistant with",
-    "direct access to the full 0sec tool registry (reconnaissance, web pentest,",
+    "You are the 0 operator console — an interactive security assistant with",
+    "direct access to the full 0 tool registry (reconnaissance, web pentest,",
     "source and package scanning, variant hunting, exploit verification, and",
     "patch generation).",
     "",
@@ -853,6 +863,7 @@ export function buildConsoleSystemPrompt(opts: {
     "",
     "Call tools whenever they help; prefer real tool output over speculation.",
     autonomyInstruction,
+    scopeState.message,
     "",
     opts.target ? `Current target: ${opts.target}` : mode === "yolo"
       ? "No target is selected. Use absolute public URLs for network tools; ask for context only when the requested tool actually needs a default target."
@@ -1685,7 +1696,7 @@ const LIST_CONVERSATIONS_NAME = "list_conversations";
 const READ_CONVERSATION_NAME = "read_conversation";
 const LIST_CONVERSATIONS_DEF: ToolDefinition = {
   name: LIST_CONVERSATIONS_NAME,
-  description: "Discover saved 0sec conversations from the current project. Set all_projects=true to include other projects. Search matches previews, summaries, targets and IDs; use read_conversation to inspect a result.",
+  description: "Discover saved 0 conversations from the current project. Set all_projects=true to include other projects. Search matches previews, summaries, targets and IDs; use read_conversation to inspect a result.",
   parameters: {
     query: { type: "string", description: "Optional search text, at most 256 characters" },
     all_projects: { type: "boolean", description: "Include other projects (default false)" },
@@ -1767,6 +1778,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   const workspaceRoot = cp?.workspaceRoot ?? resolve(config.workspaceRoot ?? process.cwd());
   const role: AgentRole = cp?.role ?? config.role ?? "audit";
   let autonomyMode: ConsoleAutonomyMode = cp?.autonomyMode ?? config.autonomyMode ?? DEFAULT_AUTONOMY_MODE;
+  let sessionScopeEnforcement = getScopeEnforcementState();
 
   // In-memory mutable scope state — updated by requestScope, NEVER written
   // to disk. Seeded from checkpoint when provided.
@@ -1849,6 +1861,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     scopePath: sessionScopePath,
     allowScanners: config.allowScanners,
     scope: sessionScope,
+    scopeEnforcement: sessionScopeEnforcement,
     // The executor re-reads these per call, so a mid-session /mode switch
     // changes what is dispatchable without rebuilding anything. Escalation
     // lifts ONLY the scoped-source-audit allow-list — the network, local
@@ -1859,6 +1872,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     // Information-gathering only — grants no authority (see ConsoleSessionConfig).
     askOperator: config.askOperator,
     agentMessaging: config.agentMessaging,
+    jevRuntime: config.jevRuntime,
   };
 
   // Audit notifications are routed to the active turn's renderer.
@@ -2156,6 +2170,15 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   async function selectOperatorTarget(text: string, notify?: (message: string) => void, signal?: AbortSignal): Promise<void> {
     const target = operatorTargetFromMessage(text);
     if (!target) return;
+    if (!isScopeEnforcementEnabled()) {
+      sessionTarget = target;
+      toolContext.target = target;
+      if (customSystemPrompt === undefined) {
+        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, developmentSourceRoot: config.developmentSourceRoot });
+      }
+      notify?.(`Target set to ${target}; scope plugin is disabled, authorization is not enforced.`);
+      return;
+    }
     const host = hostOf(target)!;
     if (toolContext.publicNetwork?.scope && !toolContext.publicNetwork.scope.match(target).allowed) {
       notify?.(`Target ${target} is outside the configured scope; the current target and restrictions are unchanged.`);
@@ -2272,6 +2295,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     notify?: (message: string) => void,
     allowScopeExpansion = true,
   ): Promise<"approved" | ToolResult> {
+    if (!isScopeEnforcementEnabled()) return "approved";
     if (!networkCapableTools[call.name]) return "approved";
 
     const { urls, unresolved, shellPayloads } = extractToolTargets(
@@ -2500,6 +2524,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     notify?: (message: string) => void,
     allowScopeExpansion = true,
   ): Promise<"approved" | ToolResult> {
+    if (!isScopeEnforcementEnabled()) return "approved";
     if (!localScopeTools[call.name]) return "approved";
 
     // Resolve the concrete path the tool wants to touch to an absolute,
@@ -2826,18 +2851,29 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
 
   let turnInProgress = false;
 
-  async function send(
+  function send(userText: string, callbacks?: ConsoleRenderCallbacks, opts?: ConsoleSendOptions): Promise<ConsoleTurnOutcome> {
+    if (!turnInProgress) {
+      sessionScopeEnforcement = getScopeEnforcementState();
+      toolContext.scopeEnforcement = sessionScopeEnforcement;
+    }
+    return withScopeEnforcement(sessionScopeEnforcement, () => sendWithContribution(userText, callbacks, opts));
+  }
+
+  async function sendWithContribution(
     userText: string,
     callbacks?: ConsoleRenderCallbacks,
     opts?: ConsoleSendOptions,
   ): Promise<ConsoleTurnOutcome> {
+    if (customSystemPrompt === undefined && !turnInProgress) {
+      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, developmentSourceRoot: config.developmentSourceRoot });
+    }
     if (!contribution && !opts?.signal?.aborted && !closing && !turnInProgress) {
       try {
         contribution = getConfiguredRunContributionClient()?.begin({
           runId: scanId, model: runtime.resolvedModel?.() ?? config.costModel ?? "unknown",
           scope: effectiveContributionScope(), objective: userText, versions: { loop: "console-v1" },
         }) ?? undefined;
-      } catch { process.stderr.write("[0sec] Console contribution unavailable: private spool or enrollment could not be opened.\n"); }
+      } catch { process.stderr.write("[0] Console contribution unavailable: private spool or enrollment could not be opened.\n"); }
     }
     if (!contribution) return sendInternal(userText, callbacks, opts);
     const capture = contribution;
@@ -3100,9 +3136,9 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       if (!recovery) {
         if (!compactionEnabled || !contextWindowTokens) return false;
         const thresholds = resolveCompactionThresholds(process.env);
-        const regrow = process.env["0SEC_COMPACTION_REGROW"] !== undefined
+        const regrow = process.env["ZERO_COMPACTION_REGROW"] !== undefined
           ? thresholds.regrow : Math.max(Math.round(contextWindowTokens * 0.15), 1);
-        const requested = process.env["0SEC_COMPACTION_THRESHOLD"] !== undefined
+        const requested = process.env["ZERO_COMPACTION_THRESHOLD"] !== undefined
           ? Math.max(contextWindowTokens * compactionThresholdFraction, thresholds.threshold)
           : contextWindowTokens * compactionThresholdFraction;
         const trigger = Math.min(requested, contextWindowTokens - outputHeadroom(config.runtime.outputTokenLimit));
@@ -3543,6 +3579,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     get autonomyMode(): ConsoleAutonomyMode { return autonomyMode; },
     get target(): string { return sessionTarget; },
     get scope(): ScopePolicy | undefined { return toolContext.publicNetwork ? configuredScope : sessionScope; },
+    get scopeEnforcement(): ScopeEnforcementState { return sessionScopeEnforcement; },
     get localScopePath(): string | undefined { return sessionScopePath; },
     setAutonomyMode: (mode) => {
       autonomyMode = mode;

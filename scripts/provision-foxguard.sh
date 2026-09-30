@@ -3,7 +3,7 @@
 #
 # Downloads the verified release asset from 0sec-labs/foxguard to a configurable
 # install directory (default: /usr/local/bin). The pinned version is the same
-# FOXGUARD_PINNED_TAG used by the 0sec runtime (v0.14.0).
+# FOXGUARD_PINNED_TAG used by the 0 runtime (v0.14.0).
 #
 # Usage:
 #   bash scripts/provision-foxguard.sh                    # install to /usr/local/bin

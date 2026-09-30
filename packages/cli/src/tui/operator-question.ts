@@ -18,7 +18,7 @@ import type {
   OperatorQuestionRequest,
   OperatorQuestionAnswer,
   OperatorQuestionAnswerItem,
-} from "@0sec/core";
+} from "@0/core";
 
 /** One answerable (navigable) row: an option toggle, or a question's free-text field. */
 export interface OperatorNavRow {

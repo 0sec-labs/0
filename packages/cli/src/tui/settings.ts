@@ -1,6 +1,6 @@
 /**
  * User-configurable display settings for the interactive console, persisted
- * to `~/.0sec/tui-settings.json`.
+ * to `~/.0/tui-settings.json`.
  *
  * The trigger was "let me hide the status bar", but a single boolean would
  * have been the wrong shape: every chrome element in the TUI (logo, hints,
@@ -22,10 +22,11 @@
  * `$HOME` is an inconvenience, not a reason to lose the console.
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 
-import { DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir } from "@0sec/shared";
+import { DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir } from "@0/shared";
 
 import { sanitizeKeybindingOverrides } from "./keybindings.js";
 import {
@@ -51,6 +52,13 @@ export interface SettingDef<T = unknown> {
   group: string;
 }
 
+/** One operator choice, bound to the connection on which it was applied. */
+export interface ModelPreference {
+  providerId: string;
+  model: string;
+  connectionIdentity: string;
+}
+
 export interface TuiSettings {
   /** Bottom status bar with model, path, git and token counters. */
   showStatusBar: boolean;
@@ -70,7 +78,7 @@ export interface TuiSettings {
    * works again; every keyboard path is unaffected either way.
    */
   mouseSupport: boolean;
-  /** Block "0SECURITY" wordmark on the empty transcript. */
+  /** Block "0.SECURITY" wordmark on the empty transcript. */
   showLogo: boolean;
   /** Surface runtime stdout/stderr as transcript notices. */
   showRuntimeNotices: boolean;
@@ -78,17 +86,6 @@ export interface TuiSettings {
   showTurnSummary: boolean;
   /** Show the active subagent list while workers run. */
   showSubagents: boolean;
-  /**
-   * Right sidebar in the chat view: live agents + a compact context strip
-   * (model · mode · scope · context %). Auto-hidden on narrow terminals.
-   * Formerly `showAgentRail`; that key is still honoured on load.
-   */
-  showRightSidebar: boolean;
-  /**
-   * Left sidebar in the chat view: recent resumable sessions on top, this run's
-   * findings below ("what you have"). Auto-hidden on narrow terminals.
-   */
-  showLeftSidebar: boolean;
   /** Relative timestamps on transcript entries. */
   showTimestamps: boolean;
   /**
@@ -106,6 +103,8 @@ export interface TuiSettings {
   busyInputMode: "steer" | "queue";
   /** Internal first-use state, persisted only in the operator's global layer. */
   onboardingCompleted: boolean;
+  /** Operator-global execution boundary; never granted by a project checkout. */
+  executionProfile: "local" | "smolvm";
   /** Let sibling subagents message each other directly (child↔child channel). */
   allowSubagentPeerMessaging: boolean;
   /** Let a subagent send a message to the operator's transcript (child→operator). */
@@ -189,7 +188,7 @@ export interface TuiSettings {
    */
   elapsedTimer: "left" | "off";
   /**
-   * Intro animation style for the "0SECURITY" wordmark. One-shot reveals: "glitch" (a
+   * Intro animation style for the "ZEROSECURITY" wordmark. One-shot reveals: "glitch" (a
    * neon-flecked scramble that resolves — the default), "matrix" (a green
    * matrix-rain cascade), "wave" (a rippling cyan wavefront), "neon" (a
    * neon-sign warm-up flicker), "strike" (a red slash strikes through the 0),
@@ -220,7 +219,7 @@ export interface TuiSettings {
    */
   reduceMotion: boolean;
   /**
-   * Operator-global analytics and training-data tier; full for new installs.
+   * Operator-global analytics and training-data tier; sharing is opt-in.
    * Usage contains counters, commands adds credential-scrubbed tool content
    * and code, and full adds scope and findings. Ordinary content is retained.
    * Explicit environment restrictions and saved opt-outs remain effective.
@@ -263,7 +262,7 @@ export interface TuiSettings {
   leaderKey: "off" | "ctrl+a" | "ctrl+b" | "ctrl+space";
   /**
    * Per-action chord overrides for the rebindable keybindings, keyed by
-   * `Keybinding.id` (e.g. `{ "view.left-sidebar": "ctrl+b" }`). NOT part of the
+   * `Keybinding.id` (e.g. `{ "view.transcript-detail": "ctrl+j" }`). NOT part of the
    * scalar `SETTING_DEFS` table — it is a map, neither a boolean nor a
    * fixed-choice enum — so it is validated by its own bespoke `keybindingsAt`
    * helper (the way `theme` uses `themeAt`) rather than the enum table. Only
@@ -271,6 +270,8 @@ export interface TuiSettings {
    * load; unknown ids and protected/duplicate chords are dropped.
    */
   keybindings: Record<string, string>;
+  /** Operator-only: provider, model and connection are replaced as one value. */
+  modelPreference: ModelPreference | null;
 }
 
 /** Keys of `TuiSettings` whose value is a boolean. */
@@ -282,7 +283,7 @@ type BooleanKey = {
  *  `keybindings` is neither boolean nor a fixed-choice enum — it is a bespoke
  *  chord-override map validated by its own path (see its field doc) — so it is
  *  excluded here rather than forced into the enum contract. */
-type EnumKey = Exclude<keyof TuiSettings, BooleanKey | "keybindings">;
+type EnumKey = Exclude<keyof TuiSettings, BooleanKey | "keybindings" | "modelPreference">;
 
 interface BooleanSettingDef extends SettingDef<boolean> {
   key: BooleanKey;
@@ -313,6 +314,7 @@ type TuiSettingDef =
   | EnumSettingDef<"analyticsLevel">
   | EnumSettingDef<"diagnosticReporting">
   | EnumSettingDef<"updatePolicy">
+  | EnumSettingDef<"executionProfile">
   | EnumSettingDef<"logoAnimation">
   | EnumSettingDef<"theme">
   | EnumSettingDef<"symbolPreset">
@@ -385,7 +387,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "showLogo",
     label: "Logo",
-    description: 'Block "0SECURITY" wordmark shown on an empty transcript.',
+    description: 'Block "0.SECURITY" wordmark shown on an empty transcript.',
     kind: "boolean",
     default: true,
     group: "Display",
@@ -413,24 +415,6 @@ const DEFS: readonly TuiSettingDef[] = [
     kind: "boolean",
     default: true,
     group: "Transcript",
-  },
-  {
-    key: "showLeftSidebar",
-    label: "Left sidebar",
-    description:
-      "Left sidebar in the chat view: recent sessions to resume, plus this run's findings. Hidden on narrow terminals.",
-    kind: "boolean",
-    default: false,
-    group: "Display",
-  },
-  {
-    key: "showRightSidebar",
-    label: "Right sidebar",
-    description:
-      "Right sidebar: live agents, their activity, the current plan and findings. Hidden on narrow terminals.",
-    kind: "boolean",
-    default: false,
-    group: "Display",
   },
   {
     key: "showTimestamps",
@@ -514,9 +498,9 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "roleLabelStyle",
     label: "Role label",
-    description: 'Speaker name on each message: "You" for your turns, "0sec" for answers. Full and short add the elapsed age when one is known; glyph shows the name alone; off omits the label entirely. Bubble cards carry it top-left on the card border, with your messages right-aligned and answers left.',
+    description: 'Labels your messages as "You"; assistant replies stay unlabeled. Full and short include the optional age, glyph shows the name alone, and off hides the label.',
     kind: "enum",
-    default: "full",
+    default: "off",
     choices: ["full", "short", "glyph", "off"],
     group: "Display",
   },
@@ -542,10 +526,10 @@ const DEFS: readonly TuiSettingDef[] = [
     key: "transcriptDetail",
     label: "Transcript detail",
     description:
-      "Expanded shows every step (thinking, tool calls + their output) inline — the default; collapsed folds each turn's successful steps into one-line summaries (failures always show). Ctrl+R toggles it live.",
+      "Collapsed folds successful tool/reasoning steps and caps output previews at 20 lines; Ctrl+R toggles between that preview and expanded retained detail. Failures always show.",
     kind: "enum",
-    default: "expanded",
-    choices: ["expanded", "collapsed"],
+    default: "collapsed",
+    choices: ["collapsed", "expanded"],
     group: "Transcript",
   },
   {
@@ -570,7 +554,7 @@ const DEFS: readonly TuiSettingDef[] = [
     key: "theme",
     label: "Theme",
     description:
-      "Colour palette. Slate (neutral grey, default) and Midnight (deep blue-black) and Carbon (warm dark), Standard/Paper (light), plus Contrast, Mono Dim and ANSI 16 for 16-colour terminals. Drop validated palettes in ~/.0sec/themes to add your own.",
+      "Colour palette. Slate (neutral grey, default) and Midnight (deep blue-black) and Carbon (warm dark), Standard/Paper (light), plus Contrast, Mono Dim and ANSI 16 for 16-colour terminals. Drop validated palettes in ~/.0/themes to add your own.",
     kind: "enum",
     default: DEFAULT_THEME_NAME,
     choices: THEME_CHOICES,
@@ -598,7 +582,7 @@ const DEFS: readonly TuiSettingDef[] = [
     key: "autoEvolveFinderLenses",
     label: "Auto-evolve finder lenses",
     description:
-      "Start the TUI watcher for ~/.0sec/lens-synthesis/miss-input.json (or OSEC_TUI_LENS_SYNTH_INPUT) so each new curated revision can invoke the configured model.",
+      "Start the TUI watcher for ~/.0/lens-synthesis/miss-input.json (or OSEC_TUI_LENS_SYNTH_INPUT) so each new curated revision can invoke the configured model.",
     kind: "boolean",
     default: false,
     group: "Security",
@@ -617,7 +601,7 @@ const DEFS: readonly TuiSettingDef[] = [
     label: "Token usage",
     description: 'Per-turn "in→out tok" line under each answer.',
     kind: "boolean",
-    default: true,
+    default: false,
     group: "Telemetry",
   },
   {
@@ -625,7 +609,7 @@ const DEFS: readonly TuiSettingDef[] = [
     label: "Cost",
     description: "Estimated dollar cost, per turn and in the status bar.",
     kind: "boolean",
-    default: true,
+    default: false,
     group: "Telemetry",
   },
   {
@@ -658,7 +642,7 @@ const DEFS: readonly TuiSettingDef[] = [
     key: "logoAnimation",
     label: "Logo animation",
     description:
-      'Intro animation for the "0SECURITY" wordmark: glitch (a neon-flecked scramble that resolves — the default), rainbow (a looping hue sweep), matrix (a green matrix-rain cascade), wave (a rippling cyan wavefront), neon (a neon-sign warm-up flicker), shimmer (a bright comet with a gradient tail), pulse (the slash breathes), strike (an orange slash strikes through the 0), draw (letters draw in behind a pen tip), fade (a centre-out bloom), typein (per-cell reveal), sweep (a bright bar wipes across) or off (static).',
+      'Intro animation for the "0.SECURITY" wordmark: glitch (a neon-flecked scramble that resolves — the default), rainbow (a looping hue sweep), matrix (a green matrix-rain cascade), wave (a rippling cyan wavefront), neon (a neon-sign warm-up flicker), shimmer (a bright comet with a gradient tail), pulse (the slash breathes), strike (an orange slash strikes through the 0), draw (letters draw in behind a pen tip), fade (a centre-out bloom), typein (per-cell reveal), sweep (a bright bar wipes across) or off (static).',
     kind: "enum",
     default: "glitch",
     choices: [
@@ -690,20 +674,20 @@ const DEFS: readonly TuiSettingDef[] = [
   },
   {
     key: "analyticsLevel",
-    label: "Analytics and training data",
+    label: "Data sharing",
     description:
-      "Full is the new-install default. Usage shares feature counters and error categories, not tool content. Commands adds tool arguments/results and submitted code for model training and security research; Full also adds scope and findings. Recognized credentials are scrubbed; emails, URLs, identifiers and other content are retained. Sending uses authenticated Cloud storage and is not anonymous. Each tool/code content field is limited to 256 KiB after credential scrubbing; oversized records are reported locally, not silently truncated. Explicit 0SEC_ANALYTICS_LEVEL and offline/no-telemetry/DO_NOT_TRACK restrictions win over broader settings. Problem reports are separate. Applies to this computer, not this project.",
+      "Usage sends counts, timing, cost and error categories. Commands adds tool inputs/outputs and code; Full adds scope and findings. Credentials are scrubbed, but identifying content may remain. Uploads require an endpoint and are not anonymous. Environment opt-outs take precedence. Applies to this computer.",
     kind: "enum",
-    default: "full",
+    default: "off",
     choices: ["off", "usage", "commands", "full"],
     group: "Privacy",
   },
   {
     key: "diagnosticReporting",
     label: "Problem reports",
-    description: "Send limited diagnostics automatically by default, ask first, or turn reporting off. Uses Cloud sign-in or a configured HTTPS feedback endpoint. Never includes prompts, tool arguments or output. Applies to this computer, not this project.",
+    description: "Review diagnostics before sending, send automatically, or keep reports local. Requires a configured endpoint. Off/Usage sharing sends categories only; Commands/Full can include scrubbed errors, stacks and failure output. Applies to this computer.",
     kind: "enum",
-    default: "automatic",
+    default: "ask",
     choices: ["off", "ask", "automatic"],
     group: "Privacy",
   },
@@ -715,6 +699,15 @@ const DEFS: readonly TuiSettingDef[] = [
     default: "automatic",
     choices: ["off", "notify", "automatic"],
     group: "Updates",
+  },
+  {
+    key: "executionProfile",
+    label: "Execution profile",
+    description: "SmolVM runs the whole console, agents, browser and shell in the online Kali workbench. Prepare its approved image and explicit credential grants with 0 workbench setup. Applies to this computer on the next launch; failures never fall back to host execution.",
+    kind: "enum",
+    default: "local",
+    choices: ["local", "smolvm"],
+    group: "Security",
   },
   {
     key: "symbolPreset",
@@ -758,8 +751,6 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   showRuntimeNotices: true,
   showTurnSummary: false,
   showSubagents: true,
-  showLeftSidebar: false,
-  showRightSidebar: false,
   showTimestamps: false,
   showObjective: true,
   showScope: true,
@@ -767,13 +758,14 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   composerStyle: "border",
   busyInputMode: "steer",
   onboardingCompleted: false,
+  executionProfile: "local",
   allowSubagentPeerMessaging: true,
   allowSubagentOperatorMessaging: true,
   transcriptStyle: "minimal",
-  roleLabelStyle: "full",
+  roleLabelStyle: "off",
   toolCardStyle: "compact",
   richToolCards: true,
-  transcriptDetail: "expanded",
+  transcriptDetail: "collapsed",
   autoCompaction: true,
   compactionThreshold: "80%",
   theme: DEFAULT_THEME_NAME,
@@ -781,30 +773,31 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   allowDevSourceUpdates: false,
   autoEvolveFinderLenses: false,
   autoPromoteFinderLenses: false,
-  showTokenUsage: true,
-  showCost: true,
+  showTokenUsage: false,
+  showCost: false,
   showContextMeter: true,
   modelDisplay: "statusbar",
   elapsedTimer: "left",
   logoAnimation: "glitch",
   reduceMotion: false,
-  analyticsLevel: "full",
-  diagnosticReporting: "automatic",
+  analyticsLevel: "off",
+  diagnosticReporting: "ask",
   diagnosticReportingPrompted: false,
   updatePolicy: "automatic",
   symbolPreset: "unicode",
   rosterSort: "attention",
   leaderKey: "off",
   keybindings: {},
+  modelPreference: null,
 };
 
-/** Basename of the settings file inside the 0sec state directory. */
+/** Basename of the settings file inside the 0 state directory. */
 const SETTINGS_FILENAME = "tui-settings.json";
 
 /**
  * Settings live beside the rest of the per-user engine state (scan DB,
  * journals, credentials) rather than in a TUI-specific directory, so
- * `homeStateDir` from `@0sec/shared` — not a local `".0sec"` literal — decides
+ * `homeStateDir` from `@0/shared` — not a local `".0"` literal — decides
  * where that is. One definition of the state root means a future relocation or
  * an `$XDG_STATE_HOME` migration happens in one place.
  */
@@ -815,8 +808,8 @@ export function settingsFilePath(homeDir?: string): string {
 /**
  * Two-level configuration: a per-user GLOBAL file and a per-project OVERRIDE.
  *
- * The global file (`~/.0sec/tui-settings.json`) is the base. A project may add a
- * local `<cwd>/.0sec/tui-settings.json` whose SET keys override the global ones;
+ * The global file (`~/.0/tui-settings.json`) is the base. A project may add a
+ * local `<cwd>/.0/tui-settings.json` whose SET keys override the global ones;
  * a key absent from the project file falls through to global, and a key absent
  * from both falls through to the built-in default. Precedence, highest first:
  *
@@ -829,9 +822,9 @@ export function settingsFilePath(homeDir?: string): string {
  */
 export type SettingLayer = "default" | "global" | "project";
 
-/** The `.0sec` directory inside a project working tree. */
+/** The `.0` directory inside a project working tree. */
 export function projectStateDir(projectDir: string = process.cwd()): string {
-  return join(projectDir, ".0sec");
+  return join(projectDir, ".0");
 }
 
 /** The per-project override settings file (may not exist; that is the norm). */
@@ -885,6 +878,9 @@ function strictValueAt<K extends keyof TuiSettings>(raw: unknown, key: K): TuiSe
       ? (sanitizeKeybindingOverrides(value) as TuiSettings[K])
       : undefined;
   }
+  if (key === "modelPreference") {
+    return normalizeModelPreference(value) as TuiSettings[K] | undefined;
+  }
   const def = DEF_BY_KEY.get(key);
   if (def?.kind === "boolean") {
     return typeof value === "boolean" ? (value as TuiSettings[K]) : undefined;
@@ -925,7 +921,9 @@ export function isOperatorSetting(key: keyof TuiSettings): boolean {
     || key === "diagnosticReporting"
     || key === "diagnosticReportingPrompted"
     || key === "updatePolicy"
-    || key === "allowDevSourceUpdates";
+    || key === "allowDevSourceUpdates"
+    || key === "executionProfile"
+    || key === "modelPreference";
 }
 
 /**
@@ -986,18 +984,6 @@ function booleanAt(raw: unknown, key: BooleanKey): boolean {
   return typeof value === "boolean" ? value : DEFAULT_SETTINGS[key];
 }
 
-/**
- * A boolean read that falls back to a renamed-away legacy key before the
- * default, so a setting that changed names still honours a hand-edited or
- * previously-saved file written under the old name.
- */
-function booleanWithLegacy(raw: unknown, key: BooleanKey, legacyKey: string): boolean {
-  const value = rawValue(raw, key);
-  if (typeof value === "boolean") return value;
-  const legacy = rawValue(raw, legacyKey);
-  if (typeof legacy === "boolean") return legacy;
-  return DEFAULT_SETTINGS[key];
-}
 
 function enumAt<K extends EnumKey>(raw: unknown, key: K): TuiSettings[K] {
   const def = DEF_BY_KEY.get(key);
@@ -1036,6 +1022,16 @@ function keybindingsAt(raw: unknown): TuiSettings["keybindings"] {
   return sanitizeKeybindingOverrides(rawValue(raw, "keybindings"));
 }
 
+function normalizeModelPreference(raw: unknown): ModelPreference | null | undefined {
+  if (raw === null) return null;
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return undefined;
+  const value = raw as Record<string, unknown>;
+  if (typeof value.providerId !== "string" || !value.providerId.trim()
+    || typeof value.model !== "string" || !value.model.trim()
+    || typeof value.connectionIdentity !== "string" || !/^[a-f0-9]{64}$/.test(value.connectionIdentity)) return undefined;
+  return { providerId: value.providerId, model: value.model, connectionIdentity: value.connectionIdentity };
+}
+
 /**
  * Total, pure coercion of anything at all into a valid `TuiSettings`.
  *
@@ -1053,10 +1049,6 @@ export function normalizeSettings(raw: unknown): TuiSettings {
     showRuntimeNotices: booleanAt(raw, "showRuntimeNotices"),
     showTurnSummary: booleanAt(raw, "showTurnSummary"),
     showSubagents: booleanAt(raw, "showSubagents"),
-    showLeftSidebar: booleanAt(raw, "showLeftSidebar"),
-    // Back-compat: the right sidebar was `showAgentRail` before it grew a
-    // context strip and a left twin. A pre-rename file keeps its choice.
-    showRightSidebar: booleanWithLegacy(raw, "showRightSidebar", "showAgentRail"),
     showTimestamps: booleanAt(raw, "showTimestamps"),
     showObjective: booleanAt(raw, "showObjective"),
     showScope: booleanAt(raw, "showScope"),
@@ -1064,6 +1056,7 @@ export function normalizeSettings(raw: unknown): TuiSettings {
     composerStyle: enumAt(raw, "composerStyle"),
     busyInputMode: enumAt(raw, "busyInputMode"),
     onboardingCompleted: booleanAt(raw, "onboardingCompleted"),
+    executionProfile: enumAt(raw, "executionProfile"),
     allowSubagentPeerMessaging: booleanAt(raw, "allowSubagentPeerMessaging"),
     allowSubagentOperatorMessaging: booleanAt(raw, "allowSubagentOperatorMessaging"),
     transcriptStyle: enumAt(raw, "transcriptStyle"),
@@ -1093,6 +1086,7 @@ export function normalizeSettings(raw: unknown): TuiSettings {
     rosterSort: enumAt(raw, "rosterSort"),
     leaderKey: enumAt(raw, "leaderKey"),
     keybindings: keybindingsAt(raw),
+    modelPreference: normalizeModelPreference(rawValue(raw, "modelPreference")) ?? null,
   };
 }
 
@@ -1111,10 +1105,16 @@ export function loadSettings(homeDir?: string, projectDir?: string): TuiSettings
  * override). Used by `config import --global`, which merges into the global file
  * rather than the effective view. Ensures installed themes are loaded so a global
  * theme id validates rather than resetting.
+ * Workbench routing may require an explicit valid profile: a corrupt/missing
+ * selection must not silently become host-local execution.
  */
-export function loadGlobalSettings(homeDir?: string): TuiSettings {
+export function loadGlobalSettings(homeDir?: string, options: { requireExecutionProfile?: boolean } = {}): TuiSettings {
   syncThemeChoices(homeDir);
-  return normalizeSettings(readRawSettingsFile(settingsFilePath(homeDir)));
+  const raw = readRawSettingsFile(settingsFilePath(homeDir));
+  if (options.requireExecutionProfile && strictValueAt(raw, "executionProfile") === undefined) {
+    throw new Error("Configured workbench execution profile is missing or invalid. Run 0 workbench setup or 0 workbench disable to make an explicit operator choice; host fallback is refused.");
+  }
+  return normalizeSettings(raw);
 }
 
 /**
@@ -1126,13 +1126,17 @@ export function loadGlobalSettings(homeDir?: string): TuiSettings {
  * newline because this file is meant to be opened and edited by hand.
  */
 export function saveSettings(settings: TuiSettings, homeDir?: string): boolean {
+  const path = settingsFilePath(homeDir);
+  const temporary = `${path}.${randomUUID()}.tmp`;
   try {
-    const path = settingsFilePath(homeDir);
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, `${JSON.stringify(normalizeSettings(settings), null, 2)}\n`, "utf8");
+    writeFileSync(temporary, `${JSON.stringify(normalizeSettings(settings), null, 2)}\n`, { encoding: "utf8", flag: "wx", mode: 0o600 });
+    renameSync(temporary, path);
     return true;
   } catch {
     return false;
+  } finally {
+    try { rmSync(temporary, { force: true }); } catch { /* best-effort failed-write cleanup */ }
   }
 }
 

@@ -5,23 +5,9 @@ import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
-import {
-  VERSION,
-  validateScanPlan,
-  validateScanTaskRoutes,
-} from "@0sec/shared";
-import type {
-  ScanDepth,
-  OutputFormat,
-  RuntimeMode,
-  ScanMode,
-  AuthConfig,
-  ScanReport,
-  SeedFinding,
-  ScanPlan,
-  ScanTaskRouteMap,
-} from "@0sec/shared";
-import type { CostBreakdownEntry, ScanCostLedger } from "@0sec/core";
+import { VERSION, validateScanPlan } from "@0/shared";
+import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig, ScanReport, SeedFinding, ScanPlan, ScanAttemptOutcome } from "@0/shared";
+import type { CostBreakdownEntry, ScanCostLedger, NativeRuntime, RuntimeConfig } from "@0/core";
 import { formatAuditReport, formatReviewReport, formatReport, generatePdfReport } from "../formatters/index.js";
 import { buildShareUrl, checkRuntimeAvailability, getRuntimeAvailability } from "../utils.js";
 import { formatCrossValidatedLeads, type CrossValidatedLeadsSummary } from "./cross-validated-leads.js";
@@ -32,7 +18,7 @@ interface ScanCompletedCost {
   cost_per_flag?: number;
 }
 
-type CoreModule = typeof import("@0sec/core");
+type CoreModule = typeof import("@0/core");
 
 let coreModulePromise: Promise<CoreModule> | null = null;
 
@@ -46,7 +32,7 @@ async function loadCoreModule(): Promise<CoreModule> {
     const srcExists = process.versions.bun && existsSync(fileURLToPath(srcUrl));
     coreModulePromise = srcExists
       ? import(srcUrl.href) as Promise<CoreModule>
-      : import("@0sec/core");
+      : import("@0/core");
   }
   return coreModulePromise;
 }
@@ -73,12 +59,13 @@ export interface RunOptions {
   mode?: ScanMode;
   /** Explicit guided setup contract; omitted preserves the legacy single run. */
   plan?: ScanPlan;
-  /** Explicit approved model id per task; never silently substituted. */
-  taskRoutes?: ScanTaskRouteMap;
-  /** Shared ledger used by the internal multi-run scheduler. */
+  agentModels?: Readonly<Record<string, string>>;
+  autoRoute?: boolean;
+  singleModel?: boolean;
+  nativeRuntime?: NativeRuntime;
+  provider?: RuntimeConfig["provider"];
+  signal?: AbortSignal;
   costLedger?: ScanCostLedger;
-  /** Internal scheduler controls; ordinary CLI callers leave these unset. */
-  scheduledRun?: boolean;
   suppressOutput?: boolean;
   suppressUi?: boolean;
   /** Source review execution strategy. The primary control plane uses
@@ -104,13 +91,13 @@ export interface RunOptions {
   rateLimit?: string;
   /** Open the operator TUI after the run completes. */
   tui?: boolean;
-  /** Path to a JSON scope file (0sec#215). Threaded into ScanConfig.scopeFile. */
+  /** Path to a JSON scope file (0#215). Threaded into ScanConfig.scopeFile. */
   scopeFile?: string;
-  /** Opt-out for the scanner-binary suppression gate (0sec#217). Threaded into ScanConfig.allowScanners. */
+  /** Opt-out for the scanner-binary suppression gate (0#217). Threaded into ScanConfig.allowScanners. */
   allowScanners?: boolean;
-  /** Repeatable `--attribution-header NAME=VALUE` (0sec#216). */
+  /** Repeatable `--attribution-header NAME=VALUE` (0#216). */
   attributionHeaders?: string[];
-  /** `--attribution-ua <token>` (0sec#216). */
+  /** `--attribution-ua <token>` (0#216). */
   attributionUaToken?: string;
   /**
    * `--engagement-profile <name>` — engagement hardening posture
@@ -124,7 +111,7 @@ export interface RunOptions {
   wafEvasion?: boolean;
   /**
    * http_audit env-bridge config (FROZEN CONTRACT). Populated by the scan
-   * command from 0SEC_TARGET_* env vars only when `mode === "http_audit"`;
+   * command from ZERO_TARGET_* env vars only when `mode === "http_audit"`;
    * undefined otherwise. The core (`agenticScan`) turns these into an
    * in-memory ScopePolicy (host allowlist), PathPolicy (path-prefix
    * allowlist), per-host RateLimiter, and a wall-clock kill switch, all
@@ -135,7 +122,7 @@ export interface RunOptions {
   httpAuditRateLimitRps?: number;
   httpAuditKillAfterSec?: number;
   /**
-   * Tool-call dispatch protocol (0sec#232) — `json`, `xml`, or `auto`.
+   * Tool-call dispatch protocol (0#232) — `json`, `xml`, or `auto`.
    * Threaded into ScanConfig.dispatchMode and consulted only by the
    * legacy text-based agent loop.
    */
@@ -192,7 +179,7 @@ export interface RunOptions {
   /**
    * Pre-computed candidate vulnerable spans, parsed from an external producer
    * (today: GemmaForge, schema `gemmaforge.leads/v1`). Only consumed when
-   * `targetType === "source-code"`. See `0sec#368` for the broader plan to
+   * `targetType === "source-code"`. See `0#368` for the broader plan to
    * inject these into the agent's worklist before static scanner prioritisation runs.
    */
   seedFindings?: SeedFinding[];
@@ -205,7 +192,7 @@ export interface RunOptions {
    */
   npmDynamicDiscovery?: boolean;
   /**
-   * Emit target (0sec#377). Default unset → existing terminal/json/etc.
+   * Emit target (0#377). Default unset → existing terminal/json/etc.
    * `pr` → turn each reproduced finding into a GitHub PR (repro + suggested
    * patch from the fix-template registry). Unverified findings roll up into
    * a single `hypotheses.md`.
@@ -258,33 +245,43 @@ interface ResultLinePayload {
     info: number;
   };
   error?: string;
+  plannedRuns?: number;
+  completedRuns?: number;
+  attempts?: ScanAttemptOutcome[];
 }
 
 function toScanReport(report: any): ScanReport {
+  const execution = {
+    plan: report.plan, plannedRuns: report.plannedRuns, completedRuns: report.completedRuns, attempts: report.attempts,
+    estimatedCostUsd: report.estimatedCostUsd, usage: report.usage, exitReason: report.exitReason,
+    costCeilingExceeded: report.costCeilingExceeded, executionSuccessful: report.executionSuccessful ?? (report.researchFailed ? false : undefined),
+    error: report.error,
+  };
   if (report.targetType === "npm-package" || report.targetType === "pypi-package" || report.targetType === "cargo-package" || report.targetType === "oci-image") {
     return {
       target: `${report.package}@${report.version}`,
-      scanDepth: "deep",
-      startedAt: report.startedAt,
-      completedAt: report.completedAt,
-      durationMs: report.durationMs,
-      summary: report.summary,
-      findings: report.findings,
-      warnings: [],
-    };
-  }
-
-  if (report.targetType === "source-code") {
-    return {
-      target: report.repo,
-      scanDepth: "deep",
+      scanDepth: report.plan?.depth ?? "deep",
       startedAt: report.startedAt,
       completedAt: report.completedAt,
       durationMs: report.durationMs,
       summary: report.summary,
       findings: report.findings,
       warnings: report.warnings ?? [],
-      executionSuccessful: report.researchFailed ? false : undefined,
+      ...execution,
+    };
+  }
+
+  if (report.targetType === "source-code") {
+    return {
+      target: report.repo,
+      scanDepth: report.plan?.depth ?? "deep",
+      startedAt: report.startedAt,
+      completedAt: report.completedAt,
+      durationMs: report.durationMs,
+      summary: report.summary,
+      findings: report.findings,
+      warnings: report.warnings ?? [],
+      ...execution,
     };
   }
 
@@ -305,18 +302,11 @@ function getTargetType(report: any, opts: RunOptions): string | undefined {
   return report?.targetType ?? opts.targetType;
 }
 
-function emitResultLine(payload: ResultLinePayload): void {  if (process.env["0SEC_EMIT_RESULT_LINE"] !== "1" && !process.env["0SEC_CLOUD_SINK"]) return;
-  console.log(`0SEC_RESULT=${JSON.stringify(payload)}`);
+function emitResultLine(payload: ResultLinePayload): void {
+  if (process.env["ZERO_EMIT_RESULT_LINE"] !== "1") return;
+  console.log(`ZERO_RESULT=${JSON.stringify(payload)}`);
 }
 
-function getCloudFinalSinkConfig(): { sinkUrl: string; scanId: string; token?: string } | null {
-  if (process.env["0SEC_FEATURE_CLOUD_SINK"] === "0") return null;
-  const sinkUrl = process.env["0SEC_CLOUD_SINK"]?.trim();
-  const scanId = process.env["0SEC_CLOUD_SCAN_ID"]?.trim();
-  if (!sinkUrl || !scanId) return null;
-  const token = process.env["0SEC_CLOUD_TOKEN"]?.trim() || undefined;
-  return { sinkUrl, scanId, token };
-}
 
 function isCostBreakdownEntry(value: unknown): value is CostBreakdownEntry {
   if (!value || typeof value !== "object") return false;
@@ -394,7 +384,7 @@ function crossValidatedSeverityColor(severity: string): (text: string) => string
 }
 
 /**
- * Print the cross-validated-leads highlight block (0sec FoxGuard Phase 4).
+ * Print the cross-validated-leads highlight block (0 FoxGuard Phase 4).
  * Purely additive end-of-scan output: a scan with no agreeing leads never
  * reaches here, and this never touches exit codes or the result line.
  */
@@ -409,180 +399,27 @@ function printCrossValidatedLeads(summary: CrossValidatedLeadsSummary): void {
   }
 }
 
-async function postFinalResultToCloud(report: unknown): Promise<void> {
-  const config = getCloudFinalSinkConfig();
-  if (!config) return;
-  const url = `${config.sinkUrl.replace(/\/+$/, "")}/scans/${encodeURIComponent(config.scanId)}/findings`;
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    "X-0sec-Scan-Id": config.scanId,
-  };
-  if (config.token) headers.Authorization = `Bearer ${config.token}`;
-
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ report, final: true }),
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      process.stderr.write(
-        `[0sec cloud-sink] report POST ${url} returned ${res.status}: ${text.slice(0, 200)}\n`,
-      );
-    }
-
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`[0sec cloud-sink] report POST ${url} failed: ${msg}\n`);
-  }
-}
-interface ScheduledRunResult {
-  report: unknown;
-  exitCode: number;
-}
-
-function aggregateScheduledReports(
-  results: ScheduledRunResult[],
-  plan: ScanPlan,
-): Record<string, unknown> {
-  const reports = results.map((result) => result.report as Record<string, any>);
-  const first = reports[0] ?? {};
-  const findings = reports.flatMap((report, runIndex) =>
-    Array.isArray(report.findings)
-      ? report.findings.map((finding: Record<string, unknown>) => ({
-          ...finding,
-          runIndex: runIndex + 1,
-        }))
-      : [],
-  );
-  const summaries = reports.map((report) => report.summary as Record<string, number> | undefined);
-  const summaryKeys = ["totalAttacks", "totalFindings", "critical", "high", "medium", "low", "info"] as const;
-  const summary = Object.fromEntries(
-    summaryKeys.map((key) => [
-      key,
-      summaries.reduce((total, current) => total + (current?.[key] ?? 0), 0),
-    ]),
-  );
-  return {
-    ...first,
-    findings,
-    summary,
-    warnings: reports.flatMap((report) => Array.isArray(report.warnings) ? report.warnings : []),
-    plan,
-    plannedRuns: plan.runCount,
-    completedRuns: results.length,
-    durationMs: reports.reduce((total, report) => total + (report.durationMs ?? 0), 0),
-  };
-}
-
-async function runPlanned(opts: RunOptions): Promise<void> {
-  const plan = opts.plan;
-  if (!plan || plan.runCount <= 1) {
-    await runUnifiedSingle(opts);
-    return;
-  }
-  const core = await loadCoreModule();
-  const ledger = opts.costLedger ?? new core.ScanCostLedger();
-  const startedAt = Date.now();
-  const results: ScheduledRunResult[] = [];
-  const runOne = async (runIndex: number): Promise<ScheduledRunResult> => {
-    const remainingMs = Math.max(1, plan.timeCapMs - (Date.now() - startedAt));
-    if (ledger.totalCostUsd() >= plan.costCapUsd) {
-      throw new Error(`Scan plan stopped before run ${runIndex}: shared cost cap reached.`);
-    }
-    const runPlan: ScanPlan = {
-      ...plan,
-      runCount: 1,
-      timeCapMs: Math.min(plan.timeCapMs, remainingMs),
-    };
-    if (!opts.suppressOutput) {
-      console.log(chalk.gray(`[plan] starting run ${runIndex}/${plan.runCount} · ${plan.executionMode}`));
-    }
-    return (await runUnifiedSingle({
-      ...opts,
-      plan: runPlan,
-      costLedger: ledger,
-      scheduledRun: true,
-      suppressOutput: true,
-      suppressUi: true,
-      timeout: runPlan.timeCapMs,
-    })) as ScheduledRunResult;
-  };
-
-  if (plan.executionMode === "parallel") {
-    const settled = await Promise.allSettled(
-      Array.from({ length: plan.runCount }, (_, index) => runOne(index + 1)),
-    );
-    for (const result of settled) {
-      if (result.status === "fulfilled") results.push(result.value);
-      else if (!opts.suppressOutput) console.error(chalk.yellow(`[plan] run stopped: ${String(result.reason)}`));
-    }
-  } else {
-    for (let index = 1; index <= plan.runCount; index++) {
-      try {
-        results.push(await runOne(index));
-      } catch (error) {
-        if (!opts.suppressOutput) console.error(chalk.yellow(`[plan] run stopped: ${error instanceof Error ? error.message : String(error)}`));
-        break;
-      }
-      if (Date.now() - startedAt >= plan.timeCapMs || ledger.totalCostUsd() >= plan.costCapUsd) break;
-    }
-  }
-  if (results.length === 0) {
-    throw new Error("Scan plan completed no runs within its shared limits.");
-  }
-  const aggregate = aggregateScheduledReports(results, plan);
-  if (!opts.suppressOutput) {
-    if (opts.format === "json") {
-      console.log(JSON.stringify(aggregate));
-    } else {
-      console.log(chalk.cyan(`[plan] completed ${results.length}/${plan.runCount} run(s); shared cost $${ledger.totalCostUsd().toFixed(4)} / $${plan.costCapUsd.toFixed(2)}`));
-      console.log(chalk.gray(`       findings: ${(aggregate.summary as Record<string, number>).totalFindings} · time cap: ${formatDuration(plan.timeCapMs)}`));
-    }
-  }
-  if (!process.stdout.isTTY && results.some((result) => result.exitCode !== 0)) {
-    process.exit(Math.max(...results.map((result) => result.exitCode)));
-  }
-}
-
-function formatDuration(ms: number): string {
-  if (ms < 60_000) return `${Math.round(ms / 1_000)}s`;
-  return `${Math.round(ms / 60_000)}m`;
-}
-
 export async function runUnified(opts: RunOptions): Promise<void> {
-  if (opts.plan && opts.plan.runCount > 1 && !opts.scheduledRun) {
-    await runPlanned(opts);
-    return;
-  }
-  await runUnifiedSingle(opts);
-}
-
-async function runUnifiedSingle(opts: RunOptions): Promise<ScheduledRunResult | undefined> {
-  if (opts.plan) {
-    validateScanPlan(opts.plan);
-    if (opts.taskRoutes) validateScanTaskRoutes(opts.taskRoutes);
-  }
-  const { target, depth, format, runtime, timeout } = opts;
+  if (opts.plan) validateScanPlan(opts.plan);
+  const { target, format, runtime, timeout } = opts;
+  const depth = opts.plan?.depth ?? opts.depth;
   const planCostCap = opts.plan?.costCapUsd;
   const effectiveCostCeilingUsd =
     planCostCap === undefined || opts.costCeilingUsd === undefined
       ? opts.costCeilingUsd ?? planCostCap
       : Math.min(opts.costCeilingUsd, planCostCap);
-  const effectiveTimeout = opts.plan?.timeCapMs ?? timeout;
+  const effectiveTimeout = Math.min(opts.plan?.timeCapMs ?? timeout, timeout);
   const core = await loadCoreModule();
-  // ── Journal-based resume (0sec#374) ───────────────────────────────
+  // ── Journal-based resume (0#374) ───────────────────────────────
   let effectiveResumeScanId = opts.resumeScanId;
 
-  // ── Journal branching (0sec#250) ─────────────────────────────────
+  // ── Journal branching (0#250) ─────────────────────────────────
   if (opts.branchFromEntry !== undefined) {
     if (!effectiveResumeScanId) {
       console.error(chalk.red("--branch-from requires --resume <run-id>"));
-      if (opts.scheduledRun) throw new Error("A scheduled scan requires --resume with --branch-from.");
       process.exit(2);
     }
-    const { branchJournal } = await import("@0sec/core");
+    const { branchJournal } = await import("@0/core");
     const result = branchJournal({
       runId: effectiveResumeScanId,
       fromEntry: opts.branchFromEntry,
@@ -628,7 +465,6 @@ async function runUnifiedSingle(opts: RunOptions): Promise<ScheduledRunResult | 
   const validRuntimes = ["api", "claude", "codex", "gemini", "ollama", "auto"];
   if (!validRuntimes.includes(runtime)) {
     console.error(chalk.red(`Unknown runtime '${runtime}'. Valid: ${validRuntimes.join(", ")}`));
-    if (opts.scheduledRun) throw new Error(`Unknown runtime '${runtime}'. Valid: ${validRuntimes.join(", ")}`);
     process.exit(2);
   }
 
@@ -637,19 +473,18 @@ async function runUnifiedSingle(opts: RunOptions): Promise<ScheduledRunResult | 
   // must not require the Codex CLI binary. Both env vars are valid
   // activations — refresh token is the long-lived OAuth credential the
   // local CLI uses, while access token is what the cloud worker forwards
-  // to sandboxes (see 0sec-cloud PR #324). detectProvider in
+  // to sandboxes (see 0-cloud PR #324). detectProvider in
   // packages/core/src/runtime/llm-api.ts accepts either pair, so the
   // preflight gate must accept either pair too.
   const directCodexProviderConfigured =
     runtime === "codex" &&
-    (!!process.env["0SEC_CHATGPT_ACCESS_TOKEN"]?.trim() ||
-      !!process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"]?.trim());
-  if (runtime !== "api" && runtime !== "auto" && !directCodexProviderConfigured) {
+    (!!process.env["ZERO_CHATGPT_ACCESS_TOKEN"]?.trim() ||
+      !!process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"]?.trim());
+  if (!opts.nativeRuntime && runtime !== "api" && runtime !== "auto" && !directCodexProviderConfigured) {
     const rt = core.createRuntime({ type: runtime, timeout });
     const available = await rt.isAvailable();
     if (!available) {
       console.error(chalk.red(`Runtime '${runtime}' not available. Is ${runtime} installed?`));
-      if (opts.scheduledRun) throw new Error(`Runtime '${runtime}' not available. Is ${runtime} installed?`);
       process.exit(2);
     }
   }
@@ -712,7 +547,7 @@ async function runUnifiedSingle(opts: RunOptions): Promise<ScheduledRunResult | 
           model: opts.model,
           ...(opts.plan ? { plan: opts.plan } : {}),
           ...(opts.costLedger ? { costLedger: opts.costLedger } : {}),
-          ...(opts.taskRoutes ? { taskRoutes: opts.taskRoutes } : {}),
+          agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel, signal: opts.signal,
           repoPath: opts.repoPath,
           auth: opts.auth,
           apiSpecPath: opts.apiSpecPath,
@@ -733,15 +568,17 @@ async function runUnifiedSingle(opts: RunOptions): Promise<ScheduledRunResult | 
           httpAuditKillAfterSec: opts.httpAuditKillAfterSec,
         },
         dbPath: opts.dbPath,
+        nativeRuntime: opts.nativeRuntime,
+        provider: opts.provider,
         onEvent: eventHandler,
         getPendingUserMessages,
-        resumeScanId: opts.resumeScanId,
+        resumeScanId: effectiveResumeScanId,
       });
     } else {
       report = await core.runPipeline({
         target,
         targetType: opts.targetType,
-        resumeScanId: opts.resumeScanId,
+        resumeScanId: effectiveResumeScanId,
         diffBase: opts.diffBase,
         changedOnly: opts.changedOnly,
         priorFindings: opts.priorFindings,
@@ -757,9 +594,17 @@ async function runUnifiedSingle(opts: RunOptions): Promise<ScheduledRunResult | 
         costCeilingUsd: effectiveCostCeilingUsd,
         ...(opts.plan ? { plan: opts.plan } : {}),
         ...(opts.costLedger ? { costLedger: opts.costLedger } : {}),
-        ...(opts.taskRoutes ? { taskRoutes: opts.taskRoutes } : {}),
+        agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel, signal: opts.signal,
+        nativeRuntime: opts.nativeRuntime, provider: opts.provider,
+        repoPath: opts.repoPath, auth: opts.auth, apiSpecPath: opts.apiSpecPath, scopeFile: opts.scopeFile,
+        rateLimit: opts.rateLimit, allowScanners: opts.allowScanners, attributionHeaders: opts.attributionHeaders,
+        attributionUaToken: opts.attributionUaToken, engagementProfile: opts.engagementProfile, wafEvasion: opts.wafEvasion,
+        dispatchMode: opts.dispatchMode, httpAuditAllowedHosts: opts.httpAuditAllowedHosts,
+        httpAuditAllowedPaths: opts.httpAuditAllowedPaths, httpAuditRateLimitRps: opts.httpAuditRateLimitRps,
+        httpAuditKillAfterSec: opts.httpAuditKillAfterSec, race: opts.race, egats: opts.egats,
         reviewProfile: opts.reviewProfile,
         reviewPackageEcosystem: opts.reviewPackageEcosystem,
+        subsystem: opts.subsystem,
         hypothesis: opts.hypothesis,
         conversation: opts.conversation,
         seedFindings: opts.seedFindings,
@@ -771,9 +616,6 @@ async function runUnifiedSingle(opts: RunOptions): Promise<ScheduledRunResult | 
     const reportAny = report as any;
     const canonicalReport = toScanReport(report);
 
-    if (opts.targetType !== "url" && opts.targetType !== "web-app") {
-      await postFinalResultToCloud(reportAny);
-    }
 
     if (inkUI) {
       inkUI.setReport(report as any);
@@ -783,7 +625,7 @@ async function runUnifiedSingle(opts: RunOptions): Promise<ScheduledRunResult | 
         const extension = format === "pdf" ? "pdf" : "html";
         const filePath = opts.reportPath
           ? resolve(opts.reportPath)
-          : join(tmpdir(), `0sec-report-${Date.now()}.${extension}`);
+          : join(tmpdir(), `0-report-${Date.now()}.${extension}`);
         if (format === "pdf") {
           await generatePdfReport(toScanReport(reportAny), filePath);
         } else {
@@ -816,7 +658,7 @@ async function runUnifiedSingle(opts: RunOptions): Promise<ScheduledRunResult | 
       console.log("");
       console.log(chalk.gray("  --tui post-scan view is no longer bundled in the npm package."));
       console.log(chalk.gray("  Install the standalone binary for the full OpenTUI experience:"));
-      console.log(chalk.gray("    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0sec/main/install.sh | bash"));
+      console.log(chalk.gray("    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash"));
       console.log("");
     }
 
@@ -832,8 +674,8 @@ async function runUnifiedSingle(opts: RunOptions): Promise<ScheduledRunResult | 
     const estimatedCostUsd = getEstimatedCost(reportAny);
     const usage = getUsage(reportAny);
 
-    // ── Emit findings as PRs (0sec#377) ──
-    if (opts.emit === "pr" && !opts.scheduledRun) {
+    // ── Emit findings as PRs (0#377) ──
+    if (opts.emit === "pr") {
       const findings = (report as any).findings ?? [];
       const core = await loadCoreModule();
       // PRs are opened against the repo we just reviewed when the target is
@@ -844,7 +686,7 @@ async function runUnifiedSingle(opts: RunOptions): Promise<ScheduledRunResult | 
       const repoRoot = opts.targetType === "source-code" && existsSync(target)
         ? resolve(target)
         : process.cwd();
-      const outDir = opts.emitOutDir ?? join(tmpdir(), `0sec-emit-${Date.now()}`);
+      const outDir = opts.emitOutDir ?? join(tmpdir(), `0-emit-${Date.now()}`);
       console.log(chalk.blue(`[emit pr] ${findings.length} finding(s); repo=${repoRoot} base=${opts.emitPrBase ?? "main"}${opts.emitPrDryRun ? " (dry-run)" : ""}`));
       const emitReport = await core.emitFindingsAsPRs(findings, {
         repoRoot,
@@ -869,7 +711,6 @@ async function runUnifiedSingle(opts: RunOptions): Promise<ScheduledRunResult | 
         console.error(
           chalk.red(`Invalid --export format: '${opts.exportTarget}'. Expected: github:owner/repo`),
         );
-        if (opts.scheduledRun) throw new Error("Invalid --export target.");
         process.exit(2);
       }
       const repo = match[1];
@@ -887,7 +728,7 @@ async function runUnifiedSingle(opts: RunOptions): Promise<ScheduledRunResult | 
       }
     }
 
-    const ceilingRaw = process.env["0SEC_COST_CEILING_USD"]?.trim();
+    const ceilingRaw = process.env["ZERO_COST_CEILING_USD"]?.trim();
     if (ceilingRaw) {
       const ceiling = Number(ceilingRaw);
       if (Number.isFinite(ceiling) && estimatedCostUsd !== undefined && estimatedCostUsd > ceiling) {
@@ -910,7 +751,7 @@ async function runUnifiedSingle(opts: RunOptions): Promise<ScheduledRunResult | 
       exitCode = 4;
     }
 
-    if (reportAny.researchFailed && exitCode === 0) {
+    if ((reportAny.researchFailed || reportAny.executionSuccessful === false) && exitCode === 0) {
       if (!opts.suppressOutput) console.error(chalk.red("Review completed with partial static results because AI analysis failed."));
       exitCode = 2;
     }
@@ -923,14 +764,10 @@ async function runUnifiedSingle(opts: RunOptions): Promise<ScheduledRunResult | 
       emitResultLine({
         ok: exitCode === 0,
         exitCode,
-        exit_reason:
-          exitCode === 4
-            ? "cost_ceiling_exceeded"
-            : exitCode === 2
-              ? "error"
-              : exitCode === 1
-                ? "findings"
-                : "completed",
+        exit_reason: reportAny.exitReason && reportAny.exitReason !== "completed" ? reportAny.exitReason
+          : exitCode === 4 ? "cost_ceiling_exceeded"
+          : exitCode === 2 ? "error"
+          : exitCode === 1 ? "findings" : "completed",
         target,
         targetType: getTargetType(reportAny, opts),
         runtime,
@@ -942,11 +779,11 @@ async function runUnifiedSingle(opts: RunOptions): Promise<ScheduledRunResult | 
         estimatedCostUsd,
         usage,
         summary: canonicalReport.summary,
+        plannedRuns: reportAny.plannedRuns, completedRuns: reportAny.completedRuns, attempts: reportAny.attempts, error: reportAny.error,
       });
     }
 
-    if (opts.scheduledRun) return { report, exitCode };
-    if (!opts.scheduledRun && exitCode !== 0 && !inkUI) process.exit(exitCode);
+    if (exitCode !== 0 && !inkUI) process.exit(exitCode);
   } catch (err) {
     // Always release the cost-bus subscription so a long-lived
     // process (test runner, future REPL) doesn't leak sinks across
@@ -975,7 +812,6 @@ async function runUnifiedSingle(opts: RunOptions): Promise<ScheduledRunResult | 
         error: message,
       });
     }
-    if (opts.scheduledRun) throw err;
     process.exit(2);
   }
 }

@@ -11,9 +11,9 @@ pr_security_policy:
   reporting_threshold: medium
   blocking_threshold: high
 
-# FoxGuard configuration for the 0sec repository.
+# FoxGuard configuration for the 0 repository.
 #
-# Refreshed with Foxguard 0.14.0 against released 0sec 0.17.0:
+# Refreshed with Foxguard 0.14.0 against released 0 0.17.0:
 # 6a34d78085f2d3edfe8c42c85f5261f1bf6f39f6. This records debt, not remediation.
 # The PR security policy scans the whole repository, so without a baseline it
 # reports the entire pre-existing backlog on every pull request and blocks

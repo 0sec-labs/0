@@ -4,7 +4,7 @@
  * pair at these fixed paths; the direct requires make Bun embed them.
  */
 
-const compiled = typeof __0SEC_COMPILED_TARGET__ === "string";
+const compiled = typeof __ZERO_COMPILED_TARGET__ === "string";
 if (!compiled) {
   module.exports = {
     Parser: require("tree-sitter"),

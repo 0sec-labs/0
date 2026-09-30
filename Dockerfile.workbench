@@ -1,0 +1,105 @@
+# syntax=docker/dockerfile:1.7
+# Build the complete online workbench, not the separate offline execution sandbox.
+# First build packages/core/docker/Dockerfile.kali as 0-kali:local, then:
+# docker build -f Dockerfile.workbench --build-arg KALI_IMAGE=0-kali:local -t 0-workbench:local .
+# Provisioning may use Docker; the resulting archive runs directly in SmolVM.
+ARG KALI_IMAGE=0-kali:local
+FROM node:24.21.0-bookworm@sha256:64af3819f9275802414d7cdc38c27e9d82bd564dec4d4da87d008255d36c63b4 AS node-runtime
+
+FROM node-runtime AS native-deps
+ENV PNPM_HOME=/root/.local/share/pnpm \
+    PATH=/root/.local/share/pnpm:$PATH \
+    CI=1 \
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+WORKDIR /app
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY scripts ./scripts
+COPY packages ./packages
+COPY assets ./assets
+COPY vendor ./vendor
+COPY LICENSE README.md ./
+RUN pnpm install --frozen-lockfile
+# Linux arm64 has no upstream parser prebuild: installation must compile the real
+# patched C++20 addon. Verify the exact parser/grammar API before bundling.
+RUN node -e 'const Parser=require("tree-sitter"); const parser=new Parser(); parser.setLanguage(require("tree-sitter-c")); const root=parser.parse("int main(void) { return 0; }").rootNode; if(root.hasError || root.namedChild(0)?.type!=="function_definition") process.exit(1); console.log("native C parser:", root.toString());'
+
+FROM native-deps AS builder
+RUN pnpm --filter '@0/cli...' build \
+    && pnpm --filter @0/dashboard build \
+    && pnpm run build:bundle
+WORKDIR /app/dist
+# The published file dependency is included in dist/vendor. Do not skip its
+# install hook: the complete runtime must also work outside the workspace.
+RUN npm ci --omit=dev --no-audit --no-fund \
+    && npm rebuild tree-sitter tree-sitter-c --build-from-source --no-audit --no-fund \
+    && node -e 'const Parser=require("tree-sitter"); const parser=new Parser(); parser.setLanguage(require("tree-sitter-c")); const root=parser.parse("int workbench(void) { return 24; }").rootNode; if(root.hasError || root.namedChild(0)?.type!=="function_definition") process.exit(1); console.log("published native C parser:", root.toString());'
+
+FROM ${KALI_IMAGE} AS workbench-base
+USER root
+ARG DEBIAN_FRONTEND=noninteractive
+ARG TARGETARCH
+# Keep the entire Kali inventory. Add only browser runtime dependencies and the
+# public CLI's source discovery utility; apt package signatures remain enforced.
+RUN apt-get update -qq \
+    && apt-get install -y --no-install-recommends \
+        unzip ripgrep python3-pkg-resources fonts-liberation \
+        libatk1.0-0t64 libatk-bridge2.0-0t64 libnspr4 libnss3 \
+        libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 \
+        libgbm1 libxcb1 libxkbcommon0 libpango-1.0-0 libcairo2 libasound2t64 libdrm2 libcups2t64 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-runtime /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+# Release digests are vendor-published GitHub asset SHA256s, not downloaded
+# alongside the executable. The Bun version matches the native release compiler.
+RUN set -eux; \
+    case "$TARGETARCH" in \
+        arm64) asset=bun-linux-aarch64; sha=a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b ;; \
+        amd64) asset=bun-linux-x64-baseline; sha=a063908ae08b7852ca10939bbdc6ceed3ddabce8fb9402dce83d65d73b36e6c7 ;; \
+        *) echo "Unsupported workbench architecture: $TARGETARCH" >&2; exit 1 ;; \
+    esac; \
+    curl --fail --location --silent --show-error \
+        "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/${asset}.zip" -o /tmp/bun.zip; \
+    printf '%s  /tmp/bun.zip\n' "$sha" | sha256sum -c -; \
+    unzip /tmp/bun.zip -d /tmp/bun; \
+    install -m 0755 "/tmp/bun/${asset}/bun" /usr/local/bin/bun; \
+    rm -rf /tmp/bun /tmp/bun.zip; \
+    test "$(bun --version)" = 1.3.14
+
+# Native model-agent executables are guest tools too. Keep their independently
+# locked payload separate from the application's npm publication.
+FROM workbench-base AS agent-clis
+WORKDIR /opt/0-agent-clis
+COPY scripts/workbench-agents/package.json scripts/workbench-agents/package-lock.json ./
+RUN --mount=type=cache,id=0-workbench-agent-clis,target=/root/.npm \
+    npm ci --omit=dev --no-audit --no-fund
+
+FROM workbench-base AS workbench
+COPY --from=builder /app/dist /opt/0
+COPY --from=agent-clis /opt/0-agent-clis /opt/0-agent-clis
+COPY scripts/workbench-tools.json /usr/local/share/0/workbench-tools.json
+ENV NODE_ENV=production \
+    HOME=/home/zero \
+    TERM=xterm-256color \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/playwright \
+    PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin
+WORKDIR /opt/0
+RUN HOME=/root npx --no-install playwright install chromium \
+    && chmod -R a+rX /opt/playwright \
+    && printf '#!/bin/sh\nexec /usr/local/bin/bun /opt/0/0.js "$@"\n' > /usr/local/bin/0 \
+    && chmod 0755 /usr/local/bin/0 \
+    && ln -s /opt/0-agent-clis/node_modules/.bin/claude /usr/local/bin/claude \
+    && ln -s /opt/0-agent-clis/node_modules/.bin/codex /usr/local/bin/codex \
+    && ln -s /opt/0-agent-clis/node_modules/.bin/gemini /usr/local/bin/gemini \
+    && test "$(id -u pentester)" = 1000 \
+    && test "$(id -g pentester)" = 1000 \
+    && usermod -l zero -d /home/zero -m pentester \
+    && groupmod -n zero pentester \
+    && install -d -o zero -g zero /workspace /work /home/zero/.0 \
+    && install -d -m 0755 /run/0-workbench
+USER 1000:1000
+WORKDIR /workspace
+ENTRYPOINT []
+CMD ["/usr/local/bin/0"]

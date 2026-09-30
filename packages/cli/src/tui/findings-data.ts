@@ -1,7 +1,8 @@
-import type { Finding } from "@0sec/shared";
-import type { NativeRuntime, SourceFixResult, SourceFixStatus } from "@0sec/core";
+import type { Finding } from "@0/shared";
+import type { NativeRuntime } from "@0/core";
 import type { RuntimeAvailability } from "../utils.js";
 import { fitTuiText, fitTuiUrl } from "./text.js";
+import { restoreFindingReviewFields } from "@0/db";
 
 
 export interface OpsSnapshot {
@@ -40,11 +41,14 @@ export interface FindingsRow {
   evidenceResponse: string;
   evidenceAnalysis?: string | null;
   /**
-   * JSON-stringified VerificationSpec as stored by `@0sec/db`. NULL for
+   * JSON-stringified VerificationSpec as stored by `@0/db`. NULL for
    * findings that carry no machine-executable re-check contract. The
    * source-fix action parses it back before asking `fixEligibility`.
    */
   verificationSpec?: string | null;
+  verificationResult?: string | null;
+  sourceVerification?: string | null;
+  reviewAnnotation?: string | null;
 }
 
 export interface FindingsScreenOptions {
@@ -137,15 +141,6 @@ export function groupFindings(rows: FindingsRow[]): FindingGroup[] {
     .sort((a, b) => b.latest.timestamp - a.latest.timestamp);
 }
 
-/** Overrides the scan target as the repo to fix in; `0sec fix` takes <repo>. */
-const FIX_REPO_ENV = "0SEC_FIX_REPO";
-
-export interface FixRunState {
-  findingId: string;
-  status: SourceFixStatus | "running";
-  result?: SourceFixResult;
-  error?: string;
-}
 
 function parseVerificationSpec(raw: string | null | undefined): unknown {
   if (!raw) return undefined;
@@ -159,10 +154,8 @@ function parseVerificationSpec(raw: string | null | undefined): unknown {
 }
 
 /**
- * Rebuild the `Finding` shape `runSourceFix` reads from a persisted findings
- * row. Only fields the findings table actually stores are populated — in
- * particular `verification_result` and `reviewAnnotation` have no columns, so
- * a row that never carried them stays honestly ineligible.
+ * Rebuild a finding using the database's conservative review/source-check
+ * hydrator. Absent or malformed persisted fields remain absent.
  */
 export function findingFromRow(row: FindingsRow): Finding {
   const record: Record<string, unknown> = {
@@ -182,6 +175,7 @@ export function findingFromRow(row: FindingsRow): Finding {
       analysis: row.evidenceAnalysis ?? undefined,
     },
     verificationSpec: parseVerificationSpec(row.verificationSpec),
+    ...restoreFindingReviewFields(row),
   };
   return record as unknown as Finding;
 }
@@ -190,25 +184,6 @@ export function isNativeRuntime(runtime: unknown): runtime is NativeRuntime {
   return typeof (runtime as Partial<NativeRuntime>)?.executeNative === "function";
 }
 
-/** A scan target that carries a scheme is a live host, not a checkout. */
-const REMOTE_TARGET_PATTERN = /^[a-z][a-z0-9+.-]*:\/\//i;
-
-/**
- * Where a source fix for this finding would run. `0SEC_FIX_REPO` wins so an
- * operator can point at a checkout that is not the recorded scan target;
- * otherwise the scan target is used, but only when it looks like a path.
- */
-export function resolveFixRepoRoot(
-  row: FindingsRow | null,
-  scanTargets: Record<string, string>,
-): string | undefined {
-  const override = process.env[FIX_REPO_ENV]?.trim();
-  if (override) return override;
-  if (!row) return undefined;
-  const target = scanTargets[row.scanId];
-  if (!target || REMOTE_TARGET_PATTERN.test(target)) return undefined;
-  return target;
-}
 
 export function cycleChoice<T extends string>(items: readonly T[], current: T, delta: 1 | -1): T {
   const index = items.indexOf(current);

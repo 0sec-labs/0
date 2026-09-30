@@ -88,7 +88,7 @@ export function OpsScreen({ dbPath, refreshMs, onExit, shell }: { dbPath?: strin
     let alive = true;
     const refresh = async () => {
       try {
-        const { osecDB } = await import("@0sec/db");
+        const { osecDB } = await import("@0/db");
         const db = new osecDB(dbPath);
         try {
           const scans = db.listScans(12) as OpsSnapshot["scans"];

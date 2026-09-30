@@ -13,7 +13,7 @@ describe("connectionRecoveryForError", () => {
 
   it("does not mistake first-launch provider choices for a failed Codex credential", () => {
     expect(connectionRecoveryForError(
-      "No provider credential found. Set OPENAI_API_KEY or 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN.",
+      "No provider credential found. Set OPENAI_API_KEY or ZERO_CHATGPT_OAUTH_REFRESH_TOKEN.",
     )).toBeNull();
   });
 
@@ -34,20 +34,6 @@ describe("connectionRecoveryForError", () => {
     }
   });
 
-  it("recovers Cloud authentication without treating its upstream as BYOK", () => {
-    for (const error of [
-      "0sec-cloud auth rejected (HTTP 401)",
-      "0cloud API error 401: OpenAI credential revoked",
-      "RuntimeConfig.provider=hosted has no configured credentials",
-    ]) {
-      expect(connectionRecoveryForError(error)?.providerId).toBe("hosted");
-    }
-    for (const status of [403, 402, 429, 503]) {
-      expect(connectionRecoveryForError(
-        `0cloud API error ${status}: OpenAI unavailable`,
-      )).toBeNull();
-    }
-  });
 
   it("does not replace model, quota or transport failures with credential setup", () => {
     for (const error of [

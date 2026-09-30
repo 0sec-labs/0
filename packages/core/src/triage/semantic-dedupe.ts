@@ -35,7 +35,7 @@ import type {
   JevEvaluator,
   JevAnswer,
   JevUsage,
-} from "@0sec/shared";
+} from "@0/shared";
 
 // ── Constants ──
 

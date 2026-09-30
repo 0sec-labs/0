@@ -59,7 +59,7 @@
 // ATLAS lists more than one, the choice is stated in a comment on the catalog
 // entry and the full set is named there.
 
-import type { AttackCategory } from "@0sec/shared";
+import type { AttackCategory } from "@0/shared";
 
 export interface AtlasTechnique {
   id: string;
@@ -94,7 +94,7 @@ const CATALOG = {
   "AML.T0051.000": { name: "LLM Prompt Injection: Direct", tactic: "Execution" },
   "AML.T0051.001": { name: "LLM Prompt Injection: Indirect", tactic: "Execution" },
   // ATLAS lists AML.T0053 under Execution and Privilege Escalation. Execution
-  // is used here: 0sec observes the tool actually being invoked, which is the
+  // is used here: 0 observes the tool actually being invoked, which is the
   // Execution reading; the privilege gain is a consequence it does not measure.
   "AML.T0053": { name: "AI Agent Tool Invocation", tactic: "Execution" },
 
@@ -162,7 +162,7 @@ function chain(
 // ── Finding category → technique ──────────────────────────────────────────
 //
 // Exhaustive over `AttackCategory` on purpose: adding a category to
-// @0sec/shared without deciding its ATLAS mapping is a type error here.
+// @0/shared without deciding its ATLAS mapping is a type error here.
 //
 // Only the AI-behavioural categories map. Everything else is `[]` — see the
 // block comment above the non-AI section before "filling in" any of them.
@@ -279,7 +279,7 @@ const CATEGORY_MAP: Record<AttackCategory, AtlasTechnique[]> = {
 
 // ── Agent tool → technique ────────────────────────────────────────────────
 //
-// Only the tools that act against an AI system appear here. Every other 0sec
+// Only the tools that act against an AI system appear here. Every other 0
 // tool — `http_request`, `run_nmap`, `bash`, `cloud_s3_probe`, the intel tools
 // — is absent by design, not by oversight: an nmap sweep is not an attack on an
 // AI system, and the ATT&CK map in ./mitre.ts already describes it correctly.
@@ -310,14 +310,14 @@ const TOOL_MAP: Record<string, AtlasTechnique[]> = {
 // An ATLAS tag asserts that the action targeted an AI system. No pipeline
 // event carries that fact on its own: `scan_start`, `stage_start` and
 // `oracle_result` fire identically against a kernel target and an LLM
-// endpoint. Tagging them would put AML ids on every engagement 0sec runs.
+// endpoint. Tagging them would put AML ids on every engagement 0 runs.
 //
 // So ATLAS event tags come from one place only: a tool-bearing event whose
 // tool is in TOOL_MAP above. That is the only point where the engine knows an
 // AI system was on the other end.
 //
 // Note in particular that `llm_planner_invoked` and `llm_review` are NOT
-// mapped. Those record 0sec's own model calls — the engine reasoning about
+// mapped. Those record 0's own model calls — the engine reasoning about
 // its work. They are not an attack on anyone's AI system, and tagging them
 // would misreport the operator's own tooling as adversary activity.
 

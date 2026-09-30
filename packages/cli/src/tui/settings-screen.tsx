@@ -319,7 +319,7 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
   // Inside a dialog the surface IS the panel's inner box — the shell renders
   // with `dialogContent`, so it has no header and no padding — and the only
   // rows the host still spends are its one footer and the route's clickable
-  // harness line. Outside a dialog the legacy shell chrome still applies.
+  // keybindings link. Outside a dialog the legacy shell chrome still applies.
   const layout = computeSettingsLayout(width, height, totalRows, inDialog
     ? { chromeRows: SETTINGS_DIALOG_HOST_ROWS, chromeColumns: 0 }
     : { chromeRows: shellChromeRows(width) });

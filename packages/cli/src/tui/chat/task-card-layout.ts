@@ -187,7 +187,7 @@ function isRunningStatus(status: string | undefined): boolean {
  * The truthful per-agent stat tokens, in OMP `appendAgentStats` order:
  * `tokens · context · duration · model`. Every token is emitted ONLY when its
  * field is genuinely present and positive — there is no estimation and no
- * placeholder. The stats OMP also shows but for which 0sec has no per-agent
+ * placeholder. The stats OMP also shows but for which 0 has no per-agent
  * producer yet — cost (`$`), request count (`req`), tool count (`🛠`), and the
  * context-window percentage (`pct%/window`) — are deliberately omitted rather
  * than faked; raw `contextTokens` stands in for the window ratio until a

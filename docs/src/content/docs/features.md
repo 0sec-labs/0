@@ -53,7 +53,6 @@ Review the destination, permissions, and sensitive evidence before use.
 ## Runtimes
 
 The model provider handles inference. The tool executor runs actions.
-Hosted model selection leaves local shell execution on your machine.
 
 [Configuration](/configuration/) documents runtime selection and fallback.
 [API Keys](/api-keys/) documents supported providers, model routing, credential
@@ -95,7 +94,7 @@ research strategies. [Agent Loop](/agent-loop/) explains the control flow;
 [Budget Management](/budget-management/) distinguishes turn limits from spend
 limits; [Configuration](/configuration/) owns feature settings and defaults.
 
-Use [Console](/console/) for interactive work. Desktop is in development; see
+Use [Console](/console/) for interactive work. Desktop is development-only alpha; see
 [Roadmap](/roadmap/#desktop) for status.
 
 ### Advisory evaluations
@@ -104,22 +103,22 @@ Jev assistance is opt-in for browser exploration, memory ranking, duplicate
 assessment, and red-team feedback. It does not verify a vulnerability, authorize
 an action, or replace the existing verification path.
 
-Set `0SEC_JEV_FEATURES` to the selected comma-separated features: `browser`,
+Set `ZERO_JEV_FEATURES` to the selected comma-separated features: `browser`,
 `memory`, `dedupe`, or `redteam`. Credentials alone do not enable assistance.
 
 | Setting | Behavior |
 | --- | --- |
-| `0SEC_JEV_PROVIDER` | `vercel` by default; `typesafe` for direct access or `cloud` for a managed scan capability |
-| `AI_GATEWAY_API_KEY` / `TYPESAFE_API_KEY` | Credential for the selected direct provider; keep it out of command history |
-| `0SEC_JEV_TIMEOUT_MS` | Per-request timeout; default `10000` |
-| `0SEC_JEV_MAX_REQUESTS` | Per-evaluator request limit; default `100` |
-| `0SEC_JEV_MAX_COST_USD` | Per-evaluator estimated budget; default `0.10`, not a customer invoice or whole-scan ceiling |
-| `0SEC_JEV_BROWSER_READ_ONLY_URLS` | Exact comma-separated URLs approved for assisted navigation; engagement scope still applies |
+| `ZERO_JEV_PROVIDER` | `vercel` by default (your own gateway key); `cloud` routes through the managed endpoint and bills workspace credits |
+| `AI_GATEWAY_API_KEY` / `ZERO_JEV_CLOUD_TOKEN` | Credential for the selected provider; keep it out of command history |
+| `ZERO_JEV_TIMEOUT_MS` | Per-request timeout; default `10000` |
+| `ZERO_JEV_MAX_REQUESTS` | Per-evaluator request limit; default `100` |
+| `ZERO_JEV_MAX_COST_USD` | Per-evaluator estimated budget; default `0.10`, not a customer invoice or whole-scan ceiling |
+| `ZERO_JEV_BROWSER_READ_ONLY_URLS` | Exact comma-separated URLs approved for assisted navigation; engagement scope still applies |
 
 After configuring the provider credential:
 
 ```bash
-env 0SEC_JEV_FEATURES=memory,dedupe \
+env ZERO_JEV_FEATURES=memory,dedupe \
   0 scan --mode web --target https://app.example.test --scope ./scope.json
 ```
 
@@ -147,12 +146,12 @@ retry or substitute chat-model fallback. Evaluator usage is separate from
 main-model usage; the cost ceiling reserves estimated request cost and is not a
 whole-engagement accounting limit.
 
-The shared evaluator API also recognizes `kernel` and a kernel-only
-`classifier` provider. That configuration support alone does not wire an
+The shared evaluator API also recognizes the `kernel` feature, used by the
+`0sec kernel jev-prepass` command. That support alone does not wire an
 automatic kernel prepass into the assessment commands described here.
 
 Managed workers receive a separate scan-bound capability and endpoint from
-0cloud. Installing this engine does not enable the hosted service, establish
+the service. Installing this engine does not enable managed execution, establish
 account entitlement, or prove that a deployed worker uses this version.
 
 ## Benchmarks
@@ -164,9 +163,7 @@ results are not current-target guarantees.
 <span id="unified-soc-story"></span>
 ## Related products
 
-See [Integrations](/integrations/) for connected tools.
-[Hosted inference](/getting-started/#hosted-models) leaves tools in your
-environment; [managed work](/getting-started/#managed-work-and-onboarding)
-requires separate scoping, access and terms. Neither is required to use the
-local open-source CLI with your own model connection.
+See [Integrations](/integrations/) for connected tools and
+[managed work](/getting-started/#managed-work-and-onboarding) for separate
+scoping, access and terms. The interactive console uses your model connection.
 See [Commands](/commands/) for the full CLI reference.

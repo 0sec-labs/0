@@ -141,7 +141,7 @@ Category-specific oracles check SQLi, reflected XSS, SSRF, RCE, path traversal, 
 
 **Implementation:** `packages/core/src/triage/oracles.ts` plus the dispatcher `verifyOracleByCategory(finding, target)`. Oracles bypass the LLM entirely on the happy path; the LLM verify pipeline is the fallback.
 
-<span id="layer-195-multi-modal-agreement-foxguard--0sec--shipped"></span>
+<span id="layer-195-multi-modal-agreement-foxguard--0--shipped"></span>
 ### Layer 1.95: Multi-Modal Agreement (foxguard × 0) — SHIPPED
 
 The optional [foxguard](https://github.com/0sec-labs/foxguard) check adds evidence
@@ -186,13 +186,13 @@ reproduction. Native tool-based verification and replay have separate paths.
 
 Because LLM sampling is non-deterministic, any single run of the structured verify pipeline may produce a false positive or false negative. We run the pipeline N times (default 5) in parallel and take the majority vote, with early termination as soon as a verdict locks up an unreachable lead.
 
-**Implementation:** `runSelfConsistencyVerify(finding, target, runtime, opts)` and `tallyConsensus(runs)` in `structured-verify.ts`. Feature flag: `0SEC_FEATURE_CONSENSUS_VERIFY`.
+**Implementation:** `runSelfConsistencyVerify(finding, target, runtime, opts)` and `tallyConsensus(runs)` in `structured-verify.ts`. Feature flag: `ZERO_FEATURE_CONSENSUS_VERIFY`.
 
 ### Layer 4.75: PoV (Proof-of-Vulnerability) Gate — SHIPPED
 
 Following *All You Need Is A Fuzzing Brain* (arXiv:2509.07225), a scoped `bash` / `http_request` loop attempts a working PoC. Missing PoV downgrades severity to `info` and sets `triageNote = "no_pov"`.
 
-**Implementation:** `packages/core/src/triage/pov-gate.ts` — `generatePov` and `judgePovEvidence`. Feature flag: `0SEC_FEATURE_POV_GATE`.
+**Implementation:** `packages/core/src/triage/pov-gate.ts` — `generatePov` and `judgePovEvidence`. Feature flag: `ZERO_FEATURE_POV_GATE`.
 
 ### Layer 5: Triage Memories (Semgrep-style) — SHIPPED
 
@@ -201,14 +201,14 @@ Current `structured-verify.ts` treats retrieved memories as untrusted context:
 a close text match or old label cannot reject fresh evidence without running
 the verification steps. Keep provenance and do not use model agreement as truth.
 
-**Implementation:** `packages/core/src/triage/memories.ts` — `MemoryStore`, `scoreMemory`, `inferPackage`. Feature flag: `0SEC_FEATURE_TRIAGE_MEMORIES`.
+**Implementation:** `packages/core/src/triage/memories.ts` — `MemoryStore`, `scoreMemory`, `inferPackage`. Feature flag: `ZERO_FEATURE_TRIAGE_MEMORIES`.
 
 <span id="layer-6-adversarial-debate--shipped"></span>
 ### Layer 6: Adversarial debate (planned)
 
 The proposed prosecutor/defender design uses fresh contexts and a judge, inspired by arXiv:2402.06782. Reduced error correlation would require measurement.
 
-**Status: planned, not implemented.** There is no `triage/adversarial.ts` and no `0SEC_FEATURE_DEBATE` flag in the engine today. The closest shipped mechanism is the cross-family refuter (`stages/hunt-cross-family.ts`), which pursues the same error-decorrelation goal by forcing the refute pass onto a different model family than the finder.
+**Status: planned, not implemented.** There is no `triage/adversarial.ts` and no `ZERO_FEATURE_DEBATE` flag in the engine today. The closest shipped mechanism is the cross-family refuter (`stages/hunt-cross-family.ts`), which pursues the same error-decorrelation goal by forcing the refute pass onto a different model family than the finder.
 
 ### Training Data Pipeline
 
@@ -219,7 +219,7 @@ The proposed prosecutor/defender design uses fresh contexts and a judge, inspire
 
 ### Target Performance
 
-> **Measured update, 2026-04-11:** the [21-run ablation](https://github.com/0sec-labs/0sec/issues/72#issuecomment-4229956469) found mode- and slice-dependent effects. See [results](/research/fp-reduction-moat/).
+> **Measured update, 2026-04-11:** the [21-run ablation](https://github.com/0sec-labs/0/issues/72#issuecomment-4229956469) found mode- and slice-dependent effects. See [results](/research/fp-reduction-moat/).
 
 The table below preserves historical design targets drawn from SAST references.
 It contains no measured 0 performance:
@@ -236,7 +236,7 @@ The actual measured effect on 0 (2026-04-11 ablation, gpt-5.4):
 - XBOW black-box @ limit=25: `moat` produced 19 versus 18 flags, 14 versus 27 findings (48% fewer), and $0.53 versus $0.76 per flag.
 - npm-bench (81 packages): TPR was 100% across profiles; `default` and `moat` matched at F1=0.956. FPR rose from 0.11 (`none`) to 0.19 (`default`) in batch 1. Batch-2 variation prevents confident subsystem attribution.
 
-The measured tradeoffs motivate [learned dynamic routing](https://github.com/0sec-labs/0sec/issues/113): preserve recall while selecting useful layers per finding and benchmark slice.
+The measured tradeoffs motivate [learned dynamic routing](https://github.com/0sec-labs/0/issues/113): preserve recall while selecting useful layers per finding and benchmark slice.
 
 ## Related Work
 

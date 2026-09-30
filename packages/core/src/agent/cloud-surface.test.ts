@@ -1,4 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+vi.mock("../plugins/enablement.js", async (importOriginal) => ({
+  ...await importOriginal<object>(),
+  readEnablement: () => ({ schema: 1, project: process.cwd(), enabled: { scope: { version: "1.0.0", capabilities: [], enabledAt: 1 } } }),
+}));
 import {
   probeS3Bucket,
   classifyBucketAccess,
@@ -16,7 +20,7 @@ import {
   type CloudScopeMatcher,
 } from "./cloud-surface.js";
 
-// 0sec#925 — every test mocks the fetch layer. NO live cloud calls.
+// 0#925 — every test mocks the fetch layer. NO live cloud calls.
 
 // A scripted fetch: maps a url-substring → {status, body}. Records calls.
 function mockFetch(routes: Array<{ match: string; status: number; body: string }>): {

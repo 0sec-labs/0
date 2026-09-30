@@ -6,7 +6,7 @@
  * module directory for *.yaml and validates each file as a skill. esbuild lands
  * that loader in dist/chunks/, so scripts/bundle-cli.mjs copies the skill tree
  * to dist/chunks/agent/skills/. Without that copy the shipped binary loads ZERO
- * skills — list_skills is empty even with 0SEC_FEATURE_JIT_SKILLS on. This test
+ * skills — list_skills is empty even with ZERO_FEATURE_JIT_SKILLS on. This test
  * fails loudly if a build regresses that copy.
  *
  * Skips when no bundle is present (bundle build hasn't run), like install.test.

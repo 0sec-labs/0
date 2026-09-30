@@ -8,7 +8,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 const dirs: string[] = [];
 function tmpHome(): string {
-  const d = mkdtempSync(join(tmpdir(), "0sec-analytics-id-"));
+  const d = mkdtempSync(join(tmpdir(), "0-analytics-id-"));
   dirs.push(d);
   return d;
 }
@@ -32,10 +32,10 @@ describe("getInstallId", () => {
     expect(getInstallId({ homeDir: tmpHome() })).not.toBe(first);
   });
 
-  it("persists to ~/.0sec/analytics-id with 0600 perms", () => {
+  it("persists to ~/.0/analytics-id with 0600 perms", () => {
     const home = tmpHome();
     const id = getInstallId({ homeDir: home });
-    const path = join(home, ".0sec", INSTALL_ID_FILENAME);
+    const path = join(home, ".0", INSTALL_ID_FILENAME);
     expect(readFileSync(path, "utf8").trim()).toBe(id);
     const mode = statSync(path).mode & 0o777;
     expect(mode).toBe(0o600);
@@ -45,7 +45,7 @@ describe("getInstallId", () => {
     const home = tmpHome();
     const good = getInstallId({ homeDir: home });
     // Corrupt the file.
-    const path = join(home, ".0sec", INSTALL_ID_FILENAME);
+    const path = join(home, ".0", INSTALL_ID_FILENAME);
     rmSync(path);
     writeFileSync(path, "not-a-uuid\n");
     const regenerated = getInstallId({ homeDir: home });

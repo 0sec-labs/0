@@ -14,7 +14,7 @@
  */
 
 import { randomUUID, createServer } from "./oracle-runtime.js";
-import type { AttackCategory, Finding } from "@0sec/shared";
+import type { AttackCategory, Finding } from "@0/shared";
 
 // ────────────────────────────────────────────────────────────────────
 // Types

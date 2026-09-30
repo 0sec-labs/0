@@ -4,9 +4,9 @@ import {
   type CodexDeviceAuthUpdate,
   type StartCodexDeviceAuthOptions,
 } from "../tui/codex-device-auth.js";
-import type { DesktopCodexAuthStatus } from "@0sec/shared";
+import type { DesktopCodexAuthStatus } from "@0/shared";
 
-export type { DesktopCodexAuthStatus } from "@0sec/shared";
+export type { DesktopCodexAuthStatus } from "@0/shared";
 
 export interface DesktopCodexAuthControllerOptions {
   start?: (options: StartCodexDeviceAuthOptions) => CodexDeviceAuthSession;
@@ -14,7 +14,7 @@ export interface DesktopCodexAuthControllerOptions {
 
 /**
  * Daemon-owned adapter for Codex's official device OAuth flow. The browser
- * renderer sees phase/status text only; the Codex CLI writes and 0sec reads the
+ * renderer sees phase/status text only; the Codex CLI writes and 0 reads the
  * auth file inside the daemon process, so OAuth tokens never cross this API.
  */
 export class DesktopCodexAuthController {

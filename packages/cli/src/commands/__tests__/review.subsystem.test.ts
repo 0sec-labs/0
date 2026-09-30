@@ -1,5 +1,5 @@
 /**
- * `0sec review --subsystem` flag tests (0sec#466).
+ * `0 review --subsystem` flag tests (0#466).
  *
  * Validates that the `--subsystem` flag is threaded through to `runUnified`
  * and that validation logic works correctly.
@@ -22,10 +22,10 @@ async function runCli(argv: string[]): Promise<void> {
   const program = new Command();
   program.exitOverride();
   registerReviewCommand(program);
-  await program.parseAsync(["node", "0sec-cli", ...argv]);
+  await program.parseAsync(["node", "@0/cli", ...argv]);
 }
 
-describe("0sec review --subsystem", () => {
+describe("0 review --subsystem", () => {
   beforeEach(() => {
     runUnifiedMock.mockClear();
     runUnifiedMock.mockResolvedValue(undefined);

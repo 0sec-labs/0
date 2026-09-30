@@ -26,7 +26,7 @@ afterEach(() => {
 });
 
 function supervisor(control = false) {
-  const directory = mkdtempSync(join(tmpdir(), "0sec-docker-process-"));
+  const directory = mkdtempSync(join(tmpdir(), "0-docker-process-"));
   directories.push(directory);
   const binary = join(directory, "docker-fixture");
   const pidFile = join(directory, "processes.json");
@@ -100,7 +100,7 @@ describe.skipIf(process.platform !== "linux" || process.getuid?.() === 0)("super
     // A failed teardown deliberately stops this process's admission pool.
     vi.resetModules();
     const { createDockerEvolutionSandbox } = await import("./sandbox.js");
-    const directory = mkdtempSync(join(tmpdir(), "0sec-docker-cleanup-"));
+    const directory = mkdtempSync(join(tmpdir(), "0-docker-cleanup-"));
     directories.push(directory);
     const removed = join(directory, "removed");
     const pidFile = join(directory, "processes.json");

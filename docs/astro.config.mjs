@@ -39,7 +39,7 @@ export default defineConfig({
         { tag: "link", attrs: { rel: "preconnect", href: "https://0.security", crossorigin: "anonymous" } },
       ],
       description:
-        "Your multi-model, open-source cybersecurity team. Install 0, connect your models, hack & fix your systems. Research Preview.",
+        "Your multi-model, self-improving open-source cybersecurity team. Install 0, connect your models, hack & fix your systems. Research Preview.",
       logo: {
         dark: "./src/assets/0-wordmark-dark.svg",
         light: "./src/assets/0-wordmark-light.svg",
@@ -50,7 +50,7 @@ export default defineConfig({
         {
           icon: "github",
           label: "GitHub",
-          href: "https://github.com/0sec-labs/0sec",
+          href: "https://github.com/0sec-labs/0",
         },
         {
           icon: "external",
@@ -59,7 +59,7 @@ export default defineConfig({
         },
       ],
       defaultLocale: "root",
-      editLink: { baseUrl: "https://github.com/0sec-labs/0sec/edit/main/docs/" },
+      editLink: { baseUrl: "https://github.com/0sec-labs/0/edit/main/docs/" },
       components: {
         Header: "./src/components/DocsHeader.astro",
         Hero: "./src/components/DocsHero.astro",
@@ -88,10 +88,6 @@ export default defineConfig({
         {
           label: "0cloud",
           items: [
-            { label: "Hosted inference setup", link: "/getting-started/#hosted-models" },
-            { label: "Access & credentials", link: "/api-keys/#hosted-inference" },
-            { label: "Accounting & errors", link: "/api-keys/#charging-and-interrupted-requests" },
-            { label: "Models", link: "/configuration/#hosted-configuration" },
             { label: "Managed work & onboarding", link: "/getting-started/#managed-work-and-onboarding" },
             { label: "Availability", link: "/roadmap/#0cloud" },
           ],

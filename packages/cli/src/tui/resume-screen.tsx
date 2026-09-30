@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/react */
 /**
- * The full-screen "resume a session" browser.
+ * The Sessions browser for open native sessions and saved conversations.
  *
  * Resuming a stored engagement used to happen through a compact picker floating
  * above the composer: a flat list of previews, one line each, and nowhere to
@@ -26,10 +26,8 @@
  *    on top of each other, and a bordered box one row short of its content
  *    paints its own border through that content.
  *
- * 2. **Deletion is never one tap.** `d` (or Delete) arms a confirm on the
- *    highlighted row; only a second press actually removes it. A transcript is
- *    plaintext engagement content — the destructive key must not fire on a
- *    fat-fingered keystroke, so anything other than the confirm cancels.
+ * 2. **Deletion is never one tap.** Delete arms a confirm on a saved row;
+ *    only a second press removes it. Open sessions never enter this path.
  */
 
 import React, { useMemo, useRef, useState } from "react";
@@ -41,6 +39,7 @@ import { useSymbols } from "./symbol-context.js";
 import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
 import { Cells, textCells } from "./primitives.js";
 import { DialogSelectBody, type DialogItem } from "./dialog-select.js";
+import { DialogActionButton } from "./dialog-screen-chrome.js";
 import {
   clampDialogSelection,
   moveDialogSelection,
@@ -61,6 +60,8 @@ import {
   CATEGORY_OTHER,
   type ResumeDetailTone,
   type ResumeMode,
+  type LiveSessionSummary,
+  type ResumeItem,
 } from "./resume-layout.js";
 
 /** How many rows page-up and page-down move. */
@@ -71,6 +72,12 @@ export interface ResumeScreenProps {
   sessions: StoredSessionMeta[];
   /** The session currently on screen, drawn with the gutter dot. */
   currentId?: string;
+  /** Open native sessions; selecting one never restores its saved transcript. */
+  liveSessions?: readonly LiveSessionSummary[];
+  currentLiveId?: string;
+  onSelectLive?: (id: string) => void;
+  onCreate?: () => void;
+  onCloseLive?: (id: string) => void;
   /** Live audit history cannot be deleted until its audit has closed. */
   protectedSessionIds?: ReadonlySet<string>;
   /** Injected clock for the age strings. Never an ambient `Date.now()`. */
@@ -82,7 +89,7 @@ export interface ResumeScreenProps {
    * no sessions from the current directory yet.
    */
   currentCwd?: string;
-  /** Enter on a row — hand the id back so the router rebuilds the chat. */
+  /** Enter on a saved row — the router restores the conversation. */
   onResume: (id: string) => boolean;
   /**
    * Confirmed delete of one transcript. Called only after a confirm key on an
@@ -115,6 +122,11 @@ function toneColor(theme: Theme, tone: ResumeDetailTone): string | undefined {
 export function ResumeScreen({
   sessions,
   currentId,
+  liveSessions = [],
+  currentLiveId,
+  onSelectLive,
+  onCreate,
+  onCloseLive,
   protectedSessionIds,
   now,
   currentCwd: propCwd,
@@ -176,10 +188,12 @@ export function ResumeScreen({
     return visibleSessions;
   }, [visibleSessions, scope, currentCwd]);
 
-  const items = useMemo<DialogItem[]>(
+  const items = useMemo<ResumeItem[]>(
     () =>
       resumeItems({
         sessions: scopedSessions,
+        liveSessions,
+        currentLiveId,
         currentId,
         currentCwd,
         now,
@@ -187,13 +201,13 @@ export function ResumeScreen({
         protectedSessionIds,
         symbols,
       }),
-    [scopedSessions, currentId, currentCwd, now, filter, protectedSessionIds, symbols],
+    [scopedSessions, liveSessions, currentLiveId, currentId, currentCwd, now, filter, protectedSessionIds, symbols],
   );
   const byId = useMemo(() => {
-    const map = new Map<string, StoredSessionMeta>();
-    for (const session of visibleSessions) map.set(session.id, session);
+    const map = new Map<string, ResumeItem>();
+    for (const item of items) map.set(item.id, item);
     return map;
-  }, [visibleSessions]);
+  }, [items]);
 
   // Display rows (headings interleaved) drive the panel's scroll/height math.
   const totalRows = useMemo(() => {
@@ -250,6 +264,7 @@ export function ResumeScreen({
     totalRows,
     inDialog,
     hasStatus: statusText.length > 0,
+    hasActions: onCreate !== undefined || (onCloseLive !== undefined && activeItem?.kind === "live"),
   });
   const { contentWidth, panel, stackedRows } = layout;
   const listRows = layout.bodyRows - stackedRows;
@@ -267,6 +282,8 @@ export function ResumeScreen({
     : resumeItems({
       sessions: sessions.filter((session) => !deletedRef.current.has(session.id) &&
         (scopeRef.current === "all" || currentCwd === undefined || sessionCategory(session, currentCwd) === CATEGORY_THIS)),
+      liveSessions,
+      currentLiveId,
       currentId,
       currentCwd,
       now,
@@ -307,9 +324,9 @@ export function ResumeScreen({
     const visible = currentItems();
     const item = visible[selectedIndex(visible)];
     if (!item) return;
-    if (protectedSessionIds?.has(item.id)) {
+    if (item.kind === "live" || protectedSessionIds?.has(item.session.id)) {
       setPendingDelete(null);
-      setDeleteError(`${symbols.fieldProtected} Live audit must close first — its history is protected until the audit ends`);
+      setDeleteError(`${symbols.fieldProtected} Close the open session first — its saved history is protected`);
       return;
     }
     setDeleteError(null);
@@ -318,13 +335,38 @@ export function ResumeScreen({
       return;
     }
     setPendingDelete(null);
-    if (!onDelete(item.id)) {
-      setDeleteError(`${symbols.warning} Failed to delete audit — it may still be live, or file permissions prevent deletion`);
+    if (!onDelete(item.session.id)) {
+      setDeleteError(`${symbols.warning} Failed to delete session — it may still be open, or file permissions prevent deletion`);
       return;
     }
-    deletedRef.current = new Set(deletedRef.current).add(item.id);
+    deletedRef.current = new Set(deletedRef.current).add(item.session.id);
     setDeleted(deletedRef.current);
     selectedIdRef.current = null;
+  };
+
+  const openItem = (item: ResumeItem | undefined) => {
+    if (!item || pendingDeleteRef.current) return;
+    setDeleteError(null);
+    if (item.kind === "live") {
+      if (onSelectLive) onSelectLive(item.session.id);
+      else setDeleteError(`${symbols.warning} Switching open sessions is unavailable`);
+    } else if (!onResume(item.session.id)) {
+      setDeleteError(`${symbols.warning} Could not open session — choose another saved conversation`);
+    }
+  };
+  const closeLive = () => {
+    const visible = currentItems();
+    const item = visible[selectedIndex(visible)];
+    if (item?.kind !== "live" || !onCloseLive) return;
+    setPendingDelete(null);
+    setDeleteError(null);
+    onCloseLive(item.session.id);
+  };
+  const create = () => {
+    if (!onCreate) return;
+    setPendingDelete(null);
+    setDeleteError(null);
+    onCreate();
   };
 
   useKeyboard((key) => {
@@ -335,6 +377,8 @@ export function ResumeScreen({
       setFiltering(false);
       return;
     }
+    if (key.ctrl && key.name === "n" && onCreate) return create();
+    if (key.ctrl && key.name === "w" && onCloseLive) return closeLive();
     if (key.ctrl || key.meta || key.option) return;
     if (key.name === "escape") {
       if (pendingDeleteRef.current) setPendingDelete(null);
@@ -365,7 +409,7 @@ export function ResumeScreen({
       if (pendingDeleteRef.current) return;
       const visible = currentItems();
       const item = visible[selectedIndex(visible)];
-      if (item && !onResume(item.id)) setDeleteError(`${symbols.warning} Could not open audit — choose another saved audit`);
+      openItem(item);
       return;
     }
     if (key.name === "backspace") {
@@ -397,11 +441,17 @@ export function ResumeScreen({
   // then — when the record is protected — the reason the delete key will
   // refuse. Every line is fitted to the exact box the shared body hands it.
   const renderDetail = (item: DialogItem, pane: { width: number; height: number }) => {
-    const session = byId.get(item.id);
+    const source = byId.get(item.id);
     const compact = pane.height < 12;
     const lines = clipResumeDetailLines(
       resumeDetailLines(
-        { session, now, compact, isProtected: protectedSessionIds?.has(item.id) === true },
+        {
+          session: source?.kind === "saved" ? source.session : undefined,
+          liveSession: source?.kind === "live" ? source.session : undefined,
+          now,
+          compact,
+          isProtected: source?.kind === "saved" && protectedSessionIds?.has(source.session.id) === true,
+        },
         pane.width,
         symbols,
       ),
@@ -425,21 +475,22 @@ export function ResumeScreen({
   };
 
   // Empty-state guidance text, context-aware.
-  const totalAll = visibleSessions.length;
+  const totalAll = visibleSessions.length + liveSessions.length;
   const emptyText = (() => {
-    if (filter) return `${symbols.fieldSearch} no audits match this filter`;
-    if (scopedSessions.length === 0 && scope === "project" && hasOtherSessions && totalAll > 0) {
-      return `${symbols.fieldCwd} no audits in this project — press Tab to browse all`;
+    if (filter) return `${symbols.fieldSearch} no sessions match this filter`;
+    if (scopedSessions.length === 0 && liveSessions.length === 0 && scope === "project" && hasOtherSessions) {
+      return `${symbols.fieldCwd} no sessions in this project — press Tab to browse all`;
     }
-    if (totalAll === 0 && filter.length === 0) return `${symbols.fieldSearch} no saved audits to open`;
-    return `${symbols.fieldSearch} no audits to show`;
+    if (totalAll === 0) return `${symbols.fieldSearch} no open or saved sessions`;
+    return `${symbols.fieldSearch} no sessions to show`;
   })();
 
   // ── Title row: glyph + label on the left, the live counter on the right.
   // Split explicitly so the two leaves can never be handed overlapping cells.
-  const highlightProtected = activeItem !== undefined && protectedSessionIds?.has(activeItem.id) === true;
+  const highlightProtected = activeItem !== undefined &&
+    (activeItem.kind === "live" || protectedSessionIds?.has(activeItem.session.id) === true);
   const protectedOnScreen = items.reduce(
-    (count, item) => (protectedSessionIds?.has(item.id) === true ? count + 1 : count),
+    (count, item) => (item.kind === "live" || protectedSessionIds?.has(item.session.id) === true ? count + 1 : count),
     0,
   );
   const titleText = resumeDialogTitle(scope, currentCwd !== undefined && currentCwd.length > 0, symbols);
@@ -471,10 +522,13 @@ export function ResumeScreen({
           cursor={cursor}
           panel={panel}
           query={filter}
-          placeholder={`${symbols.fieldSearch} type to filter audits`}
+          placeholder={`${symbols.fieldSearch} type to filter sessions`}
           gutter={items.some((item) => item.current === true)}
           isCurrent={(item) => item.current === true}
           renderDetail={renderDetail}
+          onActivateRow={(index) => highlight(currentItems(), index)}
+          onHoverRow={(index) => highlight(currentItems(), index)}
+          onScroll={move}
           emptyText={emptyText}
         />
       )}
@@ -493,6 +547,16 @@ export function ResumeScreen({
         </box>
       ) : null}
 
+
+      {layout.actionRows > 0 ? (
+        <box flexDirection="row" width={contentWidth} height={1} gap={1} flexShrink={0} minWidth={0} overflow="hidden">
+          {onCreate ? <DialogActionButton label="New" variant="primary" onPress={create} /> : null}
+          {onCloseLive && activeItem?.kind === "live" ? (
+            <DialogActionButton label="Close" onPress={closeLive} />
+          ) : null}
+          <box flexGrow={1} minWidth={0} />
+        </box>
+      ) : null}
       {layout.footerRows > 0 && contentWidth > 0 ? (
         <box flexDirection="row" width={contentWidth} height={1} flexShrink={0} minWidth={0}>
           <Cells width={contentWidth} fg={theme.MUTED}>
@@ -501,7 +565,7 @@ export function ResumeScreen({
               filter.length > 0,
               items.length > 0,
               scope,
-              scopedSessions.length,
+              items.length,
               highlightProtected,
               symbols,
             )}

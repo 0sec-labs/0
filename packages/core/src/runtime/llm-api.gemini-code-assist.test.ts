@@ -16,9 +16,9 @@ import type { NativeMessage, NativeToolDef } from "./types.js";
  */
 
 const GEMINI_ENV = [
-  "0SEC_GEMINI_ACCESS_TOKEN",
-  "0SEC_GEMINI_OAUTH_REFRESH_TOKEN",
-  "0SEC_GEMINI_PROJECT",
+  "ZERO_GEMINI_ACCESS_TOKEN",
+  "ZERO_GEMINI_OAUTH_REFRESH_TOKEN",
+  "ZERO_GEMINI_PROJECT",
   "GOOGLE_CLOUD_PROJECT",
 ];
 
@@ -48,10 +48,10 @@ function makeRuntime(): LlmApiRuntime {
     provider: "google",
     model: "gemini-2.5-pro",
     env: {
-      "0SEC_GEMINI_OAUTH_REFRESH_TOKEN": "1//refresh-fixture",
-      "0SEC_LLM_FALLBACK": "",
-      "0SEC_FORCE_PROVIDER": "",
-      "0SEC_SKIP_PROVIDER_BANNER": "1",
+      "ZERO_GEMINI_OAUTH_REFRESH_TOKEN": "1//refresh-fixture",
+      "ZERO_LLM_FALLBACK": "",
+      "ZERO_FORCE_PROVIDER": "",
+      "ZERO_SKIP_PROVIDER_BANNER": "1",
     },
   });
 }

@@ -1,13 +1,13 @@
 import type { Command } from "commander";
 import chalk from "chalk";
-import type { Finding, FindingTriageStatus, LayerVerdict } from "@0sec/shared";
+import type { Finding, FindingTriageStatus, LayerVerdict } from "@0/shared";
 import { writePresentationLine, writePresentationErrorLine } from "../presentation/process-output.js";
 import {
   listOsecRunDatabasePaths,
   osecDB,
   resolveOsecDbPath,
   resolveOsecRunStorage,
-} from "@0sec/db";
+} from "@0/db";
 import { buildFindingConsoleCommand } from "../finding-handoff.js";
 
 type FindingsListOptions = {
@@ -210,7 +210,7 @@ async function renderFindingsList(opts: FindingsListOptions): Promise<void> {
   }
 
   console.log("");
-  console.log(chalk.red.bold("  \u25C6 0sec") + chalk.gray(opts.all ? ` findings (${rows.length})` : ` finding groups (${groupFindings(rows).length})`));
+  console.log(chalk.red.bold("  \u25C6 0") + chalk.gray(opts.all ? ` findings (${rows.length})` : ` finding groups (${groupFindings(rows).length})`));
   console.log("");
 
   if (opts.all) {
@@ -265,8 +265,8 @@ async function mutateTriage(
 }
 
 export function registerFindingsCommand(program: Command): void {
-  // `--all` only declared on the parent so `0sec findings list --all`
-  // and `0sec findings --all list` both resolve via the parent's parsed
+  // `--all` only declared on the parent so `0 findings list --all`
+  // and `0 findings --all list` both resolve via the parent's parsed
   // opts (see #325). If both parent and subcommand declared it, Commander
   // would clobber the user's `true` with the subcommand's default `false`.
   const findingsCmd = withFindingsListOptions(
@@ -345,7 +345,7 @@ export function registerFindingsCommand(program: Command): void {
         const related = finding.fingerprint ? db.getRelatedFindings(finding.fingerprint) as FindingRow[] : [finding];
 
         console.log("");
-        console.log(chalk.red.bold("  \u25C6 0sec") + chalk.gray(" finding detail"));
+        console.log(chalk.red.bold("  \u25C6 0") + chalk.gray(" finding detail"));
         console.log("");
 
         console.log(`  ${chalk.white.bold(finding.title)}`);
@@ -386,7 +386,7 @@ export function registerFindingsCommand(program: Command): void {
         // shell's env — see `triage/provenance.ts`.
         {
           const { summarizeTriageProvenance, formatTriageProvenance } = await import(
-            "@0sec/core"
+            "@0/core"
           );
           const provenance = summarizeTriageProvenance({
             ...(finding as unknown as Finding),

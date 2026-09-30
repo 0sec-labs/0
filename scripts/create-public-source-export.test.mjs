@@ -22,7 +22,7 @@ async function exists(path) {
 }
 
 test("public source export contains build inputs and excludes private material", async () => {
-  const tempDir = await mkdtemp(join(tmpdir(), "0sec-public-source-"));
+  const tempDir = await mkdtemp(join(tmpdir(), "0-public-source-"));
   const outputDir = join(tempDir, "export");
 
   try {
@@ -42,8 +42,8 @@ test("public source export contains build inputs and excludes private material",
       "scripts/ci-runner-bootstrap.sh",
       ".github/workflows/main.yml",
       ".github/workflows/docker-publish.yml",
-      "assets/0sec-aperture-ink.svg",
-      "assets/0sec-aperture-white.svg",
+      "assets/0-aperture-ink.svg",
+      "assets/0-aperture-white.svg",
     ]) {
       assert.equal(await exists(join(outputDir, required)), true, `${required} is missing`);
     }
@@ -116,7 +116,7 @@ test("public source export contains build inputs and excludes private material",
     );
     assert.doesNotMatch(
       publicPrWorkflow,
-      /actions\/checkout|pnpm (?:install|build|test)|node dist\/0sec\.js/,
+      /actions\/checkout|pnpm (?:install|build|test)|node dist\/0\.js/,
       "public PR policy must not check out or execute contributor code",
     );
 

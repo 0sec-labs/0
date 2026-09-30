@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildModelCatalog, type CatalogModel } from "./model-catalog.js";
 import {
+  activateModelConnectAction,
   agentRosterLines,
   agentRosterToken,
   buildModelRows,
@@ -13,9 +14,15 @@ import {
   dialogContentWidth,
   indexOfModel,
   isFilterKey,
+  isModelConnectAction,
+  modelConnectActionItem,
+  modelConnectDetailLines,
   modelDetailLines,
+  modelDialogCount,
+  modelResultCount,
   modelTargetLine,
   providerGroupFor,
+  reachableModelCatalog,
   type ModelRow,
 } from "./model-layout.js";
 import { PROVIDERS, providerStates } from "./provider-status.js";
@@ -197,6 +204,82 @@ describe("buildModelRows", () => {
   });
 });
 
+describe("reachableModelCatalog", () => {
+  const catalog: CatalogModel[] = [
+    { id: "claude-sonnet-4-6", provider: "anthropic", price: "$3/15 per M" },
+    { id: "gpt-5.5", provider: "openai", price: "$5/30 per M" },
+    { id: "codex-account-model", provider: "chatgpt-codex", price: "subscription" },
+    { id: "deepseek-v4.1", provider: "deepseek", price: "$0.5/1 per M" },
+  ];
+
+  it("excludes all model rows without a configured provider route", () => {
+    expect(reachableModelCatalog(catalog, providerStates({}), { env: {} })).toEqual([]);
+  });
+
+  it("includes exact provider rows only for configured credentials", () => {
+    const env = {
+      ANTHROPIC_API_KEY: "anthropic-test",
+      DEEPSEEK_API_KEY: "deepseek-test",
+      OPENAI_API_KEY: "openai-test",
+    };
+    const rows = reachableModelCatalog(catalog, providerStates(env), { env });
+    expect(rows.map((model) => model.id).sort()).toEqual(["claude-sonnet-4-6", "deepseek-v4.1", "gpt-5.5"]);
+  });
+
+  it("maps OpenAI model ids to Azure only when the Azure key and endpoint are configured", () => {
+    const keyOnly = { AZURE_OPENAI_API_KEY: "azure-test" };
+    expect(reachableModelCatalog(catalog, providerStates(keyOnly), { env: keyOnly })).toEqual([]);
+
+    const env = {
+      AZURE_OPENAI_API_KEY: "azure-test",
+      AZURE_OPENAI_BASE_URL: "https://azure.example.test/openai/v1",
+    };
+    expect(reachableModelCatalog(catalog, providerStates(env), { env })).toContainEqual({
+      id: "gpt-5.5",
+      provider: "azure",
+      price: "$5/30 per M",
+    });
+  });
+  it("keeps both connected OpenAI routes distinct for the same model id", () => {
+    const env = {
+      OPENAI_API_KEY: "openai-test",
+      AZURE_OPENAI_API_KEY: "azure-test",
+      AZURE_OPENAI_BASE_URL: "https://azure.example.test/openai/v1",
+    };
+    const rows = reachableModelCatalog(catalog, providerStates(env), { env, providerId: "azure" });
+    expect(rows.filter((model) => model.id === "gpt-5.5").map((model) => model.provider)).toEqual(["openai", "azure"]);
+  });
+
+  it("includes Codex account rows only after successful model discovery", () => {
+    const env = { ZERO_CHATGPT_ACCESS_TOKEN: "codex-test" };
+    const states = providerStates(env);
+    expect(reachableModelCatalog(catalog, states, { env })).toEqual([]);
+
+    const rows = reachableModelCatalog(catalog, states, {
+      env,
+      codexModelIds: new Set(["codex-account-model"]),
+    });
+    expect(rows.map((model) => model.id)).toEqual(["codex-account-model"]);
+  });
+});
+
+describe("the Connect action", () => {
+  it("opens Connections, stays outside the model count, and explains its destination", () => {
+    const action = modelConnectActionItem();
+    let connectionsOpened = 0;
+    expect(isModelConnectAction(action)).toBe(true);
+    expect(activateModelConnectAction(action, () => { connectionsOpened += 1; })).toBe(true);
+    expect(connectionsOpened).toBe(1);
+
+    const items = [{ id: "claude-sonnet-4-6" }, action];
+    expect(modelResultCount(items)).toBe(1);
+    expect(modelDialogCount(modelResultCount(items), false)).toBe("1 model");
+    expect(modelConnectDetailLines(60).map((line) => line.text).join(" ")).toContain("Opens Connections");
+    expect(activateModelConnectAction({ id: "claude-sonnet-4-6" }, () => { connectionsOpened += 1; })).toBe(false);
+    expect(connectionsOpened).toBe(1);
+  });
+});
+
 // ---------------------------------------------------------------------------
 
 describe("provider credential reporting", () => {
@@ -246,11 +329,12 @@ describe("provider credential reporting", () => {
   it("names every configured provider in the summary line", () => {
     expect(credentialSummary(EMPTY_ENV)).toContain("none detected");
     expect(credentialSummary(LIT_ENV)).toContain(LIT_PROVIDER?.label ?? "");
+    const activeProviders = PROVIDERS;
     const all = providerStates(
-      Object.fromEntries(PROVIDERS.map((info) => [info.envVars[0] ?? "", "value"])),
+      Object.fromEntries(activeProviders.map((info) => [info.envVars[0] ?? "", "value"])),
     );
-    expect(configuredProviderLabels(all)).toHaveLength(PROVIDERS.length);
-    for (const info of PROVIDERS) expect(credentialSummary(all)).toContain(info.label);
+    expect(configuredProviderLabels(all)).toHaveLength(activeProviders.length);
+    for (const info of activeProviders) expect(credentialSummary(all)).toContain(info.label);
   });
 
   it("labels each credential state in words an operator can act on", () => {
@@ -486,4 +570,18 @@ describe("the meta-row budget", () => {
       if (layout.metaRows > 0) expect(layout.bodyRows).toBeGreaterThanOrEqual(6);
     }
   });
+});
+
+
+it("marks and prioritizes the active connection when both OpenAI routes offer the same model ID", () => {
+  const rows = buildModelRows({
+    catalog: [
+      { id: "gpt-5.5", provider: "openai", price: "$1" },
+      { id: "gpt-5.5", provider: "chatgpt-codex", price: "subscription" },
+    ],
+    states: providerStates({ OPENAI_API_KEY: "synthetic-key", ZERO_CHATGPT_ACCESS_TOKEN: "synthetic-token" }),
+    activeModel: "gpt-5.5", activeProvider: "chatgpt-codex",
+  });
+  expect(rows[0].group.id).toBe("chatgpt-codex");
+  expect(rows.filter((row) => row.kind === "model" && row.active).map((row) => row.group.id)).toEqual(["chatgpt-codex"]);
 });

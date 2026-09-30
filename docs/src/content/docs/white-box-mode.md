@@ -29,7 +29,7 @@ In the benchmark runner, `--white-box` sets the repo path to the challenge
 directory:
 
 ```bash
-pnpm --filter @0sec/benchmark exec tsx src/xbow-runner.ts --agentic --white-box
+pnpm --filter @0/benchmark exec tsx src/xbow-runner.ts --agentic --white-box
 ```
 
 ## What changes

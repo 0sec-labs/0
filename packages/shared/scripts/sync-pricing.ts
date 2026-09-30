@@ -9,8 +9,8 @@
  *              CURATED models it covers (EXACT key match only — no fuzzy aliasing,
  *              so generated data is always trustworthy). Nobody hand-types a rate.
  *
- * Run: `pnpm --filter @0sec/shared sync-pricing`         (check drift)
- *      `pnpm --filter @0sec/shared sync-pricing --write` (refresh the table)
+ * Run: `pnpm --filter @0/shared sync-pricing`         (check drift)
+ *      `pnpm --filter @0/shared sync-pricing --write` (refresh the table)
  *
  * Models the OSS feed does NOT cover (glm-*, llama-4-*, mistral-*, newest Claude)
  * stay in MANUAL_PRICING in src/pricing.ts — that residue is irreducible because
@@ -30,7 +30,7 @@ const LITELLM_URL =
  * MANUAL_PRICING instead). Add a model key here once the OSS feed carries it.
  */
 const CURATED = [
-  "gpt-6-astra",
+  "gpt-6-astra", "gpt-6-sol", "gpt-6.1-sol", "gpt-6-luna",
   "claude-fable-5-1", "claude-opus-5", "claude-sonnet-5",
   "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash",
   "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.1-pro-preview",
@@ -87,7 +87,7 @@ async function writeGenerated(oss: Record<string, LiteLlmEntry>): Promise<void> 
   const out = join(here, "..", "src", "pricing.oss.generated.ts");
   const banner =
     "// AUTO-GENERATED from the LiteLLM OSS pricing feed by scripts/sync-pricing.ts --write.\n" +
-    "// DO NOT EDIT BY HAND. Refresh: pnpm --filter @0sec/shared sync-pricing --write\n" +
+    "// DO NOT EDIT BY HAND. Refresh: pnpm --filter @0/shared sync-pricing --write\n" +
     "// $ per 1M tokens. Models the feed lacks live in MANUAL_PRICING (src/pricing.ts).\n";
   const body =
     `export const OSS_PRICING: Record<string, { input: number; output: number; cachedInput?: number }> = {\n` +

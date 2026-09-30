@@ -1,60 +1,65 @@
 /**
- * Memorable agent names.
- *
- * A spawned agent is far easier to follow as `SilentScout` than as
- * `subagent-9f3a-…`. Names are `AdjectiveNoun` (matching Oh My Pi), derived
- * deterministically from the agent's id so the SAME agent always gets the SAME
- * name — stable across a UI re-render or a resumed session — and then uniquified
- * against the names already in use so two agents never collide.
- *
- * `Main` is the reserved primary-session name and is never produced here. Pure:
- * no clock, no randomness (a hash of the id is the only entropy), so a test can
- * assert an exact name for an id.
+ * Task-derived agent labels and case-insensitive fleet name uniqueness.
+ * Opaque agent ids remain the mailbox addresses; labels describe the work.
  */
 
 /** The reserved name for the primary session. Never generated. */
 export const PRIMARY_AGENT_NAME = "Main";
 
 /**
- * Adjective + noun word banks. Kept calm and professional (this is a security
- * tool, not a toy) and deliberately co-prime-ish in length so `adj * NOUNS +
- * noun` spreads names widely before repeating. Both are single tokens so a name
- * is always a clean `[A-Za-z]+` id — safe as a mailbox/roster id with no
- * sanitisation surprises.
+ * One bounded, readable label for both live workers and retained task cards.
+ * Structured assignments prefer the goal/change over generic Markdown headings
+ * or acceptance instructions. Older records can supply their name as a fallback.
  */
-const ADJECTIVES = [
-  "Silent", "Swift", "Keen", "Bold", "Calm", "Sharp", "Quiet", "Rapid",
-  "Clever", "Steady", "Bright", "Amber", "Cobalt", "Crimson", "Golden", "Ivory",
-  "Iron", "Lunar", "Solar", "Nimble", "Prime", "Vivid", "Astral", "Ember",
-  "Frost", "Onyx", "Quartz", "Scarlet", "Slate", "Umber", "Verdant", "Zephyr",
-] as const;
-
-const NOUNS = [
-  "Scout", "Falcon", "Warden", "Sentinel", "Ranger", "Probe", "Cipher", "Beacon",
-  "Vector", "Harrier", "Lantern", "Compass", "Anchor", "Drifter", "Forge", "Gauge",
-  "Herald", "Lookout", "Marshal", "Nomad", "Oracle", "Pilot", "Quill", "Runner",
-  "Seeker", "Tracer", "Voyager", "Watcher", "Weaver", "Wraith", "Sparrow", "Delver",
-] as const;
-
-/**
- * djb2 hash (unsigned 32-bit) of the id — the same family used for the accent
- * colour, so name and colour are both stable functions of the id. Inlined here
- * rather than imported to keep `core` free of a dependency on the CLI package.
- */
-function hashId(text: string): number {
-  let hash = 5381;
-  for (let i = 0; i < text.length; i += 1) {
-    hash = ((hash << 5) + hash) ^ text.charCodeAt(i);
+export function agentTaskLabel(task: string, fallbackName?: string): string {
+  let label = "";
+  let priority = 5;
+  let sectionPriority = 4;
+  for (let start = 0; start < task.length;) {
+    const end = task.indexOf("\n", start);
+    let line = task.slice(start, end < 0 ? task.length : end).trim();
+    start = end < 0 ? task.length : end + 1;
+    if (!line) continue;
+    const heading = /^#{1,6}\s+(.+?)\s*#*$/.exec(line);
+    if (heading) {
+      const section = /^(Goal|Task|Change|Target|Constraints?|Contract|Acceptance|Non-goals?)(?:\s*[:—–-]\s*(.*))?$/i.exec(heading[1]!);
+      if (section) {
+        switch (section[1]!.toLowerCase()) {
+          case "goal": sectionPriority = 0; break;
+          case "task": sectionPriority = 1; break;
+          case "change": sectionPriority = 2; break;
+          case "target": sectionPriority = 3; break;
+          default: sectionPriority = -1;
+        }
+        line = section[2]?.trim() ?? "";
+      } else {
+        sectionPriority = 4;
+        line = heading[1]!;
+      }
+    }
+    if (!line || sectionPriority < 0 || sectionPriority >= priority) continue;
+    const candidate = line
+      .replace(/^(?:[-*+]|\d+[.)])\s+/, "")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/[`*]/g, "")
+      .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!candidate) continue;
+    label = candidate;
+    priority = sectionPriority;
+    if (priority === 0) break;
   }
-  return hash >>> 0;
-}
-
-/** The base `AdjectiveNoun` name for an id, before uniquification. */
-export function baseAgentName(id: string): string {
-  const h = hashId(id || "peer");
-  const adj = ADJECTIVES[h % ADJECTIVES.length];
-  const noun = NOUNS[Math.floor(h / ADJECTIVES.length) % NOUNS.length];
-  return `${adj}${noun}`;
+  if (!label) {
+    label = (fallbackName ?? "Worker")
+      .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim() || "Worker";
+  }
+  if (label.length <= 64) return label;
+  // Never split a surrogate pair at the label boundary.
+  const end = /[\ud800-\udbff]/.test(label[62]!) ? 62 : 63;
+  return `${label.slice(0, end).trimEnd()}…`;
 }
 
 /**
@@ -72,17 +77,16 @@ export function uniquifyAgentName(name: string, taken: Iterable<string>): string
 }
 
 /**
- * The name for a freshly spawned agent: a stable `AdjectiveNoun` from its id,
- * uniquified against the names already in use (which always includes `Main`).
- * A child of a child is dot-qualified under its parent (`Explorer.Scout`) so the
- * lineage is legible in the id itself, matching OMP's nesting scheme.
+ * A task-derived name for a freshly spawned agent, unique within its fleet.
+ * A child of a child can be dot-qualified under its parent so lineage remains
+ * readable without changing either worker's opaque address.
  */
 export function assignAgentName(
-  id: string,
+  task: string,
   taken: Iterable<string>,
   parentName?: string,
 ): string {
-  const base = baseAgentName(id);
+  const base = agentTaskLabel(task);
   const qualified = parentName && parentName !== PRIMARY_AGENT_NAME ? `${parentName}.${base}` : base;
   return uniquifyAgentName(qualified, taken);
 }

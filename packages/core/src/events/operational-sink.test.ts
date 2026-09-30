@@ -302,12 +302,12 @@ describe("operational NDJSON sink — privacy boundary", () => {
   it("requires JSON format and subscribes only once", () => {
     eventBus.clear();
     _resetOperationalSinkSubscriptionForTests();
-    vi.stubEnv("0SEC_LOG_FORMAT", "text");
+    vi.stubEnv("ZERO_LOG_FORMAT", "text");
     maybeSubscribeOperationalEventSink();
     eventBus.emit("step_started", { step: "analyze" });
     expect(capture.lines()).toEqual([]);
 
-    vi.stubEnv("0SEC_LOG_FORMAT", "json");
+    vi.stubEnv("ZERO_LOG_FORMAT", "json");
     maybeSubscribeOperationalEventSink();
     maybeSubscribeOperationalEventSink();
     eventBus.emit("cost_update", { cost_usd: 0.42 });

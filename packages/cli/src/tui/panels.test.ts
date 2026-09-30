@@ -17,7 +17,7 @@ import { getAllCapabilities } from "./capability-registry.js";
 const ROW_SHAPES: Record<string, PanelRow[]> = {
   allLabelled: [
     { label: "/help", value: "Show available slash commands" },
-    { label: "/mode [standard|copilot|yolo]", value: "Set the approval mode" },
+    { label: "/model", value: "Choose the model for this audit" },
   ],
   noneLabelled: [{ value: "read_file" }, { value: "run_command" }],
   mixed: [
@@ -129,13 +129,6 @@ const COMMANDS: HelpCommand[] = [
   },
   { name: "status", aliases: [], description: "Show session status", category: "info" },
   { name: "clear", aliases: ["new"], description: "Clear the conversation", category: "session" },
-  {
-    name: "mode",
-    aliases: [],
-    description: "Set the approval mode",
-    usage: "/mode [standard|copilot|yolo]",
-    category: "mode",
-  },
   { name: "exit", aliases: ["quit"], description: "End the session", category: "system" },
 ];
 
@@ -151,7 +144,7 @@ describe("buildHelpPanel", () => {
   it("groups commands by category, in a stable order, with headings", () => {
     const panel = buildHelpPanel(COMMANDS);
     expect(panel.title).toBe("Slash commands");
-    expect(headings(panel)).toEqual(["Info", "Session", "Mode", "System"]);
+    expect(headings(panel)).toEqual(["Info", "Session", "System"]);
 
     // Each heading must be immediately followed by its own commands.
     const infoIndex = panel.rows.findIndex((r) => r.heading && r.value === "Info");
@@ -161,9 +154,7 @@ describe("buildHelpPanel", () => {
 
   it("uses the usage hint as the label when a command takes arguments", () => {
     const panel = buildHelpPanel(COMMANDS);
-    expect(rowFor(panel, "/mode [standard|copilot|yolo]")?.value).toContain(
-      "Set the approval mode",
-    );
+    expect(rowFor(panel, "/help [command]")?.value).toContain("Show available slash commands");
     expect(rowFor(panel, "/status")).toBeDefined();
   });
 
@@ -177,12 +168,12 @@ describe("buildHelpPanel", () => {
   });
 
   it("reports the count in the subtitle and reflects the query when given", () => {
-    expect(buildHelpPanel(COMMANDS).subtitle).toBe("5 commands");
+    expect(buildHelpPanel(COMMANDS).subtitle).toBe("4 commands");
 
     const filtered = buildHelpPanel(COMMANDS, "mode");
     expect(filtered.subtitle).toContain("mode");
     expect(filtered.subtitle).toMatch(/matching/i);
-    expect(filtered.rows.some((r) => r.label === "/mode [standard|copilot|yolo]")).toBe(true);
+    expect(filtered.rows.some((r) => r.label === "/mode")).toBe(false);
     expect(filtered.rows.some((r) => r.label === "/exit")).toBe(false);
   });
 

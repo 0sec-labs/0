@@ -24,11 +24,11 @@ pnpm install --frozen-lockfile
 pnpm build
 ```
 
-The bundled CLI is `dist/0sec.js`:
+The bundled CLI is `dist/0.js`:
 
 ```bash
-node dist/0sec.js --version
-node dist/0sec.js doctor
+node dist/0.js --version
+node dist/0.js doctor
 ```
 
 ## Checks
@@ -50,7 +50,8 @@ For documentation changes, use `pnpm docs:check` and `pnpm build:docs`.
 If CLI declarations changed, regenerate the command reference with
 `pnpm docs:sync` and review the resulting diff.
 
-Desktop source setup is documented in
+Desktop is a development-only alpha, excluded from normal CLI builds and releases.
+Its explicit source setup is documented in
 [`docs/src/content/docs/desktop.md`](docs/src/content/docs/desktop.md).
 The independent Python project in [`0verse/`](0verse/README.md) uses its own
 `pyproject.toml`, `uv.lock`, and Makefile; root pnpm checks do not replace
@@ -61,7 +62,7 @@ For test-target work, start the local fixtures in separate terminals:
 ```bash
 pnpm vulnerable
 pnpm safe
-pnpm --filter @0sec/test-targets test
+pnpm --filter @0/test-targets test
 ```
 
 ## Attack templates
@@ -73,7 +74,7 @@ payload IDs/prompts, and detection rules. The `AttackTemplate` type lives in
 `packages/shared/src/types.ts`.
 
 The template package's `prebuild` regenerates `src/embedded.ts` from YAML.
-Run `pnpm --filter @0sec/templates build` and include that generated update;
+Run `pnpm --filter @0/templates build` and include that generated update;
 do not maintain a second hand-edited copy of a template in the embedded file.
 
 ## Pull requests

@@ -1,10 +1,10 @@
-// `0sec theme` — list, install, apply, export, and remove console colour themes.
+// `0 theme` — list, install, apply, export, and remove console colour themes.
 //
 // Themes are shareable ARTIFACTS, not code. A theme is a colour palette (a token
 // → #RRGGBB map) plus display metadata. It rides the same registry the plugin
 // system uses, but as pure DATA: an entry with `kind: "theme"` in the index is
 // validated, its palette is checked against the FULL WCAG `validateTheme`, and
-// its bytes are written to `~/.0sec/themes/<id>.json`. Nothing is ever executed
+// its bytes are written to `~/.0/themes/<id>.json`. Nothing is ever executed
 // — a theme has no `source` files, no tools, no capabilities, and can never
 // reach the tool loader or a capability gate.
 //
@@ -16,11 +16,11 @@
 //
 // No marketplace ships: the registry URL is empty by default (same discipline as
 // the plugin registry). `install` is a clear no-op until an operator points
-// --registry (or $0SEC_REGISTRY_URL) at a URL they trust.
+// --registry (or $ZERO_REGISTRY_URL) at a URL they trust.
 //
 // DEPENDENCY NOTE (mirrors commands/plugin.ts): the core registry client is
 // consumed through an injected port whose shapes are declared LOCALLY, so this
-// command type-checks against @0sec/core's published surface without depending on
+// command type-checks against @0/core's published surface without depending on
 // in-flight core d.ts changes, and unit tests inject a fake port (no network).
 
 import { writeFileSync } from "node:fs";
@@ -85,7 +85,7 @@ interface SignatureVerifierView {
   verify(canonicalPayload: string, signature: string): boolean;
 }
 
-/** Everything this command needs from @0sec/core. Injected; the default lazily
+/** Everything this command needs from @0/core. Injected; the default lazily
  *  imports the real barrel and casts through this view. */
 export interface ThemeCorePort {
   fetchRegistryIndex(
@@ -99,7 +99,7 @@ export interface ThemeCorePort {
 let cachedCore: ThemeCorePort | undefined;
 async function defaultThemeCorePort(): Promise<ThemeCorePort> {
   if (cachedCore) return cachedCore;
-  const mod = (await import("@0sec/core")) as unknown as ThemeCorePort;
+  const mod = (await import("@0/core")) as unknown as ThemeCorePort;
   cachedCore = mod;
   return mod;
 }
@@ -111,7 +111,7 @@ export interface ThemeCommandDeps {
   err?: (line: string) => void;
   homeDir?: string;
   projectDir?: string;
-  /** Registry index URL (https). Defaults to $0SEC_REGISTRY_URL then the (empty)
+  /** Registry index URL (https). Defaults to $ZERO_REGISTRY_URL then the (empty)
    *  core default, so no endpoint ships. */
   registryUrl?: string;
   /** Injected fetch; NEVER the real one in tests. */
@@ -130,7 +130,7 @@ function errOf(deps: ThemeCommandDeps): (line: string) => void {
   return deps.err ?? ((l) => console.error(l));
 }
 function registryUrlOf(deps: ThemeCommandDeps, core: ThemeCorePort): string {
-  return (deps.registryUrl ?? process.env["0SEC_REGISTRY_URL"] ?? core.DEFAULT_REGISTRY_URL ?? "").trim();
+  return (deps.registryUrl ?? process.env["ZERO_REGISTRY_URL"] ?? core.DEFAULT_REGISTRY_URL ?? "").trim();
 }
 
 // ── list ────────────────────────────────────────────────────────────────────
@@ -164,7 +164,7 @@ export function runThemeList(deps: ThemeCommandDeps = {}): void {
     for (const entry of installed) line(entry);
   }
   out("");
-  out(chalk.dim("Apply one with `0sec theme apply <id>`; install more with `0sec theme install <id>`."));
+  out(chalk.dim("Apply one with `0 theme apply <id>`; install more with `0 theme install <id>`."));
   process.exitCode = EXIT_OK;
 }
 
@@ -183,7 +183,7 @@ export async function runThemeInstall(id: string, deps: ThemeCommandDeps = {}): 
   const registryUrl = registryUrlOf(deps, core);
   if (registryUrl.length === 0) {
     err(chalk.red("The Hackstore is disabled (registry URL is empty), so nothing can be installed."));
-    err("  Unset 0SEC_REGISTRY_URL for the default community Hackstore, or point --registry at a theme index URL you trust.");
+    err("  Unset ZERO_REGISTRY_URL for the default community Hackstore, or point --registry at a theme index URL you trust.");
     process.exitCode = EXIT_USER_ERROR;
     return;
   }
@@ -240,7 +240,7 @@ export async function runThemeInstall(id: string, deps: ThemeCommandDeps = {}): 
   out(`  Signature: ${artifact.signatureState}`);
   out(chalk.dim("  No code ran — a theme is data (a palette), never an executable plugin."));
   out(`  Apply it with:`);
-  out(chalk.cyan(`    0sec theme apply ${id}`));
+  out(chalk.cyan(`    0 theme apply ${id}`));
   process.exitCode = EXIT_OK;
 }
 
@@ -257,7 +257,7 @@ export function runThemeApply(id: string, deps: ThemeCommandDeps = {}): void {
 
   if (!isKnownTheme(id)) {
     err(chalk.red(`"${id}" is not a known theme (neither a built-in nor an installed id).`));
-    err("  See `0sec theme list`, or install it with `0sec theme install <id>`.");
+    err("  See `0 theme list`, or install it with `0 theme install <id>`.");
     process.exitCode = EXIT_USER_ERROR;
     return;
   }

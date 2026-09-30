@@ -10,7 +10,7 @@ import type {
 
 /** Read the per-session control token injected by the dashboard server. */
 function getControlToken(): string | null {
-  const meta = document.querySelector('meta[name="0sec-control-token"]');
+  const meta = document.querySelector('meta[name="0-control-token"]');
   return meta?.getAttribute("content") ?? null;
 }
 
@@ -22,7 +22,7 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   // Attach the control token to all requests — the server only enforces it
   // on /api/control/ endpoints, but sending it unconditionally is simpler.
   const token = getControlToken();
-  if (token) headers["X-0sec-Control-Token"] = token;
+  if (token) headers["X-0-Control-Token"] = token;
 
   const response = await fetch(path, {
     ...init,
@@ -43,7 +43,7 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("json")) {
     throw new Error(
-      `Dashboard API returned ${contentType || "non-JSON content"} for ${path}. Serve the UI through \`0sec dashboard\`.`,
+      `Dashboard API returned ${contentType || "non-JSON content"} for ${path}. Serve the UI through \`0 dashboard\`.`,
     );
   }
   return response.json() as Promise<T>;

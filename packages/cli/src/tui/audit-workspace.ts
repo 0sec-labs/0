@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared";
 import { appendTuiEvent } from "./tui-crash.js";
-import type { ConsoleSession } from "@0sec/core";
+import type { ConsoleSession } from "@0/core";
 import type { ChatScreenOptions, ChatScreenProps } from "./chat-screen.js";
 import type { ConnectionRecovery } from "./connection-recovery.js";
 
@@ -205,17 +205,6 @@ export class AuditWorkspace {
     this.#refreshStatus(record);
     if (changed || unread !== record.unread) this.#emit();
   }
-  /** Consume setup choices once, before any ChatScreen owns this audit. */
-  applyInitialChoices(id: string): boolean {
-    const record = this.get(id);
-    if (!record || record.session || record.closeHandle.current || record.closeRequested) return false;
-    this.#records = this.#records.map((item) => item.id === id
-      ? { ...item, options: { ...item.options, ...item.nextOptions }, nextOptions: {} }
-      : item);
-    this.#emit();
-    return true;
-  }
-
   /**
    * Reconfigure the audit's live runtime in place, when a ChatScreen has bound
    * its runtime handle. Selection never changes runtime lifetime; a busy turn

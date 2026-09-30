@@ -3,7 +3,7 @@ import {
   createDrizzleFromShim,
   type ShimmedDatabase,
 } from "./wasm-shim.js";
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared";
 import { asc, eq, desc, and, gt, inArray, or } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
@@ -21,6 +21,7 @@ import {
 import type {
   ArtifactRecord,
   Finding,
+  SourceVerificationSummary,
   VerificationResult,
   AttackResult,
   CaseRecord,
@@ -31,7 +32,7 @@ import type {
   FindingTriageStatus,
   WorkItemRecord,
   WorkerRecord,
-} from "@0sec/shared";
+} from "@0/shared";
 import * as schema from "./schema.js";
 import {
   findingStatuses,
@@ -41,14 +42,14 @@ import {
 } from "./schema.js";
 
 const DEFAULT_DB_DIR = homeStateDir();
-const DEFAULT_DB_PATH = join(DEFAULT_DB_DIR, "0sec.db");
+const DEFAULT_DB_PATH = join(DEFAULT_DB_DIR, "0.db");
 
 // Drizzle infers UUID-shaped text from Node's randomUUID default, while SQLite
 // itself permits existing legacy and orchestrator-provided string identifiers.
 type SQLiteScanId = `${string}-${string}-${string}-${string}-${string}`;
 
 export function resolveOsecDbPath(dbPath?: string): string {
-  const configuredPath = process.env["0SEC_DB_PATH"]?.trim();
+  const configuredPath = process.env["ZERO_DB_PATH"]?.trim();
   return dbPath ?? (configuredPath ? configuredPath : DEFAULT_DB_PATH);
 }
 
@@ -127,7 +128,7 @@ function ensureDatabaseHealthy(sqlite: ShimmedDatabase): void {
 /**
  * Migrate a pre-0.7.1 WAL-mode SQLite file in-place to legacy rollback mode.
  *
- * Why this exists: 0sec versions <0.7.1 used better-sqlite3 and set the
+ * Why this exists: 0 versions <0.7.1 used better-sqlite3 and set the
  * database to WAL mode (`PRAGMA journal_mode = WAL`). WAL mode writes a
  * `2` to bytes 18 (file format write version) and 19 (read version) of
  * the SQLite file header. The WASM-backed engine we switched to in 0.7.1
@@ -210,7 +211,7 @@ function migrateWalHeaderIfNeeded(path: string): void {
   if (hadWalData) {
     // eslint-disable-next-line no-console -- user-facing one-time notice
     console.warn(
-      `[0sec] Migrated ${path} from WAL mode to rollback mode for WASM engine compatibility. ` +
+      `[0] Migrated ${path} from WAL mode to rollback mode for WASM engine compatibility. ` +
         `A non-empty WAL sidecar was present and has been removed; any uncommitted transactions ` +
         `from a prior crashed run were discarded.`,
     );
@@ -232,7 +233,7 @@ function migrateWalHeaderIfNeeded(path: string): void {
  * that for free.
  *
  * Heuristic: if the lock directory's mtime is older than 10 seconds, we
- * assume the holder is dead. Legitimate 0sec operations acquire and
+ * assume the holder is dead. Legitimate 0 operations acquire and
  * release the lock many times per second (SQLite locks are per-query,
  * not per-connection), so a 10-second-old lock that nobody has touched
  * is overwhelmingly likely to be a crash corpse. In the rare case where
@@ -262,7 +263,7 @@ function clearStaleLockIfAny(path: string): void {
     rmSync(lockPath, { recursive: true, force: true });
     // eslint-disable-next-line no-console -- user-facing one-time notice
     console.warn(
-      `[0sec] Removed stale database lock at ${lockPath} ` +
+      `[0] Removed stale database lock at ${lockPath} ` +
         `(age ${Math.floor(ageMs / 1000)}s — previous holder likely crashed).`,
     );
   } catch {
@@ -271,7 +272,7 @@ function clearStaleLockIfAny(path: string): void {
   }
 }
 
-// ── Persistent credential store + trust graph (0sec#771) ──
+// ── Persistent credential store + trust graph (0#771) ──
 
 /** A stored persistent-credential row. NEVER carries the plaintext secret. */
 export interface PersistentCredentialRow {
@@ -393,8 +394,8 @@ export class osecDB {
       // eslint-disable-next-line no-console -- user-facing repair notice
       console.warn(
         backupPath
-          ? `[0sec] Recovered malformed database at ${path}. Backup saved to ${backupPath}.`
-          : `[0sec] Recovered malformed database state at ${path} by recreating a fresh database.`,
+          ? `[0] Recovered malformed database at ${path}. Backup saved to ${backupPath}.`
+          : `[0] Recovered malformed database state at ${path} by recreating a fresh database.`,
       );
     }
   }
@@ -402,7 +403,7 @@ export class osecDB {
   private initializeDatabase(path: string): void {
     this.sqlite = createShimmedDatabase(path);
     // WAL is intentionally omitted: node-sqlite3-wasm's VFS does not support
-    // it, and 0sec's single-writer CLI workload does not benefit from it.
+    // it, and 0's single-writer CLI workload does not benefit from it.
     this.sqlite.pragma("foreign_keys = ON");
     ensureDatabaseHealthy(this.sqlite);
     this.db = createDrizzleFromShim(this.sqlite, { schema });
@@ -422,7 +423,7 @@ export class osecDB {
   }
 
   /**
-   * Upgrade databases created by older 0sec versions.
+   * Upgrade databases created by older 0 versions.
    *
    * SCHEMA_TABLES_SQL (above) now contains every table and every column from
    * the drizzle schema, so fresh installs need no patching. This method only
@@ -431,7 +432,7 @@ export class osecDB {
    * table_info is cached by SQLite) and the ALTERs are no-ops when the
    * column is already present, so running on a fresh DB is harmless.
    *
-   * See: https://github.com/0sec-labs/0sec/issues/420
+   * See: https://github.com/0sec-labs/0/issues/420
    */
   private migrate(): void {
     const cols = this.sqlite
@@ -474,23 +475,23 @@ export class osecDB {
     if (!colNames.has("workflowUpdatedAt")) {
       this.sqlite.exec("ALTER TABLE findings ADD COLUMN workflowUpdatedAt TEXT");
     }
-    // 0sec#112 — per-layer triage telemetry. JSON-stringified LayerVerdict[].
+    // 0#112 — per-layer triage telemetry. JSON-stringified LayerVerdict[].
     if (!colNames.has("layerVerdicts")) {
       this.sqlite.exec("ALTER TABLE findings ADD COLUMN layerVerdicts TEXT");
     }
     if (!colNames.has("impactAssessment")) {
       this.sqlite.exec("ALTER TABLE findings ADD COLUMN impactAssessment TEXT");
     }
-    // 0sec#170 — proof-of-concept step graph. JSON-stringified PocStep[].
+    // 0#170 — proof-of-concept step graph. JSON-stringified PocStep[].
     if (!colNames.has("pocSteps")) {
       this.sqlite.exec("ALTER TABLE findings ADD COLUMN pocSteps TEXT");
     }
-    // 0sec#193 — machine-executable verification contract. JSON-stringified
+    // 0#193 — machine-executable verification contract. JSON-stringified
     // VerificationSpec. Optional/additive: legacy findings keep working.
     if (!colNames.has("verificationSpec")) {
       this.sqlite.exec("ALTER TABLE findings ADD COLUMN verificationSpec TEXT");
     }
-    // 0sec#171 — captured PoC execution report. JSON-stringified
+    // 0#171 — captured PoC execution report. JSON-stringified
     // PocExecutionReport written by `disclose --target-url …` when the
     // behavioural re-verify runtime ran the step graph against a live
     // target. Optional/additive.
@@ -516,6 +517,11 @@ export class osecDB {
     }
     if (!colNames.has("reviewAnnotation")) {
       this.sqlite.exec("ALTER TABLE findings ADD COLUMN reviewAnnotation TEXT");
+    }
+    // This summary is code-only source evidence, not a deterministic replay
+    // result. Older rows remain NULL and hydrate without the optional field.
+    if (!colNames.has("sourceVerification")) {
+      this.sqlite.exec("ALTER TABLE findings ADD COLUMN sourceVerification TEXT");
     }
     // Backfill NULL fingerprint / triageStatus / workflowStatus for rows
     // created before those columns existed.
@@ -1248,14 +1254,14 @@ export class osecDB {
       finding.layerVerdicts && finding.layerVerdicts.length > 0
         ? JSON.stringify(finding.layerVerdicts)
         : null;
-    // 0sec#170 — persist the optional PoC step graph. NULL when the agent
+    // 0#170 — persist the optional PoC step graph. NULL when the agent
     // only produced prose evidence; JSON-stringified PocStep[] otherwise. The
     // field is additive: existing readers that ignore it keep working.
     const pocStepsJson =
       finding.pocSteps && finding.pocSteps.length > 0
         ? JSON.stringify(finding.pocSteps)
         : null;
-    // 0sec#193 — persist the optional VerificationSpec. NULL when the
+    // 0#193 — persist the optional VerificationSpec. NULL when the
     // finding has no machine-executable re-check contract. Stored as
     // JSON text; cloud's canary watcher reads it back via
     // restorePersistedFinding to re-evaluate findings on each upstream
@@ -1278,6 +1284,9 @@ export class osecDB {
     // manufacture a truthy-but-empty verification result.
     const verificationResultJson = serializeFindingVerificationResult(finding.verification_result);
     const reviewAnnotationJson = serializeFindingReviewAnnotation(finding.reviewAnnotation);
+    // A source-only summary has independent conservative parsing and never
+    // populates `verification_result` or the source-fix gate.
+    const sourceVerificationJson = serializeFindingSourceVerification(finding.sourceVerification);
     const candidateFindingRank = finding.findingRank;
     const findingRank =
       typeof candidateFindingRank === "number" &&
@@ -1324,6 +1333,7 @@ export class osecDB {
         findingRank,
         verificationResult: verificationResultJson,
         reviewAnnotation: reviewAnnotationJson,
+        sourceVerification: sourceVerificationJson,
         timestamp: finding.timestamp,
       })
       .onConflictDoUpdate({
@@ -1356,6 +1366,7 @@ export class osecDB {
           findingRank,
           verificationResult: verificationResultJson,
           reviewAnnotation: reviewAnnotationJson,
+          sourceVerification: sourceVerificationJson,
           timestamp: finding.timestamp,
         },
       })
@@ -1372,11 +1383,10 @@ export class osecDB {
   }
 
   /**
-   * Read path for the two source-fix gate fields. Returns the hydrated
-   * `verification_result` / `reviewAnnotation` for a finding, with each key
-   * omitted when the finding has none (including rows written before the
-   * columns existed). Callers building a `Finding` spread this over the row:
-   * `{ ...mapped, ...db.getFindingReviewFields(id) }`.
+   * Read path for the persisted `verification_result`, `reviewAnnotation`,
+   * and `sourceVerification` fields. The first two retain their existing
+   * source-fix gate semantics; a source-only check is never replay evidence.
+   * Each key is omitted when absent, including for pre-migration rows.
    */
   getFindingReviewFields(findingId: string): PersistedFindingReviewFields {
     return restoreFindingReviewFields(this.getFinding(findingId));
@@ -2131,7 +2141,7 @@ export class osecDB {
     return result.changes;
   }
 
-  // ── Persistent credential store (0sec#771) ──
+  // ── Persistent credential store (0#771) ──
 
   /**
    * Upsert a discovered foothold keyed by (credentialKind, valueHash). First
@@ -2222,7 +2232,7 @@ export class osecDB {
       .all(...params) as PersistentCredentialRow[];
   }
 
-  // ── Trust graph edges (0sec#771) ──
+  // ── Trust graph edges (0#771) ──
 
   /**
    * Upsert a directed trust edge keyed by
@@ -2386,13 +2396,14 @@ function buildFindingFingerprint(target: string, finding: Finding): string {
 export type FindingReviewAnnotation = NonNullable<Finding["reviewAnnotation"]>;
 
 /**
- * Hydrated form of the two columns. Both keys are OPTIONAL and are omitted
- * entirely when the underlying column is NULL / unusable — never present as
- * an empty object.
+ * Hydrated form of persisted finding review and source-check columns. Each key
+ * is OPTIONAL and omitted entirely when the underlying column is NULL or
+ * unusable — never present as an empty object.
  */
 export interface PersistedFindingReviewFields {
   verification_result?: VerificationResult;
   reviewAnnotation?: FindingReviewAnnotation;
+  sourceVerification?: SourceVerificationSummary;
 }
 
 /**
@@ -2414,8 +2425,8 @@ export interface PersistedFindingReviewFields {
  *     source for an unverified finding, so absence must stay absence.
  *
  * Validation is intentionally structural (no zod at runtime here, keeping
- * @0sec/db free of a zod dependency); the authoritative shape check remains
- * `VerificationResultSchema` in @0sec/shared.
+ * @0/db free of a zod dependency); the authoritative shape check remains
+ * `VerificationResultSchema` in @0/shared.
  */
 
 /** A non-null, non-array object — the only shape either column may hold. */
@@ -2460,6 +2471,62 @@ export function parseFindingReviewAnnotation(value: unknown): FindingReviewAnnot
   if (!parsed || typeof parsed.path !== "string" || parsed.path.length === 0) return undefined;
   return parsed as unknown as FindingReviewAnnotation;
 }
+/**
+ * A source-verification summary is meaningful only when its status, safe
+ * predicate counts, and behavior-pending flag agree. Unknown fields are
+ * discarded so malformed/forward data cannot leak into a Finding.
+ */
+export function parseFindingSourceVerification(value: unknown): SourceVerificationSummary | undefined {
+  const parsed = parseJsonObjectColumn(value);
+  if (!parsed) return undefined;
+  const status = parsed.status;
+  const totalPredicates = parsed.totalPredicates;
+  const matchedPredicates = parsed.matchedPredicates;
+  const notMatchedPredicates = parsed.notMatchedPredicates;
+  const inconclusivePredicates = parsed.inconclusivePredicates;
+  const behaviorPending = parsed.behaviorPending;
+  if (
+    (status !== "matched" && status !== "not_confirmed" && status !== "inconclusive") ||
+    typeof totalPredicates !== "number" ||
+    !Number.isSafeInteger(totalPredicates) ||
+    totalPredicates < 0 ||
+    typeof matchedPredicates !== "number" ||
+    !Number.isSafeInteger(matchedPredicates) ||
+    matchedPredicates < 0 ||
+    typeof notMatchedPredicates !== "number" ||
+    !Number.isSafeInteger(notMatchedPredicates) ||
+    notMatchedPredicates < 0 ||
+    typeof inconclusivePredicates !== "number" ||
+    !Number.isSafeInteger(inconclusivePredicates) ||
+    inconclusivePredicates < 0 ||
+    typeof behaviorPending !== "boolean"
+  ) {
+    return undefined;
+  }
+  const countSum = matchedPredicates + notMatchedPredicates + inconclusivePredicates;
+  if (!Number.isSafeInteger(countSum) || countSum !== totalPredicates) return undefined;
+  if (
+    (status === "matched" &&
+      (totalPredicates === 0 || matchedPredicates !== totalPredicates || notMatchedPredicates !== 0 || inconclusivePredicates !== 0)) ||
+    (status === "not_confirmed" && (notMatchedPredicates === 0 || inconclusivePredicates !== 0)) ||
+    (status === "inconclusive" && inconclusivePredicates === 0 && totalPredicates !== 0)
+  ) {
+    return undefined;
+  }
+  return {
+    status,
+    totalPredicates,
+    matchedPredicates,
+    notMatchedPredicates,
+    inconclusivePredicates,
+    behaviorPending,
+  };
+}
+
+function serializeFindingSourceVerification(value: unknown): string | null {
+  const usable = parseFindingSourceVerification(value);
+  return usable ? JSON.stringify(usable) : null;
+}
 
 function serializeFindingVerificationResult(value: unknown): string | null {
   const usable = parseFindingVerificationResult(value);
@@ -2472,24 +2539,27 @@ function serializeFindingReviewAnnotation(value: unknown): string | null {
 }
 
 /**
- * Hydrate the two columns off a persisted findings row into the shape the
- * shared `Finding` uses. Keys are OMITTED (not set to `undefined`) when the
- * column is absent, so `"verification_result" in finding` stays false for an
- * unverified finding and `{ ...row, ...restoreFindingReviewFields(row) }`
- * never overwrites a value a caller already resolved.
- *
- * Accepts a partial row so it also works against pre-migration rows read by
- * raw SQL, where the properties simply do not exist.
+ * Hydrate the persisted review, canonical replay, and source-check columns
+ * into the shared `Finding`. Keys are omitted entirely when their columns
+ * are absent or unusable, so pre-migration rows remain ordinary findings.
+ * Callers building a `Finding` spread these fields over their mapped row:
+ * `{ ...mapped, ...db.getFindingReviewFields(id) }`.
  */
 export function restoreFindingReviewFields(
-  row: { verificationResult?: unknown; reviewAnnotation?: unknown } | null | undefined,
+  row: {
+    verificationResult?: unknown;
+    reviewAnnotation?: unknown;
+    sourceVerification?: unknown;
+  } | null | undefined,
 ): PersistedFindingReviewFields {
   if (!row) return {};
   const verificationResult = parseFindingVerificationResult(row.verificationResult);
   const reviewAnnotation = parseFindingReviewAnnotation(row.reviewAnnotation);
+  const sourceVerification = parseFindingSourceVerification(row.sourceVerification);
   return {
     ...(verificationResult ? { verification_result: verificationResult } : {}),
     ...(reviewAnnotation ? { reviewAnnotation } : {}),
+    ...(sourceVerification ? { sourceVerification } : {}),
   };
 }
 
@@ -2541,7 +2611,7 @@ function deriveEvidenceFromPocSteps(finding: Finding): { request: string; respon
 // method below handles ALTER TABLE for databases created by older versions;
 // fresh installs get every column from day one via this SQL.
 //
-// See: https://github.com/0sec-labs/0sec/issues/420
+// See: https://github.com/0sec-labs/0/issues/420
 
 const SCHEMA_TABLES_SQL = `
 CREATE TABLE IF NOT EXISTS scans (
@@ -2601,6 +2671,7 @@ CREATE TABLE IF NOT EXISTS findings (
   findingRank INTEGER,
   verificationResult TEXT,
   reviewAnnotation TEXT,
+  sourceVerification TEXT,
   timestamp INTEGER NOT NULL
 );
 

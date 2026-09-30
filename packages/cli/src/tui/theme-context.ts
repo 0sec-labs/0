@@ -43,7 +43,8 @@ const colorDepth: ColorDepth = detectColorDepth(process.env);
  */
 const paletteCache = new Map<string, Theme>();
 
-function paletteFor(name: TuiSettings["theme"]): Theme {
+/** Resolve a displayed palette, including unsaved previews, at the terminal's color depth. */
+export function paletteFor(name: TuiSettings["theme"]): Theme {
   let cached = paletteCache.get(name);
   if (!cached) {
     cached = degradePalette(getTheme(name), colorDepth);

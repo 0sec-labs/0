@@ -5,7 +5,7 @@
  *
  * Three layers, cheapest first (the exact lesson the sspp prototype encoded
  * after `npm audit` alone missed the `radash` fork-twin of CVE-2025-48054):
- *   1. **prior-report** — packages 0sec already filed for this class.
+ *   1. **prior-report** — packages 0 already filed for this class.
  *   2. **fork-cve-twin** — packages whose vulnerable code is identical to a
  *      sibling/fork carrying a PUBLIC advisory but with NO advisory under their
  *      own npm name (so a live advisory DB gives a false all-clear).
@@ -45,12 +45,12 @@ export async function dedupConfirmation(args: {
 }): Promise<DedupVerdict> {
   const { name, version, cwe, hints, advisoryLookup } = args;
 
-  // 1. prior 0sec report for this class.
+  // 1. prior 0 report for this class.
   if (hints?.priorReports?.includes(name)) {
     return {
       novel: false,
       source: "prior-report",
-      advisories: [`${name}: previously reported by 0sec for this class`],
+      advisories: [`${name}: previously reported by 0 for this class`],
     };
   }
 

@@ -1,4 +1,4 @@
-/** Default @0sec/core integration for web and source-audit manifests. */
+/** Default @0/core integration for web and source-audit manifests. */
 
 import { createDockerWebProvisioner } from "./adapters.js";
 import type { BenchIntegration } from "./integration.js";
@@ -28,7 +28,7 @@ export function createCoreBenchIntegration(
         provisioner: createDockerWebProvisioner(opts.corpusRoot),
         oracle: new ObjectiveOracle(),
         executionMetadata: {
-          harnessId: variant.harnessId ?? "0sec-agentic",
+          harnessId: variant.harnessId ?? "0-agentic",
           ...(variant.model ? { model: variant.model } : {}),
           ...(variant.runtime ? { runtime: variant.runtime } : {}),
         },

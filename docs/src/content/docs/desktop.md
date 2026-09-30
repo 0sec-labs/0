@@ -1,12 +1,14 @@
 ---
-title: Desktop — development draft
-description: Contributor notes for the unreleased 0 Desktop application and its local CLI sidecar.
+title: Desktop — development-only alpha
+description: Contributor notes for the development-only alpha 0 Desktop application and its local CLI sidecar.
 draft: true
 pagefind: false
 ---
 
-**Desktop remains in development.** These contributor notes cover source builds;
-public downloadable and signed releases remain unavailable.
+**Desktop is a development-only alpha.** These contributor notes cover explicit
+source builds; public downloadable and signed releases remain unavailable.
+Desktop is not included in normal CLI builds, npm packages, the installer, or
+tag-triggered GitHub Releases. Its archived workflow is not active automation.
 
 The 0 desktop is an [Electron](https://www.electronjs.org/) application
 (v42, Chromium-based) that provides a native windowed control plane for the
@@ -24,26 +26,31 @@ appearance. The operations dashboard is a separate view.
 ### Source development
 
 Use Node.js 24+, the repository's pinned pnpm, and Bun 1.3.14 (matching CI).
-From the monorepo root, build the CLI and dashboard before launching:
+From the monorepo root, build the CLI dependency closure before launching:
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm --filter '0sec-cli...' build
-pnpm --filter @0sec/dashboard build
-pnpm --filter @0sec/desktop start
+pnpm --filter '@0/cli...' build
+pnpm --filter @0/desktop start
 ```
+
+`start` explicitly builds the alpha renderer and Electron code. The normal
+dashboard build produces operations-only assets in `packages/dashboard/dist/`;
+the alpha mode builds its separate assets in `packages/desktop/dist/dashboard/`.
+For browser-only alpha development, use
+`pnpm --filter @0/dashboard dev:desktop-alpha` and visit `/desktop.html`.
 
 The same development commands work on macOS Apple Silicon. A compiled
 platform-specific sidecar is needed for packaging, **not** for this source
 launch: the development app runs the built CLI entry point through Bun.
 If Bun is not on `PATH`, set `BUN_PATH` to its executable.
 The development sidecar can also run through Node.js 24+:
-`BUN_PATH=node pnpm --filter @0sec/desktop start`. Packaging still requires Bun.
+`BUN_PATH=node pnpm --filter @0/desktop start`. Packaging still requires Bun.
 
-The desktop resolves assets from `packages/dashboard/dist/` (development) or
+The desktop resolves assets from `packages/desktop/dist/dashboard/` (development) or
 `process.resourcesPath/dashboard/` (packaged), and the sidecar from
 `packages/cli/dist/index.js` run through `bun` (development) or from
-`resources/sidecars/0sec-<platform>-<arch>` (packaged).
+`resources/sidecars/0-<platform>-<arch>` (packaged).
 
 ### Environment
 
@@ -55,10 +62,11 @@ The desktop resolves assets from `packages/dashboard/dist/` (development) or
 
 ### Packaging development builds
 
-The build pipeline produces platform-specific artifacts through
+Explicit developer packaging produces platform-specific artifacts through
 [electron-builder](https://www.electron.build/). Packages bundle the Electron
-runtime, dashboard UI, and sidecar binary together. The resulting application
-is run from the desktop environment or launcher.
+runtime, dashboard UI, and sidecar binary together. They are named
+`0-desktop-alpha-<version>-<os>-<arch>.<ext>` and are not published by the
+`package` or `package:*` scripts (`--publish never`).
 
 ## Sidecar security boundary
 
@@ -86,7 +94,7 @@ The desktop separates the renderer (web UI) from engine operations through a
 │ Sidecar (0 CLI binary)            │
 │  - dashboard --no-open --host     │
 │    127.0.0.1 --port 0             │
-│  - stdout: 0SEC_DASHBOARD_READY   │
+│  - stdout: ZERO_DASHBOARD_READY   │
 │  - lifecycle: SIGTERM → SIGKILL   │
 └─────────────────────────────────────┘
 ```
@@ -98,7 +106,7 @@ The desktop separates the renderer (web UI) from engine operations through a
    `createDashboardSidecarInvocation` — the renderer never contributes a
    command, an argument, or a filesystem path to this boundary.
 2. **Readiness**: stdout is parsed for a JSON-ready line of the form
-   `0SEC_DASHBOARD_READY {"url":"http://127.0.0.1:<port>"}`. If the sidecar
+   `ZERO_DASHBOARD_READY {"url":"http://127.0.0.1:<port>"}`. If the sidecar
    exits before emitting this line (or after the 20-second timeout), the
    desktop shows an error dialog and exits.
 3. **Graceful stop**: SIGTERM is sent first. If the process has not exited
@@ -109,8 +117,8 @@ The desktop separates the renderer (web UI) from engine operations through a
 
 In development, the sidecar runs through the local `bun` CLI entrypoint
 (`packages/cli/dist/index.js`). In packaged builds, it runs the pre-bundled
-binary from `process.resourcesPath/sidecars/0sec-<platform>-<arch>`
-(Windows uses `0sec-windows-<arch>.exe`).
+binary from `process.resourcesPath/sidecars/0-<platform>-<arch>`
+(Windows uses `0-windows-<arch>.exe`).
 
 On macOS, closing the last window leaves the application and sidecar running.
 Dock activation or **New Session** recreates the window without starting another
@@ -167,7 +175,7 @@ The main process accepts renderer requests only from the current window's main
 frame at the trusted dashboard origin. External URLs must be credential-free
 HTTPS URLs. The directory picker accepts directories only and returns `null`
 on cancellation. Picking a directory sets context; it does not grant access.
-Preference writes accept only namespaced `0sec:` UI values. They do not expose
+Preference writes accept only namespaced `0:` UI values. They do not expose
 arbitrary filesystem paths, provider credentials, or engine configuration.
 
 Menu subscriptions return an unsubscribe function. Commands that arrive while
@@ -218,7 +226,7 @@ sessions or toggle the sidebar twice.
 
 ## User workflow
 
-1. Launch the desktop application from your OS (or `pnpm --filter @0sec/desktop start` in development).
+1. Launch the desktop application from your OS (or `pnpm --filter @0/desktop start` in development).
 2. The window opens a project-and-session workspace. Home lists recent sessions;
    the sidebar filters by project or session title. Closing a tab does not
    delete its live session; reopen it from Home or the command palette.
@@ -255,11 +263,11 @@ The browser used a backend built before the later shutdown repairs. Explicitly
 delivered disposal callbacks were idempotent; callback delivery during automatic
 frame removal remains best effort.
 
-Cloud sign-in, in-renderer API-key entry, and provider/model pickers remain
-unimplemented. The current renderer does wire Codex device sign-in through the
-local sidecar; that is provider authentication, not a 0cloud login or hosted
-execution. Hosted payment/inference, native installation, and release
-qualification were not established by these candidate checks.
+In-renderer API-key entry and provider/model pickers remain unimplemented. The
+current renderer does wire Codex device sign-in through the local sidecar; that
+is provider authentication, not managed-service access or execution. Native
+installation and release qualification were not established by these candidate
+checks.
 
 ## Platforms and build requirements
 
@@ -284,38 +292,39 @@ dependencies for the host OS. Run from the repository root on the target
 platform/architecture.
 
 ```bash
-# Build all workspace packages
+# Build the CLI and operations dashboard (desktop is deliberately excluded).
 pnpm install --frozen-lockfile
 pnpm build
 
 # Compile the host sidecar (this example must run on Linux x64).
 # pnpm build above also builds the dashboard required by this script.
-bash scripts/bun-compile.sh "" "dist-bin/0sec-linux-x64"
+bash scripts/bun-compile.sh "" "dist-bin/0-linux-x64"
 
 # Package the desktop (Linux example)
-pnpm --filter @0sec/desktop package:linux
+pnpm --filter @0/desktop package:linux
 ```
 
-The sidecar binary filename pattern is `0sec-<platform>-<arch>` (Linux/macOS)
-or `0sec-windows-<arch>.exe` (Windows). The example above is for a Linux x64
+The sidecar binary filename pattern is `0-<platform>-<arch>` (Linux/macOS)
+or `0-windows-<arch>.exe` (Windows). The example above is for a Linux x64
 host: the empty first argument means **compile for the host**, not "target the
 platform named in the output file." On Apple Silicon, use
-`dist-bin/0sec-darwin-arm64` and `package:mac`; on Intel macOS use
-`dist-bin/0sec-darwin-x64`. Windows requires a compatible shell for
-`bun-compile.sh` and the matching `0sec-windows-<arch>.exe` output.
+`dist-bin/0-darwin-arm64` and `package:mac`; on Intel macOS use
+`dist-bin/0-darwin-x64`. Windows requires a compatible shell for
+`bun-compile.sh` and the matching `0-windows-<arch>.exe` output.
 
 Although the Bun compiler accepts an explicit cross-target, desktop resource
 preparation currently copies only the host-matching sidecar. Build/package on
 the matching OS and architecture rather than relabeling a binary. Packages are
 written under `packages/desktop/release/` with publication disabled.
 
-The `package:*` scripts (`package:linux`, `package:mac`, `package:win`) run
+The `package:*` scripts (`package:linux`, `package:mac`, `package:win`) explicitly
+build the alpha renderer and Electron code, then run
 `prepare-desktop-resources.mjs` before invoking electron-builder:
 
-1. Validates that the built dashboard's `index.html` and the host-matching
-   `dist-bin/0sec-*` sidecar exist.
+1. Validates that the alpha renderer's `index.html` and `desktop.html` and the host-matching
+   `dist-bin/0-*` sidecar exist.
 2. Removes the desktop package's existing `resources/` directory.
-3. Copies `packages/dashboard/dist` to `resources/dashboard` and the compiled
+3. Copies `packages/desktop/dist/dashboard` to `resources/dashboard` and the compiled
    sidecar to `resources/sidecars/`, marking it executable.
 4. electron-builder bundles both as `extraResources` into the release package.
 
@@ -335,8 +344,8 @@ archive), the dashboard web UI, and the sidecar binary.
 
 | Build mode | Dashboard assets | Sidecar binary |
 |------------|------------------|----------------|
-| Development | `packages/dashboard/dist/` | Bun entrypoint at `packages/cli/dist/index.js` (run through `bun`) |
-| Packaged (`app.isPackaged === true`) | `process.resourcesPath/dashboard/` | `process.resourcesPath/sidecars/0sec-<platform>-<arch>` (`0sec-windows-<arch>.exe` on Windows) |
+| Development | `packages/desktop/dist/dashboard/` | Bun entrypoint at `packages/cli/dist/index.js` (run through `bun`) |
+| Packaged (`app.isPackaged === true`) | `process.resourcesPath/dashboard/` | `process.resourcesPath/sidecars/0-<platform>-<arch>` (`0-windows-<arch>.exe` on Windows) |
 
 Both are validated at launch — the application exits with an error dialog if
 either is missing.
@@ -347,7 +356,7 @@ In development, set `OSEC_DESKTOP_DEBUG_PORT` to attach a Chromium DevTools
 inspector bound to `127.0.0.1`:
 
 ```bash
-OSEC_DESKTOP_DEBUG_PORT=9222 pnpm --filter @0sec/desktop start
+OSEC_DESKTOP_DEBUG_PORT=9222 pnpm --filter @0/desktop start
 ```
 
 Remote inspection must traverse an SSH tunnel — the debugger is never bound to

@@ -25,7 +25,7 @@
  *   1. derive high-signal search terms (changed-file basenames, sink function
  *      names, distinctive identifiers).
  *   2. `git grep` the blob `m` across every commit (≈1 s for ~13 k emails) to
- *      find candidate patches, excluding our own postings (doruk@0sec.ai).
+ *      find candidate patches, excluding our own postings (doruk@0.ai).
  *   3. an LLM judge reads the finding + each candidate patch and rules
  *      DUPLICATE / RELATED / UNRELATED with the message-id.
  *   4. return {novel, duplicates[]}.
@@ -38,7 +38,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared";
 import { LlmApiRuntime } from "../runtime/llm-api.js";
 import type { NativeRuntime } from "../runtime/types.js";
 
@@ -97,7 +97,7 @@ export interface LoreMirror {
 
 const DEFAULT_BASE_URL = "https://lore.kernel.org";
 /** Public ownership markers — never treat these postings as third-party duplicates. */
-export const OWN_FROM_MARKERS = ["0sec.ai", "doruk@"];
+export const OWN_FROM_MARKERS = ["0.ai", "doruk@"];
 
 function epochUrl(baseUrl: string, list: string, epoch: number): string {
   return `${baseUrl}/${list}/git/${epoch}.git`;
@@ -431,7 +431,7 @@ export function makeLloreJudge(
   const attempts = Math.max(1, opts.attempts ?? 3);
   return async (query, candidates) => {
     if (candidates.length === 0) return [];
-    const debug = !!process.env["0SEC_NOVELTY_DEBUG"];
+    const debug = !!process.env["ZERO_NOVELTY_DEBUG"];
     const runtime: NativeRuntime = new LlmApiRuntime({
       type: "api",
       timeout: opts.timeoutMs ?? 120_000,

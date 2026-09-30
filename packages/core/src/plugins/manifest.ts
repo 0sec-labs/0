@@ -1,5 +1,5 @@
 /**
- * Third-party plugin manifest — schema + validation (0sec plugin system, stage 1).
+ * Third-party plugin manifest — schema + validation (0 plugin system, stage 1).
  *
  * This module is the FOUNDATION of the plugin system: the typed contract a
  * plugin declares itself against, and the pure validator that turns untrusted
@@ -96,7 +96,7 @@ export interface PluginManifest {
   id: string;
   name: string;
   version: string;
-  /** Optional minimum @0sec/core version this plugin requires (semver-ish). */
+  /** Optional minimum @0/core version this plugin requires (semver-ish). */
   minCoreVersion?: string;
   tools: PluginToolManifest[];
 }

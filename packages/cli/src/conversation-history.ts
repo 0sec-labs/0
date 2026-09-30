@@ -1,4 +1,4 @@
-import { redactSensitiveHeaders, type ConsoleConversationHistory } from "@0sec/core";
+import { redactSensitiveHeaders, type ConsoleConversationHistory } from "@0/core";
 import { isValidSessionId, listSessions, loadSession, type StoredSessionMeta } from "./tui/session-store.js";
 import { sanitizeComposerText } from "./tui/text.js";
 
@@ -31,7 +31,7 @@ function pageLimit(value: number | undefined): number {
   return value;
 }
 
-/** Reads the same store as /resume; never exposes provider payloads or tool results. */
+/** Reads the same store as /sessions; never exposes provider payloads or tool results. */
 export function createConversationHistory(options: { cwd?: string; homeDir?: string } = {}): ConsoleConversationHistory {
   const cwd = options.cwd ?? process.cwd();
   return {

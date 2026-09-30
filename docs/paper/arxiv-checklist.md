@@ -1,11 +1,11 @@
-# arXiv submission checklist (0sec)
+# arXiv submission checklist (0)
 
 Use this checklist right before uploading source to arXiv.
 
 ## 1) Files included in upload package
 
-- `0sec-submission.tex`
-- `0sec-submission.bbl`
+- `0-submission.tex`
+- `0-submission.bbl`
 - `refs.bib`
 
 Current draft has no external figures. If figures are added later, include only
@@ -17,7 +17,7 @@ the exact files referenced by `\includegraphics`.
 - `*.log`
 - `*.out`
 - `*.blg`
-- `0sec-submission.pdf` (optional; usually not needed in source upload)
+- `0-submission.pdf` (optional; usually not needed in source upload)
 
 ## 3) Metadata and claim hygiene checks
 
@@ -30,10 +30,10 @@ the exact files referenced by `\includegraphics`.
 ## 4) Local compile checks
 
 ```bash
-pdflatex -interaction=nonstopmode 0sec-submission.tex
-bibtex 0sec-submission
-pdflatex -interaction=nonstopmode 0sec-submission.tex
-pdflatex -interaction=nonstopmode 0sec-submission.tex
+pdflatex -interaction=nonstopmode 0-submission.tex
+bibtex 0-submission
+pdflatex -interaction=nonstopmode 0-submission.tex
+pdflatex -interaction=nonstopmode 0-submission.tex
 ```
 
 Pass criteria:

@@ -278,7 +278,7 @@ export const ssppFuzzDetector: Detector<SsppCandidate> = {
     };
   },
   dedupHints: {
-    // 0sec prior filing for this exact class.
+    // 0 prior filing for this exact class.
     priorReports: ["es-toolkit"],
     // Fork-twin the prototype learned the hard way: npm audit gave a false
     // all-clear because the advisory lives under the maintained fork's name.

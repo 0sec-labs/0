@@ -1,5 +1,5 @@
 {
-  "name": "@0sec/test-targets",
+  "name": "@0/test-targets",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,7 +8,7 @@
     "./vulnerable": "./dist/vulnerable-server.js",
     "./safe": "./dist/safe-server.js"
   },
-  "description": "Intentionally vulnerable and safe LLM endpoints for testing 0sec",
+  "description": "Intentionally vulnerable and safe LLM endpoints for testing 0",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "vulnerable": "tsx src/vulnerable-server.ts",

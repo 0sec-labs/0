@@ -15,8 +15,8 @@ import {
   type FindingTriageStatus,
   type PresentationEvent,
   type PresentationSource,
-} from "@0sec/shared";
-import { readToolCallNames } from "@0sec/core";
+} from "@0/shared";
+import { readToolCallNames } from "@0/core";
 import { presentationEventBus } from "../presentation/event-bus.js";
 import { buildFindingConsoleCommand } from "../finding-handoff.js";
 import { DesktopConsoleGateway, DesktopConsoleGatewayError } from "../desktop/console-gateway.js";
@@ -206,7 +206,7 @@ function sendFile(res: ServerResponse, filePath: string, controlToken?: string):
   if (controlToken && ext === ".html") {
     content = content.toString().replace(
       "</head>",
-      `<meta name="0sec-control-token" content="${controlToken}"></head>`,
+      `<meta name="0-control-token" content="${controlToken}"></head>`,
     );
   }
   res.end(content);
@@ -931,7 +931,7 @@ function isLiveLocalPid(pid: number | null | undefined): boolean {
 }
 
 function stopDaemonWorkers(
-  osecDb: typeof import("@0sec/db").osecDB,
+  osecDb: typeof import("@0/db").osecDB,
   dbPath: string | undefined,
 ): number {
   const db = new osecDb(dbPath);
@@ -1040,7 +1040,7 @@ function materializeEmbeddedDashboardAssets(
 ): DashboardAssetDirectory | null {
   if (assets.length === 0) return null;
 
-  const assetDir = mkdtempSync(join(tmpdir(), "0sec-dashboard-"));
+  const assetDir = mkdtempSync(join(tmpdir(), "0-dashboard-"));
   try {
     for (const [relativePath, contentBase64] of assets) {
       const candidate = resolve(assetDir, `.${relativePath.replaceAll("\\", "/")}`);
@@ -1097,7 +1097,7 @@ function resolveAssetPath(assetDir: string, pathname: string): string | null {
 }
 
 function requireControlToken(req: IncomingMessage, res: ServerResponse, controlToken: string): boolean {
-  const provided = req.headers["x-0sec-control-token"];
+  const provided = req.headers["x-0-control-token"];
   if (provided !== controlToken) {
     json(res, 403, { error: "Invalid or missing control token" });
     return false;
@@ -1264,7 +1264,7 @@ async function handleApiRequest(
   dbPath: string | undefined,
   controlToken: string,
 ): Promise<boolean> {
-  const { osecDB } = await import("@0sec/db");
+  const { osecDB } = await import("@0/db");
 
   if (isPresentationEventsStreamPath(pathname)) {
     if (req.method !== "GET") {
@@ -1433,7 +1433,7 @@ async function handleApiRequest(
     }
 
     if (controlPath.action === "reset-database") {
-      const { resetOsecDatabase } = await import("@0sec/db");
+      const { resetOsecDatabase } = await import("@0/db");
       const { seedVerificationWorkbench } = await import("./db.js");
       const body = (await readJson(req)) as { seed?: string };
       const seed = typeof body.seed === "string" ? body.seed.trim().toLowerCase() : "verification";
@@ -1819,9 +1819,9 @@ export function registerDashboardCommand(program: Command): void {
           origin = `http://${host.includes(":") ? `[${host}]` : host}:${address.port}`;
         }
         const url = origin;
-        console.log(chalk.red.bold("  ◆ 0sec") + chalk.gray(" dashboard"));
+        console.log(chalk.red.bold("  ◆ 0") + chalk.gray(" dashboard"));
         console.log(chalk.gray(`  ${url}`));
-        if (opts.readyJson) console.log(`0SEC_DASHBOARD_READY ${JSON.stringify({ url })}`);
+        if (opts.readyJson) console.log(`ZERO_DASHBOARD_READY ${JSON.stringify({ url })}`);
         console.log(chalk.gray("  Ctrl+C to stop"));
         if (opts.open !== false) openBrowser(`${url}/dashboard`);
       });

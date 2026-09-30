@@ -4,9 +4,20 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { writeFileSync } from "node:fs";
 import type { Runtime, RuntimeConfig, RuntimeContext, RuntimeResult, RuntimeType } from "./types.js";
-import { eventBus, isCloudEventSinkActive } from "../events/bus.js";
+import { readCacheUsage } from "./prompt-cache.js";
+import type { ModelTokenUsage, TokenUsageForPricing } from "@0/shared";
 
-// Dim the subprocess output so it's visually distinct from 0sec's own output
+function readGeminiUsage(raw: unknown): TokenUsageForPricing | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const stats = raw as Record<string, unknown>;
+  if (typeof stats.input_tokens !== "number" || typeof stats.output_tokens !== "number") return undefined;
+  const outputTokens = typeof stats.total_tokens === "number"
+    ? Math.max(stats.output_tokens, stats.total_tokens - stats.input_tokens) : stats.output_tokens;
+  return { inputTokens: stats.input_tokens, outputTokens,
+    ...(typeof stats.cached === "number" ? { cachedInputTokens: stats.cached } : {}) };
+}
+
+// Dim the subprocess output so it's visually distinct from 0's own output
 const dim = (text: string) => `\x1b[2m${text}\x1b[0m`;
 
 function formatToolDetail(input: unknown): string {
@@ -86,27 +97,11 @@ function buildOsecMcpCommandArgs(context: RuntimeContext): string[] {
   return args;
 }
 
-/** Read a number-valued field from a codex usage object, tolerating string-encoded ints. */
-function numericField(obj: Record<string, unknown>, key: string): number | undefined {
-  const v = obj[key];
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-  if (typeof v === "string" && /^\d+$/.test(v)) return Number(v);
-  return undefined;
-}
-
-/** JSON.stringify but never throws — falls back to a stable placeholder on cycles / BigInt. */
-function safeJsonStringify(v: unknown): string {
-  try {
-    return JSON.stringify(v) ?? "";
-  } catch {
-    return "(unserialisable)";
-  }
-}
 
 function buildClaudeMcpConfig(context: RuntimeContext): string {
   return JSON.stringify({
     mcpServers: {
-      "0sec": {
+      "0": {
         command: process.execPath,
         args: buildOsecMcpCommandArgs(context),
       },
@@ -136,6 +131,7 @@ export class ProcessRuntime implements Runtime {
   readonly type: RuntimeType;
   private config: RuntimeConfig;
   private command: string;
+  private observedModel: string | undefined;
 
   constructor(config: RuntimeConfig) {
     this.type = config.type as RuntimeType;
@@ -143,276 +139,26 @@ export class ProcessRuntime implements Runtime {
     this.command = RUNTIME_COMMANDS[config.type] ?? config.type;
   }
 
+  resolvedModel(): string { return this.observedModel ?? this.config.model ?? "unknown"; }
   async execute(prompt: string, context?: RuntimeContext): Promise<RuntimeResult> {
     const start = Date.now();
+    if (context?.signal?.aborted) {
+      return { output: "", exitCode: null, timedOut: false, durationMs: 0, error: "Runtime execution cancelled." };
+    }
     const args = this.buildArgs(prompt, context);
     const env = this.buildEnv(context);
 
     const onToolCall = this.config.onToolCall;
-    // Per-execution observability state for the Codex CLI JSON stream. Tracks
-    // the 1-indexed turn number we emit `agent_turn_*` events under, plus the
-    // tool-call indices we emit `tool_call_*` events under. Codex's `--json`
-    // stream uses its own `sequence_number` for stream ordering — 0sec's
-    // event types use a simpler turn-and-tool-call counter that matches what
-    // the api-runtime path emits, so the dashboard's live-trace renderer
-    // doesn't need to special-case codex events.
-    const scanId = context?.scanId;
-    // Fire the cloud stream-event relay whenever (a) we're driving a
-    // codex subprocess AND (b) something is listening — that is, the
-    // cloud sink has been subscribed via 0SEC_CLOUD_EVENTS=1. The
-    // earlier `Boolean(scanId)` guard skipped audit-mode CLI runs
-    // because `runAnalysisAgent` didn't pass scanId in its execute
-    // context; the runner still subscribes events via the cloud sink,
-    // and the worker-controller's per-relay scanId injection happens
-    // upstream of the bus anyway, so requiring scanId here was over-
-    // tightening the gate. The bus is fail-soft and no-ops when the
-    // sink isn't subscribed, so we use the same `isCloudEventSinkActive`
-    // predicate the native-loop's hot-path delta forwarder uses.
-    const emitScanEvents = this.type === "codex" && isCloudEventSinkActive();
-    // Codex's per-scan max-turn budget isn't exposed on its --json stream,
-    // so we surface the runtime-config timeout-derived turn cap (rendered
-    // as a UI hint) — falls back to a sensible 40 to match the api-runtime
-    // attack-stage default. The dashboard treats this as best-effort.
-    const maxTurnsHint = 40;
-    let turnNumber = 0;
-    let toolCallSeq = 0;
-    let deltaSeq = 0;
-    let turnStartedAt = 0;
-    // Per-tool-call start timestamps so item.completed can synthesise the
-    // duration_ms field on the cloud event (codex emits a `sequence_number`
-    // but no wall-clock timestamps).
-    const toolCallStartedAt = new Map<number, number>();
-    // Stream-level dedup. Codex's `exec --json` empirically emits its
-    // `thread.started` + `turn.started` + `turn.completed` events twice
-    // per logical turn — observed via end-to-end test 2026-05-13 with
-    // two `agent_turn_started` rows ~250ms apart and two `cost_update`
-    // rows with distinct token counts. We strongly suspect this comes
-    // from codex internally running both a planner and a synthesis
-    // model and surfacing completion events for both; the exact cause
-    // is opaque from our side. Either way, the dashboard renders
-    // double events as confusing duplicate turns. Drop the second
-    // event of each (type, sequence_number) pair within a turn.
-    const seenSequenceNumbers = new Set<string>();
-    const isSeenSequence = (event: Record<string, unknown>): boolean => {
-      const seq = event.sequence_number;
-      if (typeof seq !== "number" && typeof seq !== "string") return false;
-      const key = `${event.type ?? "?"}|${seq}`;
-      if (seenSequenceNumbers.has(key)) return true;
-      seenSequenceNumbers.add(key);
-      return false;
-    };
-
-    // Closure over the per-execution counters above. Each codex JSON event
-    // becomes 0..N 0sec cloud-bus events. See the comment above the call
-    // site in the stdout handler for what this exists for.
-    const emitCodexCloudEvents = (event: Record<string, unknown>): void => {
-      // Stream dedup — see seenSequenceNumbers definition above.
-      if (isSeenSequence(event)) return;
-      const eventType = typeof event.type === "string" ? event.type : "";
-      switch (eventType) {
-        case "thread.started": {
-          // Map to llm_planner_invoked at turn 0 so the dashboard's
-          // first-event timestamp matches when the agent loop actually
-          // started, not when worker-controller dispatched.
-          eventBus.emit("llm_planner_invoked", {
-            turn: 0,
-            model: this.config.model,
-            role: "attack",
-          });
-          return;
-        }
-        case "turn.started": {
-          turnNumber += 1;
-          turnStartedAt = Date.now();
-          deltaSeq = 0;
-          eventBus.emit("agent_turn_started", {
-            turn: turnNumber,
-            max_turns: maxTurnsHint,
-            role: "attack",
-          });
-          eventBus.emit("llm_planner_invoked", {
-            turn: turnNumber,
-            model: this.config.model,
-            role: "attack",
-          });
-          return;
-        }
-        case "turn.completed": {
-          const usage = (event.usage ?? {}) as Record<string, unknown>;
-          const inputTokens = numericField(usage, "input_tokens");
-          const cachedInputTokens = numericField(usage, "cached_input_tokens");
-          const outputTokens = numericField(usage, "output_tokens");
-          const reasoningTokens = numericField(usage, "reasoning_output_tokens");
-          const durationMs = turnStartedAt > 0 ? Date.now() - turnStartedAt : 0;
-          eventBus.emit("agent_turn_completed", {
-            turn: turnNumber,
-            duration_ms: durationMs,
-            reason: "continue",
-            role: "attack",
-          });
-          // Subscription-auth scans have no $ cost, but surfacing token
-          // counts still helps operators reason about scan size + retry
-          // budgets — emit cost_update with cost=0 so the dashboard's
-          // token meter populates. Dual-spelling token keys: the
-          // orchestrator's scan_jobs segment-sum keys on
-          // token_input/token_output (see bus.ts CostUpdatePayload).
-          eventBus.emit("cost_update", {
-            turn: turnNumber,
-            cost_usd: 0,
-            input_tokens: inputTokens,
-            output_tokens: outputTokens,
-            token_input: inputTokens,
-            token_output: outputTokens,
-            cached_input_tokens: cachedInputTokens,
-            reasoning_output_tokens: reasoningTokens,
-          });
-          return;
-        }
-        case "item.started": {
-          const item = (event.item ?? {}) as Record<string, unknown>;
-          const itemType = typeof item.type === "string" ? item.type : "";
-          if (itemType === "command_execution" && typeof item.command === "string") {
-            toolCallSeq += 1;
-            toolCallStartedAt.set(toolCallSeq, Date.now());
-            eventBus.emit("tool_call_started", {
-              tool: "shell",
-              turn: turnNumber,
-              args_preview: item.command.slice(0, 200),
-              ts: Date.now(),
-            });
-          } else if (itemType === "mcp_tool_call") {
-            // Codex emits item.started for MCP tool calls with the call's
-            // args + status=in_progress, then item.completed with the
-            // result + status=success|error. Pair them via toolCallSeq so
-            // we can synthesise duration_ms on completion. The fully-
-            // qualified name we surface to the dashboard is
-            // `<server>__<tool>` (e.g. `osec__http_request`) so the
-            // live-trace UI can show which MCP server backed the call.
-            toolCallSeq += 1;
-            toolCallStartedAt.set(toolCallSeq, Date.now());
-            const server = typeof item.server === "string" ? item.server : "?";
-            const tool = typeof item.tool === "string" ? item.tool : "?";
-            const argsRaw = item.arguments ?? {};
-            const argsPreview = typeof argsRaw === "string"
-              ? argsRaw
-              : safeJsonStringify(argsRaw);
-            eventBus.emit("tool_call_started", {
-              tool: `${server}__${tool}`,
-              turn: turnNumber,
-              args_preview: argsPreview.slice(0, 200),
-              ts: Date.now(),
-            });
-          }
-          return;
-        }
-        case "item.completed": {
-          const item = (event.item ?? {}) as Record<string, unknown>;
-          const itemType = typeof item.type === "string" ? item.type : "";
-          if (itemType === "command_execution") {
-            // Pair with the item.started above using the seq counter; the
-            // dashboard renders order by emit timestamp, so this just needs
-            // to be the *same tool* in the same turn.
-            const startedAt = toolCallStartedAt.get(toolCallSeq);
-            const durationMs = startedAt != null ? Date.now() - startedAt : 0;
-            toolCallStartedAt.delete(toolCallSeq);
-            eventBus.emit("tool_call_completed", {
-              tool: "shell",
-              turn: turnNumber,
-              duration_ms: durationMs,
-              status: "ok",
-              ts: Date.now(),
-            });
-          } else if (itemType === "mcp_tool_call") {
-            // Pair with the corresponding item.started above. Codex sets
-            // item.status to "success" / "failed" / "cancelled" depending
-            // on outcome; map success → "ok", anything else → "error" so
-            // the dashboard's red/green tool-call badge reflects truth.
-            const startedAt = toolCallStartedAt.get(toolCallSeq);
-            const durationMs = startedAt != null ? Date.now() - startedAt : 0;
-            toolCallStartedAt.delete(toolCallSeq);
-            const server = typeof item.server === "string" ? item.server : "?";
-            const tool = typeof item.tool === "string" ? item.tool : "?";
-            const status: "ok" | "error" =
-              item.status === "success" || item.status === "completed"
-                ? "ok"
-                : "error";
-            const errorMsg =
-              status === "error"
-                ? (typeof item.error === "string"
-                    ? item.error
-                    : safeJsonStringify(item.error ?? null))
-                : undefined;
-            eventBus.emit("tool_call_completed", {
-              tool: `${server}__${tool}`,
-              turn: turnNumber,
-              duration_ms: durationMs,
-              status,
-              ...(errorMsg ? { error: errorMsg.slice(0, 400) } : {}),
-              ts: Date.now(),
-            });
-          } else if (itemType === "function_call" || itemType === "tool_call") {
-            // Legacy / non-MCP function-call shape — kept for forward-
-            // compatibility against future codex CLI versions that might
-            // surface tool calls under a different item.type name. The
-            // current 0.130.x stream uses `mcp_tool_call` for the MCP
-            // path (handled above), but we emit a (started+completed)
-            // pair here in case other call shapes appear.
-            toolCallSeq += 1;
-            const toolName =
-              (typeof item.tool_name === "string" && item.tool_name) ||
-              (typeof item.name === "string" && item.name) ||
-              "mcp_tool";
-            const argsField = item.arguments ?? item.input ?? "";
-            const detail = typeof argsField === "string" ? argsField : safeJsonStringify(argsField);
-            eventBus.emit("tool_call_started", {
-              tool: toolName,
-              turn: turnNumber,
-              args_preview: detail.slice(0, 200),
-              ts: Date.now(),
-            });
-            eventBus.emit("tool_call_completed", {
-              tool: toolName,
-              turn: turnNumber,
-              duration_ms: 0,
-              status: "ok",
-              ts: Date.now(),
-            });
-          } else if (itemType === "reasoning") {
-            const reasoningText =
-              (typeof item.text === "string" && item.text) ||
-              (typeof item.summary === "string" && item.summary) ||
-              "";
-            if (reasoningText.length > 0) {
-              eventBus.emit("reasoning_summary", {
-                turn: turnNumber,
-                summary: reasoningText.slice(0, 2000),
-              });
-            }
-          } else if (itemType === "agent_message") {
-            const messageText = typeof item.text === "string" ? item.text : "";
-            if (messageText.length > 0) {
-              deltaSeq += 1;
-              eventBus.emit("delta", {
-                turn: turnNumber,
-                scope: "assistant_response",
-                text: messageText.slice(0, 2000),
-                seq: deltaSeq,
-                role: "attack",
-              });
-            }
-          }
-          return;
-        }
-        // thread.completed / response.* / unknown events: deliberately
-        // unmapped. Adding them later is a one-line case extension.
-      }
-    };
 
     return new Promise((resolve) => {
       let stdout = "";
       let stderr = "";
       let resultText = "";
       let timedOut = false;
+      let usage: RuntimeResult["usage"];
+      let usageByModel: ModelTokenUsage[] | undefined;
+      let runtimeError: string | undefined;
+      let streamBuffer = "";
       const isJsonStream = args.includes("stream-json") || args.includes("--json");
 
       let proc: ChildProcessByStdio<null, Readable, Readable>;
@@ -421,6 +167,7 @@ export class ProcessRuntime implements Runtime {
           cwd: this.config.cwd ?? process.cwd(),
           env: { ...process.env, ...env },
           stdio: ["ignore", "pipe", "pipe"],
+          detached: process.platform !== "win32",
         });
       } catch (err) {
         // E2BIG and friends throw synchronously, so they never reach the
@@ -440,10 +187,17 @@ export class ProcessRuntime implements Runtime {
         stdout += text;
 
         if (isJsonStream) {
-          for (const line of text.split("\n")) {
+          streamBuffer += text;
+          let newline = streamBuffer.indexOf("\n");
+          while (newline >= 0) {
+            const line = streamBuffer.slice(0, newline);
+            streamBuffer = streamBuffer.slice(newline + 1);
+            newline = streamBuffer.indexOf("\n");
             if (!line.trim()) continue;
             try {
               const event = JSON.parse(line);
+              if (typeof event.message?.model === "string") this.observedModel = event.message.model;
+              if (event.type === "init" && typeof event.model === "string") this.observedModel = event.model;
 
               // Claude stream-json format
               if (event.type === "assistant" && event.message?.content) {
@@ -457,6 +211,7 @@ export class ProcessRuntime implements Runtime {
                 }
               } else if (event.type === "result") {
                 resultText = event.result || resultText;
+                if (event.usage) usage = readCacheUsage(event.usage);
               }
 
               // Codex JSONL format
@@ -471,21 +226,28 @@ export class ProcessRuntime implements Runtime {
                   // Already shown on item.started
                 }
               }
+              if (event.type === "turn.completed" && event.usage) {
+                usage = { inputTokens: Number(event.usage.input_tokens ?? 0), outputTokens: Number(event.usage.output_tokens ?? 0) };
+              }
+              if (this.type === "gemini") {
+                if (event.type === "message" && event.role === "assistant" && typeof event.content === "string") {
+                  resultText += event.content;
+                  this.config.onThinking?.(event.content);
+                } else if (event.type === "tool_use") {
+                  showToolCall(onToolCall, event.tool_name, event.parameters);
+                } else if (event.type === "result") {
+                  usage = readGeminiUsage(event.stats);
+                  if (event.stats?.models && typeof event.stats.models === "object") {
+                    usageByModel = [];
+                    for (const [model, stats] of Object.entries(event.stats.models)) {
+                      const measured = readGeminiUsage(stats);
+                      if (measured) usageByModel.push({ model, usage: measured });
+                    }
+                  }
+                  if (event.status === "error") runtimeError = event.error?.message ?? "Gemini CLI returned an error result.";
+                }
+              }
 
-              // ── 0sec cloud-trace bridge (codex only) ──
-              // Codex emits structured turn/tool/reasoning events on its
-              // `--json` stream which we'd otherwise discard — translating
-              // each one into a `0SEC_EVENT_*` line on our stdout fills
-              // the dashboard's live-trace UI for the duration of Codex
-              // source-analysis workflows.
-              //
-              // Guarded on `emitScanEvents` so non-codex runtimes and
-              // non-cloud codex usage (e.g. local CLI `0sec scan
-              // --runtime codex`) don't pay the bus serialisation cost.
-              // `eventBus.emit` is a no-op when the cloud sink is not
-              // subscribed (`0SEC_CLOUD_EVENTS` unset) so this is safe
-              // to call unconditionally inside the guard.
-              if (emitScanEvents) emitCodexCloudEvents(event);
             } catch {
               // Not valid JSON line, skip
             }
@@ -501,31 +263,46 @@ export class ProcessRuntime implements Runtime {
         // tool approval, kill it with a helpful error instead of looping
         if (/permission|approve|allow.*tool/i.test(stderr) && stderr.length > 500) {
           proc.kill("SIGTERM");
-          stderr += "\n[0sec] Subprocess killed: MCP tools require interactive approval. Use --runtime api instead.";
+          stderr += "\n[0] Subprocess killed: MCP tools require interactive approval. Use --runtime api instead.";
         }
       });
 
-      const timer = setTimeout(() => {
-        timedOut = true;
-        proc.kill("SIGTERM");
-        setTimeout(() => proc.kill("SIGKILL"), 5_000);
-      }, this.config.timeout);
+      let killTimer: NodeJS.Timeout | undefined;
+      const terminate = () => {
+        if (proc.pid && process.platform !== "win32") {
+          try { process.kill(-proc.pid, "SIGTERM"); } catch { proc.kill("SIGTERM"); }
+        } else proc.kill("SIGTERM");
+        killTimer ??= setTimeout(() => {
+          if (proc.pid && process.platform !== "win32") {
+            try { process.kill(-proc.pid, "SIGKILL"); } catch { proc.kill("SIGKILL"); }
+          } else proc.kill("SIGKILL");
+        }, 1_000);
+      };
+      const timer = setTimeout(() => { timedOut = true; terminate(); }, this.config.timeout);
+      context?.signal?.addEventListener("abort", terminate, { once: true });
+      if (context?.signal?.aborted) terminate();
 
       proc.on("close", (code) => {
         clearTimeout(timer);
+        clearTimeout(killTimer);
+        context?.signal?.removeEventListener("abort", terminate);
         // For stream-json, use the parsed result text; otherwise raw stdout
         const output = isJsonStream ? (resultText || stdout).trim() : stdout.trim();
         resolve({
           output,
           exitCode: code,
           timedOut,
+          usage,
+          usageByModel,
           durationMs: Date.now() - start,
-          error: code !== 0 ? stderr.trim() || undefined : undefined,
+          error: context?.signal?.aborted ? "Runtime execution cancelled." : runtimeError ?? (code !== 0 ? stderr.trim() || undefined : undefined),
         });
       });
 
       proc.on("error", (err) => {
         clearTimeout(timer);
+        clearTimeout(killTimer);
+        context?.signal?.removeEventListener("abort", terminate);
         resolve({
           output: "",
           exitCode: 1,
@@ -545,7 +322,7 @@ export class ProcessRuntime implements Runtime {
     // OS page-cache on /usr/local/bin/<runtime>, so the first exec pays
     // for the binary load + dynamic linker + the runtime's own startup,
     // which can exceed 5s for an ~80 MB Rust binary. Empirically observed
-    // (2026-05-13 0sec-cloud rollout): same lodash audit dispatched
+    // (2026-05-13 0-cloud rollout): same lodash audit dispatched
     // back-to-back where one sandbox succeeded and the next failed with
     // "Runtime 'codex' not available. Is codex installed?", correlating
     // with sandbox cold/warm state, not codex install state. After this
@@ -581,6 +358,7 @@ export class ProcessRuntime implements Runtime {
     switch (this.type) {
       case "claude": {
         const args = ["-p", prompt, "--verbose", "--output-format", "stream-json"];
+        if (this.config.model) args.push("--model", this.config.model);
         if (context?.mcp?.enableTargetTools && context.target && context.scanId) {
           // --dangerously-skip-permissions auto-approves MCP tool calls
           // without this, the subprocess hangs waiting for interactive approval
@@ -611,7 +389,7 @@ export class ProcessRuntime implements Runtime {
         }
         if (this.config.outputSchema) {
           // Codex needs schema as a file — write to temp
-          const schemaPath = join(tmpdir(), `0sec-schema-${Date.now()}.json`);
+          const schemaPath = join(tmpdir(), `0-schema-${Date.now()}.json`);
           writeFileSync(schemaPath, JSON.stringify(this.config.outputSchema));
           args.push("--output-schema", schemaPath);
         }
@@ -620,6 +398,7 @@ export class ProcessRuntime implements Runtime {
       }
       case "gemini": {
         const args = ["-p", prompt, "--output-format", "stream-json"];
+        if (this.config.model) args.push("--model", this.config.model);
         return args;
       }
       default:
@@ -633,22 +412,22 @@ export class ProcessRuntime implements Runtime {
     };
 
     if (context?.target) {
-      env["0SEC_TARGET"] = context.target;
+      env["ZERO_TARGET"] = context.target;
     }
     if (context?.findings) {
-      env["0SEC_FINDINGS"] = context.findings;
+      env["ZERO_FINDINGS"] = context.findings;
     }
     if (context?.templateId) {
-      env["0SEC_TEMPLATE_ID"] = context.templateId;
+      env["ZERO_TEMPLATE_ID"] = context.templateId;
     }
     if (context?.mcp?.auth) {
-      env["0SEC_MCP_AUTH_JSON"] = JSON.stringify(context.mcp.auth);
+      env["ZERO_MCP_AUTH_JSON"] = JSON.stringify(context.mcp.auth);
     }
     if (context?.mcp?.attributionHeaders) {
-      env["0SEC_MCP_ATTRIBUTION_HEADERS_JSON"] = JSON.stringify(context.mcp.attributionHeaders);
+      env["ZERO_MCP_ATTRIBUTION_HEADERS_JSON"] = JSON.stringify(context.mcp.attributionHeaders);
     }
     if (context?.mcp?.attributionUaToken) {
-      env["0SEC_MCP_ATTRIBUTION_UA_TOKEN"] = context.mcp.attributionUaToken;
+      env["ZERO_MCP_ATTRIBUTION_UA_TOKEN"] = context.mcp.attributionUaToken;
     }
 
     return env;

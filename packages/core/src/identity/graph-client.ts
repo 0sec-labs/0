@@ -159,7 +159,7 @@ export class GraphClient {
     this.pageDelayMs = opts.pageDelayMs ?? DEFAULT_PAGE_DELAY_MS;
     this.maxPages = opts.maxPages ?? DEFAULT_MAX_PAGES;
     this.sleep = opts.sleep ?? defaultSleep;
-    this.userAgent = opts.userAgent ?? "0sec-identity";
+    this.userAgent = opts.userAgent ?? "0-identity";
   }
 
   /** GET a v1.0-relative path (`/users`) and return the parsed body. */
@@ -289,7 +289,7 @@ export class GraphClient {
       throw new GraphScopeError(url, `origin '${parsed.origin}' is not the configured Graph origin '${this.origin}'`);
     }
     if (this.scope) {
-      const match = this.scope.match(url);
+      const match = this.scope.enforce(url);
       if (!match.allowed) throw new GraphScopeError(url, match.reason);
     }
   }

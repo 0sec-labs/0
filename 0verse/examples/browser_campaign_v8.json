@@ -23,7 +23,7 @@
   "bounty_program": "Chrome Vulnerability Reward Program",
   "bounty_scope_url": "https://bughunters.google.com/about/rules/chrome-friends/chrome-vulnerability-reward-program-rules",
   "scope_checked_at": "2026-07-11T00:00:00Z",
-  "authorization": "published Chrome VRP scope; 0sec-owned dedicated worker",
+  "authorization": "published Chrome VRP scope; 0-owned dedicated worker",
   "worker": "browser",
   "source_root": "/srv/0verse/chromium/src",
   "command": [

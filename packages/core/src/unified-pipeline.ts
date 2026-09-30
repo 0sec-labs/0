@@ -19,12 +19,12 @@ import type {
   SemgrepFinding,
   ScanConfig,
   ScanPlan,
-  ScanTaskRouteMap,
-} from "@0sec/shared";
+  ScanPlanExecution,
+} from "@0/shared";
 import type { InferSelectModel } from "drizzle-orm";
-import { restoreFindingReviewFields } from "@0sec/db";
-import type { osecDB } from "@0sec/db";
-import type * as dbSchema from "@0sec/db";
+import { restoreFindingReviewFields } from "@0/db";
+import type { osecDB } from "@0/db";
+import type * as dbSchema from "@0/db";
 import type { ScanListener } from "./scanner.js";
 import { runAnalysisAgent } from "./agent-runner.js";
 import { cloneGitRepo } from "./repo-clone.js";
@@ -57,7 +57,7 @@ import { collectScopeFiles, countScopeFilesUpTo } from "./source-files.js";
 import { features as agentFeatures } from "./agent/features.js";
 import { relative as pathRelative } from "node:path";
 import { detectAvailableRuntimes } from "./runtime/registry.js";
-import type { RuntimeType } from "./runtime/types.js";
+import type { RuntimeType, RuntimeConfig, NativeRuntime } from "./runtime/types.js";
 import { LlmApiRuntime } from "./runtime/llm-api.js";
 import type { ApiRuntimeDiagnostics } from "./runtime/llm-api.js";
 import {
@@ -70,7 +70,9 @@ import {
   isExplicitLocalTargetPath,
   resolveLocalTargetPath,
 } from "./path-resolution.js";
-import { eventBus, isCloudEventSinkActive } from "./events/bus.js";
+import { eventBus } from "./events/bus.js";
+import { executeScanPlan, ScanBudgetError, scanExecutionTimeout } from "./scan-plan.js";
+import { agenticScan } from "./agentic-scanner.js";
 
 /**
  * Default ceiling on how many source files a `review` (source-code) target may
@@ -80,14 +82,14 @@ import { eventBus, isCloudEventSinkActive } from "./events/bus.js";
  * burns the entire budget producing 0 tokens + 0 findings, then times out
  * silently. We'd rather fail fast with an actionable error telling the
  * operator to scope to a subsystem/path. Overridable via
- * `0SEC_REVIEW_MAX_FILES`. 5000 catches the kernel while leaving any normal
+ * `ZERO_REVIEW_MAX_FILES`. 5000 catches the kernel while leaving any normal
  * library / service repo (typically well under ~2k source files) untouched.
  */
 const REVIEW_MAX_FILES = 5000;
 
-/** Resolve the review file-count cap, honoring `0SEC_REVIEW_MAX_FILES`. */
+/** Resolve the review file-count cap, honoring `ZERO_REVIEW_MAX_FILES`. */
 function reviewMaxFiles(): number {
-  const raw = process.env["0SEC_REVIEW_MAX_FILES"];
+  const raw = process.env["ZERO_REVIEW_MAX_FILES"];
   if (raw !== undefined) {
     const parsed = Number.parseInt(raw, 10);
     if (Number.isFinite(parsed) && parsed > 0) return parsed;
@@ -110,13 +112,13 @@ function reviewMaxFiles(): number {
  * 8 matches the hunt finder pool's default, the other place this codebase fans
  * agents out. This bounds the RATE only: every finding is still verified, in
  * input order, with identical verdicts. Override via
- * `0SEC_VERIFY_CONCURRENCY`.
+ * `ZERO_VERIFY_CONCURRENCY`.
  */
 const VERIFY_CONCURRENCY = 8;
 
-/** Resolve the verify fan-out limit, honoring `0SEC_VERIFY_CONCURRENCY`. */
+/** Resolve the verify fan-out limit, honoring `ZERO_VERIFY_CONCURRENCY`. */
 function verifyConcurrency(): number {
-  const raw = process.env["0SEC_VERIFY_CONCURRENCY"];
+  const raw = process.env["ZERO_VERIFY_CONCURRENCY"];
   if (raw !== undefined) {
     const parsed = Number.parseInt(raw, 10);
     if (Number.isFinite(parsed) && parsed > 0) return parsed;
@@ -133,7 +135,7 @@ export { mapWithConcurrency };
 
 // ── Public types ──
 
-export interface PipelineOptions {
+export interface PipelineOptions extends Omit<ScanConfig, "costLedger"> {
   target: string;
   targetType?: "npm-package" | "pypi-package" | "cargo-package" | "oci-image" | "source-code" | "url" | "web-app";
   depth: ScanDepth;
@@ -144,12 +146,19 @@ export interface PipelineOptions {
   plan?: ScanPlan;
   /** Shared ledger for a multi-run plan. */
   costLedger?: ScanCostLedger;
-  /** Operator-approved model id per task. */
-  taskRoutes?: ScanTaskRouteMap;
+  agentModels?: Readonly<Record<string, string>>;
+  autoRoute?: boolean;
+  singleModel?: boolean;
+  nativeRuntime?: NativeRuntime;
+  provider?: RuntimeConfig["provider"];
+  signal?: AbortSignal;
+  /** A parent plan emits one terminal event after every attempt settles. */
+  emitTerminalEvent?: boolean;
   resumeScanId?: string;
   diffBase?: string;
   changedOnly?: boolean;
   onEvent?: (event: { type: string; stage?: string; message: string; data?: unknown }) => void;
+  getPendingUserMessages?: () => string[];
   dbPath?: string;
   /** Stable local execution id. Fresh runs allocate one; cloud runs use scan id. */
   runId?: string;
@@ -221,7 +230,7 @@ export interface PipelineOptions {
    * External candidate vulnerable spans (e.g. from `gemmaforge scan`) to seed
    * the review agent's worklist alongside — or instead of — semgrep. Each
    * record carries its own source tag, so provenance survives into the agent
-   * prompt and downstream reports. Closes 0sec#368.
+   * prompt and downstream reports. Closes 0#368.
    */
   seedFindings?: SeedFinding[];
   /**
@@ -236,7 +245,7 @@ export interface PipelineOptions {
    * addition to the static review agent. Only effective for npm-ecosystem
    * targets (`--ecosystem npm` package-source reviews or `npm-package` audits).
    * Off by default (extra install + untrusted-exec cost); also enabled by the
-   * `0SEC_NPM_DYNAMIC_DISCOVERY` env toggle for cloud config. Confirmed leads
+   * `ZERO_NPM_DYNAMIC_DISCOVERY` env toggle for cloud config. Confirmed leads
    * join `findings` so they flow into the same verify → disclosure path.
    */
   npmDynamicDiscovery?: boolean;
@@ -248,7 +257,7 @@ export interface PipelineOptions {
   npmDynamicRunner?: NpmPackageRunner;
 }
 
-export interface PipelineReport {
+export interface PipelineReport extends ScanPlanExecution {
   target: string;
   targetType: string;
   startedAt: string;
@@ -269,14 +278,14 @@ export interface PipelineReport {
   researchFailed?: boolean;
   /**
    * True when the run terminated early because the shared per-scan cost
-   * ceiling (`--cost-ceiling` / 0SEC_COST_CEILING_USD) was reached —
+   * ceiling (`--cost-ceiling` / ZERO_COST_CEILING_USD) was reached —
    * research tripped it or the verify wave was skipped/truncated on budget.
    * The CLI maps this to exit code 4 and the cloud lands the scan
    * `cost_exceeded` (never a clean pass). Absent on normal completions.
    */
   costCeilingExceeded?: boolean;
   /** Terminal reason; mirrors the agentic-scanner report contract. */
-  exitReason?: "completed" | "cost_ceiling_exceeded";
+  exitReason?: "completed" | "failed" | "cost_ceiling_exceeded" | "time_cap_exceeded" | "cancelled" | "partial";
   // Extras for backwards compat
   package?: string;
   version?: string;
@@ -332,11 +341,6 @@ export function resolveSubsystemScope(
   return existsSync(subPath) ? subPath : null;
 }
 
-function shouldEmitPipelineCloudEvents(): boolean {
-  if (isCloudEventSinkActive()) return true;
-  const flag = process.env["0SEC_CLOUD_EVENTS"];
-  return !!flag && flag !== "0" && flag.toLowerCase() !== "false";
-}
 
 /**
  * Convert external `SeedFinding[]` (from `--seed-findings`) into the
@@ -357,7 +361,7 @@ function shouldEmitPipelineCloudEvents(): boolean {
  * leads more attention. The mapping is deliberately conservative —
  * "critical" is reserved for findings the agent has actually confirmed.
  *
- * Closes 0sec#368.
+ * Closes 0#368.
  */
 export function seedFindingsToSemgrepShape(seeds: SeedFinding[]): SemgrepFinding[] {
   return seeds.map((s) => {
@@ -615,7 +619,7 @@ function prepareSourceCode(target: string, emit: ScanListener): PrepareResult {
     };
   }
 
-  const tempDir = join(tmpdir(), `0sec-pipeline-${randomUUID().slice(0, 8)}`);
+  const tempDir = join(tmpdir(), `0-pipeline-${randomUUID().slice(0, 8)}`);
   mkdirSync(tempDir, { recursive: true });
 
   emit({ type: "stage:start", stage: "prepare", message: `Cloning ${target}...` });
@@ -750,7 +754,7 @@ function buildSummary(findings: Finding[], totalAttacks: number) {
  * the drizzle schema. We thread this through `restorePersistedFinding`
  * (rather than `any`) so the *next* column added to `schema.findings`
  * fails to compile in the rehydrator instead of being silently dropped
- * on resume. See 0sec#414 / 0sec#382 — historical regressions where
+ * on resume. See 0#414 / 0#382 — historical regressions where
  * `verificationSpec`, `pocSteps`, `layerVerdicts`, `pocExecution`, the
  * `workflow*` fields, and `score` were each added to the writer/schema
  * but never threaded back through the loader.
@@ -782,7 +786,7 @@ type RestorablePersistedFindingRow = Omit<
  * when the column is a non-empty string of valid JSON, the value itself
  * when it is already an object (sink-shim / test-double path), or
  * `undefined` otherwise. Malformed JSON is non-fatal: the finding still
- * restores, just without that field. See 0sec#414.
+ * restores, just without that field. See 0#414.
  */
 function parseJsonColumn<T>(value: string | T | null | undefined): T | undefined {
   if (value == null) return undefined;
@@ -838,7 +842,7 @@ function parseSemanticDedupe(
  * inside `runPipeline`.
  */
 export function restorePersistedFinding(row: RestorablePersistedFindingRow): Finding {
-  // 0sec#193 — `verificationSpec` is the deterministic re-check contract
+  // 0#193 — `verificationSpec` is the deterministic re-check contract
   // produced by the OSS engine and consumed by cloud's canary watcher.
   // It is persisted as JSON text and must be threaded through every
   // reload path; otherwise findings restored from storage silently lose
@@ -865,7 +869,7 @@ export function restorePersistedFinding(row: RestorablePersistedFindingRow): Fin
     }
   }
 
-  // 0sec#414 — mirror the verificationSpec thread for every other
+  // 0#414 — mirror the verificationSpec thread for every other
   // JSON-text column the writer persists. Each defaults to `undefined`
   // when missing or malformed; the typed `RestorablePersistedFindingRow`
   // parameter ensures any new column added to the schema fails to
@@ -894,7 +898,7 @@ export function restorePersistedFinding(row: RestorablePersistedFindingRow): Fin
     fingerprint: row.fingerprint ?? undefined,
     triageStatus: row.triageStatus as Finding["triageStatus"],
     triageNote: row.triageNote ?? undefined,
-    // 0sec#414 — workflow + score fields were persisted by saveFinding
+    // 0#414 — workflow + score fields were persisted by saveFinding
     // but silently dropped on resume. Thread the scalar columns directly.
     workflowStatus: (row.workflowStatus ?? undefined) as FindingWorkflowStatus | undefined,
     workflowAssignee: row.workflowAssignee ?? undefined,
@@ -915,7 +919,7 @@ export function restorePersistedFinding(row: RestorablePersistedFindingRow): Fin
     pocExecution,
     ...(semanticDedupe ? { semanticDedupe } : {}),
     ...(findingRank !== undefined ? { findingRank } : {}),
-    // 0sec#420 — `verification_result` and `reviewAnnotation` are the two
+    // 0#420 — `verification_result` and `reviewAnnotation` are the two
     // inputs the source-fix eligibility check reads. They were persisted
     // by the writer but had no columns until now; without threading them
     // back here every reloaded finding reports "not reproduced" and the
@@ -930,10 +934,10 @@ export function restorePersistedFinding(row: RestorablePersistedFindingRow): Fin
 function listChangedFiles(scopePath: string, diffBase: string): string[] {
   const output = execFileSync(
     "git",
-    ["diff", "--name-only", "--diff-filter=ACMR", `${diffBase}...HEAD`],
+    ["diff", "--name-only", "--diff-filter=ACMRD", `${diffBase}...HEAD`],
     {
       cwd: scopePath,
-      timeout: 30_000,
+      timeout: scanExecutionTimeout(30_000),
       stdio: "pipe",
       encoding: "utf-8",
     },
@@ -942,15 +946,14 @@ function listChangedFiles(scopePath: string, diffBase: string): string[] {
   return output
     .split("\n")
     .map((line) => line.trim())
-    .filter(Boolean)
-    .filter((path) => existsSync(join(scopePath, path)));
+    .filter(Boolean);
 }
 
 /**
  * `--runtime codex` is a special case: it can resolve through either the
  * local `codex` CLI binary (subscription path, source-analysis only) OR
  * through the direct ChatGPT Codex provider when one of
- * `0SEC_CHATGPT_ACCESS_TOKEN` / `0SEC_CHATGPT_OAUTH_REFRESH_TOKEN` is
+ * `ZERO_CHATGPT_ACCESS_TOKEN` / `ZERO_CHATGPT_OAUTH_REFRESH_TOKEN` is
  * set. In the latter mode `LlmApiRuntime` reports `provider:
  * "chatgpt-codex"`, and the pipeline must route the codex request through
  * the API runtime instead of bailing with "Requested runtime 'codex' is
@@ -979,7 +982,7 @@ function selectVerificationRuntime(
   if (preferredRuntime && preferredRuntime !== "auto") {
     if (availableRuntimes.has(preferredRuntime)) return preferredRuntime;
     // Explicit `--runtime codex` with the direct ChatGPT Codex provider
-    // configured (0SEC_CHATGPT_*_TOKEN env). Route verification through
+    // configured (ZERO_CHATGPT_*_TOKEN env). Route verification through
     // the API runtime — agent-runner.ts will pick up the same env vars
     // and run the native tool_use loop against chatgpt.com.
     if (preferredRuntime === "codex" && hasDirectChatGptCodexProvider(apiDiagnostics)) {
@@ -1154,7 +1157,7 @@ export async function runPerFileResearch(
 
 /** Env-toggle counterpart of the `npmDynamicDiscovery` opt-in (cloud config). */
 function npmDynamicDiscoveryEnvEnabled(): boolean {
-  const v = (process.env["0SEC_NPM_DYNAMIC_DISCOVERY"] ?? "").trim().toLowerCase();
+  const v = (process.env["ZERO_NPM_DYNAMIC_DISCOVERY"] ?? "").trim().toLowerCase();
   return v === "1" || v === "true" || v === "yes" || v === "on";
 }
 
@@ -1204,7 +1207,7 @@ export async function runNpmDynamicDiscoveryStage(args: {
 // ── Main entry point ──
 
 /**
- * Unified pipeline for all 0sec scan types.
+ * Unified pipeline for all 0 scan types.
  *
  * Pipeline:
  *   Phase 1: PREPARE   — detect target type, install/clone/resolve
@@ -1216,30 +1219,74 @@ export async function runNpmDynamicDiscoveryStage(args: {
  * (Claude Code CLI, Codex, API with native tool_use, legacy fallback).
  */
 export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport> {
+  const targetType = opts.targetType ?? detectTargetType(opts.target);
+  if (targetType === "url" || targetType === "web-app") {
+    const report = await agenticScan({
+      config: {
+        target: opts.target, depth: opts.depth, format: opts.format, runtime: opts.runtime, mode: opts.mode,
+        plan: opts.plan, costLedger: opts.costLedger, signal: opts.signal, costCeilingUsd: opts.costCeilingUsd,
+        model: opts.model, apiKey: opts.apiKey, timeout: opts.timeout, scanTimeout: opts.scanTimeout,
+        agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel,
+        repoPath: opts.repoPath, auth: opts.auth, identities: opts.identities, apiSpecPath: opts.apiSpecPath,
+        scopeFile: opts.scopeFile, rateLimit: opts.rateLimit, allowScanners: opts.allowScanners,
+        attributionHeaders: opts.attributionHeaders, attributionUaToken: opts.attributionUaToken,
+        engagementProfile: opts.engagementProfile, wafEvasion: opts.wafEvasion, dispatchMode: opts.dispatchMode,
+        httpAuditAllowedHosts: opts.httpAuditAllowedHosts, httpAuditAllowedPaths: opts.httpAuditAllowedPaths,
+        httpAuditRateLimitRps: opts.httpAuditRateLimitRps, httpAuditKillAfterSec: opts.httpAuditKillAfterSec,
+        race: opts.race, egats: opts.egats, maxConcurrency: opts.maxConcurrency, maxAttackTurns: opts.maxAttackTurns,
+      },
+      nativeRuntime: opts.nativeRuntime, provider: opts.provider, dbPath: opts.dbPath, runId: opts.runId,
+      resumeScanId: opts.resumeScanId, onEvent: opts.onEvent as ScanListener,
+      emitTerminalEvent: opts.emitTerminalEvent,
+      getPendingUserMessages: opts.getPendingUserMessages,
+    });
+    return { ...report, targetType };
+  }
+  if (!opts.plan) return runPipelineSingle(opts);
+  return executeScanPlan({
+    plan: opts.plan,
+    ledger: opts.costLedger,
+    signal: opts.signal,
+    costCeilingUsd: opts.costCeilingUsd,
+    emitTerminalEvent: opts.emitTerminalEvent,
+    emptyReport: (): PipelineReport => ({
+      target: opts.target, targetType: opts.targetType ?? detectTargetType(opts.target),
+      startedAt: new Date().toISOString(), completedAt: new Date().toISOString(), durationMs: 0,
+      summary: { totalAttacks: 0, totalFindings: 0, critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+      findings: [], warnings: [],
+    }),
+    dispatch: ({ runIndex, plan, ledger, signal, costCeilingUsd }) => runPipelineSingle({
+      ...opts, plan, depth: plan.depth, costLedger: ledger, signal, costCeilingUsd,
+      timeout: Math.min(opts.timeout ?? plan.timeCapMs, plan.timeCapMs),
+      resumeScanId: runIndex === 1 ? opts.resumeScanId : undefined,
+      runId: runIndex === 1 && opts.resumeScanId ? opts.resumeScanId : `${opts.runId ?? randomUUID()}-run-${runIndex}`,
+      emitTerminalEvent: false,
+    }),
+  });
+}
+
+async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport> {
   const emit: ScanListener = (opts.onEvent as ScanListener) ?? (() => {});
   const startTime = Date.now();
   const warnings: Array<{ stage: string; message: string }> = [];
   let researchFailed = false;
   let emittedScanCompleted = false;
+  let findings: Finding[] = [];
+  let executionError: string | undefined;
 
   if (opts.runId && opts.resumeScanId && opts.runId !== opts.resumeScanId) {
-    throw new Error("0sec pipeline runId must match resumeScanId when resuming.");
+    throw new Error("0 pipeline runId must match resumeScanId when resuming.");
   }
 
   const emitPipelineScanCompleted = (
     exitReason: "completed" | "failed" | "cost_exceeded",
     payload: Record<string, unknown> = {},
   ): void => {
-    if (!shouldEmitPipelineCloudEvents()) return;
-    if (emittedScanCompleted) return;
+    if (emittedScanCompleted || opts.emitTerminalEvent === false) return;
     emittedScanCompleted = true;
-    // Mirror the audit path's scan_completed field set (agentic-scanner.ts
-    // emitScanCompleted) so the cloud can populate scan detail for
-    // pipeline (review / package-audit) runs too: the engine-resolved model,
-    // cross-session turns + tool-call totals, and the ledger's true
-    // cross-session cost + per-model breakdown. cost_usd / cost_breakdown
-    // are omitted when no metered runtime ran (never a fabricated $0);
-    // model is omitted when nothing resolved one (never a guess).
+    // Include the engine-resolved model, cross-session turns and tool-call
+    // totals, and the ledger's actual cost and per-model breakdown. Omit
+    // cost/model when no metered runtime resolved them.
     const cost = costLedger.costBreakdown();
     eventBus.emit("scan_completed", {
       exit_reason: exitReason,
@@ -1276,12 +1323,17 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
   // rather than a fabricated estimate.
   const usageTotals = { inputTokens: 0, outputTokens: 0, turns: 0 };
   const recordUsage = (
-    r?: { usage?: { inputTokens: number; outputTokens: number }; turns?: number } | null,
+    r?: { usage?: { inputTokens: number; outputTokens: number }; turns?: number; executionSuccessful?: boolean; error?: string } | null,
   ): void => {
     if (!r) return;
     usageTotals.inputTokens += r.usage?.inputTokens ?? 0;
     usageTotals.outputTokens += r.usage?.outputTokens ?? 0;
     usageTotals.turns += r.turns ?? 0;
+    if (r.executionSuccessful === false) {
+      researchFailed = true;
+      executionError ??= r.error ?? "Agent did not complete its planned investigation.";
+      warnings.push({ stage: openPhase?.name ?? "research", message: r.error ?? "Agent did not complete its planned investigation." });
+    }
   };
 
   // ── Per-scan metrics tracked off the bus ──
@@ -1304,7 +1356,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
   // not each session (previously every session got the full ceiling, so a
   // $3-capped 0review scan could really spend research($3) + N×verify($3);
   // prod review scans landed at $4.99 / $6.36).
-  const costLedger = opts.costLedger ?? new ScanCostLedger();
+  const costLedger = opts.costLedger?.fork() ?? new ScanCostLedger();
   // Engine-resolved model id, stamped on scan_completed and used for pricing.
   // Assigned once the API runtime is probed below; stays undefined when
   // nothing resolved a model (for example, a CLI runtime with no model pick).
@@ -1322,29 +1374,28 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
         index: number;
         startedAt: number;
         usageAtStart: { inputTokens: number; outputTokens: number; turns: number };
+        costAtStart: number;
       }
     | null = null;
   const finishPhase = (): void => {
     if (!openPhase) return;
-    if (shouldEmitPipelineCloudEvents()) {
-      eventBus.emit("phase_completed", {
-        name: openPhase.name,
-        index: openPhase.index,
-        duration_ms: Date.now() - openPhase.startedAt,
-        input_tokens: usageTotals.inputTokens - openPhase.usageAtStart.inputTokens,
-        output_tokens: usageTotals.outputTokens - openPhase.usageAtStart.outputTokens,
-        turns: usageTotals.turns - openPhase.usageAtStart.turns,
-      });
-    }
+    eventBus.emit("phase_completed", {
+      name: openPhase.name,
+      index: openPhase.index,
+      duration_ms: Date.now() - openPhase.startedAt,
+      input_tokens: usageTotals.inputTokens - openPhase.usageAtStart.inputTokens,
+      output_tokens: usageTotals.outputTokens - openPhase.usageAtStart.outputTokens,
+      turns: usageTotals.turns - openPhase.usageAtStart.turns,
+      cost_usd: costLedger.runCostUsd() - openPhase.costAtStart,
+    });
     openPhase = null;
   };
   const startPhase = (name: string): void => {
     finishPhase();
+    if (name !== "report") opts.signal?.throwIfAborted();
     const index = phaseIndex++;
-    openPhase = { name, index, startedAt: Date.now(), usageAtStart: { ...usageTotals } };
-    if (shouldEmitPipelineCloudEvents()) {
-      eventBus.emit("phase_started", { name, index });
-    }
+    openPhase = { name, index, startedAt: Date.now(), usageAtStart: { ...usageTotals }, costAtStart: costLedger.runCostUsd() };
+    eventBus.emit("phase_started", { name, index });
   };
 
   const runState = await (async () => {
@@ -1356,7 +1407,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
         repairOsecDatabase,
         resolveOsecRunStorage,
         writeOsecRunReport,
-      } = await import("@0sec/db");
+      } = await import("@0/db");
       const storage = resolveOsecRunStorage({
         dbPath: opts.dbPath,
         runId: opts.resumeScanId ?? opts.runId,
@@ -1426,7 +1477,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
   emit({ type: "stage:end", stage: "prepare", message: `Target ready: ${prepared.resolvedType}` });
 
   // Honor `--subsystem` for non-kernel source reviews by narrowing the review
-  // scope to the requested subtree (0sec). Without this the subsystem hint
+  // scope to the requested subtree (0). Without this the subsystem hint
   // was ignored outside the linux-kernel profile, so `--subsystem` on a large
   // monorepo (e.g. dotnet/runtime) left scopePath at the whole repo and the
   // oversized-review guard below rejected it every time.
@@ -1444,7 +1495,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     }
   }
 
-  // Oversized-review guard (0sec). A whole-repo `review` feeds the source
+  // Oversized-review guard (0). A whole-repo `review` feeds the source
   // tree to a single agent session under a fixed time budget; on a target the
   // size of the Linux kernel (~80k source files) the session exhausts the
   // budget with 0 tokens + 0 findings and times out silently. Count the scope
@@ -1460,20 +1511,39 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
   // review guard. The guard counts the WHOLE repo, so a 3-file PR on a
   // monorepo would otherwise be rejected for the repo's size — the review
   // only reads the changed set, so the cap must apply to that set, not the
-  // repo. null = not a diff run or the diff failed (fall back to whole-repo).
+  // repo. A missing or unreadable diff must never widen an explicitly scoped run.
+  const diffReview = prepared.resolvedType === "source-code" && !!opts.changedOnly;
   let diffChangedFiles: string[] | null = null;
-  if (
-    prepared.resolvedType === "source-code" &&
-    opts.diffBase &&
-    opts.changedOnly &&
-    !opts.resumeScanId
-  ) {
-    try {
-      diffChangedFiles = listChangedFiles(prepared.scopePath, opts.diffBase);
-    } catch {
-      diffChangedFiles = null;
+  let diffPatch = "";
+  if (diffReview) {
+    if (!opts.diffBase) throw new Error("Changed-only review requires a diff base; refusing whole-repository fallback.");
+    diffChangedFiles = listChangedFiles(prepared.scopePath, opts.diffBase);
+    diffPatch = execFileSync("git", [
+      "diff", "--no-ext-diff", "--no-textconv", "--unified=3", `${opts.diffBase}...HEAD`,
+    ], { cwd: prepared.scopePath, timeout: scanExecutionTimeout(30_000), encoding: "utf-8", maxBuffer: 256 * 1024 });
+    if (!diffPatch.trim()) throw new Error("No reviewable diff found; refusing whole-repository fallback.");
+    // A diff is input data, not an unlimited prompt budget. Keep the initial
+    // review request below the provider context ceiling; the agent can fetch
+    // omitted hunks with read_file after the changed-path manifest is shown.
+    const maxInitialDiffChars = 64 * 1024;
+    if (Buffer.byteLength(diffPatch, "utf8") > maxInitialDiffChars) {
+      const half = Math.floor(maxInitialDiffChars / 2);
+      diffPatch = diffPatch.slice(0, half)
+        + "\n\n[0: middle of oversized diff omitted from initial prompt; inspect changed paths with read_file]\n\n"
+        + diffPatch.slice(-half);
     }
   }
+  // A routine small change gets one bounded research pass and one bounded
+  // independent verification pass. Bigger diffs keep the established budget;
+  // neither path widens the source scope or silently turns exhaustion into a
+  // clean review.
+  let addedLines = 0;
+  if (diffReview) {
+    for (const line of diffPatch.split("\n")) {
+      if (line.startsWith("+") && !line.startsWith("+++")) addedLines++;
+    }
+  }
+  const smallDiffReview = diffReview && diffChangedFiles!.length <= 3 && addedLines <= 80;
 
   if (prepared.resolvedType === "source-code" && !opts.resumeScanId) {
     const cap = reviewMaxFiles();
@@ -1493,7 +1563,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
           `review cap — split the change or scope to a subsystem/path`
         : `review target too large: over ${cap} source files exceeds the ${cap} ` +
           `review cap — scope to a subsystem/path (e.g. a specific directory) or ` +
-          `use a smaller target (override with 0SEC_REVIEW_MAX_FILES)`;
+          `use a smaller target (override with ZERO_REVIEW_MAX_FILES)`;
       logPipelineEvent("prepare", "stage_error", { error: msg, fileCount, cap });
       emit({ type: "error", stage: "prepare", message: msg });
       throw new Error(msg);
@@ -1508,7 +1578,10 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     mode: opts.mode ?? "deep",
     ...(opts.plan ? { plan: opts.plan } : {}),
     costLedger,
-    ...(opts.taskRoutes ? { taskRoutes: opts.taskRoutes } : {}),
+    agentModels: opts.agentModels,
+    autoRoute: opts.autoRoute,
+    singleModel: opts.singleModel,
+    signal: opts.signal,
     // Thread the resolved package identity through to the publishability /
     // novelty gate (issue #851). Without this the gate defaulted ecosystem to
     // npm and dropped the version, so it could only do package-level dedup. We
@@ -1532,7 +1605,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       } else {
         const newScanId = runState?.storage.runId;
         if (!newScanId) {
-          throw new Error("0sec run storage was unavailable before scan creation.");
+          throw new Error("0 run storage was unavailable before scan creation.");
         }
         persistedScanId = newScanId;
         db.createScan(scanConfig, persistedScanId);
@@ -1567,18 +1640,23 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
 
     let semgrepFindings: SemgrepFinding[] = [];
     let npmAuditFindings: NpmAuditFinding[] = [];
-    // Seeded by the pre-guard diff scoping for changedOnly runs; empty when
-    // not a diff run or the pre-guard diff failed (the analyze stage's own
-    // diffBase block then recomputes / falls back to full review).
+    // A changed-only run was resolved above and never falls back to a full scan.
     let changedFiles: string[] = diffChangedFiles ?? [];
     const staticScanner = selectedStaticScanner();
     let staticScannerRan = false;
+    // The managed PR review already binds an exact patch and sends one
+    // diff-scoped agent through its relevant callers. Foxguard's `diff`
+    // subcommand first scans the entire HEAD tree, then filters to changed
+    // files, so a one-line PR on a large repo paid a 134-second static pass.
+    // Skip that prepass only here; whole-tree/source and package reviews
+    // retain Foxguard, and an explicit Semgrep selection still runs.
+    const skipFoxguardForDiff = diffReview && staticScanner === "foxguard";
     let staticScannerFindings = 0;
 
     // External seeds (e.g. from `gemmaforge scan` via `--seed-findings`).
     // Prepended to semgrepFindings so the agent prompt lists them FIRST —
     // the agent treats top-of-list as highest priority. When `seedOnly` is
-    // also set we skip the static scan entirely. Closes 0sec#368.
+    // also set we skip the static scan entirely. Closes 0#368.
     const externalSeedCount = opts.seedFindings?.length ?? 0;
     if (externalSeedCount > 0) {
       const seededAsSemgrep = seedFindingsToSemgrepShape(opts.seedFindings!);
@@ -1600,6 +1678,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     if (
       prepared.resolvedType === "source-code" &&
       opts.diffBase &&
+      !diffReview &&
       changedFiles.length === 0
     ) {
       try {
@@ -1636,11 +1715,12 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       }
     }
 
-    // Static source scan. Foxguard is the default; 0SEC_STATIC=semgrep
+    // Static source scan. Foxguard is the default; ZERO_STATIC=semgrep
     // routes source and package-source leads through Semgrep while leaving
     // dependency advisory checks intact.
     if (
-      !skipSemgrep && (
+      !skipSemgrep && !skipFoxguardForDiff &&
+      (!diffReview || changedFiles.some(path => existsSync(join(prepared.scopePath, path)))) && (
       prepared.resolvedType === "source-code" ||
       prepared.resolvedType === "npm-package" ||
       prepared.resolvedType === "pypi-package" ||
@@ -1652,7 +1732,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       try {
         const changedOnlyPaths =
           opts.changedOnly && changedFiles.length > 0
-            ? changedFiles.map((path) => join(prepared.scopePath, path))
+            ? changedFiles.map((path) => join(prepared.scopePath, path)).filter(path => existsSync(path))
             : undefined;
         const packageStaticTarget =
           prepared.resolvedType === "npm-package" ||
@@ -1660,7 +1740,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
           prepared.resolvedType === "cargo-package" ||
           prepared.resolvedType === "oci-image";
 
-        // Subsystem-scoped static scanning (0sec#466). When --subsystem is
+        // Subsystem-scoped static scanning (0#466). When --subsystem is
         // set for a linux-kernel review, scope the static scanner to only the
         // specified subdirectory/directories. The full tree is still available
         // for cross-reference reads, but scanning the whole 30M-line tree
@@ -1686,7 +1766,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       }
     }
 
-    // Haskell fallback seed layer (0sec). Foxguard v0.10.0 emits built-in
+    // Haskell fallback seed layer (0). Foxguard v0.10.0 emits built-in
     // Cardano Haskell leads; keep this regex pass only for Semgrep/fallback
     // runs or older scanner output so cardano-haskell reviews never start from
     // an empty scanner list.
@@ -1717,7 +1797,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       }
     }
 
-    // Solidity/EVM fallback seed layer (0sec "0contract"). Semgrep's
+    // Solidity/EVM fallback seed layer (0 "0contract"). Semgrep's
     // Solidity coverage is thin and Slither is not on PATH in the engine
     // image, so this regex pass gives the evm-onchain review concrete
     // candidate sinks (external calls, delegatecall, cross-chain handlers,
@@ -1783,16 +1863,14 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       semgrepFindings: semgrepFindings.length,
       npmAuditFindings: npmAuditFindings.length,
     });
-    if (shouldEmitPipelineCloudEvents()) {
-      eventBus.emit("analyze:stage_complete", {
-        stage: "static-analysis",
-        staticScanner,
-        staticScannerRan,
-        staticScannerFindings,
-        semgrepFindings: semgrepFindings.length,
-        npmAuditFindings: npmAuditFindings.length,
-      });
-    }
+    eventBus.emit("analyze:stage_complete", {
+      stage: "static-analysis",
+      staticScanner,
+      staticScannerRan,
+      staticScannerFindings,
+      semgrepFindings: semgrepFindings.length,
+      npmAuditFindings: npmAuditFindings.length,
+    });
 
     const availableRuntimes = await detectAvailableRuntimes();
     const needsApiDiagnostics =
@@ -1806,6 +1884,10 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
           timeout: opts.timeout ?? 120_000,
           apiKey: opts.apiKey,
           model: opts.model,
+          provider: opts.provider,
+          agentModels: opts.agentModels,
+          autoRoute: opts.autoRoute,
+          singleModel: opts.singleModel,
         })
       : null;
     const apiDiagnostics = apiRuntimeForDiagnostics
@@ -1816,19 +1898,17 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
           providerLabel: "OpenAI",
           reason: "missing_key",
         } satisfies ApiRuntimeDiagnostics;
-    assertApiRuntimeSelection(opts.runtime, apiDiagnostics);
+    if (!opts.nativeRuntime) assertApiRuntimeSelection(opts.runtime, apiDiagnostics);
     // The model id this run actually drives: the operator's explicit pick
     // wins; otherwise the probed API runtime's resolved (provider-default)
     // model — but only when that runtime is really configured, so a scan
     // that ran on a CLI runtime never gets a guessed model stamped.
     resolvedModel =
-      opts.model ??
-      (apiDiagnostics.valid
-        ? apiRuntimeForDiagnostics?.resolvedModel()
-        : undefined);
-    const hasApiKey = apiDiagnostics.valid;
+      opts.nativeRuntime?.resolvedModel?.() ?? opts.model ??
+      (apiDiagnostics.valid ? apiRuntimeForDiagnostics?.resolvedModel() : undefined);
+    const hasApiKey = !!opts.nativeRuntime || apiDiagnostics.valid;
     const hasCliRuntime = availableRuntimes.size > 0;
-    const canUseAiRuntime = hasRequestedAnalysisRuntime(
+    const canUseAiRuntime = !!opts.nativeRuntime || hasRequestedAnalysisRuntime(
       opts.runtime,
       hasApiKey,
       availableRuntimes,
@@ -1837,8 +1917,8 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     const verificationRuntime = selectVerificationRuntime(opts.runtime, hasApiKey, availableRuntimes, apiDiagnostics);
 
     // Log pipeline decisions to stderr for CI visibility
-    if (process.env.CI || process.env["0SEC_DEBUG"]) {
-      process.stderr.write(`[0sec] Research: apiKey=${hasApiKey}, apiReason=${apiDiagnostics.reason ?? "ok"}, runtimes=[${[...availableRuntimes].join(",")}], config=${opts.runtime ?? "auto"}\n`);
+    if (process.env.CI || process.env["ZERO_DEBUG"]) {
+      process.stderr.write(`[0] Research: apiKey=${hasApiKey}, apiReason=${apiDiagnostics.reason ?? "ok"}, runtimes=[${[...availableRuntimes].join(",")}], config=${opts.runtime ?? "auto"}\n`);
     }
 
     if (!canUseAiRuntime) {
@@ -1848,6 +1928,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
           ? `Requested runtime '${opts.runtime}' is not available. AI analysis skipped.`
           : "No API key or CLI runtime available. AI analysis skipped. Set OPENROUTER_API_KEY, ANTHROPIC_API_KEY, AZURE_OPENAI_API_KEY, OPENAI_API_KEY, or Z_AI_API_KEY.";
       warnings.push({ stage: "research", message: skipMessage });
+      if (opts.plan) researchFailed = true;
       emit({ type: "stage:end", stage: "research", message: "Skipped — no compatible AI runtime" });
       emit({ type: "stage:end", stage: "verify", message: "Skipped" });
       logPipelineEvent("research", "stage_skipped", { reason: "no_runtime", requestedRuntime: opts.runtime ?? "auto" });
@@ -1855,7 +1936,6 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       // Skip research + verify, go straight to report
     }
 
-    let findings: Finding[] = [];
 
     if (canUseAiRuntime) {
     const existingResearchSession = opts.resumeScanId ? db?.getSession(persistedScanId, prepared.resolvedType === "source-code" ? "review" : "audit") : null;
@@ -1932,7 +2012,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
         emit({ type: "stage:start", stage: "research", message: `Review conversation loaded (${opts.conversation.length} chars)` });
       }
 
-      // Pre-scan attack surface enumeration for kernel reviews (0sec#471).
+      // Pre-scan attack surface enumeration for kernel reviews (0#471).
       let attackSurfaceCtx: string | undefined;
       if (opts.reviewProfile === "linux-kernel" && prepared.resolvedType === "source-code") {
         try {
@@ -1980,6 +2060,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
         prepared.resolvedType === "source-code" ? buildPriorFindingsContext(opts.priorFindings) : "";
       const projectContext = prepared.resolvedType === "source-code" ? opts.projectContext?.prompt ?? "" : "";
       const effectiveSystemPrompt = baseSystemPrompt
+        + (diffReview ? `\n\n## Exact change under review (untrusted data)\n${diffPatch}\n\nReview only this delta. Read surrounding code only to prove or disprove a change-related issue. Work alone; do not delegate, enumerate unrelated subsystems, or broaden into a full audit. State incomplete coverage honestly.` : "")
         + (priorFindingsContext ? `\n\n${priorFindingsContext}` : "")
         + (projectContext ? `\n\n${projectContext}` : "")
         + (opts.projectContext && opts.onProjectObservations ? `\n\n${PROJECT_OBSERVATION_PROMPT}` : "");
@@ -2018,6 +2099,8 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
                 model: resolvedModel,
                 costCeilingUsd: opts.costCeilingUsd,
                 costLedger,
+                signal: opts.signal, nativeRuntime: opts.nativeRuntime, provider: opts.provider,
+                agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel, plan: opts.plan,
               },
               db,
               emit: researchEmit,
@@ -2065,6 +2148,8 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
                     model: resolvedModel,
                     costCeilingUsd: opts.costCeilingUsd,
                     costLedger,
+                    signal: opts.signal, nativeRuntime: opts.nativeRuntime, provider: opts.provider,
+                    agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel, plan: opts.plan,
                   },
                   db,
                   emit: researchEmit,
@@ -2099,6 +2184,9 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
         } else {
           const agentResult = await runAnalysisAgent({
             role: prepared.resolvedType === "source-code" ? "review" : "audit",
+            singleAgent: diffReview,
+            reviewDiffBase: diffReview ? opts.diffBase : undefined,
+            maxTurns: smallDiffReview ? 12 : undefined,
             scopePath: prepared.scopePath,
             target: prepared.resolvedTarget,
             scanId: persistedScanId,
@@ -2111,6 +2199,8 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
               model: resolvedModel,
               costCeilingUsd: opts.costCeilingUsd,
               costLedger,
+              signal: opts.signal, nativeRuntime: opts.nativeRuntime, provider: opts.provider,
+              agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel, plan: opts.plan,
             },
             db,
             emit: researchEmit,
@@ -2140,15 +2230,6 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
         warnings.push({ stage: "research", message: `AI analysis failed: ${msg}` });
         logPipelineEvent("research", "warning", { message: `AI analysis failed: ${msg}` });
       }
-    } else {
-      // URL / web-app targets — not supported yet in unified pipeline
-      warnings.push({
-        stage: "research",
-        message: `Target type "${prepared.resolvedType}" is not yet supported in the unified pipeline. Use '0sec scan' for URL/web-app targets.`,
-      });
-      logPipelineEvent("research", "warning", {
-        message: `Target type "${prepared.resolvedType}" is not yet supported in the unified pipeline.`,
-      });
     }
 
     emit({
@@ -2314,10 +2395,10 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
         const memoryStore = db ? createScanMemoryStore(db) : undefined;
         const verifyResults = await mapWithConcurrency(
           findings,
-          verifyConcurrency(),
+          diffReview ? 1 : verifyConcurrency(),
           async (finding) => {
             // Extract file path from evidence_request field
-            const filePath = finding.evidence.request || "";
+            const filePath = finding.reviewAnnotation?.path || finding.evidence.request || "";
             // Extract PoC from evidence_response (the PoC code)
             const poc = finding.evidence.response || finding.evidence.analysis || "";
             const claimedSeverity = finding.severity;
@@ -2328,6 +2409,9 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
               claimedSeverity,
               prepared.scopePath,
             );
+            if (diffReview) {
+              verifySystemPrompt += "\n\nThis is a diff-scoped review. Independently verify only the claimed change and its required callers/guards; stop once resolved. The research finding already owns the PR annotation and any exact replacement; do not emit a second suggestion. Cite the actual source path if confirmed, and report independently whether the claimed issue holds.";
+            }
             if (memoryStore) {
               try {
                 const memories = await memoryStore.getRelevantMemories(finding, opts.target);
@@ -2351,6 +2435,9 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
               const agentResult = await runAnalysisAgent({
                 role: "review",
                 purpose: "verify",
+                singleAgent: diffReview,
+                reviewDiffBase: diffReview ? opts.diffBase : undefined,
+                maxTurns: smallDiffReview ? 10 : undefined,
                 scopePath: prepared.scopePath,
                 target: prepared.resolvedTarget,
                 scanId: `${persistedScanId}-verify`,
@@ -2362,6 +2449,8 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
                   model: resolvedModel,
                   costCeilingUsd: opts.costCeilingUsd,
                   costLedger,
+                  signal: opts.signal, nativeRuntime: opts.nativeRuntime, provider: opts.provider,
+                  agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel, plan: opts.plan,
                 },
                 db: null,
                 emit: verifyEmit,
@@ -2383,12 +2472,12 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
               // cost_exceeded; an honest `inconclusive` holds it for review
               // instead (isDisclosureWorthy keeps non-rejected verdicts),
               // matching the verifier-error path (#599).
-              if (agentResult.costCeilingExceeded) {
+              if (agentResult.costCeilingExceeded || agentResult.executionSuccessful === false) {
                 const verdict: VerifyVerdict = {
                   verdict: "inconclusive",
                   confidence: finding.confidence ?? 0,
-                  reasoning: "Verification truncated: scan cost ceiling reached.",
-                  signals: [{ name: "blind_verify", passed: false, reasoning: "cost ceiling reached mid-verify" }],
+                  reasoning: agentResult.costCeilingExceeded ? "Verification truncated: scan cost ceiling reached." : "Verification did not complete; finding remains inconclusive.",
+                  signals: [{ name: "blind_verify", passed: false, reasoning: "verification interrupted before a verdict" }],
                   evidenceKind: evidenceKindForFinding(finding),
                 };
                 return { finding, verdict, verifiedFinding: null };
@@ -2419,6 +2508,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
               return { finding, verdict, verifiedFinding: verifiedFindings[0] ?? null };
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err);
+              if (opts.plan) researchFailed = true;
               warnings.push({ stage: "verify", message: `Verification failed for "${finding.title}": ${msg}` });
               // A verifier that threw did NOT decide the finding is a false
               // positive — it failed to decide. Emit `inconclusive` so the
@@ -2593,7 +2683,11 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       summary,
       findings: confirmedFindings,
       warnings,
+      estimatedCostUsd: costLedger.hasUnpricedUsage() ? undefined : costLedger.runCostUsd(),
+      usage: costLedger.tokenUsage(),
       ...(researchFailed ? { researchFailed: true } : {}),
+      ...(researchFailed ? { executionSuccessful: false, exitReason: "failed" as const } : {}),
+      error: executionError,
       // Backwards-compat extras
       ...(costCeilingExceeded
         ? { costCeilingExceeded: true, exitReason: "cost_ceiling_exceeded" as const }
@@ -2633,8 +2727,30 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     db?.failScan(persistedScanId, msg);
     logPipelineEvent("report", "stage_error", { error: msg });
     emitPipelineScanCompleted("failed", { summary: msg });
+    if (opts.plan || opts.signal?.aborted || err instanceof ScanBudgetError) {
+      startPhase("report");
+      const partialFindings = findings.filter(finding => finding.status !== "false-positive");
+      const costExceeded = scanCostCeilingTripped();
+      const reason = costExceeded ? "cost_ceiling_exceeded" : opts.signal?.reason instanceof ScanBudgetError
+        ? opts.signal.reason.status : err instanceof ScanBudgetError ? err.status : opts.signal?.aborted ? "cancelled" : "failed";
+      const partial: PipelineReport = {
+        target: opts.target, targetType: prepared.resolvedType,
+        startedAt: new Date(startTime).toISOString(), completedAt: new Date().toISOString(), durationMs: Date.now() - startTime,
+        findings: partialFindings, summary: buildSummary(partialFindings, usageTotals.turns),
+        warnings: [...warnings, { stage: "report", message: `Scan interrupted: ${msg}. Findings are partial.` }],
+        executionSuccessful: false, researchFailed: reason === "failed", exitReason: reason,
+        error: msg,
+        costCeilingExceeded: costExceeded, estimatedCostUsd: costLedger.hasUnpricedUsage() ? undefined : costLedger.runCostUsd(),
+        usage: costLedger.tokenUsage(),
+        ...(prepared.resolvedType === "source-code" ? { repo: opts.target } : {}),
+      };
+      finishPhase();
+      runState?.writeReport(partial);
+      return partial;
+    }
     throw err;
   } finally {
+    finishPhase();
     unsubscribeMetrics();
     db?.close();
     // Clean up temporary directories

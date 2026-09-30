@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 #
-# 0sec — pre-built distribution image
+# 0 — pre-built distribution image
 #
 # Multi-stage build:
 #   stage 1 (builder):    node:24 + pnpm, builds the bundled CLI in /app/dist
@@ -12,13 +12,13 @@
 #
 # Usage:
 #   docker run --rm -e AZURE_OPENAI_API_KEY=$KEY \
-#     ghcr.io/0sec-labs/0sec:latest scan --target https://example.com --scope /work/scope.json
+#     ghcr.io/0sec-labs/0:latest scan --target https://example.com --scope /work/scope.json
 # Build args:
 #   INSTALL_SECLISTS=1     include SecLists wordlists (~1GB extra, off by default)
 #   AZUREHOUND_VERSION=vX  pin the AzureHound release (checksum-verified, see below)
 
 # Shared Node payload; the toolbox does not depend on application compilation.
-FROM node:24-bookworm AS node-runtime
+FROM node:24.21.0-bookworm@sha256:64af3819f9275802414d7cdc38c27e9d82bd564dec4d4da87d008255d36c63b4 AS node-runtime
 
 # ---------- Stage 1: builder ----------
 FROM node-runtime AS builder
@@ -27,7 +27,7 @@ ENV PNPM_HOME=/root/.local/share/pnpm \
     PATH=/root/.local/share/pnpm:$PATH \
     CI=1
 
-RUN corepack enable && corepack prepare pnpm@9 --activate
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
 WORKDIR /app
 
@@ -37,6 +37,7 @@ COPY tsconfig.base.json ./
 COPY scripts ./scripts
 COPY packages ./packages
 COPY assets ./assets
+COPY vendor ./vendor
 
 # Pull in any other workspace files referenced by package.json globs
 COPY LICENSE README.md ./
@@ -44,9 +45,9 @@ COPY LICENSE README.md ./
 RUN pnpm install --frozen-lockfile
 RUN pnpm build
 
-# Install the bundle's locked runtime dependencies without lifecycle scripts.
+# Install native runtime dependencies with their required build lifecycle.
 WORKDIR /app/dist
-RUN npm ci --omit=dev --ignore-scripts
+RUN npm ci --omit=dev --no-audit --no-fund
 
 # ---------- Stage 2: toolbox ----------
 FROM ubuntu:24.04 AS toolbox
@@ -55,7 +56,7 @@ ARG INSTALL_SECLISTS=0
 ARG DEBIAN_FRONTEND=noninteractive
 
 ENV NODE_ENV=production \
-    0SEC_DOCKER=1 \
+    ZERO_DOCKER=1 \
     PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin
 
 # Reuse the official Node image payload rather than downloading another runtime.
@@ -72,7 +73,7 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
 # scan quality. Cheap to add (a few MB) and the agent has been
 # expecting it since the audit subcommand shipped.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates curl wget gnupg jq git unzip xz-utils \
+        ca-certificates curl wget gnupg jq git gh unzip xz-utils \
         ripgrep \
         skopeo \
         python3 python3-requests python3-bs4 \
@@ -178,14 +179,13 @@ WORKDIR /app
 # Copy the bundled CLI + its production node_modules from the builder
 COPY --from=builder /app/dist /app/dist
 
-# Make the bundled CLI globally invocable as `0sec` (and `0` for short).
-RUN ln -s /app/dist/0sec.js /usr/local/bin/0sec \
-    && ln -s /app/dist/0sec.js /usr/local/bin/0 \
-    && chmod +x /app/dist/0sec.js
+# Make the bundled CLI globally invocable as `0`.
+RUN ln -s /app/dist/0.js /usr/local/bin/0 \
+    && chmod +x /app/dist/0.js
 
 # App code remains root-owned; only the workspace is writable by the worker.
 USER ubuntu
 WORKDIR /work
 
-ENTRYPOINT ["node", "/app/dist/0sec.js"]
+ENTRYPOINT ["node", "/app/dist/0.js"]
 CMD ["--help"]

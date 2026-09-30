@@ -1,18 +1,18 @@
 {
-  "name": "@0sec/desktop",
+  "name": "@0/desktop",
   "version": "0.15.0",
-  "description": "Native desktop workspace for the 0.security cybersecurity team.",
+  "description": "Development-only alpha desktop workspace for 0.security; not part of CLI releases.",
   "author": "0.security",
   "repository": {
     "type": "git",
-    "url": "https://github.com/0sec-labs/0sec.git"
+    "url": "https://github.com/0sec-labs/0.git"
   },
   "private": true,
   "type": "module",
   "main": "dist/main/index.js",
-  "desktopName": "0sec",
+  "desktopName": "0",
   "scripts": {
-    "build": "tsc --project tsconfig.json && tsc --project tsconfig.preload.json && tsc --project src/renderer/tsconfig.json",
+    "build": "pnpm --filter @0/dashboard build:desktop-alpha && tsc --project tsconfig.json && tsc --project tsconfig.preload.json && tsc --project src/renderer/tsconfig.json",
     "start": "pnpm run build && electron .",
     "test": "vitest run",
     "package": "pnpm run build && node scripts/prepare-desktop-resources.mjs && electron-builder --publish never",
@@ -24,12 +24,13 @@
   "build": {
     "appId": "com.0security.osec",
     "productName": "0security",
-    "executableName": "0sec",
-    "artifactName": "0sec-${version}-${os}-${arch}.${ext}",
+    "executableName": "0",
+    "artifactName": "0-desktop-alpha-${version}-${os}-${arch}.${ext}",
     "icon": "build/icon.png",
     "asar": true,
     "files": [
-      "dist/**/*",
+      "dist/main/**/*",
+      "dist/preload/**/*",
       "package.json"
     ],
     "extraResources": [
@@ -75,7 +76,7 @@
     }
   },
   "devDependencies": {
-    "@0sec/shared": "workspace:*",
+    "@0/shared": "workspace:*",
     "@fontsource/ibm-plex-mono": "^5.2.7",
     "@radix-ui/react-dialog": "^1.1.15",
     "cmdk": "^1.1.1",

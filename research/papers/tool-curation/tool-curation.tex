@@ -25,8 +25,8 @@
 \title{Tool Curation for Security Agents}
 
 \author{
-  0sec Labs \\
-  \texttt{github.com/0sec-labs/0sec}
+  0 Labs \\
+  \texttt{github.com/0sec-labs/0}
 }
 
 \date{}
@@ -36,12 +36,12 @@
 \maketitle
 
 \begin{abstract}
-0sec registers 56 model-facing tools, and its default interactive console
+0 registers 56 model-facing tools, and its default interactive console
 advertises roughly 40 of them to the model in a single reasoning context. Both
 Anthropic's own guidance and independent benchmarks place reliable tool
 selection at roughly 10--20 always-loaded tools, with accuracy degrading
 non-linearly past 30--50 and token cost accruing on every turn. The lean
-non-console lanes of 0sec (discovery, attack, verify, report, subagents) already
+non-console lanes of 0 (discovery, attack, verify, report, subagents) already
 sit inside the safe band; the audit-default console path is the outlier, and a
 flag-filter bug inflates its advertised count further. This paper audits the
 model-facing tool surface against current tool-use accuracy guidance, documents
@@ -231,7 +231,7 @@ schemas into a single verb with a discriminated argument, which is exactly the
 
 \section{The pattern we already have: JIT skills}
 
-0sec already ships progressive disclosure --- for methodology, not for tools. The
+0 already ships progressive disclosure --- for methodology, not for tools. The
 JIT-skills feature (\texttt{packages/core/src/agent/tools/skills.ts}, gated by the
 \texttt{jitSkills} flag) exposes two tools:
 
@@ -271,7 +271,7 @@ tail.
   shell primitive.
   \item \textbf{Per-phase loadouts.} Extend the discipline the engine already
   applies per role --- recon / exploit / triage / report each get a curated
-  static set sized to the band. 0sec already has per-role sets
+  static set sized to the band. 0 already has per-role sets
   (\texttt{networkTools}, \texttt{fileTools}, the report set); this formalizes and
   completes that.
   \item \textbf{Deferred loading front door.} Add \texttt{list\_tools} /

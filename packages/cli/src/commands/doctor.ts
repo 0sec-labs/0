@@ -20,7 +20,7 @@ export function registerDoctorCommand(program: Command): void {
       const hasSupportedNode = nodeMajor >= 24;
 
       console.log("");
-      console.log(chalk.red.bold("  ◆ 0sec") + chalk.gray(" doctor"));
+      console.log(chalk.red.bold("  ◆ 0") + chalk.gray(" doctor"));
       console.log("");
       console.log(`  CLI version   v${runtime.cliVersion} [${runtime.releaseChannel}]`);
       console.log(`  Runtime       ${runtime.engine} ${runtime.engineVersion}`);
@@ -36,16 +36,16 @@ export function registerDoctorCommand(program: Command): void {
       console.log("");
 
       if (!hasSupportedNode) {
-        console.log(chalk.red("  Upgrade to Node 24+ before running 0sec."));
+        console.log(chalk.red("  Upgrade to Node 24+ before running 0."));
       } else if (apiRuntime.configured && !apiRuntime.valid && apiRuntime.error) {
         console.log(chalk.red("  API runtime is configured but unusable."));
         console.log(chalk.gray(`  ${apiRuntime.error.split("\n").join("\n  ")}`));
       } else if (hasApiKey || availableRuntimes.length > 0) {
         console.log(chalk.yellow("  Prerequisites found. The first request verifies credentials."));
         console.log(chalk.gray("  Try one of:"));
-        console.log(chalk.gray("    0sec scan --target https://example.com --mode web"));
-        console.log(chalk.gray("    0sec review ."));
-        console.log(chalk.gray("    0sec audit express"));
+        console.log(chalk.gray("    0 scan --target https://example.com --mode web"));
+        console.log(chalk.gray("    0 review ."));
+        console.log(chalk.gray("    0 audit express"));
       } else {
         console.log(chalk.yellow("  Next step: install Claude/Codex/Gemini CLI or set an API key."));
       }

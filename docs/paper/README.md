@@ -1,21 +1,21 @@
-# 0sec paper workspace
+# 0 paper workspace
 
 This folder mirrors the noeris paper workflow pattern:
 
-- one living narrative draft (`0sec.md`)
-- one submission-oriented LaTeX draft (`0sec-submission.tex`)
+- one living narrative draft (`0.md`)
+- one submission-oriented LaTeX draft (`0-submission.tex`)
 - split support notes for evaluation and related work
 
 **Status:** unsubmitted research drafts and dated evidence notes, not current
-runtime documentation. `evaluation.md` retains an April snapshot while `0sec.md`
+runtime documentation. `evaluation.md` retains an April snapshot while `0.md`
 also quotes May results; align provenance explicitly before submission rather
 than overwriting historical tables. Current commands and score interpretation
 live in the documentation site's benchmark and methodology pages.
 
 ## Files
 
-- `0sec.md` - canonical long-form draft with repo-grounded claims
-- `0sec-submission.tex` - arXiv-style LaTeX draft
+- `0.md` - canonical long-form draft with repo-grounded claims
+- `0-submission.tex` - arXiv-style LaTeX draft
 - `evaluation.md` - canonical table/numbers source for paper text
 - `related_work.md` - comparison/citation notes with caveats
 - `refs.bib` - bibliography database for LaTeX draft
@@ -27,17 +27,17 @@ live in the documentation site's benchmark and methodology pages.
 From this directory:
 
 ```bash
-pdflatex -interaction=nonstopmode "0sec-submission.tex"
-pdflatex -interaction=nonstopmode "0sec-submission.tex"
+pdflatex -interaction=nonstopmode "0-submission.tex"
+pdflatex -interaction=nonstopmode "0-submission.tex"
 ```
 
 With bibliography:
 
 ```bash
-pdflatex -interaction=nonstopmode "0sec-submission.tex"
-bibtex "0sec-submission"
-pdflatex -interaction=nonstopmode "0sec-submission.tex"
-pdflatex -interaction=nonstopmode "0sec-submission.tex"
+pdflatex -interaction=nonstopmode "0-submission.tex"
+bibtex "0-submission"
+pdflatex -interaction=nonstopmode "0-submission.tex"
+pdflatex -interaction=nonstopmode "0-submission.tex"
 ```
 
 Create arXiv source package:

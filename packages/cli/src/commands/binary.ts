@@ -5,9 +5,9 @@ import { fileURLToPath } from "node:url";
 import type { Command } from "commander";
 
 /**
- * `0sec binary <target>` — delegate to **0verse**, the in-repo binary-native /
+ * `0 binary <target>` — delegate to **0verse**, the in-repo binary-native /
  * no-source analysis engine (a Python project under `0verse/`). This makes
- * "0sec does binary analysis too" literally true: we locate the engine
+ * "0 does binary analysis too" literally true: we locate the engine
  * checkout, sanity-check the toolchain (`uv` + the `0verse/` dir), then hand
  * off to `uv run --frozen 0verse <mode> <target> …` with live stdio so the user
  * sees the engine's own output and inherits its exit code.
@@ -95,10 +95,10 @@ export function setupGuidanceLines(reason: {
   overseDir: string | null;
 }): string[] {
   const lines: string[] = [];
-  lines.push("0sec binary analysis delegates to the 0verse engine, but it isn't ready yet.");
+  lines.push("0 binary analysis delegates to the 0verse engine, but it isn't ready yet.");
   lines.push("");
   if (reason.overseDir === null) {
-    lines.push("  • Could not find the 0verse/ engine checkout next to the 0sec CLI.");
+    lines.push("  • Could not find the 0verse/ engine checkout next to the 0 CLI.");
     lines.push("    Make sure the 0verse/ directory exists at the repo root.");
     lines.push("");
   }
@@ -113,7 +113,7 @@ export function setupGuidanceLines(reason: {
   lines.push(`  cd ${dir} && uv sync --frozen`);
   lines.push("");
   lines.push("Once that succeeds, re-run your command, e.g.:");
-  lines.push("  0sec binary ./target --mode triage");
+  lines.push("  0 binary ./target --mode triage");
   return lines;
 }
 

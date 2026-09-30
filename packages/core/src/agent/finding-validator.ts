@@ -1,10 +1,10 @@
 /**
- * Structural validation at the report-creation boundary (0sec#409).
+ * Structural validation at the report-creation boundary (0#409).
  *
  * Background — Strix's `tools/reporting/reporting_actions.py:201-339` rejects
  * malformed vulnerability reports at the agent boundary BEFORE they enter the
  * pipeline: CVE/CWE shape-check, CVSS vector validation, evidence path
- * traversal guard. 0sec used to trust the LLM's structured output: a
+ * traversal guard. 0 used to trust the LLM's structured output: a
  * hallucinated `CVE-9999-FAKE` or an evidence path of `/etc/passwd` would land
  * in the finding store unchallenged and propagate downstream into disclosure,
  * the dashboard, and (worst) cloud-side dedup keys.
@@ -19,15 +19,16 @@
  * in the upstream prompt.
  *
  * Out of scope (separate issues):
- *   - LLM-based semantic dedup (Strix does this; 0sec#281 covers the
+ *   - LLM-based semantic dedup (Strix does this; 0#281 covers the
  *     structural dedup we actually need)
  *   - Changing the `Finding` schema (we read draft fields here, the schema
  *     stays put)
- *   - Auto-fix PR generation (shipped per closed 0sec#377)
+ *   - Auto-fix PR generation (shipped per closed 0#377)
  */
 
 import { existsSync, lstatSync, realpathSync } from "node:fs";
 import { isAbsolute, resolve, sep } from "node:path";
+import type { ImpactAssessment } from "@0/shared";
 
 // ────────────────────────────────────────────────────────────────────
 // Public types
@@ -64,6 +65,14 @@ export interface FindingDraft {
    * field. Wire those into this list before calling the validator.
    */
   evidence?: Array<{ path?: string | null }>;
+  /**
+   * Optional business-impact assessment (0#1103). When the LLM supplied
+   * evidence-grounded reachability / blast-radius / weaponizability facts,
+   * these fields are populated inline by the model at save_finding time
+   * rather than by a separate report-time LLM call. Structurally validated
+   * in the saveFinding handler — no special validation here.
+   */
+  impactAssessment?: ImpactAssessment;
 }
 
 export interface ValidationError {

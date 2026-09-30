@@ -1,5 +1,5 @@
 /**
- * Scoped-path resolution shared by the extracted tool handlers (0sec#1284).
+ * Scoped-path resolution shared by the extracted tool handlers (0#1284).
  *
  * Pulled out of agent/tools.ts verbatim so per-domain handler modules (starting
  * with intel.ts) can enforce the same scope-escape guard as the still-in-class
@@ -8,6 +8,7 @@
  */
 import { lstatSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, resolve, sep } from "node:path";
+import { isScopeEnforcementEnabled } from "../../scope/activation.js";
 
 function pathEntryExists(path: string): boolean {
   try {
@@ -47,12 +48,12 @@ function isScopedPath(scopePath: string, inputPath: string): boolean {
   return candidate === root || candidate.startsWith(root + sep);
 }
 
-export function resolveScopedPath(scopePath: string, inputPath: string): string {
-  if (!isScopedPath(scopePath, inputPath)) {
+export function resolveScopedPath(scopePath: string | undefined, inputPath: string): string {
+  if (isScopeEnforcementEnabled() && (!scopePath || !isScopedPath(scopePath, inputPath))) {
     throw new Error(`Path escapes the allowed scope: ${inputPath}`);
   }
 
-  const root = realpathSync(scopePath);
+  const root = scopePath ? realpathSync(scopePath) : process.cwd();
   const logicalCandidate = isAbsolute(inputPath)
     ? resolve(inputPath)
     : resolve(root, inputPath);

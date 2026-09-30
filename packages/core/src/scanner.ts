@@ -1,6 +1,6 @@
-import type { ScanConfig, ScanContext, ScanReport, PipelineStage } from "@0sec/shared";
-import type { osecDB } from "@0sec/db";
-import { loadTemplates } from "@0sec/templates";
+import type { ScanConfig, ScanContext, ScanReport, PipelineStage } from "@0/shared";
+import type { osecDB } from "@0/db";
+import { loadTemplates } from "@0/templates";
 import { createScanContext, finalize } from "./context.js";
 import { createRuntime } from "./runtime/index.js";
 import type { Runtime, RuntimeType } from "./runtime/index.js";
@@ -31,7 +31,7 @@ async function openRunDatabase(dbPath?: string): Promise<LocalRunDatabase> {
       repairOsecDatabase,
       resolveOsecRunStorage,
       writeOsecRunReport,
-    } = await import("@0sec/db");
+    } = await import("@0/db");
     const storage = resolveOsecRunStorage({ dbPath });
     try {
       return {
@@ -43,7 +43,7 @@ async function openRunDatabase(dbPath?: string): Promise<LocalRunDatabase> {
       if (!isRepairableDbError(error)) throw error;
       const repaired = repairOsecDatabase(storage.dbPath);
       process.stderr.write(
-        `[0sec] Recovered local scan database${repaired.backupPath ? ` (backup: ${repaired.backupPath})` : ""}.\n`,
+        `[0] Recovered local scan database${repaired.backupPath ? ` (backup: ${repaired.backupPath})` : ""}.\n`,
       );
       return {
         db: new osecDB(storage.dbPath),

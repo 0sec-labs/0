@@ -39,7 +39,7 @@ export type VariantExecutionFactory = (variant: Readonly<BenchVariant>) => Bench
 const INTEGRATION_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
 /**
- * Validated registry for integrations supplied by core, @0sec/benchmark, or a
+ * Validated registry for integrations supplied by core, @0/benchmark, or a
  * host application. It deliberately has no module-loading behavior: callers
  * register constructed integrations, keeping execution provenance explicit.
  */

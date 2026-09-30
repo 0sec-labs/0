@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { closeSync, fsyncSync, openSync, realpathSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared";
 import { z } from "zod";
 import { ensureEvolutionDirectory, readEvolutionArtifact } from "../improvement/artifacts.js";
 import { acquireEvolutionController } from "../improvement/controller-lock.js";

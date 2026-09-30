@@ -172,7 +172,7 @@ export function HistoryScreen({ dbPath, limit, onResolve, onExit, shell }: { dbP
     let alive = true;
     const load = async () => {
       try {
-        const { osecDB } = await import("@0sec/db");
+        const { osecDB } = await import("@0/db");
         const db = new osecDB(dbPath);
         try {
           const rows = db.listScans(limit) as HistoryScanRow[];

@@ -83,7 +83,7 @@ import { sanitizeUntrustedToolResult, type SanitizeResult } from "../untrusted-s
 export const OUTBOUND_BODY_MAX_CHARS = 2_000;
 
 /** Marker appended to a body clamped to {@link OUTBOUND_BODY_MAX_CHARS}. */
-export const OUTBOUND_TRUNCATION_MARKER = " […0sec: message truncated]";
+export const OUTBOUND_TRUNCATION_MARKER = " […0: message truncated]";
 
 /**
  * Max messages a single `check_messages` call re-enters into context. A drain

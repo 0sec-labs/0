@@ -36,7 +36,7 @@
  * `shellChromeRows` and `wrapCells` are imported from `settings-layout.ts`
  * (re-exported here) exactly as `model-layout.ts` does, and the numeric-hygiene
  * helpers mirror that module. The registry shapes are declared LOCALLY as
- * structural views so this pure module type-checks against `@0sec/core`'s
+ * structural views so this pure module type-checks against `@0/core`'s
  * published surface without importing its in-flight `d.ts`.
  */
 
@@ -926,7 +926,7 @@ export function marketEmptyLines(
   if (!configured) {
     push("Hackstore disabled.", "title");
     blank();
-    push("0SEC_REGISTRY_URL is set to an empty value, so no index is fetched.", "text");
+    push("ZERO_REGISTRY_URL is set to an empty value, so no index is fetched.", "text");
     push("Unset it to use the default community Hackstore, or point it at an index URL you trust.", "text");
     blank();
     push("Installing writes files and runs nothing; it never enables a plugin.", "muted");

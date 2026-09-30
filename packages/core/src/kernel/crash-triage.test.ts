@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { JevEvaluator } from "@0sec/shared";
+import type { JevEvaluator } from "@0/shared";
 import { rankCrashesWithJev, crashSummaryFromTriage } from "./crash-triage.js";
 import type { CrashRecord } from "./crash-triage.js";
 

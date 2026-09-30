@@ -12,13 +12,13 @@
  *   - The tree terminates when a FLAG is found, all branches die, or
  *     max depth is reached
  *
- * This is a generalisation of 0sec's existing early-stop mechanism:
+ * This is a generalisation of 0's existing early-stop mechanism:
  * early-stop gates a single linear run, while EGATS gates every branch.
  */
 
 import { randomUUID } from "node:crypto";
 import type { NativeRuntime, NativeMessage, NativeContentBlock } from "../runtime/types.js";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared";
 import { runNativeAgentLoop } from "./native-loop.js";
 import { getToolsForRole, TOOL_DEFINITIONS } from "./tools.js";
 import { shellPentestPrompt, specialistSection, VULN_CLASS_LABELS } from "./prompts.js";
@@ -26,7 +26,7 @@ import type { VulnClass } from "./prompts.js";
 import { skillIdForVulnClass } from "./skills/index.js";
 import { features } from "./features.js";
 import type { ToolDefinition } from "./types.js";
-import type { osecDB } from "@0sec/db";
+import type { osecDB } from "@0/db";
 
 // ── Types ──
 
