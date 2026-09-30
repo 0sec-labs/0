@@ -141,7 +141,7 @@ export const DIALOG_HOST_FOOTER_ROWS = 1;
 
 /**
  * Rows the settings route's host spends inside a dialog: the footer, plus the
- * one clickable "Live harness · ctrl+g" line the route renders above the body.
+ * clickable "Keybindings · ctrl+k" link above the body.
  */
 export const SETTINGS_DIALOG_HOST_ROWS = DIALOG_HOST_FOOTER_ROWS + 1;
 

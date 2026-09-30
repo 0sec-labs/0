@@ -580,9 +580,7 @@ describe("runUnified — emitResultLine env gate", () => {
     errSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
     envSnapshot["ZERO_EMIT_RESULT_LINE"] = process.env["ZERO_EMIT_RESULT_LINE"];
-    envSnapshot["ZERO_CLOUD_SINK"] = process.env["ZERO_CLOUD_SINK"];
     delete process.env["ZERO_EMIT_RESULT_LINE"];
-    delete process.env["ZERO_CLOUD_SINK"];
   });
 
   afterEach(() => {
@@ -595,7 +593,7 @@ describe("runUnified — emitResultLine env gate", () => {
     }
   });
 
-  it("does NOT emit ZERO_RESULT line when neither env var is set", async () => {
+  it("does NOT emit ZERO_RESULT line without explicit opt-in", async () => {
     agenticScanMock.mockResolvedValueOnce(cleanReport());
     await runUnified({
       target: "https://example.com",

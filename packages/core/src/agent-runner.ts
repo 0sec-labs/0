@@ -7,14 +7,12 @@ import { createEphemeralCodexHome, isEphemeralScope } from "./runtime/codex-home
 import { detectAvailableRuntimes, pickRuntimeForStage } from "./runtime/registry.js";
 import { runAgentLoop } from "./agent/loop.js";
 import { runNativeAgentLoop } from "./agent/native-loop.js";
-import { maybeStartCloudInboxPoller } from "./agent/cloud-inbox.js";
 import { toolCallPreview } from "./agent/tool-preview.js";
 import { getToolsForRole } from "./agent/tools.js";
 import type { NativeRuntime } from "./runtime/types.js";
 import { CLI_RUNTIME_TYPES } from "./shared-analysis.js";
 import { parseFindingsFromCliOutput } from "./findings-parser.js";
 import { estimateCost } from "./agent/cost.js";
-import { getCloudSinkConfig, postFinding } from "./cloud-sink.js";
 import { analyticsPipeline } from "./telemetry/analytics-pipeline.js";
 import { reportUnsupportedContributionMode } from "./telemetry/run-contribution.js";
 import { parseProjectObservations, type ProposedProjectObservation } from "./secure/project-context.js";
@@ -480,13 +478,6 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
       const turnBudget = getMaxTurns(role, config.depth, "native", purpose);
       const maxTurns = Math.min(opts.maxTurns ?? turnBudget, opts.singleAgent ? 20 : turnBudget);
 
-      // #978 (ADR-060) — cloud control channel. unified-pipeline.ts (the
-      // package/source audit + review path) runs the agent here, NOT through
-      // agenticScan, so the inbox drain must be wired in BOTH entries. In
-      // cloud mode, default getPendingUserMessages to the scan-inbox poller so
-      // operator steers ("Steer this scan") reach the agent mid-run. null in
-      // local mode (no cloud sink). unref'd, so the process still exits clean.
-      const cloudInbox = maybeStartCloudInboxPoller();
 
       const agentState = await runNativeAgentLoop({
         config: {
@@ -500,7 +491,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
           target,
           scanId,
           scopePath,
-          codebaseLearning: !!getCloudSinkConfig() && scopedSourceAudit && purpose === "research",
+          codebaseLearning: scopedSourceAudit && purpose === "research",
           sessionId,
           costCeilingUsd: config.costCeilingUsd,
           costModel: config.model,
@@ -508,7 +499,6 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
         },
         runtime: apiRuntime as NativeRuntime,
         db,
-        getPendingUserMessages: cloudInbox?.drain,
         onFindingSaved: (finding) => {
           if (purpose === "verify" && opts.singleAgent) return;
           emit({
@@ -516,7 +506,6 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
             message: `[${finding.severity}] ${finding.title}`,
             data: finding,
           });
-          void postFinding(finding, getCloudSinkConfig());
           // Full-tier capture; the pipeline enforces saved and environment restrictions.
           try {
             analyticsPipeline.recordFinding({
@@ -677,7 +666,6 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
         message: `[${finding.severity}] ${finding.title}`,
         data: finding,
       });
-      void postFinding(finding, getCloudSinkConfig());
       // Full-tier capture; the pipeline enforces saved and environment restrictions.
       try {
         analyticsPipeline.recordFinding({

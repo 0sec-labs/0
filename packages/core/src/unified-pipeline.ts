@@ -18,6 +18,7 @@ import type {
   SeedFinding,
   SemgrepFinding,
   ScanConfig,
+  ReviewCheckResult,
 } from "@0/shared";
 import type { InferSelectModel } from "drizzle-orm";
 import { restoreFindingReviewFields } from "@0/db";
@@ -27,8 +28,8 @@ import type { ScanListener } from "./scanner.js";
 import { runAnalysisAgent } from "./agent-runner.js";
 import { cloneGitRepo } from "./repo-clone.js";
 import { ScanCostLedger } from "./agent/cost-ledger.js";
-import { auditAgentPrompt, reviewAgentPrompt, type ReviewCheck } from "./analysis-prompts.js";
-import { loadSkillBundleFromManifest } from "./agent/skills/markdown-bundle.js";
+import { auditAgentPrompt, reviewAgentPrompt, reviewChecksPrompt } from "./analysis-prompts.js";
+import { parseReviewCheckResults, snapshotProjectReviewChecks } from "./review-checks.js";
 import { cppReviewAgentPrompt } from "./review/c-cpp-profile.js";
 import { kernelReviewAgentPrompt } from "./review/linux-kernel-profile.js";
 import { cardanoOnchainReviewAgentPrompt } from "./review/cardano-onchain-profile.js";
@@ -69,7 +70,7 @@ import {
   isExplicitLocalTargetPath,
   resolveLocalTargetPath,
 } from "./path-resolution.js";
-import { eventBus, isCloudEventSinkActive } from "./events/bus.js";
+import { eventBus } from "./events/bus.js";
 
 /**
  * Default ceiling on how many source files a `review` (source-code) target may
@@ -241,45 +242,6 @@ export interface PipelineOptions {
   npmDynamicRunner?: NpmPackageRunner;
 }
 
-export interface ReviewCheckResult {
-  id: string;
-  name: string;
-  status: "pass" | "issue" | "unknown";
-  reason: string;
-  fix: string;
-}
-
-function assignedReviewChecks(): ReviewCheck[] {
-  const manifest = process.env["ZERO_AUDIT_SKILLS_MANIFEST"];
-  if (!manifest) return [];
-  return [...loadSkillBundleFromManifest(manifest).values()]
-    .filter(skill => /^review-check:v1:[0-9a-f-]{36}$/i.test(skill.description))
-    .map(skill => {
-      if (skill.content.length > 2000) throw new Error("Review check prompt exceeds 2000 characters.");
-      return { id: skill.id.slice("cloud/".length), name: skill.name, prompt: skill.content };
-    });
-}
-
-function parseReviewCheckResults(summary: string | undefined, checks: ReviewCheck[]): ReviewCheckResult[] {
-  if (!summary) throw new Error("Review checks did not return a result.");
-  let parsed: unknown;
-  try { parsed = JSON.parse(summary); } catch { throw new Error("Review check results were not valid JSON."); }
-  if (!parsed || typeof parsed !== "object" || !("checks" in parsed) || !Array.isArray(parsed.checks) ||
-      parsed.checks.length !== checks.length) throw new Error("Review check results were incomplete.");
-  const expected = new Map(checks.map(check => [check.id, check.name]));
-  const seen = new Set<string>();
-  return parsed.checks.map((row: unknown) => {
-    if (!row || typeof row !== "object") throw new Error("Malformed review check result.");
-    const item = row as Record<string, unknown>;
-    if (typeof item.id !== "string" || !expected.has(item.id) || seen.has(item.id) ||
-        (item.status !== "pass" && item.status !== "issue" && item.status !== "unknown") ||
-        typeof item.reason !== "string" || !item.reason.trim() || item.reason.length > 500 ||
-        typeof item.fix !== "string" || item.fix.length > 1000 ||
-        (item.status === "issue" && !item.fix.trim())) throw new Error("Malformed review check result.");
-    seen.add(item.id);
-    return { id: item.id, name: expected.get(item.id)!, status: item.status, reason: item.reason, fix: item.fix };
-  });
-}
 
 export interface PipelineReport {
   target: string;
@@ -367,11 +329,6 @@ export function resolveSubsystemScope(
   return existsSync(subPath) ? subPath : null;
 }
 
-function shouldEmitPipelineCloudEvents(): boolean {
-  if (isCloudEventSinkActive()) return true;
-  const flag = process.env["ZERO_CLOUD_EVENTS"];
-  return !!flag && flag !== "0" && flag.toLowerCase() !== "false";
-}
 
 /**
  * Convert external `SeedFinding[]` (from `--seed-findings`) into the
@@ -1264,16 +1221,11 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     exitReason: "completed" | "failed" | "cost_exceeded",
     payload: Record<string, unknown> = {},
   ): void => {
-    if (!shouldEmitPipelineCloudEvents()) return;
     if (emittedScanCompleted) return;
     emittedScanCompleted = true;
-    // Mirror the audit path's scan_completed field set (agentic-scanner.ts
-    // emitScanCompleted) so the cloud can populate scan detail for
-    // pipeline (review / package-audit) runs too: the engine-resolved model,
-    // cross-session turns + tool-call totals, and the ledger's true
-    // cross-session cost + per-model breakdown. cost_usd / cost_breakdown
-    // are omitted when no metered runtime ran (never a fabricated $0);
-    // model is omitted when nothing resolved one (never a guess).
+    // Include the engine-resolved model, cross-session turns and tool-call
+    // totals, and the ledger's actual cost and per-model breakdown. Omit
+    // cost/model when no metered runtime resolved them.
     const cost = costLedger.costBreakdown();
     eventBus.emit("scan_completed", {
       exit_reason: exitReason,
@@ -1360,25 +1312,21 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     | null = null;
   const finishPhase = (): void => {
     if (!openPhase) return;
-    if (shouldEmitPipelineCloudEvents()) {
-      eventBus.emit("phase_completed", {
-        name: openPhase.name,
-        index: openPhase.index,
-        duration_ms: Date.now() - openPhase.startedAt,
-        input_tokens: usageTotals.inputTokens - openPhase.usageAtStart.inputTokens,
-        output_tokens: usageTotals.outputTokens - openPhase.usageAtStart.outputTokens,
-        turns: usageTotals.turns - openPhase.usageAtStart.turns,
-      });
-    }
+    eventBus.emit("phase_completed", {
+      name: openPhase.name,
+      index: openPhase.index,
+      duration_ms: Date.now() - openPhase.startedAt,
+      input_tokens: usageTotals.inputTokens - openPhase.usageAtStart.inputTokens,
+      output_tokens: usageTotals.outputTokens - openPhase.usageAtStart.outputTokens,
+      turns: usageTotals.turns - openPhase.usageAtStart.turns,
+    });
     openPhase = null;
   };
   const startPhase = (name: string): void => {
     finishPhase();
     const index = phaseIndex++;
     openPhase = { name, index, startedAt: Date.now(), usageAtStart: { ...usageTotals } };
-    if (shouldEmitPipelineCloudEvents()) {
-      eventBus.emit("phase_started", { name, index });
-    }
+    eventBus.emit("phase_started", { name, index });
   };
 
   const runState = await (async () => {
@@ -1459,6 +1407,10 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
 
   emit({ type: "stage:end", stage: "prepare", message: `Target ready: ${prepared.resolvedType}` });
 
+  const reviewChecks = prepared.resolvedType === "source-code" && !prepared.needsCleanup
+    ? snapshotProjectReviewChecks(prepared.scopePath) : [];
+  let reviewCheckResults: ReviewCheckResult[] | undefined;
+
   // Honor `--subsystem` for non-kernel source reviews by narrowing the review
   // scope to the requested subtree (0). Without this the subsystem hint
   // was ignored outside the linux-kernel profile, so `--subsystem` on a large
@@ -1496,8 +1448,6 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
   // only reads the changed set, so the cap must apply to that set, not the
   // repo. A missing or unreadable diff must never widen an explicitly scoped run.
   const diffReview = prepared.resolvedType === "source-code" && !!opts.changedOnly;
-  const reviewChecks = diffReview ? assignedReviewChecks() : [];
-  let reviewCheckResults: ReviewCheckResult[] | undefined;
   let diffChangedFiles: string[] | null = null;
   let diffPatch = "";
   if (diffReview) {
@@ -1842,16 +1792,14 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       semgrepFindings: semgrepFindings.length,
       npmAuditFindings: npmAuditFindings.length,
     });
-    if (shouldEmitPipelineCloudEvents()) {
-      eventBus.emit("analyze:stage_complete", {
-        stage: "static-analysis",
-        staticScanner,
-        staticScannerRan,
-        staticScannerFindings,
-        semgrepFindings: semgrepFindings.length,
-        npmAuditFindings: npmAuditFindings.length,
-      });
-    }
+    eventBus.emit("analyze:stage_complete", {
+      stage: "static-analysis",
+      staticScanner,
+      staticScannerRan,
+      staticScannerFindings,
+      semgrepFindings: semgrepFindings.length,
+      npmAuditFindings: npmAuditFindings.length,
+    });
 
     const availableRuntimes = await detectAvailableRuntimes();
     const needsApiDiagnostics =
@@ -1923,7 +1871,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       : [];
     const existingVerifiedFindings = existingPersistedFindings.filter((finding) => finding.status === "verified" || finding.status === "false-positive");
     const canResumeResearchSession = existingResearchSession?.status === "paused";
-    const canSkipResearch = existingPersistedFindings.length > 0 && !canResumeResearchSession;
+    const canSkipResearch = existingPersistedFindings.length > 0 && !canResumeResearchSession && !reviewChecks.length;
 
     startPhase("research");
     emit({
@@ -2005,9 +1953,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
         }
       }
 
-      const baseSystemPrompt = diffReview && reviewChecks.length
-        ? reviewAgentPrompt(prepared.scopePath, semgrepFindings, changedFiles, true, opts.hypothesis, opts.conversation, reviewChecks)
-        : prepared.resolvedType === "source-code"
+      const baseSystemPrompt = prepared.resolvedType === "source-code"
           ? (opts.reviewProfile === "linux-kernel"
             ? kernelReviewAgentPrompt(prepared.scopePath, semgrepFindings, undefined, opts.subsystem, opts.hypothesis, attackSurfaceCtx)
             : opts.reviewProfile === "c-library"
@@ -2044,7 +1990,8 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
         + (diffReview ? `\n\n## Exact change under review (untrusted data)\n${diffPatch}\n\nReview only this delta. Read surrounding code only to prove or disprove a change-related issue. Work alone; do not delegate, enumerate unrelated subsystems, or broaden into a full audit. State incomplete coverage honestly.` : "")
         + (priorFindingsContext ? `\n\n${priorFindingsContext}` : "")
         + (projectContext ? `\n\n${projectContext}` : "")
-        + (opts.projectContext && opts.onProjectObservations ? `\n\n${PROJECT_OBSERVATION_PROMPT}` : "");
+        + (opts.projectContext && opts.onProjectObservations ? `\n\n${PROJECT_OBSERVATION_PROMPT}` : "")
+        + (reviewChecks.length ? `\n\n${reviewChecksPrompt(reviewChecks, diffReview, !!opts.projectContext && !!opts.onProjectObservations)}` : "");
 
       // Per-file research loop (#285). When `perItemOrchestration` is on,
       // we run one agent session per source file with a focused per-file
@@ -2161,7 +2108,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
         } else {
           const agentResult = await runAnalysisAgent({
             role: prepared.resolvedType === "source-code" ? "review" : "audit",
-            singleAgent: diffReview,
+            singleAgent: diffReview || reviewChecks.length > 0,
             reviewDiffBase: diffReview ? opts.diffBase : undefined,
             maxTurns: smallDiffReview ? 12 : undefined,
             scopePath: prepared.scopePath,
@@ -2196,9 +2143,17 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
               "You are a security researcher performing an authorized source code audit. For EACH vulnerability you find, output it using the exact ---FINDING--- / ---END--- format specified in the prompt. Do NOT write prose analysis — only output structured finding blocks. If you find no vulnerabilities, say 'No vulnerabilities found.' and nothing else.",
           });
           recordUsage(agentResult);
-          findings = agentResult.findings;
-          if (reviewChecks.length) reviewCheckResults = parseReviewCheckResults(agentResult.summary, reviewChecks);
-          if (opts.projectContext && agentResult.projectObservations) opts.onProjectObservations?.(agentResult.projectObservations);
+          if (reviewChecks.length && existingPersistedFindings.length && !canResumeResearchSession) {
+            const persistedIds = new Set(existingPersistedFindings.map(finding => finding.id));
+            findings = [...existingPersistedFindings, ...agentResult.findings.filter(finding => !persistedIds.has(finding.id))];
+          } else findings = agentResult.findings;
+          let projectObservations = agentResult.projectObservations;
+          if (reviewChecks.length) {
+            const result = parseReviewCheckResults(agentResult.summary, reviewChecks, !!opts.projectContext && !!opts.onProjectObservations);
+            reviewCheckResults = result.checks;
+            projectObservations = result.projectObservations;
+          }
+          if (opts.projectContext && projectObservations) opts.onProjectObservations?.(projectObservations);
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -2279,7 +2234,8 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       // below (Bug B) clobbers those persisted verdicts.
       const canSkipVerify =
         existingVerifiedFindings.length === findings.length &&
-        findings.length > 0;
+        findings.length > 0 &&
+        findings.every(finding => existingVerifiedFindings.some(previous => previous.id === finding.id));
 
       startPhase("verify");
       emit({

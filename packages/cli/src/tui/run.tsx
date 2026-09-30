@@ -2,10 +2,12 @@
 import { randomUUID } from "node:crypto";
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { CliRenderEvents, createCliRenderer, type CliRenderer } from "@opentui/core";
-import { AppContext, createRoot, useKeyboard } from "@opentui/react";
+import { AppContext, createRoot, flushSync, useKeyboard } from "@opentui/react";
 import { type Finding } from "@0/shared";
 import { resolveEngagement } from "../engagement-plan.js";
 import { getRuntimeAvailability } from "../utils.js";
+import { bindDevUiDiagnostics, DevUiHost, DevUiRenderBoundary, isDevUiRemount, startDevUiReload, useDevUiBoundary, useDevUiRef, useDevUiState } from "../dev-ui-reload.js";
+import type { DevUiReloadController } from "../dev-ui-reload.js";
 import { buildFindingChatPrompt, loadFindingFocus } from "../finding-focus.js";
 import { runUnified } from "../commands/run.js";
 import { useTheme } from "./theme-context.js";
@@ -35,7 +37,8 @@ import { PanePalette } from "./command-palette.js";
 import { RouteHistoryKeys } from "./route-history-keys.js";
 import { PopupStackProvider } from "./popup-stack.js";
 import type { FindingsScreenOptions } from "./findings-data.js";
-import { DialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
+import { DialogSurface, SurfaceContext, useSurfaceDimensions } from "./dialog-surface.js";
+import { Popup } from "./popup.js";
 import { ShutdownDialog } from "./shutdown-dialog.js";
 import {
   ChatScreen,
@@ -44,16 +47,14 @@ import {
 } from "./chat-screen.js";
 import { AuditWorkspace, type AuditRecord } from "./audit-workspace.js";
 import type { HerdSubagentMap } from "./herd-layout.js";
-import { AuditSwitcher } from "./audit-switcher.js";
 import { OnboardingScreen, OnboardingSubstep } from "./onboarding-screen.js";
-import { HerdScreen } from "./herd-screen.js";
 import { AgentsCommsScreen } from "./agents-comms-screen.js";
 import { SettingsScreen } from "./settings-screen.js";
 import { KeybindingsEditorScreen } from "./keybindings-editor-screen.js";
-import { HarnessProvider } from "./harness-context.js";
-import { HarnessControlsPanel } from "./harness-trust-controls.js";
+import { HarnessLifecycle } from "./harness-lifecycle.js";
 import { ModelScreen } from "./model-screen.js";
 import { ResumeScreen } from "./resume-screen.js";
+import type { LiveSessionSummary } from "./resume-layout.js";
 import { listSessions, loadSession, deleteSession } from "./session-store.js";
 import { MarketScreen } from "./market-screen.js";
 import { createPluginService } from "./plugin-service.js";
@@ -110,10 +111,7 @@ type ConsoleRoute = (
   | { type: "replay"; dbPath?: string; scanId?: string }
   | { type: "settings" }
   | { type: "keybindings" }
-  | { type: "harness" }
-  | { type: "herd" }
   | { type: "comms" }
-  | { type: "audits" }
   | { type: "onboard" }
   | { type: "market" }
   | { type: "connect"; recovery?: ConnectionRecovery }
@@ -155,7 +153,6 @@ function ConsoleSessionRoute({ route, shell }: { route: Extract<ConsoleRoute, { 
 function SettingsRoute({ onExit, shell }: { onExit: () => void; shell?: ShellNav }) {
   const theme = useTheme();
   useKeyboard((key) => {
-    if (key.ctrl && key.name === "g") shell?.openHarness();
     // Ctrl+K opens the keybinding editor. The keybindings map is not a scalar
     // settings row (it is a map, not a boolean/enum the dialog can cycle), so it
     // lives on its own capture-oriented screen rather than in the table.
@@ -169,10 +166,6 @@ function SettingsRoute({ onExit, shell }: { onExit: () => void; shell?: ShellNav
         <ShellFrame view="settings" dialogContent>
           {shell ? (
             <box flexDirection="row">
-              <text fg={theme.ACCENT} onMouseDown={() => shell.openHarness()}>
-                Live harness · [⌃G]
-              </text>
-              <text fg={theme.MUTED}>{"   "}</text>
               <text fg={theme.ACCENT} onMouseDown={() => shell.openKeybindings()}>
                 Keybindings · [⌃K]
               </text>
@@ -208,44 +201,7 @@ function KeybindingsRoute({ onExit, shell }: { onExit: () => void; shell?: Shell
   );
 }
 
-function HarnessRoute({ onBack }: { onBack: () => void }) {
-  const { width } = useSurfaceDimensions();
-  return (
-    <ShellFrame view="Live harness" dialogContent>
-      <HarnessControlsPanel contentWidth={Math.max(1, width - 4)} onBack={onBack} />
-    </ShellFrame>
-  );
-}
 
-/**
- * Routes the agent-herd overview, supplying the console shell around it.
- *
- * The active audit supplies its worker snapshot, parent identity and mailbox
- * namespace. Peer discovery remains separate from worker lifecycle ownership.
- */
-function HerdRoute({ onExit, shell, parentScanId, readAgents, messagingHomeDir }: {
-  onExit: () => void;
-  shell?: ShellNav;
-  parentScanId?: string;
-  readAgents?: () => Readonly<HerdSubagentMap>;
-  messagingHomeDir?: string;
-}) {
-  return (
-    <HerdScreen
-      onBack={() => leaveCurrentScreen(shell, onExit)}
-      onExit={onExit}
-      frame={({ body, hint }) => (
-        <ShellFrame view="herd" dialogContent>
-          {body}
-          <FooterBar hint={hint} />
-        </ShellFrame>
-      )}
-      parentScanId={parentScanId}
-      readAgents={readAgents}
-      messagingHomeDir={messagingHomeDir}
-    />
-  );
-}
 
 /**
  * Routes the Agents Comms view — the live fleet of sub-agents plus the stream
@@ -330,10 +286,16 @@ function ModelRoute({
  * that stored transcript (openChat's initialMessages → ChatScreen mount-restore);
  * delete removes the file (the screen hides the row locally).
  */
-function ResumeRoute({ onResume, protectedSessionIds, currentId, onExit, shell }: {
+function ResumeRoute({ onResume, protectedSessionIds, currentId, liveSessions, currentLiveId,
+  onSelectLive, onCreate, onCloseLive, onExit, shell }: {
   onResume: (id: string) => boolean;
   protectedSessionIds: ReadonlySet<string>;
   currentId?: string;
+  liveSessions: readonly LiveSessionSummary[];
+  currentLiveId?: string;
+  onSelectLive: (id: string) => void;
+  onCreate: () => void;
+  onCloseLive: (id: string) => void;
   onExit: () => void;
   shell?: ShellNav;
 }) {
@@ -343,6 +305,11 @@ function ResumeRoute({ onResume, protectedSessionIds, currentId, onExit, shell }
       <ResumeScreen
         sessions={listSessions(undefined, { limit: 50 })}
         currentId={currentId}
+        liveSessions={liveSessions}
+        currentLiveId={currentLiveId}
+        onSelectLive={onSelectLive}
+        onCreate={onCreate}
+        onCloseLive={onCloseLive}
         protectedSessionIds={protectedSessionIds}
         currentCwd={process.cwd()}
         now={Date.now()}
@@ -562,16 +529,6 @@ type AppMode =
   | { type: "console"; initialRoute: ConsoleRoute; onResolve?: (selection: HomeSelection) => void; onExit: () => void }
   | { type: "session"; initialState: SessionState; subscribe: (listener: (state: SessionState) => void) => () => void; queueUserMessage?: (text: string) => void; onExit: () => void };
 
-function AuditRoute({ render, onBack }: { render: (width: number, rows: number) => React.ReactNode; onBack: () => void }) {
-  const { width, height } = useSurfaceDimensions();
-  useKeyboard((key) => {
-    if (key.name !== "escape") return;
-    key.preventDefault();
-    key.stopPropagation();
-    onBack();
-  });
-  return <ShellFrame view="audits">{render(Math.max(1, width - SHELL_HORIZONTAL_PADDING * 2), Math.max(1, height - getShellChromeHeight(width)))}<FooterBar hint="Esc back · Ctrl+Alt+N new audit" /></ShellFrame>;
-}
 function ConsoleApp({
   initialRoute,
   onResolve,
@@ -583,16 +540,17 @@ function ConsoleApp({
   onExit: () => void;
   lensEvolution?: TuiLensEvolutionController;
 }) {
+  const devUi = useDevUiBoundary("console");
   const { width: terminalWidth, height: terminalHeight } = useSurfaceDimensions();
   const initialChatOptions = initialRoute.type === "chat" ? initialRoute.options : undefined;
-  const workspaceRef = useRef<AuditWorkspace | null>(null);
+  const workspaceRef = useDevUiRef<AuditWorkspace | null>(devUi, "workspace", null);
   if (!workspaceRef.current) workspaceRef.current = new AuditWorkspace(initialChatOptions);
   const workspace = workspaceRef.current;
   const rootRoute: ConsoleRoute = { type: "chat", auditId: workspace.selectedId };
-  const [routes, setRoutes] = useState<ConsoleRoute[]>(() =>
+  const [routes, setRoutes] = useDevUiState<ConsoleRoute[]>(devUi, "routes", () =>
     initialRoute.type === "chat" ? [rootRoute] : [rootRoute, { ...initialRoute, auditId: workspace.selectedId }]);
-  const [routeIndex, setRouteIndex] = useState(() => initialRoute.type !== "chat" ? 1 : 0);
-  const [lensEvolutionState, setLensEvolutionState] = useState<TuiLensEvolutionStatus | undefined>(
+  const [routeIndex, setRouteIndex] = useDevUiState(devUi, "routeIndex", () => initialRoute.type !== "chat" ? 1 : 0);
+  const [lensEvolutionState, setLensEvolutionState] = useDevUiState<TuiLensEvolutionStatus | undefined>(devUi, "lensEvolutionState",
     () => lensEvolution?.getStatus(),
   );
   useEffect(() => {
@@ -617,14 +575,14 @@ function ConsoleApp({
     if (!selectedScanId) return;
     reportHerdrSession({ sessionId: selectedScanId });
   }, [selectedScanId]);
-  const [workspaceRoot] = useState(() => process.cwd());
-  const [shellError, setShellError] = useState<string | null>(null);
-  const [closingAll, setClosingAll] = useState(false);
-  const exitRequested = useRef(false);
-  const creations = useRef(new Set<Promise<AuditRecord | undefined>>());
-  const openingSessions = useRef(new Map<string, Promise<AuditRecord | undefined>>());
+  const [workspaceRoot] = useDevUiState(devUi, "workspaceRoot", () => process.cwd());
+  const [shellError, setShellError] = useDevUiState<string | null>(devUi, "shellError", null);
+  const [closingAll, setClosingAll] = useDevUiState(devUi, "closingAll", false);
+  const exitRequested = useDevUiRef(devUi, "exitRequested", false);
+  const creations = useDevUiRef(devUi, "creations", new Set<Promise<AuditRecord | undefined>>());
+  const openingSessions = useDevUiRef(devUi, "openingSessions", new Map<string, Promise<AuditRecord | undefined>>());
   const legacyLaunches = useRef(new Map<ReturnType<typeof createSessionCloseGate>, Promise<void>>());
-  const navigationEpoch = useRef(0);
+  const navigationEpoch = useDevUiRef(devUi, "navigationEpoch", 0);
   const reportError = (error: unknown) => setShellError(error instanceof Error ? error.message : String(error));
   const currentRoute = routes[routeIndex] ?? rootRoute;
   const routeOwner = currentRoute.type === "chat" ? selectedRecord : workspace.get(currentRoute.auditId);
@@ -633,7 +591,7 @@ function ConsoleApp({
     navigationEpoch.current++;
     if (id) workspace.select(id);
     const closing = workspace.get(id)?.closeRequested;
-    setRoutes(closing ? [{ type: "chat", auditId: id }, { type: "audits", auditId: id }] : [{ type: "chat", auditId: id }]);
+    setRoutes(closing ? [{ type: "chat", auditId: id }, { type: "resume", auditId: id }] : [{ type: "chat", auditId: id }]);
     setRouteIndex(closing ? 1 : 0);
   };
   const requestExit = (selection?: HomeSelection) => {
@@ -716,12 +674,23 @@ function ConsoleApp({
     delete base.initialMessages;
     delete base.initialPrompt;
     delete base.mcpHost;
+    delete base.modelConnectionIdentity;
     const runtime = source?.runtimeInfo.current;
     const options: ChatScreenOptions = {
       ...base,
-      ...(runtime ? { model: runtime.model(), providerId: runtime.providerId() as ChatScreenOptions["providerId"] } : {}),
+      ...(runtime ? {
+        model: runtime.connectionIdentity() ? runtime.model() : undefined,
+        providerId: runtime.providerId() as ChatScreenOptions["providerId"],
+        modelConnectionIdentity: runtime.connectionIdentity(),
+      } : {}),
       ...source?.nextOptions,
+      ...(source?.nextOptions.providerId !== undefined && source.nextOptions.model === undefined
+        ? { model: undefined, modelConnectionIdentity: undefined }
+        : source?.nextOptions.model !== undefined && (source.nextOptions.model !== runtime?.model()
+          || source.nextOptions.providerId !== undefined && source.nextOptions.providerId !== runtime?.providerId())
+          ? { modelConnectionIdentity: undefined } : {}),
       ...overrides,
+      ...(overrides?.model !== undefined ? { modelConnectionIdentity: undefined } : {}),
     };
     const creation = (async (): Promise<AuditRecord | undefined> => {
       if (exitRequested.current) return undefined;
@@ -756,7 +725,7 @@ function ConsoleApp({
     if (workspace.selectedId === id) {
       const next = workspace.records.find((record) => record.id !== id && !record.closeRequested);
       if (next) showChat(next.id);
-      else navigate({ type: "audits", auditId: id });
+      else navigate({ type: "resume", auditId: id });
     }
     const requestedAt = navigationEpoch.current;
     void closing.then(() => {
@@ -789,7 +758,7 @@ function ConsoleApp({
 
   // Workspace shortcuts remain available when either audit panel is collapsed.
   useKeyboard((key) => {
-    if (closingAll || (currentRoute.type !== "chat" && currentRoute.type !== "audits")) return;
+    if (closingAll || (currentRoute.type !== "chat" && currentRoute.type !== "resume")) return;
     if (!key.ctrl || !(key.option || key.meta) || !["up", "down", "n", "w"].includes(key.name)) return;
     key.preventDefault();
     key.stopPropagation();
@@ -802,25 +771,20 @@ function ConsoleApp({
       showChat(records[next].id);
     }
   });
-  const stageHarnessPrompt = (text: string) => {
-    const owner = workspace.get(routeOwner?.id);
-    if (!owner || owner.closeRequested || !owner.stagePrompt.current) { reportError("This audit is not ready for input."); return; }
-    owner.stagePrompt.current(text);
-    showChat(owner.id);
-  };
   // Marketplace hosts belong to the shell; each session leases its initial
   // approved tool set. Refresh prepares the next chat without rebuilding this one.
-  const [pluginHostManager, setPluginHostManager] = useState<SessionPluginHostManager | null>(null);
-  const [pluginHostReady, setPluginHostReady] = useState(false);
-  const [pluginError, setPluginError] = useState<string | null>(null);
-  const pluginPreparation = useRef<Promise<SessionPluginHostManager> | null>(null);
-  const appAlive = useRef(true);
+  const [pluginHostManager, setPluginHostManager] = useDevUiState<SessionPluginHostManager | null>(devUi, "pluginHostManager", null);
+  const [pluginHostReady, setPluginHostReady] = useDevUiState(devUi, "pluginHostReady", false);
+  const [pluginError, setPluginError] = useDevUiState<string | null>(devUi, "pluginError", null);
+  const pluginPreparation = useDevUiRef<Promise<SessionPluginHostManager> | null>(devUi, "pluginPreparation", null);
+  const appAlive = useDevUiRef(devUi, "appAlive", true);
   useEffect(() => {
     appAlive.current = true;
     return () => { appAlive.current = false; };
   }, []);
   useEffect(() => {
     if (exitRequested.current) return;
+    if (pluginHostReady) return;
     let disposed = false;
     let created: SessionPluginHostManager | undefined;
     const preparation = createSessionPluginHostManager({ reservedToolNames: Object.keys(TOOL_DEFINITIONS) });
@@ -841,7 +805,7 @@ function ConsoleApp({
       });
     return () => {
       disposed = true;
-      created?.dispose();
+      if (!isDevUiRemount()) created?.dispose();
     };
   }, []);
 
@@ -907,10 +871,8 @@ function ConsoleApp({
     openReplay: (scanId) => navigate({ type: "replay", dbPath: routeOwner?.options?.dbPath, scanId }),
     openSettings: () => navigate({ type: "settings" }),
     openKeybindings: () => navigate({ type: "keybindings" }),
-    openHarness: () => navigate({ type: "harness" }),
     openModels: (chatOpts) => navigate({ type: "models", chatOptions: chatOpts ?? routeOwner?.options }),
     openResume: (chatOpts) => navigate({ type: "resume", chatOptions: chatOpts ?? routeOwner?.options }),
-    openHerd: () => navigate({ type: "herd" }),
     openComms: () => navigate({ type: "comms" }),
     openMarket: () => navigate({ type: "market" }),
     openConnect: () => navigate({ type: "connect", recovery: routeOwner?.recovery }),
@@ -928,16 +890,13 @@ function ConsoleApp({
     replay: shell.openReplay,
     settings: shell.openSettings,
     keybindings: shell.openKeybindings,
-    harness: shell.openHarness,
     "new-chat": openNewAudit,
     models: () => shell.openModels(selectedRecord?.options),
     market: shell.openMarket,
     usage: () => shell.openUsage(selectedRecord?.options),
     connect: shell.openConnect,
-    herd: shell.openHerd,
     comms: shell.openComms,
-    resume: () => shell.openResume(selectedRecord?.options),
-    audits: () => navigate({ type: "audits" }),
+    sessions: () => shell.openResume(selectedRecord?.options),
     onboard: () => navigate({ type: "onboard" }),
   };
 
@@ -1084,35 +1043,33 @@ function ConsoleApp({
     ? tuiLensEvolutionStatusLabel(lensEvolutionState)
     : undefined;
   const theme = useTheme();
-  const renderAuditSwitcher = (width: number, rows: number) => (
-    <AuditSwitcher records={records} selectedAuditId={selectedId} onSelect={showChat}
-      onCreate={openNewAudit} onClose={closeAudit} width={width} rows={rows} theme={theme} />
-  );
 
   // ── Audit chat screens ──
-  // Each audit has its own HarnessProvider and gated AppContext.Provider.
+  // Each audit has its own checkpoint lifecycle and gated AppContext.Provider.
   // Only the selected audit is interactive; hidden audits are zero-sized and
   // non-interactive, keeping React state alive without accepting input.
   const auditPanels = records.length > 0 ? (
     records.map((record) => {
       const isSelected = record.id === selectedId;
-      const interactive = isSelected && !overlayActive && !closingAll && !record.closeRequested;
+      // Reopened onboarding owns the screen; keep the chat mounted but hide
+      // its hero shortcuts behind the setup flow.
+      const visible = isSelected && routeType !== "onboard";
+      const interactive = visible && !overlayActive && !closingAll && !record.closeRequested;
       return (
         <box
           key={record.id}
           position="absolute"
           top={0}
           left={0}
-          width={isSelected ? "100%" : 0}
-          height={isSelected ? "100%" : 0}
+          width={visible ? "100%" : 0}
+          height={visible ? "100%" : 0}
           overflow="hidden"
-          zIndex={isSelected ? 1 : 0}
+          zIndex={visible ? 1 : 0}
         >
-          <HarnessProvider
+          <HarnessLifecycle
             host={record.session?.harness ?? null}
             busy={record.busy || record.stopping}
             workspaceRoot={workspaceRoot}
-            stagePrompt={(text: string) => record.stagePrompt.current?.(text)}
           >
             <AppContext.Provider
               value={interactive ? appContext : { ...appContext, keyHandler: null }}
@@ -1133,7 +1090,6 @@ function ConsoleApp({
                   onSessionChange={record.onSessionChange}
                   onWorkingChange={record.onWorkingChange}
                   onNextChatOptions={record.onNextOptions}
-                  renderAuditSwitcher={renderAuditSwitcher}
                   pluginHostManager={pluginHostManager ?? undefined}
                   evolutionStatus={evolutionStatus}
                   onGoBack={shell.goBack}
@@ -1141,10 +1097,6 @@ function ConsoleApp({
                     if (exitRequested.current || record.id !== workspace.selectedId) return;
                     if (destination === "finding") {
                       shell.openFindingDetail(id, undefined, record.options);
-                      return;
-                    }
-                    if (destination === "audits") {
-                      navigate({ type: "audits", auditId: record.id });
                       return;
                     }
                     if (destination === "onboard") {
@@ -1163,11 +1115,11 @@ function ConsoleApp({
               ) : (
                 <box flexDirection="column">
                   <text fg={record.outcome === "failed" ? theme.ERROR : theme.MUTED}>{record.closing || closingAll ? "Closing audit…" : record.outcome === "failed" ? "Audit cleanup failed. Retry closing this audit." : "Preparing approved tools…"}</text>
-                  {isSelected && !overlayActive ? renderAuditSwitcher(terminalWidth, Math.max(1, terminalHeight - 1)) : null}
+                  {isSelected && !overlayActive ? <text fg={theme.MUTED}>Use /sessions to switch conversations.</text> : null}
                 </box>
               )}
             </AppContext.Provider>
-          </HarnessProvider>
+          </HarnessLifecycle>
         </box>
       );
     })
@@ -1182,30 +1134,32 @@ function ConsoleApp({
     <OnboardingScreen
       key={`${onboardingOwner}:${onboardingIndex}`}
       interactive={routeType === "onboard" && !closingAll}
-      frame={({ body, hint, actions }) => <ShellFrame view="onboarding" dialogContent>{body}{actions}<FooterBar hint={hint} /></ShellFrame>}
+      frame={({ body }) => <ShellFrame view="onboarding" dialogContent>{body}</ShellFrame>}
       renderConnect={(nav) => (
-        <OnboardingSubstep nav={nav}>
         <ConnectScreen
+          embedded
           onConnected={(providerId) => {
             const owner = ownerForAction();
             if (!owner) return;
-            owner.onNextOptions({ providerId: providerId as ChatScreenOptions["providerId"] });
+            owner.onNextOptions({ providerId: providerId as ChatScreenOptions["providerId"], model: undefined });
             nav.onDone();
           }}
           onBack={nav.onBack}
           onSkip={nav.onSkip}
           onExit={nav.onExit}
-          frame={({ body, hint }) => (
-            <ShellFrame view="connect" dialogContent>{body}<FooterBar hint={hint} /></ShellFrame>
+          frame={({ body, onBack, backLabel, onNext, nextLabel, nextDisabled }) => (
+            <OnboardingSubstep nav={nav} onBack={onBack} backLabel={backLabel}
+              onNext={onNext} nextLabel={nextLabel} nextDisabled={nextDisabled}>
+              <ShellFrame view="connect" dialogContent>{body}</ShellFrame>
+            </OnboardingSubstep>
           )}
         />
-        </OnboardingSubstep>
       )}
       renderModels={(nav) => {
         const sel = routeOwner;
         return (
-          <OnboardingSubstep nav={nav}>
           <ModelScreen
+            embedded
             currentModel={sel?.nextOptions.model ?? sel?.runtimeInfo.current?.model() ?? sel?.options?.model}
             providerId={sel?.nextOptions.providerId ?? sel?.runtimeInfo.current?.providerId() ?? sel?.options?.providerId}
             codexCatalog={sel?.runtimeInfo.current?.providerId() === "chatgpt-codex" ? sel.runtimeInfo.current.codexCatalog : undefined}
@@ -1218,14 +1172,13 @@ function ConsoleApp({
             onBack={nav.onBack}
             onSkip={nav.onSkip}
             onExit={nav.onExit}
-            frame={({ body, hint }) => (
-              <ShellFrame view="models" dialogContent>
-                {body}
-                <FooterBar hint={hint} />
-              </ShellFrame>
+            frame={({ body, onBack, onNext, nextLabel, nextDisabled }) => (
+              <OnboardingSubstep nav={nav} onBack={onBack}
+                onNext={onNext} nextLabel={nextLabel} nextDisabled={nextDisabled}>
+                <ShellFrame view="models" dialogContent>{body}</ShellFrame>
+              </OnboardingSubstep>
             )}
           />
-          </OnboardingSubstep>
         );
       }}
       onComplete={() => showChat(onboardingOwner)}
@@ -1235,9 +1188,7 @@ function ConsoleApp({
   ) : null;
 
   let overlay: React.ReactNode = null;
-  if (routeType === "audits" || (routeType === "chat" && records.length === 0)) {
-    overlay = <AuditRoute onBack={() => showChat()} render={renderAuditSwitcher} />;
-  } else if (routeType === "launcher") {
+  if (routeType === "launcher") {
     overlay = (
       <HomeScreen onResolve={(selection) => {
         if (selection.action === "tui") {
@@ -1274,7 +1225,12 @@ function ConsoleApp({
   } else if (routeType === "history") {
     overlay = <HistoryScreen dbPath={currentRoute.dbPath} limit={currentRoute.limit} onExit={appExit} shell={shell} />;
   } else if (routeType === "findings") {
-    overlay = <FindingsScreen options={currentRoute.options} onExit={appExit} shell={shell} />;
+    overlay = <FindingsScreen options={currentRoute.options} onExit={appExit} shell={shell} onSourceFix={(findingId) => {
+      const owner = ownerForAction();
+      if (!owner?.submit.current) { reportError("This audit is not ready for input."); return; }
+      owner.submit.current(`/fix ${findingId}`);
+      showChat(owner.id);
+    }} />;
   } else if (routeType === "session") {
     overlay = <ConsoleSessionRoute route={currentRoute} shell={shell} />;
   } else if (routeType === "replay") {
@@ -1283,8 +1239,6 @@ function ConsoleApp({
     overlay = <SettingsRoute onExit={appExit} shell={shell} />;
   } else if (routeType === "keybindings") {
     overlay = <KeybindingsRoute onExit={appExit} shell={shell} />;
-  } else if (routeType === "harness") {
-    overlay = <HarnessRoute onBack={shell.goBack} />;
   } else if (routeType === "models") {
     const sel = routeOwner;
     overlay = (
@@ -1303,13 +1257,16 @@ function ConsoleApp({
         shell={shell}
       />
     );
-  } else if (routeType === "resume") {
+  } else if (routeType === "resume" || (routeType === "chat" && records.length === 0)) {
     overlay = <ResumeRoute onResume={resumeAudit} protectedSessionIds={workspace.protectedSessionIds}
-      currentId={routeOwner?.session?.scanId ?? routeOwner?.sourceSessionId} onExit={appExit} shell={shell} />;
-  } else if (routeType === "herd") {
-    const sel = routeOwner;
-    overlay = <HerdRoute onExit={appExit} shell={shell} parentScanId={sel?.session?.scanId ?? ""}
-      readAgents={sel?.herd.current ?? undefined} messagingHomeDir={sel?.messagingHomeDir} />;
+      currentId={routeOwner?.session?.scanId ?? routeOwner?.sourceSessionId}
+      liveSessions={records.map((record) => ({
+        id: record.id, title: record.title, status: record.status,
+        activity: record.activity, unread: record.unread,
+        sessionId: record.session?.scanId ?? record.sourceSessionId,
+      }))}
+      currentLiveId={selectedId} onSelectLive={showChat} onCreate={openNewAudit} onCloseLive={closeAudit}
+      onExit={appExit} shell={shell} />;
   } else if (routeType === "comms") {
     const sel = routeOwner;
     overlay = <AgentsCommsRoute onExit={appExit} shell={shell} readAgents={sel?.herd.current ?? undefined} />;
@@ -1322,7 +1279,7 @@ function ConsoleApp({
         onConnected={(providerId) => {
           const owner = ownerForAction();
           if (!owner) return;
-          owner.onNextOptions({ providerId: providerId as ChatScreenOptions["providerId"] });
+          owner.onNextOptions({ providerId: providerId as ChatScreenOptions["providerId"], model: undefined });
           owner.recovery = undefined;
           owner.onActivity({ waiting: false });
           if (owner.runtimeInfo.current?.providerId() !== providerId) {
@@ -1354,7 +1311,7 @@ function ConsoleApp({
         onPlanFix={(finding) => {
           const owner = ownerForAction();
           if (!owner?.submit.current) { reportError("This audit is not ready for input."); return; }
-          owner.submit.current(buildFindingChatPrompt({ finding, target: currentRoute.chatOptions?.target }, "draft_fix"));
+          owner.submit.current(`/fix ${finding.id}`);
           showChat(owner.id);
         }}
         shell={shell}
@@ -1363,17 +1320,30 @@ function ConsoleApp({
   }
 
 
+  devUi.safe = () => {
+    // Remount only the settled console, not an auth/settings/approval overlay or
+    // a legacy command session. Every audit (including hidden audits) participates.
+    if (currentRoute.type !== "chat" || closingAll || exitRequested.current ||
+      !pluginHostReady || creations.current.size || openingSessions.current.size ||
+      legacyLaunches.current.size || routes.some(route => route.type === "session")) return false;
+    for (const record of workspace.records) {
+      if (record.busy || record.waiting || record.stopping || record.workers ||
+        record.closing || record.closeRequested || record.recovery) return false;
+    }
+    return true;
+  };
+  devUi.assertNativeIdle = () => {
+    for (const record of workspace.records) record.session?.exportCheckpoint();
+  };
+
   // ── Render ──
-  const selectedHost = routeOwner?.session?.harness ?? null;
-  const selectedBusy = closingAll || (routeOwner?.busy ?? false) || (routeOwner?.stopping ?? false);
+  const compactPopupWidth = Math.max(1, Math.min(routeType === "connect" ? 92 : 72, terminalWidth - 4));
+  const compactPopupHeight = Math.max(1, Math.min(routeType === "connect" ? 24 : 20, terminalHeight - 4));
+  const overlayPane = SCREENS_WITH_LOCAL_PALETTE[routeType] ? overlay : (
+    <PanePalette key={`${routeType}:${currentRoute.auditId ?? ""}`} shell={shell}>{overlay}</PanePalette>
+  );
   return (
     <AppContext.Provider value={closingAll ? { ...appContext, keyHandler: null } : appContext}>
-    <HarnessProvider
-      host={selectedHost}
-      busy={selectedBusy}
-      workspaceRoot={workspaceRoot}
-      stagePrompt={stageHarnessPrompt}
-    >
     <box flexDirection="column" width="100%" height="100%">
     {/* The visual popup stack lives inside the full-screen box (like the
         shutdown dialog), so pushed sub-popups (levels ≥1) render ABOVE the
@@ -1398,23 +1368,27 @@ function ConsoleApp({
         {onboarding ? (
           <box position="absolute" top={0} left={0} width={routeType === "onboard" ? "100%" : 0}
             height={routeType === "onboard" ? "100%" : 0} overflow="hidden" zIndex={100}>
-            <DialogSurface onDismiss={() => { if (!closingAll) showChat(onboardingOwner); }}>
-              {onboarding}
-            </DialogSurface>
+            {onboarding}
           </box>
         ) : null}
-        {overlay ? (
-          <DialogSurface onDismiss={closingAll ? undefined : shell.goBack}>
-            {SCREENS_WITH_LOCAL_PALETTE[routeType] ? overlay : (
-              <PanePalette key={`${routeType}:${currentRoute.auditId ?? ""}`} shell={shell}>{overlay}</PanePalette>
-            )}
+        {overlay ? routeType === "models" || routeType === "connect" ? (
+          <Popup variant="centered" width={compactPopupWidth} height={compactPopupHeight}
+            dismissOnBackdrop={false} onClose={closingAll ? undefined : shell.goBack}>
+            <SurfaceContext.Provider value={{ width: Math.max(1, compactPopupWidth - 4), height: Math.max(1, compactPopupHeight - 2) }}>
+              <box width="100%" height="100%" flexDirection="column" minWidth={0} minHeight={0} overflow="hidden">
+                {overlayPane}
+              </box>
+            </SurfaceContext.Provider>
+          </Popup>
+        ) : (
+          <DialogSurface size={routeType === "findings" ? "xlarge" : "large"} onDismiss={closingAll ? undefined : shell.goBack}>
+            {overlayPane}
           </DialogSurface>
         ) : null}
       </box>
       </RouteHistoryKeys>
     </PopupStackProvider>
     </box>
-    </HarnessProvider>
     </AppContext.Provider>
   );
 }
@@ -1477,6 +1451,7 @@ async function mountApp(mode: AppMode): Promise<void> {
   const outputGuard = installTuiOutputGuard();
   const root = createRoot(renderer);
   const lensEvolution = createTuiLensEvolutionController();
+  let devUiReload: DevUiReloadController | undefined;
   await new Promise<void>((resolve) => {
     let closed = false;
     const close = () => {
@@ -1484,6 +1459,7 @@ async function mountApp(mode: AppMode): Promise<void> {
       closed = true;
       appendTuiEvent({ kind: "shutdown", stage: "close-begin" });
       lensEvolution.stop();
+      const reloadStopped = devUiReload?.stop();
       mode.onExit?.();
       if (traceRender) {
         const stats = renderer.getStats();
@@ -1524,17 +1500,61 @@ async function mountApp(mode: AppMode): Promise<void> {
         stream.write(`${line.text}\n`);
       }
       appendTuiEvent({ kind: "shutdown", stage: "close-complete" });
-      resolve();
+      void Promise.resolve(reloadStopped).then(resolve, resolve);
     };
     try {
-      root.render(
+      let activeApp = UnifiedApp;
+      let generationKey = "initial";
+      const props = { mode: { ...mode, onExit: close } as AppMode, lensEvolution };
+      let updateView: ((node: React.ReactNode) => void) | undefined;
+      const bindView = (update: ((node: React.ReactNode) => void) | undefined) => { updateView = update; };
+      const render = async (App: typeof UnifiedApp, key: string) => {
+        let failed = false;
+        let failure: unknown;
+        if (!updateView) throw new Error("The development UI host is not mounted");
+        flushSync(() => updateView!(
+          <DevUiRenderBoundary key={key} onFailure={error => { failed = true; failure = error; }}>
+            <App {...props} />
+          </DevUiRenderBoundary>,
+        ));
+        // OpenTUI commits passive input subscriptions on a macrotask. Keep the
+        // handoff flag active until old handlers are detached/new ones installed.
+        const readiness = Promise.withResolvers<void>();
+        setTimeout(readiness.resolve, 0);
+        await readiness.promise;
+        if (failed) throw failure;
+      };
+      bindDevUiDiagnostics(() => root.render(
         <TuiErrorBoundary onQuit={close}>
-          <UnifiedApp mode={{ ...mode, onExit: close } as AppMode} lensEvolution={lensEvolution} />
+          <DevUiHost onReady={bindView} initial={
+            <DevUiRenderBoundary key="initial">
+              <UnifiedApp {...props} />
+            </DevUiRenderBoundary>
+          } />
         </TuiErrorBoundary>,
-      );
+      ));
+      if (mode.type === "console") devUiReload = startDevUiReload({
+        notice: text => process.stderr.write(`${text}\n`),
+        apply: async (candidate, digest) => {
+          if (closed) return;
+          const previous = activeApp;
+          const previousKey = generationKey;
+          try {
+            await render(candidate.UnifiedApp, digest);
+            activeApp = candidate.UnifiedApp;
+            generationKey = digest;
+          } catch (error) {
+            await render(previous, `${previousKey}-rollback`);
+            throw error;
+          }
+        },
+      });
     } catch (error) {
       // Never leave the process with patched streams: the crash report
       // below and anything after it must reach the real terminal.
+      void devUiReload?.stop();
+      root.unmount();
+      renderer.destroy();
       outputGuard.restore();
       resumeProcessPresentationStreamBridge();
       lensEvolution.stop();

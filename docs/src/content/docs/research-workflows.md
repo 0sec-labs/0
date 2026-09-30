@@ -58,7 +58,7 @@ unknown families, or a failed alternate call can retain/fall back to same-family
 refutation. Inspect the recorded pairing/degradation status rather than assuming
 independence. This is a role-selection policy, not a learned optimal-model router
 or proof that a finding was dynamically reproduced. Local tools and VM execution
-remain local even when model calls use a hosted transport.
+remain in the configured local environment.
 
 ## Input and artifact contracts
 

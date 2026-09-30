@@ -106,8 +106,7 @@ redaction and hashed artifacts. A broader adversarial-eval report should also ca
 ## Product scope
 
 Use the local harness and your configured model connections for these workflows.
-Hosted model transport still leaves tools in the chosen execution environment;
-managed execution requires separately scoped access and terms. The website's
+Managed execution requires separately scoped access and terms. The website's
 find/verify/fix product organization does not establish that every path performs
 universal reproduction or that recurring managed evaluation is qualified by this
 repository. See [Features](/features/#related-products) and [Roadmap](/roadmap/).

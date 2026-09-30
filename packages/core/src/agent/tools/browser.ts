@@ -6,6 +6,7 @@
 import { z } from "zod";
 import type { JevEvaluator } from "@0/shared";
 import type { ScopePolicy } from "../../scope/scope.js";
+import type { ScopeEnforcementState } from "../../scope/activation.js";
 import type { ToolDefinition, ToolResult } from "../types.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -480,6 +481,7 @@ export class PlaywrightDriver implements BrowserDriver {
 export interface BrowserToolContext {
   target: string;
   scope?: ScopePolicy;
+  scopeEnforcement?: ScopeEnforcementState;
   publicNetwork?: { readonly scope?: ScopePolicy };
 }
 
@@ -543,7 +545,7 @@ function effectiveScope(ctx: BrowserToolContext): ScopePolicy | undefined {
 function gateUrl(ctx: BrowserToolContext, url: string): { ok: true } | { ok: false; reason: string } {
   const scope = effectiveScope(ctx);
   if (!scope) return { ok: true }; // unscoped scans keep today's behaviour
-  const verdict = scope.match(url);
+  const verdict = scope.enforce(url, ctx.scopeEnforcement);
   if (!verdict.allowed) return { ok: false, reason: verdict.reason };
   return { ok: true };
 }

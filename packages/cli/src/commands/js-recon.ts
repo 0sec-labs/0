@@ -5,6 +5,8 @@ import {
   enumerateJsChunkUrls,
   ScopePolicy,
   fetchScoped,
+  isScopeEnforcementEnabled,
+  getScopeEnforcementState,
   type JsReconResult,
   type FetchTextResult,
 } from "@0/core";
@@ -19,22 +21,19 @@ interface JsReconCliOptions {
 /**
  * Mine a live site's JavaScript bundles for endpoints + redacted secret hits.
  *
- * DENY-BY-DEFAULT: every JS URL is scope-checked before fetch and the library
- * fetches NOTHING without a `ScopePolicy`. The CLI refuses up front when
- * `--scope` is absent so the operator gets a clear message instead of a silent
- * no-op. Secret values are never printed — only the redacted excerpt the
- * library returns.
+ * Host authorization is supplied by the optional scope plugin. Secret values
+ * are never printed — only the redacted excerpt the library returns.
  */
 export function registerJsReconCommand(program: Command): void {
   program
     .command("js-recon")
     .description(
-      "Fetch the JS a live site serves and mine each bundle for endpoints/API base URLs + embedded secrets (redacted). Scope-gated, deny-by-default. #927",
+      "Mine live JavaScript for endpoints/API bases + redacted secrets. The optional scope plugin controls destination authorization.",
     )
     .argument("<url>", "Target page URL whose <script> bundles are mined, e.g. https://app.example.com")
-    .requiredOption(
+    .option(
       "--scope <file>",
-      "Path to a JSON scope file ({in_scope, out_of_scope}). REQUIRED — every JS URL is checked against it before any fetch. No scope = nothing fetched.",
+      "JSON engagement policy; required only while the scope plugin is enabled.",
     )
     .option("--timeout <ms>", "Per-request fetch timeout in milliseconds", "10000")
     .option("--max-files <n>", "Maximum JS files to fetch (clamped to [0,100])")
@@ -57,15 +56,21 @@ export function registerJsReconCommand(program: Command): void {
         }
       }
 
-      // Deny-by-default. `--scope` is requiredOption, so commander already
-      // enforces presence; load + validate it before any network touch.
-      let scope: ScopePolicy;
-      try {
-        scope = ScopePolicy.fromJsonFile(opts.scope!);
-      } catch (err) {
-        console.error(chalk.red(`Failed to load --scope '${opts.scope}': ${err instanceof Error ? err.message : String(err)}`));
+      console.error(chalk.dim(getScopeEnforcementState().message));
+      let scope: ScopePolicy | undefined;
+      if (isScopeEnforcementEnabled() && !opts.scope) {
+        console.error(chalk.red("js-recon requires --scope while the scope plugin is enabled."));
         process.exitCode = 2;
         return;
+      }
+      if (opts.scope) {
+        try {
+          scope = ScopePolicy.fromJsonFile(opts.scope);
+        } catch (err) {
+          console.error(chalk.red(`Failed to load --scope '${opts.scope}': ${err instanceof Error ? err.message : String(err)}`));
+          process.exitCode = 2;
+          return;
+        }
       }
 
       const fetchText = async (target: string): Promise<FetchTextResult & { url: string }> => {
@@ -81,7 +86,7 @@ export function registerJsReconCommand(program: Command): void {
       // Step 1: fetch the page and extract its <script src> bundle URLs. The
       // page fetch itself is scope-gated — an out-of-scope page yields no
       // script URLs and therefore no JS sweep.
-      if (!scope.match(url).allowed) {
+      if (isScopeEnforcementEnabled() && scope && !scope.match(url).allowed) {
         console.error(chalk.red(`Target page '${url}' is out of scope — refusing (deny-by-default).`));
         process.exitCode = 2;
         return;

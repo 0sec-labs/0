@@ -14,16 +14,42 @@ on the published npm package and the GitHub Release tag.
 
 ### Changed
 
-- Add codebase-scoped checks to `0 checks`. Save drafts, enable or remove them,
-  and return pass, issue, or unknown during changed-only reviews. Suggestions
-  stay advisory; existing security merge policy is unchanged.
 - The interactive CLI now uses connected API keys or provider subscriptions
   only. Cloud credentials no longer select hosted inference implicitly, and
   `/connect` and `/model` no longer offer 0cloud sign-in or 0security Auto.
   Local token, context and estimated-cost reporting remains available.
-- `0dev` no longer injects a Cloud provider or credentials. Remove the
-  hosted-inference `0 models` and `0 balance` commands; keep managed-service
-  `0 auth`, `0 login`, `0 connect` and `0 service` separate from local model access.
+- Removed managed-cloud login, scans and hosted-inference commands from the CLI.
+  Provider API keys and supported provider subscriptions remain available.
+- Added automatic provider model-catalog refresh and account-specific Codex
+  discovery using current protocol negotiation and backend recommendation order.
+  Successful explicit model choices persist for the same connection; CLI and
+  environment overrides win. Fresh launches no longer silently select GPT-5.5.
+- Reworked onboarding and dialogs with compact controls, live theme preview and
+  0security branding. Setup is five steps; sharing preferences remain optional
+  and editable from Settings, and completion returns directly to chat.
+- Replaced the Audits sidebar and separate saved-audit browser with one
+  `/sessions` picker for open and saved conversations. Removed both chat sidebars;
+  compact agent task rows share the main transcript and composer.
+- Added an optional local SmolVM workbench: the complete Kali-based 0 runtime,
+  browser, Linux tools and scoped GitHub CLI run in a network-enabled Linux VM on
+  Apple Silicon, without Docker/Colima at execution. Docker can still build the
+  OCI image; it is not required to run it.
+- Added safe `0dev --watch console` frontend reloads at idle boundaries, preserving
+  conversations, drafts and runtime ownership.
+- Added reviewed `/fix` setup with private per-project inputs and separately
+  approved, regression-verified draft-PR publication.
+- Scope enforcement is an explicitly enabled plugin. Desktop remains alpha and
+  is excluded from normal release artifacts. Per-answer usage is off by default.
+
+### Fixed
+
+- Stop repeated NVD requests after rate limits rather than flooding the transcript.
+- Preserve model-picker selection while runtime metadata hydrates; compact
+  onboarding keeps a selectable model row instead of spending its space on chrome.
+- Fix development build failures in tool registration, plugin capabilities and
+  source-fix state handling.
+- Publish native SmolVM cleanup proofs atomically, and make craft directory
+  listing portable without interpreting model-supplied paths as shell input.
 
 ## [0.21.4] - 2026-09-23
 

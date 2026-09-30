@@ -8,6 +8,8 @@ import {
   validateAwsCredentials,
   features,
   ScopePolicy,
+  isScopeEnforcementEnabled,
+  getScopeEnforcementState,
   type BucketProbeResult,
   type TakeoverVerdict,
   type CredentialValidationResult,
@@ -33,16 +35,15 @@ const FEATURE_OFF_MSG =
   "cloud commands are disabled. Set ZERO_FEATURE_CLOUD_SURFACE=1 to enable (read-only S3/credential probes, deny-by-default).";
 
 /**
- * Live cloud-surface probes (#925). Every subcommand is gated behind BOTH the
- * ZERO_FEATURE_CLOUD_SURFACE feature flag AND an engagement ScopePolicy
- * (`--scope`). Both rails are deny-by-default and refuse with a clear message.
+ * Live cloud-surface probes (#925). Feature enablement is independent of the
+ * optional scope plugin's engagement authorization.
  * All probes are anonymous or read-only — nothing is mutated or exfiltrated.
  */
 export function registerCloudCommand(program: Command): void {
   const cloud = program
     .command("cloud")
     .description(
-      "Read-only cloud-surface probes (S3 public-access / takeover, AWS credential validation). Gated behind ZERO_FEATURE_CLOUD_SURFACE + an engagement scope, deny-by-default. #925",
+      "Read-only S3 and AWS credential probes. Feature enablement and optional scope authorization are separate controls.",
     );
 
   cloud
@@ -51,9 +52,9 @@ export function registerCloudCommand(program: Command): void {
       "Anonymously probe one or more S3 buckets for public listability + orphaned-bucket takeover. Read-only, no credentials sent.",
     )
     .argument("<bucket...>", "Bucket name(s) to probe, e.g. acme-assets")
-    .requiredOption(
+    .option(
       "--scope <file>",
-      "Path to a JSON scope file ({in_scope, out_of_scope}). REQUIRED — each bucket's S3 endpoint must be in scope or it is refused.",
+      "JSON engagement policy; required only while the scope plugin is enabled.",
     )
     .option("--region <region>", "Bucket home region (default us-east-1 / global endpoint)")
     .option("--max-keys <n>", "Max object keys to sample from a public listing (1-100, default 10)")
@@ -65,7 +66,7 @@ export function registerCloudCommand(program: Command): void {
         return;
       }
       const scope = loadScopeOrExit(opts.scope);
-      if (!scope) return;
+      if ((opts.scope || isScopeEnforcementEnabled()) && !scope) return;
 
       let maxKeys: number | undefined;
       if (opts.maxKeys !== undefined) {
@@ -118,9 +119,9 @@ export function registerCloudCommand(program: Command): void {
     .description(
       "Validate a harvested AWS credential READ-ONLY via sts:GetCallerIdentity + read-only over-privilege probes. No mutation, ever.",
     )
-    .requiredOption(
+    .option(
       "--scope <file>",
-      "Path to a JSON scope file ({in_scope, out_of_scope}). REQUIRED — validating a credential is recon against the target org, deny-by-default.",
+      "JSON engagement policy; required only while the scope plugin is enabled.",
     )
     .option("--access-key-id <id>", "AWS access key id (defaults to $AWS_ACCESS_KEY_ID)")
     .option("--secret-access-key <key>", "AWS secret access key (defaults to $AWS_SECRET_ACCESS_KEY)")
@@ -134,7 +135,7 @@ export function registerCloudCommand(program: Command): void {
         return;
       }
       const scope = loadScopeOrExit(opts.scope);
-      if (!scope) return;
+      if ((opts.scope || isScopeEnforcementEnabled()) && !scope) return;
 
       const accessKeyId = (opts.accessKeyId ?? process.env.AWS_ACCESS_KEY_ID ?? "").trim();
       const secretAccessKey = (opts.secretAccessKey ?? process.env.AWS_SECRET_ACCESS_KEY ?? "").trim();
@@ -187,15 +188,18 @@ export function registerCloudCommand(program: Command): void {
     });
 }
 
-/**
- * Load + validate a `--scope` file; on failure print a clear message and set a
- * non-zero exit code, returning `undefined` so the caller bails. `--scope` is a
- * requiredOption on every subcommand, so the only failure mode here is an
- * unreadable / malformed file.
- */
+/** Parse supplied policy without silently accepting configuration errors. */
 function loadScopeOrExit(path: string | undefined): ScopePolicy | undefined {
+  consolePresentationOutput.stderr(chalk.dim(getScopeEnforcementState().message), "cloud.scope.state");
+  if (!path) {
+    if (isScopeEnforcementEnabled()) {
+      consolePresentationOutput.stderr(chalk.red("cloud probes require --scope while the scope plugin is enabled."), "cloud.scope.required");
+      process.exitCode = 2;
+    }
+    return undefined;
+  }
   try {
-    return ScopePolicy.fromJsonFile(path!);
+    return ScopePolicy.fromJsonFile(path);
   } catch (err) {
     consolePresentationOutput.stderr(chalk.red(`Failed to load --scope '${path}': ${err instanceof Error ? err.message : String(err)}`), "cloud.scope.load-error");
     process.exitCode = 2;

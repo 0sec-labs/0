@@ -52,8 +52,9 @@ export function formatPresentationDocument(
           durationMs: document.report.durationMs,
           summary: document.report.summary,
           findings: document.report.findings,
-          warnings: [],
+          warnings: document.report.warnings?.map(warning => ({ stage: "report" as const, message: `[${warning.stage}] ${warning.message}` })) ?? [],
           executionSuccessful: document.report.researchFailed ? false : undefined,
+          reviewChecks: document.report.reviewChecks,
         };
 
   switch (format) {

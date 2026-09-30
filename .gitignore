@@ -20,6 +20,8 @@ pnpm-publish-summary.json
 services/
 # Local build artifacts
 *.tgz
+!vendor/tree-sitter-0.21.1-node24.tgz
+.workbench/
 # Local secrets
 .env
 .env.*

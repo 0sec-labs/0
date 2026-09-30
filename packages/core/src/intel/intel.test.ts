@@ -144,6 +144,33 @@ describe("vulnerability intel", () => {
     expect(result?.kev?.dateAdded).toBe("2024-02-01");
   });
 
+  it("opens a shared NVD cooldown after 429 without flooding parallel lookups or poisoning the cache", async () => {
+    let now = 1_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    let nvdCalls = 0;
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.startsWith("https://www.cisa.gov/")) return json({ vulnerabilities: [] });
+      if (url.startsWith("https://services.nvd.nist.gov/")) {
+        nvdCalls++;
+        return nvdCalls === 1 ? new Response(null, { status: 429 }) : json(NVD_RESPONSE);
+      }
+      throw new Error(`unexpected URL ${url}`);
+    }) as unknown as typeof fetch;
+
+    const requests = Array.from({ length: 12 }, (_, index) =>
+      lookupCve({ cveId: `CVE-2024-${String(index + 1).padStart(4, "0")}`, cacheDir }, { fetchImpl: fetchMock }));
+    expect(await Promise.all(requests)).toEqual(Array(12).fill(null));
+    expect(nvdCalls).toBe(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    now += 30_001;
+    const resumed = await lookupCve({ cveId: "CVE-2024-0001", cacheDir }, { fetchImpl: fetchMock });
+    expect(resumed?.cvss?.score).toBe(8.1);
+    expect(nvdCalls).toBe(2);
+  });
+
   it("searches similar advisories through NVD keyword search", async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = new URL(String(input));

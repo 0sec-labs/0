@@ -186,6 +186,8 @@ const fakeTools = [
 const getToolsForRoleMock = vi.fn(() => fakeTools);
 
 vi.mock("@0/core", () => ({
+  isScopeEnforcementEnabled: () => true,
+  getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, projectPath: process.cwd(), message: "Scope plugin enabled" }),
   ToolExecutor: FakeToolExecutor,
   getToolsForRole: getToolsForRoleMock,
   loadScope: loadScopeMock,

@@ -1,4 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+// Existing authorization regressions exercise the explicitly activated plugin.
+vi.mock("../plugins/enablement.js", async (importOriginal) => ({
+  ...await importOriginal<object>(),
+  readEnablement: () => ({ schema: 1, project: process.cwd(), enabled: { scope: { version: "1.0.0", capabilities: [], enabledAt: 1 } } }),
+}));
 import { ToolExecutor, getToolsForRole, TOOL_DEFINITIONS, SCANNER_TOOL_NAMES, detectHttpEgressSegments, evaluateDoneCoverageGate, containsUnquotedShellChars, sanitizedEnv, toolExecutorCheckpointSchema } from "./tools.js";
 import { parseFindingsFromCliOutput } from "../findings-parser.js";
 import type { ToolContext, ToolCall } from "./types.js";
@@ -406,6 +411,167 @@ describe("ToolExecutor", () => {
     expect(ctx.findings[0].severity).toBe("high");
     expect(ctx.findings[0].status).toBe("discovered");
     expect(ctx.findings[0].id).toBeTruthy();
+  });
+
+  it("save_finding evaluates only code predicates in the scoped source workspace", async () => {
+    const root = mkdtempSync(join(tmpdir(), "0-source-check-"));
+    try {
+      writeFileSync(join(root, "source.ts"), "unsafe(input)\n");
+      const scopedContext: ToolContext = {
+        ...ctx,
+        findings: [],
+        scopePath: root,
+      };
+      const scopedExecutor = new ToolExecutor(scopedContext, null);
+      const result = await scopedExecutor.execute({
+        name: "save_finding",
+        arguments: {
+          title: "Unsafe source parser",
+          severity: "high",
+          category: "missing-validation",
+          evidence_request: "source.ts:1",
+          evidence_response: "Source inspection found an unvalidated call.",
+          verification_spec: {
+            code: [{ kind: "file-contains", file: "source.ts", pattern: "unsafe\\(input\\)" }],
+            behavior: {
+              steps: [{ method: "GET", path: "http://127.0.0.1:1/never-run", expect: "success" }],
+            },
+          },
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(scopedContext.findings[0]?.sourceVerification).toEqual({
+        status: "matched",
+        totalPredicates: 1,
+        matchedPredicates: 1,
+        notMatchedPredicates: 0,
+        inconclusivePredicates: 0,
+        behaviorPending: true,
+      });
+      expect(scopedContext.findings[0]?.verification_result).toBeUndefined();
+      expect(scopedContext.findings[0]?.status).toBe("discovered");
+      expect(mockFetchScoped).not.toHaveBeenCalled();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("save_finding reports unmatched code predicates as not confirmed", async () => {
+    const root = mkdtempSync(join(tmpdir(), "0-source-check-not-confirmed-"));
+    try {
+      writeFileSync(join(root, "source.ts"), "safe(input)\n");
+      const scopedContext: ToolContext = {
+        ...ctx,
+        findings: [],
+        scopePath: root,
+      };
+      const scopedExecutor = new ToolExecutor(scopedContext, null);
+      const result = await scopedExecutor.execute({
+        name: "save_finding",
+        arguments: {
+          title: "Source predicate no longer matches",
+          severity: "medium",
+          category: "missing-validation",
+          evidence_request: "source inspection",
+          evidence_response: "The expected unsafe call was absent.",
+          verification_spec: {
+            code: [{ kind: "file-contains", file: "source.ts", pattern: "unsafe\\(input\\)" }],
+          },
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(scopedContext.findings[0]?.sourceVerification).toEqual({
+        status: "not_confirmed",
+        totalPredicates: 1,
+        matchedPredicates: 0,
+        notMatchedPredicates: 1,
+        inconclusivePredicates: 0,
+        behaviorPending: false,
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("save_finding marks unsupported source predicates inconclusive", async () => {
+    const root = mkdtempSync(join(tmpdir(), "0-source-check-inconclusive-"));
+    try {
+      const scopedContext: ToolContext = {
+        ...ctx,
+        findings: [],
+        scopePath: root,
+      };
+      const scopedExecutor = new ToolExecutor(scopedContext, null);
+      const result = await scopedExecutor.execute({
+        name: "save_finding",
+        arguments: {
+          title: "Unsupported source predicate",
+          severity: "medium",
+          category: "missing-validation",
+          evidence_request: "source inspection",
+          evidence_response: "Source predicate cannot yet be evaluated.",
+          verification_spec: {
+            code: [{ kind: "ast-shape", file: "source.ts", query: "(call_expression)" }],
+          },
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(scopedContext.findings[0]?.sourceVerification).toEqual({
+        status: "inconclusive",
+        totalPredicates: 1,
+        matchedPredicates: 0,
+        notMatchedPredicates: 0,
+        inconclusivePredicates: 1,
+        behaviorPending: false,
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("save_finding omits source results when scope or a valid spec is absent", async () => {
+    const noScope = await executor.execute({
+      name: "save_finding",
+      arguments: {
+        title: "Unscoped source finding",
+        severity: "medium",
+        category: "missing-validation",
+        evidence_request: "source inspection",
+        evidence_response: "Source finding saved.",
+        verification_spec: {
+          code: [{ kind: "file-contains", file: "source.ts", pattern: "unsafe" }],
+        },
+      },
+    });
+    expect(noScope.success).toBe(true);
+    expect(ctx.findings[0]?.sourceVerification).toBeUndefined();
+
+    const root = mkdtempSync(join(tmpdir(), "0-source-check-no-spec-"));
+    try {
+      const scopedContext: ToolContext = {
+        ...ctx,
+        findings: [],
+        scopePath: root,
+      };
+      const scopedExecutor = new ToolExecutor(scopedContext, null);
+      const noSpec = await scopedExecutor.execute({
+        name: "save_finding",
+        arguments: {
+          title: "Scoped finding without a spec",
+          severity: "medium",
+          category: "missing-validation",
+          evidence_request: "source inspection",
+          evidence_response: "Source finding saved.",
+        },
+      });
+      expect(noSpec.success).toBe(true);
+      expect(scopedContext.findings[0]?.sourceVerification).toBeUndefined();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("save_finding records a workspace-contained 0review annotation", async () => {
@@ -1058,9 +1224,8 @@ describe("ToolExecutor", () => {
     expect(f.confidence!).toBeGreaterThanOrEqual(0);
     expect(f.confidence!).toBeLessThanOrEqual(1);
     expect(f.confidence!).toBeCloseTo(0.92);
-    // Mirrored back onto the call args so agent-runner's mid-scan
-    // postFinding(call.arguments) and the native-loop's finding_ingested
-    // event both see the computed value.
+    // Mirrored onto the call arguments so the native-loop's local
+    // finding_ingested event sees the computed value.
     expect(args.confidence).toBeCloseTo(0.92);
   });
 
@@ -4546,11 +4711,9 @@ describe("sanitizedEnv — child-process credential filtering (0#134)", () => {
     const out = sanitizedEnv({
       "ZERO_FEATURE_JIT_SKILLS": "1",
       "ZERO_BASH_TIMEOUT_MS": "60000",
-      "ZERO_CLOUD_SCAN_ID": "scan-1",
     });
     expect(out["ZERO_FEATURE_JIT_SKILLS"]).toBe("1");
     expect(out["ZERO_BASH_TIMEOUT_MS"]).toBe("60000");
-    expect(out["ZERO_CLOUD_SCAN_ID"]).toBe("scan-1");
   });
 
   it("end-to-end: the bash child cannot read the injected credentials, but CAN read $AUTH_VALUE", async () => {

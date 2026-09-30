@@ -12,6 +12,12 @@ vi.mock("@0/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@0/core")>();
   return {
     ...actual,
+    getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, projectPath: process.cwd(), message: "Scope plugin enabled" }),
+    isScopeEnforcementEnabled: () => true,
+    bucketInScope: (...args: Parameters<typeof actual.bucketInScope>) => actual.withScopeEnforcement(
+      { pluginId: "scope", enabled: true, projectPath: process.cwd(), message: "Scope plugin enabled" },
+      () => actual.bucketInScope(...args),
+    ),
     probeS3Bucket: probeS3BucketMock,
     classifyTakeover: classifyTakeoverMock,
     validateAwsCredentials: validateAwsCredentialsMock,
@@ -79,9 +85,10 @@ describe("0cloud", () => {
       expect(io.stderr.join("\n")).toContain("ZERO_FEATURE_CLOUD_SURFACE=1");
     });
 
-    it("deny-by-default: requires --scope (commander rejects without it)", async () => {
+    it("requires scope while the plugin is activated", async () => {
       process.env["ZERO_FEATURE_CLOUD_SURFACE"] = "1";
-      await expect(runCli(["cloud", "s3-probe", "acme-assets"])).rejects.toBeDefined();
+      await runCli(["cloud", "s3-probe", "acme-assets"]);
+      expect(process.exitCode).toBe(2);
       expect(probeS3BucketMock).not.toHaveBeenCalled();
     });
 
@@ -109,11 +116,10 @@ describe("0cloud", () => {
       expect(process.exitCode).toBe(2);
     });
 
-    it("deny-by-default: requires --scope (commander rejects without it)", async () => {
+    it("requires scope while the plugin is activated", async () => {
       process.env["ZERO_FEATURE_CLOUD_SURFACE"] = "1";
-      await expect(
-        runCli(["cloud", "validate-creds", "--access-key-id", "AKIA", "--secret-access-key", "s"]),
-      ).rejects.toBeDefined();
+      await runCli(["cloud", "validate-creds", "--access-key-id", "AKIA", "--secret-access-key", "s"]);
+      expect(process.exitCode).toBe(2);
       expect(validateAwsCredentialsMock).not.toHaveBeenCalled();
     });
 

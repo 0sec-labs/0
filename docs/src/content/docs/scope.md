@@ -3,9 +3,17 @@ title: Scope & Authorization
 description: Define CLI scope JSON, understand hostname and CIDR matching, and distinguish target authorization from execution isolation.
 ---
 
-A scope policy limits target destinations. It does not authorize testing a
-system and is not an OS sandbox. Obtain authorization first, then encode
-allowed hosts and exclusions as narrowly as possible.
+Scope authorization is an optional first-party plugin, **disabled by default**.
+Activate it per project with `0 plugin enable scope`; deactivate it with
+`0 plugin disable scope`. A scope file supplies policy but never activates
+checks by itself. When disabled, engagement host/path checks, exclusions and
+local filesystem authorization boundaries are **not enforced**.
+
+The behavior below describes the enabled plugin. A scope policy limits target
+destinations; it does not authorize testing a system and is not an OS sandbox.
+Obtain authorization first, then encode allowed hosts and exclusions narrowly.
+Credential protection, sandboxing and resource limits remain active regardless
+of the scope plugin's state.
 
 ## Minimal scope file
 
@@ -21,14 +29,15 @@ Save this as `scope.json`, replacing the example host with your authorized targe
 Then pass the file explicitly:
 
 ```bash
+0 plugin enable scope
 0 scan --target https://app.example.com --mode web \
   --scope ./scope.json --depth quick --cost-ceiling 2
 ```
 
-The ordinary `scan` path refuses live HTTP, HTTPS, and MCP targets without a
-scope policy. It also checks that the initial target matches the supplied file.
-Missing files, malformed policies, and an out-of-scope initial target stop the
-scan with exit code `2` before the assessment starts.
+With the plugin enabled, ordinary `scan` refuses live HTTP, HTTPS, and MCP
+targets without a scope policy. It checks the initial target against the file.
+Missing files or malformed policies remain configuration errors in either state;
+an out-of-scope target stops the assessment only when authorization is enabled.
 
 The worker-oriented `http_audit` mode can construct an in-memory policy from
 operator-provided target configuration instead. It is not a way to bypass
@@ -88,7 +97,7 @@ Scope, credentials, and engagement controls are separate inputs:
 
 | Control | Purpose |
 | --- | --- |
-| `--scope` | Authorized destination allow/deny rules. |
+| `--scope` | Destination policy; enforced only after `0 plugin enable scope`. |
 | `--auth` | Credentials for the target, not permission to test it. |
 | Model credential / `--model` | Which model handles the investigation. |
 | `--engagement-profile conservative` | A quieter testing posture, not a new scope. |
@@ -96,18 +105,19 @@ Scope, credentials, and engagement controls are separate inputs:
 | `--cost-ceiling` | Model-spend limit for the run, not a managed engagement quote. |
 
 [Authorized Engagements](/engagements/) covers attribution, rate/jitter controls,
-and WAF behavior. Generic scanner tools are suppressed on scoped scan paths by
-default. `--allow-scanners` relaxes that particular gate; use it only with explicit
-permission for the additional traffic. It does not expand the host allowlist.
+and WAF behavior. With the scope plugin enabled, generic scanner commands are
+suppressed on scoped scan paths by default. `--allow-scanners` relaxes that
+policy without expanding host authorization. Structured scanner tools retain
+their explicit scanner opt-in regardless of scope activation.
 
 ### Requirements differ by command
 
-| Entry point | Current authorization control |
+| Entry point | Authorization while the scope plugin is enabled |
 | --- | --- |
 | `scan` with HTTP(S)/MCP | Requires a matching engagement policy before starting, including localhost. |
-| `recon --active` | Requires `--scope`; checks active DNS brute-force candidates before resolving them. |
+| `recon --active` / `js-recon` / `cloud` / `agent-assure` | Require `--scope`; existing candidate/endpoint checks apply before live work. |
 | `recon` without `--active` | Still performs CT/DNS lookups and HTTP probes. Its scope option is not a universal guard over those paths. |
-| `identity` | Scope is optional; when supplied it must allow `graph.microsoft.com`. The Graph token determines the actual tenant queried. |
+| `identity` | Supplied scope must allow `graph.microsoft.com`. Token delivery remains pinned to the configured Graph origin even with the plugin disabled. |
 | `adgraph` / `entragraph` | Analyze supplied exports offline; do not collect or authorize access to a directory. |
 | `review`, `fix`, `secure` | Source/tool execution boundaries, not live-target scope-file enforcement. `fix` and `secure` do not accept `--scope`. |
 
@@ -128,15 +138,14 @@ can require network access.
 The interactive console's YOLO mode distinguishes public repository checkout
 from live-target authorization. A standalone HTTPS `git clone` can acquire
 source without adding the hosting service to the engagement scope. Explicit
-host/address exclusions and private-network restrictions still apply; other
+host/address exclusions apply only while the scope plugin is enabled; private-network restrictions always remain. Other
 commands do not inherit that checkout permission. See
 [public repository acquisition](/console/#acquiring-a-public-repository-in-yolo).
 
-`ZERO_REQUIRE_SCOPE=1` requests fail-closed behavior where these guards are
-used. It does not manufacture a policy, and not every command accepts `--scope`.
-Use the command-specific [reference](/commands/) instead of adding unsupported
-flags. The `scan --require-scope` option is not needed to activate the normal
-live-target scope requirement.
+`ZERO_REQUIRE_SCOPE=1` and `scan --require-scope` make the **enabled** plugin
+fail closed in unscoped local modes too. Neither activates the plugin or creates
+a policy. Use `0 plugin enable scope` first; check the command-specific
+[reference](/commands/) rather than adding unsupported flags.
 
 ## Execution boundary
 
@@ -152,8 +161,8 @@ valid before resuming. Persisted state is not continuing authorization.
 For `secure`, setup commands, regression tests, and generated behavioral probes
 run in disposable checkouts **inside the current worker**. They can access that
 worker's network and credentials; `--publish` additionally authorizes the
-workflow to attempt GitHub branch/PR writes. Neither selecting hosted model
-transport nor passing a state directory provisions isolation. See
+workflow to attempt GitHub branch/PR writes. Passing a state directory does
+not provision isolation. See
 [repository lifecycle](/scan-workflows/#repository-lifecycle-with-secure).
 
 ## Diagnose a scope refusal
@@ -171,4 +180,3 @@ Source: `packages/core/src/scope/scope.ts`,
 `packages/core/src/scope/scope-guard.ts`, and
 `packages/cli/src/commands/scan.ts`.
 
-Managed access follows the separate [0cloud deployment policy](/roadmap/#0cloud).

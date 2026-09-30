@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 
-import { defaultOpenBrowser } from "../commands/auth.js";
+import { defaultOpenBrowser } from "../open-browser.js";
 import { maybeLoadCodexAuth } from "../codex-auth.js";
 import { sanitizeTuiText } from "./text.js";
 

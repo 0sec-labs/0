@@ -71,7 +71,7 @@ export function repositoryAcquisitionAllowed(plan: RepositoryAcquisition, scope?
   return ScopePolicy.fromJson({
     ...scope.raw,
     in_scope: [...(scope.raw.in_scope ?? []), new URL(plan.url).hostname],
-  }).match(plan.url).allowed;
+  }).enforce(plan.url).allowed;
 }
 
 const blockedIpv4 = new BlockList();

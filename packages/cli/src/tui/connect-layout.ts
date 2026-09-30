@@ -2,43 +2,11 @@
  * The provider model and text of the connect / login dialog (`/connect`,
  * alias `/login`).
  *
- * The screen is a pop-up now, so the two-pane console geometry this module
- * used to own is gone: the shared picker (`DialogSelectBody` over
- * `computeDialogPanel`) lays out the list column, the detail column and the
- * split between them, and `computeConnectLayout` here is the dialog-shaped
- * partition every other dialog uses. What remains is what only connect knows
- * — which providers exist, how they group, what may honestly be said about
- * each one, and how a credential is masked — and it is still pure: the
- * component reads widths and row counts off this module and never computes
- * one, for the reason spelled out in `PRIMITIVES.md` (OpenTUI lays rows out
- * with Yoga, and Yoga shrinks siblings rather than clipping them).
- *
- * ## What the screen is for
- *
- * `/providers` is read-only: it says which vendors this machine can already
- * reach. This screen is the write side — it lets the operator connect one. The
- * providers, their env vars and their setup hints are all taken from
- * `provider-status.ts` (itself transcribed from the runtime's detection), so a
- * provider added there appears here without this module changing. This module
- * only adds two things the runtime table does not carry: which auth *method*
- * each provider uses (an API key versus an OAuth/subscription sign-in) and
- * which providers are worth surfacing first for someone connecting their very
- * first one.
- *
- * ## The honesty rule
- *
- * A provider reads as connected — the green check — only when a credential
- * actually exists for it: an env var holds one, or the credential store on
- * disk does. The store is written by the screen's input sub-step. Nothing here
- * ever reports a connection that was not verified against one of those two
- * sources; there is no optimistic "connecting…" state that sticks.
- *
- * ## Reuse
- *
- * `shellChromeRows` and `wrapCells` are imported from `settings-layout.ts`
- * rather than copied, exactly as `model-layout.ts` does — the honest long-term
- * home for both is a shared `shell-geometry.ts`, and this import is the marker
- * for that move.
+ * The shared picker owns list/detail geometry; this module supplies provider
+ * grouping, supported authentication instructions, credential presence and
+ * masking. A configured credential is never presented as checked API access.
+ * Standalone navigation is budgeted here; embedded navigation belongs to the
+ * onboarding window.
  */
 
 import { PROVIDER_DEVICE_AUTH } from "./device-auth.js";
@@ -97,15 +65,11 @@ export type AuthKind = "api-key" | "oauth";
  */
 export const RECOMMENDED_IDS: readonly string[] = ["anthropic", "openai"];
 
-/**
- * Plain-language subtitles for the recommended group. Kept short enough to sit
- * as a single dimmed row under the provider it describes; wrapping is handled
- * by the list row budget, not here.
- */
+/** Short acquisition instructions shown in the selected provider's detail. */
 const PROVIDER_SUBTITLE: Record<string, string> = {
-  "chatgpt-codex": "Sign in with your ChatGPT subscription - no API key, no per-token billing.",
-  anthropic: "Paste an Anthropic API key from console.anthropic.com.",
-  openai: "Paste an OpenAI API key from platform.openai.com.",
+  "chatgpt-codex": "Use your ChatGPT subscription through Codex device sign-in.",
+  anthropic: "Get a key at console.anthropic.com.",
+  openai: "Get a key at platform.openai.com/api-keys.",
 };
 
 /** The auth method for a provider id comes from the runtime provider table. */
@@ -125,9 +89,9 @@ export interface ConnectGroup {
   readonly label: string;
 }
 
-const POPULAR_GROUP: ConnectGroup = { id: "popular", label: "Use my own API key" };
+const POPULAR_GROUP: ConnectGroup = { id: "popular", label: "Popular API providers" };
 const ALL_GROUP: ConnectGroup = { id: "all", label: "Other API providers" };
-const SUBSCRIPTION_GROUP: ConnectGroup = { id: "subscription", label: "Provider subscription" };
+const SUBSCRIPTION_GROUP: ConnectGroup = { id: "subscription", label: "Account sign-in" };
 
 export interface ConnectProvider {
   readonly id: string;
@@ -135,7 +99,7 @@ export interface ConnectProvider {
   readonly auth: AuthKind;
   /** True when an env var OR the credential store holds a credential. */
   readonly connected: boolean;
-  /** Where the connection was verified: "env" or "stored". Undefined when dark. */
+  /** Credential presence, not a successful authentication or API validity check. */
   readonly source?: "env" | "stored";
   /** The env var that actually held the credential, when connected via env. */
   readonly via?: string;
@@ -194,7 +158,6 @@ function connectProviderFor(
 
 export type ConnectRow =
   | { readonly kind: "heading"; readonly group: ConnectGroup }
-  | { readonly kind: "subtitle"; readonly group: ConnectGroup; readonly text: string }
   | {
       readonly kind: "provider";
       readonly group: ConnectGroup;
@@ -258,9 +221,6 @@ export function buildConnectRows({
     rows.push({ kind: "heading", group });
     for (const provider of shown) {
       rows.push({ kind: "provider", group, provider });
-      if (group.id === "popular" && provider.subtitle) {
-        rows.push({ kind: "subtitle", group, text: provider.subtitle });
-      }
     }
   };
 
@@ -300,17 +260,9 @@ export interface ConnectItemsInput {
 }
 
 /**
- * Projects the connect rows onto the console's one shared picker.
- *
- * Provider-group headings are searchable. The subtitle that used to occupy
- * a row of its own becomes the item's `description`, which costs no row and
- * cannot be landed on by the cursor.
- *
- * The honesty rule survives the projection intact. `current` — the gutter dot
- * — and the `connected` meta are set from `provider.connected`, which
- * `connectProviderFor` derives only from an env credential or the on-disk
- * store, minus any provider currently being repaired. Nothing here can mark a
- * provider connected optimistically, and no secret is carried on the item.
+ * Projects providers onto the shared picker without repeated setup prose.
+ * Configured status comes only from credential presence, minus providers
+ * being repaired. Secrets never reach the visible item model.
  */
 export function connectDialogItems({
   rows,
@@ -318,13 +270,6 @@ export function connectDialogItems({
   tones,
 }: ConnectItemsInput): DialogItem[] {
   const items: DialogItem[] = [];
-  // Subtitles are rows in the row model; fold them onto the item above.
-  const subtitleFor = new Map<string, string>();
-  rows.forEach((row, index) => {
-    if (row.kind !== "subtitle") return;
-    const above = rows[index - 1];
-    if (above?.kind === "provider") subtitleFor.set(above.provider.id, row.text);
-  });
 
   for (const row of rows) {
     if (row.kind !== "provider") continue;
@@ -334,8 +279,7 @@ export function connectDialogItems({
     items.push({
       id: provider.id,
       label: provider.label,
-      description: provider.subtitle ?? subtitleFor.get(provider.id),
-      meta: recovering ? "reconnect" : connected ? "connected" : authHintLabel(provider.auth),
+      meta: recovering ? "reconnect" : connected ? "configured" : authHintLabel(provider.auth),
       category: row.group.label,
       current: connected,
       tone: recovering ? tones?.recovering : connected ? tones?.connected : undefined,
@@ -371,8 +315,13 @@ export function connectRowForId(
 // Dialog geometry
 // ---------------------------------------------------------------------------
 
-export type ConnectLayout = DialogScreenLayout;
-export type ConnectLayoutOptions = DialogScreenLayoutOptions;
+export interface ConnectLayout extends DialogScreenLayout {
+  /** The standalone top action row; the onboarding host supplies its own. */
+  navigationRows: number;
+}
+export interface ConnectLayoutOptions extends DialogScreenLayoutOptions {
+  embedded?: boolean;
+}
 
 /**
  * The connect dialog's row and column budget.
@@ -391,7 +340,11 @@ export function computeConnectLayout(
   totalRows: number,
   options: ConnectLayoutOptions = {},
 ): ConnectLayout {
-  return computeDialogScreenLayout(width, height, totalRows, options);
+  const chromeRows = cells(options.chromeRows ?? shellChromeRows(width));
+  const availableRows = Math.max(0, cells(height) - chromeRows);
+  const navigationRows = !options.embedded && availableRows >= 5 ? 1 : 0;
+  const layout = computeDialogScreenLayout(width, Math.max(0, cells(height) - navigationRows), totalRows, options);
+  return { ...layout, navigationRows, availableRows: layout.availableRows + navigationRows };
 }
 
 // ---------------------------------------------------------------------------
@@ -446,39 +399,31 @@ export function connectDetailLines(
   // not a device-code flow where the operator types a code — name it honestly.
   const oauthVerb =
     PROVIDER_DEVICE_AUTH[provider.id]?.kind === "pkce-loopback" ? "browser sign-in" : "device sign-in";
-  push(
-    provider.auth === "oauth" ? `Auth: ${provider.label} ${oauthVerb}` : "Auth: API key",
-    "text",
-  );
+  push(provider.auth === "oauth" ? `OAuth · ${oauthVerb}` : "API key", "text");
 
   separate();
   if (provider.connected) {
     if (provider.source === "env") {
-      push(`Connected: credential found in ${provider.via ?? "the environment"}`, "ok");
+      push(`Credential found in ${provider.via ?? "the environment"}.`, "ok");
     } else {
-      push("Connected: credential stored on this machine", "ok");
-      if (provider.envVars.length > 0) {
-        push(`Exported to the runtime as ${provider.envVars[0]}`, "muted");
-      }
+      push("Credential saved on this machine.", "ok");
     }
+    push("API access has not been checked.", "muted");
   } else {
-    push("Not connected in this environment", "warn");
-    if (provider.envVars.length > 0) push(`Reads: ${provider.envVars.join(", ")}`, "muted");
-    if (provider.hint) push(`Setup: ${provider.hint}`, "muted");
+    push("No credential configured.", "muted");
+    if (!provider.subtitle && provider.hint) push(provider.hint, "text");
     if (provider.fileSource) {
-      push(`Also read from ${provider.fileSource}, which is not checked here.`, "muted");
+      push(`Also reads ${provider.fileSource}; not checked here.`, "muted");
     }
   }
 
   separate();
-  push(
-    provider.connected
-      ? "Enter: continue with this provider"
-      : (provider.auth === "oauth"
-        ? `Enter: start ${provider.label} ${oauthVerb}. No API key or pasted token is used.`
-        : "Enter: paste an API key. It is stored owner-only on this machine."),
-    "muted",
-  );
+  if (!provider.connected) {
+    push(
+      provider.auth === "oauth" ? "Sign in opens your browser." : "Paste a key to save it securely on this machine.",
+      "muted",
+    );
+  }
 
   return lines;
 }
@@ -559,9 +504,9 @@ export function connectConnectedCounts(rows: readonly ConnectRow[]): ConnectCoun
 /** The always-on status line under the list: how many providers are connected. */
 export function connectStatusLine(rows: readonly ConnectRow[]): string {
   const { connected, total } = connectConnectedCounts(rows);
-  if (total === 0) return "no connections to show";
-  if (connected === 0) return "no connections yet - select one to connect";
-  return `connected: ${connected} of ${total}`;
+  if (total === 0) return "No providers match.";
+  if (connected === 0) return "Choose a provider to configure.";
+  return `${connected} of ${total} providers configured · API access not checked`;
 }
 
 /** The detail pane's stable, left-aligned header label. */
@@ -570,13 +515,13 @@ export function connectDetailTitleLabel(): string {
 }
 
 /**
- * "connected" when a credential exists, "not connected" when it does not,
- * and "" when nothing is highlighted. Colour is the component's to choose.
+ * "configured" when a credential exists, "not configured" when it does not,
+ * and "" when nothing is highlighted. This does not check API access.
  */
 export function connectDetailTitleMeta(row: ConnectRow | undefined): string {
   if (!row) return "";
   if (row.kind !== "provider") return "";
-  return row.provider.connected ? "connected" : "not connected";
+  return row.provider.connected ? "configured" : "not configured";
 }
 
 export type ConnectMode = "browse" | "filter" | "input" | "oauth";
@@ -595,16 +540,16 @@ export function connectInputMask(secretLength: number): string {
 
 /** The footer hint, per mode. Names the real bindings. */
 export function connectFooterHint(mode: ConnectMode, hasFilter = false, canContinue = false): string {
-  if (mode === "input") return "paste credential · [⏎] save · [esc] cancel";
-  if (mode === "oauth") return "device sign-in running · [esc] cancel";
+  if (mode === "input") return "Paste key · Enter save · Esc cancel";
+  if (mode === "oauth") return "Sign-in running · Esc cancel";
   const action = canContinue ? "continue" : "connect";
-  if (mode === "filter") return `type to filter · [⏎] ${action} · [esc] done · [⌫] delete`;
+  if (mode === "filter") return `Type to search · Enter ${action} · Esc done`;
   return [
-    "[↑↓] select",
-    `[⏎] ${action}`,
-    "[/] filter",
-    hasFilter ? "[esc] clear filter" : "[esc] back",
-    "[⌃C] exit",
+    "↑↓ select",
+    `Enter ${action}`,
+    "/ search",
+    hasFilter ? "Esc clear search" : "Esc back",
+    "Tab actions",
   ].join(" · ");
 }
 

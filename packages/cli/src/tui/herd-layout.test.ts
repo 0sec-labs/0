@@ -659,10 +659,32 @@ describe("subagent reducers (bus payload → live record)", () => {
     expect(rec?.status).toBe("running");
     expect(rec?.maxTurns).toBe(8);
     expect(rec?.lastSeen).toBe(NOW);
+    expect(rec?.startedAt).toBe(NOW);
     expect(rec?.activity).toHaveLength(1);
     expect(rec?.activity[0]?.kind).toBe("lifecycle");
   });
 
+  it("records and preserves the running start through duplicate lifecycle events", () => {
+    let map = applySubagentLifecycle({}, lifecycle({ status: "queued" }), NOW);
+    expect(map["child-1"]?.startedAt).toBeUndefined();
+    map = applySubagentLifecycle(map, lifecycle(), NOW + 5);
+    expect(map["child-1"]?.startedAt).toBe(NOW + 5);
+    map = applySubagentLifecycle(map, lifecycle({ turns: 1 }), NOW + 10);
+    expect(map["child-1"]?.startedAt).toBe(NOW + 5);
+  });
+
+  it("starts a new timer after a worker leaves and re-enters running", () => {
+    let map = applySubagentLifecycle({}, lifecycle(), NOW);
+    map = applySubagentLifecycle(map, lifecycle({ status: "completed" }), NOW + 5);
+    map = applySubagentLifecycle(map, lifecycle(), NOW + 10);
+    expect(map["child-1"]?.startedAt).toBe(NOW + 10);
+  });
+
+  it("seeds a running start from progress when lifecycle was missed", () => {
+    const map = applySubagentProgress({}, progress(), NOW);
+    expect(map["child-1"]?.status).toBe("running");
+    expect(map["child-1"]?.startedAt).toBe(NOW);
+  });
   it("appends progress turns and tracks the latest tool/turn", () => {
     let map = applySubagentLifecycle({}, lifecycle(), NOW);
     map = applySubagentProgress(map, progress({ turn: 1, tool: "read_file" }), NOW + 1);

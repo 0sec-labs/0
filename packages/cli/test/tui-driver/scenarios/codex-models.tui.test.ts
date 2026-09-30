@@ -8,13 +8,23 @@ vi.mock("../../../src/tui/credential-store.js", async (original) => ({
 let tui: TuiHandle | undefined;
 afterEach(async () => { await tui?.close(); tui = undefined; vi.restoreAllMocks(); });
 
-function fixture(discovery: "ok" | "denied" = "ok") {
+function fixture(discovery: "ok" | "denied" = "ok", publicDiscovery: "ok" | "denied" = "denied") {
   const requests: Array<{ url: string; model: string }> = [];
+  let publicRequests = 0;
   const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = String(input);
+    if (url === "https://models.dev/api.json") {
+      publicRequests += 1;
+      return publicDiscovery === "denied" ? new Response(null, { status: 503 }) : Response.json({
+        openai: { models: {
+          "aaa-automatic-model": { cost: { input: 1, output: 2, cache_read: 0.1 }, limit: { context: 524288 } },
+        } },
+        "chatgpt-codex": { models: { "aaa-public-subscription": {} } },
+      });
+    }
     if (url.includes("/codex/models?")) {
       return discovery === "denied" ? new Response(null, { status: 403 }) : Response.json({ models: [
-        { slug: "gpt-5.5" }, { slug: "gpt-daybreak-blue-latest", context_window: 1_050_000 },
+        { slug: "gpt-5.5", priority: 13 }, { slug: "gpt-daybreak-blue-latest", context_window: 1_050_000, priority: 1 },
       ] });
     }
     if (url.endsWith("/codex/responses")) {
@@ -24,9 +34,22 @@ function fixture(discovery: "ok" | "denied" = "ok") {
         usage: { input_tokens: 10, output_tokens: 2 },
       } })}\n\n`, { headers: { "Content-Type": "text/event-stream" } });
     }
+    if (url === "https://api.openai.com/v1/chat/completions") {
+      requests.push({ url, model: JSON.parse(String(init?.body)).model });
+      return Response.json({
+        choices: [{ message: { role: "assistant", content: "Synthetic API reply" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 10, completion_tokens: 2 },
+      });
+    }
     return new Response(null, { status: 503 });
   });
-  return { requests, fetchMock, setDiscovery: (next: "ok" | "denied") => { discovery = next; } };
+  return {
+    requests,
+    fetchMock,
+    publicRequestCount: () => publicRequests,
+    setPublicDiscovery: (next: "ok" | "denied") => { publicDiscovery = next; },
+    setDiscovery: (next: "ok" | "denied") => { discovery = next; },
+  };
 }
 
 async function start(apiKey?: string, providerId: "chatgpt-codex" | "openai" | "azure" = "chatgpt-codex") {
@@ -38,6 +61,22 @@ async function start(apiKey?: string, providerId: "chatgpt-codex" | "openai" | "
   await tui.waitForText(/type to chat/);
 }
 
+test("account-discovered subscription choices lead metered models without losing provider prices", async () => {
+  fixture("ok", "ok");
+  await start("synthetic-api-key", "openai");
+  await tui!.sendKeys("/model");
+  await tui!.sendKey("return");
+  await tui!.waitForText(/gpt-daybreak-blue-latest/);
+  await tui!.waitForText(/aaa-automatic-model/);
+
+  const frame = tui!.captureFrame();
+  expect(frame.indexOf("gpt-daybreak-blue-latest")).toBeLessThan(frame.indexOf("aaa-automatic-model"));
+  expect(frame.indexOf("gpt-daybreak-blue-latest")).toBeLessThan(frame.indexOf("gpt-5.5"));
+  expect(frame).toContain("subscription");
+  expect(frame).toMatch(/\$1\/2 per M/);
+  expect(frame).toContain("OPENAI");
+});
+
 test("subscription selection reaches the Codex request with its exact discovered model ID", async () => {
   const { requests } = fixture();
   await start();
@@ -47,7 +86,7 @@ test("subscription selection reaches the Codex request with its exact discovered
   await tui!.sendKeys("daybreak");
   await tui!.waitForText(/gpt-daybreak-blue-latest/);
   await tui!.sendKey("return");
-  await tui!.waitForText(/Applied to this audit: gpt-daybreak-blue-latest/);
+  await tui!.waitForText(/◈ gpt-daybreak-blue-latest/);
   await tui!.sendKeys("synthetic request");
   await tui!.sendKey("return");
   await expect.poll(async () => { await tui!.settle(); return requests.length; }).toBeGreaterThan(0);
@@ -56,12 +95,15 @@ test("subscription selection reaches the Codex request with its exact discovered
 });
 
 test("a model-only slash switch preserves the active subscription", async () => {
-  fixture();
+  const { requests } = fixture();
   await start();
   await tui!.sendKeys("/model gpt-daybreak-blue-latest");
   await tui!.sendKey("return");
-  await tui!.waitForText(/Applied to this audit: gpt-daybreak-blue-latest/);
-  expect(tui!.captureFrame()).not.toContain("Connect OpenAI");
+  await tui!.waitForText(/◈ gpt-daybreak-blue-latest/);
+  await tui!.sendKeys("synthetic subscription request");
+  await tui!.sendKey("return");
+  await expect.poll(async () => { await tui!.settle(); return requests.length; }).toBeGreaterThan(0);
+  expect(requests[0]).toEqual({ url: "https://chatgpt.com/backend-api/codex/responses", model: "gpt-daybreak-blue-latest" });
 });
 
 test("a denied account catalog shows discovery failure rather than a public subscription list", async () => {
@@ -82,7 +124,7 @@ test("confirming a duplicate current model keeps subscription billing when an AP
   await tui!.sendKey("return");
   await tui!.waitForText(/2 Codex account models/);
   await tui!.sendKey("return");
-  await tui!.waitForText(/Applied to this audit: gpt-5.5 \(ChatGPT Codex\)/);
+  await tui!.waitForText(/◈ gpt-5\.5/);
   await tui!.sendKeys("synthetic request");
   await tui!.sendKey("return");
   await expect.poll(async () => { await tui!.settle(); return requests.length; }).toBeGreaterThan(0);
@@ -126,4 +168,26 @@ test("Azure roles retain OpenAI-named models while excluding subscription-only r
   await tui!.sendKeys("gpt-5.5");
   await tui!.sendKey("return");
   await tui!.waitForText(/discovery: gpt-5.5 applied/);
+});
+
+test("new public models appear unfiltered, survive a forced offline reload, and keep their API route", async () => {
+  const { requests, publicRequestCount, setPublicDiscovery } = fixture("ok", "ok");
+  await start("synthetic-api-key", "openai");
+  await tui!.sendKeys("/model");
+  await tui!.sendKey("return");
+  await tui!.waitForText(/aaa-automatic-model/);
+  expect(tui!.captureFrame()).not.toContain("aaa-public-subscription");
+  expect(publicRequestCount()).toBe(1);
+  setPublicDiscovery("denied");
+  await tui!.sendKey("r", { ctrl: true });
+  await tui!.waitForText(/Public catalog unavailable/);
+  expect(publicRequestCount()).toBe(2);
+  expect(tui!.captureFrame()).toContain("aaa-automatic-model");
+  await tui!.sendKey("down");
+  await tui!.sendKey("return");
+  await tui!.waitForText(/◈ aaa-automatic-model/);
+  await tui!.sendKeys("synthetic discovered-model request");
+  await tui!.sendKey("return");
+  await expect.poll(async () => { await tui!.settle(); return requests.length; }).toBeGreaterThan(0);
+  expect(requests[0]).toEqual({ url: "https://api.openai.com/v1/chat/completions", model: "aaa-automatic-model" });
 });

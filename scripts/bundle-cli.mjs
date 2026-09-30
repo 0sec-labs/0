@@ -192,6 +192,13 @@ const bundle = readFileSync(bundlePath, "utf8").replace(
 );
 writeFileSync(bundlePath, bundle);
 
+// Offline replay uses the same real fixture without booting interactive 0 or
+// carrying a main-workbench admission/state grant into its sibling VM.
+copyFileSync(
+  "packages/core/dist/verification-spec/cli-path-traversal-fixture.js",
+  `${outdir}/cli-path-traversal-fixture.js`,
+);
+
 // Write a clean package.json for publishing (no workspace: deps).
 const publishPkg = {
   name: rootPkg.name,
@@ -199,7 +206,12 @@ const publishPkg = {
   type: "module",
   description: rootPkg.description,
   bin: { "0": "0.js", "0sec": "0.js" },
-  files: ["0.js", "chunks", "attacks", "dashboard"],
+  files: ["0.js", "cli-path-traversal-fixture.js", "chunks", "attacks", "dashboard", "vendor"],
+  // npm resolves nested local tarballs before extracting their parent package.
+  // Bundle the patched parser and its peer grammar as real source so registry
+  // installs never fetch an unpatched peer or depend on an unavailable file:
+  // path. Both native install hooks stay enabled.
+  bundledDependencies: ["tree-sitter", "tree-sitter-c"],
   keywords: rootPkg.keywords,
   author: rootPkg.author,
   homepage: rootPkg.homepage,
@@ -213,6 +225,7 @@ const publishPkg = {
     "drizzle-orm": rootPkg.dependencies["drizzle-orm"],
     "node-sqlite3-wasm": rootPkg.dependencies["node-sqlite3-wasm"],
     "pdfkit": rootPkg.dependencies.pdfkit,
+    "playwright": rootPkg.dependencies.playwright,
     "tree-sitter": rootPkg.dependencies["tree-sitter"],
     "tree-sitter-c": rootPkg.dependencies["tree-sitter-c"],
     "@opentui/core": cliPkg.dependencies["@opentui/core"],
@@ -221,6 +234,7 @@ const publishPkg = {
   },
 };
 writeFileSync(`${outdir}/package.json`, JSON.stringify(publishPkg, null, 2) + "\n");
+cpSync("vendor", `${outdir}/vendor`, { recursive: true });
 copyFileSync("scripts/dist-package-lock.json", `${outdir}/package-lock.json`);
 copyFileSync("LICENSE", `${outdir}/LICENSE`);
 copyFileSync("README.md", `${outdir}/README.md`);

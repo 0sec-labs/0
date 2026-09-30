@@ -107,6 +107,9 @@ export type {
 export {
   runDeterministicReplay,
   LocalShellRunner,
+  SmolvmRunner,
+  createSmolvmPocTargetRunner,
+  runSmolvmPocSteps,
   DockerRunner,
   QemuRunner,
   argvForStep,
@@ -122,6 +125,7 @@ export type {
   AssertionInput,
   DeterministicReplayOutcome,
   DockerRunnerOptions,
+  SmolvmRunnerOptions,
   QemuRunnerOptions,
   ReplayRunner,
   ReplayRunnerContext,

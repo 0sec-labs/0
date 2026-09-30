@@ -40,11 +40,9 @@
  *
  * Three further properties are load-bearing:
  *
- * 1. **Nothing here knows the models.** The row model is derived from
- *    `model-catalog.ts` — itself derived from the pricing table — and provider
- *    facts from `provider-status.ts`. There is no list, no vendor order and no
- *    row count written down, so a model added to the pricing table appears
- *    here without this file changing.
+ * 1. **Nothing here knows the models.** Public cached metadata and the bundled
+ *    floor come from `model-catalog.ts`; subscription IDs come from the current
+ *    account's HTTP catalog. Future IDs need no picker or pricing-table edit.
  *
  * 2. **This component does no arithmetic.** Every width, height, row count and
  *    window boundary comes off `model-layout.ts` via
@@ -76,7 +74,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
-import { loadCodexModelCatalog, type CodexCatalogModel, type RuntimeConfig } from "@0/core";
+import { CodexCatalogRefreshError, loadCodexModelCatalog, type CodexCatalogModel, type RuntimeConfig } from "@0/core";
 import { credentialEnvPatch, loadCredentials } from "./credential-store.js";
 import { useKeyboard, usePaste } from "@opentui/react";
 import { decodePasteBytes, TextAttributes } from "@opentui/core";
@@ -94,6 +92,7 @@ import {
   activateModelConnectAction,
   agentRosterLines,
   buildContextWindowIndex,
+  catalogContextKey,
   clipModelDetailLines,
   computeModelDialogLayout,
   contextWindowFor,
@@ -143,6 +142,12 @@ export interface ModelFrameInput {
   body: React.ReactNode;
   /** Footer text for the current mode, naming the bindings that actually work. */
   hint: string;
+  /** Window Back follows the same filter-unwind semantics as Escape. */
+  onBack?: () => void;
+  /** Window Next activates the same highlighted row as Enter. */
+  onNext?: () => void;
+  nextLabel?: string;
+  nextDisabled?: boolean;
 }
 
 export interface ModelScreenProps {
@@ -155,6 +160,8 @@ export interface ModelScreenProps {
    * with the mode) and the router supplies it.
    */
   frame: (input: ModelFrameInput) => React.ReactNode;
+  /** Wizard owns all navigation chrome; its surface is entirely picker body. */
+  embedded?: boolean;
   /** The model the session is currently running, when there is one. */
   currentModel?: string;
   /** The active runtime connection, used to highlight its provider group. */
@@ -208,20 +215,32 @@ function toneColor(theme: Theme, tone: ModelDetailTone): string | undefined {
   }
 }
 
-function modelDialogItems(rows: ModelRow[]): DialogItem[] {
-  return rows
-    .filter((row): row is Extract<ModelRow, { kind: "model" }> => row.kind === "model")
-    .map((row) => ({
-      id: row.model.id,
+type ModelDialogItem = DialogItem & { row?: Extract<ModelRow, { kind: "model" }> };
+
+function modelDialogItems(rows: ModelRow[], showPrices: boolean, subscriptionOrder: ReadonlyMap<string, number>): ModelDialogItem[] {
+  const subscriptionItems: ModelDialogItem[] = [];
+  const otherItems: ModelDialogItem[] = [];
+  for (const row of rows) {
+    if (row.kind !== "model") continue;
+    const item: ModelDialogItem = {
+      id: catalogContextKey(row.group.id, row.model.id),
       label: row.model.id,
-      meta: row.model.price,
+      meta: showPrices ? row.model.price : undefined,
       category: row.group.label,
       current: row.active,
-    }));
+      row,
+    };
+    (row.model.price === "subscription" ? subscriptionItems : otherItems).push(item);
+  }
+  subscriptionItems.sort((a, b) =>
+    (subscriptionOrder.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+    (subscriptionOrder.get(b.id) ?? Number.MAX_SAFE_INTEGER));
+  return [...subscriptionItems, ...otherItems];
 }
 
 export function ModelScreen({
   frame,
+  embedded = false,
   currentModel,
   providerId,
   codexCatalog,
@@ -262,18 +281,19 @@ export function ModelScreen({
   // The model the picker is choosing FOR: the parent model, or the role's own
   // assignment when it has one. A role with no assignment inherits, and the
   // target row says so rather than showing the inherited id as an assignment.
-  const activeModel = role === null ? currentModel : (agentModels?.[role] ?? currentModel);
+  const parentModel = currentModel || env["ZERO_MODEL"];
+  const activeModel = role === null ? parentModel : (agentModels?.[role] ?? parentModel);
   const [notice, setNotice] = useState("");
 
   const [filter, setFilter] = useState("");
-  const [showAll, setShowAll] = useState(false);
+  const [showAll, setShowAll] = useState(true);
   const [refreshing, setRefreshing] = useState(true);
+  const [publicFailed, setPublicFailed] = useState(false);
   const filterRef = useRef("");
-  const showAllRef = useRef(false);
+  const showAllRef = useRef(true);
 
-  // Read once per mount. Credentials are process-level and cannot change
-  // under a screen that has no way to set them; re-deriving them on every
-  // keystroke would only make the filter slower.
+  // Re-read provider state only when the supplied environment or reload changes.
+  // Keystrokes do not touch account storage or credentials.
   const credentialStates = useMemo(() => providerStates(env), [env]);
   const loadCodex = providerId === "chatgpt-codex" || credentialStates.some((state) => state.id === "chatgpt-codex" && state.configured);
 
@@ -305,13 +325,21 @@ export function ModelScreen({
     if (loadCodex) {
       tasks.push((codexCatalog ? codexCatalog(controller.signal) : loadCodexModelCatalog({ env, signal: controller.signal })).then(
         (models) => { if (alive) setCodexState({ source, models, failed: false }); },
-        () => { if (alive) setCodexState({ source, models: null, failed: true }); },
+        (error: unknown) => {
+          if (alive) setCodexState({
+            source,
+            models: error instanceof CodexCatalogRefreshError ? [...error.cachedModels] : null,
+            failed: true,
+          });
+        },
       ));
     }
     // Refresh the public catalogue independently of subscription discovery.
     tasks.push(
-      syncModelCatalog().then((updated) => {
-        if (alive && updated) setCatalogNonce((n) => n + 1);
+      syncModelCatalog({ force: reload > 0 }).then((updated) => {
+        if (!alive) return;
+        setPublicFailed(updated === null);
+        if (updated) setCatalogNonce((n) => n + 1);
       }),
     );
     void Promise.allSettled(tasks).finally(() => {
@@ -350,28 +378,26 @@ export function ModelScreen({
   };
   const scopedCatalog = scopeCatalog(filter, showAll);
 
-  // `buildModelRows` does all the domain work — grouping by provider, credential
-  // lookup, credential-band ordering, floating the active model first, and the
-  // AND-over-terms filter. The screen keeps only its selectable model rows and
-  // projects them onto `DialogItem`s: the provider label is the category (so the
-  // shared body draws a heading per provider), the price is the right-aligned
-  // meta, and the running model carries the current-value dot.
   const modelRows = useMemo(
     () => buildModelRows({ catalog: scopedCatalog, states, filter, activeModel, activeProvider: providerId }),
     [scopedCatalog, states, filter, activeModel, providerId],
   );
-  const modelOnlyRows = useMemo(
-    () => modelRows.filter((row): row is Extract<ModelRow, { kind: "model" }> => row.kind === "model"),
-    [modelRows],
-  );
-  const byokItems = useMemo(() => modelDialogItems(modelOnlyRows), [modelOnlyRows]);
+  // `buildModelRows` does the domain work — provider grouping, credential
+  // lookup, credential-band ordering, active-model placement and filtering.
+  // The catalog exposes subscription-backed choices with an explicit
+  // "subscription" price marker (including account-discovered Codex models).
+  // Prefer the account's recommended subscription order; never infer recency
+  // or availability from a model name.
+  // Both rendered rows and input arriving before the next paint use this
+  // provider-qualified, subscription-first projection.
+  const showPrices = dialogContentWidth(width, inDialog) >= 48;
+  const subscriptionOrder = useMemo(() => new Map(
+    (codexModels ?? []).map((model, index) => [catalogContextKey("chatgpt-codex", model.id), index]),
+  ), [codexModels]);
+  const byokItems = useMemo(() => modelDialogItems(modelRows, showPrices, subscriptionOrder),
+    [modelRows, showPrices, subscriptionOrder]);
   const connectAction = onConnect ? modelConnectActionItem() : undefined;
-  const items = connectAction ? [...byokItems, connectAction] : byokItems;
-  // Item identity preserves the provider's own price, window and credential facts.
-  const rowByItem = useMemo(
-    () => new Map(byokItems.map((item, index) => [item, modelOnlyRows[index]])),
-    [byokItems, modelOnlyRows],
-  );
+  const items: ModelDialogItem[] = connectAction ? [...byokItems, connectAction] : byokItems;
   // Display rows (headings interleaved) drive the panel's scroll/height math.
   const totalRows = useMemo(() => {
     let count = 0;
@@ -386,56 +412,41 @@ export function ModelScreen({
     return count;
   }, [items]);
 
-  // Match provider and id so duplicates remain navigable across catalog refreshes.
-  const [selectedItem, setSelectedItem] = useState<DialogItem>();
-  const selectedItemRef = useRef(selectedItem);
-  const selectionIndex = (visible: DialogItem[], selection = selectedItemRef.current) =>
-    clampDialogSelection(visible, visible.findIndex((item) =>
-      item.id === (selection?.id ?? activeModel) &&
-      item.category === (selection?.category ?? states.find((state) => state.id === providerId)?.label),
-    ));
-  const cursor = selectionIndex(items, selectedItem);
+  // Selection identity is the provider-qualified model row. The Connections
+  // action has its own identity and must not fall through to the active model.
+  const [selectedId, setSelectedId] = useState<string | undefined>(() =>
+    providerId && activeModel ? catalogContextKey(providerId, activeModel)
+      : items.find((item) => item.row?.active)?.id ?? items[0]?.id,
+  );
+  const selectedIdRef = useRef(selectedId);
+  const selectionIndex = (visible: ModelDialogItem[], selection = selectedIdRef.current) =>
+    clampDialogSelection(visible, visible.findIndex((item) => item.id === selection));
+  const cursor = selectionIndex(items, selectedId);
 
   // Every width and row count comes off the layout module, from the surface
   // box the dialog handed down — never from `useTerminalDimensions` and never
   // computed here (PRIMITIVES.md: Yoga shrinks siblings rather than clipping).
   // ── Meta lines (above the list), deliberately kept to at most one by default.
-  // The header used to carry six-plus lines — a focus line with key hints, a
-  // single-model policy line, the full per-agent roster (which wraps to several
-  // rows) and a curated/all count — and that dense block stole the rows the
-  // picker list needs. So now:
-  //   • ONE compact context line, only while role targeting is wired: the
-  //     target and the model it resolves to, with the single-model note folded
-  //     in. No key hints — those live in the footer.
-  //   • The full agent roster is NOT drawn by default. It is revealed only while
-  //     the operator is actively targeting a specific role, which is the one
-  //     moment the whole per-role mapping matters (so "select each" is visible).
-  //   • No single-model line and no curated/all line: the title already names
-  //     curated/all and its count, and the footer already names Tab and Ctrl+S.
-  // Built here, before the layout, so the layout can size the list against the
-  // real demand — the width it wraps to (`dialogContentWidth`) is the same the
-  // layout will report.
+  // Default modal chrome is title, search and results. Role context appears
+  // only while a role is explicitly targeted, and shares the measured row budget.
   const metaContentWidth = dialogContentWidth(width, inDialog);
   const metaLines: { text: string; fg: string }[] = [];
-  if (rolesLive) {
+  if (rolesLive && role !== null) {
     metaLines.push({
-      text: modelTargetLine(role, activeModel, role !== null && agentModels?.[role] !== undefined, symbols, singleModel),
-      fg: singleModel && role !== null ? theme.WARNING : theme.ACCENT,
+      text: modelTargetLine(role, activeModel, agentModels?.[role] !== undefined, symbols, singleModel),
+      fg: singleModel ? theme.WARNING : theme.ACCENT,
     });
-    // Reveal the full roster only while a specific role is targeted; the parent
-    // (base) view stays at the single context line above.
-    if (role !== null) {
-      for (const line of agentRosterLines(
-        { roles, parentModel: currentModel, agentModels, activeRole: role, singleModel },
-        metaContentWidth,
-        symbols,
-      )) {
-        metaLines.push({ text: line.text, fg: line.tone === "warn" ? theme.WARNING : theme.MUTED });
-      }
+    for (const line of agentRosterLines(
+      { roles, parentModel, agentModels, activeRole: role, singleModel },
+      metaContentWidth,
+      symbols,
+    )) {
+      metaLines.push({ text: line.text, fg: line.tone === "warn" ? theme.WARNING : theme.MUTED });
     }
   }
 
-  const layout = computeModelDialogLayout({ width, height, totalRows, inDialog, metaLineCount: metaLines.length });
+  const layout = computeModelDialogLayout({ width, height, totalRows, inDialog, compact: inDialog,
+    hostChromeRows: embedded ? 0 : undefined, metaLineCount: metaLines.length });
   const { contentWidth, panel, stackedRows } = layout;
   const listRows = layout.bodyRows - stackedRows;
   const visibleMetaLines = metaLines.slice(0, layout.metaRows);
@@ -444,11 +455,12 @@ export function ModelScreen({
   // Connection failures affect only that provider's row; other connected
   // providers remain selectable.
   const baseStatusText = credentialSummary(states);
-  const statusText = !loadCodex ? baseStatusText : `${baseStatusText} · ${codexFailed
-    ? "Codex model discovery unavailable · Ctrl+R retry"
-    : codexModels === null ? "Loading Codex account models…" : `${codexModels.length} Codex account models`}`;
+  const catalogStatus = publicFailed ? "Public catalog unavailable · using cached models · Ctrl+R retry" : baseStatusText;
+  const statusText = !loadCodex ? catalogStatus : `${codexFailed
+    ? `Codex model discovery unavailable${codexModels ? " · using cached account models" : ""} · Ctrl+R retry`
+    : codexModels === null ? "Loading Codex account models…" : `${codexModels.length} Codex account models`} · ${catalogStatus}`;
 
-  const currentItems = (): DialogItem[] => {
+  const currentItems = (): ModelDialogItem[] => {
     const byok = filterRef.current === filter && showAllRef.current === showAll
       ? byokItems
       : modelDialogItems(buildModelRows({
@@ -457,14 +469,13 @@ export function ModelScreen({
         filter: filterRef.current,
         activeModel,
         activeProvider: providerId,
-      }));
-    const results = byok;
-    return connectAction ? [...results, connectAction] : results;
+      }), showPrices, subscriptionOrder);
+    return connectAction ? [...byok, connectAction] : byok;
   };
-  const highlight = (index: number) => {
-    const item = currentItems()[index];
-    selectedItemRef.current = item;
-    setSelectedItem(item);
+  const highlight = (index: number, visible = currentItems()) => {
+    const item = visible[clampDialogSelection(visible, index)];
+    selectedIdRef.current = item?.id;
+    setSelectedId(item?.id);
   };
 
   const move = (delta: number) => {
@@ -472,8 +483,10 @@ export function ModelScreen({
     if (visible.length === 0) return;
     const dir: 1 | -1 = delta >= 0 ? 1 : -1;
     let next = selectionIndex(visible);
-    for (let i = 0; i < Math.abs(delta); i += 1) next = moveDialogSelection(visible, next, dir);
-    highlight(next);
+    for (let i = 0; i < Math.abs(delta); i += 1) {
+      next = moveDialogSelection(visible, next, dir);
+    }
+    highlight(next, visible);
   };
 
   const setQuery = (next: SetStateAction<string>) => {
@@ -486,6 +499,27 @@ export function ModelScreen({
     const text = sanitizeTuiText(decodePasteBytes(event.bytes));
     if (text) setQuery((current) => current + text);
   });
+
+  const leaveSubstep = () => {
+    if (filterRef.current) setQuery("");
+    else onBack();
+  };
+
+  const activateSelection = () => {
+    const visible = currentItems();
+    const activeItem = visible[selectionIndex(visible)];
+    if (!activeItem || activeItem.disabled) return;
+    if (activateModelConnectAction(activeItem, onConnect)) return;
+    if (role !== null && rolesLive) {
+      const modelId = activeItem.row?.model.id;
+      if (!modelId) return;
+      onAgentModelsChange?.({ ...agentModels, [role]: modelId });
+      setNotice(`${role}: ${modelId} applied${singleModel ? "; single-model mode still takes precedence" : ""}.`);
+      return;
+    }
+    const row = activeItem.row;
+    if (row) onSelect(row.model.id, row.group.id as RuntimeConfig["provider"]);
+  };
 
   useKeyboard((key) => {
     const seq = typeof key.sequence === "string" ? key.sequence : "";
@@ -504,8 +538,9 @@ export function ModelScreen({
       const next = roles[(index + (key.name === "right" ? 1 : -1) + roles.length) % roles.length] ?? null;
       setRole(next);
       setNotice(next === null ? "" : "Role models use the parent audit’s connection.");
-      const target = next === null ? currentModel : (agentModels?.[next] ?? currentModel);
-      highlight(currentItems().findIndex((item) => item.id === target));
+      const target = next === null ? parentModel : (agentModels?.[next] ?? parentModel);
+      const visible = currentItems();
+      highlight(visible.findIndex((item) => item.row?.model.id === target && item.row?.group.id === providerId), visible);
       return;
     }
     if (singleModelLive && key.ctrl && key.name === "s") {
@@ -513,8 +548,8 @@ export function ModelScreen({
       setNotice("Single-model policy applied to this audit.");
       return;
     }
-    // Retry Codex account discovery when requested.
-    if (loadCodex && key.ctrl && key.name === "r") {
+    // Retry every catalog, bypassing the public cache's daily TTL.
+    if (key.ctrl && key.name === "r") {
       setReload((value) => value + 1);
       return;
     }
@@ -526,40 +561,27 @@ export function ModelScreen({
       return;
     }
     if (key.ctrl || key.meta || key.option) return;
-    if (key.name === "up") return move(-1);
-    if (key.name === "down") return move(1);
-    if (key.name === "pageup") return move(-PAGE_STEP);
-    if (key.name === "pagedown") return move(PAGE_STEP);
-    if (key.name === "home") return highlight(0);
-    if (key.name === "end") return highlight(Math.max(0, currentItems().length - 1));
+    if (key.name === "up") { key.preventDefault(); key.stopPropagation(); return move(-1); }
+    if (key.name === "down") { key.preventDefault(); key.stopPropagation(); return move(1); }
+    if (key.name === "pageup") { key.preventDefault(); key.stopPropagation(); return move(-PAGE_STEP); }
+    if (key.name === "pagedown") { key.preventDefault(); key.stopPropagation(); return move(PAGE_STEP); }
+    if (key.name === "home") { key.preventDefault(); key.stopPropagation(); return highlight(0); }
+    if (key.name === "end") {
+      key.preventDefault();
+      key.stopPropagation();
+      return highlight(Math.max(0, currentItems().length - 1));
+    }
     if (key.name === "tab") {
       showAllRef.current = !showAllRef.current;
       setShowAll(showAllRef.current);
       return;
     }
     if (key.name === "return") {
-      const visible = currentItems();
-      const activeItem = visible[selectionIndex(visible)];
-      if (!activeItem) return;
-      if (activateModelConnectAction(activeItem, onConnect)) return;
-      if (role !== null && rolesLive) {
-        onAgentModelsChange?.({ ...agentModels, [role]: activeItem.id });
-        setNotice(
-          `${role}: ${activeItem.id} applied${singleModel ? "; single-model mode still takes precedence" : ""}.`,
-        );
-        return;
-      }
-      // The category is the connection identity. Resolve it from the same
-      // live items used for navigation; a filter typed before React paints
-      // must not accidentally keep the previous provider.
-      const selectedProvider = states.find((state) => state.label === activeItem.category)?.id as RuntimeConfig["provider"] | undefined;
-      if (!selectedProvider) return;
-      onSelect(activeItem.id, selectedProvider);
+      activateSelection();
       return;
     }
     if (key.name === "escape") {
-      if (filterRef.current) setQuery("");
-      else onBack();
+      leaveSubstep();
       return;
     }
     if (key.name === "backspace") {
@@ -574,7 +596,7 @@ export function ModelScreen({
   });
 
   // The detail pane is clipped to the rows its shared picker body assigns.
-  const renderDetail = (item: DialogItem, pane: { width: number; height: number }) => {
+  const renderDetail = (item: ModelDialogItem, pane: { width: number; height: number }) => {
     const compact = pane.height < 12;
     if (isModelConnectAction(item)) {
       const lines = clipModelDetailLines(
@@ -596,7 +618,7 @@ export function ModelScreen({
         </>
       );
     }
-    const row = rowByItem.get(item);
+    const row = item.row;
 
     // The BYOK pane is short and bounded — id, provider, price, context, the
     // credential story — and is clipped with a visible marker rather than
@@ -627,18 +649,20 @@ export function ModelScreen({
     );
   };
 
-  // ── Title row: glyph + label on the left, the live row count on the right.
+  // Action title on the left, live result count on the right.
   // Split explicitly so the two leaves can never be handed overlapping cells.
-  const titleText = modelDialogTitle({ scope, showAll: showAll || !!filter.trim() });
+  const titleText = modelDialogTitle({ scope });
   const countText = modelDialogCount(modelResultCount(items), refreshing);
   const countWidth = Math.min(contentWidth, textCells(countText));
   const titleWidth = Math.max(0, contentWidth - countWidth - (countWidth > 0 ? 1 : 0));
 
   const hint = onSkip && !filter
-    ? "[esc] back · [⌃N] skip · [⏎] select · [↑↓] move · type to filter · [⌃C] quit"
-    : rolesLive && singleModelLive
-      ? modelDialogHint({ scope, role, hasFilter: filter.length > 0, canReload: loadCodex })
-      : modelFooterHint(mode, filter.length > 0);
+    ? "[⏎] select · [⌃R] reload · [⌃N] skip · [esc] back"
+    : inDialog
+      ? `[⏎] select · [⌃R] reload · [⇥] curated/all · [esc] ${filter ? "clear" : "back"}`
+      : rolesLive && singleModelLive
+        ? modelDialogHint({ scope, role, hasFilter: filter.length > 0, canReload: true })
+        : modelFooterHint(mode, filter.length > 0);
 
 
   const body = (
@@ -667,6 +691,8 @@ export function ModelScreen({
         ))
         : null}
 
+      {/* Hover is intentionally not a selection event here: moving the pointer
+          must not recenter the list or replace the chosen model. */}
       {listRows < 2 || contentWidth < 1 ? null : (
         <DialogSelectBody
           items={items}
@@ -677,8 +703,7 @@ export function ModelScreen({
           gutter
           isCurrent={(item) => item.current === true}
           renderDetail={renderDetail}
-          onActivateRow={highlight}
-          onHoverRow={highlight}
+          onActivateRow={(index) => highlight(index, items)}
           onScroll={move}
           emptyText={showAll || filter.trim()
             ? "No matches. Ctrl+U clears search."
@@ -700,5 +725,10 @@ export function ModelScreen({
     </box>
   );
 
-  return <>{frame({ body, hint })}</>;
+  const activeItem = items[cursor];
+  return <>{frame({
+    body, hint, onBack: leaveSubstep, onNext: activateSelection,
+    nextLabel: activeItem && isModelConnectAction(activeItem) ? "Connect" : "Next",
+    nextDisabled: !activeItem || activeItem.disabled === true || (isModelConnectAction(activeItem) && !onConnect),
+  })}</>;
 }

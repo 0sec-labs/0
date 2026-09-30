@@ -50,7 +50,7 @@ let preferences: DesktopPreferences | undefined;
 function desktopAssetDirectory(): string {
   if (app.isPackaged) return join(process.resourcesPath, "dashboard");
   const workspaceRoot = findWorkspaceRoot(process.env.OSEC_DESKTOP_ROOT ?? moduleDirectory);
-  return join(workspaceRoot, "packages", "dashboard", "dist");
+  return join(workspaceRoot, "packages", "desktop", "dist", "dashboard");
 }
 
 function sidecarWorkingDirectory(): string {

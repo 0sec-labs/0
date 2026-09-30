@@ -40,7 +40,7 @@ import { join } from "node:path";
 
 import { homeStateDir } from "@0/shared";
 
-import { defaultOpenBrowser } from "../commands/auth.js";
+import { defaultOpenBrowser } from "../open-browser.js";
 import {
   accountEnvPatch,
   addAccount,

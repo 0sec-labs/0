@@ -1,6 +1,5 @@
 /**
- * Layout, grouping and detail-pane arithmetic for the "resume a saved audit"
- * pop-up dialog.
+ * Layout, grouping and detail-pane arithmetic for the Sessions picker.
  *
  * The screen is a dialog body — an icon+title row, the shared grouped and
  * searchable picker with a detail column beside it, a status line and a footer
@@ -22,13 +21,9 @@
  *
  * What is domain-specific and lives here:
  *
- *   - the category split, "This project" before "Other projects", so the
- *     operator sees at a glance which stored engagements ran in the directory
- *     they are standing in;
+ *   - open and saved groups, with saved sessions from this project first;
  *   - the list projection (`resumeItems`) — label, compact meta, category and
- *     current-session dot — plus the AND-over-terms filter, scoped to the
- *     `summary` and `preview` because those are the two lines that say what a
- *     session was *about*;
+ *     current-session dot — plus the AND-over-terms filter;
  *   - the detail pane (`resumeDetailLines`): the objective/preview in full,
  *     then a metadata block, as flat tone-tagged lines the component only has
  *     to colour;
@@ -43,6 +38,7 @@
  */
 
 import { computeDialogPanel, type DialogItem, type DialogPanel } from "./dialog-select-layout.js";
+import type { AuditSummary } from "./audit-workspace.js";
 import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import { relativeAge, type StoredSessionMeta } from "./session-store.js";
 import { shellChromeRows, wrapCells } from "./settings-layout.js";
@@ -150,10 +146,23 @@ export function sessionMeta(session: StoredSessionMeta, now: number): string {
   if (model.length > 0) parts.push(model);
   return parts.join(" · ");
 }
+/** An open native session, optionally linked to its saved conversation. */
+export interface LiveSessionSummary extends AuditSummary {
+  sessionId?: string;
+}
+
+/** The source discriminant keeps open sessions out of restore/delete paths. */
+export type ResumeItem = DialogItem & (
+  | { kind: "live"; session: LiveSessionSummary }
+  | { kind: "saved"; session: StoredSessionMeta }
+);
+
 
 export interface ResumeItemsInput {
   /** Sessions to project, newest-first as the caller supplies them. */
   sessions: readonly StoredSessionMeta[];
+  liveSessions?: readonly LiveSessionSummary[];
+  currentLiveId?: string;
   /** The session currently on screen, marked with the gutter dot. */
   currentId?: string;
   /** The console's working directory; drives the "This project" split. */
@@ -177,34 +186,46 @@ export interface ResumeItemsInput {
 }
 
 /**
- * Projects sessions onto `DialogItem`s, filtered and grouped.
- *
- * The filter is AND-over-terms across the objective and the opening prompt —
- * the two fields that say what a session was for — so typing a target host or a
- * bug class reaches the right engagement without matching an incidental model
- * id or timestamp. Surviving sessions keep their newest-first order within each
- * category, and "This project" is emitted before "Other projects" so
- * `buildDialogRows` draws that heading first.
+ * Open sessions lead the list; linked saved conversations are deduplicated
+ * before filtering, so an old preview cannot offer a replay of a live runtime.
+ * Saved conversations retain project-first, newest-first ordering.
  */
 export function resumeItems({
   sessions,
+  liveSessions = [],
+  currentLiveId,
   currentId,
   currentCwd,
   now,
   filter = "",
   protectedSessionIds,
   symbols = DEFAULT_SYMBOLS,
-}: ResumeItemsInput): DialogItem[] {
-  const ICON_PROTECTED = symbols.fieldProtected;
+}: ResumeItemsInput): ResumeItem[] {
   const terms = sanitizeTuiText(filter).toLowerCase().split(" ").filter(Boolean);
-  const matched = sessions.filter((session) => {
-    if (terms.length === 0) return true;
-    const haystack = `${session.summary ?? ""} ${session.preview ?? ""}`.toLowerCase();
+  const matches = (text: string) => {
+    const haystack = sanitizeTuiText(text).toLowerCase();
     return terms.every((term) => haystack.includes(term));
-  });
-
-  // Partition stably so "This project" leads. With no `currentCwd` every
-  // category is undefined and the input order is preserved untouched.
+  };
+  const linkedIds = new Set<string>();
+  for (const live of liveSessions) {
+    if (live.sessionId) linkedIds.add(live.sessionId);
+  }
+  const items: ResumeItem[] = [];
+  for (const live of liveSessions) {
+    if (!matches(`${live.title} ${live.activity ?? ""}`)) continue;
+    items.push({
+      id: `live:${live.id}`,
+      kind: "live",
+      session: live,
+      label: `${symbols.fieldProtected} ${sanitizeTuiText(live.title)}`,
+      meta: `${live.status}${live.unread ? " · unread" : ""}`,
+      category: "Open",
+      current: live.id === currentLiveId,
+    });
+  }
+  const matched = sessions.filter((session) =>
+    !linkedIds.has(session.id) && matches(`${session.summary ?? ""} ${session.preview ?? ""}`),
+  );
   const here: StoredSessionMeta[] = [];
   const elsewhere: StoredSessionMeta[] = [];
   for (const session of matched) {
@@ -212,21 +233,19 @@ export function resumeItems({
     else elsewhere.push(session);
   }
   const ordered = currentCwd ? [...here, ...elsewhere] : matched;
-
-  return ordered.map((session) => {
-    // The lock leads the label rather than riding in the meta column: the meta
-    // is right-aligned and capped at a share of the row, so on a narrow list
-    // it is the first thing to be truncated, and a protection marker that
-    // disappears when the panel narrows is worse than none at all.
+  for (const session of ordered) {
     const locked = protectedSessionIds?.has(session.id) === true;
-    return {
-      id: session.id,
-      label: locked ? `${ICON_PROTECTED} ${sessionLabel(session)}` : sessionLabel(session),
+    items.push({
+      id: `saved:${session.id}`,
+      kind: "saved",
+      session,
+      label: locked ? `${symbols.fieldProtected} ${sessionLabel(session)}` : sessionLabel(session),
       meta: sessionMeta(session, now),
-      category: sessionCategory(session, currentCwd),
-      current: currentId !== undefined && session.id === currentId,
-    };
-  });
+      category: "Saved",
+      current: currentLiveId === undefined && session.id === currentId,
+    });
+  }
+  return items;
 }
 
 // ---------------------------------------------------------------------------
@@ -268,6 +287,7 @@ export interface ResumeDetailLine {
 
 export interface ResumeDetailInput {
   session?: StoredSessionMeta;
+  liveSession?: LiveSessionSummary;
   /** Injected clock for the relative-age line. */
   now: number;
   /** Omit the blank separator rows. Set when the pane is short of rows. */
@@ -295,12 +315,12 @@ export interface ResumeDetailInput {
  * away and the label would fuse to its value.
  */
 export function resumeDetailLines(
-  { session, now, compact = false, isProtected = false }: ResumeDetailInput,
+  { session, liveSession, now, compact = false, isProtected = false }: ResumeDetailInput,
   width: number,
   symbols: SymbolTable = DEFAULT_SYMBOLS,
 ): ResumeDetailLine[] {
   const limit = cells(width);
-  if (!session || limit <= 0) return [];
+  if ((!session && !liveSession) || limit <= 0) return [];
   const ICON_PROTECTED = symbols.fieldProtected;
 
   const lines: ResumeDetailLine[] = [];
@@ -310,6 +330,17 @@ export function resumeDetailLines(
   const separate = () => {
     if (!compact) lines.push({ text: "", tone: "blank" });
   };
+
+  if (liveSession) {
+    push(sanitizeTuiText(liveSession.title), "title");
+    if (liveSession.activity) push(sanitizeTuiText(liveSession.activity), "text");
+    separate();
+    push(`Status: ${liveSession.status}${liveSession.unread ? " · unread" : ""}`, "accent");
+    push(`${ICON_PROTECTED} Open session: switching keeps its current work and transcript intact.`, "accent");
+    push("Close the session before deleting its saved history.", "muted");
+    return lines;
+  }
+  if (!session) return lines;
 
   // What the session was about / did. When the objective and the opening
   // prompt differ, show both — the objective as the headline, the prompt as the
@@ -329,16 +360,11 @@ export function resumeDetailLines(
     push("(no prompt recorded)", "muted");
   }
 
-  // The protection notice leads the metadata rather than trailing it. A short
-  // pane clips from the bottom, and "this history cannot be deleted" is the
-  // one line that must survive the cut — an operator who never sees it reads
-  // the refusal as a bug. It states the rule the screen enforces and nothing
-  // more: the audit has to close on its own before the history can be removed,
-  // and this screen has no power to close it.
+  // Protection leads the metadata so short panes keep the deletion boundary.
   if (isProtected) {
     separate();
     push(
-      `${ICON_PROTECTED} Protected: this audit is still live. Its history cannot be deleted until the audit closes. Opening it is unaffected.`,
+      `${ICON_PROTECTED} Protected: this session is still open. Its history cannot be deleted until it closes.`,
       "accent",
     );
   }
@@ -412,6 +438,8 @@ export interface ResumeDialogLayoutInput {
   inDialog?: boolean;
   /** Whether the confirm/error line is currently showing. */
   hasStatus?: boolean;
+  /** Whether New or Close actions are available. */
+  hasActions?: boolean;
 }
 
 export interface ResumeDialogLayout {
@@ -423,6 +451,8 @@ export interface ResumeDialogLayout {
   statusRows: number;
   /** 1 when there is room for the footer hint row, else 0. */
   footerRows: number;
+  /** Rows reserved for the compact New/Close controls. */
+  actionRows: number;
   /** Rows the picker body (search line + list + detail) may occupy. */
   bodyRows: number;
   /** Rows of stacked detail below the list when the pane could not sit beside it. */
@@ -455,6 +485,7 @@ export function computeResumeDialogLayout({
   totalRows,
   inDialog = false,
   hasStatus = false,
+  hasActions = false,
 }: ResumeDialogLayoutInput): ResumeDialogLayout {
   const surfaceWidth = cells(width);
   const surfaceHeight = cells(height);
@@ -466,7 +497,8 @@ export function computeResumeDialogLayout({
   const footerRows = available >= 3 ? 1 : 0;
   const statusRows = hasStatus && available >= 4 ? 1 : 0;
   const titleRows = available >= 6 ? 1 : 0;
-  const bodyRows = Math.max(0, available - footerRows - statusRows - titleRows);
+  const actionRows = hasActions && available >= 7 && contentWidth >= 13 ? 1 : 0;
+  const bodyRows = Math.max(0, available - footerRows - statusRows - titleRows - actionRows);
 
   const panelFor = (rows: number): DialogPanel =>
     computeDialogPanel({
@@ -489,7 +521,7 @@ export function computeResumeDialogLayout({
     panel = panelFor(bodyRows - stackedRows);
   }
 
-  return { contentWidth, titleRows, statusRows, footerRows, bodyRows, stackedRows, panel };
+  return { contentWidth, titleRows, statusRows, footerRows, actionRows, bodyRows, stackedRows, panel };
 }
 
 // ---------------------------------------------------------------------------
@@ -524,7 +556,7 @@ export function resumeDialogCount(
 ): string {
   const count = cells(matched);
   const locked = cells(protectedCount);
-  const head = `${count} audit${count === 1 ? "" : "s"}`;
+  const head = `${count} session${count === 1 ? "" : "s"}`;
   return locked > 0 ? `${head} · ${symbols.fieldProtected} ${locked} live` : head;
 }
 
@@ -537,10 +569,8 @@ export type ResumeMode = "browse" | "filter" | "confirm-delete";
 /**
  * The footer hint, per mode.
  *
- * `d` is named as the delete key in browse mode and, once armed, the confirm
- * key — a second press is what actually deletes, so the destructive action is
- * never one tap. Esc unwinds one step at a time, which the hint reflects: it
- * cancels an armed delete, then clears a filter, then leaves.
+ * Delete arms a confirmation; a second press deletes. Esc cancels an armed
+ * delete, then clears a filter, then leaves.
  */
 export function resumeFooterHint(
   mode: ResumeMode,
@@ -558,7 +588,7 @@ export function resumeFooterHint(
   symbols: SymbolTable = DEFAULT_SYMBOLS,
 ): string {
   const ICON_PROTECTED = symbols.fieldProtected;
-  const count = sessionCount !== undefined ? `${sessionCount} audit${sessionCount === 1 ? "" : "s"}` : undefined;
+  const count = sessionCount !== undefined ? `${sessionCount} session${sessionCount === 1 ? "" : "s"}` : undefined;
 
   switch (mode) {
     case "filter":
@@ -582,7 +612,7 @@ export function resumeFooterHint(
 
 /**
  * Every printable character can start a filter — except the keys browse mode
- * reserves, which the caller checks first (`d` for delete). This only decides
+ * reserves, which the caller checks first. This only decides
  * "is this a character that types", exactly as the model and settings screens'
  * own `isFilterKey` does; kept local so this module has no cross-screen import.
  */

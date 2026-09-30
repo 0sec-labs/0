@@ -29,11 +29,11 @@ describe("resolveAnalyticsLevel — parsing", () => {
     expect(resolveAnalyticsLevel({ "ZERO_ANALYTICS_LEVEL": "  FULL " })).toBe("full");
   });
 
-  it("defaults to full when unset", () => {
-    expect(resolveAnalyticsLevel({})).toBe("full");
+  it("does not authorize sharing without a choice", () => {
+    expect(resolveAnalyticsLevel({})).toBe("off");
   });
 
-  it("opt-out env still wins over default full", () => {
+  it("respects environment opt-outs without a sharing choice", () => {
     expect(resolveAnalyticsLevel({ "ZERO_OFFLINE": "1" })).toBe("off");
     expect(resolveAnalyticsLevel({ "DO_NOT_TRACK": "1" })).toBe("off");
   });

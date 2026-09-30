@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "execution": "smolvm-online-workbench",
+  "user": { "name": "zero", "uid": 1000, "gid": 1000, "home": "/home/zero", "workdir": "/workspace" },
+  "runtimes": { "node": "24.21.0", "bun": "1.3.14", "playwright": "1.60.0", "tree-sitter": "0.21.1-node24", "tree-sitter-c": "0.21.4" },
+  "agentProviders": { "codex": "0.159.2", "claude": "2.1.285", "gemini": "0.62.0" },
+  "tools": [
+    "0", "node", "npm", "npx", "bun", "claude", "codex", "gemini", "bash", "python3", "git", "gh", "jq", "rg", "curl", "wget",
+    "nmap", "sqlmap", "wpscan", "nikto", "gobuster", "ffuf", "hydra", "john", "dirb", "wfuzz", "whatweb",
+    "nc", "socat", "proxychains4", "gdb", "gdb-multiarch", "r2", "binwalk", "foremost", "exiftool", "ltrace", "strace", "file", "strings", "objdump", "readelf", "ROPgadget", "foxguard"
+  ],
+  "pythonModules": ["requests", "pwn", "bs4", "unicorn"],
+  "wordlists": "/usr/share/seclists",
+  "browser": "Playwright-managed Chromium and Chromium headless shell",
+  "stateMount": "/home/zero/.0",
+  "admissionMount": "/run/0-workbench"
+}

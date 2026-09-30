@@ -4,6 +4,8 @@
  */
 
 import type { LaunchOptions, TuiHandle } from "../index.js";
+import { degradePalette, detectColorDepth, getTheme, parseHex } from "../../../src/tui/themes.js";
+import type { CapturedFrame } from "@opentui/core";
 
 /**
  * Pin a direct provider and model for deterministic picker navigation. The
@@ -22,41 +24,30 @@ export function modelsByokLaunch(opts: { mouse?: boolean } = {}): LaunchOptions 
   };
 }
 
-/**
- * The list row the picker is currently highlighting, read from the captured
- * per-cell spans.
- *
- * The active row is the only list line painted with the PRIMARY highlight
- * BACKGROUND (see dialog-select.tsx: `bg = isActive ? theme.PRIMARY`), so it is
- * found without knowing any exact colour: take the most common background as the
- * page ground, then pick the line carrying the widest run of a DIFFERENT
- * background. Full-width chrome bars (the title/status/composer rows) and the
- * empty left rail are excluded by width so only a real, partial-width list row
- * with text wins. Returns the line index and its trimmed text (`{ index: -1 }`
- * when nothing is highlighted).
+/** Route one OpenAI id through both OpenAI and Azure to exercise provider-qualified rows. */
+export function duplicateProviderModelsLaunch(opts: { mouse?: boolean } = {}): LaunchOptions {
+  return {
+    route: { type: "models" },
+    settings: opts.mouse ? { mouseSupport: true } : {},
+    env: {
+      OPENAI_API_KEY: "test-openai-key",
+      AZURE_OPENAI_API_KEY: "test-azure-key",
+      AZURE_OPENAI_BASE_URL: "https://azure.invalid",
+      ZERO_PROVIDER: "openai",
+      ZERO_MODEL: "gpt-6-luna",
+    },
+  };
+}
+
+/** Locate the selected list row, not the popup background or sidebar surface.
+ * Scenarios use the deterministic fixture's blue-team theme unless overridden.
  */
 export function highlightedRow(
-  frame: ReturnType<TuiHandle["captureSpans"]>,
+  frame: CapturedFrame,
+  themeName = "blue-team",
 ): { index: number; text: string } {
-  const bgKey = (bg: { toInts: () => number[] }): string => bg.toInts().join(",");
-
-  // Page ground = the background covering the most cells.
-  const widthByBg = new Map<string, number>();
-  for (const line of frame.lines) {
-    for (const span of line.spans) {
-      const key = bgKey(span.bg);
-      widthByBg.set(key, (widthByBg.get(key) ?? 0) + span.width);
-    }
-  }
-  let pageBg = "";
-  let widest = -1;
-  for (const [key, width] of widthByBg) {
-    if (width > widest) {
-      widest = width;
-      pageBg = key;
-    }
-  }
-
+  const color = parseHex(degradePalette(getTheme(themeName), detectColorDepth(process.env)).PRIMARY)!;
+  const highlight = `${color.r},${color.g},${color.b}`;
   let index = -1;
   let bestWidth = 0;
   let text = "";
@@ -64,7 +55,7 @@ export function highlightedRow(
     let width = 0;
     let lineText = "";
     for (const span of line.spans) {
-      if (bgKey(span.bg) !== pageBg) {
+      if (span.bg.toInts().slice(0, 3).join(",") === highlight) {
         width += span.width;
         lineText += span.text;
       }
@@ -86,8 +77,8 @@ export function modelLabel(rowText: string): string {
   return (rowText.replace(/^●\s*/, "").split(/\s{2,}|\$/)[0] ?? "").trim();
 }
 
-/** The chat composer is interactive once its prompt appears. */
-export const HOME_READY = /type to chat or \/ for commands/;
+/** The empty-chat landing screen exposes its always-available Connect action. */
+export const HOME_READY = /\[\/connect\]/;
 
 /** Any box-drawing glyph: light/heavy/double borders, corners, tees and dividers. */
 export const BORDER_GLYPHS =

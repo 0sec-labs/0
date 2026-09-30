@@ -187,7 +187,7 @@ const CLOUD_FEEDBACK_PATH = "/api/cli-feedback";
 
 export interface FeedbackResolveOptions {
   /**
-   * Test seam for the local `0 auth login` credential store. An explicit
+   * Test seam for an explicitly configured managed-service account token.
    * ZERO_FEEDBACK_URL always wins and never consumes this credential.
    */
   cloudCredentials?: () => { host: string; token: string } | null;
@@ -279,10 +279,9 @@ function isOptOutSet(value: string | undefined): boolean {
 }
 
 /**
- * The configured endpoint, or the authenticated dashboard receiver associated
- * with `0 auth login`. Scheme validation stays in
- * {@link submissionBlockedReason}, so callers can distinguish absent from
- * refused configuration.
+ * The configured endpoint, or an authenticated managed-service receiver when
+ * account credentials are present. Scheme validation stays in
+ * {@link submissionBlockedReason}.
  */
 export function feedbackEndpoint(
   env: FeedbackEnv = process.env,

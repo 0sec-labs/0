@@ -13,8 +13,6 @@ type Internals = {
   apiKey: string;
   baseUrl: string;
   reasoningEffort?: string;
-  hostedCatalogPromise: Promise<void> | null;
-  hostedMaxOutputTokens: number | undefined;
   config: { agentModels?: Readonly<Record<string, string>>; singleModel?: boolean; model?: string };
 };
 const peek = (runtime: LlmApiRuntime): Internals => runtime as unknown as Internals;
@@ -70,40 +68,120 @@ describe("live runtime reconfiguration", () => {
     expect(after.reasoningEffort).toBeUndefined();
   });
 
-  it("re-detects the account and clears the hosted memo on a provider change", () => {
+  it("re-detects the provider account and endpoint after a live switch", () => {
     const runtime = new LlmApiRuntime({
       type: "api", provider: "openai", model: "primary", timeout: 1000,
       env: { ...environment(), OPENAI_API_KEY: "openai-key", OPENAI_BASE_URL: "https://openai.fixture/v1" },
     });
-    // Prime a stale hosted memo to prove reconfigure drops it.
-    peek(runtime).hostedCatalogPromise = Promise.resolve();
-    peek(runtime).hostedMaxOutputTokens = 999;
-
     runtime.reconfigure({
-      provider: "hosted",
-      env: { ...environment(), "ZERO_CLOUD_HOST": "http://127.0.0.1:12345", "ZERO_CLOUD_TOKEN": "cloud-token" },
+      provider: "deepseek",
+      model: "deepseek-v4-flash",
+      env: { ...environment(), DEEPSEEK_API_KEY: "deepseek-key", DEEPSEEK_BASE_URL: "https://deepseek.fixture/v1" },
     });
-
     const after = peek(runtime);
-    expect(after.provider).toBe("hosted");
-    expect(after.apiKey).toBe("cloud-token");
-    expect(after.baseUrl).toContain("127.0.0.1:12345");
-    // The old account's catalog ceiling must not survive the switch.
-    expect(after.hostedCatalogPromise).toBeNull();
-    expect(after.hostedMaxOutputTokens).toBeUndefined();
+    expect(after.provider).toBe("deepseek");
+    expect(after.apiKey).toBe("deepseek-key");
+    expect(after.baseUrl).toBe("https://deepseek.fixture/v1");
+    expect(after.model).toBe("deepseek-v4-flash");
+  });
+
+  it("retains same-provider picks but drops an omitted model on a provider-only reconnect", () => {
+    vi.stubEnv("ZERO_MODEL", undefined);
+    const runtime = new LlmApiRuntime({
+      type: "api", provider: "openai", model: "operator-platform-model",
+      env: { ...environment(), OPENAI_API_KEY: "synthetic-reconnect-platform" },
+    });
+    runtime.reconfigure({ singleModel: true });
+    expect(runtime.resolvedModel()).toBe("operator-platform-model");
+    const env = {
+      ...environment(), DEEPSEEK_API_KEY: "synthetic-reconnect-deepseek",
+      DEEPSEEK_BASE_URL: "https://deepseek.fixture/v1",
+    };
+    const fresh = new LlmApiRuntime({ type: "api", provider: "deepseek", env });
+    runtime.reconfigure({ provider: "deepseek", env });
+    expect(runtime.getConfigurationDiagnostics().provider).toBe("deepseek");
+    expect(runtime.resolvedModel()).toBe(fresh.resolvedModel());
+    expect(runtime.resolvedModel()).not.toBe("operator-platform-model");
   });
 });
 
 
-it("discovers against the captured subscription account after another login replaces environment credentials", async () => {
+it("discovers and infers new models with one protocol on the captured subscription account", async () => {
   const env = { ...environment(), ZERO_CHATGPT_ACCESS_TOKEN: "synthetic-account-a", ZERO_CHATGPT_ACCOUNT_ID: "account-a" };
-  const runtime = new LlmApiRuntime({ type: "api", provider: "chatgpt-codex", model: "gpt-5.5", env });
+  const runtime = new LlmApiRuntime({ type: "api", provider: "chatgpt-codex", model: "gpt-6.1", env });
   vi.stubEnv("ZERO_CHATGPT_ACCESS_TOKEN", "synthetic-account-b");
   vi.stubEnv("ZERO_CHATGPT_ACCOUNT_ID", "account-b");
-  const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ models: [{ slug: "gpt-daybreak-blue-latest" }] }));
-  vi.stubGlobal("fetch", fetchMock);
-  expect(await runtime.codexModelCatalog()).toEqual([{ id: "gpt-daybreak-blue-latest" }]);
-  const headers = new Headers(fetchMock.mock.calls[0][1]?.headers);
-  expect(headers.get("Authorization")).toBe("Bearer synthetic-account-a");
-  expect(headers.get("ChatGPT-Account-Id")).toBe("account-a");
+  let catalogVersion: string | undefined;
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (input, init) => {
+    const url = new URL(String(input));
+    const headers = new Headers(init?.headers);
+    if (url.origin !== "https://chatgpt.com"
+        || headers.get("Authorization") !== "Bearer synthetic-account-a"
+        || headers.get("ChatGPT-Account-Id") !== "account-a") {
+      return new Response(null, { status: 403 });
+    }
+    const version = headers.get("version") ?? "";
+    const [major, minor] = version.split(".").map(Number);
+    if (url.pathname.endsWith("/models")) {
+      // The real backend hides GPT-6 models below Codex protocol 0.153.
+      if (!(major > 0 || major === 0 && minor >= 153)
+          || url.searchParams.get("client_version") !== version) {
+        return Response.json({ models: [] });
+      }
+      catalogVersion = version;
+      return Response.json({ models: [{ slug: "gpt-6.1" }] });
+    }
+    if (url.pathname !== "/backend-api/codex/responses"
+        || version !== catalogVersion
+        || headers.get("x-codex-routing-hint") !== "model=gpt-6.1"
+        || JSON.parse(String(init?.body)).model !== "gpt-6.1") {
+      return new Response(null, { status: 400 });
+    }
+    return new Response(`data: ${JSON.stringify({
+      type: "response.completed",
+      response: {
+        status: "completed",
+        output: [{ type: "message", content: [{ type: "output_text", text: "subscription reply" }] }],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      },
+    })}\n\n`, { headers: { "Content-Type": "text/event-stream" } });
+  }));
+  expect(await runtime.codexModelCatalog()).toEqual([{ id: "gpt-6.1" }]);
+  const result = await runtime.executeNative("Reply briefly.", [{ role: "user", content: [{ type: "text", text: "Hello" }] }], []);
+  expect(result.stopReason).toBe("end_turn");
+  expect(result.content).toEqual([{ type: "text", text: "subscription reply" }]);
+});
+
+it("keeps saved connection identities account-scoped across token rotation and later login changes", () => {
+  const codex = (accessToken: string, accountId?: string) => new LlmApiRuntime({
+    type: "api", provider: "chatgpt-codex", model: "gpt-6.1",
+    env: {
+      ...environment(), ZERO_CHATGPT_ACCESS_TOKEN: accessToken,
+      ZERO_CHATGPT_ACCOUNT_ID: accountId ?? "", ZERO_CHATGPT_OAUTH_REFRESH_TOKEN: "",
+    },
+  });
+  const accountA = codex("synthetic-identity-token-a", "identity-account-a");
+  const saved = accountA.connectionIdentity();
+  expect(saved).toMatch(/^[a-f0-9]{64}$/);
+  expect(codex("synthetic-identity-rotated-a", "identity-account-a").connectionIdentity()).toBe(saved);
+  expect(codex("synthetic-identity-token-b", "identity-account-b").connectionIdentity()).not.toBe(saved);
+  vi.stubEnv("ZERO_CHATGPT_ACCOUNT_ID", "identity-account-b");
+  expect(accountA.connectionIdentity()).toBe(saved);
+  expect(codex("synthetic-unidentified-a").connectionIdentity())
+    .not.toBe(codex("synthetic-unidentified-b").connectionIdentity());
+});
+
+it("scopes Google preferences to the captured credential and effective project across access refreshes", () => {
+  const google = (accessToken: string, refreshToken: string, project: string) => new LlmApiRuntime({
+    type: "api", provider: "google", model: "gemini-2.5-pro",
+    env: {
+      ...environment(), ZERO_GEMINI_ACCESS_TOKEN: accessToken, ZERO_GEMINI_OAUTH_REFRESH_TOKEN: refreshToken,
+      GOOGLE_CLOUD_PROJECT: project, ZERO_GEMINI_PROJECT: "lower-priority-project",
+    },
+  });
+  const saved = google("synthetic-google-access-a", "synthetic-google-refresh-a", "project-a").connectionIdentity();
+  expect(saved).toMatch(/^[a-f0-9]{64}$/);
+  expect(google("synthetic-google-access-rotated", "synthetic-google-refresh-a", "project-a").connectionIdentity()).toBe(saved);
+  expect(google("synthetic-google-access-a", "synthetic-google-refresh-a", "project-b").connectionIdentity()).not.toBe(saved);
+  expect(google("synthetic-google-access-b", "synthetic-google-refresh-b", "project-a").connectionIdentity()).not.toBe(saved);
 });

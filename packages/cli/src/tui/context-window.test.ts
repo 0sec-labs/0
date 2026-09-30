@@ -20,4 +20,11 @@ describe("resolveContextLimit — connected providers", () => {
   it("never guesses a window without a running provider", () => {
     expect(resolveContextLimit({ modelId: "gpt-5.5", providerId: undefined }, { loadModels })).toBeNull();
   });
+
+  it("keeps a fractional context limit unknown instead of reporting a zero-token window", () => {
+    expect(resolveContextLimit(
+      { modelId: "future-model", providerId: "openai" },
+      { loadModels: () => ({ source: "synced", models: [{ id: "future-model", provider: "openai", contextTokens: 0.5 }] }) },
+    )).toBeNull();
+  });
 });

@@ -32,7 +32,7 @@ export interface RuntimeConfig {
   /** Force children to use the resolved parent model regardless of selection. */
   singleModel?: boolean;
   /** Explicit provider for this new runtime; conflicting FORCE pins fail closed. */
-  provider?: "openrouter" | "anthropic" | "openai" | "azure" | "deepseek" | "chatgpt-codex" | "z-ai" | "kimi" | "qwen" | "xai" | "opencode" | "copilot" | "google" | "hosted";
+  provider?: "openrouter" | "anthropic" | "openai" | "azure" | "deepseek" | "chatgpt-codex" | "z-ai" | "kimi" | "qwen" | "xai" | "opencode" | "copilot" | "google";
   apiKey?: string;
   /** Called when the subprocess executes a tool (read file, run command, etc.) */
   onToolCall?: (name: string, detail: string) => void;
@@ -199,13 +199,6 @@ export interface NativeRuntimeResult {
    */
   cancelled?: boolean;
   /**
-   * Whether the gateway proved a failed hosted request can safely be
-   * replayed unchanged (currently x-0-retry-safe on 429). Hosted failures
-   * without this proof must not enter transient same-request retries; a
-   * pre-dispatch 413 can instead trigger bounded history pruning.
-   */
-  retrySafe?: boolean;
-  /**
    * The provider's raw response items for this turn, when the wire format has
    * items worth replaying (Responses API). Callers that maintain a message
    * history should carry this onto the assistant message they push — see
@@ -283,4 +276,6 @@ export interface NativeRuntime {
   }): void;
   /** Current model identifier; not a per-request billing identity or rate receipt. */
   resolvedModel?(): string;
+  /** Provider-qualified catalog estimate key, not a billing receipt. */
+  resolvedPricingModel?(): string;
 }

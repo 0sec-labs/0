@@ -74,9 +74,9 @@ export function registerSecureCommand(program: Command): void {
       const cancel = () => controller.abort(new Error("Workflow cancelled by operator"));
       process.once("SIGINT", cancel);
       process.once("SIGTERM", cancel);
-      const cloudOutput = process.env["ZERO_EMIT_RESULT_LINE"] === "1" || Boolean(process.env["ZERO_CLOUD_SINK"]);
+      const emitMachineEvents = process.env["ZERO_EMIT_RESULT_LINE"] === "1";
       const onEvent = (event: SecureEvent) => {
-        if (cloudOutput) process.stdout.write(`ZERO_SECURE_EVENT=${JSON.stringify({ ...event, timestamp: Date.now() })}\n`);
+        if (emitMachineEvents) process.stdout.write(`ZERO_SECURE_EVENT=${JSON.stringify({ ...event, timestamp: Date.now() })}\n`);
         else process.stderr.write(`[secure:${event.phase}] ${event.message}\n`);
       };
       try {
@@ -98,7 +98,7 @@ export function registerSecureCommand(program: Command): void {
           signal: controller.signal,
           onEvent,
         });
-        process.stdout.write(cloudOutput
+        process.stdout.write(emitMachineEvents
           ? `ZERO_RESULT=${JSON.stringify(result)}\n`
           : `${JSON.stringify(result, null, 2)}\n`);
         process.exitCode = { completed: 0, blocked: 2, failed: 3, cancelled: 130 }[result.status];

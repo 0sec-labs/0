@@ -11,6 +11,8 @@
  */
 
 import chalk from "chalk";
+import type { ScanReport } from "@0/shared";
+import { formatReport } from "../formatters/index.js";
 
 interface ScanEvent {
   type: string;
@@ -112,9 +114,9 @@ export function renderScanStream(opts: RenderScanStreamOptions): StreamSession {
     }
   };
 
-  const setReport = (_report: unknown): void => {
-    // No-op — `commands/run.ts` already prints `formatReport(...)` after the
-    // session resolves. We don't render the final summary ourselves.
+  const setReport = (report: unknown): void => {
+    // runUnified supplies the canonical ScanReport for every streaming session.
+    console.log(formatReport(report as ScanReport, "terminal"));
   };
 
   const waitForExit = async (): Promise<void> => {

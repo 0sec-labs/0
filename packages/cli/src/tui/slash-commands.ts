@@ -97,21 +97,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     category: "info",
     description: "List available tools",
   },
-  {
-    name: "agents",
-    aliases: [],
-    category: "info",
-    description: "List available agents",
-    tuiOnly: true,
-  },
 
-  {
-    name: "harness",
-    aliases: [],
-    category: "navigation",
-    description: "Live harness: views, commands, settings, rollback and workspace trust",
-    tuiOnly: true,
-  },
   {
     name: "new-chat",
     aliases: ["new"],
@@ -120,25 +106,10 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     tuiOnly: true,
   },
   {
-    name: "audits",
-    aliases: [],
-    category: "navigation",
-    description: "Switch between live audits without stopping their work",
-    tuiOnly: true,
-  },
-  {
     name: "onboard",
     aliases: [],
     category: "navigation",
     description: "Reopen guided setup without replacing the current audit",
-    tuiOnly: true,
-  },
-  {
-    name: "stop",
-    aliases: [],
-    category: "session",
-    description: "Stop this audit's work or one owned worker and its descendants",
-    usage: "/stop audit | /stop worker <exact name or id>",
     tuiOnly: true,
   },
 
@@ -157,13 +128,6 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     tuiOnly: true,
   },
   {
-    name: "transcript",
-    aliases: ["review"],
-    category: "session",
-    description: "Show this conversation, including tool details",
-    tuiOnly: true,
-  },
-  {
     name: "findings",
     aliases: ["finds"],
     category: "session",
@@ -171,11 +135,11 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     tuiOnly: true,
   },
   {
-    name: "finding",
-    aliases: ["finding-detail"],
+    name: "fix",
+    aliases: [],
     category: "session",
-    description: "Open one finding in full detail to read and act on it",
-    usage: "/finding [id]",
+    description: "Generate a verified local source fix; review before explicitly publishing a draft PR",
+    usage: "/fix [finding-id] | /fix publish <finding-id> | /fix cancel",
     tuiOnly: true,
   },
   {
@@ -194,27 +158,13 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     usage: "/copy",
     tuiOnly: true,
   },
-  {
-    name: "replay",
-    aliases: [],
-    category: "session",
-    description: "Replay a previous turn or session",
-    tuiOnly: true,
-  },
 
   {
-    name: "resume",
-    aliases: ["sessions"],
-    category: "session",
-    description: "Find and resume saved conversations",
-    usage: "/resume",
-  },
-  {
-    name: "providers",
+    name: "sessions",
     aliases: [],
-    category: "system",
-    description: "Connect API keys or provider subscriptions",
-    usage: "/providers",
+    category: "session",
+    description: "Switch open sessions or resume saved conversations",
+    usage: "/sessions",
     tuiOnly: true,
   },
   {
@@ -282,13 +232,6 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     aliases: ["runs"],
     category: "navigation",
     description: "View active and recent operations",
-    tuiOnly: true,
-  },
-  {
-    name: "herd",
-    aliases: ["workers"],
-    category: "navigation",
-    description: "Inspect the active harness worker herd",
     tuiOnly: true,
   },
   {

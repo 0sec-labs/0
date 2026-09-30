@@ -5,7 +5,7 @@
 # session, while the physical Mac-mini UI smoke is an explicit SSH operation.
 set -euo pipefail
 
-APP_BUNDLE="${1:-packages/desktop/release/mac-arm64/0.app}"
+APP_BUNDLE="${1:-packages/desktop/release/mac-arm64/0security.app}"
 RESOURCES_DIR="$APP_BUNDLE/Contents/Resources"
 SIDECAR="$RESOURCES_DIR/sidecars/0-darwin-arm64"
 DASHBOARD="$RESOURCES_DIR/dashboard"

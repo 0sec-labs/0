@@ -5,6 +5,10 @@
  * Explicitly local modes retain the existing opt-in global strictness switch.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+vi.mock("./plugins/enablement.js", async (importOriginal) => ({
+  ...await importOriginal<object>(),
+  readEnablement: () => ({ schema: 1, project: process.cwd(), enabled: { scope: { version: "1.0.0", capabilities: [], enabledAt: 1 } } }),
+}));
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -157,17 +161,4 @@ describe("agenticScan — scope-guard visibility (0#133)", () => {
     ).rejects.toThrow(/ZERO_REQUIRE_SCOPE is set but no engagement scope is configured/);
   });
 
-  it("stays silent when http_audit synthesises a host policy (guards active)", async () => {
-    // http_audit is the one cloud mode that DOES get a ScopePolicy — built
-    // in-memory from httpAuditAllowedHosts rather than from a --scope file.
-    // It must not be warned at.
-    await runUnscopedScan(
-      baseConfig({
-        mode: "http_audit",
-        httpAuditAllowedHosts: ["target.example.invalid"],
-      } as Partial<ScanConfig>),
-    );
-
-    expect(events.find((e) => /No engagement scope is configured/.test(e.message))).toBeUndefined();
-  });
 });

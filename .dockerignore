@@ -5,6 +5,7 @@ dist
 docs/dist
 packages/*/node_modules
 packages/*/dist
+**/*.tsbuildinfo
 .claude
 www/node_modules
 www/.next
@@ -16,3 +17,4 @@ test-targets/node_modules
 .env
 .env.*
 .worktrees
+.workbench

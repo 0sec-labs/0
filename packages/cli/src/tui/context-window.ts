@@ -70,7 +70,7 @@ export interface ActiveModelIdentity {
 }
 
 function positiveTokens(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.trunc(value) : null;
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : null;
 }
 
 
@@ -117,12 +117,6 @@ export function resolveContextLimit(
   };
 
 
-  // A known BYOK caveat, recorded rather than worked around: the synced
-  // catalog deduplicates globally by id, so a given id survives under one
-  // provider only. When the running provider is not that one the exact match
-  // fails and the window stays unknown. That is the correct outcome — the
-  // surviving row describes a different provider's route — and fixing it
-  // belongs in the catalog contract, not here.
   const load = opts.loadModels ?? loadCatalogModels;
   const cache = load(opts.sync ?? {});
   const row = cache.models.find((model) => sameByokModel(model, identity));

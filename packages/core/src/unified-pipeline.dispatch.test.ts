@@ -47,12 +47,12 @@
  */
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { createHash } from "node:crypto";
-import { copyFileSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Finding, NpmAuditFinding, SemgrepFinding } from "@0/shared";
 import { osecDB } from "@0/db";
+import { updateProjectReviewChecks } from "./review-checks.js";
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
 //
@@ -219,7 +219,7 @@ let originalPerItemEnv: string | undefined;
 let originalApiKey: string | undefined;
 let originalStaticAnalyzer: string | undefined;
 let originalCloudEvents: string | undefined;
-let originalReviewManifest: string | undefined;
+let originalHome: string | undefined;
 
 beforeEach(() => {
   installPackageMock.mockReset();
@@ -254,8 +254,8 @@ beforeEach(() => {
   originalApiKey = process.env.ANTHROPIC_API_KEY;
   originalStaticAnalyzer = process.env["ZERO_STATIC"];
   originalCloudEvents = process.env["ZERO_CLOUD_EVENTS"];
-  originalReviewManifest = process.env["ZERO_AUDIT_SKILLS_MANIFEST"];
-  delete process.env["ZERO_AUDIT_SKILLS_MANIFEST"];
+  originalHome = process.env.HOME;
+  process.env.HOME = freshTmpDir("checks-home");
   delete process.env["ZERO_STATIC"];
   delete process.env["ZERO_CLOUD_EVENTS"];
 });
@@ -281,11 +281,8 @@ afterEach(() => {
   } else {
     process.env["ZERO_CLOUD_EVENTS"] = originalCloudEvents;
   }
-  if (originalReviewManifest === undefined) {
-    delete process.env["ZERO_AUDIT_SKILLS_MANIFEST"];
-  } else {
-    process.env["ZERO_AUDIT_SKILLS_MANIFEST"] = originalReviewManifest;
-  }
+  if (originalHome === undefined) delete process.env.HOME;
+  else process.env.HOME = originalHome;
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -1410,25 +1407,8 @@ describe("runPipeline — diff-aware review", () => {
     return { repoDir, changedFile: "changed.ts" };
   }
 
-  function writeReviewCheckManifest(dir: string): string {
-    const skillId = "00000000-0000-4000-8000-000000000001";
-    const files = [{ path: "SKILL.md", content: "Tenant-owned queries must enforce the authenticated organization." }];
-    const manifest = {
-      schema: "0-audit-skills-v1",
-      skills: [{
-        skillId,
-        revisionId: "00000000-0000-4000-8000-000000000003",
-        revision: 1,
-        name: "Tenant boundaries",
-        description: "review-check:v1:00000000-0000-4000-8000-000000000002",
-        sha256: createHash("sha256").update(JSON.stringify(files), "utf8").digest("hex"),
-        entrypoint: "SKILL.md",
-        files,
-      }],
-    };
-    const manifestPath = join(dir, "review-checks.json");
-    writeFileSync(manifestPath, JSON.stringify(manifest));
-    return manifestPath;
+  function addReviewCheck(dir: string, prompt = "Tenant-owned queries must enforce the authenticated organization."): string {
+    return updateProjectReviewChecks(dir, { action: "add", name: "Tenant boundaries", prompt, approved: true }).checks.at(-1)!.id;
   }
 
   it("--diff-base threads changed-files context into the agent prompt", async () => {
@@ -1508,11 +1488,11 @@ describe("runPipeline — diff-aware review", () => {
 
   it("returns configured review-check issues and suggested changes", async () => {
     const { repoDir } = makeRepoWithDiff();
-    process.env["ZERO_AUDIT_SKILLS_MANIFEST"] = writeReviewCheckManifest(repoDir);
+    const id = addReviewCheck(repoDir);
     runAnalysisAgentMock.mockResolvedValueOnce({
       findings: [],
       summary: JSON.stringify({ checks: [{
-        id: "00000000-0000-4000-8000-000000000001",
+        id,
         status: "issue",
         reason: "The changed query omits the organization predicate.",
         fix: "Bind the authenticated organization ID in the query.",
@@ -1526,7 +1506,7 @@ describe("runPipeline — diff-aware review", () => {
     });
 
     expect(report.reviewChecks).toEqual([{
-      id: "00000000-0000-4000-8000-000000000001",
+      id,
       name: "Tenant boundaries",
       status: "issue",
       reason: "The changed query omits the organization predicate.",
@@ -1537,7 +1517,7 @@ describe("runPipeline — diff-aware review", () => {
 
   it("does not report a clean review when check output is malformed", async () => {
     const { repoDir } = makeRepoWithDiff();
-    process.env["ZERO_AUDIT_SKILLS_MANIFEST"] = writeReviewCheckManifest(repoDir);
+    addReviewCheck(repoDir);
     runAnalysisAgentMock.mockResolvedValueOnce({ findings: [], summary: "Review complete; no issue found." });
 
     const report = await runPipeline({
@@ -1548,10 +1528,29 @@ describe("runPipeline — diff-aware review", () => {
 
     expect(report.reviewChecks).toBeUndefined();
     expect(report.researchFailed).toBe(true);
-    expect(report.warnings).toContainEqual(expect.objectContaining({
-      stage: "research",
-      message: "AI analysis failed: Review check results were not valid JSON.",
-    }));
+    expect(report.warnings.some(warning => warning.stage === "research" && warning.message.includes("not valid JSON"))).toBe(true);
+  });
+
+  it("keeps both literal frontmatter-like prompts and the selected kernel methodology in a changed-only review", async () => {
+    const { repoDir } = makeRepoWithDiff();
+    const prompts = ["---\nCheck tenant isolation", "---\ndescription: Tenant isolation\n---\nCheck tenant isolation"];
+    const ids = prompts.map(prompt => addReviewCheck(repoDir, prompt));
+    runAnalysisAgentMock.mockResolvedValueOnce({
+      findings: [],
+      summary: JSON.stringify({ checks: ids.map(id => ({ id, status: "unknown", reason: "The changed code lacks enough evidence to verify tenant isolation.", fix: "" })) }),
+    });
+    const report = await runPipeline({
+      target: repoDir, targetType: "source-code", depth: "quick", format: "json",
+      runtime: "api", apiKey: "sk-fake", diffBase: "HEAD~", changedOnly: true,
+      reviewProfile: "linux-kernel", subsystem: "net/", dbPath: freshDbPath(),
+    });
+    expect(report.researchFailed).toBeUndefined();
+    expect(report.reviewChecks?.map(check => check.id)).toEqual(ids);
+    const prompt = runAnalysisAgentMock.mock.calls[0]![0].agentSystemPrompt as string;
+    for (const literal of prompts) expect(prompt).toContain(JSON.stringify(literal));
+    expect(prompt).toContain("copy_from_user");
+    expect(prompt).toContain("net/");
+    expect(prompt).toContain("+export const y = req.body;");
   });
 
   it("keeps the original diff finding and research suggestion after independent verification", async () => {

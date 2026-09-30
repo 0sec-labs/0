@@ -64,7 +64,6 @@
 
 import { computeDialogPanel, type DialogItem, type DialogPanel } from "./dialog-select-layout.js";
 import { buildModelCatalog, type CatalogModel } from "./model-catalog.js";
-import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import { PROVIDERS, providerStates, type ProviderState } from "./provider-status.js";
 import { shellChromeRows, wrapCells } from "./settings-layout.js";
 import { getSymbols, type SymbolTable } from "./symbols.js";
@@ -759,6 +758,8 @@ export interface ModelDialogLayoutInput {
   totalRows: number;
   /** True when the screen is mounted inside a `DialogSurface` panel. */
   inDialog?: boolean;
+  /** A compact modal spends all picker rows on search and results, not detail. */
+  compact?: boolean;
   /** Override the rows reserved for the host frame inside a dialog panel. */
   hostChromeRows?: number;
   /**
@@ -825,6 +826,7 @@ export function computeModelDialogLayout({
   height,
   totalRows,
   inDialog = false,
+  compact = false,
   hostChromeRows,
   metaLineCount,
 }: ModelDialogLayoutInput): ModelDialogLayout {
@@ -857,13 +859,14 @@ export function computeModelDialogLayout({
       height: surfaceHeight,
       size: "large",
       totalRows,
-      withDetail: true,
+      withDetail: !compact,
       bodyRows: rows,
     });
 
   let panel = panelFor(bodyRows);
   let stackedRows = 0;
   if (
+    !compact &&
     !panel.showDetail &&
     contentWidth >= STACKED_MIN_WIDTH &&
     bodyRows >= STACKED_MIN_LIST_ROWS + 3
@@ -884,22 +887,11 @@ export type ModelCatalogScope = "byok" | "unknown";
 
 export interface ModelDialogTitleInput {
   scope: ModelCatalogScope;
-  /** BYOK only: whether the full synced superset is on show. */
-  showAll?: boolean;
 }
 
-/**
- * The dialog's title row: the shared glyph, the shared label, then which
- * catalogue is on screen.
- *
- * The glyph and label come from `operator-icons.ts` so this dialog is stamped
- * exactly like every other one, and the label is always beside the glyph —
- * there is no icon font behind these code points.
- */
-export function modelDialogTitle({ scope, showAll = false }: ModelDialogTitleInput): string {
-  const head = `${operatorIcon("models")} ${operatorTitle("models")}`;
-  if (scope === "unknown") return `${head} · no connection`;
-  return `${head} · connected providers · ${showAll ? "all synced" : "curated"}`;
+/** A quiet action title; connection facts belong in the rows and status. */
+export function modelDialogTitle({ scope }: ModelDialogTitleInput): string {
+  return scope === "unknown" ? "Select model · no connection" : "Select model";
 }
 
 /**
@@ -919,13 +911,13 @@ export interface ModelDialogHintInput {
   /** Null when the parent model is the target; otherwise the role being set. */
   role?: string | null;
   hasFilter?: boolean;
-  /** Whether Ctrl+R retries account model discovery for a subscription. */
+  /** Whether Ctrl+R retries public and account model discovery. */
   canReload?: boolean;
 }
 
 /**
  * The footer hints, naming only bindings this screen actually implements.
- * `Ctrl+R` retries account model discovery where available and
+ * `Ctrl+R` refreshes public and account catalogs, and
  * `Ctrl+Backspace` is named only while a role is targeted.
  */
 export function modelDialogHint({ scope, role = null, hasFilter = false, canReload = false }: ModelDialogHintInput): string {
@@ -1056,10 +1048,10 @@ export type ModelMode = "browse" | "filter";
 /** Contextual shortcuts for the model picker. */
 export function modelFooterHint(mode: ModelMode, hasFilter = false): string {
   return [
-    "[↑↓] select",
-    "[⏎] select for new chat",
-    "[⇥] configured/all",
-    "Other providers: /connect",
+    "[↑↓] model",
+    "[⏎] select",
+    "[⇥] curated/all",
+    "[⌃R] reload",
     mode === "filter" || hasFilter ? "[esc] clear" : "[esc] back",
   ].join(" · ");
 }

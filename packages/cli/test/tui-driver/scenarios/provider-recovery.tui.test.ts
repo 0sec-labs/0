@@ -20,7 +20,8 @@ test("a missing direct-provider key retains the draft despite saved Cloud creden
   const frame = await tui.waitForText(/OpenAI credentials need attention/);
   expect(frame).not.toContain("0security Auto");
   await tui.sendKey("escape");
-  await tui.waitForText(/Connect a provider to start chatting/);
+  const main = await tui.waitForText(/needs connection/);
+  expect(main).toMatch(/██|0.SECURITY/);
   await tui.sendKeys("Keep this draft until I connect my own model");
   await tui.sendKey("return");
   expect(tui.captureFrame()).toContain("Keep this draft until I connect my own model");

@@ -114,8 +114,8 @@ the release binary includes its runtime.
 
 `0` starts in chat, including on a fresh installation. Use `/onboard` for
 optional guided setup. Choose a connected provider's model in `/model`.
-The interactive console does not route inference through 0cloud; Cloud authentication
-for managed-service commands is separate from model access.
+The interactive console does not route inference through 0cloud; managed-service
+access is arranged separately from local model access.
 
 For your own provider, use `/model` to select a model. Model and role-model
 selections apply to the current audit while idle, or after its current turn
@@ -282,17 +282,12 @@ boundaries; enabling one does not sandbox every CLI operation. See
 
 ## Managed work and onboarding
 
-The CLI implements repository enrollment, managed run requests, and recurring
-schedules, and corresponding server integration exists. That is different
-from proving your account's access or a compatible deployed end-to-end flow.
+Managed execution is separately operated; the local CLI does not provide
+repository enrollment or managed scan lifecycle commands.
 [Contact the team](https://0.security/contact/?intent=contact) to agree managed
-work; the local CLI above remains an account-optional starting point.
-
-Before automating `connect` or `service`, check
-[managed lifecycle compatibility](/ci/github-action/#managed-lifecycle-compatibility).
-The reviewed client/server pair has schedule-filtering and budget-field
-mismatches: repository-selective disconnect and per-run ceiling enforcement
-must not be assumed safe from the command names or flags alone.
+work. Confirm schedule filtering, budget enforcement, deployment compatibility
+and account access with the operator before automating service workflows.
+The local CLI above remains an account-optional starting point.
 
 Before managed work starts, agree on the repositories and running targets,
 allowed actions, budget, cadence and evidence required. Repository access
@@ -303,11 +298,6 @@ separate approvals. A generated patch is not a verified fix.
 Agree on verification and remediation deliverables as part of the engagement.
 Local model access and managed security are separate paths; access to one does
 not grant the other. See the [roadmap](/roadmap/#0cloud).
-
-The CLI also implements [managed lifecycle commands](/commands/#service) for
-approved service environments. Starting a remote scan, polling its outcome,
-requesting cancellation and deleting schedules are different operations.
-Their presence in `--help` does not qualify the backend or grant service access.
 
 ## Next steps
 

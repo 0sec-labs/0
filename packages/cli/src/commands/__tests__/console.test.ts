@@ -24,7 +24,11 @@ vi.mock("../../tui/run.js", () => ({
 }));
 vi.mock("@0/core", async (importOriginal) => {
   const actual = await importOriginal<typeof Core>();
-  return { ...actual, connectMcpServers: async () => undefined };
+  return {
+    ...actual,
+    connectMcpServers: async () => undefined,
+    getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, projectPath: process.cwd(), message: "Scope plugin enabled" }),
+  };
 });
 
 describe("console launch authorization", () => {
