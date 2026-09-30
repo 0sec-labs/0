@@ -803,6 +803,22 @@ export function buildConsoleSystemPrompt(opts: {
     : mode === "recon"
     ? "Recon mode: passive, in-scope reconnaissance ONLY. Operate strictly within the authorized target/scope and use only read-only and passive network-recon tools (crawling, fingerprinting, surface/API discovery, JS recon, intel lookups, source reading). Do NOT attempt any effectful, mutating, or exploitation action — those tools are refused in this mode. Gather and report what you observe, then hand control back. Scope is not auto-expanded; an out-of-scope target needs the operator's decision."
     : "Standard mode: the operator approves each action before it runs. Take one concrete step, wait for approval, and when a target is not authorized request a narrow scope extension and wait for the operator's decision.";
+  const verificationWorkflow = mode === "yolo" ? [
+    "YOLO verification workflow: a credible security lead starts verification; it is not a reason to pause.",
+    "Automatically attempt safe, bounded verification and execute a minimal PoC when the required capabilities exist.",
+    "Use existing tests, bounded HTTP requests, local parser/protocol checks, or verify_finding for a persisted PoC as appropriate.",
+    "Do not ask 'Should I test this?' for routine verification already covered by the operator's request.",
+    "This instruction grants no new authority: honor explicit read-only/plan-only requests, scope/exclusions/refusals,",
+    "credentials, private-network access, workspace trust, sandbox restrictions, resource budgets and cancellation.",
+    "Ask only for missing operator context/credentials or a necessary decision about destructive, irreversible or",
+    "high-impact actions, target expansion, separately protected capabilities, or unrequested external publication.",
+    "Missing compilers, VMs, credentials or disposable resources are concrete blockers; report which prerequisite",
+    "is missing and continue other useful authorized checks rather than asking generic permission to verify.",
+    "Capture exact source lines and executed requests/responses, commands, crashes or state transitions.",
+    "Label static/source-verified evidence separately from runtime reproduction; saving a finding is not verification.",
+    "Reject false positives, persist supported findings with prerequisites, impact, confidence and remediation,",
+    "and finish with what actually ran, what failed, and what remains unverified and why.",
+  ] : [];
   return [
     "You are the 0 operator console — an interactive security assistant with",
     "direct access to the full 0 tool registry (reconnaissance, web pentest,",
@@ -867,6 +883,7 @@ export function buildConsoleSystemPrompt(opts: {
     "",
     "Call tools whenever they help; prefer real tool output over speculation.",
     autonomyInstruction,
+    ...verificationWorkflow,
     scopeState.message,
     "",
     opts.target ? `Current target: ${opts.target}` : mode === "yolo"
@@ -3436,6 +3453,24 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         catch (error) {
           if (!authorityFailure) throw error;
           toolResult = { success: false, output: null, error: authorityFailure };
+        }
+        // A successful save is a workflow handoff, never proof of runtime
+        // reproduction. Build the receipt from the host's finding ledger, not
+        // the model's submitted evidence prose. All subsequent verification
+        // still passes through dispatchAuthorized and its independent gates.
+        if (autonomyMode === "yolo" && call.name === "save_finding" && toolResult.success &&
+          toolResult.output && typeof toolResult.output === "object" && "findingId" in toolResult.output) {
+          const findingId = toolResult.output.findingId;
+          const finding = toolContext.findings.find((item) => item.id === findingId);
+          if (finding && finding.status !== "false-positive") {
+            toolResult = { ...toolResult, output: { ...toolResult.output,
+              verification_workflow: {
+                source_status: finding.sourceVerification?.status ?? "not_checked",
+                replay_status: finding.verification_result?.status ?? "not_run",
+                instruction: "Continue with safe, bounded verification within the requested workflow and existing controls. Saving is not runtime reproduction. Execute a minimal PoC when supported; otherwise report the concrete missing prerequisite. Do not ask for routine confirmation. Honor read-only/plan-only requests and separately controlled actions.",
+              },
+            } };
+          }
         }
         recordToolResult(call, toolResult, startedAt, findingsBefore);
         callbacks?.onToolResult?.(call, toolResult);
