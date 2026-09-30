@@ -57,6 +57,8 @@ on the published npm package and the GitHub Release tag.
 - Align isolated sibling source and artifact paths, reject occupied scratch
   directories, and recover retained workbench admission only after native
   cleanup proof. Setup and execution share the eight-GiB archive ceiling.
+- Exercise offline VM disk exhaustion within the normal import budget instead
+  of assuming every Node/SDK image fits in a one-GiB reservation.
 
 ## [0.22.1] - 2026-09-30
 

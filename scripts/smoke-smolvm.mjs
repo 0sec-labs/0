@@ -125,14 +125,17 @@ try {
     assert.equal(result.timedOut, false);
   });
   await check("guest disk exhaustion stays within storage cap", async () => {
-    const result = await execute(`const fs=require('node:fs'); const fd=fs.openSync('/tmp/qualification-disk-limit','w'); const chunk=Buffer.alloc(1024*1024,1); let mib=0;
-      try { for(;mib<1200;mib++) fs.writeSync(fd,chunk); throw new Error('storage cap did not stop writes'); }
-      catch(e) { if(e.code!=='ENOSPC') throw e; console.log(JSON.stringify({code:e.code,mib})); } finally { fs.closeSync(fd); }`,
-      { storageGb: 1 });
+    // Keep the normal import budget: a Node/SDK rootfs may not fit in one GiB.
+    const result = await execute(`const fs=require('node:fs'),assert=require('node:assert/strict');
+      const disk=fs.statfsSync('/tmp'); assert.equal(disk.type,fs.statfsSync('/').type);
+      assert(disk.bsize*disk.blocks<=${defaults.storageGb * 1024 ** 3},'guest disk exceeds configured storage');
+      const fd=fs.openSync('/tmp/qualification-disk-limit','w'); const chunk=Buffer.alloc(1024*1024,1); let mib=0;
+      try { for(;mib<${defaults.storageGb * 1024 + 256};mib++) fs.writeSync(fd,chunk); throw new Error('storage cap did not stop writes'); }
+      catch(e) { if(e.code!=='ENOSPC') throw e; console.log(JSON.stringify({code:e.code,mib})); } finally { fs.closeSync(fd); }`);
     successful(result);
     const data = JSON.parse(result.stdout);
     assert.equal(data.code, "ENOSPC");
-    assert(data.mib > 0 && data.mib < 1024);
+    assert(data.mib > 0 && data.mib < defaults.storageGb * 1024);
   });
   await check("archive integrity rejects changed identity", () => rejectedExecution({ ...defaults, imageDigest: `sha256:${"0".repeat(64)}`, command: ["node", "-e", "process.exit(0)"] }));
   await check("missing runtime never runs guest commands on host", async () => {
