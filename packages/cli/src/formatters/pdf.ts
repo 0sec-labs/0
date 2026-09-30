@@ -114,6 +114,7 @@ export async function generatePdfReport(
     renderExecutiveSummary(doc, report);
     renderFindingsTable(doc, report);
     renderFindingDetails(doc, report);
+    renderReviewChecks(doc, report);
     renderMethodology(doc, report);
     renderFooters(doc);
 
@@ -399,6 +400,21 @@ function renderFindingDetails(doc: PDFDoc, report: ScanReport): void {
         .fillColor(COLORS.text)
         .text(finding.evidence.analysis, PAGE_MARGIN, doc.y, { width: CONTENT_WIDTH });
     }
+  }
+}
+
+function renderReviewChecks(doc: PDFDoc, report: ScanReport): void {
+  if (!report.reviewChecks?.length) return;
+  doc.addPage();
+  sectionTitle(doc, "Review Checks (Advisory)");
+  for (const check of report.reviewChecks) {
+    if (doc.y > doc.page.height - PAGE_MARGIN - 80) doc.addPage();
+    subSectionTitle(doc, `${check.status.toUpperCase()}: ${check.name}`);
+    doc.fontSize(10).font("Helvetica").fillColor(COLORS.text)
+      .text(`ID: ${check.id}`, PAGE_MARGIN, doc.y, { width: CONTENT_WIDTH })
+      .text(`Reason: ${check.reason}`, { width: CONTENT_WIDTH });
+    if (check.fix) doc.text(`Suggested fix: ${check.fix}`, { width: CONTENT_WIDTH });
+    doc.moveDown(1);
   }
 }
 

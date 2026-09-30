@@ -1291,6 +1291,15 @@ export interface ScanWarning {
  */
 export type ScanExitReason = "completed" | "cost_ceiling_exceeded";
 
+/** Advisory local review criteria, independent of vulnerability severity and exit policy. */
+export interface ReviewCheckResult {
+  id: string;
+  name: string;
+  status: "pass" | "issue" | "unknown";
+  reason: string;
+  fix: string;
+}
+
 export interface ScanReport {
   target: string;
   scanDepth: ScanDepth;
@@ -1300,6 +1309,7 @@ export interface ScanReport {
   summary: ReportSummary;
   findings: Finding[];
   warnings: ScanWarning[];
+  reviewChecks?: ReviewCheckResult[];
   benchmarkMeta?: {
     attackTurns?: number;
     estimatedCostUsd?: number;
@@ -1751,6 +1761,7 @@ export interface ReviewReport {
   semgrepFindings: number;
   summary: ReportSummary;
   findings: Finding[];
+  reviewChecks?: ReviewCheckResult[];
   /** Non-fatal stage failures retained alongside any partial findings. */
   warnings?: Array<{ stage: string; message: string }>;
   /** True when the primary review agent failed; partial static results may remain. */

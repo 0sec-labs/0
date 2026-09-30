@@ -62,6 +62,8 @@ export type AnalysisTokenUsage = import("@0/shared").TokenUsage;
 
 export interface AnalysisAgentResult {
   findings: Finding[];
+  /** Agent's final done() summary; a scoped review can return check results here. */
+  summary?: string;
   usage?: AnalysisTokenUsage;
   estimatedCostUsd?: number;
   /**
@@ -578,6 +580,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
 
       return {
         findings: agentState.findings,
+        summary: agentState.summary,
         usage: agentState.totalUsage,
         estimatedCostUsd: agentState.estimatedCostUsd,
         turns: agentState.turnCount,
@@ -688,7 +691,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
   // Legacy loop doesn't track token usage / cost — those are populated
   // only by the native API loop branch above. It does count turns, so those
   // are still attributable per-phase.
-  return { findings: agentState.findings, usage: undefined, estimatedCostUsd: undefined, turns: agentState.turnCount,
+  return { findings: agentState.findings, summary: agentState.summary, usage: undefined, estimatedCostUsd: undefined, turns: agentState.turnCount,
     ...(opts.collectProjectContext ? { projectObservations: parseProjectObservations(agentState.summary) } : {}) };
 }
 

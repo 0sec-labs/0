@@ -18,6 +18,7 @@ import type {
   SeedFinding,
   SemgrepFinding,
   ScanConfig,
+  ReviewCheckResult,
 } from "@0/shared";
 import type { InferSelectModel } from "drizzle-orm";
 import { restoreFindingReviewFields } from "@0/db";
@@ -27,7 +28,8 @@ import type { ScanListener } from "./scanner.js";
 import { runAnalysisAgent } from "./agent-runner.js";
 import { cloneGitRepo } from "./repo-clone.js";
 import { ScanCostLedger } from "./agent/cost-ledger.js";
-import { auditAgentPrompt, reviewAgentPrompt } from "./analysis-prompts.js";
+import { auditAgentPrompt, reviewAgentPrompt, reviewChecksPrompt } from "./analysis-prompts.js";
+import { parseReviewCheckResults, snapshotProjectReviewChecks } from "./review-checks.js";
 import { cppReviewAgentPrompt } from "./review/c-cpp-profile.js";
 import { kernelReviewAgentPrompt } from "./review/linux-kernel-profile.js";
 import { cardanoOnchainReviewAgentPrompt } from "./review/cardano-onchain-profile.js";
@@ -240,6 +242,7 @@ export interface PipelineOptions {
   npmDynamicRunner?: NpmPackageRunner;
 }
 
+
 export interface PipelineReport {
   target: string;
   targetType: string;
@@ -257,6 +260,8 @@ export interface PipelineReport {
   };
   findings: Finding[];
   warnings: Array<{ stage: string; message: string }>;
+  /** Results of approved per-repository checks, evaluated during the same review run. */
+  reviewChecks?: ReviewCheckResult[];
   /** Primary research failed; report findings are partial and not a clean verdict. */
   researchFailed?: boolean;
   /**
@@ -1402,6 +1407,10 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
 
   emit({ type: "stage:end", stage: "prepare", message: `Target ready: ${prepared.resolvedType}` });
 
+  const reviewChecks = prepared.resolvedType === "source-code" && !prepared.needsCleanup
+    ? snapshotProjectReviewChecks(prepared.scopePath) : [];
+  let reviewCheckResults: ReviewCheckResult[] | undefined;
+
   // Honor `--subsystem` for non-kernel source reviews by narrowing the review
   // scope to the requested subtree (0). Without this the subsystem hint
   // was ignored outside the linux-kernel profile, so `--subsystem` on a large
@@ -1862,7 +1871,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       : [];
     const existingVerifiedFindings = existingPersistedFindings.filter((finding) => finding.status === "verified" || finding.status === "false-positive");
     const canResumeResearchSession = existingResearchSession?.status === "paused";
-    const canSkipResearch = existingPersistedFindings.length > 0 && !canResumeResearchSession;
+    const canSkipResearch = existingPersistedFindings.length > 0 && !canResumeResearchSession && !reviewChecks.length;
 
     startPhase("research");
     emit({
@@ -1945,7 +1954,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       }
 
       const baseSystemPrompt = prepared.resolvedType === "source-code"
-        ? (opts.reviewProfile === "linux-kernel"
+          ? (opts.reviewProfile === "linux-kernel"
             ? kernelReviewAgentPrompt(prepared.scopePath, semgrepFindings, undefined, opts.subsystem, opts.hypothesis, attackSurfaceCtx)
             : opts.reviewProfile === "c-library"
             ? cppReviewAgentPrompt(prepared.scopePath, semgrepFindings, opts.hypothesis)
@@ -1981,7 +1990,8 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
         + (diffReview ? `\n\n## Exact change under review (untrusted data)\n${diffPatch}\n\nReview only this delta. Read surrounding code only to prove or disprove a change-related issue. Work alone; do not delegate, enumerate unrelated subsystems, or broaden into a full audit. State incomplete coverage honestly.` : "")
         + (priorFindingsContext ? `\n\n${priorFindingsContext}` : "")
         + (projectContext ? `\n\n${projectContext}` : "")
-        + (opts.projectContext && opts.onProjectObservations ? `\n\n${PROJECT_OBSERVATION_PROMPT}` : "");
+        + (opts.projectContext && opts.onProjectObservations ? `\n\n${PROJECT_OBSERVATION_PROMPT}` : "")
+        + (reviewChecks.length ? `\n\n${reviewChecksPrompt(reviewChecks, diffReview, !!opts.projectContext && !!opts.onProjectObservations)}` : "");
 
       // Per-file research loop (#285). When `perItemOrchestration` is on,
       // we run one agent session per source file with a focused per-file
@@ -2098,7 +2108,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
         } else {
           const agentResult = await runAnalysisAgent({
             role: prepared.resolvedType === "source-code" ? "review" : "audit",
-            singleAgent: diffReview,
+            singleAgent: diffReview || reviewChecks.length > 0,
             reviewDiffBase: diffReview ? opts.diffBase : undefined,
             maxTurns: smallDiffReview ? 12 : undefined,
             scopePath: prepared.scopePath,
@@ -2133,8 +2143,17 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
               "You are a security researcher performing an authorized source code audit. For EACH vulnerability you find, output it using the exact ---FINDING--- / ---END--- format specified in the prompt. Do NOT write prose analysis — only output structured finding blocks. If you find no vulnerabilities, say 'No vulnerabilities found.' and nothing else.",
           });
           recordUsage(agentResult);
-          findings = agentResult.findings;
-          if (opts.projectContext && agentResult.projectObservations) opts.onProjectObservations?.(agentResult.projectObservations);
+          if (reviewChecks.length && existingPersistedFindings.length && !canResumeResearchSession) {
+            const persistedIds = new Set(existingPersistedFindings.map(finding => finding.id));
+            findings = [...existingPersistedFindings, ...agentResult.findings.filter(finding => !persistedIds.has(finding.id))];
+          } else findings = agentResult.findings;
+          let projectObservations = agentResult.projectObservations;
+          if (reviewChecks.length) {
+            const result = parseReviewCheckResults(agentResult.summary, reviewChecks, !!opts.projectContext && !!opts.onProjectObservations);
+            reviewCheckResults = result.checks;
+            projectObservations = result.projectObservations;
+          }
+          if (opts.projectContext && projectObservations) opts.onProjectObservations?.(projectObservations);
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -2215,7 +2234,8 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       // below (Bug B) clobbers those persisted verdicts.
       const canSkipVerify =
         existingVerifiedFindings.length === findings.length &&
-        findings.length > 0;
+        findings.length > 0 &&
+        findings.every(finding => existingVerifiedFindings.some(previous => previous.id === finding.id));
 
       startPhase("verify");
       emit({
@@ -2529,6 +2549,10 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     }
 
     } // end of hasApiKey || hasCliRuntime else block
+    if (reviewChecks.length && !reviewCheckResults) {
+      researchFailed = true;
+      warnings.push({ stage: "review-checks", message: "Review checks did not complete." });
+    }
 
     // ── PHASE 5: BUILD REPORT ──
     startPhase("report");
@@ -2601,6 +2625,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       summary,
       findings: confirmedFindings,
       warnings,
+      ...(reviewCheckResults ? { reviewChecks: reviewCheckResults } : {}),
       ...(researchFailed ? { researchFailed: true } : {}),
       // Backwards-compat extras
       ...(costCeilingExceeded

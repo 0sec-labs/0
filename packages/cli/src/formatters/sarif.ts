@@ -172,6 +172,14 @@ export function formatSarif(report: ScanReport): string {
     }
   }
 
+  for (const check of report.reviewChecks ?? []) {
+    rulesMap.set(`review-check/${check.id}`, {
+      id: `review-check/${check.id}`, name: check.name,
+      shortDescription: { text: check.name },
+      defaultConfiguration: { level: "note" },
+      properties: { advisory: true },
+    });
+  }
   const sarif = {
     $schema: "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
     version: "2.1.0" as const,
@@ -185,7 +193,16 @@ export function formatSarif(report: ScanReport): string {
             rules: Array.from(rulesMap.values()),
           },
         },
-        results: report.findings.map((f) => findingToResult(f, report.target)),
+        results: [
+          ...report.findings.map((f) => findingToResult(f, report.target)),
+          ...(report.reviewChecks ?? []).map(check => ({
+            ruleId: `review-check/${check.id}`,
+            kind: check.status === "pass" ? "pass" : check.status === "issue" ? "fail" : "open",
+            level: "note",
+            message: { text: `${check.name}: ${check.reason}${check.fix ? `\nSuggested fix: ${check.fix}` : ""}` },
+            properties: { advisory: true, reviewCheck: check },
+          })),
+        ],
         invocations: [
           {
             executionSuccessful: report.executionSuccessful !== false,

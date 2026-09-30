@@ -107,10 +107,12 @@ export function formatTerminal(report: ScanReport): string {
   // ── Findings Section ──
   if (report.findings.length === 0) {
     lines.push("");
-    if (report.warnings.length > 0) {
+    if (report.warnings.length > 0 || report.executionSuccessful === false) {
       lines.push(
         `  ${chalk.yellow.bold("!")} ${chalk.yellow("No vulnerabilities confirmed. Scan finished with warnings.")}`
       );
+    } else if (report.reviewChecks?.some(check => check.status !== "pass")) {
+      lines.push(`  ${chalk.yellow.bold("!")} ${chalk.yellow("No security vulnerabilities found. Advisory review checks need attention.")}`);
     } else {
       lines.push(`  ${chalk.green.bold("✓")} ${chalk.green("No vulnerabilities found.")}`);
     }
@@ -127,6 +129,17 @@ export function formatTerminal(report: ScanReport): string {
 
     for (const finding of sorted) {
       lines.push(formatFinding(finding));
+    }
+  }
+
+  if (report.reviewChecks?.length) {
+    lines.push("", `  ${chalk.bold.white("REVIEW CHECKS (advisory)")}`, "");
+    for (const check of report.reviewChecks) {
+      const color = check.status === "pass" ? chalk.green : chalk.yellow;
+      lines.push(`  ${color(check.status.toUpperCase())} ${check.name} (${check.id})`);
+      lines.push(`    Reason: ${check.reason}`);
+      if (check.fix) lines.push(`    Suggested fix: ${check.fix}`);
+      lines.push("");
     }
   }
 

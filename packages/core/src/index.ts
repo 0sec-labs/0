@@ -1009,6 +1009,8 @@ export type {
 // Unified pipeline
 export { runPipeline, parseSubsystems } from "./unified-pipeline.js";
 export type { PipelineOptions, PipelineReport } from "./unified-pipeline.js";
+export { listProjectReviewChecks, snapshotProjectReviewChecks, updateProjectReviewChecks, reviewChecksProject, reviewChecksFilePath, MAX_ENABLED_REVIEW_CHECKS } from "./review-checks.js";
+export type { ReviewCheck, ProjectReviewCheck, ProjectReviewChecks, ReviewCheckMutation } from "./review-checks.js";
 
 // External seed findings (0#368). Parser + reader for ND-JSON leads
 // supplied by upstream probes like GemmaForge (`gemmaforge.leads/v1`).

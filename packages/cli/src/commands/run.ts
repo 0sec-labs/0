@@ -257,6 +257,7 @@ function toScanReport(report: any): ScanReport {
       findings: report.findings,
       warnings: report.warnings ?? [],
       executionSuccessful: report.researchFailed ? false : undefined,
+      reviewChecks: report.reviewChecks,
     };
   }
 
@@ -571,7 +572,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
 
 
     if (inkUI) {
-      inkUI.setReport(report as any);
+      inkUI.setReport(canonicalReport);
       await inkUI.waitForExit();
     } else {
       if (format === "html" || format === "pdf") {
