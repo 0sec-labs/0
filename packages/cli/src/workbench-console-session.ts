@@ -3,8 +3,9 @@ import { realpathSync } from "node:fs";
 import { mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { getScopeEnforcementState, runSmolvmWorkbench, ScopePolicy } from "@0/core";
-import type { ConsoleSession, ConsoleSessionConfig, ConsoleSessionCheckpoint, ConsoleRenderCallbacks, SmolvmWorkbenchResult, SmolvmWorkbenchOptions } from "@0/core";
+import type { ConsoleSession, ConsoleSessionConfig, ConsoleSessionCheckpoint, ConsoleRenderCallbacks, ConsoleTurnOutcome, SmolvmWorkbenchResult, SmolvmWorkbenchOptions } from "@0/core";
 import { findingSchema, type Finding } from "@0/shared";
+import type { TuiSettings } from "./tui/settings.js";
 import type { WorkbenchConfig } from "./workbench.js";
 import { encodeWorkbenchFrame, WorkbenchFrameReader, WORKBENCH_MAX_PENDING, guestWorkspacePath, hostWorkspacePath, mapWorkbenchTarget, mapWorkbenchCheckpoint, serializeWorkbenchConfig } from "./workbench-console-protocol.js";
 import type { WorkbenchFrame } from "./workbench-console-protocol.js";
@@ -28,16 +29,17 @@ export interface WorkbenchControllerOptions {
   guestCommand?: readonly string[];
   assets?: { cliDist: string; dependencies?: string };
   artifactDirectory?: string;
+  guestSettings?: TuiSettings;
 }
 export interface WorkbenchConsoleSessionOptions extends WorkbenchControllerOptions {
   config: Omit<ConsoleSessionConfig, "runtime" | "db">;
-  onFindings?: (findings: Finding[]) => void | Promise<void>;
+  onFindings?: (findings: Finding[], completion?: { outcome?: ConsoleTurnOutcome }) => void | Promise<void>;
 }
 const EVENTS = new Set(["onHarnessUpdate", "onAssistantDelta", "onReasoningDelta", "onToolStart", "onToolResult", "onUsage", "onNotice", "onCompaction"]);
 const DECISIONS = new Set(["requestScope", "requestLocalScope", "approveTool", "escalateScopedAudit", "askOperator", "historyList", "historyRead"]);
 function validateOptions(options: WorkbenchControllerOptions): void {
   if (options.provider.provider !== "chatgpt-codex" || (options.selection.provider && options.selection.provider !== "chatgpt-codex") || !options.provider.models.includes(options.selection.model)) throw new Error("Workbench requires an explicit host provider/model grant");
-  for (const model of Object.values(options.selection.agentModels ?? {})) if (!options.provider.models.includes(model)) throw new Error("Workbench worker model is outside the host provider grant");
+  for (const model of Object.values(options.selection.agentModels ?? {})) if (model !== "auto" && !options.provider.models.includes(model)) throw new Error("Workbench worker model is outside the host provider grant");
   for (const [name, value, max] of [["lifetimeMs", options.lifetimeMs ?? 30 * 60_000, 60 * 60_000], ["idleMs", options.idleMs ?? 5 * 60_000, 15 * 60_000]] as const) if (!Number.isSafeInteger(value) || value < 1000 || value > max) throw new Error(`Invalid workbench ${name}`);
 }
 function guestCommand(options: WorkbenchControllerOptions, cli: boolean): { command: readonly string[]; mounts?: SmolvmWorkbenchOptions["readOnlyMounts"] } {
@@ -89,7 +91,7 @@ class Controller {
         command: launch.command, environment: { ZERO_PROVIDER: "chatgpt-codex", ZERO_NO_TELEMETRY: "1", DO_NOT_TRACK: "1" }, network: this.options.network,
         tty: false, cpus: this.options.workbench.cpus, memoryMb: this.options.workbench.memoryMb, storageGb: this.options.workbench.storageGb,
         approvedImages: this.options.workbench.approvedImages, signal: this.abort.signal, workspaceMode: "snapshot", artifactDirectory: artifacts,
-        readOnlyMounts: launch.mounts, transport: { initialInput: encodeWorkbenchFrame({ type: "init", ...this.init, selection: { ...this.options.selection, provider: "chatgpt-codex" } }), onReady: input => { this.input = input; }, onStdout: data => reader.push(data, frame => this.dispatch(frame)), onStderr: () => {} },
+        readOnlyMounts: launch.mounts, transport: { initialInput: encodeWorkbenchFrame({ type: "init", ...this.init, guestSettings: this.options.guestSettings, selection: { ...this.options.selection, provider: "chatgpt-codex" } }), onReady: input => { this.input = input; }, onStdout: data => reader.push(data, frame => this.dispatch(frame)), onStderr: () => {} },
       });
       void this.done.then(async result => {
         const error = new Error(result.error ?? "Workbench VM exited");
@@ -139,7 +141,7 @@ class Controller {
     try { this.write({ type: "request", id, op, ...values }); } catch (error) { this.pending.delete(id); throw error; } return result;
   }
   async close(): Promise<void> {
-    if (!this.started) return;
+    if (!this.started) { await this.options.provider.close?.(); return; }
     let exited = false;
     try {
       await Promise.race([this.request("close"), new Promise(resolve => setTimeout(resolve, 1000))]);
@@ -165,7 +167,7 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
   let target = config.target ?? ""; let scope = config.scope; let localScopePath = config.initialCheckpoint?.localScopePath ?? undefined;
   let autonomyMode = config.autonomyMode ?? "standard";
   let systemPrompt = config.systemPrompt ?? ""; let tools = config.tools ?? [];
-  let render: ConsoleRenderCallbacks | undefined; let active = false; let findings: Finding[] = [];
+  let render: ConsoleRenderCallbacks | undefined; let active = false; let findings: Finding[] = []; let engineWorkStarted = false; let lastOutcome: ConsoleTurnOutcome | undefined; let cleanupPromise: Promise<void> | undefined;
   const deferred: Promise<unknown>[] = [];
   const queue = (op: string, value?: unknown) => { if (!controller.done) { serial[op === "autonomy" ? "autonomyMode" : op] = value; return; } const pending = controller.request(op, { value }); deferred.push(pending); void pending.catch(() => {}); };
   controller.decision = async (name, args) => {
@@ -210,7 +212,7 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
     configureEngagement(selection) { if (selection.target !== undefined) target = selection.target; if (selection.scope !== undefined) scope = selection.scope ?? undefined;
       const value = { ...(selection.target === undefined ? {} : { target: mapWorkbenchTarget(selection.target, workspace) }), ...(selection.scope === undefined ? {} : { scope: selection.scope?.raw ?? null }) };
       if (!controller.done) Object.assign(serial, value); else queue("configure", value); },
-    reconfigureRuntime(selection) { if (selection.env !== undefined || (selection.provider && selection.provider !== "chatgpt-codex") || (selection.model && !options.provider.models.includes(selection.model)) || Object.values(selection.agentModels ?? {}).some(model => !options.provider.models.includes(model))) throw new Error("Runtime selection is outside workbench provider grant");
+    reconfigureRuntime(selection) { if (selection.env !== undefined || (selection.provider && selection.provider !== "chatgpt-codex") || (selection.model && !options.provider.models.includes(selection.model)) || Object.values(selection.agentModels ?? {}).some(model => model !== "auto" && !options.provider.models.includes(model))) throw new Error("Runtime selection is outside workbench provider grant");
       Object.assign(options.selection, selection); if (controller.done) queue("reconfigure", selection); },
     clearConversation() { messages = []; checkpoint = undefined; if (!controller.done) { serial.initialMessages = []; delete serial.initialCheckpoint; } else queue("clear"); },
     async send(text, callbacks, sendOptions) {
@@ -218,14 +220,14 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
       let cancelTimer: ReturnType<typeof setTimeout> | undefined;
       const cancel = () => { try { controller.write({ type: "cancel" }); } catch { /* May still be booting. */ } cancelTimer = setTimeout(() => controller.abort.abort(new Error("Operator cancelled workbench turn")), 2000); };
       sendOptions?.signal?.addEventListener("abort", cancel, { once: true });
-      try { await Promise.all(deferred.splice(0)); await controller.start(); if (sendOptions?.signal?.aborted) cancel(); controller.status("running");
-        return await controller.request("send", { text, generateTitle: sendOptions?.generateTitle }) as Awaited<ReturnType<ConsoleSession["send"]>>;
+      try { await Promise.all(deferred.splice(0)); await controller.start(); if (sendOptions?.signal?.aborted) cancel(); controller.status("running"); engineWorkStarted = true;
+        lastOutcome = await controller.request("send", { text, generateTitle: sendOptions?.generateTitle }) as Awaited<ReturnType<ConsoleSession["send"]>>; return lastOutcome;
       } finally { clearTimeout(cancelTimer); active = false; render = undefined; sendOptions?.signal?.removeEventListener("abort", cancel); if (!controller.abort.signal.aborted && controller.execution.status !== "stopped" && controller.execution.status !== "failed") controller.status("ready"); }
     },
     async stopPersistentAgent(agentId) { return await controller.request("stopWorker", { agentId }) as boolean; }, async stopPersistentAgents() { if (controller.done) await controller.request("stopWorkers"); },
     exportCheckpoint() { if (active || !checkpoint) throw new Error("No quiescent VM checkpoint is available"); return structuredClone(checkpoint); },
     async prepareHandoff() { if (active) throw new Error("Cannot hand off active VM turn"); if (!controller.done) return {}; return await controller.request("handoff") as { warnings?: string[] }; },
-    async cleanup() { await controller.close(); await options.onFindings?.(findings); },
+    cleanup() { return cleanupPromise ??= (async () => { await controller.close(); if (engineWorkStarted && controller.done) await options.onFindings?.(findings, { outcome: lastOutcome }); })(); },
   };
 }
 

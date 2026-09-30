@@ -1,10 +1,34 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eventBus, type ConsoleSession, type ConsoleTurnOutcome, type NativeMessage, type ToolCall } from "@0/core";
 import { ConsoleGateway, ConsoleGatewayError, type ConsoleGatewaySessionFactoryInput } from "./console-gateway.js";
 import { loadSession, saveSession } from "../tui/session-store.js";
+
+const isolated = vi.hoisted(() => ({
+  profile: "local" as "local" | "smolvm",
+  localFactory: vi.fn(),
+  runtimeFactory: vi.fn(),
+  applyRuntime: vi.fn(),
+  pluginManager: vi.fn(),
+  flushPlugins: vi.fn(),
+}));
+vi.mock("../console-execution.js", () => ({ consoleExecutionProfile: () => isolated.profile }));
+vi.mock("../console-session.js", () => ({ createLocalConsoleSession: (...args: unknown[]) => isolated.localFactory(...args) }));
+vi.mock("./operator-services.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./operator-services.js")>(),
+  createWebConsoleRuntime: (...args: unknown[]) => isolated.runtimeFactory(...args),
+  applyWebConsoleRuntimeSelection: (...args: unknown[]) => isolated.applyRuntime(...args),
+  getWebConsolePluginHostManager: (...args: unknown[]) => isolated.pluginManager(...args),
+  flushWebConsolePlugins: (...args: unknown[]) => isolated.flushPlugins(...args),
+}));
+beforeEach(() => {
+  isolated.profile = "local";
+  isolated.localFactory.mockReset(); isolated.runtimeFactory.mockReset();
+  isolated.applyRuntime.mockReset(); isolated.pluginManager.mockReset();
+  isolated.flushPlugins.mockReset().mockResolvedValue([]);
+});
 
 const gateways: ConsoleGateway[] = [];
 const homes: string[] = [];
@@ -81,10 +105,10 @@ describe("ConsoleGateway", () => {
     expect(instance.get(created.id).title).toBe("My review");
   });
 
-  it("titles blank sessions \"New conversation\" and reports message counts so clients can reuse a blank one", async () => {
+  it("titles blank sessions \"New chat\" and reports message counts so clients can reuse a blank one", async () => {
     const instance = gateway();
     const created = instance.create({});
-    expect(created).toMatchObject({ title: "New conversation", messageCount: 0 });
+    expect(created).toMatchObject({ title: "New chat", messageCount: 0 });
     expect(instance.list().find((item) => item.id === created.id)?.messageCount).toBe(0);
     await instance.send(created.id, "Review tenant isolation");
     await idle(instance, created.id);
@@ -282,4 +306,114 @@ describe("ConsoleGateway", () => {
     expect(saveSession({ id: "corrupt", savedAt: 1, cwd: "/fixture", preview: "", messageCount: 2, messages: [{ role: "user", content: [{ type: "text", text: "Retained" }] }, { role: "assistant", content: [{ type: "unsupported" }] }] }, homes.at(-1))).toBe(true);
     await expect(instance.resume("corrupt")).rejects.toBeInstanceOf(ConsoleGatewayError);
   });
+});
+
+
+describe("ConsoleGateway isolated execution boundaries", () => {
+  function isolatedGateway() {
+    isolated.profile = "smolvm";
+    const home = mkdtempSync(join(tmpdir(), "0-web-isolated-test-")); homes.push(home);
+    const runtime = { resolvedModel: () => "granted-model", resolvedProvider: () => "chatgpt-codex", modelSelection: () => ({ agentModels: {}, singleModel: true, autoRoute: false }) };
+    const info = { providerId: "chatgpt-codex", providerLabel: "ChatGPT", model: "granted-model", configured: true,
+      connectionIdentity: "fixture-account", diagnostics: { valid: true, reason: null, message: null },
+      agentModels: {}, singleModel: true, autoRoute: false, contextWindowTokens: 100_000 };
+    isolated.runtimeFactory.mockResolvedValue({ runtime, info });
+    let id = 0;
+    const instance = new ConsoleGateway({ homeDir: home, projectPath: "/fixture", createId: () => `vm-${homes.length}-${++id}` });
+    gateways.push(instance);
+    return { instance, info };
+  }
+  function admitFixture() {
+    const cleanup = vi.fn(async () => undefined);
+    const reconfigure = vi.fn();
+    isolated.localFactory.mockImplementation((config: ConsoleGatewaySessionFactoryInput, _db: unknown, options: { onExecution: (execution: unknown) => void }) => {
+      const session = engine(config);
+      session.cleanup = cleanup;
+      session.reconfigureRuntime = reconfigure;
+      options.onExecution({ backend: "smolvm", status: "ready", workspacePath: "/fixture" });
+      return session;
+    });
+    return { cleanup, reconfigure };
+  }
+
+  it("rejects a VM model/account change after history without changing the grant or transcript", async () => {
+    const { instance, info } = isolatedGateway(); const { cleanup, reconfigure } = admitFixture();
+    const created = instance.create({ runtime: { providerId: "chatgpt-codex", model: info.model } });
+    await instance.send(created.id, "Keep the authorized account and model."); await idle(instance, created.id);
+    const before = instance.get(created.id);
+    await expect(instance.configure(created.id, { runtime: { providerId: "openai", model: "different-model" } })).rejects.toThrow(/grant is fixed/);
+    const after = instance.get(created.id);
+    expect(after.messages).toEqual(before.messages);
+    expect(after.runtime).toEqual(before.runtime);
+    expect(after.pendingConfiguration).toBeUndefined();
+    expect(isolated.applyRuntime).not.toHaveBeenCalled();
+    expect(reconfigure).not.toHaveBeenCalled(); expect(cleanup).not.toHaveBeenCalled();
+    expect(isolated.flushPlugins).not.toHaveBeenCalled();
+  });
+
+  it("refuses host workflow execution before initializing a selected VM chat", async () => {
+    const { instance } = isolatedGateway();
+    const created = instance.create();
+    await expect(instance.getExecutionContext(created.id)).rejects.toThrow(/host execution is refused/);
+    expect(isolated.runtimeFactory).not.toHaveBeenCalled();
+    expect(isolated.localFactory).not.toHaveBeenCalled();
+    expect(isolated.pluginManager).not.toHaveBeenCalled();
+    expect(instance.get(created.id).execution).toMatchObject({ backend: "smolvm", status: "pending" });
+  });
+
+  it("retains selected VM failure without retrying a local session or opening host plugins", async () => {
+    const { instance } = isolatedGateway();
+    isolated.localFactory.mockImplementation(() => { throw new Error("Approved VM image unavailable; host fallback is refused."); });
+    const created = instance.create();
+    await expect(instance.send(created.id, "Inspect the approved workspace.")).rejects.toThrow(/host fallback is refused/);
+    expect(isolated.localFactory).toHaveBeenCalledOnce();
+    expect(isolated.pluginManager).not.toHaveBeenCalled();
+    const snapshot = instance.get(created.id);
+    expect(snapshot.execution).toMatchObject({ backend: "smolvm", status: "failed" });
+    expect(snapshot.session.status).toBe("failed");
+    expect(snapshot.messages).toEqual([]);
+  });
+
+  it("refuses an existing VM when the global profile changes instead of keeping stale execution", async () => {
+    const { instance } = isolatedGateway(); admitFixture();
+    const created = instance.create(); await instance.send(created.id, "Initial isolated turn."); await idle(instance, created.id);
+    const before = instance.get(created.id).messages;
+    isolated.profile = "local";
+    await expect(instance.send(created.id, "Run after changing the profile.")).rejects.toThrow(/execution profile/i);
+    expect(instance.get(created.id).messages).toEqual(before);
+    expect(isolated.localFactory).toHaveBeenCalledOnce();
+    expect(isolated.pluginManager).not.toHaveBeenCalled();
+  });
+
+  it("refuses a retained local session after selecting VM execution", async () => {
+    const { instance } = isolatedGateway();
+    isolated.profile = "local";
+    const refresh = vi.fn(async () => undefined); const release = vi.fn();
+    isolated.pluginManager.mockResolvedValue({ refresh, acquire: () => ({ host: undefined, release }) });
+    isolated.localFactory.mockImplementation((config: ConsoleGatewaySessionFactoryInput) => engine(config));
+    const created = instance.create();
+    await instance.send(created.id, "Initial local turn."); await idle(instance, created.id);
+    const before = instance.get(created.id);
+    expect(before.execution).toMatchObject({ backend: "local", status: "ready" });
+    isolated.profile = "smolvm";
+    await expect(instance.send(created.id, "Continue inside the selected VM.")).rejects.toThrow(/execution profile/i);
+    expect(instance.get(created.id).messages).toEqual(before.messages);
+    expect(isolated.localFactory).toHaveBeenCalledOnce();
+    expect(isolated.pluginManager).toHaveBeenCalledOnce();
+    expect(release).not.toHaveBeenCalled();
+    expect(isolated.flushPlugins).toHaveBeenCalledOnce();
+  });
+
+  it("refuses VM worker delivery through the host mailbox without retaining an operator message", async () => {
+    const { instance } = isolatedGateway(); admitFixture();
+    const created = instance.create();
+    await instance.send(created.id, "Start isolated work."); await idle(instance, created.id);
+    const workerId = `${created.id}-sub-child`;
+    eventBus.emit("subagent_lifecycle", { agent_id: workerId, parent_scan_id: created.id, status: "running", task: "Inspect", max_turns: 3 });
+    expect(instance.worker(created.id, workerId).status).toBe("running");
+    expect(() => instance.sendWorker(created.id, workerId, "Guest-only instruction.")).toThrow(/Host mailbox delivery is refused/);
+    expect(instance.worker(created.id, workerId).operatorMessages ?? []).toEqual([]);
+    expect(instance.eventsAfter(created.id).events.some((event) => event.type === "notice" && event.text.includes("Message delivered"))).toBe(false);
+  });
+
 });

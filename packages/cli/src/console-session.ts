@@ -4,6 +4,7 @@ import { osecDB } from "@0/db";
 import { createConversationHistory } from "./conversation-history.js";
 import { withDevEngineUpdates } from "./dev-engine-updates.js";
 import type { JevFeature } from "@0/shared";
+import { createIsolatedConsoleSession, type ConsoleExecutionOptions } from "./console-execution.js";
 
 /** Local frontends share the findings store with history and own its connection. */
 const CONSOLE_JEV_FEATURES = new Set<JevFeature>([
@@ -22,7 +23,11 @@ function consoleJevRuntimeFromEnvironment() {
 export function createLocalConsoleSession(
   config: Omit<ConsoleSessionConfig, "db">,
   dbPath?: string,
+  options: ConsoleExecutionOptions = {},
 ): ConsoleSession {
+  const isolated = createIsolatedConsoleSession(config, { ...options, dbPath });
+  if (isolated) return isolated;
+  options.onExecution?.({ backend: "local", status: "ready", workspacePath: options.workspaceRoot ?? config.workspaceRoot ?? process.cwd() });
   const db = new osecDB(dbPath);
   const scanId = config.scanId ?? `console-${randomUUID()}`;
   let ownsScan = false;

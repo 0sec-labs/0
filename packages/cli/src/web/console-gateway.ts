@@ -13,12 +13,13 @@ import {
   type ConsoleEventsPage, type ConsoleJsonValue, type ConsoleMessageInput, type ConsolePublicExport,
   type ConsolePublicMessage, type ConsoleQueuedMessage, type ConsoleRuntimeSelection, type ConsoleRuntimeSnapshot,
   type ConsoleSavedSession, type ConsoleSessionConfiguration, type ConsoleSessionSnapshot,
-  type ConsoleTodos, type ConsoleTurnOutcome, type ConsoleWorker, type DesktopConsoleAutonomyMode,
+  type ConsoleTodos, type ConsoleExecutionSnapshot, type ConsoleTurnOutcome, type ConsoleWorker, type DesktopConsoleAutonomyMode,
   type DesktopConsoleDecision, type DesktopConsoleDecisionResponse, type DesktopConsoleEvent,
   type DesktopConsoleEventPayload, type DesktopConsoleOperatorAnswer, type DesktopConsoleRole,
   type DesktopConsoleSession, type DesktopConsoleSessionStatus, type DesktopConsoleToolCall, type Finding, type HarnessSnapshot, type HarnessUiEvent,
 } from "@0/shared";
 import { createLocalConsoleSession } from "../console-session.js";
+import { consoleExecutionProfile } from "../console-execution.js";
 import { buildFindingChatPrompt, loadFindingFocus, resolveFindingChatIntent } from "../finding-focus.js";
 import { exportChatConversation } from "../tui/chat-export.js";
 import { getSettings } from "../tui/settings-store.js";
@@ -82,7 +83,7 @@ type ManagedSession = {
   usage: ConsoleSessionSnapshot["usage"]; contextInputTokens?: number;
   lastOutcome: ConsoleTurnOutcome | null; compaction: ConsoleJsonValue | null; harness: HarnessSnapshot | null;
   objective: string; todos: ConsoleTodos | null; focusedFinding?: Finding; stagedPrompt?: string;
-  executionEpoch: number;
+  executionEpoch: number; execution: ConsoleExecutionSnapshot;
 };
 
 function record(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === "object" && !Array.isArray(value); }
@@ -294,12 +295,12 @@ export class ConsoleGateway {
     const managed: ManagedSession = {
       id, createdAt: now, updatedAt: now, target: raw.target === undefined ? "" : text(raw.target, "Target", MAX_TARGET_LENGTH, true),
       role: raw.role === undefined ? "audit" : role(raw.role), autonomyMode: raw.autonomyMode === undefined ? DEFAULT_AUTONOMY_MODE : mode(raw.autonomyMode),
-      title: raw.title === undefined ? "New conversation" : text(raw.title, "Title", 200),
+      title: raw.title === undefined ? "New chat" : text(raw.title, "Title", 200),
       scope: raw.scope === undefined ? undefined : scopePolicy(raw.scope), selection: raw.runtime === undefined ? {} : runtimeSelection(raw.runtime),
       runtime: null, info: null, session: null, initialization: null, status: "ready", sequence: 0, events: [], listeners: new Set(), pending: new Map(),
       abort: null, turn: null, turnOwner: null, initialMessages: [], workers: new Map(), ownedIds: new Set([id]), busUnsubscribe: null,
       queued: [], pauseQueue: false, configuration: null, usage: { inputTokens: 0, outputTokens: 0, costUnavailable: true }, lastOutcome: null, compaction: null, harness: null, objective: "", todos: null,
-      executionEpoch: 0,
+      executionEpoch: 0, execution: { backend: consoleExecutionProfile(this.#options.homeDir), status: "pending", workspacePath: this.#projectPath },
       ...(focusedFinding ? { focusedFinding } : {}), ...(stagedPrompt ? { stagedPrompt } : {}),
     };
     this.#sessions.set(id, managed); this.#emitSession(managed); return this.#summary(managed);
@@ -310,7 +311,7 @@ export class ConsoleGateway {
       session: this.#summary(managed), title: managed.title, cursor: managed.sequence,
       messages: publicMessages(session?.messages ?? managed.initialMessages), events: structuredClone(managed.events),
       pendingDecisions: [...managed.pending.values()].map((pending) => structuredClone(pending.decision)),
-      workers: this.workers(id), queuedMessages: structuredClone(managed.queued), runtime: managed.info ? structuredClone(managed.info) : null,
+      execution: structuredClone(managed.execution), workers: this.workers(id), queuedMessages: structuredClone(managed.queued), runtime: managed.info ? structuredClone(managed.info) : null,
       scope: structuredClone(session?.scope?.raw ?? managed.scope?.raw ?? null), scopeEnforcement: { ...(session?.scopeEnforcement ?? getScopeEnforcementState(this.#projectPath, this.#options.homeDir)) },
       ...(session?.localScopePath ? { localScopePath: session.localScopePath } : {}), usage: { ...managed.usage },
       ...(managed.contextInputTokens !== undefined ? { contextInputTokens: managed.contextInputTokens } : {}),
@@ -414,6 +415,13 @@ export class ConsoleGateway {
   }
   async configure(id: string, value: unknown): Promise<DesktopConsoleSession> {
     const managed = this.#requireOpen(id); const input = configuration(value);
+    if (input.runtime && managed.session && managed.execution.backend === "smolvm") {
+      if (managed.turn || managed.initialization || managed.configuration || managed.pending.size || managed.session.messages.length) {
+        throw new ConsoleGatewayError("The SmolVM model and account grant is fixed for this run. Start a new chat or resume saved work with the new model; this session was not changed.", 409);
+      }
+      await managed.session.cleanup(); managed.session = null; managed.runtime = null; managed.info = null;
+      managed.selection = { ...managed.selection, ...input.runtime };
+    }
     if (input.title !== undefined) managed.title = input.title;
     const execution = { ...input }; delete execution.title;
     if (!Object.keys(execution).length) { this.#emitSession(managed); return this.#summary(managed); }
@@ -462,7 +470,7 @@ export class ConsoleGateway {
       ...(configuration ? { role: configuration.role, runtime: configuration.runtime } : stored.model ? { runtime: { model: stored.model } } : {}),
     };
     const created = this.#createRecord({ ...defaults, ...raw }); const managed = this.#require(created.id);
-    managed.initialMessages = initialMessages; managed.savedId = id; managed.title = raw.title === undefined ? stored.summary ?? stored.preview ?? "Resumed conversation" : managed.title;
+    managed.initialMessages = initialMessages; managed.savedId = id; managed.title = raw.title === undefined ? stored.summary ?? stored.preview ?? "Resumed chat" : managed.title;
     managed.objective = stored.summary ?? "";
     if (stored.consoleState) {
       const state = stored.consoleState;
@@ -515,6 +523,7 @@ export class ConsoleGateway {
   sendWorker(id: string, workerId: string, value: unknown): DesktopConsoleSession {
     const managed = this.#requireOpen(id); const body = text(value, "Worker message", MAX_OPERATOR_TEXT_LENGTH); const worker = managed.workers.get(workerId);
     if (!worker || !Object.hasOwn(ACTIVE_WORKERS, worker.status)) throw new ConsoleGatewayError("Worker is not reachable in this session.", 404);
+    if (managed.execution.backend === "smolvm") throw new ConsoleGatewayError("Worker messages must be delivered inside the isolated workspace. Host mailbox delivery is refused until the guest messaging bridge is available.", 409);
     const settings = getSettings();
     const result = sendOperatorMessage({ selfId: "Main", selfRole: "operator", siblingChannelEnabled: false, operatorChannelEnabled: settings.allowSubagentOperatorMessaging, projectPath: this.#projectPath, homeDir: managed.messagingHome, knownPeerIds: [...managed.workers.values()].filter((worker) => Object.hasOwn(ACTIVE_WORKERS, worker.status)).map((worker) => worker.id) }, workerId, body, this.#now().getTime());
     if (!result.ok) throw new ConsoleGatewayError(result.reason ?? "Worker message could not be delivered.", 409);
@@ -539,6 +548,7 @@ export class ConsoleGateway {
   }
   async getExecutionContext(id: string): Promise<ConsoleExecutionContext> {
     const managed = this.#requireOpen(id); this.#assertIdle(managed);
+    if (managed.execution.backend === "smolvm" || consoleExecutionProfile(this.#options.homeDir) === "smolvm") throw new ConsoleGatewayError("This workflow has not been qualified inside the SmolVM controller. Use the isolated chat; host execution is refused.", 409);
     if (managed.pendingConfiguration || managed.queued.length) throw new ConsoleGatewayError("Apply staged configuration and send or remove queued messages before starting a workflow.", 409);
     for (const worker of managed.workers.values()) if (Object.hasOwn(ACTIVE_WORKERS, worker.status)) throw new ConsoleGatewayError("Drain owned workers before starting a workflow with a stable authorization snapshot.", 409);
     const session = await this.#ensureSession(managed); const runtime = managed.runtime;
@@ -630,7 +640,10 @@ export class ConsoleGateway {
     if (managed.turn || managed.initialization || managed.configuration || managed.pending.size) throw new ConsoleGatewayError("Wait for the current turn and decisions to finish.", 409);
   }
   async #ensureSession(managed: ManagedSession): Promise<ConsoleSession> {
-    if (managed.session) return managed.session;
+    if (managed.session) {
+      if (!this.#options.createSession && managed.execution.backend !== consoleExecutionProfile(this.#options.homeDir)) throw new ConsoleGatewayError("The execution profile changed. Start a new chat or resume its checkpoint with the selected profile before running more work.", 409);
+      return managed.session;
+    }
     if (managed.initialization) return managed.initialization;
     this.#subscribeBus(managed);
     const initialize = (async () => {
@@ -641,7 +654,19 @@ export class ConsoleGateway {
         const callbacks = this.#decisionCallbacks(managed);
         if (this.#options.createSession) {
           session = await this.#options.createSession({ scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, scope: managed.scope, initialMessages: managed.initialMessages, ...callbacks });
+        } else if (consoleExecutionProfile(this.#options.homeDir) === "smolvm") {
+          if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection); managed.runtime = created.runtime; managed.info = created.info; }
+          session = createLocalConsoleSession({
+            runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
+            scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, scope: managed.scope,
+            initialMessages: managed.initialMessages, workspaceRoot: this.#projectPath,
+            allowModelSelfExtension: settings.allowModelSelfExtension,
+            onHarnessUpdate: (harness) => { managed.harness = harness; this.#emit(managed, { type: "harness", harness }); }, ...callbacks,
+          }, this.#options.dbPath, { homeDir: this.#options.homeDir, workspaceRoot: this.#projectPath,
+            onExecution: (execution) => { managed.execution = structuredClone(execution); this.#emitSession(managed); },
+          });
         } else {
+          managed.execution = { backend: "local", status: "ready", workspacePath: this.#projectPath };
           if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection); managed.runtime = created.runtime; managed.info = created.info; }
           const manager = await getWebConsolePluginHostManager(); await manager.refresh(); const lease = manager.acquire();
           let mcpHost: McpHost | undefined;
@@ -659,6 +684,7 @@ export class ConsoleGateway {
           const cleanup = session.cleanup; let cleanupPromise: Promise<void> | undefined;
           session.cleanup = () => cleanupPromise ??= cleanup().finally(() => lease.release());
         }
+        if (this.#options.createSession) managed.execution = { backend: "local", status: "ready", workspacePath: this.#projectPath };
         await session.ready;
         if (managed.status === "closed") { await session.cleanup(); throw new ConsoleGatewayError("Console session is closed.", 410); }
         managed.session = session;
@@ -668,6 +694,7 @@ export class ConsoleGateway {
       } catch (error) {
         await session?.cleanup().catch(() => undefined);
         if (!managed.session) { managed.runtime = null; managed.info = null; }
+        managed.execution = { ...managed.execution, status: "failed", message: errorMessage(error) };
         if (managed.status !== "closed") { managed.status = "failed"; this.#emit(managed, { type: "error", message: errorMessage(error) }); this.#emitSession(managed); }
         throw error instanceof ConsoleGatewayError ? error : new ConsoleGatewayError(errorMessage(error), 409);
       }
@@ -703,7 +730,7 @@ export class ConsoleGateway {
     if ((managed.status as DesktopConsoleSessionStatus) === "closed") throw new ConsoleGatewayError("Console session is closed.", 410);
     const abort = new AbortController(); managed.abort = abort; managed.pauseQueue = false; managed.turnOwner = `turn:${this.#createId()}`; managed.lastOutcome = null;
     managed.stagedPrompt = undefined;
-    const generateTitle = managed.title === "New conversation" || managed.title === "New session";
+    const generateTitle = managed.title === "New chat" || managed.title === "New conversation" || managed.title === "New session";
     if (generateTitle) {
       managed.title = body.replace(/\s+/g, " ").trim().slice(0, 80);
     }
@@ -741,7 +768,7 @@ export class ConsoleGateway {
         this.#denyDecisions(managed, managed.turnOwner ?? undefined); managed.abort = null; managed.turnOwner = null; managed.turn = null;
         if (managed.status !== "closed") {
           if (managed.status !== "failed") managed.status = "ready";
-          try { if (managed.pendingConfiguration) await this.#applyPendingConfiguration(managed); if (!this.#options.createSession) await flushWebConsolePlugins(); }
+          try { if (managed.pendingConfiguration) await this.#applyPendingConfiguration(managed); if (!this.#options.createSession && managed.execution.backend === "local") await flushWebConsolePlugins(); }
           catch (error) { this.#emit(managed, { type: "error", message: errorMessage(error) }); }
           this.#save(managed); this.#refreshStatus(managed);
           await this.#processIdleWork(managed);
@@ -770,7 +797,7 @@ export class ConsoleGateway {
   }
   #cancelTurn(managed: ManagedSession): void {
     managed.abort?.abort(); this.#denyDecisions(managed, managed.turnOwner ?? undefined);
-    this.#emit(managed, { type: "notice", text: "Cancellation requested. An executing tool finishes at its next safe boundary; the conversation and authorization remain intact." }); this.#refreshStatus(managed);
+    this.#emit(managed, { type: "notice", text: managed.execution.backend === "smolvm" ? "Cancellation requested. The VM run is being stopped; results and teardown status will be retained." : "Cancellation requested. An executing tool finishes at its next safe boundary; the conversation and authorization remain intact." }); this.#refreshStatus(managed);
   }
   async #applyPendingConfiguration(managed: ManagedSession): Promise<void> {
     if (managed.configuration) return managed.configuration;
@@ -909,7 +936,7 @@ export class ConsoleGateway {
   }
   #withCallId(call: ToolCall): DesktopConsoleToolCall { let id = this.#callIds.get(call); if (!id) { id = this.#createId(); this.#callIds.set(call, id); } return { id, name: call.name, arguments: json(call.arguments) }; }
   #summary(managed: ManagedSession): DesktopConsoleSession {
-    return { id: managed.id, ...(managed.savedId ? { savedId: managed.savedId } : {}), target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: managed.session?.autonomyMode ?? managed.autonomyMode, scopeConfigured: Boolean(managed.session?.scope ?? managed.scope), localScopeConfigured: Boolean(managed.session?.localScopePath), status: managed.status, createdAt: managed.createdAt, updatedAt: managed.updatedAt, title: managed.title, messageCount: (managed.session?.messages ?? managed.initialMessages).length + managed.queued.length, ...(managed.info ? { runtime: structuredClone(managed.info) } : {}), ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}) };
+    return { id: managed.id, ...(managed.savedId ? { savedId: managed.savedId } : {}), target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: managed.session?.autonomyMode ?? managed.autonomyMode, scopeConfigured: Boolean(managed.session?.scope ?? managed.scope), localScopeConfigured: Boolean(managed.session?.localScopePath), status: managed.status, createdAt: managed.createdAt, updatedAt: managed.updatedAt, title: managed.title, messageCount: (managed.session?.messages ?? managed.initialMessages).length + managed.queued.length, execution: structuredClone(managed.execution), ...(managed.info ? { runtime: structuredClone(managed.info) } : {}), ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}) };
   }
   #emitSession(managed: ManagedSession): void { this.#emit(managed, { type: "session", session: this.#summary(managed) }); }
   #emit(managed: ManagedSession, payload: DesktopConsoleEventPayload): void {

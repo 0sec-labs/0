@@ -87,3 +87,22 @@ export function serializeWorkbenchConfig(config: Omit<ConsoleSessionConfig, "run
   }
   return result;
 }
+
+/** Interpret only known path-valued CLI options; operator prose is never rewritten. */
+export function mapWorkbenchCliArguments(args: readonly string[], workspace: string): string[] {
+  const targetFlags = new Set(["--target", "-t", "--repo"]);
+  const pathFlags = new Set(["--scope", "--db-path", "--workspace", "--workspace-root", "--cwd", "--output", "-o", "--config"]);
+  const result = [...args];
+  for (let index = 0; index < result.length; index++) {
+    const argument = result[index]!; const equal = argument.indexOf("=");
+    const flag = equal < 0 ? argument : argument.slice(0, equal);
+    if (!targetFlags.has(flag) && !pathFlags.has(flag)) continue;
+    const valueIndex = equal < 0 ? index + 1 : index;
+    const value = equal < 0 ? result[valueIndex] : argument.slice(equal + 1);
+    if (value === undefined) throw new Error(`Missing workbench argument for ${flag}`);
+    const mapped = targetFlags.has(flag) ? mapWorkbenchTarget(value, workspace) : isAbsolute(value) ? guestWorkspacePath(value, workspace) : value;
+    result[valueIndex] = equal < 0 ? mapped : `${flag}=${mapped}`;
+    if (equal < 0) index++;
+  }
+  return result;
+}

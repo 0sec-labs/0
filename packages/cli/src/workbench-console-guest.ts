@@ -6,6 +6,7 @@ import { createConsoleRuntime, isAdmittedSmolvmWorkbench, ScopePolicy, withScope
 import type { ConsoleSession, ConsoleSessionConfig, ScopeEnforcementState } from "@0/core";
 import { osecDB } from "@0/db";
 import { findingFromRow } from "./tui/findings-data.js";
+import { normalizeSettings } from "./tui/settings.js";
 import { createLocalConsoleSession } from "./console-session.js";
 import { encodeWorkbenchFrame, WorkbenchFrameReader, WORKBENCH_MAX_PENDING, WORKBENCH_FRAME_BYTES } from "./workbench-console-protocol.js";
 import type { WorkbenchFrame } from "./workbench-console-protocol.js";
@@ -77,6 +78,11 @@ async function runGuest(cli: boolean): Promise<number> {
       try {
         if (frame.type === "init") {
           if (initialized) throw new Error("Workbench already initialized"); initialized = true;
+          if (frame.guestSettings) { const settings = normalizeSettings(frame.guestSettings);
+            if (settings.executionProfile !== "local" || settings.updatePolicy !== "off") throw new Error("Invalid guest preferences");
+            await mkdir("/home/zero/.0", { recursive: true, mode: 0o700 });
+            await writeFile("/home/zero/.0/tui-settings.json", JSON.stringify(settings), { mode: 0o600, flag: "wx" });
+          }
           const selection = frame.selection as Record<string, unknown>;
           if (!selection || selection.provider !== "chatgpt-codex" || typeof selection.model !== "string") throw new Error("Unsupported workbench provider");
           process.env.ZERO_PROVIDER = "chatgpt-codex"; process.env.ZERO_WORKBENCH_PROVIDER_MODEL = selection.model;
