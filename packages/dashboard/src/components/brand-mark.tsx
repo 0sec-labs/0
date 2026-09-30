@@ -4,9 +4,11 @@ import { cn } from "@/lib/utils";
 
 export function BrandMark({
   compact = false,
+  showVersion = false,
   className,
 }: {
   compact?: boolean;
+  showVersion?: boolean;
   className?: string;
 }) {
   if (compact) {
@@ -43,6 +45,7 @@ export function BrandMark({
         height={24}
         className="hidden h-auto w-48 max-w-full dark:block"
       />
+      {showVersion && <span aria-label={`Version ${__ZERO_VERSION__}`} className="font-mono text-[10px] leading-4 tracking-wider text-muted-foreground/60">v{__ZERO_VERSION__}</span>}
     </div>
   );
 }
