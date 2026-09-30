@@ -49,6 +49,27 @@ function readResponsesCachedTokens(usage: Record<string, unknown>): { cachedInpu
   const cached = Number(details?.cached_tokens ?? 0);
   return Number.isFinite(cached) && cached > 0 ? { cachedInputTokens: cached } : {};
 }
+function readChatUsage(raw: unknown): RuntimeResult["usage"] {
+  if (!raw || typeof raw !== "object") return undefined;
+  const usage = raw as Record<string, unknown>;
+  if (usage.prompt_tokens === undefined && usage.completion_tokens === undefined) return undefined;
+  return {
+    inputTokens: Number(usage.prompt_tokens ?? 0), outputTokens: Number(usage.completion_tokens ?? 0),
+    ...readResponsesCachedTokens({ input_tokens_details: usage.prompt_tokens_details }),
+  };
+}
+
+function readGoogleUsage(raw: unknown): RuntimeResult["usage"] {
+  if (!raw || typeof raw !== "object") return undefined;
+  const usage = raw as Record<string, unknown>;
+  if (usage.promptTokenCount === undefined && usage.candidatesTokenCount === undefined) return undefined;
+  const cached = Number(usage.cachedContentTokenCount ?? 0);
+  return {
+    inputTokens: Number(usage.promptTokenCount ?? 0),
+    outputTokens: Number(usage.candidatesTokenCount ?? 0) + Number(usage.thoughtsTokenCount ?? 0),
+    ...(cached > 0 ? { cachedInputTokens: cached } : {}),
+  };
+}
 
 /** Safely parse JSON tool arguments; returns empty object on malformed input. */
 function safeParseJson(raw: string | null | undefined): Record<string, unknown> {
@@ -2840,6 +2861,10 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     return this.model;
   }
 
+  resolvedProvider(): string {
+    return this.provider;
+  }
+
   /** Price discovered IDs on their actual route without changing the wire model. */
   resolvedPricingModel(): string {
     if (this.provider === "chatgpt-codex" || this.provider === "copilot" || this.provider === "google") return this.model;
@@ -3534,6 +3559,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     context?: RuntimeContext,
   ): Promise<RuntimeResult> {
     const start = Date.now();
+    if (context?.signal?.aborted) {
+      return { output: "", exitCode: null, timedOut: false, durationMs: 0, error: "API execution cancelled." };
+    }
 
     // chatgpt-codex and google (Code Assist) authenticate via an OAuth bearer
     // refreshed on demand, not a Platform API key field — skip the missing-key
@@ -3555,10 +3583,12 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       () => controller.abort(),
       this.config.timeout || 120_000,
     );
+    const abort = composeCallAbort(controller.signal, context?.signal);
 
     try {
       let res: Response | null;
       do {
+        abort.throwIfCancelled();
 
         if (this.isOpenAICompat && this.wireApi === "chat_completions") {
           // OpenRouter / OpenAI / Azure chat completions format
@@ -3578,7 +3608,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
                 ? { reasoning_effort: this.reasoningEffort }
                 : {}),
             }),
-            controller.signal,
+            abort.signal, abort,
           );
         } else if (this.isOpenAICompat && this.wireApi === "responses") {
           // Azure Responses API format
@@ -3601,7 +3631,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
               input,
               ...(isCodex ? { store: false } : { max_output_tokens: NATIVE_COMPLETION_TOKEN_LIMIT }),
             }),
-            controller.signal,
+            abort.signal, abort,
           );
         } else if (this.isGeminiCodeAssist) {
           // Same inner request as the Google generateContent wire, wrapped in
@@ -3612,7 +3642,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
             generationConfig: { maxOutputTokens: NATIVE_COMPLETION_TOKEN_LIMIT },
           };
           const geminiBody = await this.wrapGeminiCodeAssistBody(request);
-          res = await this.postWithRetry(() => JSON.stringify(geminiBody), controller.signal);
+          res = await this.postWithRetry(() => JSON.stringify(geminiBody), abort.signal, abort);
         } else if (this.isGoogleWire) {
           res = await this.postWithRetry(
             () => JSON.stringify({
@@ -3622,7 +3652,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
               contents: [{ role: "user", parts: [{ text: prompt }] }],
               generationConfig: { maxOutputTokens: NATIVE_COMPLETION_TOKEN_LIMIT },
             }),
-            controller.signal,
+            abort.signal, abort,
           );
         } else if (this.isAnthropicWire) {
           // Anthropic Messages API format (also serves the z-ai/GLM and
@@ -3635,14 +3665,13 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
               ...(systemPrompt ? { system: systemPrompt } : {}),
               messages: [{ role: "user", content: prompt }],
             }),
-            controller.signal,
+            abort.signal, abort,
           );
         } else {
           throw new Error(`execute: provider ${this.provider} is not mapped to a wire`);
         }
       } while (!res);
 
-      clearTimeout(timer);
 
       const body = await res.text();
 
@@ -3703,14 +3732,11 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       if (this.isAnthropicWire) {
         usage = readCacheUsage(json.usage);
       } else if ((this.isGoogleWire || this.isGeminiCodeAssist) && json.usageMetadata) {
-        usage = {
-          inputTokens: json.usageMetadata.promptTokenCount ?? 0,
-          outputTokens: json.usageMetadata.candidatesTokenCount ?? 0,
-        };
+        usage = readGoogleUsage(json.usageMetadata);
       } else if (this.isOpenAICompat && json.usage) {
         usage = this.wireApi === "chat_completions"
-          ? { inputTokens: json.usage.prompt_tokens ?? 0, outputTokens: json.usage.completion_tokens ?? 0 }
-          : { inputTokens: json.usage.input_tokens ?? 0, outputTokens: json.usage.output_tokens ?? 0 };
+          ? readChatUsage(json.usage)
+          : { inputTokens: json.usage.input_tokens ?? 0, outputTokens: json.usage.output_tokens ?? 0, ...readResponsesCachedTokens(json.usage) };
       }
 
       return {
@@ -3722,6 +3748,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       };
     } catch (err) {
       clearTimeout(timer);
+      if (abort.operatorAborted()) {
+        return { output: "", exitCode: null, timedOut: false, durationMs: Date.now() - start, error: "API execution cancelled." };
+      }
       if (err instanceof QuotaExhaustedError) {
         // Plan-quota exhaustion: fail fast with the distinct, greppable
         // message (carries usage_limit_reached + resets_at) — never retried.
@@ -3744,6 +3773,10 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           ? `${this.providerLabel} API request timed out`
           : `${this.providerLabel} API error: ${msg}`,
       };
+    }
+    finally {
+      clearTimeout(timer);
+      abort.dispose();
     }
   }
 
@@ -4369,10 +4402,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
               : "end_turn";
 
         if (json.usage) {
-          usage = {
-            inputTokens: json.usage.prompt_tokens ?? 0,
-            outputTokens: json.usage.completion_tokens ?? 0,
-          };
+          usage = readChatUsage(json.usage);
         }
       } else if (this.isGoogleWire || this.isGeminiCodeAssist) {
         const candidate = json.candidates?.[0];
@@ -4416,10 +4446,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
             ? "max_tokens"
             : "end_turn";
         if (json.usageMetadata) {
-          usage = {
-            inputTokens: json.usageMetadata.promptTokenCount ?? 0,
-            outputTokens: json.usageMetadata.candidatesTokenCount ?? 0,
-          };
+          usage = readGoogleUsage(json.usageMetadata);
         }
       } else {
         // Anthropic format (also serves the z-ai/GLM and kimi/Moonshot

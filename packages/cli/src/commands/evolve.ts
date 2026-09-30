@@ -28,6 +28,7 @@ import type { Command } from "commander";
 import chalk from "chalk";
 import type {
   EvolutionConfig,
+  EvolutionCampaignLedger,
   EvolutionRegistry,
   EvolutionRunResult,
   EvolutionExecution,
@@ -39,6 +40,8 @@ import {
   executeEvolutionVersion,
   approveEvolutionCandidate,
   loadEvolutionRegistry,
+  loadEvolutionCampaign,
+  reconcileCampaignDispatch,
   captureObservation,
   approveObservation,
   listObservations,
@@ -285,7 +288,20 @@ export function registerEvolveCommand(program: Command): void {
         }
 
         const registry = loadEvolutionRegistry(storePath);
-        formatRegistryStatus(registry, Boolean(opts.json), (l) => console.log(l));
+        let campaign: EvolutionCampaignLedger | undefined;
+        try { campaign = loadEvolutionCampaign(storePath); }
+        catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+        if (opts.json) console.log(JSON.stringify({ ...registry, ...(campaign ? { campaign } : {}) }, null, 2));
+        else {
+          formatRegistryStatus(registry, false, (line) => console.log(line));
+          if (campaign) {
+            console.log(`  Campaign: ${campaign.status}; model $${campaign.cumulativeModelCostUsd.toFixed(4)}, evaluation $${campaign.cumulativeEvaluationCostUsd.toFixed(4)}`);
+            for (const entry of campaign.reservations.filter((reservation) => reservation.state !== "completed")) {
+              console.log(`  Unresolved dispatch: ${entry.id} (${entry.kind}, ${entry.state})`);
+            }
+            if (campaign.status === "blocked" || campaign.status === "exhausted") console.log(`  ${campaign.resumeReason}`);
+          }
+        }
         process.exitCode = EXIT_OK;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -294,6 +310,27 @@ export function registerEvolveCommand(program: Command): void {
         } else {
           console.error(chalk.red(`Status error: ${message}`));
         }
+        process.exitCode = EXIT_USER_ERROR;
+      }
+    });
+
+  evolve
+    .command("reconcile")
+    .description("Reconcile an interrupted dispatch using observed cost and an immutable receipt digest")
+    .requiredOption("--store <path>", "Path to evolution store directory")
+    .requiredOption("--dispatch <id>", "Unresolved dispatch reservation ID")
+    .requiredOption("--cost-usd <amount>", "Actual provider/execution charge", Number)
+    .requiredOption("--receipt-digest <sha256>", "Immutable observed cost receipt digest")
+    .option("--json", "Output structured campaign ledger")
+    .action((opts: { store: string; dispatch: string; costUsd: number; receiptDigest: string; json?: boolean }) => {
+      try {
+        const ledger = reconcileCampaignDispatch(resolve(opts.store), opts.dispatch, opts.costUsd, opts.receiptDigest);
+        console.log(opts.json ? JSON.stringify(ledger) : `Reconciled ${opts.dispatch}; campaign ${ledger.status}`);
+        process.exitCode = EXIT_OK;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (opts.json) console.log(JSON.stringify({ error: message }));
+        else console.error(chalk.red(`Reconciliation failed: ${message}`));
         process.exitCode = EXIT_USER_ERROR;
       }
     });

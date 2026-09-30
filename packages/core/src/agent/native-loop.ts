@@ -52,6 +52,7 @@ import { SECURITY_RULES, selectRules, buildRuleInjection, type EngagementPhase, 
 import { formatJitSkillsInstruction, getSkillById } from "./skills/index.js";
 import { estimateCost } from "./cost.js";
 import type { ScanCostLedger } from "./cost-ledger.js";
+import { addRuntimeUsage } from "./cost-ledger.js";
 import { eventBus } from "../events/bus.js";
 import { diag } from "../diagnostics/channel.js";
 import {
@@ -248,6 +249,8 @@ export function toolFailureText(toolName: string, result: ToolResult): string {
 // ── Native Agent Loop Config ──
 
 export interface NativeAgentConfig {
+  /** Preserve exact target identity guards when delegating from the console. */
+  consoleSession?: boolean;
   /**
    * Agent-to-agent messaging identity and policy, propagated to the tool
    * context so the child messaging tools know who they are and whom they
@@ -316,6 +319,7 @@ export interface NativeAgentConfig {
    * independently. Omit to keep the legacy per-session accounting.
    */
   costLedger?: ScanCostLedger;
+  requirePricedUsage?: boolean;
   /** Root policy inherited by descendants without accumulating ancestor tasks.
    * Defaults to systemPrompt for a non-delegated root.
    */
@@ -464,7 +468,7 @@ export interface NativeAgentState {
    * full price — without it, a well-cached run would report roughly 10x its
    * actual input spend.
    */
-  totalUsage: { inputTokens: number; outputTokens: number; cachedInputTokens: number };
+  totalUsage: { inputTokens: number; outputTokens: number; cachedInputTokens: number; cacheWriteTokens?: number };
   /** Set to true when the loop stopped early because no save_finding was called by the halfway point. */
   earlyStopNoProgress: boolean;
   /** Brief description of tools/approaches used before the early stop (for retry context). */
@@ -713,6 +717,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     target: config.target,
     scanId: config.scanId,
     role: config.role,
+    consoleSession: config.consoleSession,
     diffScopedReview: config.role === "review" && config.singleAgent === true,
     reviewDiffBase: config.reviewDiffBase,
     delegationSystemPrompt: config.delegationSystemPrompt ?? config.systemPrompt,
@@ -751,6 +756,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // the SAME scan-wide ledger and ceiling as this session (closing the
     // off-ledger gap where subagent spend escaped the ceiling entirely).
     costLedger: config.costLedger,
+    requirePricedUsage: config.requirePricedUsage,
     costCeilingUsd: config.costCeilingUsd,
     get costModel() { return runtime.resolvedModel?.() || config.costModel; },
     // Tool-health aggregator (0#tool-reliability). Shared across the scan so
@@ -1088,11 +1094,17 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       { onUsage: (usage) => { streamedUsage = usage; } }, signal,
     );
     const usage = result.usage ?? streamedUsage;
+    if (config.requirePricedUsage && !usage) {
+      config.costLedger?.markUnpricedUsage();
+      throw new Error("Executable model response did not report usage; cannot continue a cost-bounded scan.");
+    }
     if (usage) {
       state.totalUsage.inputTokens += usage.inputTokens;
       state.totalUsage.outputTokens += usage.outputTokens;
       state.totalUsage.cachedInputTokens += usage.cachedInputTokens ?? 0;
-      config.costLedger?.add(usage, pricingModel());
+      if (usage.cacheWriteTokens !== undefined) state.totalUsage.cacheWriteTokens = (state.totalUsage.cacheWriteTokens ?? 0) + usage.cacheWriteTokens;
+      if (!result.usage) result.usage = usage;
+      addRuntimeUsage(config.costLedger, result, pricingModel());
       state.estimatedCostUsd = estimateCost(state.totalUsage, pricingModel());
       onEvent?.("usage", {
         turn: state.turnCount, inputTokens: state.totalUsage.inputTokens,
@@ -1853,7 +1865,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   }
   // One gate for planner/continuation/maintenance spend and tool-turn exits.
   const enforceCostCeiling = (): boolean => {
-    if (config.costCeilingUsd === undefined || !(config.costCeilingUsd > 0)) return false;
+    if (config.costCeilingUsd === undefined) return false;
     const runningCost = config.costLedger?.totalCostUsd() ?? estimateCost(state.totalUsage, pricingModel());
     if (runningCost < config.costCeilingUsd) return false;
     state.costCeilingExceeded = true;
@@ -2150,11 +2162,12 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       state.totalUsage.inputTokens += result.usage.inputTokens;
       state.totalUsage.outputTokens += result.usage.outputTokens;
       state.totalUsage.cachedInputTokens += result.usage.cachedInputTokens ?? 0;
+      if (result.usage.cacheWriteTokens !== undefined) state.totalUsage.cacheWriteTokens = (state.totalUsage.cacheWriteTokens ?? 0) + result.usage.cacheWriteTokens;
       // Fold this turn into the shared per-scan ledger (when threaded) so
       // sibling agent sessions see this spend in their own ceiling checks.
       // The session's pricing model keys the ledger's per-model buckets,
       // which the scan_completed cost_breakdown is derived from.
-      config.costLedger?.add(result.usage, pricingModel());
+      addRuntimeUsage(config.costLedger, result, pricingModel());
       state.estimatedCostUsd = estimateCost(state.totalUsage, pricingModel());
       if (
         streamedUsageInputTokens !== result.usage.inputTokens
@@ -2183,6 +2196,12 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         token_output: state.totalUsage.outputTokens,
         turn: state.turnCount,
       });
+    }
+    if (config.requirePricedUsage && !result.usage) {
+      config.costLedger?.markUnpricedUsage();
+      state.errorExit = { error: result.error ?? "Runtime did not report usage; cannot continue a cost-bounded scan.", turn: state.turnCount };
+      state.summary = `Error: ${state.errorExit.error}`;
+      break;
     }
 
 

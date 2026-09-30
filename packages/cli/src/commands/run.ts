@@ -5,9 +5,9 @@ import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
-import { VERSION } from "@0/shared";
-import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig, ScanReport, SeedFinding } from "@0/shared";
-import type { CostBreakdownEntry } from "@0/core";
+import { VERSION, validateScanPlan } from "@0/shared";
+import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig, ScanReport, SeedFinding, ScanPlan, ScanAttemptOutcome } from "@0/shared";
+import type { CostBreakdownEntry, ScanCostLedger, NativeRuntime, RuntimeConfig } from "@0/core";
 import { formatAuditReport, formatReviewReport, formatReport, generatePdfReport } from "../formatters/index.js";
 import { buildShareUrl, checkRuntimeAvailability, getRuntimeAvailability } from "../utils.js";
 import { formatCrossValidatedLeads, type CrossValidatedLeadsSummary } from "./cross-validated-leads.js";
@@ -57,6 +57,21 @@ export interface RunOptions {
   format: OutputFormat;
   runtime: RuntimeMode;
   mode?: ScanMode;
+  /** Explicit guided setup contract; omitted preserves the legacy single run. */
+  plan?: ScanPlan;
+  agentModels?: Readonly<Record<string, string>>;
+  autoRoute?: boolean;
+  singleModel?: boolean;
+  nativeRuntime?: NativeRuntime;
+  provider?: RuntimeConfig["provider"];
+  signal?: AbortSignal;
+  costLedger?: ScanCostLedger;
+  suppressOutput?: boolean;
+  suppressUi?: boolean;
+  /** Source review execution strategy. The primary control plane uses
+   * `lenses`, which is the validated self-evolving source-review path.
+   */
+  reviewStrategy?: "pipeline" | "lenses";
   timeout: number;
   verbose: boolean;
   dbPath?: string;
@@ -230,34 +245,44 @@ interface ResultLinePayload {
     info: number;
   };
   error?: string;
+  plannedRuns?: number;
+  completedRuns?: number;
+  attempts?: ScanAttemptOutcome[];
 }
 
 function toScanReport(report: any): ScanReport {
+  const execution = {
+    plan: report.plan, plannedRuns: report.plannedRuns, completedRuns: report.completedRuns, attempts: report.attempts,
+    estimatedCostUsd: report.estimatedCostUsd, usage: report.usage, exitReason: report.exitReason,
+    costCeilingExceeded: report.costCeilingExceeded, executionSuccessful: report.executionSuccessful ?? (report.researchFailed ? false : undefined),
+    error: report.error,
+    reviewChecks: report.reviewChecks,
+  };
   if (report.targetType === "npm-package" || report.targetType === "pypi-package" || report.targetType === "cargo-package" || report.targetType === "oci-image") {
     return {
       target: `${report.package}@${report.version}`,
-      scanDepth: "deep",
-      startedAt: report.startedAt,
-      completedAt: report.completedAt,
-      durationMs: report.durationMs,
-      summary: report.summary,
-      findings: report.findings,
-      warnings: [],
-    };
-  }
-
-  if (report.targetType === "source-code") {
-    return {
-      target: report.repo,
-      scanDepth: "deep",
+      scanDepth: report.plan?.depth ?? "deep",
       startedAt: report.startedAt,
       completedAt: report.completedAt,
       durationMs: report.durationMs,
       summary: report.summary,
       findings: report.findings,
       warnings: report.warnings ?? [],
-      executionSuccessful: report.researchFailed ? false : undefined,
-      reviewChecks: report.reviewChecks,
+      ...execution,
+    };
+  }
+
+  if (report.targetType === "source-code") {
+    return {
+      target: report.repo,
+      scanDepth: report.plan?.depth ?? "deep",
+      startedAt: report.startedAt,
+      completedAt: report.completedAt,
+      durationMs: report.durationMs,
+      summary: report.summary,
+      findings: report.findings,
+      warnings: report.warnings ?? [],
+      ...execution,
     };
   }
 
@@ -376,9 +401,16 @@ function printCrossValidatedLeads(summary: CrossValidatedLeadsSummary): void {
 }
 
 export async function runUnified(opts: RunOptions): Promise<void> {
-  const { target, depth, format, runtime, timeout } = opts;
+  if (opts.plan) validateScanPlan(opts.plan);
+  const { target, format, runtime, timeout } = opts;
+  const depth = opts.plan?.depth ?? opts.depth;
+  const planCostCap = opts.plan?.costCapUsd;
+  const effectiveCostCeilingUsd =
+    planCostCap === undefined || opts.costCeilingUsd === undefined
+      ? opts.costCeilingUsd ?? planCostCap
+      : Math.min(opts.costCeilingUsd, planCostCap);
+  const effectiveTimeout = Math.min(opts.plan?.timeCapMs ?? timeout, timeout);
   const core = await loadCoreModule();
-
   // ── Journal-based resume (0#374) ───────────────────────────────
   let effectiveResumeScanId = opts.resumeScanId;
 
@@ -449,7 +481,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
     runtime === "codex" &&
     (!!process.env["ZERO_CHATGPT_ACCESS_TOKEN"]?.trim() ||
       !!process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"]?.trim());
-  if (runtime !== "api" && runtime !== "auto" && !directCodexProviderConfigured) {
+  if (!opts.nativeRuntime && runtime !== "api" && runtime !== "auto" && !directCodexProviderConfigured) {
     const rt = core.createRuntime({ type: runtime, timeout });
     const available = await rt.isAvailable();
     if (!available) {
@@ -465,7 +497,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
   let eventHandler: (event: any) => void = () => {};
   let getPendingUserMessages: (() => string[]) | undefined;
 
-  if (format === "terminal" && process.stdout.isTTY && process.stdin.isTTY) {
+  if (format === "terminal" && process.stdout.isTTY && process.stdin.isTTY && !opts.suppressUi) {
     const mode = opts.targetType === "npm-package" || opts.targetType === "pypi-package" || opts.targetType === "cargo-package" || opts.targetType === "oci-image" ? "audit"
       : opts.targetType === "source-code" ? "review"
       : "scan";
@@ -510,16 +542,19 @@ export async function runUnified(opts: RunOptions): Promise<void> {
           format,
           runtime,
           mode: opts.mode ?? "deep",
-          timeout,
+          timeout: effectiveTimeout,
           verbose: opts.verbose,
           apiKey: opts.apiKey,
           model: opts.model,
+          ...(opts.plan ? { plan: opts.plan } : {}),
+          ...(opts.costLedger ? { costLedger: opts.costLedger } : {}),
+          agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel, signal: opts.signal,
           repoPath: opts.repoPath,
           auth: opts.auth,
           apiSpecPath: opts.apiSpecPath,
           race: opts.race,
           egats: opts.egats,
-          costCeilingUsd: opts.costCeilingUsd,
+          costCeilingUsd: effectiveCostCeilingUsd,
           scopeFile: opts.scopeFile,
           rateLimit: opts.rateLimit,
           allowScanners: opts.allowScanners,
@@ -534,15 +569,17 @@ export async function runUnified(opts: RunOptions): Promise<void> {
           httpAuditKillAfterSec: opts.httpAuditKillAfterSec,
         },
         dbPath: opts.dbPath,
+        nativeRuntime: opts.nativeRuntime,
+        provider: opts.provider,
         onEvent: eventHandler,
         getPendingUserMessages,
-        resumeScanId: opts.resumeScanId,
+        resumeScanId: effectiveResumeScanId,
       });
     } else {
       report = await core.runPipeline({
         target,
         targetType: opts.targetType,
-        resumeScanId: opts.resumeScanId,
+        resumeScanId: effectiveResumeScanId,
         diffBase: opts.diffBase,
         changedOnly: opts.changedOnly,
         priorFindings: opts.priorFindings,
@@ -553,9 +590,19 @@ export async function runUnified(opts: RunOptions): Promise<void> {
         dbPath: opts.dbPath,
         apiKey: opts.apiKey,
         model: opts.model,
-        timeout,
+        timeout: effectiveTimeout,
         packageVersion: opts.packageVersion,
-        costCeilingUsd: opts.costCeilingUsd,
+        costCeilingUsd: effectiveCostCeilingUsd,
+        ...(opts.plan ? { plan: opts.plan } : {}),
+        ...(opts.costLedger ? { costLedger: opts.costLedger } : {}),
+        agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel, signal: opts.signal,
+        nativeRuntime: opts.nativeRuntime, provider: opts.provider,
+        repoPath: opts.repoPath, auth: opts.auth, apiSpecPath: opts.apiSpecPath, scopeFile: opts.scopeFile,
+        rateLimit: opts.rateLimit, allowScanners: opts.allowScanners, attributionHeaders: opts.attributionHeaders,
+        attributionUaToken: opts.attributionUaToken, engagementProfile: opts.engagementProfile, wafEvasion: opts.wafEvasion,
+        dispatchMode: opts.dispatchMode, httpAuditAllowedHosts: opts.httpAuditAllowedHosts,
+        httpAuditAllowedPaths: opts.httpAuditAllowedPaths, httpAuditRateLimitRps: opts.httpAuditRateLimitRps,
+        httpAuditKillAfterSec: opts.httpAuditKillAfterSec, race: opts.race, egats: opts.egats,
         reviewProfile: opts.reviewProfile,
         reviewPackageEcosystem: opts.reviewPackageEcosystem,
         subsystem: opts.subsystem,
@@ -574,7 +621,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
     if (inkUI) {
       inkUI.setReport(canonicalReport);
       await inkUI.waitForExit();
-    } else {
+    } else if (!opts.suppressOutput) {
       if (format === "html" || format === "pdf") {
         const extension = format === "pdf" ? "pdf" : "html";
         const filePath = opts.reportPath
@@ -616,10 +663,10 @@ export async function runUnified(opts: RunOptions): Promise<void> {
       console.log("");
     }
 
-    if (crossValidatedLeads) {
+    if (!opts.suppressOutput && crossValidatedLeads) {
       printCrossValidatedLeads(crossValidatedLeads);
     }
-    if (scanCompletedCost) {
+    if (!opts.suppressOutput && scanCompletedCost) {
       printCostSummary(scanCompletedCost);
     }
     unsubscribeCost();
@@ -695,16 +742,18 @@ export async function runUnified(opts: RunOptions): Promise<void> {
     // (CI, schedulers, cloud watchers) can distinguish a clean budget abort
     // from a normal completion or failure.
     if (canonicalReport.costCeilingExceeded && exitCode === 0) {
-      console.error(
-        chalk.yellow(
-          `Scan aborted: cost ceiling exceeded. ${canonicalReport.summary.totalFindings} partial finding(s) preserved.`,
-        ),
-      );
+      if (!opts.suppressOutput) {
+        console.error(
+          chalk.yellow(
+            `Scan aborted: cost ceiling exceeded. ${canonicalReport.summary.totalFindings} partial finding(s) preserved.`,
+          ),
+        );
+      }
       exitCode = 4;
     }
 
-    if (reportAny.researchFailed && exitCode === 0) {
-      console.error(chalk.red("Review completed with partial static results because AI analysis failed."));
+    if ((reportAny.researchFailed || reportAny.executionSuccessful === false) && exitCode === 0) {
+      if (!opts.suppressOutput) console.error(chalk.red("Review completed with partial static results because AI analysis failed."));
       exitCode = 2;
     }
 
@@ -712,29 +761,28 @@ export async function runUnified(opts: RunOptions): Promise<void> {
       exitCode = 1;
     }
 
-    emitResultLine({
-      ok: exitCode === 0,
-      exitCode,
-      exit_reason:
-        exitCode === 4
-          ? "cost_ceiling_exceeded"
-          : exitCode === 2
-            ? "error"
-            : exitCode === 1
-              ? "findings"
-              : "completed",
-      target,
-      targetType: getTargetType(reportAny, opts),
-      runtime,
-      format,
-      cost_usd: estimatedCostUsd,
-      token_input: usage?.inputTokens,
-      token_output: usage?.outputTokens,
-      finding_count: canonicalReport.summary.totalFindings,
-      estimatedCostUsd,
-      usage,
-      summary: canonicalReport.summary,
-    });
+    if (!opts.suppressOutput) {
+      emitResultLine({
+        ok: exitCode === 0,
+        exitCode,
+        exit_reason: reportAny.exitReason && reportAny.exitReason !== "completed" ? reportAny.exitReason
+          : exitCode === 4 ? "cost_ceiling_exceeded"
+          : exitCode === 2 ? "error"
+          : exitCode === 1 ? "findings" : "completed",
+        target,
+        targetType: getTargetType(reportAny, opts),
+        runtime,
+        format,
+        cost_usd: estimatedCostUsd,
+        token_input: usage?.inputTokens,
+        token_output: usage?.outputTokens,
+        finding_count: canonicalReport.summary.totalFindings,
+        estimatedCostUsd,
+        usage,
+        summary: canonicalReport.summary,
+        plannedRuns: reportAny.plannedRuns, completedRuns: reportAny.completedRuns, attempts: reportAny.attempts, error: reportAny.error,
+      });
+    }
 
     if (exitCode !== 0 && !inkUI) process.exit(exitCode);
   } catch (err) {
@@ -752,17 +800,19 @@ export async function runUnified(opts: RunOptions): Promise<void> {
       await inkUI.waitForExit();
       return;
     }
-    console.error(chalk.red(message));
-    emitResultLine({
-      ok: false,
-      exitCode: 2,
-      exit_reason: "error",
-      target,
-      targetType: opts.targetType,
-      runtime,
-      format,
-      error: message,
-    });
+    if (!opts.suppressOutput) console.error(chalk.red(message));
+    if (!opts.suppressOutput) {
+      emitResultLine({
+        ok: false,
+        exitCode: 2,
+        exit_reason: "error",
+        target,
+        targetType: opts.targetType,
+        runtime,
+        format,
+        error: message,
+      });
+    }
     process.exit(2);
   }
 }

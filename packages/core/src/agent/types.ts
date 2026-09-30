@@ -1,4 +1,4 @@
-import type { Finding, AttackResult, TargetInfo, AuthConfig, NamedIdentity } from "@0/shared";
+import type { Finding, AttackResult, TargetInfo, AuthConfig, NamedIdentity, ScanCostLedgerLike } from "@0/shared";
 import type { ScopePolicy } from "../scope/scope.js";
 import type { ScopeEnforcementState } from "../scope/activation.js";
 import type { RateLimiter } from "../scope/rate-limit.js";
@@ -358,6 +358,9 @@ export interface AgentConfig {
   costCeilingUsd?: number;
   /** Pricing model id for `estimateCost`; defaults to the shared default rates. */
   costModel?: string;
+  costLedger?: ScanCostLedgerLike;
+  signal?: AbortSignal;
+  requirePricedUsage?: boolean;
   target: string;
   scanId: string;
   scopePath?: string;
@@ -467,6 +470,9 @@ export interface AgentState {
   summary: string;
   /** True when the loop stopped because the cost ceiling was reached (vs `done` or max turns). */
   costCeilingExceeded?: boolean;
+  totalUsage?: { inputTokens: number; outputTokens: number; cachedInputTokens?: number };
+  estimatedCostUsd?: number;
+  errorExit?: { error: string; turn: number };
 }
 
 // ── Tool Execution Context ──
@@ -516,6 +522,12 @@ export interface ToolContext {
     paths: string[];
     tags?: string[];
   }) => { id: string };
+  /**
+   * True only for the interactive console executor. This explicit marker keeps
+   * console-only source-acquisition identity checks out of native scan callers,
+   * whose acquisition contract is unchanged.
+   */
+  consoleSession?: boolean;
   /**
    * Current console autonomy mode, re-read by the scoped-source-audit gate on
    * every `execute()` so switching mode mid-session takes effect immediately
@@ -714,6 +726,7 @@ export interface ToolContext {
    * against the shared {@link costLedger}.
    */
   costCeilingUsd?: number;
+  requirePricedUsage?: boolean;
   /**
    * Model id used to price token usage against the ceiling, mirrored from
    * `NativeAgentConfig.costModel`. Passed through to spawned subagents so

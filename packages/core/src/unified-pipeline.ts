@@ -19,6 +19,8 @@ import type {
   SemgrepFinding,
   ScanConfig,
   ReviewCheckResult,
+  ScanPlan,
+  ScanPlanExecution,
 } from "@0/shared";
 import type { InferSelectModel } from "drizzle-orm";
 import { restoreFindingReviewFields } from "@0/db";
@@ -57,7 +59,7 @@ import { collectScopeFiles, countScopeFilesUpTo } from "./source-files.js";
 import { features as agentFeatures } from "./agent/features.js";
 import { relative as pathRelative } from "node:path";
 import { detectAvailableRuntimes } from "./runtime/registry.js";
-import type { RuntimeType } from "./runtime/types.js";
+import type { RuntimeType, RuntimeConfig, NativeRuntime } from "./runtime/types.js";
 import { LlmApiRuntime } from "./runtime/llm-api.js";
 import type { ApiRuntimeDiagnostics } from "./runtime/llm-api.js";
 import {
@@ -71,6 +73,8 @@ import {
   resolveLocalTargetPath,
 } from "./path-resolution.js";
 import { eventBus } from "./events/bus.js";
+import { executeScanPlan, ScanBudgetError, scanExecutionTimeout } from "./scan-plan.js";
+import { agenticScan } from "./agentic-scanner.js";
 
 /**
  * Default ceiling on how many source files a `review` (source-code) target may
@@ -133,17 +137,30 @@ export { mapWithConcurrency };
 
 // ── Public types ──
 
-export interface PipelineOptions {
+export interface PipelineOptions extends Omit<ScanConfig, "costLedger"> {
   target: string;
   targetType?: "npm-package" | "pypi-package" | "cargo-package" | "oci-image" | "source-code" | "url" | "web-app";
   depth: ScanDepth;
   format: OutputFormat;
   runtime?: RuntimeMode;
   mode?: ScanMode;
+  /** Optional bounded guided plan. */
+  plan?: ScanPlan;
+  /** Shared ledger for a multi-run plan. */
+  costLedger?: ScanCostLedger;
+  agentModels?: Readonly<Record<string, string>>;
+  autoRoute?: boolean;
+  singleModel?: boolean;
+  nativeRuntime?: NativeRuntime;
+  provider?: RuntimeConfig["provider"];
+  signal?: AbortSignal;
+  /** A parent plan emits one terminal event after every attempt settles. */
+  emitTerminalEvent?: boolean;
   resumeScanId?: string;
   diffBase?: string;
   changedOnly?: boolean;
   onEvent?: (event: { type: string; stage?: string; message: string; data?: unknown }) => void;
+  getPendingUserMessages?: () => string[];
   dbPath?: string;
   /** Stable local execution id. Fresh runs allocate one; cloud runs use scan id. */
   runId?: string;
@@ -242,8 +259,7 @@ export interface PipelineOptions {
   npmDynamicRunner?: NpmPackageRunner;
 }
 
-
-export interface PipelineReport {
+export interface PipelineReport extends ScanPlanExecution {
   target: string;
   targetType: string;
   startedAt: string;
@@ -273,7 +289,7 @@ export interface PipelineReport {
    */
   costCeilingExceeded?: boolean;
   /** Terminal reason; mirrors the agentic-scanner report contract. */
-  exitReason?: "completed" | "cost_ceiling_exceeded";
+  exitReason?: "completed" | "failed" | "cost_ceiling_exceeded" | "time_cap_exceeded" | "cancelled" | "partial";
   // Extras for backwards compat
   package?: string;
   version?: string;
@@ -925,7 +941,7 @@ function listChangedFiles(scopePath: string, diffBase: string): string[] {
     ["diff", "--name-only", "--diff-filter=ACMRD", `${diffBase}...HEAD`],
     {
       cwd: scopePath,
-      timeout: 30_000,
+      timeout: scanExecutionTimeout(30_000),
       stdio: "pipe",
       encoding: "utf-8",
     },
@@ -1207,11 +1223,60 @@ export async function runNpmDynamicDiscoveryStage(args: {
  * (Claude Code CLI, Codex, API with native tool_use, legacy fallback).
  */
 export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport> {
+  const targetType = opts.targetType ?? detectTargetType(opts.target);
+  if (targetType === "url" || targetType === "web-app") {
+    const report = await agenticScan({
+      config: {
+        target: opts.target, depth: opts.depth, format: opts.format, runtime: opts.runtime, mode: opts.mode,
+        plan: opts.plan, costLedger: opts.costLedger, signal: opts.signal, costCeilingUsd: opts.costCeilingUsd,
+        model: opts.model, apiKey: opts.apiKey, timeout: opts.timeout, scanTimeout: opts.scanTimeout,
+        agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel,
+        repoPath: opts.repoPath, auth: opts.auth, identities: opts.identities, apiSpecPath: opts.apiSpecPath,
+        scopeFile: opts.scopeFile, rateLimit: opts.rateLimit, allowScanners: opts.allowScanners,
+        attributionHeaders: opts.attributionHeaders, attributionUaToken: opts.attributionUaToken,
+        engagementProfile: opts.engagementProfile, wafEvasion: opts.wafEvasion, dispatchMode: opts.dispatchMode,
+        httpAuditAllowedHosts: opts.httpAuditAllowedHosts, httpAuditAllowedPaths: opts.httpAuditAllowedPaths,
+        httpAuditRateLimitRps: opts.httpAuditRateLimitRps, httpAuditKillAfterSec: opts.httpAuditKillAfterSec,
+        race: opts.race, egats: opts.egats, maxConcurrency: opts.maxConcurrency, maxAttackTurns: opts.maxAttackTurns,
+      },
+      nativeRuntime: opts.nativeRuntime, provider: opts.provider, dbPath: opts.dbPath, runId: opts.runId,
+      resumeScanId: opts.resumeScanId, onEvent: opts.onEvent as ScanListener,
+      emitTerminalEvent: opts.emitTerminalEvent,
+      getPendingUserMessages: opts.getPendingUserMessages,
+    });
+    return { ...report, targetType };
+  }
+  if (!opts.plan) return runPipelineSingle(opts);
+  return executeScanPlan({
+    plan: opts.plan,
+    ledger: opts.costLedger,
+    signal: opts.signal,
+    costCeilingUsd: opts.costCeilingUsd,
+    emitTerminalEvent: opts.emitTerminalEvent,
+    emptyReport: (): PipelineReport => ({
+      target: opts.target, targetType: opts.targetType ?? detectTargetType(opts.target),
+      startedAt: new Date().toISOString(), completedAt: new Date().toISOString(), durationMs: 0,
+      summary: { totalAttacks: 0, totalFindings: 0, critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+      findings: [], warnings: [],
+    }),
+    dispatch: ({ runIndex, plan, ledger, signal, costCeilingUsd }) => runPipelineSingle({
+      ...opts, plan, depth: plan.depth, costLedger: ledger, signal, costCeilingUsd,
+      timeout: Math.min(opts.timeout ?? plan.timeCapMs, plan.timeCapMs),
+      resumeScanId: runIndex === 1 ? opts.resumeScanId : undefined,
+      runId: runIndex === 1 && opts.resumeScanId ? opts.resumeScanId : `${opts.runId ?? randomUUID()}-run-${runIndex}`,
+      emitTerminalEvent: false,
+    }),
+  });
+}
+
+async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport> {
   const emit: ScanListener = (opts.onEvent as ScanListener) ?? (() => {});
   const startTime = Date.now();
   const warnings: Array<{ stage: string; message: string }> = [];
   let researchFailed = false;
   let emittedScanCompleted = false;
+  let findings: Finding[] = [];
+  let executionError: string | undefined;
 
   if (opts.runId && opts.resumeScanId && opts.runId !== opts.resumeScanId) {
     throw new Error("0 pipeline runId must match resumeScanId when resuming.");
@@ -1221,7 +1286,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     exitReason: "completed" | "failed" | "cost_exceeded",
     payload: Record<string, unknown> = {},
   ): void => {
-    if (emittedScanCompleted) return;
+    if (emittedScanCompleted || opts.emitTerminalEvent === false) return;
     emittedScanCompleted = true;
     // Include the engine-resolved model, cross-session turns and tool-call
     // totals, and the ledger's actual cost and per-model breakdown. Omit
@@ -1262,12 +1327,17 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
   // rather than a fabricated estimate.
   const usageTotals = { inputTokens: 0, outputTokens: 0, turns: 0 };
   const recordUsage = (
-    r?: { usage?: { inputTokens: number; outputTokens: number }; turns?: number } | null,
+    r?: { usage?: { inputTokens: number; outputTokens: number }; turns?: number; executionSuccessful?: boolean; error?: string } | null,
   ): void => {
     if (!r) return;
     usageTotals.inputTokens += r.usage?.inputTokens ?? 0;
     usageTotals.outputTokens += r.usage?.outputTokens ?? 0;
     usageTotals.turns += r.turns ?? 0;
+    if (r.executionSuccessful === false) {
+      researchFailed = true;
+      executionError ??= r.error ?? "Agent did not complete its planned investigation.";
+      warnings.push({ stage: openPhase?.name ?? "research", message: r.error ?? "Agent did not complete its planned investigation." });
+    }
   };
 
   // ── Per-scan metrics tracked off the bus ──
@@ -1290,7 +1360,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
   // not each session (previously every session got the full ceiling, so a
   // $3-capped 0review scan could really spend research($3) + N×verify($3);
   // prod review scans landed at $4.99 / $6.36).
-  const costLedger = new ScanCostLedger();
+  const costLedger = opts.costLedger?.fork() ?? new ScanCostLedger();
   // Engine-resolved model id, stamped on scan_completed and used for pricing.
   // Assigned once the API runtime is probed below; stays undefined when
   // nothing resolved a model (for example, a CLI runtime with no model pick).
@@ -1308,6 +1378,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
         index: number;
         startedAt: number;
         usageAtStart: { inputTokens: number; outputTokens: number; turns: number };
+        costAtStart: number;
       }
     | null = null;
   const finishPhase = (): void => {
@@ -1319,13 +1390,15 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       input_tokens: usageTotals.inputTokens - openPhase.usageAtStart.inputTokens,
       output_tokens: usageTotals.outputTokens - openPhase.usageAtStart.outputTokens,
       turns: usageTotals.turns - openPhase.usageAtStart.turns,
+      cost_usd: costLedger.runCostUsd() - openPhase.costAtStart,
     });
     openPhase = null;
   };
   const startPhase = (name: string): void => {
     finishPhase();
+    if (name !== "report") opts.signal?.throwIfAborted();
     const index = phaseIndex++;
-    openPhase = { name, index, startedAt: Date.now(), usageAtStart: { ...usageTotals } };
+    openPhase = { name, index, startedAt: Date.now(), usageAtStart: { ...usageTotals }, costAtStart: costLedger.runCostUsd() };
     eventBus.emit("phase_started", { name, index });
   };
 
@@ -1455,7 +1528,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     diffChangedFiles = listChangedFiles(prepared.scopePath, opts.diffBase);
     diffPatch = execFileSync("git", [
       "diff", "--no-ext-diff", "--no-textconv", "--unified=3", `${opts.diffBase}...HEAD`,
-    ], { cwd: prepared.scopePath, timeout: 30_000, encoding: "utf-8", maxBuffer: 256 * 1024 });
+    ], { cwd: prepared.scopePath, timeout: scanExecutionTimeout(30_000), encoding: "utf-8", maxBuffer: 256 * 1024 });
     if (!diffPatch.trim()) throw new Error("No reviewable diff found; refusing whole-repository fallback.");
     // A diff is input data, not an unlimited prompt budget. Keep the initial
     // review request below the provider context ceiling; the agent can fetch
@@ -1511,6 +1584,12 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     format: opts.format,
     runtime: opts.runtime ?? "api",
     mode: opts.mode ?? "deep",
+    ...(opts.plan ? { plan: opts.plan } : {}),
+    costLedger,
+    agentModels: opts.agentModels,
+    autoRoute: opts.autoRoute,
+    singleModel: opts.singleModel,
+    signal: opts.signal,
     // Thread the resolved package identity through to the publishability /
     // novelty gate (issue #851). Without this the gate defaulted ecosystem to
     // npm and dropped the version, so it could only do package-level dedup. We
@@ -1813,6 +1892,10 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
           timeout: opts.timeout ?? 120_000,
           apiKey: opts.apiKey,
           model: opts.model,
+          provider: opts.provider,
+          agentModels: opts.agentModels,
+          autoRoute: opts.autoRoute,
+          singleModel: opts.singleModel,
         })
       : null;
     const apiDiagnostics = apiRuntimeForDiagnostics
@@ -1823,19 +1906,17 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
           providerLabel: "OpenAI",
           reason: "missing_key",
         } satisfies ApiRuntimeDiagnostics;
-    assertApiRuntimeSelection(opts.runtime, apiDiagnostics);
+    if (!opts.nativeRuntime) assertApiRuntimeSelection(opts.runtime, apiDiagnostics);
     // The model id this run actually drives: the operator's explicit pick
     // wins; otherwise the probed API runtime's resolved (provider-default)
     // model — but only when that runtime is really configured, so a scan
     // that ran on a CLI runtime never gets a guessed model stamped.
     resolvedModel =
-      opts.model ??
-      (apiDiagnostics.valid
-        ? apiRuntimeForDiagnostics?.resolvedModel()
-        : undefined);
-    const hasApiKey = apiDiagnostics.valid;
+      opts.nativeRuntime?.resolvedModel?.() ?? opts.model ??
+      (apiDiagnostics.valid ? apiRuntimeForDiagnostics?.resolvedModel() : undefined);
+    const hasApiKey = !!opts.nativeRuntime || apiDiagnostics.valid;
     const hasCliRuntime = availableRuntimes.size > 0;
-    const canUseAiRuntime = hasRequestedAnalysisRuntime(
+    const canUseAiRuntime = !!opts.nativeRuntime || hasRequestedAnalysisRuntime(
       opts.runtime,
       hasApiKey,
       availableRuntimes,
@@ -1855,6 +1936,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
           ? `Requested runtime '${opts.runtime}' is not available. AI analysis skipped.`
           : "No API key or CLI runtime available. AI analysis skipped. Set OPENROUTER_API_KEY, ANTHROPIC_API_KEY, AZURE_OPENAI_API_KEY, OPENAI_API_KEY, or Z_AI_API_KEY.";
       warnings.push({ stage: "research", message: skipMessage });
+      if (opts.plan) researchFailed = true;
       emit({ type: "stage:end", stage: "research", message: "Skipped — no compatible AI runtime" });
       emit({ type: "stage:end", stage: "verify", message: "Skipped" });
       logPipelineEvent("research", "stage_skipped", { reason: "no_runtime", requestedRuntime: opts.runtime ?? "auto" });
@@ -1862,7 +1944,6 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       // Skip research + verify, go straight to report
     }
 
-    let findings: Finding[] = [];
 
     if (canUseAiRuntime) {
     const existingResearchSession = opts.resumeScanId ? db?.getSession(persistedScanId, prepared.resolvedType === "source-code" ? "review" : "audit") : null;
@@ -2027,6 +2108,8 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
                 model: resolvedModel,
                 costCeilingUsd: opts.costCeilingUsd,
                 costLedger,
+                signal: opts.signal, nativeRuntime: opts.nativeRuntime, provider: opts.provider,
+                agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel, plan: opts.plan,
               },
               db,
               emit: researchEmit,
@@ -2074,6 +2157,8 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
                     model: resolvedModel,
                     costCeilingUsd: opts.costCeilingUsd,
                     costLedger,
+                    signal: opts.signal, nativeRuntime: opts.nativeRuntime, provider: opts.provider,
+                    agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel, plan: opts.plan,
                   },
                   db,
                   emit: researchEmit,
@@ -2123,6 +2208,8 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
               model: resolvedModel,
               costCeilingUsd: opts.costCeilingUsd,
               costLedger,
+              signal: opts.signal, nativeRuntime: opts.nativeRuntime, provider: opts.provider,
+              agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel, plan: opts.plan,
             },
             db,
             emit: researchEmit,
@@ -2161,15 +2248,6 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
         warnings.push({ stage: "research", message: `AI analysis failed: ${msg}` });
         logPipelineEvent("research", "warning", { message: `AI analysis failed: ${msg}` });
       }
-    } else {
-      // URL / web-app targets — not supported yet in unified pipeline
-      warnings.push({
-        stage: "research",
-        message: `Target type "${prepared.resolvedType}" is not yet supported in the unified pipeline. Use '0 scan' for URL/web-app targets.`,
-      });
-      logPipelineEvent("research", "warning", {
-        message: `Target type "${prepared.resolvedType}" is not yet supported in the unified pipeline.`,
-      });
     }
 
     emit({
@@ -2390,6 +2468,8 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
                   model: resolvedModel,
                   costCeilingUsd: opts.costCeilingUsd,
                   costLedger,
+                  signal: opts.signal, nativeRuntime: opts.nativeRuntime, provider: opts.provider,
+                  agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel, plan: opts.plan,
                 },
                 db: null,
                 emit: verifyEmit,
@@ -2411,12 +2491,12 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
               // cost_exceeded; an honest `inconclusive` holds it for review
               // instead (isDisclosureWorthy keeps non-rejected verdicts),
               // matching the verifier-error path (#599).
-              if (agentResult.costCeilingExceeded) {
+              if (agentResult.costCeilingExceeded || agentResult.executionSuccessful === false) {
                 const verdict: VerifyVerdict = {
                   verdict: "inconclusive",
                   confidence: finding.confidence ?? 0,
-                  reasoning: "Verification truncated: scan cost ceiling reached.",
-                  signals: [{ name: "blind_verify", passed: false, reasoning: "cost ceiling reached mid-verify" }],
+                  reasoning: agentResult.costCeilingExceeded ? "Verification truncated: scan cost ceiling reached." : "Verification did not complete; finding remains inconclusive.",
+                  signals: [{ name: "blind_verify", passed: false, reasoning: "verification interrupted before a verdict" }],
                   evidenceKind: evidenceKindForFinding(finding),
                 };
                 return { finding, verdict, verifiedFinding: null };
@@ -2447,6 +2527,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
               return { finding, verdict, verifiedFinding: verifiedFindings[0] ?? null };
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err);
+              if (opts.plan) researchFailed = true;
               warnings.push({ stage: "verify", message: `Verification failed for "${finding.title}": ${msg}` });
               // A verifier that threw did NOT decide the finding is a false
               // positive — it failed to decide. Emit `inconclusive` so the
@@ -2626,7 +2707,11 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
       findings: confirmedFindings,
       warnings,
       ...(reviewCheckResults ? { reviewChecks: reviewCheckResults } : {}),
+      estimatedCostUsd: costLedger.hasUnpricedUsage() ? undefined : costLedger.runCostUsd(),
+      usage: costLedger.tokenUsage(),
       ...(researchFailed ? { researchFailed: true } : {}),
+      ...(researchFailed ? { executionSuccessful: false, exitReason: "failed" as const } : {}),
+      error: executionError,
       // Backwards-compat extras
       ...(costCeilingExceeded
         ? { costCeilingExceeded: true, exitReason: "cost_ceiling_exceeded" as const }
@@ -2666,8 +2751,30 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     db?.failScan(persistedScanId, msg);
     logPipelineEvent("report", "stage_error", { error: msg });
     emitPipelineScanCompleted("failed", { summary: msg });
+    if (opts.plan || opts.signal?.aborted || err instanceof ScanBudgetError) {
+      startPhase("report");
+      const partialFindings = findings.filter(finding => finding.status !== "false-positive");
+      const costExceeded = scanCostCeilingTripped();
+      const reason = costExceeded ? "cost_ceiling_exceeded" : opts.signal?.reason instanceof ScanBudgetError
+        ? opts.signal.reason.status : err instanceof ScanBudgetError ? err.status : opts.signal?.aborted ? "cancelled" : "failed";
+      const partial: PipelineReport = {
+        target: opts.target, targetType: prepared.resolvedType,
+        startedAt: new Date(startTime).toISOString(), completedAt: new Date().toISOString(), durationMs: Date.now() - startTime,
+        findings: partialFindings, summary: buildSummary(partialFindings, usageTotals.turns),
+        warnings: [...warnings, { stage: "report", message: `Scan interrupted: ${msg}. Findings are partial.` }],
+        executionSuccessful: false, researchFailed: reason === "failed", exitReason: reason,
+        error: msg,
+        costCeilingExceeded: costExceeded, estimatedCostUsd: costLedger.hasUnpricedUsage() ? undefined : costLedger.runCostUsd(),
+        usage: costLedger.tokenUsage(),
+        ...(prepared.resolvedType === "source-code" ? { repo: opts.target } : {}),
+      };
+      finishPhase();
+      runState?.writeReport(partial);
+      return partial;
+    }
     throw err;
   } finally {
+    finishPhase();
     unsubscribeMetrics();
     db?.close();
     // Clean up temporary directories

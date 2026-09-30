@@ -25,18 +25,58 @@
 import { estimateCost, modelProvider, splitCost } from "./cost.js";
 import type { CostBreakdownEntry } from "../events/bus.js";
 import type { TokenUsageForPricing } from "@0/shared";
+import type { NativeRuntimeResult, RuntimeResult } from "../runtime/types.js";
+
+const recordedResults = new WeakMap<NativeRuntimeResult | RuntimeResult, ScanCostLedger>();
+
+/** A runtime wrapper and its agent loop may observe the same billed response. */
+export function addRuntimeUsage(ledger: ScanCostLedger | undefined, result: NativeRuntimeResult | RuntimeResult, model?: string): void {
+  if (!ledger || recordedResults.get(result) === ledger || (!result.usage && !result.usageByModel?.length)) return;
+  if (result.usageByModel?.length) {
+    for (const bucket of result.usageByModel) ledger.add(bucket.usage, bucket.model);
+  } else if (result.usage) ledger.add(result.usage, model);
+  recordedResults.set(result, ledger);
+}
 
 interface UsageBucket {
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens: number;
+  cacheWriteTokens: number;
 }
 
 export class ScanCostLedger {
   private inputTokens = 0;
   private outputTokens = 0;
   private cachedInputTokens = 0;
+  private cacheWriteTokens = 0;
   private readonly perModel = new Map<string, UsageBucket>();
+  private readonly listeners = new Set<() => void>();
+  private unpricedUsage = false;
+
+  markUnpricedUsage(): void {
+    if (this.unpricedUsage) return;
+    this.unpricedUsage = true;
+    this.parent?.markUnpricedUsage();
+    for (const listener of this.listeners) listener();
+  }
+
+  hasUnpricedUsage(): boolean { return this.unpricedUsage; }
+
+  constructor(private readonly parent?: ScanCostLedger) {}
+
+  /** Isolated attribution, with the same root budget for every concurrent run. */
+  fork(): ScanCostLedger { return new ScanCostLedger(this); }
+
+  onSpend(listener: () => void): () => void {
+    const root = this.parent ?? this;
+    if (root !== this) return root.onSpend(listener);
+    this.listeners.add(listener);
+    return () => { this.listeners.delete(listener); };
+  }
+
+  /** Spend attributable to this run, not its siblings or earlier attempts. */
+  runCostUsd(): number { return this.costBreakdown()?.costUsd ?? 0; }
 
   /**
    * Fold one turn's token usage into the cumulative total. `model` (the
@@ -47,14 +87,18 @@ export class ScanCostLedger {
     this.inputTokens += usage.inputTokens;
     this.outputTokens += usage.outputTokens;
     this.cachedInputTokens += usage.cachedInputTokens ?? 0;
+    this.cacheWriteTokens += usage.cacheWriteTokens ?? 0;
     const key = model ?? "unknown";
     const bucket =
       this.perModel.get(key) ??
-      { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
+      { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, cacheWriteTokens: 0 };
     bucket.inputTokens += usage.inputTokens;
     bucket.outputTokens += usage.outputTokens;
     bucket.cachedInputTokens += usage.cachedInputTokens ?? 0;
+    bucket.cacheWriteTokens += usage.cacheWriteTokens ?? 0;
     this.perModel.set(key, bucket);
+    this.parent?.add(usage, model);
+    for (const listener of this.listeners) listener();
   }
 
   /** Cumulative estimated cost (USD) across every contributing session. */
@@ -64,13 +108,14 @@ export class ScanCostLedger {
         inputTokens: this.inputTokens,
         outputTokens: this.outputTokens,
         cachedInputTokens: this.cachedInputTokens,
+        cacheWriteTokens: this.cacheWriteTokens,
       },
       model,
     );
   }
   /** Exact cumulative spend derived from the per-model buckets. */
   totalCostUsd(): number {
-    return this.costBreakdown()?.costUsd ?? 0;
+    return this.parent?.totalCostUsd() ?? this.runCostUsd();
   }
 
   /** Cumulative usage for the final cloud cost_update event. */
@@ -79,6 +124,7 @@ export class ScanCostLedger {
       inputTokens: this.inputTokens,
       outputTokens: this.outputTokens,
       cachedInputTokens: this.cachedInputTokens,
+      ...(this.cacheWriteTokens > 0 ? { cacheWriteTokens: this.cacheWriteTokens } : {}),
     };
   }
 
@@ -109,7 +155,8 @@ export class ScanCostLedger {
       if (
         usage.inputTokens === 0 &&
         usage.outputTokens === 0 &&
-        usage.cachedInputTokens === 0
+        usage.cachedInputTokens === 0 &&
+        usage.cacheWriteTokens === 0
       ) {
         continue;
       }

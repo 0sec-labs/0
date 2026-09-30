@@ -35,8 +35,8 @@ import type { RuntimeMode, PipelineEvent } from "@0/shared";
 import { createScanMemoryStore } from "./triage/memories.js";
 import { features } from "./agent/features.js";
 import { diag } from "./diagnostics/channel.js";
-import type { ScanEvent, ScanListener } from "./scanner.js";
-import type { NativeRuntime, NativeMessage, NativeContentBlock } from "./runtime/types.js";
+import type { ScanListener } from "./scanner.js";
+import type { NativeRuntime, NativeMessage, NativeContentBlock, RuntimeConfig } from "./runtime/types.js";
 import type { ToolCall } from "./agent/types.js";
 import { isMcpTarget } from "./http.js";
 import { discoverMcpTarget, runMcpSecurityChecks } from "./mcp.js";
@@ -47,6 +47,8 @@ import { createScanContext, finalize } from "./context.js";
 import { generateRemediation } from "./remediation.js";
 import { attachRemediation, countFlagsInFindings } from "./agentic/report-enrichment.js";
 import { getOrCreateRateLimiter, resolveEngagementForConfig, attachEngagementPosture, resolveEnforcementForConfig, attachEnforcementSummary, resolveScopeForConfig, buildAttributionForConfig, cacheScopePolicy } from "./agentic/scan-config.js";
+import { ScanCostLedger } from "./agent/cost-ledger.js";
+import { executeScanPlan, budgetNativeRuntime, ScanBudgetError } from "./scan-plan.js";
 
 
 import { parseApiSpec } from "./api-spec.js";
@@ -141,6 +143,8 @@ export type { AgentOutput } from "./agentic/phase-runners.js";
 export interface AgenticScanOptions {
   config: ScanConfig;
   dbPath?: string;
+  nativeRuntime?: NativeRuntime;
+  provider?: RuntimeConfig["provider"];
   /**
    * Stable execution identity. Cloud workers supply their orchestrator scan id;
    * local callers may provide one to make run-local state resumable.
@@ -285,7 +289,7 @@ async function detectScanMode(config: ScanConfig): Promise<ScanConfig> {
         headers: {
           Accept: "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
         },
-        signal: controller.signal,
+        signal: config.signal ? AbortSignal.any([controller.signal, config.signal]) : controller.signal,
       });
       limiter.noteResponse(config.target, response);
       if (response.status >= 300 && response.status < 400) {
@@ -560,7 +564,28 @@ function parsePackageTarget(
 }
 
 export function agenticScan(opts: AgenticScanOptions): Promise<ScanReport> {
-  return withScopeEnforcement(getScopeEnforcementState(), () => agenticScanInternal(opts));
+  return withScopeEnforcement(getScopeEnforcementState(), () => {
+    const plan = opts.config.plan;
+    if (!plan) return agenticScanInternal(opts);
+    return executeScanPlan({
+      plan, ledger: opts.config.costLedger as ScanCostLedger | undefined,
+      signal: opts.config.signal, costCeilingUsd: opts.config.costCeilingUsd,
+      emitTerminalEvent: opts.emitTerminalEvent,
+      emptyReport: (): ScanReport => ({
+        target: opts.config.target, scanDepth: plan.depth,
+        startedAt: new Date().toISOString(), completedAt: new Date().toISOString(), durationMs: 0,
+        summary: { totalAttacks: 0, totalFindings: 0, critical: 0, high: 0, medium: 0, low: 0, info: 0 },
+        findings: [], warnings: [],
+      }),
+      dispatch: ({ runIndex, plan: runPlan, ledger, signal, costCeilingUsd }) => agenticScanInternal({
+        ...opts, emitTerminalEvent: false,
+        resumeScanId: runIndex === 1 ? opts.resumeScanId : undefined,
+        runId: runIndex === 1 && opts.resumeScanId ? opts.resumeScanId : opts.runId ? `${opts.runId}-run-${runIndex}` : undefined,
+        config: { ...opts.config, plan: runPlan, depth: runPlan.depth, costLedger: ledger, signal, costCeilingUsd,
+          timeout: Math.min(opts.config.timeout ?? runPlan.timeCapMs, runPlan.timeCapMs) },
+      }),
+    });
+  });
 }
 
 async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport> {
@@ -597,8 +622,31 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
     }
     return runCraftScanStage(opts.config, opts.craftTarget, opts.craft, emit);
   }
-
   let config = normalizeScanConfig(opts.config);
+  const scanCostLedger = config.costLedger
+    ? (config.costLedger as ScanCostLedger).fork()
+    : new ScanCostLedger();
+  config = { ...config, costLedger: scanCostLedger };
+  let measuredTurns = 0;
+  let phaseIndex = 0;
+  let openPhase: { name: string; index: number; startedAt: number; inputTokens: number; outputTokens: number; costUsd: number; turns: number } | undefined;
+  const finishPhase = () => {
+    if (!openPhase) return;
+    const usage = scanCostLedger.tokenUsage();
+    eventBus.emit("phase_completed", {
+      name: openPhase.name, index: openPhase.index, duration_ms: Date.now() - openPhase.startedAt,
+      input_tokens: usage.inputTokens - openPhase.inputTokens, output_tokens: usage.outputTokens - openPhase.outputTokens,
+      cost_usd: scanCostLedger.runCostUsd() - openPhase.costUsd, turns: measuredTurns - openPhase.turns,
+    });
+    openPhase = undefined;
+  };
+  const startPhase = (name: string) => {
+    finishPhase();
+    if (name !== "report") config.signal?.throwIfAborted();
+    const usage = scanCostLedger.tokenUsage();
+    openPhase = { name, index: phaseIndex++, startedAt: Date.now(), ...usage, costUsd: scanCostLedger.runCostUsd(), turns: measuredTurns };
+    eventBus.emit("phase_started", { name, index: openPhase.index });
+  };
 
   // Programmatic scope ingestion (0#215). Load once at the top and
   // pass the parsed `ScopePolicy` to every agent config below. The CLI
@@ -681,7 +729,14 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
       );
     }
   })();
-  const { db, storage, writeReport } = runState;
+  const { db, storage } = runState;
+  const writeReport = (report: ScanReport) => {
+    report.estimatedCostUsd = scanCostLedger.hasUnpricedUsage() ? undefined : scanCostLedger.runCostUsd();
+    report.usage = scanCostLedger.tokenUsage();
+    if (report.benchmarkMeta) report.benchmarkMeta.estimatedCostUsd = report.estimatedCostUsd;
+    if (report.benchmarkMeta) report.benchmarkMeta.model = scanCostLedger.soleModel();
+    runState.writeReport(report);
+  };
   const effectiveDbPath = storage.dbPath;
 
   // Resume or create new scan. New scan ids are also run-directory ids, so
@@ -756,18 +811,19 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
 
   // Determine runtime mode
   const requestedRuntime = config.runtime ?? "api";
-
-  // Native API runtime is only valid for explicit API mode, or for auto mode
-  // when we intentionally choose the native API strategy.
   const nativeApiRuntime = new LlmApiRuntime({
     type: "api",
     timeout: config.timeout ?? 120_000,
     model: config.model,
     apiKey: config.apiKey,
+    provider: opts.provider,
+    agentModels: config.agentModels,
+    autoRoute: config.autoRoute,
+    singleModel: config.singleModel,
   });
   const nativeApiDiagnostics = nativeApiRuntime.getConfigurationDiagnostics();
-  assertApiRuntimeSelection(config.runtime, nativeApiDiagnostics);
-  const nativeApiAvailable = nativeApiDiagnostics.valid;
+  if (!opts.nativeRuntime) assertApiRuntimeSelection(config.runtime, nativeApiDiagnostics);
+  const nativeApiAvailable = !!opts.nativeRuntime || nativeApiDiagnostics.valid;
 
   let selectedRuntimeType: "api" | "claude" | "codex" | "gemini" | "ollama" = "api";
   let useNative = false;
@@ -777,7 +833,10 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
   // never set ANTHROPIC_API_KEY but have already run `claude login`.
   let cliNativeRuntime: CliNativeRuntime | undefined;
 
-  if (requestedRuntime === "api") {
+  if (opts.nativeRuntime) {
+    selectedRuntimeType = opts.nativeRuntime.type;
+    useNative = true;
+  } else if (requestedRuntime === "api") {
     selectedRuntimeType = "api";
     useNative = nativeApiAvailable;
   } else if (requestedRuntime === "auto") {
@@ -797,6 +856,7 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
           type: "claude",
           timeout: config.timeout ?? 600_000,
           model: config.model,
+          agentModels: config.agentModels, autoRoute: config.autoRoute, singleModel: config.singleModel,
         });
         useNative = true;
         emit({
@@ -829,6 +889,7 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
       type: "claude",
       timeout: config.timeout ?? 600_000,
       model: config.model,
+      agentModels: config.agentModels, autoRoute: config.autoRoute, singleModel: config.singleModel,
     });
     useNative = true;
     emit({
@@ -854,19 +915,24 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
   // The native-loop entry points all take a NativeRuntime. When the
   // user is in subscription mode, swap the LLM-API runtime for the
   // CLI-backed one. Everywhere else, the API runtime is still in use.
-  const nativeRuntime: NativeRuntime = cliNativeRuntime ?? nativeApiRuntime;
+  const rootNativeRuntime = budgetNativeRuntime(opts.nativeRuntime ?? cliNativeRuntime ?? nativeApiRuntime, scanCostLedger, config.signal, config.costCeilingUsd, config.plan);
+  const roleRuntime = async (role: string): Promise<NativeRuntime> => useNative && rootNativeRuntime.forkForSubagent
+    ? rootNativeRuntime.forkForSubagent(config.timeout ?? 120_000, { role })
+    : rootNativeRuntime;
+  let nativeRuntime = await roleRuntime("discovery");
 
-  const legacyRuntime = createRuntime({
+  const legacyRuntimeForRole = (role: "discovery" | "attack" | "verify") => createRuntime({
     type: selectedRuntimeType,
     timeout: config.timeout ?? 60_000,
-    model: config.model,
+    model: config.singleModel ? config.model : config.agentModels?.[role] && config.agentModels[role] !== "auto" ? config.agentModels[role] : config.model,
     apiKey: config.apiKey,
     // Route tool calls through the event system so they don't write
     // directly to stderr (which disrupts the Ink TUI)
     onToolCall: (name, detail) => {
-      emit({ type: "stage:start", stage: "discovery", message: `${name}${detail ? `: ${detail}` : ""}` });
+      emit({ type: "stage:start", stage: role, message: `${name}${detail ? `: ${detail}` : ""}` });
     },
   });
+  let legacyRuntime = legacyRuntimeForRole("discovery");
 
   const templates = loadTemplates(config.depth);
   const categories = [...new Set(templates.map((t) => t.category))];
@@ -983,6 +1049,7 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
     },
   ): void => {
     try {
+      finishPhase();
       if (opts.emitTerminalEvent === false || emittedScanCompleted) return;
       emittedScanCompleted = true;
       // Caller-provided summary (from the loop's `state.summary` field)
@@ -1000,55 +1067,9 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
       // input/output/cache costs. The cloud relay / consolidator can
       // sum across entries for a single dollar total without losing
       // the per-model breakdown.
-      let cost_usd: number | undefined;
-      let cost_breakdown: CostBreakdownEntry[] | undefined;
-      if (metrics?.stages && metrics.stages.length > 0) {
-        const acc = new Map<string, CostBreakdownEntry>();
-        for (const stage of metrics.stages) {
-          if (!stage.usage) continue;
-          // Skip stages that ran but recorded zero usage (e.g. legacy
-          // CLI runtimes that don't track tokens). Keeps the breakdown
-          // honest — empty entries would mislead consumers into
-          // thinking we're double-counting.
-          if (
-            stage.usage.inputTokens === 0 &&
-            stage.usage.outputTokens === 0 &&
-            !stage.usage.cachedInputTokens
-          ) {
-            continue;
-          }
-          const provider = modelProvider(stage.model);
-          const model = stage.model ?? "unknown";
-          const key = `${provider}\x1f${model}`;
-          const split = splitCost(stage.usage, stage.model);
-          const existing = acc.get(key);
-          if (existing) {
-            existing.cost_in += split.cost_in;
-            existing.cost_out += split.cost_out;
-            if (split.cost_cache_read !== undefined) {
-              existing.cost_cache_read =
-                (existing.cost_cache_read ?? 0) + split.cost_cache_read;
-            }
-          } else {
-            acc.set(key, {
-              provider,
-              model,
-              cost_in: split.cost_in,
-              cost_out: split.cost_out,
-              ...(split.cost_cache_read !== undefined
-                ? { cost_cache_read: split.cost_cache_read }
-                : {}),
-            });
-          }
-        }
-        if (acc.size > 0) {
-          cost_breakdown = Array.from(acc.values());
-          cost_usd = cost_breakdown.reduce(
-            (sum, e) => sum + e.cost_in + e.cost_out + (e.cost_cache_read ?? 0),
-            0,
-          );
-        }
-      }
+      const cost = scanCostLedger.costBreakdown();
+      const cost_usd = cost?.costUsd;
+      const cost_breakdown = cost?.breakdown;
 
       // ── Flag count for cost_per_flag ──
       // Prefer caller-supplied `flagsExtracted` when present (currently
@@ -1242,6 +1263,7 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
     }
 
     // ── Stage 1: Discovery Agent ──
+    startPhase("discovery");
     emit({ type: "stage:start", stage: "discovery", message: "Discovery agent starting..." });
     db.transitionCaseWorkItem?.(scanId, "surface_map", "in_progress", {
       owner: "attack-surface-agent",
@@ -1297,10 +1319,21 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
         });
       }
     }
-
     const discoveryState = useNative
-      ? await runNativeDiscovery(nativeRuntime, db, config, scanId, emit, apiSpecPromptText, getPendingUserMessages)
+      ? await runNativeDiscovery(
+          nativeRuntime,
+          db,
+          config,
+          scanId,
+          emit,
+          apiSpecPromptText,
+          getPendingUserMessages,
+          scanCostLedger,
+        )
       : await runLegacyDiscovery(legacyRuntime, db, config, scanId, emit, effectiveDbPath, apiSpecPromptText);
+    measuredTurns += discoveryState.turnCount;
+    allFindings = [...discoveryState.findings];
+    config.signal?.throwIfAborted();
 
     // Merge the deterministic pre-pass findings into discovery output (once).
     if (reconFindings.length) {
@@ -1342,6 +1375,9 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
     });
 
     // ── Stage 2: Attack Agent ──
+    startPhase("attack");
+    nativeRuntime = await roleRuntime("attack");
+    legacyRuntime = legacyRuntimeForRole("attack");
     const depthAttackTurns = config.depth === "deep" ? 100 : config.depth === "default" ? 40 : 20;
     const maxAttackTurns =
       typeof config.maxAttackTurns === "number" &&
@@ -1453,11 +1489,37 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
       }
     } else {
       attackState = useNative
-        ? await runNativeAttack(nativeRuntime, db, config, scanId, discoveryState.targetInfo, categories, maxAttackTurns, emit, opts.challengeHint, apiSpecPromptText, getPendingUserMessages)
-        : await runLegacyAttack(legacyRuntime, db, config, scanId, discoveryState.targetInfo, categories, maxAttackTurns, emit, effectiveDbPath, apiSpecPromptText);
+        ? await runNativeAttack(
+            nativeRuntime,
+            db,
+            config,
+            scanId,
+            discoveryState.targetInfo,
+            categories,
+            maxAttackTurns,
+            emit,
+            opts.challengeHint,
+            apiSpecPromptText,
+            getPendingUserMessages,
+            scanCostLedger,
+          )
+        : await runLegacyAttack(
+            legacyRuntime,
+            db,
+            config,
+            scanId,
+            discoveryState.targetInfo,
+            categories,
+            maxAttackTurns,
+            emit,
+            effectiveDbPath,
+            apiSpecPromptText,
+          );
     }
 
     allFindings = [...attackState.findings];
+    measuredTurns += attackState.turnCount;
+    config.signal?.throwIfAborted();
 
     db.logEvent({
       scanId,
@@ -1583,6 +1645,7 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
         ],
         findingsForFlagCount: allFindings,
       });
+      writeReport(partialReport);
       return partialReport;
     }
 
@@ -1680,6 +1743,8 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
     }
 
     // ── Stage 2.5: Triage (holding-it-wrong + feature extraction) ──
+    startPhase("verify");
+    nativeRuntime = await roleRuntime("verify");
     // For every finding saved by the attack agent:
     //   1. Run `isHoldingItWrong` — if true, downgrade severity to `info`,
     //      mark triage_status=rejected, and skip further verification.
@@ -3103,9 +3168,18 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
           message: "All candidates rejected by consensus — skipping agentic verify.",
         });
       } else if (useNative) {
-        await runNativeVerify(nativeRuntime, db, config, scanId, consensusFiltered, emit);
+        measuredTurns += await runNativeVerify(
+          nativeRuntime,
+          db,
+          config,
+          scanId,
+          consensusFiltered,
+          emit,
+          scanCostLedger,
+        );
       } else {
-        await runLegacyVerify(legacyRuntime, db, config, scanId, consensusFiltered, emit, effectiveDbPath);
+        legacyRuntime = legacyRuntimeForRole("verify");
+        measuredTurns += await runLegacyVerify(legacyRuntime, db, config, scanId, consensusFiltered, emit, effectiveDbPath);
       }
 
       // Merge verification results — DB is source of truth
@@ -3163,6 +3237,8 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
       });
     }
 
+    startPhase("report");
+    nativeRuntime = await roleRuntime("report");
     // ── Remediation: ensure all non-false-positive findings have guidance ──
     // Only findings site C did not already cover reach this, so on the normal
     // path it is a no-op rather than a second round of model calls.
@@ -3190,6 +3266,7 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
     // additive optional fields; fail-soft — a post-process error never fails
     // the scan (the pass itself is also fail-soft per batch).
     const jevDedupeConfig = jevConfigFromEnvironment("dedupe", process.env);
+    const jevEvaluator = jevDedupeConfig ? createJevEvaluator(jevDedupeConfig) : undefined;
     const dedupeEnabled = features.semanticDedupe || jevDedupeConfig !== undefined;
     if (dedupeEnabled || features.incrementalRank) {
       try {
@@ -3210,7 +3287,17 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
           incrementalRank: features.incrementalRank,
           scanId,
           anchors,
-          jevEvaluator: jevDedupeConfig ? createJevEvaluator(jevDedupeConfig) : undefined,
+          jevEvaluator: jevEvaluator ? {
+            async evaluate(request) {
+              config.signal?.throwIfAborted();
+              if (scanCostLedger.totalCostUsd() >= (config.costCeilingUsd ?? Infinity)) {
+                throw new ScanBudgetError("cost_ceiling_exceeded", "Shared scan cost ceiling exhausted before report evaluation.");
+              }
+              const result = await jevEvaluator.evaluate({ ...request, signal: request.signal && config.signal ? AbortSignal.any([request.signal, config.signal]) : request.signal ?? config.signal });
+              scanCostLedger.add(result.usage, result.model);
+              return result;
+            },
+          } : undefined,
         });
         // Findings were persisted before the report post-process. Re-save the
         // additive mapping/rank so reports, later resumes, and cross-scan
@@ -3240,6 +3327,14 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
       { allFindings, attackState, discoveryState, config, scanId, routingDecisions },
       { db, emit, emitScanCompleted, attachEnforcementSummary, attachEngagementPosture },
     );
+    report.estimatedCostUsd = scanCostLedger.runCostUsd();
+    report.usage = scanCostLedger.tokenUsage();
+    if (config.signal?.aborted || scanCostLedger.totalCostUsd() >= (config.costCeilingUsd ?? Infinity)) {
+      report.executionSuccessful = false;
+      report.costCeilingExceeded = scanCostLedger.totalCostUsd() >= (config.costCeilingUsd ?? Infinity);
+      report.exitReason = report.costCeilingExceeded ? "cost_ceiling_exceeded"
+        : config.signal?.reason instanceof ScanBudgetError ? config.signal.reason.status : "cancelled";
+    }
     writeReport(report);
     return report;
   } catch (err) {
@@ -3258,13 +3353,37 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
       payload: { error: msg },
       timestamp: Date.now(),
     });
-    // Surface whatever cost we'd accrued before the throw — the catch
-    // block sees `discoveryState` / `attackState` only when they were
-    // hoisted to function scope. They aren't, so we settle for the
-    // partial-findings flag count and skip cost.
+    finishPhase();
     emitScanCompleted("failed", allFindings.length, {
       findingsForFlagCount: allFindings,
     });
+    if (config.plan || config.signal?.aborted || err instanceof ScanBudgetError) {
+      startPhase("report");
+      const persisted = db.getFindings(scanId).map(dbFindingToFinding);
+      const findings = Array.from(new Map([...allFindings, ...persisted].map(finding => [finding.id, finding])).values());
+      const costExceeded = scanCostLedger.totalCostUsd() >= (config.costCeilingUsd ?? Infinity);
+      const reason = costExceeded ? "cost_ceiling_exceeded" : config.signal?.reason instanceof ScanBudgetError
+        ? config.signal.reason.status : err instanceof ScanBudgetError ? err.status : config.signal?.aborted ? "cancelled" : "failed";
+      const partial: ScanReport = {
+        target: config.target, scanDepth: config.depth, startedAt: new Date(scanStartedAt).toISOString(),
+        completedAt: new Date().toISOString(), durationMs: Date.now() - scanStartedAt,
+        findings, warnings: [{ stage: "report", message: `Scan interrupted: ${msg}. Findings are partial.` }],
+        summary: { totalAttacks: measuredTurns, totalFindings: findings.length,
+          critical: findings.filter(finding => finding.severity === "critical").length,
+          high: findings.filter(finding => finding.severity === "high").length,
+          medium: findings.filter(finding => finding.severity === "medium").length,
+          low: findings.filter(finding => finding.severity === "low").length,
+          info: findings.filter(finding => finding.severity === "info").length },
+        error: msg,
+        executionSuccessful: false, exitReason: reason, costCeilingExceeded: costExceeded,
+        estimatedCostUsd: scanCostLedger.hasUnpricedUsage() ? undefined : scanCostLedger.runCostUsd(),
+        usage: scanCostLedger.tokenUsage(),
+      };
+      attachEnforcementSummary(partial, config);
+      attachEngagementPosture(partial, config);
+      writeReport(partial);
+      return partial;
+    }
     throw err;
   } finally {
     // Safety net: if none of the normal exit paths fired (e.g. a synchronous
@@ -3276,6 +3395,7 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
       });
     }
     db.close();
+    finishPhase();
   }
 }
 

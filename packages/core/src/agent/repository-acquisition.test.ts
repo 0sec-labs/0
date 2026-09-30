@@ -4,7 +4,7 @@ vi.mock("../plugins/enablement.js", async (importOriginal) => ({
   readEnablement: () => ({ schema: 1, project: process.cwd(), enabled: { scope: { version: "1.0.0", capabilities: [], enabledAt: 1 } } }),
 }));
 import { ScopePolicy } from "../scope/scope.js";
-import { isPublicRepositoryAddress, parseRepositoryAcquisition, repositoryAcquisitionAllowed, runRepositoryAcquisition } from "./repository-acquisition.js";
+import { isPublicRepositoryAddress, parseRepositoryAcquisition, repositoryAcquisitionAllowed, repositoryIdentityMatchesTarget, runRepositoryAcquisition } from "./repository-acquisition.js";
 
 const dns = vi.hoisted(() => ({ lookup: vi.fn() }));
 vi.mock("node:dns/promises", () => dns);
@@ -47,5 +47,22 @@ describe("public repository acquisition boundaries", () => {
     expect(parseRepositoryAcquisition("git clone git@github.com:golang/go.git")).toBeNull();
     expect(parseRepositoryAcquisition('git clone "https://github.com/golang/go.git')).toBeNull();
     expect(parseRepositoryAcquisition("git clone https://github.com/golang/go.git # comment")).toBeNull();
+  });
+});
+
+describe("console repository identity", () => {
+  it("requires an exact HTTPS repository URL, with only a trailing .git tolerated", () => {
+    expect(repositoryIdentityMatchesTarget(
+      "https://GitHub.com/muse-spark/muse-spark",
+      "https://github.com/muse-spark/muse-spark.git",
+    )).toBe(true);
+    expect(repositoryIdentityMatchesTarget(
+      "https://github.com/muse-spark/muse-spark",
+      "https://github.com/muse-spark/another-repository.git",
+    )).toBe(false);
+  });
+
+  it("does not infer repository identity from a product name", () => {
+    expect(repositoryIdentityMatchesTarget("Muse Spark", "https://github.com/muse-spark/muse-spark.git")).toBe(false);
   });
 });

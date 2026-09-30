@@ -1,7 +1,7 @@
 export type {
   EvolutionArtifactKind, EvolutionAttempt, EvolutionBackend, EvolutionCase, EvolutionConfig,
   EvolutionDependencies, EvolutionEdit, EvolutionEvaluation, EvolutionExecution,
-  EvolutionFile, EvolutionLane, EvolutionModel, EvolutionProposal, EvolutionRegistry,
+  EvolutionFile, EvolutionLane, EvolutionModel, EvolutionModelIdentity, EvolutionProposal, EvolutionRegistry,
   EvolutionRegistryEvent, EvolutionRunResult, EvolutionSandbox, EvolutionSandboxRequest,
   EvolutionSnapshot, EvolutionVersion,
 } from "./types.js";
@@ -22,6 +22,30 @@ export {
   resolveEvolutionImage, resolveEvolutionConfigImage,
 } from "./sandbox.js";
 export { proposeEvolutionEdits } from "./rewrite.js";
+export {
+  campaignPromotionAllowed,
+  blockEvolutionCampaign,
+  compareEvolutionIdentities,
+  createOrLoadEvolutionCampaign,
+  createEvolutionComparisonIdentity,
+  evolutionCampaignKey,
+  evolutionCorpusIdentity,
+  holdoutExposureIdentity,
+  loadEvolutionCampaign,
+  reserveCampaignDispatch,
+  reconcileCampaignDispatch,
+  reserveHoldoutExposure,
+  settleCampaignDispatch,
+} from "./safety.js";
+export type {
+  CampaignDispatchReservation,
+  EvolutionCampaignLedger,
+  EvolutionCompatibility,
+  EvolutionCompatibilityStatus,
+  EvolutionComparisonIdentity,
+  EvolutionCorpusIdentity,
+  HoldoutExposureRecord,
+} from "./safety.js";
 export {
   harvestMissesFromScorecard,
   harvestMissesFromTournament,

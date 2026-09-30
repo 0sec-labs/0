@@ -26,6 +26,7 @@ import { RateLimiter } from "../scope/rate-limit.js";
 import { WafDetector } from "../scope/waf-detect.js";
 import { resolveEngagementProfile } from "../scope/engagement-profile.js";
 
+import * as repositoryAcquisition from "./repository-acquisition.js";
 const ORIGINAL_JIT_SKILLS_ENV = process.env["ZERO_FEATURE_JIT_SKILLS"];
 const ORIGINAL_LOOT_LEDGER_ENV = process.env["ZERO_FEATURE_LOOT_LEDGER"];
 const ORIGINAL_CLOUD_SURFACE_ENV = process.env["ZERO_FEATURE_CLOUD_SURFACE"];
@@ -3019,6 +3020,30 @@ describe("ToolExecutor — scope enforcement (0#215)", () => {
 // authority: scope, when present and covering the host, satisfies the
 // cross-origin check. With no scope, the same-origin rail is unchanged.
 describe("ToolExecutor — explicit console public-network authority", () => {
+  it("refuses a different repository identity even with console YOLO public-network authority", async () => {
+    const acquisition = vi.spyOn(repositoryAcquisition, "runRepositoryAcquisition")
+      .mockResolvedValue({ success: true, output: "checkout completed" });
+    const executor = new ToolExecutor({
+      target: "https://code.example/operator-approved",
+      scanId: "console-repository-identity",
+      findings: [], attackResults: [], targetInfo: {},
+      autonomyMode: "yolo",
+      consoleSession: true,
+      publicNetwork: {},
+    });
+    try {
+      const result = await executor.execute({
+        name: "bash",
+        arguments: { command: "git clone https://code.example/different.git" },
+      });
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/repository acquisition refused/i);
+    } finally {
+      await executor.cleanup();
+      acquisition.mockRestore();
+    }
+  });
+
   it("admits absolute public requests without a target only with explicit host opt-in", async () => {
     const ctx: ToolContext = { target: "", scanId: "public-no-target", findings: [], attackResults: [], targetInfo: {}, autonomyMode: "yolo" };
     const executor = new ToolExecutor(ctx);

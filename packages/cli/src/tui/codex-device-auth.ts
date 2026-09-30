@@ -1,12 +1,14 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 
 import { defaultOpenBrowser } from "../open-browser.js";
 import { maybeLoadCodexAuth } from "../codex-auth.js";
 import { sanitizeTuiText } from "./text.js";
 
 const MAX_VISIBLE_LINES = 8;
+const CODEX_UNAVAILABLE_MESSAGE =
+  "Codex CLI is not available on this console's PATH. Install Codex, or add its directory to PATH and restart 0.";
 
-export type CodexDeviceAuthPhase = "running" | "connected" | "cancelled" | "failed";
+export type CodexDeviceAuthPhase = "running" | "connected" | "cancelled" | "failed" | "unavailable";
 
 export interface CodexDeviceAuthUpdate {
   phase: CodexDeviceAuthPhase;
@@ -28,10 +30,13 @@ export type SpawnCodexDeviceAuth = (
   options: { env: NodeJS.ProcessEnv },
 ) => CodexDeviceAuthProcess;
 
+export type ProbeCodexExecutable = (env: NodeJS.ProcessEnv) => boolean;
+
 export interface StartCodexDeviceAuthOptions {
   homeDir?: string;
   env?: NodeJS.ProcessEnv;
   spawn?: SpawnCodexDeviceAuth;
+  probe?: ProbeCodexExecutable;
   /** Test seam; defaults to the platform browser opener. */
   openBrowser?: (url: string) => void | Promise<void>;
   onUpdate: (update: CodexDeviceAuthUpdate) => void;
@@ -58,6 +63,15 @@ function defaultSpawnCodexDeviceAuth(
   return child;
 }
 
+function defaultProbeCodexExecutable(env: NodeJS.ProcessEnv): boolean {
+  const result = spawnSync("codex", ["--version"], { env, stdio: "ignore" });
+  return (result.error as NodeJS.ErrnoException | undefined)?.code !== "ENOENT";
+}
+
+function isMissingCodexExecutable(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
+}
+
 /**
  * Run Codex's official device-auth flow without ever asking the operator to
  * paste a ChatGPT API key or OAuth token into 0. The Codex CLI owns the
@@ -66,6 +80,14 @@ function defaultSpawnCodexDeviceAuth(
  */
 export function startCodexDeviceAuth(options: StartCodexDeviceAuthOptions): CodexDeviceAuthSession {
   const env = options.env ?? process.env;
+  if (!(options.probe ?? defaultProbeCodexExecutable)(env)) {
+    options.onUpdate({
+      phase: "unavailable",
+      lines: [],
+      message: CODEX_UNAVAILABLE_MESSAGE,
+    });
+    return { cancel: () => {} };
+  }
   const launch = options.spawn ?? defaultSpawnCodexDeviceAuth;
   const openBrowser = options.openBrowser ?? defaultOpenBrowser;
   const lines: string[] = [];
@@ -87,12 +109,14 @@ export function startCodexDeviceAuth(options: StartCodexDeviceAuthOptions): Code
     const url = rawUrl.replace(/[),.;]+$/, "");
     browserOpened = true;
     void Promise.resolve(openBrowser(url)).catch(() => {
+      if (settled) return;
       lines.push("Could not open a browser automatically; open the URL above.");
       if (lines.length > MAX_VISIBLE_LINES) lines.shift();
       publish("running", "Complete the ChatGPT Codex device sign-in in your browser.");
     });
   };
   const pushOutput = (chunk: Buffer): void => {
+    if (settled) return;
     const text = chunk.toString("utf8");
     tryOpenBrowser(text);
     const raw = `${pending}${text}`;
@@ -121,16 +145,23 @@ export function startCodexDeviceAuth(options: StartCodexDeviceAuthOptions): Code
   try {
     child = launch("codex", ["login", "--device-auth"], { env });
   } catch (error) {
-    finish("failed", error instanceof Error ? error.message : String(error));
+    finish(
+      isMissingCodexExecutable(error) ? "unavailable" : "failed",
+      isMissingCodexExecutable(error) ? CODEX_UNAVAILABLE_MESSAGE : error instanceof Error ? error.message : String(error),
+    );
     return { cancel: () => {} };
   }
 
   child.stdout.on("data", pushOutput);
   child.stderr.on("data", pushOutput);
   child.on("error", (error) => {
-    finish("failed", error.message);
+    finish(
+      isMissingCodexExecutable(error) ? "unavailable" : "failed",
+      isMissingCodexExecutable(error) ? CODEX_UNAVAILABLE_MESSAGE : error.message,
+    );
   });
   child.on("close", (code) => {
+    if (settled) return;
     if (cancelled) {
       finish("cancelled", "Codex device sign-in cancelled.");
       return;

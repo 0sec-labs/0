@@ -1,4 +1,4 @@
-import type { AuthConfig } from "@0/shared";
+import type { AuthConfig, TokenUsageForPricing, ModelTokenUsage } from "@0/shared";
 
 export type RuntimeType = "api" | "claude" | "codex" | "gemini" | "ollama";
 
@@ -58,7 +58,8 @@ export interface RuntimeResult {
   exitCode: number | null;
   timedOut: boolean;
   durationMs: number;
-  usage?: { inputTokens: number; outputTokens: number };
+  usage?: TokenUsageForPricing;
+  usageByModel?: ModelTokenUsage[];
   error?: string;
 }
 
@@ -98,6 +99,7 @@ export interface RuntimeContext {
   templateId?: string;
   systemPrompt?: string;
   scanId?: string;
+  signal?: AbortSignal;
   mcp?: {
     enableTargetTools?: boolean;
     dbPath?: string;
@@ -196,6 +198,7 @@ export interface NativeRuntimeResult {
     /** Prompt tokens written to cache this request (~1.25x input price). */
     cacheWriteTokens?: number;
   };
+  usageByModel?: ModelTokenUsage[];
   durationMs: number;
   error?: string;
   /**
@@ -222,7 +225,7 @@ export interface NativeRuntimeResult {
 
 export interface NativeStreamCallbacks {
   onThinking?: (text: string) => void;
-  onUsage?: (usage: { inputTokens: number; outputTokens: number }) => void;
+  onUsage?: (usage: TokenUsageForPricing) => void;
   /**
    * Token-level streaming hook. Fired for every SSE delta event while the
    * runtime is still streaming the response. `text` is just the incremental
@@ -289,6 +292,8 @@ export interface NativeRuntime {
   }): void;
   /** Current model identifier; not a per-request billing identity or rate receipt. */
   resolvedModel?(): string;
+  /** Provider selected by the runtime, never inferred from a requested model. */
+  resolvedProvider?(): string;
   /** Provider-qualified catalog estimate key, not a billing receipt. */
   resolvedPricingModel?(): string;
 }

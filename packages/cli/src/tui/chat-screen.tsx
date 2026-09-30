@@ -38,6 +38,7 @@ import {
   type RuntimeConfig,
   type LlmApiRuntime,
   type NativeMessage,
+  type NativeRuntime,
   type OperatorQuestionRequest,
   type OperatorQuestionAnswer,
   type SubagentLifecyclePayload,
@@ -180,6 +181,10 @@ import {
   reduceActiveSubagents,
   summaryInputFromMessage,
 } from "./subagent-card.js";
+import {
+  buildCoordinatorSummary,
+  COORDINATOR_SUMMARY_ROWS,
+} from "./coordinator-summary.js";
 import { onTuiOutputLine } from "./output-guard.js";
 import {
   COMPOSER_QUEUE_LIMIT,
@@ -713,6 +718,7 @@ export interface ChatScreenProps {
     providerId: () => string;
     connectionIdentity: () => string | undefined;
     codexCatalog?: (signal?: AbortSignal) => Promise<import("@0/core").CodexCatalogModel[]>;
+    nativeRuntime: () => NativeRuntime;
     /**
      * Live-apply a model/provider/role-map selection to the running runtime.
      * Reconfigures in place at a turn boundary (never mid-turn): applies at
@@ -2001,6 +2007,7 @@ export function ChatScreen({
       providerId: () => runtime.getConfigurationDiagnostics().provider,
       connectionIdentity: () => runtime.connectionIdentity(),
       codexCatalog: (signal) => runtime.codexModelCatalog(signal),
+      nativeRuntime: () => runtime,
       applySelection: (sel) => applySelectionRef.current?.(sel),
     };
     if (explicitChoice) pendingModelPreferenceRef.current = runtime;
@@ -5485,6 +5492,27 @@ export function ChatScreen({
   );
 
 
+  // Retained lifecycle outcomes include completed/failed direct children; the
+  // active-only map intentionally drops them and cannot drive this overview.
+  const coordinatorSummary = useMemo(
+    () => buildCoordinatorSummary({
+      rootPlan: todos,
+      directChildren: Object.values(workerOutcomes),
+      rootScanId: session?.scanId,
+      objective,
+    }),
+    [workerOutcomes, objective, session?.scanId, todos],
+  );
+  const coordinatorSummaryNode = !focused && (coordinatorSummary.hasRootPlan || coordinatorSummary.hasDirectChildren) ? (
+    <box width={transcriptWidth} height={COORDINATOR_SUMMARY_ROWS} flexShrink={0} minWidth={0} flexDirection="column">
+      {coordinatorSummary.lines.map((line, index) => (
+        <text key={`coordinator-summary-${index}`} height={1} wrapMode="none" truncate fg={index === 0 ? TEXT : MUTED}>
+          {fitTuiText(line, transcriptWidth)}
+        </text>
+      ))}
+    </box>
+  ) : null;
+
   const workerDisplay: EntryDisplay = {
     ...entryDisplay,
     model: focusedTelemetry?.model ?? "",
@@ -5713,6 +5741,7 @@ export function ChatScreen({
           if (transcriptRef.current) transcriptRef.current.content.height = this.height;
         }}>
           {renderTranscriptEntries(focused ? focusedTranscript : entries, transcriptWidth, focused ? workerDisplay : entryDisplay)}
+          {coordinatorSummaryNode}
           {!focused && todos && todos.total > 0 ? (
             <Todos payload={todos} width={transcriptWidth} theme={theme} />
           ) : null}

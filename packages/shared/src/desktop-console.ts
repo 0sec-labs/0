@@ -15,7 +15,7 @@ export const DEFAULT_ALLOW_MODEL_SELF_EXTENSION = true;
 export type DesktopConsoleRole = "discovery" | "attack" | "verify" | "report" | "audit" | "review";
 export type DesktopConsoleSessionStatus = "ready" | "working" | "waiting" | "closed" | "failed";
 
-export type DesktopCodexAuthPhase = "idle" | "running" | "connected" | "cancelled" | "failed";
+export type DesktopCodexAuthPhase = "idle" | "running" | "connected" | "cancelled" | "failed" | "unavailable";
 
 export interface DesktopCodexAuthStatus {
   phase: DesktopCodexAuthPhase;

@@ -261,14 +261,9 @@ export interface CacheUsage {
  * Returns `undefined` when there is no usage to report, matching the existing
  * `NativeRuntimeResult.usage` optionality.
  *
- * COST NOTE: `cacheWriteTokens` is folded into `inputTokens` and billed at the
- * full input rate by `estimateCost`, which under-reports a cache WRITE by its
- * 1.25x premium. `TokenUsageForPricing` has no cache-write field to express
- * that, and the error is bounded and conservative in the direction that
- * matters: writes happen once per prefix while reads happen every turn after,
- * so the read discount (correctly modelled, ~0.9x saved) dominates the
- * unmodelled write premium (~0.25x paid once) by a wide margin on any run
- * longer than two turns.
+ * Cache reads and writes are included in total prompt size but priced separately
+ * by the canonical shared tariff. Five-minute writes use the 1.25x input rate;
+ * cache reads use the model's cached-input rate.
  */
 export function readCacheUsage(raw: unknown): CacheUsage | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;

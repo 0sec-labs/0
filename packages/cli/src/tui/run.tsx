@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { CliRenderEvents, createCliRenderer, type CliRenderer } from "@opentui/core";
 import { AppContext, createRoot, flushSync, useKeyboard } from "@opentui/react";
-import { type Finding } from "@0/shared";
+import { type Finding, type ScanPlan } from "@0/shared";
 import { resolveEngagement } from "../engagement-plan.js";
 import { getRuntimeAvailability } from "../utils.js";
 import { bindDevUiDiagnostics, DevUiHost, DevUiRenderBoundary, isDevUiRemount, startDevUiReload, useDevUiBoundary, useDevUiRef, useDevUiState } from "../dev-ui-reload.js";
@@ -99,6 +99,7 @@ export interface HomeSelection {
   target?: string;
   runtime?: LaunchRuntime;
   depth?: LaunchDepth;
+  plan?: ScanPlan;
 }
 
 type ConsoleRoute = (
@@ -903,21 +904,51 @@ function ConsoleApp({
   const launchSelection = (selection: HomeSelection): Promise<void> => {
     const target = selection.target;
     if (exitRequested.current || !target) return Promise.resolve();
+    const owner = ownerForAction();
+    if (!owner) return Promise.resolve();
     const sessionGate = createSessionCloseGate();
     const launch: Promise<void> = Promise.resolve().then(async () => {
-      if (exitRequested.current) return;
+      if (exitRequested.current || owner.closeRequested) return;
       const resolution = resolveEngagement(target);
       if (!resolution.ok) return;
       const plan = resolution.plan;
+      const selectedPlan = selection.plan ?? {
+        goal: plan.kind === "package"
+          ? "known-vulnerabilities"
+          : plan.kind === "web"
+            ? "misconfigurations"
+            : "unknown-vulnerabilities",
+        depth: selection.depth ?? "deep",
+        runCount: 1,
+        executionMode: "sequential",
+        timeCapMs: plan.kind === "web" ? 30_000 : 600_000,
+        costCapUsd: 5,
+      } satisfies ScanPlan;
       const mode: SessionMode = plan.kind === "package"
         ? "audit"
         : plan.kind === "source"
           ? "review"
           : "scan";
-      const depth = selection.depth ?? "deep";
-      const runtime = selection.runtime ?? "auto";
+      const depth = selectedPlan.depth;
+      const live = owner.session ? owner.runtimeInfo.current : null;
+      const nativeRuntime = live?.nativeRuntime();
+      const runtime = nativeRuntime && (selection.runtime === undefined || selection.runtime === "auto" || selection.runtime === "api")
+        ? "api"
+        : selection.runtime ?? "auto";
+      const runtimeSelection = live
+        ? {
+            nativeRuntime: runtime === "api" || plan.kind !== "web" ? nativeRuntime : undefined,
+            model: live.model(),
+            provider: live.providerId() as ChatScreenOptions["providerId"],
+          }
+        : {
+            model: owner.nextOptions.model ?? owner.options?.model,
+            provider: owner.nextOptions.providerId ?? owner.options?.providerId,
+            agentModels: owner.nextOptions.agentModels ?? owner.options?.agentModels,
+            singleModel: owner.nextOptions.singleModel ?? owner.options?.singleModel,
+          };
       const availability = await getRuntimeAvailability();
-      if (exitRequested.current) return;
+      if (exitRequested.current || owner.closeRequested) return;
       let state = createInitialSessionState(plan.target, depth, mode, {
         runtime,
         apiProviderLabel: availability.apiRuntime.providerLabel,
@@ -966,7 +997,12 @@ function ConsoleApp({
           depth,
           format: "terminal",
           runtime,
-          timeout: plan.kind === "web" ? 30000 : 600000,
+          plan: selectedPlan,
+          ...runtimeSelection,
+          dbPath: owner.options?.dbPath,
+          scope: owner.options?.scope,
+          timeout: selectedPlan.timeCapMs,
+          signal: sessionGate.signal,
           verbose: false,
           sessionUiFactory: async () => ({
             onEvent: (event) => {
@@ -1215,7 +1251,7 @@ function ConsoleApp({
           requestExit(selection);
           return;
         }
-        void launchSelection(selection);
+        void launchSelection(selection).catch(reportError);
       }} onExit={appExit} shell={shell} evolutionStatus={lensEvolutionState} />
     );
   } else if (routeType === "ops") {

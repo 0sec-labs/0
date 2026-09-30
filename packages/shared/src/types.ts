@@ -1,5 +1,6 @@
 import type { VerificationResult } from "./verification.js";
 import type { ResearchEvidenceEnvelope } from "./research-evidence.js";
+import type { TokenUsageForPricing } from "./pricing.js";
 
 // ── Scan Configuration ──
 
@@ -8,6 +9,89 @@ export type OutputFormat = "terminal" | "json" | "markdown" | "html" | "sarif" |
 export type RuntimeMode = "api" | "claude" | "codex" | "gemini" | "ollama" | "auto";
 export type ScanMode = "probe" | "deep" | "mcp" | "web" | "http_audit" | "llm-ipi";
 export type PackageEcosystem = "npm" | "pypi" | "cargo" | "oci";
+
+/** The operator-visible objective used to derive a bounded scan plan. */
+export type ScanGoal =
+  | "known-vulnerabilities"
+  | "unknown-vulnerabilities"
+  | "misconfigurations";
+
+/** Whether multiple planned runs share one sequential or concurrent lane. */
+export type ScanExecutionMode = "sequential" | "parallel";
+
+/**
+ * The complete pre-launch contract. Limits cover the whole plan, including
+ * every selected run and its subagents; they are not multiplied per run.
+ */
+export interface ScanPlan {
+  goal: ScanGoal;
+  depth: ScanDepth;
+  runCount: number;
+  executionMode: ScanExecutionMode;
+  timeCapMs: number;
+  costCapUsd: number;
+}
+/**
+ * Structural seam for sharing one scan-wide cost ledger across planned runs.
+ * The concrete implementation lives in @0/core; shared types must not
+ * import the core package.
+ */
+export interface ScanCostLedgerLike {
+  add(
+    usage: TokenUsageForPricing,
+    model?: string,
+  ): void;
+  totalCostUsd(): number;
+  markUnpricedUsage(): void;
+  hasUnpricedUsage(): boolean;
+}
+
+export type ScanAttemptStatus = "completed" | "failed" | "rejected" | "cancelled" | "time_cap_exceeded" | "cost_ceiling_exceeded";
+
+export interface ScanAttemptOutcome {
+  runIndex: number;
+  status: ScanAttemptStatus;
+  durationMs: number;
+  costUsd?: number;
+  error?: string;
+}
+
+export interface ScanPlanExecution {
+  plan?: ScanPlan;
+  plannedRuns?: number;
+  completedRuns?: number;
+  attempts?: ScanAttemptOutcome[];
+  estimatedCostUsd?: number;
+  executionSuccessful?: boolean;
+  error?: string;
+  usage?: TokenUsageForPricing;
+}
+
+export function validateScanPlan(plan: ScanPlan): void {
+  if (!Number.isInteger(plan.runCount) || plan.runCount < 1) {
+    throw new Error("Scan plan runCount must be a positive integer");
+  }
+  if (plan.depth !== "quick" && plan.depth !== "default" && plan.depth !== "deep") {
+    throw new Error(`Unknown scan depth "${String(plan.depth)}"`);
+  }
+  if (!Number.isFinite(plan.timeCapMs) || plan.timeCapMs <= 0) {
+    throw new Error("Scan plan timeCapMs must be a positive finite number");
+  }
+  if (!Number.isFinite(plan.costCapUsd) || plan.costCapUsd <= 0) {
+    throw new Error("Scan plan costCapUsd must be a positive finite number");
+  }
+  if (plan.executionMode !== "sequential" && plan.executionMode !== "parallel") {
+    throw new Error(`Unknown scan execution mode "${String(plan.executionMode)}"`);
+  }
+  if (
+    plan.goal !== "known-vulnerabilities" &&
+    plan.goal !== "unknown-vulnerabilities" &&
+    plan.goal !== "misconfigurations"
+  ) {
+    throw new Error(`Unknown scan goal "${String(plan.goal)}"`);
+  }
+}
+
 
 // ── Authentication ──
 
@@ -79,6 +163,16 @@ export interface ScanConfig {
   format: OutputFormat;
   runtime?: RuntimeMode;
   mode?: ScanMode;
+  /** Explicit pre-launch limits and execution intent. Omitted keeps legacy one-run behavior. */
+  plan?: ScanPlan;
+  /** Shared ledger for a multi-run plan; omitted creates one for this run. */
+  costLedger?: ScanCostLedgerLike;
+  /** Operator-approved role selections; the selected runtime enforces reachability. */
+  agentModels?: Readonly<Record<string, string>>;
+  autoRoute?: boolean;
+  singleModel?: boolean;
+  /** Plan-wide cancellation inherited by every phase and descendant. */
+  signal?: AbortSignal;
   repoPath?: string;
   /**
    * Package ecosystem of the target (npm / pypi / cargo / …). Optional; when
@@ -1289,7 +1383,7 @@ export interface ScanWarning {
  * (`ZERO_COST_CEILING_USD` / `--cost-ceiling`) was hit and the scan
  * aborted with partial findings preserved.
  */
-export type ScanExitReason = "completed" | "cost_ceiling_exceeded";
+export type ScanExitReason = "completed" | "cost_ceiling_exceeded" | "time_cap_exceeded" | "cancelled" | "failed" | "partial";
 
 /** Advisory local review criteria, independent of vulnerability severity and exit policy. */
 export interface ReviewCheckResult {
@@ -1300,7 +1394,7 @@ export interface ReviewCheckResult {
   fix: string;
 }
 
-export interface ScanReport {
+export interface ScanReport extends ScanPlanExecution {
   target: string;
   scanDepth: ScanDepth;
   startedAt: string;

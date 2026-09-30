@@ -1,4 +1,4 @@
-import type { Finding } from "@0/shared";
+import type { Finding, ScanCostLedgerLike, ScanPlan } from "@0/shared";
 import type { ScanListener } from "./scanner.js";
 import { createRuntime } from "./runtime/index.js";
 import type { RuntimeType } from "./runtime/index.js";
@@ -9,13 +9,16 @@ import { runAgentLoop } from "./agent/loop.js";
 import { runNativeAgentLoop } from "./agent/native-loop.js";
 import { toolCallPreview } from "./agent/tool-preview.js";
 import { getToolsForRole } from "./agent/tools.js";
-import type { NativeRuntime } from "./runtime/types.js";
+import type { NativeRuntime, Runtime, RuntimeConfig } from "./runtime/types.js";
 import { CLI_RUNTIME_TYPES } from "./shared-analysis.js";
 import { parseFindingsFromCliOutput } from "./findings-parser.js";
 import { estimateCost } from "./agent/cost.js";
 import { analyticsPipeline } from "./telemetry/analytics-pipeline.js";
 import { reportUnsupportedContributionMode } from "./telemetry/run-contribution.js";
 import { parseProjectObservations, type ProposedProjectObservation } from "./secure/project-context.js";
+import { scanGoalPrompt } from "./scan-plan.js";
+import { addRuntimeUsage } from "./agent/cost-ledger.js";
+import type { ScanCostLedger } from "./agent/cost-ledger.js";
 
 // ── Types ──
 
@@ -25,7 +28,22 @@ export interface AnalysisAgentOptions {
   target: string;
   scanId: string;
   sessionId?: string;
-  config: { runtime?: string; timeout?: number; depth?: string; apiKey?: string; model?: string; costCeilingUsd?: number; costLedger?: import("./agent/cost-ledger.js").ScanCostLedger };
+  config: {
+    runtime?: string;
+    timeout?: number;
+    depth?: string;
+    apiKey?: string;
+    model?: string;
+    provider?: RuntimeConfig["provider"];
+    agentModels?: RuntimeConfig["agentModels"];
+    autoRoute?: boolean;
+    singleModel?: boolean;
+    nativeRuntime?: NativeRuntime;
+    signal?: AbortSignal;
+    plan?: ScanPlan;
+    costCeilingUsd?: number;
+    costLedger?: ScanCostLedgerLike;
+  };
   db: any;
   emit: ScanListener;
   /** Prompt sent to CLI runtimes (compact, includes ---FINDING--- format instructions) */
@@ -66,6 +84,9 @@ export interface AnalysisAgentResult {
   summary?: string;
   usage?: AnalysisTokenUsage;
   estimatedCostUsd?: number;
+  /** Planned analysis retains partial evidence without claiming a clean completion. */
+  executionSuccessful?: boolean;
+  error?: string;
   /**
    * Number of agent-loop turns this run consumed. Populated by the loop
    * branches that track it (native + legacy); the CLI-runtime and single-shot
@@ -212,7 +233,16 @@ export function getMaxTurns(
  * 3. Legacy fallback (runAgentLoop)
  */
 export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<AnalysisAgentResult> {
-  const { role, scopePath, target, scanId, sessionId, config, db, emit, cliPrompt, agentSystemPrompt, cliSystemPrompt, directApiPrompt, purpose = "research" } = opts;
+  const { role, scopePath, target, scanId, sessionId, config, db, emit, purpose = "research" } = opts;
+  config.signal?.throwIfAborted();
+  if (config.costCeilingUsd !== undefined && config.costLedger && config.costLedger.totalCostUsd() >= config.costCeilingUsd) {
+    throw new Error("Scan cost ceiling is exhausted before source analysis.");
+  }
+  const goalPrompt = config.plan ? `\n\n${scanGoalPrompt(config.plan)}` : "";
+  const cliPrompt = opts.cliPrompt + goalPrompt;
+  const agentSystemPrompt = opts.agentSystemPrompt + goalPrompt;
+  const cliSystemPrompt = opts.cliSystemPrompt + goalPrompt;
+  const directApiPrompt = opts.directApiPrompt === undefined ? undefined : opts.directApiPrompt + goalPrompt;
   // The source tree is attacker-controlled. A CLI runtime owns its own command
   // channel and bypasses ToolExecutor, so scoped audit/review work must use the
   // API loop where every filesystem operation crosses the scoped tool boundary.
@@ -246,6 +276,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
 
   // Detect available CLI runtimes
   const available = await detectAvailableRuntimes();
+  config.signal?.throwIfAborted();
 
   // `--runtime codex` is dual-mode: it can resolve through either the
   // local `codex` CLI binary or the direct ChatGPT Codex provider when
@@ -264,6 +295,10 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
           timeout: config.timeout ?? 120_000,
           apiKey: config.apiKey,
           model: config.model,
+          provider: config.provider,
+          agentModels: config.agentModels,
+          autoRoute: config.autoRoute,
+          singleModel: config.singleModel,
         }).getConfigurationDiagnostics()
       : null;
   const useDirectChatGptCodex =
@@ -274,7 +309,9 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
 
   // Determine runtime: prefer CLI runtimes, fall back to API agent loop
   let runtimeType: RuntimeType;
-  if (config.runtime === "auto") {
+  if (config.nativeRuntime) {
+    runtimeType = "api";
+  } else if (config.runtime === "auto") {
     runtimeType = available.size > 0
       ? pickRuntimeForStage("source-analysis", available)
       : "api";
@@ -386,14 +423,19 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
         // turn/tool-call/cost events surface for the live trace. Same
         // scanId we already pass through the rest of the agent runner.
         scanId,
+        signal: config.signal,
       });
     } finally {
       // Discards any trust entry, project-local config or hook the run
       // picked up; syncs back only a rotated credential.
       codexHome?.dispose();
     }
+    addRuntimeUsage(config.costLedger as ScanCostLedger | undefined, result, cliRuntime.resolvedModel?.() ?? config.model);
+    if (config.plan && !result.usage && !result.usageByModel?.length) config.costLedger?.markUnpricedUsage();
+    if (!config.plan) config.signal?.throwIfAborted();
 
     if (result.error && !result.output) {
+      if (config.plan) return { findings: [], usage: result.usage, executionSuccessful: false, error: result.error };
       emit({
         type: "stage:end",
         stage: "attack",
@@ -436,7 +478,16 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
         message: `CLI agent complete: ${findings.length} findings${questions && questions.length > 0 ? `, ${questions.length} question(s)` : ""} (${result.durationMs}ms)`,
       });
 
-      return { findings, questions };
+      return {
+        findings,
+        questions,
+        usage: result.usage,
+        estimatedCostUsd: result.usageByModel?.length
+          ? result.usageByModel.reduce((sum, bucket) => sum + estimateCost(bucket.usage, bucket.model), 0)
+          : result.usage ? estimateCost(result.usage, cliRuntime.resolvedModel?.() ?? config.model) : undefined,
+        executionSuccessful: config.plan ? !result.error && !result.timedOut && result.exitCode === 0 && !config.signal?.aborted && !!result.usage : undefined,
+        error: config.plan ? result.error ?? (result.timedOut ? "CLI analysis timed out." : !result.usage ? "CLI did not report priced usage." : undefined) : undefined,
+      };
     }
   }
 
@@ -457,16 +508,27 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
       message: `Running agentic source code ${role === "audit" ? "analysis" : "review"} via API...`,
     });
 
-    const apiRuntime = new LlmApiRuntime({
+    const parentRuntime = config.nativeRuntime ?? new LlmApiRuntime({
       type: "api" as RuntimeType,
       timeout: config.timeout ?? 120_000,
       apiKey: config.apiKey,
       model: config.model,
+      provider: config.provider,
+      agentModels: config.agentModels,
+      autoRoute: config.autoRoute,
+      singleModel: config.singleModel,
     });
-    const apiDiagnostics = apiRuntime.getConfigurationDiagnostics();
-    if (!apiDiagnostics.valid) {
-      throw new Error(apiDiagnostics.fatalError ?? `${apiDiagnostics.providerLabel} runtime is not available.`);
+    if (parentRuntime instanceof LlmApiRuntime) {
+      const diagnostics = parentRuntime.getConfigurationDiagnostics();
+      if (!diagnostics.valid) {
+        throw new Error(diagnostics.fatalError ?? `${diagnostics.providerLabel} runtime is not available.`);
+      }
     }
+    const apiRuntime = await parentRuntime.forkForSubagent?.(
+      config.timeout ?? 120_000,
+      { role: purpose === "verify" ? "verify" : "research" },
+    ) ?? parentRuntime;
+    config.signal?.throwIfAborted();
 
     // Check if runtime supports native tool_use (multi-turn agentic loop)
     const supportsNative = typeof (apiRuntime as NativeRuntime).executeNative === "function";
@@ -494,10 +556,12 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
           codebaseLearning: scopedSourceAudit && purpose === "research",
           sessionId,
           costCeilingUsd: config.costCeilingUsd,
-          costModel: config.model,
-          costLedger: config.costLedger,
+          costModel: apiRuntime.resolvedModel?.() ?? config.model,
+          costLedger: config.costLedger as import("./agent/cost-ledger.js").ScanCostLedger | undefined,
+          requirePricedUsage: Boolean(config.plan),
         },
         runtime: apiRuntime as NativeRuntime,
+        signal: config.signal,
         db,
         onFindingSaved: (finding) => {
           if (purpose === "verify" && opts.singleAgent) return;
@@ -559,23 +623,20 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
         });
       }
 
-      // Honor the loop's structured hard-exit (errorExit): an auth-class or
-      // exhausted-retry failure is NOT "0 findings" — propagate so the
-      // caller's error path (per-file onFileError + circuit breaker, or the
-      // pipeline's "AI analysis failed" warning) records it. Without this a
-      // dead provider reads as a clean "no vulnerabilities" report (measured
-      // 2026-07-17: codex 401 → 0-finding clean report, warnings[] empty).
-      if (agentState.errorExit) {
+      // Unplanned callers retain main's hard-error contract. Planned callers
+      // return their partial evidence and an explicit unsuccessful outcome.
+      if (agentState.errorExit && !config.plan) {
         throw new Error(agentState.errorExit.error);
       }
-      if (opts.singleAgent && !agentState.done && agentState.turnCount >= maxTurns) {
+      if (!config.plan && opts.singleAgent && !agentState.done && agentState.turnCount >= maxTurns) {
         throw new Error("Bounded review turn limit reached; coverage is incomplete.");
       }
+      const executionSuccessful = !agentState.errorExit && !config.signal?.aborted && (!config.plan || agentState.done);
 
       emit({
         type: "stage:end",
         stage: "attack",
-        message: `${role === "audit" ? "Agent" : "Review"} complete: ${agentState.findings.length} findings in ${agentState.turnCount} turns (${agentState.totalUsage.inputTokens + agentState.totalUsage.outputTokens} tokens)`,
+        message: `${role === "audit" ? "Agent" : "Review"} ${executionSuccessful ? "complete" : "incomplete"}: ${agentState.findings.length} findings in ${agentState.turnCount} turns (${agentState.totalUsage.inputTokens + agentState.totalUsage.outputTokens} tokens)`,
       });
 
       return {
@@ -585,18 +646,25 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
         estimatedCostUsd: agentState.estimatedCostUsd,
         turns: agentState.turnCount,
         costCeilingExceeded: agentState.costCeilingExceeded,
+        executionSuccessful,
+        error: agentState.errorExit?.error,
         ...(opts.collectProjectContext ? { projectObservations: parseProjectObservations(agentState.summary) } : {}),
       };
     }
 
     // ── Single-shot fallback for API runtimes without native tool_use ──
-    if (directApiPrompt) {
+    if (directApiPrompt && typeof (apiRuntime as Partial<Runtime>).execute === "function") {
       reportUnsupportedContributionMode("single-response analysis");
-      const result = await apiRuntime.execute(directApiPrompt, {
+      const result = await (apiRuntime as Runtime).execute(directApiPrompt, {
         systemPrompt: cliSystemPrompt,
+        signal: config.signal,
       });
+      addRuntimeUsage(config.costLedger as ScanCostLedger | undefined, result, apiRuntime.resolvedPricingModel?.() ?? apiRuntime.resolvedModel?.() ?? config.model);
+      if (config.plan && !result.usage && !result.usageByModel?.length) config.costLedger?.markUnpricedUsage();
+      if (!config.plan) config.signal?.throwIfAborted();
 
       if (result.error && !result.output) {
+        if (config.plan) return { findings: [], usage: result.usage, executionSuccessful: false, error: result.error };
         emit({
           type: "stage:end",
           stage: "attack",
@@ -625,10 +693,12 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
         findings,
         usage: result.usage,
         estimatedCostUsd: result.usage
-          ? estimateCost(result.usage, config.model)
+          ? estimateCost(result.usage, apiRuntime.resolvedPricingModel?.() ?? apiRuntime.resolvedModel?.() ?? config.model)
           : undefined,
         // Single-shot fallback = exactly one model round-trip.
         turns: 1,
+        executionSuccessful: config.plan ? !result.error && !result.timedOut && result.exitCode === 0 && !config.signal?.aborted && !!result.usage : undefined,
+        error: config.plan ? result.error ?? (result.timedOut ? "API analysis timed out." : !result.usage ? "API did not report priced usage." : undefined) : undefined,
       };
     }
   }
@@ -642,6 +712,10 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
     timeout: config.timeout ?? 120_000,
     apiKey: config.apiKey,
     model: config.model,
+    provider: config.provider,
+    agentModels: config.agentModels,
+    autoRoute: config.autoRoute,
+    singleModel: config.singleModel,
   };
   const runtime =
     runtimeType === "api" || !available.has(runtimeType)
@@ -657,8 +731,13 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
       target,
       scanId,
       scopePath,
+      costCeilingUsd: config.costCeilingUsd,
+      costModel: config.model,
+      costLedger: config.costLedger,
+      requirePricedUsage: Boolean(config.plan),
     },
     runtime,
+    signal: config.signal,
     db,
     onFindingSaved: (finding) => {
       emit({
@@ -682,17 +761,28 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
     },
   });
 
+  if (!config.plan) {
+    config.signal?.throwIfAborted();
+    if (agentState.errorExit) throw new Error(agentState.errorExit.error);
+  }
+  const executionSuccessful = !agentState.errorExit && !config.signal?.aborted && (!config.plan || agentState.done);
   emit({
     type: "stage:end",
     stage: "attack",
-    message: `${role === "audit" ? "Agent" : "Review"} complete: ${agentState.findings.length} findings${agentState.summary ? `, ${agentState.summary}` : ""}`,
+    message: `${role === "audit" ? "Agent" : "Review"} ${executionSuccessful ? "complete" : "incomplete"}: ${agentState.findings.length} findings${agentState.summary ? `, ${agentState.summary}` : ""}`,
   });
 
-  // Legacy loop doesn't track token usage / cost — those are populated
-  // only by the native API loop branch above. It does count turns, so those
-  // are still attributable per-phase.
-  return { findings: agentState.findings, summary: agentState.summary, usage: undefined, estimatedCostUsd: undefined, turns: agentState.turnCount,
-    ...(opts.collectProjectContext ? { projectObservations: parseProjectObservations(agentState.summary) } : {}) };
+  return {
+    findings: agentState.findings,
+    summary: agentState.summary,
+    usage: agentState.totalUsage,
+    estimatedCostUsd: agentState.estimatedCostUsd,
+    turns: agentState.turnCount,
+    costCeilingExceeded: agentState.costCeilingExceeded,
+    executionSuccessful,
+    error: agentState.errorExit?.error,
+    ...(opts.collectProjectContext ? { projectObservations: parseProjectObservations(agentState.summary) } : {}),
+  };
 }
 
 /**

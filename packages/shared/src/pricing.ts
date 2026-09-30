@@ -5,12 +5,21 @@ export interface ModelRates {
   output: number;
   /** Cached-input rate ($/1M). Falls back to `input` if absent. */
   cachedInput?: number;
+  /** Cache-write rate ($/1M); default is the five-minute Anthropic 1.25x input rate. */
+  cacheWrite?: number;
 }
 
 export interface TokenUsageForPricing {
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens?: number;
+  /** Cache-creation tokens included in inputTokens, not additional prompt tokens. */
+  cacheWriteTokens?: number;
+}
+/** Observed per-model usage from a runtime that performs several requests internally. */
+export interface ModelTokenUsage {
+  model: string;
+  usage: TokenUsageForPricing;
 }
 
 export const PRICING_SNAPSHOT_DATE = "2026-09-29";
@@ -141,13 +150,15 @@ export function registerModelPricing(model: string, rates: ModelRates): boolean 
     Object.hasOwn(MODEL_PRICING, model) ||
     !Number.isFinite(rates.input) || rates.input < 0 ||
     !Number.isFinite(rates.output) || rates.output < 0 ||
-    (rates.cachedInput !== undefined && (!Number.isFinite(rates.cachedInput) || rates.cachedInput < 0))) {
+    (rates.cachedInput !== undefined && (!Number.isFinite(rates.cachedInput) || rates.cachedInput < 0)) ||
+    (rates.cacheWrite !== undefined && (!Number.isFinite(rates.cacheWrite) || rates.cacheWrite < 0))) {
     return false;
   }
   DISCOVERED_PRICING.set(model, Object.freeze({
     input: rates.input,
     output: rates.output,
     ...(rates.cachedInput !== undefined ? { cachedInput: rates.cachedInput } : {}),
+    ...(rates.cacheWrite !== undefined ? { cacheWrite: rates.cacheWrite } : {}),
   }));
   return true;
 }
@@ -216,10 +227,12 @@ export function estimateCost(usage: TokenUsageForPricing, model?: string): numbe
   const rates = getRates(model);
   const cachedInputRate = rates.cachedInput ?? rates.input;
   const cached = usage.cachedInputTokens ?? 0;
-  const uncachedInput = Math.max(0, usage.inputTokens - cached);
+  const writes = usage.cacheWriteTokens ?? 0;
+  const uncachedInput = Math.max(0, usage.inputTokens - cached - writes);
   return (
     (uncachedInput / 1_000_000) * rates.input +
     (cached / 1_000_000) * cachedInputRate +
+    (writes / 1_000_000) * (rates.cacheWrite ?? rates.input * 1.25) +
     (usage.outputTokens / 1_000_000) * rates.output
   );
 }
@@ -270,9 +283,10 @@ export function splitCost(usage: TokenUsageForPricing, model?: string): CostSpli
   const rates = getRates(model);
   const cachedInputRate = rates.cachedInput ?? rates.input;
   const cached = usage.cachedInputTokens ?? 0;
-  const uncachedInput = Math.max(0, usage.inputTokens - cached);
+  const writes = usage.cacheWriteTokens ?? 0;
+  const uncachedInput = Math.max(0, usage.inputTokens - cached - writes);
   const split: CostSplit = {
-    cost_in: (uncachedInput / 1_000_000) * rates.input,
+    cost_in: (uncachedInput / 1_000_000) * rates.input + (writes / 1_000_000) * (rates.cacheWrite ?? rates.input * 1.25),
     cost_out: (usage.outputTokens / 1_000_000) * rates.output,
   };
   if (usage.cachedInputTokens !== undefined) {
