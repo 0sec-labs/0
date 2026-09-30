@@ -7,9 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 const destinations = [
-  { to: "/console", label: "Chats", icon: MessageSquare },
+  { to: "/console", label: "Chat", icon: MessageSquare },
   { to: "/findings", label: "Findings", icon: ShieldCheck },
-  { to: "/runs", label: "Activity", icon: Workflow },
+  { to: "/audits", label: "Audits", icon: Workflow },
   { to: "/plugins", label: "Plugins", icon: Plug },
   { to: "/settings", label: "Settings", icon: Settings },
 ];

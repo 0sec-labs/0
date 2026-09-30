@@ -16,7 +16,7 @@ import type { DashboardResponse, ScanRecord } from "@/types";
 
 type PaletteAction = {
   id: string;
-  group: "Actions" | "Pages" | "Findings" | "Scans";
+  group: "Actions" | "Pages" | "Findings" | "Audits";
   label: string;
   meta: string;
   icon: React.ComponentType<{ className?: string }>;
@@ -25,7 +25,7 @@ type PaletteAction = {
   shortcut?: string;
 };
 
-const GROUPS: PaletteAction["group"][] = ["Actions", "Pages", "Findings", "Scans"];
+const GROUPS: PaletteAction["group"][] = ["Actions", "Pages", "Findings", "Audits"];
 
 export function CommandPalette({
   open,
@@ -127,11 +127,11 @@ export function CommandPalette({
       {
         id: "page-scans",
         group: "Pages",
-        label: "Activity",
-        meta: "Scan history",
+        label: "Audits",
+        meta: "Plan and track security reviews",
         icon: PlayCircle,
-        keywords: ["scans runs timeline history"],
-        run: () => navigate("/runs"),
+        keywords: ["audits security review scans runs timeline history"],
+        run: () => navigate("/audits"),
       },
     ];
 
@@ -193,8 +193,8 @@ export function CommandPalette({
       base.unshift({
         id: "scan-detail",
         group: "Actions",
-        label: "Open this run",
-        meta: "Run details",
+        label: "Open this audit",
+        meta: "Audit report",
         icon: PlayCircle,
         keywords: ["scan timeline detail current"],
         run: () => navigate(`/runs/${selectedScanId}`),
@@ -216,7 +216,7 @@ export function CommandPalette({
     for (const scan of scans?.slice(0, 14) ?? []) {
       base.push({
         id: `scan-${scan.id}`,
-        group: "Scans",
+        group: "Audits",
         label: scan.target,
         meta: scan.status,
         icon: PlayCircle,

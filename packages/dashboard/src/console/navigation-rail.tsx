@@ -9,9 +9,9 @@ export function ConsoleNavigationRail({ settingsHref }: { settingsHref: string }
   const icon = "mx-[9px] size-[18px] shrink-0";
   const label = "whitespace-nowrap text-sm opacity-0 transition-opacity duration-150 motion-reduce:transition-none group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:opacity-100";
   const destinations = [
-    { to: "/console?new=1", label: "Home", icon: MessageSquare },
+    { to: "/console?new=1", label: "Chat", icon: MessageSquare },
     { to: "/findings", label: "Findings", icon: ShieldCheck },
-    { to: "/runs", label: "Activity", icon: Workflow },
+    { to: "/audits", label: "Audits", icon: Workflow },
     { to: "/plugins", label: "Plugins", icon: Plug },
   ];
   return <div className="relative hidden w-14 shrink-0 lg:block">

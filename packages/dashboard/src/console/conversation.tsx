@@ -182,14 +182,14 @@ function ContextSuggestions({ snapshot, onChoose }: { snapshot: ConsoleSessionSn
   ] : [
     { icon: FolderSearch, text: "Review a codebase", prompt: "Help me review a codebase for security issues. Ask which local directory to use and establish the scope first." },
     { icon: ShieldCheck, text: "Investigate a security question", prompt: "Help me investigate a security question. Ask for the relevant evidence and constraints first." },
-    { icon: ListChecks, text: "Plan an assessment", prompt: "Help me plan a security assessment. Ask for the target, authorized scope, and time and cost limits." },
+    { icon: ListChecks, text: "Plan an audit", prompt: "Help me plan a security audit. Ask for the target, authorized scope, and time and cost limits." },
   ];
   return <div aria-label="Suggested prompts" className="mx-auto w-full max-w-3xl space-y-1 px-3 pt-3 sm:px-6">{suggestions.map(({ icon: Icon, text, prompt }) => <button key={text} type="button" className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-muted-foreground hover:bg-muted/40 hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary" onClick={() => onChoose(prompt)}><Icon className="size-4 shrink-0" /><span className="truncate">{text}</span></button>)}</div>;
 }
 
 const COMMAND_SUMMARIES: Record<string, string> = {
   help: "Browse commands", capabilities: "Explore what 0 can do", status: "Check this conversation", tools: "Browse available tools",
-  "new-chat": "Start a new conversation", onboard: "Open guided setup", clear: "Clear this conversation", history: "Browse previous runs",
+  "new-chat": "Start a new conversation", onboard: "Open guided setup", clear: "Clear this conversation", history: "Browse audit reports",
   findings: "Review findings", fix: "Prepare a fix for review", copy: "Export this conversation", sessions: "Switch conversations",
   explain: "Get a simpler explanation", feedback: "Share feedback", settings: "Manage preferences", keybindings: "View keyboard shortcuts",
   theme: "Change appearance", model: "Choose a model", chat: "Return to chat", ops: "Open dashboard", hackstore: "Browse plugins",

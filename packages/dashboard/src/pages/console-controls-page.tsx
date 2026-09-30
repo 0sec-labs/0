@@ -22,7 +22,7 @@ const pages = [
   { mode: "plugins", path: "/plugins", label: "Plugins", icon: Blocks, description: "" },
   { mode: "doctor", path: "/doctor", label: "Health", icon: HeartPulse, description: "" },
   { mode: "tools", path: "/tools", label: "Tools", icon: Wrench, description: "" },
-  { mode: "launch", path: "/launcher", label: "Launcher", icon: Rocket, description: "Limits apply to the whole scan." },
+  { mode: "launch", path: "/audits", label: "Audits", icon: Rocket, description: "Plan and track security audits. Limits apply to the whole audit." },
   { mode: "fix", path: "/fix", label: "Fixes", icon: Wrench, description: "" },
 ] as const;
 
@@ -30,7 +30,7 @@ export function WebConsoleControlsPage({ mode: passedMode }: { mode?: WebConsole
   const location = useLocation();
   const headingRef = useRef<HTMLDivElement>(null);
   const leaf = location.pathname.replace(/^\/console\//, "/").replace(/\/$/, "");
-  const mode = passedMode ?? (leaf === "/launch" ? "launch" : pages.find(page => page.path === leaf)?.mode) ?? "settings";
+  const mode = passedMode ?? (["/launch", "/launcher"].includes(leaf) ? "launch" : pages.find(page => page.path === leaf)?.mode) ?? "settings";
   const page = pages.find(item => item.mode === mode)!;
   const params = new URLSearchParams(location.search);
   const sessionId = params.get("session") ?? undefined;
