@@ -92,7 +92,7 @@ Guide: [Read the workflow](/console/).
 | `--mode <mode>` | — | Autonomy mode: standard, recon, copilot, yolo. YOLO accepts absolute public-network targets without a launch target; explicit restrictions and exclusions still apply. |
 | `--yolo` | — | Shortcut for --mode yolo. Omits per-action approval prompts; explicit restrictions and exclusions still apply. |
 | `--autonomy <mode>` | — | Alias of --mode (standard\|copilot\|yolo\|recon); --mode/--yolo take precedence. |
-| `--max-tool-calls <n>` | `100` | Safety cap on tool-call rounds per operator message |
+| `--max-tool-calls <n>` | `100` | Safety cap on tool-call rounds per message |
 | `--allow-scanners` | — | Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off |
 | `--resume [id]` | — | Reopen a saved console session by id (or unique prefix); with no id, opens a session picker. Also reachable as `0 -r [id]`. |
 | `--continue` | — | Reopen the most recent console session, no picker. Also reachable as `0 -c`. |
@@ -150,8 +150,11 @@ Guide: [Read the workflow](/architecture/#presentation-contract).
 | `--port <port>` | `48123` | Port to bind; 0 chooses a free loopback port |
 | `--host <host>` | `127.0.0.1` | Loopback host to bind (127.0.0.0/8 or ::1) |
 | `--asset-dir <path>` | — | Path to built dashboard assets |
+| `--dev-url <url>` | — | Loopback Vite server for authenticated frontend hot reload |
 | `--ready-json` | — | Emit the bound dashboard URL as machine-readable JSON |
 | `--no-open` | — | Do not auto-open a browser |
+
+Aliases: `web`.
 
 ### doctor
 
@@ -522,37 +525,37 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--target <target>` **required** | — | Target URL or mcp:// endpoint |
 | `--depth <depth>` | `default` | Scan depth: quick, default, deep |
 | `--format <format>` | `terminal` | Output format: terminal, json, md, html, sarif, pdf |
-| `--runtime <runtime>` | `auto` | Runtime: auto (default), api, claude, codex, gemini |
-| `--mode <mode>` | — | Scan mode: probe, deep, mcp, web, http_audit. `http_audit` is the worker-driven authed HTTP scan: it reads target config from ZERO_TARGET_* env vars (ZERO_TARGET_BASE_URL, ZERO_TARGET_AUTH_JSON, ZERO_TARGET_ALLOWED_HOSTS, ZERO_TARGET_ALLOWED_PATHS, ZERO_TARGET_RATE_LIMIT_RPS, ZERO_TARGET_KILL_AFTER_SEC), builds an in-memory ScopePolicy + path allowlist + per-host RateLimiter + wall-clock kill switch, runs the web-pentest loop, and emits an enforcement_summary block in the report JSON. |
+| `--runtime <runtime>` | `auto` | Model provider: auto, api, claude, codex, gemini |
+| `--mode <mode>` | — | Scan mode: probe, deep, mcp, web, http_audit (http_audit reads ZERO_TARGET_* env config) |
 | `--timeout <ms>` | `30000` | Request timeout in milliseconds |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
-| `--repo <path>` | — | Source code path for white-box scanning (read code before attacking) |
-| `--auth <json>` | — | Auth credentials as JSON string or path to JSON file (types: bearer, cookie, basic, header) |
-| `--scope <path>` | — | JSON engagement policy ({in_scope, out_of_scope}); activate its authorization checks with `0 plugin enable scope` |
-| `--allow-scanners` | `false` | Expose structured scanner tools and relax generic-scanner suppression in scope-enforced engagements. Pass only when the operator permits that traffic. |
+| `--repo <path>` | — | Source code path for white-box scanning |
+| `--auth <json>` | — | Auth credentials: JSON string or path (bearer, cookie, basic, header) |
+| `--scope <path>` | — | Path to a JSON scope policy (enable with `0 plugin enable scope`) |
+| `--allow-scanners` | `false` | Expose generic scanner tools in scope-enforced scans |
 | `--require-scope` | `false` | Set ZERO_REQUIRE_SCOPE for scope-aware execution paths. Ordinary live-target scan already refuses missing scope, independently of this flag. |
-| `--attribution-header <name=value>` | — | Attribution header to attach to in-scope outbound requests (0#216). Repeatable: pass `--attribution-header X-A=1 --attribution-header X-B=2`. Lower precedence than the scope file's `attribution.headers` block and ZERO_ATTRIBUTION_HEADERS env var. NEVER attached to out-of-scope traffic. |
-| `--attribution-ua <token>` | — | Engagement token to embed in the User-Agent on in-scope traffic (0#216). Resulting UA: `0/&lt;ver&gt; (engagement: &lt;token&gt;)`. Lower precedence than the scope file's `attribution.user_agent_token` and ZERO_ATTRIBUTION_UA_TOKEN env var. |
-| `--api-spec <path>` | — | Path to OpenAPI 3.x / Swagger 2.0 spec file (JSON or YAML) for pre-loaded endpoint knowledge |
+| `--attribution-header <name=value>` | — | Header to attach to in-scope requests (repeatable); never sent out-of-scope |
+| `--attribution-ua <token>` | — | Engagement token to embed in the User-Agent on in-scope traffic |
+| `--api-spec <path>` | — | Path to an OpenAPI/Swagger spec for endpoint knowledge |
 | `--export <target>` | — | Export findings to issue tracker (e.g. github:owner/repo) |
-| `--race` | `false` | Enable benchmark/CTF best-of-N strategy racing: run multiple flag-oriented attack strategies in parallel. Do not use for normal live-target audits. |
-| `--egats` | `false` | Enable EGATS (Evidence-Gated Attack Tree Search): beam-search over a hypothesis tree |
+| `--race` | `false` | Best-of-N strategy racing (benchmark/CTF only) |
+| `--egats` | `false` | Evidence-gated attack tree search |
 | `--cost-ceiling <usd>` | — | Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD. |
-| `--rate-limit <spec>` | — | Per-host requests-per-second cap for outbound scan traffic. Plain number (e.g. '5') sets the default rps; comma-separated form 'api.example.com=5,*.example.com=3:6,2' allows per-host overrides and a fallback default. Default is 5 rps when unset. Each host carries an independent token bucket; 429 responses honour Retry-After (with a conservative 60s floor). |
-| `--engagement-profile <name>` | — | Engagement hardening posture for authorized enterprise work. 'standard' (default) is the existing behaviour. 'conservative' applies ONE quiet posture: no password-reset burst probe, the deterministic web-recon pre-pass routed through the per-host rate limiter, no adaptive WAF-evasion ladder, full jitter on the token bucket, and a reduced default of 1 rps/host. The applied posture is recorded in the report as `engagementPosture` so it can be handed to the client as evidence. Lower precedence than the scope file's `engagement` block and ZERO_ENGAGEMENT_PROFILE. |
-| `--no-waf-evasion` | — | Disable the adaptive WAF-evasion ladder (default: on). When a response classifies as blocked, the engine normally retries with encoding/casing/whitespace-mutated payload variants, which escalates a routine WAF block into a SOC incident. Detection and reporting of the block are unaffected. Independent of --engagement-profile; env form: ZERO_WAF_EVASION=0. |
-| `--tui` | `false` | Open the local terminal UI after the scan completes |
-| `--features <list>` | — | Comma-separated list of opt-in feature flags to enable for this scan (e.g. 'wp_fingerprint,web_search'). Each flag maps to the corresponding ZERO_FEATURE_&lt;NAME&gt; environment variable. The token 'fp-moat' is a preset that enables the full false-positive moat (reachability, multi-modal, publishability, pov-gate, poc-gen, consensus) for an A/B run; an env var you set yourself always wins over the preset, so 'ZERO_FEATURE_POV_GATE=0 --features fp-moat' is a single-layer ablation. |
-| `--no-decoy-detection` | — | Disable the anti-honeypot flag-shape validator (default: on). When enabled, the `done` tool rejects low-confidence flags (e.g. `FLAG{I'm_a_Script_Kiddie}`) once with a hint to keep exploring. See GitHub issue #82. |
-| `--dispatch <mode>` | `auto` | Tool-call protocol for the legacy text agent loop (0#232): 'json' (default TOOL_CALL JSON lines), 'xml' (&lt;command&gt;/&lt;flag&gt;/&lt;finding&gt;/&lt;note&gt; tags — survives malformed JSON from cheap OpenRouter / Gemini / DeepSeek models), or 'auto' (xml for cheap providers, json otherwise). No effect on the native API loop. Env override: ZERO_DISPATCH=xml. |
-| `--emit <target>` | — | Emit target. Default unset → existing terminal/json/etc. `pr` → emit each reproduced finding as a GitHub PR with repro + suggested patch (0#377). Unverified findings roll up into `hypotheses.md`. |
+| `--rate-limit <spec>` | — | Per-host requests/sec cap, e.g. '5' or 'host=5,*=3' (default 5) |
+| `--engagement-profile <name>` | — | Engagement posture: standard (default) or conservative (quieter) |
+| `--no-waf-evasion` | — | Disable adaptive WAF-evasion retries |
+| `--tui` | `false` | Open the terminal UI after the scan completes |
+| `--features <list>` | — | Comma-separated feature flags to enable, e.g. 'fp-moat' |
+| `--no-decoy-detection` | — | Disable the anti-honeypot flag validator |
+| `--dispatch <mode>` | `auto` | Tool-call protocol: json, xml, auto (legacy loop only) |
+| `--emit <target>` | — | Emit mode: 'pr' opens a GitHub PR per reproduced finding |
 | `--base <branch>` | — | Base branch for `--emit pr` (default: main) |
 | `--dry-run` | `false` | For --emit pr only: print proposed git/gh emission commands. The scan itself still executes. |
 | `--emit-out-dir <path>` | — | Directory for `--emit pr` rollup files (default: system temp) |
-| `--resume <run-id>` | — | Resume a previous run from its journal on disk (0#374). Locates the run's journal, rehydrates agent state, and continues from the last entry. |
-| `--branch-from <entry-index>` | — | Branch the journal at the given entry index before resuming (requires --resume). Copies entries 0..N into a new run and resumes from there. |
+| `--resume <run-id>` | — | Resume a previous run from its on-disk journal |
+| `--branch-from <entry-index>` | — | Branch the journal at an entry index before resuming (with --resume) |
 | `--verbose` | `false` | Show detailed output |
 | `--replay` | `false` | Replay the last scan's results |
 
