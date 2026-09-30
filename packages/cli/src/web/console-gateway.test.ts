@@ -53,6 +53,22 @@ async function idle(instance: ConsoleGateway, id: string): Promise<void> {
 }
 
 describe("ConsoleGateway", () => {
+  it("archives a chat with a failed model initialization without initializing it again", async () => {
+    const createSession = vi.fn(() => { throw new Error("The selected model is not available to this ChatGPT account."); });
+    const instance = gateway(createSession);
+    const created = instance.create({ title: "Unavailable model" });
+    await expect(instance.send(created.id, "Keep this message")).rejects.toThrow("selected model");
+    expect(instance.get(created.id).session.status).toBe("failed");
+    const before = instance.get(created.id).messages;
+
+    const archived = await instance.archive(created.id);
+
+    expect(archived.archived).toBe(true);
+    expect(instance.get(created.id).session.status).toBe("closed");
+    expect(instance.loadSaved(archived.id).messages).toEqual(before);
+    expect(createSession).toHaveBeenCalledTimes(1);
+  });
+
   it("archives a live chat without losing history, persists across gateways, and restores it", async () => {
     const instance = gateway();
     const created = instance.create({ title: "Archive fixture" });

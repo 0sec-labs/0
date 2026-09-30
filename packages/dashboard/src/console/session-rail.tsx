@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Archive, ArchiveRestore, Plus, Search, Trash2, Settings, ShieldCheck } from "lucide-react";
+import { Archive, ArchiveRestore, CircleAlert, MessageCircleQuestion, Plus, Search, Trash2, Settings, ShieldCheck } from "lucide-react";
 import type { ConsoleSavedSession, DesktopConsoleSession } from "@0/shared";
 import { Button as KumoButton } from "@cloudflare/kumo/components/button";
 import { Input } from "@/components/ui/input";
@@ -11,10 +11,12 @@ import type { ConsoleWorkspace } from "./use-console-workspace";
 function SessionActivity({ status }: { status: DesktopConsoleSession["status"] }) {
   if (status === "ready" || status === "closed") return null;
   const label = status === "working" ? "Responding" : status === "waiting" ? "Waiting for you" : "Needs attention";
-  return <span role="status" aria-label={label} title={label} className="mr-1 flex size-5 shrink-0 items-center justify-center">
+  return <span role="status" aria-label={label} title={label} className="flex size-7 shrink-0 items-center justify-center">
     {status === "working"
       ? <LoadingDots className="console-loading-dots-compact text-muted-foreground" />
-      : <span aria-hidden="true" className={cn("size-1.5 rounded-full", status === "waiting" ? "bg-amber-400" : "bg-red-400/80")} />}
+      : status === "waiting"
+        ? <MessageCircleQuestion aria-hidden="true" className="size-4 text-amber-400" />
+        : <CircleAlert aria-hidden="true" className="size-4 text-red-400/80" />}
   </span>;
 }
 
