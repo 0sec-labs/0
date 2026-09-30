@@ -25,6 +25,30 @@ function getControlToken(): string | null {
   return meta?.getAttribute("content") ?? null;
 }
 
+let refreshingControlToken: Promise<string | null> | undefined;
+
+/** Recover after a local server restart using its same-origin HTML bootstrap. */
+function refreshControlToken(): Promise<string | null> {
+  return refreshingControlToken ??= (async () => {
+    const response = await fetch("/", {
+      credentials: "same-origin", cache: "no-store", redirect: "error",
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok || !response.headers.get("content-type")?.includes("text/html")) return null;
+    const bootstrap = new DOMParser().parseFromString(await response.text(), "text/html");
+    const token = bootstrap.querySelector('meta[name="0-control-token"]')?.getAttribute("content");
+    if (!token) return null;
+    let meta = document.querySelector('meta[name="0-control-token"]');
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.setAttribute("name", "0-control-token");
+      document.head.append(meta);
+    }
+    meta.setAttribute("content", token);
+    return token;
+  })().finally(() => { refreshingControlToken = undefined; });
+}
+
 export async function webFetch(path: string, init?: RequestInit): Promise<Response> {
   if (!path.startsWith("/api/") || path.includes("\\") || new URL(path, window.location.origin).origin !== window.location.origin) {
     throw new Error("Browser controls require a same-origin API path.");
@@ -34,13 +58,24 @@ export async function webFetch(path: string, init?: RequestInit): Promise<Respon
   const token = getControlToken();
   if (token) headers.set("X-0-Control-Token", token);
 
-  return fetch(path, {
+  const request = () => fetch(path, {
     ...init,
     headers,
     credentials: "same-origin",
     cache: "no-store",
     redirect: "error",
   });
+  const response = await request();
+  if (response.status !== 403) return response;
+  const rejection = await response.clone().json().catch(() => null) as { error?: string } | null;
+  if (rejection?.error !== "Invalid or missing control token") return response;
+  // Token validation rejects the request before the API action runs, so one
+  // retry is safe even for writes. Other authorization failures never retry.
+  const current = getControlToken();
+  const refreshed = current && current !== token ? current : await refreshControlToken().catch(() => null);
+  if (!refreshed || init?.signal?.aborted) return response;
+  headers.set("X-0-Control-Token", refreshed);
+  return request();
 }
 
 export async function webFetchJson<T>(path: string, init?: RequestInit): Promise<T> {

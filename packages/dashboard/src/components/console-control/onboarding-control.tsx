@@ -5,21 +5,19 @@ import { ArrowLeft, ArrowRight, Check as CheckIcon } from "lucide-react";
 import { webFetch, webFetchJson } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { BrandMark } from "@/components/brand-mark";
 import zeroMascotUrl from "../../assets/zero-peek.png";
 import { cn } from "@/lib/utils";
 import { ConnectionsControl, useProviders } from "./connections-control";
-import { ThemeControl, useConsoleSettings } from "./settings-control";
-import { ProjectControl } from "./system-control";
-import { Check, Facts, Feedback, Field, QueryState, SubmitButton, jsonBody } from "./control-ui";
+import { useConsoleSettings } from "./settings-control";
+import { Facts, Feedback, Field, QueryState, SubmitButton, jsonBody } from "./control-ui";
 import type { ModelsResponse, SessionSnapshot, SessionSummary, SettingsResponse } from "./contracts";
 
 const steps = [
   { id: "welcome", label: "Welcome", title: "Welcome to 0" },
   { id: "connect", label: "Connect", title: "Connect a provider" },
   { id: "model", label: "Model", title: "Choose a model" },
-  { id: "scope", label: "Scope", title: "Set boundaries" },
-  { id: "look", label: "Theme", title: "Pick a theme" },
   { id: "privacy", label: "Privacy", title: "Privacy" },
 ] as const;
 type StepId = typeof steps[number]["id"];
@@ -27,8 +25,6 @@ const stepDescriptions: Record<StepId, string> = {
   welcome: "Your security teammate, ready to explore.",
   connect: "Bring the provider you already use.",
   model: "Pick the model that fits your work.",
-  scope: "Choose what 0 can work on.",
-  look: "Make this workspace feel like yours.",
   privacy: "Choose what you share. You stay in control.",
 };
 
@@ -38,10 +34,18 @@ export function OnboardingControl({ sessionId, returnTo }: { sessionId?: string;
   const queryClient = useQueryClient();
   const providers = useProviders();
   const settings = useConsoleSettings();
-  const requested = steps.findIndex(item => item.id === search.get("step"));
+  const requestedStep = search.get("step");
+  const retiredStep = requestedStep === "scope" || requestedStep === "look";
+  const requested = steps.findIndex(item => item.id === (retiredStep ? "privacy" : requestedStep));
   const step = requested < 0 ? 0 : requested;
   const current = steps[step];
   const setStep = (index: number) => { const next = new URLSearchParams(search); next.set("step", steps[Math.max(0, Math.min(index, steps.length - 1))].id); setSearch(next, { replace: true }); };
+  useEffect(() => {
+    if (!retiredStep) return;
+    const next = new URLSearchParams(search);
+    next.set("step", "privacy");
+    setSearch(next, { replace: true });
+  }, [retiredStep, search, setSearch]);
 
   // The session in the URL may have been removed since the link was made. A missing session must not
   // block setup: steps that need one create a fresh session instead of patching a 404.
@@ -60,7 +64,6 @@ export function OnboardingControl({ sessionId, returnTo }: { sessionId?: string;
   const [reporting, setReporting] = useState("ask");
   const [analyticsChanged, setAnalyticsChanged] = useState(false);
   const [reportingChanged, setReportingChanged] = useState(false);
-  const [automaticApproved, setAutomaticApproved] = useState(false);
   const [consentReady, setConsentReady] = useState(false);
   const focusRef = useRef<HTMLHeadingElement>(null);
   const stepperRef = useRef<HTMLOListElement>(null);
@@ -74,7 +77,6 @@ export function OnboardingControl({ sessionId, returnTo }: { sessionId?: string;
   const complete = useMutation({ mutationFn: async () => {
     if (!settings.data || !consentReady) throw new Error("Load the server's current sharing preferences before completing setup.");
     const latest = await webFetchJson<SettingsResponse>("/api/console/settings");
-    if (reportingChanged && reporting === "automatic" && latest.settings.diagnosticReporting !== "automatic" && !automaticApproved) throw new Error("Automatic diagnostic reporting needs explicit separate consent.");
     const entries: [string, unknown][] = [];
     if (analyticsChanged && analytics !== latest.settings.analyticsLevel) entries.push(["analyticsLevel", analytics]);
     if (reportingChanged && reporting !== latest.settings.diagnosticReporting) entries.push(["diagnosticReporting", reporting]);
@@ -94,11 +96,8 @@ export function OnboardingControl({ sessionId, returnTo }: { sessionId?: string;
     welcome: step > 0 || settings.data?.settings.onboardingCompleted === true,
     connect: connected.length > 0,
     model: !!preference?.model,
-    scope: false,
-    look: false,
     privacy: settings.data?.settings.diagnosticReportingPrompted === true,
   };
-  const reportingNeedsConsent = reportingChanged && reporting === "automatic" && settings.data?.settings.diagnosticReporting !== "automatic";
 
   return <div className="mx-auto grid min-h-[calc(100dvh-160px)] w-full max-w-5xl items-center gap-8 py-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-16">
     <aside className="text-center lg:sticky lg:top-12 lg:self-center">
@@ -135,17 +134,14 @@ export function OnboardingControl({ sessionId, returnTo }: { sessionId?: string;
           </div>)}
     {current.id === "connect" && <ConnectionsControl onConnected={() => setStep(step + 1)} />}
     {current.id === "model" && (sessionGate || <ModelStep owner={owner} onApplied={applied} />)}
-    {current.id === "scope" && (sessionGate || <ProjectControl sessionId={owner} onApplied={applied} />)}
-    {current.id === "look" && <ThemeControl />}
     {current.id === "privacy" && <div className="space-y-5">
       <QueryState pending={settings.isPending} error={settings.error} retry={settings.refetch} />
-      <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Usage metrics" hint="Anonymous counts and timing. Never code or prompts."><Select aria-label="Usage metrics" value={analytics} onValueChange={value => { setAnalytics(value); setAnalyticsChanged(true); }} disabled={!consentReady || complete.isPending} options={[{ value: "off", label: "Off" }, { value: "usage", label: "Share" }]} /></Field>
-        <Field label="Diagnostic reports"><Select aria-label="Diagnostic reports" value={reporting} onValueChange={value => { setReporting(value); setReportingChanged(true); setAutomaticApproved(false); }} disabled={!consentReady || complete.isPending} options={[{ value: "off", label: "Off" }, { value: "ask", label: "Ask before sending" }, { value: "automatic", label: "Send automatically" }]} /></Field>
+      <div className="divide-y divide-border/50">
+        <div className="flex items-center justify-between gap-6 py-4"><div className="space-y-1"><label htmlFor="setup-usage-metrics" className="text-sm font-medium">Usage metrics</label><p id="setup-usage-metrics-hint" className="text-xs leading-5 text-muted-foreground">Anonymous counts and timing. Never code or prompts.</p></div><Switch id="setup-usage-metrics" aria-label="Usage metrics" aria-describedby="setup-usage-metrics-hint" checked={analytics === "usage"} onCheckedChange={value => { setAnalytics(value ? "usage" : "off"); setAnalyticsChanged(true); }} disabled={!consentReady || complete.isPending} /></div>
+        <div className="flex items-center justify-between gap-6 py-4"><div className="space-y-1"><label htmlFor="setup-diagnostic-reports" className="text-sm font-medium">Diagnostic reports</label><p id="setup-diagnostic-reports-hint" className="text-xs leading-5 text-muted-foreground">{reporting === "automatic" ? "Reports send automatically. Change this in Settings." : "Ask before sending. You review each report first."}</p></div><Switch id="setup-diagnostic-reports" aria-label="Diagnostic reports" aria-describedby="setup-diagnostic-reports-hint" checked={reporting !== "off"} onCheckedChange={value => { setReporting(value ? "ask" : "off"); setReportingChanged(true); }} disabled={!consentReady || complete.isPending} /></div>
       </div>
-      {reportingNeedsConsent && <Check checked={automaticApproved} onChange={setAutomaticApproved}>I authorize sending diagnostic reports automatically to the configured destination.</Check>}
       <Feedback error={complete.error} />
-      <SubmitButton pending={complete.isPending} disabled={!consentReady || settings.isError || (reportingNeedsConsent && !automaticApproved)} onClick={() => complete.mutate()}>Finish setup<ArrowRight className="size-4" /></SubmitButton>
+      <SubmitButton pending={complete.isPending} disabled={!consentReady || settings.isError} onClick={() => complete.mutate()}>Finish setup<ArrowRight className="size-4" /></SubmitButton>
     </div>}
 
     {step > 0 && <div className="sticky bottom-0 z-10 -mx-1 flex items-center justify-between gap-3 bg-background/95 px-1 py-3 backdrop-blur">
