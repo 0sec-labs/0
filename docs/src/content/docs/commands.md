@@ -7,7 +7,7 @@ tableOfContents:
 ---
 
 Find the command, arguments, and options for your task. This reference covers
-**56 top-level commands** and their registered subcommands.
+**57 top-level commands** and their registered subcommands.
 
 For a worked example, start with [Scan Workflows](/scan-workflows/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
@@ -2117,7 +2117,7 @@ Autonomous self-improvement: source-candidate proposal, lens evaluation, and aut
 
 Guide: [Read the workflow](/improvement-plane/).
 
-Subcommands: [run](#evolve-run) · [status](#evolve-status) · [promote](#evolve-promote) · [rollback](#evolve-rollback) · [exec](#evolve-exec) · [feedback](#evolve-feedback).
+Subcommands: [run](#evolve-run) · [status](#evolve-status) · [reconcile](#evolve-reconcile) · [promote](#evolve-promote) · [rollback](#evolve-rollback) · [exec](#evolve-exec) · [feedback](#evolve-feedback).
 
 #### evolve run
 
@@ -2150,6 +2150,25 @@ Show active and canary versions, snapshot identities, and registry events
 | --- | --- | --- |
 | `--store <path>` | — | Required path to evolution store directory |
 | `--json` | — | Output structured JSON |
+
+#### evolve reconcile
+
+Record an observed charge for an interrupted durable dispatch. Supply the
+reservation ID and immutable cost-receipt digest shown by the campaign status.
+This resolves cost uncertainty once; it does not bypass provenance or promotion.
+See [durable campaign accounting](/improvement-plane/#feedback-across-evolution-passes).
+
+```text
+0 evolve reconcile [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--store <path>` **required** | — | Path to evolution store directory |
+| `--dispatch <id>` **required** | — | Unresolved dispatch reservation ID |
+| `--cost-usd <amount>` **required** | — | Actual provider/execution charge |
+| `--receipt-digest <sha256>` **required** | — | Immutable observed cost receipt digest |
+| `--json` | — | Output structured campaign ledger |
 
 #### evolve promote
 
@@ -2882,6 +2901,143 @@ Write a program's structured_scopes to ~/.0/scopes/<handle>.json
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--out <path>` | — | Override the output path |
+
+## Private local review checks
+
+These commands store operator-approved criteria for a real local project root,
+not cloud enrollment or repository-controlled configuration. See the
+[review-check workflow](/scan-workflows/#private-project-review-checks).
+
+### checks
+
+Manage private project checks and explicit revision approvals.
+
+```text
+0 checks
+```
+
+Subcommands: [propose](#checks-propose) · [add](#checks-add) · [list](#checks-list) · [enable](#checks-enable) · [disable](#checks-disable) · [set](#checks-set) · [remove](#checks-remove).
+
+#### checks propose
+
+Save a literal draft without enabling it. Creating a draft grants no authority
+to execute it in future reviews.
+
+```text
+0 checks propose [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--name <name>` **required** | — | Short check name (1–120 characters) |
+| `--prompt <text>` **required** | — | Literal review criterion (1–2000 characters) |
+| `--project <path>` | — | Local project directory (defaults to this checkout's root) |
+| `--json` | — | Machine-readable result |
+
+#### checks add
+
+Create and enable an explicitly approved literal check. At most eight checks
+can be active in one local project.
+
+```text
+0 checks add [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--name <name>` **required** | — | Short check name (1–120 characters) |
+| `--prompt <text>` **required** | — | Literal review criterion (1–2000 characters) |
+| `--yes` **required** | — | Approve this prompt for future local reviews |
+| `--project <path>` | — | Local project directory (defaults to this checkout's root) |
+| `--json` | — | Machine-readable result |
+
+#### checks list
+
+List current prompts, revisions, and enabled or inactive status for the project.
+
+```text
+0 checks list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--project <path>` | — | Local project directory (defaults to this checkout's root) |
+| `--json` | — | Machine-readable result |
+
+#### checks enable
+
+Approve the current revision. Use an expected revision when approval must refer
+to the exact draft inspected by the operator.
+
+```text
+0 checks enable [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--yes` **required** | — | Confirm developer approval |
+| `--expected-revision <n>` | — | Refuse if the inspected revision changed |
+| `--project <path>` | — | Local project directory (defaults to this checkout's root) |
+| `--json` | — | Machine-readable result |
+
+#### checks disable
+
+Stop future evaluation without deleting prompt history.
+
+```text
+0 checks disable [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--project <path>` | — | Local project directory (defaults to this checkout's root) |
+| `--json` | — | Machine-readable result |
+
+#### checks set
+
+Revise the literal prompt. Changing an enabled check requires fresh explicit
+approval; stale expected revisions leave the previous state unchanged.
+
+```text
+0 checks set [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--prompt <text>` **required** | — | Replacement literal prompt (1–2000 characters) |
+| `--yes` | — | Approve the new revision if the check is enabled |
+| `--expected-revision <n>` | — | Refuse if the inspected revision changed |
+| `--project <path>` | — | Local project directory (defaults to this checkout's root) |
+| `--json` | — | Machine-readable result |
+
+#### checks remove
+
+Delete a local check and its revisions from the selected project.
+
+```text
+0 checks remove [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--project <path>` | — | Local project directory (defaults to this checkout's root) |
+| `--json` | — | Machine-readable result |
 
 ## XBOW benchmark runner
 

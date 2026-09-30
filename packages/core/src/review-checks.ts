@@ -87,8 +87,11 @@ export function snapshotProjectReviewChecks(projectPath: string, homeDir?: strin
 }
 
 export type ReviewCheckMutation =
-  | { action: "propose" | "add"; name: string; prompt: string; approved?: boolean }
-  | { action: "enable" | "disable" | "remove"; id: string; approved?: boolean; expectedRevision?: number }
+  | { action: "propose"; name: string; prompt: string; approved?: boolean }
+  | { action: "add"; name: string; prompt: string; approved?: boolean }
+  | { action: "enable"; id: string; approved?: boolean; expectedRevision?: number }
+  | { action: "disable"; id: string; approved?: boolean; expectedRevision?: number }
+  | { action: "remove"; id: string; approved?: boolean; expectedRevision?: number }
   | { action: "set"; id: string; prompt: string; approved?: boolean; expectedRevision?: number };
 
 /** Serialized read/modify/atomic-rename; failed approval/CAS leaves the previous file untouched. */

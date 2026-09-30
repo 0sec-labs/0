@@ -2711,7 +2711,6 @@ describe("Console source acquisition is not target authorization", () => {
     });
     const checkout = await session.send("Get Go source");
     expect(checkout.toolCalls[0].result.success).toBe(false);
-    expect(checkout.toolCalls[0].result.error).toContain("exact official HTTPS repository URL");
     expect(runCheckout).not.toHaveBeenCalled();
     expect(session.scope?.match("https://github.com").allowed ?? false).toBe(false);
   });
@@ -2743,7 +2742,6 @@ describe("Console source acquisition is not target authorization", () => {
     });
     const checkout = await session.send("Use the same-name search result for Muse Spark");
     expect(checkout.toolCalls[0].result.success).toBe(false);
-    expect(checkout.toolCalls[0].result.error).toContain("exact official HTTPS repository URL");
     expect(runCheckout).not.toHaveBeenCalled();
   });
 

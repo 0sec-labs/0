@@ -3,18 +3,24 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NativeAgentLoopOptions, NativeAgentState } from "./native-loop.js";
+import type * as NativeLoopModule from "./native-loop.js";
 import type { NativeRuntime, NativeRuntimeResult } from "../runtime/types.js";
 import type { ToolContext } from "./types.js";
 
 const loop = vi.hoisted(() => ({
   run: undefined as ((options: NativeAgentLoopOptions) => Promise<NativeAgentState>) | undefined,
 }));
-vi.mock("./native-loop.js", () => ({
-  runNativeAgentLoop: (options: NativeAgentLoopOptions) => {
-    if (!loop.run) throw new Error("Worker loop not installed");
-    return loop.run(options);
-  },
-}));
+// Keep real checkpoint helpers while replacing only the long-running worker loop.
+vi.mock("./native-loop.js", async (original) => {
+  const actual = await original<typeof NativeLoopModule>();
+  return {
+    ...actual,
+    runNativeAgentLoop: (options: NativeAgentLoopOptions) => {
+      if (!loop.run) throw new Error("Worker loop not installed");
+      return loop.run(options);
+    },
+  };
+});
 
 import { AuditWorkerTree } from "./worker-tree.js";
 import { ToolExecutor } from "./tools.js";

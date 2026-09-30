@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import { VERSION, validateScanPlan } from "@0/shared";
 import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig, ScanReport, SeedFinding, ScanPlan, ScanAttemptOutcome } from "@0/shared";
-import type { CostBreakdownEntry, ScanCostLedger, NativeRuntime, RuntimeConfig } from "@0/core";
+import type { CostBreakdownEntry, ScanCostLedger, NativeRuntime, RuntimeConfig, ScopePolicy } from "@0/core";
 import { formatAuditReport, formatReviewReport, formatReport, generatePdfReport } from "../formatters/index.js";
 import { buildShareUrl, checkRuntimeAvailability, getRuntimeAvailability } from "../utils.js";
 import { formatCrossValidatedLeads, type CrossValidatedLeadsSummary } from "./cross-validated-leads.js";
@@ -93,6 +93,8 @@ export interface RunOptions {
   tui?: boolean;
   /** Path to a JSON scope file (0#215). Threaded into ScanConfig.scopeFile. */
   scopeFile?: string;
+  /** Reuse the active console's admitted in-memory policy. */
+  scope?: ScopePolicy;
   /** Opt-out for the scanner-binary suppression gate (0#217). Threaded into ScanConfig.allowScanners. */
   allowScanners?: boolean;
   /** Repeatable `--attribution-header NAME=VALUE` (0#216). */
@@ -570,6 +572,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
         },
         dbPath: opts.dbPath,
         nativeRuntime: opts.nativeRuntime,
+        scope: opts.scope,
         provider: opts.provider,
         onEvent: eventHandler,
         getPendingUserMessages,
@@ -597,6 +600,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
         ...(opts.costLedger ? { costLedger: opts.costLedger } : {}),
         agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel, signal: opts.signal,
         nativeRuntime: opts.nativeRuntime, provider: opts.provider,
+        scope: opts.scope,
         repoPath: opts.repoPath, auth: opts.auth, apiSpecPath: opts.apiSpecPath, scopeFile: opts.scopeFile,
         rateLimit: opts.rateLimit, allowScanners: opts.allowScanners, attributionHeaders: opts.attributionHeaders,
         attributionUaToken: opts.attributionUaToken, engagementProfile: opts.engagementProfile, wafEvasion: opts.wafEvasion,
@@ -663,10 +667,10 @@ export async function runUnified(opts: RunOptions): Promise<void> {
       console.log("");
     }
 
-    if (!opts.suppressOutput && crossValidatedLeads) {
+    if (!opts.suppressOutput && format === "terminal" && crossValidatedLeads) {
       printCrossValidatedLeads(crossValidatedLeads);
     }
-    if (!opts.suppressOutput && scanCompletedCost) {
+    if (!opts.suppressOutput && format === "terminal" && scanCompletedCost) {
       printCostSummary(scanCompletedCost);
     }
     unsubscribeCost();

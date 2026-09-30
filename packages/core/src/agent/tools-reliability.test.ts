@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -182,20 +181,21 @@ describe("ToolExecutor reliability fixes (0#tool-reliability)", () => {
 
   // Fix 4: a missing optional binary is a graceful skip, not a throw.
   it("returns a graceful skip for a missing binary and records missing-binary", async () => {
-    // `semgrep` is allow-listed but not installed on the test runner, so the
-    // spawn ENOENTs. Guard for the rare runner that does have it installed.
-    const installed = spawnSync("semgrep", ["--version"]).error == null;
-    const result = await executor.execute({
-      name: "run_command",
-      arguments: { command: "semgrep --version" },
-    });
-    // Either way this must NOT be a hard failure.
-    expect(result.success).toBe(true);
-    if (!installed) {
+    const previousPath = process.env.PATH;
+    process.env.PATH = root;
+    try {
+      const result = await executor.execute({
+        name: "run_command",
+        arguments: { command: "semgrep --version" },
+      });
+      expect(result.success).toBe(true);
       expect(result.output).toMatchObject({ skipped: true });
       const summary = executor.toolHealthSummary();
       expect(summary.missing).toContain("semgrep");
       expect(summary.byCategory["missing-binary"]).toBeGreaterThanOrEqual(1);
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
     }
   });
 

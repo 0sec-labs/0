@@ -182,6 +182,15 @@ opening task, latest instruction, and complete recent tool exchanges. Context
 recovery is bounded and reports when it cannot reduce the prompt; a provider
 quota or authentication error is not treated as context overflow.
 
+A native Responses `max_output_tokens` incompletion is a recoverable checkpoint
+when its terminal state is valid. The console retains completed observations and
+plan state, discards incomplete function calls, and makes at most three extra
+cap-continuation requests within the original limits. Repeated caps pause with a
+resume instruction rather than a provider-failure verdict. Send a new operator
+message to resume; authentication, policy, quota, cancellation, and budget errors
+remain distinct terminal conditions. The native provider output bound remains
+8,192 tokens where supported.
+
 A “turn token budget” pause identifies a local cumulative budget, not the size
 of the current context. Older builds imposed a 2m-token default. If that pause
 appears unexpectedly, check `0 --version` and `/doctor` for the running
@@ -338,6 +347,11 @@ Use `/copy` (aliases `/export` and `/dump`) while idle to export the complete
 public conversation, not just visible transcript rows. It saves private local
 JSON even when copying fails. An OSC52 notice means the content was sent to the
 terminal clipboard; it does not verify clipboard contents.
+
+Long assistant and reasoning bodies use bounded head-and-tail display previews.
+Older rows may use plain text when newer rows consume the rich-Markdown budget;
+newlines and code indentation remain intact. Display truncation does not change
+canonical messages or the full-message copy/export actions.
 
 Use `/impact <finding-id>` to discuss a persisted finding in the current chat.
 Without an ID, select a finding from the conversation. Its prompt asks the model

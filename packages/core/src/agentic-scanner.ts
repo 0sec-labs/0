@@ -145,6 +145,7 @@ export interface AgenticScanOptions {
   dbPath?: string;
   nativeRuntime?: NativeRuntime;
   provider?: RuntimeConfig["provider"];
+  scope?: ScopePolicy;
   /**
    * Stable execution identity. Cloud workers supply their orchestrator scan id;
    * local callers may provide one to make run-local state resumable.
@@ -654,18 +655,15 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
   // here we just propagate. Pre-validate the configured target so an
   // out-of-scope `--target` fails the scan loudly instead of being
   // refused silently by every tool call.
-  let scope: ScopePolicy | undefined;
-  if (config.scopeFile) {
-    scope = loadScope(config.scopeFile);
-    // Seed the per-scan cache so every downstream helper reuses this
-    // exact policy instance instead of re-reading the JSON file. See
-    // `resolveScopeForConfig` for the TOCTOU rationale (0#218
-    // review).
+  if (opts.scope && config.scopeFile) throw new Error("Supply either an in-memory scope policy or a scope file, not both.");
+  const scope = opts.scope ?? (config.scopeFile ? loadScope(config.scopeFile) : undefined);
+  if (scope) {
+    // Keep the active console policy or file snapshot identical for every phase.
     cacheScopePolicy(config, scope);
     const verdict = scope.enforce(config.target);
     if (!verdict.allowed) {
       throw new Error(
-        `--target ${config.target} is out of scope per ${config.scopeFile}: ${verdict.reason}`,
+        `--target ${config.target} is out of scope: ${verdict.reason}`,
       );
     }
   }

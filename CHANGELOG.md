@@ -12,6 +12,31 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+### Added
+
+- Private, project-scoped review checks with explicit revision approval and
+  advisory pass, issue, and unknown results in human and machine reports.
+- Guided scan goals, repeated sequential or parallel runs, shared priced
+  budgets, and explicit partial, failed, cancelled, and budget-stopped outcomes.
+- Durable evolution dispatch accounting, holdout exposure limits, observed
+  provider/model provenance, and explicit interrupted-cost reconciliation.
+
+### Fixed
+
+- Continue safe native Responses output-cap checkpoints without losing completed
+  observations or plan state, replaying ambiguous tool calls, or failing workers
+  solely because a parent response reached its output cap. Repeated caps pause
+  with an actionable resume state; existing execution limits remain in force.
+- Bound live Markdown previews, parse-cache weight, diagnostic lines, and native
+  review buffers while preserving full canonical messages and plain-code layout.
+  Streamed replies follow the tail and native review fits the available viewport.
+- Preserve specialized review methodology and literal frontmatter-like check
+  prompts; show advisory failures instead of silently dropping them.
+- Keep JSON/SARIF report stdout free of human-only cost and cross-validation text.
+- Preserve current model-selection and scope boundaries, exact repository
+  identity, subsystem review scoping, and known cache-write charges. Correct
+  nested private storage paths and enforce durable safety at real promotion.
+
 ## [0.22.0] - 2026-09-30
 
 ### Changed

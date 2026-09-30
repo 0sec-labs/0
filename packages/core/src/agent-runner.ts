@@ -9,7 +9,7 @@ import { runAgentLoop } from "./agent/loop.js";
 import { runNativeAgentLoop } from "./agent/native-loop.js";
 import { toolCallPreview } from "./agent/tool-preview.js";
 import { getToolsForRole } from "./agent/tools.js";
-import type { NativeRuntime, Runtime, RuntimeConfig } from "./runtime/types.js";
+import type { NativeRuntime, RuntimeResult, RuntimeConfig } from "./runtime/types.js";
 import { CLI_RUNTIME_TYPES } from "./shared-analysis.js";
 import { parseFindingsFromCliOutput } from "./findings-parser.js";
 import { estimateCost } from "./agent/cost.js";
@@ -19,6 +19,7 @@ import { parseProjectObservations, type ProposedProjectObservation } from "./sec
 import { scanGoalPrompt } from "./scan-plan.js";
 import { addRuntimeUsage } from "./agent/cost-ledger.js";
 import type { ScanCostLedger } from "./agent/cost-ledger.js";
+import type { ScopePolicy } from "./scope/scope.js";
 
 // ── Types ──
 
@@ -40,6 +41,7 @@ export interface AnalysisAgentOptions {
     singleModel?: boolean;
     nativeRuntime?: NativeRuntime;
     signal?: AbortSignal;
+    scope?: ScopePolicy;
     plan?: ScanPlan;
     costCeilingUsd?: number;
     costLedger?: ScanCostLedgerLike;
@@ -553,6 +555,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
           target,
           scanId,
           scopePath,
+          scope: config.scope,
           codebaseLearning: scopedSourceAudit && purpose === "research",
           sessionId,
           costCeilingUsd: config.costCeilingUsd,
@@ -653,9 +656,9 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
     }
 
     // ── Single-shot fallback for API runtimes without native tool_use ──
-    if (directApiPrompt && typeof (apiRuntime as Partial<Runtime>).execute === "function") {
+    if (directApiPrompt && "execute" in apiRuntime && typeof apiRuntime.execute === "function") {
       reportUnsupportedContributionMode("single-response analysis");
-      const result = await (apiRuntime as Runtime).execute(directApiPrompt, {
+      const result: RuntimeResult = await apiRuntime.execute(directApiPrompt, {
         systemPrompt: cliSystemPrompt,
         signal: config.signal,
       });
@@ -735,9 +738,10 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
       costModel: config.model,
       costLedger: config.costLedger,
       requirePricedUsage: Boolean(config.plan),
+      signal: config.signal,
+      scope: config.scope,
     },
     runtime,
-    signal: config.signal,
     db,
     onFindingSaved: (finding) => {
       emit({

@@ -30,6 +30,7 @@ import type { ScanListener } from "./scanner.js";
 import { runAnalysisAgent } from "./agent-runner.js";
 import { cloneGitRepo } from "./repo-clone.js";
 import { ScanCostLedger } from "./agent/cost-ledger.js";
+import { loadScope, type ScopePolicy } from "./scope/scope.js";
 import { auditAgentPrompt, reviewAgentPrompt, reviewChecksPrompt } from "./analysis-prompts.js";
 import { parseReviewCheckResults, snapshotProjectReviewChecks } from "./review-checks.js";
 import { cppReviewAgentPrompt } from "./review/c-cpp-profile.js";
@@ -154,6 +155,7 @@ export interface PipelineOptions extends Omit<ScanConfig, "costLedger"> {
   nativeRuntime?: NativeRuntime;
   provider?: RuntimeConfig["provider"];
   signal?: AbortSignal;
+  scope?: ScopePolicy;
   /** A parent plan emits one terminal event after every attempt settles. */
   emitTerminalEvent?: boolean;
   resumeScanId?: string;
@@ -1240,6 +1242,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
         race: opts.race, egats: opts.egats, maxConcurrency: opts.maxConcurrency, maxAttackTurns: opts.maxAttackTurns,
       },
       nativeRuntime: opts.nativeRuntime, provider: opts.provider, dbPath: opts.dbPath, runId: opts.runId,
+      scope: opts.scope,
       resumeScanId: opts.resumeScanId, onEvent: opts.onEvent as ScanListener,
       emitTerminalEvent: opts.emitTerminalEvent,
       getPendingUserMessages: opts.getPendingUserMessages,
@@ -1272,6 +1275,8 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
 async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport> {
   const emit: ScanListener = (opts.onEvent as ScanListener) ?? (() => {});
   const startTime = Date.now();
+  if (opts.scope && opts.scopeFile) throw new Error("Supply either an in-memory scope policy or a scope file, not both.");
+  const scope = opts.scope ?? (opts.scopeFile ? loadScope(opts.scopeFile) : undefined);
   const warnings: Array<{ stage: string; message: string }> = [];
   let researchFailed = false;
   let emittedScanCompleted = false;
@@ -2110,6 +2115,7 @@ async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport>
                 costLedger,
                 signal: opts.signal, nativeRuntime: opts.nativeRuntime, provider: opts.provider,
                 agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel, plan: opts.plan,
+                scope,
               },
               db,
               emit: researchEmit,
@@ -2159,6 +2165,7 @@ async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport>
                     costLedger,
                     signal: opts.signal, nativeRuntime: opts.nativeRuntime, provider: opts.provider,
                     agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel, plan: opts.plan,
+                    scope,
                   },
                   db,
                   emit: researchEmit,
@@ -2210,6 +2217,7 @@ async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport>
               costLedger,
               signal: opts.signal, nativeRuntime: opts.nativeRuntime, provider: opts.provider,
               agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel, plan: opts.plan,
+              scope,
             },
             db,
             emit: researchEmit,
@@ -2470,6 +2478,7 @@ async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport>
                   costLedger,
                   signal: opts.signal, nativeRuntime: opts.nativeRuntime, provider: opts.provider,
                   agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel, plan: opts.plan,
+                  scope,
                 },
                 db: null,
                 emit: verifyEmit,
