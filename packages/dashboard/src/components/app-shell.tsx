@@ -12,7 +12,7 @@ function pageTitle(pathname: string): string {
   if (pathname.startsWith("/setup")) return "Set up 0";
   if (pathname.startsWith("/connections")) return "Connections";
   if (pathname.startsWith("/models")) return "Models";
-  if (pathname.startsWith("/plugins")) return "Integrations";
+  if (pathname.startsWith("/plugins")) return "Plugins";
   if (pathname.startsWith("/settings")) return "Settings";
   return "Workspace";
 }

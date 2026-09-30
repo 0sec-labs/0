@@ -10,7 +10,7 @@ First check whether the 0 CLI is installed and whether this agent supports local
 Ask me for the authorized target URL and an absolute path to its scope JSON file before configuring target tools. Do not infer authorization from conversation history.
 The server command is: 0 mcp-server --target <authorized-url> --scan-id <unique-session-id> --scope <absolute-scope-json> --tools http_request,crawl,query_findings
 Use an absolute executable path if the client cannot resolve 0. Apply the client's actual MCP configuration format, show me the proposed change, and wait for approval before writing it.
-Verify that the server exposes the selected tools. This is a scoped tool integration, not a replacement for the 0 browser console, and does not automatically start an assessment.`;
+Verify that the server exposes the selected tools. This is a scoped tool integration, not a replacement for the 0 browser chat, and does not automatically start an assessment.`;
 
 export function AgentOnboarding({ sessionId }: { sessionId?: string }) {
   const [open, setOpen] = useState(false);

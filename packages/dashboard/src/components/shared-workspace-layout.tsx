@@ -10,7 +10,7 @@ const destinations = [
   { to: "/console", label: "Chats", icon: MessageSquare },
   { to: "/findings", label: "Findings", icon: ShieldCheck },
   { to: "/runs", label: "Assessment history", icon: Workflow },
-  { to: "/plugins", label: "Integrations", icon: Plug },
+  { to: "/plugins", label: "Plugins", icon: Plug },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 

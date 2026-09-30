@@ -91,8 +91,8 @@ export function ComposerPickerSurface({ open, children, className = "", label }:
 
 export function IntegrationPicker({ picker }: { picker: ReturnType<typeof useIntegrationPicker> }) {
   useEffect(() => { if (picker.open) document.getElementById(`${picker.id}-${picker.index}`)?.scrollIntoView({ block: "nearest" }); }, [picker.id, picker.index, picker.open]);
-  return <ComposerPickerSurface open={picker.open} label="Integrations" className="w-full max-w-sm">
-    <div id={picker.id} role="listbox" aria-label="Available integrations" className="max-h-[280px] overflow-y-auto overscroll-contain">
+  return <ComposerPickerSurface open={picker.open} label="Plugins" className="w-full max-w-sm">
+    <div id={picker.id} role="listbox" aria-label="Available plugins" className="max-h-[280px] overflow-y-auto overscroll-contain">
       {picker.items.map((plugin, index) => <button key={plugin.id} id={`${picker.id}-${index}`} type="button" role="option" aria-selected={index === picker.index}
         onMouseDown={event => event.preventDefault()} onClick={() => picker.select(plugin)}
         className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors duration-100 motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-primary ${index === picker.index ? "bg-muted" : "hover:bg-muted/60"}`}>
@@ -100,7 +100,7 @@ export function IntegrationPicker({ picker }: { picker: ReturnType<typeof useInt
         <span className="min-w-0"><span className="block truncate font-medium">{plugin.name}</span>{plugin.description && <span className="block truncate text-xs text-muted-foreground">{plugin.description}</span>}</span>
       </button>)}
     </div>
-    {picker.items.length === 0 && <p role="status" className="px-3 py-3 text-sm text-muted-foreground">{picker.loading ? "Loading integrations…" : picker.error ? "Couldn't load integrations." : "No matching integrations."}</p>}
-    <Link to="/plugins" className="mt-1 block rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground">Manage integrations</Link>
+    {picker.items.length === 0 && <p role="status" className="px-3 py-3 text-sm text-muted-foreground">{picker.loading ? "Loading plugins…" : picker.error ? "Couldn't load plugins." : "No matching plugins."}</p>}
+    <Link to="/plugins" className="mt-1 block rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground">Manage plugins</Link>
   </ComposerPickerSurface>;
 }

@@ -192,7 +192,7 @@ const COMMAND_SUMMARIES: Record<string, string> = {
   "new-chat": "Start a new conversation", onboard: "Open guided setup", clear: "Clear this conversation", history: "Browse previous runs",
   findings: "Review findings", fix: "Prepare a fix for review", copy: "Export this conversation", sessions: "Switch conversations",
   explain: "Get a simpler explanation", feedback: "Share feedback", settings: "Manage preferences", keybindings: "View keyboard shortcuts",
-  theme: "Change appearance", model: "Choose a model", chat: "Return to chat", ops: "Open dashboard", hackstore: "Browse integrations",
+  theme: "Change appearance", model: "Choose a model", chat: "Return to chat", ops: "Open dashboard", hackstore: "Browse plugins",
   connect: "Connect a provider", usage: "Check usage and cost", back: "Go back", scope: "Manage approved scope", doctor: "Check your setup", exit: "Close this conversation",
 };
 

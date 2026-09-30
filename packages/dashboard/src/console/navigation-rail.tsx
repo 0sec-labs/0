@@ -12,7 +12,7 @@ export function ConsoleNavigationRail({ settingsHref }: { settingsHref: string }
     { to: "/console?new=1", label: "Home", icon: MessageSquare },
     { to: "/findings", label: "Findings", icon: ShieldCheck },
     { to: "/runs", label: "Assessment history", icon: Workflow },
-    { to: "/plugins", label: "Integrations", icon: Plug },
+    { to: "/plugins", label: "Plugins", icon: Plug },
   ];
   return <div className="relative hidden w-14 shrink-0 lg:block">
     <nav aria-label="Workspace navigation" className="group absolute inset-y-0 left-0 z-40 flex w-14 flex-col gap-2 overflow-hidden bg-background px-2 py-3 transition-[width,box-shadow] duration-150 ease-out motion-reduce:transition-none focus-within:w-56 focus-within:shadow-xl [@media(hover:hover)]:hover:w-56 [@media(hover:hover)]:hover:shadow-xl">
