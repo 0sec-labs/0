@@ -1,5 +1,6 @@
-/** Onboarding state, consent, and bundled mascot contracts. Rendered navigation
+/** Onboarding state and consent contracts. Rendered navigation
  * coverage lives in test/tui-driver/scenarios/onboarding-navigation.tui.test.ts.
+ * Native mascot contracts live in test/tui-driver/scenarios/mascot.tui.test.ts.
  */
 
 import { mkdtempSync, rmSync } from "node:fs";
@@ -23,7 +24,6 @@ import {
   stepBefore,
   type OnboardingStep,
 } from "./onboarding-screen.js";
-import { createZeroAxeImages } from "./chat/zero-axe-art.js";
 
 const tempHomes: string[] = [];
 
@@ -42,23 +42,6 @@ function otherThemeChoice(): string {
   if (!other) throw new Error("expected more than one theme choice");
   return other;
 }
-
-describe("welcome mascot frames", () => {
-  it("composites transparent frame edges onto the active card canvas", () => {
-    const canvas = [16, 32, 48, 255];
-    const images = createZeroAxeImages("#102030");
-    try {
-      for (const image of images) {
-        const raw = image.raw();
-        const bottomRight = (raw.height - 1) * raw.stride + (raw.width - 1) * 4;
-        expect(Array.from(raw.data.slice(0, 4))).toEqual(canvas);
-        expect(Array.from(raw.data.slice(bottomRight, bottomRight + 4))).toEqual(canvas);
-      }
-    } finally {
-      images.forEach((image) => image.dispose());
-    }
-  });
-});
 
 beforeEach(() => {
   __resetSettingsStoreForTests();

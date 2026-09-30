@@ -3,8 +3,9 @@ import { setTimeout as delay } from "node:timers/promises";
 import { CliRenderEvents, type TerminalCapabilities } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { createRoot } from "@opentui/react";
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { createZeroImage } from "../../../src/tui/chat/mascot.js";
+import { createZeroAxeImages } from "../../../src/tui/chat/zero-axe-art.js";
 import { Masthead } from "../../../src/tui/chat/Masthead.js";
 import { TERMINAL_BLOCK_LOGO } from "../../../src/tui/chat/logo.js";
 import { finalLogoFrame } from "../../../src/tui/logo-animation.js";
@@ -32,6 +33,23 @@ it("bakes the active canvas into the portrait instead of leaving terminal-contro
     dark.dispose();
     light.dispose();
   }
+});
+
+describe("welcome mascot frames", () => {
+  it("composites transparent frame edges onto the active card canvas", () => {
+    const canvas = [16, 32, 48, 255];
+    const images = createZeroAxeImages("#102030");
+    try {
+      for (const image of images) {
+        const raw = image.raw();
+        const bottomRight = (raw.height - 1) * raw.stride + (raw.width - 1) * 4;
+        expect(Array.from(raw.data.slice(0, 4))).toEqual(canvas);
+        expect(Array.from(raw.data.slice(bottomRight, bottomRight + 4))).toEqual(canvas);
+      }
+    } finally {
+      images.forEach((image) => image.dispose());
+    }
+  });
 });
 
 it("removes the mascot and its space when native graphics would fall back to blocks", async () => {
