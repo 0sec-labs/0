@@ -257,7 +257,7 @@
 }
 @media (prefers-reduced-motion: no-preference) {
   [role="menu"]:has([data-kumo-component="DropdownMenu"][data-kumo-part="item"]) {
-    transition: opacity 120ms ease, transform 120ms ease;
+    transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1), transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
   }
   [role="menu"]:has([data-kumo-component="DropdownMenu"][data-kumo-part="item"])[data-starting-style],
   [role="menu"]:has([data-kumo-component="DropdownMenu"][data-kumo-part="item"])[data-ending-style] {
@@ -295,11 +295,11 @@
 .console-controls main section > h2 { border: 0; font-size: 14px; letter-spacing: 0; text-transform: none; color: var(--foreground); padding-top: 24px; }
 .console-controls main section > div { border-color: color-mix(in srgb, var(--foreground), transparent 94%); }
 
-.console-controls { margin-block: 32px; padding: 28px; border-radius: 24px; background: color-mix(in srgb, var(--background), var(--foreground) 3%); }
+.console-controls { margin-block: 0; padding: 0; background: transparent; }
 .console-controls > .grid { gap: 32px; }
 .console-controls > .grid > nav { position: sticky; top: 24px; align-self: start; }
 .console-controls > .grid > main { min-width: 0; }
-@media (max-width: 1023px) { .console-controls { margin-block: 0; border-radius: 0; padding: 20px; } .console-controls > .grid > nav { position: static; } }
+@media (max-width: 1023px) { .console-controls { margin-block: 0; padding: 0; } .console-controls > .grid > nav { position: static; } }
 
 /* Quiet secondary controls; orange identifies actions and keyboard focus. */
 .console-frame [data-slot="button"][data-variant="outline"],
@@ -320,3 +320,28 @@
     transition: width 180ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 120ms ease;
   }
 }
+
+@supports (interpolate-size: allow-keywords) {
+  @media (prefers-reduced-motion: no-preference) {
+    .console-tool-activity::details-content {
+      interpolate-size: allow-keywords;
+      block-size: 0;
+      overflow: clip;
+      transition: block-size 160ms ease-out, content-visibility 160ms allow-discrete;
+    }
+    .console-tool-activity[open]::details-content { block-size: auto; }
+  }
+}
+
+.console-transcript-scroller[data-scrolled="true"] {
+  mask-image: linear-gradient(to bottom, transparent, black 48px);
+}
+
+.console-transcript-scroller[data-more-below="true"] {
+  mask-image: linear-gradient(to bottom, black calc(100% - 48px), transparent);
+}
+.console-transcript-scroller[data-scrolled="true"][data-more-below="true"] {
+  mask-image: linear-gradient(to bottom, transparent, black 48px, black calc(100% - 48px), transparent);
+}
+
+[role="menu"][data-ending-style] { transition-duration: 120ms; }

@@ -1,0 +1,31 @@
+/* Animate only the live tail: streamed updates never replay message entrances. */
+.console-markdown[data-streaming="true"] > :is(p, h1, h2, h3, h4, h5, h6):last-child::after,
+.console-markdown[data-streaming="true"] > :is(ul, ol):last-child > li:last-child::after,
+.console-markdown[data-streaming="true"] > blockquote:last-child > p:last-child::after,
+.console-markdown[data-streaming="true"] > div:last-child pre code::after {
+  content: "";
+  display: inline-block;
+  width: 0.45em;
+  height: 0.45em;
+  margin-inline-start: 0.45em;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: 0.08em;
+  opacity: 0.65;
+}
+
+@keyframes console-stream-tail {
+  50% { opacity: 0.3; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .console-markdown[data-streaming="true"] ::after,
+  .console-markdown[data-streaming="true"] > :last-child::after {
+    animation: console-stream-tail 1.4s ease-in-out infinite;
+  }
+}
+
+[data-reduced-motion="true"] .console-markdown::after,
+[data-reduced-motion="true"] .console-markdown ::after {
+  animation: none !important;
+}
