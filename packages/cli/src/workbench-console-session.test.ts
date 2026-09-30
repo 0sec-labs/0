@@ -43,6 +43,15 @@ describe("host console VM controller", () => {
     expect(mock.requests.filter(frame => frame.op === "send").map(frame => frame.text)).toEqual(["message mentioning /private/host", "second"]);
     await session.cleanup(); expect(session.execution.status).toBe("stopped");
   });
+  it("forwards serialized provider bodies through the exact model grant", async () => {
+    const input = await options(); input.provider.request.mockResolvedValue(new Response("data: done\n\n", { headers: { "content-type": "text/event-stream" } }));
+    const session = createWorkbenchConsoleSession(input); await session.send("hello");
+    const body = JSON.stringify({ model: "granted", input: [] });
+    mock.output!(JSON.stringify({ type: "provider", id: "provider_request_1", envelope: { provider: "chatgpt-codex", model: "granted", body } }) + "\n");
+    await vi.waitFor(() => expect(input.provider.request).toHaveBeenCalledWith({ provider: "chatgpt-codex", model: "granted", body }, expect.any(AbortSignal)));
+    await vi.waitFor(() => expect(mock.requests.some(frame => frame.type === "provider-end")).toBe(true));
+    await session.cleanup();
+  });
   it("rejects host executable resources and ungranted providers before launch", async () => {
     const input = await options(); expect(() => createWorkbenchConsoleSession({ ...input, config: { ...input.config, mcpHost: {} } as never })).toThrow("cannot execute");
     expect(() => createWorkbenchConsoleSession({ ...input, selection: { model: "ungranted" } })).toThrow("grant");
