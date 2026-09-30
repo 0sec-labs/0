@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardEmpty, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { selectClass } from "@/components/console-control/control-ui";
+import { Select } from "@/components/ui/select";
 import { formatDuration, formatTime } from "@/lib/format";
 import type { DashboardResponse } from "@/types";
 
@@ -731,9 +731,7 @@ function SelectionField({
   return (
     <div className="min-w-0 space-y-2">
       <label htmlFor={id} className="text-xs font-medium text-muted-foreground">{label}</label>
-      <select id={id} className={selectClass} value={value} onChange={event => onValueChange(event.target.value)}>
-        {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-      </select>
+      <Select id={id} aria-label={label} value={value} onValueChange={onValueChange} options={options} />
     </div>
   );
 }

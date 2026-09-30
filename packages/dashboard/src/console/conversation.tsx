@@ -13,7 +13,7 @@ import { QueuedMessages } from "./queued-messages";
 import { ModePicker } from "./mode-picker";
 type SendBehavior = "queue" | "steer";
 import { AgentOnboarding } from "./agent-onboarding";
-import zeroWaveUrl from "../assets/zero-wave.png";
+import zeroMascotUrl from "../assets/zero-peek.png";
 import { BrandMark } from "@/components/brand-mark";
 import { Input } from "@/components/ui/input";
 import { useQuery } from "@tanstack/react-query";
@@ -126,7 +126,7 @@ export function Conversation({ workspace, worker, onResolve, onSubmit, onStop, r
     <section className="flex min-h-full flex-col justify-center pb-20 pt-8">
       <div className="mx-auto w-full max-w-3xl px-3 py-5 text-center sm:px-6">
         <div className="mb-8 flex justify-center"><AgentOnboarding sessionId={snapshot.session.id} /></div>
-        <img src={zeroWaveUrl} width={80} height={80} alt="" className="mx-auto mb-4 size-20 object-contain" />
+        <img src={zeroMascotUrl} width={96} height={72} alt="" className="mx-auto mb-4 h-auto w-24 object-contain" />
         <BrandMark className="mb-7" />
         <h2 className="font-heading text-xl">What would you like to work on?</h2>
       </div>
@@ -154,7 +154,7 @@ export function Conversation({ workspace, worker, onResolve, onSubmit, onStop, r
             {turn.notices.map((notice, index) => <p key={index} className="border-l-2 border-border pl-3 text-xs whitespace-pre-wrap text-muted-foreground">{notice.startsWith("Cancellation requested.") ? "Stop requested" : notice}</p>)}
             {turn.error && <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm whitespace-pre-wrap text-destructive">{consoleErrorMessage(turn.error)}{needsProviderSignIn(turn.error) && <Button asChild variant="default" size="sm" className="mt-3 flex w-fit"><Link to={`/connections?session=${snapshot.session.id}&return=${encodeURIComponent(`/console/${snapshot.session.id}`)}`}>Manage connection</Link></Button>}</div>}
             {turn.isWorking && (snapshot.session.status === "waiting" || (!turn.assistantText && turn.toolCalls.length === 0 && !turn.reasoningText)) && <ActivityIndicator waiting={snapshot.session.status === "waiting"} label={snapshot.session.status === "waiting" ? "Waiting for your decision" : turn.toolCalls.some((call) => call.isRunning) ? "Running tools…" : turn.assistantText ? "Responding…" : "Thinking…"} />}
-          </article>) : <div className="py-4 text-center"><div className="mb-8 flex justify-center"><AgentOnboarding sessionId={snapshot.session.id} /></div><img src={zeroWaveUrl} width={80} height={80} alt="" className="mx-auto mb-4 size-20 object-contain" /><BrandMark className="mb-7" /><h2 className="font-heading text-xl">What would you like to work on?</h2></div>}
+          </article>) : <div className="py-4 text-center"><div className="mb-8 flex justify-center"><AgentOnboarding sessionId={snapshot.session.id} /></div><img src={zeroMascotUrl} width={96} height={72} alt="" className="mx-auto mb-4 h-auto w-24 object-contain" /><BrandMark className="mb-7" /><h2 className="font-heading text-xl">What would you like to work on?</h2></div>}
           {snapshot.lastOutcome?.outputCap && !worker && <div role="status" className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-4 text-sm"><div className="font-medium">0 hit its output limit</div><Button className="mt-3" size="sm" disabled={workspace.busy || active} onClick={resumeCap}>Keep going</Button></div>}
           {snapshot.pendingDecisions.map((decision) => <div key={decision.id} className="space-y-2"><ApprovalPanel decision={decision} busy={workspace.busy} onResolve={(response) => onResolve(decision.id, response)} /></div>)}
         </div>

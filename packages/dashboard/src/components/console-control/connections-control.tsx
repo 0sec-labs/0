@@ -4,9 +4,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, ShieldCheck } from "lucide-react";
 import { webFetchJson } from "@/api";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { ProviderIcon } from "@/components/provider-icon";
-import { ControlCard, Empty, Feedback, Field, QueryState, SubmitButton, TextField, Check, jsonBody, selectClass } from "./control-ui";
+import { ControlCard, Empty, Feedback, Field, QueryState, SubmitButton, TextField, jsonBody } from "./control-ui";
 import type { AuthStatus, ModelsResponse, ProvidersResponse, RuntimeSelection, SessionSnapshot, SessionSummary } from "./contracts";
 import { GitHubPublicationControl } from "./github-publication-control";
 
@@ -126,13 +128,13 @@ export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; on
     {runtime && <div className="flex items-center gap-2 text-sm"><ProviderIcon providerId={runtime.providerId} /><span>{runtime.providerLabel}</span><span className="text-muted-foreground">· {runtime.model}</span>{!!(snapshot.data?.session.pendingConfiguration || snapshot.data?.pendingConfiguration) && <span className="text-muted-foreground">· change pending</span>}</div>}
     {providers.data && !providers.data.providers.some(provider => provider.configured) && <Empty>No provider connected. <Link to="/connections" className="underline">Connect one</Link> first.</Empty>}
     <form className="space-y-4" onSubmit={event => { event.preventDefault(); mutation.mutate(); }}>
-      <div className="grid gap-4 sm:grid-cols-2"><Field label="Provider"><select value={providerId} onChange={event => { setProviderId(event.target.value); setModel(""); setAgentModels({}); mutation.reset(); }} className={selectClass}><option value="">Choose a provider</option>{providers.data?.providers.map(provider => <option key={provider.id} value={provider.id} disabled={!provider.configured}>{provider.label}{!provider.configured ? " — not connected" : ""}</option>)}</select></Field><Field label="Model"><select value={model} onChange={event => setModel(event.target.value)} disabled={models.isPending || !providerId} className={selectClass} required><option value="">Choose a model</option>{models.data?.models.map(item => <option key={`${item.provider}:${item.id}`} value={item.id}>{item.id} · {item.price}</option>)}</select></Field></div>
+      <div className="grid gap-4 sm:grid-cols-2"><Field label="Provider"><Select aria-label="Provider" value={providerId} onValueChange={value => { setProviderId(value); setModel(""); setAgentModels({}); mutation.reset(); }} options={[{ value: "", label: "Choose a provider" }, ...(providers.data?.providers.map(provider => ({ value: provider.id, label: `${provider.label}${!provider.configured ? " — not connected" : ""}`, disabled: !provider.configured })) ?? [])]} /></Field><Field label="Model"><Select aria-label="Model" value={model} onValueChange={setModel} disabled={models.isPending || !providerId} required options={[{ value: "", label: "Choose a model" }, ...(models.data?.models.map(item => ({ value: item.id, label: `${item.id} · ${item.price}` })) ?? [])]} /></Field></div>
       <QueryState pending={!!providerId && models.isPending} error={models.error} retry={models.refetch} />
       {models.data?.diagnostics.map(item => <p key={item.providerId} className="text-xs text-muted-foreground">{item.message}</p>)}
       <details><summary className="cursor-pointer text-sm text-muted-foreground">Advanced</summary><div className="mt-3 space-y-4">
-      <Check checked={singleModel} onChange={setSingleModel}>Use one model for everything</Check>
-      <Check checked={autoRoute} onChange={setAutoRoute} disabled={singleModel}>Pick models per task automatically</Check>
-      {!singleModel && <div className="grid gap-4 sm:grid-cols-2">{models.data?.roles.map(role => <Field key={role} label={`${role[0]?.toUpperCase()}${role.slice(1)} model`}><select value={agentModels[role] ?? "auto"} onChange={event => setAgentModels(current => ({ ...current, [role]: event.target.value }))} className={selectClass}><option value="auto">Auto</option>{models.data.models.map(item => <option key={item.id} value={item.id}>{item.id}</option>)}</select></Field>)}</div>}
+      <label className="flex items-center justify-between gap-4 text-sm"><span>Use one model for everything</span><Switch aria-label="Use one model for everything" checked={singleModel} onCheckedChange={setSingleModel} /></label>
+      <label className="flex items-center justify-between gap-4 text-sm"><span>Pick models per task automatically</span><Switch aria-label="Pick models per task automatically" checked={autoRoute} onCheckedChange={setAutoRoute} disabled={singleModel} /></label>
+      {!singleModel && <div className="grid gap-4 sm:grid-cols-2">{models.data?.roles.map(role => <Field key={role} label={`${role[0]?.toUpperCase()}${role.slice(1)} model`}><Select aria-label={`${role} model`} value={agentModels[role] ?? "auto"} onValueChange={value => setAgentModels(current => ({ ...current, [role]: value }))} options={[{ value: "auto", label: "Auto" }, ...models.data.models.map(item => ({ value: item.id, label: item.id }))]} /></Field>)}</div>}
       </div></details>
       <Feedback error={mutation.error} message={message} />
       <div className="flex flex-wrap gap-2"><SubmitButton type="submit" pending={mutation.isPending} disabled={!selectedProvider?.configured || !model}>{sessionId ? "Save" : "Start"}</SubmitButton><Button type="button" variant="outline" disabled={mutation.isPending} onClick={() => { setProviderId(runtime?.providerId ?? providers.data?.preference?.providerId ?? ""); setModel(runtime?.model ?? providers.data?.preference?.model ?? ""); setAgentModels(runtime?.agentModels ?? {}); setSingleModel(runtime?.singleModel ?? false); setAutoRoute(runtime?.autoRoute ?? true); mutation.reset(); setMessage(null); }}>Reset</Button></div>
