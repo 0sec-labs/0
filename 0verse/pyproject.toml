@@ -117,6 +117,8 @@ pythonpath = ["src"]
 testpaths = ["tests"]
 
 [tool.uv]
+# Security floors for optional MCP authentication and PoC HTTP dependencies.
+constraint-dependencies = ["pyjwt>=2.14.0", "urllib3>=2.8.0"]
 # python-fx (transitive via qiling → firmware extra) hard-pins `pillow<11`, which
 # blocks the pillow CVE patch (needs >=12.3.0). pillow's basic image ops (open,
 # resize, getpixel) that python-fx uses are backward-compatible across 10→12, and
