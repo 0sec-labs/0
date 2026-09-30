@@ -127,11 +127,11 @@ export function CommandPalette({
       {
         id: "page-scans",
         group: "Pages",
-        label: "Audits",
-        meta: "Plan and track security reviews",
+        label: "Workflows",
+        meta: "Create and run security workflows",
         icon: PlayCircle,
-        keywords: ["audits security review scans runs timeline history"],
-        run: () => navigate("/audits"),
+        keywords: ["workflows automations agents audit security review scans"],
+        run: () => navigate("/workflows"),
       },
     ];
 

@@ -55,3 +55,4 @@ export type {
   TrustGraphEdgeRow,
   TrustGraphEdgeInput,
 } from "./database.js";
+export { SecurityWorkflowStore, SecurityWorkflowStoreError, type SecurityWorkflowExecutionUpdate } from "./security-workflows.js";

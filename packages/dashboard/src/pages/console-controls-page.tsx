@@ -54,6 +54,10 @@ export function WebConsoleControlsPage({ mode: passedMode }: { mode?: WebConsole
     : mode === "launch" ? <LauncherControl sessionId={sessionId} />
     : <FixControl sessionId={sessionId} />;
 
+  if (mode === "launch") {
+    return <main aria-label="Audits" className="mx-auto w-full max-w-5xl space-y-6 px-5 py-6 sm:px-8 lg:px-10">{content}</main>;
+  }
+
   const focused = mode === "onboarding";
 
   return <div className={cn("console-controls mx-auto w-full space-y-6 px-5 py-6 sm:px-8 lg:px-10", focused ? "max-w-5xl" : "max-w-4xl")}>

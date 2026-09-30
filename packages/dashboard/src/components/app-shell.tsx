@@ -7,7 +7,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 function pageTitle(pathname: string): string {
   if (/^\/(?:threads|findings)(?:\/|$)/.test(pathname)) return "Findings";
   if (/^\/(?:runs|scans)(?:\/|$)/.test(pathname)) return "Audit reports";
-  if (/^\/(?:audits|launcher|launch)(?:\/|$)/.test(pathname)) return "Audits";
+  if (/^\/(?:workflows|audits|launcher|launch)(?:\/|$)/.test(pathname)) return "Workflows";
   if (pathname.startsWith("/live")) return "Live activity";
   if (pathname.startsWith("/dashboard")) return "Dashboard";
   if (pathname.startsWith("/setup")) return "Set up 0";

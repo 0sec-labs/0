@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { SecurityWorkflowStore } from "@0/db";
 import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -682,6 +683,10 @@ export class ConsoleGateway {
               compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
               scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, scope: managed.scope,
               initialMessages: managed.initialMessages,
+              workflowAuthoring: {
+                list: () => { const store = new SecurityWorkflowStore(this.#options.dbPath); try { return store.list(); } finally { store.close(); } },
+                save: input => { const store = new SecurityWorkflowStore(this.#options.dbPath); try { return store.save(input); } finally { store.close(); } },
+              },
               allowModelSelfExtension: settings.allowModelSelfExtension, workspaceRoot: managed.workspacePath ?? this.#projectPath, pluginHost: lease.host, ...(mcpHost ? { mcpHost } : {}),
               agentMessaging: { selfId: "Main", selfRole: "parent", siblingChannelEnabled: settings.allowSubagentPeerMessaging, operatorChannelEnabled: settings.allowSubagentOperatorMessaging, projectPath: managed.workspacePath ?? this.#projectPath, homeDir: managed.messagingHome },
               onHarnessUpdate: (harness) => { managed.harness = harness; this.#emit(managed, { type: "harness", harness }); }, ...callbacks,

@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 const destinations = [
   { to: "/console", label: "Chat", icon: MessageSquare },
   { to: "/findings", label: "Findings", icon: ShieldCheck },
-  { to: "/audits", label: "Audits", icon: Workflow },
+  { to: "/workflows", label: "Workflows", icon: Workflow },
   { to: "/plugins", label: "Plugins", icon: Plug },
   { to: "/settings", label: "Settings", icon: Settings },
 ];

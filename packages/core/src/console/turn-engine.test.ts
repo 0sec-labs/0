@@ -29,6 +29,7 @@ import { LlmApiRuntime } from "../runtime/llm-api.js";
 import { eventBus, type SubagentLifecyclePayload } from "../events/bus.js";
 import { MAX_OUTPUT_CAP_CONTINUATIONS } from "../agent/native-loop.js";
 
+import { DEFAULT_SECURITY_WORKFLOW_PLAN, type SecurityWorkflow, type SecurityWorkflowInput } from "@0/shared";
 import { setWorkspaceHarnessTrust } from "../plugins/harness-trust.js";
 
 /**
@@ -3840,5 +3841,71 @@ describe("operator-approved workspace configuration", () => {
       expect(requestLocalScope).not.toHaveBeenCalled();
       expect(session.exportCheckpoint()).toMatchObject({ workspaceRoot: directory, localScopePath: directory });
     } finally { await session.cleanup(); rmSync(directory, { recursive: true, force: true }); }
+  });
+});
+
+
+describe("console workflow draft authoring", () => {
+  const input: SecurityWorkflowInput = {
+    name: "Dependency review", instructions: "Review dependency vulnerabilities and report verified findings.", target: "source:/fixture",
+    nodes: [
+      { id: "start", type: "trigger", label: "Manual start", enabled: true },
+      { id: "audit", type: "audit", label: "Dependency review", enabled: true, plan: DEFAULT_SECURITY_WORKFLOW_PLAN },
+      { id: "report", type: "report", label: "Report", enabled: true },
+    ], edges: [{ source: "start", target: "audit" }, { source: "audit", target: "report" }],
+  };
+  const saved: SecurityWorkflow = { ...input, id: "workflow-fixture", revision: 1, createdAt: "2026-09-30T00:00:00Z", updatedAt: "2026-09-30T00:00:00Z" };
+
+  it("uses real structured tool calls to save a draft without executing or granting permissions", async () => {
+    const save = vi.fn((_input: SecurityWorkflowInput) => saved); const list = vi.fn(() => [saved]); const approval = vi.fn(async () => true);
+    const runtime = new ScriptedRuntime([
+      { content: [{ type: "tool_use", id: "draft-1", name: "console_save_workflow", input: { ...input } }], stopReason: "tool_use", durationMs: 1 },
+      { content: [{ type: "tool_use", id: "list-1", name: "console_list_workflows", input: { id: "workflow-fixture" } }], stopReason: "tool_use", durationMs: 1 },
+      endTurn("Saved the workflow draft for inspection."),
+    ]);
+    const session = createConsoleSession({ runtime, autonomyMode: "standard", approveTool: approval, workflowAuthoring: { list, save } });
+    try {
+      await session.send("Create a dependency review workflow draft.");
+      expect(save).toHaveBeenCalledOnce();
+      expect(list).toHaveBeenCalledOnce();
+      expect(save.mock.calls[0]?.[0]).toEqual(input);
+      const readResult = runtime.calls[2]?.messages.flatMap(message => message.content).find(block => block.type === "tool_result" && block.tool_use_id === "list-1");
+      expect(readResult && "content" in readResult ? readResult.content : "").toContain(input.instructions);
+      expect(readResult && "content" in readResult ? readResult.content : "").toContain('"edges"');
+      expect(approval).not.toHaveBeenCalled();
+      expect(session.scope).toBeUndefined();
+      expect(session.localScopePath).toBeUndefined();
+      expect(runtime.calls[0]?.tools.map(tool => tool.name)).toEqual(expect.arrayContaining(["console_save_workflow", "console_list_workflows"]));
+      expect(runtime.calls[0]?.system).toContain("Do not claim saving runs or schedules it");
+      const result = runtime.calls[1]?.messages.flatMap(message => message.content).find(block => block.type === "tool_result");
+      expect(result && "content" in result ? result.content : "").toContain('"executed":false');
+      expect(result && "content" in result ? result.content : "").toContain("/workflows?workflow=workflow-fixture");
+    } finally { await session.cleanup(); }
+  });
+
+  it("does not advertise authoring tools without a caller-owned draft store", async () => {
+    const runtime = new ScriptedRuntime([endTurn("Ready.")]);
+    const session = createConsoleSession({ runtime });
+    try {
+      await session.send("Hello.");
+      expect(runtime.calls[0]?.tools.some(tool => tool.name.startsWith("console_save_workflow") || tool.name === "console_list_workflows")).toBe(false);
+      expect(runtime.calls[0]?.system).not.toContain("console_save_workflow");
+    } finally { await session.cleanup(); }
+  });
+
+  it("rejects executable or unbounded draft payloads before storage", async () => {
+    const save = vi.fn((_input: SecurityWorkflowInput) => saved);
+    const runtime = new ScriptedRuntime([
+      { content: [{ type: "tool_use", id: "invalid-draft", name: "console_save_workflow", input: { ...input, command: "execute shell", schedule: "every minute" } }], stopReason: "tool_use", durationMs: 1 },
+      { content: [{ type: "tool_use", id: "oversized-draft", name: "console_save_workflow", input: { ...input, instructions: "x".repeat(16_001) } }], stopReason: "tool_use", durationMs: 1 },
+      endTurn("No draft saved."),
+    ]);
+    const session = createConsoleSession({ runtime, workflowAuthoring: { list: () => [], save } });
+    try {
+      await session.send("Draft a workflow.");
+      expect(save).not.toHaveBeenCalled();
+      const result = runtime.calls[1]?.messages.flatMap(message => message.content).find(block => block.type === "tool_result");
+      expect(result && "is_error" in result ? result.is_error : false).toBe(true);
+    } finally { await session.cleanup(); }
   });
 });
