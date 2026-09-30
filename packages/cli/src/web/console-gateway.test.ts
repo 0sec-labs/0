@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -40,10 +40,12 @@ function engine(input: ConsoleGatewaySessionFactoryInput): ConsoleSession {
   let currentMode = input.autonomyMode;
   let currentTarget = input.target;
   let currentScope = input.scope;
+  let currentFolder: string | undefined;
   return {
     scanId: input.scanId, ready: Promise.resolve(), systemPrompt: "Fixture", tools: [], messages,
     get autonomyMode() { return currentMode; }, get target() { return currentTarget; }, get scope() { return currentScope; },
-    scopeEnforcement: { pluginId: "scope", enabled: true, projectPath: "/fixture", message: "Scope authorization enabled" }, localScopePath: undefined,
+    scopeEnforcement: { pluginId: "scope", enabled: true, projectPath: "/fixture", message: "Scope authorization enabled" }, get localScopePath() { return currentFolder; },
+    configureWorkspace: path => { currentFolder = path; },
     setAutonomyMode: (mode) => { currentMode = mode; }, reconfigureRuntime: () => undefined,
     configureEngagement: (selection) => {
       if (selection.target !== undefined) currentTarget = selection.target;
@@ -75,6 +77,63 @@ async function idle(instance: ConsoleGateway, id: string): Promise<void> {
 }
 
 describe("ConsoleGateway", () => {
+  it("archives a live chat without losing history, persists across gateways, and restores it", async () => {
+    const instance = gateway();
+    const created = instance.create({ title: "Archive fixture" });
+    await instance.send(created.id, "Keep this evidence"); await idle(instance, created.id);
+    const before = instance.get(created.id).messages;
+    expect(() => instance.archiveSaved(created.id, { archived: true })).toThrow(ConsoleGatewayError);
+    const archived = await instance.archive(created.id);
+    expect(instance.get(created.id).session.status).toBe("closed");
+    expect(archived.archived).toBe(true);
+    expect(instance.loadSaved(archived.id).messages).toEqual(before);
+    const reopened = new ConsoleGateway({ homeDir: homes.at(-1), projectPath: "/fixture", createSession: engine }); gateways.push(reopened);
+    expect(reopened.listSaved().find(row => row.id === archived.id)?.archived).toBe(true);
+    expect(reopened.archiveSaved(archived.id, { archived: false }).archived).toBeUndefined();
+    expect(reopened.loadSaved(archived.id).messages).toEqual(before);
+    expect(() => reopened.archiveSaved(archived.id, { archived: "true" })).toThrow(ConsoleGatewayError);
+    reopened.archiveSaved(archived.id, { archived: true });
+    reopened.deleteSaved(archived.id);
+    expect(reopened.listSaved().find(row => row.id === archived.id)).toBeUndefined();
+  });
+
+  it("changes the workspace only after explicit folder approval and preserves it on denial", async () => {
+    const instance = gateway(); const created = instance.create();
+    const directory = realpathSync(mkdtempSync(join(tmpdir(), "zero-workspace-"))); homes.push(directory);
+    await instance.configure(created.id, { workspacePath: directory });
+    await vi.waitFor(() => expect(instance.get(created.id).pendingDecisions).toHaveLength(1));
+    expect(instance.get(created.id).localScopePath).toBeUndefined();
+    const denied = instance.get(created.id).pendingDecisions[0]!;
+    expect(denied).toMatchObject({ kind: "local-scope", requestedPath: directory });
+    instance.resolveDecision(created.id, denied.id, { approve: false });
+    await vi.waitFor(() => expect(instance.get(created.id).pendingConfiguration).toBeUndefined());
+    expect(instance.get(created.id).workspacePath).toBe("/fixture");
+    await instance.configure(created.id, { workspacePath: directory });
+    await vi.waitFor(() => expect(instance.get(created.id).pendingDecisions).toHaveLength(1));
+    instance.resolveDecision(created.id, instance.get(created.id).pendingDecisions[0]!.id, { approve: true });
+    await vi.waitFor(() => expect(instance.get(created.id).workspacePath).toBe(directory));
+    expect(instance.get(created.id).localScopePath).toBe(directory);
+    expect(loadSession(created.id, homes[0])?.cwd).toBe(directory);
+  });
+
+  it("rejects missing, protected and symlinked protected roots before requesting approval", async () => {
+    const instance = gateway(); const created = instance.create();
+    await expect(instance.configure(created.id, { workspacePath: "/zero-missing-folder-12345" })).rejects.toThrow("existing local folder");
+    await expect(instance.configure(created.id, { workspacePath: "/" })).rejects.toThrow("protected root");
+    const directory = realpathSync(mkdtempSync(join(tmpdir(), "zero-workspace-link-"))); homes.push(directory);
+    symlinkSync("/", join(directory, "root"));
+    await expect(instance.configure(created.id, { workspacePath: join(directory, "root") })).rejects.toThrow("protected root");
+    expect(instance.get(created.id).pendingDecisions).toHaveLength(0);
+  });
+
+  it("requires active agents to stop before switching folders", async () => {
+    const instance = gateway(); const created = instance.create();
+    await instance.send(created.id, "Start"); await idle(instance, created.id);
+    eventBus.emit("subagent_lifecycle", { agent_id: `${created.id}-sub-agent`, parent_scan_id: created.id, status: "running", task: "Inspect", max_turns: 3 });
+    await expect(instance.configure(created.id, { workspacePath: tmpdir() })).rejects.toThrow("Stop active agents");
+    expect(instance.get(created.id).pendingDecisions).toHaveLength(0);
+  });
+
   it("uses an AI title returned by the successful accounted turn", async () => {
     const instance = gateway((input) => {
       const session = engine(input);

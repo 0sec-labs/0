@@ -1,4 +1,4 @@
-import { useMemo, useState, type ComponentType } from "react";
+import { useId, useMemo, useState, type ComponentType } from "react";
 import { NavLink } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, AlertCircle, Database, Play, Power, RefreshCcw, Siren, Trash2 } from "lucide-react";
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardEmpty, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select } from "@/components/ui/select";
 import { formatDuration, formatTime } from "@/lib/format";
 import type { DashboardResponse } from "@/types";
 
@@ -205,12 +205,12 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Overview"
+        title="Dashboard"
         summary=""
         actions={(
           <>
             <Button asChild variant="outline">
-              <NavLink to="/runs">Runs</NavLink>
+              <NavLink to="/runs">Assessment history</NavLink>
             </Button>
             <Button asChild variant="accent">
               <NavLink to="/findings">Findings</NavLink>
@@ -229,7 +229,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="space-y-2">
-                <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Target</div>
+                <div className="text-xs font-medium text-muted-foreground">Target</div>
                 <Input
                   value={target}
                   onChange={(event) => setTarget(event.target.value)}
@@ -312,9 +312,9 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
               </div>
           </CardHeader>
           <CardContent className="space-y-5">
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_repeat(3,minmax(0,0.8fr))]">
-              <label className="space-y-2">
-                <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Target</div>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <label className="min-w-0 space-y-2 sm:col-span-3">
+                <div className="text-xs font-medium text-muted-foreground">Target</div>
                 <Input
                   value={target}
                   onChange={(event) => setTarget(event.target.value)}
@@ -707,7 +707,7 @@ function SituationStat({
 }) {
   return (
     <div className="rounded-lg border border-border bg-background px-4 py-3">
-      <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-widest text-muted-foreground/70">
+      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
         <Icon className="size-3.5" />
         {label}
       </div>
@@ -727,18 +727,11 @@ function SelectionField({
   onValueChange: (value: string) => void;
   options: Array<{ value: string; label: string }>;
 }) {
+  const id = useId();
   return (
-    <div className="space-y-2">
-      <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{label}</div>
-      <Tabs value={value} onValueChange={onValueChange}>
-        <TabsList className="w-full flex-wrap justify-start">
-          {options.map((option) => (
-            <TabsTrigger key={option.value} value={option.value} className="flex-1">
-              {option.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+    <div className="min-w-0 space-y-2">
+      <label htmlFor={id} className="text-xs font-medium text-muted-foreground">{label}</label>
+      <Select id={id} aria-label={label} value={value} onValueChange={onValueChange} options={options} />
     </div>
   );
 }

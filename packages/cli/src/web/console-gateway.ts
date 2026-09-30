@@ -24,8 +24,8 @@ import { buildFindingChatPrompt, loadFindingFocus, resolveFindingChatIntent } fr
 import { exportChatConversation } from "../tui/chat-export.js";
 import { getSettings } from "../tui/settings-store.js";
 import type { TuiSettings } from "../tui/settings.js";
-import { deleteSession, isValidSessionId, listSessions, loadSession, saveSession, type StoredConsoleState, type StoredSession } from "../tui/session-store.js";
-import { applyWebConsoleRuntimeSelection, createWebConsoleRuntime, describeWebConsoleRuntime, flushWebConsolePlugins, getWebConsolePluginHostManager } from "./operator-services.js";
+import { deleteSession, isValidSessionId, listSessions, loadSession, saveSession, setSessionArchived, type StoredConsoleState, type StoredSession } from "../tui/session-store.js";
+import { applyWebConsoleRuntimeSelection, createWebConsoleRuntime, describeWebConsoleRuntime, savedWebRuntimeSelection, flushWebConsolePlugins, getWebConsolePluginHostManager } from "./operator-services.js";
 
 const MAX_EVENTS = 2_000;
 const MAX_MESSAGE_LENGTH = 1_000_000;
@@ -83,7 +83,7 @@ type ManagedSession = {
   usage: ConsoleSessionSnapshot["usage"]; contextInputTokens?: number;
   lastOutcome: ConsoleTurnOutcome | null; compaction: ConsoleJsonValue | null; harness: HarnessSnapshot | null;
   objective: string; todos: ConsoleTodos | null; focusedFinding?: Finding; stagedPrompt?: string;
-  executionEpoch: number; execution: ConsoleExecutionSnapshot;
+  executionEpoch: number; execution: ConsoleExecutionSnapshot; workspacePath?: string;
 };
 
 function record(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === "object" && !Array.isArray(value); }
@@ -110,9 +110,9 @@ function role(value: unknown): DesktopConsoleRole {
 }
 function runtimeSelection(value: unknown): ConsoleRuntimeSelection {
   const raw = object(value, "Runtime selection");
-  allowedKeys(raw, ["providerId", "model", "agentModels", "singleModel", "autoRoute"]);
+  allowedKeys(raw, ["providerId", "model", "agentModels", "singleModel", "autoRoute", "reasoningEffort"]);
   const result: ConsoleRuntimeSelection = {};
-  for (const key of ["providerId", "model"] as const) if (raw[key] !== undefined) result[key] = text(raw[key], key, 256);
+  for (const key of ["providerId", "model", "reasoningEffort"] as const) if (raw[key] !== undefined) result[key] = text(raw[key], key, 256);
   for (const key of ["singleModel", "autoRoute"] as const) if (raw[key] !== undefined) {
     if (typeof raw[key] !== "boolean") throw new ConsoleGatewayError(`${key} must be a boolean.`, 400);
     result[key] = raw[key];
@@ -152,8 +152,9 @@ function scopePolicy(value: unknown): ScopePolicy | undefined {
 }
 function configuration(value: unknown): ConsoleSessionConfiguration {
   const raw = object(value, "Configuration");
-  allowedKeys(raw, ["title", "target", "autonomyMode", "scope", "runtime"]);
+  allowedKeys(raw, ["title", "target", "autonomyMode", "scope", "runtime", "workspacePath"]);
   const result: ConsoleSessionConfiguration = {};
+  if (raw.workspacePath !== undefined) result.workspacePath = text(raw.workspacePath, "Workspace folder", MAX_TARGET_LENGTH);
   if (raw.title !== undefined) result.title = text(raw.title, "Title", 200);
   if (raw.target !== undefined) result.target = text(raw.target, "Target", MAX_TARGET_LENGTH, true);
   if (raw.autonomyMode !== undefined) result.autonomyMode = mode(raw.autonomyMode);
@@ -313,6 +314,7 @@ export class ConsoleGateway {
       pendingDecisions: [...managed.pending.values()].map((pending) => structuredClone(pending.decision)),
       execution: structuredClone(managed.execution), workers: this.workers(id), queuedMessages: structuredClone(managed.queued), runtime: managed.info ? structuredClone(managed.info) : null,
       scope: structuredClone(session?.scope?.raw ?? managed.scope?.raw ?? null), scopeEnforcement: { ...(session?.scopeEnforcement ?? getScopeEnforcementState(this.#projectPath, this.#options.homeDir)) },
+      workspacePath: managed.workspacePath ?? this.#projectPath,
       ...(session?.localScopePath ? { localScopePath: session.localScopePath } : {}), usage: { ...managed.usage },
       ...(managed.contextInputTokens !== undefined ? { contextInputTokens: managed.contextInputTokens } : {}),
       ...(managed.info?.contextWindowTokens != null ? { contextWindowTokens: managed.info.contextWindowTokens } : {}),
@@ -415,6 +417,16 @@ export class ConsoleGateway {
   }
   async configure(id: string, value: unknown): Promise<DesktopConsoleSession> {
     const managed = this.#requireOpen(id); const input = configuration(value);
+    if (input.workspacePath !== undefined) {
+      this.#assertIdle(managed);
+      if ([...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Stop active agents before changing the workspace folder.", 409);
+      let directory: string;
+      try { directory = realpathSync(resolve(managed.workspacePath ?? this.#projectPath, input.workspacePath)); }
+      catch { throw new ConsoleGatewayError("Choose an existing local folder.", 400); }
+      if (!statSync(directory).isDirectory() || isDangerousLocalRoot(directory)) throw new ConsoleGatewayError("Choose a project folder, rather than a protected root or home directory.", 400);
+      if (managed.session && managed.execution.backend === "smolvm" && directory !== (managed.execution.workspacePath ?? managed.workspacePath ?? this.#projectPath)) throw new ConsoleGatewayError("The SmolVM workspace grant is fixed for this chat. Start a new chat to select a different folder; this chat was not changed.", 409);
+      input.workspacePath = directory;
+    }
     if (input.runtime && managed.session && managed.execution.backend === "smolvm") {
       if (managed.turn || managed.initialization || managed.configuration || managed.pending.size || managed.session.messages.length) {
         throw new ConsoleGatewayError("The SmolVM model and account grant is fixed for this run. Start a new chat or resume saved work with the new model; this session was not changed.", 409);
@@ -428,6 +440,13 @@ export class ConsoleGateway {
     managed.executionEpoch++;
     managed.pendingConfiguration = { ...managed.pendingConfiguration, ...execution, ...(execution.runtime ? { runtime: { ...managed.pendingConfiguration?.runtime, ...execution.runtime } } : {}) };
     if (managed.turn || managed.initialization || managed.configuration || managed.pending.size) { this.#emitSession(managed); return this.#summary(managed); }
+    if (input.workspacePath !== undefined) {
+      void this.#applyPendingConfiguration(managed).catch(error => {
+        managed.pendingConfiguration = undefined;
+        this.#emit(managed, { type: "error", message: errorMessage(error) }); this.#refreshStatus(managed);
+      }).finally(() => { void this.#processIdleWork(managed); });
+      return this.#summary(managed);
+    }
     await this.#applyPendingConfiguration(managed); return this.#summary(managed);
   }
   async setRuntime(id: string, value: unknown): Promise<DesktopConsoleSession> { return this.configure(id, { runtime: value }); }
@@ -437,6 +456,19 @@ export class ConsoleGateway {
   save(id: string): ConsoleSavedSession {
     const managed = this.#require(id); if (!this.#save(managed)) throw new ConsoleGatewayError("The private transcript could not be saved.", 500);
     return this.loadSaved(managed.savedId ?? managed.id).meta;
+  }
+  async archive(id: string): Promise<ConsoleSavedSession> {
+    const managed = this.#require(id);
+    await this.close(id);
+    return this.archiveSaved(managed.savedId ?? managed.id, { archived: true });
+  }
+  archiveSaved(id: string, value: unknown): ConsoleSavedSession {
+    const raw = object(value, "Archive configuration"); allowedKeys(raw, ["archived"]);
+    if (typeof raw.archived !== "boolean") throw new ConsoleGatewayError("archived must be a boolean.", 400);
+    for (const managed of this.#sessions.values()) if (managed.status !== "closed" && (managed.id === id || managed.savedId === id)) throw new ConsoleGatewayError("Close the active chat before changing its saved archive state.", 409);
+    this.#stored(id);
+    if (!setSessionArchived(id, raw.archived, this.#options.homeDir)) throw new ConsoleGatewayError("The archive state could not be saved.", 500);
+    return this.loadSaved(id).meta;
   }
   listSaved(value: unknown = {}): ConsoleSavedSession[] {
     const raw = object(value, "Saved session query"); allowedKeys(raw, ["cwd", "limit"]);
@@ -470,7 +502,7 @@ export class ConsoleGateway {
       ...(configuration ? { role: configuration.role, runtime: configuration.runtime } : stored.model ? { runtime: { model: stored.model } } : {}),
     };
     const created = this.#createRecord({ ...defaults, ...raw }); const managed = this.#require(created.id);
-    managed.initialMessages = initialMessages; managed.savedId = id; managed.title = raw.title === undefined ? stored.summary ?? stored.preview ?? "Resumed chat" : managed.title;
+    managed.initialMessages = initialMessages; managed.workspacePath = stored.cwd; managed.savedId = id; managed.title = raw.title === undefined ? stored.summary ?? stored.preview ?? "Resumed chat" : managed.title;
     managed.objective = stored.summary ?? "";
     if (stored.consoleState) {
       const state = stored.consoleState;
@@ -525,7 +557,7 @@ export class ConsoleGateway {
     if (!worker || !Object.hasOwn(ACTIVE_WORKERS, worker.status)) throw new ConsoleGatewayError("Worker is not reachable in this session.", 404);
     if (managed.execution.backend === "smolvm") throw new ConsoleGatewayError("Worker messages must be delivered inside the isolated workspace. Host mailbox delivery is refused until the guest messaging bridge is available.", 409);
     const settings = getSettings();
-    const result = sendOperatorMessage({ selfId: "Main", selfRole: "operator", siblingChannelEnabled: false, operatorChannelEnabled: settings.allowSubagentOperatorMessaging, projectPath: this.#projectPath, homeDir: managed.messagingHome, knownPeerIds: [...managed.workers.values()].filter((worker) => Object.hasOwn(ACTIVE_WORKERS, worker.status)).map((worker) => worker.id) }, workerId, body, this.#now().getTime());
+    const result = sendOperatorMessage({ selfId: "Main", selfRole: "operator", siblingChannelEnabled: false, operatorChannelEnabled: settings.allowSubagentOperatorMessaging, projectPath: managed.workspacePath ?? this.#projectPath, homeDir: managed.messagingHome, knownPeerIds: [...managed.workers.values()].filter((worker) => Object.hasOwn(ACTIVE_WORKERS, worker.status)).map((worker) => worker.id) }, workerId, body, this.#now().getTime());
     if (!result.ok) throw new ConsoleGatewayError(result.reason ?? "Worker message could not be delivered.", 409);
     worker.operatorMessages ??= [];
     worker.operatorMessages.push({ id: this.#createId(), text: clampOutboundBody(body).body, createdAt: this.#now().toISOString() });
@@ -653,16 +685,16 @@ export class ConsoleGateway {
         const settings = getSettings();
         const callbacks = this.#decisionCallbacks(managed);
         if (this.#options.createSession) {
-          session = await this.#options.createSession({ scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, scope: managed.scope, initialMessages: managed.initialMessages, ...callbacks });
+          session = await this.#options.createSession({ scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, scope: managed.scope, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, ...callbacks });
         } else if (consoleExecutionProfile(this.#options.homeDir) === "smolvm") {
           if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection); managed.runtime = created.runtime; managed.info = created.info; }
           session = createLocalConsoleSession({
             runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
             scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, scope: managed.scope,
-            initialMessages: managed.initialMessages, workspaceRoot: this.#projectPath,
-            allowModelSelfExtension: settings.allowModelSelfExtension,
+            initialMessages: managed.initialMessages, workspaceRoot: managed.workspacePath ?? this.#projectPath,
+            allowModelSelfExtension: settings.allowModelSelfExtension, compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
             onHarnessUpdate: (harness) => { managed.harness = harness; this.#emit(managed, { type: "harness", harness }); }, ...callbacks,
-          }, this.#options.dbPath, { homeDir: this.#options.homeDir, workspaceRoot: this.#projectPath,
+          }, this.#options.dbPath, { homeDir: this.#options.homeDir, workspaceRoot: managed.workspacePath ?? this.#projectPath,
             onExecution: (execution) => { managed.execution = structuredClone(execution); this.#emitSession(managed); },
           });
         } else {
@@ -676,8 +708,8 @@ export class ConsoleGateway {
               compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
               scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, scope: managed.scope,
               initialMessages: managed.initialMessages,
-              allowModelSelfExtension: settings.allowModelSelfExtension, workspaceRoot: this.#projectPath, pluginHost: lease.host, ...(mcpHost ? { mcpHost } : {}),
-              agentMessaging: { selfId: "Main", selfRole: "parent", siblingChannelEnabled: settings.allowSubagentPeerMessaging, operatorChannelEnabled: settings.allowSubagentOperatorMessaging, projectPath: this.#projectPath, homeDir: managed.messagingHome },
+              allowModelSelfExtension: settings.allowModelSelfExtension, workspaceRoot: managed.workspacePath ?? this.#projectPath, pluginHost: lease.host, ...(mcpHost ? { mcpHost } : {}),
+              agentMessaging: { selfId: "Main", selfRole: "parent", siblingChannelEnabled: settings.allowSubagentPeerMessaging, operatorChannelEnabled: settings.allowSubagentOperatorMessaging, projectPath: managed.workspacePath ?? this.#projectPath, homeDir: managed.messagingHome },
               onHarnessUpdate: (harness) => { managed.harness = harness; this.#emit(managed, { type: "harness", harness }); }, ...callbacks,
             }, this.#options.dbPath);
           } catch (error) { lease.release(); await mcpHost?.closeAll(); throw error; }
@@ -804,6 +836,18 @@ export class ConsoleGateway {
     const input = managed.pendingConfiguration; if (!input) return;
     const operation = (async () => {
       if ((input.target !== undefined || input.scope !== undefined) && [...managed.workers.values()].some((worker) => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Drain owned workers before changing the engagement target or scope.", 409);
+      if (input.workspacePath !== undefined) {
+        const session = await this.#ensureSession(managed);
+        const directory = input.workspacePath;
+        const response = await this.#requestDecision(managed, { kind: "local-scope", title: "Use this workspace folder?", detail: "0 will run from this folder and have access to its contents for this session.", requestedPath: directory, currentScopePath: session.localScopePath }, "workspace");
+        if (response.approve && managed.status !== "closed") {
+          if ([...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Stop active agents before changing the workspace folder.", 409);
+          // Revalidate after approval: the folder may have changed while the prompt was open.
+          if (realpathSync(directory) !== directory || !statSync(directory).isDirectory() || isDangerousLocalRoot(directory)) throw new ConsoleGatewayError("The workspace folder changed. Choose it again.", 409);
+          session.configureWorkspace(directory);
+          managed.workspacePath = directory;
+        }
+      }
       if (!managed.session) {
         if (input.target !== undefined) managed.target = input.target;
         if (input.scope !== undefined) managed.scope = input.scope === null ? undefined : ScopePolicy.fromJson(input.scope);
@@ -920,7 +964,7 @@ export class ConsoleGateway {
     const consoleState: StoredConsoleState = {
       configuration: {
         target: managed.session?.target ?? managed.target, role: managed.role,
-        runtime: { ...managed.selection, ...(managed.info ? { providerId: managed.info.providerId, model: managed.info.model, agentModels: managed.info.agentModels, singleModel: managed.info.singleModel, autoRoute: managed.info.autoRoute } : {}) },
+        runtime: savedWebRuntimeSelection(managed.selection, managed.info),
       },
       version: 1, title: managed.title, objective: managed.objective, usage: { ...managed.usage },
       ...(managed.contextInputTokens !== undefined ? { contextInputTokens: managed.contextInputTokens } : {}),
@@ -930,7 +974,7 @@ export class ConsoleGateway {
       ...(managed.focusedFinding ? { focusedFindingId: managed.focusedFinding.id } : {}),
       ...(managed.stagedPrompt ? { stagedPrompt: managed.stagedPrompt } : {}),
     };
-    const saved = saveSession({ id, savedAt: this.#now().getTime(), cwd: this.#projectPath, target: managed.session?.target ?? managed.target, ...(managed.info ? { model: managed.info.model } : {}), mode: managed.session?.autonomyMode ?? managed.autonomyMode, messageCount: messages.length, preview: "", summary: managed.title, messages: [...messages], consoleState }, this.#options.homeDir);
+    const saved = saveSession({ id, savedAt: this.#now().getTime(), cwd: managed.workspacePath ?? this.#projectPath, target: managed.session?.target ?? managed.target, ...(managed.info ? { model: managed.info.model } : {}), mode: managed.session?.autonomyMode ?? managed.autonomyMode, messageCount: messages.length, preview: "", summary: managed.title, messages: [...messages], consoleState }, this.#options.homeDir);
     if (!saved) this.#emit(managed, { type: "notice", text: "Private transcript could not be saved; the live conversation is still intact." });
     return saved;
   }

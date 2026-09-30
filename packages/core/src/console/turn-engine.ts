@@ -702,6 +702,8 @@ export interface ConsoleSession {
   setAutonomyMode(mode: ConsoleAutonomyMode): void;
   /** Keep identity, resources and denied-decision memory while changing engagement configuration. */
   configureEngagement(selection: ConsoleEngagementSelection): void;
+  /** Explicit operator-approved local directory; idle only. */
+  configureWorkspace(path: string): void;
   /**
    * Live-reconfigure the model / provider / role map on the underlying runtime,
    * so the next turn and next subagent fork pick it up without a session
@@ -1818,7 +1820,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     : consoleSessionCheckpointSchema.parse(config.initialCheckpoint);
 
   const scanId = cp?.scanId ?? config.scanId ?? `console-${randomUUID()}`;
-  const workspaceRoot = cp?.workspaceRoot ?? resolve(config.workspaceRoot ?? process.cwd());
+  let workspaceRoot = cp?.workspaceRoot ?? resolve(config.workspaceRoot ?? process.cwd());
   const role: AgentRole = cp?.role ?? config.role ?? "audit";
   let autonomyMode: ConsoleAutonomyMode = cp?.autonomyMode ?? config.autonomyMode ?? DEFAULT_AUTONOMY_MODE;
   let sessionScopeEnforcement = getScopeEnforcementState();
@@ -2574,7 +2576,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     // symlink-resolved real path — the exact value the decision is made against.
     let requestedPath: string;
     try {
-      requestedPath = canonicalizeRealPath(extractLocalPath(call));
+      requestedPath = canonicalizeRealPath(resolve(sessionScopePath ?? workspaceRoot, extractLocalPath(call)));
     } catch {
       if (!allowScopeExpansion) {
         return { success: false, output: null, error: "Executable code requires a resolvable path inside the parent's approved local scope." };
@@ -3687,6 +3689,16 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       if (customSystemPrompt === undefined) {
         systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, developmentSourceRoot: config.developmentSourceRoot });
       }
+    },
+    configureWorkspace: (path) => {
+      if (!initialized || turnInProgress || closing) throw new Error("Workspace configuration requires an initialized idle console session.");
+      const directory = realpathSync(path);
+      if (!statSync(directory).isDirectory() || isDangerousLocalRoot(directory)) throw new Error("Workspace must be an existing unprotected local directory.");
+      workspaceRoot = directory;
+      sessionScopePath = directory;
+      toolContext.workspaceRoot = directory;
+      if (toolContext.agentMessaging) (toolContext.agentMessaging as MessagingRuntime).projectPath = directory;
+      executor.configureWorkspace(directory);
     },
     configureEngagement: (selection) => {
       if (!initialized || turnInProgress || closing) throw new Error("Engagement configuration requires an initialized idle console session.");

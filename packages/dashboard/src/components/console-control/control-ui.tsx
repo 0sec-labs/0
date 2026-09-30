@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-export const selectClass = "h-10 w-full rounded-xl border border-transparent bg-muted/60 px-3 text-sm outline-none focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 disabled:opacity-50";
 
 export function ControlCard({ title, description, children, className }: { title: string; description?: string; children: ReactNode; className?: string }) {
   return <Card className={cn("control-section", className)}><CardHeader><CardTitle>{title}</CardTitle>{description && <CardDescription>{description}</CardDescription>}</CardHeader><CardContent className="space-y-4">{children}</CardContent></Card>;

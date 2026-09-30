@@ -13,6 +13,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -4919,5 +4920,30 @@ describe("ToolExecutor engine handoff", () => {
       const { scopedAuditDenials: _denials, ...incomplete } = original.exportCheckpoint();
       expect(() => toolExecutorCheckpointSchema.parse(incomplete)).toThrow();
     } finally { await original.cleanup(); }
+  });
+});
+
+
+describe("approved workspace shell directory", () => {
+  it("drops old workspace escalation grants while preserving explicit denials", () => {
+    const context: ToolContext = { target: "", scanId: "workspace-grants", findings: [], attackResults: [], targetInfo: {} };
+    const seed = new ToolExecutor(context, null).exportCheckpoint();
+    const executor = new ToolExecutor(context, null, undefined, undefined, { ...seed, scopedAuditGrants: ["run_command"], scopedAuditDenials: ["bash"] });
+    executor.configureWorkspace(process.cwd());
+    expect(executor.exportCheckpoint().scopedAuditGrants).toEqual([]);
+    expect(executor.exportCheckpoint().scopedAuditDenials).toEqual(["bash"]);
+  });
+
+  it("runs bash in the selected directory without changing the server cwd", async () => {
+    const directory = realpathSync(mkdtempSync(join(tmpdir(), "zero-shell-workspace-")));
+    const previous = process.cwd();
+    try {
+      const executor = new ToolExecutor({ target: "", scanId: "workspace-cwd", findings: [], attackResults: [], targetInfo: {}, autonomyMode: "yolo" }, null);
+      executor.configureWorkspace(directory);
+      const result = await executor.execute({ name: "bash", arguments: { command: "pwd" } });
+      expect(result.success).toBe(true);
+      expect(String(result.output).trim()).toBe(directory);
+      expect(process.cwd()).toBe(previous);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 });

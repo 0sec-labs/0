@@ -128,10 +128,23 @@ export function describeWebConsoleRuntime(runtime: NativeRuntime): ConsoleRuntim
   const diagnostics = api ? runtimeDiagnostics(api) : { valid: true, reason: null, message: null };
   return {
     providerId, providerLabel: PROVIDERS.find((provider) => provider.id === providerId)?.label ?? providerId,
-    model, configured: diagnostics.valid,
+    model, configured: diagnostics.valid, reasoning: api?.reasoningConfiguration() ?? null,
     connectionIdentity: api?.connectionIdentity() ?? null,
     diagnostics, ...(runtime.modelSelection?.() ?? { agentModels: {}, singleModel: false, autoRoute: false }),
     contextWindowTokens: (api ? runtimeContextLimits.get(api) : undefined) ?? resolveContextLimit({ modelId: model, providerId })?.tokens ?? null,
+  };
+}
+
+type StoredReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
+/** Persist only an effective effort, without stale or undefined optional fields. */
+export function savedWebRuntimeSelection(selection: ConsoleRuntimeSelection, info: ConsoleRuntimeSnapshot | null): Omit<ConsoleRuntimeSelection, "reasoningEffort"> & { reasoningEffort?: StoredReasoningEffort } {
+  const { reasoningEffort: selectedEffort, ...stored } = selection;
+  const effort = info ? info.reasoning?.effort : selectedEffort;
+  const reasoning = effort && ["none", "low", "medium", "high", "xhigh", "max"].includes(effort)
+    ? { reasoningEffort: effort as StoredReasoningEffort } : {};
+  if (!info) return { ...stored, ...reasoning };
+  return { ...stored, providerId: info.providerId, model: info.model, agentModels: info.agentModels,
+    singleModel: info.singleModel, autoRoute: info.autoRoute, ...reasoning,
   };
 }
 
@@ -140,6 +153,7 @@ function validateSelection(selection: ConsoleRuntimeSelection): void {
   for (const value of [selection.model, ...Object.values(selection.agentModels ?? {})]) {
     if (value !== undefined && (typeof value !== "string" || !value || value.length > 256 || /[\s\x00-\x1f\x7f]/.test(value))) throw new OperatorError(400, "invalid_model", "Model identifiers must be non-empty and contain no whitespace.");
   }
+  if (selection.reasoningEffort !== undefined && !["none", "low", "medium", "high", "xhigh", "max"].includes(selection.reasoningEffort)) throw new OperatorError(400, "invalid_reasoning_effort", "Choose an available thinking effort.");
   for (const key of Object.keys(selection.agentModels ?? {})) if (!/^[a-z][a-z0-9_-]{0,63}$/.test(key)) throw new OperatorError(400, "invalid_role", "Invalid model role.");
 }
 
@@ -174,6 +188,10 @@ export async function createWebConsoleRuntime(selection: ConsoleRuntimeSelection
     agentModels: selection.agentModels, singleModel: selection.singleModel, autoRoute: selection.autoRoute, env,
   });
   await validateRuntimeModels(runtime);
+  if (selection.reasoningEffort !== undefined) {
+    try { runtime.setReasoningEffort(selection.reasoningEffort); }
+    catch { throw new OperatorError(400, "unsupported_reasoning_effort", "Choose an available thinking effort for this model."); }
+  }
   runtimeEnvironments.set(runtime, env);
   if (selection.model !== undefined) saveAppliedModelPreference(runtime);
   return { runtime, info: describeWebConsoleRuntime(runtime) };
@@ -204,11 +222,17 @@ export async function applyWebConsoleRuntimeSelection(runtime: LlmApiRuntime, se
     candidate.reconfigure({ ...runtime.modelSelection(), ...selection });
     await validateRuntimeModels(candidate);
   }
+  if (selection.reasoningEffort !== undefined) {
+    try { candidate.setReasoningEffort(selection.reasoningEffort); }
+    catch { throw new OperatorError(400, "unsupported_reasoning_effort", "Choose an available thinking effort for this model."); }
+  }
   runtime.reconfigure({
     model: candidate.resolvedModel(), provider: targetProvider,
     ...candidate.modelSelection(),
     ...(targetProvider !== currentProvider ? { env: runtimeEnvironments.get(candidate) } : {}),
   });
+  const reasoning = candidate.reasoningConfiguration();
+  if (reasoning) runtime.setReasoningEffort(reasoning.effort);
   const contextTokens = runtimeContextLimits.get(candidate);
   if (contextTokens) runtimeContextLimits.set(runtime, contextTokens);
   else runtimeContextLimits.delete(runtime);

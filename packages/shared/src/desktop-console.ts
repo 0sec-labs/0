@@ -184,6 +184,7 @@ export type DesktopConsoleEvent = DesktopConsoleEventBase & DesktopConsoleEventP
 export type ConsoleJsonValue = null | boolean | number | string | ConsoleJsonValue[] | { [key: string]: ConsoleJsonValue };
 
 export interface ConsoleRuntimeSelection {
+  reasoningEffort?: string;
   providerId?: string;
   model?: string;
   agentModels?: Record<string, string>;
@@ -192,6 +193,7 @@ export interface ConsoleRuntimeSelection {
 }
 
 export interface ConsoleRuntimeSnapshot {
+  reasoning?: { effort: string; options: string[] } | null;
   providerId: string;
   providerLabel: string;
   model: string;
@@ -218,6 +220,7 @@ export interface ConsoleScopeEnforcement {
 }
 
 export interface ConsoleSessionConfiguration {
+  workspacePath?: string;
   title?: string;
   target?: string;
   autonomyMode?: DesktopConsoleAutonomyMode;
@@ -283,6 +286,7 @@ export interface ConsoleTodos {
 }
 
 export interface ConsoleSavedSession {
+  archived?: boolean;
   id: string;
   savedAt: number;
   cwd: string;
@@ -308,6 +312,7 @@ export interface ConsoleSessionSnapshot {
   scope: ConsoleScope | null;
   scopeEnforcement: ConsoleScopeEnforcement;
   localScopePath?: string;
+  workspacePath?: string;
   usage: { inputTokens: number; outputTokens: number; costUsd?: number; costKind?: "estimated" | "reported"; costUnavailable?: boolean };
   contextInputTokens?: number;
   contextWindowTokens?: number;

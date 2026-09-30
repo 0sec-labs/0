@@ -246,3 +246,7 @@ export function exportConsoleSession(id: string, saved = false, workerId?: strin
   return webFetchJson(`/api/console/${saved ? "saved" : "sessions"}/${encodeURIComponent(id)}${workerId ? `/workers/${encodeURIComponent(workerId)}` : ""}/export`);
 }
 
+
+export function archiveConsoleSession(id: string, saved = false, archived = true): Promise<{ session: ConsoleSavedSession }> {
+  return webFetchJson(`/api/console/${saved ? "saved" : "sessions"}/${encodeURIComponent(id)}/archive`, { method: "POST", body: JSON.stringify({ archived }) });
+}

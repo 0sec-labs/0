@@ -64,6 +64,8 @@ import { homeStateDir } from "@0/shared";
 
 /** Listing entry: everything needed to describe a session without loading it. */
 export interface StoredSessionMeta {
+  /** Hidden from the main chat list, retained for restore/export. */
+  archived?: boolean;
   /** Stable session id — the `ConsoleSession.scanId`, and the filename stem. */
   id: string;
   /**
@@ -249,6 +251,7 @@ function toMeta(id: string, raw: unknown, messageCount: number): StoredSessionMe
     cwd: typeof cwd === "string" ? cwd : "",
     messageCount,
     preview: sanitizePreview(rawValue(raw, "preview")),
+    ...(rawValue(raw, "archived") === true ? { archived: true } : {}),
     ...(summary !== undefined ? { summary } : {}),
   };
 }
@@ -276,6 +279,7 @@ const consoleStateSchema = z.object({
     target: z.string().max(8_000), role: z.enum(["discovery", "attack", "verify", "report", "audit", "review"]),
     runtime: z.object({
       providerId: z.string().max(256).optional(), model: z.string().max(256).optional(),
+      reasoningEffort: z.enum(["none", "low", "medium", "high", "xhigh", "max"]).optional(),
       agentModels: z.record(z.string().max(256)).optional(), singleModel: z.boolean().optional(), autoRoute: z.boolean().optional(),
     }).strict(),
   }).strict().optional(),
@@ -580,4 +584,10 @@ export function pruneSessions(homeDir?: string, opts?: { keep?: number; protecte
     if (deleteSession(meta.id, homeDir, opts)) removed += 1;
   }
   return removed;
+}
+
+/** Archive changes presentation only; transcript and authorization stay intact. */
+export function setSessionArchived(id: string, archived: boolean, homeDir?: string): boolean {
+  const session = loadSession(id, homeDir);
+  return session !== null && saveSession({ ...session, archived }, homeDir);
 }

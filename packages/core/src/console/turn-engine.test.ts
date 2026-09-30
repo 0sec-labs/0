@@ -3817,3 +3817,28 @@ describe("createConsoleSession — context compaction", () => {
     expect(session.messages.some((m) => m.content.some((b) => b.type === "text" && b.text.includes("FIRST-ANCHOR")))).toBe(true);
   });
 });
+
+describe("operator-approved workspace configuration", () => {
+  it("binds shell cwd and checkpoint context to the approved folder while keeping action approval", async () => {
+    const directory = realpathSync(mkdtempSync(join(tmpdir(), "zero-engine-workspace-")));
+    const approveTool = vi.fn(async () => true);
+    const requestLocalScope = vi.fn(async () => null);
+    const runtime = new ScriptedRuntime([
+      { content: [{ type: "tool_use", id: "workspace-pwd", name: "bash", input: { command: "pwd" } }], stopReason: "tool_use", durationMs: 1 },
+      endTurn("Done"),
+    ]);
+    const session = createConsoleSession({ runtime, role: "discovery", autonomyMode: "standard", refineObjective: false, allowModelSelfExtension: false, approveTool, requestLocalScope });
+    try {
+      await session.ready;
+      expect(() => session.configureWorkspace("/")).toThrow("unprotected");
+      expect(session.localScopePath).toBeUndefined();
+      session.configureWorkspace(directory);
+      const result = await session.send("Check your directory");
+      expect(result.toolCalls[0]!.result.success).toBe(true);
+      expect(String(result.toolCalls[0]!.result.output).trim()).toBe(directory);
+      expect(approveTool).toHaveBeenCalled();
+      expect(requestLocalScope).not.toHaveBeenCalled();
+      expect(session.exportCheckpoint()).toMatchObject({ workspaceRoot: directory, localScopePath: directory });
+    } finally { await session.cleanup(); rmSync(directory, { recursive: true, force: true }); }
+  });
+});

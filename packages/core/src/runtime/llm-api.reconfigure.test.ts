@@ -65,6 +65,22 @@ it("binds the host workbench credential closure to the selected account across a
 });
 
 describe("live runtime reconfiguration", () => {
+  it("inherits supported effort in same-model forks and resets it on model changes", async () => {
+    const runtime = new LlmApiRuntime({ type: "api", provider: "openai", model: "gpt-6.1-sol", timeout: 1000,
+      env: { ...environment(), OPENAI_API_KEY: "synthetic-key" } });
+    runtime.setReasoningEffort("max");
+    const fork = await runtime.forkForSubagent(1000);
+    expect(fork.reasoningConfiguration()?.effort).toBe("max");
+    expect(() => runtime.setReasoningEffort("none")).toThrow("not supported");
+    runtime.reconfigure({ model: "gpt-6-luna" });
+    expect(runtime.reasoningConfiguration()?.effort).toBe("medium");
+    runtime.setReasoningEffort("none");
+    expect(runtime.reasoningConfiguration()?.effort).toBe("none");
+    runtime.reconfigure({ model: "gpt-4o" });
+    expect(runtime.reasoningConfiguration()).toBeNull();
+    expect(() => runtime.setReasoningEffort("high")).toThrow("not supported");
+  });
+
   it("replaces the frozen agentModels map without touching provider or model", () => {
     const runtime = new LlmApiRuntime({
       type: "api", provider: "openai", model: "primary", timeout: 1000,

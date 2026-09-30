@@ -2085,8 +2085,10 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
     }
     const provider = pinnedProviderRaw as ApiProvider;
     const model = preferredModel ?? env["ZERO_MODEL"] ??
+      (provider === "azure" ? env.AZURE_OPENAI_MODEL ?? parseCodexAzureConfig(env).model : undefined) ??
       (configProvider !== undefined ? DEFAULT_PROVIDER_MODELS[provider] : undefined);
     if (model === undefined || model === "") {
+      if (provider === "azure") throw new Error("Choose an Azure deployment model in Connections to finish setup.");
       throw new Error(`${source} requires an explicit model`);
     }
     if (configApiKey && provider === "chatgpt-codex") {
@@ -2608,6 +2610,27 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       identity = [this.provider, this.baseUrl, this.apiKey];
     }
     return createHash("sha256").update(JSON.stringify(identity)).digest("hex");
+  }
+
+  /** Documented effort controls only on routes which send Responses reasoning. */
+  reasoningConfiguration(): { effort: string; options: string[] } | null {
+    if (this.wireApi !== "responses" || !["openai", "azure", "chatgpt-codex"].includes(this.provider)) return null;
+    // https://developers.openai.com/api/docs/guides/latest-model
+    const model = this.model.replace(/^openai\//, "");
+    let options: string[];
+    if (/^gpt-(?:6-astra|6\.1-sol)(?:-20\d\d-\d\d-\d\d)?$/.test(model)) options = ["low", "medium", "high", "xhigh", "max"];
+    else if (/^gpt-(?:6-sol|6-luna|5\.6(?:-sol|-terra|-luna)?)(?:-20\d\d-\d\d-\d\d)?$/.test(model)) options = ["none", "low", "medium", "high", "xhigh", "max"];
+    else return null;
+    const effort = this.reasoningEffort ?? defaultReasoningEffort(this.model) ?? "medium";
+    // Do not disguise an existing unsupported custom configuration as a choice.
+    return options.includes(effort) ? { effort, options } : null;
+  }
+
+  /** Apply an effort for subsequent requests and same-model worker forks. */
+  setReasoningEffort(effort: string): void {
+    const configuration = this.reasoningConfiguration();
+    if (!configuration || !configuration.options.includes(effort)) throw new Error("This reasoning effort is not supported by the selected model and connection.");
+    this.reasoningEffort = effort;
   }
 
   /** Discover models using this runtime's captured account, including after a separate login changes. */
