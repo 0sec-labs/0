@@ -39,12 +39,12 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
     ...(sessionsQuery.data ?? []).flatMap((session) => [session.id, ...(session.savedId ? [session.savedId] : [])]),
     ...(savedQuery.data ?? []).map((session) => session.id),
   ]), [sessionsQuery.data, savedQuery.data]);
-  // Console records share the findings database, but are conversations rather than assessments.
-  const assessments = useMemo(() => scans.filter((scan) => Boolean(scan.target.trim()) && !scan.id.startsWith("console-") && !conversationIds.has(scan.id)), [scans, conversationIds]);
+  // Console records share the findings database, but are conversations rather than scans.
+  const savedScans = useMemo(() => scans.filter((scan) => Boolean(scan.target.trim()) && !scan.id.startsWith("console-") && !conversationIds.has(scan.id)), [scans, conversationIds]);
 
   const groupedTargets = useMemo(() => {
     const grouped = new Map<string, ScanRecord[]>();
-    for (const scan of assessments) {
+    for (const scan of savedScans) {
       const existing = grouped.get(scan.target) ?? [];
       existing.push(scan);
       grouped.set(scan.target, existing);
@@ -62,7 +62,7 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
         } satisfies TargetRunGroup;
       })
       .sort((left, right) => right.latestScan.startedAt.localeCompare(left.latestScan.startedAt));
-  }, [assessments]);
+  }, [savedScans]);
 
   const filteredTargets = useMemo(() => {
     const normalized = deferredSearch.trim().toLowerCase();
@@ -110,11 +110,11 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
       <Workspace className="xl:grid-cols-[22rem_minmax(0,1fr)]">
         <WorkspaceSidebar>
           <EntityList
-            title="Assessment history"
-            description="Past assessments by target"
+            title="Activity"
+            description="Past scans by target"
             searchValue={search}
             onSearchChange={setSearch}
-            searchPlaceholder="Search assessments"
+            searchPlaceholder="Search scans"
           >
             {filteredTargets.length === 0 ? (
               <CardEmpty className="py-8">No matches.</CardEmpty>
@@ -125,7 +125,7 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
                     <EntityListItem
                       selected={isActive}
                       title={group.target}
-                      description={`${group.scans.length} assessment${group.scans.length === 1 ? "" : "s"}`}
+                      description={`${group.scans.length} scan${group.scans.length === 1 ? "" : "s"}`}
                       meta={formatTime(group.latestScan.startedAt)}
                       badges={
                         <>
@@ -144,8 +144,8 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
         {!selectedScanId ? (
           <WorkspaceMain span>
             <EmptyState
-              title="No assessments yet"
-              body="Start an assessment in a chat. Its results will appear here."
+              title={savedScans.length ? "Select a scan" : "No scans yet"}
+              body={savedScans.length ? "Select a target to view its scan activity and findings." : "Start a scan in a chat. Its results will appear here."}
               action={<Button asChild><NavLink to="/console">Open chats</NavLink></Button>}
             />
           </WorkspaceMain>
@@ -153,7 +153,7 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
           <WorkspaceMain span>
             <EmptyState
               title="Chat activity"
-              body="This record belongs to a conversation, not a separate assessment. Open chats to continue the work and view its agents."
+              body="This record belongs to a conversation, not a separate scan. Open chats to continue the work and view its agents."
               action={<Button asChild><NavLink to={liveConversation ? `/console/${liveConversation.id}` : "/console"}>Open chat</NavLink></Button>}
             />
             {findingsQuery.data && findingsQuery.data.groups.length > 0 ? (
@@ -164,7 +164,7 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
           </WorkspaceMain>
         ) : eventsQuery.isLoading || findingsQuery.isLoading ? (
           <WorkspaceMain span>
-            <LoadingState label="Assessment" />
+            <LoadingState label="Scan" />
           </WorkspaceMain>
         ) : eventsQuery.error ? (
           <WorkspaceMain span>
@@ -179,8 +179,8 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
         ) : (
           <WorkspaceMain span>
             <EmptyState
-              title="Assessment not found"
-              body="This assessment couldn't be loaded."
+              title="Scan not found"
+              body="This scan couldn't be loaded."
             />
           </WorkspaceMain>
         )}
@@ -214,7 +214,7 @@ function ScanDetail({
             <MetaTile label="Mode" value={`${scan.mode} / ${scan.depth}`} />
             <MetaTile label="Engine" value={scan.runtime} />
             <MetaTile label="Duration" value={formatDuration(scan.durationMs)} />
-            <MetaTile label="Assessment ID" value={scan.id} mono />
+            <MetaTile label="Scan ID" value={scan.id} mono />
           </CardList>
         </InspectorPane>
       </div>
@@ -298,7 +298,7 @@ function ScanDetail({
           </CardHeader>
           <CardContent>
             {findings.groups.length === 0 ? (
-              <CardEmpty>No findings in this assessment.</CardEmpty>
+              <CardEmpty>No findings in this scan.</CardEmpty>
             ) : (
               <Table>
                 <TableHeader>
@@ -331,12 +331,12 @@ function ScanDetail({
         <Card className="overflow-hidden">
           <CardHeader>
             <div>
-              <CardTitle className="font-sans text-base font-medium">Previous assessments</CardTitle>
+              <CardTitle className="font-sans text-base font-medium">Previous scans</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
             {targetRuns.filter((entry) => entry.id !== scan.id).length === 0 ? (
-              <CardEmpty>No previous assessments yet.</CardEmpty>
+              <CardEmpty>No previous scans yet.</CardEmpty>
             ) : (
               <Table>
                 <TableHeader>
