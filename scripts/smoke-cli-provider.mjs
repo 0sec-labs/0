@@ -176,6 +176,12 @@ async function main() {
       assert.ok(counters.authErrors > 0, "CLI did not reach the rejecting local provider");
       assert.match(stdout + stderr, /authentication_error/, "CLI did not surface the actual provider rejection");
       assert.equal(review ? report.researchFailed : report.executionSuccessful === false, true, "auth rejection was reported as a clean verdict");
+      if (!review) {
+        assert.equal(report.exitReason, "failed");
+        assert.ok(typeof report.error === "string" && report.error.length > 0);
+        assert.ok(report.summary.totalAttacks > 0, "failed scan lost initialized attack evidence");
+        assert.ok(report.benchmarkMeta.attackTurns > 0, "failed scan lost initialized turn evidence");
+      }
     } else {
       assert.equal(counters.modelRequests, 2, "bootstrap bypassed a real provider turn");
       assert.equal(counters.sourceReceipts, review ? 3 : 0);
