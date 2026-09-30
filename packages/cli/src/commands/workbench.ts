@@ -114,7 +114,7 @@ export async function workbenchStatus(home: string = process.env.HOME || homedir
 }
 
 export function registerWorkbenchCommand(program: Command): void {
-  const workbench = program.command("workbench").description("Set up and inspect the whole-harness online SmolVM workbench (no Docker runtime)");
+  const workbench = program.command("workbench").description("Set up and inspect the sandboxed execution workbench (no Docker)");
   workbench.command("setup")
     .description("Verify/provision the signed native runtime, approve a local image, and select SmolVM execution")
     .option("--image <archive>", "Local OCI/Docker archive to digest-pin and approve; never a mutable registry tag")

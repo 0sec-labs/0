@@ -122,7 +122,7 @@ function readBaseline(path: string): LoadedAgentAssureBaseline {
 export function registerAgentAssureCommand(program: Command): void {
   program
     .command("agent-assure")
-    .description("Test whether untrusted MCP content causes a prohibited action in an authorized agent environment")
+    .description("Test whether untrusted MCP content can trigger a prohibited agent action")
     .requiredOption("--agent-endpoint <url>", "Customer-owned agent test adapter endpoint (HTTP JSON contract)")
     .requiredOption("--mcp-endpoint <url>", "Authorized MCP tools/list endpoint")
     .requiredOption("--oracle-endpoint <url>", "Customer-owned state-observer endpoint")

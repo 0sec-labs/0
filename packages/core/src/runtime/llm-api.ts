@@ -2619,6 +2619,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     provider?: string;
     agentModels?: Record<string, string>;
     singleModel?: boolean;
+    autoRoute?: boolean;
     env?: NodeJS.ProcessEnv;
   }): void {
     const providerChanged = sel.provider !== undefined && sel.provider !== this.provider;
@@ -2635,6 +2636,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         model: sel.model,
         ...(sel.agentModels !== undefined ? { agentModels: sel.agentModels } : {}),
         ...(sel.singleModel !== undefined ? { singleModel: sel.singleModel } : {}),
+        ...(sel.autoRoute !== undefined ? { autoRoute: sel.autoRoute } : {}),
         ...(sel.env !== undefined ? { env: sel.env as Record<string, string> } : {}),
       };
       this.applyConfiguration(merged);
@@ -2649,6 +2651,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     }
     if (sel.singleModel !== undefined) {
       this.config = { ...this.config, singleModel: sel.singleModel };
+    }
+    if (sel.autoRoute !== undefined) {
+      this.config = { ...this.config, autoRoute: sel.autoRoute };
     }
 
     // Same-provider model change: re-run model/wire-api resolution exactly like
@@ -2859,6 +2864,15 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
    */
   resolvedModel(): string {
     return this.model;
+  }
+
+  /** JSON-safe routing policy, not the runtime's private environment or configuration. */
+  modelSelection(): { agentModels: Record<string, string>; singleModel: boolean; autoRoute: boolean } {
+    return {
+      agentModels: { ...this.config.agentModels },
+      singleModel: this.config.singleModel === true,
+      autoRoute: this.config.autoRoute === true,
+    };
   }
 
   resolvedProvider(): string {

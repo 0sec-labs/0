@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Search } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Card, CardContent, CardDescription, CardEyebrow, CardHeader, CardList, CardListItem, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardList, CardListItem, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
 export function EntityList({
@@ -23,9 +23,8 @@ export function EntityList({
     <Card className="flex h-[36rem] min-h-0 max-h-[calc(100vh-8rem)] flex-col overflow-hidden">
       <CardHeader className="space-y-3">
         <div>
-          <CardEyebrow>Queue</CardEyebrow>
           <CardTitle className="mt-2">{title}</CardTitle>
-          <CardDescription>{description}</CardDescription>
+          {description ? <CardDescription>{description}</CardDescription> : null}
         </div>
         <label className="flex items-center gap-3">
           <Search className="size-4 text-muted-foreground" />
@@ -64,7 +63,7 @@ export function EntityListItem({
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-0.5">
           <div className="text-sm font-semibold leading-5 text-foreground">{title}</div>
-          <div className="text-xs leading-5 text-muted-foreground">{description}</div>
+          {description ? <div className="text-xs leading-5 text-muted-foreground">{description}</div> : null}
           {meta ? <div className="text-xs text-muted-foreground">{meta}</div> : null}
         </div>
         {badges ? <div className="flex max-w-[12rem] flex-wrap justify-end gap-2">{badges}</div> : null}

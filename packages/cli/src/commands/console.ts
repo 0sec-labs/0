@@ -20,11 +20,9 @@ import type {
 } from "@0/core";
 import { DEFAULT_AUTONOMY_MODE } from "@0/shared";
 import { canUseOpenTui, isBunRuntime } from "../tui/runtime.js";
-import {
-  findCommand,
-  getCommandByName,
-  SLASH_COMMANDS,
-} from "../tui/slash-commands.js";
+import { findCommand,
+getCommandByName,
+SLASH_COMMANDS, } from "@0/shared"
 import {
   processPresentationOutput,
   type ProcessPresentationOutput,
@@ -135,7 +133,7 @@ export function registerConsoleCommand(program: Command): void {
   program
     .command("console")
     .description(
-      "Interactive chat console — talk to the engine and drive the full tool registry (recon, web, source-scan, variant-hunt, verify, patch-gen) from one prompt.",
+      "Interactive chat console to drive the engine and its tools from one prompt",
     )
     .option("--target <url>", "Engagement target the tools operate against (optional; can be named in-chat)")
     .option("--scope <file>", "Initial policy for the optional scope plugin; activate with `0 plugin enable scope`")
@@ -144,10 +142,10 @@ export function registerConsoleCommand(program: Command): void {
     .option("--db-path <path>", "Persistent findings database (defaults to ZERO_DB_PATH or the local store)")
     .option("-m, --model <id>", "Override the LLM model id (else provider default)")
     .option("--role <role>", "Tool set to expose: audit|review|discovery|attack|verify (default audit = every tool)")
-    .option("--mode <mode>", "Approval/capability mode: standard|recon|copilot|yolo (default yolo). Scope authorization is a separate optional plugin; cycle mode with Shift+Tab.")
+    .option("--mode <mode>", "Approval mode: standard|recon|copilot|yolo (default yolo); cycle with Shift+Tab")
     .option("--yolo", "Shortcut for --mode yolo (no per-action prompts; independent credential, private-network and sandbox protections remain).")
     .option("--autonomy <mode>", "Alias of --mode (standard|copilot|yolo|recon); --mode/--yolo take precedence.")
-    .option("--max-tool-calls <n>", "Safety cap on tool-call rounds per operator message", String(DEFAULT_MAX_TOOL_ITERATIONS))
+    .option("--max-tool-calls <n>", "Safety cap on tool-call rounds per message", String(DEFAULT_MAX_TOOL_ITERATIONS))
     .option("--allow-scanners", "Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off")
     .option("--resume [id]", "Reopen a saved console session by id (or unique prefix); with no id, opens a session picker. Also reachable as `0 -r [id]`.")
     .option("--continue", "Reopen the most recent console session, no picker. Also reachable as `0 -c`.")
@@ -575,7 +573,7 @@ function previewResult(result: ToolResult): string {
 
 function printBanner(session: ConsoleSession, target?: string): void {
   console.log("");
-  console.log(chalk.bold("0 console") + chalk.dim(" — interactive operator cockpit"));
+  console.log(chalk.bold("0 console") + chalk.dim(" — interactive chat"));
   console.log(chalk.dim(`  session ${session.scanId}`));
   console.log(chalk.dim(`  ${session.tools.length} tools available${target ? ` · target ${target}` : " · no target set"}`));
   console.log(chalk.dim(`  mode: ${modeLabel(session.autonomyMode)}`));

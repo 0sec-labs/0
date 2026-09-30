@@ -156,12 +156,8 @@ export function registerRecencyHuntCommand(program: Command): void {
   program
     .command("recency-hunt")
     .description(
-      "Recency flywheel: hunt the kernelCTF freshness window. git-diff a fresh " +
-        "linux-next range → drop non-unpriv-reachable files → classify each diff " +
-        "SEMANTIC (lifetime/refcount/lock change) vs COSMETIC (reshuffle) → run the " +
-        "refined invariant engine on semantic files → adversarial verify → ranked " +
-        "report. Emits LEADS (verify novelty/reachability before disclosure). " +
-        "Exit 0=survivor(s), 1=none, 2=empty window, 3=error.",
+      "Hunt recent kernel commits (linux-next) for security regressions. " +
+        "Emits leads to verify, not confirmed bugs.",
     )
     .requiredOption("--tree <path>", "Kernel source tree to hunt (e.g. /root/linux-next)")
     .option("--since <gitrange>", "Explicit git range (e.g. HEAD~20..HEAD or <sha>..HEAD); overrides --hours")

@@ -274,7 +274,7 @@ export function describeFeedbackOutcome(
     return { text: `Could not save feedback: ${local.error ?? "unknown error"}`, tone: "err" };
   }
   if (sent.ok) {
-    return { text: `Feedback submitted and saved to ${local.path}.`, tone: "ok" };
+    return { text: "Thanks — report submitted.", tone: "ok" };
   }
   if (sent.skipped) {
     // describeSkip text already explains "saved locally only".
@@ -418,10 +418,10 @@ function CrashPanel({ crash, onRestart, onQuit }: { crash: CrashInfo; onRestart:
   });
 
   const footerHint = view === "feedback"
-    ? "[⏎] send · [esc] back · [⌃C] quit"
+    ? "[⏎] send · [esc] back"
     : view === "submitting"
-      ? "submitting feedback…"
-      : "r restart · f feedback · q quit";
+      ? "sending…"
+      : "[r] restart · [f] report it · [q] quit";
 
   return (
     <ShellFrame view="crash">
@@ -434,7 +434,7 @@ function CrashPanel({ crash, onRestart, onQuit }: { crash: CrashInfo; onRestart:
         minWidth={0}
       >
         <box flexDirection="column" width="100%" minWidth={0}>
-          <text fg={theme.ERROR}>{fitTuiText("TUI crashed while rendering the current screen.", contentWidth)}</text>
+          <text fg={theme.ERROR}>{fitTuiText("Something broke on this screen.", contentWidth)}</text>
           <text fg={theme.TEXT} wrapMode="word">{fitTuiText(cleanMessage, contentWidth)}</text>
           {stackLines.length > 0 ? <text fg={theme.MUTED}>{fitTuiText("stack:", contentWidth)}</text> : null}
           {stackLines.map((line, index) => (
@@ -444,7 +444,7 @@ function CrashPanel({ crash, onRestart, onQuit }: { crash: CrashInfo; onRestart:
 
           {view === "feedback" ? (
             <box flexDirection="column" width="100%" minWidth={0} marginTop={1}>
-              <text fg={theme.INFO}>{fitTuiText("Add a note — the sanitized crash report is attached automatically.", contentWidth)}</text>
+              <text fg={theme.INFO}>{fitTuiText("What were you doing? (crash details are attached, secrets removed)", contentWidth)}</text>
               <box flexDirection="row" width="100%" minWidth={0}>
                 <text width={2} flexShrink={0} fg={theme.PRIMARY}>&gt; </text>
                 <box width={inputWidth} flexShrink={0} minWidth={0}>
@@ -457,7 +457,7 @@ function CrashPanel({ crash, onRestart, onQuit }: { crash: CrashInfo; onRestart:
 
           {view === "submitting" ? (
             <box width="100%" minWidth={0} marginTop={1}>
-              <text fg={theme.INFO}>{fitTuiText("Submitting feedback…", contentWidth)}</text>
+              <text fg={theme.INFO}>{fitTuiText("Sending…", contentWidth)}</text>
             </box>
           ) : null}
 

@@ -19,8 +19,10 @@ import {
 import { readToolCallNames } from "@0/core";
 import { presentationEventBus } from "../presentation/event-bus.js";
 import { buildFindingConsoleCommand } from "../finding-handoff.js";
-import { DesktopConsoleGateway, DesktopConsoleGatewayError } from "../desktop/console-gateway.js";
-import { DesktopCodexAuthController } from "../desktop/codex-auth-controller.js";
+import { ConsoleGateway, ConsoleGatewayError } from "../web/console-gateway.js";
+import { WebOperatorServices } from "../web/operator-services.js";
+import { WebWorkflowService } from "../web/workflows.js";
+import { GitHubPublicationAuth } from "../web/github-auth.js";
 import { DASHBOARD_ASSETS, type EmbeddedDashboardAsset } from "../dashboard-assets.generated.js";
 
 type DashboardOptions = {
@@ -28,11 +30,43 @@ type DashboardOptions = {
   port?: string;
   host?: string;
   assetDir?: string;
+  devUrl?: string;
   readyJson?: boolean;
   // Commander 12 maps `--no-open` to `opts.open = false` (not `opts.noOpen = true`).
   // See: https://github.com/tj/commander.js/blob/master/Readme.md#other-option-types-negatable-boolean-and-booleanvalue
   open?: boolean;
 };
+
+class WebRequestError extends Error {
+  constructor(message: string, readonly statusCode: number) { super(message); }
+}
+
+const WEB_HOST_ALIASES: Record<string, true> = { localhost: true, "127.0.0.1": true, "[::1]": true };
+
+function errorStatusCode(error: unknown): number {
+  if (error instanceof z.ZodError) return 400;
+  if (error && typeof error === "object" && "statusCode" in error &&
+      typeof error.statusCode === "number" && Number.isInteger(error.statusCode) &&
+      error.statusCode >= 400 && error.statusCode < 600) return error.statusCode;
+  return 500;
+}
+
+/** Do not issue a local execution capability through a rebinding hostname. */
+function authorizeWebRequest(req: IncomingMessage, origin: string): void {
+  const serverUrl = new URL(origin);
+  const authority = req.headers.host;
+  if (!authority || !/^[A-Za-z0-9.[\]:-]+$/.test(authority)) throw new WebRequestError("Invalid web application host.", 403);
+  const requestOrigin = new URL(`http://${authority}`);
+  if ((requestOrigin.hostname !== serverUrl.hostname && !WEB_HOST_ALIASES[requestOrigin.hostname]) ||
+      requestOrigin.port !== serverUrl.port) throw new WebRequestError("Use the bound loopback host and port.", 403);
+  if (req.headers.origin !== undefined && req.headers.origin !== requestOrigin.origin) {
+    throw new WebRequestError("Cross-origin web application requests are not allowed.", 403);
+  }
+  if (req.url?.startsWith("/api/") && req.headers["sec-fetch-site"] === "cross-site") {
+    throw new WebRequestError("Cross-site control requests are not allowed.", 403);
+  }
+  if (!req.url?.startsWith("/") || req.url.startsWith("//")) throw new WebRequestError("Invalid request target.", 400);
+}
 
 type ManagedDaemonState = {
   child: ChildProcess;
@@ -197,6 +231,9 @@ function sendFile(res: ServerResponse, filePath: string, controlToken?: string):
   const ext = extname(filePath);
   const contentType = CONTENT_TYPES[ext] ?? "application/octet-stream";
   res.writeHead(200, {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "X-Frame-Options": "DENY",
     "Content-Type": contentType,
     "Cache-Control": ext === ".html" ? "no-store" : "public, max-age=300",
   });
@@ -213,23 +250,36 @@ function sendFile(res: ServerResponse, filePath: string, controlToken?: string):
 }
 
 function readJson(req: IncomingMessage): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    let data = "";
-    req.on("data", (chunk) => {
-      data += chunk;
-      if (data.length > 1_000_000) {
-        reject(new Error("Request body too large"));
-      }
-    });
-    req.on("end", () => {
-      try {
-        resolve(data ? JSON.parse(data) : {});
-      } catch (err) {
-        reject(err);
-      }
-    });
-    req.on("error", reject);
+  const { promise, resolve, reject } = Promise.withResolvers<unknown>();
+  const chunks: Buffer[] = [];
+  let bytes = 0;
+  let settled = false;
+  const onData = (chunk: Buffer | string) => {
+    if (settled) return;
+    const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    bytes += data.length;
+    if (bytes > 1_000_000) {
+      settled = true;
+      req.removeListener("data", onData);
+      req.resume();
+      reject(new WebRequestError("Request body too large.", 413));
+      return;
+    }
+    chunks.push(data);
+  };
+  req.on("data", onData);
+  req.on("end", () => {
+    if (settled) return;
+    settled = true;
+    try {
+      const data = Buffer.concat(chunks, bytes).toString("utf8");
+      resolve(data ? JSON.parse(data) : {});
+    } catch { reject(new WebRequestError("Request body is not valid JSON.", 400)); }
   });
+  req.on("error", error => {
+    if (!settled) { settled = true; reject(error); }
+  });
+  return promise;
 }
 
 function normalizeTriageStatus(value?: string | null): FindingTriageStatus {
@@ -1105,120 +1155,99 @@ function requireControlToken(req: IncomingMessage, res: ServerResponse, controlT
   return true;
 }
 
-const DesktopConsoleSessionInputSchema = z.object({
-  target: z.unknown().optional(),
-  role: z.unknown().optional(),
-  autonomyMode: z.unknown().optional(),
-});
-
-const DesktopConsoleMessageInputSchema = z.object({
-  text: z.unknown().optional(),
-});
-
-function consolePath(pathname: string): { sessionId: string; action?: "events" | "messages" | "cancel"; decisionId?: string } | null {
-  const match = /^\/api\/console\/sessions\/([a-zA-Z0-9-]+)(?:\/(events|messages|cancel)|\/decisions\/([a-zA-Z0-9-]+))?$/.exec(pathname);
-  if (!match) return null;
-  const action = match[2] as "events" | "messages" | "cancel" | undefined;
-  return {
-    sessionId: match[1]!,
-    ...(action ? { action } : {}),
-    ...(match[3] ? { decisionId: match[3] } : {}),
-  };
-}
 
 function consoleEventsAfter(value: string | null): number {
   if (value === null || value === "") return 0;
   const after = Number(value);
   if (!Number.isSafeInteger(after) || after < 0) {
-    throw new DesktopConsoleGatewayError("Event cursor must be a non-negative integer.", 400);
+    throw new ConsoleGatewayError("Event cursor must be a non-negative integer.", 400);
   }
   return after;
 }
 
-async function handleDesktopConsoleApiRequest(
+async function handleWebConsoleApiRequest(
   req: IncomingMessage,
   res: ServerResponse,
   requestUrl: URL,
-  gateway: DesktopConsoleGateway,
-  codexAuth: DesktopCodexAuthController,
-  controlToken: string,
+  gateway: ConsoleGateway,
+  operator: WebOperatorServices,
+  workflows: WebWorkflowService,
+  github: GitHubPublicationAuth,
 ): Promise<boolean> {
   if (!requestUrl.pathname.startsWith("/api/console/")) return false;
-  if (!requireControlToken(req, res, controlToken)) return true;
-
+  const method = req.method ?? "GET";
+  const path = requestUrl.pathname.slice("/api/console/".length);
+  const input = method === "GET" || method === "HEAD" ? undefined : await readJson(req);
   try {
-    if (requestUrl.pathname === "/api/console/providers/codex") {
-      if (req.method === "GET") {
-        json(res, 200, { status: codexAuth.status() });
-        return true;
-      }
-      json(res, 405, { error: "Method not allowed" });
+    if (path === "github" && method === "GET") { json(res, 200, { github: await github.status() }); return true; }
+    if (path === "github/connect" && method === "POST") { json(res, 200, { github: await github.connect(input) }); return true; }
+    if (path === "github/device-auth" && method === "POST") { json(res, 202, { github: await github.start() }); return true; }
+    if (path === "github/device-auth" && method === "DELETE") { json(res, 200, { github: await github.cancel() }); return true; }
+    const workflow = await workflows.handle(requestUrl.pathname, method, input, requestUrl.searchParams);
+    if (workflow) { json(res, workflow.status, workflow.data); return true; }
+    const service = await operator.handle(requestUrl.pathname, method, input, requestUrl.searchParams);
+    if (service) { json(res, service.status, service.data); return true; }
+    if (path === "sessions") {
+      if (method === "GET") json(res, 200, { sessions: gateway.list() });
+      else if (method === "POST") json(res, 201, { session: gateway.create(input) });
+      else json(res, 405, { error: "Method not allowed." });
       return true;
     }
-    if (requestUrl.pathname === "/api/console/providers/codex/device-auth") {
-      if (req.method === "POST") {
-        json(res, 202, { status: codexAuth.start() });
-        return true;
-      }
-      if (req.method === "DELETE") {
-        json(res, 200, { status: codexAuth.cancel() });
-        return true;
-      }
-      json(res, 405, { error: "Method not allowed" });
+    const parts = path.split("/").map(part => decodeURIComponent(part));
+    if (parts.some(part => !/^[A-Za-z0-9_.:-]+$/.test(part))) throw new ConsoleGatewayError("Invalid resource identifier.", 400);
+    if (parts[0] === "saved") {
+      const id = parts[1];
+      if (!id && method === "GET") {
+        const limit = requestUrl.searchParams.get("limit");
+        json(res, 200, { sessions: gateway.listSaved({
+          ...(requestUrl.searchParams.get("cwd") ? { cwd: requestUrl.searchParams.get("cwd") } : {}),
+          ...(limit ? { limit: Number(limit) } : {}),
+        }) });
+      } else if (id && parts.length === 2 && method === "GET") json(res, 200, gateway.loadSaved(id));
+      else if (id && parts.length === 2 && method === "DELETE") { gateway.deleteSaved(id); json(res, 200, { ok: true }); }
+      else if (id && parts[2] === "resume" && method === "POST") json(res, 201, { session: await gateway.resume(id, input) });
+      else if (id && parts[2] === "export" && method === "GET") json(res, 200, gateway.exportSaved(id));
+      else json(res, 405, { error: "Method not allowed." });
       return true;
     }
-
-    if (requestUrl.pathname === "/api/console/sessions") {
-      if (req.method === "GET") {
-        json(res, 200, { sessions: gateway.list() });
-        return true;
-      }
-      if (req.method === "POST") {
-        const body = DesktopConsoleSessionInputSchema.parse(await readJson(req));
-        const session = gateway.create(body);
-        json(res, 201, { session });
-        return true;
-      }
-      json(res, 405, { error: "Method not allowed" });
-      return true;
-    }
-
-    const parsed = consolePath(requestUrl.pathname);
-    if (!parsed) return false;
-    if (parsed.action === "events" && req.method === "GET") {
-      json(res, 200, { events: gateway.eventsAfter(parsed.sessionId, consoleEventsAfter(requestUrl.searchParams.get("after"))) });
-      return true;
-    }
-    if (parsed.action === "messages" && req.method === "POST") {
-      const body = DesktopConsoleMessageInputSchema.parse(await readJson(req));
-      json(res, 202, { session: gateway.send(parsed.sessionId, body.text) });
-      return true;
-    }
-    if (parsed.action === "cancel" && req.method === "POST") {
-      json(res, 200, { session: gateway.cancel(parsed.sessionId) });
-      return true;
-    }
-    if (parsed.decisionId && req.method === "POST") {
-      const body = await readJson(req);
-      json(res, 200, { session: gateway.resolveDecision(parsed.sessionId, parsed.decisionId, body) });
-      return true;
-    }
-    if (!parsed.action && !parsed.decisionId && req.method === "DELETE") {
-      await gateway.close(parsed.sessionId);
+    if (parts[0] !== "sessions" || !parts[1]) return false;
+    const id = parts[1];
+    const action = parts[2];
+    if (!action && method === "GET") json(res, 200, { snapshot: gateway.get(id) });
+    else if (!action && method === "DELETE") {
+      workflows.cancelSession(id);
+      await gateway.close(id);
       json(res, 200, { ok: true });
-      return true;
-    }
-    json(res, 405, { error: "Method not allowed" });
+    } else if (action === "events" && method === "GET") {
+      json(res, 200, gateway.eventsAfter(id, consoleEventsAfter(requestUrl.searchParams.get("after"))));
+    } else if (action === "messages" && method === "POST") json(res, 202, { session: await gateway.send(id, input) });
+    else if (action === "cancel" && method === "POST") json(res, 200, { session: await gateway.cancel(id) });
+    else if (action === "configuration" && method === "PATCH") json(res, 200, { session: await gateway.configure(id, input) });
+    else if (action === "clear" && method === "POST") json(res, 200, { session: await gateway.clear(id) });
+    else if (action === "continue" && method === "POST") json(res, 202, { session: await gateway.continue(id, input) });
+    else if (action === "harness" && method === "POST") json(res, 200, await gateway.harness(id, input));
+    else if (action === "save" && method === "POST") json(res, 200, { session: gateway.save(id) });
+    else if (action === "delete" && method === "POST") {
+      workflows.cancelSession(id);
+      json(res, 200, await gateway.delete(id));
+    } else if (action === "export" && method === "GET") json(res, 200, gateway.export(id));
+    else if (action === "queue" && method === "DELETE") json(res, 200, { session: gateway.removeQueued(id, parts[3]) });
+    else if (action === "decisions" && parts[3] && method === "POST") json(res, 200, { session: gateway.resolveDecision(id, parts[3], input) });
+    else if (action === "workers") {
+      const workerId = parts[3];
+      if (!workerId && method === "GET") json(res, 200, { workers: gateway.workers(id) });
+      else if (workerId === "stop" && method === "POST") json(res, 200, { session: await gateway.drainWorkers(id) });
+      else if (workerId && parts[4] === "export" && method === "GET") json(res, 200, gateway.exportWorker(id, workerId));
+      else if (workerId && parts[4] === "stop" && method === "POST") json(res, 200, { worker: await gateway.stopWorker(id, workerId) });
+      else if (workerId && parts[4] === "messages" && method === "POST") {
+        const body = z.object({ text: z.unknown() }).strict().parse(input);
+        json(res, 202, { session: gateway.sendWorker(id, workerId, body.text) });
+      } else json(res, 405, { error: "Method not allowed." });
+    } else json(res, 405, { error: "Method not allowed." });
     return true;
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      json(res, 400, { error: "Invalid console request payload." });
-      return true;
-    }
-    if (error instanceof DesktopConsoleGatewayError) {
-      json(res, error.statusCode, { error: error.message });
-      return true;
-    }
+    if (error instanceof z.ZodError) { json(res, 400, { error: "Invalid console request payload." }); return true; }
+    if (error instanceof ConsoleGatewayError) { json(res, error.statusCode, { error: error.message }); return true; }
     throw error;
   }
 }
@@ -1750,11 +1779,13 @@ function isLoopbackDashboardHost(host: string): boolean {
 export function registerDashboardCommand(program: Command): void {
   program
     .command("dashboard")
-    .description("Run a local mission-control dashboard for scans and findings")
+    .alias("web")
+    .description("Run the local browser console and operations workspace")
     .option("--db-path <path>", "Path to SQLite database")
     .option("--port <port>", "Port to bind; 0 chooses a free loopback port", "48123")
     .option("--host <host>", "Loopback host to bind (127.0.0.0/8 or ::1)", "127.0.0.1")
     .option("--asset-dir <path>", "Path to built dashboard assets")
+    .option("--dev-url <url>", "Loopback Vite server for authenticated frontend hot reload")
     .option("--ready-json", "Emit the bound dashboard URL as machine-readable JSON")
     .option("--no-open", "Do not auto-open a browser")
     .action(async (opts: DashboardOptions) => {
@@ -1769,25 +1800,55 @@ export function registerDashboardCommand(program: Command): void {
         );
       }
       let origin = `http://${host.includes(":") ? `[${host}]` : host}:${port}`;
+      let devUrl: URL | undefined;
+      if (opts.devUrl) {
+        devUrl = new URL(opts.devUrl);
+        const devHost = devUrl.hostname.replace(/^\[|\]$/g, "");
+        if (devUrl.protocol !== "http:" || devUrl.username || devUrl.password || !isLoopbackDashboardHost(devHost)) {
+          throw new Error("The frontend development server must use an HTTP loopback URL without credentials.");
+        }
+      }
 
 
       const { path: assetDir, cleanup: cleanupAssetDir } = resolveDashboardAssetDir(opts.assetDir);
       const controlToken = randomUUID();
-      const consoleGateway = new DesktopConsoleGateway();
-      const codexAuth = new DesktopCodexAuthController();
+      const consoleGateway = new ConsoleGateway({ dbPath: opts.dbPath });
+      const operator = new WebOperatorServices({ isTurnActive: () => consoleGateway.hasActiveTurns() });
+      const workflows = new WebWorkflowService({ gateway: consoleGateway, dbPath: opts.dbPath });
+      const github = new GitHubPublicationAuth();
 
       const server = createServer(async (req, res) => {
+        try { authorizeWebRequest(req, origin); }
+        catch (error) {
+          json(res, error instanceof WebRequestError ? error.statusCode : 403, { error: error instanceof Error ? error.message : "Invalid request origin." });
+          return;
+        }
         const requestUrl = new URL(req.url ?? "/", origin);
 
         try {
           if (requestUrl.pathname.startsWith("/api/")) {
-            const consoleHandled = await handleDesktopConsoleApiRequest(req, res, requestUrl, consoleGateway, codexAuth, controlToken);
+            if (!requireControlToken(req, res, controlToken)) return;
+            const consoleHandled = await handleWebConsoleApiRequest(req, res, requestUrl, consoleGateway, operator, workflows, github);
             if (consoleHandled) return;
             const handled = await handleApiRequest(req, res, requestUrl.pathname, opts.dbPath, controlToken);
             if (!handled) json(res, 404, { error: "Not found" });
             return;
           }
 
+          if (devUrl) {
+            if (req.method !== "GET" && req.method !== "HEAD") throw new WebRequestError("Asset method not allowed.", 405);
+            const assetUrl = new URL(`${requestUrl.pathname}${requestUrl.search}`, devUrl);
+            const response = await fetch(assetUrl, { redirect: "error", signal: AbortSignal.timeout(15_000) });
+            const contentType = response.headers.get("content-type") ?? "application/octet-stream";
+            const data = Buffer.from(await response.arrayBuffer());
+            if (data.length > 16_000_000) throw new WebRequestError("Development asset is too large.", 413);
+            const body = contentType.includes("text/html")
+              ? data.toString("utf8").replace("</head>", `<meta name="0-control-token" content="${controlToken}"></head>`)
+              : data;
+            res.writeHead(response.status, { "Content-Type": contentType, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY" });
+            res.end(req.method === "HEAD" ? undefined : body);
+            return;
+          }
           const explicitAsset = resolveAssetPath(assetDir, requestUrl.pathname);
           if (explicitAsset) {
             sendFile(res, explicitAsset, controlToken);
@@ -1802,7 +1863,7 @@ export function registerDashboardCommand(program: Command): void {
           // Inject the control token into HTML so the dashboard JS can read it.
           sendFile(res, join(assetDir, "index.html"), controlToken);
         } catch (err) {
-          json(res, 500, { error: err instanceof Error ? err.message : String(err) });
+          json(res, errorStatusCode(err), { error: err instanceof Error ? err.message : "Web application request failed." });
         }
       });
       let dashboardAssetsCleaned = false;
@@ -1823,14 +1884,16 @@ export function registerDashboardCommand(program: Command): void {
         console.log(chalk.gray(`  ${url}`));
         if (opts.readyJson) console.log(`ZERO_DASHBOARD_READY ${JSON.stringify({ url })}`);
         console.log(chalk.gray("  Ctrl+C to stop"));
-        if (opts.open !== false) openBrowser(`${url}/dashboard`);
+        if (opts.open !== false) openBrowser(`${url}/console`);
       });
 
       let shuttingDown = false;
       const shutdown = () => {
         if (shuttingDown) return;
         shuttingDown = true;
-        void consoleGateway.closeAll().finally(() => {
+        void workflows.dispose().then(() => consoleGateway.closeAll()).finally(() => {
+          operator.dispose();
+          github.dispose();
           server.close(() => {
             cleanupDashboardAssets();
             process.exit(0);

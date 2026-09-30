@@ -230,7 +230,7 @@ export function runConfigImport(
 export function registerConfigCommand(program: Command): void {
   const config = program
     .command("config")
-    .description("Inspect, export, and import the two-level console configuration");
+    .description("Inspect, export, and import console configuration (global and project layers)");
 
   config
     .command("show")

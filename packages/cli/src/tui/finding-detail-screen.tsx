@@ -383,19 +383,19 @@ export function FindingDetailScreen({
   const startInvestigation = () => {
     if (!finding || !onInvestigate) return;
     onInvestigate(finding);
-    setNotice(`Investigation opened for ${finding.id}.`);
+    setNotice("Investigating in chat.");
   };
 
   const planFix = () => {
     if (!finding || !onPlanFix) return;
     onPlanFix(finding);
-    setNotice(`Source fix requested for ${finding.id}; review its diff and regression result in chat.`);
+    setNotice("Fix started — see chat.");
   };
 
   const copyReport = () => {
     if (!finding) return;
     if (!onCopyReport) {
-      setNotice("Copy unavailable — no clipboard handler wired.");
+      setNotice("Copy isn't available here.");
       return;
     }
     let markdown: string;
@@ -407,7 +407,7 @@ export function FindingDetailScreen({
       markdown = `# ${finding.title}\n\n${finding.description ?? ""}`.trim();
     }
     onCopyReport(finding, markdown);
-    setNotice("Report copied to the clipboard.");
+    setNotice("Report copied.");
   };
 
   const setStatus = (status: FindingStatusAction) => {

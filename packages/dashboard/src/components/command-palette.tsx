@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { FileSearch, LayoutDashboard, MessageSquare, PlayCircle, ShieldCheck, ShieldOff } from "lucide-react";
+import { FileSearch, LayoutDashboard, MessageSquare, PlayCircle, Settings, ShieldCheck, ShieldOff, SlidersHorizontal } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getFindingFamily, updateFindingFamilyTriage } from "@/api";
@@ -70,20 +70,47 @@ export function CommandPalette({
 
   const items = useMemo<PaletteAction[]>(() => {
     const base: PaletteAction[] = [
-      ...(import.meta.env.MODE === "desktop-alpha" ? [{
-        id: "page-chat",
-        group: "Pages" as const,
-        label: "Open chat workspace (alpha)",
-        meta: "Development-only operator conversation and approvals",
+      {
+        id: "page-console",
+        group: "Pages",
+        label: "Console",
+        meta: "Chat with 0",
         icon: MessageSquare,
-        keywords: ["chat operator workspace session scope approvals alpha"],
-        run: () => window.location.assign("/desktop.html"),
-      }] : []),
+        keywords: ["chat operator workspace session scope approvals console"],
+        run: () => navigate("/console"),
+      },
+      {
+        id: "new-console",
+        group: "Actions",
+        label: "New chat",
+        meta: "Start a new conversation",
+        icon: MessageSquare,
+        keywords: ["new conversation chat audit session"],
+        run: () => navigate("/console?new=1"),
+      },
+      ...[
+        ["setup", "Setup", "Connect a model and pick a project"],
+        ["connections", "Connections", "API keys and accounts"],
+        ["models", "Models", "Choose which models 0 uses"],
+        ["settings", "Settings", "Preferences, shortcuts, appearance"],
+        ["plugins", "Plugins", "Add and manage extensions"],
+        ["doctor", "Diagnostics", "Check that everything works"],
+        ["tools", "Tools", "What 0 can use"],
+        ["project", "Project", "Target and permissions"],
+        ["fix", "Fix", "Review and apply a code fix"],
+      ].map(([route, label, meta]): PaletteAction => ({
+        id: `control-${route}`, group: "Pages", label: label!, meta: meta!, icon: route === "settings" ? Settings : SlidersHorizontal,
+        keywords: [route!, label!],
+        run: () => {
+          const sessionId = location.pathname.match(/^\/console\/([^/]+)/)?.[1];
+          navigate(`/${route}${sessionId ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(location.pathname)}` : ""}`);
+        },
+      })),
       {
         id: "page-findings",
         group: "Pages",
-        label: "Open findings workspace",
-        meta: "Evidence, chat handoff, disposition",
+        label: "Findings",
+        meta: "Issues 0 found",
         icon: FileSearch,
         keywords: ["findings families review evidence console handoff"],
         run: () => navigate("/findings"),
@@ -91,30 +118,53 @@ export function CommandPalette({
       {
         id: "page-control",
         group: "Pages",
-        label: "Open operations home",
-        meta: "Launch, queue, worker control",
+        label: "Overview",
+        meta: "What 0 is doing",
         icon: LayoutDashboard,
-        keywords: ["operations dashboard overview launch workers queue"],
+        keywords: ["operations dashboard overview workers queue"],
         run: () => navigate("/dashboard"),
       },
       {
         id: "page-scans",
         group: "Pages",
-        label: "Open runs",
-        meta: "Run history and provenance",
+        label: "Runs",
+        meta: "Scan history",
         icon: PlayCircle,
         keywords: ["scans runs timeline history"],
         run: () => navigate("/runs"),
       },
     ];
 
+    const selectedFindingId = selectedFamilyQuery.data?.latest.id;
+    if (selectedFindingId) {
+      base.unshift(
+        {
+          id: "finding-console",
+          group: "Actions",
+          label: "Investigate this finding",
+          meta: "Open it in a new chat",
+          icon: MessageSquare,
+          keywords: ["finding investigate console chat focus evidence"],
+          run: () => navigate(`/console?finding=${encodeURIComponent(selectedFindingId)}&intent=investigate`),
+        },
+        {
+          id: "finding-impact",
+          group: "Actions",
+          label: "View impact",
+          meta: "See how serious this finding is",
+          icon: FileSearch,
+          keywords: ["finding impact assessment stored"],
+          run: () => navigate(`/console?finding=${encodeURIComponent(selectedFindingId)}&intent=impact`),
+        },
+      );
+    }
     if (selectedFingerprint) {
       base.unshift(
         {
           id: "triage-accept",
           group: "Actions",
-          label: "Accept selected finding",
-          meta: "Mark the finding family as accepted",
+          label: "Accept finding",
+          meta: "Mark as real",
           icon: ShieldCheck,
           keywords: ["accept finding triage"],
           shortcut: "Enter",
@@ -126,8 +176,8 @@ export function CommandPalette({
         {
           id: "triage-suppress",
           group: "Actions",
-          label: "Suppress selected finding",
-          meta: "Suppress the finding family",
+          label: "Dismiss finding",
+          meta: "Hide it from the list",
           icon: ShieldOff,
           keywords: ["suppress finding triage"],
           shortcut: "Shift+S",
@@ -143,8 +193,8 @@ export function CommandPalette({
       base.unshift({
         id: "scan-detail",
         group: "Actions",
-        label: "Focus selected scan timeline",
-        meta: "Open current run detail",
+        label: "Open this run",
+        meta: "Run details",
         icon: PlayCircle,
         keywords: ["scan timeline detail current"],
         run: () => navigate(`/runs/${selectedScanId}`),
@@ -168,7 +218,7 @@ export function CommandPalette({
         id: `scan-${scan.id}`,
         group: "Runs",
         label: scan.target,
-        meta: `${scan.status} · ${scan.depth} · ${scan.runtime}`,
+        meta: scan.status,
         icon: PlayCircle,
         keywords: [scan.target, scan.status, scan.depth, scan.runtime, scan.mode],
         run: () => navigate(`/runs/${scan.id}`),
@@ -183,6 +233,8 @@ export function CommandPalette({
     scans,
     selectedFingerprint,
     selectedFamilyQuery.data?.latest.triageNote,
+    location.pathname,
+    selectedFamilyQuery.data?.latest.id,
     selectedScanId,
     triageMutation,
   ]);
@@ -208,13 +260,9 @@ export function CommandPalette({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="overflow-hidden p-0 sm:max-w-2xl" showCloseButton={false}>
-        <DialogHeader className="border-b border-border px-5 py-4 pr-12">
-          <DialogTitle className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            Mission command
-          </DialogTitle>
-          <DialogDescription className="pt-2 text-sm text-muted-foreground">
-            Search operations views, findings, runs, and control actions.
-          </DialogDescription>
+        <DialogHeader className="sr-only">
+          <DialogTitle>Commands</DialogTitle>
+          <DialogDescription>Go to a page, run or finding.</DialogDescription>
         </DialogHeader>
 
         <div className="border-b border-border px-4 py-3">
@@ -222,7 +270,8 @@ export function CommandPalette({
             autoFocus
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Jump to a page, run, finding, or action"
+            placeholder="Search pages, runs, findings…"
+            aria-label="Search commands"
           />
         </div>
 
@@ -252,7 +301,7 @@ export function CommandPalette({
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="font-medium text-foreground">{item.label}</div>
-                        <div className="truncate text-xs text-muted-foreground">{item.meta}</div>
+                        {item.group !== "Pages" && <div className="truncate text-xs text-muted-foreground">{item.meta}</div>}
                       </div>
                       {item.shortcut ? (
                         <div className="text-xs tracking-widest text-muted-foreground">{item.shortcut}</div>
@@ -265,7 +314,7 @@ export function CommandPalette({
 
             {filteredItems.length === 0 ? (
               <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                No matching commands.
+                No results.
               </div>
             ) : null}
           </div>

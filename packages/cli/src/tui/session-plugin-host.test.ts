@@ -280,27 +280,19 @@ describe("PluginService ↔ SessionPluginHostManager integration", () => {
     expect(built[0].loadedIds.has("a.one")).toBe(true);
   });
 
-  it("enable triggers a manager refresh at a turn boundary", async () => {
-    const core = makeCore({ ids: ["a.one"] });
-    const { factory } = makeHostFactory();
+  it("records approval without starting code, then runs only after explicit activation", async () => {
+    const onDisk = { ids: [] as string[] };
+    const core = makeCore(onDisk);
+    core.writeEnablement = () => { onDisk.ids = ["a.one"]; return true; };
+    const { factory, built } = makeHostFactory();
     const manager = await createSessionPluginHostManager({ core, hostFactory: factory });
-    const spy = vi.spyOn(manager, "refresh");
-
     const svc = createPluginService({ core, pluginHostManager: manager, isTurnActive: () => false });
-    const res = await svc.enable(pluginItem("a.one"));
-    expect(res.ok).toBe(true);
-    expect(spy).toHaveBeenCalledTimes(1);
-  });
 
-  it("enable does NOT refresh while a turn is in flight", async () => {
-    const core = makeCore({ ids: ["a.one"] });
-    const { factory } = makeHostFactory();
-    const manager = await createSessionPluginHostManager({ core, hostFactory: factory });
-    const spy = vi.spyOn(manager, "refresh");
-
-    const svc = createPluginService({ core, pluginHostManager: manager, isTurnActive: () => true });
-    await svc.enable(pluginItem("a.one"));
-    expect(spy).not.toHaveBeenCalled();
+    expect((await svc.enable(pluginItem("a.one"))).ok).toBe(true);
+    expect(built.flatMap((host) => [...host.loadedIds])).toEqual([]);
+    expect((await svc.run(pluginItem("a.one"))).ok).toBe(true);
+    expect((manager.current() as unknown as FakeHost).loadedIds.has("a.one")).toBe(true);
+    manager.dispose();
   });
 
   it("run defers past a live turn, then loads through the manager on flush", async () => {

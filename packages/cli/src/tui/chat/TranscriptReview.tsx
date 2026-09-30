@@ -46,7 +46,7 @@ export function TranscriptReview({
   const count = transcript.entries.length;
   // The registered `replay` glyph, always beside its label — never glyph-only.
   const title = `${operatorIcon("replay", symbols)} TRANSCRIPT REVIEW`;
-  const hints = "Esc / Ctrl+O live · PgUp/PgDn scroll · Ctrl+Home/Ctrl+End jump";
+  const hints = "esc back to live · PgUp/PgDn scroll";
   const rule = reviewRule(width);
   const content = boundTranscriptReviewContent(document.text
     ? [
@@ -61,7 +61,7 @@ export function TranscriptReview({
         hints,
         rule,
         "",
-        "No transcript entries yet.",
+        "Nothing here yet.",
       ].join("\n"));
 
   return (

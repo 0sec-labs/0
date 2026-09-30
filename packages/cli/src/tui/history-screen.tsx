@@ -96,7 +96,7 @@ export function HistoryScreen({ dbPath, limit, onResolve, onExit, shell }: { dbP
   // an unknown finding count rather than a zero.
   const historyItems = useMemo<DialogItem[]>(() => {
     if (scans.length === 0) {
-      return [{ id: "history:none", label: "No scan history found.", category: "Runs", disabled: true }];
+      return [{ id: "history:none", label: "No scans yet.", category: "Runs", disabled: true }];
     }
     const now = Date.now();
     return scans.map((scan) => ({
@@ -142,7 +142,7 @@ export function HistoryScreen({ dbPath, limit, onResolve, onExit, shell }: { dbP
       id: "replay-scan",
       title: "Replay selected scan",
       category: "Session",
-      description: "Hand off the selected run to the replay view",
+      description: "Open the selected run in replay",
       keybind: "r",
       suggested: true,
       action: () => {
@@ -160,7 +160,7 @@ export function HistoryScreen({ dbPath, limit, onResolve, onExit, shell }: { dbP
       id: "back-history",
       title: "Go back",
       category: "Navigate",
-      description: "Return to the previous console screen",
+      description: "Back to the previous screen",
       keybind: "esc",
       suggested: true,
       action: () => leaveCurrentScreen(shell, onExit),
@@ -306,14 +306,12 @@ export function HistoryScreen({ dbPath, limit, onResolve, onExit, shell }: { dbP
     lines.push({ text: "" });
     lines.push(...wrapDialogLines(`status ${scan.status}`, inner, scanStatusTone(theme, scan.status) ?? theme.MUTED));
     lines.push(...wrapDialogLines(`mode ${scan.mode}/${scan.depth}`, inner, theme.MUTED));
-    lines.push(...wrapDialogLines(`runtime ${scan.runtime}`, inner, theme.MUTED));
+    lines.push(...wrapDialogLines(`provider ${scan.runtime}`, inner, theme.MUTED));
     // An unparsable summary reports an unknown count; it is never a zero.
     lines.push(...wrapDialogLines(`findings ${scanSummary.totalFindings ?? "unknown"}`, inner, theme.MUTED));
     lines.push(...wrapDialogLines(`duration ${formatDuration(scan.durationMs)}`, inner, theme.MUTED));
     lines.push(...wrapDialogLines(`started ${scan.startedAt}`, inner, theme.MUTED));
     lines.push(...wrapDialogLines(`scan ${scan.id}`, inner, theme.MUTED));
-    lines.push({ text: "" });
-    lines.push(...wrapDialogLines("r replays this run", inner, theme.ACCENT));
     return <DialogDetailColumn lines={lines} pane={pane} />;
   };
   const historyStatusLine = error
@@ -325,20 +323,20 @@ export function HistoryScreen({ dbPath, limit, onResolve, onExit, shell }: { dbP
     <ShellFrame view="history" dialogContent>
       {palette.paletteOpen ? <PaletteOverlay title="History commands" query={palette.paletteQuery} selected={palette.paletteSelected} commands={palette.filteredPalette} /> : null}
       <box flexDirection="column" width="100%" height="100%" minWidth={0}>
-        <DialogTitleRow screenKey="history" width={width} meta={`${scans.length} runs · limit ${limit}`} />
+        <DialogTitleRow screenKey="history" width={width} meta={`${scans.length} runs`} />
         <DialogSelectBody
           items={historyFiltered}
           cursor={historyCursor}
           panel={historyPanel}
           query={historyFilter}
-          placeholder={historyFiltering ? "type to filter" : "/ to filter runs"}
-          emptyText="Nothing matches this filter."
+          placeholder={historyFiltering ? "type to filter" : "/ to search"}
+          emptyText="No matches."
           renderDetail={renderHistoryDetail}
         />
         <Cells width={width} fg={error ? theme.ERROR : theme.MUTED}>
           {historyStatusLine}
         </Cells>
-        <FooterBar hint={historyFiltering ? "type to filter · [⏎] keep · [esc] clear" : "[↑↓] move · [r] replay · [/] filter · [esc] back · [⌃P] commands · [⌃C] exit"} />
+        <FooterBar hint={historyFiltering ? "[⏎] keep · [esc] clear" : "[↑↓] move · [r] replay · [/] search · [⌃P] commands · [esc] back"} />
       </box>
     </ShellFrame>
   );

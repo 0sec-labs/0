@@ -454,7 +454,7 @@ function TaskCard({
           ) : null}
           {bodyCapped ? (
             <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
-              {fitTuiText("Context capped; additional lines are not retained here", inner)}
+              {fitTuiText("(truncated)", inner)}
             </text>
           ) : null}
         </box>
@@ -560,7 +560,7 @@ function TaskCard({
           <box width={inner} flexDirection="column" flexShrink={0} minWidth={0}>{outBody}</box>
         ) : (
           <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
-            {fitTuiText(running ? "Awaiting output" : "No output retained", inner)}
+            {fitTuiText(running ? "waiting for output…" : "no output", inner)}
           </text>
         )}
         {outHidden > 0 ? (
@@ -570,7 +570,7 @@ function TaskCard({
         ) : null}
         {outCapped ? (
           <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
-            {fitTuiText("Preview capped; additional output is not retained here", inner)}
+            {fitTuiText("(output truncated)", inner)}
           </text>
         ) : null}
       </box>
@@ -692,7 +692,7 @@ function CodeCard({
         ) : null}
         {codeCapped ? (
           <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
-            {fitTuiText("Source capped; additional lines are not retained here", inner)}
+            {fitTuiText("(truncated)", inner)}
           </text>
         ) : null}
       </box>
@@ -710,7 +710,7 @@ function CodeCard({
             </box>
         ) : (
           <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
-            {fitTuiText(running ? "Awaiting output" : "No output", inner)}
+            {fitTuiText(running ? "waiting for output…" : "no output", inner)}
           </text>
         )}
         {outHidden > 0 ? (
@@ -720,7 +720,7 @@ function CodeCard({
         ) : null}
         {outCapped ? (
           <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
-            {fitTuiText("Preview capped; additional output is not retained here", inner)}
+            {fitTuiText("(output truncated)", inner)}
           </text>
         ) : null}
       </box>
@@ -935,7 +935,7 @@ export function ToolCard({
           <box width={inner} flexDirection="column" flexShrink={0} minWidth={0}>{outputBody}</box>
         ) : (
           <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
-            {fitTuiText(running ? "Awaiting output" : "No output retained", inner)}
+            {fitTuiText(running ? "waiting for output…" : "no output", inner)}
           </text>
         )}
         {hiddenLines > 0 ? (
@@ -945,7 +945,7 @@ export function ToolCard({
         ) : null}
         {capped ? (
           <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
-            {fitTuiText("Preview capped; additional output is not retained here", inner)}
+            {fitTuiText("(output truncated)", inner)}
           </text>
         ) : null}
       </box>

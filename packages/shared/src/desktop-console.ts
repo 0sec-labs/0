@@ -1,7 +1,10 @@
+import type { HarnessSnapshot } from "./live-harness.js";
+import type { Finding } from "./types.js";
+
 /**
- * Renderer-neutral contract between the desktop renderer and the local console
- * daemon. It deliberately contains only JSON-safe values: neither Electron nor
- * a browser receives a live tool, scope, credential, or runtime object.
+ * Renderer-neutral contract between the browser and the local console daemon.
+ * It contains only JSON-safe values: clients never receive a live tool, scope,
+ * credential, or runtime object.
  */
 export const DESKTOP_CONSOLE_SCHEMA_VERSION = 1 as const;
 
@@ -24,6 +27,8 @@ export interface DesktopCodexAuthStatus {
 }
 
 export interface DesktopConsoleSession {
+  /** Original durable conversation, when this engine resumes saved work. */
+  savedId?: string;
   id: string;
   target: string;
   role: DesktopConsoleRole;
@@ -33,6 +38,11 @@ export interface DesktopConsoleSession {
   status: DesktopConsoleSessionStatus;
   createdAt: string;
   updatedAt: string;
+  title?: string;
+  /** Transcript messages plus queued operator messages; 0 means the conversation is still blank. */
+  messageCount?: number;
+  runtime?: ConsoleRuntimeSnapshot;
+  pendingConfiguration?: ConsoleSessionConfiguration;
 }
 
 export interface DesktopConsoleToolCall {
@@ -45,14 +55,17 @@ export interface DesktopConsoleUsage {
   inputTokens: number;
   outputTokens: number;
   turnTokensUsed: number;
-  turnTokenBudget: number;
+  /** null explicitly means an unlimited budget. */
+  turnTokenBudget: number | null;
   iterations: number;
   maxToolIterations: number;
+  kind?: "planner" | "plugin" | "compaction";
 }
 
 export interface DesktopConsoleTurnBudget {
   tokensUsed: number;
-  tokenBudget: number;
+  /** null explicitly means an unlimited budget. */
+  tokenBudget: number | null;
   iterations: number;
   maxToolIterations: number;
 }
@@ -60,6 +73,7 @@ export interface DesktopConsoleTurnBudget {
 export interface DesktopConsoleOperatorOption {
   label: string;
   description?: string;
+  recommended?: boolean;
 }
 
 export interface DesktopConsoleOperatorQuestion {
@@ -81,6 +95,19 @@ export interface DesktopConsoleDecision {
   requestedUrls?: string[];
   requestedPath?: string;
   questions?: DesktopConsoleOperatorQuestion[];
+  risk?: { level: "destructive" | "unknown"; category?: string };
+  reason?: string;
+  unresolvedTargets?: string[];
+  currentScope?: ConsoleScope | null;
+  currentScopePath?: string;
+  ownerId?: string;
+  context?: {
+    target: string;
+    role: DesktopConsoleRole;
+    autonomyMode: DesktopConsoleAutonomyMode;
+    scopeEnforcement: ConsoleScopeEnforcement;
+    localScopePath?: string;
+  };
 }
 
 export interface DesktopConsoleOperatorAnswer {
@@ -112,35 +139,186 @@ export type DesktopConsoleEventPayload =
   | { type: "notice"; text: string }
   | { type: "decision"; decision: DesktopConsoleDecision }
   | { type: "decision-resolved"; decisionId: string; approved: boolean }
-  | { type: "turn-complete"; assistantText: string; stopReason: string; budget: DesktopConsoleTurnBudget; error?: string }
-  | { type: "error"; message: string };
+  | ({ type: "turn-complete" } & ConsoleTurnOutcome)
+  | { type: "error"; message: string }
+  | { type: "snapshot"; snapshot: ConsoleSessionSnapshot }
+  | { type: "clear" }
+  | { type: "worker"; worker: ConsoleWorker; incremental?: boolean }
+  | { type: "queued"; messages: ConsoleQueuedMessage[] }
+  | { type: "state"; objective: string; todos: ConsoleTodos | null }
+  | { type: "harness"; harness: HarnessSnapshot }
+  | { type: "compaction"; compaction: ConsoleJsonValue };
 
 export type DesktopConsoleEvent = DesktopConsoleEventBase & DesktopConsoleEventPayload;
 
-// ── Desktop Bridge Contract ─────────────────────────────────────────────
-// Typed contract between Electron main/preload and the dedicated desktop renderer.
-// The renderer accesses these through window.osecDesktop (set by the preload
-// script), which is always defined in the desktop shell.
+export type ConsoleJsonValue = null | boolean | number | string | ConsoleJsonValue[] | { [key: string]: ConsoleJsonValue };
 
-export type DesktopHostCommand =
-  | "new-thread"
-  | "open-folder"
-  | "toggle-sidebar"
-  | "settings";
+export interface ConsoleRuntimeSelection {
+  providerId?: string;
+  model?: string;
+  agentModels?: Record<string, string>;
+  singleModel?: boolean;
+  autoRoute?: boolean;
+}
 
-export interface DesktopHostBridge {
-  /** Immutable platform string (process.platform from Electron). */
-  readonly platform: string;
-  /** Open a URL in the system default browser. Only HTTPS URLs are allowed. */
-  openExternal(url: string): Promise<void>;
-  /** Show a native directory picker. Returns null on cancellation. */
-  chooseDirectory(): Promise<string | null>;
-  /** UI preferences persisted independently of the ephemeral sidecar origin. */
-  getPreferences(): Promise<Record<string, unknown>>;
-  setPreference(key: string, value: unknown): Promise<void>;
-  /**
-   * Subscribe to native menu commands. Returns an unsubscribe function.
-   * The listener is invoked synchronously for every matching command.
-   */
-  onCommand(listener: (command: DesktopHostCommand) => void): () => void;
+export interface ConsoleRuntimeSnapshot {
+  providerId: string;
+  providerLabel: string;
+  model: string;
+  configured: boolean;
+  connectionIdentity: string | null;
+  diagnostics: { valid: boolean; reason: string | null; message: string | null };
+  agentModels: Record<string, string>;
+  singleModel: boolean;
+  autoRoute: boolean;
+  contextWindowTokens: number | null;
+}
+
+export interface ConsoleScope {
+  in_scope?: string[];
+  out_of_scope?: string[];
+  attribution?: { headers?: Record<string, string>; user_agent_token?: string };
+}
+
+export interface ConsoleScopeEnforcement {
+  pluginId: string;
+  enabled: boolean;
+  projectPath: string;
+  message: string;
+}
+
+export interface ConsoleSessionConfiguration {
+  title?: string;
+  target?: string;
+  autonomyMode?: DesktopConsoleAutonomyMode;
+  scope?: ConsoleScope | null;
+  runtime?: ConsoleRuntimeSelection;
+}
+
+export interface ConsolePublicMessage {
+  role: "user" | "assistant";
+  content: Array<
+    | { type: "text"; text: string }
+    | { type: "tool_use"; id: string; name: string; input: Record<string, ConsoleJsonValue> }
+    | { type: "tool_result"; tool_use_id: string; content: string; is_error?: boolean }
+  >;
+}
+
+export interface ConsoleTurnOutcome {
+  assistantText: string;
+  stopReason: string;
+  budget: DesktopConsoleTurnBudget;
+  error?: string;
+  usage?: { inputTokens: number; outputTokens: number };
+  contextInputTokens?: number;
+  outputCap?: { checkpoint: ConsoleJsonValue; continuations: number; message: string };
+}
+
+export interface ConsoleQueuedMessage {
+  id: string;
+  text: string;
+  createdAt: string;
+}
+
+export interface ConsoleWorkerTurn {
+  turn: number;
+  ts: number;
+  assistant?: string;
+  reasoning_summary?: string;
+  partial?: boolean;
+  tools?: Array<{ callIndex: number; call: DesktopConsoleToolCall; result: ConsoleJsonValue; running?: boolean }>;
+}
+
+export interface ConsoleWorker {
+  id: string;
+  parentId: string;
+  name: string;
+  status: "queued" | "running" | "parked" | "completed" | "failed" | "stopped";
+  task: string;
+  transcript: ConsoleWorkerTurn[];
+  operatorMessages?: ConsoleQueuedMessage[];
+  telemetry?: Record<string, ConsoleJsonValue>;
+  summary?: string;
+  error?: string;
+  model?: string;
+  role?: string;
+}
+
+export interface ConsoleTodos {
+  todos: Array<{ id: string; content: string; status: string; group?: string }>;
+  done: number;
+  total: number;
+  line: string;
+  revision: number;
+}
+
+export interface ConsoleSavedSession {
+  id: string;
+  savedAt: number;
+  cwd: string;
+  messageCount: number;
+  preview: string;
+  target?: string;
+  model?: string;
+  mode?: string;
+  summary?: string;
+}
+
+export interface ConsoleSessionSnapshot {
+  session: DesktopConsoleSession;
+  title: string;
+  cursor: number;
+  messages: ConsolePublicMessage[];
+  events: DesktopConsoleEvent[];
+  pendingDecisions: DesktopConsoleDecision[];
+  workers: ConsoleWorker[];
+  queuedMessages: ConsoleQueuedMessage[];
+  runtime: ConsoleRuntimeSnapshot | null;
+  scope: ConsoleScope | null;
+  scopeEnforcement: ConsoleScopeEnforcement;
+  localScopePath?: string;
+  usage: { inputTokens: number; outputTokens: number; costUsd?: number; costKind?: "estimated" | "reported"; costUnavailable?: boolean };
+  contextInputTokens?: number;
+  contextWindowTokens?: number;
+  lastOutcome: ConsoleTurnOutcome | null;
+  compaction: ConsoleJsonValue | null;
+  harness: HarnessSnapshot | null;
+  objective: string;
+  todos: ConsoleTodos | null;
+  tools: Array<{ name: string; description: string; inputSchema: ConsoleJsonValue }>;
+  pendingConfiguration?: ConsoleSessionConfiguration;
+  focusedFinding?: Finding;
+  stagedPrompt?: string;
+}
+
+export interface ConsoleEventsPage {
+  events: DesktopConsoleEvent[];
+  cursor: number;
+  gap: boolean;
+  snapshot?: ConsoleSessionSnapshot;
+}
+
+export interface ConsoleCreateSessionInput {
+  target?: string;
+  role?: DesktopConsoleRole;
+  autonomyMode?: DesktopConsoleAutonomyMode;
+  title?: string;
+  scope?: ConsoleScope;
+  runtime?: ConsoleRuntimeSelection;
+  findingId?: string;
+  findingIntent?: "investigate" | "verify" | "draft_fix" | "impact";
+}
+
+export interface ConsoleMessageInput {
+  text: string;
+  mode?: "send" | "queue" | "steer";
+  workerId?: string;
+  /** References to daemon-local paths or text, not browser uploads or multimodal bytes. */
+  attachments?: Array<{ kind: "path" | "text"; value: string }>;
+}
+
+export interface ConsolePublicExport {
+  text: string;
+  messages: ConsolePublicMessage[];
+  source?: "canonical-root-history" | "published-worker-trace";
 }

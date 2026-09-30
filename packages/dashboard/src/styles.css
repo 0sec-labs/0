@@ -1,5 +1,7 @@
 @import "@fontsource/ibm-plex-mono/400.css";
+@import "@cloudflare/kumo/styles/tailwind";
 @import "tailwindcss";
+@source "../node_modules/@cloudflare/kumo/dist/**/*.{js,jsx,ts,tsx}";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
@@ -7,6 +9,12 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --text-xs: 12px;
+  --text-xs--line-height: 18px;
+  --text-sm: 14px;
+  --text-sm--line-height: 20px;
+  --text-base: 16px;
+  --text-base--line-height: 24px;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -30,11 +38,12 @@
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-border: var(--sidebar-border);
-  --radius-sm: calc(var(--radius) - 2px);
-  --radius-md: var(--radius);
-  --radius-lg: calc(var(--radius) + 2px);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
   --font-heading: var(--font-sans);
-  --font-sans: 'Geist Variable', sans-serif;
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-accent: var(--sidebar-accent);
@@ -45,10 +54,10 @@
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --radius-3xl: 28px;
+  --radius-4xl: 32px;
 }
 
 :root {
@@ -60,7 +69,7 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
   --primary: #FD802E;
-  --primary-foreground: #1A1815;
+  --primary-foreground: #ffffff;
   --primary-text: #A7470B;
   --secondary: oklch(0.967 0.001 286.375);
   --secondary-foreground: oklch(0.21 0.006 285.885);
@@ -76,7 +85,7 @@
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-border: oklch(0.922 0 0);
-  --radius: 0.375rem;
+  --radius: 12px;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -122,7 +131,10 @@
 
   button,
   input,
-  textarea {
+  textarea,
+  select,
+  optgroup,
+  option {
     font: inherit;
   }
 
@@ -157,7 +169,7 @@
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
   --primary: #FD802E;
-  --primary-foreground: #1A1815;
+  --primary-foreground: #ffffff;
   --primary-text: #FD802E;
   --secondary: oklch(0.274 0.006 286.033);
   --secondary-foreground: oklch(0.985 0 0);
@@ -183,3 +195,76 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: var(--ring);
 }
+/* One orange action color across Kumo and the browser workspace. */
+:root, [data-mode="dark"], [data-mode="light"] {
+  --color-kumo-brand: #f97316;
+  --color-kumo-brand-hover: #ea580c;
+  --text-color-kumo-brand: #f97316;
+  --color-kumo-focus: #f97316;
+}
+[data-kumo-component="Button"][style*="--color-kumo-brand"] { color: var(--primary-foreground) !important; }
+.console-frame { height: 100dvh; border: 0; border-radius: 0; box-shadow: none; }
+.session-rail { background: var(--sidebar); }
+.session-row { transition: none; }
+.session-row:hover { background: var(--muted); }
+@media (prefers-reduced-motion: no-preference) {
+  .console-enter { animation: console-enter 160ms ease-out; }
+  @keyframes console-enter { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+}
+
+/* Quiet chat surfaces: separation by tone and spacing rather than rules. */
+.console-frame header, .console-frame footer { border: 0; }
+.console-frame .session-rail { background: color-mix(in srgb, var(--background), var(--foreground) 3%); }
+.console-frame textarea { border: 0; box-shadow: none; }
+[data-reduced-motion="true"] *, [data-reduced-motion="true"] .console-entry,
+[data-reduced-motion="true"] .console-spinner, [data-reduced-motion="true"] .console-skeleton,
+[data-reduced-motion="true"] .console-enter { animation: none !important; scroll-behavior: auto !important; }
+
+.console-frame .console-composer { background: var(--muted); border: 0; border-radius: 24px; box-shadow: none; }
+.console-frame .console-composer:focus-within { background: color-mix(in srgb, var(--muted), var(--foreground) 3%); box-shadow: none; }
+.console-frame input { border-color: transparent; background: transparent; }
+
+/* Shared conversation and settings geometry. */
+[data-slot="button"][data-size^="icon"] { border-radius: 50%; }
+[data-kumo-component="Button"] { border-radius: 9999px; }
+[data-slot="dialog-content"], [data-slot="sheet-content"] { border-radius: 24px; }
+[data-slot="dropdown-menu-content"], [data-slot="popover-content"], [data-slot="command"] { border-radius: 16px; }
+[data-slot="dropdown-menu-item"] { border-radius: 8px; }
+.console-controls .control-section { border: 0; background: transparent; box-shadow: none; border-radius: 0; padding-block: 12px; }
+.console-controls .control-section > [data-slot="card-header"], .console-controls .control-section > [data-slot="card-content"] { padding-inline: 0; }
+.console-controls input:not([type="checkbox"]), .console-controls select, .console-controls textarea { border-radius: 12px; background: var(--muted); border-color: transparent; }
+/* One quiet focus cue replaces the stacked component ring and orange border. */
+.console-frame input:not([type="checkbox"]):focus-visible,
+.console-controls input:not([type="checkbox"]):focus-visible,
+.console-controls select:focus-visible,
+.console-controls textarea:focus-visible {
+  border-color: transparent;
+  box-shadow: none;
+  outline: 1px solid color-mix(in srgb, var(--foreground), transparent 55%);
+  outline-offset: 2px;
+}
+.console-frame input[aria-invalid="true"],
+.console-controls input[aria-invalid="true"],
+.console-controls textarea[aria-invalid="true"] {
+  border-color: var(--destructive);
+}
+.console-controls [data-slot="badge"] { border: 0; border-radius: 999px; }
+.console-controls main section > h2 { border: 0; font-size: 14px; letter-spacing: 0; text-transform: none; color: var(--foreground); padding-top: 24px; }
+.console-controls main section > div { border-color: color-mix(in srgb, var(--foreground), transparent 94%); }
+
+.console-controls { margin-block: 32px; padding: 28px; border-radius: 24px; background: color-mix(in srgb, var(--background), var(--foreground) 3%); }
+.console-controls > .grid { gap: 32px; }
+.console-controls > .grid > nav { position: sticky; top: 24px; align-self: start; }
+.console-controls > .grid > main { min-width: 0; }
+@media (max-width: 1023px) { .console-controls { margin-block: 0; border-radius: 0; padding: 20px; } .console-controls > .grid > nav { position: static; } }
+
+/* Quiet secondary controls; orange identifies actions and keyboard focus. */
+.console-frame [data-slot="button"][data-variant="outline"],
+.console-controls [data-slot="button"][data-variant="outline"] { border-color: transparent; background: var(--muted); }
+.console-frame [data-slot="button"]:focus-visible,
+.console-controls [data-slot="button"]:focus-visible,
+.session-row button:focus-visible { box-shadow: none; outline: 1px solid var(--primary); outline-offset: 2px; }
+.console-controls .border-border { border-color: transparent; }
+.console-controls .border-dashed { border-style: none; background: var(--muted); border-radius: 16px; }
+.console-frame details:not([role]), .console-controls details { border-color: transparent; border-radius: 16px; background: color-mix(in srgb, var(--muted), transparent 35%); }
+.session-row { min-height: 40px; }

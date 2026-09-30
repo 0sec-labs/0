@@ -1,0 +1,285 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { eventBus, type ConsoleSession, type ConsoleTurnOutcome, type NativeMessage, type ToolCall } from "@0/core";
+import { ConsoleGateway, ConsoleGatewayError, type ConsoleGatewaySessionFactoryInput } from "./console-gateway.js";
+import { loadSession, saveSession } from "../tui/session-store.js";
+
+const gateways: ConsoleGateway[] = [];
+const homes: string[] = [];
+function outcome(text = "Finished."): ConsoleTurnOutcome {
+  return { assistantText: text, toolCalls: [], usage: { inputTokens: 10, outputTokens: 5 }, budget: { tokensUsed: 15, tokenBudget: Infinity, iterations: 1, maxToolIterations: 100 }, stopReason: "end_turn" };
+}
+function engine(input: ConsoleGatewaySessionFactoryInput): ConsoleSession {
+  const messages: NativeMessage[] = structuredClone(input.initialMessages ?? []);
+  let currentMode = input.autonomyMode;
+  let currentTarget = input.target;
+  let currentScope = input.scope;
+  return {
+    scanId: input.scanId, ready: Promise.resolve(), systemPrompt: "Fixture", tools: [], messages,
+    get autonomyMode() { return currentMode; }, get target() { return currentTarget; }, get scope() { return currentScope; },
+    scopeEnforcement: { pluginId: "scope", enabled: true, projectPath: "/fixture", message: "Scope authorization enabled" }, localScopePath: undefined,
+    setAutonomyMode: (mode) => { currentMode = mode; }, reconfigureRuntime: () => undefined,
+    configureEngagement: (selection) => {
+      if (selection.target !== undefined) currentTarget = selection.target;
+      if (selection.scope !== undefined) currentScope = selection.scope ?? undefined;
+    },
+    clearConversation: () => { messages.splice(0); }, stopPersistentAgent: async () => true, stopPersistentAgents: async () => undefined,
+    exportCheckpoint: () => { throw new Error("Fixture has no executable checkpoint"); }, prepareHandoff: async () => ({}), cleanup: async () => undefined,
+    async send(text, callbacks) {
+      messages.push({ role: "user", content: [{ type: "text", text }] });
+      callbacks?.onAssistantDelta?.("Partial.");
+      messages.push({ role: "assistant", content: [{ type: "text", text: "Complete final text." }] });
+      return outcome("Complete final text.");
+    },
+  };
+}
+function gateway(createSession: (input: ConsoleGatewaySessionFactoryInput) => ConsoleSession | Promise<ConsoleSession> = engine): ConsoleGateway {
+  const home = mkdtempSync(join(tmpdir(), "0-web-gateway-test-")); homes.push(home);
+  let id = 0;
+  const instance = new ConsoleGateway({ homeDir: home, projectPath: "/fixture", createSession, createId: () => `session-${homes.length}-${++id}`, now: () => new Date("2026-09-30T00:00:00Z") });
+  gateways.push(instance); return instance;
+}
+afterEach(async () => {
+  await Promise.all(gateways.splice(0).map((instance) => instance.closeAll()));
+  for (const home of homes.splice(0)) rmSync(home, { recursive: true, force: true });
+});
+
+async function idle(instance: ConsoleGateway, id: string): Promise<void> {
+  await vi.waitFor(() => expect(instance.get(id).session.status).toBe("ready"));
+}
+
+describe("ConsoleGateway", () => {
+  it("uses an AI title returned by the successful accounted turn", async () => {
+    const instance = gateway((input) => {
+      const session = engine(input);
+      const original = session.send;
+      session.send = async (body, callbacks, options) => {
+        expect(options?.generateTitle).toBe(true);
+        return { ...await original(body, callbacks, options), conversationTitle: "Tenant boundary review" };
+      };
+      return session;
+    });
+    const created = instance.create({ title: "New session" });
+    await instance.send(created.id, "Find authorization issues");
+    await idle(instance, created.id);
+    expect(instance.get(created.id).title).toBe("Tenant boundary review");
+    expect(loadSession(created.id, homes.at(-1))?.summary).toBe("Tenant boundary review");
+  });
+
+  it("names new sessions from their first prompt and preserves the title in saved history", async () => {
+    const instance = gateway();
+    const created = instance.create({ title: "New session" });
+    await instance.send(created.id, "Review\n  tenant isolation");
+    await idle(instance, created.id);
+    expect(instance.get(created.id).title).toBe("Review tenant isolation");
+    expect(loadSession(created.id, homes.at(-1))?.summary).toBe("Review tenant isolation");
+    await instance.configure(created.id, { title: "My review" });
+    await instance.send(created.id, "Second request");
+    await idle(instance, created.id);
+    expect(instance.get(created.id).title).toBe("My review");
+  });
+
+  it("titles blank sessions \"New conversation\" and reports message counts so clients can reuse a blank one", async () => {
+    const instance = gateway();
+    const created = instance.create({});
+    expect(created).toMatchObject({ title: "New conversation", messageCount: 0 });
+    expect(instance.list().find((item) => item.id === created.id)?.messageCount).toBe(0);
+    await instance.send(created.id, "Review tenant isolation");
+    await idle(instance, created.id);
+    expect(instance.list().find((item) => item.id === created.id)?.messageCount).toBe(2);
+  });
+
+  it("keeps full canonical history and final text when a reattached client has missed the journal", async () => {
+    const instance = gateway((input) => {
+      const session = engine(input);
+      session.send = async (text, callbacks) => {
+        session.messages.push({ role: "user", content: [{ type: "text", text }] });
+        for (let index = 0; index < 2_100; index++) callbacks?.onAssistantDelta?.("fragment ");
+        session.messages.push({ role: "assistant", content: [{ type: "text", text: "Complete authoritative answer." }] });
+        return outcome("Complete authoritative answer.");
+      };
+      return session;
+    });
+    const created = instance.create(); await instance.send(created.id, "Keep this request."); await idle(instance, created.id);
+    const recovery = instance.eventsAfter(created.id, 0);
+    expect(recovery.gap).toBe(true);
+    expect(recovery.snapshot?.messages).toEqual([
+      { role: "user", content: [{ type: "text", text: "Keep this request." }] },
+      { role: "assistant", content: [{ type: "text", text: "Complete authoritative answer." }] },
+    ]);
+    expect(recovery.snapshot?.lastOutcome?.assistantText).toBe("Complete authoritative answer.");
+    expect(JSON.parse(JSON.stringify(recovery.snapshot)).lastOutcome.budget.tokenBudget).toBeNull();
+    expect(instance.export(created.id).text).toContain("Keep this request.");
+    expect(instance.eventsAfter(created.id, recovery.cursor)).toEqual({ events: [], cursor: recovery.cursor, gap: false });
+  });
+
+  it("cancels a decision-waiting turn by declining its approval without closing or clearing the conversation", async () => {
+    let permission: boolean | undefined;
+    const instance = gateway((input) => {
+      const session = engine(input);
+      session.send = async (text) => {
+        session.messages.push({ role: "user", content: [{ type: "text", text }] });
+        permission = await input.approveTool!({ name: "bash", arguments: { command: "rm -rf /fixture/cache" } }, { level: "destructive", category: "delete" as never });
+        return { ...outcome(), stopReason: "cancelled" };
+      };
+      return session;
+    });
+    const created = instance.create({ autonomyMode: "standard" }); await instance.send(created.id, "Inspect, do not delete.");
+    await vi.waitFor(() => expect(instance.get(created.id).pendingDecisions).toHaveLength(1));
+    const decision = instance.get(created.id).pendingDecisions[0]!;
+    expect(decision.risk?.level).toBe("destructive"); expect(decision.context?.scopeEnforcement.enabled).toBe(true);
+    await instance.cancel(created.id);
+    expect(permission).toBe(false); expect(instance.get(created.id).pendingDecisions).toEqual([]);
+    expect(instance.get(created.id).session.status).toBe("ready");
+    expect(instance.get(created.id).messages[0]?.content).toEqual([{ type: "text", text: "Inspect, do not delete." }]);
+    expect(() => instance.resolveDecision(created.id, decision.id, { approve: true })).toThrow(ConsoleGatewayError);
+  });
+
+  it("does not report an excluded network target as approved or consume a malformed operator answer", async () => {
+    let resolution: unknown;
+    const instance = gateway((input) => {
+      const session = engine(input);
+      session.send = async () => {
+        resolution = await input.requestScope!({ call: { name: "http_request", arguments: { url: "https://excluded.example.test" } }, requestedUrls: ["https://excluded.example.test"], target: input.target, currentScope: input.scope });
+        return outcome();
+      };
+      return session;
+    });
+    const created = instance.create({ target: "https://app.example.test", scope: { in_scope: ["app.example.test"], out_of_scope: ["excluded.example.test"] } });
+    await instance.send(created.id, "Inspect excluded host.");
+    await vi.waitFor(() => expect(instance.get(created.id).pendingDecisions).toHaveLength(1));
+    const decision = instance.get(created.id).pendingDecisions[0]!;
+    expect(() => instance.resolveDecision(created.id, decision.id, { approve: true })).toThrow(ConsoleGatewayError);
+    expect(instance.get(created.id).pendingDecisions[0]?.id).toBe(decision.id);
+    instance.resolveDecision(created.id, decision.id, { approve: false }); await idle(instance, created.id); expect(resolution).toBeNull();
+  });
+
+  it("keeps an operator question pending after an invalid selection and accepts a free-text-only question without granting scope", async () => {
+    const instance = gateway((input) => {
+      const session = engine(input);
+      session.send = async () => {
+        await input.askOperator!({
+          requestId: "question-1",
+          questions: [
+            { header: "Strategy", question: "Which strategy?", options: [{ label: "Review only" }] },
+            { header: "Context", question: "What context should I use?" },
+          ],
+        });
+        return outcome();
+      };
+      return session;
+    });
+    const created = instance.create({ autonomyMode: "standard" }); await instance.send(created.id, "Ask before deciding.");
+    await vi.waitFor(() => expect(instance.get(created.id).pendingDecisions).toHaveLength(1));
+    const decision = instance.get(created.id).pendingDecisions[0]!;
+    expect(() => instance.resolveDecision(created.id, decision.id, { approve: true, answers: [
+      { header: "Strategy", selectedLabels: ["Unlisted strategy"] }, { header: "Context", customText: "Evidence only." },
+    ] })).toThrow(ConsoleGatewayError);
+    expect(instance.get(created.id).pendingDecisions[0]?.id).toBe(decision.id);
+    instance.resolveDecision(created.id, decision.id, { approve: true, answers: [
+      { header: "Strategy", selectedLabels: ["Review only"] }, { header: "Context", customText: "Evidence only." },
+    ] });
+    await idle(instance, created.id);
+    expect(instance.get(created.id).scope).toBeNull();
+    expect(instance.get(created.id).session.autonomyMode).toBe("standard");
+    expect(instance.get(created.id).pendingDecisions).toEqual([]);
+  });
+
+  it("retries failed async initialization without consuming the rejected message", async () => {
+    let attempt = 0;
+    const instance = gateway(async (input) => { if (++attempt === 1) throw new Error("Connection unavailable"); return engine(input); });
+    const created = instance.create();
+    await expect(instance.send(created.id, "Retain my draft.")).rejects.toBeInstanceOf(ConsoleGatewayError);
+    expect(instance.get(created.id).messages).toEqual([]);
+    expect(instance.eventsAfter(created.id).events.some((event) => event.type === "user")).toBe(false);
+    await instance.send(created.id, "Retain my draft."); await idle(instance, created.id);
+    expect(instance.get(created.id).messages[0]?.content).toEqual([{ type: "text", text: "Retain my draft." }]);
+  });
+
+  it("resumes messages and cap display state with target context without restoring scope authority, and protects a live saved owner", async () => {
+    const first = gateway((input) => {
+      const session = engine(input);
+      session.send = async (text) => {
+        session.messages.push({ role: "user", content: [{ type: "text", text }] });
+        return { ...outcome("Partial retained answer."), stopReason: "output_cap", outputCap: { checkpoint: { reason: "max_output_tokens", provider: "fixture", model: "fixture", resumable: true } as never, continuations: 2, message: "Send remaining task." } };
+      };
+      return session;
+    });
+    const created = first.create({ target: "https://authorized.example.test", autonomyMode: "standard", scope: { in_scope: ["authorized.example.test"] } });
+    await first.send(created.id, "Analyze."); await idle(first, created.id); const saved = first.save(created.id); await first.close(created.id);
+    const resumed = await first.resume(saved.id);
+    const snapshot = first.get(resumed.id);
+    expect(snapshot.messages[0]?.content).toEqual([{ type: "text", text: "Analyze." }]);
+    expect(snapshot.session.target).toBe("https://authorized.example.test"); expect(snapshot.scope).toBeNull(); expect(snapshot.session.localScopeConfigured).toBe(false);
+    expect(snapshot.lastOutcome?.stopReason).toBe("output_cap");
+    expect(snapshot.lastOutcome?.budget.tokenBudget).toBeNull();
+    expect(() => first.deleteSaved(saved.id)).toThrow(ConsoleGatewayError);
+    await expect(first.delete(created.id)).rejects.toBeInstanceOf(ConsoleGatewayError);
+    await first.continue(resumed.id, { text: "Summarize only the remaining observations." }); await idle(first, resumed.id);
+    expect(first.get(resumed.id).messages.at(-1)?.content).toEqual([{ type: "text", text: "Summarize only the remaining observations." }]);
+    const deleted = await first.delete(resumed.id);
+    expect(deleted.savedId).toBe(saved.id);
+    expect(() => first.get(resumed.id)).toThrow(ConsoleGatewayError);
+    expect(first.listSaved().some((entry) => entry.id === saved.id)).toBe(false);
+  });
+
+  it("retains only owned descendant workers and stops an owned subtree without stopping another live session", async () => {
+    const instance = gateway(); const first = instance.create(); const second = instance.create();
+    await instance.send(first.id, "First."); await instance.send(second.id, "Second."); await idle(instance, first.id); await idle(instance, second.id);
+    const child = `${first.id}-sub-child`; const nested = `${child}-sub-nested`; const other = `${second.id}-sub-other`;
+    const lifecycle = (agent_id: string, parent_scan_id: string) => eventBus.emit("subagent_lifecycle", { agent_id, parent_scan_id, status: "running", task: "Inspect", max_turns: 3 });
+    lifecycle(child, first.id); lifecycle(nested, child); lifecycle(other, second.id);
+    eventBus.emit("subagent_message", { agent_id: nested, parent_scan_id: child, turn: 1, ts: 1, assistant: "Owned observation.", partial: false });
+    expect(instance.workers(first.id).map((worker) => worker.id)).toEqual([child, nested]);
+    expect(() => instance.sendWorker(first.id, other, "Cross-session message")).toThrow(ConsoleGatewayError);
+    await expect(instance.stopWorker(first.id, other)).rejects.toBeInstanceOf(ConsoleGatewayError);
+    await instance.stopWorker(first.id, child);
+    expect(instance.workers(first.id).map((worker) => worker.status)).toEqual(["stopped", "stopped"]);
+    expect(instance.worker(first.id, nested).transcript[0]?.assistant).toBe("Owned observation.");
+    expect(instance.exportWorker(first.id, nested).text).toContain("Owned observation.");
+    expect(instance.exportWorker(first.id, nested).source).toBe("published-worker-trace");
+    expect(instance.worker(second.id, other).status).toBe("running");
+    await instance.clear(first.id); expect(instance.get(first.id).messages).toEqual([]); expect(instance.worker(first.id, nested).transcript[0]?.assistant).toBe("Owned observation.");
+  });
+
+  it("stages autonomy changes at the turn boundary and delivers queued operator messages exactly once", async () => {
+    const gate = Promise.withResolvers<void>(); const delivered: string[] = []; const observedModes: string[] = [];
+    const instance = gateway((input) => {
+      const session = engine(input);
+      session.send = async (text) => { delivered.push(text); observedModes.push(session.autonomyMode); if (delivered.length === 1) await gate.promise; return outcome(); };
+      return session;
+    });
+    const created = instance.create({ autonomyMode: "standard" }); await instance.send(created.id, "First instruction.");
+    await instance.configure(created.id, { autonomyMode: "recon" }); await instance.send(created.id, { text: "Second instruction.", mode: "queue" });
+    await instance.send(created.id, { text: "Withdraw this queued instruction.", mode: "queue" });
+    const withdrawal = instance.get(created.id).queuedMessages.find((message) => message.text === "Withdraw this queued instruction.")!;
+    instance.removeQueued(created.id, withdrawal.id);
+    expect(instance.get(created.id).session.autonomyMode).toBe("standard"); expect(instance.get(created.id).pendingConfiguration?.autonomyMode).toBe("recon");
+    gate.resolve(); await vi.waitFor(() => expect(delivered).toEqual(["First instruction.", "Second instruction."])); await idle(instance, created.id);
+    expect(observedModes).toEqual(["standard", "recon"]); expect(instance.get(created.id).queuedMessages).toEqual([]);
+  });
+
+  it("continues saved role and target context with explicit overrides taking precedence", async () => {
+    const instance = gateway();
+    const created = instance.create({ target: "https://original.example.test", role: "review", autonomyMode: "standard", runtime: { providerId: "openai", model: "saved-model", singleModel: true } });
+    await instance.send(created.id, "Keep the working context."); await idle(instance, created.id);
+    const saved = instance.save(created.id); await instance.close(created.id);
+    expect(loadSession(saved.id, homes.at(-1))?.consoleState?.configuration?.runtime).toMatchObject({ providerId: "openai", model: "saved-model", singleModel: true });
+    const restored = await instance.resume(saved.id);
+    expect(restored).toMatchObject({ savedId: saved.id, role: "review", target: "https://original.example.test", autonomyMode: "standard", scopeConfigured: false });
+    await instance.close(restored.id);
+    const overridden = await instance.resume(saved.id, { target: "https://replacement.example.test", role: "audit" });
+    expect(overridden).toMatchObject({ role: "audit", target: "https://replacement.example.test" });
+  });
+
+  it("rejects malformed raw inputs and corrupt saved messages rather than silently truncating a resume", async () => {
+    const instance = gateway(); expect(() => instance.create({ autonomyMode: "unsafe" })).toThrow(ConsoleGatewayError);
+    expect(() => instance.create({ scope: { in_scope: "*" } })).toThrow(ConsoleGatewayError);
+    const created = instance.create(); await expect(instance.send(created.id, " ")).rejects.toBeInstanceOf(ConsoleGatewayError);
+    expect(() => instance.eventsAfter(created.id, NaN)).toThrow(ConsoleGatewayError);
+    expect(saveSession({ id: "corrupt", savedAt: 1, cwd: "/fixture", preview: "", messageCount: 2, messages: [{ role: "user", content: [{ type: "text", text: "Retained" }] }, { role: "assistant", content: [{ type: "unsupported" }] }] }, homes.at(-1))).toBe(true);
+    await expect(instance.resume("corrupt")).rejects.toBeInstanceOf(ConsoleGatewayError);
+  });
+});

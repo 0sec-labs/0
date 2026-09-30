@@ -140,7 +140,7 @@ function exitCodeFor(result: SourceFixResult): number {
 export function registerFixCommand(program: Command): void {
   program
     .command("fix")
-    .description("Generate, source-retest, and optionally apply a scoped fix for one reproduced source finding")
+    .description("Generate and optionally apply a fix for one reproduced finding")
     .argument("<repo>", "Clean local Git worktree containing the affected source file")
     .option("--finding <path>", "Path to an external finding JSON with verificationSpec")
     .option("--finding-id <id>", "Persisted finding ID (full ID or unique prefix)")

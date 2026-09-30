@@ -246,7 +246,7 @@ import {
   filterCommands,
   findCommand,
   type SlashCommand,
-} from "./slash-commands.js";
+} from "@0/shared";
 import {
   deletePreviousCharacter,
   deletePreviousWord,
@@ -1709,16 +1709,16 @@ export function ChatScreen({
     if (choice !== "off" && choice !== "ask" && choice !== "automatic") return;
     const saved = updateSetting("diagnosticReporting", choice, { scope: "global" });
     const recorded = updateSetting("diagnosticReportingPrompted", true, { scope: "global" });
-    showToast(saved && recorded ? `Problem reports: ${choice}` : "Privacy choice changed for this session; could not save it.");
+    showToast(saved && recorded ? `Problem reports: ${choice}` : "Changed for this session only; couldn't save it.");
   }, [showToast]);
 
   const openReportingChoices = useCallback(() => {
     const current = settingsRef.current.diagnosticReporting;
     setPicker({
-      state: createSelectorState("Problem reports · optional", [
-        { id: "off", label: "Keep reports local", detail: "No automatic submission. You can still review and send individual reports with /feedback.", current: current === "off" },
-        { id: "ask", label: "Ask before sending", detail: "Offer to review limited diagnostics after a problem. Nothing is sent until you confirm.", current: current === "ask" },
-        { id: "automatic", label: "Send diagnostics automatically", detail: "Finite error categories and runtime metadata; configured Sentry also receives scrubbed built-in stack locations. No error messages, tool output or code. Offline restrictions still apply.", current: current === "automatic" },
+      state: createSelectorState("Problem reports", [
+        { id: "off", label: "Keep reports local", detail: "Nothing is sent. You can still send one with /feedback.", current: current === "off" },
+        { id: "ask", label: "Ask before sending", detail: "After a problem, show the report first. Nothing is sent until you confirm.", current: current === "ask" },
+        { id: "automatic", label: "Send automatically", detail: "Error types, runtime info and scrubbed stack locations. Never messages, tool output or code.", current: current === "automatic" },
       ], current),
       commit: chooseReporting,
       onCancel: () => { restorePaletteDraft(); },
@@ -1763,7 +1763,7 @@ export function ChatScreen({
       return;
     }
     void submitFeedback(payload, process.env, { diagnosticConsent: { policy: settingsRef.current.diagnosticReporting } }).then((result) => {
-      if (alive.current) showToast(result.ok ? "Problem report submitted" : "Problem report saved locally; submission unavailable.");
+      if (alive.current) showToast(result.ok ? "Problem report submitted" : "Problem report saved locally; couldn't send.");
     });
   }, [showToast]);
 
@@ -1778,9 +1778,9 @@ export function ChatScreen({
     setProblemReview(null);
     setPicker({
       state: createSelectorState("Report this problem?", [
-        { id: "review", label: "Review report", detail: "Inspect the limited diagnostics and destination before deciding whether to send." },
-        { id: "local", label: "Keep it local", detail: "Save this diagnostic report locally without sending it." },
-        { id: "off", label: "Stop asking", detail: "Turn off automatic problem-report prompts in your user settings." },
+        { id: "review", label: "Review report", detail: "See exactly what would be sent, then decide." },
+        { id: "local", label: "Keep it local", detail: "Save it on this machine only." },
+        { id: "off", label: "Stop asking", detail: "Don't offer problem reports again." },
       ]),
       commit: (id) => {
         if (id === "review") stageFeedback(payload);
@@ -1810,7 +1810,7 @@ export function ChatScreen({
       if (pendingModelPreferenceRef.current === runtime) {
         pendingModelPreferenceRef.current = null;
         if (!saveAppliedModelPreference(runtime)) {
-          appendEntry({ kind: "notice", text: "Model applied for this audit but could not be saved for future launches", turn: turn.current });
+          appendEntry({ kind: "notice", text: "Model switched, but couldn't be saved as your default", turn: turn.current });
         }
       }
     } catch (error) {
@@ -1836,9 +1836,9 @@ export function ChatScreen({
     setFirstProblemConsent(null);
     setPicker({
       state: createSelectorState("Send problem reports to 0?", [
-        { id: "automatic", label: "Send automatically", detail: "Finite categories and runtime metadata; configured Sentry also receives scrubbed built-in stack locations. Messages, tool output and code stay local.", current: settings.diagnosticReporting === "automatic" },
-        { id: "ask", label: "Ask me each time", detail: "Review the exact bytes and destination before anything is sent.", current: settings.diagnosticReporting === "ask" },
-        { id: "off", label: "Keep reports local", detail: "Reports stay on this machine. You can still send one explicitly with /feedback.", current: settings.diagnosticReporting === "off" },
+        { id: "automatic", label: "Send automatically", detail: "Error types, runtime info and scrubbed stack locations. Never messages, tool output or code.", current: settings.diagnosticReporting === "automatic" },
+        { id: "ask", label: "Ask me each time", detail: "See exactly what would be sent first.", current: settings.diagnosticReporting === "ask" },
+        { id: "off", label: "Keep reports local", detail: "Nothing is sent. You can still send one with /feedback.", current: settings.diagnosticReporting === "off" },
       ], settings.diagnosticReporting),
       commit: (id) => {
         if (id !== "automatic" && id !== "ask" && id !== "off") return;
@@ -1850,7 +1850,7 @@ export function ChatScreen({
             return;
           }
           void submitFeedback(payload, process.env, { diagnosticConsent: { policy: "automatic" } }).then((result) => {
-            if (alive.current) showToast(result.ok ? "Problem report submitted" : "Problem report saved locally; submission unavailable.");
+            if (alive.current) showToast(result.ok ? "Problem report submitted" : "Problem report saved locally; couldn't send.");
           });
         } else if (id === "ask") {
           stageFeedback(payload);
@@ -2070,8 +2070,7 @@ export function ChatScreen({
     return pluginHostManager.onChanged(() => {
       appendEntry({
         kind: "notice",
-        text: "Marketplace updated for new audits",
-        detail: "Use /new to load the changed plugins. This audit keeps its current tools and live harness.",
+        text: "Plugins changed — run /new to use them",
         turn: turn.current,
       });
     });
@@ -2112,8 +2111,8 @@ export function ChatScreen({
         const label = PROVIDERS.find((candidate) => candidate.id === targetProvider)?.label ?? targetProvider;
         appendEntry({
           kind: "notice",
-          text: `Connect ${label} to switch this audit live`,
-          detail: "Saved for the next audit. Connect the provider, then reselect to apply it to this conversation.",
+          text: `Connect ${label} first`,
+          detail: "Saved for next time. Connect it, then pick the model again to switch now.",
           turn: turn.current,
         });
         return;
@@ -2158,8 +2157,7 @@ export function ChatScreen({
       };
       appendEntry({
         kind: "notice",
-        text: "Selection queued for this audit",
-        detail: "It applies to this conversation the moment the current turn finishes.",
+        text: "Model switches after this turn",
         turn: turn.current,
       });
       return;
@@ -2408,7 +2406,7 @@ export function ChatScreen({
           const nameFor = (id: string): string =>
             id === "Main" || id === "all"
               ? id
-              : agentNamesRef.current.get(id) ?? "Unnamed worker";
+              : agentNamesRef.current.get(id) ?? "Unnamed sub-agent";
           appendEntry({
             kind: "peer",
             text: p.body,
@@ -2576,14 +2574,14 @@ export function ChatScreen({
     setPendingScope(null);
     if (!approved) {
       pending.resolve(null);
-      appendEntry({ kind: "notice", text: "scope extension rejected; the requested tool did not run", turn: turn.current });
+      appendEntry({ kind: "notice", text: "denied — the tool did not run", turn: turn.current });
       return;
     }
 
     const resolution = buildScopeResolution(pending.request);
     if (!resolution) {
       pending.resolve(null);
-      appendEntry({ kind: "notice", text: "scope extension could not be safely constructed", turn: turn.current });
+      appendEntry({ kind: "notice", text: "couldn't safely add those hosts — the tool did not run", turn: turn.current });
       return;
     }
 
@@ -2599,7 +2597,7 @@ export function ChatScreen({
       pending.resolve(null);
       appendEntry({
         kind: "notice",
-        text: "local directory access declined; the tool did not run",
+        text: "denied — the tool did not run",
         turn: turn.current,
       });
       return;
@@ -2610,8 +2608,7 @@ export function ChatScreen({
     pending.resolve({ scopePath: pending.request.requestedPath });
     appendEntry({
       kind: "notice",
-      text: `local scope approved: ${pending.request.requestedPath}`,
-      detail: "This directory subtree only, for this session. Nothing is written to disk.",
+      text: `allowed reading ${pending.request.requestedPath} (this session)`,
       turn: turn.current,
     });
   }, [appendEntry, pendingLocalScope]);
@@ -2625,10 +2622,7 @@ export function ChatScreen({
       kind: "notice",
       text: approved
         ? `${pending.request.call.name} enabled for this session`
-        : `${pending.request.call.name} left disabled`,
-      detail: approved
-        ? "Scope and approval rules still apply to it — this only lifts the source-audit tool restriction."
-        : undefined,
+        : `${pending.request.call.name} kept off`,
       turn: turn.current,
     });
   }, [appendEntry, pendingEscalation]);
@@ -2640,7 +2634,7 @@ export function ChatScreen({
     pending.resolve(approved);
     appendEntry({
       kind: "notice",
-      text: approved ? `${pending.call.name} approved` : `${pending.call.name} rejected`,
+      text: approved ? `${pending.call.name} allowed` : `${pending.call.name} denied`,
       turn: turn.current,
     });
   }, [appendEntry, pendingToolApproval]);
@@ -2680,24 +2674,24 @@ export function ChatScreen({
       const owner = pendingScope;
       return {
         owner,
-        title: "Authorize audit scope",
-        context: `${owner.request.call.name} requests ${owner.request.requestedUrls.join(", ")}`,
+        title: "Allow access to these hosts?",
+        context: `${owner.request.call.name} wants ${owner.request.requestedUrls.join(", ")}`,
         subject: owner.request.call.name,
-        bodyLines: owner.request.requestedUrls.map((url) => `requests: ${url}`),
+        bodyLines: owner.request.requestedUrls.map((url) => `host: ${url}`),
         borderColor: WARNING,
         titleColor: WARNING,
         items: [
           {
             id: APPROVAL_GRANT_ID,
-            label: "Approve for this audit",
-            meta: "adds the exact hosts",
-            detail: "Exact hosts apply only to this audit. Existing deny rules still win.",
+            label: "Allow",
+            meta: "these hosts, this audit only",
+            detail: "Only these exact hosts, only for this audit. Deny rules still win.",
           },
           {
             id: APPROVAL_DENY_ID,
-            label: "Reject",
-            meta: "tool does not run",
-            detail: "Scope is unchanged and the requested tool call is refused.",
+            label: "Deny",
+            meta: "tool won't run",
+            detail: "Nothing changes; the tool call is refused.",
           },
         ],
         decide: (id) => dispatchOnce(owner, () => resolveScope(id === APPROVAL_GRANT_ID)),
@@ -2708,7 +2702,7 @@ export function ChatScreen({
       const owner = pendingLocalScope;
       return {
         owner,
-        title: "Authorize local directory",
+        title: "Allow reading this folder?",
         context: `${owner.request.call.name} wants to read ${owner.request.requestedPath}`,
         subject: owner.request.call.name,
         bodyLines: [`wants to read: ${owner.request.requestedPath}`],
@@ -2717,15 +2711,15 @@ export function ChatScreen({
         items: [
           {
             id: APPROVAL_GRANT_ID,
-            label: "Approve this directory",
-            meta: "this subtree, this session",
-            detail: "Grants this directory subtree for this session only. Nothing is written to disk.",
+            label: "Allow",
+            meta: "this folder, this session only",
+            detail: "Read access to this folder and below, this session only.",
           },
           {
             id: APPROVAL_DENY_ID,
-            label: "Decline",
-            meta: "tool does not run",
-            detail: "No filesystem access is granted and the tool call is refused.",
+            label: "Deny",
+            meta: "tool won't run",
+            detail: "No access is granted; the tool call is refused.",
           },
         ],
         decide: (id) => dispatchOnce(owner, () => resolveLocalScope(id === APPROVAL_GRANT_ID)),
@@ -2736,7 +2730,7 @@ export function ChatScreen({
       const owner = pendingEscalation;
       return {
         owner,
-        title: "Enable additional tool",
+        title: "Enable this tool?",
         context: `${owner.request.call.name} — ${owner.request.reason}`,
         subject: owner.request.call.name,
         bodyLines: [owner.request.reason],
@@ -2745,15 +2739,15 @@ export function ChatScreen({
         items: [
           {
             id: APPROVAL_GRANT_ID,
-            label: "Enable for this audit",
-            meta: "lifts the audit restriction",
-            detail: "Scope approval and the Co-pilot gate still apply to it.",
+            label: "Enable",
+            meta: "this audit only",
+            detail: "Other approvals still apply to it.",
           },
           {
             id: APPROVAL_DENY_ID,
-            label: "Keep disabled",
+            label: "Keep off",
             meta: "tool stays blocked",
-            detail: "The source-audit tool restriction stays in force for this session.",
+            detail: "The tool stays blocked for this session.",
           },
         ],
         decide: (id) => dispatchOnce(owner, () => resolveEscalation(id === APPROVAL_GRANT_ID)),
@@ -2776,7 +2770,7 @@ export function ChatScreen({
       const bodyLines = dangerLabel ? [`Destructive action: ${dangerLabel}`, ...argumentsLines] : argumentsLines;
       return {
         owner,
-        title: `${modeLabel(modeRef.current)} approval`,
+        title: `Allow this tool call? · ${modeLabel(modeRef.current)}`,
         context: `${owner.call.name} ${JSON.stringify(owner.call.arguments)}`,
         subject: owner.call.name,
         bodyLines,
@@ -2787,15 +2781,15 @@ export function ChatScreen({
         items: [
           {
             id: APPROVAL_GRANT_ID,
-            label: "Approve this call",
-            meta: "runs once",
-            detail: "Approves only this call. The next one asks again.",
+            label: "Allow once",
+            meta: "just this call",
+            detail: "Only this call. The next one asks again.",
           },
           {
             id: APPROVAL_DENY_ID,
-            label: "Reject",
-            meta: "call does not run",
-            detail: "The model is told the operator refused, and continues without it.",
+            label: "Deny",
+            meta: "call won't run",
+            detail: "The agent is told you said no and continues without it.",
           },
         ],
         decide: (id) => dispatchOnce(owner, () => resolveToolApproval(id === APPROVAL_GRANT_ID)),
@@ -2979,7 +2973,7 @@ export function ChatScreen({
 
   const startSourceFix = useCallback((id: string) => {
     if (busy || sourceFixAbortRef.current || pendingOperatorQuestion || pendingToolApproval) {
-      showFixPanel("Source fix not started", ["Wait for the active turn/fix, or use /fix cancel."]);
+      showFixPanel("Fix not started", ["Wait for the current turn or fix, or run /fix cancel."]);
       return;
     }
     let focus: FindingFocus;
@@ -2988,7 +2982,7 @@ export function ChatScreen({
       const check = fixEligibility(focus.finding);
       if (!check.eligible) throw new Error(check.reason);
     } catch (error) {
-      showFixPanel("Source fix unavailable", [error instanceof Error ? error.message : String(error), FIX_USAGE]);
+      showFixPanel("Can't start fix", [error instanceof Error ? error.message : String(error), FIX_USAGE]);
       return;
     }
     const controller = new AbortController();
@@ -3009,9 +3003,9 @@ export function ChatScreen({
         if (repoRoot && !testCommand) {
           try { testCommand = loadSourceFixProjectInputs(repoRoot)?.testCommand ?? ""; }
           catch (error) {
-            showFixPanel("Saved source-fix setup unavailable", [
+            showFixPanel("Couldn't load saved fix setup", [
               error instanceof Error ? error.message : String(error),
-              "Enter fresh local inputs. Checked-in project configuration never approves script execution.",
+              "Enter the repo and test command again.",
             ]);
           }
         }
@@ -3021,8 +3015,8 @@ export function ChatScreen({
           const request: OperatorQuestionRequest = {
             requestId: `source-fix-setup-${focus.finding.id}-${Date.now()}`,
             questions: [
-              { header: "Repository", question: "Local Git checkout to fix. The selected audit/workspace root is suggested only when valid; change it if needed.", allowCustom: true },
-              { header: "Regression command", question: "Command to run in each isolated patched candidate. Enter your regression command; repository scripts are never automatically authorized.", allowCustom: true },
+              { header: "Repository", question: "Which local Git repo should be fixed?", allowCustom: true },
+              { header: "Regression command", question: "Which command should verify the fix? (e.g. your test command)", allowCustom: true },
             ],
           };
           const state = createOperatorQuestionState(request);
@@ -3039,14 +3033,14 @@ export function ChatScreen({
             setPendingOperatorQuestion((pending) => pending?.request === request ? null : pending);
           }
           if (!response || controller.signal.aborted) {
-            showFixPanel("Source fix setup cancelled", ["No model generation, regression command, or publication ran."]);
+            showFixPanel("Fix cancelled", ["Nothing was run."]);
             return;
           }
           requestedRepo = response.answers.find((item) => item.header === "Repository")?.customText?.trim() ?? "";
           testCommand = response.answers.find((item) => item.header === "Regression command")?.customText?.trim() ?? "";
           repoRoot = await resolveSourceFixRepository(requestedRepo);
           const inputs = fixInputEligibility({ repoRoot, testCommand });
-          if (!inputs.eligible) showFixPanel("Source fix setup needs input", [inputs.reason]);
+          if (!inputs.eligible) showFixPanel("Fix needs more input", [inputs.reason]);
         } while (!repoRoot || !testCommand);
         controller.signal.throwIfAborted();
         const call: ToolCall = {
@@ -3054,7 +3048,7 @@ export function ChatScreen({
           arguments: {
             regression_command: testCommand,
             repository: repoRoot,
-            execution: "Generate a source-only patch and run this command in isolated candidates (up to 3 attempts). Original checkout is not changed; no push or PR.",
+            execution: "Write a patch and run this command on isolated copies (up to 3 tries). Your checkout isn't changed. No push, no PR.",
           },
         };
         const approval = trackedRequest<boolean>(false);
@@ -3068,16 +3062,16 @@ export function ChatScreen({
           setPendingToolApproval((pending) => pending?.call === call ? null : pending);
         }
         if (!approved || controller.signal.aborted) {
-          showFixPanel("Source fix execution declined", ["No model generation, regression command, or publication ran. Setup was not saved."]);
+          showFixPanel("Fix denied", ["Nothing was run or saved."]);
           return;
         }
         try { saveSourceFixProjectInputs({ repoRoot, testCommand }); }
         catch (error) {
-          showFixPanel("Source fix preferences not saved", [error instanceof Error ? error.message : String(error), "This explicitly approved run can proceed; the next run will ask for inputs again."]);
+          showFixPanel("Fix setup not saved", [error instanceof Error ? error.message : String(error), "This run continues; next time you'll be asked again."]);
         }
-        showFixPanel(`Generating source fix ${focus.finding.id}`, [
-          `repo ${repoRoot}`, `operator-approved regression command ${testCommand}`,
-          "Generating and re-testing in isolation. The original worktree is untouched. /fix cancel stops this run.",
+        showFixPanel(`Fixing ${focus.finding.id}`, [
+          `repo ${repoRoot}`, `test command ${testCommand}`,
+          "Working on isolated copies; your checkout is untouched. /fix cancel stops it.",
         ]);
         const runtime = createRuntime({ type: "api", timeout: 600_000, model: modelId ?? undefined, provider: options?.providerId });
         if (!isNativeRuntime(runtime) || !(await runtime.isAvailable())) throw new Error("selected API runtime is unavailable; connect a provider first");
@@ -3104,12 +3098,12 @@ export function ChatScreen({
 
   const requestFixPublication = useCallback((id: string) => {
     if (busy || sourceFixAbortRef.current) {
-      showFixPanel("Publication not started", ["Wait for the active turn/fix before reviewing publication."]);
+      showFixPanel("Can't publish yet", ["Wait for the current turn or fix to finish."]);
       return;
     }
     const result = sourceFixCandidatesRef.current.get(id);
     if (!result) {
-      showFixPanel("No verified local candidate", [`Run /fix ${id || "<finding-id>"} first. Unverified, missing-source and template-only patches cannot publish.`]);
+      showFixPanel("No verified fix to publish", [`Run /fix ${id || "<finding-id>"} first. Only verified fixes can be published.`]);
       return;
     }
     const controller = new AbortController();
@@ -3119,31 +3113,31 @@ export function ChatScreen({
       try {
         const plan: SourceFixPublicationPlan = await planSourceFixPublication(result);
         if (controller.signal.aborted || !alive.current) return;
-        showFixPanel("Review draft PR publication", [...fixPublicationLines(plan), ...fixResultLines(result)]);
+        showFixPanel("Review draft PR", [...fixPublicationLines(plan), ...fixResultLines(result)]);
         setPicker({
-          state: createSelectorState("Publish this reviewed source fix?", [
-            { id: "keep-local", label: "Keep local — do not push", detail: "Preserve the verified candidate and review record" },
-            { id: "publish-draft", label: "Push branch and create draft PR", detail: `${plan.branch} → ${plan.baseBranch}; ${plan.remote}` },
+          state: createSelectorState("Publish this fix?", [
+            { id: "keep-local", label: "Keep local", detail: "Don't push anything" },
+            { id: "publish-draft", label: "Push and open draft PR", detail: `${plan.branch} → ${plan.baseBranch}; ${plan.remote}` },
           ]),
-          onCancel: () => showFixPanel("Publication cancelled", ["Candidate preserved; nothing pushed."]),
+          onCancel: () => showFixPanel("Cancelled", ["Fix kept locally; nothing pushed."]),
           commit: (choice) => {
             if (choice !== "publish-draft") {
-              showFixPanel("Kept local", ["Candidate preserved; nothing pushed."]);
+              showFixPanel("Kept local", ["Nothing pushed."]);
               return;
             }
             if (sourceFixAbortRef.current) return;
             const publishing = new AbortController();
             sourceFixAbortRef.current = publishing;
             setFixWorking(true);
-            showFixPanel("Publishing approved draft PR", ["Re-checking the exact reviewed source change and regression command before pushing.", ...fixPublicationLines(plan)]);
+            showFixPanel("Publishing draft PR", ["Re-checking the fix before pushing.", ...fixPublicationLines(plan)]);
             sourceFixPromiseRef.current = (async () => {
               try {
                 const published = await publishSourceFixDraftPR(result, { approval: "publish-draft-pr", signal: publishing.signal });
-                if (alive.current) showFixPanel("Draft PR created", [published.prUrl, `branch ${published.branch}`, `preserved worktree ${published.worktree}`]);
+                if (alive.current) showFixPanel("Draft PR created", [published.prUrl, `branch ${published.branch}`, `worktree ${published.worktree}`]);
               } catch (error) {
-                if (alive.current) showFixPanel("Draft PR publication failed", [
+                if (alive.current) showFixPanel("Draft PR failed", [
                   error instanceof Error ? error.message : String(error),
-                  `Candidate and branch are preserved at ${plan.worktree}. If pushing already succeeded, the remote branch remains; no PR success is claimed.`,
+                  `Fix and branch kept at ${plan.worktree}. If the push went through, the remote branch still exists.`,
                 ]);
               } finally {
                 sourceFixAbortRef.current = null;
@@ -3154,7 +3148,7 @@ export function ChatScreen({
           },
         });
       } catch (error) {
-        if (alive.current) showFixPanel("Publication unavailable", [error instanceof Error ? error.message : String(error), "Verified local candidate preserved; nothing pushed."]);
+        if (alive.current) showFixPanel("Can't publish", [error instanceof Error ? error.message : String(error), "Fix kept locally; nothing pushed."]);
       } finally {
         sourceFixAbortRef.current = null;
         sourceFixPromiseRef.current = null;
@@ -3171,7 +3165,7 @@ export function ChatScreen({
       appendEntry({
         kind: "notice",
         text: parsed.rawName ? `unknown command: /${parsed.rawName}` : "choose a slash command",
-        detail: "Type /help to browse local commands.",
+        detail: "Type /help to see commands.",
         turn: turn.current,
       });
       return true;
@@ -3211,12 +3205,12 @@ export function ChatScreen({
           outputTokens: sessionTokens.output,
         });
         if (lastContext !== undefined) {
-          panel.rows.push({ label: "last model input", value: `${lastContext} tokens` });
+          panel.rows.push({ label: "context", value: `${lastContext} tokens` });
         }
         if (turnBudget) {
           panel.rows.push({
-            label: "turn usage",
-            value: `${turnBudget.used} reported tokens${turnBudget.limit > 0 ? ` / ${turnBudget.limit} limit` : ""}`,
+            label: "this turn",
+            value: `${turnBudget.used} tokens${turnBudget.limit > 0 ? ` of ${turnBudget.limit}` : ""}`,
           });
         }
         appendEntry({ kind: "panel", text: "status", panel, turn: turn.current });
@@ -3242,7 +3236,7 @@ export function ChatScreen({
         if (busy) {
           appendEntry({
             kind: "notice",
-            text: "wait for the active turn before clearing",
+            text: "wait for the current turn to finish",
             turn: turn.current,
           });
           return true;
@@ -3285,9 +3279,9 @@ export function ChatScreen({
         if (feedbackCommand.kind === "usage") {
           setPicker({
             state: createSelectorState("Feedback", [
-              { id: "write", label: "Write feedback", detail: "Save locally and review the exact message and destination before sending." },
-              { id: "problem", label: "Review latest problem", detail: "Limited diagnostics only; no prompt or tool output.", disabled: latestProblemRef.current === null },
-              { id: "privacy", label: "Problem-report preferences", meta: settingsRef.current.diagnosticReporting, detail: "Choose local-only, ask before sending, or automatic limited diagnostics." },
+              { id: "write", label: "Write feedback", detail: "You'll see a preview before anything is sent." },
+              { id: "problem", label: "Review latest problem", detail: "No prompts or tool output included.", disabled: latestProblemRef.current === null },
+              { id: "privacy", label: "Problem reports", meta: settingsRef.current.diagnosticReporting, detail: "Keep local, ask first, or send automatically." },
             ]),
             commit: (id) => {
               if (id === "privacy") openReportingChoices();
@@ -3314,7 +3308,7 @@ export function ChatScreen({
             appendEntry({
               kind: "notice",
               text: "usage: /feedback submit <message>",
-              detail: "Write feedback locally and show a preview before sending.",
+              detail: "You'll see a preview before anything is sent.",
               turn: turn.current,
             });
             return true;
@@ -3347,7 +3341,7 @@ export function ChatScreen({
             appendEntry({
               kind: "notice",
               text: "cannot send feedback",
-              detail: "Submission is blocked; the message was still saved locally. Use /feedback cancel to clear.",
+              detail: "Sending is blocked. It's saved locally; /feedback cancel clears it.",
               turn: turn.current,
             });
             return true;
@@ -3395,7 +3389,7 @@ export function ChatScreen({
           appendEntry({
             kind: "notice",
             text: "pending feedback cancelled",
-            detail: "The local copy remains saved; nothing was transmitted.",
+            detail: "Nothing was sent. The local copy is kept.",
             turn: turn.current,
           });
           return true;
@@ -3421,7 +3415,7 @@ export function ChatScreen({
       }
       case "copy": {
         if (!session || busy) {
-          showToast(busy ? "Wait for the active turn before exporting the complete conversation." : "No conversation is available to export.");
+          showToast(busy ? "Wait for the current turn to finish." : "Nothing to export yet.");
           return true;
         }
         try {
@@ -3446,26 +3440,26 @@ export function ChatScreen({
       case "fix": {
         if (args === "cancel") {
           sourceFixAbortRef.current?.abort();
-          showFixPanel("Source fix cancellation", [sourceFixAbortRef.current ? "Cancellation requested. Any verified local candidate and created branch are preserved; no pending approval is published." : "No source fix is running; local candidates are preserved."]);
+          showFixPanel("Cancel fix", [sourceFixAbortRef.current ? "Cancelling. Anything already made is kept; nothing is published." : "No fix is running."]);
           return true;
         }
         if (args === "publish" || args.startsWith("publish ")) {
           const id = args.slice("publish".length).trim();
-          if (!id || /\s/.test(id)) showFixPanel("Source fix usage", [FIX_USAGE]);
+          if (!id || /\s/.test(id)) showFixPanel("Usage", [FIX_USAGE]);
           else requestFixPublication(id);
           return true;
         }
         if (args) {
-          if (/\s/.test(args)) showFixPanel("Source fix usage", [FIX_USAGE]);
+          if (/\s/.test(args)) showFixPanel("Usage", [FIX_USAGE]);
           else startSourceFix(args);
           return true;
         }
         const findings = runFindingsFromEntries(entries).filter((finding) => finding.id);
-        if (!findings.length) showFixPanel("Choose a saved source finding", [FIX_USAGE, "Use /findings, open the finding, then choose Fix; or type its id here."]);
+        if (!findings.length) showFixPanel("No findings to fix", [FIX_USAGE, "Open /findings and pick one, or type its id."]);
         else setPicker({
-          state: createSelectorState("Generate verified source fix", findings.map((finding) => ({ id: finding.id!, label: finding.title, detail: finding.severity }))),
+          state: createSelectorState("Fix which finding?", findings.map((finding) => ({ id: finding.id!, label: finding.title, detail: finding.severity }))),
           commit: startSourceFix,
-          onCancel: () => showFixPanel("Source fix selection cancelled", ["Nothing generated or published."]),
+          onCancel: () => showFixPanel("Cancelled", ["Nothing was run."]),
         });
         return true;
       }
@@ -3475,7 +3469,7 @@ export function ChatScreen({
           return true;
         }
         if (busy) {
-          appendEntry({ kind: "notice", text: "wait for the active turn before asking for an explanation", turn: turn.current });
+          appendEntry({ kind: "notice", text: "wait for the current turn to finish", turn: turn.current });
           return true;
         }
         const topic = args.trim();
@@ -3574,8 +3568,7 @@ export function ChatScreen({
       case "chat":
         appendEntry({
           kind: "notice",
-          text: "Chat is already active",
-          detail: "Type a request to continue the current conversation.",
+          text: "You're already in chat",
           turn: turn.current,
         });
         return true;
@@ -3676,7 +3669,7 @@ export function ChatScreen({
         composingRef.current = true;
         setComposing(true);
       }
-      showToast("Message not sent. Your draft is kept; review the recovery actions below.");
+      showToast("Message not sent — your draft is kept.");
       return;
     }
     if (busy || abortRef.current || stoppingAuditRef.current || !alive.current || !session) return;
@@ -3905,16 +3898,16 @@ export function ChatScreen({
         const limit = Math.round(outcome.budget.tokenBudget / 1000);
         appendEntry({
           kind: "error",
-          text: `paused at the turn token budget (${used}k of ${limit}k)`,
-          detail: `Ran ${outcome.budget.iterations} tool call${outcome.budget.iterations === 1 ? "" : "s"}. Send another message to continue — the conversation is kept, and nothing re-runs.`,
+          text: `paused — hit the token limit for this turn (${used}k of ${limit}k)`,
+          detail: "Send another message to keep going.",
           turn: currentTurn,
         });
       } else if (outcome.stopReason === "max_tool_iterations") {
         appendEntry({
           kind: "error",
-          text: `paused at the tool-call backstop (${outcome.budget.iterations} of ${outcome.budget.maxToolIterations})`,
+          text: `paused — hit the tool-call limit (${outcome.budget.iterations} of ${outcome.budget.maxToolIterations})`,
           detail: outcome.error
-            ?? "The tool-round backstop was reached. History is preserved; review the progress before continuing.",
+            ?? "Send another message to keep going.",
           turn: currentTurn,
         });
       } else if (outcome.stopReason !== "cancelled" && outcome.stopReason !== "output_cap" && !producedText && outcome.toolCalls.length === 0) {
@@ -3923,7 +3916,7 @@ export function ChatScreen({
           kind: "error",
           text: "no response from the model",
           detail: outcome.usage.inputTokens === 0 && outcome.usage.outputTokens === 0
-            ? "The request consumed no tokens, which usually means the provider rejected it — check /doctor and the model's credentials."
+            ? "The provider likely rejected the request. Check /doctor and your credentials."
             : "The model returned an empty reply. Try rephrasing, or /model to switch.",
           turn: currentTurn,
         });
@@ -4074,7 +4067,7 @@ export function ChatScreen({
   const deliverToSubagent = useCallback(
     (agentId: string, body: string): { ok: boolean; reason?: string } => {
       if (!settingsRef.current.allowSubagentOperatorMessaging) {
-        return { ok: false, reason: "operator→subagent messaging is off (see /settings)" };
+        return { ok: false, reason: "messaging sub-agents is off (see /settings)" };
       }
       const runtime: MessagingRuntime = {
         selfId: "Main",
@@ -4094,7 +4087,7 @@ export function ChatScreen({
           kind: "peer",
           text: body.trim(),
           peerFrom: "Main",
-          peerTo: agentNamesRef.current.get(agentId) ?? "Unnamed worker",
+          peerTo: agentNamesRef.current.get(agentId) ?? "Unnamed sub-agent",
           at: Date.now(),
           turn: turn.current,
         });
@@ -4508,7 +4501,7 @@ export function ChatScreen({
     // command and stays out of the command chooser.
     if (isAutonomyCycleKey(key)) {
       if (!session) {
-        showToast("Runtime is not ready; mode is unchanged");
+        showToast("Not ready yet — mode unchanged");
         return;
       }
       const next = nextAutonomyMode(modeRef.current);
@@ -4671,7 +4664,7 @@ export function ChatScreen({
             setFocusAgentId(null);
           } else {
             const res = deliverToSubagent(focusAgentId, expandedInput);
-            setSubagentTranscripts((prev) => ({ ...prev, [focusAgentId]: [...(prev[focusAgentId] ?? []), { id: `${focusAgentId}-operator-${Date.now()}`, kind: res.ok ? "user" : "error", text: res.ok ? expandedInput : `${res.reason ?? "Message could not be delivered"}. Your draft is retained; Escape returns to Main.`, turn: worker?.turn ?? 0, at: Date.now() }] }));
+            setSubagentTranscripts((prev) => ({ ...prev, [focusAgentId]: [...(prev[focusAgentId] ?? []), { id: `${focusAgentId}-operator-${Date.now()}`, kind: res.ok ? "user" : "error", text: res.ok ? expandedInput : `${res.reason ?? "Message not delivered"}. Draft kept · esc returns to main.`, turn: worker?.turn ?? 0, at: Date.now() }] }));
             if (!res.ok) return;
           }
           historyRef.current = pushHistory(historyRef.current, expandedInput);
@@ -4688,8 +4681,8 @@ export function ChatScreen({
         }
         if (!findCommand(input).isSlash && !runtimeReadyRef.current) {
           showToast(checkingModel
-            ? "Checking service availability. Your draft is kept."
-            : "Your draft is kept. Review the recovery actions below.");
+            ? "Still checking the model — your draft is kept."
+            : "Not connected — your draft is kept.");
           return;
         }
         // Remember every submitted message (sent or queued) for Up/Down recall.
@@ -4830,7 +4823,7 @@ export function ChatScreen({
       : runningTool
         ? toolActivity(runningTool, runningEntry?.toolArgs)
         : rootTail?.kind === "reasoning"
-          ? `reasoning · ${reasoningExcerpt(rootTail.text) || "in progress"}`
+          ? `thinking · ${reasoningExcerpt(rootTail.text) || "…"}`
           : rootTail?.kind === "assistant"
             ? "responding"
             : agentActivity || "working"
@@ -5004,7 +4997,7 @@ export function ChatScreen({
   // focus view and suppresses the rail / subagent block while it is open.
   const nowMs = Date.now();
   const focusRecord = focusAgentId ? projectedHerdAgents[focusAgentId] : undefined;
-  const focusAgentName = focusRecord ? agentTaskLabel(focusRecord.task, focusRecord.name) : "Worker";
+  const focusAgentName = focusRecord ? agentTaskLabel(focusRecord.task, focusRecord.name) : "Sub-agent";
   const focused = Boolean(focusAgentId && focusRecord);
   const transcriptWidth = Math.max(1, contentWidth - 1);
   // "0" is 4 cells. The optional objective sits at the top-right; target,
@@ -5384,7 +5377,7 @@ export function ChatScreen({
         <text fg={TEXT}>{fitTuiText(`${"•".repeat(Math.min(secretPrompt.value.length, 40))}█`, approvalWidth)}</text>
       </box>
       <box width={approvalWidth} flexShrink={0} minWidth={0}>
-        <text fg={MUTED}>{fitTuiText(`Stored owner-only in your 0 state dir and exported as ${secretPrompt.envVar}. Never transmitted by 0.`, approvalWidth, { mode: "middle" })}</text>
+        <text fg={MUTED}>{fitTuiText(`Saved locally as ${secretPrompt.envVar}. Never sent anywhere by 0.`, approvalWidth, { mode: "middle" })}</text>
       </box>
       <box width={approvalWidth} flexShrink={0} minWidth={0}>
         <text fg={MUTED}>{fitLegend(approvalWidth, "[⏎] save · [esc] cancel")}</text>
@@ -5418,7 +5411,7 @@ export function ChatScreen({
       body={approvalBodyShown}
       choices={approvalItems}
       activeIndex={approvalState.index}
-      hint={approvalPrompt.completeDetails ? "[Pg↑↓] details · [↑↓] choose · [⏎] confirm · [esc] decline" : "[↑↓] choose · [⏎] confirm · [esc] decline"}
+      hint={approvalPrompt.completeDetails ? "[Pg↑↓] details · [↑↓] choose · [⏎] confirm · [esc] deny" : "[↑↓] choose · [⏎] confirm · [esc] deny"}
       accent={approvalPrompt.borderColor}
       severity={approvalPrompt.severity}
       contentWidth={contentWidth}
@@ -5667,14 +5660,14 @@ export function ChatScreen({
         {checkingModel ? "Checking model availability…" : "Connect a provider to start chatting"}
       </text>
       {startupError ? <text fg={MUTED} wrapMode="word">{startupError.text}</text> : null}
-      <text fg={MUTED} wrapMode="word">Draft kept. Press Enter to send after access is restored.</text>
+      <text fg={MUTED} wrapMode="word">Your draft is kept.</text>
       <box flexDirection="row" flexWrap="wrap" minWidth={0} marginTop={1} gap={1}>
         <box onMouseDown={() => onNavigate("connect")}><text fg={PRIMARY}>[Connect provider]</text></box>
         {session && !checkingModel ? (
           <box onMouseDown={() => { void checkRuntime(); }}><text fg={PRIMARY}>[Check again]</text></box>
         ) : null}
       </box>
-      <text fg={MUTED} wrapMode="word">{session ? "Ctrl+R check again · Ctrl+P commands" : "Ctrl+P commands · /connect"}</text>
+      <text fg={MUTED} wrapMode="word">{session ? "ctrl+r retry · ctrl+p commands" : "ctrl+p commands"}</text>
     </box>
   );
   const heroRecoveryNotice = (
@@ -5725,10 +5718,10 @@ export function ChatScreen({
 
   // Keep first-use actions visible without opening a second navigation surface.
   const heroHintPairs: KeyHint[] = [
-    { key: "/connect", label: "connection" },
+    { key: "/connect", label: "connect" },
     settings.onboardingCompleted
       ? { key: "/sessions", label: "sessions" }
-      : { key: "/onboard", label: "optional setup" },
+      : { key: "/onboard", label: "setup" },
     { key: "ctrl+p", label: "commands" },
   ];
   // Any overlay open in the hero (slash menu, picker, an approval, the secret

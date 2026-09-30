@@ -75,6 +75,8 @@ export interface ScanEvent {
   stage?: string;
   message: string;
   data?: unknown;
+  /** Bounded-plan attempt ownership, including concurrent progress. */
+  runIndex?: number;
 }
 
 export type ScanListener = (event: ScanEvent) => void;

@@ -1,21 +1,17 @@
 import { useEffect, useEffectEvent } from "react";
-import type { DesktopHostCommand } from "@0/shared";
+type BrowserCommand = "new-thread" | "open-folder" | "toggle-sidebar" | "settings";
 
-const SHORTCUTS: Readonly<Record<string, DesktopHostCommand>> = {
+const SHORTCUTS: Readonly<Record<string, BrowserCommand>> = {
   n: "new-thread",
   o: "open-folder",
   b: "toggle-sidebar",
   ",": "settings",
 };
 
-export function useKeyboardShortcuts(handler: (command: DesktopHostCommand) => void): void {
+export function useKeyboardShortcuts(handler: (command: BrowserCommand) => void): void {
   const onCommand = useEffectEvent(handler);
 
   useEffect(() => {
-    // Electron's native menu owns these accelerators. A second DOM listener
-    // would race it and can create duplicate threads or toggle twice.
-    if (window.osecDesktop) return window.osecDesktop.onCommand(onCommand);
-
     const isMac = navigator.platform.includes("Mac");
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing || event.altKey || event.shiftKey) return;

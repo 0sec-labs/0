@@ -89,9 +89,8 @@ async function radarAction(opts: RadarOpts): Promise<void> {
  */
 export const radarCommand = new Command("radar")
   .description(
-    "Score recent commits in a git repo for silent security-fix signals " +
-      "using Jev. Only survivors consume deep review / variant-hunt spend. " +
-      "Jev is advisory only. Requires ZERO_JEV_FEATURES=radar.",
+    "Score recent git commits for silent security-fix signals to prioritize review. " +
+      "Requires ZERO_JEV_FEATURES=radar.",
   )
   .requiredOption("--repo <path>", "Path to a valid git working tree")
   .option("--since <date-or-ref>", "Git since-format constraint (e.g. '7 days ago', 'HEAD~50')")

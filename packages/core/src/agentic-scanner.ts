@@ -572,6 +572,11 @@ export function agenticScan(opts: AgenticScanOptions): Promise<ScanReport> {
       plan, ledger: opts.config.costLedger as ScanCostLedger | undefined,
       signal: opts.config.signal, costCeilingUsd: opts.config.costCeilingUsd,
       emitTerminalEvent: opts.emitTerminalEvent,
+      onAttempt: progress => opts.onEvent?.({
+        type: progress.phase === "started" ? "stage:start" : "stage:end",
+        stage: "plan", message: `Run ${progress.runIndex}/${plan.runCount} ${progress.phase}`,
+        runIndex: progress.runIndex, data: progress,
+      }),
       emptyReport: (): ScanReport => ({
         target: opts.config.target, scanDepth: plan.depth,
         startedAt: new Date().toISOString(), completedAt: new Date().toISOString(), durationMs: 0,
@@ -582,6 +587,7 @@ export function agenticScan(opts: AgenticScanOptions): Promise<ScanReport> {
         ...opts, emitTerminalEvent: false,
         resumeScanId: runIndex === 1 ? opts.resumeScanId : undefined,
         runId: runIndex === 1 && opts.resumeScanId ? opts.resumeScanId : opts.runId ? `${opts.runId}-run-${runIndex}` : undefined,
+        onEvent: event => opts.onEvent?.({ ...event, runIndex }),
         config: { ...opts.config, plan: runPlan, depth: runPlan.depth, costLedger: ledger, signal, costCeilingUsd,
           timeout: Math.min(opts.config.timeout ?? runPlan.timeCapMs, runPlan.timeCapMs) },
       }),
@@ -743,6 +749,7 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
   if (!resumeScanId) {
     db.createScan(config, scanId);
   }
+  emit({ type: "stage:start", stage: "discovery", message: "Scan started", data: { scanId, persisted: true } });
 
   if (resumeScanId) {
     const existing = db.getScan(resumeScanId);

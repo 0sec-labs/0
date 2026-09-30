@@ -63,6 +63,25 @@ function endTurn(text: string): NativeRuntimeResult {
 
 
 describe("createConsoleSession", () => {
+  it("generates title metadata inside accounted planner rounds without executing a tool", async () => {
+    const runtime = new ScriptedRuntime([
+      { content: [{ type: "tool_use", id: "title-1", name: "console_set_conversation_title", input: { title: "Tenant isolation review" } }], stopReason: "tool_use", durationMs: 1, usage: { inputTokens: 10, outputTokens: 5 } },
+      { ...endTurn("Here is the review."), usage: { inputTokens: 20, outputTokens: 8 } },
+    ]);
+    const session = createConsoleSession({ runtime, refineObjective: false });
+    const starts = vi.fn(); const usage = vi.fn();
+    const result = await session.send("Review tenant isolation", { onToolStart: starts, onUsage: usage }, { generateTitle: true });
+    expect(result.conversationTitle).toBe("Tenant isolation review");
+    expect(result.usage).toEqual({ inputTokens: 30, outputTokens: 13 });
+    expect(usage).toHaveBeenCalledTimes(2);
+    expect(starts).not.toHaveBeenCalled();
+    expect(result.toolCalls).toEqual([]);
+    expect(runtime.calls[0].tools.some((tool) => tool.name === "console_set_conversation_title")).toBe(true);
+    expect(runtime.calls[1].tools.some((tool) => tool.name === "console_set_conversation_title")).toBe(false);
+    expect(runtime.calls[1].messages.some((message) => message.content.some((block) => block.type === "tool_result" && block.tool_use_id === "title-1"))).toBe(true);
+    await session.cleanup();
+  });
+
   it("exposes the full audit-role tool registry by default", () => {
     const session = createConsoleSession({ runtime: new ScriptedRuntime([]) });
     const names = session.tools.map((t) => t.name);
@@ -3412,6 +3431,51 @@ describe("console live driver authority", () => {
       expect(session.scope?.match("https://denied.test./").allowed ?? false).toBe(false);
       expect(requestScope).toHaveBeenCalledTimes(2);
     } finally { await session.cleanup(); }
+  });
+});
+
+describe("console engagement configuration", () => {
+  it("changes the engagement without losing conversation or previously declined host memory", async () => {
+    const runtime = new ScriptedRuntime([
+      { content: [{ type: "tool_use", id: "first", name: "bash", input: { command: "printf https://denied.test/" } }], stopReason: "tool_use", durationMs: 0 },
+      endTurn("Denied."),
+      { content: [{ type: "tool_use", id: "second", name: "bash", input: { command: "printf https://denied.test/" } }], stopReason: "tool_use", durationMs: 0 },
+      endTurn("Still denied."),
+    ]);
+    const requestScope = vi.fn(async () => null);
+    const session = createConsoleSession({ runtime, allowModelSelfExtension: false, refineObjective: false, autonomyMode: "standard", approveTool: async () => true, requestScope });
+    try {
+      const first = await session.send("Inspect the requested endpoint.");
+      expect(first.toolCalls[0]!.result.success).toBe(false);
+      const history = structuredClone(session.messages);
+      session.configureEngagement({ target: "https://next.test/", scope: ScopePolicy.fromJson({ in_scope: ["next.test", "denied.test"] }) });
+      expect(session.messages).toEqual(history);
+      expect(session.target).toBe("https://next.test/");
+      const second = await session.send("Inspect the requested endpoint again.");
+      expect(second.toolCalls[0]!.result.success).toBe(false);
+      expect(requestScope).toHaveBeenCalledTimes(1);
+      session.configureEngagement({ scope: null });
+      expect(session.scope).toBeUndefined();
+      expect(session.target).toBe("https://next.test/");
+    } finally { await session.cleanup(); }
+  });
+
+  it("rejects engagement changes during an active model call rather than changing a tool's authorization mid-turn", async () => {
+    const started = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const runtime = new ScriptedRuntime([]);
+    runtime.executeNative = async () => { started.resolve(); await release.promise; return endTurn("Done."); };
+    const session = createConsoleSession({ runtime, target: "https://original.test/", allowModelSelfExtension: false, refineObjective: false });
+    try {
+      await session.ready;
+      const sending = session.send("Inspect.");
+      await started.promise;
+      expect(() => session.configureEngagement({ target: "https://replacement.test/" })).toThrow();
+      expect(session.target).toBe("https://original.test/");
+      release.resolve(); await sending;
+      session.configureEngagement({ target: "https://replacement.test/" });
+      expect(session.target).toBe("https://replacement.test/");
+    } finally { release.resolve(); await session.cleanup(); }
   });
 });
 

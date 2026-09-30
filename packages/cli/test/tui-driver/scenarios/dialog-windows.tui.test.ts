@@ -18,7 +18,7 @@ test("the compact close control survives resize and dismisses without editing se
   await tui.waitForText(/Theme/);
   await tui.resize(64, 18);
   const resized = await tui.waitForText(/Theme/);
-  expect(resized).toContain("type/paste search");
+  expect(resized).toContain("[⌃U] clear");
   const lines = frameLines(tui.rawFrame());
   const closeY = lines.findIndex((line) => /\bClose\b/.test(line));
   expect(closeY).toBeGreaterThanOrEqual(0);
@@ -38,10 +38,10 @@ test("the compact close control survives resize and dismisses without editing se
 test("short generic windows keep a compact close action rather than spending the content area on tall buttons", async () => {
   tui = await launch({ ...modelsByokLaunch({ mouse: true }), route: { type: "settings" },
     cols: 40, rows: 8, settings: { onboardingCompleted: true, mouseSupport: true } });
-  await tui.waitForText(/type to search/);
+  await tui.waitForText(/Search settings/);
   const lines = frameLines(tui.rawFrame());
   const y = lines.findIndex((line) => /\bClose\b/.test(line));
   expect(y).toBeGreaterThanOrEqual(0);
   await tui.click(lines[y]!.indexOf("Close") - 1, y);
-  expect(tui.captureFrame()).not.toMatch(/\bClose\b|type to search/);
+  expect(tui.captureFrame()).not.toMatch(/\bClose\b|Search settings/);
 });

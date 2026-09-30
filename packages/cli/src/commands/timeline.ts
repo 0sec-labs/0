@@ -72,7 +72,7 @@ export function registerTimelineCommand(program: Command): void {
   program
     .command("timeline")
     .description(
-      "Export a scan's immutable pipeline-event audit trail as a chronological, MITRE ATT&CK- and ATLAS-tagged forensic record — UTC ISO-8601 timestamps, per-event action summaries, ready to hand to a client SOC for detection cross-referencing.",
+      "Export a scan's event audit trail as a chronological, MITRE ATT&CK-tagged record.",
     )
     .argument("<scanId>", "Scan id to export (see `0 history`)")
     .option("--format <format>", `Output format: ${TIMELINE_FORMATS.join(", ")}`, "markdown")
