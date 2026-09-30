@@ -124,8 +124,8 @@ class Controller {
     const abort = new AbortController(); this.providers.set(frame.id, abort);
     const cancel = () => abort.abort(); this.abort.signal.addEventListener("abort", cancel, { once: true });
     try {
-      if (!envelope || envelope.provider !== "chatgpt-codex" || !this.options.provider.models.includes(envelope.model) || typeof envelope.body !== "object" || Array.isArray(envelope.body) || envelope.body === null) throw new Error("Invalid guest provider envelope");
-      const response = await this.options.provider.request({ provider: envelope.provider, model: envelope.model, body: JSON.stringify(envelope.body) }, abort.signal);
+      if (!envelope || envelope.provider !== "chatgpt-codex" || !this.options.provider.models.includes(envelope.model) || typeof envelope.body !== "string") throw new Error("Invalid guest provider envelope");
+      const response = await this.options.provider.request({ provider: envelope.provider, model: envelope.model, body: envelope.body as string }, abort.signal);
       this.write({ type: "provider-headers", id: frame.id, status: response.status, contentType: response.headers.get("content-type") ?? "text/event-stream" });
       let bytes = 0;
       if (response.body) { const reader = response.body.getReader(); try { while (true) { const next = await reader.read(); if (next.done) break; const chunk = next.value; bytes += chunk.length; if (bytes > 16 * 1024 * 1024) throw new Error("Provider response exceeds controller limit"); for (let offset = 0; offset < chunk.length; offset += 49152) this.write({ type: "provider-chunk", id: frame.id, data: Buffer.from(chunk.subarray(offset, offset + 49152)).toString("base64") }); } } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); } }
