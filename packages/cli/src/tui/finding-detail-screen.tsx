@@ -3,9 +3,9 @@
  * The finding-detail view, as a pop-up dialog.
  *
  * Open one finding, see its title, severity, category, location, description,
- * redacted evidence, remediation, CVSS and references — then investigate or
- * request a verified source fix in chat, copy a submission-ready report, or move its
- * status. It is the console's read+act companion to the `/findings` list.
+ * stored impact assessment, redacted evidence, remediation, CVSS and references —
+ * then investigate or request a verified source fix in chat, copy a report, or
+ * move its status. It is the read+act companion to the `/findings` list.
  *
  * Three properties are load-bearing, all inherited from `usage-screen.tsx` and
  * `model-screen.tsx`:

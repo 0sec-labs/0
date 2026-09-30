@@ -35,7 +35,7 @@ export interface SlashCommand {
   /** Usage hint, e.g. "/model <id>". Omitted when blank. */
   readonly usage?: string;
   /**
-   * Commands that only make sense in the Bun TUI (navigation/routing).
+   * Commands that require the Bun TUI's interaction or routing surfaces.
    * The readline console explains that the TUI is required.
    */
   readonly tuiOnly?: boolean;
@@ -84,6 +84,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     category: "info",
     description: "Show the harness capability map and its safety gates",
     usage: "/capabilities",
+    tuiOnly: true,
   },
   {
     name: "status",
@@ -143,14 +144,6 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     tuiOnly: true,
   },
   {
-    name: "impact",
-    aliases: [],
-    category: "session",
-    description: "Explain a finding's business impact and evidence-qualified potential chains",
-    usage: "/impact [finding-id]",
-    tuiOnly: true,
-  },
-  {
     name: "copy",
     aliases: ["export", "dump"],
     category: "session",
@@ -173,6 +166,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     category: "session",
     description: "Explain like I'm five: short sentences and everyday words",
     usage: "/explain [topic]",
+    tuiOnly: true,
   },
   {
     name: "feedback",
@@ -180,6 +174,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     category: "system",
     description: "Record feedback about 0 to a local file you control, with optional HTTPS submission",
     usage: "/feedback <message> | /feedback submit <message> | /feedback send | /feedback cancel",
+    tuiOnly: true,
   },
   {
     name: "settings",
@@ -187,6 +182,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     category: "system",
     description: "Open settings; changes persist between sessions",
     usage: "/settings",
+    tuiOnly: true,
   },
   {
     name: "keybindings",
@@ -210,6 +206,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     category: "session",
     description: "Show or select a model (TUI: applies to New chat)",
     usage: "/model [id]",
+    tuiOnly: true,
   },
 
   // ── navigation ──────────────────────────────────────────────────────────
@@ -232,13 +229,6 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     aliases: ["runs"],
     category: "navigation",
     description: "View active and recent operations",
-    tuiOnly: true,
-  },
-  {
-    name: "comms",
-    aliases: ["messages"],
-    category: "navigation",
-    description: "Watch the agent fleet and the messages flowing between agents",
     tuiOnly: true,
   },
   {

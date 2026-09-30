@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Finding } from "@0/shared";
-import { findingFromRow } from "./findings-data.js";
+import { findingFromRow, type FindingsRow } from "./findings-data.js";
 
 import {
   buildFindingRows,
@@ -293,6 +293,78 @@ describe("buildFindingRows", () => {
     const sevRow = rows.find((r) => r.kind === "kv" && r.label.includes("Severity"));
     expect(sevRow && sevRow.kind === "kv" && sevRow.tone).toBe("error");
     expect(sevRow && sevRow.kind === "kv" && sevRow.value).toBe("HIGH");
+  });
+
+  it("shows a persisted impact assessment between description and evidence without upgrading proof", () => {
+    const assessment = {
+      reachability_tier: "local-unpriv",
+      blast_radius: "One authenticated account; broader reach is untested.",
+      weaponizability: "info-leak",
+      business_impact: "modest",
+      rationale: "A local reader can inspect the cached account data.",
+    };
+    const finding = findingFromRow({
+      id: "F-impact",
+      scanId: "scan-impact",
+      title: "Account cache leak",
+      severity: "high",
+      category: "information-disclosure",
+      status: "discovered",
+      timestamp: 1,
+      templateId: "manual",
+      description: "Cached account data is readable.",
+      evidenceRequest: "cache.ts:1",
+      evidenceResponse: "Source inspection only",
+      impactAssessment: JSON.stringify(assessment),
+    });
+    const rows = buildFindingRows(finding, 200);
+    const flat = rows.map((row) => row.kind === "kv"
+      ? `${row.label}: ${row.value}`
+      : row.kind === "text" || row.kind === "heading" ? row.text : "").join("\n");
+    expect(flat.indexOf("Description:")).toBeLessThan(flat.indexOf("Impact"));
+    expect(flat.indexOf("Impact")).toBeLessThan(flat.indexOf("Evidence"));
+    expect(flat).toContain("Assessment for F-impact");
+    expect(flat).toContain("not reproduction proof");
+    expect(flat).toContain(`Business impact: ${assessment.business_impact}`);
+    expect(flat).toContain(`Reachability: ${assessment.reachability_tier}`);
+    expect(flat).toContain(`Blast radius: ${assessment.blast_radius}`);
+    expect(flat).toContain(`Weaponizability: ${assessment.weaponizability}`);
+    expect(flat).toContain(`Rationale: ${assessment.rationale}`);
+    expect(flat).toContain("Status: discovered");
+    expect(flat).toContain("Replay verification: not run");
+    expect(flat).toContain("Source check: not run");
+  });
+
+  it("keeps absent and malformed stored assessments unavailable rather than guessing impact", () => {
+    const row: FindingsRow = {
+      id: "F-unknown",
+      scanId: "scan-unknown",
+      title: "Unassessed finding",
+      severity: "critical",
+      category: "command-injection",
+      status: "discovered",
+      timestamp: 1,
+      templateId: "manual",
+      description: "Severity and category are not an impact assessment.",
+      evidenceRequest: "",
+      evidenceResponse: "",
+    };
+    for (const raw of [undefined, null, "{bad json", "[]", "{}", JSON.stringify({
+      reachability_tier: "from-mars",
+      blast_radius: "all accounts",
+      weaponizability: "rce",
+      business_impact: "headline",
+      rationale: "Unsupported reachability",
+    })]) {
+      const rows = buildFindingRows(findingFromRow({ ...row, impactAssessment: raw }), 200);
+      const flat = rows.map((item) => item.kind === "text" || item.kind === "heading" ? item.text : "").join("\n");
+      expect(flat).toContain("Not assessed");
+      expect(flat).not.toContain("Business impact:");
+      expect(flat).not.toContain("Reachability:");
+    }
+    const malformedDirect = { ...SAMPLE, impactAssessment: { business_impact: "headline" } } as Finding;
+    const directRows = buildFindingRows(malformedDirect, 200);
+    expect(directRows.some((item) => item.kind === "text" && item.text.startsWith("Not assessed"))).toBe(true);
   });
 
   it("renders persisted code-only matches separately from replay and pending behavior", () => {

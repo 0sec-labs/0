@@ -495,9 +495,7 @@ export function registerConsoleCommand(program: Command): void {
             return;
           }
           default: {
-            // A known, non-tuiOnly command the line-mode REPL doesn't implement
-            // (e.g. model/settings/sessions). Say so instead of silently
-            // ignoring it — the full set lives in the Bun TUI.
+            // Fail locally if a registered command lacks a readline handler.
             console.log(
               chalk.yellow(
                 `\n/${parsed.command} isn't available in the line-mode console. ` +
@@ -620,8 +618,8 @@ function printHelp(): void {
 
   console.log(chalk.dim("  Modes: Standard runs automatically in scope and can request a narrow session-only extension; Co-pilot adds approval for every non-read-only tool; YOLO runs only inside an explicit configured scope and never requests extensions."));
   console.log(chalk.dim("  The Node fallback cannot approve scope extensions or Co-pilot actions; use the Bun TUI for those approvals."));
-  console.log(chalk.dim("  anything else is sent to the engine as an operator message.\n"));
-  console.log(chalk.dim("  Navigation commands (/chat, /scope, /sessions, …) require the Bun TUI. Switch agents in the inline chat worklist."));
+  console.log(chalk.dim("  Non-slash input is sent to the engine as an operator message; unknown slash commands stay local.\n"));
+  console.log(chalk.dim("  Other commands require the Bun TUI. Switch agents in the inline chat worklist."));
   console.log(chalk.dim("  Run the bare `0` command for the full interactive experience.\n"));
 }
 

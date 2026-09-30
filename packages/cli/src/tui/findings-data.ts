@@ -1,5 +1,5 @@
 import type { Finding } from "@0/shared";
-import type { NativeRuntime } from "@0/core";
+import { parseImpactAssessment, type NativeRuntime } from "@0/core";
 import type { getRuntimeAvailability } from "../utils.js";
 import { fitTuiText, fitTuiUrl } from "./text.js";
 import { restoreFindingReviewFields } from "@0/db";
@@ -40,6 +40,8 @@ export interface FindingsRow {
   evidenceRequest: string;
   evidenceResponse: string;
   evidenceAnalysis?: string | null;
+  /** Persisted JSON assessment; unavailable or invalid values are never inferred. */
+  impactAssessment?: string | null;
   /**
    * JSON-stringified VerificationSpec as stored by `@0/db`. NULL for
    * findings that carry no machine-executable re-check contract. The
@@ -136,22 +138,24 @@ export function groupFindings(rows: FindingsRow[]): FindingGroup[] {
 }
 
 
-function parseVerificationSpec(raw: string | null | undefined): unknown {
+function parseJsonColumn(raw: string | null | undefined): unknown {
   if (!raw) return undefined;
   try {
     return JSON.parse(raw);
   } catch {
-    // A spec that will not parse is the same as no spec for eligibility
-    // purposes; `fixEligibility` reports it as a missing contract.
+    // Malformed persisted JSON is unavailable, never a partial stand-in.
     return undefined;
   }
 }
 
 /**
- * Rebuild a finding using the database's conservative review/source-check
- * hydrator. Absent or malformed persisted fields remain absent.
+ * Rebuild a finding using the canonical impact parser and the database's
+ * conservative review/source-check hydrator. Unusable persisted fields stay absent.
  */
 export function findingFromRow(row: FindingsRow): Finding {
+  const impactAssessment = parseJsonColumn(row.impactAssessment) === undefined
+    ? undefined
+    : parseImpactAssessment(row.impactAssessment!) ?? undefined;
   const record: Record<string, unknown> = {
     id: row.id,
     templateId: row.templateId,
@@ -168,7 +172,8 @@ export function findingFromRow(row: FindingsRow): Finding {
       response: row.evidenceResponse,
       analysis: row.evidenceAnalysis ?? undefined,
     },
-    verificationSpec: parseVerificationSpec(row.verificationSpec),
+    verificationSpec: parseJsonColumn(row.verificationSpec),
+    impactAssessment,
     ...restoreFindingReviewFields(row),
   };
   return record as unknown as Finding;

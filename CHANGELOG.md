@@ -12,6 +12,19 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.22.1] - 2026-09-30
+
+### Fixed
+
+- Remove orphaned `/comms` and `/messages` slash entries and the standalone
+  `/impact` ID-entry workflow. Command menus no longer show actions without a runner.
+- Show persisted impact with the selected finding's description and evidence.
+  List filters stay in list controls, not in the finding payload; missing
+  assessments remain unassessed.
+- Keep tool output previews within twenty displayed lines even when an old
+  expanded-detail preference is saved. Full retained output requires an
+  explicit card disclosure.
+
 ## [0.22.0] - 2026-09-30
 
 ### Changed
