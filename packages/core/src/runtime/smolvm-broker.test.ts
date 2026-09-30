@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { link, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { link, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -31,31 +31,36 @@ describe.skipIf(!qualifiedHost)("host sibling broker authority boundary", () => 
       }
       throw new Error("Bounded broker refusal did not arrive");
     }
+    async function publishRequest(id: string, value: unknown): Promise<void> {
+      const temporary = join(broker.guestRoot, `${id}.request.tmp`);
+      await writeFile(temporary, JSON.stringify(value), { flag: "wx", mode: 0o600 });
+      await rename(temporary, join(broker.guestRoot, `${id}.request.json`));
+    }
     const base = { protocol: 1, runtimeId, profile: "offline", command: ["/bin/sh", "-c", "exit 0"], interactive: false, files: [],
       timeoutMs: 1000, memoryMb: 128, cpus: 1, maxOutputBytes: 1024 };
     try {
       const hostPathId = randomBytes(24).toString("hex");
-      await writeFile(join(broker.guestRoot, `${hostPathId}.request.json`), JSON.stringify({ ...base, id: hostPathId, workspaceRoot: root, environment: { SECRET: secret } }));
+      await publishRequest(hostPathId, { ...base, id: hostPathId, workspaceRoot: root, environment: { SECRET: secret } });
       const hostPath = await receipt(hostPathId);
       expect(hostPath.execution.error).toMatch(/identity or fields/);
       expect(hostPath.execution.stdout).toBe("");
 
       const imageId = randomBytes(24).toString("hex");
-      await writeFile(join(broker.guestRoot, `${imageId}.request.json`), JSON.stringify({ ...base, id: imageId, imageReference: `unapproved.invalid/tool@sha256:${"a".repeat(64)}` }));
+      await publishRequest(imageId, { ...base, id: imageId, imageReference: `unapproved.invalid/tool@sha256:${"a".repeat(64)}` });
       expect((await receipt(imageId)).execution.error).toMatch(/not explicitly approved/);
 
       // V8's grouped/repeated base64 regex used to exhaust its stack at this
       // advertised boundary, even though the decoded bytes were valid.
       const maximumId = randomBytes(24).toString("hex");
       const maximum = Buffer.alloc(4 * 1024 * 1024);
-      await writeFile(join(broker.guestRoot, `${maximumId}.request.json`), JSON.stringify({ ...base, id: maximumId,
+      await publishRequest(maximumId, { ...base, id: maximumId,
         imageReference: `unapproved.invalid/tool@sha256:${"a".repeat(64)}`,
-        files: [{ path: "maximum.bin", digest: `sha256:${createHash("sha256").update(maximum).digest("hex")}`, data: maximum.toString("base64"), mode: 0o600 }] }));
+        files: [{ path: "maximum.bin", digest: `sha256:${createHash("sha256").update(maximum).digest("hex")}`, data: maximum.toString("base64"), mode: 0o600 }] });
       expect((await receipt(maximumId)).execution.error).toMatch(/not explicitly approved/);
 
       const traversalId = randomBytes(24).toString("hex");
-      await writeFile(join(broker.guestRoot, `${traversalId}.request.json`), JSON.stringify({ ...base, id: traversalId,
-        files: [{ path: "../authority", digest, data: bytes.toString("base64"), mode: 0o600 }] }));
+      await publishRequest(traversalId, { ...base, id: traversalId,
+        files: [{ path: "../authority", digest, data: bytes.toString("base64"), mode: 0o600 }] });
       expect((await receipt(traversalId)).execution.error).toMatch(/file path/);
 
       const linkedId = randomBytes(24).toString("hex");
@@ -72,12 +77,12 @@ describe.skipIf(!qualifiedHost)("host sibling broker authority boundary", () => 
       expect(JSON.stringify(hardlinked)).not.toContain(secret);
 
       const httpId = randomBytes(24).toString("hex");
-      await writeFile(join(broker.guestRoot, `${httpId}.request.json`), JSON.stringify({ ...base, id: httpId, profile: "http", httpTarget: "http://127.0.0.1:9/" }));
+      await publishRequest(httpId, { ...base, id: httpId, profile: "http", httpTarget: "http://127.0.0.1:9/" });
       expect((await receipt(httpId)).execution.error).toMatch(/did not grant HTTP/);
 
       const cancelledId = randomBytes(24).toString("hex");
       await writeFile(join(broker.guestRoot, `${cancelledId}.cancel.json`), JSON.stringify({ cancel: true }));
-      await writeFile(join(broker.guestRoot, `${cancelledId}.request.json`), JSON.stringify({ ...base, id: cancelledId }));
+      await publishRequest(cancelledId, { ...base, id: cancelledId });
       expect((await receipt(cancelledId)).execution.error).toMatch(/cancelled before VM admission/);
       await broker.close();
       expect(await readdir(privateRoot)).toEqual([]);

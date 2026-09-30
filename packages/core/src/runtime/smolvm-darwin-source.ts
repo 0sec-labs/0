@@ -176,9 +176,13 @@ static void write_result(const char *path, int code, int failed, const char *rea
   }
   char json[512];
   int n = snprintf(json, sizeof(json), "{\"schemaVersion\":1,\"exitCode\":%d,\"cleanupFailed\":%s,\"cancelled\":%s,\"reason\":\"%s\"}\n", code, failed ? "true" : "false", cancelled ? "true" : "false", reason);
-  int fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600);
-  if (fd < 0 || write(fd, json, n) != n || fsync(fd)) { if (fd >= 0) close(fd); return; }
-  close(fd);
+  char temporary[PROC_PIDPATHINFO_MAXSIZE];
+  int length = snprintf(temporary, sizeof(temporary), "%s.%d.tmp", path, getpid());
+  if (n < 0 || (size_t)n >= sizeof(json) || length < 0 || (size_t)length >= sizeof(temporary)) return;
+  int fd = open(temporary, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600);
+  if (fd < 0) return;
+  if (write(fd, json, n) != n || fsync(fd)) { close(fd); unlink(temporary); return; }
+  if (close(fd) || renamex_np(temporary, path, RENAME_EXCL)) { unlink(temporary); return; }
   /* fd4 is protocol-only, independent of inherited terminal stdio. */
   (void)write(4, json, n);
 }
