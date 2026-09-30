@@ -1,4 +1,5 @@
 /** @jsxImportSource @opentui/react */
+import { consoleExecutionProfile } from "../console-execution.js";
 import { randomUUID } from "node:crypto";
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { CliRenderEvents, createCliRenderer, type CliRenderer } from "@opentui/core";
@@ -695,7 +696,7 @@ function ConsoleApp({
     };
     const creation = (async (): Promise<AuditRecord | undefined> => {
       if (exitRequested.current) return undefined;
-      const mcpHost = await connectMcpServers(parseMcpConfig(process.env["ZERO_MCP"]));
+      const mcpHost = consoleExecutionProfile() === "smolvm" ? undefined : await connectMcpServers(parseMcpConfig(process.env["ZERO_MCP"]));
       if (exitRequested.current || !appAlive.current) {
         await mcpHost?.closeAll();
         return undefined;
@@ -786,6 +787,7 @@ function ConsoleApp({
   useEffect(() => {
     if (exitRequested.current) return;
     if (pluginHostReady) return;
+    if (consoleExecutionProfile() === "smolvm") { setPluginHostReady(true); return; }
     let disposed = false;
     let created: SessionPluginHostManager | undefined;
     const preparation = createSessionPluginHostManager({ reservedToolNames: Object.keys(TOOL_DEFINITIONS) });

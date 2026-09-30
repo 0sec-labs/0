@@ -8,6 +8,7 @@ import type { SmolvmWorkbenchApprovedImage } from "@0/core";
 import { DEFAULT_SETTINGS, loadGlobalSettings } from "../tui/settings.js";
 import { PROVIDERS } from "../tui/provider-status.js";
 import { defaultWorkbenchStateRoot, isPinnedWorkbenchImageReference, loadWorkbenchConfig, resolveWorkbenchGuestSettings, saveWorkbenchConfig, selectWorkbenchProfile, workbenchConfigPath, workbenchNetworkEnabled } from "../workbench.js";
+import { runWorkbenchConsoleGuest, runWorkbenchCliGuest } from "../workbench-console-guest.js";
 import type { WorkbenchConfig } from "../workbench.js";
 
 interface WorkbenchSetupOptions {
@@ -115,13 +116,15 @@ export async function workbenchStatus(home: string = process.env.HOME || homedir
 
 export function registerWorkbenchCommand(program: Command): void {
   const workbench = program.command("workbench").description("Set up and inspect the sandboxed execution workbench (no Docker)");
+  workbench.command("run-agent", { hidden: true }).action(async () => { await runWorkbenchCliGuest(); });
+  workbench.command("console-agent", { hidden: true }).action(async () => { await runWorkbenchConsoleGuest(); });
   workbench.command("setup")
     .description("Verify/provision the signed native runtime, approve a local image, and select SmolVM execution")
     .option("--image <archive>", "Local OCI/Docker archive to digest-pin and approve; never a mutable registry tag")
     .option("--state <directory>", "Private VM state directory (defaults to ~/.0/workbench)")
     .option("--workspace <directory>", "Explicit workspace mount; otherwise each invocation mounts its current directory")
-    .option("--provider <id>", "Grant this provider's selected account/environment credential; repeat for multiple providers", (id: string, ids: string[] = []) => [...ids, id])
-    .option("--github", "Grant a GitHub token from GH_TOKEN/GITHUB_TOKEN or the existing gh account")
+    .option("--provider <id>", "Grant chatgpt-codex requests through the host provider broker; credentials stay on the host", (id: string, ids: string[] = []) => [...ids, id])
+    .option("--github", "Unsupported: GitHub credential forwarding is refused")
     .option("--no-github", "Revoke the GitHub token grant")
     .option("--cpus <count>", "Guest virtual CPUs")
     .option("--memory <MiB>", "Guest RAM in MiB")
@@ -132,11 +135,11 @@ export function registerWorkbenchCommand(program: Command): void {
         const config = await setupWorkbench(options);
         console.log(`SmolVM workbench selected. Approved image: ${config.imageDigest}`);
         console.log(`Workspace: ${config.workspaceRoot ?? "each invocation's current directory"} → /workspace`);
-        console.log(`Provider grants: ${config.providers.join(", ") || "none (connect inside the guest)"}; GitHub: ${config.github ? "granted" : "not granted"}`);
+        console.log(`Provider grants: ${config.providers.join(", ") || "none (grant chatgpt-codex on the host)"}; GitHub: ${config.github ? "granted" : "not granted"}`);
         console.log(`Sandbox image grants: ${config.approvedImages?.map((image) => image.reference).join(", ") || "none (no additional image references are granted)"}`);
         console.log(`Network: ${workbenchNetworkEnabled() ? "online" : "offline (explicit ZERO_OFFLINE restriction)"}`);
         console.log(`Isolated sandbox hard ceilings: ${JSON.stringify(DEFAULT_WORKBENCH_BROKER_LIMITS)}`);
-        console.log("Run 0 or 0 console. All agents, tools and the browser execute inside this workbench VM.");
+        console.log("Run 0 console or 0 web. Terminal/browser controls stay on the host; selected agent work executes inside SmolVM.");
       } catch (error) {
         console.error(error instanceof Error ? error.message : String(error));
         process.exitCode = 2;
@@ -155,7 +158,7 @@ export function registerWorkbenchCommand(program: Command): void {
       }
     });
   workbench.command("providers").description("List explicit provider grant IDs; credentials are never displayed")
-    .action(() => { for (const provider of PROVIDERS) console.log(`${provider.id.padEnd(16)} ${provider.label}`); });
+    .action(() => { for (const provider of PROVIDERS.filter(provider => provider.id === "chatgpt-codex")) console.log(`${provider.id.padEnd(16)} ${provider.label}`); });
   workbench.command("configure")
     .description("Change saved integration grants or return workspace selection to the invocation directory")
     .addOption(new Option("--provider <ids>", "Replace provider grants with comma-separated IDs, or none"))

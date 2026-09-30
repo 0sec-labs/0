@@ -19,6 +19,7 @@ import {
 import { readToolCallNames } from "@0/core";
 import { presentationEventBus } from "../presentation/event-bus.js";
 import { buildFindingConsoleCommand } from "../finding-handoff.js";
+import { workbenchStatus } from "./workbench.js";
 import { ConsoleGateway, ConsoleGatewayError } from "../web/console-gateway.js";
 import { WebOperatorServices } from "../web/operator-services.js";
 import { WebWorkflowService } from "../web/workflows.js";
@@ -1179,6 +1180,7 @@ async function handleWebConsoleApiRequest(
   const path = requestUrl.pathname.slice("/api/console/".length);
   const input = method === "GET" || method === "HEAD" ? undefined : await readJson(req);
   try {
+    if (path === "execution" && method === "GET") { json(res, 200, await workbenchStatus()); return true; }
     if (path === "github" && method === "GET") { json(res, 200, { github: await github.status() }); return true; }
     if (path === "github/connect" && method === "POST") { json(res, 200, { github: await github.connect(input) }); return true; }
     if (path === "github/device-auth" && method === "POST") { json(res, 202, { github: await github.start() }); return true; }

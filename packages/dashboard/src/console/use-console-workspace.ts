@@ -42,7 +42,7 @@ function applyEvents(snapshot: ConsoleSessionSnapshot, events: DesktopConsoleEve
     retained.set(event.sequence, event);
     switch (event.type) {
       case "user": next = { ...next, lastOutcome: null, stagedPrompt: undefined }; break;
-      case "session": next = { ...next, session: event.session, title: event.session.title ?? next.title }; break;
+      case "session": next = { ...next, session: event.session, execution: event.session.execution ?? next.execution, title: event.session.title ?? next.title }; break;
       case "decision": next = { ...next, pendingDecisions: [...next.pendingDecisions.filter((item) => item.id !== event.decision.id), event.decision] }; break;
       case "decision-resolved": next = { ...next, pendingDecisions: next.pendingDecisions.filter((item) => item.id !== event.decisionId) }; break;
       case "worker": {

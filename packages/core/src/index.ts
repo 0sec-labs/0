@@ -2535,3 +2535,5 @@ export type {
 
 export { startWorkbenchBroker, runWorkbenchBrokerProgram, isAdmittedSmolvmWorkbench, resolveWorkbenchBrokerImage, getWorkbenchBrokerLimits, DEFAULT_WORKBENCH_BROKER_LIMITS, WORKBENCH_BROKER_WORKSPACE } from "./runtime/smolvm-broker.js";
 export type { WorkbenchBrokerProgram, WorkbenchBrokerLimits, WorkbenchBrokerImage, WorkbenchBrokerOptions, WorkbenchBrokerController, WorkbenchBrokerAdmission } from "./runtime/smolvm-broker.js";
+export { createWorkbenchProviderBroker, DEFAULT_WORKBENCH_PROVIDER_LIMITS } from "./runtime/workbench-provider-broker.js";
+export type { WorkbenchProviderRequest, WorkbenchProviderLimits, WorkbenchProviderGrant, WorkbenchProviderBrokerOptions, WorkbenchProviderBroker } from "./runtime/workbench-provider-broker.js";

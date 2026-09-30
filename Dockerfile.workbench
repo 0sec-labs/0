@@ -1,9 +1,10 @@
 # syntax=docker/dockerfile:1.7
-# Build the complete online workbench, not the separate offline execution sandbox.
-# First build packages/core/docker/Dockerfile.kali as 0-kali:local, then:
-# docker build -f Dockerfile.workbench --build-arg KALI_IMAGE=0-kali:local -t 0-workbench:local .
-# Provisioning may use Docker; the resulting archive runs directly in SmolVM.
-ARG KALI_IMAGE=0-kali:local
+# Current CLI, provider CLIs and browser in curated Linux ARM64 workbench profiles.
+# Plan without downloads: node scripts/build-workbench-image.mjs --profile core-web
+# Explicit build/export: add --build --archive /absolute/path/workbench.tar
+# Kali is opt-in and requires a pre-provisioned immutable base (see architecture doc).
+ARG WORKBENCH_BASE=debian-base
+ARG KALI_IMAGE=scratch
 FROM node:24.21.0-bookworm@sha256:64af3819f9275802414d7cdc38c27e9d82bd564dec4d4da87d008255d36c63b4 AS node-runtime
 
 FROM node-runtime AS native-deps
@@ -35,23 +36,36 @@ RUN npm ci --omit=dev --no-audit --no-fund \
     && npm rebuild tree-sitter tree-sitter-c --build-from-source --no-audit --no-fund \
     && node -e 'const Parser=require("tree-sitter"); const parser=new Parser(); parser.setLanguage(require("tree-sitter-c")); const root=parser.parse("int workbench(void) { return 24; }").rootNode; if(root.hasError || root.namedChild(0)?.type!=="function_definition") process.exit(1); console.log("published native C parser:", root.toString());'
 
-FROM ${KALI_IMAGE} AS workbench-base
+FROM node:24.21.0-bookworm-slim@sha256:24b8bc17702002d2ed0c1da9ad66c3ee507cc279d0856726662ff2b6fc35c149 AS debian-base
 USER root
 ARG DEBIAN_FRONTEND=noninteractive
-ARG TARGETARCH
-# Keep the entire Kali inventory. Add only browser runtime dependencies and the
-# public CLI's source discovery utility; apt package signatures remain enforced.
-RUN apt-get update -qq \
-    && apt-get install -y --no-install-recommends \
-        unzip ripgrep python3-pkg-resources fonts-liberation \
-        libatk1.0-0t64 libatk-bridge2.0-0t64 libnspr4 libnss3 \
-        libx11-6 libxcomposite1 libxdamage1 libxext6 libxfixes3 libxrandr2 \
-        libgbm1 libxcb1 libxkbcommon0 libpango-1.0-0 libcairo2 libasound2t64 libdrm2 libcups2t64 \
+ARG TOOLBOX_PROFILE=core-web
+# Freeze OS dependencies to a dated archive. Disabling expiry for a historical
+# Release file does not disable repository signatures or package checksums.
+COPY --from=node-runtime /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY scripts/workbench-profiles.json scripts/workbench-profile.mjs scripts/install-workbench-profile.mjs /opt/0-build/
+RUN rm -f /etc/apt/sources.list.d/debian.sources \
+    && printf '%s\n' \
+      'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260929T000000Z/ bookworm main' \
+      'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20260929T000000Z/ bookworm-security main' > /etc/apt/sources.list \
+    && apt-get update -qq \
+    && node /opt/0-build/install-workbench-profile.mjs "$TOOLBOX_PROFILE" \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+COPY scripts/provision-foxguard.sh /opt/0-build/provision-foxguard.sh
+RUN sh /opt/0-build/provision-foxguard.sh
+
+# No apt/pip bootstrap here: the supplied pinned Kali image must already have
+# required tools, Python modules and browser libraries; inventory fails if absent.
+FROM ${KALI_IMAGE} AS kali-base
+USER root
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 COPY --from=node-runtime /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
-RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
-    && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+
+FROM ${WORKBENCH_BASE} AS workbench-base
+ARG TARGETARCH
+RUN test "$TARGETARCH" = arm64
 # Release digests are vendor-published GitHub asset SHA256s, not downloaded
 # alongside the executable. The Bun version matches the native release compiler.
 RUN set -eux; \
@@ -79,7 +93,13 @@ RUN --mount=type=cache,id=0-workbench-agent-clis,target=/root/.npm \
 FROM workbench-base AS workbench
 COPY --from=builder /app/dist /opt/0
 COPY --from=agent-clis /opt/0-agent-clis /opt/0-agent-clis
-COPY scripts/workbench-tools.json /usr/local/share/0/workbench-tools.json
+ARG TOOLBOX_PROFILE=core-web
+ARG SOURCE_REVISION
+ARG BASE_IMAGE
+ENV ZERO_WORKBENCH_PROFILE=$TOOLBOX_PROFILE \
+    ZERO_WORKBENCH_SOURCE_REVISION=$SOURCE_REVISION \
+    ZERO_WORKBENCH_BASE_IMAGE=$BASE_IMAGE
+COPY scripts/workbench-tools.json scripts/workbench-profiles.json scripts/workbench-profile.mjs scripts/workbench-inventory.mjs /usr/local/share/0/
 ENV NODE_ENV=production \
     HOME=/home/zero \
     TERM=xterm-256color \
@@ -93,12 +113,16 @@ RUN HOME=/root npx --no-install playwright install chromium \
     && ln -s /opt/0-agent-clis/node_modules/.bin/claude /usr/local/bin/claude \
     && ln -s /opt/0-agent-clis/node_modules/.bin/codex /usr/local/bin/codex \
     && ln -s /opt/0-agent-clis/node_modules/.bin/gemini /usr/local/bin/gemini \
-    && test "$(id -u pentester)" = 1000 \
-    && test "$(id -g pentester)" = 1000 \
-    && usermod -l zero -d /home/zero -m pentester \
-    && groupmod -n zero pentester \
+    && old_user="$(getent passwd 1000 | cut -d: -f1)" \
+    && old_group="$(getent group 1000 | cut -d: -f1)" \
+    && test -n "$old_user" && test -n "$old_group" \
+    && usermod -l zero -d /home/zero -m "$old_user" \
+    && groupmod -n zero "$old_group" \
     && install -d -o zero -g zero /workspace /work /home/zero/.0 \
-    && install -d -m 0755 /run/0-workbench
+    && install -d -m 0755 /run/0-workbench \
+    && runuser -u zero -- node /usr/local/share/0/workbench-inventory.mjs /tmp/workbench-tool-inventory.json \
+    && install -m 0444 /tmp/workbench-tool-inventory.json /usr/local/share/0/workbench-tool-inventory.json \
+    && rm /tmp/workbench-tool-inventory.json
 USER 1000:1000
 WORKDIR /workspace
 ENTRYPOINT []

@@ -28,6 +28,7 @@ import {
   type WireBlock,
 } from "./prompt-cache.js";
 import type { CodexCatalogModel } from "./codex-models.js";
+import { resolveWorkbenchProviderProxy } from "./workbench-provider-proxy.js";
 
 
 /**
@@ -2039,6 +2040,13 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
   wireApi: WireApi;
   reasoningEffort?: string;
 } {
+  const proxy = resolveWorkbenchProviderProxy(env);
+  if (proxy) {
+    if ([configProvider, env.ZERO_SELECTED_PROVIDER, env.ZERO_FORCE_PROVIDER].some(provider => provider && provider !== "chatgpt-codex")) {
+      throw new Error("Workbench provider broker supports chatgpt-codex only; no fallback is permitted");
+    }
+    return { provider: "chatgpt-codex", apiKey: "", baseUrl: proxy.url, defaultModel: proxy.model, wireApi: "responses" };
+  }
   if (configProvider !== undefined && !Object.hasOwn(DEFAULT_PROVIDER_MODELS, configProvider)) {
     throw new Error(`RuntimeConfig.provider is unsupported: ${configProvider}`);
   }
@@ -2427,6 +2435,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   // Not readonly: a live provider switch re-freezes env from the new account.
   private env!: Readonly<NodeJS.ProcessEnv>;
   private codexAuthState?: ChatGptCodexAuthState;
+  private workbenchProviderProxy?: { url: string; model: string };
   private geminiAuthState?: GeminiCodeAssistAuthState;
   private provider!: ApiProvider;
   private apiKey!: string;
@@ -2462,6 +2471,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         timeout: Math.min(timeout, inherited.config.timeout || 120_000),
       };
       this.env = inherited.env;
+      this.workbenchProviderProxy = inherited.workbenchProviderProxy;
       this.provider = inherited.provider;
       this.apiKey = inherited.apiKey;
       this.baseUrl = inherited.baseUrl;
@@ -2498,8 +2508,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       ...(config.agentModels ? { agentModels: Object.freeze({ ...config.agentModels }) } : {}),
     };
     this.env = Object.freeze({ ...process.env, ...config.env });
+    this.workbenchProviderProxy = resolveWorkbenchProviderProxy(this.env);
     this.azureConfig = parseCodexAzureConfig(this.env);
-    this.fallbackChain = getFallbackChain(this.env).map(entry => ({
+    this.fallbackChain = (this.workbenchProviderProxy ? [] : getFallbackChain(this.env)).map(entry => ({
       ...entry, credentials: resolveFailoverProvider(entry.provider, entry.model, this.env),
     }));
     this.fallbackIndex = 0;
@@ -2513,7 +2524,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     // Clear any prior codex auth so a switch away from ChatGPT Codex cannot
     // carry a stale OAuth state; re-resolve only when the new route needs it.
     this.codexAuthState = undefined;
-    if (this.provider === "chatgpt-codex" || this.fallbackChain.some(entry => entry.provider === "chatgpt-codex")) {
+    if (!this.workbenchProviderProxy && (this.provider === "chatgpt-codex" || this.fallbackChain.some(entry => entry.provider === "chatgpt-codex"))) {
       if (readChatGptCodexEnv(this.env) || readChatGptCodexAuthFile(this.env)) {
         this.codexAuthState = resolveChatGptCodexAuthState(this.env);
       }
@@ -2624,10 +2635,25 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
 
   /** Discover models using this runtime's captured account, including after a separate login changes. */
   async codexModelCatalog(signal?: AbortSignal): Promise<CodexCatalogModel[]> {
+    if (this.workbenchProviderProxy) {
+      signal?.throwIfAborted();
+      return [{ id: this.workbenchProviderProxy.model }];
+    }
     const state = this.codexAuthState;
     if (this.provider !== "chatgpt-codex" || !state) throw new Error("No active Codex subscription");
     const { loadCodexModelCatalog } = await import("./codex-models.js");
     return loadCodexModelCatalog({ signal, resolveCredentials: () => refreshChatGptCodexAuthState(state) });
+  }
+
+  /** Host-only inference grant bound to this captured account, including after
+   * later logins or runtime reconfiguration. Never serialize the closure or
+   * its result into guest admission, workspace files or environment. */
+  workbenchCredentialResolver(): () => Promise<{ accessToken: string; accountId?: string }> {
+    const state = this.codexAuthState;
+    if (this.workbenchProviderProxy || this.provider !== "chatgpt-codex" || !state) {
+      throw new Error("Host workbench credential broker requires a captured chatgpt-codex account");
+    }
+    return () => refreshChatGptCodexAuthState(state);
   }
 
 
@@ -2718,6 +2744,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
    * failover chain uses — including auth-only providers (chatgpt-codex OAuth).
    */
   accessibleProviders(): ApiProvider[] {
+    if (this.workbenchProviderProxy) return ["chatgpt-codex"];
     const out: ApiProvider[] = [];
     for (const provider of Object.keys(DEFAULT_PROVIDER_MODELS) as ApiProvider[]) {
       const probeModel = DEFAULT_PROVIDER_MODELS[provider] || "probe";
@@ -2734,6 +2761,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
    * provider has creds, so this is a helpful starting set, not the whole bound.
    */
   accessibleModels(): string[] {
+    if (this.workbenchProviderProxy) return [this.workbenchProviderProxy.model];
     const models = new Set<string>();
     if (this.model) models.add(this.model);
     for (const provider of this.accessibleProviders()) {
@@ -2750,6 +2778,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
    * accessible defaults as a fallback for ids the router does not pattern-match.
    */
   private isModelAccessible(model: string): boolean {
+    if (this.workbenchProviderProxy) return this.accessibleModels().includes(model);
     if (providerForModel(model, this.env) !== undefined) return true;
     return this.accessibleModels().includes(model);
   }
@@ -3409,7 +3438,10 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         // provider config / ZERO_* env), never user/attacker input; same
         // trusted endpoint the client already POSTed to, now wrapped in retry.
         // foxguard: ignore[js/no-ssrf]
-        res = await fetch(this.buildUrl(), {
+        res = this.workbenchProviderProxy ? await fetch(this.workbenchProviderProxy.url, {
+          method: "POST", redirect: "error", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ provider: this.provider, model: this.model, body: bodyFactory() }), signal,
+        }) : await fetch(this.buildUrl(), {
           method: "POST",
           headers: await this.ensureFreshHeaders(),
           body: bodyFactory(),
@@ -3598,6 +3630,16 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     const start = Date.now();
     if (context?.signal?.aborted) {
       return { output: "", exitCode: null, timedOut: false, durationMs: 0, error: "API execution cancelled." };
+    }
+    if (this.workbenchProviderProxy) {
+      const result = await this.executeNative(context?.systemPrompt ?? "", [
+        { role: "user", content: [{ type: "text", text: prompt }] },
+      ], [], undefined, context?.signal);
+      return {
+        output: result.content.filter((block): block is Extract<NativeContentBlock, { type: "text" }> => block.type === "text").map(block => block.text).join("\n"),
+        exitCode: result.cancelled ? null : result.stopReason === "error" ? 1 : 0,
+        timedOut: false, durationMs: Date.now() - start, usage: result.usage, error: result.error,
+      };
     }
 
     // chatgpt-codex and google (Code Assist) authenticate via an OAuth bearer
@@ -5114,6 +5156,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   }
 
   async isAvailable(): Promise<boolean> {
+    if (this.workbenchProviderProxy) return true;
     // Credential presence only; this does not promise provider readiness or funds.
     if (this.provider === "chatgpt-codex") {
       return this.codexAuthState !== undefined;

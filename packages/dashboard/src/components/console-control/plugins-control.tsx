@@ -1,7 +1,7 @@
 import { ControlDisclosure } from "./control-disclosure";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Blocks, Check as CheckIcon, ChevronDown, Palette, RefreshCcw, Search } from "lucide-react";
+import { Blocks, Palette, RefreshCcw, Search } from "lucide-react";
 import { webFetchJson } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,19 +17,9 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
   const queryClient = useQueryClient();
   const inventory = useQuery({ queryKey: ["console-plugins"], queryFn: ({ signal }) => webFetchJson<PluginsResponse>("/api/console/plugins", { signal }), refetchInterval: 5000 });
   const [filter, setFilter] = useState("");
-  const [selectedId, setSelectedId] = useState("");
   const [confirmation, setConfirmation] = useState<{ action: "install" | "enable" | "run"; item: PluginItem } | null>(null);
   const [technicalMessage, setTechnicalMessage] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  useEffect(() => {
-    const entries = inventory.data?.items;
-    if (entries?.length && !entries.some(entry => `${entry.kind}:${entry.id}` === selectedId)) {
-      setSelectedId(`${entries[0].kind}:${entries[0].id}`);
-    }
-  }, [inventory.data?.items, selectedId]);
-  const item = inventory.data?.items.find(entry => `${entry.kind}:${entry.id}` === selectedId);
-  const identity = item ? JSON.stringify([item.kind, item.id, item.version, item.capabilities]) : "";
-  useEffect(() => { setMessage(null); setTechnicalMessage(null); }, [identity]);
   const mutate = useMutation({ mutationFn: async ({ action, target, approved = false }: { action: "install" | "enable" | "disable" | "run" | "theme"; target: PluginItem; approved?: boolean }) => {
     if (action === "theme") {
       const result = await webFetchJson<SettingsResponse>("/api/console/settings", { method: "PATCH", body: JSON.stringify({ key: "theme", value: target.id, scope: "global" }) });
@@ -55,7 +45,6 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
     setMessage(action === "enable" ? result.deferred ? "Enabled. Loading after the current response finishes." : "Enabled." : action === "disable" ? "Disabled for new sessions." : action === "install" ? "Installed." : action === "theme" ? "Theme applied." : result.deferred ? "Loading is waiting for the current response to finish." : "Loaded.");
   }, onError: () => { void inventory.refetch(); } });
   const requestConfirmation = (action: "install" | "enable" | "run", target: PluginItem) => { mutate.reset(); setConfirmation({ action, item: target }); };
-  const description = item?.description && !inventory.data?.host.tools.some(tool => tool.name === item.description) && !/^[a-z][a-z0-9_]*(?:, [a-z][a-z0-9_]*)+$/.test(item.description) && !/^[a-z][a-z0-9]*_[a-z0-9_]+$/.test(item.description) ? item.description : "";
   const items = inventory.data?.items.filter(entry => `${entry.name} ${entry.id} ${entry.description}`.toLowerCase().includes(filter.toLowerCase())) ?? [];
   return <div className="space-y-6">
     <div className="space-y-3">
@@ -73,34 +62,33 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
     {inventory.data && <>
       {inventory.data.registry.error ? <Feedback error={inventory.data.registry.error} /> : !inventory.data.registry.available && <Feedback error="The plugin registry is offline. Installed plugins are still listed below." />}
       {items.length === 0 ? <div className="space-y-2 py-8 text-sm text-muted-foreground"><p>{filter.trim() ? "No plugins or themes match your search." : "No plugins or themes available."}</p>{filter && <Button variant="ghost" size="sm" onClick={() => setFilter("")}>Clear search</Button>}</div> :
-        <div className="grid items-start gap-6 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-          <div className="min-w-0 space-y-1" aria-label="Plugins and themes">
-            {items.map(entry => {
-              const selected = item?.id === entry.id && item?.kind === entry.kind;
-              const Icon = entry.kind === "theme" ? Palette : Blocks;
-              return <button key={`${entry.kind}:${entry.id}`} type="button" onClick={() => { setSelectedId(`${entry.kind}:${entry.id}`); mutate.reset(); }} disabled={mutate.isPending} className={`flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition-colors motion-reduce:transition-none focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 disabled:opacity-50 ${selected ? "bg-muted" : "hover:bg-muted/60"}`} aria-pressed={selected}>
-                <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{entry.name}</p><p className="mt-1 text-xs text-muted-foreground">{entry.kind === "theme" ? "Theme" : "Plugin"} · {entry.version}</p><Badge variant="outline" className="mt-2 text-xs">{entry.state}</Badge></div>
-                {selected && <CheckIcon className="mt-0.5 size-4 shrink-0" />}
-              </button>;
-            })}
-          </div>
-          {item && <section className="min-w-0 space-y-4" aria-label={`${item.name} details`}>
-            <div><h3 className="text-base font-medium">{item.name}</h3>{description && <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{description}</p>}</div>
+        <div className="space-y-4" aria-label="Plugins and themes">
+          {items.map(item => {
+            const Icon = item.kind === "theme" ? Palette : Blocks;
+            const feedbackForItem = mutate.variables?.target.id === item.id && mutate.variables?.target.kind === item.kind;
+            const description = item?.description && !inventory.data?.host.tools.some(tool => tool.name === item.description) && !/^[a-z][a-z0-9_]*(?:, [a-z][a-z0-9_]*)+$/.test(item.description) && !/^[a-z][a-z0-9]*_[a-z0-9_]+$/.test(item.description) ? item.description : "";
+            return <section key={`${item.kind}:${item.id}`} className="min-w-0 space-y-4 rounded-2xl border border-foreground/10 p-4" aria-label={item.name}>
+            <div className="flex items-start gap-3">
+              <Icon aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
+              <div className="min-w-0 flex-1"><h3 className="text-sm font-medium">{item.name}</h3><p className="mt-1 text-xs text-muted-foreground">{item.kind === "theme" ? "Theme" : "Plugin"} · {item.version}</p></div>
+              <Badge variant="outline" className="shrink-0 text-xs">{item.state}</Badge>
+            </div>
+            {description && <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>}
             {item.error && <Feedback error={item.error} />}
             {item.state === "available" && <SubmitButton pending={mutate.isPending} disabled={!inventory.data.registry.available || Boolean(item.error)} onClick={event => { confirmationTrigger.current = event.currentTarget; requestConfirmation("install", item); }}>Install {item.kind}</SubmitButton>}
-            {item.kind === "plugin" && item.state !== "available" && <div className="flex items-center justify-between gap-4 rounded-xl bg-muted/40 p-3"><div><p className="text-sm font-medium">Enable plugin</p><p className="mt-1 text-xs text-muted-foreground">{item.state === "enabled" ? inventory.data.deferred.includes(item.id) ? "Loading when the current response finishes." : item.loaded ? "Ready for new sessions." : "Enabled for new sessions." : "Off for new sessions."}</p></div><Switch onClick={event => { confirmationTrigger.current = event.currentTarget; }} aria-label={`Enable ${item.name}`} checked={item.state === "enabled"} disabled={mutate.isPending || (Boolean(item.error) && item.state !== "enabled")} onCheckedChange={checked => checked ? requestConfirmation("enable", item) : mutate.mutate({ action: "disable", target: item })} /></div>}
+            {item.kind === "plugin" && item.state !== "available" && <div className="flex items-center justify-between gap-4 border-t border-foreground/5 pt-4"><div><p className="text-sm font-medium">Enable plugin</p><p className="mt-1 text-xs text-muted-foreground">{item.state === "enabled" ? inventory.data.deferred.includes(item.id) ? "Loading when the current response finishes." : item.loaded ? "Ready for new sessions." : "Enabled for new sessions." : "Off for new sessions."}</p></div><Switch onClick={event => { confirmationTrigger.current = event.currentTarget; }} aria-label={`Enable ${item.name}`} checked={item.state === "enabled"} disabled={mutate.isPending || (Boolean(item.error) && item.state !== "enabled")} onCheckedChange={checked => checked ? requestConfirmation("enable", item) : mutate.mutate({ action: "disable", target: item })} /></div>}
             {item.kind === "theme" && item.state === "installed" && <SubmitButton pending={mutate.isPending} onClick={() => mutate.mutate({ action: "theme", target: item })}>Use theme</SubmitButton>}
             {item.kind === "theme" && item.state === "active" && <p role="status" className="text-sm text-muted-foreground">In use. Change it in Settings.</p>}
-            <Feedback error={mutate.error} message={message} />
-            <ControlDisclosure className="group p-3" title={<><ChevronDown className="size-4 transition-transform group-open:rotate-180 motion-reduce:transition-none" />Plugin information</>}><div className="mt-4 space-y-4"><Facts entries={[["ID", item.id], ["Version", item.version], ["Signature", item.signature], ["Status", item.state], ["Loaded in current host", item.loaded ? "Yes" : "No"]]} />
+            {feedbackForItem && <Feedback error={mutate.error} message={message} />}
+            <ControlDisclosure title={item.kind === "theme" ? "Theme details" : "Permissions and details"}><div className="mt-4 space-y-4"><Facts entries={[["ID", item.id], ["Version", item.version], ["Signature", item.signature], ["Status", item.state], ["Loaded in current host", item.loaded ? "Yes" : "No"]]} />
               {item.kind === "plugin" && <div><p className="text-xs text-muted-foreground">Permissions</p>{item.capabilities.length ? <ul className="mt-2 list-inside list-disc space-y-1 text-sm break-words">{item.capabilities.map(capability => <li key={capability}>{capability}</li>)}</ul> : <p className="mt-1 text-sm">No extra permissions.</p>}</div>}
               {item.kind === "plugin" && item.state === "enabled" && !item.loaded && <div className="space-y-2"><p className="text-xs leading-5 text-muted-foreground">Enabling saves your preference. Loading executes plugin code in the local host; an active response may defer it.</p><Button variant="secondary" disabled={mutate.isPending} onClick={event => { confirmationTrigger.current = event.currentTarget; requestConfirmation("run", item); }}>Load plugin</Button></div>}
-              {technicalMessage && <p className="text-xs leading-5 text-muted-foreground">{technicalMessage}</p>}
+              {feedbackForItem && technicalMessage && <p className="text-xs leading-5 text-muted-foreground">{technicalMessage}</p>}
             </div></ControlDisclosure>
-          </section>}
+          </section>;
+          })}
         </div>}
-      <ControlDisclosure className="group p-3" title={<><ChevronDown className="size-4 transition-transform group-open:rotate-180 motion-reduce:transition-none" />Registry information</>}><div className="mt-4 space-y-4"><Facts entries={[["Registry", inventory.data.registry.url], ["Loaded plugins", inventory.data.host.loadedPluginIds.length ? inventory.data.host.loadedPluginIds.join(", ") : "None"], ["Waiting to load", inventory.data.deferred.length ? inventory.data.deferred.join(", ") : "None"]]} />
+      <ControlDisclosure title="Registry details"><div className="mt-4 space-y-4"><Facts entries={[["Registry", inventory.data.registry.url], ["Loaded plugins", inventory.data.host.loadedPluginIds.length ? inventory.data.host.loadedPluginIds.join(", ") : "None"], ["Waiting to load", inventory.data.deferred.length ? inventory.data.deferred.join(", ") : "None"]]} />
         {inventory.data.host.tools.length > 0 && <div className="space-y-3"><p className="text-xs text-muted-foreground">Plugin tools</p><ul className="space-y-3">{inventory.data.host.tools.map(tool => <li key={tool.name}><p className="text-sm font-medium">{tool.name}</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{tool.description}</p></li>)}</ul></div>}
       </div></ControlDisclosure>
     </>}
