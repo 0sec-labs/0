@@ -17,24 +17,23 @@ import { Markdown } from "./markdown";
 import { ComposerPickerSurface, IntegrationPicker, useIntegrationPicker } from "./integration-picker";
 import { ActivityIndicator, LoadingDots } from "./loading-state";
 import { ApprovalPanel } from "./approvals";
+import { ActivityRow } from "./activity-row";
+import { toolCallStatus } from "./tool-call-status";
 import { reduceConversation, type ToolCallState } from "./transcript";
 import type { ConsoleWorkspace } from "./use-console-workspace";
 
 export function ToolResult({ call }: { call: ToolCallState }) {
   const argumentsText = useMemo(() => typeof call.arguments === "string" ? call.arguments : JSON.stringify(call.arguments, null, 2) ?? "", [call.arguments]);
   const resultText = useMemo(() => typeof call.result === "string" ? call.result : JSON.stringify(call.result, null, 2) ?? "", [call.result]);
+  const status = toolCallStatus(call);
   return (
-    <details className="my-2 rounded-lg border border-border bg-muted/20">
-      <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-xs font-medium">
-        <Wrench className="size-3.5 shrink-0" /><span className="min-w-0 break-all">{call.name}</span>
-        <span className="ml-auto whitespace-nowrap text-muted-foreground">{call.isRunning ? "Running…" : call.result === undefined ? "Stopped" : "Done"}</span>
-      </summary>
-      <div className="space-y-3  p-3 text-xs">
-        <div><div className="mb-1 text-muted-foreground">Input</div><pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words font-mono">{argumentsText}</pre></div>
-        {call.result !== undefined && <div><div className="mb-1 text-muted-foreground">Output</div><pre className="max-h-[32rem] overflow-auto whitespace-pre-wrap break-words font-mono">{resultText}</pre></div>}
+    <ActivityRow icon={<Wrench />} title={call.name} status={status} running={call.isRunning} failed={status === "Error"}>
+      <div className="space-y-3">
+        <div><div className="mb-1 text-muted-foreground">Input</div><pre tabIndex={0} aria-label={`${call.name} input`} className="max-h-96 overflow-auto whitespace-pre-wrap break-words font-mono">{argumentsText}</pre></div>
+        {call.result !== undefined && <div><div className="mb-1 text-muted-foreground">Output</div><pre tabIndex={0} aria-label={`${call.name} output`} className="max-h-[32rem] overflow-auto whitespace-pre-wrap break-words font-mono">{resultText}</pre></div>}
         {call.isRunning && <ActivityIndicator label="Running tool…" />}
       </div>
-    </details>
+    </ActivityRow>
   );
 }
 
@@ -104,7 +103,7 @@ export function Conversation({ workspace, worker, onResolve, onSubmit, onStop, r
             {turn.user.text && <div className="ml-auto max-w-[92%] rounded-2xl rounded-br-sm bg-muted/50 px-4 py-3 text-sm whitespace-pre-wrap break-words">{turn.user.text}</div>}
             {turn.reasoningText && <details className="rounded-lg border border-border bg-muted/10 p-3 text-xs"><summary className="cursor-pointer text-muted-foreground">Reasoning</summary><div className="mt-3 whitespace-pre-wrap leading-6">{turn.reasoningText}</div></details>}
             {turn.toolCalls.map((call) => <ToolResult key={call.id} call={call} />)}
-            {turn.decisions.filter((decision) => decision.resolved).map((decision) => <details key={decision.id} className="rounded-lg border border-border p-3 text-xs"><summary className="cursor-pointer text-muted-foreground">{decision.title} · {decision.approved === undefined ? "closed" : decision.approved ? "approved" : "declined"}</summary><div className="mt-3"><ApprovalPanel decision={decision} busy={workspace.busy} onResolve={(response) => onResolve(decision.id, response)} /></div></details>)}
+            {turn.decisions.filter((decision) => decision.resolved).map((decision) => <ActivityRow key={decision.id} icon={<ShieldCheck />} title={`${decision.title} · ${decision.approved === undefined ? "closed" : decision.approved ? "approved" : "declined"}`} status=""><ApprovalPanel decision={decision} busy={workspace.busy} onResolve={(response) => onResolve(decision.id, response)} /></ActivityRow>)}
             {turn.assistantText && <Markdown text={turn.assistantText} />}
             {turn.notices.map((notice, index) => <p key={index} className="border-l-2 border-border pl-3 text-xs whitespace-pre-wrap text-muted-foreground">{notice}</p>)}
             {turn.error && <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm whitespace-pre-wrap text-destructive">{consoleErrorMessage(turn.error)}{needsProviderSignIn(turn.error) && <Button asChild variant="default" size="sm" className="mt-3 flex w-fit"><Link to={`/connections?session=${snapshot.session.id}&return=${encodeURIComponent(`/console/${snapshot.session.id}`)}`}>Manage connection</Link></Button>}</div>}
