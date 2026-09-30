@@ -23,7 +23,7 @@ export function AppShell({ children, onOpenPalette }: { children: ReactNode; onO
   const { panel, dismissPanel } = useDashboardPanel();
   // The conversation already owns this shared rail and its session sidebar.
   if (pathname.startsWith("/console")) return <>{children}</>;
-  return <SharedWorkspaceLayout title={pageTitle(pathname)} onNew={() => navigate("/console?new=1")} onSearch={() => navigate("/console?search=1")} onOpenPalette={onOpenPalette}>
+  return <SharedWorkspaceLayout title={pageTitle(pathname)} onNew={() => navigate("/console?new=1")} onOpenPalette={onOpenPalette}>
     {children}
     <Sheet open={Boolean(panel)} onOpenChange={(open) => { if (!open) dismissPanel(); }}>
       <SheetContent side="right" className="w-full overflow-y-auto p-0 sm:max-w-2xl">

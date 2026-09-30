@@ -1,21 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Blocks, Check as CheckIcon, ChevronDown, Palette, RefreshCcw, Search } from "lucide-react";
 import { webFetchJson } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { LoadingDots } from "@/console/loading-state";
-import { Check, Facts, Feedback, SubmitButton, jsonBody } from "./control-ui";
-import type { PluginResult, PluginsResponse, SettingsResponse } from "./contracts";
+import { Facts, Feedback, SubmitButton, jsonBody } from "./control-ui";
+import type { PluginItem, PluginResult, PluginsResponse, SettingsResponse } from "./contracts";
 
 export function PluginsControl({ sessionId }: { sessionId?: string }) {
+  const confirmationTrigger = useRef<HTMLButtonElement | null>(null);
   const queryClient = useQueryClient();
   const inventory = useQuery({ queryKey: ["console-plugins"], queryFn: ({ signal }) => webFetchJson<PluginsResponse>("/api/console/plugins", { signal }), refetchInterval: 5000 });
   const [filter, setFilter] = useState("");
   const [selectedId, setSelectedId] = useState("");
-  const [capabilityApproval, setCapabilityApproval] = useState(false);
-  const [runApproval, setRunApproval] = useState(false);
+  const [confirmation, setConfirmation] = useState<{ action: "install" | "enable" | "run"; item: PluginItem } | null>(null);
+  const [technicalMessage, setTechnicalMessage] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   useEffect(() => {
     const entries = inventory.data?.items;
@@ -24,27 +27,34 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
     }
   }, [inventory.data?.items, selectedId]);
   const item = inventory.data?.items.find(entry => `${entry.kind}:${entry.id}` === selectedId);
-  const identity = item ? JSON.stringify([item.kind, item.id, item.version, item.capabilities, item.state]) : "";
-  useEffect(() => { setCapabilityApproval(false); setRunApproval(false); setMessage(null); }, [identity]);
-  const mutate = useMutation({ mutationFn: async (action: "install" | "enable" | "disable" | "run" | "theme") => {
-    if (!item) throw new Error("Select a plugin or theme first.");
+  const identity = item ? JSON.stringify([item.kind, item.id, item.version, item.capabilities]) : "";
+  useEffect(() => { setMessage(null); setTechnicalMessage(null); }, [identity]);
+  const mutate = useMutation({ mutationFn: async ({ action, target, approved = false }: { action: "install" | "enable" | "disable" | "run" | "theme"; target: PluginItem; approved?: boolean }) => {
     if (action === "theme") {
-      const result = await webFetchJson<SettingsResponse>("/api/console/settings", { method: "PATCH", body: JSON.stringify({ key: "theme", value: item.id, scope: "global" }) });
+      const result = await webFetchJson<SettingsResponse>("/api/console/settings", { method: "PATCH", body: JSON.stringify({ key: "theme", value: target.id, scope: "global" }) });
       if (result.persisted === false) throw new Error("Couldn't save the theme.");
       return { ok: true, message: "Theme applied." } satisfies PluginResult;
     }
-    if (action === "enable" && !capabilityApproval) throw new Error("Approve the permissions first.");
-    if (action === "run" && !runApproval) throw new Error("Allow running the plugin first.");
-    const payload = action === "install" ? { id: item.id, kind: item.kind }
-      : action === "enable" ? { id: item.id, approved: true, capabilities: item.capabilities, version: item.version }
-      : { id: item.id };
+    if ((action === "enable" || action === "run" || action === "install") && !approved) throw new Error("Confirm this action first.");
+    const payload = action === "install" ? { id: target.id, kind: target.kind }
+      : action === "enable" ? { id: target.id, approved: true, capabilities: target.capabilities, version: target.version }
+      : { id: target.id };
     const result = await webFetchJson<PluginResult>(`/api/console/plugins/${action}`, jsonBody(payload));
-    if (!result.ok) throw new Error(result.message);
+    if (!result.ok && !(action === "run" && result.deferred)) throw new Error(result.message);
+    if (action === "enable") {
+      const loaded = await webFetchJson<PluginResult>("/api/console/plugins/run", jsonBody({ id: target.id }));
+      if (!loaded.ok && !loaded.deferred) throw new Error(loaded.message);
+      return loaded;
+    }
     return result;
-  }, onSuccess: async result => {
-    setMessage(result.message); setCapabilityApproval(false); setRunApproval(false);
+  }, onSuccess: async (result, { action }) => {
     await Promise.all([inventory.refetch(), queryClient.invalidateQueries({ queryKey: ["console-themes"] }), queryClient.invalidateQueries({ queryKey: ["console-settings"] }), queryClient.invalidateQueries({ queryKey: ["console-tools"] })]);
-  } });
+    setConfirmation(null);
+    setTechnicalMessage(result.message);
+    setMessage(action === "enable" ? result.deferred ? "Enabled. Loading after the current response finishes." : "Enabled." : action === "disable" ? "Disabled for new sessions." : action === "install" ? "Installed." : action === "theme" ? "Theme applied." : result.deferred ? "Loading is waiting for the current response to finish." : "Loaded.");
+  }, onError: () => { void inventory.refetch(); } });
+  const requestConfirmation = (action: "install" | "enable" | "run", target: PluginItem) => { mutate.reset(); setConfirmation({ action, item: target }); };
+  const description = item?.description && !inventory.data?.host.tools.some(tool => tool.name === item.description) && !/^[a-z][a-z0-9_]*(?:, [a-z][a-z0-9_]*)+$/.test(item.description) && !/^[a-z][a-z0-9]*_[a-z0-9_]+$/.test(item.description) ? item.description : "";
   const items = inventory.data?.items.filter(entry => `${entry.name} ${entry.id} ${entry.description}`.toLowerCase().includes(filter.toLowerCase())) ?? [];
   return <div className="space-y-6">
     <div className="space-y-3">
@@ -75,21 +85,27 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
             })}
           </div>
           {item && <section className="min-w-0 space-y-4" aria-label={`${item.name} details`}>
-            <div><h3 className="text-base font-medium">{item.name}</h3>{item.description && <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{item.description}</p>}</div>
+            <div><h3 className="text-base font-medium">{item.name}</h3>{description && <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{description}</p>}</div>
             {item.error && <Feedback error={item.error} />}
-            {item.signature === "unverified" && <p className="rounded-xl bg-muted/40 p-3 text-sm leading-relaxed">Unverified signature. Only install if you trust the source.</p>}
-            {item.kind === "plugin" && <div className="space-y-2"><p className="text-sm font-medium">Permissions</p>{item.capabilities.length ? <ul className="list-inside list-disc space-y-1 rounded-xl bg-muted/40 p-3 text-sm break-words">{item.capabilities.map(capability => <li key={capability}>{capability}</li>)}</ul> : <p className="text-sm text-muted-foreground">No extra permissions.</p>}</div>}
-            {item.state === "available" && <SubmitButton pending={mutate.isPending} disabled={!inventory.data.registry.available} onClick={() => mutate.mutate("install")}>Install {item.kind}</SubmitButton>}
-            {item.kind === "plugin" && item.state === "installed" && <div className="space-y-3"><Check checked={capabilityApproval} onChange={setCapabilityApproval} disabled={mutate.isPending}>I allow {item.name} {item.version} these permissions.</Check><SubmitButton pending={mutate.isPending} disabled={!capabilityApproval} onClick={() => mutate.mutate("enable")}>Enable plugin</SubmitButton></div>}
-            {item.kind === "plugin" && item.state === "enabled" && <div className="space-y-3"><Check checked={runApproval} onChange={setRunApproval} disabled={mutate.isPending}>I allow this plugin's code to run.</Check><div className="flex flex-wrap gap-2"><SubmitButton pending={mutate.isPending} disabled={!runApproval} onClick={() => mutate.mutate("run")}>Run plugin</SubmitButton><Button variant="outline" disabled={mutate.isPending} onClick={() => mutate.mutate("disable")}>Disable plugin</Button></div></div>}
-            {item.kind === "theme" && item.state === "installed" && <SubmitButton pending={mutate.isPending} onClick={() => mutate.mutate("theme")}>Use theme</SubmitButton>}
+            {item.state === "available" && <SubmitButton pending={mutate.isPending} disabled={!inventory.data.registry.available || Boolean(item.error)} onClick={event => { confirmationTrigger.current = event.currentTarget; requestConfirmation("install", item); }}>Install {item.kind}</SubmitButton>}
+            {item.kind === "plugin" && item.state !== "available" && <div className="flex items-center justify-between gap-4 rounded-xl bg-muted/40 p-3"><div><p className="text-sm font-medium">Enable plugin</p><p className="mt-1 text-xs text-muted-foreground">{item.state === "enabled" ? inventory.data.deferred.includes(item.id) ? "Loading when the current response finishes." : item.loaded ? "Ready for new sessions." : "Enabled for new sessions." : "Off for new sessions."}</p></div><Switch onClick={event => { confirmationTrigger.current = event.currentTarget; }} aria-label={`Enable ${item.name}`} checked={item.state === "enabled"} disabled={mutate.isPending || (Boolean(item.error) && item.state !== "enabled")} onCheckedChange={checked => checked ? requestConfirmation("enable", item) : mutate.mutate({ action: "disable", target: item })} /></div>}
+            {item.kind === "theme" && item.state === "installed" && <SubmitButton pending={mutate.isPending} onClick={() => mutate.mutate({ action: "theme", target: item })}>Use theme</SubmitButton>}
             {item.kind === "theme" && item.state === "active" && <p role="status" className="text-sm text-muted-foreground">In use. Change it in Settings.</p>}
             <Feedback error={mutate.error} message={message} />
-            <details className="group p-3"><summary className="flex cursor-pointer list-none items-center gap-2 text-sm text-muted-foreground [&::-webkit-details-marker]:hidden"><ChevronDown className="size-4 transition-transform group-open:rotate-180 motion-reduce:transition-none" />Plugin information</summary><div className="mt-4"><Facts entries={[["ID", item.id], ["Version", item.version], ["Signature", item.signature], ["Status", item.state], ["Loaded", item.loaded ? "Yes" : "No"]]} /></div></details>
+            <details className="group p-3"><summary className="flex cursor-pointer list-none items-center gap-2 text-sm text-muted-foreground [&::-webkit-details-marker]:hidden"><ChevronDown className="size-4 transition-transform group-open:rotate-180 motion-reduce:transition-none" />Plugin information</summary><div className="mt-4 space-y-4"><Facts entries={[["ID", item.id], ["Version", item.version], ["Signature", item.signature], ["Status", item.state], ["Loaded in current host", item.loaded ? "Yes" : "No"]]} />
+              {item.kind === "plugin" && <div><p className="text-xs text-muted-foreground">Permissions</p>{item.capabilities.length ? <ul className="mt-2 list-inside list-disc space-y-1 text-sm break-words">{item.capabilities.map(capability => <li key={capability}>{capability}</li>)}</ul> : <p className="mt-1 text-sm">No extra permissions.</p>}</div>}
+              {item.kind === "plugin" && item.state === "enabled" && !item.loaded && <div className="space-y-2"><p className="text-xs leading-5 text-muted-foreground">Enabling saves your preference. Loading executes plugin code in the local host; an active response may defer it.</p><Button variant="secondary" disabled={mutate.isPending} onClick={event => { confirmationTrigger.current = event.currentTarget; requestConfirmation("run", item); }}>Load plugin</Button></div>}
+              {technicalMessage && <p className="text-xs leading-5 text-muted-foreground">{technicalMessage}</p>}
+            </div></details>
           </section>}
         </div>}
-      <details className="group p-3"><summary className="flex cursor-pointer list-none items-center gap-2 text-sm text-muted-foreground [&::-webkit-details-marker]:hidden"><ChevronDown className="size-4 transition-transform group-open:rotate-180 motion-reduce:transition-none" />Registry and loaded plugins</summary><div className="mt-4"><Facts entries={[["Registry", inventory.data.registry.url], ["Loaded plugins", inventory.data.host.loadedPluginIds.length ? inventory.data.host.loadedPluginIds.join(", ") : "None"], ["Waiting to load", inventory.data.deferred.length ? inventory.data.deferred.join(", ") : "None"]]} /></div></details>
-      {inventory.data.host.tools.length > 0 && <section className="space-y-3"><h2 className="text-sm font-medium">Plugin tools</h2><ul className="space-y-3">{inventory.data.host.tools.map(tool => <li key={tool.name}><p className="text-sm font-medium">{tool.name}</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{tool.description}</p></li>)}</ul></section>}
+      <details className="group p-3"><summary className="flex cursor-pointer list-none items-center gap-2 text-sm text-muted-foreground [&::-webkit-details-marker]:hidden"><ChevronDown className="size-4 transition-transform group-open:rotate-180 motion-reduce:transition-none" />Registry information</summary><div className="mt-4 space-y-4"><Facts entries={[["Registry", inventory.data.registry.url], ["Loaded plugins", inventory.data.host.loadedPluginIds.length ? inventory.data.host.loadedPluginIds.join(", ") : "None"], ["Waiting to load", inventory.data.deferred.length ? inventory.data.deferred.join(", ") : "None"]]} />
+        {inventory.data.host.tools.length > 0 && <div className="space-y-3"><p className="text-xs text-muted-foreground">Plugin tools</p><ul className="space-y-3">{inventory.data.host.tools.map(tool => <li key={tool.name}><p className="text-sm font-medium">{tool.name}</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{tool.description}</p></li>)}</ul></div>}
+      </div></details>
     </>}
+    <Dialog open={Boolean(confirmation)} onOpenChange={open => { if (!open && !mutate.isPending) { setConfirmation(null); mutate.reset(); } }}><DialogContent showCloseButton={!mutate.isPending} onCloseAutoFocus={event => { event.preventDefault(); confirmationTrigger.current?.focus(); }} onEscapeKeyDown={event => { if (mutate.isPending) event.preventDefault(); }} onInteractOutside={event => { if (mutate.isPending) event.preventDefault(); }}><DialogHeader><DialogTitle>{confirmation?.action === "enable" ? "Enable" : confirmation?.action === "run" ? "Load" : "Install"} {confirmation?.item.name}</DialogTitle><DialogDescription>{confirmation?.action === "enable" ? "Approve this version and its permissions, and allow its code to load in the local host. Existing sessions keep their current tools." : confirmation?.action === "run" ? "This runs the plugin's code in the local host. An active response may defer loading." : "Install this artifact from the configured registry."}</DialogDescription></DialogHeader>
+      {confirmation && <div className="space-y-3 text-sm"><p className="text-muted-foreground">{confirmation.item.name} {confirmation.item.version}</p>{confirmation.action === "install" && confirmation.item.signature === "unverified" && <p className="leading-6">The signature is unverified. Only install if you trust this source.</p>}{confirmation.item.kind === "plugin" && confirmation.action !== "run" && <div><p className="font-medium">Permissions</p>{confirmation.item.capabilities.length ? <ul className="mt-2 list-inside list-disc space-y-1 break-words">{confirmation.item.capabilities.map(capability => <li key={capability}>{capability}</li>)}</ul> : <p className="mt-2 text-muted-foreground">No extra permissions.</p>}</div>}<Feedback error={mutate.error} /></div>}
+      <DialogFooter><Button variant="ghost" disabled={mutate.isPending} onClick={() => { setConfirmation(null); mutate.reset(); }}>Cancel</Button><SubmitButton pending={mutate.isPending} onClick={() => { if (confirmation) mutate.mutate({ action: confirmation.action, target: confirmation.item, approved: true }); }}>{confirmation?.action === "enable" ? "Approve and enable" : confirmation?.action === "run" ? "Allow and load" : "Install"}</SubmitButton></DialogFooter>
+    </DialogContent></Dialog>
   </div>;
 }
