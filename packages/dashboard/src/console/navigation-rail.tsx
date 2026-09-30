@@ -11,7 +11,7 @@ export function ConsoleNavigationRail({ settingsHref }: { settingsHref: string }
   const destinations = [
     { to: "/console?new=1", label: "Home", icon: MessageSquare },
     { to: "/findings", label: "Findings", icon: ShieldCheck },
-    { to: "/runs", label: "Assessment history", icon: Workflow },
+    { to: "/runs", label: "Activity", icon: Workflow },
     { to: "/plugins", label: "Integrations", icon: Plug },
   ];
   return <div className="relative hidden w-14 shrink-0 lg:block">

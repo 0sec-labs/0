@@ -210,7 +210,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
         actions={(
           <>
             <Button asChild variant="outline">
-              <NavLink to="/runs">Assessment history</NavLink>
+              <NavLink to="/runs">Activity</NavLink>
             </Button>
             <Button asChild variant="accent">
               <NavLink to="/findings">Findings</NavLink>
