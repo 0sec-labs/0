@@ -229,13 +229,7 @@ function DecisionForm({ decision, busy, onResolve }: ApprovalPanelProps) {
         {decision.resolved && <Badge variant={decision.approved === undefined ? "neutral" : decision.approved ? "success" : "danger"}>{resolvedLabel}</Badge>}
       </div>
       <p className="text-sm text-muted-foreground">{presentation.explanation}</p>
-      <p className="whitespace-pre-wrap break-words text-sm">{decision.detail}</p>
-      {decision.risk && (
-        <div className="space-y-1 rounded-xl bg-destructive/10 p-3 text-sm">
-          <p className="font-semibold text-destructive">{decision.risk.level === "destructive" ? "This could change or delete things" : "Risk unknown"}</p>
-          {decision.risk.category && <p className="whitespace-pre-wrap break-words">Type: {decision.risk.category}</p>}
-        </div>
-      )}
+      {decision.kind !== "tool" && decision.detail && <p className="whitespace-pre-wrap break-words text-sm">{decision.detail}</p>}
       {decision.reason && <DetailBlock label="Why" value={decision.reason} />}
       {decision.call && (
         <div className="space-y-2 rounded-xl bg-muted/20 p-3">
@@ -246,7 +240,6 @@ function DecisionForm({ decision, busy, onResolve }: ApprovalPanelProps) {
       {decision.requestedUrls && decision.requestedUrls.length > 0 && <DetailBlock label="Targets to allow" value={decision.requestedUrls} />}
       {decision.unresolvedTargets && decision.unresolvedTargets.length > 0 && <DetailBlock label="Unknown destinations" value={decision.unresolvedTargets} />}
       {decision.requestedPath && <DetailBlock label="Folder to allow" value={decision.requestedPath} />}
-      {context && !context.scopeEnforcement.enabled && <p className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">Network limits are off. 0 can reach any target.</p>}
       {(context || decision.currentScope !== undefined || decision.currentScopePath !== undefined) && (
         <details aria-label="Current permissions" className="space-y-3 rounded-xl bg-muted/20 p-3">
           <summary className="cursor-pointer text-sm text-muted-foreground">Current permissions</summary>
@@ -256,9 +249,7 @@ function DecisionForm({ decision, busy, onResolve }: ApprovalPanelProps) {
                 <dt className="text-muted-foreground">Target</dt><dd className="whitespace-pre-wrap break-all">{context.target}</dd>
                 <dt className="text-muted-foreground">Role</dt><dd>{context.role}</dd>
                 <dt className="text-muted-foreground">Mode</dt><dd>{context.autonomyMode}</dd>
-                <dt className="text-muted-foreground">Network limits</dt><dd className={context.scopeEnforcement.enabled ? "" : "text-destructive"}>{context.scopeEnforcement.enabled ? "On" : "Off — 0 can reach any target"}</dd>
               </dl>
-              <DetailBlock label="Network limit details" value={context.scopeEnforcement} />
               {context.localScopePath && context.localScopePath !== decision.currentScopePath && <DetailBlock label="Allowed folder" value={context.localScopePath} />}
             </>
           )}

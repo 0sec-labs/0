@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query";
 import { findCommand, SLASH_COMMANDS } from "@0/shared/dist/slash-commands.js";
 import type { ConsolePublicExport, DesktopConsoleSession, HarnessSnapshot } from "@0/shared";
-import { Copy, Download, HelpCircle, Menu, MoreHorizontal, PanelRight, Plus, Settings, Square, Trash2 } from "lucide-react";
+import { Copy, Download, HelpCircle, Menu, MoreHorizontal, PanelRight, Plus, Square, Trash2, Pencil, Eraser, X } from "lucide-react";
 import { closeConsoleSession, configureConsoleSession, controlConsoleSession, deleteConsoleSession, deleteSavedConsoleSession, exportConsoleSession, resolveConsoleDecision, resumeConsoleSession, stopConsoleWorker, webFetchJson } from "@/api";
 import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,9 @@ export function ConsolePage() {
   const settingsQuery = useQuery({ queryKey: ["console-settings"], queryFn: ({ signal }) => webFetchJson<SettingsResponse>("/api/console/settings", { signal }), refetchInterval: 5000 });
   const snapshot = workspace.snapshot;
   const worker = snapshot?.workers.find((item) => item.id === workerId);
+  const canExport = workerId
+    ? Boolean(worker?.transcript.length || worker?.operatorMessages?.length)
+    : Boolean(snapshot?.messages.some(message => message.content.length > 0));
   const [activeSession, setActiveSession] = usePersistentState<string | null>("0-console-active-session", null);
   const creatingSession = useRef(false);
   const sessionRailElement = useRef<HTMLElement>(null);
@@ -240,11 +243,12 @@ export function ConsolePage() {
       <section className="flex min-w-0 flex-1 flex-col">
         <header className="flex shrink-0 flex-wrap items-center justify-between gap-2  px-3 py-3 sm:px-5">
           <div className="flex min-w-0 items-center gap-2"><Button variant="ghost" size="icon-sm" aria-label="Open conversations" className="lg:hidden" onClick={() => setRailOpen(true)}><Menu className="size-4" /></Button><div className="min-w-0"><h1 className="truncate text-sm font-semibold">{snapshot?.title || "Console"}</h1>{snapshot && snapshot.session.autonomyMode !== "standard" && <div className="mt-0.5 truncate text-xs text-muted-foreground">{snapshot.session.autonomyMode} mode</div>}</div></div>
-          <div className="flex items-center gap-1"><Button size="icon-sm" variant="ghost" aria-label="New conversation" onClick={() => void createSession()}><Plus className="size-4" /></Button><Button size="icon-sm" variant="ghost" aria-label="Commands" onClick={() => setHelpOpen(true)}><HelpCircle className="size-4" /></Button><Button size="icon-sm" variant="ghost" aria-label="Settings" asChild><Link to={`/settings${controlsQuery}`}><Settings className="size-4" /></Link></Button>{snapshot && <><Button size="icon-sm" variant="ghost" aria-label="Copy conversation" onClick={() => void openExport(snapshot.session.id, false, true, workerId ?? undefined)}><Copy className="size-4" /></Button><DropdownMenu><DropdownMenu.Trigger aria-label="Conversation actions" className="flex size-8 items-center justify-center rounded-full hover:bg-muted focus-visible:outline-2 focus-visible:outline-primary"><button type="button"><MoreHorizontal className="size-4" /></button></DropdownMenu.Trigger><DropdownMenu.Content align="end">
-<DropdownMenu.Item onClick={() => { setRename(snapshot.session); setRenameValue(snapshot.title); }}>Rename</DropdownMenu.Item>
-<DropdownMenu.Item icon={<Download className="size-4" />} onClick={() => void openExport(snapshot.session.id, false, false, workerId ?? undefined)}>Export</DropdownMenu.Item>
-<DropdownMenu.Item onClick={() => setConfirm({ kind: "clear", id: snapshot.session.id, title: snapshot.title })}>Clear conversation</DropdownMenu.Item>
-<DropdownMenu.Item onClick={() => setConfirm({ kind: "close", id: snapshot.session.id, title: snapshot.title })}>Close conversation</DropdownMenu.Item>
+          <div className="flex items-center gap-1"><Button size="icon-sm" variant="ghost" aria-label="New conversation" onClick={() => void createSession()}><Plus className="size-4" /></Button><Button size="icon-sm" variant="ghost" aria-label="Commands" onClick={() => setHelpOpen(true)}><HelpCircle className="size-4" /></Button>{snapshot && <><DropdownMenu><DropdownMenu.Trigger aria-label="Conversation actions" className="flex size-8 items-center justify-center rounded-full hover:bg-muted focus-visible:outline-2 focus-visible:outline-primary"><button type="button"><MoreHorizontal className="size-4" /></button></DropdownMenu.Trigger><DropdownMenu.Content align="end">
+<DropdownMenu.Item icon={<Pencil className="size-4" />} onClick={() => { setRename(snapshot.session); setRenameValue(snapshot.title); }}>Rename</DropdownMenu.Item>
+<DropdownMenu.Item disabled={!canExport} icon={<Copy className="size-4" />} onClick={() => void openExport(snapshot.session.id, false, true, workerId ?? undefined)}>Copy conversation</DropdownMenu.Item>
+<DropdownMenu.Item disabled={!canExport} icon={<Download className="size-4" />} onClick={() => void openExport(snapshot.session.id, false, false, workerId ?? undefined)}>Export</DropdownMenu.Item>
+<DropdownMenu.Item disabled={!canExport} icon={<Eraser className="size-4" />} onClick={() => setConfirm({ kind: "clear", id: snapshot.session.id, title: snapshot.title })}>Clear conversation</DropdownMenu.Item>
+<DropdownMenu.Item icon={<X className="size-4" />} onClick={() => setConfirm({ kind: "close", id: snapshot.session.id, title: snapshot.title })}>Close conversation</DropdownMenu.Item>
 <DropdownMenu.Item variant="danger" icon={<Trash2 className="size-4" />} onClick={() => setConfirm({ kind: "delete-live", id: snapshot.session.id, title: snapshot.title })}>Delete conversation</DropdownMenu.Item>
 </DropdownMenu.Content></DropdownMenu><Button size="icon-sm" variant={inspectOpen ? "secondary" : "ghost"} aria-label="Details" onClick={() => setInspectOpen((value) => !value)}><PanelRight className="size-4" /></Button></>}</div>
         </header>

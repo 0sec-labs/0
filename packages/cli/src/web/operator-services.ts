@@ -108,6 +108,17 @@ function runtimeDiagnostics(runtime: LlmApiRuntime) {
   };
 }
 
+/** Inspect connection configuration without choosing or requesting an inference model. */
+function connectionProbeRuntime(providerId: string, env: Record<string, string>): LlmApiRuntime {
+  return new LlmApiRuntime({
+    type: "api", timeout: 300_000, provider: providerId as RuntimeConfig["provider"], env,
+    // OpenAI has no default model. Like accessibleProviders(), use an explicit
+    // sentinel solely for auth/transport inspection. Azure must still validate
+    // its real deployment configuration; the probe cannot supply that for it.
+    ...(providerId !== "azure" ? { model: "probe" } : {}),
+  });
+}
+
 export function describeWebConsoleRuntime(runtime: NativeRuntime): ConsoleRuntimeSnapshot {
   const providerId = runtime.resolvedProvider?.() ?? "unknown";
   const model = runtime.resolvedModel?.() ?? "unknown";
@@ -270,7 +281,7 @@ export class WebOperatorServices {
       const configured = Boolean(via);
       if (configured) {
         try {
-          diagnostics = runtimeDiagnostics(new LlmApiRuntime({ type: "api", timeout: 300_000, provider: info.id as RuntimeConfig["provider"], env }));
+          diagnostics = runtimeDiagnostics(connectionProbeRuntime(info.id, env));
         } catch (error) {
           diagnostics = { valid: false, reason: "invalid_config", message: publicMessage(error) };
         }
@@ -290,7 +301,7 @@ export class WebOperatorServices {
     const states = providerStates(env).map((state) => {
       if (!state.configured) return state;
       try {
-        const runtime = new LlmApiRuntime({ type: "api", timeout: 300_000, provider: state.id as RuntimeConfig["provider"], env });
+        const runtime = connectionProbeRuntime(state.id, env);
         const configuration = runtime.getConfigurationDiagnostics();
         if (configuration.valid) return state;
         diagnostics.push({ providerId: state.id, message: publicMessage(configuration.fatalError ?? "Provider configuration is incomplete.") });
