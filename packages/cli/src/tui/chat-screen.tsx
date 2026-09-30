@@ -1,4 +1,5 @@
 /** @jsxImportSource @opentui/react */
+import { consoleExecutionProfile } from "../console-execution.js";
 import React, {
   useCallback,
   useEffect,
@@ -1886,7 +1887,7 @@ export function ChatScreen({
     const initialContextWindow = resolveContextLimit(
       { modelId: resolvedModel, providerId: buildDiag.provider },
     )?.tokens;
-    const pluginLease = pluginHostManager?.acquire();
+    const pluginLease = consoleExecutionProfile() === "smolvm" ? undefined : pluginHostManager?.acquire();
     let created: ConsoleSession;
     try {
     created = createLocalConsoleSession({

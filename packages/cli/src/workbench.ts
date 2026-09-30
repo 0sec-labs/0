@@ -1,20 +1,17 @@
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { homeStateDir } from "@0/shared";
-import { ANALYTICS_LEVEL_ENV, getSmolvmWorkbenchStatus, isAdmittedSmolvmWorkbench, levelAtLeast, resolveAnalyticsLevel, runSmolvmWorkbench } from "@0/core";
+import { ANALYTICS_LEVEL_ENV, getSmolvmWorkbenchStatus, isAdmittedSmolvmWorkbench, levelAtLeast, resolveAnalyticsLevel, createConsoleRuntime, createWorkbenchProviderBroker } from "@0/core";
 import type { SmolvmWorkbenchApprovedImage, SmolvmWorkbenchResult } from "@0/core";
-import { maybeLoadCodexAuth } from "./codex-auth.js";
-import { accountEnvPatch, loadAccountStore } from "./tui/credential-store.js";
-import type { AccountStore } from "./tui/credential-store.js";
+import { currentWorkbenchAssets } from "./workbench-assets.js";
+import { mapWorkbenchCliArguments } from "./workbench-console-protocol.js";
+import { runWorkbenchCli } from "./workbench-console-session.js";
 import { PROVIDERS } from "./tui/provider-status.js";
 import { loadGlobalSettings, normalizeSettings, saveSettings } from "./tui/settings.js";
 import type { TuiSettings } from "./tui/settings.js";
 import { FEEDBACK_OPT_OUT_ENV, submissionBlockedReason } from "./tui/feedback.js";
 
-const execFileAsync = promisify(execFile);
 export const WORKBENCH_INNER_ARGUMENT = "--workbench-inner";
 
 /** Only operator choices belong here; credentials are resolved for one launch. */
@@ -55,6 +52,8 @@ export function isPinnedWorkbenchImageReference(value: unknown): value is string
 export function normalizeWorkbenchConfig(raw: unknown): WorkbenchConfig {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new Error("Invalid workbench operator choices.");
   const config = raw as Record<string, unknown>;
+  if (config.github === true) throw new Error("GitHub credential forwarding is not supported by the isolated workbench. Revoke the GitHub grant before launch.");
+  if (Array.isArray(config.providers) && config.providers.some(provider => provider !== "chatgpt-codex")) throw new Error("The isolated workbench currently supports only host-brokered chatgpt-codex grants.");
   const approvedImages: SmolvmWorkbenchApprovedImage[] = [];
   if (config.approvedImages !== undefined) {
     if (!Array.isArray(config.approvedImages)) throw new Error("Invalid workbench sandbox image catalog.");
@@ -119,76 +118,6 @@ export function saveWorkbenchConfig(config: WorkbenchConfig, home?: string): voi
 }
 
 
-const PROVIDER_CONFIGURATION: Readonly<Record<string, readonly string[]>> = {
-  "chatgpt-codex": ["ZERO_CHATGPT_ACCOUNT_ID", "ZERO_CHATGPT_BASE_URL"],
-  deepseek: ["DEEPSEEK_BASE_URL"],
-  openrouter: ["OPENROUTER_BASE_URL"],
-  azure: ["AZURE_OPENAI_BASE_URL", "AZURE_OPENAI_API_VERSION", "AZURE_OPENAI_DEPLOYMENT", "OPENAI_BASE_URL"],
-  openai: ["OPENAI_BASE_URL"],
-  "z-ai": ["Z_AI_BASE_URL"],
-  kimi: ["KIMI_BASE_URL"],
-  qwen: ["QWEN_BASE_URL"],
-  xai: ["XAI_BASE_URL"],
-  opencode: ["OPENCODE_BASE_URL"],
-  copilot: ["COPILOT_BASE_URL"],
-  google: ["GOOGLE_CLOUD_PROJECT", "ZERO_GEMINI_PROJECT"],
-  anthropic: ["ANTHROPIC_BASE_URL"],
-};
-
-/** The selected integration grant is an allowlist, not a host-env copy. */
-export function selectedWorkbenchEnvironment(config: Pick<WorkbenchConfig, "providers" | "github">, env: Readonly<NodeJS.ProcessEnv>, accounts: AccountStore): Record<string, string> {
-  const selected: AccountStore = { version: 2, providers: {} };
-  const result: Record<string, string> = {};
-  for (const id of config.providers) {
-    const provider = PROVIDERS.find((candidate) => candidate.id === id);
-    if (!provider) throw new Error(`Unknown workbench provider grant: ${id}`);
-    const account = accounts.providers[id];
-    if (account) selected.providers[id] = account;
-    for (const name of [...provider.envVars, ...(PROVIDER_CONFIGURATION[id] ?? [])]) {
-      const value = env[name];
-      if (value?.trim()) result[name] = value;
-    }
-  }
-  Object.assign(result, accountEnvPatch(selected, result));
-  if (config.github) {
-    const token = env.GH_TOKEN?.trim() || env.GITHUB_TOKEN?.trim();
-    if (token) result.GH_TOKEN = token;
-  }
-  for (const name of ["TERM", "COLORTERM", "NO_COLOR", "LANG", "LC_ALL"]) {
-    const value = env[name];
-    if (value !== undefined) result[name] = value;
-  }
-  return result;
-}
-
-async function integrationEnvironment(config: WorkbenchConfig, home: string): Promise<Record<string, string>> {
-  // Do not even open the credential store until an operator selects a provider.
-  const accounts: AccountStore = config.providers.length ? loadAccountStore(home) : { version: 2, providers: {} };
-  const environment = selectedWorkbenchEnvironment(config, process.env, accounts);
-  if (config.providers.includes("chatgpt-codex")) {
-    const codexEnvironment: NodeJS.ProcessEnv = {
-      ...environment,
-      ZERO_CHATGPT_AUTH_FILE: process.env.ZERO_CHATGPT_AUTH_FILE,
-      ZERO_CODEX_AUTH_JSON_PATH: process.env.ZERO_CODEX_AUTH_JSON_PATH,
-    };
-    maybeLoadCodexAuth({ env: codexEnvironment, home });
-    for (const name of ["ZERO_CHATGPT_ACCESS_TOKEN", "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"]) {
-      const value = codexEnvironment[name];
-      if (value) environment[name] = value;
-    }
-  }
-  if (config.github && !environment.GH_TOKEN) {
-    try {
-      const { stdout } = await execFileAsync("gh", ["auth", "token"], { encoding: "utf8", timeout: 10000, maxBuffer: 65536 });
-      if (stdout.trim()) environment.GH_TOKEN = stdout.trim();
-    } catch {
-      throw new Error("GitHub grant is enabled but no token is available. Connect gh on the host or run 0 workbench setup --no-github.");
-    }
-  }
-  return environment;
-}
-
-/** Preserve the existing permission gates without forwarding endpoint authority. */
 export function resolveWorkbenchGuestSettings(settings: TuiSettings, env: Readonly<NodeJS.ProcessEnv> = process.env): TuiSettings {
   const privacy: NodeJS.ProcessEnv = { [ANALYTICS_LEVEL_ENV]: env[ANALYTICS_LEVEL_ENV] ?? settings.analyticsLevel };
   for (const name of FEEDBACK_OPT_OUT_ENV) privacy[name] = env[name];
@@ -219,7 +148,7 @@ export async function launchConfiguredWorkbench(args: readonly string[]): Promis
   // Child agents may invoke 0 without the private outer argv marker.
   if (process.platform === "linux" && isAdmittedSmolvmWorkbench()) return undefined;
   // The host management surface is deliberately available even after a failed VM launch.
-  if (args[0] === "workbench" || args[0] === "config") return undefined;
+  if (["workbench", "config", "web", "dashboard", "console", "tui", "doctor", "help", "--help", "-h", "--version", "-v"].includes(args[0] ?? "") || args.length === 0) return undefined;
   const hostSettings = loadGlobalSettings(home, { requireExecutionProfile: existsSync(workbenchConfigPath(home)) });
   if (hostSettings.executionProfile !== "smolvm") return undefined;
   const config = loadWorkbenchConfig(home);
@@ -230,17 +159,18 @@ export async function launchConfiguredWorkbench(args: readonly string[]): Promis
   if (!status.platformSupported || !status.runtimeReady || !status.imageApproved) {
     throw new Error(status.error ?? "SmolVM runtime or approved image is unavailable. Run 0 workbench setup; host fallback is refused.");
   }
-  const environment = await integrationEnvironment(config, home);
+  const modelIndex = args.findIndex(argument => argument === "--model" || argument === "-m");
+  const modelArgument = modelIndex >= 0 ? args[modelIndex + 1] : args.find(argument => argument.startsWith("--model="))?.slice("--model=".length);
+  const runtime = createConsoleRuntime({ model: modelArgument });
+  const providerId = runtime.resolvedProvider();
+  if (providerId !== "chatgpt-codex" || !config.providers.includes(providerId)) throw new Error("Isolated CLI execution requires an explicitly granted brokered chatgpt-codex provider. Host fallback is refused.");
+  const model = runtime.resolvedModel();
+  const routing = runtime.modelSelection();
+  const broker = createWorkbenchProviderBroker({ provider: providerId,
+    models: [...new Set([model, ...Object.values(routing.agentModels).filter(value => value !== "auto")])],
+    resolveCredentials: runtime.workbenchCredentialResolver(),
+  });
   const network = workbenchNetworkEnabled();
-  if (!network) environment.ZERO_OFFLINE = "1";
-  const guestState = join(config.stateRoot, "guest-state");
-  mkdirSync(guestState, { recursive: true, mode: 0o700 });
-  if (!lstatSync(guestState).isDirectory() || lstatSync(guestState).isSymbolicLink()) throw new Error("Workbench guest-state must be a real private directory.");
-  const settingsFile = join(guestState, "tui-settings.json");
-  // Selected display/operator preferences, never credentials or arbitrary host state.
-  const temporarySettings = `${settingsFile}.${process.pid}.tmp`;
-  writeFileSync(temporarySettings, `${JSON.stringify(resolveWorkbenchGuestSettings(hostSettings), null, 2)}\n`, { mode: 0o600, flag: "wx" });
-  renameSync(temporarySettings, settingsFile);
   const controller = new AbortController();
   let signalCode: number | undefined;
   const interrupt = () => { signalCode = 130; controller.abort(); };
@@ -251,21 +181,14 @@ export async function launchConfiguredWorkbench(args: readonly string[]): Promis
   process.once("SIGHUP", hangup);
   let result: SmolvmWorkbenchResult;
   try {
-    result = await runSmolvmWorkbench({
-      image: config.image,
-      workspaceRoot,
-      stateRoot: config.stateRoot,
-      command: ["/usr/local/bin/0", WORKBENCH_INNER_ARGUMENT, ...args],
-      environment,
-      network,
-      tty: !!process.stdin.isTTY && !!process.stdout.isTTY,
-      cpus: config.cpus,
-      memoryMb: config.memoryMb,
-      storageGb: config.storageGb,
-      signal: controller.signal,
-      approvedImages: config.approvedImages ?? [],
+    result = await runWorkbenchCli({
+      workbench: config, selection: { provider: providerId, model, ...routing }, provider: { ...broker.grant, request: broker.request, close: broker.close },
+      assets: currentWorkbenchAssets(), guestSettings: resolveWorkbenchGuestSettings(hostSettings),
+      network, args: mapWorkbenchCliArguments(args, workspaceRoot), signal: controller.signal,
+      onStdout: (data) => process.stdout.write(data), onStderr: (data) => process.stderr.write(data),
     });
   } finally {
+    await broker.close();
     process.removeListener("SIGINT", interrupt);
     process.removeListener("SIGTERM", terminate);
     process.removeListener("SIGHUP", hangup);
@@ -274,6 +197,7 @@ export async function launchConfiguredWorkbench(args: readonly string[]): Promis
     process.stderr.write("[0] SmolVM cleanup could not be proven. Workbench admission/state is retained; host execution is refused.\n");
     return 125;
   }
+  if (result.artifacts) process.stderr.write(`[0] Guest workspace and results saved at ${result.artifacts.directory}\n`);
   if (result.error) process.stderr.write(`[0] ${result.error}\n`);
   if (result.timedOut) return 124;
   return signalCode ?? result.exitCode ?? 125;

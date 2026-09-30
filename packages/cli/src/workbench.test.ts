@@ -2,9 +2,8 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { loadWorkbenchConfig, resolveWorkbenchGuestSettings, saveWorkbenchConfig, selectedWorkbenchEnvironment, workbenchConfigPath, workbenchNetworkEnabled } from "./workbench.js";
+import { loadWorkbenchConfig, resolveWorkbenchGuestSettings, saveWorkbenchConfig, normalizeWorkbenchConfig, workbenchConfigPath, workbenchNetworkEnabled } from "./workbench.js";
 import type { WorkbenchConfig } from "./workbench.js";
-import type { AccountStore } from "./tui/credential-store.js";
 import { DEFAULT_SETTINGS } from "./tui/settings.js";
 
 const homes: string[] = [];
@@ -16,21 +15,12 @@ function temporaryHome(): string {
   return home;
 }
 
-const accounts: AccountStore = {
-  version: 2,
-  providers: {
-    openai: { activeAccountId: "chosen", accounts: { chosen: { kind: "api_key", secret: "selected-account" }, other: { kind: "api_key", secret: "unselected-account" } } },
-    anthropic: { activeAccountId: "default", accounts: { default: { kind: "api_key", secret: "ungranted-provider" } } },
-  },
-};
-
 describe("workbench authority boundary", () => {
-  it("exposes only granted integrations and gives an explicit environment account precedence", () => {
-    const env = { OPENAI_API_KEY: "explicit-account", ANTHROPIC_API_KEY: "ambient-ungranted", GH_TOKEN: "ambient-github", SSH_AUTH_SOCK: "/operator/agent.sock", DOCKER_HOST: "unix:///operator/docker.sock", HOME: "/operator", OPENAI_BASE_URL: "https://provider.example.test/v1", TERM: "xterm-256color" };
-    const guest = selectedWorkbenchEnvironment({ providers: ["openai"], github: false }, env, accounts);
-    expect(guest).toEqual({ OPENAI_API_KEY: "explicit-account", OPENAI_BASE_URL: "https://provider.example.test/v1", TERM: "xterm-256color" });
-    expect(selectedWorkbenchEnvironment({ providers: ["openai"], github: true }, { GH_TOKEN: "explicit-github" }, accounts)).toEqual({ OPENAI_API_KEY: "selected-account", GH_TOKEN: "explicit-github" });
-    expect(env.HOME).toBe("/operator");
+  it("rejects unsupported credential forwarding instead of exposing host secrets", () => {
+    const choices = { schemaVersion: 1, image: "/approved.tar", imageDigest: "sha256:" + "a".repeat(64), stateRoot: "/private/workbench", providers: ["chatgpt-codex"], github: false, cpus: 2, memoryMb: 2048, storageGb: 4 };
+    expect(normalizeWorkbenchConfig(choices).providers).toEqual(["chatgpt-codex"]);
+    expect(() => normalizeWorkbenchConfig({ ...choices, github: true })).toThrow("GitHub credential forwarding");
+    expect(() => normalizeWorkbenchConfig({ ...choices, providers: ["openai"] })).toThrow("only host-brokered");
   });
 
   it("never broadens saved consent and keeps privacy opt-outs separate from VM network policy", () => {
@@ -55,7 +45,7 @@ describe("workbench authority boundary", () => {
 
   it("stores only validated operator choices privately and refuses unreadable authority instead of resetting it", () => {
     const home = temporaryHome();
-    const config: WorkbenchConfig = { schemaVersion: 1, image: "/approved/image.tar", imageDigest: `sha256:${"a".repeat(64)}`, stateRoot: join(home, ".0", "workbench"), providers: ["openai"], github: false, cpus: 2, memoryMb: 4096, storageGb: 20, approvedImages: [{ reference: `registry.example:443/security/toolbox@sha256:${"b".repeat(64)}`, archive: "/approved/toolbox.tar", digest: `sha256:${"c".repeat(64)}` }] };
+    const config: WorkbenchConfig = { schemaVersion: 1, image: "/approved/image.tar", imageDigest: `sha256:${"a".repeat(64)}`, stateRoot: join(home, ".0", "workbench"), providers: ["chatgpt-codex"], github: false, cpus: 2, memoryMb: 4096, storageGb: 20, approvedImages: [{ reference: `registry.example:443/security/toolbox@sha256:${"b".repeat(64)}`, archive: "/approved/toolbox.tar", digest: `sha256:${"c".repeat(64)}` }] };
     saveWorkbenchConfig(config, home);
     expect(loadWorkbenchConfig(home)).toEqual(config);
     expect(() => saveWorkbenchConfig({ ...config, approvedImages: [{ ...config.approvedImages![0]!, reference: "alpine:latest" }] }, home)).toThrow();

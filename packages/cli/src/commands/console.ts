@@ -1,3 +1,4 @@
+import { consoleExecutionProfile } from "../console-execution.js";
 import { createInterface } from "node:readline";
 import { stdin, stdout } from "node:process";
 
@@ -328,7 +329,7 @@ export function registerConsoleCommand(program: Command): void {
       // synchronous — the connected host is threaded down as an option. The
       // session closes the host on cleanup. Fail-soft: a bad config or a server
       // that won't connect degrades to no MCP tools, never blocks the console.
-      const mcpHost = await connectMcpServers(parseMcpConfig(process.env["ZERO_MCP"]));
+      const mcpHost = consoleExecutionProfile() === "smolvm" ? undefined : await connectMcpServers(parseMcpConfig(process.env["ZERO_MCP"]));
       if (mcpHost) {
         console.log(chalk.dim(`MCP: connected ${mcpHost.serverIds().length} server(s) — ${mcpHost.registeredTools().length} tool(s)`));
       }

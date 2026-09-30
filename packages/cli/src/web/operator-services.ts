@@ -34,6 +34,8 @@ import { CodexAuthController, webAuthStatus, type WebAuthStatus } from "./codex-
 import { connectionConfigEnvPatch, loadConnectionConfigs, saveConnectionConfig, validateConnectionConfig } from "./connection-config.js";
 import { appendFeedback, buildSubmitPreview, submitFeedback, type FeedbackPayload, type SubmitPreview } from "../tui/feedback.js";
 
+import { consoleExecutionProfile } from "../console-execution.js";
+
 const MODEL_ROLES = ["discovery", "attack", "verify", "report", "audit", "review"];
 const reservedToolNames = Object.values(TOOL_DEFINITIONS).map((tool) => tool.name);
 const runtimeEnvironments = new WeakMap<LlmApiRuntime, Record<string, string>>();
@@ -66,7 +68,7 @@ const pluginService = createPluginService({
 
 /** The gateway calls this only after its last active turn reaches a safe boundary. */
 export async function flushWebConsolePlugins(): Promise<PluginRunResult[]> {
-  if (isTurnActive()) return [];
+  if (consoleExecutionProfile() === "smolvm" || isTurnActive()) return [];
   const results = await pluginService.flushDeferred();
   deferredPlugins.clear();
   return results;
@@ -478,6 +480,7 @@ export class WebOperatorServices {
   }
 
   async #pluginAction(action: string, input: unknown) {
+    if (action === "run" && consoleExecutionProfile() === "smolvm") throw new OperatorError(409, "isolated_execution_required", "Host plugin execution is refused while SmolVM is selected. Configure and run plugins inside the approved guest image.");
     const body = object(input);
     const id = text(body.id, "plugin ID", 64);
     if (action === "install") {

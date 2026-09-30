@@ -26,6 +26,35 @@ export interface DesktopCodexAuthStatus {
   lines: readonly string[];
 }
 
+/** Host-observed execution state, independent of provider/model selection. */
+export interface ConsoleExecutionSnapshot {
+  backend: "local" | "smolvm";
+  /** pending selects a backend; ready admits its proxy; only running means active work. */
+  status: "pending" | "ready" | "running" | "stopped" | "failed";
+  runId?: string;
+  workspacePath?: string;
+  guestWorkspacePath?: string;
+  imageDigest?: string;
+  cpus?: number;
+  memoryMb?: number;
+  message?: string;
+}
+
+/** Workbench availability is configuration, never evidence of an active VM. */
+export interface ConsoleExecutionStatus {
+  profile: "local" | "smolvm";
+  configured: boolean;
+  platformSupported?: boolean;
+  runtimeReady: boolean;
+  imageApproved: boolean;
+  workspace?: string;
+  image?: string | null;
+  imageDigest?: string | null;
+  resources?: { cpus: number; memoryMb: number; storageGb: number } | null;
+  error?: string;
+  message?: string;
+}
+
 export interface DesktopConsoleSession {
   /** Original durable conversation, when this engine resumes saved work. */
   savedId?: string;
@@ -42,6 +71,7 @@ export interface DesktopConsoleSession {
   /** Transcript messages plus queued operator messages; 0 means the conversation is still blank. */
   messageCount?: number;
   runtime?: ConsoleRuntimeSnapshot;
+  execution?: ConsoleExecutionSnapshot;
   pendingConfiguration?: ConsoleSessionConfiguration;
 }
 
@@ -278,6 +308,7 @@ export interface ConsoleSessionSnapshot {
   workers: ConsoleWorker[];
   queuedMessages: ConsoleQueuedMessage[];
   runtime: ConsoleRuntimeSnapshot | null;
+  execution?: ConsoleExecutionSnapshot;
   scope: ConsoleScope | null;
   scopeEnforcement: ConsoleScopeEnforcement;
   localScopePath?: string;
