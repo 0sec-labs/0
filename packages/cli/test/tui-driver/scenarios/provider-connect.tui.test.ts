@@ -54,6 +54,27 @@ test("mouse Cancel preserves the existing key; mouse selection and keyboard Save
   expect(loadCredentials(home)).toEqual({ anthropic: "existing-anthropic-key", openai: secret });
 });
 
+test("missing Codex on the process PATH shows prerequisite guidance and leaves other providers usable", async () => {
+  tui = await launch({ route: { type: "connect" }, cols: 110, rows: 36,
+    env: { ...emptyProviderEnv, PATH: "/definitely-missing" },
+    settings: { onboardingCompleted: true, mouseSupport: true } });
+  await tui.waitForText(/Search providers/);
+  const lines = frameLines(tui.rawFrame());
+  const y = lines.findIndex((line) => /ChatGPT Codex/.test(line));
+  expect(y).toBeGreaterThanOrEqual(0);
+  await tui.click(lines[y]!.indexOf("ChatGPT Codex") + 1, y);
+  await clickAction("Connect");
+  await tui.waitForText(/setup required/);
+  const frame = tui.captureFrame();
+  expect(frame).toMatch(/Install Codex/);
+  expect(frame).toMatch(/PATH/);
+  expect(frame).not.toMatch(/press Enter to try again|Executable not found|spawn codex ENOENT/);
+  await tui.sendKey("down");
+  expect(tui.captureFrame()).not.toMatch(/setup required/);
+  expect(tui.captureFrame()).toMatch(/Search providers/);
+  expect(loadCredentials(process.env["HOME"]!)).toEqual({});
+});
+
 test.each([[64, 24], [40, 12]])("compact embedded controls go back or advance without saving or completing setup (%ix%i)", async (cols, rows) => {
   vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 503 }));
   tui = await launch({ route: { type: "onboard" }, cols, rows,
