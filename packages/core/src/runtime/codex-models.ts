@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
-import { getChatGptCodexAccessToken } from "./llm-api.js";
+import { CODEX_CLIENT_VERSION, CODEX_PROTOCOL_HEADERS, getChatGptCodexAccessToken } from "./llm-api.js";
 
 export interface CodexCatalogModel {
   id: string;
   contextTokens?: number;
+  /** Backend recommendation rank; lower values are preferred. */
+  priority?: number;
 }
 
 /** Transient failure with metadata verified for the credentials just resolved. */
@@ -38,7 +40,17 @@ export function parseCodexModels(raw: unknown): CodexCatalogModel[] {
     if (seen.has(id)) return [];
     seen.add(id);
     const context = row.context_window;
-    return [{ id, ...(typeof context === "number" && Number.isSafeInteger(context) && context > 0 ? { contextTokens: context } : {}) }];
+    const priority = row.priority;
+    return [{
+      id,
+      ...(typeof context === "number" && Number.isSafeInteger(context) && context > 0 ? { contextTokens: context } : {}),
+      ...(typeof priority === "number" && Number.isFinite(priority) ? { priority } : {}),
+    }];
+  }).sort((left, right) => {
+    // Stable sorting preserves backend order when priorities match or are absent.
+    const a = left.priority ?? Infinity;
+    const b = right.priority ?? Infinity;
+    return a < b ? -1 : a > b ? 1 : 0;
   });
 }
 
@@ -50,8 +62,6 @@ export async function loadCodexModelCatalog(options: {
   /** Host-internal resolver for an already-running subscription account. */
   resolveCredentials?: () => Promise<{ accessToken: string; accountId?: string }>;
 } = {}): Promise<CodexCatalogModel[]> {
-  // Compatibility version used by the pinned OMP Codex catalog protocol.
-  const version = "0.144.1";
   const timeout = AbortSignal.timeout(8_000);
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
   signal.throwIfAborted();
@@ -72,26 +82,36 @@ export async function loadCodexModelCatalog(options: {
   if (cachedCatalog?.identity !== identity) cachedCatalog = undefined;
   let denied = false;
   try {
-    const response = await (options.fetchImpl ?? fetch)(
-      `https://chatgpt.com/backend-api/codex/models?client_version=${version}`,
-      {
-        signal,
-        redirect: "error",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          ...(accountId ? { "ChatGPT-Account-Id": accountId } : {}),
-          "OpenAI-Beta": "responses=experimental",
-          originator: "0",
-          version,
-          Accept: "application/json",
-        },
-      },
-    );
-    denied = response.status === 401 || response.status === 403;
-    if (!response.ok) throw new Error(`Codex model discovery failed (HTTP ${response.status})`);
-    const models = parseCodexModels(await response.json());
-    if (!signal.aborted) cachedCatalog = { identity, models };
-    return models;
+    let lastError: unknown = new Error("Codex model discovery unavailable");
+    for (const path of ["/codex/models", "/models"]) {
+      signal.throwIfAborted();
+      try {
+        const response = await (options.fetchImpl ?? fetch)(
+          `https://chatgpt.com/backend-api${path}?client_version=${CODEX_CLIENT_VERSION}`,
+          {
+            signal,
+            redirect: "error",
+            headers: {
+              ...CODEX_PROTOCOL_HEADERS,
+              Authorization: `Bearer ${accessToken}`,
+              ...(accountId ? { "ChatGPT-Account-Id": accountId } : {}),
+              Accept: "application/json",
+            },
+          },
+        );
+        denied = response.status === 401 || response.status === 403;
+        if (!response.ok) throw new Error(`Codex model discovery failed (HTTP ${response.status})`);
+        const models = parseCodexModels(await response.json());
+        signal.throwIfAborted();
+        cachedCatalog = { identity, models };
+        return models;
+      } catch (error) {
+        // An account denial is definitive; another route cannot grant access.
+        if (denied || signal.aborted) throw error;
+        lastError = error;
+      }
+    }
+    throw lastError;
   } catch (error) {
     if (denied && cachedCatalog?.identity === identity) cachedCatalog = undefined;
     // A cancelled picker is not an offline refresh and must not paint cached rows.

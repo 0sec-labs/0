@@ -12,7 +12,7 @@ import type {
   NativeContentBlock,
 } from "./types.js";
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -27,6 +27,7 @@ import {
   withCacheControl,
   type WireBlock,
 } from "./prompt-cache.js";
+import type { CodexCatalogModel } from "./codex-models.js";
 
 
 /**
@@ -1177,6 +1178,15 @@ const QWEN_DEFAULT_MODEL = "qwen3.8-max";
 // set to `0` so server-side observability can distinguish our
 // traffic from raw Codex CLI traffic.
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses";
+
+// Match OMP's Codex wire protocol: older versions hide new models on both
+// catalog discovery and Responses inference, even with valid subscription auth.
+export const CODEX_CLIENT_VERSION = "0.153.0";
+export const CODEX_PROTOCOL_HEADERS = {
+  "OpenAI-Beta": "responses=experimental",
+  originator: "0",
+  version: CODEX_CLIENT_VERSION,
+} as const;
 const CODEX_OAUTH_ISSUER = "https://auth.openai.com";
 const CODEX_OAUTH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 const CODEX_DEFAULT_MODEL = "gpt-5.5";
@@ -1948,9 +1958,9 @@ function providerForModel(model: string | undefined, env: Readonly<NodeJS.Proces
   if (m.startsWith("gemini") || m.startsWith("google/")) {
     return env["ZERO_GEMINI_ACCESS_TOKEN"] || env["ZERO_GEMINI_OAUTH_REFRESH_TOKEN"] ? "google" : undefined;
   }
-  // OpenAI GPT-5 / o-series → ChatGPT-Codex subscription if present, else OpenAI.
+  // OpenAI GPT / o-series → this client's signed-in Codex account, else OpenAI.
   if (/^gpt-|^o[1-4](?:[-_]|$)/.test(m)) {
-    if (env["ZERO_CHATGPT_ACCESS_TOKEN"] || env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"]) return "chatgpt-codex";
+    if (readChatGptCodexEnv(env) || readChatGptCodexAuthFile(env)) return "chatgpt-codex";
     if (env.OPENAI_API_KEY) return "openai";
     return undefined;
   }
@@ -2529,8 +2539,32 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     }
   }
 
+  /** Non-secret identity for preferences scoped to the captured connection. */
+  connectionIdentity(): string | undefined {
+    let identity: readonly string[];
+    if (this.provider === "chatgpt-codex") {
+      const state = this.codexAuthState;
+      if (!state) return undefined;
+      if (state.accountId) {
+        identity = [this.provider, "account", state.accountId];
+      } else {
+        const credential = state.refreshToken || state.accessToken;
+        if (!credential) return undefined;
+        identity = [this.provider, "credential", credential];
+      }
+    } else if (this.provider === "google") {
+      const credential = this.geminiAuthState?.refreshToken || this.geminiAuthState?.accessToken;
+      if (!credential) return undefined;
+      identity = [this.provider, this.baseUrl, credential, firstNonEmptyEnv(this.env, "GOOGLE_CLOUD_PROJECT", "ZERO_GEMINI_PROJECT") ?? ""];
+    } else {
+      if (!this.apiKey) return undefined;
+      identity = [this.provider, this.baseUrl, this.apiKey];
+    }
+    return createHash("sha256").update(JSON.stringify(identity)).digest("hex");
+  }
+
   /** Discover models using this runtime's captured account, including after a separate login changes. */
-  async codexModelCatalog(signal?: AbortSignal): Promise<import("./codex-models.js").CodexCatalogModel[]> {
+  async codexModelCatalog(signal?: AbortSignal): Promise<CodexCatalogModel[]> {
     const state = this.codexAuthState;
     if (this.provider !== "chatgpt-codex" || !state) throw new Error("No active Codex subscription");
     const { loadCodexModelCatalog } = await import("./codex-models.js");
@@ -2541,8 +2575,8 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   /**
    * Mutate the live selection in place so the NEXT turn (the engine reads
    * `config.runtime` per turn) and the NEXT `forkForSubagent` pick up the new
-   * model / provider / role map with zero session teardown. No-op-safe:
-   * undefined fields leave the corresponding state unchanged.
+   * model / provider / role map with zero session teardown. Undefined fields
+   * preserve the current state, except a provider change resets an omitted model.
    */
   reconfigure(sel: {
     model?: string;
@@ -2555,14 +2589,14 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
 
     if (providerChanged) {
       // Full re-detection against the (optionally new) account, reusing the
-      // exact constructor path. Preserve the existing selection knobs unless
-      // this call overrides them; drop any explicit apiKey so credentials come
-      // from the (possibly refreshed) environment.
+      // exact constructor path. Preserve the role-selection knobs, but never
+      // carry the previous provider's model or explicit apiKey to a new connection.
+      // Credentials come from the (possibly refreshed) environment.
       const merged: RuntimeConfig = {
         ...this.config,
         apiKey: undefined,
         provider: (sel.provider ?? this.provider) as RuntimeConfig["provider"],
-        ...(sel.model !== undefined ? { model: sel.model } : {}),
+        model: sel.model,
         ...(sel.agentModels !== undefined ? { agentModels: sel.agentModels } : {}),
         ...(sel.singleModel !== undefined ? { singleModel: sel.singleModel } : {}),
         ...(sel.env !== undefined ? { env: sel.env as Record<string, string> } : {}),
@@ -2810,15 +2844,11 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       // the actual access_token is injected pre-flight. Setting an
       // empty Authorization here would override the populated one, so
       // intentionally OMIT it — the pre-flight method writes it.
-      //
-      // `originator` + `User-Agent` mirror opencode's chat.headers hook
-      // (codex.ts:610-614): originator identifies the client to
-      // OpenAI's server-side analytics (Codex CLI uses `codex_cli_rs`,
-      // we ship `0`), and User-Agent gives them a way to
-      // distinguish our version + platform in their access logs.
+      // Keep our client identity separate from the shared backend protocol version.
       return {
         "Content-Type": "application/json",
-        originator: "0",
+        ...CODEX_PROTOCOL_HEADERS,
+        "x-codex-routing-hint": `model=${this.model}`,
         "User-Agent": `0/${VERSION}`,
       };
     }

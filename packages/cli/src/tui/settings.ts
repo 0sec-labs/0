@@ -22,7 +22,8 @@
  * `$HOME` is an inconvenience, not a reason to lose the console.
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 
 import { DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir } from "@0/shared";
@@ -49,6 +50,13 @@ export interface SettingDef<T = unknown> {
   choices?: readonly string[];
   /** Grouping label for the settings UI, e.g. "Display". */
   group: string;
+}
+
+/** One operator choice, bound to the connection on which it was applied. */
+export interface ModelPreference {
+  providerId: string;
+  model: string;
+  connectionIdentity: string;
 }
 
 export interface TuiSettings {
@@ -262,6 +270,8 @@ export interface TuiSettings {
    * load; unknown ids and protected/duplicate chords are dropped.
    */
   keybindings: Record<string, string>;
+  /** Operator-only: provider, model and connection are replaced as one value. */
+  modelPreference: ModelPreference | null;
 }
 
 /** Keys of `TuiSettings` whose value is a boolean. */
@@ -273,7 +283,7 @@ type BooleanKey = {
  *  `keybindings` is neither boolean nor a fixed-choice enum — it is a bespoke
  *  chord-override map validated by its own path (see its field doc) — so it is
  *  excluded here rather than forced into the enum contract. */
-type EnumKey = Exclude<keyof TuiSettings, BooleanKey | "keybindings">;
+type EnumKey = Exclude<keyof TuiSettings, BooleanKey | "keybindings" | "modelPreference">;
 
 interface BooleanSettingDef extends SettingDef<boolean> {
   key: BooleanKey;
@@ -778,6 +788,7 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   rosterSort: "attention",
   leaderKey: "off",
   keybindings: {},
+  modelPreference: null,
 };
 
 /** Basename of the settings file inside the 0 state directory. */
@@ -867,6 +878,9 @@ function strictValueAt<K extends keyof TuiSettings>(raw: unknown, key: K): TuiSe
       ? (sanitizeKeybindingOverrides(value) as TuiSettings[K])
       : undefined;
   }
+  if (key === "modelPreference") {
+    return normalizeModelPreference(value) as TuiSettings[K] | undefined;
+  }
   const def = DEF_BY_KEY.get(key);
   if (def?.kind === "boolean") {
     return typeof value === "boolean" ? (value as TuiSettings[K]) : undefined;
@@ -908,7 +922,8 @@ export function isOperatorSetting(key: keyof TuiSettings): boolean {
     || key === "diagnosticReportingPrompted"
     || key === "updatePolicy"
     || key === "allowDevSourceUpdates"
-    || key === "executionProfile";
+    || key === "executionProfile"
+    || key === "modelPreference";
 }
 
 /**
@@ -1007,6 +1022,16 @@ function keybindingsAt(raw: unknown): TuiSettings["keybindings"] {
   return sanitizeKeybindingOverrides(rawValue(raw, "keybindings"));
 }
 
+function normalizeModelPreference(raw: unknown): ModelPreference | null | undefined {
+  if (raw === null) return null;
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return undefined;
+  const value = raw as Record<string, unknown>;
+  if (typeof value.providerId !== "string" || !value.providerId.trim()
+    || typeof value.model !== "string" || !value.model.trim()
+    || typeof value.connectionIdentity !== "string" || !/^[a-f0-9]{64}$/.test(value.connectionIdentity)) return undefined;
+  return { providerId: value.providerId, model: value.model, connectionIdentity: value.connectionIdentity };
+}
+
 /**
  * Total, pure coercion of anything at all into a valid `TuiSettings`.
  *
@@ -1061,6 +1086,7 @@ export function normalizeSettings(raw: unknown): TuiSettings {
     rosterSort: enumAt(raw, "rosterSort"),
     leaderKey: enumAt(raw, "leaderKey"),
     keybindings: keybindingsAt(raw),
+    modelPreference: normalizeModelPreference(rawValue(raw, "modelPreference")) ?? null,
   };
 }
 
@@ -1100,13 +1126,17 @@ export function loadGlobalSettings(homeDir?: string, options: { requireExecution
  * newline because this file is meant to be opened and edited by hand.
  */
 export function saveSettings(settings: TuiSettings, homeDir?: string): boolean {
+  const path = settingsFilePath(homeDir);
+  const temporary = `${path}.${randomUUID()}.tmp`;
   try {
-    const path = settingsFilePath(homeDir);
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, `${JSON.stringify(normalizeSettings(settings), null, 2)}\n`, "utf8");
+    writeFileSync(temporary, `${JSON.stringify(normalizeSettings(settings), null, 2)}\n`, { encoding: "utf8", flag: "wx", mode: 0o600 });
+    renameSync(temporary, path);
     return true;
   } catch {
     return false;
+  } finally {
+    try { rmSync(temporary, { force: true }); } catch { /* best-effort failed-write cleanup */ }
   }
 }
 

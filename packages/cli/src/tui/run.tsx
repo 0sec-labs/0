@@ -674,12 +674,23 @@ function ConsoleApp({
     delete base.initialMessages;
     delete base.initialPrompt;
     delete base.mcpHost;
+    delete base.modelConnectionIdentity;
     const runtime = source?.runtimeInfo.current;
     const options: ChatScreenOptions = {
       ...base,
-      ...(runtime ? { model: runtime.model(), providerId: runtime.providerId() as ChatScreenOptions["providerId"] } : {}),
+      ...(runtime ? {
+        model: runtime.connectionIdentity() ? runtime.model() : undefined,
+        providerId: runtime.providerId() as ChatScreenOptions["providerId"],
+        modelConnectionIdentity: runtime.connectionIdentity(),
+      } : {}),
       ...source?.nextOptions,
+      ...(source?.nextOptions.providerId !== undefined && source.nextOptions.model === undefined
+        ? { model: undefined, modelConnectionIdentity: undefined }
+        : source?.nextOptions.model !== undefined && (source.nextOptions.model !== runtime?.model()
+          || source.nextOptions.providerId !== undefined && source.nextOptions.providerId !== runtime?.providerId())
+          ? { modelConnectionIdentity: undefined } : {}),
       ...overrides,
+      ...(overrides?.model !== undefined ? { modelConnectionIdentity: undefined } : {}),
     };
     const creation = (async (): Promise<AuditRecord | undefined> => {
       if (exitRequested.current) return undefined;
@@ -1130,7 +1141,7 @@ function ConsoleApp({
           onConnected={(providerId) => {
             const owner = ownerForAction();
             if (!owner) return;
-            owner.onNextOptions({ providerId: providerId as ChatScreenOptions["providerId"] });
+            owner.onNextOptions({ providerId: providerId as ChatScreenOptions["providerId"], model: undefined });
             nav.onDone();
           }}
           onBack={nav.onBack}
@@ -1268,7 +1279,7 @@ function ConsoleApp({
         onConnected={(providerId) => {
           const owner = ownerForAction();
           if (!owner) return;
-          owner.onNextOptions({ providerId: providerId as ChatScreenOptions["providerId"] });
+          owner.onNextOptions({ providerId: providerId as ChatScreenOptions["providerId"], model: undefined });
           owner.recovery = undefined;
           owner.onActivity({ waiting: false });
           if (owner.runtimeInfo.current?.providerId() !== providerId) {

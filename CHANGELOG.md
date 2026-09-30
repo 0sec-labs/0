@@ -20,8 +20,10 @@ on the published npm package and the GitHub Release tag.
   Local token, context and estimated-cost reporting remains available.
 - Removed managed-cloud login, scans and hosted-inference commands from the CLI.
   Provider API keys and supported provider subscriptions remain available.
-- Added automatic provider model-catalog refresh and account-specific model
-  discovery; saved model choices are retained instead of forcing GPT-5.5.
+- Added automatic provider model-catalog refresh and account-specific Codex
+  discovery using current protocol negotiation and backend recommendation order.
+  Successful explicit model choices persist for the same connection; CLI and
+  environment overrides win. Fresh launches no longer silently select GPT-5.5.
 - Reworked onboarding and dialogs with compact controls, live theme preview and
   0security branding. Setup is five steps; sharing preferences remain optional
   and editable from Settings, and completion returns directly to chat.
@@ -46,6 +48,8 @@ on the published npm package and the GitHub Release tag.
   onboarding keeps a selectable model row instead of spending its space on chrome.
 - Fix development build failures in tool registration, plugin capabilities and
   source-fix state handling.
+- Publish native SmolVM cleanup proofs atomically, and make craft directory
+  listing portable without interpreting model-supplied paths as shell input.
 
 ## [0.21.4] - 2026-09-23
 

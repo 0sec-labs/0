@@ -359,6 +359,22 @@ describe("store: write target", () => {
     expect(getSettings().density).toBe("compact");
   });
 
+  it("restores the whole model choice globally and rejects a repository account override", () => {
+    const home = makeHome();
+    const project = makeProjectDir();
+    const preference = { providerId: "chatgpt-codex", model: "account-selected-model", connectionIdentity: "a".repeat(64) };
+    writeProjectRaw(project, { modelPreference: { ...preference, model: "repository-model" }, density: "compact" });
+    configureSettingsStore({ homeDir: home, projectDir: project });
+    expect(getSettings().modelPreference).toBeNull();
+    expect(updateSetting("modelPreference", preference, { scope: "project" })).toBe(false);
+    expect(updateSetting("modelPreference", preference)).toBe(true);
+    __resetSettingsStoreForTests();
+    configureSettingsStore({ homeDir: home, projectDir: project });
+    expect(getSettings().modelPreference).toEqual(preference);
+    expect(getSettings().density).toBe("compact");
+    expect(loadGlobalSettings(home).density).toBe(DEFAULT_SETTINGS.density);
+  });
+
   it("persists operator consent globally even inside a configured project", () => {
     const home = makeHome();
     const project = makeProjectDir();

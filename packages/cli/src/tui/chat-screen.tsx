@@ -36,6 +36,7 @@ import {
   type ScopedAuditEscalationRequest,
   type ConsoleSession,
   type RuntimeConfig,
+  type LlmApiRuntime,
   type NativeMessage,
   type OperatorQuestionRequest,
   type OperatorQuestionAnswer,
@@ -59,6 +60,7 @@ import {
   previewSetting,
   reloadSettings,
 } from "./settings-store.js";
+import { createPreferredConsoleRuntime, saveAppliedModelPreference } from "./model-preference.js";
 import { useTheme, type Theme } from "./theme-context.js";
 import { modelProvider } from "@0/shared";
 import { homedir } from "node:os";
@@ -631,6 +633,8 @@ export interface ChatScreenOptions {
   dbPath?: string;
   scope?: ScopePolicy;
   model?: string;
+  /** Internal inheritance guard: a model from another connection is not a new explicit choice. */
+  modelConnectionIdentity?: string;
   /** Explicit provider choice, applied only when constructing a new runtime. */
   providerId?: RuntimeConfig["provider"];
   /** Operator-approved role/model choices for new runtimes, never agent-authored consent. */
@@ -703,6 +707,7 @@ export interface ChatScreenProps {
   runtimeInfoHandle: React.MutableRefObject<{
     model: () => string;
     providerId: () => string;
+    connectionIdentity: () => string | undefined;
     codexCatalog?: (signal?: AbortSignal) => Promise<import("@0/core").CodexCatalogModel[]>;
     /**
      * Live-apply a model/provider/role-map selection to the running runtime.
@@ -1456,6 +1461,8 @@ export function ChatScreen({
   // live-apply path can reconfigure it in place without capturing a specific
   // runtime in a closure (a rebuild swaps the reference here).
   const runtimeRef = useDevUiRef<ReturnType<typeof createConsoleRuntime> | null>(devUi, "runtimeRef", null);
+  const pendingModelPreferenceRef = useDevUiRef<LlmApiRuntime | null>(devUi, "pendingModelPreferenceRef", null);
+  const sessionBuildEpoch = useDevUiRef(devUi, "sessionBuildEpoch", 0);
   // A selection that arrived mid-turn. NEVER reconfigure mid-turn; this is
   // flushed to the live runtime in send()'s completion path, where busy flips
   // back to false. Last-writer-wins per field, agentModels merged.
@@ -1790,6 +1797,12 @@ export function ChatScreen({
       setStartupError(null);
       setModelId(runtime.resolvedModel());
       modelIdRef.current = runtime.resolvedModel();
+      if (pendingModelPreferenceRef.current === runtime) {
+        pendingModelPreferenceRef.current = null;
+        if (!saveAppliedModelPreference(runtime)) {
+          appendEntry({ kind: "notice", text: "Model applied for this audit but could not be saved for future launches", turn: turn.current });
+        }
+      }
     } catch (error) {
       if (!alive.current || epoch !== runtimeCheckEpoch.current || runtimeRef.current !== runtime) return;
       const detail = error instanceof Error ? error.message : String(error);
@@ -1798,7 +1811,7 @@ export function ChatScreen({
     } finally {
       if (alive.current && epoch === runtimeCheckEpoch.current) setCheckingModel(false);
     }
-  }, []);
+  }, [appendEntry]);
 
   // First-report consent stays separate from analytics. Cancel defers the choice.
   useEffect(() => {
@@ -1840,20 +1853,26 @@ export function ChatScreen({
     });
   }, [firstProblemConsent, settings.diagnosticReportingPrompted, settings.diagnosticReporting, busy, picker, pendingScope, pendingLocalScope, pendingToolApproval, pendingOperatorQuestion, chooseReporting, stageFeedback, showToast, restorePaletteDraft]);
   /** Construct only at initial startup, explicit new chat, or failed-start recovery. */
-  const buildSession = useCallback((
+  const buildSession = useCallback(async (
     opts: { model?: string; providerId?: RuntimeConfig["provider"]; initialMessages?: NativeMessage[] } = {},
-  ): { session: ConsoleSession; model: string } => {
+  ): Promise<{ session: ConsoleSession; model: string }> => {
     if (closingRef.current || stoppingAuditRef.current) throw new Error("This audit is stopping.");
+    const buildEpoch = ++sessionBuildEpoch.current;
     // Resolve credentials into this construction only. Explicit shell exports
     // win, and changing a connection never mutates a live runtime's environment.
     const env = { ...process.env, ...credentialEnvPatch(loadCredentials(), process.env) };
-    const runtime = createConsoleRuntime({
-      model: (opts.model ?? options?.model) || undefined,
+    const { runtime, explicitChoice } = await createPreferredConsoleRuntime({
+      model: (opts.providerId !== undefined ? opts.model : opts.model ?? options?.model) || undefined,
       provider: opts.providerId ?? options?.providerId,
       agentModels: options?.agentModels,
       singleModel: options?.singleModel,
       env: Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined)),
+    }, {
+      inheritedConnectionIdentity: opts.model === undefined && opts.providerId === undefined ? options?.modelConnectionIdentity : undefined,
+      onDiscoveryError: (error) => recordProblem("runtime", error),
     });
+    if (!alive.current || closingRef.current || stoppingAuditRef.current) throw new Error("This audit is stopping.");
+    if (buildEpoch !== sessionBuildEpoch.current) throw new Error("This startup choice was superseded.");
     const resolvedModel = runtime.resolvedModel();
     // Resolve compaction from this direct/subscription runtime's model.
     const buildDiag = runtime.getConfigurationDiagnostics();
@@ -1976,15 +1995,17 @@ export function ChatScreen({
     runtimeInfoHandle.current = {
       model: () => runtime.resolvedModel(),
       providerId: () => runtime.getConfigurationDiagnostics().provider,
+      connectionIdentity: () => runtime.connectionIdentity(),
       codexCatalog: (signal) => runtime.codexModelCatalog(signal),
       applySelection: (sel) => applySelectionRef.current?.(sel),
     };
+    if (explicitChoice) pendingModelPreferenceRef.current = runtime;
     void checkRuntime();
     // resolvedModel() is the id the runtime actually settled on after
     // provider detection — not necessarily what was requested — so it is
     // the only value honest enough to display.
     return { session: created, model: runtime.resolvedModel() };
-  }, [options, pluginHostManager, messagingHomeDir, trackedRequest, runtimeInfoHandle, checkRuntime]);
+  }, [options, pluginHostManager, messagingHomeDir, trackedRequest, runtimeInfoHandle, checkRuntime, recordProblem, appendEntry]);
 
   useEffect(() => {
     if (closingRef.current) return;
@@ -2002,13 +2023,14 @@ export function ChatScreen({
     if (initializedView.current) return releaseView;
     initializedView.current = true;
 
+    void (async () => {
     try {
       // Resume: when the full-screen browser opened this chat with a stored
       // transcript, build the console around it and rehydrate the transcript
       // silently (the restored messages ARE the context — see the /sessions
       // in-place path, which does the same).
       const resumeMessages = options?.initialMessages;
-      const built = buildSession(
+      const built = await buildSession(
         resumeMessages && resumeMessages.length > 0 ? { initialMessages: resumeMessages } : {},
       );
       created = built.session;
@@ -2019,12 +2041,14 @@ export function ChatScreen({
         setEntries(entriesFromStoredMessages(resumeMessages));
       }
     } catch (error) {
+      if (!alive.current || sessionRef.current) return;
       recordProblem("runtime", error);
       const detail = error instanceof Error ? error.message : String(error);
       setStartupError({ text: startupRecoveryText(detail) });
       const recovery = connectionRecoveryForError(detail);
       if (recovery) connectionFailureRef.current?.(recovery);
     }
+    })();
 
     return releaseView;
   }, []);
@@ -2091,12 +2115,13 @@ export function ChatScreen({
       ...(sel.singleModel !== undefined ? { singleModel: sel.singleModel } : {}),
       env,
     });
-    void checkRuntime();
     // resolvedModel() is the id the runtime settled on after re-detection.
     const applied = runtime.resolvedModel();
     setModelId(applied);
     modelIdRef.current = applied;
     const providerNow = runtime.getConfigurationDiagnostics().provider;
+    if (sel.model !== undefined) pendingModelPreferenceRef.current = runtime;
+    void checkRuntime();
     const providerLabel = PROVIDERS.find((candidate) => candidate.id === providerNow)?.label ?? providerNow;
     showToast(`Model: ${applied} (${providerLabel})`);
   }, [appendEntry, checkRuntime, showToast]);
@@ -2132,7 +2157,7 @@ export function ChatScreen({
   }, [appendEntry, applyRuntimeSelection]);
   applySelectionRef.current = applySelection;
 
-  const reconnectProvider = useCallback((providerId: string) => {
+  const reconnectProvider = useCallback(async (providerId: string) => {
     const knownProvider = PROVIDERS.find((candidate) => candidate.id === providerId);
     if (!knownProvider) {
       appendEntry({ kind: "error", text: "Unknown connection", detail: providerId, turn: turn.current });
@@ -2149,7 +2174,7 @@ export function ChatScreen({
       return;
     }
     try {
-      const built = buildSession({ providerId: provider, model: options?.model, initialMessages: options?.initialMessages });
+      const built = await buildSession({ providerId: provider, initialMessages: options?.initialMessages });
       sessionRef.current = built.session;
       modelIdRef.current = built.model;
       setSession(built.session);
@@ -2164,7 +2189,7 @@ export function ChatScreen({
         turn: turn.current,
       });
     }
-  }, [appendEntry, buildSession, options?.model, options?.initialMessages, onNextChatOptions]);
+  }, [appendEntry, buildSession, options?.initialMessages, onNextChatOptions]);
 
   useEffect(() => {
     if (!reconnectHandle) return;
@@ -2174,7 +2199,7 @@ export function ChatScreen({
     };
   }, [reconnectHandle, reconnectProvider]);
 
-  const selectModel = useCallback((requested: string) => {
+  const selectModel = useCallback(async (requested: string) => {
     // Stage for /new, then apply LIVE to the running audit (deferred to the
     // turn boundary when busy; kept staged only if the provider is dark).
     onNextChatOptions?.({ model: requested });
@@ -2183,7 +2208,7 @@ export function ChatScreen({
       return;
     }
     try {
-      const built = buildSession({ model: requested, initialMessages: options?.initialMessages });
+      const built = await buildSession({ model: requested, initialMessages: options?.initialMessages });
       sessionRef.current = built.session;
       modelIdRef.current = built.model;
       setSession(built.session);
@@ -3207,7 +3232,6 @@ export function ChatScreen({
           appendEntry({
             kind: "notice",
             text: "wait for the active turn before clearing",
-            detail: "The turn in flight is still appending to the conversation this would empty.",
             turn: turn.current,
           });
           return true;
@@ -3234,9 +3258,6 @@ export function ChatScreen({
         appendEntry({
           kind: "notice",
           text: "conversation cleared",
-          detail: session
-            ? "The model starts from an empty history. Scope, target and mode are unchanged, and nothing you previously denied has been re-allowed."
-            : "The transcript is empty. The runtime is not connected, so there was no model history to clear.",
           turn: turn.current,
         });
         return true;

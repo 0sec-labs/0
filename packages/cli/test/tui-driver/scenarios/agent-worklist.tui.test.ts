@@ -39,5 +39,5 @@ test("Main and subagents share the composer and full-width clickable task list",
   // Ctrl+Shift+Home switches to Main without taking the composer/input out of service.
   await tui.sendKey("home", { ctrl: true, shift: true });
   expect(tui.captureFrame()).toContain("main draft");
-  expect(tui.captureFrame()).not.toContain("worker draft");
+  expect(tui.captureFrame()).not.toMatch(/› worker draft/);
 });

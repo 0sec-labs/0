@@ -282,15 +282,15 @@ provider's stored account from being mixed into the connection.
 file permissions. Treat `credentials.json` like an exported secret in a shell
 profile.
 
-The BYOK `/model` picker starts with curated models. **Tab** opens the full
-catalog; typing a query searches the full catalog from either view.
-Check credentials and account access before use. The detail pane shows setup
-hints and credential sources; missing prices remain unknown.
+The `/model` picker lists connected API and subscription models. Subscription
+choices come first; Codex follows the signed-in account's recommendation order.
+**Tab** toggles the public catalog view; queries search the full catalog.
+Missing prices stay unknown.
 Use `/connect` to add credentials or inspect connection state.
-Model selections apply to the current audit while idle or after its active
-turn finishes. A selection requiring an unconnected provider remains staged:
-connect the provider, then select the model again. A normal `/connect` choice
-alone prepares the next chat rather than switching a healthy current runtime.
+Model selections apply while idle or after the active turn. Successful explicit
+choices are remembered for the same connection on fresh launches; explicit CLI
+and environment model settings take precedence. Unconnected choices remain staged.
+A normal `/connect` choice prepares the next chat; select a model after connecting.
 See [Model picker](/console/#model-picker).
 
 ### Other browser and subscription connections

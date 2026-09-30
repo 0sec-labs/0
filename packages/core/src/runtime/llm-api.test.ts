@@ -640,6 +640,36 @@ describe("LlmApiRuntime provider detection", () => {
     expect((rt as any).model).toBe("deepseek-v4-flash-0731");
   });
 
+  it("routes GPT-6.1 to this client's signed-in Codex file rather than an ambient API key", async () => {
+    const authPath = join(fixtureHome, "subscription-auth.json");
+    writeFileSync(authPath, JSON.stringify({
+      tokens: { access_token: "synthetic-file-subscription", account_id: "file-subscription-account" },
+    }));
+    process.env["ZERO_CHATGPT_AUTH_FILE"] = authPath;
+    process.env.OPENAI_API_KEY = "synthetic-platform-key";
+    const runtime = new LlmApiRuntime({ type: "api", timeout: 5000, model: "gpt-6.1" });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const headers = new Headers(init?.headers);
+      if (String(input) !== "https://chatgpt.com/backend-api/codex/responses"
+          || headers.get("Authorization") !== "Bearer synthetic-file-subscription"
+          || headers.get("ChatGPT-Account-Id") !== "file-subscription-account"
+          || JSON.parse(String(init?.body)).model !== "gpt-6.1") {
+        return new Response(null, { status: 403 });
+      }
+      return new Response(`data: ${JSON.stringify({
+        type: "response.completed",
+        response: { status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: "signed-in reply" }] }] },
+      })}\n\n`, { headers: { "Content-Type": "text/event-stream" } });
+    });
+    try {
+      const result = await runtime.executeNative("Reply briefly.", [{ role: "user", content: [{ type: "text", text: "Hello" }] }], []);
+      expect(result.stopReason).toBe("end_turn");
+      expect(result.content).toEqual([{ type: "text", text: "signed-in reply" }]);
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
   it("binds a controlled run to its declared API-key provider over ChatGPT OAuth", async () => {
     process.env.OPENAI_API_KEY = "sk-openai-test";
     process.env["ZERO_CHATGPT_ACCESS_TOKEN"] = "oauth-test";

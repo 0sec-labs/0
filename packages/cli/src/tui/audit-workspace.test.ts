@@ -7,6 +7,7 @@ function bindRuntimeHandle(record: AuditRecord, applySelection: (sel: unknown) =
   record.runtimeInfo.current = {
     model: () => "current-model",
     providerId: () => "anthropic",
+    connectionIdentity: () => undefined,
     applySelection: applySelection as never,
   };
 }
