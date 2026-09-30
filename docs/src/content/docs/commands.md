@@ -232,7 +232,31 @@ the browser; Docker is not required to run the workbench.
 
 Guide: [Execution profile and grants](/configuration/#whole-harness-execution-profile).
 
-Subcommands: [setup](#workbench-setup) · [status](#workbench-status) · [providers](#workbench-providers) · [configure](#workbench-configure) · [disable](#workbench-disable).
+Subcommands: [run-agent](#workbench-run-agent) · [console-agent](#workbench-console-agent) · [setup](#workbench-setup) · [status](#workbench-status) · [providers](#workbench-providers) · [configure](#workbench-configure) · [disable](#workbench-disable).
+
+#### workbench run-agent
+
+Internal, hidden entrypoint for the host-controlled CLI engine inside an admitted
+Linux SmolVM workbench. It exchanges framed controller messages over standard
+input/output; it is not an interactive command or a host-side launch shortcut.
+Normal CLI commands select this entrypoint automatically when the workbench
+profile is enabled. Direct invocation outside an admitted guest is refused.
+
+```text
+0 workbench run-agent
+```
+
+#### workbench console-agent
+
+Internal, hidden entrypoint for the host-controlled chat engine inside an
+admitted Linux SmolVM workbench. The host owns the terminal/browser UI and
+forwards requests, events and approvals over the framed controller transport.
+Use `0 console` or `0 web` to start a chat; do not invoke this transport endpoint
+manually. Direct invocation outside an admitted guest is refused.
+
+```text
+0 workbench console-agent
+```
 
 #### workbench setup
 
@@ -248,16 +272,18 @@ and persist the operator-global SmolVM profile.
 | `--image <archive>` | — | Local OCI/Docker archive to digest-pin and approve; never a mutable registry tag |
 | `--state <directory>` | — | Private VM state directory (defaults to ~/.0/workbench) |
 | `--workspace <directory>` | — | Explicit workspace mount; otherwise each invocation mounts its current directory |
-| `--provider <id>` | — | Grant this provider's selected account/environment credential; repeat for multiple providers |
-| `--github` | — | Grant a GitHub token from GH_TOKEN/GITHUB_TOKEN or the existing gh account |
+| `--provider <id>` | — | Grant chatgpt-codex requests through the host provider broker; credentials stay on the host |
+| `--github` | — | Unsupported: GitHub credential forwarding is refused |
 | `--no-github` | — | Revoke the GitHub token grant |
 | `--cpus <count>` | — | Guest virtual CPUs |
 | `--memory <MiB>` | — | Guest RAM in MiB |
 | `--storage <GiB>` | — | Guest private writable storage in GiB |
 | `--sandbox-image <reference=archive>` | — | Approve an immutable image reference for brokered isolated container actions; repeat for multiple images |
 
-Provider/GitHub credentials resolve only for explicit grants. The host HOME,
-SSH configuration and Docker socket are not mounted into the guest.
+The supported provider grant is `chatgpt-codex`: model requests go through the
+host broker, and credentials stay on the host. GitHub credential forwarding is
+refused. The host HOME, SSH configuration and Docker socket are not mounted
+into the guest.
 
 #### workbench status
 
