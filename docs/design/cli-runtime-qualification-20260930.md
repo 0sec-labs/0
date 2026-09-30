@@ -36,11 +36,17 @@ A subsequent **CLI guest startup qualification passed** in 14.7 seconds: the 0.2
 
 This proves CLI startup and diagnostics in a VM. It does **not** prove a full authenticated model/tool conversation inside the whole-harness workbench, enable that profile globally, or resolve slow full-toolbox import. Normal CLI/web-console sessions still run locally.
 
+### Registered controller follow-up
+
+The current registered `workbench console-agent` and `run-agent` entries now pass real offline SmolVM checks using the approved Node image, the current CLI distribution and explicitly staged Linux dependencies. A host SSE fixture drove the actual guest engine through `read_file` and `apply_patch`; the source workspace remained unchanged, the guest output and transcript/checkpoint were exported, an interrupted provider turn returned cancelled, and native teardown released the active lease. The actual public `console --print` command also returned the fixture response with exit 0 and exported its database. No image downloads or host credential forwarding occurred.
+
+These checks qualify registered routing, engine execution, artifact preservation and cancellation with a fixture provider. They do **not** qualify a live provider account, the new profile images, Kali tools, browser automation, or hosted workflows. The live web app remains on the operator's local profile until an approved image is explicitly configured. Evidence is retained locally in `/tmp/zero-smolvm-controller-qualification.json` and `/tmp/zero-smolvm-registered-cli-qualification.json`; fixture model labels do not establish live account model availability.
+
 ## People testing it
 
 There is concrete external evidence: [issue #143](https://github.com/0sec-labs/0/issues/143) reports a live DeepSeek console interruption; [issue #74](https://github.com/0sec-labs/0/issues/74) reports an actual Linux review of dotnet/dotnet; [merged PR #141](https://github.com/0sec-labs/0/pull/141) contributes a reproduced long-session terminal fix. These demonstrate people trying the product and contributing, not a measured active-user population. Internal operator reports are separate evidence.
 
-At the checked snapshot, GitHub binary asset downloads were 99 for v0.21.4, 19 for v0.22.0 and 7 for v0.22.1, excluding checksum files. Downloads can include repeats, maintainers and automation. They are not unique users or successful launches. No reviewed active-user metric or matched multi-target raw-Codex study was found. Real VM smoke scripts exist; mocked configuration tests and Docker CI do not establish a current SmolVM end-to-end pass.
+At the checked snapshot, GitHub binary asset downloads were 99 for v0.21.4, 19 for v0.22.0 and 7 for v0.22.1, excluding checksum files. Downloads can include repeats, maintainers and automation. They are not unique users or successful launches. No reviewed active-user metric or matched multi-target raw-Codex study was found. Real VM checks now qualify the registered fixture-provider controller described above; download counts and Docker CI do not establish live-account or full-toolbox qualification.
 
 ## Follow-up validation
 
