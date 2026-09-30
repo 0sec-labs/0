@@ -73,7 +73,7 @@ export function CommandPalette({
       {
         id: "page-console",
         group: "Pages",
-        label: "Console",
+        label: "Chats",
         meta: "Chat with 0",
         icon: MessageSquare,
         keywords: ["chat operator workspace session scope approvals console"],

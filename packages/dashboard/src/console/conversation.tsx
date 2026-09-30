@@ -98,7 +98,7 @@ export function Conversation({ workspace, worker, onResolve, onSubmit, onStop, r
         if (!node) return;
         nearBottom.current = node.scrollHeight - node.scrollTop - node.clientHeight < 100;
         if (nearBottom.current) setShowJump(false);
-      }} aria-label={worker ? `${worker.name} conversation` : "Conversation"}>
+      }} aria-label={worker ? `${worker.name} chat` : "Chat"}>
         <div ref={content} className="mx-auto max-w-3xl space-y-7">
           {worker ? <WorkerConversation worker={worker} /> : turns.length ? turns.map((turn) => <article key={turn.id} className="space-y-3">
             {turn.user.text && <div className="ml-auto max-w-[92%] rounded-2xl rounded-br-sm bg-muted/50 px-4 py-3 text-sm whitespace-pre-wrap break-words">{turn.user.text}</div>}
@@ -143,12 +143,12 @@ function ContextSuggestions({ snapshot, onChoose }: { snapshot: ConsoleSessionSn
 }
 
 const COMMAND_SUMMARIES: Record<string, string> = {
-  help: "Browse commands", capabilities: "Explore what 0 can do", status: "Check this conversation", tools: "Browse available tools",
-  "new-chat": "Start a new conversation", onboard: "Open guided setup", clear: "Clear this conversation", history: "Browse previous runs",
-  findings: "Review findings", fix: "Prepare a fix for review", copy: "Export this conversation", sessions: "Switch conversations",
+  help: "Browse commands", capabilities: "Explore what 0 can do", status: "Check this chat", tools: "Browse available tools",
+  "new-chat": "Start a new chat", onboard: "Open guided setup", clear: "Clear this chat", history: "Browse previous runs",
+  findings: "Review findings", fix: "Prepare a fix for review", copy: "Export this chat", sessions: "Switch chats",
   explain: "Get a simpler explanation", feedback: "Share feedback", settings: "Manage preferences", keybindings: "View keyboard shortcuts",
   theme: "Change appearance", model: "Choose a model", chat: "Return to chat", ops: "Open dashboard", hackstore: "Browse integrations",
-  connect: "Connect a provider", usage: "Check usage and cost", back: "Go back", scope: "Manage approved scope", doctor: "Check your setup", exit: "Close this conversation",
+  connect: "Connect a provider", usage: "Check usage and cost", back: "Go back", scope: "Manage approved scope", doctor: "Check your setup", exit: "Close this chat",
 };
 
 function Composer({ workspace, snapshot, worker, onSubmit, onStop }: { workspace: ConsoleWorkspace; snapshot: ConsoleSessionSnapshot; worker?: ConsoleWorker; onSubmit: () => void; onStop: () => void }) {

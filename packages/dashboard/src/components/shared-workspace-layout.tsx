@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 const destinations = [
-  { to: "/console", label: "Conversations", icon: MessageSquare },
+  { to: "/console", label: "Chats", icon: MessageSquare },
   { to: "/findings", label: "Findings", icon: ShieldCheck },
   { to: "/runs", label: "Runs", icon: Workflow },
   { to: "/dashboard", label: "Overview", icon: LayoutDashboard },
@@ -33,7 +33,7 @@ export function SharedWorkspaceLayout({ title, children, onNew, onSearch, onOpen
           <span className="truncate text-sm font-semibold">{title}</span>
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon-sm" aria-label="New session" onClick={onNew}><Plus className="size-4" /></Button>
+          <Button variant="ghost" size="icon-sm" aria-label="New chat" onClick={onNew}><Plus className="size-4" /></Button>
           <Button variant="ghost" size="icon-sm" aria-label="Open commands" onClick={onOpenPalette}><Command className="size-4" /></Button>
         </div>
       </header>

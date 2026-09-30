@@ -1,3 +1,4 @@
+import type { ConsoleExecutionStatus } from "@0/shared";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RotateCcw } from "lucide-react";
@@ -36,6 +37,27 @@ export function ThemeControl() {
   </ControlCard>;
 }
 
+function ExecutionControl() {
+  const status = useQuery({ queryKey: ["console-execution"], queryFn: ({ signal }) => webFetchJson<ConsoleExecutionStatus>("/api/console/execution", { signal }), refetchInterval: 5000 });
+  const execution = status.data;
+  return <ControlCard title="Execution">
+    <QueryState pending={status.isPending} error={status.error} retry={status.refetch} />
+    {execution && <div className="space-y-2 text-sm">
+      <p>Selected backend: <span className="font-medium">{execution.profile === "smolvm" ? "SmolVM" : "Local"}</span></p>
+      <p className="text-xs text-muted-foreground">Availability checks do not mean a VM is running. Each chat shows its actual execution state.</p>
+      <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-[8rem_minmax(0,1fr)]">
+        <dt className="text-muted-foreground">VM setup</dt><dd>{execution.configured ? "Configured" : "Not configured"}</dd>
+        <dt className="text-muted-foreground">VM runtime</dt><dd>{execution.runtimeReady ? "Available" : "Unavailable"}</dd>
+        <dt className="text-muted-foreground">VM image</dt><dd>{execution.imageApproved ? "Approved" : "Not approved"}</dd>
+        {execution.workspace && <><dt className="text-muted-foreground">Workspace setting</dt><dd className="break-all">{execution.workspace}</dd></>}
+        {execution.imageDigest && <><dt className="text-muted-foreground">Image digest</dt><dd className="break-all">{execution.imageDigest}</dd></>}
+        {execution.resources && <><dt className="text-muted-foreground">Resources</dt><dd>{execution.resources.cpus} CPUs · {execution.resources.memoryMb} MiB memory · {execution.resources.storageGb} GiB storage</dd></>}
+      </dl>
+      {(execution.error || execution.message) && <p className="text-xs text-muted-foreground">{execution.error || execution.message}</p>}
+    </div>}
+  </ControlCard>;
+}
+
 export function SettingsControl({ presentationOnly = false }: { presentationOnly?: boolean }) {
   const settings = useConsoleSettings();
   const queryClient = useQueryClient();
@@ -57,7 +79,7 @@ export function SettingsControl({ presentationOnly = false }: { presentationOnly
   const presentationKeys: Record<string, true> = { theme: true, density: true, transcriptStyle: true, roleLabelStyle: true, toolCardStyle: true, richToolCards: true, transcriptDetail: true, showTimestamps: true, showTokenUsage: true, showCost: true, showContextMeter: true, modelDisplay: true, reduceMotion: true, showComposerHints: true };
   const definitions = settings.data?.definitions.filter(def => (!presentationOnly || presentationKeys[def.key]) && `${def.label} ${def.description} ${def.key} ${def.group}`.toLowerCase().includes(filter.toLowerCase()) && def.key !== "theme") ?? [];
   const groups = [...new Set(definitions.map(def => def.group))];
-  return <div className="space-y-5"><ThemeControl /><ControlCard title={presentationOnly ? "Appearance" : "Settings"}>
+  return <div className="space-y-5">{!presentationOnly && <ExecutionControl />}<ThemeControl /><ControlCard title={presentationOnly ? "Appearance" : "Settings"}>
     <QueryState pending={settings.isPending} error={settings.error} retry={settings.refetch} />
     <div className="grid gap-4 sm:grid-cols-2"><TextField label="Find a setting" type="search" value={filter} onChange={event => setFilter(event.target.value)} placeholder="Search…" /><Field label="Save to"><select className={selectClass} value={scope} onChange={event => setScope(event.target.value as "global" | "project")}><option value="global">All projects</option><option value="project">This project</option></select></Field></div>
     <Feedback error={save.error ?? reset.error} message={message} />
