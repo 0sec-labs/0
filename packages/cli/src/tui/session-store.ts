@@ -279,6 +279,7 @@ const consoleStateSchema = z.object({
     target: z.string().max(8_000), role: z.enum(["discovery", "attack", "verify", "report", "audit", "review"]),
     runtime: z.object({
       providerId: z.string().max(256).optional(), model: z.string().max(256).optional(),
+      reasoningEffort: z.enum(["none", "low", "medium", "high", "xhigh", "max"]).optional(),
       agentModels: z.record(z.string().max(256)).optional(), singleModel: z.boolean().optional(), autoRoute: z.boolean().optional(),
     }).strict(),
   }).strict().optional(),

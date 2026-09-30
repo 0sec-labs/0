@@ -6,9 +6,9 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 
 function pageTitle(pathname: string): string {
   if (/^\/(?:threads|findings)(?:\/|$)/.test(pathname)) return "Findings";
-  if (/^\/(?:runs|scans)(?:\/|$)/.test(pathname)) return "Runs";
+  if (/^\/(?:runs|scans)(?:\/|$)/.test(pathname)) return "Assessment history";
   if (pathname.startsWith("/live")) return "Live activity";
-  if (pathname.startsWith("/dashboard")) return "Overview";
+  if (pathname.startsWith("/dashboard")) return "Dashboard";
   if (pathname.startsWith("/setup")) return "Set up 0";
   if (pathname.startsWith("/connections")) return "Connections";
   if (pathname.startsWith("/models")) return "Models";
@@ -23,7 +23,7 @@ export function AppShell({ children, onOpenPalette }: { children: ReactNode; onO
   const { panel, dismissPanel } = useDashboardPanel();
   // The conversation already owns this shared rail and its session sidebar.
   if (pathname.startsWith("/console")) return <>{children}</>;
-  return <SharedWorkspaceLayout title={pageTitle(pathname)} onNew={() => navigate("/console?new=1")} onSearch={() => navigate("/console?search=1")} onOpenPalette={onOpenPalette}>
+  return <SharedWorkspaceLayout title={pageTitle(pathname)} onNew={() => navigate("/console?new=1")} onOpenPalette={onOpenPalette}>
     {children}
     <Sheet open={Boolean(panel)} onOpenChange={(open) => { if (!open) dismissPanel(); }}>
       <SheetContent side="right" className="w-full overflow-y-auto p-0 sm:max-w-2xl">

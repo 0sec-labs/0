@@ -371,6 +371,7 @@ type BashOutcome =
   | { kind: "error"; message: string };
 
 interface BashRunOptions {
+  cwd?: string;
   timeoutMs: number;
   ceilingMs: number;
   env: Record<string, string>;
@@ -397,6 +398,7 @@ async function runBashWithWallclock(
     try {
       child = spawn("/bin/bash", ["-c", command], {
         env: opts.env,
+        cwd: opts.cwd,
         stdio: ["ignore", "pipe", "pipe"],
         detached: true,
       });
@@ -3117,6 +3119,15 @@ export class ToolExecutor {
   private _todos: TodoTracker;
   private _workspaceIdentity?: WorkspaceIdentity;
 
+  /** Called only after explicit operator folder approval while the engine is idle. */
+  configureWorkspace(path: string): void {
+    this.ctx.scopePath = path;
+    this.ctx.workspaceRoot = path;
+    this._workspaceIdentity = captureWorkspaceIdentity(path);
+    this._scopedAuditGrants.clear();
+    this._sourceFilesRead.clear();
+  }
+
   constructor(
     ctx: ToolContext,
     db: osecDB | null = null,
@@ -5822,7 +5833,7 @@ export class ToolExecutor {
     const displayCommand = (args.command as string).trim();
     const startedAt = Date.now();
     const outcome = await runBashWithWallclock(command, {
-      timeoutMs, ceilingMs, env, signal: this._executionContext.getStore()?.signal,
+      timeoutMs, ceilingMs, env, cwd: this.ctx.scopePath ?? this.ctx.workspaceRoot, signal: this._executionContext.getStore()?.signal,
     });
     const durationMs = Date.now() - startedAt;
 
