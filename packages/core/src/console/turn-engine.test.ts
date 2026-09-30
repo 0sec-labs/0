@@ -25,6 +25,9 @@ import { ScopePolicy } from "../scope/scope.js";
 import type { ToolDefinition } from "../agent/types.js";
 import * as repositoryAcquisition from "../agent/repository-acquisition.js";
 import * as http from "../http.js";
+import { LlmApiRuntime } from "../runtime/llm-api.js";
+import { eventBus, type SubagentLifecyclePayload } from "../events/bus.js";
+import { MAX_OUTPUT_CAP_CONTINUATIONS } from "../agent/native-loop.js";
 
 import { setWorkspaceHarnessTrust } from "../plugins/harness-trust.js";
 
@@ -218,6 +221,188 @@ describe("createConsoleSession", () => {
     expect(outcome.stopReason).toBe("max_tool_iterations");
     expect(outcome.toolCalls).toHaveLength(3);
     expect(notices).toHaveLength(1);
+  });
+});
+
+describe("Responses output-cap continuation", () => {
+  function stream(events: Record<string, unknown>[]): Response {
+    return new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(""), {
+      headers: { "content-type": "text/event-stream" },
+    });
+  }
+  function cap(text = "Completed observation.", inputTokens = 10): Response {
+    return stream([
+      { type: "response.output_text.delta", delta: text },
+      { type: "response.output_item.done", item: {
+        type: "function_call", status: "completed", call_id: "not-authorized", name: "update_todos",
+        arguments: JSON.stringify({ todos: [{ content: "must never replace the plan" }] }),
+      } },
+      { type: "response.incomplete", response: { id: "resp-cap", status: "incomplete",
+        incomplete_details: { reason: "max_output_tokens" }, usage: { input_tokens: inputTokens, output_tokens: 8192 } } },
+    ]);
+  }
+  function runtime(): LlmApiRuntime {
+    return new LlmApiRuntime({ type: "api", timeout: 5000, provider: "azure", model: "DeepSeek-V4-Flash",
+      env: { AZURE_OPENAI_API_KEY: "synthetic", AZURE_OPENAI_BASE_URL: "https://deepseek.test/openai/v1", AZURE_OPENAI_WIRE_API: "responses",
+        ZERO_SKIP_PROVIDER_BANNER: "1" } });
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("completes one DeepSeek turn after a cap without replaying tools, losing the plan or failing a live worker", async () => {
+    let releaseChild!: (result: NativeRuntimeResult) => void;
+    let childStarted!: () => void;
+    const started = new Promise<void>(resolve => { childStarted = resolve; });
+    let childParked!: () => void;
+    const parked = new Promise<void>(resolve => { childParked = resolve; });
+    let childSignal: AbortSignal | undefined;
+    const child: NativeRuntime = {
+      type: "api", isAvailable: async () => true,
+      executeNative: async (_system, _messages, _tools, _callbacks, signal) => {
+        childSignal = signal;
+        const result = new Promise<NativeRuntimeResult>(resolve => {
+          releaseChild = resolve;
+          signal?.addEventListener("abort", () => resolve({ content: [], stopReason: "error", cancelled: true, durationMs: 0 }), { once: true });
+        });
+        childStarted();
+        return result;
+      },
+    };
+    const lifecycle: SubagentLifecyclePayload[] = [];
+    const unsubscribe = eventBus.subscribe({ emit(type, payload) {
+      if (type === "subagent_lifecycle") {
+        const event = payload as SubagentLifecyclePayload;
+        lifecycle.push(event);
+        if (event.status === "parked") childParked();
+      }
+    } });
+    const plan = { todos: [{ content: "Retain verified observation and finish report", status: "in_progress" }] };
+    const requests: Array<Record<string, unknown>> = [];
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (_url, init) => {
+      requests.push(JSON.parse(String(init?.body)));
+      if (requests.length === 1) return stream([{ type: "response.completed", response: {
+        status: "completed", output: [
+          { type: "function_call", call_id: "plan", name: "update_todos", arguments: JSON.stringify(plan) },
+          { type: "function_call", call_id: "spawn", name: "spawn_persistent_agent", arguments: JSON.stringify({ task: "Retain the observation", name: "observer", max_turns: 2 }) },
+        ], usage: { input_tokens: 12, output_tokens: 3 },
+      } }]);
+      if (requests.length === 2) { await started; return cap(); }
+      expect(childSignal?.aborted).toBe(false);
+      releaseChild({ content: [{ type: "tool_use", id: "child-done", name: "done", input: { summary: "Observation preserved." } }], stopReason: "tool_use", durationMs: 0 });
+      await parked;
+      return stream([
+        { type: "response.output_text.delta", delta: " Final report." },
+        { type: "response.completed", response: { status: "completed",
+          output: [{ type: "message", content: [{ type: "output_text", text: " Final report." }] }],
+          usage: { input_tokens: 15, output_tokens: 4 } } },
+      ]);
+    }));
+    const model = runtime();
+    vi.spyOn(model, "forkForSubagent").mockResolvedValue(child);
+    const session = createConsoleSession({ runtime: model, refineObjective: false, allowModelSelfExtension: false });
+    const deltas: string[] = [];
+    const usage: ConsoleUsageReport[] = [];
+    try {
+      const outcome = await session.send("Produce a report and retain a background observer.", {
+        onAssistantDelta: text => deltas.push(text), onUsage: value => usage.push(value),
+        onToolResult: (_call, result) => expect(result.success).toBe(true),
+      });
+      expect(outcome.stopReason).toBe("end_turn");
+      expect(outcome.assistantText).toBe("Completed observation. Final report.");
+      expect(deltas).toEqual(["Completed observation.", " Final report."]);
+      expect(outcome.toolCalls.map(entry => entry.call.name)).toEqual(["update_todos", "spawn_persistent_agent"]);
+      expect(outcome.usage).toEqual({ inputTokens: 37, outputTokens: 8199 });
+      expect(usage.filter(value => value.kind === "planner").map(value => value.outputTokens)).toEqual([3, 8192, 4]);
+      expect(requests).toHaveLength(3);
+      expect(requests.every(request => request.max_output_tokens === 8192)).toBe(true);
+      const continuation = JSON.stringify(requests[2].input);
+      expect(continuation).toContain("Completed observation.");
+      expect(continuation).toContain(plan.todos[0].content);
+      expect(continuation).toContain("[OUTPUT CAP CHECKPOINT]");
+      expect(continuation).not.toContain("not-authorized");
+      expect(session.messages.filter(message => message.role === "assistant").flatMap(message => message.content)
+        .filter(block => block.type === "tool_use").map(block => block.id)).toEqual(["plan", "spawn"]);
+      expect(lifecycle.some(event => event.status === "failed")).toBe(false);
+      expect(lifecycle.find(event => event.status === "parked")).toMatchObject({ done: true, completion_reason: "done" });
+    } finally {
+      releaseChild?.(endTurn("Released."));
+      await session.cleanup();
+      unsubscribe();
+    }
+  });
+
+  it("bounds repeated caps and resumes only on a new operator action", async () => {
+    const fetchMock = vi.fn(async () => cap("Saved observation."));
+    vi.stubGlobal("fetch", fetchMock);
+    const session = createConsoleSession({ runtime: runtime(), refineObjective: false, allowModelSelfExtension: false });
+    try {
+      const outcome = await session.send("continue");
+      expect(outcome.stopReason).toBe("output_cap");
+      expect(outcome.outputCap?.continuations).toBe(MAX_OUTPUT_CAP_CONTINUATIONS);
+      expect(outcome.outputCap?.message).toMatch(/resume/i);
+      expect(fetchMock).toHaveBeenCalledTimes(MAX_OUTPUT_CAP_CONTINUATIONS + 1);
+      expect(outcome.usage.outputTokens).toBe(8192 * (MAX_OUTPUT_CAP_CONTINUATIONS + 1));
+      expect(session.messages.filter(message => message.role === "assistant").map(message => message.content))
+        .toEqual(Array.from({ length: MAX_OUTPUT_CAP_CONTINUATIONS + 1 }, () => [{ type: "text", text: "Saved observation." }]));
+      fetchMock.mockImplementation(async () => stream([{ type: "response.completed", response: { status: "completed",
+        output: [{ type: "message", content: [{ type: "output_text", text: "Concise finish." }] }] } }]));
+      expect((await session.send("Finish concisely from saved observations.")).assistantText).toBe("Concise finish.");
+    } finally { await session.cleanup(); }
+  });
+
+  it.each(["abort", "budget"])("does not continue past the original %s allowance", async mode => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn(async () => cap("Saved observation.", mode === "budget" ? 30_000 : 10));
+    vi.stubGlobal("fetch", fetchMock);
+    const session = createConsoleSession({ runtime: runtime(), refineObjective: false, allowModelSelfExtension: false,
+      maxTurnTokens: mode === "budget" ? 50_000 : undefined });
+    try {
+      const outcome = await session.send("continue", { onNotice: () => { if (mode === "abort") controller.abort(); } }, { signal: controller.signal });
+      expect(outcome.stopReason).toBe(mode === "abort" ? "cancelled" : "max_turn_tokens");
+      expect(fetchMock).toHaveBeenCalledOnce();
+      expect(outcome.assistantText).toBe("Saved observation.");
+      expect(outcome.usage.outputTokens).toBe(8192);
+      expect(outcome.toolCalls).toEqual([]);
+    } finally { await session.cleanup(); }
+  });
+
+  it("reserves the full output cap for an unmetered response under a finite turn budget", async () => {
+    const fetchMock = vi.fn(async () => stream([
+      { type: "response.output_text.delta", delta: "Saved observation." },
+      { type: "response.incomplete", response: { status: "incomplete", incomplete_details: { reason: "max_output_tokens" } } },
+    ]));
+    vi.stubGlobal("fetch", fetchMock);
+    const session = createConsoleSession({ runtime: runtime(), refineObjective: false, allowModelSelfExtension: false, maxTurnTokens: 100_000 });
+    const samples: ConsoleUsageReport[] = [];
+    try {
+      const outcome = await session.send("continue", { onUsage: sample => samples.push(sample) });
+      const plannerSamples = samples.filter(sample => sample.kind === "planner");
+      expect(plannerSamples.every(sample => sample.outputTokens === 8192)).toBe(true);
+      expect(outcome.usage.outputTokens).toBe(fetchMock.mock.calls.length * 8192);
+      expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(MAX_OUTPUT_CAP_CONTINUATIONS + 1);
+      expect(outcome.stopReason === "max_turn_tokens" || outcome.stopReason === "output_cap").toBe(true);
+    } finally { await session.cleanup(); }
+  });
+
+  it("keeps a subsequent policy failure terminal and charges both responses once", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(cap()).mockResolvedValueOnce(stream([
+      { type: "response.failed", response: { status: "failed", error: { code: "cyber_policy" },
+        usage: { input_tokens: 7, output_tokens: 3 } } },
+      { type: "response.completed", response: { status: "completed", output: [] } },
+    ]));
+    vi.stubGlobal("fetch", fetchMock);
+    const session = createConsoleSession({ runtime: runtime(), refineObjective: false, allowModelSelfExtension: false });
+    try {
+      const outcome = await session.send("continue");
+      expect(outcome.stopReason).toBe("error");
+      expect(outcome.error).toContain("cyber_policy");
+      expect(outcome.assistantText).toBe("Completed observation.");
+      expect(outcome.usage).toEqual({ inputTokens: 17, outputTokens: 8195 });
+      expect(outcome.toolCalls).toEqual([]);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally { await session.cleanup(); }
   });
 });
 
@@ -2515,8 +2700,8 @@ describe("Console source acquisition is not target authorization", () => {
     expect(requestScope).not.toHaveBeenCalled();
   });
 
-  it("also permits source setup through run_command with no preconfigured target", async () => {
-    vi.spyOn(repositoryAcquisition, "runRepositoryAcquisition").mockResolvedValue({ success: true, output: "Checkout completed" });
+  it("refuses source setup through run_command with no exact repository target", async () => {
+    const runCheckout = vi.spyOn(repositoryAcquisition, "runRepositoryAcquisition").mockResolvedValue({ success: true, output: "Checkout completed" });
     const session = createConsoleSession({
       runtime: new ScriptedRuntime([
         checkoutTurn("git clone --depth 1 https://github.com/golang/go.git", "run_command"),
@@ -2525,8 +2710,39 @@ describe("Console source acquisition is not target authorization", () => {
       autonomyMode: "yolo",
     });
     const checkout = await session.send("Get Go source");
-    expect(checkout.toolCalls[0].result.success).toBe(true);
+    expect(checkout.toolCalls[0].result.success).toBe(false);
+    expect(runCheckout).not.toHaveBeenCalled();
     expect(session.scope?.match("https://github.com").allowed ?? false).toBe(false);
+  });
+
+  it("allows an exact operator-supplied repository target, including a clone suffix", async () => {
+    const runCheckout = vi.spyOn(repositoryAcquisition, "runRepositoryAcquisition").mockResolvedValue({ success: true, output: "Checkout completed" });
+    const session = createConsoleSession({
+      runtime: new ScriptedRuntime([
+        checkoutTurn("git clone --depth 1 https://github.com/muse-spark/muse-spark.git", "run_command"),
+        endTurn("Source ready."),
+      ]),
+      autonomyMode: "yolo",
+      target: "https://github.com/muse-spark/muse-spark",
+    });
+    const checkout = await session.send("Review the official Muse Spark source");
+    expect(checkout.toolCalls[0].result.success).toBe(true);
+    expect(runCheckout).toHaveBeenCalledOnce();
+  });
+
+  it("does not treat a product name and same-name search result as repository identity", async () => {
+    const runCheckout = vi.spyOn(repositoryAcquisition, "runRepositoryAcquisition").mockResolvedValue({ success: true, output: "Checkout completed" });
+    const session = createConsoleSession({
+      runtime: new ScriptedRuntime([
+        checkoutTurn("git clone https://github.com/muse-spark/muse-spark.git"),
+        endTurn("Refused."),
+      ]),
+      autonomyMode: "yolo",
+      target: "Muse Spark",
+    });
+    const checkout = await session.send("Use the same-name search result for Muse Spark");
+    expect(checkout.toolCalls[0].result.success).toBe(false);
+    expect(runCheckout).not.toHaveBeenCalled();
   });
 
   it("does not exempt appended commands or Git configuration and submodule execution", async () => {

@@ -2,9 +2,16 @@ import { chmodSync, mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync }
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { estimateCost } from "@0/shared";
 import { parseEvolutionConfig } from "./config.js";
 import { evaluateEvolutionCandidate } from "./evaluation.js";
 import { createEvolutionCandidate, snapshotEvolutionSource } from "./registry.js";
+import { proposeEvolutionEdits } from "./rewrite.js";
+import {
+  campaignPromotionAllowed, loadEvolutionCampaign, reconcileCampaignDispatch,
+  reserveCampaignDispatch, settleCampaignDispatch,
+} from "./safety.js";
+import { promoteEvolutionVersion, recordEvolutionVersion, startEvolutionCanary } from "./registry.js";
 import type { EvolutionConfig, EvolutionSandbox, EvolutionSnapshot } from "./types.js";
 
 const directories: string[] = [];
@@ -136,6 +143,134 @@ describe("independent evolution oracle", () => {
     expect(evaluation.decision.status).toBe("rejected");
   });
 
+
+  it("charges completed executions before admitting the next bounded evaluation", async () => {
+    const { config, baseline, candidate } = await setup();
+    let dispatches = 0;
+    const sandbox: EvolutionSandbox = async ({ input }) => {
+      dispatches++;
+      const fixture = config.cases.find((entry) => JSON.stringify(entry.input) === JSON.stringify(input))!;
+      return { exitCode: 0, stdout: JSON.stringify(fixture.expected), stderr: "", durationMs: 500, timedOut: false };
+    };
+    await expect(evaluateEvolutionCandidate(baseline, candidate, {
+      ...config, timeoutMs: 1000, maxEvaluationCostUsd: 0.0015,
+    }, { sandbox })).rejects.toThrow(/budget/);
+    expect(dispatches).toBe(2);
+  });
+
+  it("retains observed execution cost when the shared pass cap rejects after settlement", async () => {
+    const { config, baseline, candidate } = await setup();
+    let charged = 0;
+    await expect(evaluateEvolutionCandidate(baseline, candidate, {
+      ...config, timeoutMs: 1000, safety: { enabled: true, holdoutExposureLimit: 100 },
+    }, {
+      modelIdentity: () => ({ provider: "openai", model: "gpt-4o" }),
+      sandbox: async () => ({ exitCode: 0, stdout: "{}", stderr: "", durationMs: 2000, timedOut: false }),
+      evaluationBudget: {
+        remainingUsd: () => 0.0015 - charged,
+        charge: (costUsd) => {
+          charged += costUsd;
+          if (charged > 0.0015) throw new Error("shared pass cap exceeded");
+        },
+      },
+    })).rejects.toThrow(/shared pass cap/);
+    const ledger = loadEvolutionCampaign(config.storePath);
+    expect(ledger.cumulativeEvaluationCostUsd).toBe(0.002);
+    expect(ledger.unknownCost).toBe(false);
+    expect(charged).toBe(0.002);
+  });
+
+  it("reserves real generation before dispatch and retains failed-call unknown cost", async () => {
+    const { config, baseline } = await setup();
+    const safe = { ...config, model: "anthropic/claude-sonnet-4-6", allowModelSourceAccess: true, safety: { enabled: true, holdoutExposureLimit: 100 } };
+    const modelIdentity = () => ({ provider: "anthropic", model: "claude-sonnet-4-6", pricingModel: "anthropic/claude-sonnet-4-6" });
+    const usage = { inputTokens: 1000, outputTokens: 100, cacheWriteTokens: 1000 };
+    const proposal = await proposeEvolutionEdits(baseline, safe, "development only", {
+      modelIdentity,
+      model: async () => {
+        expect(campaignPromotionAllowed(config.storePath).allowed).toBe(false);
+        return {
+          content: [{ type: "tool_use", id: "proposal", name: "propose_edits", input: { rationale: "No justified change", edits: [] } }],
+          stopReason: "tool_use", usage, durationMs: 1,
+        };
+      },
+    });
+    expect(proposal.modelCostUsd).toBe(estimateCost(usage, "anthropic/claude-sonnet-4-6"));
+    expect(loadEvolutionCampaign(config.storePath).cumulativeModelCostUsd).toBe(proposal.modelCostUsd);
+    await expect(proposeEvolutionEdits(baseline, safe, "development only", {
+      modelIdentity, model: async () => { throw new Error("provider disconnected after dispatch"); },
+    })).rejects.toThrow(/disconnected/);
+    expect(loadEvolutionCampaign(config.storePath).unknownCost).toBe(true);
+    expect(loadEvolutionCampaign(config.storePath).cumulativeModelCostUsd).toBe(proposal.modelCostUsd);
+    expect(campaignPromotionAllowed(config.storePath).allowed).toBe(false);
+    let bypassDispatches = 0;
+    await expect(proposeEvolutionEdits(baseline, { ...safe, safety: { ...safe.safety, enabled: false } }, "development only", {
+      modelIdentity,
+      model: async () => {
+        bypassDispatches++;
+        throw new Error("must not dispatch after disabling a durable gate");
+      },
+    })).rejects.toThrow(/cannot be disabled/);
+    expect(bypassDispatches).toBe(0);
+  });
+
+  it("settles the observed failover route and blocks incompatible generator provenance", async () => {
+    const { config, baseline } = await setup();
+    let resolvedModel = "gpt-4o";
+    const usage = { inputTokens: 100, outputTokens: 10 };
+    await expect(proposeEvolutionEdits(baseline, {
+      ...config, model: "gpt-4o", allowModelSourceAccess: true, safety: { enabled: true, holdoutExposureLimit: 100 },
+    }, "development only", {
+      modelIdentity: () => ({ provider: "openai", model: resolvedModel, pricingModel: `openai/${resolvedModel}` }),
+      model: async () => {
+        resolvedModel = "gpt-4o-mini";
+        return {
+          content: [{ type: "tool_use", id: "proposal", name: "propose_edits", input: { rationale: "Observed failover", edits: [] } }],
+          stopReason: "tool_use", usage, durationMs: 1,
+        };
+      },
+    })).rejects.toThrow(/changed or is unresolved/);
+    const ledger = loadEvolutionCampaign(config.storePath);
+    expect(ledger.cumulativeModelCostUsd).toBe(estimateCost(usage, "openai/gpt-4o-mini"));
+    expect(ledger.status).toBe("blocked");
+    expect(ledger.unknownCost).toBe(false);
+    expect(campaignPromotionAllowed(config.storePath).allowed).toBe(false);
+  });
+
+  it("cannot reset the evaluator or holdout exposure by relabeling and reordering fixtures", async () => {
+    const { config, baseline, candidate } = await setup();
+    const safe = { ...config, safety: { enabled: true, holdoutExposureLimit: 12 } };
+    const deps = { sandbox: probe(candidate.id, "correct"), modelIdentity: () => ({ provider: "openai", model: "gpt-4o" }) };
+    await evaluateEvolutionCandidate(baseline, candidate, safe, deps);
+    await expect(evaluateEvolutionCandidate(baseline, candidate, {
+      ...safe, cases: [...safe.cases].reverse().map((entry) => ({ ...entry, id: `renamed-${entry.id}` })),
+    }, deps)).rejects.toThrow(/holdout exposure exhausted/);
+    expect(loadEvolutionCampaign(config.storePath).exposures[0]?.consumed).toBe(12);
+  });
+
+  it("enforces pending and unknown-cost gates inside canary and promotion CAS transitions", async () => {
+    const { config, baseline, candidate } = await setup();
+    const safe = { ...config, safety: { enabled: true, holdoutExposureLimit: 100 } };
+    const evaluation = await evaluateEvolutionCandidate(baseline, candidate, safe, {
+      sandbox: probe(candidate.id, "correct"), modelIdentity: () => ({ provider: "openai", model: "gpt-4o" }),
+    });
+    await recordEvolutionVersion(config.storePath, {
+      schemaVersion: 1, id: baseline.id, kind: safe.kind, snapshot: baseline, parentId: null,
+      createdAt: new Date().toISOString(), configDigest: evaluation.configDigest, receiptDigest: null, status: "baseline",
+    }, safe);
+    await recordEvolutionVersion(config.storePath, {
+      schemaVersion: 1, id: candidate.id, kind: safe.kind, snapshot: candidate, parentId: baseline.id,
+      createdAt: new Date().toISOString(), configDigest: evaluation.configDigest, receiptDigest: evaluation.receiptDigest, status: "candidate",
+    }, safe, evaluation);
+    const dispatch = reserveCampaignDispatch(config.storePath, "model", 1);
+    await expect(startEvolutionCanary(config.storePath, candidate.id, baseline.id)).rejects.toThrow(/pending/);
+    settleCampaignDispatch(config.storePath, dispatch.id, null);
+    await expect(startEvolutionCanary(config.storePath, candidate.id, baseline.id)).rejects.toThrow(/unknown-cost/);
+    reconcileCampaignDispatch(config.storePath, dispatch.id, 0.01, "sha256:" + "b".repeat(64));
+    await startEvolutionCanary(config.storePath, candidate.id, baseline.id);
+    reserveCampaignDispatch(config.storePath, "model", 1);
+    await expect(promoteEvolutionVersion(config.storePath, candidate.id, baseline.id)).rejects.toThrow(/pending/);
+  });
   it("rejects missing controls and reused development inputs in held-out lanes", async () => {
     const { config } = await setup();
     expect(() => parseEvolutionConfig({ ...config, cases: config.cases.filter((entry) => entry.lane !== "negative-control") })).toThrow(/negative-control/);

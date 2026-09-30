@@ -189,3 +189,64 @@ describe("installTuiOutputGuard", () => {
     expect(guard.drain().map((l) => l.text)).toEqual(["still fine"]);
   });
 });
+
+
+describe("bounded diagnostic lines", () => {
+  it("bounds newline-free output across writes and emits one marked line", () => {
+    const guard = installTuiOutputGuard({ maxLineLength: 32 });
+    try {
+      for (let i = 0; i < 100; i++) process.stderr.write("x".repeat(1000));
+      expect(guard.peek()).toEqual([]);
+      process.stdout.write("independent stream\n");
+      process.stderr.write("\nnext line\n");
+    } finally {
+      guard.restore();
+    }
+    expect(guard.drain()).toEqual([
+      { stream: "stdout", text: "independent stream" },
+      { stream: "stderr", text: "x".repeat(32) + " … [truncated 99968 code units]" },
+      { stream: "stderr", text: "next line" },
+    ]);
+  });
+
+  it("bounds complete writes, console lines, and partial lines flushed at restore", () => {
+    const guard = installTuiOutputGuard({ maxLineLength: 32 });
+    try {
+      process.stderr.write("a".repeat(1000) + "\n");
+      console.warn("b".repeat(1000));
+      process.stderr.write("c".repeat(1000));
+    } finally {
+      guard.restore();
+    }
+    expect(guard.drain().map((line) => line.text)).toEqual(
+      ["a", "b", "c"].map((char) => char.repeat(32) + " … [truncated 968 code units]"),
+    );
+  });
+
+  it("still filters a truncated cloud relay line", () => {
+    const guard = installTuiOutputGuard({ maxLineLength: 32 });
+    try {
+      process.stdout.write("ZERO_EVENT_TOOL_CALL_STARTED " + "x".repeat(1000));
+      process.stdout.write("\nvisible\n");
+    } finally {
+      guard.restore();
+    }
+    expect(guard.drain()).toEqual([{ stream: "stdout", text: "visible" }]);
+  });
+});
+
+
+it("preserves split Unicode writes and avoids bisecting a truncated glyph", () => {
+  const guard = installTuiOutputGuard({ maxLineLength: 32 });
+  try {
+    process.stderr.write("a".repeat(30) + "\ud83d");
+    process.stderr.write("\ude00\n");
+    process.stderr.write("a".repeat(31) + "😀suffix\n");
+  } finally {
+    guard.restore();
+  }
+  expect(guard.drain().map((line) => line.text)).toEqual([
+    "a".repeat(30) + "😀",
+    "a".repeat(31) + " … [truncated 8 code units]",
+  ]);
+});

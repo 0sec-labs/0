@@ -117,7 +117,7 @@ import { validateFlagShape } from "./flag-validator.js";
 import { extractPocStepsFromProse } from "./poc-steps-from-prose.js";
 import { isUntrustedSourceTool, sanitizeUntrustedToolResult } from "../untrusted-sanitizer.js";
 import { computeFindingConfidence } from "./finding-confidence.js";
-import { parseRepositoryAcquisition, repositoryAcquisitionAllowed, runRepositoryAcquisition } from "./repository-acquisition.js";
+import { parseRepositoryAcquisition, repositoryAcquisitionAllowed, repositoryIdentityMatchesTarget, runRepositoryAcquisition } from "./repository-acquisition.js";
 import { evaluateVerificationSpec } from "../verification-spec/spec.js";
 import {
   validateFindingDraft,
@@ -5631,9 +5631,16 @@ export class ToolExecutor {
       return { success: false, output: null, error: "Command is required" };
     }
     const networkScope = this.ctx.publicNetwork ? this.ctx.publicNetwork.scope : this.ctx.scope;
+    const acquisition = parseRepositoryAcquisition(command);
+    if (this.ctx.consoleSession && acquisition && !repositoryIdentityMatchesTarget(this.ctx.target, acquisition.url)) {
+      return {
+        success: false,
+        output: null,
+        error: "Console repository acquisition refused: provide the exact HTTPS repository URL as the current target before cloning or reviewing source.",
+      };
+    }
 
     if (this.ctx.autonomyMode === "yolo" && !this.ctx.enforcement) {
-      const acquisition = parseRepositoryAcquisition(command);
       if (acquisition && !networkScope?.match(acquisition.url).allowed) {
         if (!repositoryAcquisitionAllowed(acquisition, networkScope)) {
           return { success: false, output: null, error: "Repository source is explicitly excluded by the engagement scope" };
@@ -6220,10 +6227,12 @@ export class ToolExecutor {
           scope: this.ctx.scope,
           authConfig: this.usesTargetIdentity(this.ctx.target) ? this.ctx.authConfig : undefined,
           costLedger: this.ctx.costLedger,
+          requirePricedUsage: this.ctx.requirePricedUsage,
           costCeilingUsd: this.ctx.costCeilingUsd,
           costModel: rt.resolvedModel?.() ?? this.ctx.costModel,
           scopePath: this.ctx.scopePath,
           autonomyMode: this.ctx.autonomyMode,
+          consoleSession: this.ctx.consoleSession,
           publicNetwork: this.ctx.publicNetwork,
           allowScanners: this.ctx.allowScanners,
           attribution: this.ctx.attribution,
@@ -6287,7 +6296,7 @@ export class ToolExecutor {
       findings: state.findings.length,
       summary: state.summary,
       done: state.done,
-      completion_reason: state.errorExit ? "error" : state.costCeilingExceeded ? "cost_limit" : state.earlyStopNoProgress ? "early_stop" : state.done ? "done" : "turn_limit",
+      completion_reason: state.errorExit ? "error" : state.costCeilingExceeded ? "cost_limit" : state.outputCapExit ? "output_limit" : state.earlyStopNoProgress ? "early_stop" : state.done ? "done" : "turn_limit",
       ...(state.errorExit ? { error: state.errorExit.error } : {}),
       ...(state.totalUsage && (state.totalUsage.inputTokens > 0 || state.totalUsage.outputTokens > 0) ? { usage: state.totalUsage } : {}),
       durationMs: Date.now() - startedAt,
@@ -6371,10 +6380,12 @@ export class ToolExecutor {
         scope: this.ctx.scope,
         authConfig: this.usesTargetIdentity(this.ctx.target) ? this.ctx.authConfig : undefined,
         costLedger: this.ctx.costLedger,
+        requirePricedUsage: this.ctx.requirePricedUsage,
         costCeilingUsd: this.ctx.costCeilingUsd,
         costModel: rt.resolvedModel?.() ?? this.ctx.costModel,
         scopePath: this.ctx.scopePath,
         autonomyMode: this.ctx.autonomyMode,
+        consoleSession: this.ctx.consoleSession,
         publicNetwork: this.ctx.publicNetwork,
         allowScanners: this.ctx.allowScanners,
         attribution: this.ctx.attribution,
@@ -6419,7 +6430,7 @@ export class ToolExecutor {
       turns: turnOffset + state.turnCount, summary: state.summary, done: state.done,
       ...(state.totalUsage && (state.totalUsage.inputTokens > 0 || state.totalUsage.outputTokens > 0) ? { usage: state.totalUsage } : {}),
       durationMs: Date.now() - startedAt, model: rt.resolvedModel?.(),
-      completion_reason: state.costCeilingExceeded ? "cost_limit" : state.earlyStopNoProgress ? "early_stop" : state.done ? "done" : "turn_limit",
+      completion_reason: state.costCeilingExceeded ? "cost_limit" : state.outputCapExit ? "output_limit" : state.earlyStopNoProgress ? "early_stop" : state.done ? "done" : "turn_limit",
     };
   }
 

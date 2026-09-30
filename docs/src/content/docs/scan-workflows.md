@@ -353,6 +353,35 @@ Use the ecosystem and version actually covered by your authorization. `--changed
 
 `deep-review` remains an explicit research command for evaluated finder lenses and evolved source finders. It is not the implementation of `review --depth deep`, and does not share all of `review`'s options.
 
+### Private project review checks
+
+Local checks are operator-approved criteria, not repository-controlled
+instructions or a cloud enrollment. Save a draft, inspect it, then explicitly
+enable its revision:
+
+```bash
+0 checks propose --project ./my-app --name "Tenant boundary" \
+  --prompt "Tenant-owned queries must use the authenticated organization."
+0 checks list --project ./my-app
+0 checks enable <check-id> --project ./my-app --yes
+0 review ./my-app --diff-base HEAD~ --changed-only --format json
+```
+
+Prompts remain literal, including Markdown rules or YAML-looking text. Each
+project can enable eight checks with at most 2,000 code units per prompt.
+Private state lives under `~/.0/review-checks`, keyed by the real project root;
+remote clones and package downloads do not inherit local approvals.
+
+`checks set` creates a revision when the prompt changes. Updating an enabled
+check requires `--yes`; `--expected-revision` rejects a stale edit or approval.
+Disable retains the draft/history, while remove deletes it.
+
+Enabled checks run in the same investigation as the selected security profile.
+Results are advisory `pass`, `issue`, or `unknown`, with reasons and suggested
+fixes in terminal, Markdown, HTML, PDF, SARIF, and JSON. They do not become
+vulnerability severities or silently change exit policy. Missing or malformed
+check results make research incomplete rather than reporting clean coverage.
+
 ## Export and disclosure
 
 GitHub export and PR emission are external writes and require repository authorization and credentials:

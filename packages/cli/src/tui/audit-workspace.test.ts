@@ -1,13 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 import { AuditWorkspace, type AuditRecord } from "./audit-workspace.js";
-import type { ConsoleSession } from "@0/core";
+import type { ConsoleSession, NativeRuntime } from "@0/core";
 
 /** A record's runtime handle, as ChatScreen publishes it via buildSession. */
 function bindRuntimeHandle(record: AuditRecord, applySelection: (sel: unknown) => void): void {
+  const nativeRuntime: NativeRuntime = {
+    type: "api",
+    executeNative: vi.fn(),
+    isAvailable: vi.fn(),
+  };
   record.runtimeInfo.current = {
     model: () => "current-model",
     providerId: () => "anthropic",
     connectionIdentity: () => undefined,
+    nativeRuntime: () => nativeRuntime,
     applySelection: applySelection as never,
   };
 }

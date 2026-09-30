@@ -1310,9 +1310,9 @@ export interface HerdSubagentRecord {
   readonly error?: string;
   /**
    * Why a terminal worker stopped, straight off the lifecycle payload's
-   * `completion_reason` ("done"|"turn_limit"|"cost_limit"|"early_stop"|"error").
+   * `completion_reason` ("done"|"turn_limit"|"cost_limit"|"output_limit"|"early_stop"|"error").
    * `undefined` means "not reported", never a synthesised default — a curtailed
-   * run (turn_limit/cost_limit) reads distinctly from a clean `done`.
+   * run (turn_limit/cost_limit/output_limit) reads distinctly from a clean `done`.
    */
   readonly completionReason?: string;
   /** Latest tool the child ran, mirrored onto the roster row's activity. */

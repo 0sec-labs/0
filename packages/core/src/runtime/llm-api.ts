@@ -49,6 +49,27 @@ function readResponsesCachedTokens(usage: Record<string, unknown>): { cachedInpu
   const cached = Number(details?.cached_tokens ?? 0);
   return Number.isFinite(cached) && cached > 0 ? { cachedInputTokens: cached } : {};
 }
+function readChatUsage(raw: unknown): RuntimeResult["usage"] {
+  if (!raw || typeof raw !== "object") return undefined;
+  const usage = raw as Record<string, unknown>;
+  if (usage.prompt_tokens === undefined && usage.completion_tokens === undefined) return undefined;
+  return {
+    inputTokens: Number(usage.prompt_tokens ?? 0), outputTokens: Number(usage.completion_tokens ?? 0),
+    ...readResponsesCachedTokens({ input_tokens_details: usage.prompt_tokens_details }),
+  };
+}
+
+function readGoogleUsage(raw: unknown): RuntimeResult["usage"] {
+  if (!raw || typeof raw !== "object") return undefined;
+  const usage = raw as Record<string, unknown>;
+  if (usage.promptTokenCount === undefined && usage.candidatesTokenCount === undefined) return undefined;
+  const cached = Number(usage.cachedContentTokenCount ?? 0);
+  return {
+    inputTokens: Number(usage.promptTokenCount ?? 0),
+    outputTokens: Number(usage.candidatesTokenCount ?? 0) + Number(usage.thoughtsTokenCount ?? 0),
+    ...(cached > 0 ? { cachedInputTokens: cached } : {}),
+  };
+}
 
 /** Safely parse JSON tool arguments; returns empty object on malformed input. */
 function safeParseJson(raw: string | null | undefined): Record<string, unknown> {
@@ -57,6 +78,21 @@ function safeParseJson(raw: string | null | undefined): Record<string, unknown> 
     return JSON.parse(raw);
   } catch {
     return { _raw: raw };
+  }
+}
+
+/** A completed Responses envelope is necessary, but malformed calls still fail closed. */
+function parseResponsesFunctionCall(item: Record<string, unknown>): Extract<NativeContentBlock, { type: "tool_use" }> | undefined {
+  if ((item.status !== undefined && item.status !== "completed") ||
+      typeof item.call_id !== "string" || !item.call_id.trim() ||
+      typeof item.name !== "string" || !item.name.trim() ||
+      typeof item.arguments !== "string") return undefined;
+  try {
+    const input: unknown = JSON.parse(item.arguments);
+    if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+    return { type: "tool_use", id: item.call_id, name: item.name, input: input as Record<string, unknown> };
+  } catch {
+    return undefined;
   }
 }
 
@@ -244,9 +280,9 @@ export function isRetryableHttpStatus(status: number): boolean {
 // retains the existing bounded retry for that missing-final-response result;
 // EOF alone does not establish why the stream ended.
 //
-// Explicit `error`, `response.failed`, and `response.incomplete` events are
-// terminal failures, not transient empty streams. The Responses consumer keeps
-// their bounded protocol identifiers and returns a distinct non-retryable error.
+// Explicit failures are not transient empty streams. Only a provider-confirmed
+// max_output_tokens incompletion can return an observation-only checkpoint;
+// its continuation belongs to the loop, never this same-request retry.
 // "response stream failed" remains below for historical runtime results only.
 // Auth/validation errors, timeouts, operator cancellations, and outcomes that
 // already produced tool calls are not retried here.
@@ -2825,6 +2861,10 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     return this.model;
   }
 
+  resolvedProvider(): string {
+    return this.provider;
+  }
+
   /** Price discovered IDs on their actual route without changing the wire model. */
   resolvedPricingModel(): string {
     if (this.provider === "chatgpt-codex" || this.provider === "copilot" || this.provider === "google") return this.model;
@@ -3519,6 +3559,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     context?: RuntimeContext,
   ): Promise<RuntimeResult> {
     const start = Date.now();
+    if (context?.signal?.aborted) {
+      return { output: "", exitCode: null, timedOut: false, durationMs: 0, error: "API execution cancelled." };
+    }
 
     // chatgpt-codex and google (Code Assist) authenticate via an OAuth bearer
     // refreshed on demand, not a Platform API key field — skip the missing-key
@@ -3540,10 +3583,12 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       () => controller.abort(),
       this.config.timeout || 120_000,
     );
+    const abort = composeCallAbort(controller.signal, context?.signal);
 
     try {
       let res: Response | null;
       do {
+        abort.throwIfCancelled();
 
         if (this.isOpenAICompat && this.wireApi === "chat_completions") {
           // OpenRouter / OpenAI / Azure chat completions format
@@ -3563,7 +3608,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
                 ? { reasoning_effort: this.reasoningEffort }
                 : {}),
             }),
-            controller.signal,
+            abort.signal, abort,
           );
         } else if (this.isOpenAICompat && this.wireApi === "responses") {
           // Azure Responses API format
@@ -3586,7 +3631,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
               input,
               ...(isCodex ? { store: false } : { max_output_tokens: NATIVE_COMPLETION_TOKEN_LIMIT }),
             }),
-            controller.signal,
+            abort.signal, abort,
           );
         } else if (this.isGeminiCodeAssist) {
           // Same inner request as the Google generateContent wire, wrapped in
@@ -3597,7 +3642,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
             generationConfig: { maxOutputTokens: NATIVE_COMPLETION_TOKEN_LIMIT },
           };
           const geminiBody = await this.wrapGeminiCodeAssistBody(request);
-          res = await this.postWithRetry(() => JSON.stringify(geminiBody), controller.signal);
+          res = await this.postWithRetry(() => JSON.stringify(geminiBody), abort.signal, abort);
         } else if (this.isGoogleWire) {
           res = await this.postWithRetry(
             () => JSON.stringify({
@@ -3607,7 +3652,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
               contents: [{ role: "user", parts: [{ text: prompt }] }],
               generationConfig: { maxOutputTokens: NATIVE_COMPLETION_TOKEN_LIMIT },
             }),
-            controller.signal,
+            abort.signal, abort,
           );
         } else if (this.isAnthropicWire) {
           // Anthropic Messages API format (also serves the z-ai/GLM and
@@ -3620,14 +3665,13 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
               ...(systemPrompt ? { system: systemPrompt } : {}),
               messages: [{ role: "user", content: prompt }],
             }),
-            controller.signal,
+            abort.signal, abort,
           );
         } else {
           throw new Error(`execute: provider ${this.provider} is not mapped to a wire`);
         }
       } while (!res);
 
-      clearTimeout(timer);
 
       const body = await res.text();
 
@@ -3688,14 +3732,11 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       if (this.isAnthropicWire) {
         usage = readCacheUsage(json.usage);
       } else if ((this.isGoogleWire || this.isGeminiCodeAssist) && json.usageMetadata) {
-        usage = {
-          inputTokens: json.usageMetadata.promptTokenCount ?? 0,
-          outputTokens: json.usageMetadata.candidatesTokenCount ?? 0,
-        };
+        usage = readGoogleUsage(json.usageMetadata);
       } else if (this.isOpenAICompat && json.usage) {
         usage = this.wireApi === "chat_completions"
-          ? { inputTokens: json.usage.prompt_tokens ?? 0, outputTokens: json.usage.completion_tokens ?? 0 }
-          : { inputTokens: json.usage.input_tokens ?? 0, outputTokens: json.usage.output_tokens ?? 0 };
+          ? readChatUsage(json.usage)
+          : { inputTokens: json.usage.input_tokens ?? 0, outputTokens: json.usage.output_tokens ?? 0, ...readResponsesCachedTokens(json.usage) };
       }
 
       return {
@@ -3707,6 +3748,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       };
     } catch (err) {
       clearTimeout(timer);
+      if (abort.operatorAborted()) {
+        return { output: "", exitCode: null, timedOut: false, durationMs: Date.now() - start, error: "API execution cancelled." };
+      }
       if (err instanceof QuotaExhaustedError) {
         // Plan-quota exhaustion: fail fast with the distinct, greppable
         // message (carries usage_limit_reached + resets_at) — never retried.
@@ -3729,6 +3773,10 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           ? `${this.providerLabel} API request timed out`
           : `${this.providerLabel} API error: ${msg}`,
       };
+    }
+    finally {
+      clearTimeout(timer);
+      abort.dispose();
     }
   }
 
@@ -4354,85 +4402,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
               : "end_turn";
 
         if (json.usage) {
-          usage = {
-            inputTokens: json.usage.prompt_tokens ?? 0,
-            outputTokens: json.usage.completion_tokens ?? 0,
-          };
-        }
-      } else if (this.isOpenAICompat && this.wireApi === "responses") {
-        content = [];
-        // Reasoning summaries are surfaced to the UI and then DROPPED from
-        // `content` — see the reasoning branch below.
-        const reasoningSummaries: string[] = [];
-        // Keep a non-empty raw item array so the next turn can replay the
-        // reasoning items verbatim — see ProviderRawOutput. Avoid persisting an
-        // empty sidecar on reasoning-free end_turn responses.
-        const rawOutput = (json.output ?? []) as unknown[];
-        if (rawOutput.length > 0) {
-          providerRaw = {
-            provider: this.provider,
-            model: this.model,
-            wireApi: this.wireApi,
-            output: rawOutput,
-          };
-        }
-        for (const item of json.output ?? []) {
-          if (item.type === "function_call") {
-            content.push({
-              type: "tool_use",
-              id: item.call_id as string,
-              name: item.name as string,
-              input: safeParseJson(item.arguments as string),
-            });
-            continue;
-          }
-
-          if (item.type === "reasoning") {
-            // The summary is a lossy PARAPHRASE of reasoning we now return
-            // properly: the raw item (with its `encrypted_content`) rides back
-            // on `providerRaw` and is spliced verbatim into the next request.
-            // Pushing the paraphrase into `content` too made it a permanent
-            // assistant text block that the agent loop replays as `output_text`
-            // on every later turn — S·T(T−1)/2 tokens over a T-turn run, at
-            // full input price because the Responses path has no prompt
-            // caching. So: surface it to the UI, never to `content`.
-            const summaryParts = Array.isArray(item.summary)
-              ? item.summary
-                  .map((block: Record<string, unknown>) => typeof block.text === "string" ? block.text : "")
-                  .filter((text: string) => text.trim().length > 0)
-              : [];
-            const reasoningText = summaryParts.join("\n").trim();
-            if (reasoningText) reasoningSummaries.push(reasoningText);
-            continue;
-          }
-
-          for (const block of item.content ?? []) {
-            if (block.type === "output_text") {
-              content.push({ type: "text", text: block.text as string });
-            } else if (block.type === "summary_text" || block.type === "reasoning_text") {
-              const text = typeof block.text === "string" ? block.text : "";
-              if (text.trim()) reasoningSummaries.push(text);
-            }
-          }
-        }
-
-        // Non-streaming has no `response.reasoning_summary_text.*` events, so
-        // this is the only place the dashboard's thinking channel gets fed on
-        // this path. Once per response, matching the Anthropic branch below.
-        if (callbacks?.onThinking && reasoningSummaries.length > 0) {
-          callbacks.onThinking(reasoningSummaries.join("\n"));
-        }
-
-        stopReason = content.some((block) => block.type === "tool_use") ? "tool_use" : "end_turn";
-
-        if (json.usage) {
-          usage = {
-            inputTokens: json.usage.input_tokens ?? 0,
-            outputTokens: json.usage.output_tokens ?? 0,
-            // Responses `input_tokens` already includes the cached span, so
-            // this is instrumentation only — see the streaming path.
-            ...readResponsesCachedTokens(json.usage as Record<string, unknown>),
-          };
+          usage = readChatUsage(json.usage);
         }
       } else if (this.isGoogleWire || this.isGeminiCodeAssist) {
         const candidate = json.candidates?.[0];
@@ -4476,10 +4446,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
             ? "max_tokens"
             : "end_turn";
         if (json.usageMetadata) {
-          usage = {
-            inputTokens: json.usageMetadata.promptTokenCount ?? 0,
-            outputTokens: json.usageMetadata.candidatesTokenCount ?? 0,
-          };
+          usage = readGoogleUsage(json.usageMetadata);
         }
       } else {
         // Anthropic format (also serves the z-ai/GLM and kimi/Moonshot
@@ -4700,6 +4667,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     const identifier = (value: unknown): string | null =>
       typeof value === "string" && /^[A-Za-z0-9_.:-]{1,96}$/.test(value) ? value : null;
     let completedResponse: Record<string, unknown> | null = null;
+    let outputCapResponse: Record<string, unknown> | undefined;
+    let assistantText = "";
+    const pendingFunctionCalls = new Set<string>();
     let streamFailure: Record<string, string | null> | undefined;
     let responseUsage: NativeRuntimeResult["usage"];
     // The ChatGPT Codex backend's `response.completed` payload has NO
@@ -4838,10 +4808,16 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
             };
             callbacks?.onUsage?.(responseUsage);
           }
+          const incomplete = response?.incomplete_details as Record<string, unknown> | undefined;
+          if (type === "response.incomplete" && response?.status === "incomplete" &&
+              incomplete?.reason === "max_output_tokens" && response.error == null &&
+              event.error == null && event.code == null && !completedResponse && malformedEvents === 0) {
+            outputCapResponse = response;
+            break responses;
+          }
           if (!terminal || !response || response.error != null ||
               ((type === "response.done" || response.status !== undefined) && response.status !== "completed")) {
             const error = (response?.error ?? event.error) as Record<string, unknown> | undefined;
-            const incomplete = response?.incomplete_details as Record<string, unknown> | undefined;
             streamFailure = {
               event: type,
               status: identifier(response?.status),
@@ -4860,11 +4836,11 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           type === "response.output_text.delta" ||
           (this.provider === "openrouter" && type === "response.content_part.delta")
         ) {
-          // Visible assistant text streaming. We don't accumulate locally —
-          // the agent loop's batcher is responsible for coalescing fragments
-          // before they hit the event bus. Just forward the raw fragment.
+          // Retain visible observations even when the output cap prevents an
+          // output_item.done/final output array. The callback is still a delta.
           const delta = typeof event.delta === "string" ? event.delta : "";
           if (delta) {
+            assistantText += delta;
             callbacks?.onDelta?.("assistant_response", delta);
           }
           continue;
@@ -4896,6 +4872,14 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           continue;
         }
 
+        if (type === "response.output_item.added") {
+          const item = event.item as Record<string, unknown> | undefined;
+          if (item?.type === "function_call") {
+            pendingFunctionCalls.add(String(item.id ?? item.call_id ?? event.output_index ?? pendingFunctionCalls.size));
+          }
+          continue;
+        }
+
         if (type === "response.output_item.done") {
           // Codex backend (and recent public Responses API streams) emit
           // each output item — including function_call items — through
@@ -4906,6 +4890,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           // chatgpt.com/backend-api/codex/responses with gpt-5.5.
           const item = event.item as Record<string, unknown> | undefined;
           if (item && typeof item.type === "string") {
+            if (item.type === "function_call") pendingFunctionCalls.add(String(item.id ?? item.call_id ?? event.output_index ?? pendingFunctionCalls.size));
             streamedOutputItems.push(item);
           }
           continue;
@@ -4915,6 +4900,38 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     }
 
     emitThinking(true);
+
+    if (outputCapResponse) {
+      // Never replay opaque reasoning or dispatch ANY call from an incomplete
+      // response, even when an individual item claimed to be done.
+      void reader.cancel().catch(() => { /* best-effort */ });
+      const finalOutput = Array.isArray(outputCapResponse.output)
+        ? outputCapResponse.output as Array<Record<string, unknown>> : [];
+      const output = finalOutput.length > 0 ? finalOutput : streamedOutputItems;
+      let finalText = "";
+      for (const item of output) {
+        if (item.type === "function_call") pendingFunctionCalls.add(String(item.id ?? item.call_id ?? pendingFunctionCalls.size));
+        if (!Array.isArray(item.content)) continue;
+        for (const block of item.content as Array<Record<string, unknown>>) {
+          if (block.type === "output_text" && typeof block.text === "string") finalText += block.text;
+        }
+      }
+      // Deltas are the observations already shown to the operator. Prefer the
+      // final snapshot only when it extends them; don't duplicate either copy.
+      const text = finalText.startsWith(assistantText) ? finalText : assistantText || finalText;
+      if (operatorSignal?.aborted) {
+        return { ...this.cancelledResult(start), content: [{ type: "text", text }], usage: responseUsage };
+      }
+      const checkpoint = {
+        reason: "max_output_tokens" as const,
+        ...(identifier(outputCapResponse.id) ? { responseId: String(outputCapResponse.id) } : {}),
+        discardedToolCalls: pendingFunctionCalls.size,
+      };
+      appendNativeTrace({ kind: "native-response-checkpoint", provider: this.providerLabel,
+        wireApi: this.wireApi, checkpoint, usage: responseUsage ?? null });
+      return { content: [{ type: "text", text }], stopReason: "max_tokens", checkpoint,
+        usage: responseUsage, durationMs: Date.now() - start };
+    }
 
     if (!completedResponse || streamFailure) {
       if (streamFailure) {
@@ -4974,26 +4991,28 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     // not absent) because items are already delivered via streamed
     // `response.output_item.done` events. The `??` operator wouldn't fall
     // through on `[]` — we'd keep the empty array and silently drop every
-    // streamed function_call. Prefer the streamed list whenever it has any
-    // items; only fall back to `completedResponse.output` when nothing was
-    // streamed in-band (Azure / public OpenAI fill it; Codex doesn't).
-    const completedOutput =
-      (completedResponse.output as Array<Record<string, unknown>> | undefined) ??
-      [];
-    const outputItems =
-      streamedOutputItems.length > 0 ? streamedOutputItems : completedOutput;
+    // streamed function_call. Use the authoritative final array when populated;
+    // only Codex's absent/empty array falls back to output_item.done items.
+    const completedOutput = Array.isArray(completedResponse.output)
+      ? completedResponse.output as Array<Record<string, unknown>> : [];
+    const outputItems = completedOutput.length > 0 ? completedOutput : streamedOutputItems;
     const content: NativeContentBlock[] = [];
     // Reasoning summaries are surfaced to the UI and then DROPPED — never
     // pushed into `content`. See the reasoning branch below.
     const reasoningSummaries: string[] = [];
+    const callIds = new Set<string>();
     for (const item of outputItems) {
       if (item.type === "function_call") {
-        content.push({
-          type: "tool_use",
-          id: String(item.call_id),
-          name: String(item.name),
-          input: safeParseJson(String(item.arguments ?? "{}")),
-        });
+        const call = parseResponsesFunctionCall(item);
+        if (!call || callIds.has(call.id) || malformedEvents > 0) {
+          return {
+            content: [{ type: "text", text: assistantText }],
+            stopReason: "error", usage: responseUsage, durationMs: Date.now() - start,
+            error: `${this.providerLabel} API error: Responses completed with an incomplete or malformed function call`,
+          };
+        }
+        callIds.add(call.id);
+        content.push(call);
         continue;
       }
       if (item.type === "reasoning") {
@@ -5020,6 +5039,11 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       }
     }
 
+    // Some Responses backends omit message items after streaming their text.
+    // Keep those observed bytes in canonical history, never as hidden reasoning.
+    const observedTextFallback = !!assistantText && !content.some(block => block.type === "text");
+    if (observedTextFallback) content.unshift({ type: "text", text: assistantText });
+
     // The summary normally reached the UI live through
     // `response.reasoning_summary_text.delta`, in which case `lastThinkingEmit`
     // is already set and emitting here would show the same text twice. This is
@@ -5039,7 +5063,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       // reasoning items with their `encrypted_content` still attached, each
       // immediately followed by the item it produced. Handing it back lets the
       // next turn replay it verbatim instead of re-deriving the reasoning.
-      ...(outputItems.length > 0
+      ...(!observedTextFallback && outputItems.length > 0
         ? {
             providerRaw: {
               provider: this.provider,

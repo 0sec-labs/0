@@ -53,6 +53,18 @@ export function formatMarkdown(report: ScanReport): string {
     lines.push("");
   }
 
+  if (report.reviewChecks?.length) {
+    lines.push("## Review Checks (Advisory)", "");
+    const literal = (text: string): string => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/([\\`*_{}\[\]()#+.!|~-])/g, "\\$1");
+    for (const check of report.reviewChecks) {
+      lines.push(`### ${check.status.toUpperCase()}: ${literal(check.name)}`, "");
+      lines.push(`- **ID:** ${literal(check.id)}`);
+      lines.push(`- **Reason:** ${literal(check.reason)}`);
+      if (check.fix) lines.push(`- **Suggested fix:** ${literal(check.fix)}`);
+      lines.push("");
+    }
+  }
+
   // Findings
   if (report.findings.length > 0) {
     lines.push("## Findings");
@@ -66,7 +78,9 @@ export function formatMarkdown(report: ScanReport): string {
     lines.push(
       report.warnings.length > 0
         ? "The scanner did not confirm vulnerabilities, but target validation or probe execution produced warnings."
-        : "The target passed all tests."
+        : report.reviewChecks?.length
+          ? "No security vulnerabilities were found in the inspected scope. Advisory review-check results are reported separately above."
+          : "The target passed all tests."
     );
   }
 

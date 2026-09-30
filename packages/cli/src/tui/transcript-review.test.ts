@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createTranscriptDocument } from "@0/shared";
-import { compileTranscriptReview } from "./transcript-review.js";
+import {
+  MAX_REVIEW_CHARS,
+  boundTranscriptReviewContent,
+  compileTranscriptReview,
+} from "./transcript-review.js";
 import type { ChatEntry } from "./chat/types.js";
 
 function entry(overrides: Partial<ChatEntry> & Pick<ChatEntry, "id" | "kind" | "text">): ChatEntry {
@@ -57,5 +61,46 @@ describe("compileTranscriptReview", () => {
 
     expect(document.text).toContain("unsafe");
     expect(document.text).not.toContain("\u001b");
+  });
+
+  it("keeps the review projection bounded for long conversations", () => {
+    const document = compileTranscriptReview(createTranscriptDocument(
+      Array.from({ length: 12 }, (_, index) => entry({
+        id: `assistant-${index}`,
+        kind: "assistant",
+        text: `START ${index} ${"review content alpha beta ".repeat(450)} END ${index}`,
+        turn: index + 1,
+      })),
+    ), { width: 80, detail: "expanded" });
+
+    expect(document.text.length).toBeLessThanOrEqual(MAX_REVIEW_CHARS);
+    expect(document.text).toContain("earlier review lines hidden");
+    expect(document.text).toContain("END 11");
+  });
+
+  it("bounds a huge final non-message row before creating the native review buffer", () => {
+    const document = compileTranscriptReview(createTranscriptDocument([
+      entry({
+        id: "final-error",
+        kind: "error",
+        text: `START ${"terminal failure detail ".repeat(10_000)} END`,
+      }),
+    ]), { width: 80, detail: "expanded" });
+
+    expect(document.text.length).toBeLessThanOrEqual(MAX_REVIEW_CHARS);
+    expect(document.text).toContain("hidden in this TUI preview");
+    expect(document.text).toContain("START");
+    expect(document.text).toContain("END");
+  });
+
+  it("bounds composed review content while retaining its title and latest text", () => {
+    const content = boundTranscriptReviewContent(
+      `TRANSCRIPT REVIEW\n${"review content\n".repeat(3_000)}LATEST ENTRY`,
+    );
+
+    expect(content.length).toBeLessThanOrEqual(MAX_REVIEW_CHARS);
+    expect(content).toContain("TRANSCRIPT REVIEW");
+    expect(content).toContain("LATEST ENTRY");
+    expect(content).toContain("hidden in this TUI preview");
   });
 });

@@ -53,6 +53,11 @@ export interface EvolutionConfig {
   autoPromote: boolean;
   canaryTrials: number;
   promotionPolicy: ImprovementPromotionPolicy;
+  /** Opt-in durable campaign/exposure enforcement; legacy callers remain unchanged. */
+  safety?: {
+    enabled: boolean;
+    holdoutExposureLimit: number;
+  };
   /** Optional bounded exploration of alternative parent versions (0 or omitted disables; 1+ enables). */
   maxAlternativeParents?: number;
 }
@@ -82,6 +87,8 @@ export interface EvolutionProposal {
   rationale: string;
   edits: EvolutionEdit[];
   modelCostUsd: number;
+  /** Observed generator identity, not the operator's requested model text. */
+  modelIdentity?: EvolutionModelIdentity;
 }
 
 export interface EvolutionExecution {
@@ -187,9 +194,22 @@ export interface EvolutionRunResult {
   evaluationCostUsd: number;
 }
 
+export interface EvolutionModelIdentity {
+  provider: string;
+  model: string;
+  pricingModel?: string;
+}
+
 export interface EvolutionDependencies {
   model?: EvolutionModel;
+  /** Controller observation for injected model implementations. */
+  modelIdentity?: () => EvolutionModelIdentity;
   sandbox?: EvolutionSandbox;
+  /** Shared pass/canary budget. Known execution cost settles before charge can reject. */
+  evaluationBudget?: {
+    remainingUsd: () => number;
+    charge: (costUsd: number) => void;
+  };
   signal?: AbortSignal;
   log?: (message: string) => void;
   /** Parent run pins the version once; child runIds reuse the same pinned version across the engagement. */

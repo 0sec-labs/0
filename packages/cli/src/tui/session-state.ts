@@ -3,6 +3,7 @@ import {
   normalizeStageAction,
   normalizeStageEndDetail,
 } from "@0/core";
+import type { ReviewCheckResult } from "@0/shared";
 import { buildShareUrl } from "../utils.js";
 
 export type SessionMode = "audit" | "review" | "scan";
@@ -461,6 +462,8 @@ export function applySessionReport(state: SessionState, report: Record<string, u
   const rep = report as {
     durationMs?: number;
     summary?: { critical?: number; high?: number; medium?: number; low?: number; info?: number };
+    reviewChecks?: ReviewCheckResult[];
+    executionSuccessful?: boolean;
   };
 
   return {
@@ -483,7 +486,10 @@ export function applySessionReport(state: SessionState, report: Record<string, u
     },
     transcript: [
       ...state.transcript,
-      transcriptItem("summary", "Report ready", { tone: "success" }),
+      transcriptItem("summary", rep.executionSuccessful === false ? "Report incomplete: research failed" : "Report ready", { tone: rep.executionSuccessful === false ? "warning" : "success" }),
+      ...(rep.reviewChecks ?? []).map(check => transcriptItem("summary",
+        stripTerminalControl(`Review check (advisory) ${check.status.toUpperCase()}: ${check.name} (${check.id})\nReason: ${check.reason}${check.fix ? `\nSuggested fix: ${check.fix}` : ""}`),
+        { tone: check.status === "pass" ? "success" : "warning" })),
     ],
   };
 }

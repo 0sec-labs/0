@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, resolve, sep } from "node:path";
 
 import { LlmApiRuntime } from "../runtime/llm-api.js";
-import { resolveCompactionThresholds } from "../agent/native-loop.js";
+import { resolveCompactionThresholds, isRecoverableOutputCap, MAX_OUTPUT_CAP_CONTINUATIONS, OUTPUT_CAP_CONTINUATION_PROMPT } from "../agent/native-loop.js";
 import { contextOverflow, estimatePromptTokens, maintainContext, outputHeadroom } from "./context-maintenance.js";
 import { diag } from "../diagnostics/channel.js";
 import { DEFAULT_AUTONOMY_MODE, DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir, type HarnessSnapshot } from "@0/shared";
@@ -307,6 +307,8 @@ export interface ConsoleLocalScopeResolution {
  *   for tools past a round count no legitimate investigation should reach.
  *   Distinct from `max_turn_tokens` on purpose, so a surface can say "something
  *   is looping" rather than "you ran out of budget".
+ * - `output_cap` — bounded output-cap continuations are spent. Observations and
+ *   plan remain intact; the operator can resume with a concise remaining task.
  * - `cancelled` — the operator interrupted the turn via an {@link AbortSignal}
  *   (see {@link ConsoleSendOptions.signal}). Like the budget stops, this is NOT
  *   an error: the conversation is left intact and resumable — every dispatched
@@ -319,6 +321,7 @@ export type ConsoleStopReason =
   | "end_turn"
   | "max_tool_iterations"
   | "max_turn_tokens"
+  | "output_cap"
   | "cancelled"
   | "error";
 
@@ -359,6 +362,7 @@ export interface ConsoleTurnOutcome {
   budget: ConsoleTurnBudget;
   stopReason: ConsoleStopReason;
   error?: string;
+  outputCap?: { checkpoint: NonNullable<NativeRuntimeResult["checkpoint"]>; continuations: number; message: string };
 }
 
 /**
@@ -1850,6 +1854,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   const toolContext: ToolContext = {
     target: sessionTarget,
     scanId,
+    consoleSession: true,
     role,
     costModel: config.costModel,
     findings: cp ? structuredClone(cp.sessionData.findings) : [],
@@ -3006,6 +3011,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     // `result.usage`; taking exactly one of the two is what keeps the turn
     // total accurate without ever double-counting a call.
     let streamedUsage: { inputTokens: number; outputTokens: number } | undefined;
+    let outputCapContinuations = 0;
 
     const streamCallbacks: NativeStreamCallbacks = {
       onDelta: (scope, text) => {
@@ -3285,7 +3291,9 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
           }
           const plannerUsage = result.usage ?? streamedUsage;
           recordModelUsage("planner", plannerUsage ?? (hasTurnTokenCap && result.stopReason !== "error"
-            ? { inputTokens: requestEstimate, outputTokens: estimatePromptTokens("", [{ role: "assistant", content: result.content }]) } : undefined));
+            ? { inputTokens: requestEstimate, outputTokens: result.checkpoint
+              ? outputHeadroom(config.runtime.outputTokenLimit)
+              : estimatePromptTokens("", [{ role: "assistant", content: result.content }]) } : undefined));
           plannerEstimateAtUsage = plannerUsage ? requestEstimate : undefined;
         }
       } catch (error) {
@@ -3301,9 +3309,9 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         if (recoverableOverflow) result.error = `context_length_exceeded: ${result.error}`;
       } finally { directDriver = false; }
 
-      if (signal?.aborted) return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(), stopReason: "cancelled" };
+      if (signal?.aborted && !isRecoverableOutputCap(result)) return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(), stopReason: "cancelled" };
 
-      if (result.stopReason === "error") {
+      if (result.stopReason === "error" || result.error || (result.checkpoint && !isRecoverableOutputCap(result))) {
         // The runtime reports an operator abort structurally via `cancelled`
         // rather than by message text, so an interrupted call is reported as
         // a cancellation and not as a failure the operator has to interpret.
@@ -3329,12 +3337,12 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
           contextInputTokens: lastPlannerInputTokens > 0 ? lastPlannerInputTokens : undefined,
           budget: budgetSnapshot(),
           stopReason: "error",
-          error: result.error ?? "LLM runtime error",
+          error: result.error ?? (result.checkpoint ? "Invalid output-cap checkpoint; refusing incomplete function calls." : "LLM runtime error"),
         };
       }
 
 
-      messages.push({ role: "assistant", content: result.content });
+      messages.push({ role: "assistant", content: result.content, ...(result.providerRaw ? { providerRaw: result.providerRaw } : {}) });
 
       // Surface any visible text the runtime didn't stream token-by-token.
       const turnText = result.content
@@ -3343,6 +3351,24 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         .join("");
       if (turnText) assistantText += turnText;
       if (driven && turnText) callbacks?.onAssistantDelta?.(turnText);
+
+      if (isRecoverableOutputCap(result)) {
+        const checkpoint = result.checkpoint!;
+        if (signal?.aborted) return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(), stopReason: "cancelled" };
+        if (outputCapContinuations >= MAX_OUTPUT_CAP_CONTINUATIONS) {
+          const message = "Provider output cap reached repeatedly. Observations and plan are retained; send a concise remaining task to resume. No incomplete function calls were executed.";
+          callbacks?.onNotice?.(message);
+          return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(),
+            contextInputTokens: lastPlannerInputTokens || undefined, stopReason: "output_cap",
+            outputCap: { checkpoint, continuations: outputCapContinuations, message } };
+        }
+        outputCapContinuations++;
+        callbacks?.onNotice?.(`Provider output cap reached; continuing from retained observations (${outputCapContinuations}/${MAX_OUTPUT_CAP_CONTINUATIONS}).`);
+        messages.push({ role: "user", content: [{ type: "text", text: OUTPUT_CAP_CONTINUATION_PROMPT }] });
+        // The next normal boundary performs compaction and checks the ORIGINAL
+        // turn's cancellation/token allowance. No tools/request are replayed.
+        continue;
+      }
 
       const toolUseBlocks = result.content.filter(
         (b): b is Extract<NativeContentBlock, { type: "tool_use" }> => b.type === "tool_use",

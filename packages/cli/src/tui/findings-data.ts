@@ -1,6 +1,7 @@
 import type { Finding } from "@0/shared";
-import { parseImpactAssessment, type NativeRuntime } from "@0/core";
-import type { getRuntimeAvailability } from "../utils.js";
+import { parseImpactAssessment } from "@0/core";
+import type { NativeRuntime } from "@0/core";
+import type { RuntimeAvailability } from "../utils.js";
 import { fitTuiText, fitTuiUrl } from "./text.js";
 import { restoreFindingReviewFields } from "@0/db";
 
@@ -72,11 +73,17 @@ export interface FindingGroup {
 }
 
 export interface DoctorState {
+  cliVersion: string;
+  releaseChannel: "dev" | "beta";
+  runtimeEngine: "Bun" | "Node.js";
+  runtimeVersion: string;
+  platform: string;
+  arch: string;
   nodeOk: boolean;
   nodeVersion: string;
   hasApiKey: boolean;
   availableRuntimes: string[];
-  apiRuntime: Awaited<ReturnType<typeof getRuntimeAvailability>>["apiRuntime"];
+  apiRuntime: RuntimeAvailability["apiRuntime"];
 }
 
 export interface ReplayScanRow {

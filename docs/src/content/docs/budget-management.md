@@ -47,7 +47,7 @@ env ZERO_MAX_TURNS_REVIEW=30 ZERO_MAX_TURNS_VERIFY=12 \
   0 review ./authorized-repo --runtime api --depth default --cost-ceiling 5
 ```
 
-The console separately exposes `--max-tool-calls` (default `20`) for tool-call
+The console separately exposes `--max-tool-calls` (default `100`) for tool-call
 rounds per operator message. It does not configure the scan depth presets.
 
 <span id="why-40-turns"></span>
@@ -117,6 +117,14 @@ research, per-file sessions and concurrent verification instead of allocating
 the full ceiling to each session. In-flight requests can still finish and
 overshoot the ceiling, including one outstanding turn per active session.
 
+Guided launcher plans share one priced ledger across every planned run and phase.
+Goals and depth enter the investigator's execution policy; sequential or
+parallel attempts retain independent outcomes and run-local cost attribution.
+The wall-clock limit includes preparation, investigation, verification, reporting,
+and descendants. Failed, cancelled, skipped, or budget-stopped attempts remain
+visible; one successful attempt cannot turn an incomplete plan into clean
+coverage. Native and supported CLI routes retain the operator's model selections.
+
 On a reported ceiling breach, these CLI commands retain partial results, exit
 with code `4`, and use `exit_reason: "cost_ceiling_exceeded"` in the optional
 machine-readable result line (`ZERO_EMIT_RESULT_LINE=1`). A cost stop is not a
@@ -136,10 +144,11 @@ Other commands have different stop boundaries:
 
 ## Interpreting cost estimates
 
-The estimator prices reported input, output and cached-input tokens using the
-bundled rate table. Cached tokens are subtracted from ordinary input and priced
-at the cached-input rate when known. Unknown models warn and fall back to
-$3 input / $15 output per million tokens; **that fallback is not a quote**.
+The estimator prices reported input, output, cached-input, and cache-write tokens
+using the bundled rate table. Cache reads and writes are separated from ordinary
+input; writes use a known write tariff or the five-minute creation rate of
+1.25 times input pricing. Unknown models warn and fall back to $3 input / $15
+output per million tokens; **that fallback is not a quote**.
 The model picker's unknown price is likewise not zero.
 
 Important boundaries:

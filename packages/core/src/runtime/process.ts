@@ -4,6 +4,18 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { writeFileSync } from "node:fs";
 import type { Runtime, RuntimeConfig, RuntimeContext, RuntimeResult, RuntimeType } from "./types.js";
+import { readCacheUsage } from "./prompt-cache.js";
+import type { ModelTokenUsage, TokenUsageForPricing } from "@0/shared";
+
+function readGeminiUsage(raw: unknown): TokenUsageForPricing | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const stats = raw as Record<string, unknown>;
+  if (typeof stats.input_tokens !== "number" || typeof stats.output_tokens !== "number") return undefined;
+  const outputTokens = typeof stats.total_tokens === "number"
+    ? Math.max(stats.output_tokens, stats.total_tokens - stats.input_tokens) : stats.output_tokens;
+  return { inputTokens: stats.input_tokens, outputTokens,
+    ...(typeof stats.cached === "number" ? { cachedInputTokens: stats.cached } : {}) };
+}
 
 // Dim the subprocess output so it's visually distinct from 0's own output
 const dim = (text: string) => `\x1b[2m${text}\x1b[0m`;
@@ -119,6 +131,7 @@ export class ProcessRuntime implements Runtime {
   readonly type: RuntimeType;
   private config: RuntimeConfig;
   private command: string;
+  private observedModel: string | undefined;
 
   constructor(config: RuntimeConfig) {
     this.type = config.type as RuntimeType;
@@ -126,8 +139,12 @@ export class ProcessRuntime implements Runtime {
     this.command = RUNTIME_COMMANDS[config.type] ?? config.type;
   }
 
+  resolvedModel(): string { return this.observedModel ?? this.config.model ?? "unknown"; }
   async execute(prompt: string, context?: RuntimeContext): Promise<RuntimeResult> {
     const start = Date.now();
+    if (context?.signal?.aborted) {
+      return { output: "", exitCode: null, timedOut: false, durationMs: 0, error: "Runtime execution cancelled." };
+    }
     const args = this.buildArgs(prompt, context);
     const env = this.buildEnv(context);
 
@@ -138,6 +155,10 @@ export class ProcessRuntime implements Runtime {
       let stderr = "";
       let resultText = "";
       let timedOut = false;
+      let usage: RuntimeResult["usage"];
+      let usageByModel: ModelTokenUsage[] | undefined;
+      let runtimeError: string | undefined;
+      let streamBuffer = "";
       const isJsonStream = args.includes("stream-json") || args.includes("--json");
 
       let proc: ChildProcessByStdio<null, Readable, Readable>;
@@ -146,6 +167,7 @@ export class ProcessRuntime implements Runtime {
           cwd: this.config.cwd ?? process.cwd(),
           env: { ...process.env, ...env },
           stdio: ["ignore", "pipe", "pipe"],
+          detached: process.platform !== "win32",
         });
       } catch (err) {
         // E2BIG and friends throw synchronously, so they never reach the
@@ -165,10 +187,17 @@ export class ProcessRuntime implements Runtime {
         stdout += text;
 
         if (isJsonStream) {
-          for (const line of text.split("\n")) {
+          streamBuffer += text;
+          let newline = streamBuffer.indexOf("\n");
+          while (newline >= 0) {
+            const line = streamBuffer.slice(0, newline);
+            streamBuffer = streamBuffer.slice(newline + 1);
+            newline = streamBuffer.indexOf("\n");
             if (!line.trim()) continue;
             try {
               const event = JSON.parse(line);
+              if (typeof event.message?.model === "string") this.observedModel = event.message.model;
+              if (event.type === "init" && typeof event.model === "string") this.observedModel = event.model;
 
               // Claude stream-json format
               if (event.type === "assistant" && event.message?.content) {
@@ -182,6 +211,7 @@ export class ProcessRuntime implements Runtime {
                 }
               } else if (event.type === "result") {
                 resultText = event.result || resultText;
+                if (event.usage) usage = readCacheUsage(event.usage);
               }
 
               // Codex JSONL format
@@ -194,6 +224,27 @@ export class ProcessRuntime implements Runtime {
                   this.config.onThinking?.(event.item.text);
                 } else if (event.item.type === "command_execution" && event.item.command) {
                   // Already shown on item.started
+                }
+              }
+              if (event.type === "turn.completed" && event.usage) {
+                usage = { inputTokens: Number(event.usage.input_tokens ?? 0), outputTokens: Number(event.usage.output_tokens ?? 0) };
+              }
+              if (this.type === "gemini") {
+                if (event.type === "message" && event.role === "assistant" && typeof event.content === "string") {
+                  resultText += event.content;
+                  this.config.onThinking?.(event.content);
+                } else if (event.type === "tool_use") {
+                  showToolCall(onToolCall, event.tool_name, event.parameters);
+                } else if (event.type === "result") {
+                  usage = readGeminiUsage(event.stats);
+                  if (event.stats?.models && typeof event.stats.models === "object") {
+                    usageByModel = [];
+                    for (const [model, stats] of Object.entries(event.stats.models)) {
+                      const measured = readGeminiUsage(stats);
+                      if (measured) usageByModel.push({ model, usage: measured });
+                    }
+                  }
+                  if (event.status === "error") runtimeError = event.error?.message ?? "Gemini CLI returned an error result.";
                 }
               }
 
@@ -216,27 +267,42 @@ export class ProcessRuntime implements Runtime {
         }
       });
 
-      const timer = setTimeout(() => {
-        timedOut = true;
-        proc.kill("SIGTERM");
-        setTimeout(() => proc.kill("SIGKILL"), 5_000);
-      }, this.config.timeout);
+      let killTimer: NodeJS.Timeout | undefined;
+      const terminate = () => {
+        if (proc.pid && process.platform !== "win32") {
+          try { process.kill(-proc.pid, "SIGTERM"); } catch { proc.kill("SIGTERM"); }
+        } else proc.kill("SIGTERM");
+        killTimer ??= setTimeout(() => {
+          if (proc.pid && process.platform !== "win32") {
+            try { process.kill(-proc.pid, "SIGKILL"); } catch { proc.kill("SIGKILL"); }
+          } else proc.kill("SIGKILL");
+        }, 1_000);
+      };
+      const timer = setTimeout(() => { timedOut = true; terminate(); }, this.config.timeout);
+      context?.signal?.addEventListener("abort", terminate, { once: true });
+      if (context?.signal?.aborted) terminate();
 
       proc.on("close", (code) => {
         clearTimeout(timer);
+        clearTimeout(killTimer);
+        context?.signal?.removeEventListener("abort", terminate);
         // For stream-json, use the parsed result text; otherwise raw stdout
         const output = isJsonStream ? (resultText || stdout).trim() : stdout.trim();
         resolve({
           output,
           exitCode: code,
           timedOut,
+          usage,
+          usageByModel,
           durationMs: Date.now() - start,
-          error: code !== 0 ? stderr.trim() || undefined : undefined,
+          error: context?.signal?.aborted ? "Runtime execution cancelled." : runtimeError ?? (code !== 0 ? stderr.trim() || undefined : undefined),
         });
       });
 
       proc.on("error", (err) => {
         clearTimeout(timer);
+        clearTimeout(killTimer);
+        context?.signal?.removeEventListener("abort", terminate);
         resolve({
           output: "",
           exitCode: 1,
@@ -292,6 +358,7 @@ export class ProcessRuntime implements Runtime {
     switch (this.type) {
       case "claude": {
         const args = ["-p", prompt, "--verbose", "--output-format", "stream-json"];
+        if (this.config.model) args.push("--model", this.config.model);
         if (context?.mcp?.enableTargetTools && context.target && context.scanId) {
           // --dangerously-skip-permissions auto-approves MCP tool calls
           // without this, the subprocess hangs waiting for interactive approval
@@ -331,6 +398,7 @@ export class ProcessRuntime implements Runtime {
       }
       case "gemini": {
         const args = ["-p", prompt, "--output-format", "stream-json"];
+        if (this.config.model) args.push("--model", this.config.model);
         return args;
       }
       default:

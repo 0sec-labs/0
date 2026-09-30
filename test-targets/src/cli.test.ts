@@ -1,6 +1,7 @@
-import { afterAll, describe, it, expect } from "vitest";
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { afterAll, beforeAll, describe, it, expect } from "vitest";
+import { fork, spawnSync } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -17,6 +18,28 @@ const tsxCliPath = join(thisDir, "../node_modules/tsx/dist/cli.mjs");
 const tsconfigPath = join(thisDir, "../tsconfig.cli-e2e.json");
 const testHome = mkdtempSync(join(tmpdir(), "0-cli-test-"));
 const testDbPath = join(testHome, "findings.db");
+let registryUrl = "";
+let registryProcess: ChildProcess | undefined;
+beforeAll(async () => {
+  const packageRoot = join(testHome, "package");
+  mkdirSync(packageRoot);
+  writeFileSync(join(packageRoot, "package.json"), JSON.stringify({ name: "is-odd", version: "3.0.1", main: "index.js" }));
+  writeFileSync(join(packageRoot, "index.js"), "module.exports = n => Number.isInteger(n) && Math.abs(n) % 2 === 1;\n");
+  const archive = join(testHome, "is-odd-3.0.1.tgz");
+  const packed = spawnSync("tar", ["-czf", archive, "-C", testHome, "package"], { encoding: "utf8" });
+  if (packed.status !== 0) throw new Error(`Unable to pack controlled npm fixture: ${packed.stderr}`);
+  // A separate process serves acquisition while spawnSync blocks the test worker.
+  registryProcess = fork(new URL("./npm-registry-fixture.mjs", import.meta.url), [], {
+    env: { PATH: process.env.PATH, HOME: testHome, NPM_FIXTURE_ARCHIVE: archive },
+    stdio: ["ignore", "pipe", "pipe", "ipc"],
+  });
+  registryUrl = await new Promise<string>((resolve, reject) => {
+    registryProcess!.once("error", reject);
+    registryProcess!.once("exit", code => reject(new Error(`Controlled npm registry exited: ${code}`)));
+    registryProcess!.stdout!.once("data", data => resolve(String(data).trim()));
+  });
+});
+afterAll(() => registryProcess?.kill());
 afterAll(() => rmSync(testHome, { recursive: true, force: true }));
 
 const projectRoot = join(thisDir, "../..");
@@ -37,6 +60,8 @@ const run = (args: string[], timeout = 30_000, extraEnv: Record<string, string |
       "ZERO_OFFLINE": "1",
       "ZERO_SKIP_PROVIDER_BANNER": "1",
       ...extraEnv,
+      npm_config_registry: registryUrl,
+      npm_config_cache: join(testHome, "npm-cache"),
     },
   });
 };
@@ -44,7 +69,7 @@ const run = (args: string[], timeout = 30_000, extraEnv: Record<string, string |
 describe("CLI E2E", () => {
   it("--help shows all commands", () => {
     const result = run(["--help"]);
-    expect(result.status).toBe(0);
+    expect(result.status, result.stderr || String(result.error ?? "")).toBe(0);
     expect(result.stdout).toContain("0");
     for (const cmd of ["scan", "audit", "review", "history", "findings", "replay", "doctor"]) {
       expect(result.stdout).toContain(cmd);

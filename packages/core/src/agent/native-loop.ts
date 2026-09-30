@@ -52,6 +52,7 @@ import { SECURITY_RULES, selectRules, buildRuleInjection, type EngagementPhase, 
 import { formatJitSkillsInstruction, getSkillById } from "./skills/index.js";
 import { estimateCost } from "./cost.js";
 import type { ScanCostLedger } from "./cost-ledger.js";
+import { addRuntimeUsage } from "./cost-ledger.js";
 import { eventBus } from "../events/bus.js";
 import { diag } from "../diagnostics/channel.js";
 import {
@@ -186,6 +187,18 @@ export function isContextWindowError(errorMsg: string): boolean {
   );
 }
 
+/** Total extra output-cap requests permitted in one loop/console turn. */
+export const MAX_OUTPUT_CAP_CONTINUATIONS = 3;
+export const OUTPUT_CAP_CONTINUATION_PROMPT =
+  "[OUTPUT CAP CHECKPOINT] The previous response reached max_output_tokens. Continue from the retained observations and current plan, without restarting the task or repeating completed tools. No function calls from that incomplete response were executed; if still needed, issue them anew as complete calls. Keep the remaining answer concise.";
+
+/** Only the runtime's observation-only checkpoint authorizes a new request. */
+export function isRecoverableOutputCap(result: NativeRuntimeResult): boolean {
+  return result.stopReason === "max_tokens" && result.checkpoint?.reason === "max_output_tokens" &&
+    !result.error && !result.cancelled && !result.providerRaw &&
+    result.content.every(block => block.type === "text");
+}
+
 /**
  * Fold a command-tool's captured exit status + output tail into a single
  * concise line, e.g. `exited 1: <last lines of stdout/stderr>`. Used to
@@ -236,6 +249,8 @@ export function toolFailureText(toolName: string, result: ToolResult): string {
 // ── Native Agent Loop Config ──
 
 export interface NativeAgentConfig {
+  /** Preserve exact target identity guards when delegating from the console. */
+  consoleSession?: boolean;
   /**
    * Agent-to-agent messaging identity and policy, propagated to the tool
    * context so the child messaging tools know who they are and whom they
@@ -304,6 +319,7 @@ export interface NativeAgentConfig {
    * independently. Omit to keep the legacy per-session accounting.
    */
   costLedger?: ScanCostLedger;
+  requirePricedUsage?: boolean;
   /** Root policy inherited by descendants without accumulating ancestor tasks.
    * Defaults to systemPrompt for a non-delegated root.
    */
@@ -452,7 +468,7 @@ export interface NativeAgentState {
    * full price — without it, a well-cached run would report roughly 10x its
    * actual input spend.
    */
-  totalUsage: { inputTokens: number; outputTokens: number; cachedInputTokens: number };
+  totalUsage: { inputTokens: number; outputTokens: number; cachedInputTokens: number; cacheWriteTokens?: number };
   /** Set to true when the loop stopped early because no save_finding was called by the halfway point. */
   earlyStopNoProgress: boolean;
   /** Brief description of tools/approaches used before the early stop (for retry context). */
@@ -486,6 +502,8 @@ export interface NativeAgentState {
    * the loop bailed out.
    */
   errorExit?: { error: string; turn: number; source?: "provider" | "harness" };
+  /** Resumable output-cap pause, never a provider failure or completed task. */
+  outputCapExit?: { checkpoint: NonNullable<NativeRuntimeResult["checkpoint"]>; continuations: number; message: string };
   /**
    * Inline-validation outcomes (#554), one per high/critical finding that the
    * onFindingSaved hook validated. Empty when `features.inlineValidation` is
@@ -562,6 +580,7 @@ export async function runNativeAgentLoop(
         : state.killSwitchTriggered ? "timeout"
         : state.costCeilingExceeded ? "run_resource_limit"
         : state.errorExit ? state.errorExit.source === "harness" ? "harness_error" : "provider_error"
+        : state.outputCapExit ? "run_resource_limit"
         : state.earlyStopNoProgress ? "no_progress"
         : state.done ? "plan_exhausted"
         : state.turnCount >= opts.config.maxTurns ? "run_resource_limit" : "unknown";
@@ -698,6 +717,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     target: config.target,
     scanId: config.scanId,
     role: config.role,
+    consoleSession: config.consoleSession,
     diffScopedReview: config.role === "review" && config.singleAgent === true,
     reviewDiffBase: config.reviewDiffBase,
     delegationSystemPrompt: config.delegationSystemPrompt ?? config.systemPrompt,
@@ -736,6 +756,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // the SAME scan-wide ledger and ceiling as this session (closing the
     // off-ledger gap where subagent spend escaped the ceiling entirely).
     costLedger: config.costLedger,
+    requirePricedUsage: config.requirePricedUsage,
     costCeilingUsd: config.costCeilingUsd,
     get costModel() { return runtime.resolvedModel?.() || config.costModel; },
     // Tool-health aggregator (0#tool-reliability). Shared across the scan so
@@ -1051,6 +1072,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   let driverResult: NativeRuntimeResult | undefined;
   let driverCalls: ToolCall[] | undefined;
   let driverResults: ToolResult[] | undefined;
+  let outputCapContinuations = 0;
   const harnessInput = (phase: HarnessUiInput["phase"]): HarnessUiInput => ({
     sessionId: state.sessionId, phase, iterations: state.turnCount,
     tokensUsed: state.totalUsage.inputTokens + state.totalUsage.outputTokens, tokenBudget: 0,
@@ -1072,11 +1094,17 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       { onUsage: (usage) => { streamedUsage = usage; } }, signal,
     );
     const usage = result.usage ?? streamedUsage;
+    if (config.requirePricedUsage && !usage) {
+      config.costLedger?.markUnpricedUsage();
+      throw new Error("Executable model response did not report usage; cannot continue a cost-bounded scan.");
+    }
     if (usage) {
       state.totalUsage.inputTokens += usage.inputTokens;
       state.totalUsage.outputTokens += usage.outputTokens;
       state.totalUsage.cachedInputTokens += usage.cachedInputTokens ?? 0;
-      config.costLedger?.add(usage, pricingModel());
+      if (usage.cacheWriteTokens !== undefined) state.totalUsage.cacheWriteTokens = (state.totalUsage.cacheWriteTokens ?? 0) + usage.cacheWriteTokens;
+      if (!result.usage) result.usage = usage;
+      addRuntimeUsage(config.costLedger, result, pricingModel());
       state.estimatedCostUsd = estimateCost(state.totalUsage, pricingModel());
       onEvent?.("usage", {
         turn: state.turnCount, inputTokens: state.totalUsage.inputTokens,
@@ -1835,6 +1863,20 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         }
       }
   }
+  // One gate for planner/continuation/maintenance spend and tool-turn exits.
+  const enforceCostCeiling = (): boolean => {
+    if (config.costCeilingUsd === undefined) return false;
+    const runningCost = config.costLedger?.totalCostUsd() ?? estimateCost(state.totalUsage, pricingModel());
+    if (runningCost < config.costCeilingUsd) return false;
+    state.costCeilingExceeded = true;
+    state.estimatedCostUsd = runningCost;
+    state.summary = `Cost ceiling exceeded at turn ${state.turnCount}: $${runningCost.toFixed(4)} >= $${config.costCeilingUsd.toFixed(4)} ceiling. Aborting with ${toolCtx.findings.length} partial finding(s).`;
+    const payload = { turn: state.turnCount, runningCostUsd: runningCost, ceilingUsd: config.costCeilingUsd, findingCount: toolCtx.findings.length };
+    onEvent?.("cost_ceiling_exceeded", payload);
+    db?.logEvent({ scanId: config.scanId, stage: config.role, eventType: "cost_ceiling_exceeded",
+      agentRole: config.role, payload, timestamp: Date.now() });
+    return true;
+  };
   try {
   await executablePlugins?.ready;
   syncExtensionTools();
@@ -1843,6 +1885,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       state.summary = "Error: Agent execution cancelled.";
       break;
     }
+    if (enforceCostCeiling()) break;
     // ── Coordinator rails: supervise sub-agents BETWEEN iterations ──
     // No-op unless the feature flag is on. Read-only observation + logging.
     runCoordinatorSupervisor();
@@ -1960,6 +2003,89 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       }
     }
 
+    // ── Context window compaction (BoxPwnr-inspired) ──
+    // Trigger at 60% of context window (~77k tokens for 128k models).
+    // Allow multiple compactions as context regrows — don't re-compact until
+    // tokens have grown by at least 30k since last compaction.
+    //
+    // PROMPT-CACHE INTERACTION: this REWRITES history (middle turns collapse
+    // into a summary message), which changes the cached prefix and therefore
+    // invalidates every message-level cache entry. That is unavoidable — any
+    // rewrite of a prefix-matched cache voids it by definition — and it is
+    // still the right trade: compaction only fires once the transcript is large
+    // enough that carrying it is worse than re-establishing it. Recovery is
+    // automatic and needs no bookkeeping here: `llm-api.ts` re-plans breakpoints
+    // from the CURRENT message array on every request, so the next call writes a
+    // fresh set over the rewritten transcript and the turn after that reads it
+    // back. The system prompt + tool schemas keep hitting throughout — compaction
+    // never touches them, and they carry their own breakpoint.
+    //
+    // The threshold itself is measured against total prompt tokens (cache reads
+    // included), so a high cache hit rate does not silently defer compaction
+    // past the real context limit. See `readCacheUsage` in runtime/prompt-cache.ts.
+    // Env-tunable so an operator can match the model's real context window.
+    const { threshold: COMPACTION_THRESHOLD, regrow: COMPACTION_REGROW } =
+      resolveCompactionThresholds(process.env);
+    if (
+      features.contextCompaction
+      && state.totalUsage.inputTokens > COMPACTION_THRESHOLD
+      && state.totalUsage.inputTokens - tokensAtLastCompaction > COMPACTION_REGROW
+      && state.messages.length > 15
+    ) {
+      const beforeCount = state.messages.length;
+      currentRunContribution()?.record("compaction", { phase: "before", messagesBefore: beforeCount, inputTokens: state.totalUsage.inputTokens, strategy: "llm_with_regex_fallback" });
+
+      // Use LLM-based compaction if we have the runtime, otherwise regex.
+      // Default opts preserve the scan loop's original behavior (tail count 10,
+      // security-testing summarizer instruction).
+      state.messages = (await compactMessagesWithLLM(state.messages, runtime, config.systemPrompt, {
+        signal: executionSignal,
+        onSummaryUsage: usage => {
+          state.totalUsage.inputTokens += usage.inputTokens;
+          state.totalUsage.outputTokens += usage.outputTokens;
+          state.totalUsage.cachedInputTokens += usage.cachedInputTokens ?? 0;
+          config.costLedger?.add(usage, pricingModel());
+          state.estimatedCostUsd = estimateCost(state.totalUsage, pricingModel());
+        },
+      })).messages;
+
+      compactionCount++;
+      tokensAtLastCompaction = state.totalUsage.inputTokens;
+
+      const afterCount = state.messages.length;
+      currentRunContribution()?.record("compaction", { phase: "after", messagesAfter: afterCount, compactionNumber: compactionCount });
+      onEvent?.("context_compacted", {
+        turn: state.turnCount,
+        inputTokens: state.totalUsage.inputTokens,
+        messagesBefore: beforeCount,
+        messagesAfter: afterCount,
+        compactionNumber: compactionCount,
+      });
+      if (db) {
+        db.logEvent({
+          scanId: config.scanId,
+          stage: config.role,
+          eventType: "context_compacted",
+          agentRole: config.role,
+          payload: {
+            turn: state.turnCount,
+            inputTokens: state.totalUsage.inputTokens,
+            messagesBefore: beforeCount,
+            messagesAfter: afterCount,
+            compactionNumber: compactionCount,
+          },
+          timestamp: Date.now(),
+        });
+      }
+    }
+    // Maintenance is a metered model call too. Re-enter the boundary gates
+    // before planning if its usage/cancellation/elapsed time spent the allowance.
+    if (executionSignal.aborted || config.enforcement?.isKillExpired() ||
+        (config.costCeilingUsd !== undefined && config.costCeilingUsd > 0 &&
+          (config.costLedger?.totalCostUsd() ?? state.estimatedCostUsd) >= config.costCeilingUsd)) {
+      state.turnCount--;
+      continue;
+    }
     let streamedThinkingText = "";
     let streamedUsageInputTokens: number | undefined;
     let streamedUsageOutputTokens: number | undefined;
@@ -2036,11 +2162,12 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       state.totalUsage.inputTokens += result.usage.inputTokens;
       state.totalUsage.outputTokens += result.usage.outputTokens;
       state.totalUsage.cachedInputTokens += result.usage.cachedInputTokens ?? 0;
+      if (result.usage.cacheWriteTokens !== undefined) state.totalUsage.cacheWriteTokens = (state.totalUsage.cacheWriteTokens ?? 0) + result.usage.cacheWriteTokens;
       // Fold this turn into the shared per-scan ledger (when threaded) so
       // sibling agent sessions see this spend in their own ceiling checks.
       // The session's pricing model keys the ledger's per-model buckets,
       // which the scan_completed cost_breakdown is derived from.
-      config.costLedger?.add(result.usage, pricingModel());
+      addRuntimeUsage(config.costLedger, result, pricingModel());
       state.estimatedCostUsd = estimateCost(state.totalUsage, pricingModel());
       if (
         streamedUsageInputTokens !== result.usage.inputTokens
@@ -2070,77 +2197,19 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         turn: state.turnCount,
       });
     }
-
-    // ── Context window compaction (BoxPwnr-inspired) ──
-    // Trigger at 60% of context window (~77k tokens for 128k models).
-    // Allow multiple compactions as context regrows — don't re-compact until
-    // tokens have grown by at least 30k since last compaction.
-    //
-    // PROMPT-CACHE INTERACTION: this REWRITES history (middle turns collapse
-    // into a summary message), which changes the cached prefix and therefore
-    // invalidates every message-level cache entry. That is unavoidable — any
-    // rewrite of a prefix-matched cache voids it by definition — and it is
-    // still the right trade: compaction only fires once the transcript is large
-    // enough that carrying it is worse than re-establishing it. Recovery is
-    // automatic and needs no bookkeeping here: `llm-api.ts` re-plans breakpoints
-    // from the CURRENT message array on every request, so the next call writes a
-    // fresh set over the rewritten transcript and the turn after that reads it
-    // back. The system prompt + tool schemas keep hitting throughout — compaction
-    // never touches them, and they carry their own breakpoint.
-    //
-    // The threshold itself is measured against total prompt tokens (cache reads
-    // included), so a high cache hit rate does not silently defer compaction
-    // past the real context limit. See `readCacheUsage` in runtime/prompt-cache.ts.
-    // Env-tunable so an operator can match the model's real context window.
-    const { threshold: COMPACTION_THRESHOLD, regrow: COMPACTION_REGROW } =
-      resolveCompactionThresholds(process.env);
-    if (
-      features.contextCompaction
-      && state.totalUsage.inputTokens > COMPACTION_THRESHOLD
-      && state.totalUsage.inputTokens - tokensAtLastCompaction > COMPACTION_REGROW
-      && state.messages.length > 15
-    ) {
-      const beforeCount = state.messages.length;
-      currentRunContribution()?.record("compaction", { phase: "before", messagesBefore: beforeCount, inputTokens: state.totalUsage.inputTokens, strategy: "llm_with_regex_fallback" });
-
-      // Use LLM-based compaction if we have the runtime, otherwise regex.
-      // Default opts preserve the scan loop's original behavior (tail count 10,
-      // security-testing summarizer instruction).
-      state.messages = (await compactMessagesWithLLM(state.messages, runtime, config.systemPrompt)).messages;
-
-      compactionCount++;
-      tokensAtLastCompaction = state.totalUsage.inputTokens;
-
-      const afterCount = state.messages.length;
-      currentRunContribution()?.record("compaction", { phase: "after", messagesAfter: afterCount, compactionNumber: compactionCount });
-      onEvent?.("context_compacted", {
-        turn: state.turnCount,
-        inputTokens: state.totalUsage.inputTokens,
-        messagesBefore: beforeCount,
-        messagesAfter: afterCount,
-        compactionNumber: compactionCount,
-      });
-      if (db) {
-        db.logEvent({
-          scanId: config.scanId,
-          stage: config.role,
-          eventType: "context_compacted",
-          agentRole: config.role,
-          payload: {
-            turn: state.turnCount,
-            inputTokens: state.totalUsage.inputTokens,
-            messagesBefore: beforeCount,
-            messagesAfter: afterCount,
-            compactionNumber: compactionCount,
-          },
-          timestamp: Date.now(),
-        });
-      }
+    if (config.requirePricedUsage && !result.usage) {
+      config.costLedger?.markUnpricedUsage();
+      state.errorExit = { error: result.error ?? "Runtime did not report usage; cannot continue a cost-bounded scan.", turn: state.turnCount };
+      state.summary = `Error: ${state.errorExit.error}`;
+      break;
     }
 
+
     // Handle error or empty response
-    if (result.stopReason === "error" || result.error || (result.content.length === 0 && (!result.usage || result.usage.outputTokens === 0))) {
-      const errorMsg = result.error || "API returned empty response (0 tokens) — model may be rate-limited or unavailable";
+    if (result.stopReason === "error" || result.error || (result.checkpoint && !isRecoverableOutputCap(result)) ||
+        (result.content.length === 0 && !isRecoverableOutputCap(result) && (!result.usage || result.usage.outputTokens === 0))) {
+      const errorMsg = result.error || (result.checkpoint ? "Invalid output-cap checkpoint; refusing incomplete function calls."
+        : "API returned empty response (0 tokens) — model may be rate-limited or unavailable");
       // Operator cancellation is terminal, even if the runtime supplied an
       // error string that also resembles a rate limit or context rejection.
       if (result.cancelled || executionSignal.aborted) {
@@ -2288,6 +2357,31 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     if (toolUseBlocks.length === 0) {
       // Text-only turns used to bypass observers, losing the worker's final answer.
       onTurn?.(state.turnCount, driverCalls ?? [], driverResults ?? [], textContent, turnTelemetry);
+      if (executionSignal.aborted) {
+        state.summary = "Error: Agent execution cancelled.";
+        break;
+      }
+      if (enforceCostCeiling()) break;
+      if (isRecoverableOutputCap(result)) {
+        const checkpoint = result.checkpoint!;
+        const message = "Provider output cap reached repeatedly or the loop allowance is spent. Observations and plan are saved; resume this session with a concise remaining task. No incomplete function calls were executed.";
+        onEvent?.("output_cap_checkpoint", { turn: state.turnCount, checkpoint, continuations: outputCapContinuations });
+        if (config.costCeilingUsd !== undefined && config.costCeilingUsd > 0 && !result.usage) {
+          const message = "Provider output cap reached without token usage. Cannot safely continue within the monetary allowance; observations and plan are saved. Resume with an explicitly budgeted remaining task.";
+          state.outputCapExit = { checkpoint, continuations: outputCapContinuations, message };
+          state.summary = message;
+          break;
+        }
+        if (outputCapContinuations >= MAX_OUTPUT_CAP_CONTINUATIONS || state.turnCount >= config.maxTurns) {
+          state.outputCapExit = { checkpoint, continuations: outputCapContinuations, message };
+          state.summary = message;
+          break;
+        }
+        outputCapContinuations++;
+        state.messages.push({ role: "user", content: [{ type: "text", text: OUTPUT_CAP_CONTINUATION_PROMPT }] });
+        if (db) persistSession(db, state, config, "running");
+        continue;
+      }
       // Only allow early exit if the agent has done meaningful work:
       // - At least 4 turns (read files, ran commands, analyzed code)
       // - OR explicitly called the done tool (handled below in tool execution)
@@ -2931,48 +3025,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       currentRunContribution()?.record("checkpoint", { sessionId: state.sessionId, turn: state.turnCount, storage: "session", storedMessages: Math.min(state.messages.length, 40), sideEffectsReplayed: false });
     }
 
-    // ── Cost ceiling check ──
-    // After every tool-call turn, recompute the running cost estimate from
-    // the cumulative token usage. If the user configured a hard ceiling and
-    // we've exceeded it, break out of the loop. Findings collected so far
-    // are preserved on `state.findings`.
-    //
-    // When a shared per-scan ledger is threaded, price the LEDGER's
-    // cross-session cumulative total: a scan running multiple agent sessions
-    // (research + the verify wave) must trip the ceiling on their combined
-    // spend, not grant each session the full ceiling independently.
-    if (config.costCeilingUsd !== undefined && config.costCeilingUsd > 0) {
-      const runningCost = config.costLedger
-        ? config.costLedger.totalCostUsd()
-        : estimateCost(state.totalUsage, pricingModel());
-      if (runningCost >= config.costCeilingUsd) {
-        state.costCeilingExceeded = true;
-        state.estimatedCostUsd = runningCost;
-        state.summary = `Cost ceiling exceeded at turn ${state.turnCount}: $${runningCost.toFixed(4)} >= $${config.costCeilingUsd.toFixed(4)} ceiling. Aborting with ${toolCtx.findings.length} partial finding(s).`;
-        onEvent?.("cost_ceiling_exceeded", {
-          turn: state.turnCount,
-          runningCostUsd: runningCost,
-          ceilingUsd: config.costCeilingUsd,
-          findingCount: toolCtx.findings.length,
-        });
-        if (db) {
-          db.logEvent({
-            scanId: config.scanId,
-            stage: config.role,
-            eventType: "cost_ceiling_exceeded",
-            agentRole: config.role,
-            payload: {
-              turn: state.turnCount,
-              runningCostUsd: runningCost,
-              ceilingUsd: config.costCeilingUsd,
-              findingCount: toolCtx.findings.length,
-            },
-            timestamp: Date.now(),
-          });
-        }
-        break;
-      }
-    }
+    if (enforceCostCeiling()) break;
     if (state.done && state.turnCount < config.maxTurns && injectPendingUserMessages?.()) {
       state.done = false;
     }
@@ -3290,7 +3343,9 @@ export interface CompactMessagesOptions {
    */
   summarizerInstruction?: string;
   /** Invoked with the summarizer model call's usage, when the runtime reports it. */
-  onSummaryUsage?: (usage: { inputTokens: number; outputTokens: number }) => void;
+  onSummaryUsage?: (usage: NonNullable<NativeRuntimeResult["usage"]>) => void;
+  /** Shares cancellation with the planner; late summaries never rewrite history. */
+  signal?: AbortSignal;
 }
 
 /** Result of {@link compactMessagesWithLLM}. */
@@ -3372,9 +3427,13 @@ export async function compactMessagesWithLLM(
         },
       ],
       [], // no tools for summary
+      undefined,
+      opts.signal,
     );
 
     if (summaryResult.usage) opts.onSummaryUsage?.(summaryResult.usage);
+    if (opts.signal?.aborted) return { messages, summaryText: "", degraded: false };
+    if (summaryResult.stopReason !== "end_turn" || summaryResult.error) throw new Error("Incomplete context summary");
 
     // Extract text from result
     const textBlocks = summaryResult.content.filter(
@@ -3386,6 +3445,7 @@ export async function compactMessagesWithLLM(
       throw new Error("LLM summary too short or empty");
     }
   } catch {
+    if (opts.signal?.aborted) return { messages, summaryText: "", degraded: false };
     // Fallback to regex extraction
     degraded = true;
     summaryText = [

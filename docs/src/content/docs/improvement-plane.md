@@ -175,9 +175,31 @@ must remain compatible. Changing the proposal model or remaining spending
 budgets does not erase otherwise compatible observations. Held-out and
 negative-control attempts, scores, and expected answers are not recovery feedback.
 
-`evolve run --watch` accumulates spend within one process and stops after a
-no-change pass. Restarting loses that campaign budget state. Unattended restarts
-require a separate budget control.
+Without durable safety, `evolve run --watch` retains its process-local spending
+state and stops after a no-change pass. To retain campaign accounting and holdout
+exposure across restarts, configure:
+
+```json
+"safety": { "enabled": true, "holdoutExposureLimit": 100 }
+```
+
+Generation and evaluation reserve before dispatch, then settle observed charges.
+Pending or unknown-cost work, exhausted held-out exposure, and incompatible or
+unresolved provider/model/evaluator identity block canary and promotion. Renaming
+or reordering content-equivalent cases does not reset exposure. Once a store has
+a campaign ledger, omitting or disabling safety cannot bypass those gates.
+
+An interrupted dispatch requires observed cost evidence, not an assumed zero:
+
+```bash
+0 evolve status --store ./private-evolution-store
+0 evolve reconcile --store ./private-evolution-store \
+  --dispatch <reservation-id> --cost-usd <observed-charge> \
+  --receipt-digest <immutable-cost-receipt-sha256> --json
+```
+
+Reconciliation records the charge once; it does not waive provenance, corpus,
+canary, authorization, or compare-and-swap checks.
 
 ### Trust boundary
 

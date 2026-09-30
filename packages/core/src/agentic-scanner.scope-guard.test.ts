@@ -18,6 +18,7 @@ import { agenticScan } from "./agentic-scanner.js";
 import { LlmApiRuntime } from "./runtime/llm-api.js";
 import type { ScanConfig } from "@0/shared";
 import type { ScanEvent } from "./scanner.js";
+import { ScopePolicy } from "./scope/scope.js";
 
 function tmpDbPath(): string {
   return path.join(
@@ -92,6 +93,33 @@ describe("agenticScan — scope-guard visibility (0#133)", () => {
       expect(fs.existsSync(dbPath)).toBe(false);
     } finally {
       fs.unlinkSync(scopeFile);
+    }
+  });
+
+  it("uses the active in-memory scope to admit or refuse target classification", async () => {
+    let requests = 0;
+    const server = createServer((_request, response) => {
+      requests++;
+      response.writeHead(200, { connection: "close" });
+      response.end("<html>synthetic scope fixture</html>");
+    });
+    try {
+      await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+      const target = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
+      // The diagnostic stub stops the admitted scan after its real target probe.
+      await expect(agenticScan({
+        config: baseConfig({ target }), dbPath,
+        scope: ScopePolicy.fromJson({ in_scope: ["127.0.0.1"] }),
+      })).rejects.toThrow();
+      expect(requests).toBe(1);
+      await expect(agenticScan({
+        config: baseConfig({ target }), dbPath,
+        scope: ScopePolicy.fromJson({ in_scope: ["127.0.0.2"] }),
+      })).rejects.toThrow();
+      expect(requests).toBe(1);
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>(resolve => server.close(() => resolve()));
     }
   });
 

@@ -2,7 +2,7 @@
 import React from "react";
 import { TextAttributes, type BorderSides } from "@opentui/core";
 import { MODEL_PRICING, type ModelRates } from "@0/shared";
-import { fitTuiText, sanitizeTuiText } from "../text.js";
+import { fitTuiText, sanitizeComposerText, sanitizeTuiText } from "../text.js";
 import { ShimmerText } from "./shimmer.js";
 import { renderMarkdown } from "../markdown.js";
 import { formatElapsed } from "../animation.js";
@@ -26,6 +26,7 @@ import type { ChatEntry, EntryDisplay } from "./types.js";
 import { ToolCard } from "./ToolCard.js";
 import { ImageCard } from "./ImageCard.js";
 import { toolActionTitle, toolResultLine, toolState, toolStateLabel } from "./card-layout.js";
+import { previewTranscriptText } from "../transcript-preview.js";
 import { activityExcerpt, reasoningExcerpt, toolActivity } from "./helpers.js";
 
 const USER_RAIL_SIDES: BorderSides[] = ["left"];
@@ -181,10 +182,13 @@ export function renderEntry(
     const card = roundedCardFrame(maxWidth);
     const bordered = card.render && (frame.bordered || transcriptStyle === "rail");
     const bodyWidth = bordered ? card.innerWidth : Math.max(1, maxWidth);
+    const preview = previewTranscriptText(entry.text);
     // Body: raw text for the operator, rendered markdown for the model.
     const body = isUser
-      ? <text fg={TEXT} wrapMode="word">{sanitizeTuiText(entry.text)}</text>
-      : renderMarkdownBlocks(renderMarkdown(entry.text, bodyWidth), entry.id, theme);
+      ? <text fg={TEXT} wrapMode="word">{sanitizeTuiText(preview.text)}</text>
+      : display.richMarkdown === false
+        ? <text fg={TEXT} wrapMode="word">{sanitizeComposerText(preview.text)}</text>
+        : renderMarkdownBlocks(renderMarkdown(preview.text, bodyWidth, { cache: display.activeEntryId !== entry.id }), entry.id, theme);
     const footerParts: string[] = [];
     if (!isUser) {
       if (display.modelInFooter && display.model) footerParts.push(display.model);
@@ -427,11 +431,12 @@ export function renderEntry(
   if (entry.kind === "reasoning") {
     // Reasoning is quieter than the answer: a dotted rail and muted text.
     // Only the live tail label shimmers. Settled entries retain a short static
-    // heading and the full body, rather than preserving a stale activity claim.
+    // heading and a bounded body, rather than preserving a stale activity claim.
     const live = entry.id === display.activeEntryId && entry.turn === display.activeTurn;
-    const preview = live ? reasoningExcerpt(entry.text) : "";
+    const labelExcerpt = live ? reasoningExcerpt(entry.text) : "";
+    const bodyPreview = previewTranscriptText(entry.text);
     const label = fitTuiText(
-      live ? (preview ? `reasoning · ${preview}` : "reasoning in progress") : "reasoning",
+      live ? (labelExcerpt ? `reasoning · ${labelExcerpt}` : "reasoning in progress") : "reasoning",
       Math.max(1, maxWidth - 2),
     );
     return finish(
@@ -445,12 +450,14 @@ export function renderEntry(
           ) : (
             <text fg={MUTED}>{label}</text>
           )}
-          {renderMarkdownBlocks(
-            renderMarkdown(normalizeReasoning(entry.text), Math.max(8, maxWidth - 2)),
-            entry.id,
-            theme,
-            MUTED,
-          )}
+          {display.richMarkdown === false
+            ? <text fg={MUTED} wrapMode="word">{sanitizeComposerText(bodyPreview.text)}</text>
+            : renderMarkdownBlocks(
+              renderMarkdown(normalizeReasoning(bodyPreview.text), Math.max(8, maxWidth - 2), { cache: display.activeEntryId !== entry.id }),
+              entry.id,
+              theme,
+              MUTED,
+            )}
         </box>
       </box>,
     );

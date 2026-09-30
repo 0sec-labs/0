@@ -38,6 +38,7 @@ import {
   type RuntimeConfig,
   type LlmApiRuntime,
   type NativeMessage,
+  type NativeRuntime,
   type OperatorQuestionRequest,
   type OperatorQuestionAnswer,
   type SubagentLifecyclePayload,
@@ -180,6 +181,10 @@ import {
   reduceActiveSubagents,
   summaryInputFromMessage,
 } from "./subagent-card.js";
+import {
+  buildCoordinatorSummary,
+  COORDINATOR_SUMMARY_ROWS,
+} from "./coordinator-summary.js";
 import { onTuiOutputLine } from "./output-guard.js";
 import {
   COMPOSER_QUEUE_LIMIT,
@@ -266,7 +271,11 @@ import {
   isRightClick,
   type ContextMenuItem,
 } from "./use-context-menu.js";
-import { firstCodeBlock } from "./markdown.js";
+import { clearMarkdownCache, firstCodeBlock } from "./markdown.js";
+import {
+  MAX_RICH_TRANSCRIPT_CHARS,
+  MAX_TRANSCRIPT_PREVIEW_CHARS,
+} from "./transcript-preview.js";
 import {
   copyToClipboard,
   defaultSpawn,
@@ -709,6 +718,7 @@ export interface ChatScreenProps {
     providerId: () => string;
     connectionIdentity: () => string | undefined;
     codexCatalog?: (signal?: AbortSignal) => Promise<import("@0/core").CodexCatalogModel[]>;
+    nativeRuntime: () => NativeRuntime;
     /**
      * Live-apply a model/provider/role-map selection to the running runtime.
      * Reconfigures in place at a turn boundary (never mid-turn): applies at
@@ -1997,6 +2007,7 @@ export function ChatScreen({
       providerId: () => runtime.getConfigurationDiagnostics().provider,
       connectionIdentity: () => runtime.connectionIdentity(),
       codexCatalog: (signal) => runtime.codexModelCatalog(signal),
+      nativeRuntime: () => runtime,
       applySelection: (sel) => applySelectionRef.current?.(sel),
     };
     if (explicitChoice) pendingModelPreferenceRef.current = runtime;
@@ -3250,6 +3261,9 @@ export function ChatScreen({
         turn.current = 0;
         setTurnBudget(null);
         setLastContext(undefined);
+        clearMarkdownCache();
+        setLatestCompaction(undefined);
+        pendingCompactionRef.current = undefined;
         // The live plan tree belongs to the conversation being emptied.
         setTodos(null);
         // The objective describes the conversation being emptied; drop it so a
@@ -3835,7 +3849,7 @@ export function ChatScreen({
       onAuditActivity({
         outcome: outcome.stopReason === "cancelled" ? "stopped"
           : outcome.stopReason === "error" ? "failed"
-          : outcome.stopReason === "max_turn_tokens" || outcome.stopReason === "max_tool_iterations" ? "waiting"
+          : outcome.stopReason === "max_turn_tokens" || outcome.stopReason === "max_tool_iterations" || outcome.stopReason === "output_cap" ? "waiting"
           : !assistantText && !outcome.assistantText && outcome.toolCalls.length === 0 ? "failed"
           : "completed",
       });
@@ -3900,7 +3914,7 @@ export function ChatScreen({
             ?? "The tool-round backstop was reached. History is preserved; review the progress before continuing.",
           turn: currentTurn,
         });
-      } else if (outcome.stopReason !== "cancelled" && !producedText && outcome.toolCalls.length === 0) {
+      } else if (outcome.stopReason !== "cancelled" && outcome.stopReason !== "output_cap" && !producedText && outcome.toolCalls.length === 0) {
         // Not an error, but silence is never a useful answer.
         appendEntry({
           kind: "error",
@@ -5447,6 +5461,27 @@ export function ChatScreen({
   );
 
 
+  // Retained lifecycle outcomes include completed/failed direct children; the
+  // active-only map intentionally drops them and cannot drive this overview.
+  const coordinatorSummary = useMemo(
+    () => buildCoordinatorSummary({
+      rootPlan: todos,
+      directChildren: Object.values(workerOutcomes),
+      rootScanId: session?.scanId,
+      objective,
+    }),
+    [workerOutcomes, objective, session?.scanId, todos],
+  );
+  const coordinatorSummaryNode = !focused && (coordinatorSummary.hasRootPlan || coordinatorSummary.hasDirectChildren) ? (
+    <box width={transcriptWidth} height={COORDINATOR_SUMMARY_ROWS} flexShrink={0} minWidth={0} flexDirection="column">
+      {coordinatorSummary.lines.map((line, index) => (
+        <text key={`coordinator-summary-${index}`} height={1} wrapMode="none" truncate fg={index === 0 ? TEXT : MUTED}>
+          {fitTuiText(line, transcriptWidth)}
+        </text>
+      ))}
+    </box>
+  ) : null;
+
   const workerDisplay: EntryDisplay = {
     ...entryDisplay,
     model: focusedTelemetry?.model ?? "",
@@ -5507,6 +5542,19 @@ export function ChatScreen({
     return byName;
   }, [herdAgents, workerTelemetry, operatorStopped]);
   const renderTranscriptEntries = (transcript: readonly ChatEntry[], width: number, display: EntryDisplay) => {
+    // A scrollbox keeps its entire child tree mounted. Spend rich Markdown's
+    // native text-buffer budget from the tail backward, so the newest answer
+    // remains styled while older rows degrade gracefully to plain previews.
+    const richMarkdownEntryIds = new Set<string>();
+    let remainingRichChars = MAX_RICH_TRANSCRIPT_CHARS;
+    for (let index = transcript.length - 1; index >= 0; index--) {
+      const entry = transcript[index];
+      if (entry.kind !== "assistant" && entry.kind !== "reasoning") continue;
+      const chars = Math.min(entry.text.length, MAX_TRANSCRIPT_PREVIEW_CHARS);
+      if (chars > remainingRichChars) continue;
+      richMarkdownEntryIds.add(entry.id);
+      remainingRichChars -= chars;
+    }
     // Deduplicate settled reasoning headings per turn, but a fresh live
     // reasoning event after a tool still identifies its current work.
     const reasoningShownForTurn = new Set<number>();
@@ -5550,6 +5598,9 @@ export function ChatScreen({
             }
           : rawEntry;
       const expanded = expandedTurns.has(entry.turn);
+      const rowDisplay = richMarkdownEntryIds.has(entry.id)
+        ? display
+        : { ...display, richMarkdown: false };
       const interactive =
         entry.kind === "tool" || entry.kind === "subagent" || entry.kind === "reasoning";
       let reasoningLabel: "shimmer" | "static" | "none" = "static";
@@ -5566,7 +5617,7 @@ export function ChatScreen({
       const node = renderEntry(
         entry,
         width,
-        expanded ? { ...display, transcriptDetail: "expanded" } : display,
+        expanded ? { ...rowDisplay, transcriptDetail: "expanded" } : rowDisplay,
         theme,
         interactive ? {
           expanded,
@@ -5652,8 +5703,13 @@ export function ChatScreen({
       paddingY={1}
     >
       <scrollbox ref={transcriptRef} focusable={false} width="100%" flexGrow={1} minHeight={0} backgroundColor={CANVAS} stickyScroll stickyStart="bottom" verticalScrollbarOptions={sleekScrollbar(theme, CANVAS)}>
-        <box flexDirection="column" width="100%">
+        <box flexDirection="column" width="100%" flexShrink={0} onSizeChange={function () {
+          // Wrapped Markdown can grow after the scrollbox first measures its
+          // child. Repair the current root/worker extent so sticky-bottom follows.
+          if (transcriptRef.current) transcriptRef.current.content.height = this.height;
+        }}>
           {renderTranscriptEntries(focused ? focusedTranscript : entries, transcriptWidth, focused ? workerDisplay : entryDisplay)}
+          {coordinatorSummaryNode}
           {!focused && todos && todos.total > 0 ? (
             <Todos payload={todos} width={transcriptWidth} theme={theme} />
           ) : null}

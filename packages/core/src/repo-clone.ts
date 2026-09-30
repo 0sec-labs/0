@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { scanExecutionTimeout } from "./scan-plan.js";
 
 export const DEFAULT_GIT_CLONE_TIMEOUT_MS = 120_000;
 export const MAX_GIT_CLONE_TIMEOUT_MS = 600_000;
@@ -55,5 +56,5 @@ export function cloneGitRepo(
   const args = ["clone", "--depth", "1"];
   if (ref) args.push("--branch", ref);
   args.push(url, destDir);
-  execFileSync("git", args, { timeout: timeoutMs, stdio: "pipe" });
+  execFileSync("git", args, { timeout: scanExecutionTimeout(timeoutMs), stdio: "pipe" });
 }

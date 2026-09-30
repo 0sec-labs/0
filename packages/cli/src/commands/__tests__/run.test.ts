@@ -21,6 +21,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ScanReport } from "@0/shared";
+import * as formatters from "../../formatters/index.js";
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
 //
@@ -39,6 +40,11 @@ import type { ScanReport } from "@0/shared";
 const agenticScanMock = vi.fn();
 const runPipelineMock = vi.fn();
 const createRuntimeMock = vi.fn();
+const ScanCostLedgerMock = class {
+  totalCostUsd() {
+    return 0;
+  }
+};
 const loadAppsecFinderLensesMock = vi.fn(() => []);
 let eventBusListener:
   | { emit: (type: string, payload: unknown) => void }
@@ -56,6 +62,7 @@ vi.mock("@0/core", () => ({
   agenticScan: agenticScanMock,
   runPipeline: runPipelineMock,
   createRuntime: createRuntimeMock,
+  ScanCostLedger: ScanCostLedgerMock,
   eventBus: eventBusMock,
   loadAppsecFinderLenses: loadAppsecFinderLensesMock,
 }));
@@ -664,190 +671,32 @@ describe("runUnified — emitResultLine env gate", () => {
   });
 });
 
-describe("runUnified — cost summary (0#231)", () => {
-  let exitSpy: { mockRestore: () => void };
-  let logSpy: ReturnType<typeof vi.spyOn>;
-  let errSpy: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
+describe("runUnified — machine-readable output", () => {
+  it("emits one parseable JSON report when cost and cross-validation diagnostics arrive", async () => {
     agenticScanMock.mockReset();
-    runPipelineMock.mockReset();
-    createRuntimeMock.mockReset();
     eventBusListener = null;
-    tracker = {};
-    exitSpy = makeExitMock(tracker);
-    errSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  });
-
-  afterEach(() => {
-    exitSpy.mockRestore();
-    errSpy.mockRestore();
-    logSpy.mockRestore();
-  });
-
-  it("prints cost-summary line when scan_completed payload carries cost_usd", async () => {
-    // Tap the event bus mid-flight: agenticScan emits scan_completed via
-    // the bus before resolving. We simulate that by firing into the bus
-    // from the mocked agenticScan.
+    // Load the actual formatter behind the module mock to check consumer JSON bytes.
+    const actual = await vi.importActual<typeof formatters>("../../formatters/index.js");
+    vi.mocked(formatters.formatReport).mockImplementationOnce(actual.formatReport);
     agenticScanMock.mockImplementationOnce(async () => {
-      eventBusListener?.emit("scan_completed", {
-        cost_usd: 0.42,
-        cost_per_flag: 0.42,
-        cost_breakdown: [
-          { provider: "anthropic", model: "claude", cost_in: 0.18, cost_out: 0.2, cost_cache_read: 0.04 },
-        ],
-      });
-      return cleanReport();
-    });
-    await runUnified({
-      target: "https://example.com",
-      targetType: "url",
-      depth: "default",
-      format: "json",
-      runtime: "auto",
-      timeout: 30000,
-      verbose: false,
-    });
-    const all = logSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
-    // chalk.gray wraps with ANSI; strip for matching.
-    // eslint-disable-next-line no-control-regex
-    const plain = all.replace(/\x1b\[\d+m/g, "");
-    expect(plain).toMatch(/cost: \$0\.42/);
-    expect(plain).toMatch(/in: \$0\.18/);
-    expect(plain).toMatch(/out: \$0\.20/);
-    expect(plain).toMatch(/cache: \$0\.04/);
-    expect(plain).toMatch(/\$0\.42\/flag/);
-  });
-
-  it("omits cache and /flag suffix when the runtime didn't report them", async () => {
-    agenticScanMock.mockImplementationOnce(async () => {
-      eventBusListener?.emit("scan_completed", {
-        cost_usd: 0.1,
-        cost_breakdown: [
-          { provider: "openai", model: "gpt-4o", cost_in: 0.05, cost_out: 0.05 },
-        ],
-        // no cost_per_flag → no /flag suffix
-      });
-      return cleanReport();
-    });
-    await runUnified({
-      target: "https://example.com",
-      targetType: "url",
-      depth: "default",
-      format: "json",
-      runtime: "auto",
-      timeout: 30000,
-      verbose: false,
-    });
-    const all = logSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
-    // eslint-disable-next-line no-control-regex
-    const plain = all.replace(/\x1b\[\d+m/g, "");
-    expect(plain).toMatch(/cost: \$0\.10/);
-    expect(plain).not.toMatch(/cache:/);
-    expect(plain).not.toMatch(/\/flag/);
-  });
-
-  it("does not print the cost line when no scan_completed cost arrives", async () => {
-    agenticScanMock.mockResolvedValueOnce(cleanReport());
-    await runUnified({
-      target: "https://example.com",
-      targetType: "url",
-      depth: "default",
-      format: "json",
-      runtime: "auto",
-      timeout: 30000,
-      verbose: false,
-    });
-    const all = logSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
-    // eslint-disable-next-line no-control-regex
-    const plain = all.replace(/\x1b\[\d+m/g, "");
-    expect(plain).not.toMatch(/cost: \$/);
-  });
-});
-
-describe("runUnified — cross-validated leads (FoxGuard Phase 4)", () => {
-  let exitSpy: { mockRestore: () => void };
-  let logSpy: ReturnType<typeof vi.spyOn>;
-  let errSpy: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    agenticScanMock.mockReset();
-    runPipelineMock.mockReset();
-    createRuntimeMock.mockReset();
-    eventBusListener = null;
-    tracker = {};
-    exitSpy = makeExitMock(tracker);
-    errSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  });
-
-  afterEach(() => {
-    exitSpy.mockRestore();
-    errSpy.mockRestore();
-    logSpy.mockRestore();
-  });
-
-  function plainLog(): string {
-    // eslint-disable-next-line no-control-regex
-    return logSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n").replace(/\x1b\[\d+m/g, "");
-  }
-
-  it("prints the cross-validated-leads block when the bus event fires", async () => {
-    agenticScanMock.mockImplementationOnce(async () => {
+      eventBusListener?.emit("scan_completed", { cost_usd: 0.42 });
       eventBusListener?.emit("cross_validated_leads", {
-        count: 2,
-        leads: [
-          { findingId: "f-1", title: "SQLi in login", severity: "high", confidence: 0.82, foxguardMatches: 3 },
-          { findingId: "f-2", title: "XSS in search", severity: "medium", confidence: 0.5, foxguardMatches: 1 },
-        ],
+        count: 1, leads: [{ findingId: "lead", title: "Investigate tenant isolation", severity: "high", confidence: 0.8, foxguardMatches: 2 }],
       });
-      return cleanReport();
+      return cleanReport({ estimatedCostUsd: 0.42 });
     });
-    await runUnified({
-      target: "https://example.com",
-      targetType: "url",
-      depth: "default",
-      format: "json",
-      runtime: "auto",
-      timeout: 30000,
-      verbose: false,
-    });
-    const plain = plainLog();
-    expect(plain).toMatch(/Cross-validated leads — 2 findings both scanners agree on \(investigate first\)/);
-    expect(plain).toMatch(/\[HIGH\] SQLi in login · 3 foxguard matches · 82% confidence/);
-    expect(plain).toMatch(/\[MEDIUM\] XSS in search · 1 foxguard match · 50% confidence/);
-  });
-
-  it("prints nothing new when no cross-validated-leads event fires", async () => {
-    agenticScanMock.mockResolvedValueOnce(cleanReport());
-    await runUnified({
-      target: "https://example.com",
-      targetType: "url",
-      depth: "default",
-      format: "json",
-      runtime: "auto",
-      timeout: 30000,
-      verbose: false,
-    });
-    expect(plainLog()).not.toMatch(/Cross-validated leads/);
-  });
-
-  it("does not crash the scan on a malformed cross-validated-leads payload", async () => {
-    agenticScanMock.mockImplementationOnce(async () => {
-      eventBusListener?.emit("cross_validated_leads", { count: 1, leads: "not-an-array" });
-      return cleanReport();
-    });
-    await runUnified({
-      target: "https://example.com",
-      targetType: "url",
-      depth: "default",
-      format: "json",
-      runtime: "auto",
-      timeout: 30000,
-      verbose: false,
-    });
-    expect(plainLog()).not.toMatch(/Cross-validated leads/);
+    const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      await runUnified({
+        target: "https://example.com", targetType: "url", depth: "default",
+        format: "json", runtime: "auto", timeout: 30_000, verbose: false,
+      });
+      const report = JSON.parse(output.mock.calls.map(call => String(call[0])).join("\n"));
+      expect(report.target).toBe("https://example.com");
+      expect(report.estimatedCostUsd).toBe(0.42);
+    } finally {
+      output.mockRestore();
+    }
   });
 });
 
@@ -910,3 +759,4 @@ describe("runUnified — resume / branch (0#374)", () => {
   });
 
 });
+
