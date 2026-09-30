@@ -12,6 +12,14 @@ const startup = vi.hoisted(() => ({
   bun: true,
   interactive: true,
   showConsole: vi.fn(),
+  createSession: vi.fn(),
+  stdout: vi.fn(),
+  stderr: vi.fn(),
+}));
+
+vi.mock("../../console-session.js", () => ({ createLocalConsoleSession: startup.createSession }));
+vi.mock("../../presentation/process-output.js", () => ({
+  processPresentationOutput: { stdout: startup.stdout, stderr: startup.stderr },
 }));
 
 vi.mock("../../tui/runtime.js", () => ({
@@ -79,6 +87,53 @@ describe("console launch authorization", () => {
     await launch(["--print", "inspect this target"]);
     expect(process.exitCode).toBe(2);
     expect(startup.showConsole).not.toHaveBeenCalled();
+  });
+});
+
+describe("headless console completion status", () => {
+  let previousExitCode: typeof process.exitCode;
+  beforeEach(async () => {
+    previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    startup.createSession.mockReset();
+    startup.stdout.mockReset();
+    startup.stderr.mockReset();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    vi.spyOn(await import("@0/core"), "createConsoleRuntime").mockReturnValue({
+      resolvedModel: () => "requested-model",
+    } as ReturnType<typeof Core.createConsoleRuntime>);
+  });
+  afterEach(() => {
+    process.exitCode = previousExitCode;
+    vi.restoreAllMocks();
+  });
+
+  it.each(["error", "end_turn"] as const)("exits appropriately after a returned %s outcome and cleans up", async (stopReason) => {
+    const error = "ChatGPT API error 400: requested model is not supported";
+    const send = vi.fn(async (_text: string, _callbacks?: unknown) => ({
+      stopReason, error: stopReason === "error" ? error : undefined,
+      assistantText: stopReason === "end_turn" ? "Completed evidence-backed answer." : "",
+      toolCalls: [], usage: { inputTokens: 12, outputTokens: 3 },
+    }));
+    const cleanup = vi.fn(async () => {});
+    startup.createSession.mockReturnValue({ send, cleanup });
+    const program = new Command();
+    registerConsoleCommand(program);
+    await program.parseAsync(["console", "--mode", "standard", "--model", "requested-model", "--print", "verify the selected target"], { from: "user" });
+
+    expect(send).toHaveBeenCalledOnce();
+    expect(send.mock.calls[0][0]).toBe("verify the selected target");
+    expect(cleanup).toHaveBeenCalledOnce();
+    expect(process.exitCode).toBe(stopReason === "error" ? 1 : undefined);
+    if (stopReason === "error") {
+      expect(startup.stderr).toHaveBeenCalledWith(expect.stringContaining(error), "console.turn.error");
+      expect(startup.stderr).toHaveBeenCalledWith(expect.stringContaining("No replacement model was selected"), "console.turn.model_unavailable");
+      expect(startup.createSession).toHaveBeenCalledOnce();
+    } else {
+      expect(startup.stderr).not.toHaveBeenCalled();
+      expect(startup.stdout).toHaveBeenCalledWith(expect.stringContaining("Completed evidence-backed answer."), "console.assistant.complete");
+    }
   });
 });
 
