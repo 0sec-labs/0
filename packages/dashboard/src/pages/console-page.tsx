@@ -249,7 +249,7 @@ export function ConsolePage() {
 
   return <>
     <div data-reduced-motion={settingsQuery.data?.settings.reduceMotion === true ? "true" : undefined} className="console-frame flex min-w-0 overflow-hidden bg-background">
-      <ConsoleNavigationRail conversationSidebar onNew={() => void createSession()} onSearch={() => sessionRailElement.current?.querySelector<HTMLInputElement>('input[aria-label="Search chats"]')?.focus()} settingsHref={`/settings${controlsQuery}`} />
+      <ConsoleNavigationRail settingsHref={`/settings${controlsQuery}`} />
       <aside ref={sessionRailElement} className="hidden w-64 shrink-0  lg:block">{rail}</aside>
       <section className="flex min-w-0 flex-1 flex-col">
         <header className="flex shrink-0 items-center justify-between gap-2  px-3 py-3 sm:px-5">

@@ -15,16 +15,15 @@ const destinations = [
 ];
 
 /** The same compact navigation and page rhythm used by the conversation workspace. */
-export function SharedWorkspaceLayout({ title, children, onNew, onSearch, onOpenPalette }: {
+export function SharedWorkspaceLayout({ title, children, onNew, onOpenPalette }: {
   title: string;
   children: ReactNode;
   onNew: () => void;
-  onSearch: () => void;
   onOpenPalette: () => void;
 }) {
   const [navigationOpen, setNavigationOpen] = useState(false);
   return <div className="console-frame flex min-w-0 overflow-hidden bg-background text-foreground">
-    <ConsoleNavigationRail onNew={onNew} onSearch={onSearch} settingsHref="/settings" />
+    <ConsoleNavigationRail settingsHref="/settings" />
     <div className="flex min-w-0 flex-1 flex-col">
       <header className="flex shrink-0 items-center justify-between gap-2 px-3 py-3 sm:px-5">
         <div className="flex min-w-0 items-center gap-2">
