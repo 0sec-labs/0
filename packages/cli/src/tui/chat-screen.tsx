@@ -181,10 +181,6 @@ import {
   reduceActiveSubagents,
   summaryInputFromMessage,
 } from "./subagent-card.js";
-import {
-  buildCoordinatorSummary,
-  COORDINATOR_SUMMARY_ROWS,
-} from "./coordinator-summary.js";
 import { onTuiOutputLine } from "./output-guard.js";
 import {
   COMPOSER_QUEUE_LIMIT,
@@ -316,7 +312,8 @@ import { Todos } from "./chat/Todos.js";
 import { ComposerFrame, ComposerInput, composerContentRows } from "./chat/Composer.js";
 import { autonomyFooterText, isAutonomyCycleKey, nextAutonomyMode } from "./composer-mode.js";
 import { matchesBinding } from "./keybindings.js";
-import { resolveContextLimit } from "./context-window.js";
+import { reduceWorkerTelemetry, resolveContextLimit, selectConversationContext } from "./context-window.js";
+import type { WorkerTelemetry } from "./context-window.js";
 import { Cells, textCells } from "./primitives.js";
 import {
   KeyHints,
@@ -1307,7 +1304,7 @@ export function ChatScreen({
   // fits on screen anyway).
   const [subagentTranscripts, setSubagentTranscripts] = useDevUiState<Record<string, ChatEntry[]>>(devUi, "subagentTranscripts", {});
   const finalizedWorkerTurns = useDevUiRef<Map<string, Set<number>>>(devUi, "finalizedWorkerTurns", new Map());
-  const [workerTelemetry, setWorkerTelemetry] = useDevUiState<Record<string, SubagentMessagePayload>>(devUi, "workerTelemetry", {});
+  const [workerTelemetry, setWorkerTelemetry] = useDevUiState<Record<string, WorkerTelemetry>>(devUi, "workerTelemetry", {});
   const [commsMessages, setCommsMessages] = useDevUiState<CommsMessage[]>(devUi, "commsMessages", []);
   const commsSequenceRef = useDevUiRef(devUi, "commsSequenceRef", 0);
   const [workerOutcomes, setWorkerOutcomes] = useDevUiState<Record<string, SubagentLifecyclePayload>>(devUi, "workerOutcomes", {});
@@ -2367,6 +2364,7 @@ export function ChatScreen({
         }
         if (type === "subagent_lifecycle") {
           const event = payload as unknown as SubagentLifecyclePayload;
+          setWorkerTelemetry((prev) => reduceWorkerTelemetry(prev, event));
           ownedScanIds.add(event.agent_id);
           const previousStatus = herdAgentsRef.current[event.agent_id]?.status;
           const startsLife = event.status === "queued"
@@ -2428,7 +2426,7 @@ export function ChatScreen({
             settled.add(p.turn);
             finalizedWorkerTurns.current.set(p.agent_id, settled);
           }
-          setWorkerTelemetry((prev) => ({ ...prev, [p.agent_id]: p }));
+          setWorkerTelemetry((prev) => reduceWorkerTelemetry(prev, p));
           // Use the main conversation's argument formatting and rich cards,
           // retaining the complete bounded public result rather than reducing
           // tools without rich metadata to a one-line summary.
@@ -4775,13 +4773,15 @@ export function ChatScreen({
   const focusedTelemetry = focusAgentId ? workerTelemetry[focusAgentId] : undefined;
   const activeModel = session ? runtimeInfoHandle.current?.model() : undefined;
   const activeProvider = session ? runtimeInfoHandle.current?.providerId() : undefined;
-  const contextLimit = useMemo(() => !focusAgentId && settings.showContextMeter
-    ? resolveContextLimit({ modelId: activeModel, providerId: activeProvider })
-    : null, [focusAgentId, settings.showContextMeter, activeModel, activeProvider]);
-  // The window that drives context COMPACTION — resolved independently of the
-  // context-METER display (which is gated by `showContextMeter` / a focused
-  // subagent). Compaction must not turn off just because the meter is hidden or
-  // the operator drilled into a child, so this ignores both gates.
+  const displayedContext = selectConversationContext(
+    { modelId: activeModel, providerId: activeProvider, contextUsed: lastContext },
+    focusAgentId,
+    workerTelemetry,
+  );
+  const contextLimit = useMemo(() => settings.showContextMeter
+    ? resolveContextLimit(displayedContext)
+    : null, [settings.showContextMeter, displayedContext.modelId, displayedContext.providerId]);
+  // Main compaction is independent of worker focus and meter visibility.
   const compactionContextWindow = useMemo(
     () => (activeModel && activeProvider)
       ? resolveContextLimit({ modelId: activeModel, providerId: activeProvider })?.tokens
@@ -4853,7 +4853,7 @@ export function ChatScreen({
       const usage = telemetry?.usage;
       if (!usage || usage.inputTokens <= 0 && usage.outputTokens <= 0) continue;
       entries.push({
-        model: telemetry.model,
+        model: telemetry.usageModel,
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
         cachedInputTokens: usage.cachedInputTokens,
@@ -4884,7 +4884,11 @@ export function ChatScreen({
     inputTokens: focusAgentId ? focusedTelemetry?.usage?.inputTokens : aggregateUsage.input,
     outputTokens: focusAgentId ? focusedTelemetry?.usage?.outputTokens : aggregateUsage.output,
     cachedInputTokens: focusAgentId ? focusedTelemetry?.usage?.cachedInputTokens : aggregateUsage.cached,
-    usageByModel: focusAgentId ? undefined : usageByModel,
+    usageByModel: focusAgentId
+      ? focusedTelemetry?.usage
+        ? [{ model: focusedTelemetry.usageModel, ...focusedTelemetry.usage }]
+        : undefined
+      : usageByModel,
     showTokenUsage: settings.showTokenUsage,
     // Telemetry toggles: where the model name is surfaced, whether the
     // context reading renders as a visual meter, and whether an estimated
@@ -4893,7 +4897,7 @@ export function ChatScreen({
     modelDisplay: settings.modelDisplay,
     showContextMeter: settings.showContextMeter,
     contextWindow: contextLimit?.tokens,
-    contextUsed: !focusAgentId ? lastContext : undefined,
+    contextUsed: displayedContext.contextUsed,
     showCost: settings.showCost,
   });
   // The turn timer's leading glyph uses the smooth worker spinner.
@@ -4901,15 +4905,11 @@ export function ChatScreen({
     const elapsed = statusSegments.find((segment) => segment.kind === "elapsed");
     if (elapsed) elapsed.icon = spinnerGlyph(animTick, { reduceMotion: settings.reduceMotion });
   }
-  // Feed herdr the same live facts the status bar shows — model/provider,
-  // context %, the target/objective topic and the current activity — so the
-  // pane's sidebar chrome names 0's work. Gated on `interactive`: only the
-  // selected, non-overlay audit owns the single pane's topic, so hidden audits
-  // never fight over it. Percent mirrors the status-bar meter exactly. All
-  // reporters are no-ops off-herdr and fail-soft.
+  // Herdr describes the coordinator's runtime even while a worker is focused.
+  // Only the selected, visible audit owns the pane; off-herdr reporters are no-ops.
   const herdrContextPercent =
-    contextLimit?.tokens && lastContext !== undefined && contextLimit.tokens > 0
-      ? (lastContext / contextLimit.tokens) * 100
+    compactionContextWindow && lastContext !== undefined && compactionContextWindow > 0
+      ? (lastContext / compactionContextWindow) * 100
       : null;
   useEffect(() => {
     if (!interactive) return;
@@ -5004,7 +5004,7 @@ export function ChatScreen({
   // focus view and suppresses the rail / subagent block while it is open.
   const nowMs = Date.now();
   const focusRecord = focusAgentId ? projectedHerdAgents[focusAgentId] : undefined;
-  const focusAgentName = focusRecord ? agentTaskLabel(focusRecord.task, focusRecord.name) : "Worker";
+  const focusAgentName = focusRecord ? agentTaskLabel(focusRecord.task, focusRecord.name, Infinity) : "Worker";
   const focused = Boolean(focusAgentId && focusRecord);
   const transcriptWidth = Math.max(1, contentWidth - 1);
   // "0" is 4 cells. The optional objective sits at the top-right; target,
@@ -5104,10 +5104,16 @@ export function ChatScreen({
 
   const commandMenuVisible = composing && commandMenuOpen && isSlashComposer;
 
-  const agentWorkCount = Object.keys(projectedHerdAgents).length;
+  const rootTask = entries.find((entry) => entry.kind === "user")?.text ?? "";
+  const mainTask = useMemo(() => rootTask.trim()
+    ? agentTaskLabel(rootTask, undefined, Infinity)
+    : undefined, [rootTask]);
+  const agentWorkItems = useMemo(() => agentChatWorkItems(projectedHerdAgents), [projectedHerdAgents]);
+  const agentWorkCount = agentWorkItems.length;
   const showAgentWorkList = settings.showSubagents && (Boolean(focusAgentId) || agentWorkCount > 0);
   const agentWorkRows = showAgentWorkList
-    ? agentWorkListHeight(agentWorkCount, Math.min(12, Math.max(2, height - 16)))
+    ? agentWorkListHeight(agentWorkItems, focusAgentId, contentWidth,
+        Math.min(12, Math.max(2, height - 16)), mainTask)
     : 0;
 
   // Every other region in the column is flexShrink={0}, so the transcript
@@ -5176,9 +5182,6 @@ export function ChatScreen({
   // prefix when a long scope label or objective constrains the header.
   const channelBadge = process.env["ZERO_DEV_SOURCE_ROOT"]?.trim() ? "[dev]" : "[beta]";
   const headerEngagement = [`v${VERSION} ${channelBadge}`, ...headerSegments].join(" · ");
-  const mainActivity = objective.trim()
-    || entries.find((entry) => entry.kind === "user")?.text.split("\n", 1)[0].trim()
-    || (busy ? "Working" : "Current conversation");
 
 
 
@@ -5464,27 +5467,6 @@ export function ChatScreen({
   );
 
 
-  // Retained lifecycle outcomes include completed/failed direct children; the
-  // active-only map intentionally drops them and cannot drive this overview.
-  const coordinatorSummary = useMemo(
-    () => buildCoordinatorSummary({
-      rootPlan: todos,
-      directChildren: Object.values(workerOutcomes),
-      rootScanId: session?.scanId,
-      objective,
-    }),
-    [workerOutcomes, objective, session?.scanId, todos],
-  );
-  const coordinatorSummaryNode = !focused && (coordinatorSummary.hasRootPlan || coordinatorSummary.hasDirectChildren) ? (
-    <box width={transcriptWidth} height={COORDINATOR_SUMMARY_ROWS} flexShrink={0} minWidth={0} flexDirection="column">
-      {coordinatorSummary.lines.map((line, index) => (
-        <text key={`coordinator-summary-${index}`} height={1} wrapMode="none" truncate fg={index === 0 ? TEXT : MUTED}>
-          {fitTuiText(line, transcriptWidth)}
-        </text>
-      ))}
-    </box>
-  ) : null;
-
   const workerDisplay: EntryDisplay = {
     ...entryDisplay,
     model: focusedTelemetry?.model ?? "",
@@ -5712,7 +5694,6 @@ export function ChatScreen({
           if (transcriptRef.current) transcriptRef.current.content.height = this.height;
         }}>
           {renderTranscriptEntries(focused ? focusedTranscript : entries, transcriptWidth, focused ? workerDisplay : entryDisplay)}
-          {coordinatorSummaryNode}
           {!focused && todos && todos.total > 0 ? (
             <Todos payload={todos} width={transcriptWidth} theme={theme} />
           ) : null}
@@ -5886,7 +5867,7 @@ export function ChatScreen({
             <box width="100%" minWidth={0} flexShrink={0} marginTop={1}>
               <AgentWorkList agents={projectedHerdAgents} selectedAgentId={focusAgentId}
                 width={contentWidth} height={agentWorkRows} theme={theme} runningGlyph={activityGlyph}
-                mainActivity={mainActivity}
+                mainTask={mainTask}
                 interactive={interactive && !gateOpen && !picker && !transcriptMenu.state.open && !stoppingAuditRef.current}
                 onSelect={selectAgentChat} />
             </box>

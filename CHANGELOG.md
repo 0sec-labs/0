@@ -59,6 +59,13 @@ on the published npm package and the GitHub Release tag.
   cleanup proof. Setup and execution share the eight-GiB archive ceiling.
 - Exercise offline VM disk exhaustion within the normal import budget instead
   of assuming every Node/SDK image fits in a one-GiB reservation.
+- Remove generated coordinator-summary prose while keeping the real task plan
+  and worker outcomes. Main's work row uses the original goal, not a short title.
+- Wrap worker tasks and activity within the viewport instead of prematurely
+  clipping them. Resizing preserves focused and remaining-worker navigation.
+- Restore focused-worker context usage with that worker's model/provider and
+  latest measured sample; partial updates do not erase it, and billing remains
+  separately attributed.
 
 ## [0.22.1] - 2026-09-30
 

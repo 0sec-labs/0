@@ -339,9 +339,10 @@ output, and exit code (controlled by `richToolCards` setting). The transcript
 auto-scrolls to newest content. **PageUp** / **PageDown** (or **Ctrl+Up** /
 **Ctrl+Down**) scrolls through history.
 
-The context meter displays **unavailable** when the runtime does not report a
-usable context window; it is not a turn-budget percentage. Token and dollar
-costs are estimates for the current conversation and its workers.
+The context meter follows the selected conversation's latest reported sample,
+not cumulative billing tokens. A known window gives a percentage; an unmeasured
+sample stays unknown. Known usage without a window shows tokens used.
+Token and dollar costs are estimates for the conversation and its workers.
 
 Use `/copy` (aliases `/export` and `/dump`) while idle to export the complete
 public conversation, not just visible transcript rows. It saves private local
@@ -913,12 +914,13 @@ highlights; elapsed time remains visible. Working highlights keep their text
 stationary and use normal foreground colors rather than failure red.
 
 ## Agents in chat
-- Each delegated worker appears as a task row below the composer, with its task
-  and current status/activity. Selecting it uses the same transcript and
-  composer as Main, with a separate draft per conversation.
-- Running, queued, completed, incomplete and failed states are labeled directly.
-  Additional workers remain reachable with `+N more · Next task` and
-  `Ctrl+PageUp` / `Ctrl+PageDown`; completed output stays available.
+- Each delegated worker appears below the composer. Tasks and live activity
+  wrap separately within the available space; only remaining overflow is clipped.
+  Selecting a row uses the same transcript and composer as Main, with a separate
+  draft per conversation.
+- Additional workers remain reachable with `+N more · Next task`. Completed
+  output stays available; `Ctrl+PageUp` / `Ctrl+PageDown` cycles active workers
+  with Main.
 - Selection and browsing do not message or stop a worker. Type a follow-up to
   message the selected active/parked worker. A finished one-shot worker returns
   its result to Main as untrusted context. `Ctrl+Shift+Home` returns to Main.
@@ -927,8 +929,9 @@ stationary and use normal foreground colors rather than failure red.
 
 The activity row sits above the composer and names the current main action or
 agent count. The bottom status area keeps measured context, model, mode, Git and
-enabled usage indicators. Selecting a worker shows that worker's measured model
-and usage; missing measurements remain unknown.
+enabled usage indicators. A focused worker uses its own model, provider and
+measured context. Partial updates retain the latest sample; missing measurements
+stay unknown rather than borrowing Main's count.
 
 The unabridged plan stays in the main transcript.
 

@@ -142,8 +142,8 @@ export interface StatusBarInput {
   /** Show raw token totals; independent of the optional cost estimate. */
   showTokenUsage?: boolean;
   /**
-   * Total context window in tokens. When omitted, NO context segment is
-   * produced — the percentage must never be invented.
+   * Total context window in tokens. A percentage requires measured usage too;
+   * the enabled meter shows the known capacity when usage is not yet reported.
    */
   contextWindow?: number;
   /** Tokens currently held in context, for the percentage. */
@@ -535,7 +535,7 @@ export function buildStatusSegments(input: StatusBarInput): StatusSegment[] {
   // enabled the meter, the same figure renders as a visual bar instead of the
   // plain percent (the two are mutually exclusive, never both).
   const contextWindow = positiveCount(input.contextWindow);
-  const hasUsage = typeof input.contextUsed === "number" && Number.isFinite(input.contextUsed);
+  const hasUsage = typeof input.contextUsed === "number" && Number.isFinite(input.contextUsed) && input.contextUsed >= 0;
   if (contextWindow > 0 && hasUsage) {
     const used = Math.max(0, input.contextUsed as number);
     const percent = roundForDisplay((used / contextWindow) * 100);
@@ -545,11 +545,9 @@ export function buildStatusSegments(input: StatusBarInput): StatusSegment[] {
       texts.set("context", `${percent}%/${formatTokenCount(contextWindow)}`);
     }
   } else if (contextWindow > 0 && input.showContextMeter) {
-    // Window known but no turn has reported usage yet (a fresh session). Show
-    // the meter at 0% rather than "unavailable" — the capacity is real and
-    // known even before the first token is spent. (The compact non-meter
-    // percentage still waits for real usage; a bare "0%" there reads as noise.)
-    texts.set("meter", `Context: ${contextMeter(0, contextWindow, symbols)}`);
+    // Capacity is known, but no request has reported occupancy. An empty bar
+    // would fabricate a measurement even for a freshly focused conversation.
+    texts.set("meter", `Context: unknown / ${formatTokenCount(contextWindow)}`);
   } else if (hasUsage && input.showContextMeter) {
     // Window unknown (e.g. a model absent from the catalog) but we still know
     // how many tokens the turn consumed — show that instead of a dead label.
