@@ -1,5 +1,5 @@
-import { consoleExecutionProfile } from "../console-execution.js";
 /** @jsxImportSource @opentui/react */
+import { consoleExecutionProfile } from "../console-execution.js";
 import React, {
   useCallback,
   useEffect,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { WorkbenchFrameReader, encodeWorkbenchFrame, guestWorkspacePath, hostWorkspacePath, mapWorkbenchTarget, serializeWorkbenchConfig } from "./workbench-console-protocol.js";
+import { WorkbenchFrameReader, encodeWorkbenchFrame, guestWorkspacePath, hostWorkspacePath, mapWorkbenchTarget, serializeWorkbenchConfig, mapWorkbenchCliArguments } from "./workbench-console-protocol.js";
 
 describe("workbench controller boundary", () => {
   it("frames partial streams and rejects method-shaped or oversized messages", () => {
@@ -17,6 +17,10 @@ describe("workbench controller boundary", () => {
     expect(() => guestWorkspacePath("/operator/repo-other", "/operator/repo")).toThrow("outside");
     expect(() => guestWorkspacePath("/workspace/../etc", "/operator/repo")).toThrow("Invalid");
     expect(() => hostWorkspacePath("/workspace/../../etc", "/operator/repo")).toThrow("Invalid");
+  });
+  it("maps known CLI path flags while preserving operator prose", () => {
+    expect(mapWorkbenchCliArguments(["scan", "--target=source:/operator/repo/src", "--scope", "/operator/repo/scope.json", "--print", "inspect /operator/private", "--model", "granted"], "/operator/repo")).toEqual(["scan", "--target=source:/workspace/src", "--scope", "/workspace/scope.json", "--print", "inspect /operator/private", "--model", "granted"]);
+    expect(() => mapWorkbenchCliArguments(["scan", "--target", "/operator/other"], "/operator/repo")).toThrow("outside");
   });
   it("does not serialize host authentication or executable resources", () => {
     const config = { target: "/operator/repo", workspaceRoot: "/operator/repo", autonomyMode: "standard" as const, askOperator: async () => null };

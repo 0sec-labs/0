@@ -48,7 +48,7 @@ function guestCommand(options: WorkbenchControllerOptions, cli: boolean): { comm
   if (!options.assets) return { command: ["/usr/local/bin/0", "--workbench-inner", "workbench", entry] };
   // Current compiled code is copied inside the guest; host asset grants remain read-only.
   const dependencies = options.assets.dependencies ? "/opt/0-controller-deps/node_modules" : "/opt/0/node_modules";
-  const script = `const fs=require('node:fs');const path='/tmp/0-controller-cli';fs.cpSync('/opt/0-controller-cli',path,{recursive:true});fs.symlinkSync(${JSON.stringify(dependencies)},path+'/node_modules');process.argv=[process.execPath,path+'/0.js','--workbench-inner','workbench',${JSON.stringify(entry)}];import(path+'/0.js').catch(e=>{console.error(e.message);process.exitCode=1});`;
+  const script = `const fs=require('node:fs');const path='/tmp/0-controller-cli';fs.cpSync('/opt/0-controller-cli',path,{recursive:true});fs.symlinkSync(${JSON.stringify(dependencies)},path+'/node_modules');const child=require('node:child_process').spawn(process.execPath,[path+'/0.js','--workbench-inner','workbench',${JSON.stringify(entry)}],{stdio:'inherit',env:process.env});child.once('error',e=>{console.error(e.message);process.exit(1)});child.once('exit',code=>process.exit(code??1));`;
   return { command: ["/usr/local/bin/node", "--eval", script], mounts: [{ source: options.assets.cliDist, target: "/opt/0-controller-cli" }, ...(options.assets.dependencies ? [{ source: options.assets.dependencies, target: "/opt/0-controller-deps/node_modules" }] : [])] };
 }
 
@@ -69,6 +69,7 @@ class Controller {
   private lifetime?: ReturnType<typeof setTimeout>;
   private started = false;
   private guestReady = false;
+  private startupStderr = "";
   receive: (frame: WorkbenchFrame) => void = () => {};
   decision: (name: string, args: unknown[]) => Promise<unknown> = async () => null;
   constructor(readonly options: WorkbenchControllerOptions, readonly init: Record<string, unknown>, readonly cli: boolean) {
@@ -91,10 +92,10 @@ class Controller {
         command: launch.command, environment: { ZERO_PROVIDER: "chatgpt-codex", ZERO_NO_TELEMETRY: "1", DO_NOT_TRACK: "1" }, network: this.options.network,
         tty: false, cpus: this.options.workbench.cpus, memoryMb: this.options.workbench.memoryMb, storageGb: this.options.workbench.storageGb,
         approvedImages: this.options.workbench.approvedImages, signal: this.abort.signal, workspaceMode: "snapshot", artifactDirectory: artifacts,
-        readOnlyMounts: launch.mounts, transport: { initialInput: encodeWorkbenchFrame({ type: "init", ...this.init, guestSettings: this.options.guestSettings, selection: { ...this.options.selection, provider: "chatgpt-codex" } }), onReady: input => { this.input = input; }, onStdout: data => reader.push(data, frame => this.dispatch(frame)), onStderr: () => {} },
+        readOnlyMounts: launch.mounts, transport: { initialInput: encodeWorkbenchFrame({ type: "init", ...this.init, guestSettings: this.options.guestSettings, selection: { ...this.options.selection, provider: "chatgpt-codex" } }), onReady: input => { this.input = input; }, onStdout: data => reader.push(data, frame => this.dispatch(frame)), onStderr: data => { this.startupStderr = (this.startupStderr + data).slice(-4096); } },
       });
       void this.done.then(async result => {
-        const error = new Error(result.error ?? "Workbench VM exited");
+        const error = new Error((result.error ?? "Workbench VM exited") + (!this.guestReady && this.startupStderr.trim() ? `: ${this.startupStderr.trim()}` : ""));
         if (!this.guestReady) this.rejectReady(error);
         for (const pending of this.pending.values()) pending.reject(error); this.pending.clear();
         clearTimeout(this.idle); clearTimeout(this.lifetime);
@@ -212,6 +213,7 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
     configureEngagement(selection) { if (selection.target !== undefined) target = selection.target; if (selection.scope !== undefined) scope = selection.scope ?? undefined;
       const value = { ...(selection.target === undefined ? {} : { target: mapWorkbenchTarget(selection.target, workspace) }), ...(selection.scope === undefined ? {} : { scope: selection.scope?.raw ?? null }) };
       if (!controller.done) Object.assign(serial, value); else queue("configure", value); },
+    configureWorkspace(path) { if (realpathSync(path) !== workspace) throw new Error("The SmolVM workspace grant is fixed for this chat; start a new chat to change it"); },
     reconfigureRuntime(selection) { if (selection.env !== undefined || (selection.provider && selection.provider !== "chatgpt-codex") || (selection.model && !options.provider.models.includes(selection.model)) || Object.values(selection.agentModels ?? {}).some(model => model !== "auto" && !options.provider.models.includes(model))) throw new Error("Runtime selection is outside workbench provider grant");
       Object.assign(options.selection, selection); if (controller.done) queue("reconfigure", selection); },
     clearConversation() { messages = []; checkpoint = undefined; if (!controller.done) { serial.initialMessages = []; delete serial.initialCheckpoint; } else queue("clear"); },

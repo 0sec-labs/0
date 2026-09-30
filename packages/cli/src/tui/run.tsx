@@ -1,5 +1,5 @@
-import { consoleExecutionProfile } from "../console-execution.js";
 /** @jsxImportSource @opentui/react */
+import { consoleExecutionProfile } from "../console-execution.js";
 import { randomUUID } from "node:crypto";
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { CliRenderEvents, createCliRenderer, type CliRenderer } from "@opentui/core";

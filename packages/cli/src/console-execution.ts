@@ -1,7 +1,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import { createWorkbenchProviderBroker, isAdmittedSmolvmWorkbench } from "@0/core";
 import type { ConsoleSession, ConsoleSessionConfig, LlmApiRuntime } from "@0/core";
-import { findingSchema, type ConsoleExecutionSnapshot } from "@0/shared";
+import { findingSchema, type ConsoleExecutionSnapshot, type Finding } from "@0/shared";
 import { osecDB } from "@0/db";
 import { randomUUID } from "node:crypto";
 import { currentWorkbenchAssets } from "./workbench-assets.js";
@@ -30,6 +30,8 @@ export function createIsolatedConsoleSession(
   if (consoleExecutionProfile(options.homeDir) !== "smolvm") return undefined;
   const workbench = loadWorkbenchConfig(options.homeDir);
   if (!workbench) throw new Error("SmolVM is selected but no workbench is configured. Run 0 workbench setup --image <approved archive>. Host fallback is refused.");
+  const requestedWorkspace = options.workspaceRoot ?? config.workspaceRoot;
+  if (workbench.workspaceRoot && requestedWorkspace && realpathSync(workbench.workspaceRoot) !== realpathSync(requestedWorkspace)) throw new Error("This chat folder differs from the configured SmolVM workspace grant. Start a chat in the granted folder or explicitly reconfigure the workbench before execution.");
   if (config.pluginHost || config.mcpHost) throw new Error("Host plugin and MCP resources cannot be forwarded into SmolVM. Configure tools inside the approved guest image.");
   const runtime = config.runtime as Partial<LlmApiRuntime>;
   const provider = runtime.resolvedProvider?.();
@@ -53,7 +55,7 @@ export function createIsolatedConsoleSession(
       onExecution: options.onExecution,
       onFindings: (findings, completion) => {
         // No host store is opened until the VM has stopped and native teardown is proven.
-        const validated = findings.map(finding => findingSchema.parse(finding));
+        const validated = findings.map(finding => findingSchema.parse(finding) as Finding);
         const db = new osecDB(options.dbPath);
         try {
           if (!db.getScan(scanId)) db.createScan({ target: config.target ?? "", depth: "default", format: "terminal", runtime: "api" }, scanId);

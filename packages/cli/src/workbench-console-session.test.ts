@@ -52,6 +52,13 @@ describe("host console VM controller", () => {
     await vi.waitFor(() => expect(mock.requests.some(frame => frame.type === "provider-end")).toBe(true));
     await session.cleanup();
   });
+  it("never imports blank chats and imports real guest results only once", async () => {
+    const input = await options(); const onFindings = vi.fn();
+    const blank = createWorkbenchConsoleSession({ ...input, selection: { model: "granted", agentModels: { audit: "auto" }, autoRoute: true }, onFindings });
+    await blank.cleanup(); await blank.cleanup(); expect(onFindings).not.toHaveBeenCalled();
+    const active = createWorkbenchConsoleSession({ ...input, onFindings }); await active.send("hello");
+    await active.cleanup(); await active.cleanup(); expect(onFindings).toHaveBeenCalledTimes(1);
+  });
   it("rejects host executable resources and ungranted providers before launch", async () => {
     const input = await options(); expect(() => createWorkbenchConsoleSession({ ...input, config: { ...input.config, mcpHost: {} } as never })).toThrow("cannot execute");
     expect(() => createWorkbenchConsoleSession({ ...input, selection: { model: "ungranted" } })).toThrow("grant");

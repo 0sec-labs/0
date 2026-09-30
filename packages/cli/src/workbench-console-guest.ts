@@ -14,7 +14,12 @@ import type { WorkbenchFrame } from "./workbench-console-protocol.js";
 const CALLBACKS = ["requestScope", "requestLocalScope", "approveTool", "escalateScopedAudit", "askOperator"] as const;
 const EVENTS = ["onHarnessUpdate", "onAssistantDelta", "onReasoningDelta", "onToolStart", "onToolResult", "onUsage", "onNotice", "onCompaction"] as const;
 
-/** Only the admitted VM entrypoint can create an engine or local provider listener. */
+/**
+ * Only the admitted VM entrypoint can create an engine or local provider listener.
+ * Parent-turn callbacks cross this transport. Persistent worker bus/roster events
+ * remain guest-local and their host UI presentation is not qualified yet; owned
+ * worker cancellation and final persistence still run before guest teardown.
+ */
 async function runGuest(cli: boolean): Promise<number> {
   if (!isAdmittedSmolvmWorkbench()) throw new Error("Workbench controller requires admitted Linux VM execution");
   const emit = (frame: WorkbenchFrame) => { if (!process.stdout.write(encodeWorkbenchFrame(frame))) process.stdin.pause(); };
