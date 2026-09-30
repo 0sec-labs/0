@@ -6287,7 +6287,7 @@ export class ToolExecutor {
       findings: state.findings.length,
       summary: state.summary,
       done: state.done,
-      completion_reason: state.errorExit ? "error" : state.costCeilingExceeded ? "cost_limit" : state.earlyStopNoProgress ? "early_stop" : state.done ? "done" : "turn_limit",
+      completion_reason: state.errorExit ? "error" : state.costCeilingExceeded ? "cost_limit" : state.outputCapExit ? "output_limit" : state.earlyStopNoProgress ? "early_stop" : state.done ? "done" : "turn_limit",
       ...(state.errorExit ? { error: state.errorExit.error } : {}),
       ...(state.totalUsage && (state.totalUsage.inputTokens > 0 || state.totalUsage.outputTokens > 0) ? { usage: state.totalUsage } : {}),
       durationMs: Date.now() - startedAt,
@@ -6419,7 +6419,7 @@ export class ToolExecutor {
       turns: turnOffset + state.turnCount, summary: state.summary, done: state.done,
       ...(state.totalUsage && (state.totalUsage.inputTokens > 0 || state.totalUsage.outputTokens > 0) ? { usage: state.totalUsage } : {}),
       durationMs: Date.now() - startedAt, model: rt.resolvedModel?.(),
-      completion_reason: state.costCeilingExceeded ? "cost_limit" : state.earlyStopNoProgress ? "early_stop" : state.done ? "done" : "turn_limit",
+      completion_reason: state.costCeilingExceeded ? "cost_limit" : state.outputCapExit ? "output_limit" : state.earlyStopNoProgress ? "early_stop" : state.done ? "done" : "turn_limit",
     };
   }
 

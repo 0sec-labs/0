@@ -3866,7 +3866,7 @@ export function ChatScreen({
       onAuditActivity({
         outcome: outcome.stopReason === "cancelled" ? "stopped"
           : outcome.stopReason === "error" ? "failed"
-          : outcome.stopReason === "max_turn_tokens" || outcome.stopReason === "max_tool_iterations" ? "waiting"
+          : outcome.stopReason === "max_turn_tokens" || outcome.stopReason === "max_tool_iterations" || outcome.stopReason === "output_cap" ? "waiting"
           : !assistantText && !outcome.assistantText && outcome.toolCalls.length === 0 ? "failed"
           : "completed",
       });
@@ -3931,7 +3931,7 @@ export function ChatScreen({
             ?? "The tool-round backstop was reached. History is preserved; review the progress before continuing.",
           turn: currentTurn,
         });
-      } else if (outcome.stopReason !== "cancelled" && !producedText && outcome.toolCalls.length === 0) {
+      } else if (outcome.stopReason !== "cancelled" && outcome.stopReason !== "output_cap" && !producedText && outcome.toolCalls.length === 0) {
         // Not an error, but silence is never a useful answer.
         appendEntry({
           kind: "error",

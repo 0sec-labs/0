@@ -10,11 +10,13 @@ import {
   toolFailureText,
   BUDGET_WARNING_SOFT,
   BUDGET_WARNING_HARD,
+  MAX_OUTPUT_CAP_CONTINUATIONS,
 } from "./native-loop.js";
 import { ScanCostLedger } from "./cost-ledger.js";
 import { detectPlaybooks, buildPlaybookInjection, PLAYBOOKS } from "./playbooks.js";
 import type { NativeRuntime, NativeRuntimeResult, NativeMessage, NativeToolDef } from "../runtime/types.js";
 import type { Finding } from "@0/shared";
+import { EnforcementTracker, PathPolicy } from "../scope/enforcement.js";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -67,6 +69,136 @@ function createMockRuntime(responses: NativeRuntimeResult[]): NativeRuntime {
     },
   };
 }
+
+describe("native output-cap continuation", () => {
+  const checkpoint: NativeRuntimeResult = {
+    content: [{ type: "text", text: "Verified observation; plan still in progress." }],
+    stopReason: "max_tokens", checkpoint: { reason: "max_output_tokens", discardedToolCalls: 1 },
+    usage: { inputTokens: 10, outputTokens: 8192, cachedInputTokens: 4 }, durationMs: 1,
+  };
+  const config = {
+    role: "discovery" as const, systemPrompt: "Retain observations and finish the report.", tools: [],
+    maxTurns: 10, target: "https://example.test", scanId: "cap-continuation",
+  };
+
+  it("retains partial observations and the plan through the existing loop without replaying a tool", async () => {
+    const snapshots: NativeMessage[][] = [];
+    const responses: NativeRuntimeResult[] = [
+      { content: [{ type: "tool_use", id: "plan", name: "update_todos", input: {
+        todos: [{ content: "Finish from verified observation", status: "in_progress" }],
+      } }], stopReason: "tool_use", durationMs: 0 },
+      checkpoint,
+      { content: [{ type: "tool_use", id: "done", name: "done", input: { summary: "Concise final report." } }], stopReason: "tool_use", durationMs: 0 },
+    ];
+    const model: NativeRuntime = {
+      type: "api", isAvailable: async () => true,
+      executeNative: async (_system, messages) => {
+        snapshots.push(structuredClone(messages));
+        const result = responses.shift();
+        if (!result) throw new Error("Unexpected replay");
+        return result;
+      },
+    };
+    const observed: string[] = [];
+    const state = await runNativeAgentLoop({ config, runtime: model, db: null,
+      onTurn: (_turn, _calls, _results, text) => observed.push(text) });
+    expect(state.done).toBe(true);
+    expect(state.errorExit).toBeUndefined();
+    expect(state.summary).toBe("Concise final report.");
+    expect(state.totalUsage).toEqual({ inputTokens: 10, outputTokens: 8192, cachedInputTokens: 4 });
+    expect(state.todos?.groups.flatMap(group => group.items).map(todo => todo.content)).toContain("Finish from verified observation");
+    expect(observed).toContain("Verified observation; plan still in progress.");
+    expect(snapshots).toHaveLength(3);
+    const blocks = state.messages.flatMap(message => message.content);
+    expect(blocks.filter(block => block.type === "tool_use").map(block => block.id)).toEqual(["plan", "done"]);
+    expect(JSON.stringify(snapshots[2])).toContain("[OUTPUT CAP CHECKPOINT]");
+    expect(JSON.stringify(snapshots[2])).toContain("Verified observation; plan still in progress.");
+  });
+
+  it("pauses repeated caps without reporting a provider/worker failure", async () => {
+    const executeNative = vi.fn(async () => structuredClone(checkpoint));
+    const state = await runNativeAgentLoop({ config, runtime: { type: "api", executeNative, isAvailable: async () => true }, db: null });
+    expect(executeNative).toHaveBeenCalledTimes(MAX_OUTPUT_CAP_CONTINUATIONS + 1);
+    expect(state.done).toBe(false);
+    expect(state.errorExit).toBeUndefined();
+    expect(state.outputCapExit?.continuations).toBe(MAX_OUTPUT_CAP_CONTINUATIONS);
+    expect(state.summary).toMatch(/resume/i);
+    expect(state.messages.filter(message => message.role === "assistant").map(message => message.content))
+      .toEqual(Array.from({ length: MAX_OUTPUT_CAP_CONTINUATIONS + 1 }, () => checkpoint.content));
+  });
+
+  it("charges a capped response to the shared cost ceiling before any continuation", async () => {
+    const ledger = new ScanCostLedger();
+    const executeNative = vi.fn(async () => structuredClone(checkpoint));
+    const state = await runNativeAgentLoop({ config: { ...config, costCeilingUsd: 0.001, costModel: "gpt-4o", costLedger: ledger },
+      runtime: { type: "api", executeNative, isAvailable: async () => true }, db: null });
+    expect(executeNative).toHaveBeenCalledOnce();
+    expect(state.costCeilingExceeded).toBe(true);
+    expect(state.errorExit).toBeUndefined();
+    expect(state.totalUsage.outputTokens).toBe(8192);
+    expect(ledger.totalCostUsd()).toBeGreaterThan(0.001);
+    expect(state.messages.at(-1)?.content).toEqual(checkpoint.content);
+  });
+
+  it("does not spend another monetary-budgeted request when capped usage is unavailable", async () => {
+    const executeNative = vi.fn(async () => ({ ...checkpoint, usage: undefined }));
+    const state = await runNativeAgentLoop({ config: { ...config, costCeilingUsd: 1 },
+      runtime: { type: "api", executeNative, isAvailable: async () => true }, db: null });
+    expect(executeNative).toHaveBeenCalledOnce();
+    expect(state.done).toBe(false);
+    expect(state.errorExit).toBeUndefined();
+    expect(state.outputCapExit?.message).toMatch(/without token usage/);
+    expect(state.messages.at(-1)?.content).toEqual(checkpoint.content);
+  });
+
+  it("honors cancellation after a cap without another request or incomplete dispatch", async () => {
+    const controller = new AbortController();
+    const executeNative = vi.fn(async () => structuredClone(checkpoint));
+    const state = await runNativeAgentLoop({ config, runtime: { type: "api", executeNative, isAvailable: async () => true },
+      db: null, signal: controller.signal, onTurn: () => controller.abort() });
+    expect(executeNative).toHaveBeenCalledOnce();
+    expect(state.done).toBe(false);
+    expect(state.summary).toMatch(/cancelled/i);
+    expect(state.messages.at(-1)?.content).toEqual(checkpoint.content);
+    expect(state.totalUsage.outputTokens).toBe(8192);
+  });
+
+  it("stops at the original wall clock even when the preceding response is a recoverable cap", async () => {
+    let now = 0;
+    const enforcement = new EnforcementTracker({ pathPolicy: new PathPolicy([]), killAfterSec: 1, nowFn: () => now });
+    const executeNative = vi.fn(async () => { now = 1000; return structuredClone(checkpoint); });
+    const state = await runNativeAgentLoop({ config: { ...config, enforcement },
+      runtime: { type: "api", executeNative, isAvailable: async () => true }, db: null });
+    expect(executeNative).toHaveBeenCalledOnce();
+    expect(state.killSwitchTriggered).toBe(true);
+    expect(state.errorExit).toBeUndefined();
+    expect(state.totalUsage.outputTokens).toBe(8192);
+    expect(state.messages.some(message => message.role === "assistant" && message.content[0]?.type === "text" &&
+      message.content[0].text === "Verified observation; plan still in progress.")).toBe(true);
+  });
+
+  it("does not extend the loop turn allowance to continue an output cap", async () => {
+    const executeNative = vi.fn(async () => structuredClone(checkpoint));
+    const state = await runNativeAgentLoop({ config: { ...config, maxTurns: 1 },
+      runtime: { type: "api", executeNative, isAvailable: async () => true }, db: null });
+    expect(executeNative).toHaveBeenCalledOnce();
+    expect(state.turnCount).toBe(1);
+    expect(state.outputCapExit?.continuations).toBe(0);
+    expect(state.errorExit).toBeUndefined();
+    expect(state.done).toBe(false);
+  });
+
+  it("refuses a checkpoint that includes an incomplete tool invocation", async () => {
+    const executeNative = vi.fn(async () => ({
+      ...checkpoint, content: [{ type: "tool_use" as const, id: "unsafe", name: "done", input: { summary: "must not finish" } }],
+    }));
+    const state = await runNativeAgentLoop({ config, runtime: { type: "api", executeNative, isAvailable: async () => true }, db: null });
+    expect(executeNative).toHaveBeenCalledOnce();
+    expect(state.done).toBe(false);
+    expect(state.errorExit?.error).toMatch(/Invalid output-cap checkpoint/);
+    expect(state.messages.flatMap(message => message.content).some(block => block.type === "tool_use")).toBe(false);
+  });
+});
 
 // ── Tests ──
 
