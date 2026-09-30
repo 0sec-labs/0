@@ -54,6 +54,7 @@ describe("admitted guest provider adapter", () => {
       const runtime = new LlmApiRuntime({ type: "api", timeout: 5000, env: environment(url) });
       expect(await runtime.isAvailable()).toBe(true);
       expect(runtime.getConfigurationDiagnostics().valid).toBe(true);
+      expect(() => runtime.workbenchCredentialResolver()).toThrow("captured chatgpt-codex account");
       expect(runtime.accessibleProviders()).toEqual(["chatgpt-codex"]);
       const result = await runtime.executeNative("Reply briefly.", [{ role: "user", content: [{ type: "text", text: "Hello" }] }], []);
       expect(result.stopReason).toBe("end_turn");

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LlmApiRuntime } from "./llm-api.js";
+import { createWorkbenchProviderBroker } from "./workbench-provider-broker.js";
 
 const environment = () => ({ "ZERO_FORCE_PROVIDER": "", "ZERO_SELECTED_PROVIDER": "", "ZERO_SKIP_PROVIDER_BANNER": "1", "ZERO_LLM_FALLBACK": "" });
 
@@ -21,6 +22,46 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
+});
+
+it("binds the host workbench credential closure to the selected account across ambient and runtime switches", async () => {
+  vi.stubEnv("ZERO_CHATGPT_ACCESS_TOKEN", "synthetic-broker-ambient-b");
+  vi.stubEnv("ZERO_CHATGPT_ACCOUNT_ID", "broker-account-b");
+  const runtime = new LlmApiRuntime({ type: "api", provider: "chatgpt-codex", model: "gpt-5.6-sol", env: {
+    ...environment(), ZERO_CHATGPT_ACCESS_TOKEN: "synthetic-broker-selected-a", ZERO_CHATGPT_ACCOUNT_ID: "broker-account-a",
+    ZERO_CHATGPT_OAUTH_REFRESH_TOKEN: "",
+  } });
+  const resolveCredentials = runtime.workbenchCredentialResolver();
+  vi.stubEnv("ZERO_CHATGPT_ACCESS_TOKEN", "synthetic-broker-ambient-c");
+  vi.stubEnv("ZERO_CHATGPT_ACCOUNT_ID", "broker-account-c");
+  // An already-granted workspace must not inherit a later reconnect of the
+  // original runtime object, either: the closure captures state, not `this`.
+  runtime.reconfigure({ provider: "chatgpt-codex", env: {
+    ...environment(), ZERO_CHATGPT_ACCESS_TOKEN: "synthetic-broker-reconnected-b", ZERO_CHATGPT_ACCOUNT_ID: "broker-account-b",
+    ZERO_CHATGPT_OAUTH_REFRESH_TOKEN: "",
+  } });
+  let calls = 0;
+  const broker = createWorkbenchProviderBroker({ provider: "chatgpt-codex", models: ["gpt-5.6-sol"], resolveCredentials,
+    fetchImpl: async (_url, options) => {
+      calls++;
+      const headers = new Headers(options?.headers);
+      expect(headers.get("authorization")).toBe("Bearer synthetic-broker-selected-a");
+      expect(headers.get("chatgpt-account-id")).toBe("broker-account-a");
+      return new Response("data: captured account\n\n");
+    },
+  });
+  try {
+    expect(typeof resolveCredentials).toBe("function");
+    expect(JSON.stringify(broker.grant)).not.toContain("synthetic-broker");
+    for (let index = 0; index < 2; index++) {
+      await (await broker.request({ provider: "chatgpt-codex", model: "gpt-5.6-sol",
+        body: JSON.stringify({ model: "gpt-5.6-sol", instructions: "fixture", input: [], store: false, stream: true }),
+      })).text();
+    }
+    expect(calls).toBe(2);
+  } finally { await broker.close(); }
+  const unsupported = new LlmApiRuntime({ type: "api", provider: "openai", env: { ...environment(), OPENAI_API_KEY: "fixture-api-key" } });
+  expect(() => unsupported.workbenchCredentialResolver()).toThrow("captured chatgpt-codex account");
 });
 
 describe("live runtime reconfiguration", () => {

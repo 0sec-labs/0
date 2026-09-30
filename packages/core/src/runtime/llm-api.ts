@@ -2622,6 +2622,17 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     return loadCodexModelCatalog({ signal, resolveCredentials: () => refreshChatGptCodexAuthState(state) });
   }
 
+  /** Host-only inference grant bound to this captured account, including after
+   * later logins or runtime reconfiguration. Never serialize the closure or
+   * its result into guest admission, workspace files or environment. */
+  workbenchCredentialResolver(): () => Promise<{ accessToken: string; accountId?: string }> {
+    const state = this.codexAuthState;
+    if (this.workbenchProviderProxy || this.provider !== "chatgpt-codex" || !state) {
+      throw new Error("Host workbench credential broker requires a captured chatgpt-codex account");
+    }
+    return () => refreshChatGptCodexAuthState(state);
+  }
+
 
   /**
    * Mutate the live selection in place so the NEXT turn (the engine reads
