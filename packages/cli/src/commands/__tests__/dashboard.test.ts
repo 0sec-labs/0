@@ -267,6 +267,16 @@ const dbState: {
 const resetOsecDatabaseMock = vi.fn();
 
 vi.mock("@0/db", () => {
+  // The web workflow service owns a separate definition/history store.
+  // Keep that boundary mocked too, rather than opening SQLite in HTTP tests.
+  class FakeSecurityWorkflowStore {
+    interruptActiveExecutions(): number { return 0; }
+    list(): unknown[] { return []; }
+    close(): void {}
+  }
+  class FakeSecurityWorkflowStoreError extends Error {
+    constructor(message: string, readonly statusCode: number) { super(message); }
+  }
   class FakeOsecDB {
     constructor(dbPath?: string) {
       dbState.ctorPaths.push(dbPath);
@@ -329,6 +339,8 @@ vi.mock("@0/db", () => {
   }
   return {
     osecDB: FakeOsecDB,
+    SecurityWorkflowStore: FakeSecurityWorkflowStore,
+    SecurityWorkflowStoreError: FakeSecurityWorkflowStoreError,
     resetOsecDatabase: resetOsecDatabaseMock,
   };
 });
