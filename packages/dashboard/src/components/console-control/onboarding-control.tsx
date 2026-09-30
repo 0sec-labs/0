@@ -4,13 +4,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check as CheckIcon } from "lucide-react";
 import { webFetch, webFetchJson } from "@/api";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { BrandMark } from "@/components/brand-mark";
-import zeroWaveUrl from "../../assets/zero-wave.png";
+import zeroMascotUrl from "../../assets/zero-peek.png";
 import { cn } from "@/lib/utils";
 import { ConnectionsControl, useProviders } from "./connections-control";
 import { ThemeControl, useConsoleSettings } from "./settings-control";
 import { ProjectControl } from "./system-control";
-import { Check, Facts, Feedback, Field, QueryState, SubmitButton, jsonBody, selectClass } from "./control-ui";
+import { Check, Facts, Feedback, Field, QueryState, SubmitButton, jsonBody } from "./control-ui";
 import type { ModelsResponse, SessionSnapshot, SessionSummary, SettingsResponse } from "./contracts";
 
 const steps = [
@@ -104,7 +105,7 @@ export function OnboardingControl({ sessionId, returnTo }: { sessionId?: string;
       <BrandMark className="mx-auto mb-6" />
       <div className={cn("relative mx-auto w-40 lg:w-56", current.id !== "welcome" && "hidden lg:block")}>
         <div aria-hidden="true" className="absolute inset-5 rounded-full bg-primary/10 blur-3xl" />
-        <img src={zeroWaveUrl} alt="" width={224} height={224} className="relative h-auto w-full" />
+        <img src={zeroMascotUrl} alt="" width={224} height={168} className="relative h-auto w-full" />
       </div>
       <p className="mx-auto mt-6 max-w-64 text-sm leading-6 text-muted-foreground">{stepDescriptions[current.id]}</p>
       <p className="mt-3 text-xs text-muted-foreground">Step {step + 1} of {steps.length}</p>
@@ -139,8 +140,8 @@ export function OnboardingControl({ sessionId, returnTo }: { sessionId?: string;
     {current.id === "privacy" && <div className="space-y-5">
       <QueryState pending={settings.isPending} error={settings.error} retry={settings.refetch} />
       <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="Usage metrics" hint="Anonymous counts and timing. Never code or prompts."><select value={analytics} onChange={event => { setAnalytics(event.target.value); setAnalyticsChanged(true); }} className={selectClass} disabled={!consentReady || complete.isPending}><option value="off">Off</option><option value="usage">Share</option></select></Field>
-        <Field label="Diagnostic reports"><select value={reporting} onChange={event => { setReporting(event.target.value); setReportingChanged(true); setAutomaticApproved(false); }} className={selectClass} disabled={!consentReady || complete.isPending}><option value="off">Off</option><option value="ask">Ask before sending</option><option value="automatic">Send automatically</option></select></Field>
+        <Field label="Usage metrics" hint="Anonymous counts and timing. Never code or prompts."><Select aria-label="Usage metrics" value={analytics} onValueChange={value => { setAnalytics(value); setAnalyticsChanged(true); }} disabled={!consentReady || complete.isPending} options={[{ value: "off", label: "Off" }, { value: "usage", label: "Share" }]} /></Field>
+        <Field label="Diagnostic reports"><Select aria-label="Diagnostic reports" value={reporting} onValueChange={value => { setReporting(value); setReportingChanged(true); setAutomaticApproved(false); }} disabled={!consentReady || complete.isPending} options={[{ value: "off", label: "Off" }, { value: "ask", label: "Ask before sending" }, { value: "automatic", label: "Send automatically" }]} /></Field>
       </div>
       {reportingNeedsConsent && <Check checked={automaticApproved} onChange={setAutomaticApproved}>I authorize sending diagnostic reports automatically to the configured destination.</Check>}
       <Feedback error={complete.error} />
@@ -180,8 +181,8 @@ function ModelStep({ owner, onApplied }: { owner?: string; onApplied: (session: 
   if (connected.length === 0) return <p className="text-sm text-muted-foreground">Connect a provider first.</p>;
   return <form className="space-y-5" onSubmit={event => { event.preventDefault(); apply.mutate(); }}>
     <div className="grid gap-4 sm:grid-cols-2">
-      <Field label="Provider"><select value={providerId} onChange={event => { setProviderId(event.target.value); setModel(""); apply.reset(); }} className={selectClass}>{connected.map(provider => <option key={provider.id} value={provider.id}>{provider.label}</option>)}</select></Field>
-      <Field label="Model"><select value={model} onChange={event => setModel(event.target.value)} disabled={models.isPending} className={selectClass} required><option value="">{models.isPending ? "Loading…" : "Choose a model"}</option>{models.data?.models.map(item => <option key={`${item.provider}:${item.id}`} value={item.id}>{item.id}{item.price ? ` · ${item.price}` : ""}</option>)}</select></Field>
+      <Field label="Provider"><Select aria-label="Provider" value={providerId} onValueChange={value => { setProviderId(value); setModel(""); apply.reset(); }} options={connected.map(provider => ({ value: provider.id, label: provider.label }))} /></Field>
+      <Field label="Model"><Select aria-label="Model" value={model} onValueChange={setModel} disabled={models.isPending} required options={[{ value: "", label: models.isPending ? "Loading…" : "Choose a model" }, ...(models.data?.models.map(item => ({ value: item.id, label: `${item.id}${item.price ? ` · ${item.price}` : ""}` })) ?? [])]} /></Field>
     </div>
     <Feedback error={apply.error ?? models.error} />
     <div className="flex flex-wrap items-center gap-4"><SubmitButton type="submit" pending={apply.isPending} disabled={!model}>Use this model</SubmitButton><Link to="/models" className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">Advanced routing</Link></div>

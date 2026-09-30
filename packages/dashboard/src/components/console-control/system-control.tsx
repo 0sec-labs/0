@@ -5,8 +5,9 @@ import { RefreshCcw } from "lucide-react";
 import { webFetchJson } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Check, ControlCard, Empty, Facts, Feedback, Field, QueryState, SubmitButton, TextField, jsonBody, selectClass } from "./control-ui";
+import { Check, ControlCard, Empty, Facts, Feedback, Field, QueryState, SubmitButton, TextField, jsonBody } from "./control-ui";
 import type { CheckItem, ChecksResponse, ProjectResponse, Provider, SessionSnapshot, SessionSummary } from "./contracts";
 import { DiagnosticReportControl } from "./diagnostic-report-control";
 
@@ -67,7 +68,7 @@ export function ProjectControl({ sessionId, onApplied }: { sessionId?: string; o
           <Field label="In scope" hint="One per line."><Textarea rows={4} value={inScope} onChange={event => { setInScope(event.target.value); setScopeApproved(false); }} /></Field>
           <Field label="Out of scope" hint="One per line."><Textarea rows={4} value={outOfScope} onChange={event => { setOutOfScope(event.target.value); setScopeApproved(false); }} /></Field>
         </div></details>
-        <Field label="Autonomy mode" hint={autonomyDescriptions[mode]}><select className={selectClass} value={mode} onChange={event => { setMode(event.target.value); setAutonomyApproved(false); }}>{Object.keys(autonomyDescriptions).map(value => <option key={value} value={value}>{value}</option>)}</select></Field>
+        <Field label="Autonomy mode" hint={autonomyDescriptions[mode]}><Select aria-label="Autonomy mode" value={mode} onValueChange={value => { setMode(value); setAutonomyApproved(false); }} options={Object.keys(autonomyDescriptions).map(value => ({ value, label: value }))} /></Field>
         {["copilot", "yolo"].includes(mode) && <Check checked={autonomyApproved} onChange={setAutonomyApproved}>I understand this mode won't ask before each action.</Check>}
         <Check checked={scopeApproved} onChange={setScopeApproved}>I reviewed this target and scope.</Check>
         <div className="flex flex-wrap gap-2"><SubmitButton type="submit" pending={configuration.isPending} disabled={!scopeApproved || (["copilot", "yolo"].includes(mode) && !autonomyApproved)}>{sessionId ? "Save" : "Start"}</SubmitButton><Button type="button" variant="outline" onClick={() => { setTarget(snapshot.data?.session.target ?? ""); setMode(snapshot.data?.session.autonomyMode ?? "standard"); setInScope(snapshot.data?.scope?.in_scope?.join("\n") ?? ""); setOutOfScope(snapshot.data?.scope?.out_of_scope?.join("\n") ?? ""); setScopeApproved(false); setAutonomyApproved(false); configuration.reset(); }}>Reset</Button></div>
@@ -126,7 +127,7 @@ export function ToolsControl({ sessionId }: { sessionId?: string }) {
     </ControlCard>
     <ControlCard title="All tools">
       <QueryState pending={tools.isPending} error={tools.error} retry={tools.refetch} />
-      <div className="grid gap-4 sm:grid-cols-2"><TextField label="Find a tool" type="search" value={filter} onChange={event => setFilter(event.target.value)} /><Field label="Role"><select className={selectClass} value={role} onChange={event => setRole(event.target.value)}><option value="">All roles</option>{tools.data?.roles.map(value => <option key={value} value={value}>{value}</option>)}</select></Field></div>
+      <div className="grid gap-4 sm:grid-cols-2"><TextField label="Find a tool" type="search" value={filter} onChange={event => setFilter(event.target.value)} /><Field label="Role"><Select aria-label="Role" value={role} onValueChange={setRole} options={[{ value: "", label: "All roles" }, ...(tools.data?.roles.map(value => ({ value, label: value })) ?? [])]} /></Field></div>
       {tools.data && rows.length === 0 && <Empty>No tools match these filters.</Empty>}
       <ul className="divide-y divide-border">{rows.map(tool => <li key={tool.name} className="space-y-1 py-3"><h3 className="font-medium text-sm">{tool.name}</h3><p className="text-xs leading-relaxed text-muted-foreground">{tool.description}</p></li>)}</ul>
     </ControlCard>

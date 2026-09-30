@@ -345,3 +345,77 @@
 }
 
 [role="menu"][data-ending-style] { transition-duration: 120ms; }
+
+/* Popup geometry is shared across Radix and Kumo portal surfaces. */
+[data-slot="dropdown-menu-content"],
+[data-slot="popover-content"],
+[role="menu"]:has([data-kumo-component="DropdownMenu"]),
+.kumo-popover-popup {
+  max-height: min(28rem, calc(100dvh - 2rem));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 0;
+  border-radius: 16px;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 8px 32px rgb(0 0 0 / 24%);
+  outline: 1px solid color-mix(in srgb, var(--foreground), transparent 94%);
+}
+.kumo-popover-popup { padding: 16px; }
+[data-slot="dialog-content"], [data-slot="sheet-content"] {
+  box-shadow: 0 16px 64px rgb(0 0 0 / 28%);
+}
+[data-slot="dialog-content"] button:focus-visible,
+[data-slot="sheet-content"] button:focus-visible,
+[role="menu"] [role="menuitem"]:focus-visible,
+.kumo-popover-popup button:focus-visible {
+  box-shadow: none;
+  outline: 1px solid color-mix(in srgb, var(--foreground), transparent 55%);
+  outline-offset: -2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kumo-popover-popup, [data-slot="dialog-content"], [data-slot="sheet-content"],
+  [data-slot="dialog-overlay"], [data-slot="sheet-overlay"] {
+    animation: none !important; transition: none !important;
+  }
+}
+[data-reduced-motion="true"] .kumo-popover-popup {
+  animation: none !important; transition: none !important;
+}
+
+/* Base UI Select uses a presentation popup around its scrolling listbox. */
+[role="presentation"][data-side]:has(> [role="listbox"] [data-kumo-component="Select"][data-kumo-part="option"]) {
+  display: flex;
+  flex-direction: column;
+  max-height: min(320px, var(--available-height, calc(100dvh - 2rem)));
+  overflow: hidden;
+  border: 0;
+  border-radius: 16px;
+  padding: 8px;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 8px 32px rgb(0 0 0 / 24%);
+  outline: 1px solid color-mix(in srgb, var(--foreground), transparent 94%);
+}
+[role="presentation"][data-side] > [role="listbox"]:has([data-kumo-component="Select"][data-kumo-part="option"]) {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 8px;
+}
+[data-kumo-component="Select"][data-kumo-part="option"] {
+  min-height: 36px;
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-size: 14px;
+  line-height: 20px;
+}
+@media (prefers-reduced-motion: reduce) {
+  [role="presentation"][data-side]:has(> [role="listbox"] [data-kumo-component="Select"]) {
+    animation: none !important; transition: none !important;
+  }
+}
+[data-reduced-motion="true"] [role="presentation"][data-side]:has(> [role="listbox"] [data-kumo-component="Select"]) {
+  animation: none !important; transition: none !important;
+}
