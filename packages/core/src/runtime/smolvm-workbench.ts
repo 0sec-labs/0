@@ -5,6 +5,8 @@ import { chmod, copyFile, lstat, mkdir, mkdtemp, open, readFile, realpath, rm, w
 import { homedir, availableParallelism, totalmem } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { Readable, Writable } from "node:stream";
+import { StringDecoder } from "node:string_decoder";
+import { snapshotSmolvmWorkspace, exportSmolvmWorkbenchArtifacts, type SmolvmWorkspaceLimits, type SmolvmWorkspaceManifest } from "./smolvm-workspace.js";
 import {
   approvedSmolvmWorkbenchImage, assertSmolvmWorkbenchPlatform, getSmolvmWorkbenchStatus,
   privateSmolvmDirectory, resolveSmolvmRuntime, smolvmArchiveDigest,
@@ -14,6 +16,14 @@ import { startWorkbenchBroker } from "./smolvm-broker.js";
 import type { WorkbenchBrokerController } from "./smolvm-broker.js";
 
 export interface SmolvmWorkbenchApprovedImage { reference: string; archive: string; digest: string; }
+export interface SmolvmWorkbenchTransport {
+  initialInput?: string;
+  onReady?: (input: { write(data: string): void; end(): void }) => void;
+  onStdout(data: string): void;
+  onStderr?: (data: string) => void;
+  maxInputBytes?: number;
+  maxOutputBytes?: number;
+}
 export interface SmolvmWorkbenchOptions {
   image: string;
   workspaceRoot: string;
@@ -27,12 +37,22 @@ export interface SmolvmWorkbenchOptions {
   storageGb: number;
   approvedImages?: readonly SmolvmWorkbenchApprovedImage[];
   signal?: AbortSignal;
+  /** Controller mode copies source and uses private per-run HOME/state. */
+  workspaceMode?: "shared" | "snapshot";
+  snapshotLimits?: Partial<SmolvmWorkspaceLimits>;
+  /** Unmounted private host destination; source changes are never applied automatically. */
+  artifactDirectory?: string;
+  /** Host-selected code/assets only; guest/model cannot select host mount paths. */
+  readOnlyMounts?: readonly { source: string; target: string }[];
+  /** Omitted: existing terminal inheritance. Present: bounded controller pipes. */
+  transport?: SmolvmWorkbenchTransport;
 }
 export interface SmolvmWorkbenchResult {
   exitCode: number | null;
   timedOut: boolean;
   cleanupFailed: boolean;
   error?: string;
+  artifacts?: { directory: string; workspace: SmolvmWorkspaceManifest; state: SmolvmWorkspaceManifest };
 }
 interface SupervisorResult { schemaVersion: number; exitCode: number; cleanupFailed: boolean; cancelled: boolean; reason: string; }
 function inside(path: string, parent: string): boolean {
@@ -66,6 +86,24 @@ function validate(options: SmolvmWorkbenchOptions): void {
   for (const [key, value] of Object.entries(options.environment)) {
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || typeof value !== "string" || value.includes("\0") || Buffer.byteLength(value) > 1024 * 1024) throw new Error("Invalid workbench environment grant");
     if (/^(?:SMOLVM_|ZERO_SMOLVM_|LD_|DYLD_)/.test(key) || ["HOME", "PATH", "ZERO_WORKBENCH_INNER", "ZERO_WORKBENCH_RUNTIME_ID"].includes(key)) throw new Error(`Workbench launcher/guest identity environment cannot be overridden: ${key}`);
+  }
+  if (options.workspaceMode !== undefined && !["shared", "snapshot"].includes(options.workspaceMode)) throw new Error("Invalid workbench workspace mode");
+  if (options.workspaceMode === "snapshot" && !options.artifactDirectory) throw new Error("Snapshot workbench requires an explicit artifact directory");
+  if (options.artifactDirectory && options.workspaceMode !== "snapshot") throw new Error("Artifact export requires snapshot workspace mode");
+  if (options.transport) {
+    if (options.tty) throw new Error("Controller pipe transport cannot use terminal mode");
+    for (const [name, value, maximum] of [["maxInputBytes", options.transport.maxInputBytes ?? 32 * 1024 * 1024, 64 * 1024 * 1024], ["maxOutputBytes", options.transport.maxOutputBytes ?? 64 * 1024 * 1024, 64 * 1024 * 1024]] as const) {
+      if (!Number.isSafeInteger(value) || value < 1024 || value > maximum) throw new Error(`Invalid workbench transport ${name}`);
+    }
+    if (typeof options.transport.onStdout !== "function") throw new Error("Workbench transport requires a stdout handler");
+    if (options.transport.initialInput !== undefined && (typeof options.transport.initialInput !== "string" || Buffer.byteLength(options.transport.initialInput) > (options.transport.maxInputBytes ?? 32 * 1024 * 1024))) throw new Error("Workbench initial input exceeds its limit");
+  }
+  if ((options.readOnlyMounts?.length ?? 0) > 8) throw new Error("Workbench permits at most eight readonly asset mounts");
+  const targets = new Set<string>();
+  for (const mount of options.readOnlyMounts ?? []) {
+    if (!isAbsolute(mount.source) || !isAbsolute(mount.target) || resolve(mount.target) !== mount.target || /[:\0]/.test(mount.target) || [...targets].some(target => inside(target, mount.target) || inside(mount.target, target))
+      || mount.target === "/" || ["/workspace", "/home/zero", "/run/0-workbench"].some(path => inside(path, mount.target) || inside(mount.target, path))) throw new Error("Invalid or overlapping readonly workbench mount");
+    targets.add(mount.target);
   }
   if ((options.approvedImages?.length ?? 0) > 32) throw new Error("Workbench permits at most 32 explicitly approved sandbox images");
   const references = new Set<string>();
@@ -122,6 +160,8 @@ export async function runSmolvmWorkbench(options: SmolvmWorkbenchOptions): Promi
   let control: Writable | undefined;
   let closed: Promise<void> | undefined;
   let broker: WorkbenchBrokerController | undefined;
+  let privateWorkspace: string | undefined;
+  let privateState: string | undefined;
   const lifetime = new AbortController();
   const forwardAbort = () => lifetime.abort(options.signal?.reason);
   try {
@@ -133,7 +173,8 @@ export async function runSmolvmWorkbench(options: SmolvmWorkbenchOptions): Promi
     lifetime.signal.throwIfAborted();
     await privateSmolvmDirectory(options.stateRoot);
     if (resolve(options.stateRoot) !== await realpath(options.stateRoot)) throw new Error("Workbench state path must not traverse symlinks");
-    const workspace = await workspaceGrant(options.workspaceRoot, options.stateRoot);
+    const sourceWorkspace = await workspaceGrant(options.workspaceRoot, options.stateRoot);
+    const assets = await Promise.all((options.readOnlyMounts ?? []).map(async mount => ({ source: await workspaceGrant(mount.source, options.stateRoot), target: mount.target })));
     const status = await getSmolvmWorkbenchStatus({ stateRoot: options.stateRoot, image: options.image });
     if (!status.runtimeReady || !status.imageApproved) throw new Error("Workbench runtime/image prerequisites are missing; run explicit workbench setup first");
     const image = await approvedSmolvmWorkbenchImage(options.image, options.stateRoot, lifetime.signal);
@@ -142,15 +183,23 @@ export async function runSmolvmWorkbench(options: SmolvmWorkbenchOptions): Promi
       if (approved.digest !== sandboxImage.digest) throw new Error("Sandbox image catalog archive identity mismatch");
     }
     const runtime = await resolveSmolvmRuntime({ stateRoot: options.stateRoot, signal: lifetime.signal });
-    const guestState = join(options.stateRoot, "guest-state");
-    await privateSmolvmDirectory(guestState);
-    const guestHome = join(options.stateRoot, "guest-home");
-    await privateSmolvmDirectory(guestHome);
+
     // macOS sockaddr_un has a short path limit: persistent operator paths
     // cannot be the VM's HOME/cache/socket namespace.
     root = await mkdtemp("/tmp/0w-");
     await Promise.all(["h", "c", "d", "f", "r", "t", "admission"].map((entry) => mkdir(join(root!, entry), { mode: 0o700 })));
     await mkdir(join(root, "admission", "broker"), { mode: 0o700 });
+    const runRoot = await realpath(root);
+    const guestState = options.workspaceMode === "snapshot" ? join(runRoot, "guest-state") : join(options.stateRoot, "guest-state");
+    const guestHome = options.workspaceMode === "snapshot" ? join(runRoot, "guest-home") : join(options.stateRoot, "guest-home");
+    await privateSmolvmDirectory(guestState);
+    await privateSmolvmDirectory(guestHome);
+    let workspace = sourceWorkspace;
+    if (options.workspaceMode === "snapshot") {
+      privateWorkspace = join(runRoot, "workspace"); privateState = guestState;
+      await snapshotSmolvmWorkspace(sourceWorkspace, privateWorkspace, options.snapshotLimits, lifetime.signal);
+      workspace = privateWorkspace;
+    }
     const archive = join(root, "image.tar");
     await copyFile(image.path, archive, constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE);
     await chmod(archive, 0o400);
@@ -174,6 +223,7 @@ export async function runSmolvmWorkbench(options: SmolvmWorkbenchOptions): Promi
       "--volume", `${join(root, "admission")}:/run/0-workbench:ro`,
       "--volume", `${broker.guestRoot}:/run/0-workbench/broker:rw`,
       "--env", "HOME=/home/zero", "--env", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"];
+    for (const mount of assets) args.push("--volume", `${mount.source}:${mount.target}:ro`);
     if (options.network) args.push("--net");
     if (options.tty) args.push("--tty");
     args.push("--env", `ZERO_WORKBENCH_RUNTIME_ID=${token}`);
@@ -182,7 +232,7 @@ export async function runSmolvmWorkbench(options: SmolvmWorkbenchOptions): Promi
     lifetime.signal.throwIfAborted();
     const child = spawn(runtime.supervisor, [String(process.pid), join(root, "complete.json"), "--", runtime.binary, ...args], {
       cwd: root, env: { ...launcherEnvironment(runtime, root, token), ZERO_SMOLVM_ADMISSION_LOCK: join(options.stateRoot, "native-admission.lock") },
-      stdio: ["inherit", "inherit", "inherit", "pipe", "pipe"],
+      stdio: options.transport ? ["pipe", "pipe", "pipe", "pipe", "pipe"] : ["inherit", "inherit", "inherit", "pipe", "pipe"],
     });
     control = child.stdio[3] as Writable;
     const proofStream = child.stdio[4] as Readable;
@@ -197,6 +247,34 @@ export async function runSmolvmWorkbench(options: SmolvmWorkbenchOptions): Promi
       result.timedOut = options.signal?.reason instanceof Error && options.signal.reason.name === "TimeoutError";
       if (!cancellationSent && control && !control.destroyed) { cancellationSent = true; control.write("cancel\n"); }
     };
+    if (options.transport) {
+      const transport = options.transport;
+      let inputBytes = 0, outputBytes = 0;
+      const stdoutDecoder = new StringDecoder("utf8"), stderrDecoder = new StringDecoder("utf8");
+      const fail = (message: string) => { result.error ??= message; cancel(); };
+      const input = {
+        write(data: string) {
+          if (lifetime.signal.aborted || !child.stdin || child.stdin.destroyed) throw new Error("Workbench controller input is closed");
+          if (typeof data !== "string") throw new Error("Workbench controller input must be a string");
+          const bytes = Buffer.byteLength(data);
+          if (inputBytes + bytes > (transport.maxInputBytes ?? 32 * 1024 * 1024) || child.stdin.writableLength + bytes > 8 * 1024 * 1024) { fail("Workbench controller input exceeds its byte limit"); throw new Error("Workbench controller input exceeds its byte limit"); }
+          inputBytes += bytes; child.stdin.write(data);
+        },
+        end() { child.stdin?.end(); },
+      };
+      child.stdin!.on("error", error => { if ((error as NodeJS.ErrnoException).code !== "EPIPE") fail(`Workbench stdin failed: ${String(error)}`); });
+      for (const [stream, decoder, callback] of [[child.stdout!, stdoutDecoder, transport.onStdout], [child.stderr!, stderrDecoder, transport.onStderr]] as const) {
+        stream.on("data", (chunk: Buffer) => {
+          outputBytes += chunk.length;
+          if (outputBytes > (transport.maxOutputBytes ?? 64 * 1024 * 1024)) { fail("Workbench controller output exceeds its byte limit"); return; }
+          const data = decoder.write(chunk);
+          if (data && callback) try { callback(data); } catch (error) { fail(`Workbench controller callback failed: ${String(error)}`); }
+        });
+        stream.on("end", () => { const final = decoder.end(); if (final && callback) try { callback(final); } catch (error) { fail(`Workbench controller callback failed: ${String(error)}`); } });
+      }
+      try { if (transport.initialInput) input.write(transport.initialInput); transport.onReady?.(input); }
+      catch (error) { fail(`Workbench controller initialization failed: ${String(error)}`); }
+    }
     control.on("error", () => { /* Completion proof, not a broken pipe, decides cleanup. */ });
     proofStream.on("data", (chunk: Buffer) => {
       if (protocol.length + chunk.length > 4096) { protocolError = true; completion.resolve(); return; }
@@ -250,6 +328,12 @@ export async function runSmolvmWorkbench(options: SmolvmWorkbenchOptions): Promi
     if (broker) {
       try { await broker.close(); }
       catch (error) { result.cleanupFailed = true; result.error = `Workbench sibling teardown unconfirmed; admission/state retained at ${root}: ${String(error)}`; }
+    }
+    if (!result.cleanupFailed && nativeCleanupConfirmed && privateWorkspace && privateState && options.artifactDirectory) {
+      try {
+        const artifacts = await exportSmolvmWorkbenchArtifacts(privateWorkspace, privateState, options.artifactDirectory, options.snapshotLimits);
+        result.artifacts = { directory: join(options.artifactDirectory, "artifacts"), ...artifacts };
+      } catch (error) { result.error = `Workbench artifact export failed: ${String(error)}`; }
     }
     // A missing protocol or uncertain process census never releases admission.
     if (!result.cleanupFailed) {
