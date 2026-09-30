@@ -97,6 +97,8 @@ describe("spawn_agents — concurrent subagent dispatch", () => {
     };
     try {
       const a = createRepo("a"); const b = createRepo("b");
+      vi.stubEnv("GIT_DIR", join(a, ".git"));
+      vi.stubEnv("GIT_WORK_TREE", a);
       h.impl = async () => fakeState([]);
       const ctx = toolContext({ role: "audit", scopePath: b, workspaceRoot: a });
       const executor = new ToolExecutor(ctx, undefined, undefined, fakeRuntime);
@@ -119,7 +121,7 @@ describe("spawn_agents — concurrent subagent dispatch", () => {
       expect(rejected.output).toMatchObject({ succeeded: 0, failed: 2 });
       expect(JSON.stringify(rejected.output)).toContain("workspace_mismatch");
       expect(h.configs).toHaveLength(0);
-    } finally { rmSync(root, { recursive: true, force: true }); }
+    } finally { vi.unstubAllEnvs(); rmSync(root, { recursive: true, force: true }); }
   });
 
   it("(1) runs two children to completion, merges findings, distinct agent_ids", async () => {

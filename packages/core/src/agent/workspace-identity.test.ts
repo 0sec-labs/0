@@ -18,7 +18,7 @@ function repo(name: string): string {
   git(["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", name]);
   return root;
 }
-afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.unstubAllEnvs(); for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 
 describe("delegated Git workspace identity", () => {
   it("accepts repo B at an absolute path and rejects default repo A", () => {
@@ -29,6 +29,31 @@ describe("delegated Git workspace identity", () => {
     expect(() => assertWorkspaceIdentity(identity, b)).not.toThrow();
     expect(() => assertWorkspaceIdentity(identity, a)).toThrow("workspace_mismatch");
     expect(() => assertWorkspaceIdentity(identity, undefined)).toThrow("workspace_mismatch");
+  });
+
+  it("ignores ambient Git repository and config overrides pointing at repo A", () => {
+    const a = repo("a"); const b = repo("b");
+    const identity = captureWorkspaceIdentity(b)!;
+    vi.stubEnv("GIT_DIR", join(a, ".git"));
+    vi.stubEnv("GIT_WORK_TREE", a);
+    vi.stubEnv("GIT_COMMON_DIR", join(a, ".git"));
+    vi.stubEnv("GIT_INDEX_FILE", join(a, ".git", "index"));
+    vi.stubEnv("GIT_OBJECT_DIRECTORY", join(a, ".git", "objects"));
+    vi.stubEnv("GIT_CONFIG_COUNT", "1");
+    vi.stubEnv("GIT_CONFIG_KEY_0", "remote.origin.url");
+    vi.stubEnv("GIT_CONFIG_VALUE_0", "https://example.test/override.git");
+    expect(captureWorkspaceIdentity(b)).toEqual(identity);
+    expect(() => assertWorkspaceIdentity(identity, b)).not.toThrow();
+    expect(() => assertWorkspaceIdentity(identity, a)).toThrow("workspace_mismatch");
+  });
+
+  it("does not identify a bare directory or unrelated configured worktree as the source repo", () => {
+    const a = repo("a"); const b = repo("b");
+    const bare = mkdtempSync(join(tmpdir(), "0-identity-bare-")); roots.push(bare);
+    execFileSync("git", ["init", "--bare", "-q"], { cwd: bare });
+    expect(captureWorkspaceIdentity(bare)).toBeUndefined();
+    execFileSync("git", ["config", "core.worktree", a], { cwd: b });
+    expect(captureWorkspaceIdentity(b)).toBeUndefined();
   });
 
   it("rejects a child startup mismatch before any model request", async () => {

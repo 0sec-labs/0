@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
+import { isAbsolute, relative, sep } from "node:path";
 
 /** Parent-observed identity, inherited unchanged by source-review descendants. */
 export interface WorkspaceIdentity {
@@ -10,8 +11,10 @@ export interface WorkspaceIdentity {
 }
 
 function git(cwd: string, args: string[]): string {
+  // Probe the checkout at cwd, ignoring ambient repository/config overrides.
+  const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith("GIT_")));
   return execFileSync("git", args, {
-    cwd, encoding: "utf8", timeout: 5_000, maxBuffer: 64 * 1024,
+    cwd, env, encoding: "utf8", timeout: 5_000, maxBuffer: 64 * 1024,
     stdio: ["ignore", "pipe", "ignore"],
   }).trim();
 }
@@ -22,6 +25,8 @@ export function captureWorkspaceIdentity(scopePath?: string): WorkspaceIdentity 
   try {
     const canonicalPath = realpathSync(scopePath);
     const repositoryRoot = realpathSync(git(canonicalPath, ["rev-parse", "--show-toplevel"]));
+    const scopedRelativePath = relative(repositoryRoot, canonicalPath);
+    if (isAbsolute(scopedRelativePath) || scopedRelativePath === ".." || scopedRelativePath.startsWith(`..${sep}`)) return undefined;
     const head = git(canonicalPath, ["rev-parse", "--verify", "HEAD"]);
     let origin: string | null = null;
     try { origin = git(canonicalPath, ["remote", "get-url", "origin"]); } catch { /* local-only repository */ }
