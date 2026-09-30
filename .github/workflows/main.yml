@@ -67,6 +67,6 @@ jobs:
           DEEPSEEK_API_KEY: ""
           AZURE_OPENAI_API_KEY: ""
           KIMI_API_KEY: ""
-      - name: Run native mascot tests
-        # NativeImage and the headless renderer need Bun's real FFI runtime.
-        run: pnpm --filter @0/cli test:tui test/tui-driver/scenarios/mascot.tui.test.ts
+      - name: Run native UI regression tests
+        # Native images and actual rendered finding/output contracts require Bun FFI.
+        run: pnpm --filter @0/cli test:tui test/tui-driver/scenarios/mascot.tui.test.ts test/tui-driver/scenarios/findings-impact.tui.test.ts test/tui-driver/scenarios/tool-output-preview.tui.test.ts

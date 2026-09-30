@@ -10,7 +10,7 @@ import React, {
 import { createLocalConsoleSession } from "../console-session.js";
 import { isDevUiRemount, useDevUiBoundary, useDevUiRef, useDevUiState } from "../dev-ui-reload.js";
 import type { AuditActivity } from "./audit-workspace.js";
-import { loadFindingFocus, buildFindingChatPrompt, type FindingFocus } from "../finding-focus.js";
+import { loadFindingFocus, type FindingFocus } from "../finding-focus.js";
 import { exportChatConversation } from "./chat-export.js";
 import { describeFixStatus, fixEligibility, fixInputEligibility, fixResultLines, fixPublicationLines, FIX_USAGE } from "./fix-action.js";
 import { runSourceFix, planSourceFixPublication, publishSourceFixDraftPR, createRuntime, resolveSourceFixRepository, loadSourceFixProjectInputs, saveSourceFixProjectInputs, type SourceFixResult, type SourceFixPublicationPlan } from "@0/core";
@@ -3466,37 +3466,6 @@ export function ChatScreen({
         });
         return true;
       }
-      case "impact": {
-        if (!session || busy) {
-          showToast(busy ? "Wait for the active turn before requesting an impact analysis." : "Connect a provider before requesting an impact analysis.");
-          return true;
-        }
-        const explainImpact = (id: string) => {
-          try {
-            const focus = loadFindingFocus(id, { dbPath: options?.dbPath });
-            void submitRef.current?.(buildFindingChatPrompt(focus, "impact"));
-          } catch (error) {
-            appendEntry({ kind: "error", text: "Could not load that finding.", detail: error instanceof Error ? error.message : String(error), turn: turn.current });
-          }
-        };
-        if (args.trim()) {
-          explainImpact(args.trim());
-        } else {
-          const findings = runFindingsFromEntries(entries).filter((finding) => finding.id);
-          if (!findings.length) {
-            appendEntry({ kind: "notice", text: "No saved findings in this conversation.", detail: "Use /impact <finding-id> for a saved finding, or /findings to choose one.", turn: turn.current });
-          } else {
-            setPicker({
-              state: createSelectorState("Explain finding impact", findings.map((finding) => ({
-                id: finding.id!, label: finding.title, detail: finding.severity,
-              }))),
-              commit: explainImpact,
-              onCancel: restorePaletteDraft,
-            });
-          }
-        }
-        return true;
-      }
       case "explain": {
         if (!session) {
           appendEntry({ kind: "notice", text: "runtime is not ready", turn: turn.current });
@@ -5632,9 +5601,8 @@ export function ChatScreen({
       const rowDisplay = richMarkdownEntryIds.has(entry.id)
         ? display
         : { ...display, richMarkdown: false };
-      const interactive = expanded && (
-        entry.kind === "tool" || entry.kind === "subagent" || entry.kind === "reasoning"
-      );
+      const interactive =
+        entry.kind === "tool" || entry.kind === "subagent" || entry.kind === "reasoning";
       let reasoningLabel: "shimmer" | "static" | "none" = "static";
       if (entry.kind === "reasoning") {
         const isLiveReasoning = entry.id === liveReasoningId;

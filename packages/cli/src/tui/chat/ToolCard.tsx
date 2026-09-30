@@ -2,7 +2,7 @@
 import React from "react";
 import { TextAttributes } from "@opentui/core";
 
-import { fitTuiText, keyGlyph, sanitizeTuiText } from "../text.js";
+import { fitTuiText, sanitizeTuiText } from "../text.js";
 import { commandCardFrame, toolCompactLine } from "../transcript-style.js";
 import {
   COLLAPSED_OUTPUT_LINES,
@@ -15,7 +15,6 @@ import { codeTokenStyle, highlightCode, parseDiffLine } from "../syntax-style.js
 import { resolveSyntaxColors } from "../themes.js";
 import { agentAccentFor } from "../agent-color.js";
 import type { Theme } from "../theme-context.js";
-import { KEYBINDINGS } from "../keybindings.js";
 import { ShimmerText } from "./shimmer.js";
 import { renderMarkdownBlocks } from "./markdown-blocks.js";
 import { ImageCard } from "./ImageCard.js";
@@ -81,13 +80,9 @@ import {
  *     and is printed only from a measured `wallMs` — an entry that carries no
  *     measurement gets no duration anywhere, never an estimate.
  *
- * Behaviour carried over unchanged from the previous inline implementation:
- * the collapsed/expanded line budget (10 vs 128 retained lines), the
- * `<scrollbox>` that lets an expanded body scroll inside a fixed height, the
- * expansion hint drawn from the actual keybinding registry, the
- * "Preview capped" notice, and the fact that every body line is a real
- * selectable `<text>` node so the transcript's copy-on-highlight
- * (`useSelectionCopy` in chat-screen) keeps working over the card.
+ * Output previews occupy at most twenty displayed rows. An explicit disclosure
+ * reveals the bounded retained body inline; the outer transcript keeps scroll
+ * ownership. Selectable text nodes retain normal copy-on-highlight behavior.
  */
 
 /**
@@ -98,16 +93,6 @@ import {
  */
 const EXPANDED_OUTPUT_LINES = 128;
 
-/**
- * The bracketed expand legend appended to a `… N more lines` affordance,
- * matching the `[⌃R] to expand` idiom already used for the whole-entry collapse
- * (see `TranscriptEntry`). `toggleable` means a mouse click on the row also
- * expands it, so we say so first. Built from the live keybinding registry.
- */
-function expandLegend(toggleable: boolean): string {
-  const key = TOOL_EXPAND_KEY ? `[${keyGlyph(TOOL_EXPAND_KEY)}] to expand` : "expand";
-  return `${toggleable ? "click or " : ""}${key}`;
-}
 
 /** Lines of input we will print. An input longer than this is elided. */
 const MAX_INPUT_ROWS = 8;
@@ -115,7 +100,6 @@ const MAX_INPUT_ROWS = 8;
 /** Images from one result that we will draw as cards beneath it. */
 const MAX_CARD_IMAGES = 4;
 
-const TOOL_EXPAND_KEY = KEYBINDINGS.find((binding) => binding.id === "view.transcript-detail")?.keys;
 
 export interface ToolCardProps {
   entry: ChatEntry;
@@ -123,7 +107,7 @@ export interface ToolCardProps {
   width: number;
   display: EntryDisplay;
   theme: Theme;
-  /** True when the row is fully expanded (all retained output, scrollable). */
+  /** True only after explicit disclosure, not an expanded transcript preference. */
   expanded: boolean;
   /** True when a click can toggle this row, so the hint can say so. */
   toggleable?: boolean;
@@ -364,13 +348,10 @@ function TaskCard({
     EXPANDED_SUBREPORT_LIMIT,
   );
   const todos = entry.taskTodos ?? [];
-  const expandHint = toggleable ? ` · ${expandLegend(true)}` : "";
+  const expandHint = toggleable ? " · click to expand" : "";
 
   // ── context (Goal / Constraints / Contract / Assignment) ────────────────────
-  // Flattened to one countable line list and bounded exactly like the normal
-  // card's Output: a collapsed taste, the fuller lot inside a fixed-height,
-  // CLIPPING <scrollbox> when expanded. This is what stops a 40-line Goal from
-  // painting an 88-row card straight over the transcript below it.
+  // Context uses the same inline preview/disclosure budget as output.
   const allBodyLines = taskBodyLines(sections);
   const retainedBody = allBodyLines.slice(0, EXPANDED_OUTPUT_LINES);
   const { visible: visibleBody, hidden: hiddenBody } = capTaskBodyLines(
@@ -378,7 +359,6 @@ function TaskCard({
     expanded ? EXPANDED_OUTPUT_LINES : COLLAPSED_OUTPUT_LINES,
   );
   const bodyCapped = allBodyLines.length > retainedBody.length;
-  const bodyScrollRows = Math.max(1, Math.min(MAX_OUTPUT_ROWS, visibleBody.length));
   const renderBodyLine = (line: TaskBodyLine, index: number): React.ReactNode =>
     line.kind === "rule" ? (
       <SectionRule key={`${entry.id}-body-${index}`} label={line.label} width={bodyWidth} theme={theme} />
@@ -402,15 +382,14 @@ function TaskCard({
   const hiddenTodo = allTodoRows.length - todoRows.length;
 
   // ── output (the actual worker findings / summary / errors) ──────────────────
-  // spawn_agents returns the real result on the entry; surface it through the
-  // shared previewFor + the same bounded-lines / scrollbox block the normal
-  // card uses for its Output, so it is never dropped — a taste collapsed,
-  // scrollable inside a fixed height when expanded.
+  // Worker results use the shared inline output projection and disclosure.
   const preview = previewFor(entry, failed);
   const outRetained = preview.lines
     .slice(0, EXPANDED_OUTPUT_LINES)
     .map((line) => sanitizeTuiText(line.slice(0, 512)));
-  const outVisible = outRetained.slice(0, expanded ? EXPANDED_OUTPUT_LINES : COLLAPSED_OUTPUT_LINES);
+  const outputCap = expanded ? EXPANDED_OUTPUT_LINES
+    : Math.max(0, COLLAPSED_OUTPUT_LINES - (preview.kind === "code" && preview.language ? 1 : 0));
+  const outVisible = outRetained.slice(0, outputCap);
   const outHidden = outRetained.length - outVisible.length;
   const outCapped = preview.truncated || preview.lines.length > outRetained.length;
   const outBody = preview.kind === "code" && bodyWidth >= 3
@@ -435,10 +414,6 @@ function TaskCard({
           {fitTuiText(line, bodyWidth)}
         </text>
       ));
-  const outRows = Math.min(
-    MAX_OUTPUT_ROWS,
-    Math.max(1, outVisible.length + (preview.kind === "code" && preview.language ? 1 : 0)),
-  );
 
   const headerGlyph = failed ? `${glyph} ` : "";
   // Execution time at the top, matching the tool card (OMP-style ` · (<dur>)`).
@@ -613,7 +588,7 @@ function TaskCard({
  * syntax-highlighted source that ran, then its captured Output — both inside the
  * same bordered box + `SectionRule` idiom as the command card, with the
  * execution time riding the TOP border (OMP-style `· (<dur>)`) and the same
- * collapsed/expanded line budget + `<scrollbox>` as the normal Output block.
+ * inline preview and explicit-disclosure budget as the normal Output block.
  */
 function CodeCard({
   entry,
@@ -648,7 +623,7 @@ function CodeCard({
 
   const inner = frame.innerWidth;
   const bodyWidth = inner;
-  const expandHint = toggleable ? ` · ${expandLegend(true)}` : "";
+  const expandHint = toggleable ? " · click to expand" : "";
 
   // ── code (the source that ran) — syntax-highlighted, bounded, collapsible ──
   const codeLinesAll = (entry.codeSource ?? "").split("\n");
@@ -656,7 +631,6 @@ function CodeCard({
   const codeVisible = codeRetained.slice(0, expanded ? EXPANDED_OUTPUT_LINES : COLLAPSED_OUTPUT_LINES);
   const codeHidden = codeRetained.length - codeVisible.length;
   const codeCapped = codeLinesAll.length > codeRetained.length;
-  const codeRows = Math.max(1, Math.min(MAX_OUTPUT_ROWS, codeVisible.length));
 
   // ── output (captured stdout/stderr) — same bounded/scrollbox idiom ──
   const outLinesAll = (entry.codeOutput ?? "")
@@ -667,7 +641,6 @@ function CodeCard({
   const outHidden = outRetained.length - outVisible.length;
   const outCapped = outLinesAll.length > outRetained.length;
   const hasOutput = (entry.codeOutput ?? "").length > 0;
-  const outRows = Math.max(1, Math.min(MAX_OUTPUT_ROWS, outVisible.length));
 
   const durText = formatDurationMs(entry.wallMs);
   const durSuffix = durText ? ` · (${durText})` : "";
@@ -835,7 +808,9 @@ export function ToolCard({
     .map((line) => sanitizeTuiText(line.slice(0, 512)));
   // OMP-style head window: collapsed shows only the first N lines and a
   // `… N more lines` expander; expanded reveals the full retained body.
-  const outputWindow = capOutputLines(retained, expanded ? EXPANDED_OUTPUT_LINES : COLLAPSED_OUTPUT_LINES);
+  const outputCap = expanded ? EXPANDED_OUTPUT_LINES
+    : Math.max(0, COLLAPSED_OUTPUT_LINES - (preview.kind === "code" && preview.language ? 1 : 0));
+  const outputWindow = capOutputLines(retained, outputCap);
   const visible = outputWindow.visible;
   const hiddenLines = outputWindow.hidden;
   const capped = preview.truncated || preview.lines.length > retained.length;
@@ -880,10 +855,6 @@ export function ToolCard({
         ),
       );
 
-  const outputRows = Math.min(
-    MAX_OUTPUT_ROWS,
-    visible.length + (preview.kind === "code" && preview.language ? 1 : 0),
-  );
 
   // ── input ─────────────────────────────────────────────────────────────────
   // Suppressed for command/edit/web, whose input already lives in the header or
@@ -969,7 +940,7 @@ export function ToolCard({
         )}
         {hiddenLines > 0 ? (
           <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
-            {fitTuiText(moreLinesAffordance(hiddenLines, expandLegend(toggleable)), inner)}
+            {fitTuiText(moreLinesAffordance(hiddenLines, toggleable ? "click to expand" : ""), inner)}
           </text>
         ) : null}
         {capped ? (

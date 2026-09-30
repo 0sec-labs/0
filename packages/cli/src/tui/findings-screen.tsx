@@ -8,7 +8,7 @@ import { severityToneFor } from "./themes.js";
 import { ContextMenu } from "./context-menu.js";
 import { useContextMenu, type ContextMenuItem } from "./use-context-menu.js";
 import { copyToClipboard, defaultSpawn, defaultWhich } from "./clipboard.js";
-import { fitTuiText } from "./text.js";
+import { sanitizeTuiText } from "./text.js";
 import { DialogSelectBody, type DialogItem } from "./dialog-select.js";
 import {
   clampDialogSelection,
@@ -32,6 +32,7 @@ import {
   type FindingsRow,
   type FindingsScreenOptions,
 } from "./findings-data.js";
+import { findingImpactLines } from "./finding-detail-layout.js";
 import { useSurfaceDimensions } from "./dialog-surface.js";
 import {
   findingSourcePath,
@@ -46,9 +47,6 @@ import {
 } from "./dialog-screen-chrome.js";
 
 
-// Upper bound on how far a wrapped finding detail may run inside its
-// scrolling pane, expressed in rows of the pane's own width.
-const FINDING_DETAIL_MAX_WRAPPED_ROWS = 40;
 
 /**
  * Rank used only to make the dialog's severity groups contiguous, so the
@@ -234,16 +232,9 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
   };
   const filterSummary = describeFindingsFilters(options);
   const itemCountLabel = options.all ? "rows " : "families ";
-  // These wrap rather than truncate — the pane scrolls, so a description is
-  // worth reading in full. `Math.max(width, value.length)` made that budget
-  // unbounded though, and a finding's evidence can be an entire HTTP
-  // response, so cap it at the rows the pane can plausibly be scrolled over.
 
   // ── Source fix (`f`) ──
   const selectedFinding = useMemo(() => (selectedRow ? findingFromRow(selectedRow) : null), [selectedRow]);
-  const fixSourceFile = useMemo(() => findingSourcePath(selectedFinding), [selectedFinding]);
-  const fixReadiness = useMemo(() => fixEligibility(selectedFinding), [selectedFinding]);
-  const fixPanelTone = fixReadiness.eligible ? theme.SUCCESS : theme.MUTED;
 
   const palette = usePaletteController([
     {
@@ -511,9 +502,6 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
   });
   const renderFindingsDetail = (item: DialogItem, pane: { width: number; height: number }) => {
     const inner = Math.max(1, pane.width - SCROLLBAR_COLUMN);
-    // The same char budget the legacy pane used, so nothing that was
-    // readable there stops being readable here; the column scrolls.
-    const wrapBudget = inner * FINDING_DETAIL_MAX_WRAPPED_ROWS;
     const lines: DialogDetailLine[] = [];
     const group = item.id.startsWith("group:")
       ? groups.find((entry) => entry.fingerprint === item.id.slice("group:".length)) ?? null
@@ -521,8 +509,9 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
     const row = item.id.startsWith("row:")
       ? rows.find((entry) => entry.id === item.id.slice("row:".length)) ?? null
       : group?.latest ?? null;
+    const finding = row === selectedRow ? selectedFinding : row ? findingFromRow(row) : null;
     const push = (value: string, fg?: string) => {
-      lines.push(...wrapDialogLines(fitTuiText(value, wrapBudget), inner, fg));
+      lines.push(...wrapDialogLines(sanitizeTuiText(value), inner, fg));
     };
 
     lines.push({ text: options.all ? "FINDING" : "FAMILY", fg: row ? severityToneFor(theme, row.severity) : theme.PRIMARY });
@@ -532,33 +521,19 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
       push(row.title, theme.TEXT);
       push(`${row.severity} · ${row.status} · ${row.triageStatus ?? "new"}`, severityToneFor(theme, row.severity));
       if (group) push(`${group.count} hits / ${group.scans} scans`, theme.MUTED);
-      push(`scan ${row.scanId.slice(0, 8)} · fp:${(row.fingerprint ?? row.id).slice(0, 10)}`, theme.MUTED);
+      push(`finding ${row.id} · scan ${row.scanId.slice(0, 8)} · fp:${(row.fingerprint ?? row.id).slice(0, 10)}`, theme.MUTED);
       if (row.triageNote) push(row.triageNote, theme.ACCENT);
     }
-
-    // Show the real source diff and regression output, not a template summary.
-    lines.push({ text: "" });
-    lines.push({ text: "SOURCE FIX", fg: fixPanelTone });
-    push(
-      fixReadiness.eligible
-        ? "press f to choose local inputs and approve source verification in chat"
-        : `unavailable — ${fixReadiness.reason}`,
-      fixReadiness.eligible ? theme.SUCCESS : theme.MUTED,
-    );
-    if (fixSourceFile) push(`source ${fixSourceFile}`, theme.MUTED);
-    if (fixNotice) push(fixNotice, theme.WARNING);
-    push("The actual generated diff, test result and publication approval appear in the owning audit chat.", theme.MUTED);
-
-    lines.push({ text: "" });
-    lines.push({ text: "FILTERS", fg: theme.PRIMARY });
-    push(filterSummary, theme.MUTED);
-    push(`limit ${options.limit}`, theme.MUTED);
-    push(`mode ${options.all ? "raw rows" : "grouped families"}`, theme.MUTED);
-    push("[⏎] inspect/chat · [a] accept · [s] suppress · [r] reopen · [f] generate candidate · [p] review draft PR", theme.MUTED);
 
     lines.push({ text: "" });
     lines.push({ text: "DESCRIPTION", fg: theme.PRIMARY });
     push(row ? row.description : "-", theme.MUTED);
+
+    lines.push({ text: "" });
+    lines.push({ text: "IMPACT", fg: theme.PRIMARY });
+    for (const line of finding ? findingImpactLines(finding) : ["Not assessed — no finding selected."]) {
+      push(line, theme.MUTED);
+    }
 
     lines.push({ text: "" });
     lines.push({ text: "EVIDENCE", fg: theme.PRIMARY });
@@ -566,6 +541,19 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
     push(row ? row.evidenceRequest : "-", theme.MUTED);
     push("response", theme.TEXT);
     push(row ? row.evidenceResponse : "-", theme.MUTED);
+    if (row?.evidenceAnalysis) {
+      push("analysis", theme.TEXT);
+      push(row.evidenceAnalysis, theme.MUTED);
+    }
+
+    if (finding) {
+      const readiness = fixEligibility(finding);
+      const sourceFile = findingSourcePath(finding);
+      lines.push({ text: "" });
+      lines.push({ text: "SOURCE FIX", fg: readiness.eligible ? theme.SUCCESS : theme.MUTED });
+      push(readiness.eligible ? "Eligible for candidate generation" : `Unavailable — ${readiness.reason}`, theme.MUTED);
+      if (sourceFile) push(`source ${sourceFile}`, theme.MUTED);
+    }
 
     return <DialogDetailColumn lines={lines} pane={pane} />;
   };
@@ -573,7 +561,7 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
   const findingsStatusLine = error
     ?? fixNotice
     ?? notice
-    ?? `scope ${filterSummary} · ${itemCountLabel.trim()} ${itemCount} · loaded ${rows.length}`;
+    ?? `${itemCountLabel.trim()} ${itemCount} · loaded ${rows.length}`;
   const findingsStatusTone = error ? theme.ERROR : fixNotice ? theme.WARNING : notice ? theme.ACCENT : theme.MUTED;
 
   return (
@@ -591,7 +579,7 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
         <DialogTitleRow
           screenKey="findings"
           width={width}
-          meta={triageBusy ? `updating ${triageBusy}` : options.all ? "raw rows" : "grouped families"}
+          meta={`scope ${filterSummary} · limit ${options.limit} · ${triageBusy ? `updating ${triageBusy} · ` : ""}${options.all ? "raw rows" : "grouped families"}`}
         />
         <DialogSelectBody
           items={findingsFiltered}

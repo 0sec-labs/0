@@ -1266,6 +1266,7 @@ export type {
 // a finding's PoV provenance is an OAST callback.
 export { oracleForCategory } from "./triage/pov-gate.js";
 export type { PovOracle } from "./triage/pov-gate.js";
+export { parseImpactAssessment } from "./triage/impact-assessment.js";
 
 // Auto-triage gate (#1101): source-fixed / dedup / reachability + false-refute fix
 export {

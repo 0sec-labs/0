@@ -29,14 +29,19 @@ describe("SLASH_COMMANDS", () => {
   });
 
   it("treats removed slash commands as unknown", () => {
-    for (const input of ["/stop", "/transcript", "/review", "/finding", "/finding-detail", "/replay"]) {
-      expect(getCommandByName(input.slice(1))).toBeUndefined();
+    for (const input of ["/stop", "/transcript", "/review", "/finding", "/finding-detail", "/replay", "/comms", "/messages", "/impact", "/impact finding-id"]) {
+      expect(getCommandByName(input.slice(1).split(" ", 1)[0])).toBeUndefined();
       const result = findCommand(input);
       expect(result.isSlash).toBe(true);
       expect(result.isKnown).toBe(false);
       expect(result.isUnknown).toBe(true);
       expect(result.command).toBeUndefined();
     }
+  });
+
+  it("only advertises implemented commands to the readline fallback", () => {
+    expect(SLASH_COMMANDS.filter((command) => !command.tuiOnly).map((command) => command.name))
+      .toEqual(["help", "status", "tools", "clear", "exit"]);
   });
 
   it("marks navigation commands as tuiOnly", () => {
@@ -261,6 +266,12 @@ describe("filterCommands", () => {
     const results = filterCommands("?");
     const names = results.map((c) => c.name);
     expect(names).toContain("help");
+  });
+
+  it("does not suggest the retired impact or comms workflows", () => {
+    expect(filterCommands("impact")).toEqual([]);
+    expect(filterCommands("comms")).toEqual([]);
+    expect(filterCommands("messages")).toEqual([]);
   });
 });
 

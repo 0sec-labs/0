@@ -45,19 +45,18 @@ function paletteHaystack(command: PaletteCommand): string {
 }
 
 /**
- * The slash commands as palette rows, so `/comms`, `/hackstore`, … are findable
- * by name and description. Selecting one runs `onRun` with its bare name (when
- * a runner is wired by the host); with no runner it is informational and simply
- * closes, matching how the palette dispatches (`action()`).
+ * Runnable slash commands as palette rows, searchable by name and description.
+ * Without a runner, omit these rows rather than offer commands that do nothing.
  */
 export function slashPaletteCommands(onRun?: (name: string) => void): PaletteCommand[] {
+  if (!onRun) return [];
   return SLASH_COMMANDS.map((cmd) => ({
     id: `slash-${cmd.name}`,
     title: `/${cmd.name}`,
     category: cmd.category,
     description: cmd.description,
     kind: "slash" as const,
-    action: () => onRun?.(cmd.name),
+    action: () => onRun(cmd.name),
   }));
 }
 
@@ -246,11 +245,11 @@ export function filterCommands(commands: PaletteCommand[], query: string): Palet
 
 /** Extra searchable sources to merge into the palette. */
 export interface PaletteSources {
-  /** Include the `/…` slash commands (default true). */
+  /** Include runnable `/…` slash commands when onRunSlash is provided (default true). */
   includeSlash?: boolean;
   /** Include the keybindings as informational chord rows (default true). */
   includeShortcuts?: boolean;
-  /** Runs a chosen slash command by its bare name; omit for informational-only. */
+  /** Runs a chosen slash command by its bare name; omit to hide slash rows. */
   onRunSlash?: (name: string) => void;
 }
 

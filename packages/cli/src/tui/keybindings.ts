@@ -308,7 +308,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     defaultChords: ["ctrl+r"],
     rebindable: true,
     description:
-      "Toggle the whole transcript between collapsed and expanded tool/reasoning detail (persists across the session).",
+      "Toggle folded tool/reasoning detail; output previews stay bounded until explicitly disclosed.",
     category: "View",
     handler:
       'if (matchesBinding(key, "view.transcript-detail", …)) updateSetting("transcriptDetail", …)',

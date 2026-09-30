@@ -132,12 +132,11 @@ export function renderEntry(
       : "static",
 ) {
   const { ACCENT, PRIMARY, TEXT, MUTED, ERROR, SUCCESS, BORDER, PANEL_ALT, BRAND } = theme;
-  // Interaction is only ever handed to the collapsible kinds (tool / subagent /
-  // reasoning) of an EXPANDED turn. When present we reserve a two-cell
-  // disclosure gutter and shrink the content budget so the wrapped row still
-  // fits its column — the 80-col invariant holds exactly as the fold's does.
+  // Reserve a disclosure gutter for selectable detail rows. Only an explicit
+  // turn expansion reveals a full tool body; global detail preferences still
+  // govern reasoning and message detail without enlarging every output card.
   const interactive = Boolean(interaction);
-  const fullDetails = interaction?.expanded ?? display.transcriptDetail === "expanded";
+  const fullDetails = interaction?.expanded === true || display.transcriptDetail === "expanded";
   const maxWidth = interactive ? Math.max(8, maxWidthOuter - 2) : maxWidthOuter;
   const finish = (node: React.ReactNode): React.ReactNode => {
     if (!interaction) return node;
@@ -338,7 +337,7 @@ export function renderEntry(
         width={maxWidth}
         display={display}
         theme={theme}
-        expanded={fullDetails}
+        expanded={interaction?.expanded === true}
         toggleable={Boolean(interaction?.onToggle)}
         repeat={repeat}
       />,

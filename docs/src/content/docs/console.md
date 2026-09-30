@@ -353,11 +353,10 @@ Older rows may use plain text when newer rows consume the rich-Markdown budget;
 newlines and code indentation remain intact. Display truncation does not change
 canonical messages or the full-message copy/export actions.
 
-Use `/impact <finding-id>` to discuss a persisted finding in the current chat.
-Without an ID, select a finding from the conversation. Its prompt asks the model
-to distinguish observed impact from conditional chains and missing evidence,
-and not to execute tools or expand authorization. This is an analysis workflow,
-not a new tool-permission boundary; the session's actual mode and gates still apply.
+Open `/findings` and select a finding to read its persisted impact assessment
+alongside the finding's evidence. Observed effects, conditional chains, and
+missing evidence remain distinct. An absent or malformed assessment is explicitly
+unavailable; selecting a finding does not generate an assessment or start a model turn.
 
 ## Screens
 
@@ -374,9 +373,9 @@ not a new tool-permission boundary; the session's actual mode and gates still ap
 | Theme | `/theme`, `/themes` | Colour theme live preview |
 | Model | `/model`, `/models` | Select the current audit's model, worker-role overrides and single-model policy |
 | Sessions | `/sessions` | Switch open native sessions or resume saved conversations |
-| Communications | `/comms`, `/messages` | Agent activity and messages |
+| Communications | Command palette: **Open agent comms**, or **Ctrl+T** from chat | Agent activity and messages |
 | Hackstore | `/hackstore`, `/store`, `/market`, `/marketplace` | Extension marketplace |
-| Connect | `/connect`, `/login`, `/auth` | API-key and provider-subscription connections |
+| Connect | `/connect` | API-key and provider-subscription connections |
 | Usage | `/usage`, `/cost`, `/tokens` | Token, cost, and context-window usage for this chat session |
 | Scope | `/scope` | Current engagement scope view |
 | Onboarding | `/onboard` | Reopen guided setup without replacing the current audit |
@@ -387,6 +386,9 @@ not a new tool-permission boundary; the session's actual mode and gates still ap
 
 Every command is available as `/command` in the composer. Type `/` to open
 the command menu. The readline console supports a subset (noted below).
+The source-only Node fallback advertises only `/help`, `/status`, `/tools`,
+`/clear`, and `/exit`; other registered commands explain that they need the TUI.
+Unknown slash input stays local and is never sent to the model.
 
 | Command | Aliases | Category | Readline? |
 |---------|---------|----------|-----------|
@@ -400,7 +402,6 @@ the command menu. The readline console supports a subset (noted below).
 | `/history` | — | session | — |
 | `/findings` | `/finds` | session | — |
 | `/fix` | — | session | — |
-| `/impact` | — | session | — |
 | `/copy` | `/export`, `/dump` | session | — |
 | `/sessions` | — | session | — |
 | `/explain` | `/eli5` | session | — |
@@ -408,9 +409,8 @@ the command menu. The readline console supports a subset (noted below).
 | `/chat` | — | navigation | — |
 | `/launcher` | `/run`, `/home` | navigation | — |
 | `/ops` | `/runs` | navigation | — |
-| `/comms` | `/messages` | navigation | — |
 | `/hackstore` | `/store`, `/market`, `/marketplace` | navigation | — |
-| `/connect` | `/login`, `/auth` | navigation | — |
+| `/connect` | — | navigation | — |
 | `/usage` | `/cost`, `/tokens` | navigation | — |
 | `/back` | — | navigation | — |
 | `/scope` | — | navigation | — |
@@ -544,7 +544,7 @@ fixed composer and safety keys are not all rebindable.
 | Shortcut | Action |
 |----------|--------|
 | **Ctrl+P** / **Ctrl+K** | Open command palette (all screens) |
-| **Ctrl+R** | Toggle collapsed/expanded tool call detail across the entire transcript |
+| **Ctrl+R** | Toggle folded tool/reasoning steps; click a tool card to disclose retained output beyond its 20-line preview |
 | **Ctrl+G** | Jump to agents |
 | **Ctrl+T** | Open agent communications |
 | **Esc** | Clear composer / close overlay / go back / interrupt running turn |
@@ -912,8 +912,8 @@ stationary and use normal foreground colors rather than failure red.
 - Selection and browsing do not message or stop a worker. Type a follow-up to
   message the selected active/parked worker. A finished one-shot worker returns
   its result to Main as untrusted context. `Ctrl+Shift+Home` returns to Main.
-- Use `/comms` only when you need the separate observed peer-message history;
-  no agent roster window is required.
+- Use **Open agent comms** in the command palette, or **Ctrl+T** from chat, for
+  the separate observed peer-message history; no agent roster window is required.
 
 The activity row sits above the composer and names the current main action or
 agent count. The bottom status area keeps measured context, model, mode, Git and

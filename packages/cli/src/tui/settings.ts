@@ -526,7 +526,7 @@ const DEFS: readonly TuiSettingDef[] = [
     key: "transcriptDetail",
     label: "Transcript detail",
     description:
-      "Collapsed folds successful tool/reasoning steps and caps output previews at 20 lines; Ctrl+R toggles between that preview and expanded retained detail. Failures always show.",
+      "Fold tool and reasoning steps. Output previews stay within 20 lines; click a card for retained detail.",
     kind: "enum",
     default: "collapsed",
     choices: ["collapsed", "expanded"],
@@ -536,7 +536,7 @@ const DEFS: readonly TuiSettingDef[] = [
     key: "autoCompaction",
     label: "Auto-compaction",
     description:
-      "Automatically summarise older turns when the conversation nears the model's context window (the recap stays viewable with Ctrl+O).",
+      "Automatically summarise older turns when the conversation nears the model's context window.",
     kind: "boolean",
     default: true,
     group: "Context",

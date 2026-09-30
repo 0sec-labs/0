@@ -32,6 +32,7 @@
  */
 
 import type { Finding, Severity } from "@0/shared";
+import { parseImpactAssessment } from "@0/core";
 
 import { computeKvSplit } from "./pane-layout.js";
 import { shellChromeRows, wrapCells } from "./settings-layout.js";
@@ -194,6 +195,22 @@ function findingCvssLine(finding: Finding, injected: string | undefined): string
   return EM_DASH;
 }
 
+/** Render only an existing assessment, independently of replay/source proof. */
+export function findingImpactLines(finding: Finding): string[] {
+  const assessment = finding.impactAssessment
+    ? parseImpactAssessment(JSON.stringify(finding.impactAssessment))
+    : null;
+  if (!assessment) return ["Not assessed — no usable stored impact assessment."];
+  return [
+    `Assessment for ${finding.id} — reported assessment, not reproduction proof.`,
+    `Business impact: ${assessment.business_impact}`,
+    `Reachability: ${assessment.reachability_tier}`,
+    `Blast radius: ${assessment.blast_radius}`,
+    `Weaponizability: ${assessment.weaponizability}`,
+    `Rationale: ${assessment.rationale || "not provided"}`,
+  ];
+}
+
 // ── Row markers ──────────────────────────────────────────────────────────────
 // Glyphs now come from the active symbol preset (symbols.ts): the Unicode
 // default upgrades these thin outlines to heavier forms, the `nerd` preset
@@ -240,10 +257,10 @@ export function buildFindingRows(
   const rows: FindingDetailRow[] = [];
 
 
-  // 1. Title — wrapped so long titles stay readable, severity carried below.
+  // Title — wrapped so long titles stay readable, severity carried below.
   pushWrapped(rows, findingText(finding.title || EM_DASH), width, "title");
 
-  // 2. Severity — explicit kv row (coloured badge tone for critical/high).
+  // Severity — explicit kv row (coloured badge tone for critical/high).
   rows.push({
     kind: "kv",
     label: `${icon.status} Severity`,
@@ -251,7 +268,7 @@ export function buildFindingRows(
     tone: severityDetailTone(finding.severity),
   });
 
-  // 3. Finding status; this remains independent of either verification field.
+  // Finding status remains independent of either verification field.
   rows.push({
     kind: "kv",
     label: `${icon.status} Status`,
@@ -259,47 +276,9 @@ export function buildFindingRows(
     tone: "text",
   });
 
-  // 4. Source predicates are a code-only check, never replay or fix evidence.
-  const sourceVerification = finding.sourceVerification;
-  let sourceCheckValue = "not run";
-  if (sourceVerification) {
-    switch (sourceVerification.status) {
-      case "matched":
-        sourceCheckValue =
-          `source predicates matched (${sourceVerification.matchedPredicates}/${sourceVerification.totalPredicates}); source-only`;
-        break;
-      case "not_confirmed":
-        sourceCheckValue =
-          `source predicates not confirmed (${sourceVerification.matchedPredicates}/${sourceVerification.totalPredicates}); not proof of a fix`;
-        break;
-      case "inconclusive":
-        sourceCheckValue =
-          `source predicates inconclusive (${sourceVerification.inconclusivePredicates}/${sourceVerification.totalPredicates} could not be evaluated)`;
-        break;
-    }
-    if (sourceVerification.behaviorPending) {
-      sourceCheckValue += "; behavior pending (no runtime proof)";
-    }
-  }
-  pushWrapped(
-    rows,
-    `Source check: ${sourceCheckValue}`,
-    width,
-    sourceVerification?.status === "matched" ? "warn" : "muted",
-  );
-
-  // 5. Canonical replay result stays separate from the source-only check.
-  pushWrapped(
-    rows,
-    `Replay verification: ${finding.verification_result?.status ?? "not run"}`,
-    width,
-    "text",
-  );
-
-  // 6. CVSS — near the severity and verification states.
+  // CVSS is technical severity, independent of the impact assessment.
   pushWrapped(rows, `${icon.cvss} CVSS: ${findingCvssLine(finding, options.cvssLine)}`, width, "text");
 
-  // 7. Category
   rows.push({
     kind: "kv",
     label: `${icon.category} Category`,
@@ -307,12 +286,10 @@ export function buildFindingRows(
     tone: "text",
   });
 
-  // 8. Triage (if present)
   if (finding.triageStatus) {
     rows.push({ kind: "kv", label: `${icon.triage} Triage`, value: findingText(finding.triageStatus), tone: "text" });
   }
 
-  // 9. Confidence
   rows.push({
     kind: "kv",
     label: `${icon.confid} Confidence`,
@@ -323,10 +300,10 @@ export function buildFindingRows(
     tone: "text",
   });
 
-  // 10. Location — compact section label inline with wrapped text.
+  // Location — compact section label inline with wrapped text.
   pushWrapped(rows, `${icon.location} Location: ${findingLocation(finding) ?? EM_DASH}`, width, "text");
 
-  // 11. Endpoint+method — only from actual evidence.request first line.
+  // Endpoint+method — only from actual evidence.request first line.
   const redactedRequest = finding.evidence?.request ? redact(finding.evidence.request) : "";
   if (redactedRequest) {
     const firstReqLine = redactedRequest.split("\n", 1)[0].trim();
@@ -335,10 +312,14 @@ export function buildFindingRows(
     }
   }
 
-  // 12. Description
   pushWrapped(rows, `${icon.desc} Description: ${finding.description || EM_DASH}`, width, "text");
 
-  // 13. Evidence — subsections (Request / Response / Analysis) visibly distinct.
+  rows.push({ kind: "heading", text: "Impact", tone: "heading" });
+  for (const line of findingImpactLines(finding)) {
+    pushWrapped(rows, line, width, "muted");
+  }
+
+  // Evidence subsections (Request / Response / Analysis) visibly distinct.
   const ev = finding.evidence;
   if (ev && (ev.request || ev.response || ev.analysis)) {
     rows.push({ kind: "text", text: `${icon.evidence} Evidence`, tone: "heading" });
@@ -374,8 +355,44 @@ export function buildFindingRows(
   } else {
     pushWrapped(rows, `${icon.evidence} Evidence: ${EM_DASH}`, width, "muted");
   }
+  // Source predicates are a code-only check, never replay or fix evidence.
+  const sourceVerification = finding.sourceVerification;
+  let sourceCheckValue = "not run";
+  if (sourceVerification) {
+    switch (sourceVerification.status) {
+      case "matched":
+        sourceCheckValue =
+          `source predicates matched (${sourceVerification.matchedPredicates}/${sourceVerification.totalPredicates}); source-only`;
+        break;
+      case "not_confirmed":
+        sourceCheckValue =
+          `source predicates not confirmed (${sourceVerification.matchedPredicates}/${sourceVerification.totalPredicates}); not proof of a fix`;
+        break;
+      case "inconclusive":
+        sourceCheckValue =
+          `source predicates inconclusive (${sourceVerification.inconclusivePredicates}/${sourceVerification.totalPredicates} could not be evaluated)`;
+        break;
+    }
+    if (sourceVerification.behaviorPending) {
+      sourceCheckValue += "; behavior pending (no runtime proof)";
+    }
+  }
+  pushWrapped(
+    rows,
+    `Source check: ${sourceCheckValue}`,
+    width,
+    sourceVerification?.status === "matched" ? "warn" : "muted",
+  );
 
-  // 14. Remediation
+  // Canonical replay result stays separate from the source-only check.
+  pushWrapped(
+    rows,
+    `Replay verification: ${finding.verification_result?.status ?? "not run"}`,
+    width,
+    "text",
+  );
+
+
   const remediation = finding.remediation;
   if (!remediation || (!remediation.summary && (remediation.steps?.length ?? 0) === 0)) {
     pushWrapped(rows, `${icon.fix} Remediation: ${EM_DASH}`, width, "muted");
@@ -386,7 +403,6 @@ export function buildFindingRows(
     }
   }
 
-  // 15. References
   const refs = [...(finding.remediation?.references ?? []), ...(finding.dedupRefs ?? [])];
   if (refs.length === 0) {
     pushWrapped(rows, `${icon.link} References: ${EM_DASH}`, width, "muted");
