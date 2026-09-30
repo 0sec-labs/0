@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Archive, ArchiveRestore, Plus, Search, Trash2, Settings, ShieldCheck } from "lucide-react";
+import { Archive, ArchiveRestore, SquarePen, Search, Trash2, Settings, ShieldCheck } from "lucide-react";
 import type { ConsoleSavedSession, DesktopConsoleSession } from "@0/shared";
-import { Button as KumoButton } from "@cloudflare/kumo/components/button";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { LoadingDots } from "./loading-state";
@@ -38,7 +38,7 @@ export function ConsoleSessionRail({ workspace, selectedId, onCreate, onArchiveL
   const activeIds = new Set(workspace.sessions.filter(session => session.status !== "closed").flatMap(session => [session.id, ...("savedId" in session && typeof session.savedId === "string" ? [session.savedId] : [])]));
   const saved = workspace.saved.filter(session => session.messageCount > 0 && !activeIds.has(session.id)).filter((session) => Boolean(session.archived) === showArchived).filter((session) => `${session.summary ?? ""} ${session.preview} ${session.target ?? ""} ${session.model ?? ""}`.toLowerCase().includes(needle));
   return <div className="session-rail flex h-full min-h-0 flex-col">
-    <div className="space-y-3  p-3"><KumoButton variant="primary" size="base" className="w-full justify-start text-sm" disabled={workspace.busy} onClick={onCreate}><Plus className="size-4" />New chat</KumoButton><div className="relative"><Search className="pointer-events-none absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} className="h-9 pl-8 text-sm" placeholder="Search chats" aria-label="Search chats" /></div></div>
+    <div className="shrink-0 space-y-2 p-2"><Button variant="ghost" className="h-9 w-full justify-start gap-3 rounded-lg px-3 text-sm font-normal" disabled={workspace.busy} onClick={onCreate}><SquarePen aria-hidden="true" className="size-4" />New chat</Button><div className="relative"><Search className="pointer-events-none absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} className="h-9 pl-8 text-sm" placeholder="Search chats" aria-label="Search chats" /></div></div>
     <button type="button" onClick={() => setShowArchived(value => !value)} className="mx-3 mb-1 flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"><Archive className="size-3.5" />{showArchived ? "Back to chats" : "Archived chats"}</button>
     <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2" aria-label={showArchived ? "Archived chats" : "Chats"}>
       {live.map((session) => <div key={session.id} className={cn("session-row group relative flex items-center rounded-xl", selectedId === session.id ? "bg-muted" : "hover:bg-muted/50")}>
