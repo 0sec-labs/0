@@ -12,6 +12,36 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-10-01
+
+### Added
+
+- Typed security workflows across the CLI, browser and MCP, with common run,
+  trigger and execution contracts.
+- Registered remote engine connections from the browser, CLI and MCP. Keep
+  computer selection beside the workspace controls.
+- Render chat Markdown and bounded diagrams in the browser dashboard, with
+  Zero mascot companions across workspace pages.
+
+### Changed
+
+- Simplify dashboard navigation, workspace layout, workflow controls and agent
+  activity. Keep the navigation rail consistent between pages.
+- Explain scan goal and depth recommendations, repeat runs versus subagents,
+  and sequential/parallel tradeoffs. Describe shared cost limits as estimates
+  and warn about in-flight overshoot before confirmation.
+- Lead the README with workflows and move integration guidance into Plugins.
+- Generate offline paper evidence tables from hashed inputs. Preserve
+  historical results while suppressing unsupported benchmark and efficacy claims.
+
+### Fixed
+
+- Reopen a running dashboard reliably and handle occupied ports.
+- Acknowledge console cancellation promptly and stop startup cleanly.
+- Distinguish local development artifacts from release builds in runtime
+  diagnostics and feedback, using an explicit build-channel marker.
+- Replay POST XSS probes and require ownership evidence for IDOR verification.
+
 ## [0.22.4] - 2026-10-01
 
 ### Added
