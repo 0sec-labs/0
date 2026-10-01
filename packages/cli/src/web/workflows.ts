@@ -28,6 +28,7 @@ import {
   type ScopePolicy,
   type SourceFixPublicationPlan,
   type SourceFixResult,
+  type LearningServiceOptions,
 } from "@0/core";
 import { runUnified, type RunOutcome } from "../commands/run.js";
 import { resolveEngagement } from "../engagement-plan.js";
@@ -35,6 +36,7 @@ import { loadFindingFocus } from "../finding-focus.js";
 import { fixEligibility } from "../tui/fix-action.js";
 import { createResearchWorkflowExecutors, validateResearchWorkflowInputs } from "../workflow-research-executors.js";
 import { type FindingCandidateStore, createFindingCandidateStore, createFindingWorkflowExecutors, validateFindingWorkflowInputs } from "../finding-workflow-executors.js";
+import { WebLearningService } from "./learning.js";
 
 const execFileAsync = promisify(execFile);
 const PREFIX = "/api/console/";
@@ -217,17 +219,19 @@ export class WebWorkflowService {
   readonly #fixes = new Map<string, ManagedFix>();
   readonly #repositoryJobs = new Map<string, string>();
   readonly #definitions: SecurityWorkflowStore;
+  readonly learning: WebLearningService;
   readonly #graphJobs = new Map<string, string>();
   readonly #graphConnections = new Map<string, string | null>();
   readonly #workflowCandidates = new Map<string, FindingCandidateStore>();
   readonly #lifecycleKeys = new Map<string, { request: string; promise: Promise<unknown> }>();
   #disposing = false;
 
-  constructor(options: { gateway: WebWorkflowGateway; dbPath?: string }) {
+  constructor(options: { gateway: WebWorkflowGateway; dbPath?: string; learning?: LearningServiceOptions }) {
     this.#gateway = options.gateway;
     this.#dbPath = options.dbPath;
     this.#definitions = new SecurityWorkflowStore(options.dbPath);
     this.#definitions.interruptActiveExecutions();
+    this.learning = new WebLearningService(this.#definitions, options.learning);
   }
 
   /** Session-owned lifecycle calls; launches require an idle gateway and host capabilities. */
@@ -293,6 +297,8 @@ export class WebWorkflowService {
   }
 
   async handle(pathname: string, method: string, input: unknown, query: URLSearchParams): Promise<{ status: number; data: unknown } | null> {
+    const learning = await this.learning.handle(pathname, method, input, query);
+    if (learning) return learning;
     if (!pathname.startsWith(PREFIX + "workflows") && !pathname.startsWith(PREFIX + "workflow-definitions") && !pathname.startsWith(PREFIX + "workflow-executions") && pathname !== PREFIX + "workflow-tool-catalog" && !pathname.startsWith(PREFIX + "fixes/")) return null;
     this.#prune();
     try {
@@ -351,6 +357,7 @@ export class WebWorkflowService {
     for (const job of this.#jobs.values()) this.#cancel(job);
     await Promise.all([...this.#jobs.values()].map(job => job.promise));
     await Promise.all([...this.#workflowCandidates.values()].map(store => store.dispose()));
+    await this.learning.dispose();
     this.#definitions.close();
   }
 
@@ -363,9 +370,14 @@ export class WebWorkflowService {
       throw new WorkflowError("Use GET or POST for workflow definitions.", 405);
     }
     if (pathname === executionsPath && method === "GET") return { status: 200, data: { executions: this.#definitions.listExecutions(query.get("workflowId") ?? undefined, query.get("sessionId") ?? undefined) } };
-    const definitionRoute = pathname.match(/^\/api\/console\/workflow-definitions\/([^/]+)(?:\/(run|executions))?$/);
+    const definitionRoute = pathname.match(/^\/api\/console\/workflow-definitions\/([^/]+)(?:\/(run|executions|versions|rollback))?$/);
     if (definitionRoute) {
       const id = parse(idSchema, decodeURIComponent(definitionRoute[1]!));
+      if (definitionRoute[2] === "versions" && method === "GET") return { status: 200, data: { versions: this.#definitions.listVersions(id) } };
+      if (definitionRoute[2] === "rollback" && method === "POST") {
+        const request = parse(z.object({ revision: z.number().int().positive(), expectedRevision: z.number().int().positive() }).strict(), input);
+        return { status: 200, data: { definition: this.#definitions.rollback(id, request.revision, request.expectedRevision) } };
+      }
       if (definitionRoute[2] === "run" && method === "POST") return this.#runDefinition(id, input);
       if (definitionRoute[2] === "executions" && method === "GET") return { status: 200, data: { executions: this.#definitions.listExecutions(id, query.get("sessionId") ?? undefined) } };
       if (!definitionRoute[2]) {
@@ -564,6 +576,10 @@ export class WebWorkflowService {
       for (const result of Object.values(nodeResults)) if (result.status === "queued") result.status = status === "cancelled" ? "cancelled" : "blocked";
       for (const result of Object.values(nodeResults)) if (result.status === "running") result.status = status;
       this.#definitions.updateExecution(execution.id, { status, nodeResults, ...(parent.view.error ? { error: parent.view.error } : {}) });
+      if (status === "completed" && target.plan.kind === "source" && !/^[a-z][a-z0-9+.-]*:\/\//i.test(target.plan.target) && !target.plan.target.startsWith("git@")) {
+        try { this.learning.retainSourceContext(target.plan.target); }
+        catch { this.#event(parent, "report", { learningRetained: false }); }
+      }
       this.#graphConnections.delete(parent.view.id);
       this.#graphJobs.delete(execution.id);
     });

@@ -2549,3 +2549,5 @@ export * from "./workflow-service.js";
 export { executeAssessment, executeAssessmentRun, toAssessmentReport } from "./assessment.js";
 export type { AssessmentOptions, AssessmentDependencies, AssessmentResult, AssessmentRunLifecycle } from "./assessment.js";
 export { budgetNativeRuntime } from "./scan-plan.js";
+export * from "./learning-service.js";
+export { HuntMemoryStore } from "./memory/hunt-memory.js";

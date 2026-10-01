@@ -12,6 +12,7 @@ import { LivePage } from "@/pages/live-page";
 import { OverviewPage } from "@/pages/overview-page";
 import { ScansPage } from "@/pages/scans-page";
 import { ConsolePage } from "@/pages/console-page";
+import { LearningPage } from "@/pages/learning-page";
 import { WorkflowsPage } from "@/pages/workflows-page";
 import { WebConsoleControlsPage } from "@/pages/console-controls-page";
 import type { ThemesResponse } from "@/components/console-control/contracts";
@@ -110,6 +111,7 @@ export function OperationsApp() {
             <Route key={route} path={`/${route}`} element={<WebConsoleControlsPage />} />
           ))}
           {["workflows", "audits", "launcher", "launch"].map(route => <Route key={route} path={`/${route}`} element={<WorkflowsPage />} />)}
+          <Route path="/learning" element={<LearningPage />} />
           <Route path="/dashboard" element={operations(dashboard ? <OverviewPage data={dashboard} /> : <EmptyState title="Nothing here yet" action={startChat} />)} />
           <Route path="/operations" element={<Navigate to="/dashboard" replace />} />
           <Route path="/threads" element={findings} />

@@ -2,7 +2,7 @@ import { existsSync, realpathSync } from "node:fs";
 import { createWorkbenchProviderBroker, isAdmittedSmolvmWorkbench } from "@0/core";
 import type { ConsoleSession, ConsoleSessionConfig, LlmApiRuntime } from "@0/core";
 import { findingSchema, type ConsoleExecutionSnapshot, type Finding } from "@0/shared";
-import { osecDB } from "@0/db";
+import { osecDB, LearningStore, learningProjectId, learningArtifactDigest } from "@0/db";
 import { randomUUID } from "node:crypto";
 import { currentWorkbenchAssets } from "./workbench-assets.js";
 import { loadGlobalSettings } from "./tui/settings.js";
@@ -53,6 +53,20 @@ export function createIsolatedConsoleSession(
       pluginHomeDir: options.homeDir, assets: currentWorkbenchAssets(), guestSettings: resolveWorkbenchGuestSettings(loadGlobalSettings(options.homeDir)),
       network: workbenchNetworkEnabled(),
       onExecution: options.onExecution,
+      onSourceContext: (artifact, context) => {
+        if (/^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "")) return;
+        const store = new LearningStore(options.dbPath);
+        try {
+          const digest = learningArtifactDigest(JSON.stringify(artifact.sourceLinks));
+          store.recordExperience({
+            idempotencyKey: `vm-source:${learningArtifactDigest(context.runId + digest)}`,
+            projectId: learningProjectId(context.workspaceRoot),
+            kind: "source-context", outcome: "current", evidenceStrength: "hypothesis",
+            summary: "Source references retained from an isolated workspace.",
+            runId: context.runId, sourceLinks: artifact.sourceLinks, evidenceDigests: [digest],
+          });
+        } finally { store.close(); }
+      },
       onFindings: (findings, completion) => {
         // No host store is opened until the VM has stopped and native teardown is proven.
         const validated = findings.map(finding => findingSchema.parse(finding) as Finding);

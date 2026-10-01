@@ -1,9 +1,44 @@
 import { isAbsolute, relative, resolve, sep } from "node:path";
+import { createHash } from "node:crypto";
+import { constants, openSync, closeSync, fstatSync, lstatSync, readSync, realpathSync } from "node:fs";
 import type { ConsoleSessionConfig, ConsoleSessionCheckpoint } from "@0/core";
 
 export const WORKBENCH_FRAME_BYTES = 8 * 1024 * 1024;
 export const WORKBENCH_MAX_PENDING = 64;
 export interface WorkbenchFrame { type: string; id?: string; [key: string]: unknown; }
+/** Source metadata only: guest prose, credentials and transcript content never cross this seam. */
+export interface WorkbenchSourceContextArtifact { sourceLinks: Array<{ path: string; hash: string }> }
+export const WORKBENCH_SOURCE_CONTEXT_LIMIT = 8;
+
+/** Revalidate guest evidence against the host snapshot origin, using only host-owned scope. */
+export function validateWorkbenchSourceContext(value: unknown, workspace: string, scopePath: string): WorkbenchSourceContextArtifact {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid workbench source context");
+  const links = (value as Record<string, unknown>).sourceLinks;
+  if (!Array.isArray(links) || !links.length || links.length > 16) throw new Error("Invalid workbench source links");
+  const root = realpathSync(workspace);
+  const scope = realpathSync(scopePath);
+  if (scope !== root && !scope.startsWith(root + sep)) throw new Error("Workbench source scope is outside workspace");
+  const sourceLinks = links.map(link => {
+    if (!link || typeof link !== "object" || Array.isArray(link)) throw new Error("Invalid workbench source link");
+    const { path, hash } = link as Record<string, unknown>;
+    if (typeof path !== "string" || !path || path.length > 1024 || path.includes("\0") || path.includes("\\") || isAbsolute(path) || path.split("/").some(part => !part || part === "." || part === "..") || typeof hash !== "string" || !/^sha256:[a-f0-9]{64}$/.test(hash)) throw new Error("Invalid workbench source path or hash");
+    const full = resolve(root, path);
+    if (full !== scope && !full.startsWith(scope + sep)) throw new Error("Workbench source is outside approved local scope");
+    let cursor = root;
+    for (const component of path.split("/")) { cursor = resolve(cursor, component); if (lstatSync(cursor).isSymbolicLink()) throw new Error("Workbench source symlink refused"); }
+    const fd = openSync(full, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    try {
+      const stat = fstatSync(fd);
+      if (!stat.isFile() || stat.nlink !== 1 || stat.size > 1_048_576) throw new Error("Invalid workbench source file");
+      const bytes = Buffer.alloc(1_048_577); let size = 0; let read: number;
+      while (size < bytes.length && (read = readSync(fd, bytes, size, bytes.length - size, size)) > 0) size += read;
+      const after = fstatSync(fd);
+      if (size > 1_048_576 || stat.size !== size || stat.size !== after.size || stat.mtimeMs !== after.mtimeMs || stat.ctimeMs !== after.ctimeMs || realpathSync(full) !== full || `sha256:${createHash("sha256").update(bytes.subarray(0, size)).digest("hex")}` !== hash) throw new Error("Workbench source changed or digest mismatch");
+    } finally { closeSync(fd); }
+    return { path, hash };
+  });
+  return { sourceLinks };
+}
 export function encodeWorkbenchFrame(frame: WorkbenchFrame): string {
   const encoded = JSON.stringify(frame);
   if (Buffer.byteLength(encoded) > WORKBENCH_FRAME_BYTES) throw new Error("Workbench protocol frame exceeds its byte limit");

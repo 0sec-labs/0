@@ -1,7 +1,7 @@
 import { BackendConnectionPicker } from "./backend-connection-picker";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Menu, MessageSquare, Plus, Plug, Settings, ShieldCheck, Workflow } from "lucide-react";
+import { Menu, BookOpen, MessageSquare, Plus, Plug, Settings, ShieldCheck, Workflow } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -11,6 +11,7 @@ const destinations = [
   { to: "/findings", label: "Findings", icon: ShieldCheck },
   { to: "/workflows", label: "Workflows", icon: Workflow },
   { to: "/plugins", label: "Plugins", icon: Plug },
+    { to: "/learning", label: "Learning", icon: BookOpen },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 

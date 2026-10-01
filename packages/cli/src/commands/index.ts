@@ -52,6 +52,7 @@ export { registerBinaryCommand } from "./binary.js";
 export { registerPluginCommand } from "./plugin.js";
 export { registerThemeCommand } from "./theme.js";
 export { registerEvolveCommand } from "./evolve.js";
+export { registerLearningCommand } from "./learning.js";
 export { registerConfigCommand } from "./config.js";
 export { registerWorkbenchCommand } from "./workbench.js";
 export { registerReviewChecksCommand } from "./checks.js";

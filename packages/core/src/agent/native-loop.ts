@@ -92,6 +92,8 @@ import {
   type InlineValidationOutcome,
 } from "./inline-validation.js";
 import type { osecDB } from "@0/db";
+import { LearningStore, learningProjectId } from "@0/db";
+import { LearningService } from "../learning-service.js";
 import type { Finding, AttackResult, TargetInfo } from "@0/shared";
 
 // ── External Memory ──
@@ -453,6 +455,8 @@ export interface NativeAgentLoopOptions {
    * true. ZERO_DISABLE_HUNT_MEMORY=1/true vetoes either opt-in.
    */
   huntMemoryStore?: HuntMemoryStore;
+  /** Optional tenant-local learning mirror; never enables source-memory access. */
+  learningStore?: LearningStore;
 }
 
 export interface NativeAgentState {
@@ -861,14 +865,34 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     (config.codebaseLearning === true ||
       (config.codebaseLearning !== false &&
         (config.role === "attack" || config.role === "discovery")));
+  // Mirror only already-admitted source memory. A null database stays offline
+  // unless the host supplies an explicit learning store; no default home store.
+  let sourceLearning: LearningService | undefined;
+  let ownedLearningStore: LearningStore | undefined;
+  let sourceLearningRoot: string | undefined;
+  const mirrorCodebaseNotes = (memory: HuntMemoryStore): void => {
+    if (!codebaseLearningEnabled || (!db && !opts.learningStore)) return;
+    try {
+      sourceLearningRoot ??= fs.realpathSync.native(config.scopePath!);
+      if (!sourceLearning) {
+        const store = opts.learningStore ?? (ownedLearningStore = new LearningStore(db!.databasePath));
+        sourceLearning = new LearningService(store);
+      }
+      sourceLearning.importCodebaseNotes(learningProjectId(sourceLearningRoot), sourceLearningRoot, memory, 8);
+    } catch {
+      // An auxiliary mirror cannot invalidate an accepted note or fail a scan.
+    }
+  };
   if (codebaseLearningEnabled) {
     const store = getHuntMemory();
     if (store) {
-      toolCtx.rememberCodebase = (note) => ({
-        id: store.rememberCodebase({
+      toolCtx.rememberCodebase = (note) => {
+        const accepted = store.rememberCodebase({
           ...note, root: config.scopePath!, source: `agent:${config.scanId}`,
-        }).id,
-      });
+        });
+        mirrorCodebaseNotes(store);
+        return { id: accepted.id };
+      };
     }
   }
 
@@ -1008,7 +1032,9 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
 
     if (codebaseLearningEnabled) {
       try {
-        const notes = getHuntMemory()?.recallCodebase(config.scopePath!, 6) ?? [];
+        const memory = getHuntMemory();
+        const notes = memory?.recallCodebase(config.scopePath!, 6) ?? [];
+        if (memory) mirrorCodebaseNotes(memory);
         if (notes.length > 0) {
           const context = JSON.stringify(notes.map((note) => ({
             title: note.title, summary: note.summary, files: note.codebase!.files,
@@ -1351,6 +1377,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
           () => harness?.close(),
           () => executor.cleanup(),
           () => executablePlugins?.close(),
+          () => { try { ownedLearningStore?.close(); } catch { /* Learning remains best-effort. */ } },
         ]) {
           try { await close(); } catch (error) { failures.push(error); }
         }
@@ -3098,6 +3125,19 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   // turn and cost-ceiling check; dropping the pricing model here reprices Azure
   // runs at the generic fallback after the loop completes.
   state.estimatedCostUsd = estimateCost(state.totalUsage, pricingModel());
+
+  if (sourceLearning && sourceLearningRoot) {
+    try {
+      sourceLearning.store.appendEvent({
+        projectId: learningProjectId(sourceLearningRoot),
+        idempotencyKey: `source-agent:${config.scanId}:${sessionId}:${randomUUID()}`,
+        kind: "source-agent-terminal", runId: config.scanId,
+        outcome: state.errorExit ? "failed" : opts.signal?.aborted ? "cancelled" : state.done ? "completed" : "interrupted",
+        evidenceStrength: "operational",
+        summary: `Source agent stopped after ${state.turnCount} turn(s), retaining ${state.findings.length} finding(s). Execution metadata does not establish vulnerability truth or verified remediation.`,
+      });
+    } catch { /* Auxiliary metadata must never block completion. */ }
+  }
 
   // If none of the break paths set a summary, the loop exited naturally by
   // completing all maxTurns iterations. Only in that case do we stamp the

@@ -282,6 +282,7 @@ export class ConsoleGateway {
   readonly #createId: () => string;
   readonly #options: ConsoleGatewayOptions;
   #workflowLifecycle?: ConsoleWorkflowLifecycleAdapter;
+  #learningRecorder?: (event: { id: string; project: string; outcome: string }) => void;
   readonly #callIds = new WeakMap<object, string>();
   constructor(options: ConsoleGatewayOptions = {}) { this.#options = options; this.#now = options.now ?? (() => new Date()); this.#createId = options.createId ?? randomUUID; }
 
@@ -797,6 +798,8 @@ export class ConsoleGateway {
       },
     };
   }
+  /** Records lifecycle metadata only; conversation text and tool output stay out of learning. */
+  attachLearningRecorder(recorder: (event: { id: string; project: string; outcome: string }) => void): void { this.#learningRecorder = recorder; }
   async #startTurn(managed: ManagedSession, body: string): Promise<void> {
     managed.executionEpoch++;
     managed.status = "working"; this.#emitSession(managed);
@@ -846,6 +849,10 @@ export class ConsoleGateway {
         }
       } catch (error) { if (managed.status !== "closed") managed.status = "failed"; this.#emit(managed, { type: "error", message: errorMessage(error) }); }
       finally {
+        try {
+          this.#learningRecorder?.({ id: `${managed.id}:${managed.turnOwner}`, project: managed.workspacePath ?? this.#projectPath,
+            outcome: abort.signal.aborted ? "cancelled" : managed.status === "failed" ? "failed" : managed.lastOutcome?.stopReason === "end_turn" ? "completed" : "inconclusive" });
+        } catch { this.#emit(managed, { type: "notice", text: "Learning activity could not be retained for this turn." }); }
         this.#denyDecisions(managed, managed.turnOwner ?? undefined); managed.abort = null; managed.turnOwner = null; managed.turn = null;
         if (managed.status !== "closed") {
           if (managed.status !== "failed") managed.status = "ready";

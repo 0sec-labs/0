@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
-import { TOOL_DEFINITIONS, connectServicePlugins, type McpHost, type EnablementRecord, createConsoleRuntime, isAdmittedSmolvmWorkbench, ScopePolicy, withScopeEnforcement } from "@0/core";
+import { TOOL_DEFINITIONS, HuntMemoryStore, connectServicePlugins, type McpHost, type EnablementRecord, createConsoleRuntime, isAdmittedSmolvmWorkbench, ScopePolicy, withScopeEnforcement } from "@0/core";
 import type { ConsoleSession, ConsoleSessionConfig, ScopeEnforcementState } from "@0/core";
 import { osecDB } from "@0/db";
 import { findingFromRow } from "./tui/findings-data.js";
@@ -11,7 +11,7 @@ import { installWorkbenchPlugins } from "./workbench-plugins.js";
 import { createSessionPluginHostManager, type SessionPluginHostManager } from "./tui/session-plugin-host.js";
 import { VERSION } from "@0/shared";
 import { createLocalConsoleSession } from "./console-session.js";
-import { encodeWorkbenchFrame, WorkbenchFrameReader, WORKBENCH_MAX_PENDING, WORKBENCH_FRAME_BYTES } from "./workbench-console-protocol.js";
+import { encodeWorkbenchFrame, WorkbenchFrameReader, WORKBENCH_MAX_PENDING, WORKBENCH_FRAME_BYTES, WORKBENCH_SOURCE_CONTEXT_LIMIT } from "./workbench-console-protocol.js";
 import type { WorkbenchFrame } from "./workbench-console-protocol.js";
 import { servicePluginSecretRedactor, validateGuestServicePluginConnections } from "./workbench-service-plugins.js";
 
@@ -33,6 +33,7 @@ async function runGuest(cli: boolean): Promise<number> {
   let session: ConsoleSession | undefined;
   let pluginManager: SessionPluginHostManager | undefined;
   let servicePluginHost: McpHost | undefined;
+  const exportedSourceReferences = new Set<string>();
   let initialized = false;
   let closing = false;
   let turn: AbortController | undefined;
@@ -72,20 +73,38 @@ async function runGuest(cli: boolean): Promise<number> {
     emit({ type: "state", snapshot: checkpoint?.harnessRoot ? { ...snapshot, checkpoint: undefined } : snapshot });
     const db = new osecDB("/home/zero/.0/controller.sqlite");
     try { const rows = db.getFindings(session.scanId); if (rows.length > 1000) throw new Error("Finding export limit reached"); emit({ type: "findings", findings: rows.map(findingFromRow) }); } finally { db.close(); }
+    // Export only current source references. Free-form guest memory stays inside the VM.
+    const memory = new HuntMemoryStore({ home: "/home/zero" });
+    const roots = [...new Set(memory.all().map(note => note.codebase?.root).filter((root): root is string => !!root && (root === "/workspace" || root.startsWith("/workspace/"))))].slice(0, WORKBENCH_SOURCE_CONTEXT_LIMIT);
+    let count = 0;
+    for (const root of roots) {
+      for (const note of memory.recallCodebase(root, WORKBENCH_SOURCE_CONTEXT_LIMIT)) {
+        if (!note.codebase || count++ >= WORKBENCH_SOURCE_CONTEXT_LIMIT) break;
+        const prefix = root === "/workspace" ? "" : root.slice("/workspace/".length) + "/";
+        const artifact = { sourceLinks: note.codebase.files.map(file => ({ path: prefix + file.path, hash: file.digest })) };
+        const key = JSON.stringify(artifact);
+        if (exportedSourceReferences.has(key)) continue;
+        exportedSourceReferences.add(key);
+        emit({ type: "source-context", artifact });
+      }
+      if (count >= WORKBENCH_SOURCE_CONTEXT_LIMIT) break;
+    }
   };
-  const finish = async () => {
-    if (closing) return; closing = true; turn?.abort();
+  const finish = async (holdTransport = false) => {
+    if (closing) { if (!holdTransport) process.stdin.destroy(); return; } closing = true; turn?.abort();
     for (const pending of decisions.values()) pending.reject(new Error("Workbench closed")); decisions.clear();
     for (const response of providers.values()) response.destroy(); providers.clear();
     try {
       if (session) { await session.stopPersistentAgents(); await state(); await session.cleanup(); }
     } finally {
       pluginManager?.dispose();
-      try { await servicePluginHost?.closeAll(); } finally { server.close(); process.stdin.destroy(); }
+      try { await servicePluginHost?.closeAll(); } finally { server.close(); if (!holdTransport) process.stdin.destroy(); }
     }
   };
   let chain = Promise.resolve();
   const receive = (frame: WorkbenchFrame) => {
+    // Host releases the quiescent guest only after durable artifact ingestion.
+    if (frame.type === "release" && closing) { process.stdin.destroy(); return; }
     if (frame.type === "decision-result") { const pending = decisions.get(frame.id!); decisions.delete(frame.id!); if (frame.error) pending?.reject(new Error(String(frame.error))); else pending?.resolve(frame.value); return; }
     if (frame.type === "provider-headers") { const response = providers.get(frame.id!); if (!response || typeof frame.status !== "number" || frame.status < 100 || frame.status > 599) throw new Error("Invalid provider headers"); response.writeHead(frame.status, { "content-type": typeof frame.contentType === "string" ? frame.contentType : "text/event-stream" }); return; }
     if (frame.type === "provider-chunk") { const response = providers.get(frame.id!); if (!response || typeof frame.data !== "string" || frame.data.length > 131072) throw new Error("Invalid provider chunk"); if (response.writableLength > 4 * 1024 * 1024) throw new Error("Provider consumer exceeded buffer limit"); response.write(Buffer.from(frame.data, "base64")); return; }
@@ -154,7 +173,7 @@ async function runGuest(cli: boolean): Promise<number> {
           case "stopWorker": value = await session.stopPersistentAgent(String(frame.agentId)); break;
           case "stopWorkers": await session.stopPersistentAgents(); break;
           case "handoff": value = await session.prepareHandoff(); break;
-          case "close": await finish(); emit({ type: "result", id: frame.id }); return;
+          case "close": await finish(true); emit({ type: "result", id: frame.id }); return;
           default: throw new Error("Unsupported controller operation");
         }
         await state(); emit({ type: "result", id: frame.id, value });

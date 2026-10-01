@@ -8,8 +8,8 @@ import { findingSchema, type Finding } from "@0/shared";
 import type { TuiSettings } from "./tui/settings.js";
 import type { WorkbenchConfig } from "./workbench.js";
 import { prepareWorkbenchPlugins, GUEST_PLUGIN_ASSETS } from "./workbench-plugins.js";
-import { encodeWorkbenchFrame, WorkbenchFrameReader, WORKBENCH_MAX_PENDING, guestWorkspacePath, hostWorkspacePath, mapWorkbenchTarget, mapWorkbenchCheckpoint, serializeWorkbenchConfig } from "./workbench-console-protocol.js";
-import type { WorkbenchFrame } from "./workbench-console-protocol.js";
+import { encodeWorkbenchFrame, WorkbenchFrameReader, WORKBENCH_MAX_PENDING, guestWorkspacePath, hostWorkspacePath, mapWorkbenchTarget, mapWorkbenchCheckpoint, serializeWorkbenchConfig, validateWorkbenchSourceContext } from "./workbench-console-protocol.js";
+import type { WorkbenchFrame, WorkbenchSourceContextArtifact } from "./workbench-console-protocol.js";
 import { servicePluginSecretRedactor, validateGuestServicePluginConnections } from "./workbench-service-plugins.js";
 
 export interface WorkbenchExecutionSnapshot {
@@ -37,6 +37,8 @@ export interface WorkbenchControllerOptions {
 export interface WorkbenchConsoleSessionOptions extends WorkbenchControllerOptions {
   config: Omit<ConsoleSessionConfig, "runtime" | "db">;
   onFindings?: (findings: Finding[], completion?: { outcome?: ConsoleTurnOutcome }) => void | Promise<void>;
+  /** Trusted host persistence adapter; source references have been rehashed and scoped on host. */
+  onSourceContext?: (artifact: WorkbenchSourceContextArtifact, context: { workspaceRoot: string; scanId: string; runId: string }) => void | Promise<void>;
 }
 const EVENTS = new Set(["onHarnessUpdate", "onAssistantDelta", "onReasoningDelta", "onToolStart", "onToolResult", "onUsage", "onNotice", "onCompaction"]);
 const DECISIONS = new Set(["requestScope", "requestLocalScope", "approveTool", "escalateScopedAudit", "askOperator", "historyList", "historyRead"]);
@@ -153,13 +155,23 @@ class Controller {
     const id = randomUUID(); const result = new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
     try { this.write({ type: "request", id, op, ...values }); } catch (error) { this.pending.delete(id); throw error; } return result;
   }
-  async close(): Promise<void> {
+  async close(beforeRelease?: () => Promise<void>): Promise<void> {
     if (!this.started) { await this.options.provider.close?.(); return; }
     let exited = false;
     try {
-      await Promise.race([this.request("close"), new Promise(resolve => setTimeout(resolve, 1000))]);
+      await Promise.race([this.request("close"), new Promise((_, reject) => setTimeout(() => reject(new Error("Workbench close acknowledgement timed out")), 1000))]);
+      await beforeRelease?.();
+      this.write({ type: "release" });
+      this.input?.end();
       await Promise.race([this.done?.then(() => { exited = true; }), new Promise(resolve => setTimeout(resolve, 1000))]);
-    } catch { /* A terminated guest still requires native teardown confirmation. */ }
+    } catch (error) {
+      // Persisting artifacts may fail, but native teardown must still be confirmed.
+      this.abort.abort();
+      const result = await this.done;
+      if (result?.cleanupFailed) throw new Error(result.error ?? "Workbench teardown could not be confirmed");
+      if (beforeRelease) await beforeRelease();
+      // Native shutdown races are benign; persistence failures are not.
+    }
     finally {
       if (!exited) this.abort.abort();
       const result = await this.done;
@@ -178,6 +190,12 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
   let messages = structuredClone(config.initialMessages ?? config.initialCheckpoint?.messages ?? []);
   let checkpoint = config.initialCheckpoint;
   let target = config.target ?? ""; let scope = config.scope; let localScopePath = config.initialCheckpoint?.localScopePath ?? undefined;
+  // Guest state never creates authority. Only the host's initial grant and approval callback do.
+  let sourceScopePath = config.initialCheckpoint?.localScopePath ?? (scopeEnforcement.enabled ? undefined : workspace);
+  const sourceArtifacts = new Set<string>();
+  let sourceFrames = 0;
+  let sourcePersistence = Promise.resolve();
+  const flushSourceContext = async () => { try { await sourcePersistence; } catch { throw new Error("Workbench source context persistence failed"); } };
   let autonomyMode = config.autonomyMode ?? "standard";
   let systemPrompt = config.systemPrompt ?? ""; let tools = config.tools ?? [];
   let render: ConsoleRenderCallbacks | undefined; let active = false; let findings: Finding[] = []; let engineWorkStarted = false; let lastOutcome: ConsoleTurnOutcome | undefined; let cleanupPromise: Promise<void> | undefined;
@@ -191,7 +209,7 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
     if (name === "requestLocalScope") {
       const request = structuredClone(args[0]) as Record<string, unknown>;
       for (const key of ["requestedPath", "currentScopePath"]) if (typeof request[key] === "string") request[key] = hostWorkspacePath(request[key] as string, workspace);
-      const value = await callback(request); if (!value) return null; const resolution = value as { scopePath: string }; return { scopePath: guestWorkspacePath(resolution.scopePath, workspace) };
+      const value = await callback(request); if (!value) return null; const resolution = value as { scopePath: string }; const guestPath = guestWorkspacePath(resolution.scopePath, workspace); sourceScopePath = hostWorkspacePath(guestPath, workspace); return { scopePath: guestPath };
     }
     if (name === "requestScope") {
       const request = args[0] as Record<string, unknown>;
@@ -201,7 +219,17 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
     return callback(...args);
   };
   controller.receive = frame => {
-    if (frame.type === "state") {
+    if (frame.type === "source-context") {
+      if (++sourceFrames > 128) throw new Error("Workbench source context export limit reached");
+      if (!options.onSourceContext || !sourceScopePath) return;
+      let artifact: WorkbenchSourceContextArtifact;
+      try { artifact = validateWorkbenchSourceContext(frame.artifact, workspace, sourceScopePath); } catch { return; } // Untrusted or stale guest evidence grants nothing.
+      const key = JSON.stringify(artifact);
+      if (sourceArtifacts.has(key)) return;
+      sourceArtifacts.add(key);
+      sourcePersistence = sourcePersistence.then(() => options.onSourceContext!(artifact, { workspaceRoot: workspace, scanId: config.scanId, runId: controller.runId }));
+      void sourcePersistence.catch(() => {});
+    } else if (frame.type === "state") {
       const state = frame.snapshot as Record<string, unknown>;
       if (!state || state.scanId !== config.scanId || !Array.isArray(state.messages) || state.messages.length > 10000 || !Array.isArray(state.tools)) throw new Error("Invalid guest session state");
       messages = state.messages as typeof messages; systemPrompt = String(state.systemPrompt ?? ""); tools = state.tools as typeof tools;
@@ -245,7 +273,7 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
       const cancel = () => { if (controller.execution.status === "pending") { controller.abort.abort(new Error("Operator cancelled workbench startup")); return; } try { controller.write({ type: "cancel" }); } catch { /* VM may be stopping. */ } cancelTimer ??= setTimeout(() => controller.abort.abort(new Error("Operator cancelled workbench turn")), 2000); };
       sendOptions?.signal?.addEventListener("abort", cancel, { once: true });
       try { if (sendOptions?.signal?.aborted) cancel(); await Promise.all(deferred.splice(0)); await controller.start(); sendOptions?.signal?.throwIfAborted(); controller.status("running"); engineWorkStarted = true;
-        lastOutcome = await controller.request("send", { text, generateTitle: sendOptions?.generateTitle }) as Awaited<ReturnType<ConsoleSession["send"]>>; return lastOutcome;
+        lastOutcome = await controller.request("send", { text, generateTitle: sendOptions?.generateTitle }) as Awaited<ReturnType<ConsoleSession["send"]>>; await flushSourceContext(); return lastOutcome;
       } catch (error) {
         if (sendOptions?.signal?.aborted) {
           const result = await controller.done;
@@ -262,7 +290,7 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
     async stopPersistentAgent(agentId) { return await controller.request("stopWorker", { agentId }) as boolean; }, async stopPersistentAgents() { if (controller.done) await controller.request("stopWorkers"); },
     exportCheckpoint() { if (active || !checkpoint) throw new Error("No quiescent VM checkpoint is available"); return structuredClone(checkpoint); },
     async prepareHandoff() { if (active) throw new Error("Cannot hand off active VM turn"); if (!controller.done) return {}; return await controller.request("handoff") as { warnings?: string[] }; },
-    cleanup() { return cleanupPromise ??= (async () => { await controller.close(); if (engineWorkStarted && controller.done) await options.onFindings?.(findings, { outcome: lastOutcome }); })(); },
+    cleanup() { return cleanupPromise ??= (async () => { await controller.close(flushSourceContext); await flushSourceContext(); if (engineWorkStarted && controller.done) await options.onFindings?.(findings, { outcome: lastOutcome }); })(); },
   };
 }
 

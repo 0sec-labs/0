@@ -350,11 +350,14 @@ export type OsecDbOpenOptions = {
 };
 
 export class osecDB {
+  /** Resolved storage identity for scoped stores sharing this database. */
+  readonly databasePath: string;
   private sqlite!: ShimmedDatabase;
   private db!: ReturnType<typeof createDrizzleFromShim<typeof schema>>;
 
   constructor(dbPath?: string, options: OsecDbOpenOptions = {}) {
     const path = resolveOsecDbPath(dbPath);
+    this.databasePath = path;
     if (options.readOnly) {
       if (path !== ":memory:" && !existsSync(path)) {
         throw new Error(`Database does not exist: ${path}`);

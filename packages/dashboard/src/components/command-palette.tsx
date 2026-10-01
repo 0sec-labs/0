@@ -95,6 +95,7 @@ export function CommandPalette({
         ["models", "Models", "Choose which models 0 uses"],
         ["settings", "Settings", "Preferences, shortcuts, appearance"],
         ["plugins", "Plugins", "Add and manage extensions"],
+        ["learning", "Learning", "Retained experience and evaluated improvements"],
         ["doctor", "Diagnostics", "Check that everything works"],
         ["tools", "Tools", "What 0 can use"],
         ["project", "Project", "Target and permissions"],

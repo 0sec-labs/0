@@ -1,24 +1,26 @@
-import { mkdtemp, rm, readdir } from "node:fs/promises";
+import { mkdtemp, rm, readdir, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const mock = vi.hoisted(() => ({ holdReady: false, holdSend: false, cleanupFailed: false, sendError: undefined as string | undefined, serviceConnections: [] as Array<{id:string;enabled:boolean;fields:Record<string,string>}>, pluginDirectory: undefined as string | undefined, pluginCleanup: vi.fn(async () => {}), launches: [] as unknown[], requests: [] as Record<string, unknown>[], output: undefined as ((data: string) => void) | undefined }));
+const mock = vi.hoisted(() => ({ scopeEnabled: false, sourceOnClose: undefined as unknown, destroyed: false, holdReady: false, holdSend: false, cleanupFailed: false, sendError: undefined as string | undefined, serviceConnections: [] as Array<{id:string;enabled:boolean;fields:Record<string,string>}>, pluginDirectory: undefined as string | undefined, pluginCleanup: vi.fn(async () => {}), launches: [] as unknown[], requests: [] as Record<string, unknown>[], output: undefined as ((data: string) => void) | undefined }));
 vi.mock("@0/core", () => ({
   DEFAULT_MAX_TOOL_ITERATIONS: 100,
   ScopePolicy: class { constructor(readonly raw: unknown) {} },
-  getScopeEnforcementState: (projectPath: string) => ({ pluginId: "scope", enabled: false, projectPath, message: "disabled" }),
+  getScopeEnforcementState: (projectPath: string) => ({ pluginId: "scope", enabled: mock.scopeEnabled, projectPath, message: "disabled" }),
   runSmolvmWorkbench: (options: { signal: AbortSignal; transport: { initialInput: string; onStdout(data: string): void; onReady(input: { write(data: string): void; end(): void }): void } }) => {
     mock.launches.push(options); mock.output = options.transport.onStdout;
     const init = JSON.parse(options.transport.initialInput);
     const emit = (frame: unknown) => options.transport.onStdout(JSON.stringify(frame) + "\n");
     return new Promise(resolve => {
-      const finish = () => resolve({ exitCode: 0, cleanupFailed: mock.cleanupFailed, timedOut: false, ...(mock.cleanupFailed ? { error: "Workbench teardown unconfirmed" } : {}) });
+      const finish = () => { mock.destroyed = true; resolve({ exitCode: 0, cleanupFailed: mock.cleanupFailed, timedOut: false, ...(mock.cleanupFailed ? { error: "Workbench teardown unconfirmed" } : {}) }); };
       options.signal.addEventListener("abort", finish, { once: true });
       options.transport.onReady({ write(data) {
         const frame = JSON.parse(data); mock.requests.push(frame);
-        if (frame.op === "close") { emit({ type: "result", id: frame.id }); finish(); }
+        if (frame.op === "close") { if (mock.sourceOnClose) emit({ type: "source-context", artifact: mock.sourceOnClose }); emit({ type: "result", id: frame.id }); }
+        else if (frame.type === "release") finish();
         else if (frame.op === "send" && mock.sendError) { emit({ type: "error", id: frame.id, error: mock.sendError }); }
         else if (frame.op === "send" && mock.holdSend) { emit({ type: "event", name: "onAssistantDelta", args: ["Partial answer"] }); emit({ type: "event", name: "onUsage", args: [{inputTokens: 10, outputTokens: 3, turnTokensUsed: 13, turnTokenBudget: 100, iterations: 0, maxToolIterations: 100, kind: "planner"}] }); }
         else if (frame.op === "send") { emit({ type: "event", name: "onAssistantDelta", args: ["hello"] }); emit({ type: "result", id: frame.id, value: { assistantText: "hello", stopReason: "end_turn" } }); }
@@ -33,7 +35,7 @@ vi.mock("./web/service-plugins.js", () => ({ loadServicePluginConnections: () =>
 import { createWorkbenchConsoleSession } from "./workbench-console-session.js";
 
 const roots: string[] = [];
-afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); mock.holdReady = false; mock.holdSend = false; mock.cleanupFailed = false; mock.sendError = undefined; mock.serviceConnections = []; mock.pluginDirectory = undefined; mock.pluginCleanup.mockClear(); mock.launches.length = 0; mock.requests.length = 0; });
+afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); mock.scopeEnabled = false; mock.sourceOnClose = undefined; mock.destroyed = false; mock.holdReady = false; mock.holdSend = false; mock.cleanupFailed = false; mock.sendError = undefined; mock.serviceConnections = []; mock.pluginDirectory = undefined; mock.pluginCleanup.mockClear(); mock.launches.length = 0; mock.requests.length = 0; });
 async function options() {
   const root = realpathSync(await mkdtemp(join(tmpdir(), "0-controller-test-"))); roots.push(root);
   return { config: { workspaceRoot: root, target: root }, workbench: { schemaVersion: 1 as const, image: "/approved.tar", imageDigest: "sha256:" + "a".repeat(64), stateRoot: join(root, "state"), workspaceRoot: root, providers: ["chatgpt-codex"], github: false, cpus: 1, memoryMb: 512, storageGb: 1 }, selection: { model: "granted" }, provider: { provider: "chatgpt-codex" as const, models: ["granted"], request: vi.fn() }, network: false };
@@ -143,4 +145,34 @@ it("retains teardown failures instead of reporting a clean stop", async () => {
  await vi.waitFor(() => expect(mock.launches).toHaveLength(1)); abort.abort();
  await expect(turn).rejects.toThrow("teardown unconfirmed");
  await session.cleanup().catch(() => {});
+});
+
+it("persists final source references before releasing the guest for destruction", async () => {
+ const input = await options(); const content = "source content";
+ await writeFile(join(input.config.workspaceRoot, "code.ts"), content);
+ mock.sourceOnClose = { sourceLinks: [{ path: "code.ts", hash: "sha256:" + createHash("sha256").update(content).digest("hex") }] };
+ let release!: () => void;
+ const pending = new Promise<void>(resolve => { release = resolve; });
+ const persist = vi.fn(() => pending);
+ const session = createWorkbenchConsoleSession({ ...input, onSourceContext: persist }); await session.send("hello");
+ const cleanup = session.cleanup(); await vi.waitFor(() => expect(persist).toHaveBeenCalledOnce());
+ expect(mock.destroyed).toBe(false); expect(mock.requests.some(frame => frame.type === "release")).toBe(false);
+ expect(persist).toHaveBeenCalledWith(mock.sourceOnClose, { workspaceRoot: input.config.workspaceRoot, scanId: session.scanId, runId: expect.any(String) });
+ release(); await cleanup; expect(mock.destroyed).toBe(true);
+ await session.cleanup(); expect(persist).toHaveBeenCalledOnce();
+});
+it("never treats guest state as a host source grant", async () => {
+ const input = await options(); mock.scopeEnabled = true;
+ await writeFile(join(input.config.workspaceRoot, "code.ts"), "source");
+ const persist = vi.fn(); const session = createWorkbenchConsoleSession({ ...input, onSourceContext: persist }); await session.send("hello");
+ mock.output!(JSON.stringify({ type: "state", snapshot: { scanId: session.scanId, messages: [], tools: [], target: "/workspace", localScopePath: "/workspace", autonomyMode: "standard" } }) + "\n");
+ mock.output!(JSON.stringify({ type: "source-context", artifact: { sourceLinks: [{ path: "code.ts", hash: "sha256:" + createHash("sha256").update("source").digest("hex") }] } }) + "\n");
+ await session.cleanup(); expect(persist).not.toHaveBeenCalled();
+});
+it("surfaces durable-ingestion failure while still confirming teardown", async () => {
+ const input = await options(); await writeFile(join(input.config.workspaceRoot, "code.ts"), "source");
+ mock.sourceOnClose = { sourceLinks: [{ path: "code.ts", hash: "sha256:" + createHash("sha256").update("source").digest("hex") }] };
+ const session = createWorkbenchConsoleSession({ ...input, onSourceContext: async () => { throw new Error("private adapter failure"); } });
+ await session.send("hello"); await expect(session.cleanup()).rejects.toThrow("source context persistence failed");
+ expect(mock.destroyed).toBe(true);
 });

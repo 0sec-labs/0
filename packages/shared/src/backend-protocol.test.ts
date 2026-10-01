@@ -43,6 +43,9 @@ describe("backend frontend/engine contract", () => {
     expect(backendCapabilitiesForApiPath("/api/console/fixes/publish")).toEqual(["workflows", "approvals"]);
     expect(backendCapabilitiesForApiPath("/api/console/fixes/prepare")).toEqual(["workflows"]);
     expect(backendCapabilitiesForApiPath("/api/console/settings")).toEqual(["operator-services"]);
+    expect(backendCapabilitiesForApiPath("/api/console/learning")).toEqual(["learning"]);
+    expect(backendCapabilitiesForApiPath("/api/console/learning/improvements/same/evaluate")).toEqual(["learning"]);
+    expect(backendCapabilitiesForApiPath("/api/console/workflow-definitions/same/rollback")).toEqual(["workflows"]);
     expect(backendCapabilitiesForApiPath("/api/console/service-plugins")).toEqual(["operator-services"]);
     expect(backendCapabilitiesForApiPath("/api/console/checks")).toEqual(["operator-services", "workspaces"]);
     expect(backendCapabilitiesForApiPath("/api/control/reset-database")).toEqual(["process-controls"]);

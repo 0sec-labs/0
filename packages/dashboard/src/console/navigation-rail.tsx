@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { MessageSquare, ShieldCheck, Plug, Settings, Workflow } from "lucide-react";
+import { BookOpen, MessageSquare, ShieldCheck, Plug, Settings, Workflow } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +13,7 @@ export function ConsoleNavigationRail({ settingsHref }: { settingsHref: string }
     { to: "/findings", label: "Findings", icon: ShieldCheck },
     { to: "/workflows", label: "Workflows", icon: Workflow },
     { to: "/plugins", label: "Plugins", icon: Plug },
+    { to: "/learning", label: "Learning", icon: BookOpen },
   ];
   return <div className="relative hidden w-14 shrink-0 lg:block">
     <nav aria-label="Workspace navigation" className="group absolute inset-y-0 left-0 z-40 flex w-14 flex-col gap-2 overflow-hidden bg-background px-2 py-3 transition-[width,box-shadow] duration-150 ease-out motion-reduce:transition-none has-[:focus-visible]:w-56 has-[:focus-visible]:shadow-xl [@media(hover:hover)]:hover:w-56 [@media(hover:hover)]:hover:shadow-xl">

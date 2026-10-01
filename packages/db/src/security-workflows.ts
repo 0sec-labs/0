@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { LearningStore, appendLearningEvent, enqueueLearningWork, initializeLearningTables, learningProjectId } from "./learning.js";
 import { ensureDatabaseDirectory } from "./db-directory.js";
 import { parseSecurityWorkflowInput, type SecurityWorkflow, type SecurityWorkflowExecution, type SecurityWorkflowExecutionStatus, type SecurityWorkflowNodeResult } from "@0/shared";
 import { resolveOsecDbPath } from "./database.js";
@@ -8,6 +9,16 @@ export class SecurityWorkflowStoreError extends Error {
   constructor(message: string, readonly statusCode: number) { super(message); this.name = "SecurityWorkflowStoreError"; }
 }
 export interface SecurityWorkflowExecutionUpdate { status?: SecurityWorkflowExecutionStatus; jobId?: string; nodeResults?: Record<string, SecurityWorkflowNodeResult>; error?: string }
+/** Immutable snapshot; restoring one creates a new revision rather than rewriting history. */
+export interface SecurityWorkflowVersion {
+  workflowId: string;
+  revision: number;
+  definition: SecurityWorkflow;
+  parentRevision: number | null;
+  restoredFromRevision: number | null;
+  digest: string;
+  createdAt: string;
+}
 const activeStatuses: Partial<Record<SecurityWorkflowExecutionStatus, true>> = { queued: true, running: true };
 const statuses: Record<SecurityWorkflowExecutionStatus, true> = { queued: true, running: true, completed: true, failed: true, cancelled: true, interrupted: true };
 
@@ -20,14 +31,62 @@ export class SecurityWorkflowStore {
     ensureDatabaseDirectory(path);
     this.#db = createShimmedDatabase(path);
     this.#db.pragma("busy_timeout = 5000");
+    initializeLearningTables(this.#db);
     this.#db.exec(`CREATE TABLE IF NOT EXISTS workflow_definitions (id TEXT PRIMARY KEY, revision INTEGER NOT NULL, definition_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS workflow_executions (id TEXT PRIMARY KEY, workflow_id TEXT NOT NULL, workflow_revision INTEGER NOT NULL, session_id TEXT NOT NULL, status TEXT NOT NULL, execution_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS workflow_executions_workflow ON workflow_executions(workflow_id, created_at);
       CREATE INDEX IF NOT EXISTS workflow_executions_session ON workflow_executions(session_id, created_at);`);
     this.#db.exec("CREATE TABLE IF NOT EXISTS workflow_execution_results (execution_id TEXT PRIMARY KEY, result_json TEXT NOT NULL);");
+    this.#db.exec(`CREATE TABLE IF NOT EXISTS workflow_definition_versions (
+      workflow_id TEXT NOT NULL, revision INTEGER NOT NULL, definition_json TEXT NOT NULL,
+      parent_revision INTEGER, restored_from_revision INTEGER, digest TEXT NOT NULL, created_at TEXT NOT NULL,
+      PRIMARY KEY (workflow_id, revision));`);
+    // Legacy stores retained only the current definition and execution snapshots. Recover
+    // what exists, without inventing missing revisions or treating unsaved templates as definitions.
+    this.#db.transaction(() => {
+      for (const workflow of this.list()) {
+        if (this.getVersion(workflow.id, workflow.revision)) continue;
+        this.#recordVersion(workflow, null, null, true);
+        const snapshots = this.#db.prepare("SELECT execution_json FROM workflow_executions WHERE workflow_id = ? ORDER BY created_at, id").all(workflow.id);
+        for (const row of snapshots) {
+          const execution = JSON.parse(String((row as { execution_json: string }).execution_json)) as SecurityWorkflowExecution;
+          if (execution.workflow.revision < workflow.revision) this.#recordVersion(execution.workflow, null, null, true);
+        }
+      }
+    })();
   }
+  /** Shares the control connection so learning and workflow transactions cannot race. */
+  learningStore(): LearningStore { return new LearningStore(this.#db); }
   list(): SecurityWorkflow[] { return this.#db.prepare("SELECT definition_json FROM workflow_definitions ORDER BY updated_at DESC, id").all().map(row => JSON.parse(String((row as { definition_json: string }).definition_json)) as SecurityWorkflow); }
   get(id: string): SecurityWorkflow | null { const row = this.#db.prepare("SELECT definition_json FROM workflow_definitions WHERE id = ?").all(id)[0]; return row ? JSON.parse(String((row as { definition_json: string }).definition_json)) as SecurityWorkflow : null; }
+  listVersions(id: string): SecurityWorkflowVersion[] {
+    return this.#db.prepare("SELECT * FROM workflow_definition_versions WHERE workflow_id = ? ORDER BY revision DESC").all(id).map(readVersion);
+  }
+  getVersion(id: string, revision: number): SecurityWorkflowVersion | null {
+    const row = this.#db.prepare("SELECT * FROM workflow_definition_versions WHERE workflow_id = ? AND revision = ?").all(id, revision)[0];
+    return row ? readVersion(row) : null;
+  }
+  #recordVersion(workflow: SecurityWorkflow, parentRevision: number | null, restoredFromRevision: number | null, recover = false): void {
+    const json = JSON.stringify(workflow);
+    this.#db.prepare(`${recover ? "INSERT OR IGNORE" : "INSERT"} INTO workflow_definition_versions (workflow_id, revision, definition_json, parent_revision, restored_from_revision, digest, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run(workflow.id, workflow.revision, json, parentRevision, restoredFromRevision, createHash("sha256").update(json).digest("hex"), workflow.updatedAt);
+  }
+  /** CAS restore: existing runs and reviewed schedule revisions remain pinned. */
+  rollback(id: string, targetRevision: number, expectedRevision: number): SecurityWorkflow {
+    if (!Number.isInteger(targetRevision) || targetRevision < 1 || !Number.isInteger(expectedRevision) || expectedRevision < 1) throw new SecurityWorkflowStoreError("Invalid workflow revision.", 400);
+    return this.#db.transaction(() => {
+      const current = this.get(id);
+      if (!current) throw new SecurityWorkflowStoreError("Workflow not found.", 404);
+      if (current.revision !== expectedRevision) throw new SecurityWorkflowStoreError("Workflow changed. Reload before restoring.", 409);
+      const previous = this.getVersion(id, targetRevision);
+      if (!previous) throw new SecurityWorkflowStoreError("Workflow version not found.", 404);
+      const workflow: SecurityWorkflow = { ...previous.definition, revision: current.revision + 1, createdAt: current.createdAt, updatedAt: new Date().toISOString() };
+      this.#db.prepare("UPDATE workflow_definitions SET revision = ?, definition_json = ?, updated_at = ? WHERE id = ? AND revision = ?")
+        .run(workflow.revision, JSON.stringify(workflow), workflow.updatedAt, id, expectedRevision);
+      this.#recordVersion(workflow, current.revision, targetRevision);
+      return workflow;
+    })();
+  }
   save(value: unknown): SecurityWorkflow {
     let input;
     try { input = parseSecurityWorkflowInput(value); } catch (error) { throw new SecurityWorkflowStoreError(error instanceof Error ? error.message : "Invalid workflow.", 400); }
@@ -35,10 +94,12 @@ export class SecurityWorkflowStore {
       const existing = input.id ? this.get(input.id) : null;
       if (input.id && !existing && input.revision !== undefined) throw new SecurityWorkflowStoreError("Workflow not found.", 404);
       if (existing && input.revision !== existing.revision) throw new SecurityWorkflowStoreError("Workflow changed. Reload before saving.", 409);
+      if (input.id && !existing && this.#db.prepare("SELECT 1 FROM workflow_definition_versions WHERE workflow_id = ? LIMIT 1").all(input.id).length > 0) throw new SecurityWorkflowStoreError("Deleted workflow IDs cannot be reused.", 409);
       const now = new Date().toISOString();
       const workflow: SecurityWorkflow = { ...input, id: input.id ?? randomUUID(), revision: (existing?.revision ?? 0) + 1, createdAt: existing?.createdAt ?? now, updatedAt: now };
       if (existing) this.#db.prepare("UPDATE workflow_definitions SET revision = ?, definition_json = ?, updated_at = ? WHERE id = ?").run(workflow.revision, JSON.stringify(workflow), now, workflow.id);
       else this.#db.prepare("INSERT INTO workflow_definitions (id, revision, definition_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?)").run(workflow.id, workflow.revision, JSON.stringify(workflow), now, now);
+      this.#recordVersion(workflow, existing?.revision ?? null, null);
       return workflow;
     })();
   }
@@ -100,6 +161,24 @@ export class SecurityWorkflowStore {
       }
       const execution: SecurityWorkflowExecution = { ...current, status: update.status ?? current.status, jobId: update.jobId ?? current.jobId, nodeResults: update.nodeResults ?? current.nodeResults, error: update.error ?? current.error, updatedAt: new Date().toISOString() };
       this.#db.prepare("UPDATE workflow_executions SET status = ?, execution_json = ?, updated_at = ? WHERE id = ?").run(execution.status, JSON.stringify(execution), execution.updatedAt, id);
+      const projectId = learningProjectId(execution.workflow.target || execution.workflowId);
+      const observe = (kind: string, outcome: string, stepId?: string) => {
+        const event = appendLearningEvent(this.#db, {
+          idempotencyKey: `workflow-terminal:${createHash("sha256").update(JSON.stringify({ executionId: id, stepId: stepId ?? null, kind, outcome })).digest("hex")}`,
+          projectId, kind, outcome, evidenceStrength: "operational",
+          summary: stepId ? `Workflow step ${outcome}.` : `Workflow execution ${outcome}.`,
+          executionId: id, workflowId: execution.workflowId, workflowRevision: execution.workflowRevision,
+          ...(stepId ? { stepId } : {}),
+        });
+        enqueueLearningWork(this.#db, event.id);
+      };
+      // Operational completion is not evidence that a vulnerability exists or a fix works.
+      // Persist the experience and its outbox entry atomically with the execution transition.
+      const terminalNodes = new Set(["completed", "failed", "cancelled", "interrupted", "skipped", "blocked"]);
+      for (const [stepId, result] of Object.entries(execution.nodeResults)) {
+        if (terminalNodes.has(result.status) && !terminalNodes.has(current.nodeResults[stepId]?.status ?? "")) observe("workflow-step", result.status, stepId);
+      }
+      if (!activeStatuses[execution.status]) observe("workflow-run", execution.status);
       return execution;
     })();
   }
@@ -125,4 +204,9 @@ export class SecurityWorkflowStore {
 function processAlive(pid: number): boolean {
   try { process.kill(pid, 0); return true; }
   catch (error) { return !(error && typeof error === "object" && "code" in error && error.code === "ESRCH"); }
+}
+
+function readVersion(value: unknown): SecurityWorkflowVersion {
+  const row = value as { workflow_id: string; revision: number; definition_json: string; parent_revision: number | null; restored_from_revision: number | null; digest: string; created_at: string };
+  return { workflowId: row.workflow_id, revision: row.revision, definition: JSON.parse(row.definition_json) as SecurityWorkflow, parentRevision: row.parent_revision, restoredFromRevision: row.restored_from_revision, digest: row.digest, createdAt: row.created_at };
 }

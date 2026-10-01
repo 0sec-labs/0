@@ -57,6 +57,11 @@ Browser, CLI, and MCP share one workflow runner with retained results.
 Start from 12 templates, customize steps, and run manually or with browser triggers and schedules.
 **Template:** starting point · **Workflow:** reusable steps · **Run:** one execution.
 
+**Learning** retains local run activity, source-grounded notes and evaluated
+improvement history. Saved workflows keep immutable revisions and support restore.
+Use `0 learning status` or open Learning in the browser.
+[Learning documentation](https://docs.0.security/learning/).
+
 ```bash
 0 workflow list --templates
 0 workflow run --template security-research \

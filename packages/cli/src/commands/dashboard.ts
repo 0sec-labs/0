@@ -1857,7 +1857,7 @@ export function registerDashboardCommand(program: Command): void {
       const costCapUsd = opts.engineCostCap === undefined ? 5 : Number(opts.engineCostCap);
       if (!Number.isInteger(timeCapMs) || timeCapMs < 1 || timeCapMs > 86_400_000 || !Number.isFinite(costCapUsd) || costCapUsd <= 0 || costCapUsd > 1000) throw new Error("Engine limits must be positive, with time at most 86400000 ms and cost at most $1000.");
       const controlToken = randomUUID();
-      const capabilities = ["sessions", "workflows", "schedules", "approvals", "events", "workspaces", "artifacts", "model-connections", "operator-services", "process-controls", ...(engineBearer ? ["workflow-engine"] : [])];
+      const capabilities = ["sessions", "workflows", "schedules", "approvals", "events", "workspaces", "artifacts", "model-connections", "operator-services", "process-controls", "learning", ...(engineBearer ? ["workflow-engine"] : [])];
       const localHandshake = createBackendHandshake(opts.dbPath, capabilities);
       const backends = new BackendConnectionRegistry({ configPath: opts.backendsConfig, localHandshake });
       let engine: WorkflowEngineService | undefined;
@@ -1875,6 +1875,7 @@ export function registerDashboardCommand(program: Command): void {
         const consoleGateway = startupGateway = new ConsoleGateway({ dbPath: opts.dbPath });
         const operator = startupOperator = new WebOperatorServices({ isTurnActive: () => consoleGateway.hasActiveTurns() });
         const workflows = startupWorkflows = new WebWorkflowService({ gateway: consoleGateway, dbPath: opts.dbPath });
+        consoleGateway.attachLearningRecorder(event => workflows.learning.recordChatOutcome(event));
         consoleGateway.attachWorkflowLifecycle({ invoke: (sessionId, name, args, capabilities) => workflows.invokeLifecycle(sessionId, name, args, capabilities) });
         const triggers = startupTriggers = new WorkflowTriggerService({ dbPath: opts.dbPath, adapter: {
           async validate(trigger) {

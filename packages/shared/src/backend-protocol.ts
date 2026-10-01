@@ -3,7 +3,7 @@ import { z } from "zod";
 /** Version of 0's frontend/engine HTTP and event contract, independent of model APIs. */
 export const BACKEND_PROTOCOL_VERSION = 1 as const;
 export const BACKEND_CAPABILITIES = [
-  "sessions", "workflows", "workflow-engine", "schedules", "approvals", "events", "workspaces", "artifacts", "model-connections", "process-controls", "operator-services",
+  "sessions", "workflows", "workflow-engine", "schedules", "approvals", "events", "workspaces", "artifacts", "model-connections", "process-controls", "operator-services", "learning",
 ] as const;
 export type BackendCapability = typeof BACKEND_CAPABILITIES[number];
 export const BackendCapabilitySchema = z.enum(BACKEND_CAPABILITIES);
@@ -118,7 +118,8 @@ export function backendCapabilitiesForApiPath(pathname: string): BackendCapabili
       if (operation === "events") add("events");
       if (["models", "providers", "connections", "accounts", "runtime"].includes(operation ?? "")) add("model-connections");
       if (["files", "directories", "paths", "workspace", "project"].includes(operation ?? "")) add("workspaces");
-    } else if (["workflow-triggers", "workflow-schedules"].includes(family ?? "")) add("schedules");
+    } else if (family === "learning") add("learning");
+    else if (["workflow-triggers", "workflow-schedules"].includes(family ?? "")) add("schedules");
     else if (["workflows", "workflow-definitions", "workflow-executions", "workflow-tool-catalog", "fixes"].includes(family ?? "")) {
       add("workflows");
       if (family === "fixes" && (["apply", "publish"].includes(parts[2] ?? "") || ["apply", "publish"].includes(parts[3] ?? ""))) add("approvals");

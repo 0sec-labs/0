@@ -7,7 +7,7 @@ tableOfContents:
 ---
 
 Find the command, arguments, and options for your task. This reference covers
-**59 top-level commands** and their registered subcommands.
+**60 top-level commands** and their registered subcommands.
 
 For a worked example, start with [Scan Workflows](/scan-workflows/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
@@ -3231,6 +3231,57 @@ separately running engine and is not provided by editing stored history.
 | `--backends-config <path>` | — | Operator backend connection registry JSON file |
 | `--db-path <path>` | — | Control database with saved workflows and run history |
 | `--format <format>` | `json` | Output format: json or text |
+
+### learning
+
+```text
+0 learning
+```
+
+Inspect tenant-local learning activity and evaluation provenance. See [Learning](/learning/) for trust boundaries and workflow version restoration.
+
+Subcommands: [status](#learning-status) · [process](#learning-process) · [evolve](#learning-evolve).
+
+#### learning status
+
+```text
+0 learning status [options]
+```
+
+Read recorded activity, retained knowledge, improvement states and queue status. Project filters accept a local source path or project identity. This command makes no model calls.
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--project <id>` | — | Filter by project |
+| `--json` | — | Output structured JSON |
+
+#### learning process
+
+```text
+0 learning process [options]
+```
+
+Process bounded queued observations. For an explicitly selected local source project, import existing current opted-in source notes. The default worker does not invent lessons from completion metadata or call a model.
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--project <id>` | — | Filter by project |
+| `--limit <number>` | — | Maximum observations to process |
+| `--json` | — | Output structured JSON |
+
+#### learning evolve
+
+```text
+0 learning evolve [options]
+```
+
+Run the existing evolution controller with an explicit configuration and retain integrity-checked registry receipts. This can invoke configured models and incur their costs. Its output-fixture evaluation is not proof of improved security discovery. Promotion authority remains with the evolution registry and its configured gates.
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--config <path>` **required** | — | Evolution config JSON file |
+| `--project <id>` **required** | — | Project associated with the evolution artifacts |
+| `--json` | — | Output structured JSON |
 
 ## Reference sources
 

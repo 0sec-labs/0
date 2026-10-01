@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ConsoleSessionConfig, LlmApiRuntime } from "@0/core";
 import type { Finding } from "@0/shared";
-import { osecDB } from "@0/db";
+import { osecDB, LearningStore, learningProjectId } from "@0/db";
 import type { WorkbenchConsoleSessionOptions } from "./workbench-console-session.js";
 const fixture = vi.hoisted(() => ({ workspace: "", home: "", broker: vi.fn(), proxy: vi.fn(), settings: vi.fn(), assets: vi.fn() }));
 vi.mock("@0/core", async original => ({ ...await original<object>(), createWorkbenchProviderBroker: fixture.broker }));
@@ -41,6 +41,28 @@ function setup() {
 }
 
 describe("isolated console result import", () => {
+  it("retains only validated source metadata in the explicit host learning database", async () => {
+    const { input, dbPath, root } = setup();
+    const sourceLinks = [{ path: "src/app.ts", hash: `sha256:${"a".repeat(64)}` }];
+    const context = { workspaceRoot: root, scanId: "import-fixture", runId: "vm-run" };
+    await input.onSourceContext!({ sourceLinks }, context);
+    await input.onSourceContext!({ sourceLinks }, context);
+    const store = new LearningStore(dbPath);
+    try {
+      expect(store.listEvents({ projectId: learningProjectId(root) })).toEqual([
+        expect.objectContaining({ kind: "source-context", evidenceStrength: "hypothesis", sourceLinks, runId: "vm-run" }),
+      ]);
+      expect(store.listKnowledge()).toEqual([]);
+    } finally { store.close(); }
+  });
+  it("honors the source-memory disable switch before opening a host store", async () => {
+    const { input, dbPath, root } = setup();
+    vi.stubEnv("ZERO_DISABLE_HUNT_MEMORY", "true");
+    try {
+      await input.onSourceContext!({ sourceLinks: [] }, { workspaceRoot: root, scanId: "import-fixture", runId: "vm-run" });
+      expect(existsSync(dbPath)).toBe(false);
+    } finally { vi.unstubAllEnvs(); }
+  });
   it("rejects invalid findings before opening the host store and grants no guest credentials", () => {
     const { input, dbPath, credentialResolver } = setup();
     expect(existsSync(dbPath)).toBe(false);
