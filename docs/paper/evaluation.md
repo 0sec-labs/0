@@ -111,3 +111,11 @@ Use wording consistent with current artifacts:
 3. Where possible, report per-slice outcomes rather than a single merged score.
 4. Treat router metrics as intermediate unless there is a direct online A/B run
    tying router policy to benchmark outcomes.
+
+## Evidence reconciliation (2026-09-30)
+
+The April tables above are preserved historical reports. Their complete raw attempt, failure, source/model and supplier-cost receipts are unavailable. They do not establish current single-shot performance, finding precision or autonomous-evolution efficacy.
+
+Current publication qualification comes from [the generated audit](generated/evidence-tables.md), [hashed input manifest](evidence/manifest.json) and [claim map](evidence/claim-map.json). The May 4 retained XBOW success union is incompatible with the May 6 ledger snapshot. The per-model consolidator includes both modes, so the May 6 black-box/single-shot interpretation is suppressed without changing historical numeric fields.
+
+The router audit retains weak label provenance, duplicate texts, repeated target groups and a pooled always-positive baseline. The pooled baseline is not identical-fold CV. Row-CV efficacy claims are omitted; no retraining or deployment occurred. Failed CyberGym tasks, A/B parser errors and April regressions remain visible. Source implementations and synthetic contract tests are distinct from empirical efficacy; qualification experiments remain separately scoped in #120.

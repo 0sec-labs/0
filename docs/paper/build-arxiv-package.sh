@@ -8,6 +8,9 @@ rm -f "$OUT"
 tar -czf "$OUT" \
   "0-submission.tex" \
   "0-submission.bbl" \
-  "refs.bib"
+  "refs.bib" \
+  "generated/evidence-tables.tex" \
+  "evidence/manifest.json" \
+  "evidence/claim-map.json"
 
 echo "Wrote $(pwd)/$OUT"
