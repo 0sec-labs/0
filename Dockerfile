@@ -33,7 +33,6 @@ WORKDIR /app
 
 # Copy manifests first for better layer caching
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY tsconfig.base.json ./
 COPY scripts ./scripts
 COPY packages ./packages
 COPY assets ./assets

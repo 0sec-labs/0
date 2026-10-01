@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 
-const fromRoot = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
+const repoRoot = new URL("../../", import.meta.url);
+const fromRoot = (path: string): string => fileURLToPath(new URL(path, repoRoot));
 
 // Resolve workspace deps to TypeScript source so tests do not depend on stale
 // or missing dist output from sibling packages.

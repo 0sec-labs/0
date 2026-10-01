@@ -1,5 +1,5 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "../../scripts/config/tsconfig.base.json",
   "compilerOptions": {
     "composite": true,
     "tsBuildInfoFile": "tsconfig.tsbuildinfo",
