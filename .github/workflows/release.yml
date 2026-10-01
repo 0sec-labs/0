@@ -121,6 +121,8 @@ jobs:
           )
       - name: Smoke standalone plugin execution
         run: node scripts/smoke-plugin-runtime.mjs "dist-bin/${{ matrix.asset }}"
+      - name: Smoke standalone web setup and persistence
+        run: node scripts/smoke-web-setup.mjs "dist-bin/${{ matrix.asset }}"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset }}
@@ -210,6 +212,7 @@ jobs:
           node dist/0.js --version
           bash scripts/smoke-cli.sh "node dist/0.js"
           node scripts/smoke-plugin-runtime.mjs dist/0.js
+          node scripts/smoke-web-setup.mjs dist/0.js
       - name: Smoke an installed package
         run: |
           mkdir -p "$RUNNER_TEMP/npm-pack" "$RUNNER_TEMP/npm-smoke"

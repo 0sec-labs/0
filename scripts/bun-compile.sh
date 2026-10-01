@@ -38,6 +38,8 @@ mkdir -p "$(dirname "$OUTFILE")"
 if [ -n "$TARGET" ]; then
   TARGET_ARG="--target=$TARGET"
   NATIVE_TARGET="${TARGET#bun-}"
+  NATIVE_TARGET="${NATIVE_TARGET%-baseline}"
+  NATIVE_TARGET="${NATIVE_TARGET/windows-/win32-}"
   # Append target suffix to default outfile if caller didn't override
   if [ "$OUTFILE" = "dist-bin/0" ]; then
     OUTFILE="dist-bin/0-${TARGET#bun-}"
@@ -52,6 +54,15 @@ else
     MINGW*-x86_64|MSYS*-x86_64) NATIVE_TARGET="win32-x64" ;;
     MINGW*-aarch64|MSYS*-aarch64) NATIVE_TARGET="win32-arm64" ;;
     *) echo "Unsupported native target: $(uname -s)-$(uname -m)" >&2; exit 2 ;;
+  esac
+fi
+
+# The pinned Bun compiler's default x64 executable requires AVX2. Ship its
+# baseline variant so older CPUs and x64 container emulation can start the CLI.
+if [ -z "$TARGET" ]; then
+  case "$NATIVE_TARGET" in
+    linux-x64) TARGET_ARG="--target=bun-linux-x64-baseline" ;;
+    win32-x64) TARGET_ARG="--target=bun-windows-x64-baseline" ;;
   esac
 fi
 
