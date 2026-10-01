@@ -305,7 +305,11 @@ installed plugins into private guest storage and load their tools inside the VM.
 The controller never executes their code. Approvals are mapped to the guest
 workspace, and changed capabilities require approval again. External executables
 used by a plugin must be available in the workbench image (the standard image
-includes Foxguard). Existing chats keep their original tool set.
+includes Foxguard). The workbench image pins Foxguard source revision
+`01a77530488f198584deb3ccec7cd2ce2f1c7688`, with both `v1` and `v2` policy
+support; the published 0.14.0 release predates `v2`. Build provenance lives at
+`/usr/local/share/0/foxguard-source.json` inside the guest. Existing chats keep
+their original tool set.
 Other CLI workflows do not automatically acquire this TUI host.
 
 ### Update deliberately

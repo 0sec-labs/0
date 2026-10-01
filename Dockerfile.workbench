@@ -5,6 +5,23 @@
 # Kali is opt-in and requires a pre-provisioned immutable base (see architecture doc).
 ARG WORKBENCH_BASE=debian-base
 ARG KALI_IMAGE=scratch
+FROM rust:1.93-bookworm@sha256:e469417188261e17b3ec9c14a54c2802beafe400bf9baf9688fdb5294d925c06 AS foxguard-builder
+# The released 0.14.0 binary predates the v2 policy used by this repository.
+# Pin both source identity and archive bytes until that support is released.
+ENV RUSTUP_TOOLCHAIN=1.93.1 CARGO_BUILD_JOBS=2
+WORKDIR /build/foxguard
+RUN curl --fail --location --retry 3 --silent --show-error \
+      https://codeload.github.com/0sec-labs/foxguard/tar.gz/01a77530488f198584deb3ccec7cd2ce2f1c7688 -o /tmp/foxguard-source.tar.gz \
+    && printf '%s  /tmp/foxguard-source.tar.gz\n' c293250bd27704930662c93389300115635948da33109776a864ebeb7cfa9cac | sha256sum -c - \
+    && tar -xzf /tmp/foxguard-source.tar.gz --strip-components=1 \
+    && cargo build --locked --release --bin foxguard \
+    && install -D -m 0755 target/release/foxguard /out/foxguard \
+    && printf '%s\n' '{"revision":"01a77530488f198584deb3ccec7cd2ce2f1c7688","archiveSha256":"c293250bd27704930662c93389300115635948da33109776a864ebeb7cfa9cac","policyVersions":["v1","v2"]}' > /out/foxguard-source.json
+RUN mkdir /tmp/foxguard-policy-smoke \
+    && printf 'pr_security_policy:\n  version: v2\n  scope: diff\n' > /tmp/foxguard-policy-smoke/.foxguard.yml \
+    && printf 'print("ok")\n' > /tmp/foxguard-policy-smoke/fixture.py \
+    && /out/foxguard --format json /tmp/foxguard-policy-smoke/fixture.py > /tmp/foxguard-policy-smoke/report.json
+
 FROM node:24.21.0-bookworm@sha256:64af3819f9275802414d7cdc38c27e9d82bd564dec4d4da87d008255d36c63b4 AS node-runtime
 
 FROM node-runtime AS native-deps
@@ -51,8 +68,6 @@ RUN rm -f /etc/apt/sources.list.d/debian.sources \
     && apt-get update -qq \
     && node /opt/0-build/install-workbench-profile.mjs "$TOOLBOX_PROFILE" \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
-COPY scripts/provision-foxguard.sh /opt/0-build/provision-foxguard.sh
-RUN sh /opt/0-build/provision-foxguard.sh
 
 # No apt/pip bootstrap here: the supplied pinned Kali image must already have
 # required tools, Python modules and browser libraries; inventory fails if absent.
@@ -64,6 +79,8 @@ RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
 FROM ${WORKBENCH_BASE} AS workbench-base
+COPY --from=foxguard-builder /out/foxguard /usr/local/bin/foxguard
+COPY --from=foxguard-builder /out/foxguard-source.json /usr/local/share/0/foxguard-source.json
 ARG TARGETARCH
 RUN test "$TARGETARCH" = arm64
 # Release digests are vendor-published GitHub asset SHA256s, not downloaded
