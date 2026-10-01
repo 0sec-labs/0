@@ -304,7 +304,7 @@ importers:
         specifier: ^1.7.0
         version: 1.16.0(react@19.2.6)
       mermaid:
-        specifier: ^11.17.2
+        specifier: ^11.16.1
         version: 11.17.2
       react:
         specifier: ^19.2.0
