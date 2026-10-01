@@ -34,7 +34,7 @@ export function Select({ value, onValueChange, options, className, label, ...pro
         renderValue={selected => options.find(option => option.value === selected)?.label ?? selected}
         alignItemWithTrigger={false}
         sideOffset={6}
-        className="!h-10 !w-full !min-w-0 !justify-between !rounded-xl !border !border-transparent !bg-muted/60 !px-3 !pr-9 !text-sm !font-normal !text-foreground !shadow-none !ring-0 hover:!bg-muted focus-visible:!outline focus-visible:!outline-1 focus-visible:!outline-offset-2 focus-visible:!outline-foreground/40 [&>span:last-child]:hidden"
+        className="!h-10 !w-full !min-w-0 !justify-between !rounded-xl !border !border-[var(--field-border)] !bg-[var(--field-surface)] !px-3 !pr-9 !text-sm !font-normal !text-foreground !shadow-none !ring-0 hover:!bg-muted focus-visible:!outline focus-visible:!outline-1 focus-visible:!outline-offset-2 focus-visible:!outline-foreground/40 [&>span:last-child]:hidden"
       >
         {options.map(option => <KumoSelect.Option key={option.value} value={option.value} disabled={option.disabled} className="!mx-1.5 !min-h-9 !gap-3 !rounded-xl !px-3 !py-2 !text-sm !leading-5 !text-foreground data-highlighted:!bg-muted !ring-0 [&_svg]:size-4">{option.label}</KumoSelect.Option>)}
       </KumoSelect>

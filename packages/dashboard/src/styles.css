@@ -220,13 +220,13 @@
 .console-message-surface, .console-frame .console-tool-activity { border-radius: var(--console-surface-radius); }
 .console-frame header, .console-frame footer { border: 0; }
 .console-frame .session-rail { background: color-mix(in srgb, var(--background), var(--foreground) 3%); }
-.console-frame textarea { border: 0; box-shadow: none; }
+.console-frame .console-composer textarea { border: 0; box-shadow: none; }
 [data-reduced-motion="true"] *, [data-reduced-motion="true"] .console-entry,
 [data-reduced-motion="true"] .console-spinner, [data-reduced-motion="true"] .console-skeleton,
 [data-reduced-motion="true"] .console-enter { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 
-.console-frame .console-composer { background: var(--muted); border: 0; border-radius: 24px; box-shadow: none; }
-.console-frame .console-composer:focus-within { background: color-mix(in srgb, var(--muted), var(--foreground) 3%); box-shadow: none; }
+.console-frame .console-composer { background: color-mix(in srgb, var(--muted), var(--foreground) 8%); border: 0; border-radius: 24px; box-shadow: none; }
+.console-frame .console-composer:focus-within { background: color-mix(in srgb, var(--muted), var(--foreground) 10%); box-shadow: none; }
 .console-frame .console-composer input { border-color: transparent; background: transparent; }
 
 /* Shared conversation and settings geometry. */
@@ -280,7 +280,7 @@
 [data-reduced-motion="true"] [role="menu"][data-ending-style] { transform: none; }
 .console-controls .control-section { border: 0; background: transparent; box-shadow: none; border-radius: 0; padding-block: 12px; }
 .console-controls .control-section > [data-slot="card-header"], .console-controls .control-section > [data-slot="card-content"] { padding-inline: 0; }
-.console-controls input:not([type="checkbox"]), .console-controls select, .console-controls textarea { border-radius: 12px; background: var(--muted); border-color: transparent; }
+.console-controls input:not([type="checkbox"]), .console-controls select, .console-controls textarea { border-radius: 12px; background: var(--field-surface); border-color: var(--field-border); }
 /* One quiet focus cue replaces the stacked component ring and orange border. */
 .console-frame input:not([type="checkbox"]):focus-visible,
 .console-controls input:not([type="checkbox"]):focus-visible,
@@ -451,3 +451,9 @@
 .console-workspace-bar { margin: 0 12px -12px; padding: 5px 6px 17px; border-radius: 18px 18px 0 0; background: color-mix(in srgb, var(--muted), var(--background) 18%); }
 .console-workspace-bar button { height: 28px; gap: 7px; padding-inline: 9px; font-size: 12px; font-weight: 400; }
 .console-frame .console-composer-stack .console-composer { border-radius: 22px; }
+
+/* Shared field surfaces remain visible inside cards, dialogs, and settings. */
+:root { --field-surface: var(--muted); --field-border: color-mix(in srgb, var(--foreground), transparent 86%); }
+.dark { --field-surface: color-mix(in srgb, var(--muted), var(--foreground) 8%); }
+[data-slot="input"], [data-slot="textarea"] { background: var(--field-surface); border-color: var(--field-border); }
+[data-slot="input"][aria-invalid="true"], [data-slot="textarea"][aria-invalid="true"] { border-color: var(--destructive); }
