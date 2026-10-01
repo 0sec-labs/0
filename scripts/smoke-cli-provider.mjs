@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
-import { join, resolve } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 
 const [tempArg, scenario, ...invocation] = process.argv.slice(2);
 assert.ok(tempArg && invocation.length, "usage: smoke-cli-provider.mjs <temp-dir> <review|scan|review-auth-error|scan-auth-error> <CLI argv...>");
@@ -39,6 +39,22 @@ async function main() {
   const home = join(temp, scenario);
   await mkdir(home, { recursive: true });
   const target = join(temp, "tinyrepo");
+  // This gate tests the installed CLI and API agent, not npm availability.
+  // Provision the static prepass just like the loopback model provider, so a
+  // missing local scanner cannot download a package and consume the deadline.
+  const bin = join(home, "bin");
+  const scannerReceipt = join(home, "scanner.json");
+  await mkdir(bin, { recursive: true });
+  await writeFile(join(bin, "foxguard"), `#!${process.execPath}
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+assert.equal(fs.realpathSync(process.cwd()), fs.realpathSync(${JSON.stringify(target)}));
+assert.deepEqual(process.argv.slice(2), ["--format", "json", "."]);
+const files = ${JSON.stringify(files)};
+for (const file of files) assert.match(fs.readFileSync(file, "utf8"), /console\\.log/);
+fs.writeFileSync(${JSON.stringify(scannerReceipt)}, JSON.stringify({ files, args: process.argv.slice(2) }));
+console.log(JSON.stringify({ schema_version: "1.0.0", findings: [], target: { files_scanned: files.length } }));
+`, { mode: 0o700 });
   const counters = { modelRequests: 0, sourceReceipts: 0, doneResponses: 0, authErrors: 0, targetRequests: 0, unexpectedRequests: 0 };
   let fixtureError;
   const server = createServer(async (request, response) => {
@@ -115,7 +131,7 @@ async function main() {
     // Deliberately do not spread process.env: keys, OAuth tokens, provider pins,
     // fallbacks, proxies, NODE_OPTIONS and configuration overrides must not leak.
     const env = {
-      PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: home, USERPROFILE: home,
+      PATH: `${bin}${delimiter}${process.env.PATH ?? "/usr/bin:/bin"}`, HOME: home, USERPROFILE: home,
       XDG_CONFIG_HOME: join(home, "config"), XDG_DATA_HOME: join(home, "data"), XDG_CACHE_HOME: join(home, "cache"),
       TMPDIR: home, CI: "1", NO_COLOR: "1", TERM: "dumb",
       ZERO_NO_TELEMETRY: "1", DO_NOT_TRACK: "1",
@@ -158,6 +174,11 @@ async function main() {
       process.stdout.write(stdout);
       process.stderr.write(stderr);
       process.stderr.write(`[smoke] ${scenario} transport: ${JSON.stringify(counters)}\n`);
+    }
+    if (review) {
+      const receipt = JSON.parse(await readFile(scannerReceipt, "utf8"));
+      assert.deepEqual(receipt.files, files, "static prepass did not inspect the fixture sources");
+      assert.deepEqual(receipt.args, ["--format", "json", "."]);
     }
     assert.equal(interruption, undefined, interruption);
     assert.equal(signal, null, `CLI terminated by ${signal}`);
