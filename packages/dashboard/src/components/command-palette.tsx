@@ -16,7 +16,7 @@ import type { DashboardResponse, ScanRecord } from "@/types";
 
 type PaletteAction = {
   id: string;
-  group: "Actions" | "Pages" | "Findings" | "Audits";
+  group: "Actions" | "Pages" | "Findings" | "Runs";
   label: string;
   meta: string;
   icon: React.ComponentType<{ className?: string }>;
@@ -25,7 +25,7 @@ type PaletteAction = {
   shortcut?: string;
 };
 
-const GROUPS: PaletteAction["group"][] = ["Actions", "Pages", "Findings", "Audits"];
+const GROUPS: PaletteAction["group"][] = ["Actions", "Pages", "Findings", "Runs"];
 
 export function CommandPalette({
   open,
@@ -193,8 +193,8 @@ export function CommandPalette({
       base.unshift({
         id: "scan-detail",
         group: "Actions",
-        label: "Open this audit",
-        meta: "Audit report",
+        label: "Open this run",
+        meta: "Run report",
         icon: PlayCircle,
         keywords: ["scan timeline detail current"],
         run: () => navigate(`/runs/${selectedScanId}`),
@@ -216,8 +216,8 @@ export function CommandPalette({
     for (const scan of scans?.slice(0, 14) ?? []) {
       base.push({
         id: `scan-${scan.id}`,
-        group: "Audits",
-        label: scan.target,
+        group: "Runs",
+        label: scan.target?.trim() || `Run ${scan.id.slice(0, 8)}`,
         meta: scan.status,
         icon: PlayCircle,
         keywords: [scan.target, scan.status, scan.depth, scan.runtime, scan.mode],
