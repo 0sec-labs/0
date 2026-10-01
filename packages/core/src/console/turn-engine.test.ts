@@ -3850,7 +3850,7 @@ describe("console workflow draft authoring", () => {
     name: "Dependency review", instructions: "Review dependency vulnerabilities and report verified findings.", target: "source:/fixture",
     nodes: [
       { id: "start", type: "trigger", label: "Manual start", enabled: true },
-      { id: "audit", type: "audit", label: "Dependency review", enabled: true, plan: DEFAULT_SECURITY_WORKFLOW_PLAN },
+      { id: "audit", type: "audit", label: "Dependency review", enabled: true, plan: DEFAULT_SECURITY_WORKFLOW_PLAN, execution: { instructions: "Inspect manifests without running shell commands.", allowedAgentTools: ["read_file"] } },
       { id: "report", type: "report", label: "Report", enabled: true },
     ], edges: [{ source: "start", target: "audit" }, { source: "audit", target: "report" }],
   };
@@ -3872,6 +3872,11 @@ describe("console workflow draft authoring", () => {
       const readResult = runtime.calls[2]?.messages.flatMap(message => message.content).find(block => block.type === "tool_result" && block.tool_use_id === "list-1");
       expect(readResult && "content" in readResult ? readResult.content : "").toContain(input.instructions);
       expect(readResult && "content" in readResult ? readResult.content : "").toContain('"edges"');
+      expect(readResult && "content" in readResult ? readResult.content : "").toContain('"allowedAgentTools":["read_file"]');
+      expect(runtime.calls[0]?.system).toContain("workflow.instructions only for description notes");
+      const saveTool = runtime.calls[0]?.tools.find(tool => tool.name === "console_save_workflow");
+      expect(JSON.stringify(saveTool?.input_schema)).toContain('"execution"');
+      expect(JSON.stringify(saveTool?.input_schema)).toContain('"allowedAgentTools"');
       expect(approval).not.toHaveBeenCalled();
       expect(session.scope).toBeUndefined();
       expect(session.localScopePath).toBeUndefined();
@@ -3880,6 +3885,23 @@ describe("console workflow draft authoring", () => {
       const result = runtime.calls[1]?.messages.flatMap(message => message.content).find(block => block.type === "tool_result");
       expect(result && "content" in result ? result.content : "").toContain('"executed":false');
       expect(result && "content" in result ? result.content : "").toContain("/workflows?workflow=workflow-fixture");
+    } finally { await session.cleanup(); }
+  });
+
+  it.each([undefined, []] as const)("preserves omitted versus empty agent tool restrictions (%s)", async allowedAgentTools => {
+    const draft: SecurityWorkflowInput = { ...input, nodes: input.nodes.map(node => node.type === "audit" ? { ...node, execution: { instructions: "", ...(allowedAgentTools === undefined ? {} : { allowedAgentTools: [...allowedAgentTools] }) } } : node) };
+    const save = vi.fn((value: SecurityWorkflowInput) => ({ ...saved, nodes: value.nodes }));
+    const runtime = new ScriptedRuntime([
+      { content: [{ type: "tool_use", id: "restricted-draft", name: "console_save_workflow", input: { ...draft } }], stopReason: "tool_use", durationMs: 1 },
+      endTurn("Draft saved."),
+    ]);
+    const session = createConsoleSession({ runtime, workflowAuthoring: { list: () => [], save } });
+    try {
+      await session.send("Save the stage tool restriction as a draft.");
+      expect(save).toHaveBeenCalledOnce();
+      const execution = save.mock.calls[0]?.[0].nodes.find(node => node.type === "audit")?.execution;
+      expect(execution?.allowedAgentTools).toEqual(allowedAgentTools);
+      expect(Object.hasOwn(execution ?? {}, "allowedAgentTools")).toBe(allowedAgentTools !== undefined);
     } finally { await session.cleanup(); }
   });
 
@@ -3898,6 +3920,7 @@ describe("console workflow draft authoring", () => {
     const runtime = new ScriptedRuntime([
       { content: [{ type: "tool_use", id: "invalid-draft", name: "console_save_workflow", input: { ...input, command: "execute shell", schedule: "every minute" } }], stopReason: "tool_use", durationMs: 1 },
       { content: [{ type: "tool_use", id: "oversized-draft", name: "console_save_workflow", input: { ...input, instructions: "x".repeat(16_001) } }], stopReason: "tool_use", durationMs: 1 },
+      { content: [{ type: "tool_use", id: "wrong-stage", name: "console_save_workflow", input: { ...input, nodes: input.nodes.map(node => node.type === "trigger" ? { ...node, execution: { instructions: "Execute this trigger" } } : node) } }], stopReason: "tool_use", durationMs: 1 },
       endTurn("No draft saved."),
     ]);
     const session = createConsoleSession({ runtime, workflowAuthoring: { list: () => [], save } });

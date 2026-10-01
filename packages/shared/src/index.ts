@@ -14,3 +14,4 @@ export * from "./live-harness.js";
 export * from "./jev.js";
 export * from "./slash-commands.js";
 export * from "./security-workflows.js";
+export * from "./security-workflow-templates.js";

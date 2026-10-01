@@ -1,4 +1,5 @@
 import { assertWorkspaceIdentity, captureWorkspaceIdentity, type WorkspaceIdentity } from "./workspace-identity.js";
+import { filterWorkflowAgentTools, isWorkflowAgentToolAllowed } from "../workflow-execution-policy.js";
 import { createHash, randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { readFileSync, statSync, existsSync, writeFileSync } from "node:fs";
@@ -3440,6 +3441,7 @@ export class ToolExecutor {
     try {
       signal?.throwIfAborted();
       assertAuthority?.();
+      if (!isWorkflowAgentToolAllowed(call.name)) return { success: false, output: null, error: `Tool "${call.name}" is not allowed in this workflow phase` };
       if (this.ctx.workerTree && this.ctx.delegationTools &&
           !this.ctx.delegationTools.some(tool => tool.name === call.name) &&
           !this.ctx.selfExtension?.tools().some(tool => tool.name === call.name)) {
@@ -9571,7 +9573,7 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
   };
 
   const toolNames = roleTools[role] ?? allEnabledTools;
-  return toolNames
+  return filterWorkflowAgentTools(toolNames
     .map((name) => TOOL_DEFINITIONS[name])
-    .filter((t): t is ToolDefinition => t !== undefined);
+    .filter((t): t is ToolDefinition => t !== undefined));
 }

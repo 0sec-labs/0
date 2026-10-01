@@ -579,6 +579,12 @@ export class ConsoleGateway {
     if (managed.pendingConfiguration && !managed.turn) await this.#applyPendingConfiguration(managed);
     return this.#summary(managed);
   }
+  /** Reopen working context for a durable schedule without restoring old grants or sending saved messages. */
+  async prepareScheduledWorkflowOwner(id: string): Promise<string> {
+    const existing = [...this.#sessions.values()].find(managed => managed.status !== "closed" && (managed.id === id || managed.savedId === id));
+    if (existing) return existing.id;
+    return (await this.resume(id)).id;
+  }
   async getExecutionContext(id: string): Promise<ConsoleExecutionContext> {
     const managed = this.#requireOpen(id); this.#assertIdle(managed);
     if (managed.execution.backend === "smolvm" || consoleExecutionProfile(this.#options.homeDir) === "smolvm") throw new ConsoleGatewayError("This workflow has not been qualified inside the SmolVM controller. Use the isolated chat; host execution is refused.", 409);
@@ -596,7 +602,7 @@ export class ConsoleGateway {
       authorization: { deniedHosts: [...checkpoint.deniedHosts], deniedLocalPaths: [...checkpoint.deniedLocalPaths], scopedAuditGrants: [...checkpoint.executor.scopedAuditGrants], scopedAuditDenials: [...checkpoint.executor.scopedAuditDenials] },
     };
   }
-  async authorizeWorkflowTarget(id: string, value: { target: string; kind: string }, signal?: AbortSignal, ownerId?: string): Promise<ConsoleExecutionContext> {
+  async authorizeWorkflowTarget(id: string, value: { target: string; kind: string }, signal?: AbortSignal, ownerId?: string, options: { interactive?: boolean } = {}): Promise<ConsoleExecutionContext> {
     const managed = this.#requireOpen(id); const raw = object(value, "Workflow target"); allowedKeys(raw, ["target", "kind"]);
     const target = text(raw.target, "Workflow target", MAX_TARGET_LENGTH); const kind = text(raw.kind, "Workflow kind", 32);
     if (!["web", "source", "package"].includes(kind)) throw new ConsoleGatewayError("Unsupported workflow target kind.", 400);
@@ -613,6 +619,7 @@ export class ConsoleGateway {
     if ((context.role === "audit" || context.role === "review") && context.localScopePath && context.autonomyMode !== "yolo" && (kind !== "source" || remoteGit || /^[a-z][a-z0-9+.-]*:\/\//i.test(target))) {
       if (context.authorization.scopedAuditDenials.includes("launch_run")) throw new ConsoleGatewayError("This workflow action was previously declined by the source-audit gate.", 403);
       if (!context.authorization.scopedAuditGrants.includes("launch_run")) {
+        if (options.interactive === false) throw new ConsoleGatewayError("Target approval required. Run this workflow manually to review its permissions.", 403);
         const response = await this.#requestDecision(managed, { kind: "audit-escalation", title: "Authorize a non-source workflow", detail: "The current audit/review engagement is restricted to its local source subtree. This permits only this workflow; other authorization controls remain in force.", reason: "A web/package or remote-source workflow falls outside the scoped source-audit capability allow-list.", call: this.#withCallId(call) }, ownerId ?? "workflow", signal);
         verifyOwner();
         if (!response.approve) throw new ConsoleGatewayError("Source-audit workflow escalation was declined.", 403);
@@ -626,6 +633,7 @@ export class ConsoleGateway {
       const current = context.localScopePath;
       const rel = current ? relative(current, canonical) : "..";
       if (!current || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+        if (options.interactive === false) throw new ConsoleGatewayError("Target approval required. Run this workflow manually to review its permissions.", 403);
         const response = await this.#requestDecision(managed, { kind: "local-scope", title: "Authorize workflow directory", detail: "Authorize this canonical directory subtree for this workflow only; this does not change the chat's authorization.", call: this.#withCallId(call), requestedPath: canonical, ...(current ? { currentScopePath: current } : {}) }, ownerId ?? "workflow", signal);
         if (!response.approve) throw new ConsoleGatewayError("Workflow directory authorization was declined.", 403);
         verifyOwner();
@@ -640,11 +648,13 @@ export class ConsoleGateway {
       const request: ConsoleScopeRequest = { call, target: context.target, currentScope: context.scope, requestedUrls: [url.href] };
       const resolution = buildScopeResolution(request);
       if (!resolution) throw new ConsoleGatewayError("The workflow target is explicitly excluded by the current scope.", 403);
+      if (options.interactive === false) throw new ConsoleGatewayError("Target approval required. Run this workflow manually to review its permissions.", 403);
       const response = await this.#requestDecision(managed, { kind: "scope", title: "Authorize workflow target", detail: "Authorize this network target for this workflow only; existing exclusions still apply.", call: this.#withCallId(call), requestedUrls: [url.href], currentScope: context.scope?.raw ?? null }, ownerId ?? "workflow", signal);
       if (!response.approve) throw new ConsoleGatewayError("Workflow target authorization was declined.", 403);
       verifyOwner();
       return { ...context, target, scope: resolution.scope };
     }
+    if (options.interactive === false) throw new ConsoleGatewayError("Target approval required. Run this workflow manually to review its permissions.", 403);
     const response = await this.#requestDecision(managed, { kind: "tool", title: "Authorize package workflow", detail: "Authorize resolution and analysis of this package ecosystem selector. This does not grant arbitrary network or filesystem access.", call: this.#withCallId(call), reason: "Package selectors do not identify a network host until the current resolver resolves them." }, ownerId ?? "workflow", signal);
     if (!response.approve) throw new ConsoleGatewayError("Package workflow authorization was declined.", 403);
     verifyOwner();

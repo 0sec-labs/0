@@ -1,4 +1,5 @@
 import { assertWorkspaceIdentity, type WorkspaceIdentity } from "./workspace-identity.js";
+import { assertWorkflowNativeRuntime, filterWorkflowAgentTools, workflowPhasePrompt } from "../workflow-execution-policy.js";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
@@ -546,6 +547,8 @@ export interface NativeAgentState {
 export async function runNativeAgentLoop(
   opts: NativeAgentLoopOptions,
 ): Promise<NativeAgentState> {
+  assertWorkflowNativeRuntime(opts.runtime);
+  opts = { ...opts, config: { ...opts.config, systemPrompt: workflowPhasePrompt(opts.config.systemPrompt) } };
   const parent = currentRunContribution();
   const enrollment = opts.contribution ?? parent ?? getConfiguredRunContributionClient();
   const secrets = enrollment ? [
@@ -885,7 +888,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     } else {
       t = t.filter((x) => x.name !== "self_extend");
     }
-    return t;
+    return filterWorkflowAgentTools(t);
   })();
   toolCtx.delegationTools = tools;
 
@@ -905,7 +908,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   const syncExtensionTools = (): void => {
     if (!selfExtensionEnabled) return;
     const extTools = selfExtension.tools().map(toNativeExtensionToolDef);
-    nativeTools = extTools.length > 0 ? [...baseNativeTools, ...extTools] : baseNativeTools;
+    nativeTools = filterWorkflowAgentTools(extTools.length > 0 ? [...baseNativeTools, ...extTools] : baseNativeTools);
   };
 
   // Initialize or restore state

@@ -9,8 +9,14 @@ const planSchema = z.object({
   depth: z.enum(["quick", "default", "deep"]), runCount: z.number().int().min(1).max(16),
   executionMode: z.enum(["sequential", "parallel"]), timeCapMs: z.number().int().finite().positive().max(86_400_000), costCapUsd: z.number().finite().positive().max(1000),
 }).strict();
-const nodeSchema = z.object({ id: identifier, type: z.enum(["trigger", "audit", "report"]), label: z.string().trim().min(1).max(160), enabled: z.boolean(), plan: planSchema.optional() }).strict();
-export interface SecurityWorkflowNode { id: string; type: "trigger" | "audit" | "report"; label: string; enabled: boolean; plan?: ScanPlan }
+const executionSchema = z.object({
+  instructions: z.string().trim().max(16_000),
+  allowedAgentTools: z.array(z.string().trim().min(1).max(128).regex(/^[A-Za-z0-9_.:-]+$/)).max(128).refine(tools => new Set(tools).size === tools.length, "Agent tool names must be unique.").optional(),
+}).strict();
+const nodeSchema = z.object({ id: identifier, type: z.enum(["trigger", "audit", "report"]), label: z.string().trim().min(1).max(160), enabled: z.boolean(), plan: planSchema.optional(), execution: executionSchema.optional() }).strict();
+/** Phase prompt/tool policy. Agent tools only; deterministic pipeline checks retain their own gates. */
+export interface SecurityWorkflowNodeExecution { instructions: string; /** Undefined inherits; an empty list allows no agent tools. */ allowedAgentTools?: string[] }
+export interface SecurityWorkflowNode { id: string; type: "trigger" | "audit" | "report"; label: string; enabled: boolean; plan?: ScanPlan; execution?: SecurityWorkflowNodeExecution }
 export interface SecurityWorkflowInput { id?: string; revision?: number; name: string; instructions: string; target: string; nodes: SecurityWorkflowNode[]; edges: Array<{ source: string; target: string }> }
 export interface SecurityWorkflow extends SecurityWorkflowInput { id: string; revision: number; createdAt: string; updatedAt: string }
 export const SecurityWorkflowInputSchema = z.object({
@@ -26,7 +32,7 @@ export const SecurityWorkflowInputSchema = z.object({
   if (triggers.some(node => !node.enabled)) issue("The manual trigger must remain enabled.");
   if (!workflow.nodes.some(node => node.type === "audit")) issue("A workflow requires at least one audit.");
   if (workflow.nodes.filter(node => node.type === "report").length > 1) issue("A workflow supports at most one report.");
-  if (workflow.nodes.some(node => node.type !== "audit" && node.plan !== undefined)) issue("Only audit nodes accept scan plans.");
+  if (workflow.nodes.some(node => node.type !== "audit" && (node.plan !== undefined || node.execution !== undefined))) issue("Only audit nodes accept scan plans and execution policies.");
   const edges = new Set<string>();
   const successors = new Map<string, string[]>();
   for (const edge of workflow.edges) {
@@ -63,3 +69,27 @@ export function parseSecurityWorkflowInput(value: unknown): SecurityWorkflowInpu
 export type SecurityWorkflowExecutionStatus = "queued" | "running" | "completed" | "failed" | "cancelled" | "interrupted";
 export interface SecurityWorkflowNodeResult { status: string; jobId?: string; scanId?: string; scanIds?: string[]; dbPaths?: string[]; error?: string }
 export interface SecurityWorkflowExecution { id: string; workflowId: string; workflowRevision: number; workflow: SecurityWorkflow; sessionId: string; ownerPid: number; runnerInstanceId: string; status: SecurityWorkflowExecutionStatus; jobId?: string; nodeResults: Record<string, SecurityWorkflowNodeResult>; error?: string; createdAt: string; updatedAt: string }
+
+
+/** Portable declarative JSON. No identities, execution history, approvals, schedules, or code. */
+export interface SecurityWorkflowCode { schemaVersion: 1; workflow: Omit<SecurityWorkflowInput, "id" | "revision"> }
+const codeEnvelope = z.object({ schemaVersion: z.literal(1), workflow: z.unknown() }).strict();
+export function exportSecurityWorkflowCode(value: SecurityWorkflowInput | SecurityWorkflow): string {
+  const { name, instructions, target, nodes, edges } = value;
+  const parsed = parseSecurityWorkflowInput({ name, instructions, target, nodes, edges });
+  const json = JSON.stringify({ schemaVersion: 1, workflow: parsed } satisfies SecurityWorkflowCode, null, 2);
+  if (new TextEncoder().encode(json).byteLength > 65_536) throw new Error("Workflow JSON must be at most 64 KiB.");
+  return json;
+}
+export function parseSecurityWorkflowCode(value: string | unknown): SecurityWorkflowInput {
+  if (typeof value === "string") {
+    if (new TextEncoder().encode(value).byteLength > 65_536) throw new Error("Workflow JSON must be at most 64 KiB.");
+    value = JSON.parse(value);
+  }
+  const envelope = codeEnvelope.parse(value);
+  if (!envelope.workflow || typeof envelope.workflow !== "object" || Array.isArray(envelope.workflow)) throw new Error("Workflow must be an object.");
+  // Explicit cloning of stored definitions never transfers identity or revision authority.
+  const { id: _id, revision: _revision, createdAt: _createdAt, updatedAt: _updatedAt, ...draft } = envelope.workflow as Record<string, unknown>;
+  if (new TextEncoder().encode(JSON.stringify(envelope)).byteLength > 65_536) throw new Error("Workflow JSON must be at most 64 KiB.");
+  return parseSecurityWorkflowInput(draft);
+}

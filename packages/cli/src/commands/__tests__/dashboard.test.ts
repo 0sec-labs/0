@@ -339,6 +339,11 @@ vi.mock("@0/db", () => {
   }
   return {
     osecDB: FakeOsecDB,
+    WorkflowTriggerStore: class {
+      list() { return []; }
+      close() {}
+    },
+    nextWorkflowTriggerFire: () => new Date().toISOString(),
     SecurityWorkflowStore: FakeSecurityWorkflowStore,
     SecurityWorkflowStoreError: FakeSecurityWorkflowStoreError,
     resetOsecDatabase: resetOsecDatabaseMock,
@@ -972,7 +977,7 @@ describe("dashboard — browser request boundaries", () => {
     await runCli(["dashboard", "--no-open"]);
   });
 
-  it.each(["/api/dashboard", "/api/scans", "/api/console/sessions", "/api/console/providers"])(
+  it.each(["/api/dashboard", "/api/scans", "/api/console/sessions", "/api/console/providers", "/api/console/workflow-triggers"])(
     "refuses unauthenticated reads of %s before opening the database",
     async (url) => {
       const captured = await invokeHandler(makeRequest({ method: "GET", url }));
@@ -982,6 +987,13 @@ describe("dashboard — browser request boundaries", () => {
       expect(spawnMock).not.toHaveBeenCalled();
     },
   );
+
+  it("lists workflow schedules through the authenticated router", async () => {
+    const token = await getControlToken();
+    const captured = await invokeHandler(makeRequest({ method: "GET", url: "/api/console/workflow-triggers", headers: { "x-0-control-token": token } }));
+    expect(captured.statusCode).toBe(200);
+    expect(JSON.parse(captured.body)).toEqual({ triggers: [] });
+  });
 
   it.each(["attacker.example:48123", "127.0.0.1:9000", ""])(
     "refuses to issue a browser token for hostile or missing Host %s",

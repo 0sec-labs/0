@@ -17,6 +17,7 @@ import {
   verifySourceFixCandidate,
   withScopeEnforcement,
   LlmApiRuntime,
+  withWorkflowAuditExecutionPolicy, assertWorkflowNativeRuntime, workflowPolicyRuntime, getToolsForRole,
   type NativeRuntime,
   type ScopeEnforcementState,
   type ScopePolicy,
@@ -94,6 +95,7 @@ export interface WebWorkflowGateway {
     target: { target: string; kind: string },
     signal?: AbortSignal,
     ownerId?: string,
+    options?: { interactive?: boolean },
   ): Promise<WebWorkflowExecutionContext>;
 }
 
@@ -231,9 +233,13 @@ export class WebWorkflowService {
   }
 
   async handle(pathname: string, method: string, input: unknown, query: URLSearchParams): Promise<{ status: number; data: unknown } | null> {
-    if (!pathname.startsWith(PREFIX + "workflows") && !pathname.startsWith(PREFIX + "workflow-definitions") && !pathname.startsWith(PREFIX + "workflow-executions") && !pathname.startsWith(PREFIX + "fixes/")) return null;
+    if (!pathname.startsWith(PREFIX + "workflows") && !pathname.startsWith(PREFIX + "workflow-definitions") && !pathname.startsWith(PREFIX + "workflow-executions") && pathname !== PREFIX + "workflow-tool-catalog" && !pathname.startsWith(PREFIX + "fixes/")) return null;
     this.#prune();
     try {
+      if (pathname === PREFIX + "workflow-tool-catalog") {
+        if (method !== "GET") throw new WorkflowError("Use GET to inspect workflow agent tools.", 405);
+        return { status: 200, data: { tools: getToolsForRole("audit").map(({ name, description }) => ({ name, description })), policy: "agent-tools", pipelineChecks: true } };
+      }
       if (pathname.startsWith(PREFIX + "workflow-definitions") || pathname.startsWith(PREFIX + "workflow-executions")) return await this.#definitionRequest(pathname, method, input, query);
       if (pathname === PREFIX + "workflows") {
         if (method === "GET") {
@@ -341,7 +347,32 @@ export class WebWorkflowService {
     throw new WorkflowError("Workflow route was not found.", 404);
   }
 
-  async #runDefinition(id: string, input: unknown): Promise<{ status: number; data: unknown }> {
+  /** Scheduler-only adapter: no client payload can opt out of target authorization. */
+  async launchScheduledWorkflow(id: string, request: { sessionId: string; revision: number }): Promise<{ workflow: WebWorkflow; execution: SecurityWorkflowExecution }> {
+    await this.validateScheduledWorkflow(id, request);
+    const result = await this.#runDefinition(id, { ...request, approval: "launch-authorized-run" }, false);
+    return result.data as { workflow: WebWorkflow; execution: SecurityWorkflowExecution };
+  }
+
+  async validateScheduledWorkflow(id: string, request: { sessionId: string; revision: number }): Promise<WebWorkflowExecutionContext> {
+    if (this.#disposing) throw new WorkflowError("Workflow service is shutting down.", 503);
+    const definition = this.#definitions.get(id);
+    if (!definition) throw new WorkflowError("Workflow definition was not found.", 404);
+    if (definition.revision !== request.revision) throw new WorkflowError("Workflow changed after review; refresh it before running.", 409);
+    const audits = definition.nodes.filter(node => node.enabled && node.type === "audit");
+    if (!audits.length) throw new WorkflowError("Enable at least one audit step before scheduling.", 400);
+    if (!definition.target.trim()) throw new WorkflowError("Choose a target before scheduling this workflow.", 400);
+    const resolved = resolveEngagement(definition.target);
+    if (!resolved.ok) throw new WorkflowError(resolved.message, 400);
+    // Reject a background launch before creating an execution when a fresh
+    // approval is needed. Each audit checks it again immediately before work.
+    const context = await this.#gateway.authorizeWorkflowTarget(request.sessionId, { target: resolved.plan.kind === "package" ? definition.target : resolved.plan.target, kind: resolved.plan.kind }, undefined, undefined, { interactive: false });
+    if (context.autonomyMode === "recon") throw new WorkflowError("Recon mode cannot authorize scheduled audits.", 403);
+    for (const node of audits) if (node.execution) withWorkflowAuditExecutionPolicy(node.execution, () => assertWorkflowNativeRuntime(context.runtime));
+    return context;
+  }
+
+  async #runDefinition(id: string, input: unknown, interactive = true): Promise<{ status: number; data: unknown }> {
     if (this.#disposing) throw new WorkflowError("Workflow service is shutting down.", 503);
     const request = parse(definitionRunSchema, input);
     const definition = this.#definitions.get(id);
@@ -389,7 +420,7 @@ export class WebWorkflowService {
               nodeResults[node.id] = { status: child.status, jobId: child.id, scanIds: child.runs?.map(run => run.scanId), ...(dbPath ? { dbPaths: [dbPath] } : {}), ...(child.error ? { error: child.error } : {}) };
               this.#definitions.updateExecution(execution.id, { nodeResults });
             };
-            const result = await this.#launch({ sessionId: request.sessionId, target: definition.target, plan: node.plan ?? DEFAULT_SECURITY_WORKFLOW_PLAN, approval: "launch-authorized-run" }, parent.view.id, retainLinks);
+            const result = await this.#launch({ sessionId: request.sessionId, target: definition.target, plan: node.plan ?? DEFAULT_SECURITY_WORKFLOW_PLAN, approval: "launch-authorized-run" }, parent.view.id, retainLinks, node.execution, interactive);
             const childView = (result.data as { workflow: WebWorkflow }).workflow;
             const child = this.#jobs.get(childView.id)!;
             nodeResults[node.id] = { status: "running", jobId: child.view.id };
@@ -423,7 +454,7 @@ export class WebWorkflowService {
     return { status: 202, data: { workflow: this.#project(parent), execution: this.#definitions.getExecution(execution.id) } };
   }
 
-  async #launch(input: unknown, owningGraphId?: string, retainLinks?: (job: WebWorkflow) => void): Promise<{ status: number; data: unknown }> {
+  async #launch(input: unknown, owningGraphId?: string, retainLinks?: (job: WebWorkflow) => void, execution?: SecurityWorkflowNode["execution"], interactive = true): Promise<{ status: number; data: unknown }> {
     if (this.#disposing) throw new WorkflowError("Workflow service is shutting down.", 503);
     const graphSignal = owningGraphId ? this.#jobs.get(owningGraphId)?.controller.signal : undefined;
     graphSignal?.throwIfAborted();
@@ -434,6 +465,7 @@ export class WebWorkflowService {
     const context = await this.#gateway.getExecutionContext(request.sessionId);
     if (this.#disposing) throw new WorkflowError("Workflow service is shutting down.", 503);
     graphSignal?.throwIfAborted();
+    if (execution) withWorkflowAuditExecutionPolicy(execution, () => assertWorkflowNativeRuntime(context.runtime));
     if (owningGraphId && identity(selection(context)) !== identity(this.#jobs.get(owningGraphId)!.view.runtime)) throw new WorkflowError("Session model or routing changed during this workflow. Review the selection and run it again.");
     if (owningGraphId && context.runtime instanceof LlmApiRuntime && (context.runtime.connectionIdentity() ?? null) !== this.#graphConnections.get(owningGraphId)) throw new WorkflowError("Session connection changed during this workflow. Review it and run again.");
     if (context.autonomyMode === "recon") throw new WorkflowError("Recon mode is read-only; switch modes before approving an effectful bounded scan.", 403);
@@ -444,7 +476,7 @@ export class WebWorkflowService {
     this.#start(job, async () => {
       const authorized = await this.#gateway.authorizeWorkflowTarget(request.sessionId, {
         target: resolved.kind === "package" ? request.target : resolved.target, kind: resolved.kind,
-      }, job.controller.signal, job.view.id);
+      }, job.controller.signal, job.view.id, { interactive });
       if (owningGraphId && identity(selection(authorized)) !== identity(this.#jobs.get(owningGraphId)!.view.runtime)) throw new WorkflowError("Session model or routing changed during workflow authorization. Review it and run again.");
       if (owningGraphId && authorized.runtime instanceof LlmApiRuntime && (authorized.runtime.connectionIdentity() ?? null) !== this.#graphConnections.get(owningGraphId)) throw new WorkflowError("Session connection changed during workflow authorization. Review it and run again.");
       if (authorized.autonomyMode === "recon") throw new WorkflowError("Recon mode cannot authorize an effectful bounded scan.", 403);
@@ -455,7 +487,7 @@ export class WebWorkflowService {
         }
       }
       job.controller.signal.throwIfAborted();
-      await withScopeEnforcement(authorized.scopeEnforcement, () => runUnified({
+      await withWorkflowAuditExecutionPolicy(execution, () => withScopeEnforcement(authorized.scopeEnforcement, () => runUnified({
         target: resolved.target,
         targetType: resolved.targetType,
         reviewPackageEcosystem: resolved.ecosystem,
@@ -463,7 +495,7 @@ export class WebWorkflowService {
         format: "json",
         runtime: "api",
         plan: snapshot(request.plan),
-        nativeRuntime: context.runtime,
+        nativeRuntime: workflowPolicyRuntime(context.runtime),
         model: context.model,
         agentModels: context.agentModels,
         singleModel: context.singleModel,
@@ -495,7 +527,7 @@ export class WebWorkflowService {
           const { report: _report, ...details } = outcome;
           job.view.outcome = snapshot(details);
         },
-      }));
+      })));
       if (!job.view.outcome) throw new WorkflowError("Runner returned without an execution outcome.");
       const attempts = job.view.outcome.attempts;
       if (!attempts || attempts.length !== request.plan.runCount) throw new WorkflowError("Runner did not return every planned attempt outcome.");

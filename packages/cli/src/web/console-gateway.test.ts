@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eventBus, type ConsoleSession, type ConsoleTurnOutcome, type NativeMessage, type ToolCall } from "@0/core";
-import { ConsoleGateway, ConsoleGatewayError, type ConsoleGatewaySessionFactoryInput } from "./console-gateway.js";
+import { ConsoleGateway, ConsoleGatewayError, type ConsoleGatewaySessionFactoryInput, type ConsoleExecutionContext } from "./console-gateway.js";
 import { loadSession, saveSession } from "../tui/session-store.js";
 
 const isolated = vi.hoisted(() => ({
@@ -77,6 +77,32 @@ async function idle(instance: ConsoleGateway, id: string): Promise<void> {
 }
 
 describe("ConsoleGateway", () => {
+  it("reopens scheduled working context once without restoring authorization or sending messages", async () => {
+    const createSession = vi.fn(engine);
+    const instance = gateway(createSession);
+    const created = instance.create({ target: "https://example.test", title: "Scheduled review", autonomyMode: "yolo" });
+    await instance.close(created.id);
+    const resumedId = await instance.prepareScheduledWorkflowOwner(created.id);
+    expect(resumedId).not.toBe(created.id);
+    expect(await instance.prepareScheduledWorkflowOwner(created.id)).toBe(resumedId);
+    expect(createSession).toHaveBeenCalledTimes(1);
+    expect(createSession.mock.calls[0]?.[0].autonomyMode).toBe("standard");
+    expect(createSession.mock.calls[0]?.[0].scope).toBeUndefined();
+    expect(instance.get(resumedId).messages).toEqual([]);
+    expect(instance.get(resumedId).pendingDecisions).toEqual([]);
+  });
+  it("blocks scheduled scope expansion without opening an unattended decision", async () => {
+    const instance = gateway();
+    const created = instance.create({ target: "https://example.test", title: "Scheduled review" });
+    vi.spyOn(instance, "getExecutionContext").mockResolvedValue({
+      target: "https://example.test", role: "audit", autonomyMode: "standard",
+      scopeEnforcement: { pluginId: "scope", enabled: true, projectPath: "/fixture", message: "Enabled" },
+      authorization: { deniedHosts: [], deniedLocalPaths: [], scopedAuditGrants: [], scopedAuditDenials: [] },
+    } as unknown as ConsoleExecutionContext);
+    await expect(instance.authorizeWorkflowTarget(created.id, { target: "https://another.test", kind: "web" }, undefined, "scheduled", { interactive: false })).rejects.toThrow("Target approval required");
+    await expect(instance.authorizeWorkflowTarget(created.id, { target: "npm:example", kind: "package" }, undefined, "scheduled", { interactive: false })).rejects.toThrow("Target approval required");
+    expect(instance.get(created.id).pendingDecisions).toHaveLength(0);
+  });
   it("archives a chat with a failed model initialization without initializing it again", async () => {
     const createSession = vi.fn(() => { throw new Error("The selected model is not available to this ChatGPT account."); });
     const instance = gateway(createSession);

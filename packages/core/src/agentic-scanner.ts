@@ -17,6 +17,7 @@ import { detectAvailableRuntimes } from "./runtime/registry.js";
 // DB lazy-loaded to avoid native module issues
 import { runAgentLoop } from "./agent/loop.js";
 import { runNativeAgentLoop } from "./agent/native-loop.js";
+import { assertWorkflowNativeRuntime, getWorkflowAuditExecutionPolicy } from "./workflow-execution-policy.js";
 import { toolCallPreview } from "./agent/tool-preview.js";
 import { getToolsForRole, TOOL_DEFINITIONS, parsePocStepsArg } from "./agent/tools.js";
 import {
@@ -565,6 +566,7 @@ function parsePackageTarget(
 }
 
 export function agenticScan(opts: AgenticScanOptions): Promise<ScanReport> {
+  if (getWorkflowAuditExecutionPolicy()) assertWorkflowNativeRuntime(opts.nativeRuntime ?? { type: opts.config.runtime ?? "api" });
   return withScopeEnforcement(getScopeEnforcementState(), () => {
     const plan = opts.config.plan;
     if (!plan) return agenticScanInternal(opts);
@@ -3430,4 +3432,3 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
     finishPhase();
   }
 }
-

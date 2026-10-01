@@ -1,4 +1,5 @@
 import type { Finding, ScanCostLedgerLike, ScanPlan } from "@0/shared";
+import { assertWorkflowNativeRuntime, getWorkflowAuditExecutionPolicy } from "./workflow-execution-policy.js";
 import type { ScanListener } from "./scanner.js";
 import { createRuntime } from "./runtime/index.js";
 import type { RuntimeType } from "./runtime/index.js";
@@ -236,6 +237,7 @@ export function getMaxTurns(
  */
 export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<AnalysisAgentResult> {
   const { role, scopePath, target, scanId, sessionId, config, db, emit, purpose = "research" } = opts;
+  if (getWorkflowAuditExecutionPolicy()) assertWorkflowNativeRuntime(config.nativeRuntime ?? { type: config.runtime ?? "api" });
   config.signal?.throwIfAborted();
   if (config.costCeilingUsd !== undefined && config.costLedger && config.costLedger.totalCostUsd() >= config.costCeilingUsd) {
     throw new Error("Scan cost ceiling is exhausted before source analysis.");
@@ -533,6 +535,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
     config.signal?.throwIfAborted();
 
     // Check if runtime supports native tool_use (multi-turn agentic loop)
+    assertWorkflowNativeRuntime(apiRuntime);
     const supportsNative = typeof (apiRuntime as NativeRuntime).executeNative === "function";
     if (process.env.CI || process.env["ZERO_DEBUG"]) {
       process.stderr.write(`[0] API runtime: native=${supportsNative}, model=${config.model ?? "default"}\n`);

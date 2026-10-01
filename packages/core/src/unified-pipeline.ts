@@ -28,6 +28,7 @@ import type { osecDB } from "@0/db";
 import type * as dbSchema from "@0/db";
 import type { ScanListener } from "./scanner.js";
 import { runAnalysisAgent } from "./agent-runner.js";
+import { assertWorkflowNativeRuntime, getWorkflowAuditExecutionPolicy } from "./workflow-execution-policy.js";
 import { cloneGitRepo } from "./repo-clone.js";
 import { ScanCostLedger } from "./agent/cost-ledger.js";
 import { loadScope, type ScopePolicy } from "./scope/scope.js";
@@ -1225,6 +1226,7 @@ export async function runNpmDynamicDiscoveryStage(args: {
  * (Claude Code CLI, Codex, API with native tool_use, legacy fallback).
  */
 export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport> {
+  if (getWorkflowAuditExecutionPolicy()) assertWorkflowNativeRuntime(opts.nativeRuntime ?? { type: opts.runtime ?? "api" });
   const targetType = opts.targetType ?? detectTargetType(opts.target);
   if (targetType === "url" || targetType === "web-app") {
     const report = await agenticScan({

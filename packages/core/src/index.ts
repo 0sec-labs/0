@@ -18,6 +18,8 @@ export { BUILTIN_PLUGINS, getBuiltinPlugin, SCOPE_PLUGIN_ID } from "./plugins/bu
 export type { BuiltinPlugin } from "./plugins/builtin.js";
 export { getScopeEnforcementState, isScopeEnforcementEnabled, withScopeEnforcement } from "./scope/activation.js";
 export type { ScopeEnforcementState } from "./scope/activation.js";
+export { withWorkflowAuditExecutionPolicy, getWorkflowAuditExecutionPolicy, filterWorkflowAgentTools, isWorkflowAgentToolAllowed, workflowPhasePrompt, assertWorkflowNativeRuntime, workflowPolicyRuntime } from "./workflow-execution-policy.js";
+export type { WorkflowAuditExecutionPolicy } from "./workflow-execution-policy.js";
 
 // Attribution-header injection (0#216). Builds on scope ingestion:
 // configures per-engagement headers + UA override that get merged into

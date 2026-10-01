@@ -16,13 +16,14 @@ import {
   type PresentationEvent,
   type PresentationSource,
 } from "@0/shared";
-import { readToolCallNames } from "@0/core";
+import { LlmApiRuntime, readToolCallNames } from "@0/core";
 import { presentationEventBus } from "../presentation/event-bus.js";
 import { buildFindingConsoleCommand } from "../finding-handoff.js";
 import { workbenchStatus } from "./workbench.js";
 import { ConsoleGateway, ConsoleGatewayError } from "../web/console-gateway.js";
 import { WebOperatorServices } from "../web/operator-services.js";
 import { WebWorkflowService } from "../web/workflows.js";
+import { WorkflowTriggerService } from "../web/workflow-triggers.js";
 import { GitHubPublicationAuth } from "../web/github-auth.js";
 import { DASHBOARD_ASSETS, type EmbeddedDashboardAsset } from "../dashboard-assets.generated.js";
 
@@ -1173,6 +1174,7 @@ async function handleWebConsoleApiRequest(
   gateway: ConsoleGateway,
   operator: WebOperatorServices,
   workflows: WebWorkflowService,
+  triggers: WorkflowTriggerService,
   github: GitHubPublicationAuth,
 ): Promise<boolean> {
   if (!requestUrl.pathname.startsWith("/api/console/")) return false;
@@ -1185,6 +1187,8 @@ async function handleWebConsoleApiRequest(
     if (path === "github/connect" && method === "POST") { json(res, 200, { github: await github.connect(input) }); return true; }
     if (path === "github/device-auth" && method === "POST") { json(res, 202, { github: await github.start() }); return true; }
     if (path === "github/device-auth" && method === "DELETE") { json(res, 200, { github: await github.cancel() }); return true; }
+    const trigger = await triggers.handle(method, requestUrl, input);
+    if (trigger) { json(res, trigger.status, trigger.data); return true; }
     const workflow = await workflows.handle(requestUrl.pathname, method, input, requestUrl.searchParams);
     if (workflow) { json(res, workflow.status, workflow.data); return true; }
     const service = await operator.handle(requestUrl.pathname, method, input, requestUrl.searchParams);
@@ -1822,6 +1826,18 @@ export function registerDashboardCommand(program: Command): void {
       const consoleGateway = new ConsoleGateway({ dbPath: opts.dbPath });
       const operator = new WebOperatorServices({ isTurnActive: () => consoleGateway.hasActiveTurns() });
       const workflows = new WebWorkflowService({ gateway: consoleGateway, dbPath: opts.dbPath });
+      const triggers = new WorkflowTriggerService({ dbPath: opts.dbPath, adapter: {
+        async validate(trigger) {
+          const sessionId = await consoleGateway.prepareScheduledWorkflowOwner(trigger.sessionId);
+          const context = await workflows.validateScheduledWorkflow(trigger.workflowId, { sessionId, revision: trigger.workflowRevision });
+          return { model: context.model, providerId: context.providerId, ...(context.runtime instanceof LlmApiRuntime ? { connectionIdentity: context.runtime.connectionIdentity() } : {}) };
+        },
+        async launch(trigger) {
+          const sessionId = await consoleGateway.prepareScheduledWorkflowOwner(trigger.sessionId);
+          const result = await workflows.launchScheduledWorkflow(trigger.workflowId, { sessionId, revision: trigger.workflowRevision });
+          return { executionId: result.execution.id };
+        },
+      } });
       const github = new GitHubPublicationAuth();
 
       const server = createServer(async (req, res) => {
@@ -1835,7 +1851,7 @@ export function registerDashboardCommand(program: Command): void {
         try {
           if (requestUrl.pathname.startsWith("/api/")) {
             if (!requireControlToken(req, res, controlToken)) return;
-            const consoleHandled = await handleWebConsoleApiRequest(req, res, requestUrl, consoleGateway, operator, workflows, github);
+            const consoleHandled = await handleWebConsoleApiRequest(req, res, requestUrl, consoleGateway, operator, workflows, triggers, github);
             if (consoleHandled) return;
             const handled = await handleApiRequest(req, res, requestUrl.pathname, opts.dbPath, controlToken);
             if (!handled) json(res, 404, { error: "Not found" });
@@ -1898,7 +1914,7 @@ export function registerDashboardCommand(program: Command): void {
       const shutdown = () => {
         if (shuttingDown) return;
         shuttingDown = true;
-        void workflows.dispose().then(() => consoleGateway.closeAll()).finally(() => {
+        void triggers.dispose().then(() => workflows.dispose()).then(() => consoleGateway.closeAll()).finally(() => {
           operator.dispose();
           github.dispose();
           server.close(() => {
