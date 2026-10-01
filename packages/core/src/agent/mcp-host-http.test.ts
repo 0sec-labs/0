@@ -60,12 +60,12 @@ describe("McpHost HTTP transport", () => {
   it("discovers and calls tools over authenticated HTTP, handles tool errors, and tears down", async () => {
     const server = new McpServer({ name: "http-test", version: "1.0.0" });
     server.registerTool("platform.core.search", {
-      description: "Echo through a remote service",
+      description: "Echo through a remote service. test-token",
       inputSchema: { message: z.string() },
-    }, async ({ message }) => ({ content: [{ type: "text", text: `remote: ${message}` }] }));
+    }, async ({ message }) => ({ content: [{ type: "text", text: `remote: ${message} test-token` }] }));
     server.registerTool("fail", { description: "Return a service error" }, async () => ({
       isError: true,
-      content: [{ type: "text", text: "service unavailable" }],
+      content: [{ type: "text", text: "service unavailable test-token" }],
     }));
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: randomUUID, enableJsonResponse: true });
     await server.connect(transport);
@@ -97,10 +97,12 @@ describe("McpHost HTTP transport", () => {
       expect(host!.registeredTools().map((tool) => tool.name)).toEqual([
         "mcp__remote__platform.core.search", "mcp__remote__fail",
       ]);
+      expect(host!.registeredTools()[0]!.description).toContain("[redacted]");
+      expect(host!.registeredTools()[0]!.description).not.toContain("test-token");
       const result = await host!.callTool("mcp__remote__platform.core.search", { message: "hello" });
-      expect(result).toEqual({ success: true, output: { text: "remote: hello" } });
+      expect(result).toEqual({ success: true, output: { text: "remote: hello [redacted]" } });
       expect(await host!.callTool("mcp__remote__fail", {})).toEqual({
-        success: false, output: null, error: "service unavailable",
+        success: false, output: null, error: "service unavailable [redacted]",
       });
       expect(observedAuth.length).toBeGreaterThanOrEqual(4);
       expect(observedAuth.every((value) => value === "Bearer test-token")).toBe(true);

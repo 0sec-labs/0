@@ -15,3 +15,5 @@ export * from "./jev.js";
 export * from "./slash-commands.js";
 export * from "./security-workflows.js";
 export * from "./security-workflow-templates.js";
+
+export * from "./service-plugins.js";

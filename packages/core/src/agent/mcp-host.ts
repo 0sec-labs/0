@@ -68,6 +68,7 @@ function validHeaders(value: unknown): value is Record<string, string> {
 interface ConnectedServer {
   readonly client: Client;
   readonly defs: ToolDefinition[];
+  readonly redact: (value: string) => string;
 }
 
 /**
@@ -100,9 +101,10 @@ export class McpHost {
    * (and `connectStdio` builds a real one). Fails closed: a discovery error
    * closes the client and rejects rather than leaving a half-registered server.
    */
-  async register(id: string, transport: ClientTransport): Promise<ToolDefinition[]> {
+  async register(id: string, transport: ClientTransport, secrets: readonly string[] = []): Promise<ToolDefinition[]> {
     if (!isSafeMcpServerId(id)) throw new Error(`unsafe MCP server id: ${JSON.stringify(id)}`);
     if (this.servers.has(id)) throw new Error(`MCP server "${id}" is already connected`);
+    const redact = (value: string) => secrets.filter(Boolean).reduce((result, secret) => result.split(secret).join("[redacted]"), value);
     const client = new Client({ name: "0", version: "0.1.0" }, { capabilities: {} });
     let defs: ToolDefinition[];
     try {
@@ -113,12 +115,20 @@ export class McpHost {
         description: t.description,
         inputSchema: t.inputSchema as McpToolSpec["inputSchema"],
       }));
-      defs = mcpToolsToDefinitions(id, specs);
+      // Schema descriptions/defaults are remote data too; scrub credentials
+      // before tool metadata can be included in a model request.
+      const scrub = (value: unknown): unknown => {
+        if (typeof value === "string") return redact(value);
+        if (Array.isArray(value)) return value.map(scrub);
+        if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [redact(key), scrub(item)]));
+        return value;
+      };
+      defs = mcpToolsToDefinitions(id, specs).map(def => scrub(def) as ToolDefinition);
     } catch (err) {
       await client.close().catch(() => undefined);
       throw err;
     }
-    this.servers.set(id, { client, defs });
+    this.servers.set(id, { client, defs, redact });
     return defs;
   }
 
@@ -142,7 +152,8 @@ export class McpHost {
     const transport = new StreamableHTTPClientTransport(url, {
       requestInit: { headers: config.headers, redirect: "error" },
     });
-    return this.register(config.id, transport);
+    const secrets = Object.entries(config.headers ?? {}).filter(([name]) => /authorization|cookie|token|api[-_]?key|secret/i.test(name)).flatMap(([, value]) => [value, value.replace(/^(Bearer|ApiKey|Basic)\s+/i, "")]);
+    return this.register(config.id, transport, secrets);
   }
 
   /**
@@ -160,11 +171,11 @@ export class McpHost {
         content?: unknown;
         isError?: boolean;
       };
-      const text = mcpResultText(res.content);
+      const text = server.redact(mcpResultText(res.content));
       if (res.isError) return { success: false, output: null, error: text || "MCP tool returned an error" };
       return { success: true, output: { text } };
     } catch (err) {
-      return { success: false, output: null, error: err instanceof Error ? err.message : String(err) };
+      return { success: false, output: null, error: server.redact(err instanceof Error ? err.message : String(err)) };
     }
   }
 

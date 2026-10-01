@@ -32,6 +32,7 @@ import { getRuntimeAvailability } from "../utils.js";
 import { getRuntimeMetadata } from "../tui/runtime.js";
 import { CodexAuthController, webAuthStatus, type WebAuthStatus } from "./codex-auth-controller.js";
 import { connectionConfigEnvPatch, loadConnectionConfigs, saveConnectionConfig, validateConnectionConfig } from "./connection-config.js";
+import { ServicePluginServices } from "./service-plugins.js";
 import { appendFeedback, buildSubmitPreview, submitFeedback, type FeedbackPayload, type SubmitPreview } from "../tui/feedback.js";
 
 import { consoleExecutionProfile } from "../console-execution.js";
@@ -267,6 +268,7 @@ function settingsView() {
 
 export interface WebOperatorServicesOptions { isTurnActive?: () => boolean }
 export class WebOperatorServices {
+  readonly #servicePlugins = new ServicePluginServices();
   readonly #codex = new CodexAuthController();
   readonly #auth = new Map<string, { status: WebAuthStatus; session: DeviceAuthSession | null; env: NodeJS.ProcessEnv }>();
   #registryItems = new Map<string, MarketItem>();
@@ -525,6 +527,8 @@ export class WebOperatorServices {
   async handle(pathname: string, method: string, input: unknown, query: URLSearchParams): Promise<{ status: number; data: unknown } | null> {
     if (!pathname.startsWith("/api/console/")) return null;
     const path = pathname.slice("/api/console/".length);
+    const servicePluginResult = await this.#servicePlugins.handle(path, method, input);
+    if (servicePluginResult) return servicePluginResult;
     if (!/^(providers(?:\/[^/]+(?:\/device-auth)?)?|models|connections|settings(?:\/reset)?|themes|plugins(?:\/(?:install|enable|disable|run))?|doctor|tools|project|checks|feedback)$/.test(path)) return null;
     try {
       let data: unknown;

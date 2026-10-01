@@ -1,4 +1,5 @@
 /** @jsxImportSource @opentui/react */
+import { loadServicePluginConnections } from "../web/service-plugins.js";
 import { consoleExecutionProfile } from "../console-execution.js";
 import { randomUUID } from "node:crypto";
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -60,7 +61,7 @@ import { listSessions, loadSession, deleteSession } from "./session-store.js";
 import { MarketScreen } from "./market-screen.js";
 import { createPluginService } from "./plugin-service.js";
 import { createSessionPluginHostManager, type SessionPluginHostManager } from "./session-plugin-host.js";
-import { connectMcpServers, parseMcpConfig, DEFAULT_REGISTRY_URL, TOOL_DEFINITIONS } from "@0/core";
+import { connectMcpServers, connectServicePlugins, parseMcpConfig, DEFAULT_REGISTRY_URL, TOOL_DEFINITIONS } from "@0/core";
 import { ConnectScreen } from "./connect-screen.js";
 import type { ConnectionRecovery } from "./connection-recovery.js";
 import { UsageScreen } from "./usage-screen.js";
@@ -696,7 +697,7 @@ function ConsoleApp({
     };
     const creation = (async (): Promise<AuditRecord | undefined> => {
       if (exitRequested.current) return undefined;
-      const mcpHost = consoleExecutionProfile() === "smolvm" ? undefined : await connectMcpServers(parseMcpConfig(process.env["ZERO_MCP"]));
+      const mcpHost = consoleExecutionProfile() === "smolvm" ? undefined : await connectServicePlugins(loadServicePluginConnections(), await connectMcpServers(parseMcpConfig(process.env["ZERO_MCP"])));
       if (exitRequested.current || !appAlive.current) {
         await mcpHost?.closeAll();
         return undefined;

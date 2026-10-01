@@ -240,12 +240,50 @@ export ZERO_MCP="$(node --input-type=module -e '
 The tools are discovered from your Elastic deployment; Zero does not hardcode a
 catalog or install Tracecat. API key privileges determine which data and actions
 Elastic permits. See [Elastic MCP authentication](https://www.elastic.co/docs/explore-analyze/ai-features/agent-builder/mcp-server-api-keys)
-for account setup. This is an engine configuration, not yet a connection form in
-the web Plugins page.
+for account setup. You can also connect Elastic from **Plugins** in the web UI.
 
 **Sources:** [`mcp-host.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/agent/mcp-host.ts),
 [`console.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/console.ts),
 [`tui/run.tsx`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/run.tsx).
+
+## Service plugins
+
+Open **Plugins** to connect GitHub, Elastic, Semgrep, Snyk, Linear, Jira,
+Cloudflare, Slack or Microsoft Teams. Each connection is tested before it is
+saved. Connected plugins have an on/off switch; changes apply to new chats.
+Manage a connection to update its account or inspect its tools. Leaving a saved
+secret field blank preserves that secret.
+
+| Plugin | Tools |
+|---|---|
+| GitHub | Repositories, code scanning and Dependabot alerts, issues and pull requests |
+| Elastic | Tools discovered from the deployment's Agent Builder MCP endpoint |
+| Semgrep | Projects and existing findings in a selected deployment |
+| Snyk | Projects and existing issues in a selected organization |
+| Linear | Teams, issues and creating remediation issues |
+| Jira | Projects, JQL search and creating remediation issues |
+| Cloudflare | Zones, DNS records and rulesets |
+| Slack | Channels, recent messages and posting summaries |
+| Microsoft Teams | Joined teams, channels and posting channel messages |
+
+Setup uses vendor API tokens. Jira Cloud also needs an account email and site
+URL. Elastic needs its Kibana URL, Semgrep a deployment ID, and Snyk an
+organization ID. Teams requires a delegated Microsoft Graph token with the
+permissions for the selected actions; reconnect when it expires. Browser OAuth
+and automatic token refresh are not implemented. Semgrep and Snyk read their
+platform findings rather than starting a local scan.
+
+Credentials are operator-global in `~/.0/service-plugins.json` (`0600`, directory
+`0700`), not embedded in portable workflow definitions. The API returns only
+non-secret settings and tool metadata. Service tools use the `mcp__` namespace,
+the existing MCP permission gates and untrusted-result handling. Connecting a
+plugin does not grant a token additional vendor permissions.
+
+Local chats connect the enabled accounts directly. SmolVM chats receive only
+explicitly configured, enabled service credentials through private stdin and
+connect from inside the guest. The existing workbench network grant is required;
+Plugins does not enable networking. The current CLI bundle must be rebuilt so
+the guest receives the updated adapters. Existing chats keep their original tools.
 
 ## Native workers and multiple models
 

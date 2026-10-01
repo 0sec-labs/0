@@ -54,6 +54,13 @@ export function WebConsoleControlsPage({ mode: passedMode }: { mode?: WebConsole
     : mode === "launch" ? <LauncherControl sessionId={sessionId} />
     : <FixControl sessionId={sessionId} />;
 
+  if (mode === "plugins") {
+    return <main aria-label="Plugins" className="console-controls mx-auto w-full max-w-6xl space-y-7 px-5 py-8 sm:px-8 lg:px-10">
+      <div ref={headingRef} tabIndex={-1} className="outline-none"><h1 className="text-2xl font-semibold tracking-tight">Plugins</h1></div>
+      {content}
+    </main>;
+  }
+
   if (mode === "launch") {
     return <main aria-label="Audits" className="mx-auto w-full max-w-5xl space-y-6 px-5 py-6 sm:px-8 lg:px-10">{content}</main>;
   }

@@ -1,10 +1,11 @@
+import { loadServicePluginConnections } from "./service-plugins.js";
 import { randomUUID } from "node:crypto";
 import { SecurityWorkflowStore } from "@0/db";
 import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
-  ScopePolicy, clampOutboundBody, connectMcpServers, eventBus, getScopeEnforcementState, isDangerousLocalRoot, normalizeScopeHostname, parseMcpConfig, sendOperatorMessage,
+  ScopePolicy, clampOutboundBody, connectMcpServers, connectServicePlugins, eventBus, getScopeEnforcementState, isDangerousLocalRoot, normalizeScopeHostname, parseMcpConfig, sendOperatorMessage,
   type ConsoleSession, type ConsoleSessionConfig, type ConsoleSessionCheckpoint, type ConsoleScopeRequest,
   type ConsoleTurnOutcome as EngineTurnOutcome, type LlmApiRuntime, type NativeMessage, type NativeRuntime,
   type McpHost, type OperatorQuestionAnswer, type OperatorQuestionRequest, type ScopeJson, type ToolCall,
@@ -714,7 +715,7 @@ export class ConsoleGateway {
           const manager = await getWebConsolePluginHostManager(); await manager.refresh(); const lease = manager.acquire();
           let mcpHost: McpHost | undefined;
           try {
-            mcpHost = await connectMcpServers(parseMcpConfig(process.env["ZERO_MCP"]));
+            mcpHost = await connectServicePlugins(loadServicePluginConnections(), await connectMcpServers(parseMcpConfig(process.env["ZERO_MCP"])));
             session = createLocalConsoleSession({ runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
               compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
               scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, scope: managed.scope,

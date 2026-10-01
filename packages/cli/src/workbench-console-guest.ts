@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
-import { TOOL_DEFINITIONS, type EnablementRecord, createConsoleRuntime, isAdmittedSmolvmWorkbench, ScopePolicy, withScopeEnforcement } from "@0/core";
+import { TOOL_DEFINITIONS, connectServicePlugins, type McpHost, type EnablementRecord, createConsoleRuntime, isAdmittedSmolvmWorkbench, ScopePolicy, withScopeEnforcement } from "@0/core";
 import type { ConsoleSession, ConsoleSessionConfig, ScopeEnforcementState } from "@0/core";
 import { osecDB } from "@0/db";
 import { findingFromRow } from "./tui/findings-data.js";
@@ -13,6 +13,7 @@ import { VERSION } from "@0/shared";
 import { createLocalConsoleSession } from "./console-session.js";
 import { encodeWorkbenchFrame, WorkbenchFrameReader, WORKBENCH_MAX_PENDING, WORKBENCH_FRAME_BYTES } from "./workbench-console-protocol.js";
 import type { WorkbenchFrame } from "./workbench-console-protocol.js";
+import { servicePluginSecretRedactor, validateGuestServicePluginConnections } from "./workbench-service-plugins.js";
 
 const CALLBACKS = ["requestScope", "requestLocalScope", "approveTool", "escalateScopedAudit", "askOperator"] as const;
 const EVENTS = ["onHarnessUpdate", "onAssistantDelta", "onReasoningDelta", "onToolStart", "onToolResult", "onUsage", "onNotice", "onCompaction"] as const;
@@ -25,10 +26,13 @@ const EVENTS = ["onHarnessUpdate", "onAssistantDelta", "onReasoningDelta", "onTo
  */
 async function runGuest(cli: boolean): Promise<number> {
   if (!isAdmittedSmolvmWorkbench()) throw new Error("Workbench controller requires admitted Linux VM execution");
-  const emit = (frame: WorkbenchFrame) => { if (!process.stdout.write(encodeWorkbenchFrame(frame))) process.stdin.pause(); };
+  let redact = (value: string) => value;
+  const scrub = (value: unknown) => JSON.parse(JSON.stringify(value, (_key, item) => typeof item === "string" ? redact(item) : item));
+  const emit = (frame: WorkbenchFrame) => { if (!process.stdout.write(encodeWorkbenchFrame(scrub(frame)))) process.stdin.pause(); };
   process.stdout.on("drain", () => process.stdin.resume());
   let session: ConsoleSession | undefined;
   let pluginManager: SessionPluginHostManager | undefined;
+  let servicePluginHost: McpHost | undefined;
   let initialized = false;
   let closing = false;
   let turn: AbortController | undefined;
@@ -64,7 +68,7 @@ async function runGuest(cli: boolean): Promise<number> {
     const snapshot = { scanId: session.scanId, systemPrompt: session.systemPrompt, tools: session.tools, messages: session.messages,
       autonomyMode: session.autonomyMode, target: session.target, scope: session.scope?.raw, localScopePath: session.localScopePath, checkpoint };
     await mkdir("/home/zero/.0/controller", { recursive: true, mode: 0o700 });
-    await writeFile("/home/zero/.0/controller/session.json", JSON.stringify(snapshot), { mode: 0o600 });
+    await writeFile("/home/zero/.0/controller/session.json", JSON.stringify(scrub(snapshot)), { mode: 0o600 });
     emit({ type: "state", snapshot: checkpoint?.harnessRoot ? { ...snapshot, checkpoint: undefined } : snapshot });
     const db = new osecDB("/home/zero/.0/controller.sqlite");
     try { const rows = db.getFindings(session.scanId); if (rows.length > 1000) throw new Error("Finding export limit reached"); emit({ type: "findings", findings: rows.map(findingFromRow) }); } finally { db.close(); }
@@ -73,9 +77,12 @@ async function runGuest(cli: boolean): Promise<number> {
     if (closing) return; closing = true; turn?.abort();
     for (const pending of decisions.values()) pending.reject(new Error("Workbench closed")); decisions.clear();
     for (const response of providers.values()) response.destroy(); providers.clear();
-    if (session) { await session.stopPersistentAgents(); await state(); await session.cleanup(); }
-    pluginManager?.dispose();
-    server.close(); process.stdin.destroy();
+    try {
+      if (session) { await session.stopPersistentAgents(); await state(); await session.cleanup(); }
+    } finally {
+      pluginManager?.dispose();
+      try { await servicePluginHost?.closeAll(); } finally { server.close(); process.stdin.destroy(); }
+    }
   };
   let chain = Promise.resolve();
   const receive = (frame: WorkbenchFrame) => {
@@ -88,6 +95,10 @@ async function runGuest(cli: boolean): Promise<number> {
       try {
         if (frame.type === "init") {
           if (initialized) throw new Error("Workbench already initialized"); initialized = true;
+          const servicePluginConnections = validateGuestServicePluginConnections(frame.servicePluginConnections, frame.servicePluginNetworkGranted);
+          redact = servicePluginSecretRedactor(servicePluginConnections);
+          delete frame.servicePluginConnections;
+          if (cli && servicePluginConnections.length) throw new Error("Service plugin grants are supported by the isolated chat guest only");
           if (frame.guestSettings) { const settings = normalizeSettings(frame.guestSettings);
             if (settings.executionProfile !== "local" || settings.updatePolicy !== "off") throw new Error("Invalid guest preferences");
             await mkdir("/home/zero/.0", { recursive: true, mode: 0o700 });
@@ -121,7 +132,8 @@ async function runGuest(cli: boolean): Promise<number> {
           pluginManager = await createSessionPluginHostManager({ projectPath: "/workspace", reservedToolNames: Object.values(TOOL_DEFINITIONS).map(tool => tool.name), coreVersion: VERSION });
           const unavailable = pluginManager.current().status().filter(entry => entry.state !== "ready");
           if (unavailable.length) throw new Error(`Guest plugins failed to load: ${unavailable.map(entry => entry.pluginId).join(", ")}`);
-          session = withScopeEnforcement(policy, () => createLocalConsoleSession({ ...config, ...callbacks, pluginHost: pluginManager!.current(),
+          if (servicePluginConnections.length) servicePluginHost = await connectServicePlugins(servicePluginConnections);
+          session = withScopeEnforcement(policy, () => createLocalConsoleSession({ ...config, ...callbacks, pluginHost: pluginManager!.current(), mcpHost: servicePluginHost,
             ...(config.scope ? { scope: new ScopePolicy(config.scope as ConstructorParameters<typeof ScopePolicy>[0]) } : {}),
             runtime: createConsoleRuntime({ ...selection, env: Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)) }), workspaceRoot: "/workspace",
           } as unknown as Omit<ConsoleSessionConfig, "db">, "/home/zero/.0/controller.sqlite"));
@@ -146,7 +158,7 @@ async function runGuest(cli: boolean): Promise<number> {
           default: throw new Error("Unsupported controller operation");
         }
         await state(); emit({ type: "result", id: frame.id, value });
-      } catch (error) { emit({ type: "error", id: frame.id, error: error instanceof Error ? error.message : "Guest operation failed" }); }
+      } catch (error) { if (!session) { await servicePluginHost?.closeAll(); servicePluginHost = undefined; } emit({ type: "error", id: frame.id, error: error instanceof Error ? error.message : "Guest operation failed" }); }
     });
   };
   const reader = new WorkbenchFrameReader();

@@ -1,3 +1,4 @@
+import { ServicePluginsControl } from "./service-plugins-control";
 import { ControlDisclosure } from "./control-disclosure";
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -52,17 +53,21 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
       <div className="flex items-center gap-2">
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input data-1p-ignore data-lpignore="true" autoComplete="off" aria-label="Search plugins and themes" type="search" placeholder="Search plugins and themes" value={filter} onChange={event => setFilter(event.target.value)} className="pl-9" />
+          <Input data-1p-ignore data-lpignore="true" autoComplete="off" aria-label="Search plugins" type="search" placeholder="Search plugins" value={filter} onChange={event => setFilter(event.target.value)} className="pl-9" />
         </div>
-        <Button variant="ghost" size="icon" onClick={() => void inventory.refetch()} disabled={inventory.isFetching || mutate.isPending} aria-label="Refresh plugins and themes" title="Refresh plugins and themes"><RefreshCcw className="size-4" /></Button>
+        <Button variant="ghost" size="icon" onClick={() => { void inventory.refetch(); void queryClient.invalidateQueries({ queryKey: ["console-service-plugins"] }); }} disabled={inventory.isFetching || mutate.isPending} aria-label="Refresh plugins" title="Refresh plugins"><RefreshCcw className="size-4" /></Button>
       </div>
+    </div>
+    <ServicePluginsControl filter={filter} />
+    <div className="space-y-3 border-t border-foreground/5 pt-6">
+      <h2 className="text-base font-medium">Installed plugins & themes</h2>
       <p className="text-xs text-muted-foreground">{isolated ? "Approved plugins are copied into each new SmolVM chat and run inside its VM. Plugin changes apply to new chats." : sessionId ? "Plugin changes apply to new sessions, not this one." : "Plugin changes apply to new sessions."}</p>
     </div>
     {inventory.isPending && <div role="status" className="flex items-center gap-2 py-6 text-sm text-muted-foreground"><LoadingDots className="console-loading-dots-compact" />Loading plugins and themes…</div>}
     {inventory.error && <div className="space-y-3"><Feedback error={inventory.error} /><Button variant="outline" disabled={inventory.isFetching} onClick={() => void inventory.refetch()}>Try again</Button></div>}
     {inventory.data && <>
       {inventory.data.registry.error ? <Feedback error={inventory.data.registry.error} /> : !inventory.data.registry.available && <Feedback error="The plugin registry is offline. Installed plugins are still listed below." />}
-      {items.length === 0 ? <div className="space-y-2 py-8 text-sm text-muted-foreground"><p>{filter.trim() ? "No plugins or themes match your search." : "No plugins or themes available."}</p>{filter && <Button variant="ghost" size="sm" onClick={() => setFilter("")}>Clear search</Button>}</div> :
+      {items.length === 0 ? <div className="space-y-2 py-8 text-sm text-muted-foreground"><p>{filter.trim() ? "No installed plugins or themes match your search." : "No plugins or themes available."}</p>{filter && <Button variant="ghost" size="sm" onClick={() => setFilter("")}>Clear search</Button>}</div> :
         <div className="space-y-4" aria-label="Plugins and themes">
           {items.map(item => {
             const Icon = item.kind === "theme" ? Palette : Blocks;
