@@ -107,7 +107,7 @@ More guides: [installation](https://docs.0.security/getting-started/) ·
 ## Development
 
 Install dependencies, run `npm run dev`, and open the printed browser address.
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](https://github.com/0sec-labs/0/blob/main/.github/CONTRIBUTING.md).
 
 ## Status and safety
 
@@ -115,7 +115,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 The terminal defaults to YOLO; use `0 console --mode standard` for confirmations.
 The optional [scope plugin](https://docs.0.security/scope/) enforces target boundaries.
 
-Report vulnerabilities through [SECURITY.md](SECURITY.md).
+Report vulnerabilities through [SECURITY.md](https://github.com/0sec-labs/0/blob/main/.github/SECURITY.md).
 Licensed under [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE).
 
 [Public disclosures and upstream fixes](https://0.security/research/#disclosures).

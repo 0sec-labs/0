@@ -456,7 +456,7 @@ That is a small Node worker image, not the security toolbox. To provision the
 declared pentest/identity/Foxguard inventory without building the CLI application:
 
 ```bash
-docker build --target toolbox -t 0-toolbox:local .
+docker build -f scripts/docker/Dockerfile --target toolbox -t 0-toolbox:local .
 docker save 0-toolbox:local -o toolbox.tar
 node scripts/smoke-smolvm-toolbox.mjs ./toolbox.tar
 ```

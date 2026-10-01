@@ -141,7 +141,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: ./Dockerfile
+          file: ./scripts/docker/Dockerfile
           platforms: linux/amd64
           builder: ${{ steps.buildx.outputs.name }}
           push: true
@@ -164,7 +164,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: ./Dockerfile
+          file: ./scripts/docker/Dockerfile
           platforms: linux/amd64
           builder: ${{ steps.buildx.outputs.name }}
           push: true

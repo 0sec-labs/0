@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** Qualify a provisioned toolbox archive in a real offline, non-root microVM.
- * Build first: docker build --target toolbox -t 0-toolbox .
+ * Build first: docker build -f scripts/docker/Dockerfile --target toolbox -t 0-toolbox .
  * Run: node scripts/smoke-smolvm-toolbox.mjs /absolute/path/to/toolbox.tar
  * This checks tool startup and local behavior, not authenticated engagements.
  */

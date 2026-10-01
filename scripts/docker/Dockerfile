@@ -7,8 +7,8 @@
 #   stage 2 (toolbox):    ubuntu:24.04 + Node 24 + pentest/identity/Foxguard tooling
 #   stage 3 (runtime):    toolbox + CLI — the default target
 #
-#   docker build --target toolbox   →  tooling only, no CLI (useful as smolvm image)
-#   docker build                    →  full runtime image
+#   docker build -f scripts/docker/Dockerfile --target toolbox   →  tooling only, no CLI (useful as smolvm image)
+#   docker build -f scripts/docker/Dockerfile                    →  full runtime image
 #
 # Usage:
 #   docker run --rm -e AZURE_OPENAI_API_KEY=$KEY \

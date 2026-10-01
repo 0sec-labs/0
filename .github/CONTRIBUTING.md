@@ -52,8 +52,8 @@ If CLI declarations changed, regenerate the command reference with
 
 Desktop is a development-only alpha, excluded from normal CLI builds and releases.
 Its explicit source setup is documented in
-[`docs/src/content/docs/desktop.md`](docs/src/content/docs/desktop.md).
-The independent Python project in [`0verse/`](0verse/README.md) uses its own
+[`docs/src/content/docs/desktop.md`](../docs/src/content/docs/desktop.md).
+The independent Python project in [`0verse/`](../0verse/README.md) uses its own
 `pyproject.toml`, `uv.lock`, and Makefile; root pnpm checks do not replace
 its checks. Run its commands from `0verse/`, with Python 3.11+ and `uv`.
 

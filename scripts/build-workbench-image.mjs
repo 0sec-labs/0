@@ -18,7 +18,7 @@ export function planWorkbenchBuild({ profile = "core-web", kaliImage, sourceRevi
   if (!archive || !archive.startsWith("/")) throw new Error("Build export requires an absolute archive path");
   const baseImage = profile === "kali" ? kaliImage : manifest.baseImage;
   const tag = `0-workbench:${profile}-${sourceRevision.slice(0, 12)}`;
-  const args = ["build", "--platform", manifest.platform, "--file", "Dockerfile.workbench", "--target", "workbench",
+  const args = ["build", "--platform", manifest.platform, "--file", "scripts/docker/Dockerfile.workbench", "--target", "workbench",
     "--build-arg", `TOOLBOX_PROFILE=${profile}`, "--build-arg", `SOURCE_REVISION=${sourceRevision}`,
     "--build-arg", `BASE_IMAGE=${baseImage}`, "--tag", tag];
   if (profile === "kali") args.push("--build-arg", "WORKBENCH_BASE=kali-base", "--build-arg", `KALI_IMAGE=${kaliImage}`);
