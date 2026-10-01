@@ -14,8 +14,7 @@ export function findDashboardInstance(origin: string): Promise<boolean> {
         && /<meta\s+name="0-control-token"\s+content="[^"]+"/.test(html)));
       response.on("error", () => resolve(false));
     });
-    request.setTimeout(1_000, () => request.destroy(new Error("Dashboard probe timed out")));
-    request.on("close", () => resolve(false));
+    request.setTimeout(2_000, () => { resolve(false); request.destroy(); });
     request.on("error", () => resolve(false));
   });
 }
