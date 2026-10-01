@@ -1,5 +1,7 @@
 import {
   Children,
+  createContext,
+  useContext,
   isValidElement,
   memo,
   useEffect,
@@ -11,7 +13,10 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Check, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { HighlightedCode, MermaidDiagram } from "./formatted-code";
 import "./markdown.css";
+
+const StreamingContext = createContext(false);
 
 /** Avoid mounting an empty code panel while its fence language is arriving. */
 export function streamingMarkdown(text: string): string {
@@ -47,6 +52,10 @@ function textContent(children: ReactNode): string {
 }
 
 function CodeBlock({ children }: { children: ReactNode }) {
+  const streaming = useContext(StreamingContext);
+  const child = Children.toArray(children).find(isValidElement);
+  const language = isValidElement<{ className?: string }>(child) ? /language-([\w-]+)/.exec(child.props.className ?? "")?.[1] ?? "" : "";
+  const source = textContent(children);
   const [status, setStatus] = useState<"idle" | "copied" | "failed">("idle");
   const timer = useRef<number | undefined>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -61,12 +70,12 @@ function CodeBlock({ children }: { children: ReactNode }) {
     }
   };
   return (
-    <div className="my-3 overflow-hidden rounded-md border border-border bg-muted/30">
-      <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/40 px-3 py-1 text-xs text-muted-foreground">
-        <span>Code</span>
+    <div className="my-4 min-w-0 overflow-hidden rounded-2xl bg-muted">
+      <div className="flex items-center justify-between gap-3 px-4 py-2 text-xs text-muted-foreground">
+        <span>{language || "Code"}</span>
         <Button
           type="button"
-          variant="outline"
+          variant="ghost"
           size="xs"
           className={status === "copied" ? "text-primary-text" : undefined}
           onClick={() => void copy()}
@@ -87,9 +96,9 @@ function CodeBlock({ children }: { children: ReactNode }) {
           Could not copy code. Select the code below to copy it manually, or try again.
         </p>
       )}
-      <pre className="m-0 overflow-x-auto whitespace-pre p-3 font-mono text-xs leading-relaxed text-foreground select-text [&_code]:bg-transparent [&_code]:p-0 [&_code]:text-inherit">
-        {children}
-      </pre>
+      {language === "mermaid" ? <MermaidDiagram source={source} streaming={streaming} /> : <pre className="m-0 overflow-x-auto whitespace-pre p-3 font-mono text-xs leading-relaxed text-foreground select-text [&_code]:bg-transparent [&_code]:p-0 [&_code]:text-inherit">
+        <HighlightedCode source={source} language={language} />
+      </pre>}
     </div>
   );
 }
@@ -129,7 +138,7 @@ const components: Components = {
   ),
   table: ({ children }) => (
     <div className="my-2 overflow-x-auto">
-      <table className="w-full border-collapse text-sm [&_td]:border [&_td]:border-border [&_td]:px-2.5 [&_td]:py-1.5 [&_td]:text-left [&_th]:border [&_th]:border-border [&_th]:bg-muted/40 [&_th]:px-2.5 [&_th]:py-1.5 [&_th]:text-left [&_th]:font-medium">
+      <table className="w-full border-collapse text-sm [&_td]:border-b [&_td]:border-border/60 [&_td]:px-3 [&_td]:py-3 [&_td]:text-left [&_th]:border-b [&_th]:border-border [&_th]:px-3 [&_th]:py-2.5 [&_th]:text-left [&_th]:font-semibold">
         {children}
       </table>
     </div>
@@ -140,9 +149,9 @@ const plugins = [remarkGfm];
 export const Markdown = memo(function Markdown({ text, streaming = false }: { text: string; streaming?: boolean }) {
   return (
     <div data-streaming={streaming || undefined} className="console-markdown min-w-0 break-words text-sm leading-relaxed text-foreground [&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-1.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5 [&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:px-3 [&_blockquote]:py-1 [&_blockquote]:text-muted-foreground [&_h1]:my-3 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:my-3 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:my-2 [&_h3]:text-base [&_h3]:font-semibold [&_h4]:my-2 [&_h4]:font-semibold [&_h5]:my-2 [&_h5]:font-semibold [&_h6]:my-2 [&_h6]:font-semibold [&_hr]:my-4 [&_hr]:border-border">
-      <ReactMarkdown remarkPlugins={plugins} components={components} skipHtml>
+      <StreamingContext.Provider value={streaming}><ReactMarkdown remarkPlugins={plugins} components={components} skipHtml>
         {streaming ? streamingMarkdown(text) : text}
-      </ReactMarkdown>
+      </ReactMarkdown></StreamingContext.Provider>
     </div>
   );
 });

@@ -29,3 +29,14 @@
 [data-reduced-motion="true"] .console-markdown ::after {
   animation: none !important;
 }
+
+/* Syntax colors stay legible in both workspace themes. */
+.console-markdown .hljs-keyword, .console-markdown .hljs-selector-tag { color: #c084fc; }
+.console-markdown .hljs-string, .console-markdown .hljs-attr { color: #22c55e; }
+.console-markdown .hljs-number, .console-markdown .hljs-literal { color: #fb923c; }
+.console-markdown .hljs-title, .console-markdown .hljs-built_in { color: #38bdf8; }
+.console-markdown .hljs-comment { color: var(--muted-foreground); }
+:root:not(.dark) .console-markdown .hljs-keyword { color: #7e22ce; }
+:root:not(.dark) .console-markdown .hljs-string, :root:not(.dark) .console-markdown .hljs-attr { color: #15803d; }
+:root:not(.dark) .console-markdown .hljs-number, :root:not(.dark) .console-markdown .hljs-literal { color: #c2410c; }
+:root:not(.dark) .console-markdown .hljs-title, :root:not(.dark) .console-markdown .hljs-built_in { color: #0369a1; }
