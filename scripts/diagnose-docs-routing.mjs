@@ -10,8 +10,17 @@ async function get(path) {
   if (!response.ok || !data.success) throw new Error(`${path}: ${data.errors?.map(e => e.message).join(', ') || response.status}`);
   return data.result;
 }
-const domains = await get(`/accounts/${account}/pages/projects/0-docs/domains`);
+const projects = await get(`/accounts/${account}/pages/projects`);
+const owners = projects.filter(project => project.domains?.includes('docs.0.security'));
+console.log('Pages projects serving docs.0.security:', owners.map(project => ({ name: project.name, productionBranch: project.production_branch })));
+if (owners.length !== 1) throw new Error(`Expected one Pages project owning docs.0.security; found ${owners.length}. Fix the domain association before deploying.`);
+const project = owners[0];
+const domains = await get(`/accounts/${account}/pages/projects/${project.name}/domains`);
 console.log('Pages custom domain:', domains.filter(d => d.name === 'docs.0.security').map(d => ({ name: d.name, status: d.status })));
+if (process.env.GITHUB_OUTPUT) {
+  const { appendFile } = await import('node:fs/promises');
+  await appendFile(process.env.GITHUB_OUTPUT, `project_name=${project.name}\n`);
+}
 try {
   const zones = await get('/zones?name=0.security');
   for (const zone of zones) {
