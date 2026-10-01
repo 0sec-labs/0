@@ -46,6 +46,25 @@ Keep `0 web` running while you use the browser; press Ctrl+C to stop it.
 Connect a model provider and describe what you want to investigate. In the
 browser, use **Workflows** for reusable reviews and **Plugins** to connect your tools.
 
+<details>
+  <summary>Preview the web app</summary>
+
+### Chat
+
+Plan a security review in chat.
+
+![Example conversation in the Zero web app](assets/screenshots/web-chat.jpg)
+
+### Workflows
+
+Customize review phases, tools, and triggers.
+
+![Repository review workflow in the Zero web app](assets/screenshots/web-workflow.jpg)
+
+*Actual frontend with example content. No scan results are shown.*
+
+</details>
+
 ## Use 0 from another agent
 
 **CLI:** an agent with shell access can run a review and read its JSON report:
