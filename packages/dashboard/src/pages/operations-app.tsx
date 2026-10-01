@@ -99,7 +99,7 @@ export function OperationsApp() {
   const findings = operations(dashboard ? <FindingsPage dashboard={dashboard} /> : <EmptyState title="No findings yet" action={startChat} />);
   return (
     <DashboardPanelProvider>
-      <AppShell onOpenPalette={() => setPaletteOpen(true)}>
+      <AppShell>
         <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} dashboard={dashboard} scans={scansQuery.data} />
         <Routes>
           <Route path="/" element={<Navigate to="/console" replace />} />

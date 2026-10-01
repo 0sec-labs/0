@@ -522,7 +522,7 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
       </div>
 
       <Card size="sm" className="border-0 bg-transparent">
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 px-0">
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
             <div className="relative">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />

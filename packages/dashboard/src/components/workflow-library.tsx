@@ -3,6 +3,7 @@ import { ArrowUp, FileUp, Layers, Search, ShieldCheck, Workflow } from "lucide-r
 import type { SecurityWorkflow, SecurityWorkflowInput, SecurityWorkflowTemplate } from "@0/shared";
 import { SECURITY_WORKFLOW_TEMPLATES } from "@0/shared/dist/security-workflow-templates.js";
 import { parseSecurityWorkflowCode } from "@0/shared/dist/security-workflows.js";
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,8 +24,8 @@ export function WorkflowLibrary({ definitions, busy, onSelect, onTemplate, onImp
   const matches = (text: string) => text.toLowerCase().includes(search.trim().toLowerCase());
   const saved = definitions.filter(item => matches(`${item.name} ${item.target} ${item.instructions}`));
   const templates = SECURITY_WORKFLOW_TEMPLATES.filter(item => matches(`${item.name} ${item.description} ${item.category}`));
-  return <div className="space-y-7">
-    <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-2xl font-medium tracking-tight">Workflows</h2><p className="mt-2 text-sm text-muted-foreground">Create your own custom security workflows!</p></div><Button variant="ghost" size="sm" disabled={busy} onClick={() => { setImportError(""); setImportOpen(true); }}><FileUp aria-hidden="true" />Import definition</Button></div>
+  return <div className="space-y-6">
+    <PageHeader title="Workflows" summary="Create your own custom security workflows!" actions={<Button variant="ghost" disabled={busy} onClick={() => { setImportError(""); setImportOpen(true); }}><FileUp aria-hidden="true" />Import definition</Button>} />
     <Tabs value={tab} onValueChange={setTab} className="gap-5">
       <div className="flex flex-wrap items-center justify-between gap-4"><TabsList aria-label="Workflow library"><TabsTrigger value="mine">My workflows</TabsTrigger><TabsTrigger value="templates">Templates</TabsTrigger></TabsList><div className="relative w-full sm:w-72"><Search aria-hidden="true" className="pointer-events-none absolute left-3 top-3 size-4 text-muted-foreground" /><Input aria-label="Search workflows and templates" placeholder="Search workflows…" className="pl-9" value={search} onChange={event => setSearch(event.target.value)} /></div></div>
       <TabsContent value="mine"><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{saved.map(item => <article key={item.id} className="flex flex-col gap-5 rounded-2xl bg-muted/35 p-5 transition-colors hover:bg-muted/50"><button type="button" disabled={busy} onClick={() => onSelect(item.id)} className="space-y-3 rounded-lg text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"><Workflow aria-hidden="true" className="size-5 text-primary" /><span className="block truncate text-sm font-medium">{item.name}</span><span className="block truncate text-xs text-muted-foreground">{item.target || "Choose a target"}</span><span className="block text-xs text-muted-foreground">{item.nodes.filter(node => node.type === "audit").length} phases</span></button><div className="mt-auto border-t border-border/40 pt-4"><WorkflowAutomationControl workflow={item} disabled={busy} onConfigureTarget={() => onSelect(item.id)} /></div></article>)}</div>{!saved.length && <p className="py-12 text-center text-sm text-muted-foreground">{search ? "No matching workflows." : "Create your first workflow from a template or describe it below."}</p>}</TabsContent>

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { ArrowLeft, Blocks, FolderCheck, HeartPulse, KeyRound, MessageSquare, Palette, Shield, Users, Rocket, Settings2, Sparkles, Wrench } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { ConnectionsControl, ModelsControl } from "@/components/console-control/connections-control";
 import { SettingsControl, settingsCategories, type SettingsCategory } from "@/components/console-control/settings-control";
@@ -55,8 +56,8 @@ export function WebConsoleControlsPage({ mode: passedMode }: { mode?: WebConsole
     : <FixControl sessionId={sessionId} />;
 
   if (mode === "plugins") {
-    return <main aria-label="Plugins" className="console-controls mx-auto w-full max-w-6xl space-y-7 px-5 py-8 sm:px-8 lg:px-10">
-      <div ref={headingRef} tabIndex={-1} className="outline-none"><h1 className="text-2xl font-semibold tracking-tight">Plugins</h1></div>
+    return <main aria-label="Plugins" className="console-controls min-w-0 w-full space-y-6">
+      <div ref={headingRef} tabIndex={-1} className="outline-none"><PageHeader title="Plugins" /></div>
       {content}
     </main>;
   }

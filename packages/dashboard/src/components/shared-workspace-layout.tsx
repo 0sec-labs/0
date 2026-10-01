@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Command, Menu, MessageSquare, Plus, Plug, Settings, ShieldCheck, Workflow } from "lucide-react";
+import { Menu, MessageSquare, Plus, Plug, Settings, ShieldCheck, Workflow } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -14,23 +14,19 @@ const destinations = [
 ];
 
 /** The same compact navigation and page rhythm used by the conversation workspace. */
-export function SharedWorkspaceLayout({ title, children, onNew, onOpenPalette }: {
-  title: string;
+export function SharedWorkspaceLayout({ children, onNew }: {
   children: ReactNode;
   onNew: () => void;
-  onOpenPalette: () => void;
 }) {
   const [navigationOpen, setNavigationOpen] = useState(false);
   return <div className="console-frame flex min-w-0 overflow-hidden bg-background text-foreground">
     <div className="flex min-w-0 flex-1 flex-col">
-      <header className="flex shrink-0 items-center justify-between gap-2 px-3 py-3 sm:px-5">
+      <header className="flex shrink-0 items-center justify-between gap-2 px-3 py-3 sm:px-5 lg:hidden [@media(hover:none)]:flex">
         <div className="flex min-w-0 items-center gap-2">
           <Button className="lg:hidden [@media(hover:none)]:inline-flex" variant="ghost" size="icon-sm" aria-label="Open navigation" onClick={() => setNavigationOpen(true)}><Menu className="size-4" /></Button>
-          <span className="truncate text-sm font-semibold">{title}</span>
         </div>
         <div className="flex items-center gap-1">
           <Button className="lg:hidden" variant="ghost" size="icon-sm" aria-label="New chat" onClick={onNew}><Plus className="size-4" /></Button>
-          <Button variant="ghost" size="icon-sm" aria-label="Open commands" onClick={onOpenPalette}><Command className="size-4" /></Button>
         </div>
       </header>
       <main className="min-h-0 flex-1 overflow-y-auto">

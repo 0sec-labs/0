@@ -5,21 +5,7 @@ import { SharedWorkspaceLayout } from "@/components/shared-workspace-layout";
 import { ConsoleNavigationRail } from "@/console/navigation-rail";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
-function pageTitle(pathname: string): string {
-  if (/^\/(?:threads|findings)(?:\/|$)/.test(pathname)) return "Findings";
-  if (/^\/(?:runs|scans)(?:\/|$)/.test(pathname)) return "Run reports";
-  if (/^\/(?:workflows|audits|launcher|launch)(?:\/|$)/.test(pathname)) return "Workflows";
-  if (pathname.startsWith("/live")) return "Live activity";
-  if (pathname.startsWith("/dashboard")) return "Dashboard";
-  if (pathname.startsWith("/setup")) return "Set up 0";
-  if (pathname.startsWith("/connections")) return "Connections";
-  if (pathname.startsWith("/models")) return "Models";
-  if (pathname.startsWith("/plugins")) return "Plugins";
-  if (pathname.startsWith("/settings")) return "Settings";
-  return "Workspace";
-}
-
-export function AppShell({ children, onOpenPalette }: { children: ReactNode; onOpenPalette: () => void }) {
+export function AppShell({ children }: { children: ReactNode }) {
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
   const { panel, dismissPanel } = useDashboardPanel();
@@ -33,7 +19,7 @@ export function AppShell({ children, onOpenPalette }: { children: ReactNode; onO
   return <div className="console-frame flex min-w-0 overflow-hidden bg-background text-foreground">
     <ConsoleNavigationRail settingsHref={isConsole ? `/settings${controlsQuery}` : "/settings"} />
     <div className="min-w-0 flex-1">
-    {isConsole ? children : <SharedWorkspaceLayout title={pageTitle(pathname)} onNew={() => navigate("/console?new=1")} onOpenPalette={onOpenPalette}>
+    {isConsole ? children : <SharedWorkspaceLayout onNew={() => navigate("/console?new=1")}>
     {children}
     <Sheet open={Boolean(panel)} onOpenChange={(open) => { if (!open) dismissPanel(); }}>
       <SheetContent side="right" className="w-full overflow-y-auto p-0 sm:max-w-2xl">

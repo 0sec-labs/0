@@ -81,7 +81,7 @@ export function WorkflowsPage() {
   }).catch(() => {}); };
   const linear = selected ? linearWorkflowNodes(selected) !== null : false;
 
-  return <div ref={page} tabIndex={-1} className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 outline-none sm:px-8">
+  return <div ref={page} tabIndex={-1} className="min-w-0 w-full space-y-6 outline-none">
     {error && <p role="alert" className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}
     {definitions.isError && <p role="alert" className="text-sm text-destructive">{definitions.error.message}</p>}
     {definitions.isLoading ? <div className="py-16"><ActivityIndicator label="Loading workflows…" /></div> : !selected ? <WorkflowLibrary definitions={definitions.data?.definitions ?? []} busy={busy} onSelect={select} onTemplate={useTemplate} onImport={importDefinition} onDescribe={discuss} /> : <>
