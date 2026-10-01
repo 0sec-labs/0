@@ -136,8 +136,15 @@ Source tests qualify profile selection, immutable Kali reference validation,
 resource plans and build/export refusal. Metadata verification confirms the
 official ARM64 Node manifest and dated Debian repository/tool availability.
 No image layers, OS packages or browser assets were downloaded in this session.
-No profile image was built or launched: the development disk has less than the
-30 GiB build floor. Existing unqualified full-toolbox archives must not be
+No new profile image was built: the development disk has less than the 30 GiB
+build floor and Docker is unavailable. A follow-up qualified the existing
+approved Kali archive with a live brokered ChatGPT account, current mounted CLI,
+non-root guest file tools, native parser, Chromium and bounded local scanner
+functions. It still lacks required `ssh`, so the complete toolbox is **not**
+checked off. See `docs/design/cli-runtime-qualification-20260930.md` and the
+sanitized receipts in `docs/qualification/` for measured results. The Kali build
+receipt now checks every core tool, including SSH, and rejects initialization
+errors even when a tool returns an accepted help exit code. Existing unqualified full-toolbox archives must not be
 relabeled as the new profiles without their receipt and a real SmolVM startup
 qualification. The final release needs build receipt plus non-root guest tool,
 browser, workspace persistence and bounded resource tests before claiming

@@ -28,7 +28,7 @@ Local raw pilot artifacts are retained under `/tmp/zero-cli-qualification-202609
 
 ## SmolVM
 
-The signed, pinned runtime is installed privately and ready. The global execution profile remains **local**; workbench configuration has no selected image. A ready runtime alone does not mean a conversation runs in a VM.
+At the initial orientation check, the signed, pinned runtime was installed privately, but the global execution profile was **local** and no workbench image was selected. A ready runtime alone does not mean a conversation runs in a VM. The later live qualification below records the subsequently selected SmolVM configuration.
 
 Disposable real VM checks booted Linux ARM64 under non-root UID 501, with loopback-only networking, no host credentials and confirmed teardown. Current CLI guest startup initially failed in the small Node image because React was absent; mounting the macOS dependency tree then failed on the unavailable Linux ARM64 tree-sitter addon. Import/start of the existing toolbox image exceeded the first bounded 120-second attempt. These are real qualification blockers, not mocked success. The full toolbox import also exceeded a 300-second retry. No global execution profile was changed.
 
@@ -40,13 +40,65 @@ This proves CLI startup and diagnostics in a VM. It does **not** prove a full au
 
 The current registered `workbench console-agent` and `run-agent` entries now pass real offline SmolVM checks using the approved Node image, the current CLI distribution and explicitly staged Linux dependencies. A host SSE fixture drove the actual guest engine through `read_file` and `apply_patch`; the source workspace remained unchanged, the guest output and transcript/checkpoint were exported, an interrupted provider turn returned cancelled, and native teardown released the active lease. The actual public `console --print` command also returned the fixture response with exit 0 and exported its database. No image downloads or host credential forwarding occurred.
 
-These checks qualify registered routing, engine execution, artifact preservation and cancellation with a fixture provider. They do **not** qualify a live provider account, the new profile images, Kali tools, browser automation, or hosted workflows. The live web app remains on the operator's local profile until an approved image is explicitly configured. Evidence is retained locally in `/tmp/zero-smolvm-controller-qualification.json` and `/tmp/zero-smolvm-registered-cli-qualification.json`; fixture model labels do not establish live account model availability.
+These checks qualify registered routing, engine execution, artifact preservation and cancellation with a fixture provider. They do **not** qualify a live provider account, the new profile images, Kali tools, browser automation, or hosted workflows. At that fixture-only check, the live web app remained on the operator's local profile until an approved image was explicitly configured. Evidence is retained locally in `/tmp/zero-smolvm-controller-qualification.json` and `/tmp/zero-smolvm-registered-cli-qualification.json`; fixture model labels do not establish live account model availability.
+
+
+## Live account and existing Kali image qualification
+
+The later operator configuration selected SmolVM with the previously approved
+`sha256:735d43b03363c4ad39031c054c4628669bb981a04071f62509d03bafba6acfd9`
+archive. Qualification used a clean CLI snapshot at `fdd1b777`, mounted over the
+image's older CLI, and its installed Linux dependencies. It did not change the
+operator's account, model preference, execution profile or image approval.
+
+- [x] The selected web account's live catalog accepted `gpt-6-astra`.
+- [x] The public `console --print` controller made three real brokered provider
+  requests, each HTTP 200, with the guest's tool network disabled.
+- [x] Actual guest `read_file` and `apply_patch` tools processed a disposable
+  nonce fixture; the exported result matched and the host source stayed unchanged.
+- [x] The command exited 0 without timeout or cleanup failure, and exported its
+  guest database. Provider credentials remained in the host broker.
+
+The run granted one exact model, eight requests, concurrency one, 90-second
+request deadlines, 1 MiB request/response limits and a 4 MiB aggregate response
+limit. The VM lifetime was bounded to four minutes. Evidence is retained in
+`/tmp/zero-smolvm-live-provider-qualification.json`; the fixture and guest artifact
+folders named in that receipt are disposable qualification data.
+
+The existing Kali image also booted with 2 CPUs, 4 GiB RAM and a 20 GiB storage
+allocation in 67.7 seconds, under Linux ARM64 UID 501. Chromium launched an
+offline page. The earlier zero-output failures were blocked in archive
+flattening with smaller resource allocations; they did not establish that
+installed tools were broken. A second run used a writable guest home and completed in 106.7 seconds without
+timeout or cleanup failure. File read/write/rename, native tree-sitter C parsing,
+Chromium, and bounded loopback Nmap, ffuf and Gobuster tasks passed. GitHub CLI,
+Gemini and John initialization also passed with the writable home.
+
+- [x] Browser, native parser, file operations and named local scanner functions.
+- [x] Required startup checks exercised across the core and Kali tool lists;
+  Gobuster's known version syntax change is handled explicitly.
+- [ ] Complete core/Kali image: `ssh` is absent. The Kali receipt now includes
+  every core-tool check so this dependency cannot be omitted.
+- [ ] New immutable profile build and receipt: Docker is unavailable and the
+  Mac has about 26 GiB free, below the 30 GiB core / 50 GiB Kali build floors.
+
+The existing archive embeds 0.21.4; the live provider check mounted the current
+CLI distribution. It has no new profile inventory receipt. Startup success
+alone does not qualify every tool workflow. Wfuzz starts but reports a Pycurl
+OpenSSL warning, so HTTPS fuzzing remains unqualified. Optional AD tools and
+Python impacket/ldap3 were absent; no packages were installed at VM startup.
+The sanitized receipts are checked in under `docs/qualification/`; the full local
+functional receipt is `/tmp/zero-full-toolbox-functional-20260930.json`.
+
+This qualifies the selected account/model and the tested guest paths. It does
+not establish model quality against another product, every optional Kali tool,
+or the new immutable profile build recipes.
 
 ## People testing it
 
 There is concrete external evidence: [issue #143](https://github.com/0sec-labs/0/issues/143) reports a live DeepSeek console interruption; [issue #74](https://github.com/0sec-labs/0/issues/74) reports an actual Linux review of dotnet/dotnet; [merged PR #141](https://github.com/0sec-labs/0/pull/141) contributes a reproduced long-session terminal fix. These demonstrate people trying the product and contributing, not a measured active-user population. Internal operator reports are separate evidence.
 
-At the checked snapshot, GitHub binary asset downloads were 99 for v0.21.4, 19 for v0.22.0 and 7 for v0.22.1, excluding checksum files. Downloads can include repeats, maintainers and automation. They are not unique users or successful launches. No reviewed active-user metric or matched multi-target raw-Codex study was found. Real VM checks now qualify the registered fixture-provider controller described above; download counts and Docker CI do not establish live-account or full-toolbox qualification.
+At the checked snapshot, GitHub binary asset downloads were 99 for v0.21.4, 19 for v0.22.0 and 7 for v0.22.1, excluding checksum files. Downloads can include repeats, maintainers and automation. They are not unique users or successful launches. No reviewed active-user metric or matched multi-target raw-Codex study was found. Real VM checks now qualify the registered controller, one selected live account/model, and the named toolbox functions described above. Download counts and Docker CI establish none of those results; complete toolbox qualification still fails on the missing SSH client.
 
 ## Follow-up validation
 
