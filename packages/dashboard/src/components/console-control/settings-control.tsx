@@ -40,13 +40,14 @@ function categoryFor(def: SettingDefinition): SettingsCategory {
 }
 
 function settingLabel(definition: SettingDefinition): string {
-  const labels: Record<string, string> = { analyticsLevel: "Usage metrics", busyInputMode: "Messages while working" };
+  const labels: Record<string, string> = { analyticsLevel: "Usage metrics", busyInputMode: "Messages while working", executionProfile: "Run tools in" };
   return labels[definition.key] ?? definition.label;
 }
 
 function SettingRow({ definition, value, scope, pending, apply }: { definition: SettingDefinition; value: unknown; scope: "global" | "project"; pending: boolean; apply: (key: string, value: unknown, scope: "global" | "project") => void }) {
   const label = settingLabel(definition);
   const descriptions: Record<string, string> = {
+    executionProfile: "This computer runs tools directly. Isolated VM runs tools in a separate Linux workspace. Changes apply to new chats.",
     updatePolicy: "Check for updates when 0 starts.",
     reduceMotion: "Reduce animations.",
     busyInputMode: "Interrupt with your next message, or queue it until the current turn ends.",
@@ -60,7 +61,7 @@ function SettingRow({ definition, value, scope, pending, apply }: { definition: 
   return <div className="flex items-center justify-between gap-6 py-4">
     <div className="min-w-0 space-y-1"><h3 className="text-sm font-medium">{label}</h3><p className="max-w-lg text-xs leading-5 text-muted-foreground">{description}</p></div>
     <div className="flex shrink-0 items-center gap-2">
-      {isToggle ? <Switch aria-label={label} checked={definition.kind === "boolean" ? value === true : value === enabledChoice} disabled={pending} onCheckedChange={next => applyValue(definition.kind === "boolean" ? next : next ? enabledChoice : "off")} /> : <Select aria-label={label} className="max-w-48" value={typeof value === "string" ? value : ""} onValueChange={applyValue} disabled={pending} options={definition.choices?.map(choice => ({ value: choice, label: choice.charAt(0).toUpperCase() + choice.slice(1) })) ?? []} />}
+      {isToggle ? <Switch aria-label={label} checked={definition.kind === "boolean" ? value === true : value === enabledChoice} disabled={pending} onCheckedChange={next => applyValue(definition.kind === "boolean" ? next : next ? enabledChoice : "off")} /> : <Select aria-label={label} className="max-w-48" value={typeof value === "string" ? value : ""} onValueChange={applyValue} disabled={pending} options={definition.choices?.map(choice => ({ value: choice, label: definition.key === "executionProfile" ? choice === "smolvm" ? "Isolated VM" : "This computer" : choice.charAt(0).toUpperCase() + choice.slice(1) })) ?? []} />}
     </div>
   </div>;
 }
@@ -72,7 +73,7 @@ function ExecutionControl() {
   return <section className="rounded-2xl border border-foreground/10 p-4"><h2 className="mb-3 text-sm font-medium">Execution</h2>
     <QueryState pending={status.isPending} error={status.error} retry={status.refetch} />
     {execution && <div className="space-y-2 text-sm">
-      <p>Selected backend: <span className="font-medium">{execution.profile === "smolvm" ? "SmolVM" : "Local"}</span></p>
+      <p>Run tools in: <span className="font-medium">{execution.profile === "smolvm" ? "Isolated VM" : "This computer"}</span></p>
       <p className="text-xs text-muted-foreground">The runtime and an approved image must both be configured before a chat can use SmolVM.</p>
       {execution.profile === "smolvm" && (!execution.configured || !execution.imageApproved || !execution.runtimeReady) && <div role="status" className="space-y-2 rounded-xl bg-amber-500/10 p-3 text-sm"><p className="font-medium">SmolVM needs setup</p><p className="text-xs leading-5 text-muted-foreground">{!execution.configured ? "SmolVM is selected, but no workbench image or provider grant has been configured. Installing the runtime alone does not finish setup." : !execution.runtimeReady ? "The configured VM runtime is unavailable. Run workbench setup to repair it." : "The configured VM image is not approved or is unavailable. Run workbench setup with your image archive."}</p><code className="block break-all text-xs">0 workbench setup --image /path/to/workbench.tar --provider chatgpt-codex</code></div>}
       <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-[8rem_minmax(0,1fr)]">

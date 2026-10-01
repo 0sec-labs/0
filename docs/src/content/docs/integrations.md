@@ -543,7 +543,7 @@ ghcr.io/0sec-labs/0:<sha>
 ghcr.io/0sec-labs/0:main
 ```
 
-**Sources:** [`Dockerfile`](https://github.com/0sec-labs/0/blob/main/Dockerfile),
+**Sources:** [`Dockerfile`](https://github.com/0sec-labs/0/blob/main/scripts/docker/Dockerfile),
 [`docker-publish.yml`](https://github.com/0sec-labs/0/blob/main/.github/workflows/docker-publish.yml).
 Use a digest or the published short-SHA tag when repeatability matters;
 `latest` follows eligible main builds, not a promise of a stable release.
@@ -597,8 +597,8 @@ at `/work` if you need the container to read source code or write reports.
 ### Build your own
 
 ```bash
-docker build -t 0:local .
-docker build --build-arg INSTALL_SECLISTS=1 -t 0:full .
+docker build -f scripts/docker/Dockerfile -t 0:local .
+docker build -f scripts/docker/Dockerfile --build-arg INSTALL_SECLISTS=1 -t 0:full .
 ```
 
 ## Plugin system
@@ -685,7 +685,7 @@ evolution requires the improvement loop.
 To provision the default guest and start a session:
 
 ```bash
-docker build --target toolbox -t 0-toolbox:local .
+docker build -f scripts/docker/Dockerfile --target toolbox -t 0-toolbox:local .
 env ZERO_PLUGIN_BACKEND=docker ZERO_PLUGIN_IMAGE=0-toolbox:local 0 tui
 ```
 

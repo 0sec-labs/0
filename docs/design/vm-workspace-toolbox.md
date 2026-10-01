@@ -33,7 +33,7 @@ workspace disk and retained runs; image defaults do not bypass those limits.
 
 ## Build inputs and receipts
 
-`Dockerfile.workbench` builds the current checked-out CLI and web assets. Both
+`scripts/docker/Dockerfile.workbench` builds the current checked-out CLI and web assets. Both
 build and runtime Node images are digest-pinned. The minimal runtime image uses
 the official Linux ARM64 manifest for Node 24.21.0 bookworm slim. Debian OS
 packages resolve exclusively from the dated `20260929T000000Z` main/security

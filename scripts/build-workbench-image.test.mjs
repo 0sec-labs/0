@@ -10,6 +10,7 @@ const input = { sourceRevision: revision, archive: "/tmp/0-profile.tar", availab
 
 test("default profile plans current CLI on immutable ARM64 base without choosing Kali", () => {
   const plan = planWorkbenchBuild(input);
+  assert.equal(plan.commands[0].args[plan.commands[0].args.indexOf("--file") + 1], "scripts/docker/Dockerfile.workbench");
   assert.equal(plan.profile, "core-web"); assert.equal(plan.platform, "linux/arm64");
   assert.match(plan.baseImage, /@sha256:[a-f0-9]{64}$/);
   assert.equal(plan.qualification, "not-built");
@@ -47,7 +48,7 @@ test("plan-only command succeeds with Docker absent and creates no archive", () 
   assert.equal(JSON.parse(result.stdout).qualification, "not-built");
 });
 test("snapshot and receipt inputs stay consistent with Docker build", () => {
-  const dockerfile = readFileSync(new URL("../Dockerfile.workbench", import.meta.url), "utf8");
+  const dockerfile = readFileSync(new URL("./docker/Dockerfile.workbench", import.meta.url), "utf8");
   assert.ok(dockerfile.includes(manifest.baseImage)); assert.ok(dockerfile.includes(manifest.aptSnapshot));
   assert.ok(dockerfile.includes("workbench-inventory.mjs"));
   assert.ok(dockerfile.includes("runuser -u zero"));
