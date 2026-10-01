@@ -1,5 +1,5 @@
 import { defineConfig } from "vitest/config";
-import { osecWorkspaceAliases } from "../../vitest.workspace-aliases.ts";
+import { osecWorkspaceAliases } from "../../scripts/config/vitest.workspace-aliases.ts";
 
 export default defineConfig({
   resolve: {
