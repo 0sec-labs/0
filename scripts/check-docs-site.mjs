@@ -40,6 +40,11 @@ for (const [url, html] of pages) {
   }
 }
 const readme = await readFile(resolve(root, 'README.md'), 'utf8');
+const localLinks = [...readme.matchAll(/(?:src|href|srcset)=["']([^"']+)["']|\]\(([^)]+)\)/g)].map(match => match[1] || match[2]).filter(href => !/^(?:[a-z]+:|#)/i.test(href));
+for (const href of localLinks) {
+  try { await access(resolve(root, decodeURIComponent(href.split('#')[0]))); }
+  catch { errors.push(`README.md: missing ${href}`); }
+}
 const docsLinks = [...new Set([...readme.matchAll(/https:\/\/docs\.0\.security\/[^\s)"<>]*/g)].map(m => m[0]))];
 for (const href of docsLinks) await checkLink(href, '/');
 if (errors.length) throw new Error(`Broken docs links (${errors.length}):\n${errors.join('\n')}`);
