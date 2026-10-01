@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://0.security/">
-    <img src="assets/readme-cover.png" alt="0security terminal security research workflow" width="100%">
+    <img src="assets/readme-cover.png" alt="0security landscape with Zero and the security research mission" width="100%">
   </a>
 </p>
 
@@ -67,14 +67,16 @@ Start from 12 templates, customize steps, and run manually or with browser trigg
 
 [Workflow guide: inputs, limits, and results](https://docs.0.security/workflow/).
 
-<details>
-  <summary>Preview the web app</summary>
+## See Zero at work
 
-![Customer API security review in the Zero web app](assets/screenshots/web-chat.jpg)
+![Ask Zero and inspect a source review in the web app](assets/product-preview/chat.png)
 
-![Customer API security workflow in the Zero web app](assets/screenshots/web-workflow.jpg)
+![Plan a reusable security workflow in the web app](assets/product-preview/workflow.png)
 
-</details>
+A real source-only review of the included [demo API](assets/examples/demo-api/).
+The review identifies source flaws; it does not show runtime exploit verification.
+[Full-resolution chat](assets/screenshots/web-chat.jpg) · [Full-resolution workflow](assets/screenshots/web-workflow.jpg)
+
 
 ## Use 0 from another agent
 
