@@ -12,6 +12,8 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.22.2] - 2026-10-01
+
 ### Added
 
 - Opt-in Jev finding prioritization (`rank`) and native EGATS methodology
@@ -37,6 +39,12 @@ on the published npm package and the GitHub Release tag.
   are excluded; existing first-party feedback remains the fallback.
 
 ### Fixed
+
+- Include the current web onboarding, model selection, privacy controls, chat
+  navigation and branding in standalone releases. Verify embedded assets and
+  onboarding persistence without a separately installed runtime before publishing.
+- Persist the installer PATH in shell startup files and show the command for
+  the current terminal. Use baseline x64 executables for CPUs without AVX2.
 
 - Continue safe native Responses output-cap checkpoints without losing completed
   observations or plan state, replaying ambiguous tool calls, or failing workers

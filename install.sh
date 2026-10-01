@@ -100,7 +100,31 @@ if [ "${INSTALL_FOXGUARD:-1}" != "0" ]; then
   printf '%s\n' "Installed verified FoxGuard to ${INSTALL_DIR}/foxguard" >&2
 fi
 
+# A piped installer cannot change its parent shell. Persist the path for future
+# shells and print the exact command for the terminal that launched it.
+quoted_dir="$(printf '%s' "$INSTALL_DIR" | sed "s/'/'\\\\''/g")"
+path_line="export PATH='${quoted_dir}':\"\$PATH\""
+add_path() {
+  profile="$1"
+  if ! grep -Fqx "$path_line" "$profile" 2>/dev/null; then
+    if printf '\n# 0.security CLI\n%s\n' "$path_line" >> "$profile"; then
+      printf '%s\n' "Added 0 to PATH in ${profile}" >&2
+    else
+      printf '%s\n' "Could not update ${profile}; add 0 to PATH manually" >&2
+    fi
+  fi
+}
+add_path "${HOME}/.profile"
+case "${SHELL:-/bin/bash}" in
+  */zsh) add_path "${ZDOTDIR:-${HOME}}/.zshrc" ;;
+  */bash)
+    add_path "${HOME}/.bashrc"
+    if [ -f "${HOME}/.bash_profile" ]; then add_path "${HOME}/.bash_profile"
+    elif [ -f "${HOME}/.bash_login" ]; then add_path "${HOME}/.bash_login"
+    fi
+    ;;
+esac
 case ":${PATH}:" in
   *":${INSTALL_DIR}:"*) ;;
-  *) printf '%s\n' "Add ${INSTALL_DIR} to PATH to run: 0 --help (or 0 --help)" >&2 ;;
+  *) printf '\n%s\n%s\n' "To use 0 in this terminal, run:" "$path_line" >&2 ;;
 esac
