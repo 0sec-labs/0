@@ -44,8 +44,11 @@ beforeEach(() => {
   for (const key of ["ZERO_MODEL", "ZERO_PROVIDER", "ZERO_SELECTED_PROVIDER", "ZERO_FORCE_PROVIDER", "ZERO_LLM_FALLBACK"]) vi.stubEnv(key, undefined);
   vi.stubEnv("OPENAI_API_KEY", "synthetic-openai-key");
   vi.stubEnv("DEEPSEEK_API_KEY", "synthetic-deepseek-key");
+  vi.spyOn(LlmApiRuntime.prototype, "availableModelCatalog").mockImplementation(async function(this: LlmApiRuntime) {
+    return [{ id: this.resolvedProvider() === "openai" ? "account-only-model" : "provider-only-model" }];
+  });
 });
-afterEach(() => { vi.unstubAllEnvs(); rmSync(testHome, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); rmSync(testHome, { recursive: true, force: true }); });
 
 describe("web model connection inspection", () => {
   it.each(["gpt-6.1-sol", "gpt-4o"])("round-trips effective runtime selection for %s without undefined fields", model => {
@@ -90,11 +93,39 @@ describe("web model connection inspection", () => {
     expect(data.providers.find((provider) => provider.id === "openai")).toMatchObject({ configured: true, diagnostics: { valid: true, message: null } });
   });
 
-  it("returns OpenAI catalogue rows without a spurious explicit-model diagnostic", async () => {
+  it("returns only account-discovered OpenAI models without requiring a chosen model", async () => {
     const result = await new WebOperatorServices().handle("/api/console/models", "GET", undefined, new URLSearchParams("providerId=openai"));
     const data = result?.data as { models: Array<{ provider: string }>; diagnostics: Array<{ providerId: string; message: string }> };
-    expect(data.models.some((model) => model.provider === "openai")).toBe(true);
+    expect(data.models).toEqual([expect.objectContaining({ id: "account-only-model", provider: "openai", source: "account" })]);
     expect(data.diagnostics.filter((diagnostic) => diagnostic.providerId === "openai")).toEqual([]);
+  });
+
+  it("discovers Azure deployment aliases before a deployment is selected and never copies OpenAI rows", async () => {
+    vi.stubEnv("AZURE_OPENAI_API_KEY", "synthetic-azure-key");
+    vi.stubEnv("AZURE_OPENAI_BASE_URL", "https://azure.fixture/openai/v1");
+    vi.stubEnv("AZURE_OPENAI_MODEL", "");
+    vi.mocked(LlmApiRuntime.prototype.availableModelCatalog).mockResolvedValue([{ id: "production-chat" }]);
+    const result = await new WebOperatorServices().handle("/api/console/models", "GET", undefined, new URLSearchParams("providerId=azure"));
+    expect(result?.data).toMatchObject({ models: [{ id: "production-chat", provider: "azure", source: "account" }], diagnostics: [] });
+    expect(vi.mocked(LlmApiRuntime.prototype.availableModelCatalog)).toHaveBeenCalledOnce();
+  });
+
+  it("reports discovery failure with no guessed or configured-model fallback", async () => {
+    vi.stubEnv("AZURE_OPENAI_API_KEY", "synthetic-azure-key");
+    vi.stubEnv("AZURE_OPENAI_BASE_URL", "https://azure.fixture/openai/v1");
+    vi.stubEnv("AZURE_OPENAI_MODEL", "unverified-deployment");
+    vi.mocked(LlmApiRuntime.prototype.availableModelCatalog).mockRejectedValue(new Error("Deployment discovery unavailable"));
+    const result = await new WebOperatorServices().handle("/api/console/models", "GET", undefined, new URLSearchParams("providerId=azure"));
+    expect(result?.data).toMatchObject({ models: [], diagnostics: [{ providerId: "azure", message: "Deployment discovery unavailable" }] });
+  });
+
+  it("does not leak one provider's discovered model IDs into another connection", async () => {
+    const result = await new WebOperatorServices().handle("/api/console/models", "GET", undefined, new URLSearchParams());
+    const data = result?.data as { models: Array<{ id: string; provider: string }> };
+    expect(data.models).toEqual([
+      expect.objectContaining({ id: "provider-only-model", provider: "deepseek" }),
+      expect.objectContaining({ id: "account-only-model", provider: "openai" }),
+    ]);
   });
 
   it("applies the selected cross-provider model while retaining routing settings", async () => {

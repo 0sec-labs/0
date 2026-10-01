@@ -28,7 +28,7 @@
  *
  * ## One picker, separate direct-provider and subscription catalogs
  *
- * Connected API-key providers use the pricing table and Models.dev. Codex
+ * Connected API-key providers discover IDs from the selected endpoint; the pricing table and Models.dev enrich metadata only. Codex
  * subscription IDs are discovered from the account, not inferred from public
  * model names. Matching IDs across connections remain separate rows because
  * choosing one also chooses its provider.
@@ -76,6 +76,7 @@
 import React, { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { CodexCatalogRefreshError, loadCodexModelCatalog, type CodexCatalogModel, type RuntimeConfig } from "@0/core";
 import { credentialEnvPatch, loadCredentials } from "./credential-store.js";
+import { discoverConnectionModels, type ModelDiscoveryResult } from "./available-models.js";
 import { useKeyboard, usePaste } from "@opentui/react";
 import { decodePasteBytes, TextAttributes } from "@opentui/core";
 
@@ -110,7 +111,6 @@ import {
   modelFooterHint,
   modelResultCount,
   modelTargetLine,
-  reachableModelCatalog,
   buildModelRows,
   type ModelCatalogScope,
   type ModelDetailLine,
@@ -303,6 +303,9 @@ export function ModelScreen({
   const [codexState, setCodexState] = useState<{
     source: typeof source; models: CodexCatalogModel[] | null; failed: boolean;
   } | null>(null);
+  const [connectionState, setConnectionState] = useState<{ source: typeof source; result: ModelDiscoveryResult } | null>(null);
+  const connectionModels = connectionState?.source === source ? connectionState.result.models : [];
+  const connectionDiagnostics = connectionState?.source === source ? connectionState.result.diagnostics : [];
   const codexModels = codexState?.source === source ? codexState.models : null;
   const codexFailed = codexState?.source === source && codexState.failed;
   // Successful discovery also verifies file-backed Codex credentials that the
@@ -334,6 +337,8 @@ export function ModelScreen({
         },
       ));
     }
+    tasks.push(discoverConnectionModels(env, credentialStates.filter(state => state.configured && state.id !== "chatgpt-codex").map(state => state.id), controller.signal)
+      .then(result => { if (alive) setConnectionState({ source, result }); }));
     // Refresh the public catalogue independently of subscription discovery.
     tasks.push(
       syncModelCatalog({ force: reload > 0 }).then((updated) => {
@@ -366,15 +371,14 @@ export function ModelScreen({
   );
   const scopeCatalog = (query: string, all: boolean) => {
     const scoped = scopeModelCatalog(catalog, { showAll: all, filter: query, currentModel: activeModel });
-    // Subscription rows come only from this account, including models absent
-    // from the public pricing feed. Do not dress API-key rows as subscription access.
-    const catalogRows = [
-      ...scoped.filter((model) => model.provider !== "chatgpt-codex"),
-      ...(codexModels ?? []).map((model) => ({ id: model.id, provider: "chatgpt-codex", price: "subscription" })),
-    ];
-    const codexModelIds = new Set((codexModels ?? []).map((model) => model.id));
-    return reachableModelCatalog(catalogRows, states, { env, providerId, codexModelIds })
-      .filter((model) => role === null || model.provider === providerId);
+    const metadata = new Map(catalog.map(model => [`${model.provider}/${model.id}`, model]));
+    const scopedIds = new Set(scoped.map(model => `${model.provider}/${model.id}`));
+    // Live connection inventories define choices; pricing metadata only decorates them.
+    return [
+      ...connectionModels.filter(model => !metadata.has(`${model.provider}/${model.id}`) || scopedIds.has(`${model.provider}/${model.id}`)).map(model => ({ id: model.id, provider: model.provider,
+        price: metadata.get(`${model.provider}/${model.id}`)?.price ?? "—" })),
+      ...(codexModels ?? []).map(model => ({ id: model.id, provider: "chatgpt-codex", price: "subscription" })),
+    ].filter(model => role === null || model.provider === providerId);
   };
   const scopedCatalog = scopeCatalog(filter, showAll);
 
@@ -455,7 +459,8 @@ export function ModelScreen({
   // Connection failures affect only that provider's row; other connected
   // providers remain selectable.
   const baseStatusText = credentialSummary(states);
-  const catalogStatus = publicFailed ? "Catalog offline · showing cached models · Ctrl+R retry" : baseStatusText;
+  const discoveryStatus = connectionDiagnostics.length ? `${connectionDiagnostics.map(item => item.providerId).join(", ")} models unavailable · Ctrl+R retry` : baseStatusText;
+  const catalogStatus = publicFailed ? `Pricing offline · ${discoveryStatus}` : discoveryStatus;
   const statusText = !loadCodex ? catalogStatus : `${codexFailed
     ? `Codex models unavailable${codexModels ? " · showing cached" : ""} · Ctrl+R retry`
     : codexModels === null ? "Loading Codex models…" : `${codexModels.length} Codex models`} · ${catalogStatus}`;
@@ -705,9 +710,7 @@ export function ModelScreen({
           renderDetail={renderDetail}
           onActivateRow={(index) => highlight(index, items)}
           onScroll={move}
-          emptyText={showAll || filter.trim()
-            ? "No matches. Ctrl+U clears search."
-            : "No connected models. Tab shows all, or connect a provider."}
+          emptyText={filter.trim() ? "No matches. Ctrl+U clears search." : "No discovered models. Ctrl+R retries, or connect a provider."}
         />
       )}
 

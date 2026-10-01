@@ -284,8 +284,11 @@ profile.
 
 The `/model` picker lists connected API and subscription models. Subscription
 choices come first; Codex follows the signed-in account's recommendation order.
-**Tab** toggles the public catalog view; queries search the full catalog.
-Missing prices stay unknown.
+API choices come from the selected endpoint and credentials. Public catalogs
+supply pricing and context metadata only; they do not grant model access.
+**Tab** switches between curated and all discovered models; queries search
+discovered models. Missing prices stay unknown. Discovery errors
+leave that provider's choices empty and report why; other providers remain usable.
 Use `/connect` to add credentials or inspect connection state.
 Model selections apply while idle or after the active turn. Successful explicit
 choices are remembered for the same connection on fresh launches; explicit CLI
@@ -349,6 +352,15 @@ credentials. Supported IDs are `openrouter`, `anthropic`, `openai`, `azure`,
 
 ## Azure OpenAI configuration
 
+The model picker lists deployment names from the selected Azure resource, not
+OpenAI's model catalog. Discovery uses an existing Azure CLI sign-in with read
+access to the resource and its deployments, matching the configured endpoint to
+that resource. It never starts a login or changes deployments. An inference API
+key alone cannot enumerate resource deployments; if Azure CLI/resource access is
+unavailable, configure the exact deployment ID manually in Connections instead.
+Providers without a supported account-scoped listing API report discovery as
+unavailable rather than offering their public catalog as selectable models.
+
 Configure an Azure API key, endpoint and actual deployment ID. The most
 repeatable setup supplies all three and pins the provider:
 
@@ -364,7 +376,7 @@ env ZERO_SELECTED_PROVIDER=azure ZERO_MODEL="your-deployment-id" \
 | --- | --- |
 | API key | `AZURE_OPENAI_API_KEY` (or explicit runtime API key with Azure selected) |
 | Endpoint, unpinned detection | `AZURE_OPENAI_BASE_URL`, then `OPENAI_BASE_URL`, then the Azure provider section of `~/.codex/config.toml` |
-| Endpoint, explicit pin / fallback entry | `AZURE_OPENAI_BASE_URL`, then `OPENAI_BASE_URL`; no Codex-file endpoint fallback in this resolver |
+| Endpoint, explicit pin / fallback entry | `AZURE_OPENAI_BASE_URL`, then `OPENAI_BASE_URL`, then the Azure provider section of `~/.codex/config.toml` |
 | Model | Explicit `--model`, then `ZERO_MODEL`; ambient Azure detection can use `AZURE_OPENAI_MODEL` or an Azure-backed Codex config model |
 | Wire | `AZURE_OPENAI_WIRE_API` accepts `chat_completions` or `responses`; ambient detection can inherit Codex's Azure `wire_api`, otherwise Chat Completions |
 

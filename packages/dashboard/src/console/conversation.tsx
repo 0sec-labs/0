@@ -213,7 +213,7 @@ function Composer({ workspace, snapshot, worker, onSubmit, onStop, sendBehavior 
   } });
   const [modelsOpen, setModelsOpen] = useState(false);
   const [modelFilter, setModelFilter] = useState("");
-  const modelCatalog = useQuery({ queryKey: ["console-models", snapshot.runtime?.providerId], enabled: modelsOpen, queryFn: ({ signal }) => webFetchJson<ModelsResponse>("/api/console/models", { signal }) });
+  const modelCatalog = useQuery({ queryKey: ["console-models", "all", snapshot.runtime?.connectionIdentity], enabled: modelsOpen, queryFn: ({ signal }) => webFetchJson<ModelsResponse>("/api/console/models", { signal }) });
   const visibleModels = useMemo(() => {
     const rank = (model: ModelsResponse["models"][number]) => {
       if (model.provider === snapshot.runtime?.providerId && model.id === snapshot.runtime?.model) return 0;
@@ -223,7 +223,7 @@ function Composer({ workspace, snapshot, worker, onSubmit, onStop, sendBehavior 
       return 4;
     };
     const models = new Map<string, ModelsResponse["models"][number]>();
-    for (const model of modelCatalog.data?.models ?? []) {
+    for (const model of (modelCatalog.isFetching || modelCatalog.isError ? [] : modelCatalog.data?.models ?? [])) {
       const key = `${model.provider}:${model.id}`;
       if (!models.has(key) || model.source === "account") models.set(key, model);
     }
@@ -233,7 +233,7 @@ function Composer({ workspace, snapshot, worker, onSubmit, onStop, sendBehavior 
         || Number(/^gpt-[0-9]/.test(b.id)) - Number(/^gpt-[0-9]/.test(a.id))
         || b.id.localeCompare(a.id, undefined, { numeric: true })
         || a.provider.localeCompare(b.provider));
-  }, [modelCatalog.data, modelFilter, snapshot.runtime?.providerId, snapshot.runtime?.model]);
+  }, [modelCatalog.data, modelCatalog.isFetching, modelCatalog.isError, modelFilter, snapshot.runtime?.providerId, snapshot.runtime?.model]);
   const [pasteNotice, setPasteNotice] = useState("");
   const [commandIndex, setCommandIndex] = useState(0);
   const [commandsDismissed, setCommandsDismissed] = useState(false);
@@ -287,8 +287,8 @@ function Composer({ workspace, snapshot, worker, onSubmit, onStop, sendBehavior 
           {modelCatalog.error && <div className="max-w-64 px-3 py-2 text-sm text-muted-foreground">{consoleErrorMessage(modelCatalog.error instanceof Error ? modelCatalog.error.message : "Could not load models")}</div>}
           {visibleModels.map((model) => <DropdownMenu.Item key={`${model.provider}:${model.id}`} aria-label={`${model.id} ${model.provider}`} title={`${model.id} · ${model.provider}`} icon={<ProviderIcon providerId={model.provider} className="size-4 shrink-0" />} selected={model.id === snapshot.runtime?.model && model.provider === snapshot.runtime?.providerId} className="h-9 gap-2.5 rounded-xl px-3 py-2 text-sm focus-visible:ring-0 data-highlighted:bg-muted transition-colors duration-100 motion-reduce:transition-none" onClick={() => void workspace.perform(() => configureConsoleSession(snapshot.session.id, { runtime: { providerId: model.provider, model: model.id } }))}><span className="min-w-0 flex-1 truncate text-sm leading-5">{model.id}</span></DropdownMenu.Item>)}
           {modelCatalog.data && modelCatalog.data.models.length > 0 && !modelCatalog.data.models.some(model => `${model.id} ${model.provider}`.toLowerCase().includes(modelFilter.toLowerCase())) && <div className="px-3 py-3 text-sm text-muted-foreground">No models match your search.</div>}
-          {Boolean(modelCatalog.data?.diagnostics.some(item => !modelFilter || item.providerId.toLowerCase().includes(modelFilter.toLowerCase()))) && <div role="status" className="px-3 py-2 text-xs text-muted-foreground">A connection needs attention. Manage it below.</div>}
-          {modelCatalog.data && modelCatalog.data.models.length === 0 && <div className="px-3 py-2 text-sm text-muted-foreground">Connect a provider to choose a model.</div>}
+          {!modelCatalog.isFetching && modelCatalog.data?.diagnostics.filter(item => !modelFilter || item.providerId.toLowerCase().includes(modelFilter.toLowerCase())).map(item => <div key={item.providerId} role="status" className="max-w-80 whitespace-normal px-3 py-2 text-xs text-muted-foreground">{item.providerId}: {item.message}</div>)}
+          {!modelCatalog.isFetching && modelCatalog.data && modelCatalog.data.models.length === 0 && !modelCatalog.data.diagnostics.length && <div className="px-3 py-2 text-sm text-muted-foreground">No models available. Manage connections below.</div>}
           <DropdownMenu.Item icon={<Plus className="size-4 shrink-0" />} className="gap-3 rounded-xl px-3 py-2 text-sm" onClick={() => navigate(`/connections?session=${snapshot.session.id}&return=${encodeURIComponent(`/console/${snapshot.session.id}`)}`)}>Manage connections</DropdownMenu.Item>
           <DropdownMenu.Item icon={<Wrench className="size-4 shrink-0" />} className="gap-3 rounded-xl px-3 py-2 text-sm" onClick={() => navigate(`/models?session=${snapshot.session.id}&return=${encodeURIComponent(`/console/${snapshot.session.id}`)}`)}>Model settings</DropdownMenu.Item>
         </div></DropdownMenu.Content></DropdownMenu>}<span hidden={workspace.draft.length < 30000} className={`text-xs ${workspace.draft.length > 32000 ? "text-destructive" : "text-muted-foreground"}`}>{workspace.draft.length.toLocaleString()} / 32,000</span>{snapshot.queuedMessages.length > 0 && !worker && <QueuedMessages workspace={workspace} snapshot={snapshot} />}{active && <Button variant="outline" size="sm" disabled={workspace.busy || stopping} onClick={onStop}><Square className="size-3" />{stopping ? "Stopping…" : "Stop"}</Button>}<Button size="icon-sm" title={active && !worker ? sendBehavior === "queue" ? "Send when done" : "Interrupt and send" : "Send message"} aria-label={workspace.busy ? "Sending message" : "Send message"} aria-busy={workspace.busy} disabled={!canSend} onClick={onSubmit}>{workspace.busy ? <LoadingDots className="scale-75" /> : <ArrowUp className="size-4" />}</Button></div></div>

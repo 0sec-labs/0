@@ -1074,9 +1074,10 @@ export function resolveFailoverProvider(
     case "azure": {
       const key = apiKey ?? env.AZURE_OPENAI_API_KEY;
       if (!key) return undefined;
-      const url = env.AZURE_OPENAI_BASE_URL ?? env.OPENAI_BASE_URL;
+      const azureConfig = parseCodexAzureConfig(env);
+      const url = env.AZURE_OPENAI_BASE_URL ?? env.OPENAI_BASE_URL ?? azureConfig.baseUrl;
       if (!url) return undefined;
-      return { apiKey: key, baseUrl: url, wireApi: openAICompatibleWireApi(env, "AZURE_OPENAI_WIRE_API") };
+      return { apiKey: key, baseUrl: url, wireApi: openAICompatibleWireApi(env, "AZURE_OPENAI_WIRE_API", azureConfig.wireApi) };
     }
     case "openai": {
       const key = apiKey ?? env.OPENAI_API_KEY;
@@ -2643,6 +2644,15 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     if (this.provider !== "chatgpt-codex" || !state) throw new Error("No active Codex subscription");
     const { loadCodexModelCatalog } = await import("./codex-models.js");
     return loadCodexModelCatalog({ signal, resolveCredentials: () => refreshChatGptCodexAuthState(state) });
+  }
+
+  /** Discover callable IDs from this captured connection, never from public pricing metadata. */
+  async availableModelCatalog(signal?: AbortSignal): Promise<Array<{ id: string; contextTokens?: number }>> {
+    if (this.provider === "chatgpt-codex") return this.codexModelCatalog(signal);
+    const { discoverProviderModels } = await import("./provider-model-discovery.js");
+    // Discovery uses the same resolved endpoint and credential snapshot as inference.
+    return discoverProviderModels({ provider: this.provider, baseUrl: this.baseUrl,
+      headers: this.provider === "google" ? {} : await this.ensureFreshHeaders(), signal });
   }
 
   /** Host-only inference grant bound to this captured account, including after

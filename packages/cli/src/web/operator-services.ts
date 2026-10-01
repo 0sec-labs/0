@@ -18,7 +18,7 @@ import { maybeLoadCodexAuth } from "../codex-auth.js";
 import { PROVIDERS, providerStates } from "../tui/provider-status.js";
 import { createPreferredConsoleRuntime, saveAppliedModelPreference } from "../tui/model-preference.js";
 import { buildFullModelCatalog } from "../tui/model-catalog.js";
-import { reachableModelCatalog } from "../tui/model-layout.js";
+import { discoverConnectionModels } from "../tui/available-models.js";
 import { syncModelCatalog } from "../tui/model-catalog-sync.js";
 import { resolveContextLimit } from "../tui/context-window.js";
 import { startDeviceAuth, PROVIDER_DEVICE_AUTH, type DeviceAuthSession } from "../tui/device-auth.js";
@@ -325,40 +325,17 @@ export class WebOperatorServices {
   async #models(providerId?: string) {
     if (providerId !== undefined) providerId = provider(providerId).id;
     const env = webRuntimeEnv();
-    const diagnostics: Array<{ providerId: string; message: string }> = [];
-    const states = providerStates(env).map((state) => {
-      if (!state.configured) return state;
-      try {
-        const runtime = connectionProbeRuntime(state.id, env);
-        const configuration = runtime.getConfigurationDiagnostics();
-        if (configuration.valid) return state;
-        diagnostics.push({ providerId: state.id, message: publicMessage(configuration.fatalError ?? "Provider configuration is incomplete.") });
-      } catch (error) {
-        diagnostics.push({ providerId: state.id, message: publicMessage(error) });
-      }
-      return { ...state, configured: false };
-    });
-    const publicCatalog = syncModelCatalog();
-    const codex = states.find((state) => state.id === "chatgpt-codex");
-    let accountModels: Array<{ id: string; contextTokens?: number }> = [];
-    if (codex?.configured && (!providerId || providerId === "chatgpt-codex")) {
-      const runtime = createConsoleRuntime({ provider: "chatgpt-codex", env });
-      try { accountModels = await runtime.codexModelCatalog(AbortSignal.timeout(10_000)); }
-      catch (error) {
-        diagnostics.push({ providerId: "chatgpt-codex", message: publicMessage(error) });
-        if (error instanceof CodexCatalogRefreshError) accountModels = [...error.cachedModels];
-      }
-    }
-    await publicCatalog;
-    const catalog = reachableModelCatalog(buildFullModelCatalog(), states, { env, providerId, codexModelIds: new Set(accountModels.map((model) => model.id)) });
-    const rows: Array<{ id: string; provider: string; price: string; contextWindowTokens: number | null; source: "account" | "public-catalog" }> = catalog.filter((model) => model.provider !== "chatgpt-codex").map((model) => ({
-      ...model, contextWindowTokens: resolveContextLimit({ modelId: model.id, providerId: model.provider })?.tokens ?? null,
-      source: "public-catalog" as const,
+    const ids = providerStates(env).filter(state => state.configured && (!providerId || state.id === providerId)).map(state => state.id);
+    const [discovered] = await Promise.all([discoverConnectionModels(env, ids), syncModelCatalog()]);
+    const metadata = new Map(buildFullModelCatalog().map(model => [`${model.provider}/${model.id}`, model]));
+    const rows = discovered.models.map(model => ({
+      id: model.id, provider: model.provider,
+      price: model.provider === "chatgpt-codex" ? "Included in subscription" : metadata.get(`${model.provider}/${model.id}`)?.price ?? "Unknown rate",
+      contextWindowTokens: model.contextTokens ?? resolveContextLimit({ modelId: model.id, providerId: model.provider })?.tokens ?? null,
+      source: "account" as const,
     }));
-    for (const model of accountModels) rows.push({ id: model.id, provider: "chatgpt-codex", price: "Included in subscription", contextWindowTokens: model.contextTokens ?? null, source: "account" });
-    const azureModel = env.AZURE_OPENAI_MODEL;
-    if (azureModel && states.some((state) => state.id === "azure" && state.configured) && !rows.some((model) => model.provider === "azure" && model.id === azureModel)) rows.push({ id: azureModel, provider: "azure", price: "Unknown deployment rate", contextWindowTokens: null, source: "public-catalog" });
-    return { models: rows.filter((model) => !providerId || model.provider === providerId), providerId: providerId ?? null, diagnostics, roles: MODEL_ROLES };
+    return { models: rows, providerId: providerId ?? null,
+      diagnostics: discovered.diagnostics.map(item => ({ ...item, message: publicMessage(item.message) })), roles: MODEL_ROLES };
   }
 
   async #connections(input: unknown) {

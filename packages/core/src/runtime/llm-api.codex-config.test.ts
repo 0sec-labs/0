@@ -78,6 +78,17 @@ describe("model_reasoning_effort scoping in ~/.codex/config.toml", () => {
     for (const home of homes.splice(0)) rmSync(home, { recursive: true, force: true });
   });
 
+  it("uses the Azure config endpoint for an explicit discovery provider without selecting a deployment", () => {
+    const home = withCodexConfig(['model_provider = "azure"', AZURE_SECTION].join("\n"));
+    homes.push(home);
+    vi.stubEnv("HOME", home);
+    vi.stubEnv("AZURE_OPENAI_BASE_URL", undefined);
+    vi.stubEnv("OPENAI_BASE_URL", undefined);
+    const runtime = new LlmApiRuntime({ type: "api", timeout: 5000, provider: "azure", model: "probe" });
+    expect((runtime as any).baseUrl).toBe("https://example.openai.azure.com/openai/v1");
+    expect((runtime as any).wireApi).toBe("responses");
+  });
+
   it("takes the top-level value, not a plugin section's", () => {
     const { home, effort } = effortFor(
       ['model_reasoning_effort = "medium"', 'model_provider = "azure"', AZURE_SECTION, PLUGIN_SECTION].join("\n"),
