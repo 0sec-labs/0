@@ -1,10 +1,4 @@
 <p align="center">
-  <a href="https://0.security/">
-    <img src="assets/readme-cover.png" alt="0security terminal security research workflow" width="100%">
-  </a>
-</p>
-
-<p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/0-aperture-white.svg">
     <img src="assets/0-aperture-ink.svg" alt="0security" width="280">
@@ -12,7 +6,7 @@
 </p>
 
 <p align="center">
-  <strong>The open-source, self-evolving, multi-model harness for security research.</strong><br/>
+  <strong>Open-source security research in your browser, terminal, or coding agent.</strong><br/>
   <sub>Backed by Y Combinator · The Swiss Applied AI &amp; Cybersecurity Research Lab</sub><br/>
   <a href="https://0.security/">0.security</a> ·
   <a href="https://docs.0.security/">Documentation</a> ·
@@ -22,93 +16,72 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-1A1815?style=flat-square&labelColor=1A1815" alt="License: MIT OR Apache-2.0"></a>
   <a href="https://github.com/0sec-labs/0/releases/latest"><img src="https://img.shields.io/github/v/release/0sec-labs/0?style=flat-square&labelColor=1A1815&color=1A1815" alt="Latest release"></a>
-  <a href="#status"><img src="https://img.shields.io/badge/status-research%20preview-FD802E?style=flat-square&labelColor=1A1815" alt="Status: research preview"></a>
+  <a href="#status-and-safety"><img src="https://img.shields.io/badge/status-research%20preview-FD802E?style=flat-square&labelColor=1A1815" alt="Status: research preview"></a>
 </p>
-
-<p align="center">
-  <img src="assets/security-cycle-diagram.webp" alt="Zero studies, finds, fixes, reports, and improves." width="100%">
-</p>
-
-## Security research, in your workspace
-
-0 is an open-source, multi-model harness for investigating software security:
-read code, run tools, investigate findings and review proposed fixes.
-Built by the Swiss Applied AI & Cybersecurity Research Lab, it supports our
-[public disclosures and upstream fixes](https://0.security/research/#disclosures).
 
 ## Get started
 
-Install on Apple Silicon macOS or x64/ARM64 Linux, then open 0:
+Install on Apple Silicon macOS or x64/ARM64 Linux:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash
 export PATH="$HOME/.0/bin:$PATH"
-0
+0 web
 ```
 
+Connect a model provider, open a chat, and describe the repository or system you
+want to investigate. Use **Workflows** for reusable reviews and **Plugins** to
+connect your tools. Prefer the terminal? Run `0`.
 
-### Local web app development
+## Use 0 from another agent
 
-From a source checkout with dependencies installed, run:
+**CLI:** an agent with shell access can run a review and read its JSON report:
 
 ```bash
-npm run dev
+0 review /absolute/path/to/repo --format json > review.json
 ```
 
-Open the local browser address printed by the launcher. The web app connects
-to the local engine and supports onboarding, provider connections, conversations,
-and approvals in the browser. Frontend changes reload automatically. The terminal
-console remains available separately through `0`.
+Configure 0's model provider first; the coding agent's model session is separate.
 
-## Work locally, extend deliberately
+**MCP:** give an agent selected live-target tools through a local stdio server:
 
-- Describe an authorized repository and investigation goal in chat, or use
-  `0 review ./authorized-repo` for a source review.
-- Review findings and proposed changes.
-  Follow the [research workflows](https://docs.0.security/research-workflows/)
-  for deeper investigations.
-- Connect your tools through [MCP and integrations](https://docs.0.security/integrations/).
-  Browse `/hackstore`, or [build and locally install an extension](https://docs.0.security/hackstore/).
-  Community plugins run as local processes; review them before enabling.
+```bash
+0 mcp-server --target https://target.example.com --scan-id my-review \
+  --scope /absolute/path/to/scope.json --tools http_request,crawl,query_findings
+```
 
-## Why 0?
-
-Use the models you want. Bring the tools you need. Make the workflow your own.
-0 brings security investigations and fixes into one terminal workspace, with
-focused agents and an extensible toolchain. The harness is open source and
-runs under your control.
+In browser chat, **Onboard your agent** copies a setup prompt for your MCP client.
+MCP exposes target tools; it does not control browser chats or run the full CLI.
+See [integrations](https://docs.0.security/integrations/) for client configuration
+and [scope enforcement](https://docs.0.security/scope/) for target boundaries.
 
 ## Guides
 
-- [Quick start and installation](https://docs.0.security/getting-started/)
-- [Models and provider connections](https://docs.0.security/api-keys/)
-- [Console, sessions and agents](https://docs.0.security/console/)
-- [Plugins and Hackstore publishing](https://docs.0.security/hackstore/)
-- [Scope and authorization](https://docs.0.security/scope/)
+- [Installation and quick start](https://docs.0.security/getting-started/)
+- [Models and credentials](https://docs.0.security/api-keys/)
+- [Chat, sessions and agents](https://docs.0.security/console/)
+- [Integrations and service plugins](https://docs.0.security/integrations/)
+- [Build and publish plugins](https://docs.0.security/hackstore/)
 - [GitHub Actions](https://docs.0.security/ci/github-action/)
 - [Troubleshooting](https://docs.0.security/troubleshooting/)
 
+## Development
+
+From a source checkout with dependencies installed, run `npm run dev` and open
+the printed browser address. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Status and safety
 
-This is a **research preview**, not a guarantee of coverage or correctness.
-Review results and generated fixes before applying them. Tool making and
-[evaluated self-improvement](https://docs.0.security/improvement-plane/) are research workflows.
+**Research preview.** Test only systems you own or are authorized to assess.
+Review findings and generated fixes. The default terminal console uses YOLO mode;
+run `0 console --mode standard` for tool-action confirmations. Enable the optional
+[scope plugin](https://docs.0.security/scope/) to enforce target boundaries.
 
-Only test systems you own or are authorized to assess. The optional
-[scope plugin](https://docs.0.security/scope/) is disabled by default:
-enable it explicitly with `0 plugin enable scope` and configure your boundaries.
-The default console uses YOLO mode; use `0 console --mode standard` for
-
-## Contributing and license
-
-Build and extend the harness with [CONTRIBUTING.md](CONTRIBUTING.md).
-Report security issues through [SECURITY.md](SECURITY.md).
+Report vulnerabilities through [SECURITY.md](SECURITY.md).
 Licensed under [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE).
 
-## Acknowledgments
-
-Thanks to the teams behind [OpenTUI](https://github.com/anomalyco/opentui),
-[Bun](https://bun.sh/) and [React](https://react.dev/) for the interface stack,
-and [Models.dev](https://models.dev/) and [LiteLLM](https://github.com/BerriAI/litellm)
-for model metadata and pricing estimates. Thank you to everyone contributing
-code, reporting bugs and sharing ideas.
+Built by the Swiss Applied AI & Cybersecurity Research Lab.
+[Public disclosures and upstream fixes](https://0.security/research/#disclosures).
+Thanks to [OpenTUI](https://github.com/anomalyco/opentui), [Bun](https://bun.sh/),
+[React](https://react.dev/), [Models.dev](https://models.dev/),
+[LiteLLM](https://github.com/BerriAI/litellm), and our contributors.
