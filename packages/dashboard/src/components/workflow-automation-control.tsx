@@ -34,17 +34,25 @@ export function WorkflowAutomationControl({ workflow, disabled = false, onConfig
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not pause schedules."); }
     finally { await cache.invalidateQueries({ queryKey: ["workflow-triggers"] }); setBusy(false); }
   };
+  const enable = async () => {
+    const schedule = summary.own.length === 1 ? summary.own[0] : undefined;
+    if (!schedule || schedule.workflowRevision !== workflow.revision) { setOpen(true); return; }
+    setBusy(true); setError("");
+    try { await webFetchJson(`/api/console/workflow-triggers/${encodeURIComponent(schedule.id)}`, { method: "PATCH", body: JSON.stringify({ enabled: true, approval: "enable-reviewed-trigger" }) }); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Could not enable schedule."); }
+    finally { await cache.invalidateQueries({ queryKey: ["workflow-triggers"] }); setBusy(false); }
+  };
   const inactive = disabled || busy || !schedules.data || schedules.isError;
   return <div className="space-y-2">
     <div className="flex items-center justify-between gap-3">
       <button type="button" disabled={disabled || busy} onClick={() => setOpen(true)} className="flex min-w-0 items-center gap-2 rounded-lg text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-50">
         {summary.own.length ? <CalendarClock aria-hidden="true" className="size-4 shrink-0" /> : <Play aria-hidden="true" className="size-4 shrink-0" />}<span className="truncate">{schedules.isPending ? "Loading triggers…" : schedules.isError ? "Triggers unavailable" : summary.label}</span><ChevronRight aria-hidden="true" className="size-3.5 shrink-0" />
       </button>
-      <div className="flex shrink-0 items-center gap-2"><span className="text-xs text-muted-foreground">{summary.enabled ? "On" : "Off"}</span><Switch aria-label={`Automatic triggers for ${workflow.name}`} checked={summary.enabled} disabled={inactive} onCheckedChange={checked => { if (checked) setOpen(true); else void pause(); }} /></div>
+      <div className="flex shrink-0 items-center gap-2"><span className="text-xs text-muted-foreground">{summary.enabled ? "On" : "Off"}</span><Switch aria-label={`Automatic triggers for ${workflow.name}`} checked={summary.enabled} disabled={inactive} onCheckedChange={checked => { if (checked) void enable(); else void pause(); }} /></div>
     </div>
     {summary.next && <p className="text-xs text-muted-foreground">Next · {new Date(summary.next.nextFireAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: summary.next.timezone })}</p>}
     {summary.needsReview && <p className="text-xs text-muted-foreground">Review triggers</p>}
     {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
-    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="sm:max-w-2xl"><DialogHeader><DialogTitle>{workflow.name}</DialogTitle><DialogDescription>Manage triggers. Turning off pauses future runs.</DialogDescription></DialogHeader>{workflow.target.trim() ? <WorkflowTriggers workflow={workflow} disabled={disabled} /> : <div className="space-y-4"><p className="text-sm text-muted-foreground">Choose a target before setting up automatic runs.</p><Button onClick={() => { setOpen(false); onConfigureTarget(); }}>Set target</Button></div>}</DialogContent></Dialog>
+    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="sm:max-w-2xl"><DialogHeader><DialogTitle>Triggers</DialogTitle><DialogDescription>{workflow.name}</DialogDescription></DialogHeader>{workflow.target.trim() ? <WorkflowTriggers workflow={workflow} disabled={disabled} /> : <div className="space-y-4"><p className="text-sm text-muted-foreground">Choose a target before setting up automatic runs.</p><Button onClick={() => { setOpen(false); onConfigureTarget(); }}>Set target</Button></div>}</DialogContent></Dialog>
   </div>;
 }
