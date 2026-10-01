@@ -57,12 +57,12 @@ else
   esac
 fi
 
-# The pinned Bun compiler's default x64 executable requires AVX2. Ship its
-# baseline variant so older CPUs and x64 container emulation can start the CLI.
+# Ship Linux x64's baseline variant so older CPUs and x64 container emulation
+# can start the CLI. Keep Windows native: the pinned compiler cannot extract
+# its Windows baseline runtime when compiling on a Windows runner.
 if [ -z "$TARGET" ]; then
   case "$NATIVE_TARGET" in
     linux-x64) TARGET_ARG="--target=bun-linux-x64-baseline" ;;
-    win32-x64) TARGET_ARG="--target=bun-windows-x64-baseline" ;;
   esac
 fi
 

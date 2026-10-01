@@ -12,7 +12,7 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
-## [0.22.2] - 2026-10-01
+## [0.22.3] - 2026-10-01
 
 ### Added
 
@@ -44,7 +44,7 @@ on the published npm package and the GitHub Release tag.
   navigation and branding in standalone releases. Verify embedded assets and
   onboarding persistence without a separately installed runtime before publishing.
 - Persist the installer PATH in shell startup files and show the command for
-  the current terminal. Use baseline x64 executables for CPUs without AVX2.
+  the current terminal. Use baseline Linux x64 executables for CPUs without AVX2.
 
 - Continue safe native Responses output-cap checkpoints without losing completed
   observations or plan state, replaying ambiguous tool calls, or failing workers
