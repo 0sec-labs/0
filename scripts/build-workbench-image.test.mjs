@@ -3,7 +3,7 @@ import test from "node:test";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { planWorkbenchBuild, assertWorkbenchBuildReady } from "./build-workbench-image.mjs";
-import { manifest, resolveWorkbenchProfile } from "./workbench-profile.mjs";
+import { manifest, resolveWorkbenchProfile, assertWorkbenchToolProbe, workbenchProbeFallback } from "./workbench-profile.mjs";
 
 const revision = "a".repeat(40);
 const input = { sourceRevision: revision, archive: "/tmp/0-profile.tar", availableBytes: 60 * 1024 ** 3 };
@@ -52,4 +52,19 @@ test("build admission refuses low disk, dirty sources and existing outputs befor
   assert.throws(() => assertWorkbenchBuildReady(plan, { dirty: true, archiveExists: false }), /Commit source/);
   assert.throws(() => assertWorkbenchBuildReady(plan, { dirty: false, archiveExists: true }), /already exists/);
   assert.doesNotThrow(() => assertWorkbenchBuildReady(plan, { dirty: false, archiveExists: false }));
+});
+
+test("tool receipt rejects permission and interpreter failures even with accepted exit codes", () => {
+  for (const [status, stderr] of [[1, "mkdir: /home/zero/.john: Permission denied"], [0, "Critical failure reading project registry: EACCES"], [0, "Traceback (most recent call last):"]]) {
+    assert.throws(() => assertWorkbenchToolProbe("fixture", { status, stdout: "version 1.0", stderr }, [0, 1]), /startup diagnostic/);
+  }
+  assert.deepEqual(assertWorkbenchToolProbe("hydra", { status: 255, stdout: "Hydra v9.7\nSyntax: hydra", stderr: "" }, [0, 255]), { exitCode: 255, versionOutput: "Hydra v9.7\nSyntax: hydra" });
+  assert.throws(() => assertWorkbenchToolProbe("fixture", { status: 0, stdout: "", stderr: "" }), /no version output/);
+});
+
+test("Gobuster version compatibility retries only the known rejected subcommand", () => {
+  assert.deepEqual(workbenchProbeFallback("gobuster", ["version"], { status: 3, stderr: "No help topic for 'version'" }), ["--version"]);
+  assert.equal(workbenchProbeFallback("gobuster", ["version"], { status: 0, stdout: "3.5" }), null);
+  assert.equal(workbenchProbeFallback("gobuster", ["version"], { status: 1, stderr: "Permission denied" }), null);
+  assert.equal(workbenchProbeFallback("other", ["version"], { status: 3, stderr: "No help topic for 'version'" }), null);
 });

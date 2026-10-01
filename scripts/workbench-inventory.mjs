@@ -2,13 +2,13 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
-import { manifest, resolveWorkbenchProfile, immutableImageReference } from "./workbench-profile.mjs";
+import { manifest, resolveWorkbenchProfile, immutableImageReference, assertWorkbenchToolProbe, workbenchProbeFallback } from "./workbench-profile.mjs";
 
 function probe(name, args, expected = [0]) {
-  const result = spawnSync(name, args, { encoding: "utf8", timeout: 30_000, maxBuffer: 1024 * 1024 });
-  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`.trim();
-  if (result.error || !expected.includes(result.status) || !output) throw new Error(`Required tool startup failed: ${name} (exit ${result.status}, ${result.error?.code ?? "no version output"})`);
-  return { exitCode: result.status, versionOutput: output.slice(0, 4096) };
+  let result = spawnSync(name, args, { encoding: "utf8", timeout: 30_000, maxBuffer: 1024 * 1024 });
+  const fallback = workbenchProbeFallback(name, args, result);
+  if (fallback) result = spawnSync(name, fallback, { encoding: "utf8", timeout: 30_000, maxBuffer: 1024 * 1024 });
+  return assertWorkbenchToolProbe(name, result, expected);
 }
 if (process.platform !== "linux" || process.arch !== "arm64" || process.getuid?.() !== 1000) throw new Error("Workbench inventory must run as Linux ARM64 UID 1000");
 const profile = resolveWorkbenchProfile(process.env.ZERO_WORKBENCH_PROFILE);
