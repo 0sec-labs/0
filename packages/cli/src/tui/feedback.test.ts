@@ -764,6 +764,7 @@ describe("diagnostic destination and consent", () => {
   it("sends a scrubbed Sentry event with actual release and build/channel identity", async () => {
     const sha = "a".repeat(40);
     vi.stubGlobal("__ZERO_VERSION__", VERSION);
+    vi.stubGlobal("__ZERO_RELEASE_CHANNEL__", "beta");
     vi.stubGlobal("__ZERO_BUILD_COMMIT__", sha);
     const error = new Error("customer.internal token=private-value");
     error.stack = [
@@ -789,7 +790,7 @@ describe("diagnostic destination and consent", () => {
     expect(JSON.parse(item)).toEqual({ type: "event", length: Buffer.byteLength(eventText) });
     expect(event.release).toBe(`0-cli@${VERSION}+${sha}`);
     expect(event.environment).toBe("production");
-    expect(event.tags).toMatchObject({ cli_version: VERSION, build_commit: sha });
+    expect(event.tags).toMatchObject({ cli_version: VERSION, build_commit: sha, release_channel: "beta" });
     expect(event.exception.values[0].value).toBe("Error");
     expect(event.exception.values[0].stacktrace.frames).toEqual([
       { filename: "app:///packages/core/src/agent/loop.ts", lineno: 42, colno: 7 },

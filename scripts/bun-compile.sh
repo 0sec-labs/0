@@ -77,6 +77,8 @@ esac
 # isn't in the /$bunfs virtual tree.
 PKG_VERSION="$(node -p "require('./package.json').version")"
 BUILD_COMMIT="$(git rev-parse HEAD 2>/dev/null || printf '%s' "${GITHUB_SHA:-}")"
+RELEASE_CHANNEL="dev"
+if [ "${ZERO_BUILD_RELEASE_CHANNEL:-}" = "beta" ]; then RELEASE_CHANNEL="beta"; fi
 
 # `node-gyp-build` hides native addon paths behind a runtime lookup. Stage the
 # selected pair at fixed relative paths so c-dataflow's direct requires make Bun
@@ -107,6 +109,7 @@ bun build src/index.ts \
   ${TARGET_ARG} \
   --outfile "../../$OUTFILE" \
   --define "__ZERO_VERSION__=\"$PKG_VERSION\"" \
+  --define "__ZERO_RELEASE_CHANNEL__=\"$RELEASE_CHANNEL\"" \
   --define "__ZERO_BUILD_COMMIT__=\"$BUILD_COMMIT\"" \
   --define "__ZERO_COMPILED_TARGET__=\"$NATIVE_TARGET\"" \
   --external playwright \

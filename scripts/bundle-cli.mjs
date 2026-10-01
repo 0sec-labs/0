@@ -116,6 +116,7 @@ await build({
     // unbundled source/test path falls back to a one-time fs read of
     // the same root package.json.
     __ZERO_VERSION__: JSON.stringify(PKG_VERSION),
+    __ZERO_RELEASE_CHANNEL__: JSON.stringify(process.env.ZERO_BUILD_RELEASE_CHANNEL === "beta" ? "beta" : "dev"),
     // The JavaScript bundle ships tree-sitter as an external runtime dependency.
     // Only `bun --compile` stages and embeds its native addons.
     __ZERO_COMPILED_TARGET__: "undefined",

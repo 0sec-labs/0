@@ -55,9 +55,9 @@ import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { loadCloudCredentials } from "@0/core";
 import { VERSION } from "@0/shared";
+import { getReleaseChannel } from "./runtime.js";
 
 // Reuse the version/build globals supplied by the existing release scripts.
-declare const __ZERO_VERSION__: string;
 declare const __ZERO_BUILD_COMMIT__: string;
 
 export interface FeedbackEntry {
@@ -759,8 +759,8 @@ function serializeSubmission(payload: FeedbackPayload, target: FeedbackTarget, e
   const cliVersion = VERSION;
   const commit = typeof __ZERO_BUILD_COMMIT__ !== "undefined" && /^[0-9a-f]{40}$/i.test(__ZERO_BUILD_COMMIT__)
     ? __ZERO_BUILD_COMMIT__.toLowerCase() : undefined;
-  const environment = env["NODE_ENV"] === "development" ? "development"
-    : env["NODE_ENV"] === "production" || typeof __ZERO_VERSION__ !== "undefined" ? "production" : "development";
+  const releaseChannel = getReleaseChannel(env);
+  const environment = releaseChannel === "beta" ? "production" : "development";
   const event = JSON.stringify({
     event_id: diagnostic.eventId,
     timestamp: Date.parse(payload.timestamp) / 1000,
@@ -771,6 +771,7 @@ function serializeSubmission(payload: FeedbackPayload, target: FeedbackTarget, e
     environment,
     tags: {
       cli_version: cliVersion,
+      release_channel: releaseChannel,
       ...(commit ? { build_commit: commit } : {}),
       kind: diagnostic.kind,
       platform: diagnostic.platform,

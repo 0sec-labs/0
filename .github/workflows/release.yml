@@ -48,6 +48,7 @@ jobs:
     timeout-minutes: 30
     env:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      ZERO_BUILD_RELEASE_CHANNEL: ${{ inputs.dry_run && 'dev' || 'beta' }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -183,6 +184,7 @@ jobs:
     timeout-minutes: 30
     env:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      ZERO_BUILD_RELEASE_CHANNEL: "beta"
       RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v6

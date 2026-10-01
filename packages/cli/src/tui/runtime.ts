@@ -6,6 +6,8 @@
  */
 import { VERSION } from "@0/shared";
 
+declare const __ZERO_RELEASE_CHANNEL__: string;
+
 export type CliReleaseChannel = "dev" | "beta";
 
 export interface RuntimeMetadata {
@@ -17,11 +19,20 @@ export interface RuntimeMetadata {
   arch: string;
 }
 
+/** Build intent is explicit; a version define alone does not prove a release.
+ * Source launches, local bundles and local binaries default to development.
+ * The release workflow stamps its artifacts; source/runtime env cannot promote them.
+ */
+export function getReleaseChannel(env: Record<string, string | undefined> = process.env): CliReleaseChannel {
+  if (env["ZERO_DEV_SOURCE_ROOT"]?.trim() || env["NODE_ENV"] === "development") return "dev";
+  return typeof __ZERO_RELEASE_CHANNEL__ !== "undefined" && __ZERO_RELEASE_CHANNEL__ === "beta" ? "beta" : "dev";
+}
+
 export function getRuntimeMetadata(): RuntimeMetadata {
   const bun = isBunRuntime();
   return {
     cliVersion: VERSION,
-    releaseChannel: process.env["ZERO_DEV_SOURCE_ROOT"]?.trim() ? "dev" : "beta",
+    releaseChannel: getReleaseChannel(),
     engine: bun ? "Bun" : "Node.js",
     engineVersion: bun ? (process.versions.bun ?? "unknown") : process.version,
     platform: process.platform,
