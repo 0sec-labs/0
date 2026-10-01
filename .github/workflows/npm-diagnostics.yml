@@ -1,0 +1,40 @@
+name: Diagnose npm release runtime
+on:
+  push:
+    branches: [diagnostics/npm-023]
+permissions:
+  contents: read
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      ZERO_BUILD_RELEASE_CHANNEL: beta
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: diagnostics
+      - uses: actions/checkout@v6
+        with:
+          ref: refs/tags/v0.23.0
+          path: engine
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: corepack enable
+      - name: Build the exact tagged npm package
+        working-directory: engine
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+          npm --prefix dist ci --omit=dev --no-audit --no-fund
+      - name: Diagnose offline bundled provider fixture
+        working-directory: engine
+        run: bash ../diagnostics/scripts/diagnose-provider.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zero-provider-diagnostic
+          path: ${{ runner.temp }}/zero-provider-diag
