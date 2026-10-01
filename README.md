@@ -1,4 +1,10 @@
 <p align="center">
+  <a href="https://0.security/">
+    <img src="assets/readme-cover.png" alt="0security terminal security research workflow" width="100%">
+  </a>
+</p>
+
+<p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/0-aperture-white.svg">
     <img src="assets/0-aperture-ink.svg" alt="0security" width="280">
