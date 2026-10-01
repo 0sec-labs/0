@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { join } from "node:path";
-import { getScopeEnforcementState, runSmolvmWorkbench, ScopePolicy } from "@0/core";
+import { DEFAULT_MAX_TOOL_ITERATIONS, getScopeEnforcementState, runSmolvmWorkbench, ScopePolicy } from "@0/core";
 import type { ConsoleSession, ConsoleSessionConfig, ConsoleSessionCheckpoint, ConsoleRenderCallbacks, ConsoleTurnOutcome, SmolvmWorkbenchResult, SmolvmWorkbenchOptions } from "@0/core";
 import { findingSchema, type Finding } from "@0/shared";
 import type { TuiSettings } from "./tui/settings.js";
@@ -230,12 +230,33 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
       Object.assign(options.selection, selection); if (controller.done) queue("reconfigure", selection); },
     clearConversation() { messages = []; checkpoint = undefined; if (!controller.done) { serial.initialMessages = []; delete serial.initialCheckpoint; } else queue("clear"); },
     async send(text, callbacks, sendOptions) {
-      if (active) throw new Error("Workbench turn already active"); active = true; render = callbacks;
+      if (active) throw new Error("Workbench turn already active"); active = true;
+      let partialText = "";
+      const partialTools: ConsoleTurnOutcome["toolCalls"] = [];
+      const partialUsage = { inputTokens: 0, outputTokens: 0 };
+      let usageReport: Parameters<NonNullable<ConsoleRenderCallbacks["onUsage"]>>[0] | undefined;
+      render = { ...callbacks,
+        onAssistantDelta: text => { partialText += text; callbacks?.onAssistantDelta?.(text); },
+        onToolResult: (call, result) => { partialTools.push({ call, result }); callbacks?.onToolResult?.(call, result); },
+        onUsage: usage => { partialUsage.inputTokens += usage.inputTokens; partialUsage.outputTokens += usage.outputTokens; usageReport = usage; callbacks?.onUsage?.(usage); },
+      };
+      const messageCountBeforeTurn = messages.length;
       let cancelTimer: ReturnType<typeof setTimeout> | undefined;
-      const cancel = () => { try { controller.write({ type: "cancel" }); } catch { /* May still be booting. */ } cancelTimer = setTimeout(() => controller.abort.abort(new Error("Operator cancelled workbench turn")), 2000); };
+      const cancel = () => { if (controller.execution.status === "pending") { controller.abort.abort(new Error("Operator cancelled workbench startup")); return; } try { controller.write({ type: "cancel" }); } catch { /* VM may be stopping. */ } cancelTimer ??= setTimeout(() => controller.abort.abort(new Error("Operator cancelled workbench turn")), 2000); };
       sendOptions?.signal?.addEventListener("abort", cancel, { once: true });
-      try { await Promise.all(deferred.splice(0)); await controller.start(); if (sendOptions?.signal?.aborted) cancel(); controller.status("running"); engineWorkStarted = true;
+      try { if (sendOptions?.signal?.aborted) cancel(); await Promise.all(deferred.splice(0)); await controller.start(); sendOptions?.signal?.throwIfAborted(); controller.status("running"); engineWorkStarted = true;
         lastOutcome = await controller.request("send", { text, generateTitle: sendOptions?.generateTitle }) as Awaited<ReturnType<ConsoleSession["send"]>>; return lastOutcome;
+      } catch (error) {
+        if (sendOptions?.signal?.aborted) {
+          const result = await controller.done;
+          if ((!result || !result.cleanupFailed) && controller.abort.signal.aborted) {
+            controller.status("stopped");
+            if (messages.length === messageCountBeforeTurn) messages.push({ role: "user", content: [{ type: "text", text }] });
+            if (partialText && messages.at(-1)?.role !== "assistant") messages.push({ role: "assistant", content: [{ type: "text", text: partialText }] });
+            return lastOutcome = { assistantText: partialText, toolCalls: partialTools, usage: partialUsage, budget: { tokensUsed: usageReport?.turnTokensUsed ?? partialUsage.inputTokens + partialUsage.outputTokens, tokenBudget: usageReport?.turnTokenBudget ?? options.config.maxTurnTokens ?? Infinity, iterations: usageReport?.iterations ?? 0, maxToolIterations: usageReport?.maxToolIterations ?? options.config.maxToolIterations ?? DEFAULT_MAX_TOOL_ITERATIONS }, stopReason: "cancelled" };
+          }
+        }
+        throw error;
       } finally { clearTimeout(cancelTimer); active = false; render = undefined; sendOptions?.signal?.removeEventListener("abort", cancel); if (!controller.abort.signal.aborted && controller.execution.status !== "stopped" && controller.execution.status !== "failed") controller.status("ready"); }
     },
     async stopPersistentAgent(agentId) { return await controller.request("stopWorker", { agentId }) as boolean; }, async stopPersistentAgents() { if (controller.done) await controller.request("stopWorkers"); },

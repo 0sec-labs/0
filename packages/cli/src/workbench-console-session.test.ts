@@ -4,8 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const mock = vi.hoisted(() => ({ sendError: undefined as string | undefined, serviceConnections: [] as Array<{id:string;enabled:boolean;fields:Record<string,string>}>, pluginDirectory: undefined as string | undefined, pluginCleanup: vi.fn(async () => {}), launches: [] as unknown[], requests: [] as Record<string, unknown>[], output: undefined as ((data: string) => void) | undefined }));
+const mock = vi.hoisted(() => ({ holdReady: false, holdSend: false, cleanupFailed: false, sendError: undefined as string | undefined, serviceConnections: [] as Array<{id:string;enabled:boolean;fields:Record<string,string>}>, pluginDirectory: undefined as string | undefined, pluginCleanup: vi.fn(async () => {}), launches: [] as unknown[], requests: [] as Record<string, unknown>[], output: undefined as ((data: string) => void) | undefined }));
 vi.mock("@0/core", () => ({
+  DEFAULT_MAX_TOOL_ITERATIONS: 100,
   ScopePolicy: class { constructor(readonly raw: unknown) {} },
   getScopeEnforcementState: (projectPath: string) => ({ pluginId: "scope", enabled: false, projectPath, message: "disabled" }),
   runSmolvmWorkbench: (options: { signal: AbortSignal; transport: { initialInput: string; onStdout(data: string): void; onReady(input: { write(data: string): void; end(): void }): void } }) => {
@@ -13,16 +14,17 @@ vi.mock("@0/core", () => ({
     const init = JSON.parse(options.transport.initialInput);
     const emit = (frame: unknown) => options.transport.onStdout(JSON.stringify(frame) + "\n");
     return new Promise(resolve => {
-      const finish = () => resolve({ exitCode: 0, cleanupFailed: false, timedOut: false });
+      const finish = () => resolve({ exitCode: 0, cleanupFailed: mock.cleanupFailed, timedOut: false, ...(mock.cleanupFailed ? { error: "Workbench teardown unconfirmed" } : {}) });
       options.signal.addEventListener("abort", finish, { once: true });
       options.transport.onReady({ write(data) {
         const frame = JSON.parse(data); mock.requests.push(frame);
         if (frame.op === "close") { emit({ type: "result", id: frame.id }); finish(); }
         else if (frame.op === "send" && mock.sendError) { emit({ type: "error", id: frame.id, error: mock.sendError }); }
+        else if (frame.op === "send" && mock.holdSend) { emit({ type: "event", name: "onAssistantDelta", args: ["Partial answer"] }); emit({ type: "event", name: "onUsage", args: [{inputTokens: 10, outputTokens: 3, turnTokensUsed: 13, turnTokenBudget: 100, iterations: 0, maxToolIterations: 100, kind: "planner"}] }); }
         else if (frame.op === "send") { emit({ type: "event", name: "onAssistantDelta", args: ["hello"] }); emit({ type: "result", id: frame.id, value: { assistantText: "hello", stopReason: "end_turn" } }); }
       }, end() { finish(); } });
       emit({ type: "state", snapshot: { scanId: init.config.scanId, messages: [], tools: [], target: "/workspace", autonomyMode: "standard" } });
-      emit({ type: "ready", platform: "linux", workspace: "/workspace" });
+      if (!mock.holdReady) emit({ type: "ready", platform: "linux", workspace: "/workspace" });
     });
   },
 }));
@@ -31,7 +33,7 @@ vi.mock("./web/service-plugins.js", () => ({ loadServicePluginConnections: () =>
 import { createWorkbenchConsoleSession } from "./workbench-console-session.js";
 
 const roots: string[] = [];
-afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); mock.sendError = undefined; mock.serviceConnections = []; mock.pluginDirectory = undefined; mock.pluginCleanup.mockClear(); mock.launches.length = 0; mock.requests.length = 0; });
+afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); mock.holdReady = false; mock.holdSend = false; mock.cleanupFailed = false; mock.sendError = undefined; mock.serviceConnections = []; mock.pluginDirectory = undefined; mock.pluginCleanup.mockClear(); mock.launches.length = 0; mock.requests.length = 0; });
 async function options() {
   const root = realpathSync(await mkdtemp(join(tmpdir(), "0-controller-test-"))); roots.push(root);
   return { config: { workspaceRoot: root, target: root }, workbench: { schemaVersion: 1 as const, image: "/approved.tar", imageDigest: "sha256:" + "a".repeat(64), stateRoot: join(root, "state"), workspaceRoot: root, providers: ["chatgpt-codex"], github: false, cpus: 1, memoryMb: 512, storageGb: 1 }, selection: { model: "granted" }, provider: { provider: "chatgpt-codex" as const, models: ["granted"], request: vi.fn() }, network: false };
@@ -112,4 +114,33 @@ describe("host console VM controller", () => {
     const session = createWorkbenchConsoleSession(input); expect(() => session.reconfigureRuntime({ env: { SECRET: "host-secret" } })).toThrow("grant");
     expect(mock.launches).toHaveLength(0); await session.cleanup();
   });
+});
+
+it("cancels startup immediately and returns a cancelled outcome after teardown", async () => {
+ const input = await options(); mock.holdReady = true;
+ const session = createWorkbenchConsoleSession(input); const abort = new AbortController();
+ const turn = session.send("test", {}, { signal: abort.signal });
+ await vi.waitFor(() => expect(mock.launches).toHaveLength(1));
+ abort.abort();
+ await expect(turn).resolves.toMatchObject({ stopReason: "cancelled", assistantText: "", usage: { inputTokens: 0, outputTokens: 0 } });
+ expect(mock.requests.some(frame => frame.op === "send")).toBe(false);
+ await session.cleanup();
+});
+
+it("retains partial output and usage when a running guest needs cancellation escalation", async () => {
+ const input = await options(); mock.holdSend = true;
+ const session = createWorkbenchConsoleSession(input); const abort = new AbortController();
+ const turn = session.send("test", {}, { signal: abort.signal });
+ await vi.waitFor(() => expect(mock.requests.some(frame => frame.op === "send")).toBe(true));
+ abort.abort();
+ await expect(turn).resolves.toMatchObject({ stopReason: "cancelled", assistantText: "Partial answer", usage: {inputTokens: 10, outputTokens: 3}, budget: {tokensUsed: 13} });
+ await session.cleanup();
+});
+it("retains teardown failures instead of reporting a clean stop", async () => {
+ const input = await options(); mock.holdReady = true; mock.cleanupFailed = true;
+ const session = createWorkbenchConsoleSession(input); const abort = new AbortController();
+ const turn = session.send("test", {}, { signal: abort.signal });
+ await vi.waitFor(() => expect(mock.launches).toHaveLength(1)); abort.abort();
+ await expect(turn).rejects.toThrow("teardown unconfirmed");
+ await session.cleanup().catch(() => {});
 });

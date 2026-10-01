@@ -377,7 +377,7 @@ export class ConsoleGateway {
   async cancel(id: string): Promise<DesktopConsoleSession> {
     const managed = this.#requireOpen(id);
     if (!managed.abort || !managed.turn) throw new ConsoleGatewayError("Console session has no active turn to cancel.", 409);
-    managed.pauseQueue = true; this.#cancelTurn(managed); await managed.turn; return this.#summary(managed);
+    managed.pauseQueue = true; this.#cancelTurn(managed); return this.#summary(managed);
   }
   removeQueued(id: string, value?: unknown): DesktopConsoleSession {
     const managed = this.#requireOpen(id);
@@ -839,6 +839,11 @@ export class ConsoleGateway {
         }
         managed.lastOutcome = this.#outcome(outcome); managed.contextInputTokens = outcome.contextInputTokens ?? managed.contextInputTokens;
         this.#emit(managed, { type: "turn-complete", ...managed.lastOutcome });
+        if (outcome.stopReason === "cancelled" && managed.execution.backend === "smolvm" && managed.execution.status === "stopped") {
+          await session.cleanup();
+          managed.initialMessages = structuredClone(session.messages);
+          managed.session = null;
+        }
       } catch (error) { if (managed.status !== "closed") managed.status = "failed"; this.#emit(managed, { type: "error", message: errorMessage(error) }); }
       finally {
         this.#denyDecisions(managed, managed.turnOwner ?? undefined); managed.abort = null; managed.turnOwner = null; managed.turn = null;

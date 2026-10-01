@@ -255,7 +255,7 @@ describe("ConsoleGateway", () => {
     await vi.waitFor(() => expect(instance.get(created.id).pendingDecisions).toHaveLength(1));
     const decision = instance.get(created.id).pendingDecisions[0]!;
     expect(decision.risk?.level).toBe("destructive"); expect(decision.context?.scopeEnforcement.enabled).toBe(true);
-    await instance.cancel(created.id);
+    await instance.cancel(created.id); await idle(instance, created.id);
     expect(permission).toBe(false); expect(instance.get(created.id).pendingDecisions).toEqual([]);
     expect(instance.get(created.id).session.status).toBe("ready");
     expect(instance.get(created.id).messages[0]?.content).toEqual([{ type: "text", text: "Inspect, do not delete." }]);
@@ -649,4 +649,20 @@ describe("deferred browser workflow launches", () => {
     await vi.waitFor(async () => expect(await f.callbacks().invoke("get_run", { runId: f.queued().requestId })).toMatchObject({ status: "cancelled" }));
     expect(f.invoke.mock.calls.some(call => call[1] === "start_run")).toBe(false);
   });
+});
+
+it("acknowledges stop before an active turn finishes teardown", async () => {
+ let release!: () => void;
+ const teardown = new Promise<void>(resolve => { release = resolve; });
+ const instance = gateway(input => {
+  const session = engine(input);
+  session.send = async () => { await teardown; return { ...outcome(), stopReason: "cancelled" }; };
+  return session;
+ });
+ const created = instance.create(); await instance.send(created.id, "test");
+ await instance.cancel(created.id);
+ expect(instance.get(created.id).session.status).toBe("working");
+ expect(instance.get(created.id).events.some(event => event.type === "notice" && event.text.startsWith("Cancellation requested."))).toBe(true);
+ release(); await idle(instance, created.id);
+ expect(instance.get(created.id).session.status).toBe("ready");
 });
