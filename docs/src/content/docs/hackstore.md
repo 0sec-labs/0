@@ -300,6 +300,12 @@ leased host until cleanup; disablement does not retroactively kill that running
 code. Close the old chats when revocation must take effect immediately. This
 host ownership is implemented in
 [`session-plugin-host.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/session-plugin-host.ts).
+With SmolVM selected, new web and OpenTUI chats automatically copy approved
+installed plugins into private guest storage and load their tools inside the VM.
+The controller never executes their code. Approvals are mapped to the guest
+workspace, and changed capabilities require approval again. External executables
+used by a plugin must be available in the workbench image (the standard image
+includes Foxguard). Existing chats keep their original tool set.
 Other CLI workflows do not automatically acquire this TUI host.
 
 ### Update deliberately

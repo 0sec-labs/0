@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { LlmApiRuntime } from "@0/core";
+import { pluginsRootDir, readEnablement, LlmApiRuntime } from "@0/core";
 import { saveSession, loadSession, type StoredSession } from "../tui/session-store.js";
 import { PROVIDERS } from "../tui/provider-status.js";
 import { applyWebConsoleRuntimeSelection, describeWebConsoleRuntime, savedWebRuntimeSelection, flushWebConsolePlugins, WebOperatorServices } from "./operator-services.js";
@@ -106,10 +106,29 @@ describe("web model connection inspection", () => {
 
 
 describe("web isolated plugin boundaries", () => {
-  it.each(["run", "enable"])("rejects host plugin %s before reading installed plugin bytes while VM execution is selected", async (action) => {
+  it("rejects host plugin runs before reading installed plugin bytes while VM execution is selected", async () => {
     execution.profile = "smolvm";
-    const result = await new WebOperatorServices().handle(`/api/console/plugins/${action}`, "POST", { id: "not-installed-fixture" }, new URLSearchParams());
+    const result = await new WebOperatorServices().handle("/api/console/plugins/run", "POST", { id: "not-installed-fixture" }, new URLSearchParams());
     expect(result).toMatchObject({ status: 409, data: { code: "isolated_execution_required" } });
+    expect(execution.flush).not.toHaveBeenCalled();
+  });
+
+  it("saves an approved VM plugin for automatic guest loading without loading it on the host", async () => {
+    execution.profile = "smolvm";
+    const directory = join(pluginsRootDir(testHome), "fixture.scanner");
+    mkdirSync(directory, { recursive: true, mode: 0o700 });
+    writeFileSync(join(directory, "plugin.json"), JSON.stringify({ id: "fixture.scanner", name: "Fixture", version: "1.0.0", tools: [{ name: "fixture_scan", description: "test", parameters: {}, capabilities: ["filesystem-read"] }] }));
+    writeFileSync(join(directory, "plugin.js"), 'throw new Error("host execution forbidden");');
+    const result = await new WebOperatorServices().handle("/api/console/plugins/enable", "POST", { id: "fixture.scanner", approved: true, version: "1.0.0", capabilities: ["filesystem-read"] }, new URLSearchParams());
+    expect(result).toMatchObject({ status: 200, data: { ok: true, state: "enabled", message: expect.stringContaining("new SmolVM chats") } });
+    expect(readEnablement(process.cwd(), testHome).enabled["fixture.scanner"]).toMatchObject({ version: "1.0.0", capabilities: ["filesystem-read"] });
+    expect(execution.flush).not.toHaveBeenCalled();
+  });
+
+  it("allows VM approvals to reach installed-plugin validation without attempting host loading", async () => {
+    execution.profile = "smolvm";
+    const result = await new WebOperatorServices().handle("/api/console/plugins/enable", "POST", { id: "not-installed-fixture" }, new URLSearchParams());
+    expect(result).toMatchObject({ status: 409, data: { code: "invalid_plugin" } });
     expect(execution.flush).not.toHaveBeenCalled();
   });
 

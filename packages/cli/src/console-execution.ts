@@ -50,7 +50,7 @@ export function createIsolatedConsoleSession(
       workbench,
       selection: { provider, model, contextWindowTokens: config.contextWindowTokens, ...routing },
       provider: { ...broker.grant, request: broker.request, close: broker.close },
-      assets: currentWorkbenchAssets(), guestSettings: resolveWorkbenchGuestSettings(loadGlobalSettings(options.homeDir)),
+      pluginHomeDir: options.homeDir, assets: currentWorkbenchAssets(), guestSettings: resolveWorkbenchGuestSettings(loadGlobalSettings(options.homeDir)),
       network: workbenchNetworkEnabled(),
       onExecution: options.onExecution,
       onFindings: (findings, completion) => {

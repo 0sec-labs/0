@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const mock = vi.hoisted(() => ({ launches: [] as unknown[], requests: [] as Record<string, unknown>[], output: undefined as ((data: string) => void) | undefined }));
+const mock = vi.hoisted(() => ({ pluginDirectory: undefined as string | undefined, pluginCleanup: vi.fn(async () => {}), launches: [] as unknown[], requests: [] as Record<string, unknown>[], output: undefined as ((data: string) => void) | undefined }));
 vi.mock("@0/core", () => ({
   ScopePolicy: class { constructor(readonly raw: unknown) {} },
   getScopeEnforcementState: (projectPath: string) => ({ pluginId: "scope", enabled: false, projectPath, message: "disabled" }),
@@ -25,10 +25,11 @@ vi.mock("@0/core", () => ({
     });
   },
 }));
+vi.mock("./workbench-plugins.js", () => ({ GUEST_PLUGIN_ASSETS: "/opt/0-approved-plugins", prepareWorkbenchPlugins: async () => ({ directory: mock.pluginDirectory, approvals: { schema: 1, project: "/workspace", enabled: {} }, cleanup: mock.pluginCleanup }) }));
 import { createWorkbenchConsoleSession } from "./workbench-console-session.js";
 
 const roots: string[] = [];
-afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); mock.launches.length = 0; mock.requests.length = 0; });
+afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); mock.pluginDirectory = undefined; mock.pluginCleanup.mockClear(); mock.launches.length = 0; mock.requests.length = 0; });
 async function options() {
   const root = realpathSync(await mkdtemp(join(tmpdir(), "0-controller-test-"))); roots.push(root);
   return { config: { workspaceRoot: root, target: root }, workbench: { schemaVersion: 1 as const, image: "/approved.tar", imageDigest: "sha256:" + "a".repeat(64), stateRoot: join(root, "state"), workspaceRoot: root, providers: ["chatgpt-codex"], github: false, cpus: 1, memoryMb: 512, storageGb: 1 }, selection: { model: "granted" }, provider: { provider: "chatgpt-codex" as const, models: ["granted"], request: vi.fn() }, network: false };
@@ -42,6 +43,15 @@ describe("host console VM controller", () => {
     expect(mock.launches[0]).toMatchObject({ workspaceMode: "snapshot", environment: { ZERO_PROVIDER: "chatgpt-codex" }, tty: false, network: false });
     expect(mock.requests.filter(frame => frame.op === "send").map(frame => frame.text)).toEqual(["message mentioning /private/host", "second"]);
     await session.cleanup(); expect(session.execution.status).toBe("stopped");
+  });
+  it("mounts prepared plugin copies read-only and removes them after native cleanup", async () => {
+    const input = await options(); mock.pluginDirectory = join(input.config.workspaceRoot, "plugin-assets");
+    const session = createWorkbenchConsoleSession(input); await session.send("hello");
+    const launch = mock.launches[0] as { readOnlyMounts: unknown; transport: { initialInput: string } };
+    expect(launch.readOnlyMounts).toContainEqual({ source: mock.pluginDirectory, target: "/opt/0-approved-plugins" });
+    expect(JSON.parse(launch.transport.initialInput).pluginApprovals).toEqual({ schema: 1, project: "/workspace", enabled: {} });
+    expect(mock.pluginCleanup).not.toHaveBeenCalled();
+    await session.cleanup(); expect(mock.pluginCleanup).toHaveBeenCalledOnce();
   });
   it("forwards serialized provider bodies through the exact model grant", async () => {
     const input = await options(); input.provider.request.mockResolvedValue(new Response("data: done\n\n", { headers: { "content-type": "text/event-stream" } }));

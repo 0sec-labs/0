@@ -2,11 +2,14 @@ import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
-import { createConsoleRuntime, isAdmittedSmolvmWorkbench, ScopePolicy, withScopeEnforcement } from "@0/core";
+import { TOOL_DEFINITIONS, type EnablementRecord, createConsoleRuntime, isAdmittedSmolvmWorkbench, ScopePolicy, withScopeEnforcement } from "@0/core";
 import type { ConsoleSession, ConsoleSessionConfig, ScopeEnforcementState } from "@0/core";
 import { osecDB } from "@0/db";
 import { findingFromRow } from "./tui/findings-data.js";
 import { normalizeSettings } from "./tui/settings.js";
+import { installWorkbenchPlugins } from "./workbench-plugins.js";
+import { createSessionPluginHostManager, type SessionPluginHostManager } from "./tui/session-plugin-host.js";
+import { VERSION } from "@0/shared";
 import { createLocalConsoleSession } from "./console-session.js";
 import { encodeWorkbenchFrame, WorkbenchFrameReader, WORKBENCH_MAX_PENDING, WORKBENCH_FRAME_BYTES } from "./workbench-console-protocol.js";
 import type { WorkbenchFrame } from "./workbench-console-protocol.js";
@@ -25,6 +28,7 @@ async function runGuest(cli: boolean): Promise<number> {
   const emit = (frame: WorkbenchFrame) => { if (!process.stdout.write(encodeWorkbenchFrame(frame))) process.stdin.pause(); };
   process.stdout.on("drain", () => process.stdin.resume());
   let session: ConsoleSession | undefined;
+  let pluginManager: SessionPluginHostManager | undefined;
   let initialized = false;
   let closing = false;
   let turn: AbortController | undefined;
@@ -70,6 +74,7 @@ async function runGuest(cli: boolean): Promise<number> {
     for (const pending of decisions.values()) pending.reject(new Error("Workbench closed")); decisions.clear();
     for (const response of providers.values()) response.destroy(); providers.clear();
     if (session) { await session.stopPersistentAgents(); await state(); await session.cleanup(); }
+    pluginManager?.dispose();
     server.close(); process.stdin.destroy();
   };
   let chain = Promise.resolve();
@@ -88,6 +93,7 @@ async function runGuest(cli: boolean): Promise<number> {
             await mkdir("/home/zero/.0", { recursive: true, mode: 0o700 });
             await writeFile("/home/zero/.0/tui-settings.json", JSON.stringify(settings), { mode: 0o600, flag: "wx" });
           }
+          if (frame.pluginApprovals) await installWorkbenchPlugins(frame.pluginApprovals as EnablementRecord);
           const selection = frame.selection as Record<string, unknown>;
           if (!selection || selection.provider !== "chatgpt-codex" || typeof selection.model !== "string") throw new Error("Unsupported workbench provider");
           process.env.ZERO_PROVIDER = "chatgpt-codex"; process.env.ZERO_WORKBENCH_PROVIDER_MODEL = selection.model;
@@ -112,7 +118,10 @@ async function runGuest(cli: boolean): Promise<number> {
             return value;
           };
           if ((frame.callbacks as string[]).includes("historyList")) callbacks.conversationHistory = { list: (...args: unknown[]) => callback("historyList", args), read: (...args: unknown[]) => callback("historyRead", args) };
-          session = withScopeEnforcement(policy, () => createLocalConsoleSession({ ...config, ...callbacks,
+          pluginManager = await createSessionPluginHostManager({ projectPath: "/workspace", reservedToolNames: Object.values(TOOL_DEFINITIONS).map(tool => tool.name), coreVersion: VERSION });
+          const unavailable = pluginManager.current().status().filter(entry => entry.state !== "ready");
+          if (unavailable.length) throw new Error(`Guest plugins failed to load: ${unavailable.map(entry => entry.pluginId).join(", ")}`);
+          session = withScopeEnforcement(policy, () => createLocalConsoleSession({ ...config, ...callbacks, pluginHost: pluginManager!.current(),
             ...(config.scope ? { scope: new ScopePolicy(config.scope as ConstructorParameters<typeof ScopePolicy>[0]) } : {}),
             runtime: createConsoleRuntime({ ...selection, env: Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)) }), workspaceRoot: "/workspace",
           } as unknown as Omit<ConsoleSessionConfig, "db">, "/home/zero/.0/controller.sqlite"));

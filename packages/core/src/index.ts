@@ -72,6 +72,7 @@ export { createRuntime, ProcessRuntime, LlmApiRuntime, QuotaExhaustedError, Oper
 export type { Runtime, RuntimeConfig, RuntimeContext, RuntimeResult, RuntimeType, NativeRuntime, NativeMessage, NativeContentBlock, NativeToolDef, NativeRuntimeResult, NativeOutputCapCheckpoint, OpenRouterConfig, UsageLimitDetails } from "./runtime/index.js";
 export { CodexCatalogRefreshError, loadCodexModelCatalog } from "./runtime/codex-models.js";
 export type { CodexCatalogModel } from "./runtime/codex-models.js";
+export { snapshotSmolvmWorkspace } from "./runtime/smolvm-workspace.js";
 export { runSmolvmWorkbench } from "./runtime/smolvm-workbench.js";
 export type { SmolvmWorkbenchOptions, SmolvmWorkbenchResult, SmolvmWorkbenchApprovedImage } from "./runtime/smolvm-workbench.js";
 export { resolveSmolvmRuntime, approveSmolvmWorkbenchImage, getSmolvmWorkbenchStatus } from "./runtime/smolvm-provision.js";

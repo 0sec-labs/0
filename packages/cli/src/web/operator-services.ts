@@ -480,7 +480,7 @@ export class WebOperatorServices {
   }
 
   async #pluginAction(action: string, input: unknown) {
-    if ((action === "run" || action === "enable") && consoleExecutionProfile() === "smolvm") throw new OperatorError(409, "isolated_execution_required", "Host plugin execution is refused while SmolVM is selected. Configure and run plugins inside the approved guest image.");
+    if (action === "run" && consoleExecutionProfile() === "smolvm") throw new OperatorError(409, "isolated_execution_required", "Host plugin execution is refused while SmolVM is selected. Configure and run plugins inside the approved guest image.");
     const body = object(input);
     const id = text(body.id, "plugin ID", 64);
     if (action === "install") {
@@ -513,7 +513,7 @@ export class WebOperatorServices {
         JSON.stringify([...new Set(body.capabilities)].sort()) !== JSON.stringify([...capabilities].sort())) throw new OperatorError(409, "approval_required", "Inspect and explicitly approve this installed version and its exact capabilities before enabling.");
       const result = await pluginService.enable(item);
       if (!result.ok) throw new OperatorError(409, "enable_failed", result.message);
-      return result;
+      return consoleExecutionProfile() === "smolvm" ? { ...result, message: "Approved for new SmolVM chats. Plugin files are copied and loaded automatically inside each new VM." } : result;
     }
     if (action !== "run") throw new OperatorError(404, "unknown_action", "Unsupported plugin action.");
     const result = await pluginService.run(item);
