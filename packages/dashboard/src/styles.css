@@ -424,3 +424,9 @@
 [data-reduced-motion="true"] [role="presentation"][data-side]:has(> [role="listbox"] [data-kumo-component="Select"]) {
   animation: none !important; transition: none !important;
 }
+
+/* The working folder stays attached to the composer, above the writing area. */
+.console-composer-stack { position: relative; }
+.console-workspace-bar { margin: 0 12px -12px; padding: 5px 6px 17px; border-radius: 18px 18px 0 0; background: color-mix(in srgb, var(--muted), var(--background) 18%); }
+.console-workspace-bar button { height: 28px; gap: 7px; padding-inline: 9px; font-size: 12px; font-weight: 400; }
+.console-frame .console-composer-stack .console-composer { border-radius: 22px; }

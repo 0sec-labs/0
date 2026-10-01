@@ -1,6 +1,6 @@
 import { useId, useState } from "react";
 import { Popover } from "@cloudflare/kumo/components/popover";
-import { Folder } from "lucide-react";
+import { ChevronDown, Folder } from "lucide-react";
 import { configureConsoleSession } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,9 +26,11 @@ export function FilePathPicker({ workspace, sessionId, cwd, workspaceDisabled, d
     setOpen(next);
     setPath(cwd ?? "");
   }}>
-    <Popover.Trigger render={<Button type="button" variant="ghost" size="icon-sm" />}
+    <Popover.Trigger render={<Button type="button" variant="ghost" size="sm" />}
       className={className} disabled={disabled || workspaceDisabled} aria-label="Change workspace" title={cwd ? `Change workspace: ${cwd}` : "Change workspace"}>
-      <Folder className="size-5" />
+      <Folder className="size-3.5" />
+      <span className="max-w-56 truncate">{cwd?.split(/[\\/]/).filter(Boolean).at(-1) || "Choose folder"}</span>
+      <ChevronDown className="size-3 text-muted-foreground" />
     </Popover.Trigger>
     <Popover.Content side="top" align="start" sideOffset={12} positionMethod="fixed"
       className="w-80 max-w-[calc(100vw-24px)] rounded-2xl bg-popover p-4 text-popover-foreground shadow-lg outline-border motion-reduce:transition-none [&>[data-side]]:hidden [[data-reduced-motion=true]_&]:transition-none">
