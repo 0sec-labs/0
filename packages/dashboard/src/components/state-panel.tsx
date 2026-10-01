@@ -15,10 +15,11 @@ export function LoadingState({ label }: { label: string }) {
   );
 }
 
-export function EmptyState({ title, body, action }: { title: string; body?: string; action?: ReactNode }) {
+export function EmptyState({ title, body, action, illustration }: { title: string; body?: string; action?: ReactNode; illustration?: ReactNode }) {
   return (
     <Card className="border border-dashed border-border bg-muted/20">
       <CardContent className="flex min-h-[10rem] flex-col items-center justify-center gap-3 text-center">
+        {illustration}
         <div>
           <CardTitle>{title}</CardTitle>
           {body ? <CardDescription>{body}</CardDescription> : null}

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { ArrowLeft, Blocks, FolderCheck, HeartPulse, KeyRound, MessageSquare, Palette, Shield, Users, Rocket, Settings2, Sparkles, Wrench } from "lucide-react";
+import { ZeroMascot } from "@/components/zero-mascot";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { ConnectionsControl, ModelsControl } from "@/components/console-control/connections-control";
@@ -57,7 +58,7 @@ export function WebConsoleControlsPage({ mode: passedMode }: { mode?: WebConsole
 
   if (mode === "plugins") {
     return <main aria-label="Plugins" className="console-controls min-w-0 w-full space-y-6">
-      <div ref={headingRef} tabIndex={-1} className="outline-none"><PageHeader title="Plugins" /></div>
+      <div ref={headingRef} tabIndex={-1} className="outline-none"><PageHeader title="Plugins" illustration={<ZeroMascot scene="plugins" compact />} /></div>
       {content}
     </main>;
   }

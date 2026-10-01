@@ -15,6 +15,7 @@ import { getFindingFamily, updateFindingFamilyTriage, updateFindingFamilyWorkflo
 import { EvidenceTabs } from "@/components/evidence-tabs";
 import { FindingWorkflowBoard } from "@/components/finding-workflow-board";
 import { InspectorPane } from "@/components/inspector-pane";
+import { ZeroMascot } from "@/components/zero-mascot";
 import { PageHeader } from "@/components/page-header";
 import { useDashboardPanel } from "@/components/dashboard-panel";
 import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
@@ -1067,7 +1068,7 @@ function ThreadInbox({
         <Button variant={queueSort === "newest" ? "default" : "ghost"} size="sm" onClick={() => onSortChange("newest")}>Newest</Button>
         <Button variant={queueSort === "severity" ? "default" : "ghost"} size="sm" onClick={() => onSortChange("severity")}>Severity</Button>
       </div>
-      {groups.length === 0 ? <EmptyState title="No findings" /> : null}
+      {groups.length === 0 ? <EmptyState title="No findings" illustration={<ZeroMascot scene="findings" />} /> : null}
       {sections.filter((section) => section.entries.length > 0).map((section) => (
         <section key={section.title} className="space-y-2">
           <h2 className="flex items-center gap-2 text-sm font-medium">
