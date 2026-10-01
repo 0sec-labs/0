@@ -167,8 +167,10 @@ nav[aria-label='Main'] a[aria-current='page'] { background: var(--docs-surface-h
 .docs-task-card p { margin: 0; font-size: .875rem; color: var(--docs-muted); }
 .docs-task-card p + p { margin-top: .75rem; }
 .docs-resources { margin-top: 1.5rem; }
-.starlight-aside { background: var(--docs-surface); border: 1px solid var(--docs-border); border-inline-start: 3px solid var(--sl-color-asides-border); border-radius: 12px; box-shadow: none; }
-.starlight-aside--note, .starlight-aside--tip { --sl-color-asides-border: var(--docs-orange); --sl-color-asides-text-accent: var(--docs-accent-text); }
+.starlight-aside { background: var(--docs-surface); border: 1px solid var(--docs-border); border-radius: 16px; box-shadow: none; }
+.starlight-aside__title { color: var(--docs-text); }
+.starlight-aside__icon { color: var(--sl-color-asides-border); }
+.starlight-aside--note, .starlight-aside--tip { --sl-color-asides-border: var(--docs-orange); }
 .pagination-links a { border: 1px solid var(--docs-border); border-radius: 16px; background: var(--sl-color-bg); box-shadow: none; }
 .pagination-links a:hover { background: var(--docs-surface); }
 .right-sidebar-panel h2 { color: var(--docs-muted); font-size: .75rem; font-weight: 600; }
