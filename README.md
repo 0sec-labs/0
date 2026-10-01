@@ -39,9 +39,12 @@ export PATH="$HOME/.0/bin:$PATH"
 0 web
 ```
 
-Connect a model provider, open a chat, and describe the repository or system you
-want to investigate. Use **Workflows** for reusable reviews and **Plugins** to
-connect your tools. Prefer the terminal? Run `0`.
+**One install, two interfaces:** `0 web` opens the local browser app; `0` opens
+the terminal chat. The web app is included in the CLI—no separate installation.
+Keep `0 web` running while you use the browser; press Ctrl+C to stop it.
+
+Connect a model provider and describe what you want to investigate. In the
+browser, use **Workflows** for reusable reviews and **Plugins** to connect your tools.
 
 ## Use 0 from another agent
 
