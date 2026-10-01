@@ -480,7 +480,7 @@ export class WebOperatorServices {
   }
 
   async #pluginAction(action: string, input: unknown) {
-    if (action === "run" && consoleExecutionProfile() === "smolvm") throw new OperatorError(409, "isolated_execution_required", "Host plugin execution is refused while SmolVM is selected. Configure and run plugins inside the approved guest image.");
+    if (action === "run" && consoleExecutionProfile() === "smolvm") throw new OperatorError(409, "isolated_execution_required", "Plugins load automatically inside new SmolVM chats. Start a new chat to use an approved plugin.");
     const body = object(input);
     const id = text(body.id, "plugin ID", 64);
     if (action === "install") {
