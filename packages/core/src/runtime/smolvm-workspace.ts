@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, mkdir, open, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 export interface SmolvmWorkspaceLimits { maxBytes: number; maxFiles: number; }
 export interface SmolvmWorkspaceFile { path: string; bytes: number; digest: string; }
@@ -11,7 +11,7 @@ export interface SmolvmWorkspaceManifest {
   /** Dependency caches, Git metadata and private operator state are not a source snapshot. */
   excludedDirectories: readonly string[];
 }
-export const DEFAULT_SMOLVM_WORKSPACE_LIMITS: Readonly<SmolvmWorkspaceLimits> = Object.freeze({ maxBytes: 64 * 1024 * 1024, maxFiles: 4096 });
+export const DEFAULT_SMOLVM_WORKSPACE_LIMITS: Readonly<SmolvmWorkspaceLimits> = Object.freeze({ maxBytes: 256 * 1024 * 1024, maxFiles: 16384 });
 const EXCLUDED = [".git", "node_modules", ".0", ".ssh", ".codex", ".docker", ".config", "Library"] as const;
 
 function limits(input: Partial<SmolvmWorkspaceLimits> = {}): SmolvmWorkspaceLimits {
@@ -32,8 +32,8 @@ async function privateEmptyDirectory(path: string): Promise<void> {
   if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== process.getuid?.() || (info.mode & 0o077) !== 0 || resolve(path) !== await realpath(path) || (await readdir(path)).length) throw new Error("Snapshot destination must be empty, private and without symlink ancestors");
 }
 
-/** Copy bounded regular source bytes into a private run, never grant the live tree RW. */
-export async function snapshotSmolvmWorkspace(source: string, destination: string, input: Partial<SmolvmWorkspaceLimits> = {}, signal?: AbortSignal, excludePrivate = true): Promise<SmolvmWorkspaceManifest> {
+/** Copy bounded source bytes (including in-root file link targets) into a private run, never grant the live tree RW. */
+export async function snapshotSmolvmWorkspace(source: string, destination: string, input: Partial<SmolvmWorkspaceLimits> = {}, signal?: AbortSignal, excludePrivate = true, allowSourceFileLinks = true): Promise<SmolvmWorkspaceManifest> {
   const cap = limits(input);
   const root = await realpath(source);
   if (!(await lstat(root)).isDirectory()) throw new Error("Snapshot source must be a directory");
@@ -49,13 +49,28 @@ export async function snapshotSmolvmWorkspace(source: string, destination: strin
       signal?.throwIfAborted();
       const path = join(directory, name), suffix = relative(root, path);
       if (/[\x00-\x1f\x7f\\]/.test(suffix) || !contained(path, root)) throw new Error("Invalid snapshot path");
-      const before = await lstat(path);
+      const entry = await lstat(path);
+      let before = entry, readPath = path;
       if (excludePrivate && (EXCLUDED as readonly string[]).includes(name) && (before.isDirectory() || before.isFile())) continue;
       if (before.isDirectory()) { await mkdir(join(destination, suffix), { mode: 0o700 }); await walk(path); continue; }
+      if (entry.isSymbolicLink() && allowSourceFileLinks) {
+        readPath = await realpath(path);
+        if (!contained(readPath, root) || (excludePrivate && relative(root, readPath).split(sep).some(part => (EXCLUDED as readonly string[]).includes(part)))) throw new Error("Workbench snapshot rejects links outside granted source files");
+        before = await lstat(readPath);
+      }
       if (!before.isFile() || before.nlink !== 1) throw new Error("Workbench snapshot rejects links and special files");
-      if (result.files.length >= cap.maxFiles || result.bytes + before.size > cap.maxBytes) throw new Error("Workbench snapshot exceeds its file or byte limit");
-      if (await realpath(path) !== resolve(path)) throw new Error("Snapshot file ancestors changed or traverse symlinks");
-      const fd = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+      if (result.files.length >= cap.maxFiles || result.bytes + before.size > cap.maxBytes) throw new Error(`Workbench snapshot exceeds its file or byte limit at ${suffix}: ${result.files.length + 1}/${cap.maxFiles} files, ${result.bytes + before.size}/${cap.maxBytes} bytes`);
+      async function verifyPath(): Promise<void> {
+        if (await realpath(readPath) !== resolve(readPath) || await realpath(path) !== readPath || await realpath(dirname(path)) !== resolve(dirname(path))) throw new Error("Snapshot file ancestors changed or traverse symlinks");
+        const target = await lstat(readPath);
+        if (!target.isFile() || target.nlink !== 1 || target.dev !== before.dev || target.ino !== before.ino || target.size !== before.size || target.mtimeMs !== before.mtimeMs) throw new Error("Snapshot file changed during capture");
+        if (entry.isSymbolicLink()) {
+          const current = await lstat(path);
+          if (!current.isSymbolicLink() || current.dev !== entry.dev || current.ino !== entry.ino || current.mtimeMs !== entry.mtimeMs) throw new Error("Snapshot link changed during capture");
+        }
+      }
+      await verifyPath();
+      const fd = await open(readPath, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
       let bytes: Buffer;
       try {
         const observed = await fd.stat();
@@ -69,7 +84,8 @@ export async function snapshotSmolvmWorkspace(source: string, destination: strin
           offset += read.bytesRead;
         }
         const after = await fd.stat();
-        if (after.size !== before.size || after.mtimeMs !== before.mtimeMs || await realpath(path) !== resolve(path)) throw new Error("Snapshot file changed during read");
+        if (after.size !== before.size || after.mtimeMs !== before.mtimeMs) throw new Error("Snapshot file changed during read");
+        await verifyPath();
       } finally { await fd.close(); }
       await writeFile(join(destination, suffix), bytes, { flag: "wx", mode: (before.mode & 0o111) ? 0o700 : 0o600 });
       result.bytes += bytes.length;
@@ -86,11 +102,11 @@ export async function exportSmolvmWorkbenchArtifacts(workspace: string, state: s
   const staging = join(destination, `.export-${randomBytes(8).toString("hex")}`);
   await mkdir(staging, { mode: 0o700 });
   try {
-    const workspaceManifest = await snapshotSmolvmWorkspace(workspace, join(staging, "workspace"), input);
+    const workspaceManifest = await snapshotSmolvmWorkspace(workspace, join(staging, "workspace"), input, undefined, true, false);
     const cap = limits(input);
     const stateManifest = await snapshotSmolvmWorkspace(state, join(staging, "state"), {
       maxBytes: Math.max(1, cap.maxBytes - workspaceManifest.bytes), maxFiles: Math.max(1, cap.maxFiles - workspaceManifest.files.length),
-    }, undefined, false);
+    }, undefined, false, false);
     if (workspaceManifest.bytes + stateManifest.bytes > cap.maxBytes || workspaceManifest.files.length + stateManifest.files.length > cap.maxFiles) throw new Error("Workbench artifacts exceed the aggregate snapshot limit");
     await writeFile(join(staging, "manifest.json"), JSON.stringify({ schemaVersion: 1, workspace: workspaceManifest, state: stateManifest }), { flag: "wx", mode: 0o600 });
     await rename(staging, join(destination, "artifacts"));
