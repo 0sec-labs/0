@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <strong>Open-source security research in your browser, terminal, or coding agent.</strong><br/>
+  <strong>Open-source security workflows in your browser, terminal, or coding agent.</strong><br/>
   <sub>Backed by Y Combinator · The Swiss Applied AI &amp; Cybersecurity Research Lab</sub><br/>
   <a href="https://0.security/">0.security</a> ·
   <a href="https://docs.0.security/">Documentation</a> ·
@@ -41,18 +41,36 @@ export PATH="$HOME/.0/bin:$PATH"
 
 **Browser:** `0 web` · **Terminal:** `0`
 
+Configure a [model provider](https://docs.0.security/api-keys/) before running AI workflows.
+
+## Workflows
+
+Browser, CLI, and MCP share one workflow runner with retained results.
+
+| Work | Built-in templates |
+| --- | --- |
+| Assess | Repositories, dependencies, APIs, web configuration, scoped penetration tests, package behavior, smart contracts, native code |
+| Verify | Findings with replay evidence |
+| Fix | Candidates with regression tests |
+| Research | Security research, deep source investigation |
+
+Start from 12 templates, customize steps, and run manually or with browser triggers and schedules.
+**Template:** starting point · **Workflow:** reusable steps · **Run:** one execution.
+
+```bash
+0 workflow list --templates
+0 workflow run --template security-research \
+  --target /absolute/path/to/repo --workspace /absolute/path/to/repo \
+  --format json > run.json
+0 runs list
+```
+
+[Workflow guide: inputs, limits, and results](https://docs.0.security/workflow/).
+
 <details>
   <summary>Preview the web app</summary>
 
-### Chat
-
-Review code, prioritize findings, and plan fixes in chat.
-
 ![Customer API security review in the Zero web app](assets/screenshots/web-chat.jpg)
-
-### Workflows
-
-Customize review phases, tools, and triggers.
 
 ![Customer API security workflow in the Zero web app](assets/screenshots/web-workflow.jpg)
 
@@ -60,71 +78,44 @@ Customize review phases, tools, and triggers.
 
 ## Use 0 from another agent
 
-**CLI:** an agent with shell access can run a review and read its JSON report:
-
-```bash
-0 review /absolute/path/to/repo --format json > review.json
-```
-
-Configure 0's model provider first; the coding agent's model session is separate.
-
-**MCP:** with operator-selected host-local execution, let an external agent discover templates and start managed workflows:
+Use the CLI commands above, or **MCP** to discover templates, create workflows, and manage runs:
 
 ```bash
 0 mcp-server --workflows --workspace /absolute/path/to/repo
 ```
 
-The agent calls `list_templates`, `start_run`, `get_run`, and
-`get_run_results`. Assessments use 0's configured provider. The stdio host owns
-its runs; disconnect cancels active work. For live workflows, supply `--scope`
-and enable the scope plugin in the host project with `0 plugin enable scope`.
-
+Local MCP requires an explicitly selected host-local execution profile.
 For a registered remote engine, use `0 mcp-server --workflows --backend production`.
-The engine owns execution, scope and model configuration; disconnecting the
-client leaves remote runs active. Local execution flags are unavailable in this mode.
+0's model provider is separate from the connecting agent's session.
 
-For individual live-target tools, select them explicitly:
-
-```bash
-0 mcp-server --target https://target.example.com --scan-id my-review \
-  --scope /absolute/path/to/scope.json --tools http_request,crawl,query_findings
-```
-
-In browser chat, **Connect an external agent** copies an MCP setup prompt.
-See [integrations](https://docs.0.security/integrations/) for client configuration
-and [scope enforcement](https://docs.0.security/scope/) for target boundaries.
+Browser chat's **Connect an external agent** copies a setup prompt.
+See [MCP setup and individual tools](https://docs.0.security/integrations/) or
+[local and remote engines](https://docs.0.security/engine-connections/).
 
 ## Plugins
 
-Connect GitHub, Elastic, Semgrep, Snyk, Linear, Jira, Cloudflare, Slack, and Teams.
-Add custom tools through [plugins and MCP](https://docs.0.security/integrations/).
+Connect GitHub, Elastic, Semgrep, Snyk, Linear, Jira, Cloudflare, Slack, and Teams
+through [plugins and MCP](https://docs.0.security/integrations/).
 
-## Guides
-
-- [Installation and quick start](https://docs.0.security/getting-started/)
-- [Models and credentials](https://docs.0.security/api-keys/)
-- [Chat, sessions and agents](https://docs.0.security/console/)
-- [Integrations and service plugins](https://docs.0.security/integrations/)
-- [Build and publish plugins](https://docs.0.security/hackstore/)
-- [GitHub Actions](https://docs.0.security/ci/github-action/)
-- [Troubleshooting](https://docs.0.security/troubleshooting/)
+More guides: [installation](https://docs.0.security/getting-started/) ·
+[GitHub Actions](https://docs.0.security/ci/github-action/) ·
+[plugin development](https://docs.0.security/hackstore/) ·
+[troubleshooting](https://docs.0.security/troubleshooting/).
 
 ## Development
 
-From a source checkout with dependencies installed, run `npm run dev` and open
-the printed browser address. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Install dependencies, run `npm run dev`, and open the printed browser address.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Status and safety
 
-**Research preview.** Test only systems you own or are authorized to assess.
-Review findings and generated fixes. The default terminal console uses YOLO mode;
-run `0 console --mode standard` for tool-action confirmations. Enable the optional
-[scope plugin](https://docs.0.security/scope/) to enforce target boundaries.
+**Research preview.** Assess authorized systems and review findings and fixes.
+The terminal defaults to YOLO; use `0 console --mode standard` for confirmations.
+The optional [scope plugin](https://docs.0.security/scope/) enforces target boundaries.
 
 Report vulnerabilities through [SECURITY.md](SECURITY.md).
 Licensed under [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE).
 
-Built by the Swiss Applied AI & Cybersecurity Research Lab.
 [Public disclosures and upstream fixes](https://0.security/research/#disclosures).
 Thanks to [OpenTUI](https://github.com/anomalyco/opentui), [Bun](https://bun.sh/),
 [React](https://react.dev/), [Models.dev](https://models.dev/),
