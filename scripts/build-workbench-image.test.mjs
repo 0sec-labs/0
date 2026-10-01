@@ -21,6 +21,13 @@ test("source inherits core tools and explicitly adds development probes", () => 
   assert.ok(source.packages.includes("nmap")); assert.ok(source.packages.includes("gdb"));
   assert.ok(source.probes.some(([tool]) => tool === "0")); assert.ok(source.probes.some(([tool]) => tool === "cc"));
 });
+test("Kali verifies every core tool without installing packages at startup", () => {
+  const kali = resolveWorkbenchProfile("kali");
+  assert.deepEqual(kali.packages, []);
+  for (const [name, args] of resolveWorkbenchProfile("core-web").probes) {
+    assert.ok(kali.probes.some(([tool, options]) => tool === name && JSON.stringify(options) === JSON.stringify(args)), `Kali must verify ${name}`);
+  }
+});
 test("mutable or misrouted Kali references cannot form a build plan", () => {
   for (const kaliImage of [undefined, "kali:latest", "kali:local", `kali@sha256:${"G".repeat(64)}`])
     assert.throws(() => planWorkbenchBuild({ ...input, profile: "kali", kaliImage }), /immutable/);
