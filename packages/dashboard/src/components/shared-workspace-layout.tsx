@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Command, Menu, MessageSquare, Plus, Plug, Settings, ShieldCheck, Workflow } from "lucide-react";
-import { ConsoleNavigationRail } from "@/console/navigation-rail";
 import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -23,7 +22,6 @@ export function SharedWorkspaceLayout({ title, children, onNew, onOpenPalette }:
 }) {
   const [navigationOpen, setNavigationOpen] = useState(false);
   return <div className="console-frame flex min-w-0 overflow-hidden bg-background text-foreground">
-    <ConsoleNavigationRail settingsHref="/settings" />
     <div className="flex min-w-0 flex-1 flex-col">
       <header className="flex shrink-0 items-center justify-between gap-2 px-3 py-3 sm:px-5">
         <div className="flex min-w-0 items-center gap-2">

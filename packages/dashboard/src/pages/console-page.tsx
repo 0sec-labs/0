@@ -19,7 +19,6 @@ import { Conversation } from "@/console/conversation";
 import { AgentActivity } from "@/console/agent-activity";
 import { ConsoleInspector } from "@/console/inspector";
 import { ConsoleSessionRail } from "@/console/session-rail";
-import { ConsoleNavigationRail } from "@/console/navigation-rail";
 import { useConsoleWorkspace } from "@/console/use-console-workspace";
 import type { SettingsResponse } from "@/components/console-control/contracts";
 
@@ -249,7 +248,6 @@ export function ConsolePage() {
 
   return <>
     <div data-reduced-motion={settingsQuery.data?.settings.reduceMotion === true ? "true" : undefined} className="console-frame flex min-w-0 overflow-hidden bg-background">
-      <ConsoleNavigationRail settingsHref={`/settings${controlsQuery}`} />
       <aside ref={sessionRailElement} className="hidden w-64 shrink-0  lg:block">{rail}</aside>
       <section className="flex min-w-0 flex-1 flex-col">
         <header className="flex shrink-0 items-center justify-between gap-2  px-3 py-3 sm:px-5">
