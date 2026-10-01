@@ -2542,3 +2542,10 @@ export { createWorkbenchProviderBroker, DEFAULT_WORKBENCH_PROVIDER_LIMITS } from
 export type { WorkbenchProviderRequest, WorkbenchProviderLimits, WorkbenchProviderGrant, WorkbenchProviderBrokerOptions, WorkbenchProviderBroker } from "./runtime/workbench-provider-broker.js";
 
 export { connectServicePlugins, testServicePluginConnection } from "./agent/service-plugins.js";
+
+// Transport-independent workflow execution and owned lifecycle.
+export * from "./workflow-runner.js";
+export * from "./workflow-service.js";
+export { executeAssessment, executeAssessmentRun, toAssessmentReport } from "./assessment.js";
+export type { AssessmentOptions, AssessmentDependencies, AssessmentResult, AssessmentRunLifecycle } from "./assessment.js";
+export { budgetNativeRuntime } from "./scan-plan.js";

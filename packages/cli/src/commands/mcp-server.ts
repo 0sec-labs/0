@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { isAbsolute } from "node:path";
 import type { Command } from "commander";
 import chalk from "chalk";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -23,12 +25,15 @@ import type {
   RateLimiterConfig,
 } from "@0/core";
 import { osecDB, resolveOsecRunStorage } from "@0/db";
-import type { AuthConfig } from "@0/shared";
+import { SecurityWorkflowBindingsSchema, type AuthConfig } from "@0/shared";
 import { z } from "zod";
 
 type McpServerOptions = {
-  target: string;
-  scanId: string;
+  target?: string;
+  scanId?: string;
+  workflows?: boolean;
+  workspace?: string;
+  allowApply?: boolean;
   dbPath?: string;
   timeout?: string;
   scope?: string;
@@ -68,13 +73,18 @@ const MCP_LIVE_TOOL_NAMES = new Set([
   "mongo_objectid",
 ]);
 
-function resolveMcpToolNames(raw: string | undefined): ReadonlySet<string> {
-  if (raw === undefined) return MCP_LIVE_TOOL_NAMES;
+const MCP_WORKFLOW_TOOL_NAMES = new Set([
+  "list_templates", "get_template", "list_workflows", "get_workflow", "save_workflow",
+  "start_run", "get_run", "get_run_results", "cancel_run",
+]);
+
+function resolveMcpToolNames(raw: string | undefined, workflows = false): ReadonlySet<string> {
+  if (raw === undefined) return workflows ? MCP_WORKFLOW_TOOL_NAMES : MCP_LIVE_TOOL_NAMES;
   const requested = [...new Set(raw.split(",").map((name) => name.trim()).filter(Boolean))];
   if (requested.length === 0) {
     throw new Error("--tools must name at least one 0 MCP tool.");
   }
-  const unsupported = requested.filter((name) => !MCP_LIVE_TOOL_NAMES.has(name));
+  const unsupported = requested.filter((name) => !MCP_LIVE_TOOL_NAMES.has(name) && !MCP_WORKFLOW_TOOL_NAMES.has(name));
   if (unsupported.length > 0) {
     throw new Error(`--tools contains unsupported 0 MCP tool(s): ${unsupported.join(", ")}`);
   }
@@ -265,16 +275,97 @@ function clampRateLimitToPosture(
   };
 }
 
+const workflowInputsSchema = SecurityWorkflowBindingsSchema;
+
+type WorkflowRuntime = Awaited<ReturnType<typeof import("../workflow-runtime.js")["createCliWorkflowRuntime"]>>;
+
+async function registerWorkflowTools(server: McpServer, selected: ReadonlySet<string>, opts: McpServerOptions): Promise<WorkflowRuntime> {
+  const { createCliWorkflowRuntime } = await import("../workflow-runtime.js");
+  const runtime = await createCliWorkflowRuntime({
+    ownerId: `mcp:${randomUUID()}`,
+    workspace: opts.workspace,
+    target: opts.target,
+    scopePath: opts.scope,
+    dbPath: opts.dbPath,
+    allowApply: opts.allowApply,
+  });
+  const id = z.string().trim().min(1).max(160);
+  const tools = [
+    { name: "list_templates", description: "List workflow templates and supported target types.", schema: z.object({}).strict(), run: () => runtime.listTemplates() },
+    { name: "get_template", description: "Read a workflow template.", schema: z.object({ id }).strict(), run: (args: any) => runtime.getTemplate(args.id) },
+    { name: "list_workflows", description: "List saved workflow definitions.", schema: z.object({}).strict(), run: () => runtime.listWorkflows() },
+    { name: "get_workflow", description: "Read a saved workflow and its revision.", schema: z.object({ id }).strict(), run: (args: any) => runtime.getWorkflow(args.id) },
+    { name: "save_workflow", description: "Validate and save a workflow definition with optional revision protection.", schema: z.object({ definition: z.record(z.unknown()), expectedRevision: z.number().int().positive().optional() }).strict(), run: (args: any) => runtime.saveWorkflow(args.definition, args.expectedRevision) },
+    { name: "start_run", description: "Start a template or saved workflow using 0's configured model provider. Returns a run ID promptly. Target must be within the server's authorized workspace or live scope.", schema: z.object({ templateId: id.optional(), workflowId: id.optional(), revision: z.number().int().positive().optional(), target: z.string().trim().min(1).max(4096), idempotencyKey: id.optional(), inputs: workflowInputsSchema.optional(), allowApply: z.boolean().optional(), timeCapMs: z.number().int().positive().max(86_400_000).optional(), costCapUsd: z.number().positive().max(1000).optional() }).strict(), run: (args: any) => {
+      if (Boolean(args.templateId) === Boolean(args.workflowId)) throw new Error("Select exactly one templateId or workflowId.");
+      if (args.workflowId && !args.revision) throw new Error("Saved workflow runs require a pinned revision.");
+      if (args.allowApply && !opts.allowApply) throw new Error("Applying workflow changes requires the host --allow-apply capability.");
+      return runtime.startRun(args);
+    } },
+    { name: "get_run", description: "Read status of a run owned by this MCP session.", schema: z.object({ runId: id }).strict(), run: (args: any) => runtime.getRun(args.runId) },
+    { name: "get_run_results", description: "Read paginated findings and artifact references from an owned run.", schema: z.object({ runId: id, cursor: z.number().int().nonnegative().optional(), limit: z.number().int().min(1).max(100).optional() }).strict(), run: (args: any) => runtime.getRunResults(args.runId, { cursor: args.cursor, limit: args.limit }) },
+    { name: "cancel_run", description: "Cancel an active run owned by this MCP session.", schema: z.object({ runId: id }).strict(), run: (args: any) => runtime.cancelRun(args.runId) },
+  ];
+  for (const tool of tools) {
+    if (!selected.has(tool.name)) continue;
+    server.registerTool(tool.name, { title: tool.name, description: tool.description, inputSchema: tool.schema }, async (args: Record<string, unknown>) => {
+      try {
+        const result = await tool.run(tool.schema.parse(args));
+        return toTextResult(JSON.stringify(result ?? null, null, 2), { success: true, output: result });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return { ...toTextResult(`ERROR: ${message}`, { success: false, error: message }), isError: true };
+      }
+    });
+  }
+  return runtime;
+}
+
+async function connectWorkflowServer(server: McpServer, runtime: WorkflowRuntime): Promise<void> {
+  const transport = new StdioServerTransport();
+  let disposed = false;
+  const dispose = async () => {
+    if (disposed) return;
+    disposed = true;
+    await runtime.dispose();
+  };
+  const shutdown = async () => {
+    await dispose();
+    await server.close();
+    process.exit(0);
+  };
+  const interrupt = () => { void shutdown(); };
+  process.on("SIGINT", interrupt);
+  process.on("SIGTERM", interrupt);
+  transport.onclose = () => {
+    process.off("SIGINT", interrupt);
+    process.off("SIGTERM", interrupt);
+    void dispose();
+  };
+  try {
+    await server.connect(transport);
+    console.error("0 MCP workflow server running; assessments use 0's configured provider.");
+  } catch (error) {
+    process.off("SIGINT", interrupt);
+    process.off("SIGTERM", interrupt);
+    await dispose();
+    throw error;
+  }
+}
+
 export function registerMcpServerCommand(program: Command): void {
   program
     .command("mcp-server")
-    .description("Run the 0 MCP stdio server exposing live target tools")
-    .requiredOption("--target <target>", "Target URL for this MCP session")
-    .requiredOption("--scan-id <scanId>", "Scan ID to associate persisted findings and target updates with")
+    .description("Expose selected target tools or managed workflows over MCP stdio")
+    .option("--target <target>", "Target URL for this MCP session")
+    .option("--scan-id <scanId>", "Scan ID to associate persisted findings and target updates with")
+    .option("--workflows", "Expose workflow discovery and run lifecycle tools instead of live tools", false)
+    .option("--allow-apply", "Permit explicit workflow apply requests inside the authorized workspace", false)
+    .option("--workspace <path>", "Absolute authorized local root for workflow source assessments")
     .option("--db-path <path>", "Path to SQLite database")
     .option("--timeout <ms>", "Default tool timeout in milliseconds", "30000")
     .option("--scope <path>", "Path to a 0 scope JSON file. Out-of-scope URLs are refused by every target tool.")
-    .option("--tools <names>", "Comma-separated live 0 MCP tools to expose (default: all).")
+    .option("--tools <names>", "Comma-separated 0 MCP tools to expose (default: live tools, or workflow tools with --workflows).")
     .option("--rate-limit <spec>", "Per-host request rate-limit spec. Defaults to 5 rps when unset. An active --engagement-profile caps this: the effective rate is the minimum of the two, so the profile can only lower it.")
     .option("--allow-scanners", "Disable generic-scanner suppression for scoped engagements.", false)
     .option(
@@ -287,17 +378,36 @@ export function registerMcpServerCommand(program: Command): void {
     )
     .action(async (opts: McpServerOptions) => {
       const timeoutMs = Math.max(1_000, parseInt(opts.timeout ?? "30000", 10));
-      const target = opts.target.trim();
-      const scanId = opts.scanId.trim();
+      const selectedToolNames = resolveMcpToolNames(opts.tools, opts.workflows);
+      const liveEnabled = [...selectedToolNames].some(name => MCP_LIVE_TOOL_NAMES.has(name));
+      const workflowsEnabled = [...selectedToolNames].some(name => MCP_WORKFLOW_TOOL_NAMES.has(name));
+      const target = opts.target?.trim() ?? "";
+      const scanId = opts.scanId?.trim() ?? "";
+      if (liveEnabled && (!target || !scanId)) {
+        throw new Error("Live MCP tools require --target and --scan-id.");
+      }
+      if (opts.workspace && !workflowsEnabled) {
+        throw new Error("--workspace requires workflow tools; it does not authorize local access for live tools.");
+      }
+      if (opts.allowApply && !workflowsEnabled) throw new Error("--allow-apply requires workflow tools.");
+      if (opts.workspace && !isAbsolute(opts.workspace)) {
+        throw new Error("--workspace must be an absolute authorized local root.");
+      }
       const scope = opts.scope ? loadScope(opts.scope) : undefined;
       console.error(getScopeEnforcementState().message);
-      if (isScopeEnforcementEnabled() && scope) {
+      if (target && isScopeEnforcementEnabled() && scope) {
         const verdict = scope.match(target);
         if (!verdict.allowed) {
           throw new Error(`--target ${target} is out of scope per ${opts.scope}: ${verdict.reason}`);
         }
       }
-      const selectedToolNames = resolveMcpToolNames(opts.tools);
+      // Workflow-only sessions never construct a live executor or scan database.
+      if (!liveEnabled) {
+        const server = new McpServer({ name: "0-mcp", version: "0.1.0" }, { capabilities: { logging: {} } });
+        const runtime = await registerWorkflowTools(server, selectedToolNames, opts);
+        await connectWorkflowServer(server, runtime);
+        return;
+      }
       // Engagement hardening posture (`scope/engagement-profile.ts`). Resolved
       // BEFORE the DB is opened, matching the scope-rejection ordering above:
       // a config error must fail without leaving a DB handle behind. Same
@@ -416,14 +526,25 @@ export function registerMcpServerCommand(program: Command): void {
         );
       }
 
+      let workflowRuntime: WorkflowRuntime | undefined;
+      try {
+        if (workflowsEnabled) workflowRuntime = await registerWorkflowTools(server, selectedToolNames, opts);
+      } catch (error) {
+        await executor.cleanup();
+        db.close();
+        throw error;
+      }
       const transport = new StdioServerTransport();
 
       const shutdown = async () => {
+        await workflowRuntime?.dispose();
         await executor.cleanup();
         await server.close();
         db.close();
         process.exit(0);
       };
+
+      transport.onclose = () => { void workflowRuntime?.dispose(); };
 
       process.on("SIGINT", () => { void shutdown(); });
       process.on("SIGTERM", () => { void shutdown(); });
@@ -433,6 +554,7 @@ export function registerMcpServerCommand(program: Command): void {
         console.error(`0 MCP server running for ${target} (scan ${scanId})`);
       } catch (error) {
         console.error("Fatal error in 0 MCP server:", error);
+        await workflowRuntime?.dispose();
         await executor.cleanup();
         db.close();
         process.exit(1);

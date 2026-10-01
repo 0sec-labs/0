@@ -1,14 +1,23 @@
-import { parseSecurityWorkflowInput, type SecurityWorkflowInput, type SecurityWorkflowNode } from "./security-workflows.js";
+import { parseSecurityWorkflowInput, type SecurityWorkflowInput, type SecurityWorkflowNode, type SecurityWorkflowOperation } from "./security-workflows.js";
 import type { ScanGoal } from "./types.js";
 
-export interface SecurityWorkflowTemplate { id: string; name: string; description: string; category: "repository" | "package" | "web" | "contracts" | "security"; definition: SecurityWorkflowInput }
+export type SecurityWorkflowTargetType = "source-code" | "npm-package" | "pypi-package" | "cargo-package" | "oci-image" | "url" | "web-app";
+export interface SecurityWorkflowTemplate { id: string; revision: number; name: string; description: string; compatibleTargetTypes: readonly SecurityWorkflowTargetType[]; executor: "assessment" | Exclude<SecurityWorkflowOperation, "audit">; profile: "default"; expectedOutputs: readonly string[]; inputRequirements: readonly { names: readonly string[]; required: boolean; description: string }[]; category: "repository" | "package" | "web" | "contracts" | "security"; definition: SecurityWorkflowInput }
 function phase(id: string, label: string, goal: ScanGoal, instructions: string, depth: "quick" | "default" | "deep" = "default"): SecurityWorkflowNode {
   return { id, type: "audit", label, enabled: true, plan: { goal, depth, runCount: 1, executionMode: "sequential", timeCapMs: 600_000, costCapUsd: 5 }, execution: { instructions } };
 }
 function template(id: string, name: string, description: string, category: SecurityWorkflowTemplate["category"], phases: SecurityWorkflowNode[]): SecurityWorkflowTemplate {
-  const nodes: SecurityWorkflowNode[] = [{ id: "start", type: "trigger", label: "Start manually", enabled: true }, ...phases, { id: "report", type: "report", label: "Collect reports", enabled: true }];
-  return { id, name, description, category, definition: parseSecurityWorkflowInput({ name, instructions: description, target: "", nodes, edges: nodes.slice(1).map((node, index) => ({ source: nodes[index]!.id, target: node.id })) }) };
+  const nodes: SecurityWorkflowNode[] = [{ id: "start", type: "trigger", label: "Start manually", enabled: true }, ...phases, { id: "report", type: "report", label: "Collect results", enabled: true }];
+  const compatibleTargetTypes: SecurityWorkflowTargetType[] = category === "web" || category === "security"
+    ? ["url", "web-app"] : category === "package"
+    ? ["source-code", "npm-package", "pypi-package", "cargo-package"] : ["source-code"];
+  return { id, revision: 1, name, description, category, compatibleTargetTypes, executor: "assessment", profile: "default", expectedOutputs: ["findings", "artifacts"], inputRequirements: [], definition: parseSecurityWorkflowInput({ name, instructions: description, target: "", nodes, edges: nodes.slice(1).map((node, index) => ({ source: nodes[index]!.id, target: node.id })) }) };
 }
+function operationTemplate(id: string, name: string, description: string, operation: Exclude<SecurityWorkflowOperation, "audit">, compatibleTargetTypes: SecurityWorkflowTargetType[], inputRequirements: SecurityWorkflowTemplate["inputRequirements"], inputs?: Record<string, unknown>): SecurityWorkflowTemplate {
+  const base = template(id, name, description, "repository", [{ id: "operation", type: operation, label: name, enabled: true, ...(inputs ? { inputs } : {}) }]);
+  return { ...base, executor: operation, compatibleTargetTypes, inputRequirements, expectedOutputs: operation === "fix" ? ["candidate", "validation", "artifacts"] : operation === "verify" ? ["verification", "artifacts"] : ["findings", "artifacts"] };
+}
+const FINDING_INPUT_REQUIREMENT = { names: ["finding", "findingPath", "findingId"], required: true, description: "Supply an existing finding, a finding JSON path, or a retained finding ID. Connected earlier finding evidence can also provide the input." };
 /** Ready-to-customize drafts; selecting one neither installs anything nor authorizes an assessment. */
 export const SECURITY_WORKFLOW_TEMPLATES: readonly SecurityWorkflowTemplate[] = [
   template("repository-review", "Repository security review", "Review a local repository's trust boundaries, dependency exposure, and security-sensitive code.", "repository", [
@@ -48,9 +57,25 @@ export const SECURITY_WORKFLOW_TEMPLATES: readonly SecurityWorkflowTemplate[] = 
     phase("parsers", "Parsers and memory boundaries", "unknown-vulnerabilities", "Trace untrusted input through parsing, length calculations, ownership, and memory operations. Prioritize reachable paths and concrete invalid-state evidence in the authorized source.", "deep"),
     phase("privileges", "Privilege and resource boundaries", "unknown-vulnerabilities", "Review privilege transitions, filesystem paths, subprocess inputs, concurrency, and resource lifetime. Avoid speculative issues without a supported attacker-controlled path.", "deep"),
   ]),
+  operationTemplate("finding-verification", "Finding verification", "Verify an existing finding using an explicitly selected execution runner and preserve the verification evidence.", "verify", ["source-code", "url", "web-app"], [FINDING_INPUT_REQUIREMENT, { names: ["runner"], required: true, description: "Select local, smolvm, docker, or qemu. Existing verification scope and prerequisite checks apply." }]),
+  operationTemplate("fix-candidate", "Fix candidate and validation", "Propose and test a source fix candidate without applying it to the repository.", "fix", ["source-code"], [FINDING_INPUT_REQUIREMENT, { names: ["testCommand"], required: true, description: "Provide the explicit repository regression test command." }]),
+  operationTemplate("security-research", "Security research", "Run the existing security research pipeline against an authorized source repository, retaining findings and research artifacts.", "research", ["source-code"], [], { engine: "pipeline" }),
+  operationTemplate("deep-source-review", "Deep source review", "Run the existing deep source review engine against an authorized repository, retaining its supported evidence and results.", "deep-review", ["source-code"], []),
 ];
-export function createSecurityWorkflowTemplate(id: string): SecurityWorkflowInput {
+/** Resolve a pinned catalog revision before creating a run or draft. */
+export function getSecurityWorkflowTemplate(id: string, revision?: number): SecurityWorkflowTemplate {
   const found = SECURITY_WORKFLOW_TEMPLATES.find(entry => entry.id === id);
   if (!found) throw new Error("Unknown security workflow template.");
-  return parseSecurityWorkflowInput(found.definition);
+  if (revision !== undefined && revision !== found.revision) throw new Error(`Template revision mismatch: ${id} is revision ${found.revision}.`);
+  return structuredClone(found);
+}
+export function checkSecurityWorkflowTemplateTarget(template: SecurityWorkflowTemplate, targetType: string): void {
+  if (!template.compatibleTargetTypes.includes(targetType as SecurityWorkflowTargetType)) {
+    throw new Error(`Template ${template.id} does not support target type ${targetType}. Supported types: ${template.compatibleTargetTypes.join(", ")}.`);
+  }
+}
+export function createSecurityWorkflowTemplate(id: string, options: { target?: string; targetType?: string; revision?: number } = {}): SecurityWorkflowInput {
+  const found = getSecurityWorkflowTemplate(id, options.revision);
+  if (options.targetType !== undefined) checkSecurityWorkflowTemplateTarget(found, options.targetType);
+  return parseSecurityWorkflowInput({ ...found.definition, template: { id: found.id, revision: found.revision }, ...(options.target !== undefined ? { target: options.target } : {}) });
 }

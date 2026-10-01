@@ -3,7 +3,8 @@ import { FileText, Play, ShieldCheck } from "lucide-react";
 import type { SecurityWorkflow, SecurityWorkflowExecution } from "@0/shared";
 import { cn } from "@/lib/utils";
 
-const NODE_ICONS = { trigger: Play, audit: ShieldCheck, report: FileText };
+const NODE_TYPES = { trigger: "Manual trigger", audit: "Security assessment", report: "Result collection", verify: "Finding verification", fix: "Fix candidate", research: "Security research", "deep-review": "Deep source review" };
+const NODE_ICONS = { trigger: Play, audit: ShieldCheck, verify: ShieldCheck, fix: FileText, research: ShieldCheck, "deep-review": ShieldCheck, report: FileText };
 
 export function WorkflowGraph({ definition, selectedId, onSelect, execution }: { definition: SecurityWorkflow; execution?: SecurityWorkflowExecution; selectedId: string | null; onSelect: (id: string) => void }) {
   const container = useRef<HTMLDivElement>(null);
@@ -66,9 +67,9 @@ export function WorkflowGraph({ definition, selectedId, onSelect, execution }: {
       {definition.nodes.map(node => {
         const Icon = NODE_ICONS[node.type as keyof typeof NODE_ICONS] ?? ShieldCheck, position = positions[node.id]!;
         const status = execution?.nodeResults[node.id]?.status;
-        return <button type="button" key={node.id} title={node.label} aria-pressed={selectedId === node.id} aria-label={`${node.label}, ${node.type}, ${node.enabled ? "enabled" : "disabled"}`} onClick={() => onSelect(node.id)} style={{ left: position.x, top: position.y }} className={cn("absolute flex min-h-24 w-[212px] items-start gap-3 rounded-2xl bg-background px-4 py-3 text-left shadow-sm transition-[background-color,box-shadow] duration-150 motion-reduce:transition-none hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary", selectedId === node.id && "ring-1 ring-primary/50", !node.enabled && "opacity-50")}>
+        return <button type="button" key={node.id} title={node.label} aria-pressed={selectedId === node.id} aria-label={`${node.label}, ${NODE_TYPES[node.type]}, ${node.enabled ? "enabled" : "disabled"}`} onClick={() => onSelect(node.id)} style={{ left: position.x, top: position.y }} className={cn("absolute flex min-h-24 w-[212px] items-start gap-3 rounded-2xl bg-background px-4 py-3 text-left shadow-sm transition-[background-color,box-shadow] duration-150 motion-reduce:transition-none hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary", selectedId === node.id && "ring-1 ring-primary/50", !node.enabled && "opacity-50")}>
           <Icon aria-hidden="true" className={cn("mt-1 size-4 shrink-0", node.enabled ? "text-primary" : "text-muted-foreground")} />
-          <span className="min-w-0"><span className="block line-clamp-2 break-words text-sm font-medium">{node.label}</span><span className="mt-1 block text-xs text-muted-foreground">{!node.enabled ? "Disabled" : node.type === "trigger" ? "Run manually" : node.type === "report" ? "Collect results" : "Security review"}{status && <span className="ml-2 text-foreground">· {status.replaceAll("_", " ")}</span>}</span></span>
+          <span className="min-w-0"><span className="block line-clamp-2 break-words text-sm font-medium">{node.label}</span><span className="mt-1 block text-xs text-muted-foreground">{!node.enabled ? "Disabled" : node.type === "trigger" ? "Run manually" : node.type === "report" ? "Collect results" : node.type === "verify" ? "Finding verification" : node.type === "fix" ? "Fix candidate" : node.type === "research" ? "Security research" : node.type === "deep-review" ? "Deep source review" : "Security assessment"}{status && <span className="ml-2 text-foreground">· {status.replaceAll("_", " ")}</span>}</span></span>
         </button>;
       })}
     </div>

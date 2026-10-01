@@ -146,11 +146,49 @@ const components: Components = {
 };
 const plugins = [remarkGfm];
 
+/** Ease transport chunks into view, with at most 120ms of visual catch-up. */
+function useStreamedText(text: string, streaming: boolean): string {
+  const [displayed, setDisplayed] = useState(text);
+  const shown = useRef(text);
+  useEffect(() => {
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const reduced = () => motion.matches || document.documentElement.dataset.reducedMotion === "true";
+    const commit = (next: string) => { shown.current = next; setDisplayed(next); };
+    if (!streaming || reduced() || !text.startsWith(shown.current)) {
+      commit(text);
+      return;
+    }
+    const startLength = shown.current.length;
+    if (startLength === text.length) return;
+    const started = performance.now();
+    let lastFrame = started;
+    let frame: number;
+    const reveal = (now: number) => {
+      const progress = Math.min(1, (now - started) / 120);
+      if (reduced() || progress === 1) { commit(text); return; }
+      // Limit Markdown reparsing to ~30fps and keep surrogate pairs intact.
+      if (now - lastFrame >= 32) {
+        let end = startLength + Math.ceil((text.length - startLength) * (1 - (1 - progress) ** 2));
+        const last = text.charCodeAt(end - 1);
+        if (last >= 0xd800 && last <= 0xdbff) end++;
+        commit(text.slice(0, end));
+        lastFrame = now;
+      }
+      frame = requestAnimationFrame(reveal);
+    };
+    frame = requestAnimationFrame(reveal);
+    return () => cancelAnimationFrame(frame);
+  }, [text, streaming]);
+  // Completed or replaced text is visible immediately, even in a hidden tab.
+  return streaming && text.startsWith(displayed) ? displayed : text;
+}
+
 export const Markdown = memo(function Markdown({ text, streaming = false }: { text: string; streaming?: boolean }) {
+  const displayed = useStreamedText(text, streaming);
   return (
     <div data-streaming={streaming || undefined} className="console-markdown min-w-0 break-words text-sm leading-relaxed text-foreground [&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-1.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5 [&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:px-3 [&_blockquote]:py-1 [&_blockquote]:text-muted-foreground [&_h1]:my-3 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:my-3 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:my-2 [&_h3]:text-base [&_h3]:font-semibold [&_h4]:my-2 [&_h4]:font-semibold [&_h5]:my-2 [&_h5]:font-semibold [&_h6]:my-2 [&_h6]:font-semibold [&_hr]:my-4 [&_hr]:border-border">
       <StreamingContext.Provider value={streaming}><ReactMarkdown remarkPlugins={plugins} components={components} skipHtml>
-        {streaming ? streamingMarkdown(text) : text}
+        {streaming ? streamingMarkdown(displayed) : text}
       </ReactMarkdown></StreamingContext.Provider>
     </div>
   );

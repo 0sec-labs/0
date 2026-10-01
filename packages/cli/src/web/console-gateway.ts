@@ -1,5 +1,6 @@
 import { loadServicePluginConnections } from "./service-plugins.js";
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import { SecurityWorkflowStore } from "@0/db";
 import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -11,6 +12,7 @@ import {
   type McpHost, type OperatorQuestionAnswer, type OperatorQuestionRequest, type ScopeJson, type ToolCall,
 } from "@0/core";
 import {
+  SecurityWorkflowBindingsSchema,
   DEFAULT_AUTONOMY_MODE, DESKTOP_CONSOLE_SCHEMA_VERSION, MODEL_PRICING, estimateCost,
   type ConsoleEventsPage, type ConsoleJsonValue, type ConsoleMessageInput, type ConsolePublicExport,
   type ConsolePublicMessage, type ConsoleQueuedMessage, type ConsoleRuntimeSelection, type ConsoleRuntimeSnapshot,
@@ -43,6 +45,20 @@ export class ConsoleGatewayError extends Error {
 }
 
 export type ConsoleGatewaySessionFactoryInput = Omit<ConsoleSessionConfig, "db" | "runtime"> & { runtime?: NativeRuntime; scanId: string; target: string; role: DesktopConsoleRole; autonomyMode: DesktopConsoleAutonomyMode };
+export interface ConsoleWorkflowLifecycleAdapter {
+  invoke(sessionId: string, name: string, args: Record<string, unknown>, capabilities?: { allowApply?: boolean }): unknown | Promise<unknown>;
+}
+const workflowLaunchSchema = z.object({
+  templateId: z.string().trim().min(1).max(160).optional(), workflowId: z.string().trim().min(1).max(160).optional(),
+  revision: z.number().int().positive().optional(), target: z.string().trim().min(1).max(4096),
+  inputs: SecurityWorkflowBindingsSchema.optional(), allowApply: z.boolean().optional(),
+  timeCapMs: z.number().int().positive().max(86_400_000).optional(), costCapUsd: z.number().positive().max(1000).optional(),
+  idempotencyKey: z.string().trim().min(1).max(160).optional(),
+}).strict();
+type QueuedWorkflowRequest = {
+  id: string; epoch: number; turnOwner?: string; request: z.infer<typeof workflowLaunchSchema>; abort: AbortController;
+  status: "queued" | "awaiting-approval" | "starting" | "launched" | "failed" | "cancelled"; runId?: string; error?: string;
+};
 export interface ConsoleGatewayOptions {
   createSession?: (input: ConsoleGatewaySessionFactoryInput) => ConsoleSession | Promise<ConsoleSession>;
   now?: () => Date;
@@ -85,6 +101,7 @@ type ManagedSession = {
   usage: ConsoleSessionSnapshot["usage"]; contextInputTokens?: number;
   lastOutcome: ConsoleTurnOutcome | null; compaction: ConsoleJsonValue | null; harness: HarnessSnapshot | null;
   objective: string; todos: ConsoleTodos | null; focusedFinding?: Finding; stagedPrompt?: string;
+  workflowRequests: Map<string, QueuedWorkflowRequest>; workflowDraining: boolean;
   executionEpoch: number; execution: ConsoleExecutionSnapshot; workspacePath?: string;
 };
 
@@ -264,13 +281,18 @@ export class ConsoleGateway {
   readonly #now: () => Date;
   readonly #createId: () => string;
   readonly #options: ConsoleGatewayOptions;
+  #workflowLifecycle?: ConsoleWorkflowLifecycleAdapter;
   readonly #callIds = new WeakMap<object, string>();
   constructor(options: ConsoleGatewayOptions = {}) { this.#options = options; this.#now = options.now ?? (() => new Date()); this.#createId = options.createId ?? randomUUID; }
 
+  attachWorkflowLifecycle(adapter: ConsoleWorkflowLifecycleAdapter): void {
+    if (this.#workflowLifecycle) throw new ConsoleGatewayError("Workflow lifecycle is already attached.", 409);
+    this.#workflowLifecycle = adapter;
+  }
   list(): DesktopConsoleSession[] { return [...this.#sessions.values()].map((managed) => this.#summary(managed)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)); }
   hasActiveTurns(): boolean {
     for (const managed of this.#sessions.values()) {
-      if (managed.turn || managed.initialization) return true;
+      if (managed.turn || managed.initialization || managed.workflowDraining) return true;
       for (const worker of managed.workers.values()) if (worker.status === "queued" || worker.status === "running") return true;
     }
     return false;
@@ -303,6 +325,7 @@ export class ConsoleGateway {
       runtime: null, info: null, session: null, initialization: null, status: "ready", sequence: 0, events: [], listeners: new Set(), pending: new Map(),
       abort: null, turn: null, turnOwner: null, initialMessages: [], workers: new Map(), ownedIds: new Set([id]), busUnsubscribe: null,
       queued: [], pauseQueue: false, configuration: null, usage: { inputTokens: 0, outputTokens: 0, costUnavailable: true }, lastOutcome: null, compaction: null, harness: null, objective: "", todos: null,
+      workflowRequests: new Map(), workflowDraining: false,
       executionEpoch: 0, execution: { backend: consoleExecutionProfile(this.#options.homeDir), status: "pending", workspacePath: this.#projectPath },
       ...(focusedFinding ? { focusedFinding } : {}), ...(stagedPrompt ? { stagedPrompt } : {}),
     };
@@ -337,7 +360,9 @@ export class ConsoleGateway {
     const managed = this.#require(id); managed.listeners.add(listener); return () => managed.listeners.delete(listener);
   }
   async send(id: string, value: unknown): Promise<DesktopConsoleSession> {
-    const managed = this.#requireOpen(id); const input = messageInput(value);
+    const managed = this.#requireOpen(id);
+    if (managed.workflowDraining) throw new ConsoleGatewayError("Wait for the queued workflow launch and decisions to finish.", 409);
+    const input = messageInput(value);
     if (input.workerId) return this.sendWorker(id, input.workerId, input.text);
     if (managed.turn || managed.initialization || managed.configuration || managed.status === "working" || managed.pending.size) {
       if (input.mode !== "queue" && input.mode !== "steer") throw new ConsoleGatewayError("Console session is already processing a turn; choose queue or steer.", 409);
@@ -364,6 +389,7 @@ export class ConsoleGateway {
       managed.queued.splice(index, 1);
     }
     this.#emit(managed, { type: "queued", messages: structuredClone(managed.queued) }); this.#save(managed);
+    void this.#processIdleWork(managed);
     return this.#summary(managed);
   }
   resolveDecision(id: string, decisionId: string, raw: unknown): DesktopConsoleSession {
@@ -663,6 +689,7 @@ export class ConsoleGateway {
   }
   async close(id: string): Promise<void> {
     const managed = this.#require(id); if (managed.status === "closed") return;
+    for (const request of managed.workflowRequests.values()) if (request.status !== "launched") { request.abort.abort(); request.status = "cancelled"; }
     managed.status = "closed"; managed.pauseQueue = true; managed.queued = []; managed.abort?.abort(); this.#denyDecisions(managed);
     this.#emitSession(managed); await managed.initialization?.catch(() => undefined); await managed.configuration?.catch(() => undefined); await managed.turn;
     this.#save(managed); managed.busUnsubscribe?.(); managed.busUnsubscribe = null;
@@ -697,7 +724,7 @@ export class ConsoleGateway {
         const settings = getSettings();
         const callbacks = this.#decisionCallbacks(managed);
         if (this.#options.createSession) {
-          session = await this.#options.createSession({ scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, scope: managed.scope, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, ...callbacks });
+          session = await this.#options.createSession({ scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, scope: managed.scope, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
         } else if (consoleExecutionProfile(this.#options.homeDir) === "smolvm") {
           if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection); managed.runtime = created.runtime; managed.info = created.info; }
           session = createLocalConsoleSession({
@@ -720,6 +747,7 @@ export class ConsoleGateway {
               compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
               scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, scope: managed.scope,
               initialMessages: managed.initialMessages,
+              ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}),
               workflowAuthoring: {
                 list: () => { const store = new SecurityWorkflowStore(this.#options.dbPath); try { return store.list(); } finally { store.close(); } },
                 save: input => { const store = new SecurityWorkflowStore(this.#options.dbPath); try { return store.save(input); } finally { store.close(); } },
@@ -825,10 +853,106 @@ export class ConsoleGateway {
     })();
     managed.turn = turn;
   }
+  #workflowCallbacks(managed: ManagedSession): NonNullable<ConsoleSessionConfig["workflowLifecycle"]> {
+    return { invoke: async (name, args) => {
+      this.#requireOpen(managed.id);
+      const adapter = this.#workflowLifecycle;
+      if (!adapter) throw new ConsoleGatewayError("Workflow lifecycle is unavailable.", 409);
+      if (name === "start_run") {
+        const epoch = managed.executionEpoch;
+        const turnOwner = managed.turnOwner ?? undefined;
+        const turnSignal = managed.abort?.signal;
+        if (managed.autonomyMode === "recon") throw new ConsoleGatewayError("Recon mode cannot start workflows.", 403);
+        const request = workflowLaunchSchema.parse(args);
+        if (Boolean(request.templateId) === Boolean(request.workflowId)) throw new ConsoleGatewayError("Select exactly one template or saved workflow.", 400);
+        if (request.workflowId && !request.revision) throw new ConsoleGatewayError("Saved workflow runs require a pinned revision.", 400);
+        if (request.templateId && !request.revision) {
+          const response = await adapter.invoke(managed.id, "get_template", { id: request.templateId });
+          const template = record(response) && record(response.template) ? response.template : response;
+          if (!record(template) || !Number.isSafeInteger(template.revision)) throw new ConsoleGatewayError("Template revision is unavailable.", 409);
+          request.revision = template.revision as number;
+        }
+        this.#requireOpen(managed.id);
+        if (turnSignal?.aborted || managed.executionEpoch !== epoch) throw new ConsoleGatewayError("The workflow owner changed or cancelled while preparing this request.", 409);
+        if (request.idempotencyKey) {
+          const previous = [...managed.workflowRequests.values()].find(item => item.request.idempotencyKey === request.idempotencyKey);
+          if (previous) {
+            if (JSON.stringify(previous.request) !== JSON.stringify(request)) throw new ConsoleGatewayError("Idempotency key belongs to a different workflow request.", 409);
+            return this.#workflowRequestView(previous);
+          }
+        }
+        if ([...managed.workflowRequests.values()].filter(item => ["queued", "awaiting-approval", "starting"].includes(item.status)).length >= 4) throw new ConsoleGatewayError("The workflow launch queue is full.", 409);
+        while (managed.workflowRequests.size >= 40) {
+          const terminal = [...managed.workflowRequests.values()].find(item => ["launched", "failed", "cancelled"].includes(item.status));
+          if (!terminal) break;
+          managed.workflowRequests.delete(terminal.id);
+        }
+        const queued: QueuedWorkflowRequest = { id: `workflow-request-${randomUUID()}`, epoch, turnOwner, request: structuredClone(request), abort: new AbortController(), status: "queued" };
+        managed.workflowRequests.set(queued.id, queued);
+        this.#emit(managed, { type: "notice", text: `Workflow request ${queued.id} queued. Launch awaits the end of this turn and operator approval.` });
+        return this.#workflowRequestView(queued);
+      }
+      if (["get_run", "get_run_results", "cancel_run"].includes(name)) {
+        const page = z.object({ runId: z.string().trim().min(1).max(160), cursor: z.number().int().nonnegative().optional(), limit: z.number().int().min(1).max(100).optional() }).strict().parse(args);
+        const queued = managed.workflowRequests.get(page.runId);
+        if (queued) {
+          if (name === "cancel_run" && !queued.runId) { queued.abort.abort(); queued.status = "cancelled"; return this.#workflowRequestView(queued); }
+          if (!queued.runId) return { ...this.#workflowRequestView(queued), ...(name === "get_run_results" ? { findings: [], pending: ["queued", "awaiting-approval", "starting"].includes(queued.status) } : {}) };
+          const result = await adapter.invoke(managed.id, name, { ...page, runId: queued.runId });
+          return { requestId: queued.id, runId: queued.runId, ...(record(result) ? result : { result }) };
+        }
+        return adapter.invoke(managed.id, name, page);
+      }
+      return adapter.invoke(managed.id, name, args);
+    } };
+  }
+  #workflowRequestView(request: QueuedWorkflowRequest) {
+    return { requestId: request.id, status: request.status, target: request.request.target, templateId: request.request.templateId, workflowId: request.request.workflowId, revision: request.request.revision, ...(request.runId ? { runId: request.runId } : {}), ...(request.error ? { error: request.error } : {}) };
+  }
+  async #drainWorkflowRequest(managed: ManagedSession, request: QueuedWorkflowRequest): Promise<void> {
+    managed.workflowDraining = true;
+    try {
+      this.#assertIdle(managed);
+      if (managed.executionEpoch !== request.epoch || managed.pendingConfiguration) throw new ConsoleGatewayError("The chat configuration changed after this workflow was queued. Queue it again using the current context.", 409);
+      if (request.abort.signal.aborted) { request.status = "cancelled"; return; }
+      request.status = "awaiting-approval";
+      const response = await this.#requestDecision(managed, {
+        kind: "tool", title: request.request.allowApply ? "Launch workflow and permit reviewed changes?" : "Launch queued workflow?",
+        detail: `Run ${request.request.templateId ?? request.request.workflowId} revision ${request.request.revision} against ${request.request.target}.${request.request.allowApply ? " This request permits the workflow's apply step to write inside its approved source workspace." : " Apply capability is disabled."}`,
+        call: this.#withCallId({ name: "start_run", arguments: request.request }),
+      }, request.id, request.abort.signal);
+      if (!response.approve || request.abort.signal.aborted) { request.status = "cancelled"; return; }
+      this.#assertIdle(managed);
+      if (managed.executionEpoch !== request.epoch || managed.pendingConfiguration) throw new ConsoleGatewayError("The workflow owner changed while awaiting launch approval.", 409);
+      request.status = "starting";
+      const started = await this.#workflowLifecycle!.invoke(managed.id, "start_run", request.request, { allowApply: request.request.allowApply === true });
+      if (!record(started) || typeof started.runId !== "string") throw new ConsoleGatewayError("Workflow launch did not return a run ID.", 500);
+      request.runId = started.runId;
+      if (request.abort.signal.aborted || managed.status === "closed" || managed.executionEpoch !== request.epoch) {
+        await this.#workflowLifecycle!.invoke(managed.id, "cancel_run", { runId: request.runId });
+        request.status = "cancelled";
+        return;
+      }
+      request.status = "launched";
+      this.#emit(managed, { type: "notice", text: `Workflow request ${request.id} started run ${request.runId}.` });
+    } catch (error) {
+      request.status = request.abort.signal.aborted ? "cancelled" : "failed";
+      request.error = errorMessage(error);
+      if (managed.status !== "closed") this.#emit(managed, { type: "notice", text: `Workflow request ${request.id} ${request.status}: ${request.error}` });
+    } finally {
+      managed.workflowDraining = false;
+      this.#refreshStatus(managed);
+      void this.#processIdleWork(managed);
+    }
+  }
   async #processIdleWork(managed: ManagedSession): Promise<void> {
-    if (managed.status === "closed" || managed.status === "working" || managed.turn || managed.initialization || managed.configuration || managed.pending.size) return;
+    if (managed.status === "closed" || managed.status === "working" || managed.turn || managed.initialization || managed.configuration || managed.pending.size || managed.workflowDraining) return;
     try {
       if (managed.pendingConfiguration) await this.#applyPendingConfiguration(managed);
+      if (!managed.pendingConfiguration && !managed.queued.length) {
+        const request = [...managed.workflowRequests.values()].find(item => item.status === "queued");
+        if (request) { await this.#drainWorkflowRequest(managed, request); return; }
+      }
       if (managed.pauseQueue || managed.pendingConfiguration || !managed.queued.length) return;
       const next = managed.queued.shift()!;
       this.#emit(managed, { type: "queued", messages: structuredClone(managed.queued) });
@@ -844,6 +968,7 @@ export class ConsoleGateway {
     return { assistantText: outcome.assistantText, stopReason: outcome.stopReason, budget: { ...outcome.budget, tokenBudget: Number.isFinite(outcome.budget.tokenBudget) ? outcome.budget.tokenBudget : null }, usage: { ...outcome.usage }, ...(outcome.error ? { error: outcome.error } : {}), ...(outcome.contextInputTokens !== undefined ? { contextInputTokens: outcome.contextInputTokens } : {}), ...(outcome.outputCap ? { outputCap: { ...outcome.outputCap, checkpoint: json(outcome.outputCap.checkpoint) } } : {}) };
   }
   #cancelTurn(managed: ManagedSession): void {
+    for (const request of managed.workflowRequests.values()) if (request.turnOwner === managed.turnOwner && request.status === "queued") { request.abort.abort(); request.status = "cancelled"; }
     managed.abort?.abort(); this.#denyDecisions(managed, managed.turnOwner ?? undefined);
     this.#emit(managed, { type: "notice", text: managed.execution.backend === "smolvm" ? "Cancellation requested. The VM run is being stopped; results and teardown status will be retained." : "Cancellation requested. An executing tool finishes at its next safe boundary; the conversation and authorization remain intact." }); this.#refreshStatus(managed);
   }

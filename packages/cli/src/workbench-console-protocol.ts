@@ -91,7 +91,7 @@ export function serializeWorkbenchConfig(config: Omit<ConsoleSessionConfig, "run
 /** Interpret only known path-valued CLI options; operator prose is never rewritten. */
 export function mapWorkbenchCliArguments(args: readonly string[], workspace: string): string[] {
   const targetFlags = new Set(["--target", "-t", "--repo"]);
-  const pathFlags = new Set(["--scope", "--db-path", "--workspace", "--workspace-root", "--cwd", "--output", "-o", "--config"]);
+  const pathFlags = new Set(["--scope", "--db-path", "--workspace", "--workspace-root", "--cwd", "--output", "-o", "--config", "--inputs"]);
   const result = [...args];
   for (let index = 0; index < result.length; index++) {
     const argument = result[index]!; const equal = argument.indexOf("=");

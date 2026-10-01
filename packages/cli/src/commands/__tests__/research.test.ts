@@ -1,9 +1,10 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
 
+const { managedOperationMock } = vi.hoisted(() => ({ managedOperationMock: vi.fn() }));
 const runResearchMock = vi.fn();
 class LinuxKernelResearchAdapterMock {}
 
@@ -11,6 +12,8 @@ vi.mock("@0/core", () => ({
   LinuxKernelResearchAdapter: LinuxKernelResearchAdapterMock,
   runResearch: runResearchMock,
 }));
+
+vi.mock("../../managed-operation.js", () => ({ executeManagedOperation: async (options: { execute: (context: unknown) => Promise<unknown> }) => { managedOperationMock(options); return options.execute({ signal: new AbortController().signal, deadline: Date.now() + 600_000, plan: { costCapUsd: 5 }, costLedger: {} }); } }));
 
 const { registerResearchCommand } = await import("../research.js");
 
@@ -42,6 +45,7 @@ async function runCli(args: string[]): Promise<void> {
 
 beforeEach(() => {
   runResearchMock.mockReset();
+  managedOperationMock.mockClear();
   logSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 });
 
@@ -66,6 +70,19 @@ describe("0 research linux oracle binding", () => {
       }) }) }),
       expect.any(Object),
     );
+  });
+
+  it("retains native research evidence and finding statuses in managed run reports", async () => {
+    const files = fixture();
+    const finding = JSON.parse(readFileSync(files.finding, "utf8"));
+    const native = { completed: true, findings: [{ finding }], candidates: [], evidence: [], warnings: [] };
+    runResearchMock.mockResolvedValue(native);
+    await runCli(["research", "linux", "--kernel-tree", files.kernelTree, "--reproducer", files.reproducer, "--finding", files.finding, "--expected-signature", "claimed signature"]);
+    const options = managedOperationMock.mock.calls[0][0];
+    const [report] = options.reports(native);
+    expect(report.findings).toEqual([finding]);
+    expect(report.findings[0].status).toBe("discovered");
+    expect(report.summary.high).toBe(1);
   });
 
   it("returns a failing command when the expected signature did not reproduce", async () => {

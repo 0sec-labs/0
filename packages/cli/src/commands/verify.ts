@@ -20,6 +20,7 @@
 
 import type { Command } from "commander";
 import { lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { executeManagedOperation } from "../managed-operation.js";
 import { processPresentationOutput } from "../presentation/process-output.js";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -627,7 +628,7 @@ export async function runKernelFindingVerify(opts: {
   }
 
   const result = await verifyStaticKernelFinding(finding as unknown as import("@0/shared").Finding, {
-    kernelTree: opts.kernelTree,
+    kernelTree: opts.kernelTree!,
     kernelConfig: opts.kernelConfig,
     attempts: opts.attempts,
     wallClockMs: opts.wallClockMs,
@@ -1041,12 +1042,19 @@ async function verifyAction(opts: VerifyOpts, positionalFinding?: string): Promi
     }
     const wallClockMs = opts.wallClock ? parseDurationMs(opts.wallClock) : undefined;
 
-    const kernelOutcome = await runKernelFindingVerify({
-      findingPath: opts.kernelFinding,
-      kernelTree: opts.kernelTree,
+    const kernelOutcome = await executeManagedOperation<Awaited<ReturnType<typeof runKernelFindingVerify>>>({
+      type: "verify", name: "Kernel finding verification", target: resolve(opts.kernelTree),
+      timeCapMs: wallClockMs ?? 1_800_000,
+      inputs: { findingPath: resolve(opts.kernelFinding), kernelTree: resolve(opts.kernelTree), kernelConfig: opts.kernelConfig ?? "kasan" },
+      output: outcome => outcome.result,
+      status: outcome => outcome.exitCode === 3 ? "failed" : "completed",
+      execute: () => runKernelFindingVerify({
+      findingPath: opts.kernelFinding!,
+      kernelTree: opts.kernelTree!,
       kernelConfig: opts.kernelConfig ?? "kasan",
       attempts,
       wallClockMs,
+      }),
     });
     const kernelJson = JSON.stringify(kernelOutcome.result, null, 2);
     if (opts.output) {
@@ -1073,7 +1081,12 @@ async function verifyAction(opts: VerifyOpts, positionalFinding?: string): Promi
       );
     }
     const runner = parseRunnerKind(opts.runner);
-    const { result, exitCode } = await runDeterministicReplayCli({
+    const { result, exitCode } = await executeManagedOperation<Awaited<ReturnType<typeof runDeterministicReplayCli>>>({
+      type: "verify", name: "Finding replay verification", target: resolve(findingPath), timeCapMs: 3_600_000,
+      inputs: { findingPath: resolve(findingPath), runner },
+      status: outcome => outcome.result.status === "error" ? "failed" : "completed",
+      output: outcome => outcome.result,
+      execute: context => runDeterministicReplayCli({
       findingPath,
       runner,
       outDir: opts.out,
@@ -1081,7 +1094,8 @@ async function verifyAction(opts: VerifyOpts, positionalFinding?: string): Promi
       dockerNetwork: opts.dockerNetwork,
       qemuBinary: opts.qemuBinary,
       qemuKernel: opts.qemuKernel,
-      qemuBusybox: opts.qemuBusybox,
+      qemuBusybox: opts.qemuBusybox, signal: context.signal,
+      }),
     });
     const json = JSON.stringify(result, null, 2);
     if (opts.output) {
@@ -1109,12 +1123,16 @@ async function verifyAction(opts: VerifyOpts, positionalFinding?: string): Promi
       throw new Error("--bundle requires --runner local|smolvm|docker (defaults to smolvm in an admitted workbench; qemu is not supported)");
     }
 
-    const bundleResult = await runReproductionBundle({
-      bundleDir: opts.bundle,
+    const bundleResult = await executeManagedOperation<Awaited<ReturnType<typeof runReproductionBundle>>>({
+      type: "verify", name: "Reproduction bundle verification", target: resolve(opts.bundle), timeCapMs: 3_600_000,
+      inputs: { bundleDir: resolve(opts.bundle), runner: bundleRunner },
+      execute: context => runReproductionBundle({
+      bundleDir: opts.bundle!,
       runner: bundleRunner,
       outDir: opts.out,
       scope: opts.scope ? loadScope(opts.scope) : undefined,
-      dockerNetwork: opts.dockerNetwork,
+      dockerNetwork: opts.dockerNetwork, signal: context.signal,
+      }),
     });
 
     const json = JSON.stringify(bundleResult, null, 2);
@@ -1147,7 +1165,13 @@ async function verifyAction(opts: VerifyOpts, positionalFinding?: string): Promi
   }
   const fixtureCommand = parseFixtureCommand(opts.fixtureCommand);
 
-  const outcome = await runVerify({
+  const outcome = await executeManagedOperation<VerifyOutcome>({
+    type: "verify", name: opts.fixture ? "Verification fixture replay" : "Finding replay verification",
+    target: opts.finding ? resolve(opts.finding) : `fixture:${opts.fixture}`, timeCapMs: 3_600_000,
+    inputs: { ...(opts.finding ? { findingPath: resolve(opts.finding) } : { fixture: opts.fixture! }) },
+    status: value => value.result.status === "error" ? "failed" : "completed",
+    output: value => value.result,
+    execute: context => runVerify({
     findingPath: opts.finding,
     targetPath: opts.target,
     fixture: opts.fixture,
@@ -1155,7 +1179,8 @@ async function verifyAction(opts: VerifyOpts, positionalFinding?: string): Promi
     fixtureMode: opts.fixtureMode,
     retainArtifacts: opts.retainArtifacts,
     artifactDir: opts.artifactDir,
-    scopeFile: opts.scope,
+    scopeFile: opts.scope, signal: context.signal,
+    }),
   });
 
   const json = JSON.stringify(outcome.result, null, 2);

@@ -1,5 +1,5 @@
 import type { SecurityWorkflow, SecurityWorkflowInput, SecurityWorkflowNode } from "@0/shared";
-import { DEFAULT_SECURITY_WORKFLOW_PLAN, parseSecurityWorkflowInput } from "@0/shared/dist/security-workflows.js";
+import { DEFAULT_SECURITY_WORKFLOW_PLAN, parseSecurityWorkflowInput, isSecurityWorkflowOperation } from "@0/shared/dist/security-workflows.js";
 
 export function workflowInput(definition: SecurityWorkflow): SecurityWorkflowInput {
   const { createdAt: _createdAt, updatedAt: _updatedAt, ...input } = definition;
@@ -24,7 +24,7 @@ export function linearWorkflowNodes(definition: SecurityWorkflowInput): Security
 
 export function addWorkflowPhase(definition: SecurityWorkflow): SecurityWorkflowInput {
   const nodes = linearWorkflowNodes(definition);
-  if (!nodes) throw new Error("Edit the definition to add a phase to a branched graph.");
+  if (!nodes) throw new Error("Edit the definition to add a step to a branched graph.");
   const newNode: SecurityWorkflowNode = { id: `review_${crypto.randomUUID().replaceAll("-", "")}`, type: "audit", label: "Security review", enabled: true, plan: { ...DEFAULT_SECURITY_WORKFLOW_PLAN } };
   const reportIndex = nodes.findIndex(node => node.type === "report");
   nodes.splice(reportIndex < 0 ? nodes.length : reportIndex, 0, newNode);
@@ -33,10 +33,10 @@ export function addWorkflowPhase(definition: SecurityWorkflow): SecurityWorkflow
 
 export function removeWorkflowPhase(definition: SecurityWorkflow, id: string): SecurityWorkflowInput {
   const ordered = linearWorkflowNodes(definition);
-  if (!ordered) throw new Error("Edit the definition to remove a phase from a branched graph.");
+  if (!ordered) throw new Error("Edit the definition to remove a step from a branched graph.");
   const phase = ordered.find(node => node.id === id);
   if (!phase || phase.type === "trigger") throw new Error("The manual trigger must remain in the workflow.");
-  if (phase.type === "audit" && ordered.filter(node => node.type === "audit").length < 2) throw new Error("Keep at least one review phase.");
+  if (isSecurityWorkflowOperation(phase) && ordered.filter(isSecurityWorkflowOperation).length < 2) throw new Error("Keep at least one assessment step.");
   const nodes = ordered.filter(node => node.id !== id);
   return parseSecurityWorkflowInput({ ...workflowInput(definition), nodes, edges: nodes.slice(1).map((node, index) => ({ source: nodes[index]!.id, target: node.id })) });
 }

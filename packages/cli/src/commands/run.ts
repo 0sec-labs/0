@@ -256,49 +256,11 @@ interface ResultLinePayload {
   plannedRuns?: number;
   completedRuns?: number;
   attempts?: ScanAttemptOutcome[];
+  workflowRunId?: string;
 }
 
 export interface RunOutcome extends ResultLinePayload {
   report: ScanReport;
-}
-
-function toScanReport(report: any): ScanReport {
-  const execution = {
-    plan: report.plan, plannedRuns: report.plannedRuns, completedRuns: report.completedRuns, attempts: report.attempts,
-    estimatedCostUsd: report.estimatedCostUsd, usage: report.usage, exitReason: report.exitReason,
-    costCeilingExceeded: report.costCeilingExceeded, executionSuccessful: report.executionSuccessful ?? (report.researchFailed ? false : undefined),
-    error: report.error,
-    reviewChecks: report.reviewChecks,
-  };
-  if (report.targetType === "npm-package" || report.targetType === "pypi-package" || report.targetType === "cargo-package" || report.targetType === "oci-image") {
-    return {
-      target: `${report.package}@${report.version}`,
-      scanDepth: report.plan?.depth ?? "deep",
-      startedAt: report.startedAt,
-      completedAt: report.completedAt,
-      durationMs: report.durationMs,
-      summary: report.summary,
-      findings: report.findings,
-      warnings: report.warnings ?? [],
-      ...execution,
-    };
-  }
-
-  if (report.targetType === "source-code") {
-    return {
-      target: report.repo,
-      scanDepth: report.plan?.depth ?? "deep",
-      startedAt: report.startedAt,
-      completedAt: report.completedAt,
-      durationMs: report.durationMs,
-      summary: report.summary,
-      findings: report.findings,
-      warnings: report.warnings ?? [],
-      ...execution,
-    };
-  }
-
-  return report as ScanReport;
 }
 
 function getEstimatedCost(report: any): number | undefined {
@@ -416,12 +378,6 @@ export async function runUnified(opts: RunOptions): Promise<void> {
   if (opts.plan) validateScanPlan(opts.plan);
   const { target, format, runtime, timeout } = opts;
   const depth = opts.plan?.depth ?? opts.depth;
-  const planCostCap = opts.plan?.costCapUsd;
-  const effectiveCostCeilingUsd =
-    planCostCap === undefined || opts.costCeilingUsd === undefined
-      ? opts.costCeilingUsd ?? planCostCap
-      : Math.min(opts.costCeilingUsd, planCostCap);
-  const effectiveTimeout = Math.min(opts.plan?.timeCapMs ?? timeout, timeout);
   const core = await loadCoreModule();
   // ── Journal-based resume (0#374) ───────────────────────────────
   let effectiveResumeScanId = opts.resumeScanId;
@@ -551,93 +507,75 @@ export async function runUnified(opts: RunOptions): Promise<void> {
     getPendingUserMessages = inkUI.getPendingUserMessages;
   }
 
+  let workflowRunId: string | undefined;
   try {
-    let report: unknown;
-
-    if (opts.targetType === "url" || opts.targetType === "web-app") {
-      report = await core.agenticScan({
-        config: {
-          target,
-          depth,
-          format,
-          runtime,
-          mode: opts.mode ?? "deep",
-          timeout: effectiveTimeout,
-          verbose: opts.verbose,
-          apiKey: opts.apiKey,
-          model: opts.model,
-          ...(opts.plan ? { plan: opts.plan } : {}),
-          ...(opts.costLedger ? { costLedger: opts.costLedger } : {}),
-          agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel, signal: opts.signal,
-          repoPath: opts.repoPath,
-          auth: opts.auth,
-          apiSpecPath: opts.apiSpecPath,
-          race: opts.race,
-          egats: opts.egats,
-          costCeilingUsd: effectiveCostCeilingUsd,
-          scopeFile: opts.scopeFile,
-          rateLimit: opts.rateLimit,
-          allowScanners: opts.allowScanners,
-          attributionHeaders: opts.attributionHeaders,
-          attributionUaToken: opts.attributionUaToken,
-          engagementProfile: opts.engagementProfile,
-          wafEvasion: opts.wafEvasion,
-          dispatchMode: opts.dispatchMode,
-          httpAuditAllowedHosts: opts.httpAuditAllowedHosts,
-          httpAuditAllowedPaths: opts.httpAuditAllowedPaths,
-          httpAuditRateLimitRps: opts.httpAuditRateLimitRps,
-          httpAuditKillAfterSec: opts.httpAuditKillAfterSec,
+    const {
+      onReport: _onReport, onOutcome: _onOutcome, suppressOutput: _suppressOutput,
+      suppressUi: _suppressUi, sessionUiFactory: _sessionUiFactory, embedded: _embedded,
+      reportPath: _reportPath, exportTarget: _exportTarget, tui: _tui,
+      emit: _emit, emitPrBase: _emitPrBase, emitPrDryRun: _emitPrDryRun,
+      emitOutDir: _emitOutDir, reviewStrategy: _reviewStrategy,
+      ...assessmentOptions
+    } = opts;
+    const retainedStore = opts.embedded ? undefined : new (await import("@0/db")).SecurityWorkflowStore(opts.dbPath);
+    const scanIds: string[] = [];
+    const dbPaths: string[] = [];
+    let assessment: Awaited<ReturnType<CoreModule["executeAssessmentRun"]>>;
+    try {
+      assessment = await core.executeAssessmentRun({
+        ...assessmentOptions,
+        // Journal branching above retains the CLI progress message.
+        branchFromEntry: undefined,
+        onEvent: event => {
+          const data = (event as { data?: { persisted?: boolean; scanId?: string; dbPath?: string } }).data;
+          if (data?.persisted === true && typeof data.scanId === "string" && !scanIds.includes(data.scanId)) scanIds.push(data.scanId);
+          if (data?.persisted === true && typeof data.dbPath === "string" && !dbPaths.includes(data.dbPath)) dbPaths.push(data.dbPath);
+          eventHandler(event);
         },
-        dbPath: opts.dbPath,
-        nativeRuntime: opts.nativeRuntime,
-        scope: opts.scope,
-        provider: opts.provider,
-        onEvent: eventHandler,
         getPendingUserMessages,
-        resumeScanId: effectiveResumeScanId,
-      });
-    } else {
-      report = await core.runPipeline({
-        target,
-        targetType: opts.targetType,
-        resumeScanId: effectiveResumeScanId,
-        diffBase: opts.diffBase,
-        changedOnly: opts.changedOnly,
-        priorFindings: opts.priorFindings,
-        depth,
-        format,
-        runtime,
-        onEvent: eventHandler,
-        dbPath: opts.dbPath,
-        apiKey: opts.apiKey,
-        model: opts.model,
-        timeout: effectiveTimeout,
-        packageVersion: opts.packageVersion,
-        costCeilingUsd: effectiveCostCeilingUsd,
-        ...(opts.plan ? { plan: opts.plan } : {}),
-        ...(opts.costLedger ? { costLedger: opts.costLedger } : {}),
-        agentModels: opts.agentModels, autoRoute: opts.autoRoute, singleModel: opts.singleModel, signal: opts.signal,
-        nativeRuntime: opts.nativeRuntime, provider: opts.provider,
-        scope: opts.scope,
-        repoPath: opts.repoPath, auth: opts.auth, apiSpecPath: opts.apiSpecPath, scopeFile: opts.scopeFile,
-        rateLimit: opts.rateLimit, allowScanners: opts.allowScanners, attributionHeaders: opts.attributionHeaders,
-        attributionUaToken: opts.attributionUaToken, engagementProfile: opts.engagementProfile, wafEvasion: opts.wafEvasion,
-        dispatchMode: opts.dispatchMode, httpAuditAllowedHosts: opts.httpAuditAllowedHosts,
-        httpAuditAllowedPaths: opts.httpAuditAllowedPaths, httpAuditRateLimitRps: opts.httpAuditRateLimitRps,
-        httpAuditKillAfterSec: opts.httpAuditKillAfterSec, race: opts.race, egats: opts.egats,
-        reviewProfile: opts.reviewProfile,
-        reviewPackageEcosystem: opts.reviewPackageEcosystem,
-        subsystem: opts.subsystem,
-        hypothesis: opts.hypothesis,
-        conversation: opts.conversation,
-        seedFindings: opts.seedFindings,
-        seedOnly: opts.seedOnly,
-        npmDynamicDiscovery: opts.npmDynamicDiscovery,
-      });
+      }, undefined, retainedStore ? {
+        onStart: snapshot => {
+          const mode = opts.targetType === "source-code" ? "review"
+            : opts.targetType?.endsWith("-package") || opts.targetType === "oci-image" ? "audit" : "scan";
+          const execution = retainedStore.createExecutionFromSnapshot({ ...snapshot, id: `cli-${mode}`, revision: 1, name: mode === "review" ? "Source security review" : mode === "audit" ? "Package security review" : "Web security assessment" }, "cli");
+          workflowRunId = execution.id;
+          retainedStore.updateExecution(execution.id, { status: "running", nodeResults: { start: { status: "completed" }, assessment: { status: "running" } } });
+        },
+        onComplete: result => {
+          if (result.nodeResults.assessment) result.nodeResults.assessment = {
+            ...result.nodeResults.assessment,
+            ...(scanIds.length ? { scanIds } : {}), ...(dbPaths.length ? { dbPaths } : {}),
+          };
+          const nodeResults = Object.fromEntries(Object.entries(result.nodeResults).map(([id, step]) => [id, {
+            status: step.status, ...(step.error ? { error: step.error.slice(0, 16_000) } : {}),
+            ...(id === "assessment" && scanIds.length ? { scanIds } : {}),
+            ...(id === "assessment" && dbPaths.length ? { dbPaths } : {}),
+          }]));
+          try { retainedStore.saveExecutionResults(workflowRunId!, result); }
+          catch (error) {
+            const message = `Run ${result.status}, but result retention failed: ${error instanceof Error ? error.message : String(error)}`;
+            retainedStore.updateExecution(workflowRunId!, { status: result.status, nodeResults, error: message.slice(0, 16_000) });
+            throw new Error(message);
+          }
+          retainedStore.updateExecution(workflowRunId!, { status: result.status, nodeResults,
+            ...(result.error ? { error: result.error.slice(0, 16_000) } : {}) });
+        },
+      } : undefined);
+    } catch (error) {
+      if (retainedStore && workflowRunId) {
+        const current = retainedStore.getExecution(workflowRunId);
+        if (current?.status === "queued" || current?.status === "running") {
+          try { retainedStore.updateExecution(workflowRunId, { status: "failed", error: (error instanceof Error ? error.message : String(error)).slice(0, 16_000) }); }
+          catch (retentionError) { throw new Error(`${error instanceof Error ? error.message : String(error)}; failed to retain the run failure: ${retentionError instanceof Error ? retentionError.message : String(retentionError)}`); }
+        }
+      }
+      throw error;
+    } finally {
+      retainedStore?.close();
     }
-
+    const report = assessment.rawReport;
     const reportAny = report as any;
-    const canonicalReport = toScanReport(report);
+    const canonicalReport = assessment.report;
     opts.onReport?.(canonicalReport);
 
 
@@ -651,7 +589,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
           ? resolve(opts.reportPath)
           : join(tmpdir(), `0-report-${Date.now()}.${extension}`);
         if (format === "pdf") {
-          await generatePdfReport(toScanReport(reportAny), filePath);
+          await generatePdfReport(canonicalReport, filePath);
         } else {
           const output = reportAny.targetType === "npm-package" || reportAny.targetType === "pypi-package" || reportAny.targetType === "cargo-package" || reportAny.targetType === "oci-image"
             ? formatAuditReport(reportAny, format)
@@ -808,6 +746,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
       attempts: reportAny.attempts,
       error: reportAny.error,
       report: canonicalReport,
+      workflowRunId,
     });
     if (!opts.suppressOutput) {
       emitResultLine({
@@ -828,7 +767,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
         estimatedCostUsd,
         usage,
         summary: canonicalReport.summary,
-        plannedRuns: reportAny.plannedRuns, completedRuns: reportAny.completedRuns, attempts: reportAny.attempts, error: reportAny.error,
+        plannedRuns: reportAny.plannedRuns, completedRuns: reportAny.completedRuns, attempts: reportAny.attempts, error: reportAny.error, workflowRunId,
       });
     }
 
@@ -860,6 +799,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
         runtime,
         format,
         error: message,
+        workflowRunId,
       });
     }
     process.exit(2);

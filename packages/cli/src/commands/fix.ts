@@ -4,13 +4,14 @@ import type { Command } from "commander";
 import type { Finding } from "@0/shared";
 import {
   createRuntime,
-  runSourceFix,
+  runSourceFix, budgetNativeRuntime, workflowPolicyRuntime,
   type NativeRuntime,
   type RuntimeType,
   type SourceFixResult,
 } from "@0/core";
 import { z } from "zod";
 import { findingSchema, formatZodError } from "@0/shared";
+import { executeManagedOperation } from "../managed-operation.js";
 import { loadFindingFocus } from "../finding-focus.js";
 
 type FixRuntimeType = Extract<RuntimeType, "api">;
@@ -175,14 +176,22 @@ export function registerFixCommand(program: Command): void {
         throw new Error(`runtime '${runtimeType}' is not available`);
       }
 
-      const result = await runSourceFix({
+      const result = await executeManagedOperation({
+        type: "fix", name: opts.apply ? "Source fix and explicit repository application" : "Source fix candidate and regression check",
+        fixMode: opts.apply ? "apply" : "candidate", target: resolve(repo),
+        timeCapMs: Math.min(86_400_000, (timeout + testTimeoutMs) * Math.min(maxAttempts, 3) + 60_000),
+        inputs: { findingId: finding.id, testCommand: opts.testCommand, maxAttempts, testTimeoutMs },
+        status: (result: SourceFixResult) => result.status === "error" || result.status === "precondition_failed" ? "failed" : "completed",
+        execute: context => runSourceFix({
         repoRoot: resolve(repo),
         finding,
-        runtime,
+        runtime: workflowPolicyRuntime(budgetNativeRuntime(runtime, context.costLedger, context.signal, context.plan.costCapUsd, context.plan)),
+        signal: context.signal,
         testCommand: opts.testCommand,
         apply: opts.apply,
         maxAttempts,
         testTimeoutMs,
+        }),
       });
 
       if (opts.output && result.patch) {

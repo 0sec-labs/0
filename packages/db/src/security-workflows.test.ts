@@ -7,6 +7,33 @@ const draft = () => ({ name: "Dependency review", instructions: "Review dependen
 const directories: string[] = [];
 afterEach(() => { for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true }); });
 describe("durable security workflows", () => {
+  it("retains a template snapshot and evidence across reopen without saving a workflow clone", () => {
+    const directory = mkdtempSync(join(tmpdir(), "zero-workflow-results-")); directories.push(directory);
+    const path = join(directory, "control.db");
+    let store = new SecurityWorkflowStore(path);
+    const execution = store.createExecutionFromSnapshot({ ...draft(), id: "template-dependencies", revision: 2 }, "cli");
+    const result = { status: "completed", findings: [{ id: "finding-a", verification: { status: "unconfirmed" } }], artifacts: ["scan-a/state.db"] };
+    store.saveExecutionResults(execution.id, result);
+    store.updateExecution(execution.id, { status: "completed" });
+    expect(store.list()).toEqual([]);
+    store.close();
+    store = new SecurityWorkflowStore(path);
+    try {
+      expect(store.getExecution(execution.id)?.workflowRevision).toBe(2);
+      expect(store.getExecutionResults(execution.id)).toEqual(result);
+      expect(store.list()).toEqual([]);
+    } finally { store.close(); }
+  });
+  it("refuses orphan and oversized result writes without replacing retained evidence", () => {
+    const store = new SecurityWorkflowStore(":memory:");
+    try {
+      expect(() => store.saveExecutionResults("missing", {})).toThrow(/not found/);
+      const execution = store.createExecutionFromSnapshot(draft(), "cli");
+      store.saveExecutionResults(execution.id, { evidence: "original" });
+      expect(() => store.saveExecutionResults(execution.id, { evidence: "x".repeat(16 * 1024 * 1024) })).toThrow(/16 MiB/);
+      expect(store.getExecutionResults(execution.id)).toEqual({ evidence: "original" });
+    } finally { store.close(); }
+  });
   it("persists optimistic revisions and immutable execution snapshots across reopen and definition deletion", () => {
     const directory = mkdtempSync(join(tmpdir(), "zero-workflow-store-")); directories.push(directory); const path = join(directory, "control.db");
     let store = new SecurityWorkflowStore(path);

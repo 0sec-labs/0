@@ -24,6 +24,7 @@ export class SecurityWorkflowStore {
       CREATE TABLE IF NOT EXISTS workflow_executions (id TEXT PRIMARY KEY, workflow_id TEXT NOT NULL, workflow_revision INTEGER NOT NULL, session_id TEXT NOT NULL, status TEXT NOT NULL, execution_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS workflow_executions_workflow ON workflow_executions(workflow_id, created_at);
       CREATE INDEX IF NOT EXISTS workflow_executions_session ON workflow_executions(session_id, created_at);`);
+    this.#db.exec("CREATE TABLE IF NOT EXISTS workflow_execution_results (execution_id TEXT PRIMARY KEY, result_json TEXT NOT NULL);");
   }
   list(): SecurityWorkflow[] { return this.#db.prepare("SELECT definition_json FROM workflow_definitions ORDER BY updated_at DESC, id").all().map(row => JSON.parse(String((row as { definition_json: string }).definition_json)) as SecurityWorkflow); }
   get(id: string): SecurityWorkflow | null { const row = this.#db.prepare("SELECT definition_json FROM workflow_definitions WHERE id = ?").all(id)[0]; return row ? JSON.parse(String((row as { definition_json: string }).definition_json)) as SecurityWorkflow : null; }
@@ -55,7 +56,28 @@ export class SecurityWorkflowStore {
       return execution;
     })();
   }
+  /** Execute a pinned template without implicitly saving a reusable definition. */
+  createExecutionFromSnapshot(value: unknown, sessionId: string): SecurityWorkflowExecution {
+    if (!sessionId || sessionId.length > 128) throw new SecurityWorkflowStoreError("Invalid execution owner.", 400);
+    const input = parseSecurityWorkflowInput(value);
+    const now = new Date().toISOString();
+    const workflow: SecurityWorkflow = { ...input, id: input.id ?? randomUUID(), revision: input.revision ?? 1, createdAt: now, updatedAt: now };
+    const execution: SecurityWorkflowExecution = { id: randomUUID(), workflowId: workflow.id, workflowRevision: workflow.revision, workflow, sessionId, ownerPid: process.pid, runnerInstanceId: this.#runnerInstanceId, status: "queued", nodeResults: {}, createdAt: now, updatedAt: now };
+    this.#db.prepare("INSERT INTO workflow_executions (id, workflow_id, workflow_revision, session_id, status, execution_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(execution.id, execution.workflowId, execution.workflowRevision, sessionId, execution.status, JSON.stringify(execution), now, now);
+    return execution;
+  }
   getExecution(id: string): SecurityWorkflowExecution | null { const row = this.#db.prepare("SELECT execution_json FROM workflow_executions WHERE id = ?").all(id)[0]; return row ? JSON.parse(String((row as { execution_json: string }).execution_json)) as SecurityWorkflowExecution : null; }
+  /** Retain structured evidence independently of process-local job memory. */
+  saveExecutionResults(id: string, result: unknown): void {
+    if (!this.getExecution(id)) throw new SecurityWorkflowStoreError("Execution not found.", 404);
+    const json = JSON.stringify(result);
+    if (json === undefined || Buffer.byteLength(json, "utf8") > 16 * 1024 * 1024) throw new SecurityWorkflowStoreError("Workflow results must be valid JSON of at most 16 MiB.", 400);
+    this.#db.prepare("INSERT INTO workflow_execution_results (execution_id, result_json) VALUES (?, ?) ON CONFLICT(execution_id) DO UPDATE SET result_json = excluded.result_json").run(id, json);
+  }
+  getExecutionResults(id: string): unknown | null {
+    const row = this.#db.prepare("SELECT result_json FROM workflow_execution_results WHERE execution_id = ?").all(id)[0];
+    return row ? JSON.parse(String((row as { result_json: string }).result_json)) : null;
+  }
   listExecutions(workflowId?: string, sessionId?: string): SecurityWorkflowExecution[] {
     return this.#db.prepare("SELECT execution_json FROM workflow_executions WHERE (? IS NULL OR workflow_id = ?) AND (? IS NULL OR session_id = ?) ORDER BY created_at DESC, id LIMIT 200").all(workflowId ?? null, workflowId ?? null, sessionId ?? null, sessionId ?? null).map(row => JSON.parse(String((row as { execution_json: string }).execution_json)) as SecurityWorkflowExecution);
   }

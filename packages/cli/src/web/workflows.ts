@@ -4,9 +4,14 @@ import { realpath } from "node:fs/promises";
 import { isAbsolute, relative, sep } from "node:path";
 import { promisify } from "node:util";
 import { z } from "zod";
-import { validateScanPlan, DEFAULT_SECURITY_WORKFLOW_PLAN, parseSecurityWorkflowInput, type Finding, type ScanReport, type SecurityWorkflow, type SecurityWorkflowNode, type SecurityWorkflowExecution } from "@0/shared";
+import { validateScanPlan, SECURITY_WORKFLOW_TEMPLATES, createSecurityWorkflowTemplate, isSecurityWorkflowOperation, SecurityWorkflowBindingsSchema, getSecurityWorkflowTemplate, checkSecurityWorkflowTemplateTarget, DEFAULT_SECURITY_WORKFLOW_PLAN, parseSecurityWorkflowInput, type Finding, type ScanReport, type SecurityWorkflow, type SecurityWorkflowNode, type SecurityWorkflowExecution } from "@0/shared";
 import { SecurityWorkflowStore } from "@0/db";
 import {
+  executeWorkflow,
+  orderWorkflowNodes,
+  type WorkflowAssessmentContext,
+  type WorkflowExecutorRegistry,
+  type WorkflowRunResult,
   applySourceFixCandidate,
   loadSourceFixProjectInputs,
   planSourceFixPublication,
@@ -28,6 +33,8 @@ import { runUnified, type RunOutcome } from "../commands/run.js";
 import { resolveEngagement } from "../engagement-plan.js";
 import { loadFindingFocus } from "../finding-focus.js";
 import { fixEligibility } from "../tui/fix-action.js";
+import { createResearchWorkflowExecutors, validateResearchWorkflowInputs } from "../workflow-research-executors.js";
+import { type FindingCandidateStore, createFindingCandidateStore, createFindingWorkflowExecutors, validateFindingWorkflowInputs } from "../finding-workflow-executors.js";
 
 const execFileAsync = promisify(execFile);
 const PREFIX = "/api/console/";
@@ -193,17 +200,6 @@ function contained(root: string, path: string): boolean {
   const suffix = relative(root, path);
   return !isAbsolute(suffix) && suffix !== ".." && !suffix.startsWith(`..${sep}`);
 }
-function workflowOrder(workflow: SecurityWorkflow): SecurityWorkflowNode[] {
-  const remaining = new Map(workflow.nodes.map(node => [node.id, node]));
-  const ordered: SecurityWorkflowNode[] = [];
-  const done = new Set<string>();
-  while (remaining.size) {
-    const ready = [...remaining.values()].filter(node => workflow.edges.every(edge => edge.target !== node.id || done.has(edge.source)));
-    if (!ready.length) throw new WorkflowError("Workflow graph contains a cycle.", 400);
-    for (const node of ready) { ordered.push(node); done.add(node.id); remaining.delete(node.id); }
-  }
-  return ordered;
-}
 async function repositoryState(repoRoot: string): Promise<{ head: string; dirty: boolean }> {
   const options = { cwd: repoRoot, timeout: 5000, maxBuffer: 128 * 1024 };
   const [head, status] = await Promise.all([
@@ -223,6 +219,8 @@ export class WebWorkflowService {
   readonly #definitions: SecurityWorkflowStore;
   readonly #graphJobs = new Map<string, string>();
   readonly #graphConnections = new Map<string, string | null>();
+  readonly #workflowCandidates = new Map<string, FindingCandidateStore>();
+  readonly #lifecycleKeys = new Map<string, { request: string; promise: Promise<unknown> }>();
   #disposing = false;
 
   constructor(options: { gateway: WebWorkflowGateway; dbPath?: string }) {
@@ -230,6 +228,68 @@ export class WebWorkflowService {
     this.#dbPath = options.dbPath;
     this.#definitions = new SecurityWorkflowStore(options.dbPath);
     this.#definitions.interruptActiveExecutions();
+  }
+
+  /** Session-owned lifecycle calls; launches require an idle gateway and host capabilities. */
+  async invokeLifecycle(sessionId: string, name: string, args: Record<string, unknown>, capabilities: { allowApply?: boolean } = {}): Promise<unknown> {
+    parse(idSchema, sessionId);
+    if (name === "list_templates") { parse(z.object({}).strict(), args); return { templates: snapshot(SECURITY_WORKFLOW_TEMPLATES) }; }
+    if (name === "get_template") { const request = parse(z.object({ id: idSchema, revision: z.number().int().positive().optional() }).strict(), args); return { template: getSecurityWorkflowTemplate(request.id, request.revision) }; }
+    if (name === "list_workflows") { parse(z.object({}).strict(), args); return { workflows: this.#definitions.list() }; }
+    if (name === "get_workflow") { const request = parse(z.object({ id: idSchema }).strict(), args); const workflow = this.#definitions.get(request.id); if (!workflow) throw new WorkflowError("Workflow definition was not found.", 404); return { workflow }; }
+    if (name === "save_workflow") {
+      const request = parse(z.object({ definition: z.unknown(), expectedRevision: z.number().int().positive().optional() }).strict(), args);
+      const definition = parseSecurityWorkflowInput(request.definition);
+      return { workflow: this.#definitions.save({ ...definition, ...(request.expectedRevision ? { revision: request.expectedRevision } : {}) }) };
+    }
+    if (name === "start_run") {
+      const request = parse(z.object({ templateId: idSchema.optional(), workflowId: idSchema.optional(), revision: z.number().int().positive().optional(), target: z.string().trim().min(1).max(4096).optional(),
+        inputs: SecurityWorkflowBindingsSchema.optional(), allowApply: z.boolean().optional(), timeCapMs: z.number().int().positive().max(RETENTION_MS).optional(), costCapUsd: z.number().positive().max(1000).optional(), idempotencyKey: idSchema.optional() }).strict(), args);
+      if (Boolean(request.templateId) === Boolean(request.workflowId)) throw new WorkflowError("Choose exactly one templateId or workflowId.", 400);
+      if (request.allowApply && !capabilities.allowApply) throw new WorkflowError("Repository application requires explicit host approval.", 403);
+      const key = request.idempotencyKey ? `${sessionId}:${request.idempotencyKey}` : undefined;
+      const digest = identity({ request, allowApply: capabilities.allowApply === true });
+      const existing = key ? this.#lifecycleKeys.get(key) : undefined;
+      if (existing) { if (existing.request !== digest) throw new WorkflowError("Idempotency key already identifies different run inputs."); return existing.promise; }
+      const launch = async () => {
+        let definition: SecurityWorkflow;
+        if (request.templateId) {
+          const template = createSecurityWorkflowTemplate(request.templateId, { target: request.target, revision: request.revision });
+          const now = new Date().toISOString();
+          definition = { ...template, id: `template-${request.templateId}`, revision: template.template!.revision, createdAt: now, updatedAt: now };
+        } else {
+          const saved = this.#definitions.get(request.workflowId!);
+          if (!saved) throw new WorkflowError("Workflow definition was not found.", 404);
+          if (!request.revision || request.revision !== saved.revision) throw new WorkflowError("Select the reviewed workflow revision.");
+          definition = { ...saved, ...(request.target ? { target: request.target } : {}) };
+        }
+        const result = await this.#runDefinition(definition.id, { sessionId, revision: definition.revision, approval: "launch-authorized-run" }, true, definition,
+          { inputs: request.inputs as Record<string, unknown> | undefined, allowApply: capabilities.allowApply === true && request.allowApply === true, timeCapMs: request.timeCapMs, costCapUsd: request.costCapUsd });
+        const started = result.data as { workflow: WebWorkflow; execution: SecurityWorkflowExecution };
+        return { runId: started.execution.id, jobId: started.workflow.id, status: started.execution.status, workflow: started.execution.workflow, runtime: started.workflow.runtime };
+      };
+      const promise = launch();
+      if (key) { this.#lifecycleKeys.set(key, { request: digest, promise }); promise.catch(() => this.#lifecycleKeys.delete(key)); }
+      return promise;
+    }
+    const request = parse(z.object({ runId: idSchema, cursor: z.number().int().nonnegative().optional(), limit: z.number().int().positive().max(100).optional() }).strict(), args);
+    const execution = this.#definitions.getExecution(request.runId);
+    if (!execution || execution.sessionId !== sessionId) throw new WorkflowError("Workflow run was not found for this session.", 404);
+    if (name === "get_run") return { run: { ...execution, id: execution.id, ownerId: sessionId } };
+    if (name === "get_run_results") {
+      const result = this.#definitions.getExecutionResults(execution.id) as WorkflowRunResult | null;
+      const cursor = request.cursor ?? 0; const limit = request.limit ?? 50;
+      const findings = result?.findings ?? [];
+      return { runId: execution.id, status: execution.status, findings: findings.slice(cursor, cursor + limit), totalFindings: findings.length,
+        nextCursor: cursor + limit < findings.length ? cursor + limit : null, outputs: result?.outputs ?? [], report: result?.report ? { ...result.report, findings: findings.slice(cursor, cursor + limit) } : undefined };
+    }
+    if (name === "cancel_run") {
+      const jobId = this.#graphJobs.get(execution.id); const job = jobId ? this.#jobs.get(jobId) : undefined;
+      if (job) this.#cancel(job);
+      else if (execution.status === "queued" || execution.status === "running") throw new WorkflowError("This run belongs to another local engine.");
+      return { runId: execution.id, status: this.#definitions.getExecution(execution.id)?.status, cancellationRequested: Boolean(job) };
+    }
+    throw new WorkflowError("Unknown workflow lifecycle operation.", 400);
   }
 
   async handle(pathname: string, method: string, input: unknown, query: URLSearchParams): Promise<{ status: number; data: unknown } | null> {
@@ -290,6 +350,7 @@ export class WebWorkflowService {
     this.#disposing = true;
     for (const job of this.#jobs.values()) this.#cancel(job);
     await Promise.all([...this.#jobs.values()].map(job => job.promise));
+    await Promise.all([...this.#workflowCandidates.values()].map(store => store.dispose()));
     this.#definitions.close();
   }
 
@@ -328,13 +389,14 @@ export class WebWorkflowService {
       }
       throw new WorkflowError("Unsupported workflow definition action.", 405);
     }
-    const executionRoute = pathname.match(/^\/api\/console\/workflow-executions\/([^/]+)(\/cancel)?$/);
+    const executionRoute = pathname.match(/^\/api\/console\/workflow-executions\/([^/]+)(\/(?:cancel|results))?$/);
     if (executionRoute) {
       const id = parse(idSchema, decodeURIComponent(executionRoute[1]!));
-      const sessionId = executionRoute[2] ? parse(cancelSchema, input).sessionId : parse(idSchema, query.get("sessionId"));
+      const sessionId = executionRoute[2] === "/cancel" ? parse(cancelSchema, input).sessionId : parse(idSchema, query.get("sessionId"));
       const execution = this.#definitions.getExecution(id);
       if (!execution || execution.sessionId !== sessionId) throw new WorkflowError("Workflow execution was not found for this session.", 404);
-      if (executionRoute[2] && method === "POST") {
+      if (executionRoute[2] === "/results" && method === "GET") return { status: 200, data: { results: this.#definitions.getExecutionResults(id) } };
+      if (executionRoute[2] === "/cancel" && method === "POST") {
         const jobId = this.#graphJobs.get(id);
         const job = jobId ? this.#jobs.get(jobId) : undefined;
         if (!job && (execution.status === "queued" || execution.status === "running")) throw new WorkflowError("This execution belongs to another local engine. Cancel it in that engine.");
@@ -359,31 +421,39 @@ export class WebWorkflowService {
     const definition = this.#definitions.get(id);
     if (!definition) throw new WorkflowError("Workflow definition was not found.", 404);
     if (definition.revision !== request.revision) throw new WorkflowError("Workflow changed after review; refresh it before running.", 409);
-    const audits = definition.nodes.filter(node => node.enabled && node.type === "audit");
-    if (!audits.length) throw new WorkflowError("Enable at least one audit step before scheduling.", 400);
+    const audits = definition.nodes.filter(node => node.enabled && isSecurityWorkflowOperation(node));
+    if (!audits.length) throw new WorkflowError("Enable at least one operation step before scheduling.", 400);
     if (!definition.target.trim()) throw new WorkflowError("Choose a target before scheduling this workflow.", 400);
     const resolved = resolveEngagement(definition.target);
     if (!resolved.ok) throw new WorkflowError(resolved.message, 400);
+    this.#validateTemplateTarget(definition, resolved.plan.targetType);
     // Reject a background launch before creating an execution when a fresh
     // approval is needed. Each audit checks it again immediately before work.
     const context = await this.#gateway.authorizeWorkflowTarget(request.sessionId, { target: resolved.plan.kind === "package" ? definition.target : resolved.plan.target, kind: resolved.plan.kind }, undefined, undefined, { interactive: false });
-    if (context.autonomyMode === "recon") throw new WorkflowError("Recon mode cannot authorize scheduled audits.", 403);
+    if (context.autonomyMode === "recon") throw new WorkflowError("Recon mode cannot authorize scheduled workflow operations.", 403);
     for (const node of audits) if (node.execution) withWorkflowAuditExecutionPolicy(node.execution, () => assertWorkflowNativeRuntime(context.runtime));
     return context;
   }
 
-  async #runDefinition(id: string, input: unknown, interactive = true): Promise<{ status: number; data: unknown }> {
+  #validateTemplateTarget(definition: SecurityWorkflow, targetType: string): void {
+    if (!definition.template) return;
+    try { checkSecurityWorkflowTemplateTarget(getSecurityWorkflowTemplate(definition.template.id, definition.template.revision), targetType); }
+    catch (error) { throw new WorkflowError(errorMessage(error), 400); }
+  }
+
+  async #runDefinition(id: string, input: unknown, interactive = true, override?: SecurityWorkflow, options: { inputs?: Record<string, unknown>; allowApply?: boolean; timeCapMs?: number; costCapUsd?: number } = {}): Promise<{ status: number; data: unknown }> {
     if (this.#disposing) throw new WorkflowError("Workflow service is shutting down.", 503);
     const request = parse(definitionRunSchema, input);
-    const definition = this.#definitions.get(id);
+    const definition = override ?? this.#definitions.get(id);
     if (!definition) throw new WorkflowError("Workflow definition was not found.", 404);
     if (definition.revision !== request.revision) throw new WorkflowError("Workflow changed after review; refresh it before running.", 409);
     if (!definition.target.trim()) throw new WorkflowError("Choose a target before running this workflow.", 400);
     const target = resolveEngagement(definition.target);
     if (!target.ok) throw new WorkflowError(target.message, 400);
-    const ordered = workflowOrder(definition);
-    const auditNodes = ordered.filter(node => node.enabled && node.type === "audit");
-    if (!auditNodes.length) throw new WorkflowError("Enable at least one audit step before running.", 400);
+    this.#validateTemplateTarget(definition, target.plan.targetType);
+    const ordered = orderWorkflowNodes(definition);
+    const auditNodes = ordered.filter(node => node.enabled && isSecurityWorkflowOperation(node));
+    if (!auditNodes.length) throw new WorkflowError("Enable at least one operation step before running.", 400);
     const limits = auditNodes.reduce((total, node) => {
       const plan = node.plan ?? DEFAULT_SECURITY_WORKFLOW_PLAN;
       validateScanPlan(plan);
@@ -392,10 +462,29 @@ export class WebWorkflowService {
     if (!Number.isFinite(limits.timeCapMs) || !Number.isFinite(limits.costCapUsd)) throw new WorkflowError("Workflow limits must be finite.", 400);
     const context = await this.#gateway.getExecutionContext(request.sessionId);
     if (this.#disposing) throw new WorkflowError("Workflow service is shutting down.", 503);
-    if (context.autonomyMode === "recon") throw new WorkflowError("Recon mode is read-only; switch modes before approving workflow audits.", 403);
+    if (context.autonomyMode === "recon") throw new WorkflowError("Recon mode is read-only; switch modes before approving workflow operations.", 403);
+    const inputs = options.inputs ?? {};
+    const typed = auditNodes.filter(node => node.type !== "audit");
+    let registry: WorkflowExecutorRegistry = {};
+    if (typed.length) {
+      if (target.plan.kind !== "source" || /^[a-z][a-z0-9+.-]*:\/\//i.test(target.plan.target) || target.plan.target.startsWith("git@")) throw new WorkflowError("Typed workflow operations require an authorized local source workspace.", 400);
+      const authorized = await this.#gateway.authorizeWorkflowTarget(request.sessionId, { target: target.plan.target, kind: target.plan.kind }, undefined, undefined, { interactive });
+      if (authorized.autonomyMode === "recon") throw new WorkflowError("Recon mode cannot authorize workflow operations.", 403);
+      if (identity(selection(authorized)) !== identity(selection(context))) throw new WorkflowError("Session model or routing changed while authorizing workflow inputs.");
+      if (authorized.runtime instanceof LlmApiRuntime && context.runtime instanceof LlmApiRuntime && authorized.runtime.connectionIdentity() !== context.runtime.connectionIdentity()) throw new WorkflowError("Session connection changed while authorizing workflow inputs.");
+      const workspace = await realpath(target.plan.target);
+      if (authorized.scopeEnforcement.enabled && (!authorized.localScopePath || !contained(await realpath(authorized.localScopePath), workspace))) throw new WorkflowError("Workflow inputs are outside the approved local scope.", 403);
+      const typedDefinition = { ...definition, target: workspace };
+      let candidateStore = this.#workflowCandidates.get(request.sessionId);
+      if (!candidateStore) { candidateStore = createFindingCandidateStore(); this.#workflowCandidates.set(request.sessionId, candidateStore); }
+      const findingOptions = { runtime: context.runtime, workspace, dbPath: context.dbPath ?? this.#dbPath, allowApply: options.allowApply === true, candidateStore };
+      await validateFindingWorkflowInputs(typedDefinition, inputs, findingOptions);
+      for (const node of typed) if (node.type === "research" || node.type === "deep-review") await validateResearchWorkflowInputs(node.type, { ...inputs, ...node.inputs, ...node.input }, { workspace, target: workspace });
+      registry = { ...createFindingWorkflowExecutors(findingOptions), ...createResearchWorkflowExecutors({ runtime: context.runtime, workspace, dbPath: context.dbPath ?? this.#dbPath, model: context.model }) };
+    }
     const parent = this.#createJob("workflow", request.sessionId, { workflowId: id, revision: request.revision, definition, limits }, context);
     let execution: SecurityWorkflowExecution;
-    try { execution = this.#definitions.createExecution(id, request.sessionId, request.revision); }
+    try { execution = override ? this.#definitions.createExecutionFromSnapshot((() => { const { createdAt: _createdAt, updatedAt: _updatedAt, ...draft } = override; return draft; })(), request.sessionId) : this.#definitions.createExecution(id, request.sessionId, request.revision); }
     catch (error) { this.#jobs.delete(parent.view.id); throw error; }
     parent.view.executionId = execution.id;
     this.#graphJobs.set(execution.id, parent.view.id);
@@ -405,44 +494,71 @@ export class WebWorkflowService {
     this.#definitions.updateExecution(execution.id, { jobId: parent.view.id, nodeResults });
     this.#start(parent, async () => {
       this.#definitions.updateExecution(execution.id, { status: "running" });
-      // Summed finite node limits also bound the graph as a whole, including
-      // target approval waits. Each audit retains its own stricter runner gates.
-      const deadline = setTimeout(() => parent.controller.abort(new Error("Workflow time limit reached.")), Math.min(limits.timeCapMs, 2_147_483_647));
-      try {
-        for (const node of ordered) {
-          parent.controller.signal.throwIfAborted();
-          if (!node.enabled) continue;
-          nodeResults[node.id] = { status: "running" };
-          this.#definitions.updateExecution(execution.id, { nodeResults });
-          if (node.type === "audit") {
-            const retainLinks = (child: WebWorkflow) => {
-              const dbPath = context.dbPath ?? this.#dbPath;
-              nodeResults[node.id] = { status: child.status, jobId: child.id, scanIds: child.runs?.map(run => run.scanId), ...(dbPath ? { dbPaths: [dbPath] } : {}), ...(child.error ? { error: child.error } : {}) };
-              this.#definitions.updateExecution(execution.id, { nodeResults });
-            };
-            const result = await this.#launch({ sessionId: request.sessionId, target: definition.target, plan: node.plan ?? DEFAULT_SECURITY_WORKFLOW_PLAN, approval: "launch-authorized-run" }, parent.view.id, retainLinks, node.execution, interactive);
-            const childView = (result.data as { workflow: WebWorkflow }).workflow;
-            const child = this.#jobs.get(childView.id)!;
-            nodeResults[node.id] = { status: "running", jobId: child.view.id };
+      const { createdAt: _createdAt, updatedAt: _updatedAt, ...workflowInput } = definition;
+      const result = await executeWorkflow({
+        workflow: workflowInput,
+        signal: parent.controller.signal,
+        target: typed.length ? target.plan.target : definition.target,
+        inputs,
+        timeCapMs: options.timeCapMs ?? limits.timeCapMs,
+        costCapUsd: options.costCapUsd ?? limits.costCapUsd,
+        executors: Object.fromEntries(Object.entries(registry).map(([operation, executor]) => [operation, async (step: WorkflowAssessmentContext) => {
+          const authorized = await this.#gateway.authorizeWorkflowTarget(request.sessionId, { target: target.plan.target, kind: target.plan.kind }, step.signal, parent.view.id, { interactive });
+          if (authorized.autonomyMode === "recon") throw new WorkflowError("Recon mode cannot authorize workflow operations.", 403);
+          if (identity(selection(authorized)) !== identity(parent.view.runtime)) throw new WorkflowError("Session model or routing changed during workflow authorization.");
+          if (authorized.runtime instanceof LlmApiRuntime && (authorized.runtime.connectionIdentity() ?? null) !== this.#graphConnections.get(parent.view.id)) throw new WorkflowError("Session connection changed during workflow authorization.");
+          const canonical = await realpath(target.plan.target);
+          if (authorized.scopeEnforcement.enabled && (!authorized.localScopePath || !contained(await realpath(authorized.localScopePath), canonical))) throw new WorkflowError("Workflow operation is outside the approved local scope.", 403);
+          return withScopeEnforcement(authorized.scopeEnforcement, () => executor!(step));
+        }])) as WorkflowExecutorRegistry,
+        onEvent: event => {
+          if (event.nodeId && event.result) {
+            const { reports: _reports, outputs: _outputs, ...links } = event.result;
+            nodeResults[event.nodeId] = { ...nodeResults[event.nodeId], ...snapshot(links) };
             this.#definitions.updateExecution(execution.id, { nodeResults });
-            const cancelChild = () => this.#cancel(child);
-            parent.controller.signal.addEventListener("abort", cancelChild, { once: true });
-            if (parent.controller.signal.aborted) cancelChild();
-            try { await child.promise; }
-            finally { parent.controller.signal.removeEventListener("abort", cancelChild); }
-            const dbPath = context.dbPath ?? this.#dbPath;
-            nodeResults[node.id] = { status: child.view.status, jobId: child.view.id, scanIds: child.view.runs?.map(run => run.scanId), ...(dbPath ? { dbPaths: [dbPath] } : {}), ...(child.view.error ? { error: child.view.error } : {}) };
-            this.#definitions.updateExecution(execution.id, { nodeResults });
-            this.#event(parent, "progress", { nodeId: node.id, ...nodeResults[node.id] });
-            if (child.view.status === "cancelled") parent.controller.abort(new Error(child.view.error ?? "Workflow audit was cancelled."));
-            if (child.view.status !== "completed") throw new WorkflowError(child.view.error ?? `Workflow step ${node.label} ${child.view.status}.`);
-          } else {
-            nodeResults[node.id] = { status: "completed" };
-            this.#definitions.updateExecution(execution.id, { nodeResults });
-            if (node.type === "report") this.#event(parent, "report", { workflowId: id, executionId: execution.id, nodes: snapshot(nodeResults) });
           }
-        }
-      } finally { clearTimeout(deadline); }
+          this.#event(parent, event.type === "report" ? "report" : "progress", event);
+        },
+        executeAssessment: async assessment => {
+          const node = assessment.node;
+          const retainLinks = (child: WebWorkflow) => {
+            const dbPath = context.dbPath ?? this.#dbPath;
+            nodeResults[node.id] = { status: child.status, jobId: child.id, scanIds: child.runs?.map(run => run.scanId), ...(dbPath ? { dbPaths: [dbPath] } : {}), ...(child.error ? { error: child.error } : {}) };
+            this.#definitions.updateExecution(execution.id, { nodeResults });
+          };
+          let assessmentReport: ScanReport | undefined;
+          const launched = await this.#launch({ sessionId: request.sessionId, target: assessment.target, plan: node.plan ?? DEFAULT_SECURITY_WORKFLOW_PLAN, approval: "launch-authorized-run" }, parent.view.id, retainLinks, node.execution, interactive, assessment, report => { assessmentReport = report; });
+          const childView = (launched.data as { workflow: WebWorkflow }).workflow;
+          const child = this.#jobs.get(childView.id)!;
+          nodeResults[node.id] = { status: "running", jobId: child.view.id };
+          this.#definitions.updateExecution(execution.id, { nodeResults });
+          const cancelChild = () => this.#cancel(child);
+          assessment.signal.addEventListener("abort", cancelChild, { once: true });
+          if (assessment.signal.aborted) cancelChild();
+          try { await child.promise; }
+          finally { assessment.signal.removeEventListener("abort", cancelChild); }
+          const dbPath = context.dbPath ?? this.#dbPath;
+          return {
+            status: child.view.status === "completed" ? "completed" as const : child.view.status === "cancelled" ? "cancelled" as const : "failed" as const,
+            jobId: child.view.id,
+            reports: assessmentReport ? [assessmentReport] : [],
+            scanIds: child.view.runs?.map(run => run.scanId),
+            ...(dbPath ? { dbPaths: [dbPath] } : {}),
+            ...(child.view.error ? { error: child.view.error } : {}),
+          };
+        },
+      });
+      try { this.#definitions.saveExecutionResults(execution.id, result); }
+      catch (error) { this.#event(parent, "report", { resultsPersisted: false, reason: errorMessage(error) }); }
+      for (const [nodeId, step] of Object.entries(result.nodeResults)) {
+        const { reports: _reports, outputs: _outputs, ...links } = step;
+        nodeResults[nodeId] = { ...nodeResults[nodeId], ...links };
+      }
+      if (result.report) this.#retainReport(parent, result.report);
+      if (result.status !== "completed") {
+        if (result.status === "cancelled") parent.controller.abort(new Error(result.error ?? "Workflow cancelled."));
+        throw new WorkflowError(result.error ?? `Workflow ${result.status}.`);
+      }
     }, () => {
       const status = parent.view.status === "completed" ? "completed" : parent.view.status === "cancelled" ? "cancelled" : "failed";
       for (const result of Object.values(nodeResults)) if (result.status === "queued") result.status = status === "cancelled" ? "cancelled" : "blocked";
@@ -454,12 +570,13 @@ export class WebWorkflowService {
     return { status: 202, data: { workflow: this.#project(parent), execution: this.#definitions.getExecution(execution.id) } };
   }
 
-  async #launch(input: unknown, owningGraphId?: string, retainLinks?: (job: WebWorkflow) => void, execution?: SecurityWorkflowNode["execution"], interactive = true): Promise<{ status: number; data: unknown }> {
+  async #launch(input: unknown, owningGraphId?: string, retainLinks?: (job: WebWorkflow) => void, execution?: SecurityWorkflowNode["execution"], interactive = true, assessment?: WorkflowAssessmentContext, onAssessmentReport?: (report: ScanReport) => void): Promise<{ status: number; data: unknown }> {
     if (this.#disposing) throw new WorkflowError("Workflow service is shutting down.", 503);
     const graphSignal = owningGraphId ? this.#jobs.get(owningGraphId)?.controller.signal : undefined;
     graphSignal?.throwIfAborted();
     const request = parse(launchSchema, input);
-    validateScanPlan(request.plan);
+    const executionPlan = assessment?.plan ?? request.plan;
+    validateScanPlan(executionPlan);
     const resolution = resolveEngagement(request.target);
     if (!resolution.ok) throw new WorkflowError(resolution.message, 400);
     const context = await this.#gateway.getExecutionContext(request.sessionId);
@@ -491,20 +608,22 @@ export class WebWorkflowService {
         target: resolved.target,
         targetType: resolved.targetType,
         reviewPackageEcosystem: resolved.ecosystem,
-        depth: request.plan.depth,
+        depth: executionPlan.depth,
         format: "json",
         runtime: "api",
-        plan: snapshot(request.plan),
+        plan: snapshot(executionPlan),
         nativeRuntime: workflowPolicyRuntime(context.runtime),
         model: context.model,
         agentModels: context.agentModels,
         singleModel: context.singleModel,
         autoRoute: context.autoRoute,
         scope: authorized.scope,
-        timeout: request.plan.timeCapMs,
-        costCeilingUsd: request.plan.costCapUsd,
+        timeout: executionPlan.timeCapMs,
+        costCeilingUsd: executionPlan.costCapUsd,
         dbPath: context.dbPath ?? this.#dbPath,
         signal: job.controller.signal,
+        costLedger: assessment?.costLedger,
+        priorFindings: assessment?.priorFindings,
         verbose: false,
         suppressOutput: true,
         suppressUi: true,
@@ -522,7 +641,12 @@ export class WebWorkflowService {
           }
           this.#event(job, "progress", event);
         },
-        onReport: report => this.#retainReport(job, report),
+        onReport: report => {
+          // The runner receives complete evidence even when the browser memory
+          // projection cannot retain a large report. Its bounded view is separate.
+          onAssessmentReport?.(report);
+          this.#retainReport(job, report);
+        },
         onOutcome: outcome => {
           const { report: _report, ...details } = outcome;
           job.view.outcome = snapshot(details);
@@ -746,7 +870,7 @@ export class WebWorkflowService {
       this.#event(job, "report", { reportRetained: false, originalBytes: bytes, reason: job.view.reportRetentionReason });
       return;
     }
-    let retained = [...this.#jobs.values()].reduce((sum, current) => sum + current.reportBytes, 0);
+    let retained = [...this.#jobs.values()].reduce((sum, current) => sum + current.reportBytes, 0) - job.reportBytes;
     for (const older of this.#jobs.values()) {
       if (retained + bytes <= MAX_REPORT_BYTES) break;
       if (older === job || !older.reportBytes) continue;
@@ -758,6 +882,7 @@ export class WebWorkflowService {
     }
     job.view.report = snapshot(report);
     job.view.reportRetained = true;
+    delete job.view.reportRetentionReason;
     job.reportBytes = bytes;
   }
 

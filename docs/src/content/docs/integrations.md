@@ -8,7 +8,7 @@ Choose the integration direction first:
 | Goal | Interface | What runs where |
 |---|---|---|
 | Let a coding agent run a complete review or scan | [Direct CLI](#coding-agent-workflows) | The agent launches the local CLI with your configured model runtime |
-| Give an external agent selected live-target tools | [MCP server](#mcp-server) | The client owns reasoning; a local stdio process executes the exposed tools |
+| Let an external agent launch workflows or call selected target tools | [MCP server](#mcp-server) | The client chooses operations; workflow assessments use 0's provider in a local stdio host |
 | Give 0 tools from another MCP server | [MCP client configuration](#connect-external-mcp-tools-to-0) | 0 connects operator-configured local or remote servers |
 | Install a third-party tool | [Hackstore plugins](#cli-managed-operator-plugins) | Enabled JavaScript runs as a local child process, not in a sandbox |
 | Let the model author executable tools | [Self-extension](#model-authored-executable-plugins-self-extension) | Generated TypeScript runs in disposable Docker or smolvm guests |
@@ -36,20 +36,112 @@ Findings can be leads or unconfirmed results: use the reported evidence and
 CLI invocation as proof of exploitability. Keep fix application a separate,
 operator-reviewed step; see [Scan Workflows](/scan-workflows/).
 
-For CI, use [GitHub CI](/ci/github-action/). For fine-grained interaction with a
-live target rather than a complete pipeline, use the MCP server below. It is
-not a remote API for arbitrary CLI commands, source review, or automatic
-find/verify/fix orchestration.
+For CI, use [GitHub CI](/ci/github-action/). For template discovery and managed
+workflow execution from an external agent, use the MCP workflow tools below.
+Individual target tools remain available for direct interaction.
 
 ## MCP Server
 
-The MCP server (`0 mcp-server`) exposes a fixed subset of 0's live-target tools
-through the [Model Context Protocol](https://modelcontextprotocol.io) over stdio.
-Use an MCP client that supports launching local stdio servers. Client-specific
-configuration formats differ; the example below uses the common `mcpServers`
-shape, not a claim of qualification for every named client.
+The MCP server (`0 mcp-server`) exposes selected tools through the
+[Model Context Protocol](https://modelcontextprotocol.io) over stdio.
+`--workflows` selects template discovery, workflow authoring, and run lifecycle
+operations. Without it, the default remains the existing live-target tools.
+An explicit `--tools` list selects exactly those tools, including a mixture of
+workflow and live tools.
 
-**Source:** [`mcp-server.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/mcp-server.ts)
+Use an MCP client that can launch local stdio servers. Client configuration
+formats differ; the examples use the common `mcpServers` shape.
+
+**Sources:** [`mcp-server.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/mcp-server.ts),
+[`workflow-runtime.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/workflow-runtime.ts).
+
+MCP stdio currently requires an explicitly selected **host-local** execution
+profile. The SmolVM CLI bridge supports batch commands but cannot forward the
+bidirectional stdio MCP transport; startup fails before booting a VM or reading
+provider credentials. The configured execution profile remains unchanged.
+Use `0 workflow` commands for isolated execution. If the operator intends host
+execution, they can explicitly choose `0 workbench disable`; this changes the
+sandbox boundary and must not be performed automatically by a connecting agent.
+Model provider configuration remains a separate prerequisite for assessments.
+
+### Workflow tools
+
+```bash
+# Authorized local source root
+0 mcp-server --workflows --workspace /absolute/path/to/repo
+
+# Authorized live targets; run from the project where scope is enabled
+0 plugin enable scope
+0 mcp-server --workflows --scope /absolute/path/to/scope.json \
+  --target https://target.example.com
+```
+
+`--workspace` authorizes local source targets inside that root, including
+canonical path checks. Live workflow targets require an explicit scope file
+and the project's enabled scope plugin. `--target` optionally fixes the only
+accepted target. Supplying live-tool flags does not authorize arbitrary local
+source access; source workflows need `--workspace`.
+
+| Tool | Purpose |
+| --- | --- |
+| `list_templates` / `get_template` | Read versioned templates and compatible target types |
+| `list_workflows` / `get_workflow` | Read saved definitions and their revisions |
+| `save_workflow` | Validate and save a definition with optional `expectedRevision` |
+| `start_run` | Start one template or saved workflow with target inputs; return the run ID |
+| `get_run` | Read the owned run's status, step outcomes, and retained events |
+| `get_run_results` | Page through findings and retained assessment results |
+| `cancel_run` | Cancel a run owned by this MCP host |
+
+For example, call `start_run` with:
+
+```json
+{
+  "templateId": "repository-review",
+  "revision": 1,
+  "target": "/absolute/path/to/repo",
+  "idempotencyKey": "review-request-1"
+}
+```
+
+Select exactly one `templateId` or `workflowId`; saved workflow launches require
+`revision`. Optional `timeCapMs` and `costCapUsd` narrow run limits.
+`get_run_results` accepts `runId`, a numeric `cursor`, and `limit` from 1 to 100.
+A retry with the same owner-scoped idempotency key and request returns the same
+run. Changing that request while reusing the key is rejected.
+
+The external agent chooses what to run using its own model. Assessments inside
+0 require 0's separately configured [model provider](/api-keys/). Discovery and
+individual target tools do not create an internal assessment model session.
+Workflows execute sequential typed steps through the shared runner. Templates
+select supported assessment, verification, fix, research, or deep review
+operations. Missing executor prerequisites fail before launch; a template label
+does not imply a specialized backend is available.
+
+`start_run.inputs` is a JSON object, bounded to 32 KiB, containing the selected
+operation's evidence references and options. Finding operations accept an
+existing `findingId`, `findingPath`, or structured `finding`; fix workflows
+require an explicit `testCommand`, and verification selects a supported
+`runner` such as `local`, `smolvm`, `docker`, or `qemu`. Backend-specific options
+must match the executor contract. Input data and saved definitions never grant
+filesystem access, runner availability, credentials, or apply permission.
+
+Apply steps require both the operator-configured host flag `--allow-apply`
+and an explicit `start_run.allowApply: true`. The host must also have an
+authorized source workspace. Fix proposal remains separate from application;
+publication is not implied by either permission.
+
+Runs belong to this stdio host. Graceful disconnect cancels its active runs;
+the server is not a durable background daemon. Retained history does not grant
+a new host access to another owner's runs. Browser chat's **Connect an external
+agent** copies setup instructions; it does not attach the client to a browser
+conversation or run.
+
+Browser chat offers the same template and run lifecycle operations using its
+selected runtime. A chat `start_run` returns a queued `requestId`; execution
+waits until that turn ends, the owner configuration remains stable, and the
+operator approves the launch and target. Read `get_run` with that request ID
+to obtain its status and actual `runId`. A queued request is not an active run;
+changing the chat's configuration invalidates the request.
 
 ### Usage
 
@@ -61,21 +153,24 @@ shape, not a claim of qualification for every named client.
   --tools http_request,crawl,query_findings
 ```
 
-### Required options
+### Live-tool requirements
 
 | Option | Description |
 |--------|-------------|
-| `--target <url>` | Target URL for this MCP session (required) |
-| `--scan-id <id>` | Scan ID to associate findings and target updates with (required) |
+| `--target <url>` | Target URL (required whenever live tools are selected) |
+| `--scan-id <id>` | Scan ID for live tool findings and target updates (required whenever live tools are selected) |
 
 ### Options
 
 | Option | Default | Description |
 |--------|---------|-------------|
+| `--workflows` | `false` | Expose workflow tools instead of the default live tools |
+| `--workspace <path>` | — | Absolute authorized local root for source workflows |
+| `--allow-apply` | `false` | Permit explicit apply requests inside the authorized workflow workspace |
 | `--db-path <path>` | — | Path to SQLite database for persistence |
 | `--timeout <ms>` | `30000` | Per-tool timeout in milliseconds (minimum 1000) |
-| `--scope <path>` | — | Path to a 0 scope JSON file. Out-of-scope URLs are refused by target tools; the initial target is checked before opening storage |
-| `--tools <names>` | all tools | Comma-separated subset of MCP tools to expose |
+| `--scope <path>` | — | Path to a 0 scope JSON file. Live workflows require active scope enforcement; atomic target tools enforce the file when the scope plugin is enabled |
+| `--tools <names>` | live tools, or workflow tools with `--workflows` | Exact comma-separated tool selection |
 | `--rate-limit <spec>` | `5` rps | Per-host request rate limit. An active `--engagement-profile` caps this |
 | `--allow-scanners` | `false` | Disable generic-scanner suppression for scoped engagements |
 | `--engagement-profile <name>` | `standard` | Hardening posture: `standard` (default behaviour) or `conservative` (1 rps/host ceiling, full jitter, no WAF evasion) |
@@ -102,7 +197,7 @@ Use `--tools` to select from these live-attack tools:
 
 ### Auth configuration
 
-Target authentication is provided via the `ZERO_MCP_AUTH_JSON` environment
+For individual live tools, target authentication is provided via the `ZERO_MCP_AUTH_JSON` environment
 variable. Set it to a JSON object with one of these shapes:
 
 ```json
@@ -124,7 +219,7 @@ See [Configuration](/configuration/) for the full `--auth` flag details used by
 
 ### Rate limiting and engagement posture
 
-The MCP server supports the same engagement hardening as the scan path. When
+Individual live tools support the same engagement hardening as the scan path. When
 `--engagement-profile conservative` is active:
 
 - WAF-evasion ladder is disabled (regardless of `--no-waf-evasion`)
@@ -142,7 +237,7 @@ create a complete scan pipeline or run an independent verifier.
 
 ### Attribution headers
 
-MCP supports attribution headers for authorized engagements:
+Individual live tools support attribution headers for authorized engagements:
 
 - `ZERO_MCP_ATTRIBUTION_HEADERS_JSON` — JSON array of `"Header-Name: value"`
   strings
@@ -171,13 +266,17 @@ For a client accepting `mcpServers` (for example Claude Desktop), add:
 ```
 
 Use an absolute path for `command` if a GUI-launched client cannot find `0` on
-its `PATH`. This server does not need an `ANTHROPIC_API_KEY` to expose tools:
-the MCP client supplies the reasoning model. If the target needs authentication,
+its `PATH`. For a source workflow client, replace the example `args` with
+`["mcp-server", "--workflows", "--workspace", "/absolute/path/to/repo"]`.
+Individual live tools use the MCP client's reasoning model; assessment workflows
+require 0's configured provider. If individual live tools need authentication,
 provide `ZERO_MCP_AUTH_JSON` through that client's secret/environment mechanism.
 `send_prompt` sends a prompt to the **target under test**, not a provider model.
 
 The MCP transport is stdio-only; stdout is reserved for protocol frames and
-diagnostics go to stderr. The client manages the process lifetime. Limit the
+diagnostics go to stderr. The client manages the process lifetime, including cancellation of owned active
+workflow runs on disconnect. Enable `scope` in the intended project before
+relying on atomic tool scope enforcement. Limit the
 tool list and provide scope explicitly; there is no interactive console
 approval callback in this server. Enabling a tool is not authorization to test
 systems you do not own or have permission to assess.

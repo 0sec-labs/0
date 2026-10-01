@@ -110,11 +110,11 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
       <Workspace className="xl:grid-cols-[22rem_minmax(0,1fr)]">
         <WorkspaceSidebar>
           <EntityList
-            title="Audit reports"
-            description="Past audits by target"
+            title="Run reports"
+            description="Past runs by target"
             searchValue={search}
             onSearchChange={setSearch}
-            searchPlaceholder="Search audits"
+            searchPlaceholder="Search runs"
           >
             {filteredTargets.length === 0 ? (
               <CardEmpty className="py-8">No matches.</CardEmpty>
@@ -125,7 +125,7 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
                     <EntityListItem
                       selected={isActive}
                       title={group.target}
-                      description={`${group.scans.length} audit${group.scans.length === 1 ? "" : "s"}`}
+                      description={`${group.scans.length} run${group.scans.length === 1 ? "" : "s"}`}
                       meta={formatTime(group.latestScan.startedAt)}
                       badges={
                         <>
@@ -144,8 +144,8 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
         {!selectedScanId ? (
           <WorkspaceMain span>
             <EmptyState
-              title={savedScans.length ? "Select an audit" : "No audits yet"}
-              body={savedScans.length ? "Select a target to view its audit activity and findings." : "Start an audit in a chat. Its results will appear here."}
+              title={savedScans.length ? "Select a run" : "No runs yet"}
+              body={savedScans.length ? "Select a target to view its runs and findings." : "Start a workflow in a chat. Its results will appear here."}
               action={<Button asChild><NavLink to="/console">Open chats</NavLink></Button>}
             />
           </WorkspaceMain>
@@ -153,7 +153,7 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
           <WorkspaceMain span>
             <EmptyState
               title="Chat activity"
-              body="This record belongs to a conversation, not a separate audit. Open chats to continue the work and view its agents."
+              body="This record belongs to a conversation, not a separate run. Open chats to continue the work and view its agents."
               action={<Button asChild><NavLink to={liveConversation ? `/console/${liveConversation.id}` : "/console"}>Open chat</NavLink></Button>}
             />
             {findingsQuery.data && findingsQuery.data.groups.length > 0 ? (
@@ -164,7 +164,7 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
           </WorkspaceMain>
         ) : eventsQuery.isLoading || findingsQuery.isLoading ? (
           <WorkspaceMain span>
-            <LoadingState label="Audit" />
+            <LoadingState label="Run" />
           </WorkspaceMain>
         ) : eventsQuery.error ? (
           <WorkspaceMain span>
@@ -179,8 +179,8 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
         ) : (
           <WorkspaceMain span>
             <EmptyState
-              title="Audit not found"
-              body="This audit couldn't be loaded."
+              title="Run not found"
+              body="This run couldn't be loaded."
             />
           </WorkspaceMain>
         )}
@@ -214,7 +214,7 @@ function ScanDetail({
             <MetaTile label="Mode" value={`${scan.mode} / ${scan.depth}`} />
             <MetaTile label="Engine" value={scan.runtime} />
             <MetaTile label="Duration" value={formatDuration(scan.durationMs)} />
-            <MetaTile label="Audit ID" value={scan.id} mono />
+            <MetaTile label="Run ID" value={scan.id} mono />
           </CardList>
         </InspectorPane>
       </div>
@@ -298,7 +298,7 @@ function ScanDetail({
           </CardHeader>
           <CardContent>
             {findings.groups.length === 0 ? (
-              <CardEmpty>No findings in this audit.</CardEmpty>
+              <CardEmpty>No findings in this run.</CardEmpty>
             ) : (
               <Table>
                 <TableHeader>
@@ -331,12 +331,12 @@ function ScanDetail({
         <Card className="overflow-hidden">
           <CardHeader>
             <div>
-              <CardTitle className="font-sans text-base font-medium">Previous audits</CardTitle>
+              <CardTitle className="font-sans text-base font-medium">Previous runs</CardTitle>
             </div>
           </CardHeader>
           <CardContent>
             {targetRuns.filter((entry) => entry.id !== scan.id).length === 0 ? (
-              <CardEmpty>No previous audits yet.</CardEmpty>
+              <CardEmpty>No previous runs yet.</CardEmpty>
             ) : (
               <Table>
                 <TableHeader>

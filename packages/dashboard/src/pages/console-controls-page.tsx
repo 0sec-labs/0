@@ -24,7 +24,7 @@ const pages = [
   { mode: "plugins", path: "/plugins", label: "Plugins", icon: Blocks, description: "" },
   { mode: "doctor", path: "/doctor", label: "Health", icon: HeartPulse, description: "" },
   { mode: "tools", path: "/tools", label: "Tools", icon: Wrench, description: "" },
-  { mode: "launch", path: "/audits", label: "Audits", icon: Rocket, description: "Plan and track security audits. Limits apply to the whole audit." },
+  { mode: "launch", path: "/audits", label: "Workflows", icon: Rocket, description: "Plan reusable workflows and track their runs. Limits apply to the whole run." },
   { mode: "fix", path: "/fix", label: "Fixes", icon: Wrench, description: "" },
 ] as const;
 
@@ -64,7 +64,7 @@ export function WebConsoleControlsPage({ mode: passedMode }: { mode?: WebConsole
   }
 
   if (mode === "launch") {
-    return <main aria-label="Audits" className="mx-auto w-full max-w-5xl space-y-6 px-5 py-6 sm:px-8 lg:px-10">{content}</main>;
+    return <main aria-label="Workflows" className="mx-auto w-full max-w-5xl space-y-6 px-5 py-6 sm:px-8 lg:px-10">{content}</main>;
   }
 
   const focused = mode === "onboarding";

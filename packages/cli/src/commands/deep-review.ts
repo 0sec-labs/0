@@ -35,8 +35,8 @@
 import type { Command } from "commander";
 import { readFileSync, realpathSync, statSync } from "node:fs";
 import { resolve, join, sep, relative } from "node:path";
-import type { Finding, RuntimeMode, ScanReport } from "@0/shared";
-import type { EvolutionConfig, FinderLens, ThreatLane, VerifyLens } from "@0/core";
+import type { Finding, RuntimeMode, ScanReport, ScanPlan } from "@0/shared";
+import type { EvolutionConfig, FinderLens, ThreatLane, VerifyLens, NativeRuntime, RuntimeResult, Runtime } from "@0/core";
 // The loader is called once for each review invocation, before target
 // preparation. That creates a stable lens snapshot for the engagement while
 // allowing the next review in a long-lived CLI process to observe a completed
@@ -523,6 +523,10 @@ export function enumerateDeepReviewCandidates(
 }
 
 export interface RunDeepReviewOptions {
+  signal?: AbortSignal;
+  nativeRuntime?: NativeRuntime;
+  costLedger?: ScanCostLedger;
+  plan?: ScanPlan;
   /** Source tree to review — a local path or a git URL (resolved via prepare). */
   target: string;
   /** Review profile picking the lens set (evm/solana/cardano-onchain; else default). */
@@ -580,7 +584,8 @@ export async function runDeepReview(
     moveFinderLenses,
     moveVerifyLenses,
   } = await import("@0/core");
-  const costLedger = new ScanCostLedger();
+  opts.signal?.throwIfAborted();
+  const costLedger = opts.costLedger ?? new ScanCostLedger();
   const scanStartedAt = Date.now();
   const log = opts.log ?? (() => {});
   const runtime: RuntimeMode = opts.runtime ?? "api";
@@ -654,12 +659,32 @@ export async function runDeepReview(
       allocateAcrossLanes = threatModule.allocateCandidatesAcrossLanes;
       // Map RuntimeMode to RuntimeType, defaulting to "api" for "auto".
       const rtType = (runtime !== "auto" ? runtime : "api") as "api" | "claude" | "codex" | "gemini" | "ollama";
-      const plannerRuntime = threatModule.createRuntime({
+      const plannerRuntime: Runtime = opts.nativeRuntime ? {
+        type: opts.nativeRuntime.type,
+        isAvailable: () => opts.nativeRuntime!.isAvailable(),
+        execute: async (prompt: string, context?: { systemPrompt?: string }) => {
+          const budgeted = threatModule.budgetNativeRuntime(opts.nativeRuntime!, costLedger, opts.signal, opts.costCeilingUsd, opts.plan);
+          const started = Date.now();
+          const result = await budgeted.executeNative(context?.systemPrompt ?? "", [{ role: "user", content: [{ type: "text", text: prompt }] }], [], undefined, opts.signal);
+          return { output: result.content.filter(block => block.type === "text").map(block => block.type === "text" ? block.text : "").join("\n"), exitCode: result.stopReason === "error" ? 1 : 0, timedOut: false, durationMs: Date.now() - started };
+        },
+      } : threatModule.createRuntime({
         type: rtType,
         timeout: opts.timeoutMs ?? 600_000,
         model: models?.[0],
       });
-      lanes = await threatModule.runThreatModelPlanner(sourceRoot, plannerRuntime, log);
+      const trackedPlanner = !opts.nativeRuntime && opts.plan ? {
+        ...plannerRuntime, type: plannerRuntime.type, isAvailable: () => plannerRuntime.isAvailable(),
+        execute: async (prompt: string, context?: { systemPrompt?: string }) => {
+          opts.signal?.throwIfAborted();
+          const result: RuntimeResult = await plannerRuntime.execute(prompt, { ...context, signal: opts.signal });
+          if (result.usageByModel?.length) for (const bucket of result.usageByModel) costLedger.add(bucket.usage, bucket.model);
+          else if (result.usage) costLedger.add(result.usage, models?.[0]);
+          else costLedger.markUnpricedUsage();
+          return result;
+        },
+      } : plannerRuntime;
+      lanes = await threatModule.runThreatModelPlanner(sourceRoot, trackedPlanner, log);
       if (!lanes || lanes.length === 0) {
         log("[threat-model] no lanes produced — continuing with default selection");
       } else {
@@ -786,6 +811,9 @@ export async function runDeepReview(
       // including "it could not", which is the case worth knowing about.
       ...(opts.costCeilingUsd !== undefined ? { costCeilingUsd: opts.costCeilingUsd } : {}),
       costLedger,
+      ...(opts.plan ? { plan: opts.plan } : {}),
+      ...(opts.signal ? { signal: opts.signal } : {}),
+      ...(opts.nativeRuntime ? { nativeRuntime: opts.nativeRuntime, crossFamilyRefute: false } : {}),
       ...(!evolvedFinder && models && models.length > 0 ? { finderModels: models } : {}),
       ...(opts.quorum ? { quorum: opts.quorum } : {}),
       log,
@@ -801,6 +829,9 @@ export async function runDeepReview(
       concurrency: opts.concurrency ?? DEFAULT_CONCURRENCY,
       ...(opts.costCeilingUsd !== undefined ? { costCeilingUsd: opts.costCeilingUsd } : {}),
       costLedger,
+      ...(opts.plan ? { plan: opts.plan } : {}),
+      ...(opts.signal ? { signal: opts.signal } : {}),
+      ...(opts.nativeRuntime ? { nativeRuntime: opts.nativeRuntime } : {}),
       attemptsPerCandidate,
       ...(models ? { models } : {}),
       verify,
@@ -1014,9 +1045,13 @@ async function deepReviewAction(target: string, opts: DeepReviewOpts): Promise<v
   }
 
   const { writeFileSync } = await import("node:fs");
-  const outcome = await runDeepReview({
+  const { executeManagedOperation } = await import("../managed-operation.js");
+  const timeoutMs = parsePositive("--timeout", opts.timeout, 600_000);
+  const outcome = await executeManagedOperation<DeepReviewOutcome>({ type: "deep-review", name: "Deep source review", target, timeCapMs: timeoutMs, costCapUsd: costCeilingUsd,
+    execute: context => runDeepReview({
     target,
-    ...(costCeilingUsd !== undefined ? { costCeilingUsd } : {}),
+    signal: context.signal, costLedger: context.costLedger, plan: context.plan,
+    costCeilingUsd: context.plan.costCapUsd,
     ...(opts.profile ? { profile: opts.profile } : {}),
     ...(opts.subsystem ? { subsystem: opts.subsystem } : {}),
     // Flag > env > single provider-default model. Only pass `models` when the
@@ -1029,8 +1064,9 @@ async function deepReviewAction(target: string, opts: DeepReviewOpts): Promise<v
     ...(opts.threatModel ? { useThreatModel: true } : {}),
     ...(opts.runtime ? { runtime: opts.runtime as RuntimeMode } : {}),
     ...(opts.evolutionConfig ? { evolutionConfig: loadEvolutionConfigFile(opts.evolutionConfig) } : {}),
-    timeoutMs: parsePositive("--timeout", opts.timeout, 600_000),
+    timeoutMs: Math.max(1, context.deadline - Date.now()),
     log: (m) => process.stderr.write(m + "\n"),
+  }), status: outcome => outcome.exitCode === 0 ? "completed" : "failed", reports: outcome => outcome.report ? [outcome.report] : [],
   });
   if (outcome.report) {
     const storage = resolveOsecRunStorage();

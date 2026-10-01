@@ -1,13 +1,16 @@
 import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import { loadWorkbenchConfig, resolveWorkbenchGuestSettings, saveWorkbenchConfig, normalizeWorkbenchConfig, workbenchConfigPath, workbenchNetworkEnabled } from "./workbench.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { launchConfiguredWorkbench, loadWorkbenchConfig, resolveWorkbenchGuestSettings, saveWorkbenchConfig, normalizeWorkbenchConfig, workbenchConfigPath, workbenchNetworkEnabled } from "./workbench.js";
 import type { WorkbenchConfig } from "./workbench.js";
 import { DEFAULT_SETTINGS } from "./tui/settings.js";
+import * as settings from "./tui/settings.js";
+import * as core from "@0/core";
+import * as controller from "./workbench-console-session.js";
 
 const homes: string[] = [];
-afterEach(() => { for (const home of homes.splice(0)) rmSync(home, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); for (const home of homes.splice(0)) rmSync(home, { recursive: true, force: true }); });
 
 function temporaryHome(): string {
   const home = mkdtempSync(join(tmpdir(), "0-workbench-grants-"));
@@ -16,6 +19,28 @@ function temporaryHome(): string {
 }
 
 describe("workbench authority boundary", () => {
+  it("refuses unsupported MCP stdio before launching a VM or resolving provider credentials", async () => {
+    const selected = { ...DEFAULT_SETTINGS, executionProfile: "smolvm" as const };
+    vi.spyOn(settings, "loadGlobalSettings").mockReturnValue(selected);
+    const status = vi.spyOn(core, "getSmolvmWorkbenchStatus").mockRejectedValue(new Error("VM launch must not be attempted"));
+    const runtime = vi.spyOn(core, "createConsoleRuntime");
+    const launch = vi.spyOn(controller, "runWorkbenchCli");
+    const persist = vi.spyOn(settings, "saveSettings");
+    await expect(launchConfiguredWorkbench(["mcp-server", "--workflows", "--workspace", "/repo"])).rejects.toThrow("MCP requires bidirectional stdio");
+    expect(status).not.toHaveBeenCalled();
+    expect(runtime).not.toHaveBeenCalled();
+    expect(launch).not.toHaveBeenCalled();
+    expect(persist).not.toHaveBeenCalled();
+    expect(selected.executionProfile).toBe("smolvm");
+  });
+
+  it("leaves explicitly local MCP transport in the host without changing the profile", async () => {
+    vi.spyOn(settings, "loadGlobalSettings").mockReturnValue({ ...DEFAULT_SETTINGS, executionProfile: "local" });
+    const persist = vi.spyOn(settings, "saveSettings");
+    await expect(launchConfiguredWorkbench(["mcp-server", "--workflows", "--workspace", "/repo"])).resolves.toBeUndefined();
+    expect(persist).not.toHaveBeenCalled();
+  });
+
   it("rejects unsupported credential forwarding instead of exposing host secrets", () => {
     const choices = { schemaVersion: 1, image: "/approved.tar", imageDigest: "sha256:" + "a".repeat(64), stateRoot: "/private/workbench", providers: ["chatgpt-codex"], github: false, cpus: 2, memoryMb: 2048, storageGb: 4 };
     expect(normalizeWorkbenchConfig(choices).providers).toEqual(["chatgpt-codex"]);

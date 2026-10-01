@@ -56,3 +56,4 @@ export { registerConfigCommand } from "./config.js";
 export { registerWorkbenchCommand } from "./workbench.js";
 export { registerReviewChecksCommand } from "./checks.js";
 export { registerHackstoreCommand } from "./hackstore.js";
+export { registerWorkflowCommand } from "./workflow.js";

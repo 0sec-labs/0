@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LlmApiRuntime, type NativeRuntime } from "@0/core";
-import { DEFAULT_SECURITY_WORKFLOW_PLAN, type SecurityWorkflow, type SecurityWorkflowExecution, type SecurityWorkflowInput } from "@0/shared";
+import { DEFAULT_SECURITY_WORKFLOW_PLAN, createSecurityWorkflowTemplate, type SecurityWorkflow, type SecurityWorkflowExecution, type SecurityWorkflowInput, type ScanReport } from "@0/shared";
 import type { RunOptions, RunOutcome } from "../commands/run.js";
 import { WebWorkflowService, type WebWorkflowExecutionContext } from "./workflows.js";
 
@@ -80,6 +80,34 @@ describe("manual security workflow execution", () => {
     expect(execution.workflowRevision).toBe(1);
   });
 
+  it("shares the workflow ledger, passes preceding evidence, and retains collected findings", async () => {
+    const report = (id: string): ScanReport => ({
+      target: "https://example.test", scanDepth: "default", startedAt: new Date().toISOString(), completedAt: new Date().toISOString(), durationMs: 10,
+      summary: { totalAttacks: 1, totalFindings: 1, critical: 0, high: 1, medium: 0, low: 0, info: 0 },
+      findings: [{ id, templateId: "fixture", title: `Finding ${id}`, category: "missing-validation", description: "Untrusted assessment evidence", severity: "high", status: "verified", evidence: { request: "fixture request", response: "fixture response" }, timestamp: Date.now() }], warnings: [],
+    });
+    runner.mockImplementation(async (options: RunOptions) => {
+      const id = `evidence-${++count}`;
+      options.onReport?.(report(id));
+      options.onOutcome?.({ attempts: [{ status: "completed" }], exit_reason: "completed", exitCode: 1 } as unknown as RunOutcome);
+    });
+    const { instance } = service();
+    const launched = await run(instance, await save(instance));
+    const { execution, workflow } = launched?.data as { execution: SecurityWorkflowExecution; workflow: { id: string } };
+    expect((await finished(instance, execution.id)).status).toBe("completed");
+    const first = runner.mock.calls[0][0] as RunOptions;
+    const second = runner.mock.calls[1][0] as RunOptions;
+    expect(first.costLedger).toBeDefined();
+    expect(second.costLedger).toBe(first.costLedger);
+    expect(first.priorFindings).toEqual([]);
+    expect(second.priorFindings).toEqual([expect.objectContaining({ id: "evidence-1", title: "Finding evidence-1" })]);
+    const storedResults = await instance.handle(`/api/console/workflow-executions/${execution.id}/results`, "GET", undefined, new URLSearchParams("sessionId=owner"));
+    expect(storedResults?.data).toMatchObject({ results: { status: "completed", findings: [{ id: "evidence-1" }, { id: "evidence-2" }] } });
+    expect((await instance.handle(`/api/console/workflow-executions/${execution.id}/results`, "GET", undefined, new URLSearchParams("sessionId=other")))?.status).toBe(404);
+    const retained = await instance.handle(`/api/console/workflows/${workflow.id}`, "GET", undefined, new URLSearchParams("sessionId=owner"));
+    expect(retained?.data).toMatchObject({ workflow: { status: "completed", reportRetained: true, report: { summary: { high: 2, totalFindings: 2 }, findings: [{ id: "evidence-1" }, { id: "evidence-2" }] } } });
+  });
+
   it("stops dependent work after a failed audit and preserves failure history", async () => {
     runner.mockImplementationOnce(async () => { throw new Error("Synthetic audit failure"); });
     const { instance } = service();
@@ -90,6 +118,20 @@ describe("manual security workflow execution", () => {
     expect(execution.nodeResults.last.status).toBe("blocked");
     expect(execution.nodeResults.report.status).toBe("blocked");
     expect(runner).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects an incompatible pinned template before creating or authorizing a run", async () => {
+    const { instance, authorize } = service();
+    const draft = createSecurityWorkflowTemplate("repository-review", { target: "https://example.test" });
+    const saved = await instance.handle("/api/console/workflow-definitions", "POST", draft, new URLSearchParams());
+    expect(saved?.status).toBe(201);
+    const workflow = (saved?.data as { definition: SecurityWorkflow }).definition;
+    const rejected = await run(instance, workflow);
+    expect(rejected?.status).toBe(400);
+    expect(rejected?.data).toMatchObject({ error: expect.stringContaining("does not support target type url") });
+    expect(authorize).not.toHaveBeenCalled();
+    expect(runner).not.toHaveBeenCalled();
+    expect((await instance.handle(`/api/console/workflow-definitions/${workflow.id}/executions`, "GET", undefined, new URLSearchParams()))?.data).toEqual({ executions: [] });
   });
 
   it("rejects stale reviewed revisions and recon mode before dispatch", async () => {
@@ -158,6 +200,45 @@ describe("manual security workflow execution", () => {
     const history = await reopened.handle(`/api/console/workflow-definitions/${workflow.id}/executions`, "GET", undefined, new URLSearchParams());
     const executions = (history?.data as { executions: SecurityWorkflowExecution[] }).executions;
     expect(executions[0]).toMatchObject({ id, status: "completed", workflowRevision: 1, workflow: { name: definition.name } });
+    expect((await reopened.handle(`/api/console/workflow-executions/${id}/results`, "GET", undefined, new URLSearchParams("sessionId=owner")))?.data).toMatchObject({ results: { status: "completed", reports: [], findings: [] } });
     expect((await reopened.handle(`/api/console/workflow-executions/${id}`, "GET", undefined, new URLSearchParams("sessionId=other")))?.status).toBe(404);
+  });
+});
+
+describe("browser workflow lifecycle", () => {
+  it("starts a template snapshot without saving a draft and returns owner-scoped results", async () => {
+    const { instance } = service(":memory:", { runtime: { type: "api", executeNative: vi.fn(), isAvailable: async () => true } as NativeRuntime });
+    const launched = await instance.invokeLifecycle("owner", "start_run", { templateId: "api-security", target: "https://example.test", idempotencyKey: "same-request" }) as { runId: string };
+    const replayed = await instance.invokeLifecycle("owner", "start_run", { templateId: "api-security", target: "https://example.test", idempotencyKey: "same-request" }) as { runId: string };
+    expect(replayed.runId).toBe(launched.runId);
+    await finished(instance, launched.runId);
+    expect(await instance.invokeLifecycle("owner", "list_workflows", {})).toEqual({ workflows: [] });
+    expect(await instance.invokeLifecycle("owner", "get_run", { runId: launched.runId })).toMatchObject({ run: { id: launched.runId, status: "completed" } });
+    expect(await instance.invokeLifecycle("owner", "get_run_results", { runId: launched.runId })).toMatchObject({ runId: launched.runId, status: "completed", findings: [] });
+    await expect(instance.invokeLifecycle("other", "get_run", { runId: launched.runId })).rejects.toThrow("for this session");
+    await expect(instance.invokeLifecycle("owner", "start_run", { templateId: "api-security", target: "https://changed.test", idempotencyKey: "same-request" })).rejects.toThrow("different run inputs");
+  });
+
+  it("runs typed mobile research through the common runner with canonical target and retained native output", async () => {
+    const root = mkdtempSync(join(tmpdir(), "zero-browser-research-")); directories.push(root);
+    const { instance, authorize } = service();
+    const saved = await instance.handle("/api/console/workflow-definitions", "POST", {
+      name: "Mobile intake", instructions: "", target: `source:${root}`,
+      nodes: [{ id: "start", type: "trigger", label: "Start", enabled: true }, { id: "mobile", type: "research", label: "Mobile intake", enabled: true, inputs: { engine: "mobile" } }],
+      edges: [{ source: "start", target: "mobile" }],
+    }, new URLSearchParams());
+    expect(saved?.status).toBe(201);
+    const workflow = (saved?.data as { definition: SecurityWorkflow }).definition;
+    const started = await instance.invokeLifecycle("owner", "start_run", { workflowId: workflow.id, revision: workflow.revision }) as { runId: string };
+    expect((await finished(instance, started.runId)).status).toBe("completed");
+    expect(authorize).toHaveBeenCalledTimes(2);
+    expect(runner).not.toHaveBeenCalled();
+    expect(await instance.invokeLifecycle("owner", "get_run_results", { runId: started.runId })).toMatchObject({ outputs: [{ outputs: [{ kind: "research", value: { completed: true, findings: [] } }] }] });
+  });
+
+  it("requires host capability in addition to an application request", async () => {
+    const { instance } = service();
+    await expect(instance.invokeLifecycle("owner", "start_run", { templateId: "fix-candidate", target: "/fixture", allowApply: true })).rejects.toThrow("host approval");
+    expect(runner).not.toHaveBeenCalled();
   });
 });

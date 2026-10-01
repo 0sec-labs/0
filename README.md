@@ -68,15 +68,25 @@ Customize review phases, tools, and triggers.
 
 Configure 0's model provider first; the coding agent's model session is separate.
 
-**MCP:** give an agent selected live-target tools through a local stdio server:
+**MCP:** with operator-selected host-local execution, let an external agent discover templates and start managed workflows:
+
+```bash
+0 mcp-server --workflows --workspace /absolute/path/to/repo
+```
+
+The agent calls `list_templates`, `start_run`, `get_run`, and
+`get_run_results`. Assessments use 0's configured provider. The stdio host owns
+its runs; disconnect cancels active work. For live workflows, supply `--scope`
+and enable the scope plugin in the host project with `0 plugin enable scope`.
+
+For individual live-target tools, select them explicitly:
 
 ```bash
 0 mcp-server --target https://target.example.com --scan-id my-review \
   --scope /absolute/path/to/scope.json --tools http_request,crawl,query_findings
 ```
 
-In browser chat, **Onboard your agent** copies a setup prompt for your MCP client.
-MCP exposes target tools; it does not control browser chats or run the full CLI.
+In browser chat, **Connect an external agent** copies an MCP setup prompt.
 See [integrations](https://docs.0.security/integrations/) for client configuration
 and [scope enforcement](https://docs.0.security/scope/) for target boundaries.
 

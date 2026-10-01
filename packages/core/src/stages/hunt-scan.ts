@@ -32,7 +32,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { rmSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import type { Finding, RuntimeMode, ScanConfig } from "@0/shared";
+import type { Finding, RuntimeMode, ScanConfig, ScanPlan } from "@0/shared";
 import { ScanCostLedger } from "../agent/cost-ledger.js";
 import { stampDeploymentContext } from "./deployment-context.js";
 import {
@@ -65,6 +65,7 @@ import { osecDB } from "@0/db";
 import { type AnalysisAgentResult, runAnalysisAgent } from "../agent-runner.js";
 import { reviewAgentPrompt } from "../analysis-prompts.js";
 import type { ScanListener } from "../scanner.js";
+import type { NativeRuntime } from "../runtime/types.js";
 
 // Per-scan throwaway SQLite DB. The finders/skeptics run concurrently and the
 // default DB is a single shared ~/.0/0.db — at any real fan-out width
@@ -86,6 +87,7 @@ async function runSourceHunt(
   hint: string,
   purpose: "research" | "verify",
   emit: ScanListener = () => {},
+  nativeRuntime?: NativeRuntime,
 ): Promise<AnalysisAgentResult> {
   const dbPath = freshHuntDb();
   const db = new osecDB(dbPath);
@@ -99,7 +101,7 @@ async function runSourceHunt(
       scopePath: sourceRoot,
       target: config.target,
       scanId,
-      config,
+      config: { ...config, ...(nativeRuntime ? { nativeRuntime } : {}) },
       db,
       emit,
       cliPrompt: prompt,
@@ -206,6 +208,9 @@ export type HuntFinder = (input: {
 }) => Promise<{ findings: Finding[] }>;
 
 export interface HuntScanOptions {
+  signal?: AbortSignal;
+  nativeRuntime?: NativeRuntime;
+  plan?: ScanPlan;
   sourceRoot: string;
   /** Where to hunt (under-audited files / variant sites). The coverage frontier. */
   candidates: HuntCandidate[];
@@ -783,6 +788,9 @@ function huntHint(brief: HuntBrief | undefined, candidate: HuntCandidate, lensHi
  * userspace, the kernel-vm verify for kernel) before trusting a "confirmed".
  */
 export function makeSkepticVerifier(opts: {
+  signal?: AbortSignal;
+  nativeRuntime?: NativeRuntime;
+  plan?: ScanPlan;
   sourceRoot: string;
   runtime: RuntimeMode;
   model?: string;
@@ -946,6 +954,8 @@ export function makeSkepticVerifier(opts: {
     const baseConfig = {
       ...(opts.costCeilingUsd !== undefined ? { costCeilingUsd: opts.costCeilingUsd } : {}),
       ...(opts.costLedger ? { costLedger: opts.costLedger } : {}),
+      ...(opts.signal ? { signal: opts.signal } : {}),
+      ...(opts.plan ? { plan: opts.plan } : {}),
       target: resolve(opts.sourceRoot, candidate.path),
       depth: "quick",
       format: "json",
@@ -958,7 +968,7 @@ export function makeSkepticVerifier(opts: {
     /** Run one refute pass on `model`, in its own throwaway DB. */
     const refutePass = async (model?: string): Promise<boolean> => {
       const config: ScanConfig = { ...baseConfig, ...(model ? { model } : {}) };
-      const report = await runSourceHunt(config, hint, "verify");
+      const report = await runSourceHunt(config, hint, "verify", undefined, opts.nativeRuntime);
       return report.findings.length > 0;
     };
 
@@ -1090,6 +1100,9 @@ export interface VerifyLens {
 }
 
 export interface MultiLensVerifierOptions {
+  signal?: AbortSignal;
+  nativeRuntime?: NativeRuntime;
+  plan?: ScanPlan;
   /** Source tree the skeptic passes re-read. Required — every lens is a real refute pass. */
   sourceRoot: string;
   runtime: RuntimeMode;
@@ -1147,6 +1160,9 @@ export function makeMultiLensVerifier(lenses: VerifyLens[], opts: MultiLensVerif
       makeSkepticVerifier({
         sourceRoot: opts.sourceRoot,
         runtime: opts.runtime,
+        ...(opts.signal ? { signal: opts.signal } : {}),
+        ...(opts.nativeRuntime ? { nativeRuntime: opts.nativeRuntime } : {}),
+        ...(opts.plan ? { plan: opts.plan } : {}),
         ...(opts.model ? { model: opts.model } : {}),
         ...(opts.negatives ? { negatives: opts.negatives } : {}),
         ...(opts.costCeilingUsd !== undefined ? { costCeilingUsd: opts.costCeilingUsd } : {}),
@@ -1252,6 +1268,7 @@ function siteGroupKey(candidatePath: string, model: string | undefined, lensId?:
 }
 
 export async function runHuntScan(opts: HuntScanOptions): Promise<HuntScanResult> {
+  opts.signal?.throwIfAborted();
   const log = opts.log ?? (() => {});
   const models = opts.models && opts.models.length > 0 ? opts.models : [undefined as unknown as string];
   const concurrency = opts.concurrency ?? 8;
@@ -1335,6 +1352,7 @@ export async function runHuntScan(opts: HuntScanOptions): Promise<HuntScanResult
   const effectiveConcurrency = costCeilingEnabled ? 1 : aimd ?? concurrency;
 
   const reports = await pool(runs, effectiveConcurrency, async (run) => {
+    opts.signal?.throwIfAborted();
     const version = run.lens.versionDigest ? { lensVersionDigest: run.lens.versionDigest } : {};
     if (costCeilingReached()) {
       return {
@@ -1370,7 +1388,7 @@ export async function runHuntScan(opts: HuntScanOptions): Promise<HuntScanResult
           model: run.model,
           attempt: run.attempt,
           challengeHint: huntHint(opts.brief, run.candidate, run.lens.challengeHint),
-          ...(finderAbort ? { signal: finderAbort.signal } : {}),
+          ...(opts.signal || finderAbort ? { signal: opts.signal && finderAbort ? AbortSignal.any([opts.signal, finderAbort.signal]) : opts.signal ?? finderAbort?.signal } : {}),
         });
         lateRef.current = scanPromise;
         return await scanPromise;
@@ -1386,6 +1404,8 @@ export async function runHuntScan(opts: HuntScanOptions): Promise<HuntScanResult
         ...(run.model ? { model: run.model } : {}),
         ...(costCeilingUsd !== undefined ? { costCeilingUsd } : {}),
         ...(costLedger ? { costLedger } : {}),
+        ...(opts.signal ? { signal: opts.signal } : {}),
+        ...(opts.plan ? { plan: opts.plan } : {}),
       };
       const scanPromise = runSourceHunt(
         config,
@@ -1396,11 +1416,13 @@ export async function runHuntScan(opts: HuntScanOptions): Promise<HuntScanResult
           const partial = partialFindingFromEvent(event.data);
           if (partial) partials.push(partial);
         },
+        opts.nativeRuntime,
       );
       lateRef.current = scanPromise;
       return await scanPromise;
     };
     const outcome = await runFinderResilient(attemptOnce, { timeoutMs: finderTimeoutMs, maxRetries: finderMaxRetries });
+    opts.signal?.throwIfAborted();
     if (outcome.status === "timed-out") finderAbort?.abort();
     let findings: Finding[];
     if (outcome.status === "completed") {

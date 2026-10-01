@@ -3932,3 +3932,34 @@ describe("console workflow draft authoring", () => {
     } finally { await session.cleanup(); }
   });
 });
+
+describe("caller-owned workflow lifecycle tools", () => {
+  it("dispatches discovery and queued launch without starting a scan inside the turn", async () => {
+    const invoke = vi.fn(async (name: string) => name === "list_templates" ? [{ id: "repository-review", revision: 1 }] : { requestId: "queued-1", status: "queued" });
+    const runtime = new ScriptedRuntime([
+      { content: [{ type: "tool_use", id: "templates-1", name: "list_templates", input: {} }], stopReason: "tool_use", durationMs: 1 },
+      { content: [{ type: "tool_use", id: "launch-1", name: "start_run", input: { templateId: "repository-review", target: "/fixture" } }], stopReason: "tool_use", durationMs: 1 },
+      endTurn("The workflow is queued for launch approval after this turn."),
+    ]);
+    const session = createConsoleSession({ runtime, refineObjective: false, allowModelSelfExtension: false, workflowLifecycle: { invoke } });
+    try {
+      await session.send("Run the repository review workflow");
+      expect(invoke).toHaveBeenCalledWith("list_templates", {});
+      expect(invoke).toHaveBeenCalledWith("start_run", { templateId: "repository-review", target: "/fixture" });
+      expect(runtime.calls[0]!.tools.map(tool => tool.name)).toEqual(expect.arrayContaining(["list_templates", "start_run", "get_run", "get_run_results", "cancel_run"]));
+      expect(runtime.calls[0]!.system).toContain("queued requestId");
+      const result = runtime.calls[2]!.messages.flatMap(message => message.content).find(block => block.type === "tool_result" && block.tool_use_id === "launch-1");
+      expect(result && "content" in result ? result.content : "").toContain('"status":"queued"');
+    } finally { await session.cleanup(); }
+  });
+  it("rejects launch requests in recon mode before reaching the caller adapter", async () => {
+    const invoke = vi.fn();
+    const runtime = new ScriptedRuntime([
+      { content: [{ type: "tool_use", id: "launch-recon", name: "start_run", input: { templateId: "repository-review", target: "/fixture" } }], stopReason: "tool_use", durationMs: 1 },
+      endTurn("Cannot run assessments in recon mode."),
+    ]);
+    const session = createConsoleSession({ runtime, autonomyMode: "recon", refineObjective: false, allowModelSelfExtension: false, workflowLifecycle: { invoke } });
+    try { await session.send("Run review"); expect(invoke).not.toHaveBeenCalled(); }
+    finally { await session.cleanup(); }
+  });
+});

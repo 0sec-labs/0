@@ -7,7 +7,7 @@ tableOfContents:
 ---
 
 Find the command, arguments, and options for your task. This reference covers
-**57 top-level commands** and their registered subcommands.
+**59 top-level commands** and their registered subcommands.
 
 For a worked example, start with [Scan Workflows](/scan-workflows/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
@@ -43,7 +43,7 @@ For a worked example, start with [Scan Workflows](/scan-workflows/),
   <section class="docs-task-card">
     <h3>Connect and automate</h3>
     <p>Configure integrations and queued local work.</p>
-    <p><a href="#mcp-server">mcp-server</a> · <a href="#orchestrate">orchestrate</a></p>
+    <p><a href="#workflow">workflow</a> · <a href="#runs">runs</a> · <a href="#mcp-server">mcp-server</a> · <a href="#orchestrate">orchestrate</a></p>
   </section>
 </div>
 
@@ -2677,24 +2677,29 @@ Adapt a public PoC for <cve-id> until it reproduces on the target kernel.
 
 ### mcp-server
 
-Run the MCP stdio server for live target interaction tools.
+Expose selected target tools or managed workflows over MCP stdio.
 
 ```text
 0 mcp-server [options]
 ```
 
-Set an explicit scope and narrow `--tools` allowlist. The external MCP client selects the model; configure OS isolation separately.
+Use `--workflows --workspace /absolute/path/to/repo` for template discovery and source workflow execution. Live workflow targets require `--scope` and the enabled scope plugin. Workflow assessments use 0's configured provider; individual target tools use the external agent's reasoning model. Disconnect cancels this host's active runs.
+
+MCP stdio requires operator-selected host-local execution. The SmolVM batch CLI bridge cannot forward this transport and refuses startup without changing the configured sandbox profile. Use `0 workflow` commands for isolated execution.
 
 Guide: [Read the workflow](/integrations/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--target <target>` **required** | — | Target URL for this MCP session |
-| `--scan-id <scanId>` **required** | — | Scan ID to associate persisted findings and target updates with |
+| `--target <target>` | — | Target URL for this MCP session |
+| `--scan-id <scanId>` | — | Scan ID to associate persisted findings and target updates with |
+| `--workflows` | `false` | Expose workflow discovery and run lifecycle tools instead of live tools |
+| `--allow-apply` | `false` | Permit explicit workflow apply requests inside the authorized workspace |
+| `--workspace <path>` | — | Absolute authorized local root for workflow source assessments |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--timeout <ms>` | `30000` | Default tool timeout in milliseconds |
 | `--scope <path>` | — | Path to a 0 scope JSON file. Out-of-scope URLs are refused by every target tool. |
-| `--tools <names>` | — | Comma-separated live 0 MCP tools to expose (default: all). |
+| `--tools <names>` | — | Comma-separated 0 MCP tools to expose (default: live tools, or workflow tools with --workflows). |
 | `--rate-limit <spec>` | — | Per-host request rate-limit spec. Defaults to 5 rps when unset. An active --engagement-profile caps this: the effective rate is the minimum of the two, so the profile can only lower it. |
 | `--allow-scanners` | `false` | Disable generic-scanner suppression for scoped engagements. |
 | `--engagement-profile <name>` | — | Engagement hardening posture for authorized enterprise work. 'standard' (default) is the existing behaviour. 'conservative' applies the quiet posture to this MCP session: no adaptive WAF-evasion ladder, full jitter on the per-host token bucket, and a 1 rps/host ceiling. The profile can only ever make the session quieter — the effective rate is the minimum of the profile and --rate-limit. The applied posture is recorded as an `engagement_posture_applied` event on the scan so it can be handed to the client as evidence. Lower precedence than the scope file's `engagement` block and ZERO_ENGAGEMENT_PROFILE. |
@@ -3071,6 +3076,139 @@ Delete a local check and its revisions from the selected project.
 ## XBOW benchmark runner
 
 The XBOW runner lives in the benchmark workspace. See [Benchmarks](/benchmark/) and [Methodology](/methodology/) for current commands, prerequisites, and measured-result interpretation. **The specialized runner does not implement a help-only `--help` path; passing it can start benchmark execution.** Inspect the documented arguments or `packages/benchmark/src/xbow-runner.ts` instead. Execution requires dedicated target environments and a benchmark budget.
+
+## Workflow execution
+
+See [Workflow CLI](/workflow/) for templates, foreground execution, scope, and host lifetime.
+
+### workflow
+
+Discover reusable definitions and execute them through the shared workflow runtime.
+
+```text
+0 workflow
+```
+
+Subcommands: [list](#workflow-list) · [show](#workflow-show) · [run](#workflow-run).
+
+#### workflow list
+
+List saved workflows and templates without starting an assessment.
+
+```text
+0 workflow list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--templates` | — | List only templates |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### workflow show
+
+Inspect one saved workflow or select a template with `--template`.
+
+```text
+0 workflow show [options] [id]
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--template <id>` | — | Show a template definition |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### workflow run
+
+Execute one saved revision or template in the foreground. Ctrl-C cancels the run.
+Completed execution can contain findings; consumers must inspect the results.
+
+```text
+0 workflow run [options] [id]
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--template <id>` | — | Execute a template without saving a copy |
+| `--revision <revision>` | — | Require this workflow or template revision |
+| `--target <target>` | — | Bind the authorized target |
+| `--workspace <path>` | — | Workspace for local execution |
+| `--scope <path>` | — | Scope JSON file |
+| `--model <model>` | — | Configured 0 assessment model |
+| `--inputs <path>` | — | Workflow artifact inputs as a JSON object (32 KiB values; 256 KiB file read limit) |
+| `--allow-apply` | — | Explicitly authorize supported patch application steps for this host and run |
+| `--time-cap <ms>` | — | Workflow-wide time cap in milliseconds |
+| `--cost-cap <usd>` | — | Workflow-wide cost ceiling in USD |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+### runs
+
+Inspect retained workflow execution history.
+
+```text
+0 runs
+```
+
+Subcommands: [list](#runs-list) · [show](#runs-show) · [cancel](#runs-cancel).
+
+#### runs list
+
+List retained runs in the selected control database.
+
+```text
+0 runs list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### runs show
+
+Read one run and its retained results.
+
+```text
+0 runs show [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### runs cancel
+
+Cancel a run owned by this host. Use Ctrl-C for foreground CLI execution or the
+owning browser/MCP host's lifecycle API. Cross-process cancellation requires a
+separately running engine and is not provided by editing stored history.
+
+```text
+0 runs cancel [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
 
 ## Reference sources
 

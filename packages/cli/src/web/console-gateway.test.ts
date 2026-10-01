@@ -527,3 +527,126 @@ describe("ConsoleGateway isolated execution boundaries", () => {
   });
 
 });
+
+describe("deferred browser workflow launches", () => {
+  function fixture(overrides: Record<string, unknown> = {}) {
+    let callbacks!: NonNullable<ConsoleGatewaySessionFactoryInput["workflowLifecycle"]>;
+    let queued!: { requestId: string; status: string };
+    let release!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const instance = gateway(input => {
+      callbacks = input.workflowLifecycle!;
+      const session = engine(input);
+      session.send = async () => {
+        queued = await callbacks.invoke("start_run", { templateId: "repository-review", target: "/fixture", idempotencyKey: "request-1", ...overrides }) as typeof queued;
+        await held;
+        return outcome();
+      };
+      return session;
+    });
+    const invoke = vi.fn(async (_sessionId: string, name: string, _args: Record<string, unknown>) => {
+      if (name === "get_template") return { template: { id: "repository-review", revision: 1 } };
+      if (name === "start_run") return { runId: "run-1", status: "queued" };
+      if (name === "get_run") return { runId: "run-1", status: "completed" };
+      return {};
+    });
+    instance.attachWorkflowLifecycle({ invoke });
+    const created = instance.create({ target: "/fixture" });
+    return { instance, created, invoke, release, callbacks: () => callbacks, queued: () => queued };
+  }
+
+  it("queues during the active turn and launches only after idle operator approval", async () => {
+    const f = fixture();
+    await f.instance.send(f.created.id, "Run the repository workflow");
+    await vi.waitFor(() => expect(f.queued()?.status).toBe("queued"));
+    expect(f.invoke.mock.calls.some(call => call[1] === "start_run")).toBe(false);
+    expect(f.instance.get(f.created.id).pendingDecisions).toEqual([]);
+    f.release();
+    await vi.waitFor(() => expect(f.instance.get(f.created.id).pendingDecisions).toHaveLength(1));
+    expect(await f.callbacks().invoke("get_run", { runId: f.queued().requestId })).toMatchObject({ status: "awaiting-approval" });
+    const launch = f.instance.get(f.created.id).pendingDecisions[0]!;
+    expect(launch.call?.name).toBe("start_run");
+    f.instance.resolveDecision(f.created.id, launch.id, { approve: true });
+    await vi.waitFor(() => expect(f.invoke.mock.calls.some(call => call[1] === "start_run")).toBe(true));
+    expect(f.invoke).toHaveBeenCalledWith(f.created.id, "start_run", expect.objectContaining({ revision: 1, target: "/fixture" }), { allowApply: false });
+    await vi.waitFor(async () => expect(await f.callbacks().invoke("get_run", { runId: f.queued().requestId })).toMatchObject({ runId: "run-1", status: "completed" }));
+  });
+
+  it("cancels queued work without invoking the workflow runner", async () => {
+    const f = fixture();
+    await f.instance.send(f.created.id, "Run the repository workflow");
+    await vi.waitFor(() => expect(f.queued()?.status).toBe("queued"));
+    expect(await f.callbacks().invoke("cancel_run", { runId: f.queued().requestId })).toMatchObject({ status: "cancelled" });
+    f.release(); await idle(f.instance, f.created.id);
+    expect(f.invoke.mock.calls.some(call => call[1] === "start_run")).toBe(false);
+    expect(f.instance.get(f.created.id).pendingDecisions).toEqual([]);
+  });
+
+  it("rejects a queued request when the owner configuration changes", async () => {
+    const f = fixture();
+    await f.instance.send(f.created.id, "Run the repository workflow");
+    await vi.waitFor(() => expect(f.queued()?.status).toBe("queued"));
+    await f.instance.setTarget(f.created.id, "/different-target");
+    f.release(); await idle(f.instance, f.created.id);
+    expect(await f.callbacks().invoke("get_run", { runId: f.queued().requestId })).toMatchObject({ status: "failed", error: expect.stringContaining("configuration changed") });
+    expect(f.invoke.mock.calls.some(call => call[1] === "start_run")).toBe(false);
+  });
+
+  it("coalesces retries and rejects a changed request with the same key", async () => {
+    const f = fixture();
+    await f.instance.send(f.created.id, "Run workflow");
+    await vi.waitFor(() => expect(f.queued()?.status).toBe("queued"));
+    expect(await f.callbacks().invoke("start_run", { templateId: "repository-review", target: "/fixture", idempotencyKey: "request-1" })).toMatchObject({ requestId: f.queued().requestId });
+    await expect(f.callbacks().invoke("start_run", { templateId: "repository-review", target: "/other", idempotencyKey: "request-1" })).rejects.toThrow("different workflow request");
+    await f.callbacks().invoke("cancel_run", { runId: f.queued().requestId });
+    f.release(); await idle(f.instance, f.created.id);
+  });
+
+  it("requires explicit idle approval before granting apply capability", async () => {
+    const f = fixture({ allowApply: true });
+    await f.instance.send(f.created.id, "Run fix and apply");
+    await vi.waitFor(() => expect(f.queued()?.status).toBe("queued")); f.release();
+    await vi.waitFor(() => expect(f.instance.get(f.created.id).pendingDecisions).toHaveLength(1));
+    const decision = f.instance.get(f.created.id).pendingDecisions[0]!;
+    expect(decision.title).toContain("permit reviewed changes");
+    expect(f.invoke.mock.calls.some(call => call[1] === "start_run")).toBe(false);
+    f.instance.resolveDecision(f.created.id, decision.id, { approve: true });
+    await vi.waitFor(() => expect(f.invoke).toHaveBeenCalledWith(f.created.id, "start_run", expect.objectContaining({ allowApply: true }), { allowApply: true }));
+  });
+
+  it("cancels the active turn's queued workflows when the operator stops that turn", async () => {
+    const f = fixture();
+    await f.instance.send(f.created.id, "Run workflow");
+    await vi.waitFor(() => expect(f.queued()?.status).toBe("queued"));
+    const cancel = f.instance.cancel(f.created.id);
+    f.release(); await cancel;
+    expect(await f.callbacks().invoke("get_run", { runId: f.queued().requestId })).toMatchObject({ status: "cancelled" });
+    expect(f.invoke.mock.calls.some(call => call[1] === "start_run")).toBe(false);
+  });
+
+  it("cancels a run allocated while the owning chat closes", async () => {
+    const f = fixture();
+    let completeLaunch!: (value: { runId: string; status: string }) => void;
+    const launching = new Promise<{ runId: string; status: string }>(resolve => { completeLaunch = resolve; });
+    const original = f.invoke.getMockImplementation()!;
+    f.invoke.mockImplementation(async (sessionId, name, args) => name === "start_run" ? launching : original(sessionId, name, args));
+    await f.instance.send(f.created.id, "Run workflow");
+    await vi.waitFor(() => expect(f.queued()?.status).toBe("queued")); f.release();
+    await vi.waitFor(() => expect(f.instance.get(f.created.id).pendingDecisions).toHaveLength(1));
+    f.instance.resolveDecision(f.created.id, f.instance.get(f.created.id).pendingDecisions[0]!.id, { approve: true });
+    await vi.waitFor(() => expect(f.invoke.mock.calls.some(call => call[1] === "start_run")).toBe(true));
+    await f.instance.close(f.created.id);
+    completeLaunch({ runId: "late-run", status: "queued" });
+    await vi.waitFor(() => expect(f.invoke).toHaveBeenCalledWith(f.created.id, "cancel_run", { runId: "late-run" }));
+  });
+
+  it("treats declined launch approval as cancellation", async () => {
+    const f = fixture();
+    await f.instance.send(f.created.id, "Run workflow");
+    await vi.waitFor(() => expect(f.queued()?.status).toBe("queued")); f.release();
+    await vi.waitFor(() => expect(f.instance.get(f.created.id).pendingDecisions).toHaveLength(1));
+    f.instance.resolveDecision(f.created.id, f.instance.get(f.created.id).pendingDecisions[0]!.id, { approve: false });
+    await vi.waitFor(async () => expect(await f.callbacks().invoke("get_run", { runId: f.queued().requestId })).toMatchObject({ status: "cancelled" }));
+    expect(f.invoke.mock.calls.some(call => call[1] === "start_run")).toBe(false);
+  });
+});

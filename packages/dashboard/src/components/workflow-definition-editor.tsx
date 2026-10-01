@@ -26,7 +26,7 @@ export function WorkflowDefinitionEditor({ definition, busy, onSave }: { definit
     const parsed = parseSecurityWorkflowCode(source);
     void onSave({ ...parsed, id: definition.id, revision: definition.revision }).catch(cause => setError(cause instanceof Error ? cause.message : "Unable to save definition."));
   } catch (cause) { setError(cause instanceof Error ? cause.message : "Invalid workflow definition."); } }}>
-    <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-muted-foreground">Portable JSON defines phases, links and review settings.</p><Button type="button" size="sm" variant="ghost" onClick={download}><Download aria-hidden="true" />Download JSON</Button></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-muted-foreground">Portable JSON defines steps, links and review settings.</p><Button type="button" size="sm" variant="ghost" onClick={download}><Download aria-hidden="true" />Download JSON</Button></div>
     <Textarea aria-label="Workflow JSON definition" spellCheck={false} autoComplete="off" rows={22} className="min-h-96 resize-y rounded-2xl bg-muted/30 p-5 font-mono text-xs leading-6" value={source} disabled={busy} onChange={event => setSource(event.target.value)} />
     {error && <p role="alert" className="whitespace-pre-wrap text-xs text-destructive">{error}</p>}
     <Button type="submit" size="sm" disabled={busy || source === initial.source}><Save aria-hidden="true" />Save definition</Button>

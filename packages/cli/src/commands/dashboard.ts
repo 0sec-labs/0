@@ -1834,6 +1834,7 @@ export function registerDashboardCommand(program: Command): void {
       const consoleGateway = new ConsoleGateway({ dbPath: opts.dbPath });
       const operator = new WebOperatorServices({ isTurnActive: () => consoleGateway.hasActiveTurns() });
       const workflows = new WebWorkflowService({ gateway: consoleGateway, dbPath: opts.dbPath });
+      consoleGateway.attachWorkflowLifecycle({ invoke: (sessionId, name, args, capabilities) => workflows.invokeLifecycle(sessionId, name, args, capabilities) });
       const triggers = new WorkflowTriggerService({ dbPath: opts.dbPath, adapter: {
         async validate(trigger) {
           const sessionId = await consoleGateway.prepareScheduledWorkflowOwner(trigger.sessionId);

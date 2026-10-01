@@ -126,7 +126,7 @@ export function Conversation({ workspace, worker, onResolve, onSubmit, onStop, r
   if (empty) return <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain" aria-label="Home">
     <section className="flex min-h-full flex-col justify-center pb-20 pt-8">
       <div className="mx-auto w-full max-w-3xl px-3 py-5 text-center sm:px-6">
-        <div className="mb-8 flex justify-center"><AgentOnboarding sessionId={snapshot.session.id} /></div>
+        <div className="mb-8 flex justify-center"><AgentOnboarding /></div>
         <img src={zeroMascotUrl} width={96} height={72} alt="" className="mx-auto mb-4 h-auto w-24 object-contain" />
         <BrandMark className="mb-7" />
         <h2 className="font-heading text-xl">What would you like to hack and fix today?</h2>
@@ -155,7 +155,7 @@ export function Conversation({ workspace, worker, onResolve, onSubmit, onStop, r
             {turn.notices.map((notice, index) => <p key={index} className="border-l-2 border-border pl-3 text-xs whitespace-pre-wrap text-muted-foreground">{notice.startsWith("Cancellation requested.") ? "Stop requested" : notice}</p>)}
             {turn.error && <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm whitespace-pre-wrap text-destructive">{consoleErrorMessage(turn.error)}{needsProviderSignIn(turn.error) && <Button asChild variant="default" size="sm" className="mt-3 flex w-fit"><Link to={`/connections?session=${snapshot.session.id}&return=${encodeURIComponent(`/console/${snapshot.session.id}`)}`}>Manage connection</Link></Button>}</div>}
             {turn.isWorking && (snapshot.session.status === "waiting" || (!turn.assistantText && turn.toolCalls.length === 0 && !turn.reasoningText)) && <ActivityIndicator waiting={snapshot.session.status === "waiting"} label={snapshot.session.status === "waiting" ? "Waiting for your decision" : turn.toolCalls.some((call) => call.isRunning) ? "Running tools…" : turn.assistantText ? "Responding…" : "Thinking…"} />}
-          </article>) : <div className="py-4 text-center"><div className="mb-8 flex justify-center"><AgentOnboarding sessionId={snapshot.session.id} /></div><img src={zeroMascotUrl} width={96} height={72} alt="" className="mx-auto mb-4 h-auto w-24 object-contain" /><BrandMark className="mb-7" /><h2 className="font-heading text-xl">What would you like to hack and fix today?</h2></div>}
+          </article>) : <div className="py-4 text-center"><div className="mb-8 flex justify-center"><AgentOnboarding /></div><img src={zeroMascotUrl} width={96} height={72} alt="" className="mx-auto mb-4 h-auto w-24 object-contain" /><BrandMark className="mb-7" /><h2 className="font-heading text-xl">What would you like to hack and fix today?</h2></div>}
           {snapshot.lastOutcome?.outputCap && !worker && <div role="status" className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-4 text-sm"><div className="font-medium">0 hit its output limit</div><Button className="mt-3" size="sm" disabled={workspace.busy || active} onClick={resumeCap}>Keep going</Button></div>}
           {snapshot.pendingDecisions.map((decision) => <div key={decision.id} className="space-y-2"><ApprovalPanel decision={decision} busy={workspace.busy} onResolve={(response) => onResolve(decision.id, response)} /></div>)}
         </div>
@@ -183,14 +183,14 @@ function ContextSuggestions({ snapshot, onChoose }: { snapshot: ConsoleSessionSn
   ] : [
     { icon: FolderSearch, text: "Review a codebase", prompt: "Help me review a codebase for security issues. Ask which local directory to use and establish the scope first." },
     { icon: ShieldCheck, text: "Investigate a security question", prompt: "Help me investigate a security question. Ask for the relevant evidence and constraints first." },
-    { icon: ListChecks, text: "Plan an audit", prompt: "Help me plan a security audit. Ask for the target, authorized scope, and time and cost limits." },
+    { icon: ListChecks, text: "Plan a workflow", prompt: "Help me plan a security workflow. Ask for the target, authorized scope, and time and cost limits." },
   ];
   return <div aria-label="Suggested prompts" className="mx-auto w-full max-w-3xl space-y-1 px-3 pt-3 sm:px-6">{suggestions.map(({ icon: Icon, text, prompt }) => <Tooltip key={text} content={prompt} preview><button type="button" className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-muted-foreground hover:bg-muted/40 hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary" onClick={() => onChoose(prompt)}><Icon className="size-4 shrink-0" /><span className="truncate">{text}</span></button></Tooltip>)}</div>;
 }
 
 const COMMAND_SUMMARIES: Record<string, string> = {
   help: "Browse commands", capabilities: "Explore what 0 can do", status: "Check this conversation", tools: "Browse available tools",
-  "new-chat": "Start a new conversation", onboard: "Open guided setup", clear: "Clear this conversation", history: "Browse audit reports",
+  "new-chat": "Start a new conversation", onboard: "Open guided setup", clear: "Clear this conversation", history: "Browse run reports",
   findings: "Review findings", fix: "Prepare a fix for review", copy: "Export this conversation", sessions: "Switch conversations",
   explain: "Get a simpler explanation", feedback: "Share feedback", settings: "Manage preferences", keybindings: "View keyboard shortcuts",
   theme: "Change appearance", model: "Choose a model", chat: "Return to chat", ops: "Open dashboard", hackstore: "Browse plugins",

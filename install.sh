@@ -86,18 +86,28 @@ if [ "${INSTALL_FOXGUARD:-1}" != "0" ]; then
     *) fail "unsupported operating system for FoxGuard companion" ;;
   esac
 
-  fg_binary="$(mktemp "${INSTALL_DIR}/.${FG_ASSET}.XXXXXX")"
+  if [ -x "${INSTALL_DIR}/foxguard" ]; then
+    printf '%s\n' "Keeping existing FoxGuard at ${INSTALL_DIR}/foxguard" >&2
+  else
+    fg_binary="$(mktemp "${INSTALL_DIR}/.${FG_ASSET}.XXXXXX")"
 
-  printf '%s\n' "Downloading FoxGuard ${FOXGUARD_TAG} companion (${FG_ASSET})…" >&2
-  curl --fail --location --silent --show-error --retry 3 --retry-delay 2 \
-    "https://github.com/${FOXGUARD_REPO}/releases/download/${FOXGUARD_TAG}/${FG_ASSET}" -o "$fg_binary"
-
-  actual="$(sha256_file "$fg_binary")"
-  [ "$FG_SHA256" = "$actual" ] || fail "FoxGuard checksum mismatch for ${FG_ASSET}; refusing to install"
-
-  chmod 755 "$fg_binary"
-  mv -f "$fg_binary" "${INSTALL_DIR}/foxguard"
-  printf '%s\n' "Installed verified FoxGuard to ${INSTALL_DIR}/foxguard" >&2
+    printf '%s\n' "Downloading FoxGuard ${FOXGUARD_TAG} companion (${FG_ASSET})…" >&2
+    if curl --fail --location --silent --show-error --connect-timeout 10 \
+      --max-time 30 --retry 1 --retry-delay 1 --retry-max-time 35 \
+      "https://github.com/${FOXGUARD_REPO}/releases/download/${FOXGUARD_TAG}/${FG_ASSET}" -o "$fg_binary"; then
+      actual="$(sha256_file "$fg_binary")"
+      if [ "$FG_SHA256" = "$actual" ]; then
+        chmod 755 "$fg_binary"
+        mv -f "$fg_binary" "${INSTALL_DIR}/foxguard"
+        fg_binary=""
+        printf '%s\n' "Installed verified FoxGuard to ${INSTALL_DIR}/foxguard" >&2
+      else
+        printf '%s\n' "0 installer: FoxGuard checksum mismatch; keeping 0 installed without the companion" >&2
+      fi
+    else
+      printf '%s\n' "0 installer: FoxGuard download failed; keeping 0 installed without the companion" >&2
+    fi
+  fi
 fi
 
 # A piped installer cannot change its parent shell. Persist the path for future

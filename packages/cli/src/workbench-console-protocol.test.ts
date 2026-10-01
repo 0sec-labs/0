@@ -20,6 +20,8 @@ describe("workbench controller boundary", () => {
   });
   it("maps known CLI path flags while preserving operator prose", () => {
     expect(mapWorkbenchCliArguments(["scan", "--target=source:/operator/repo/src", "--scope", "/operator/repo/scope.json", "--print", "inspect /operator/private", "--model", "granted"], "/operator/repo")).toEqual(["scan", "--target=source:/workspace/src", "--scope", "/workspace/scope.json", "--print", "inspect /operator/private", "--model", "granted"]);
+    expect(mapWorkbenchCliArguments(["workflow", "run", "--inputs", "/operator/repo/inputs.json"], "/operator/repo")).toEqual(["workflow", "run", "--inputs", "/workspace/inputs.json"]);
+    expect(() => mapWorkbenchCliArguments(["workflow", "run", "--inputs", "/operator/private/inputs.json"], "/operator/repo")).toThrow("outside");
     expect(() => mapWorkbenchCliArguments(["scan", "--target", "/operator/other"], "/operator/repo")).toThrow("outside");
   });
   it("does not serialize host authentication or executable resources", () => {

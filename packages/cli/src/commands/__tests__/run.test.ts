@@ -58,15 +58,29 @@ const eventBusMock = {
   },
 };
 
-vi.mock("@0/core", () => ({
+vi.mock("@0/core", async () => {
+  const assessmentModuleUrl = new URL("../../../../core/src/assessment.ts", import.meta.url).href;
+  const { executeAssessmentRun } = await import(assessmentModuleUrl);
+  return ({
+  executeAssessmentRun: (options: any, _dependencies: unknown, lifecycle: unknown) => executeAssessmentRun(options, {
+    agenticScan: agenticScanMock, runPipeline: runPipelineMock, branchJournal: vi.fn(),
+  }, lifecycle),
   agenticScan: agenticScanMock,
   runPipeline: runPipelineMock,
   createRuntime: createRuntimeMock,
   ScanCostLedger: ScanCostLedgerMock,
   eventBus: eventBusMock,
   loadAppsecFinderLenses: loadAppsecFinderLensesMock,
-}));
+});
+});
 
+
+const workflowStoreMock = {
+  createExecutionFromSnapshot: vi.fn(() => ({ id: "cli-run" })),
+  updateExecution: vi.fn(), saveExecutionResults: vi.fn(),
+  getExecution: vi.fn(() => ({ status: "running" })), close: vi.fn(),
+};
+vi.mock("@0/db", () => ({ SecurityWorkflowStore: class { constructor() { return workflowStoreMock; } } }));
 
 // `runUnified` calls `checkRuntimeAvailability` for terminal format. We
 // stub it to a no-op so tests don't probe the user's environment.
@@ -160,7 +174,8 @@ describe("runUnified — runtime gating", () => {
   let logSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    agenticScanMock.mockReset();
+    for (const mock of Object.values(workflowStoreMock)) mock.mockClear();
+  agenticScanMock.mockReset();
     runPipelineMock.mockReset();
     createRuntimeMock.mockReset();
     eventBusListener = null;
@@ -376,7 +391,8 @@ describe("runUnified — dispatch routing on targetType", () => {
   let logSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    agenticScanMock.mockReset();
+    for (const mock of Object.values(workflowStoreMock)) mock.mockClear();
+  agenticScanMock.mockReset();
     runPipelineMock.mockReset();
     createRuntimeMock.mockReset();
     eventBusListener = null;
@@ -488,7 +504,8 @@ describe("runUnified — exit codes", () => {
   let logSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    agenticScanMock.mockReset();
+    for (const mock of Object.values(workflowStoreMock)) mock.mockClear();
+  agenticScanMock.mockReset();
     runPipelineMock.mockReset();
     createRuntimeMock.mockReset();
     eventBusListener = null;
@@ -578,7 +595,8 @@ describe("runUnified — emitResultLine env gate", () => {
   const envSnapshot: Record<string, string | undefined> = {};
 
   beforeEach(() => {
-    agenticScanMock.mockReset();
+    for (const mock of Object.values(workflowStoreMock)) mock.mockClear();
+  agenticScanMock.mockReset();
     runPipelineMock.mockReset();
     createRuntimeMock.mockReset();
     eventBusListener = null;
@@ -673,7 +691,8 @@ describe("runUnified — emitResultLine env gate", () => {
 
 describe("runUnified — machine-readable output", () => {
   it("emits one parseable JSON report when cost and cross-validation diagnostics arrive", async () => {
-    agenticScanMock.mockReset();
+    for (const mock of Object.values(workflowStoreMock)) mock.mockClear();
+  agenticScanMock.mockReset();
     eventBusListener = null;
     // Load the actual formatter behind the module mock to check consumer JSON bytes.
     const actual = await vi.importActual<typeof formatters>("../../formatters/index.js");
@@ -706,7 +725,8 @@ describe("runUnified — resume / branch (0#374)", () => {
   let logSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    agenticScanMock.mockReset();
+    for (const mock of Object.values(workflowStoreMock)) mock.mockClear();
+  agenticScanMock.mockReset();
     runPipelineMock.mockReset();
     createRuntimeMock.mockReset();
     eventBusListener = null;
@@ -760,3 +780,62 @@ describe("runUnified — resume / branch (0#374)", () => {
 
 });
 
+
+describe("runUnified — retained shortcut runs", () => {
+  const options = { target: "https://example.com", targetType: "url" as const, depth: "default" as const,
+    format: "json" as const, runtime: "api" as const, timeout: 30_000, verbose: false, suppressOutput: true };
+  beforeEach(() => {
+    for (const mock of Object.values(workflowStoreMock)) mock.mockClear();
+    agenticScanMock.mockReset();
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("retains the snapshot before dispatch and stores successful execution independently of high findings", async () => {
+    const tracker: ExitTracker = {};
+    makeExitMock(tracker);
+    const onOutcome = vi.fn();
+    agenticScanMock.mockImplementationOnce(async scannerOptions => {
+      scannerOptions.onEvent({ type: "scan_started", message: "started", data: { persisted: true, scanId: "scan-one", dbPath: "/tmp/scan.db" } });
+      expect(workflowStoreMock.createExecutionFromSnapshot).toHaveBeenCalledWith(expect.objectContaining({ target: options.target, id: "cli-scan" }), "cli");
+      return cleanReport({ summary: { ...emptySummary(), high: 1, totalFindings: 1 } });
+    });
+    await runUnified({ ...options, onOutcome }).catch(() => {});
+    expect(onOutcome).toHaveBeenCalledWith(expect.objectContaining({ workflowRunId: "cli-run" }));
+    expect(workflowStoreMock.saveExecutionResults).toHaveBeenCalledWith("cli-run", expect.objectContaining({
+      status: "completed", nodeResults: expect.objectContaining({ assessment: expect.objectContaining({ scanIds: ["scan-one"], dbPaths: ["/tmp/scan.db"] }) }),
+    }));
+    expect(workflowStoreMock.updateExecution).toHaveBeenCalledWith("cli-run", expect.objectContaining({ status: "completed" }));
+    expect(workflowStoreMock.close).toHaveBeenCalledOnce();
+    expect(tracker.firstCode).toBe(1);
+  });
+
+  it("retains scanner failures before the CLI error exit", async () => {
+    const tracker: ExitTracker = {};
+    makeExitMock(tracker);
+    agenticScanMock.mockRejectedValueOnce(new Error("provider failed"));
+    await runUnified(options).catch(() => {});
+    expect(workflowStoreMock.saveExecutionResults).toHaveBeenCalledWith("cli-run", expect.objectContaining({ status: "failed", error: "provider failed" }));
+    expect(workflowStoreMock.updateExecution).toHaveBeenCalledWith("cli-run", expect.objectContaining({ status: "failed" }));
+    expect(tracker.firstCode).toBe(2);
+  });
+
+  it("lets embedded browser runs own their retention", async () => {
+    agenticScanMock.mockResolvedValueOnce(cleanReport());
+    await runUnified({ ...options, embedded: true });
+    expect(workflowStoreMock.createExecutionFromSnapshot).not.toHaveBeenCalled();
+    expect(workflowStoreMock.saveExecutionResults).not.toHaveBeenCalled();
+  });
+
+  it("reports result-retention failure as a CLI failure", async () => {
+    const tracker: ExitTracker = {};
+    makeExitMock(tracker);
+    agenticScanMock.mockResolvedValueOnce(cleanReport());
+    workflowStoreMock.saveExecutionResults.mockImplementationOnce(() => { throw new Error("disk full"); });
+    workflowStoreMock.getExecution.mockReturnValueOnce({ status: "completed" });
+    await runUnified(options).catch(() => {});
+    expect(workflowStoreMock.updateExecution).toHaveBeenCalledWith("cli-run", expect.objectContaining({ status: "completed", error: "Run completed, but result retention failed: disk full" }));
+    expect(tracker.firstCode).toBe(2);
+  });
+});
