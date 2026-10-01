@@ -147,7 +147,7 @@ export function Conversation({ workspace, worker, onResolve, onSubmit, onStop, r
       }} aria-label={worker ? `${worker.name} conversation` : "Conversation"}>
         <div ref={content} className="mx-auto max-w-3xl space-y-7">
           {worker ? <WorkerConversation worker={worker} /> : turns.length ? turns.map((turn) => <article key={turn.id} className="space-y-3">
-            {turn.user.text && <div className="ml-auto min-w-0 max-w-[92%] rounded-2xl rounded-br-sm bg-muted/50 px-4 py-3 text-sm break-words [&_p]:whitespace-pre-wrap"><Markdown text={turn.user.text} /></div>}
+            {turn.user.text && <div className="ml-auto min-w-0 max-w-[92%] console-message-surface bg-muted/50 px-4 py-3 text-sm break-words [&_p]:whitespace-pre-wrap"><Markdown text={turn.user.text} /></div>}
             {(turn.toolCalls.length > 0 || turn.reasoningText) && <ToolActivity calls={turn.toolCalls} reasoning={turn.reasoningText} working={turn.isWorking && !turn.assistantText} />}
             {turn.decisions.filter((decision) => decision.resolved).map((decision) => <ActivityRow key={decision.id} icon={<ShieldCheck />} title={`${decision.title} · ${decision.approved === undefined ? "closed" : decision.approved ? "approved" : "declined"}`} status=""><ApprovalPanel decision={decision} busy={workspace.busy} onResolve={(response) => onResolve(decision.id, response)} /></ActivityRow>)}
             {turn.assistantText && <Markdown text={turn.assistantText} streaming={turn.isWorking && snapshot.session.status === "working"} />}

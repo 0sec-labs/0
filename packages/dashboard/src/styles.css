@@ -216,6 +216,8 @@
 }
 
 /* Quiet chat surfaces: separation by tone and spacing rather than rules. */
+.console-frame { --console-surface-radius: 16px; }
+.console-message-surface, .console-frame .console-tool-activity { border-radius: var(--console-surface-radius); }
 .console-frame header, .console-frame footer { border: 0; }
 .console-frame .session-rail { background: color-mix(in srgb, var(--background), var(--foreground) 3%); }
 .console-frame textarea { border: 0; box-shadow: none; }

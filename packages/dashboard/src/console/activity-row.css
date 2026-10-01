@@ -2,7 +2,7 @@
   width: 100%;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
-  border-radius: 12px;
+  border-radius: var(--console-surface-radius, 16px);
   background: color-mix(in srgb, var(--muted) 48%, var(--background));
 }
 .console-tool-trigger {
@@ -20,7 +20,7 @@
   transition: background-color 140ms ease;
 }
 .console-tool-trigger:hover { background-color: color-mix(in srgb, var(--muted) 65%, transparent); }
-.console-tool-trigger:focus-visible { outline: 2px solid var(--ring); outline-offset: -3px; border-radius: 11px; }
+.console-tool-trigger:focus-visible { outline: 2px solid var(--ring); outline-offset: -3px; border-radius: var(--console-surface-radius, 16px); }
 .console-tool-icon { display: flex; flex: none; color: var(--muted-foreground); }
 .console-tool-icon > svg { width: 17px; height: 17px; }
 .console-tool-title { min-width: 0; overflow-wrap: anywhere; font-weight: 500; }
