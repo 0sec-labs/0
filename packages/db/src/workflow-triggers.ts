@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { ensureDatabaseDirectory } from "./db-directory.js";
 import { resolveOsecDbPath } from "./database.js";
 import { createShimmedDatabase, type ShimmedDatabase } from "./wasm-shim.js";
 
@@ -23,7 +22,7 @@ export function nextWorkflowTriggerFire(startAt: string, cadence: WorkflowTrigge
 export class WorkflowTriggerStore {
   readonly #db: ShimmedDatabase;
   constructor(dbPath?: string) {
-    const path = resolveOsecDbPath(dbPath); if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    const path = resolveOsecDbPath(dbPath); ensureDatabaseDirectory(path);
     this.#db = createShimmedDatabase(path); this.#db.pragma("busy_timeout = 5000");
     this.#db.exec("CREATE TABLE IF NOT EXISTS workflow_triggers (id TEXT PRIMARY KEY, workflow_id TEXT NOT NULL, enabled INTEGER NOT NULL, next_fire_at TEXT NOT NULL, active_claim TEXT, trigger_json TEXT NOT NULL)");
     this.#db.exec("CREATE INDEX IF NOT EXISTS workflow_triggers_due ON workflow_triggers(enabled, next_fire_at)");

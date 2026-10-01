@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { ensureDatabaseDirectory } from "./db-directory.js";
 import { parseSecurityWorkflowInput, type SecurityWorkflow, type SecurityWorkflowExecution, type SecurityWorkflowExecutionStatus, type SecurityWorkflowNodeResult } from "@0/shared";
 import { resolveOsecDbPath } from "./database.js";
 import { createShimmedDatabase, type ShimmedDatabase } from "./wasm-shim.js";
@@ -18,7 +17,7 @@ export class SecurityWorkflowStore {
   readonly #runnerInstanceId = randomUUID();
   constructor(dbPath?: string) {
     const path = resolveOsecDbPath(dbPath);
-    if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    ensureDatabaseDirectory(path);
     this.#db = createShimmedDatabase(path);
     this.#db.pragma("busy_timeout = 5000");
     this.#db.exec(`CREATE TABLE IF NOT EXISTS workflow_definitions (id TEXT PRIMARY KEY, revision INTEGER NOT NULL, definition_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);

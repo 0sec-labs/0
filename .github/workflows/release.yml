@@ -14,10 +14,14 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to build + release (e.g. v0.15.0)"
+        description: "Git tag or commit to build (e.g. v0.22.4)"
         required: true
       npm_only:
         description: "Publish only npm from the existing tag; leave native assets unchanged"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and smoke every native binary without publishing"
         type: boolean
         default: false
 
@@ -133,6 +137,7 @@ jobs:
   release:
     name: publish release
     needs: build
+    if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -173,7 +178,7 @@ jobs:
   publish-npm:
     name: publish npm
     needs: release
-    if: ${{ !cancelled() && (needs.release.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.npm_only)) }}
+    if: ${{ !cancelled() && !inputs.dry_run && (needs.release.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.npm_only)) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:

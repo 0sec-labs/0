@@ -4,6 +4,7 @@ import {
   type ShimmedDatabase,
 } from "./wasm-shim.js";
 import { homeStateDir } from "@0/shared";
+import { ensureDatabaseDirectory } from "./db-directory.js";
 import { asc, eq, desc, and, gt, inArray, or } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
@@ -56,9 +57,7 @@ export function resolveOsecDbPath(dbPath?: string): string {
 export function resetOsecDatabase(dbPath?: string): string {
   const path = resolveOsecDbPath(dbPath);
 
-  if (path !== ":memory:") {
-    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  }
+  ensureDatabaseDirectory(path);
 
   for (const suffix of ["", "-wal", "-shm"]) {
     const candidate = `${path}${suffix}`;
@@ -73,9 +72,7 @@ export function resetOsecDatabase(dbPath?: string): string {
 export function repairOsecDatabase(dbPath?: string): { path: string; backupPath?: string } {
   const path = resolveOsecDbPath(dbPath);
 
-  if (path !== ":memory:") {
-    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  }
+  ensureDatabaseDirectory(path);
 
   clearStaleLockIfAny(path);
   const backupPath = backupCorruptDatabase(path) ?? undefined;
@@ -365,9 +362,7 @@ export class osecDB {
       this.initializeReadOnlyDatabase(path);
       return;
     }
-    if (path !== ":memory:") {
-      mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-    }
+    ensureDatabaseDirectory(path);
     this.openWithRecovery(path);
   }
 

@@ -12,7 +12,7 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
-## [0.22.3] - 2026-10-01
+## [0.22.4] - 2026-10-01
 
 ### Added
 
@@ -40,6 +40,8 @@ on the published npm package and the GitHub Release tag.
 
 ### Fixed
 
+- Fix Windows dashboard startup with a relative database filename by avoiding
+  redundant creation of an existing database parent directory.
 - Include the current web onboarding, model selection, privacy controls, chat
   navigation and branding in standalone releases. Verify embedded assets and
   onboarding persistence without a separately installed runtime before publishing.
