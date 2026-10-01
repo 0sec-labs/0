@@ -1,7 +1,9 @@
 import { useRef, useState } from "react";
 import type { ServicePluginItem, ServicePluginsResponse } from "@0/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { GithubLogo, MicrosoftTeamsLogo, SlackLogo } from "@phosphor-icons/react";
+import { GithubLogo } from "@phosphor-icons/react/dist/csr/GithubLogo";
+import { MicrosoftTeamsLogo } from "@phosphor-icons/react/dist/csr/MicrosoftTeamsLogo";
+import { SlackLogo } from "@phosphor-icons/react/dist/csr/SlackLogo";
 import { ArrowUpRight, Check, Cloud, CodeXml, Database, Layers, Plug, ShieldCheck, Waypoints } from "lucide-react";
 import { webFetchJson } from "@/api";
 import { Button } from "@/components/ui/button";
