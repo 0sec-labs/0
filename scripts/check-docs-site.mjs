@@ -55,12 +55,13 @@ if (args.includes('--live')) {
     try {
       const response = await fetch(`${base}/deployment.json?revision=${revision}`, { signal: AbortSignal.timeout(15000), cache: 'no-store' });
       if (!response.ok || (await response.json()).revision !== revision) throw new Error('Custom domain is not serving the deployed revision.');
-      for (const href of docsLinks) {
-        const url = new URL(href); url.searchParams.set('revision', revision);
+      const livePaths = [...new Set([...pages.keys()].filter(path => path !== '/404.html').concat(docsLinks.map(href => new URL(href).pathname)))];
+      for (const path of livePaths) {
+        const url = new URL(path, base); url.searchParams.set('revision', revision);
         const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
-        if (!response.ok) throw new Error(`${href}: HTTP ${response.status}`);
+        if (!response.ok) throw new Error(`${url.pathname}: HTTP ${response.status}`);
       }
-      console.log(`Verified ${base} serves ${revision} and all README documentation links.`);
+      console.log(`Verified ${base} serves ${revision} and all ${pages.size - 1} documentation routes.`);
       process.exit(0);
     } catch (error) {
       if (attempt === 11) throw error;

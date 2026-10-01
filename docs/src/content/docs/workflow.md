@@ -17,7 +17,7 @@ in chat. Select a step in **Steps** to edit its instructions, tools, and limits.
 or import it into another workspace.
 
 Set a target and use **Run** for a single execution. Use **Triggers** to configure
-manual, scheduled, or event-driven starts. An enabled schedule needs a running
+hourly, daily, or weekly schedules. An enabled schedule needs a running
 browser server and a working engine connection; closing the server stops its scheduler.
 Review execution status and results in **Runs**.
 
