@@ -59,7 +59,8 @@ function ExecutionControl() {
     <QueryState pending={status.isPending} error={status.error} retry={status.refetch} />
     {execution && <div className="space-y-2 text-sm">
       <p>Selected backend: <span className="font-medium">{execution.profile === "smolvm" ? "SmolVM" : "Local"}</span></p>
-      <p className="text-xs text-muted-foreground">Availability checks do not mean a VM is running. Each chat shows its actual execution state.</p>
+      <p className="text-xs text-muted-foreground">The runtime and an approved image must both be configured before a chat can use SmolVM.</p>
+      {execution.profile === "smolvm" && (!execution.configured || !execution.imageApproved || !execution.runtimeReady) && <div role="status" className="space-y-2 rounded-xl bg-amber-500/10 p-3 text-sm"><p className="font-medium">SmolVM needs setup</p><p className="text-xs leading-5 text-muted-foreground">{!execution.configured ? "SmolVM is selected, but no workbench image or provider grant has been configured. Installing the runtime alone does not finish setup." : !execution.runtimeReady ? "The configured VM runtime is unavailable. Run workbench setup to repair it." : "The configured VM image is not approved or is unavailable. Run workbench setup with your image archive."}</p><code className="block break-all text-xs">0 workbench setup --image /path/to/workbench.tar --provider chatgpt-codex</code></div>}
       <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-[8rem_minmax(0,1fr)]">
         <dt className="text-muted-foreground">VM setup</dt><dd>{execution.configured ? "Configured" : "Not configured"}</dd>
         <dt className="text-muted-foreground">VM runtime</dt><dd>{execution.runtimeReady ? "Available" : "Unavailable"}</dd>
