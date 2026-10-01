@@ -72,7 +72,6 @@ export function WorkflowTriggers({ workflow, disabled = false }: { workflow: Sec
     }, enabled ? "Schedule on." : "Schedule saved.");
   };
   return <div className="space-y-7">
-    <p className="text-xs text-muted-foreground">Run manually, on a schedule, or through the local API.</p>
     <section className="space-y-4"><div className="flex items-center justify-between gap-3"><h3 className="flex items-center gap-2 text-sm font-medium"><CalendarClock aria-hidden="true" className="size-4" />Schedules</h3><div className="flex items-center gap-1"><Button variant="ghost" size="sm" disabled={inactive} onClick={() => setAdding(true)}><Plus aria-hidden="true" />Add schedule</Button><Button variant="ghost" size="icon-sm" aria-label="Refresh schedules" disabled={inactive || schedules.isFetching} onClick={() => void schedules.refetch()}><RefreshCw aria-hidden="true" /></Button></div></div>
       {schedules.isPending && <ActivityIndicator label="Loading schedules…" />}
       {schedules.isError && <p role="alert" className="text-sm text-destructive">{schedules.error.message}</p>}
@@ -88,13 +87,13 @@ export function WorkflowTriggers({ workflow, disabled = false }: { workflow: Sec
       })}
       {schedules.data && !schedules.data.triggers.length && <p className="text-sm text-muted-foreground">No schedules yet.</p>}
     </section>
-    {(adding || schedules.data?.triggers.length === 0) && <section className="space-y-4"><h3 className="text-sm font-medium">Create a schedule</h3><p className="text-xs leading-5 text-muted-foreground">Keep the local engine open. Missed runs are skipped.</p><details className="text-xs text-muted-foreground"><summary className="cursor-pointer">Timing details</summary><p className="mt-2 leading-5">Intervals use elapsed UTC time; local times may shift with daylight saving.</p></details>
+    {adding && <section className="space-y-4"><details className="text-xs text-muted-foreground"><summary className="cursor-pointer">Timing details</summary><p className="mt-2 leading-5">The local engine must stay open. Missed runs are skipped. Intervals use elapsed UTC time; local times may shift with daylight saving.</p></details>
       {!hasTarget && <p className="text-sm text-muted-foreground">Set a target in this workflow before scheduling it.</p>}
       <div className="grid gap-4 sm:grid-cols-2"><Select label="Repeat" value={cadence} options={Object.entries(CADENCES).map(([value, label]) => ({ value, label }))} disabled={inactive || !hasTarget} onValueChange={value => setCadence(value as Cadence)} /><label className="space-y-2 text-sm"><span className="block font-medium">First run · {timezone}</span><Input aria-label="First scheduled run in local time" value={firstRun} placeholder="YYYY-MM-DD HH:mm" disabled={inactive || !hasTarget} onChange={event => setFirstRun(event.target.value)} /></label></div>
       <div className="flex flex-wrap items-end gap-3"><Select className="min-w-0 flex-1" label="Run with" value={ownerId} placeholder="Choose a conversation" disabled={inactive || sessions.isPending || !hasTarget} options={[{ value: "", label: "Choose a conversation" }, ...owners.map(session => ({ value: session.id, label: `${session.title || "Conversation"} · ${session.runtime?.model || session.autonomyMode}` }))]} onValueChange={setOwnerId} /><Button variant="ghost" size="sm" disabled={inactive || !hasTarget} onClick={createOwner}><Plus aria-hidden="true" />New conversation</Button></div>
       {sessions.isError && <p role="alert" className="text-xs text-destructive">{sessions.error.message}</p>}
       {owner && <p className="text-xs text-muted-foreground"><a className="underline underline-offset-4" href={`/console/${encodeURIComponent(owner.id)}`}>Review conversation</a></p>}
-      <div className="flex flex-wrap gap-2"><Button variant="secondary" size="sm" disabled={inactive || !hasTarget || !owner} onClick={() => saveSchedule(false)}>Save off</Button><Button size="sm" disabled={inactive || !hasTarget || !owner} onClick={() => saveSchedule(true)}><Clock3 aria-hidden="true" />Enable schedule</Button></div>
+      <div className="flex flex-wrap gap-2"><Button variant="secondary" size="sm" disabled={inactive || !hasTarget || !owner} onClick={() => saveSchedule(false)}>Save paused</Button><Button size="sm" disabled={inactive || !hasTarget || !owner} onClick={() => saveSchedule(true)}><Clock3 aria-hidden="true" />Enable schedule</Button></div>
     </section>}
     {busy && <ActivityIndicator label="Updating schedule…" />}{feedback && <p role="status" className="flex items-start gap-2 text-sm text-muted-foreground"><Check aria-hidden="true" className="mt-0.5 size-4 shrink-0" />{feedback}</p>}{error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 

@@ -51,7 +51,7 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
   return <div className="space-y-6">
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <div className="relative min-w-0 flex-1">
+        <div className="relative min-w-0 flex-1 sm:max-w-sm">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input data-1p-ignore data-lpignore="true" autoComplete="off" aria-label="Search plugins" type="search" placeholder="Search plugins" value={filter} onChange={event => setFilter(event.target.value)} className="pl-9" />
         </div>
@@ -74,7 +74,7 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
             const executionFacts: [string, string][] = item.kind === "plugin" ? [[isolated ? "Enabled for new VM chats" : "Loaded in current host", (isolated ? item.state === "enabled" : item.loaded) ? "Yes" : "No"]] : [];
             const feedbackForItem = mutate.variables?.target.id === item.id && mutate.variables?.target.kind === item.kind;
             const description = item?.description && !inventory.data?.host.tools.some(tool => tool.name === item.description) && !/^[a-z][a-z0-9_]*(?:, [a-z][a-z0-9_]*)+$/.test(item.description) && !/^[a-z][a-z0-9]*_[a-z0-9_]+$/.test(item.description) ? item.description : "";
-            return <section key={`${item.kind}:${item.id}`} className="min-w-0 space-y-4 rounded-2xl border border-foreground/10 p-4" aria-label={item.name}>
+            return <section key={`${item.kind}:${item.id}`} className="min-w-0 space-y-4 rounded-2xl bg-muted/35 p-5" aria-label={item.name}>
             <div className="flex items-start gap-3">
               <Icon aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
               <div className="min-w-0 flex-1"><h3 className="text-sm font-medium">{item.name}</h3><p className="mt-1 text-xs text-muted-foreground">{item.kind === "theme" ? "Theme" : "Plugin"} · {item.version}</p></div>

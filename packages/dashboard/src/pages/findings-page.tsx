@@ -512,7 +512,7 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
         )}
       />
 
-      <div className="flex flex-wrap items-center gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <Tabs value={viewMode} onValueChange={(value) => setConsoleState((current) => ({ ...current, viewMode: value as ThreadViewMode }))}>
           <TabsList>
             <TabsTrigger value="inbox">Queue</TabsTrigger>
@@ -520,27 +520,10 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
             <TabsTrigger value="board">Board</TabsTrigger>
           </TabsList>
         </Tabs>
+        <div className="relative w-full sm:w-72"><Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search findings" type="search" autoComplete="off" data-1p-ignore data-lpignore="true" value={search} onChange={event => setConsoleState(current => ({ ...current, search: event.target.value }))} placeholder="Search findings" className="pl-9" /></div>
       </div>
-
-      <Card size="sm" className="border-0 bg-transparent">
-        <CardContent className="space-y-4 px-0">
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-            <div className="relative">
-              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(event) => setConsoleState((current) => ({ ...current, search: event.target.value }))}
-                placeholder="Search findings"
-                className="pl-9"
-              />
-            </div>
-            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              <span>{resultLabel}</span>
-              {selectedFingerprint && !selectedVisible ? (
-                <Badge variant="warning">Open finding is filtered out</Badge>
-              ) : null}
-            </div>
-          </div>
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span>{resultLabel}</span>{selectedFingerprint && !selectedVisible ? <Badge variant="warning">Open finding is filtered out</Badge> : null}</div>
 
           {filtersActive || search.trim() ? (
             <div className="flex flex-wrap items-center gap-2">
@@ -555,8 +538,8 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
               </Button>
             </div>
           ) : null}
-        </CardContent>
-      </Card>
+
+      </div>
 
       <div className="min-w-0 space-y-4">
         {viewMode === "board" ? (
@@ -609,13 +592,7 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
           </SheetHeader>
 
           <div className="space-y-5 p-6">
-            <label className="block space-y-2">
-              <Input
-                value={search}
-                onChange={(event) => setConsoleState((current) => ({ ...current, search: event.target.value }))}
-                placeholder="Search findings"
-              />
-            </label>
+
 
             <div className="grid gap-4 md:grid-cols-2">
               <FilterRow label="Status">

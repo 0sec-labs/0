@@ -3,6 +3,7 @@ import { ChevronDown } from "lucide-react";
 import { Popover } from "@cloudflare/kumo/components/popover";
 import type { ConsoleRuntimeSnapshot } from "@0/shared";
 import { configureConsoleSession } from "@/api";
+import { Tooltip } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import type { ConsoleWorkspace } from "./use-console-workspace";
@@ -30,11 +31,11 @@ export function ReasoningPicker({ workspace, sessionId, reasoning, disabled }: {
     }, sessionId);
   };
   return <Popover open={open} onOpenChange={setOpen}>
-    <Popover.Trigger render={<Button variant="ghost" size="sm" />} disabled={disabled}
+    <Tooltip content="Thinking effort" side="bottom"><Popover.Trigger render={<Button variant="ghost" size="sm" />} disabled={disabled}
       aria-label={`Thinking effort: ${LABELS[reasoning.effort] ?? reasoning.effort}`}
       className="gap-1 rounded-full px-2 text-xs text-muted-foreground">
       <span>{LABELS[reasoning.effort] ?? reasoning.effort}</span><ChevronDown className="size-3" />
-    </Popover.Trigger>
+    </Popover.Trigger></Tooltip>
     <Popover.Content side="top" align="end" sideOffset={10} positionMethod="fixed" className="w-64 rounded-2xl p-4 font-sans">
       <Popover.Title className="text-sm font-medium">Thinking effort</Popover.Title>
       <div className="mt-3 text-sm">{LABELS[draft] ?? draft}</div>

@@ -425,6 +425,27 @@
   animation: none !important; transition: none !important;
 }
 
+/* Compact control hints and readable suggestion previews. */
+.kumo-tooltip-popup:has(.zero-tooltip-label),
+.kumo-tooltip-popup:has(.zero-tooltip-preview) {
+  border-radius: 16px;
+  background: var(--muted);
+  color: var(--foreground);
+  padding: 5px 12px;
+  outline: 1px solid color-mix(in srgb, var(--foreground), transparent 92%);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 12%);
+}
+.kumo-tooltip-popup:has(.zero-tooltip-label) > :first-child,
+.kumo-tooltip-popup:has(.zero-tooltip-preview) > :first-child { display: none; }
+.kumo-tooltip-popup:has(.zero-tooltip-preview) {
+  width: min(360px, calc(100vw - 32px));
+  border-radius: 24px;
+  padding: 16px 20px;
+  background: var(--background);
+}
+.zero-tooltip-preview { white-space: normal; overflow-wrap: anywhere; line-height: 1.7; }
+@media (prefers-reduced-motion: reduce) { .kumo-tooltip-popup { transition: none; } }
+
 /* The working folder stays attached to the composer, above the writing area. */
 .console-composer-stack { position: relative; }
 .console-workspace-bar { margin: 0 12px -12px; padding: 5px 6px 17px; border-radius: 18px 18px 0 0; background: color-mix(in srgb, var(--muted), var(--background) 18%); }

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, MessageSquare, Play, Plus, Trash2 } from "lucide-react";
@@ -7,10 +7,9 @@ import { createSecurityWorkflowTemplate } from "@0/shared/dist/security-workflow
 import { parseSecurityWorkflowInput } from "@0/shared/dist/security-workflows.js";
 import { createConsoleSession, sendConsoleMessage, webFetchJson } from "@/api";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageHeader } from "@/components/page-header";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { WorkflowGraph } from "@/components/workflow-graph";
-import { WorkflowAutomationControl } from "@/components/workflow-automation-control";
 import { WorkflowLibrary } from "@/components/workflow-library";
 import { WorkflowPhaseEditor, WorkflowSettingsEditor } from "@/components/workflow-phase-editor";
 import { WorkflowDefinitionEditor } from "@/components/workflow-definition-editor";
@@ -27,7 +26,7 @@ export function WorkflowsPage() {
   const [search, setSearch] = useSearchParams();
   const selectedId = search.get("workflow");
   const [nodeId, setNodeId] = useState<string | null>(null);
-  const [tab, setTab] = useState("graph");
+  const [activeSection, setActiveSection] = useState("steps");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [runCandidate, setRunCandidate] = useState<SecurityWorkflow | null>(null);
@@ -38,7 +37,7 @@ export function WorkflowsPage() {
   const definitions = useQuery({ queryKey: ["workflow-definitions"], queryFn: ({ signal }) => webFetchJson<{ definitions: SecurityWorkflow[] }>(DEFINITIONS, { signal }), refetchInterval: 5000 });
   const selected = definitions.data?.definitions.find(item => item.id === selectedId);
   const selectedNode = selected?.nodes.find(node => node.id === nodeId);
-  const select = (id: string | null) => { setSearch(previous => { const next = new URLSearchParams(previous); if (id) next.set("workflow", id); else next.delete("workflow"); return next; }); setNodeId(null); setTab("graph"); setError(""); };
+  const select = (id: string | null) => { setSearch(previous => { const next = new URLSearchParams(previous); if (id) next.set("workflow", id); else next.delete("workflow"); return next; }); setNodeId(null); setActiveSection("steps"); setError(""); };
   const perform = async (action: () => Promise<void>) => {
     if (busy) throw new Error("Wait for the current update to finish.");
     setBusy(true); setError("");
@@ -76,24 +75,40 @@ export function WorkflowsPage() {
   const run = () => { if (!runCandidate) return; const reviewed = runCandidate; void perform(async () => {
     const session = await createConsoleSession({ title: reviewed.name, target: reviewed.target });
     await webFetchJson(`${DEFINITIONS}/${encodeURIComponent(reviewed.id)}/run`, { method: "POST", body: JSON.stringify({ sessionId: session.id, revision: reviewed.revision, approval: "launch-authorized-run" }) });
-    setRunCandidate(null); setTab("runs");
+    setRunCandidate(null); document.getElementById("workflow-runs")?.scrollIntoView({ block: "start" });
     await cache.invalidateQueries({ queryKey: ["workflow-executions", reviewed.id] });
   }).catch(() => {}); };
   const linear = selected ? linearWorkflowNodes(selected) !== null : false;
+  useEffect(() => {
+    if (!selectedId || !page.current) return;
+    const sections = [...page.current.querySelectorAll<HTMLElement>("[data-workflow-section]")];
+    const observer = new IntersectionObserver(entries => {
+      const visible = entries.filter(entry => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+      if (visible) setActiveSection(visible.target.getAttribute("data-workflow-section")!);
+    }, { root: page.current.closest("main"), rootMargin: "-8% 0px -60% 0px", threshold: 0 });
+    sections.forEach(section => observer.observe(section));
+    return () => observer.disconnect();
+  }, [selectedId, Boolean(selected)]);
+
 
   return <div ref={page} tabIndex={-1} className="min-w-0 w-full space-y-6 outline-none">
     {error && <p role="alert" className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}
     {definitions.isError && <p role="alert" className="text-sm text-destructive">{definitions.error.message}</p>}
-    {definitions.isLoading ? <div className="py-16"><ActivityIndicator label="Loading workflows…" /></div> : !selected ? <WorkflowLibrary definitions={definitions.data?.definitions ?? []} busy={busy} onSelect={select} onTemplate={useTemplate} onImport={importDefinition} onDescribe={discuss} /> : <>
+    {definitions.isLoading ? <div className="py-16"><ActivityIndicator label="Loading workflows…" /></div> : !selected ? <WorkflowLibrary definitions={definitions.data?.definitions ?? []} busy={busy} onSelect={select} onTemplate={useTemplate} onImport={importDefinition} onDescribe={discuss} onDelete={(workflow, trigger) => { deleteTrigger.current = trigger; setError(""); setDeleteCandidate(structuredClone(workflow)); }} /> : <>
       <Button variant="ghost" size="sm" onClick={() => select(null)}><ArrowLeft aria-hidden="true" />Back to workflows</Button>
-      <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-2xl font-medium">{selected.name}</h2><p className="mt-2 break-all text-sm text-muted-foreground">{selected.target || "Choose a target below before running."}</p></div><div className="flex gap-2"><Button variant="ghost" size="sm" disabled={busy} onClick={() => discuss("I want to update this workflow.", selected)}><MessageSquare aria-hidden="true" />Edit in chat</Button><Button ref={runTrigger} size="sm" disabled={busy || !canRun} onClick={() => { setError(""); setRunCandidate(structuredClone(selected)); }}><Play aria-hidden="true" />Run</Button><Button ref={deleteTrigger} variant="ghost" size="icon-sm" aria-label="Delete workflow" disabled={busy} onClick={() => { setError(""); setDeleteCandidate(structuredClone(selected)); }}><Trash2 aria-hidden="true" /></Button></div></div>
-      <div className="max-w-md rounded-2xl bg-muted/35 p-4"><WorkflowAutomationControl workflow={selected} disabled={busy} onConfigureTarget={() => setTab("graph")} /></div>
-      <Tabs value={tab} onValueChange={setTab} className="gap-6"><TabsList aria-label="Workflow editor"><TabsTrigger value="graph">Graph</TabsTrigger><TabsTrigger value="definition">Definition</TabsTrigger><TabsTrigger value="triggers">Triggers</TabsTrigger><TabsTrigger value="runs">Runs</TabsTrigger></TabsList>
-        <TabsContent value="graph" className="space-y-5"><WorkflowSettingsEditor key={`${selected.id}:${selected.revision}`} definition={selected} busy={busy} onSave={save} /><div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-sm font-medium">Phases</h3><Button variant="ghost" size="sm" disabled={busy || !linear || selected.nodes.length >= 16} onClick={() => void save(addWorkflowPhase(selected)).catch(() => {})}><Plus aria-hidden="true" />Add phase</Button></div>{!linear && <p className="text-xs text-muted-foreground">This graph has branches. Add or remove phases in Definition to keep its connections intact.</p>}<WorkflowGraph definition={selected} selectedId={nodeId} onSelect={setNodeId} />{selectedNode ? <WorkflowPhaseEditor key={`${selected.id}:${selected.revision}:${selectedNode.id}`} definition={selected} phase={selectedNode} busy={busy} onSave={save} canRemove={linear && selectedNode.type !== "trigger" && (selectedNode.type !== "audit" || selected.nodes.filter(node => node.type === "audit").length > 1)} onRemove={() => void save(removeWorkflowPhase(selected, selectedNode.id)).then(() => setNodeId(null)).catch(() => {})} /> : <p className="text-center text-xs text-muted-foreground">Select a phase to edit its instructions, tools and review settings.</p>}</TabsContent>
-        <TabsContent value="definition"><WorkflowDefinitionEditor key={`${selected.id}:${selected.revision}`} definition={selected} busy={busy} onSave={save} /></TabsContent>
-        <TabsContent value="triggers"><WorkflowTriggers workflow={selected} disabled={busy} /></TabsContent>
-        <TabsContent value="runs"><WorkflowRuns workflowId={selected.id} busy={busy} onAction={perform} /></TabsContent>
-      </Tabs>
+      <PageHeader title={selected.name} summary={selected.target || "Choose a target in Details before running."} actions={<><Button variant="ghost" size="default" disabled={busy} onClick={() => discuss("I want to update this workflow.", selected)}><MessageSquare aria-hidden="true" />Edit in chat</Button><Button ref={runTrigger} size="default" disabled={busy || !canRun} onClick={() => { setError(""); setRunCandidate(structuredClone(selected)); }}><Play aria-hidden="true" />Run</Button><Button ref={deleteTrigger} variant="ghost" size="icon" aria-label="Delete workflow" disabled={busy} onClick={() => { setError(""); setDeleteCandidate(structuredClone(selected)); }}><Trash2 aria-hidden="true" /></Button></>} />
+      <div className="grid items-start gap-6 lg:grid-cols-[9rem_minmax(0,1fr)]">
+        <nav aria-label="Workflow sections" className="sticky top-0 z-10 flex gap-1 overflow-x-auto bg-background py-2 lg:top-4 lg:flex-col lg:rounded-2xl lg:bg-muted/20 lg:p-2">
+          {[{ id: "steps", label: "Steps" }, { id: "details", label: "Details" }, { id: "triggers", label: "Triggers" }, { id: "runs", label: "Runs" }, { id: "definition", label: "Definition" }].map(section => <a key={section.id} href={`#workflow-${section.id}`} aria-current={activeSection === section.id ? "location" : undefined} onClick={event => { event.preventDefault(); setActiveSection(section.id); document.getElementById(`workflow-${section.id}`)?.scrollIntoView({ block: "start" }); }} className={`shrink-0 rounded-xl px-3 py-2 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-primary ${activeSection === section.id ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"}`}>{section.label}</a>)}
+        </nav>
+        <div className="min-w-0 space-y-10 pb-[60dvh]">
+          <section id="workflow-steps" data-workflow-section="steps" className="scroll-mt-20 space-y-5"><div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-sm font-medium">Steps</h3><Button variant="ghost" size="sm" disabled={busy || !linear || selected.nodes.length >= 16} onClick={() => void save(addWorkflowPhase(selected)).catch(() => {})}><Plus aria-hidden="true" />Add step</Button></div>{!linear && <p className="text-xs text-muted-foreground">This graph has branches. Add or remove phases in Definition to keep its connections intact.</p>}<WorkflowGraph definition={selected} selectedId={nodeId} onSelect={setNodeId} />{selectedNode ? <WorkflowPhaseEditor key={`${selected.id}:${selected.revision}:${selectedNode.id}`} definition={selected} phase={selectedNode} busy={busy} onSave={save} canRemove={linear && selectedNode.type !== "trigger" && (selectedNode.type !== "audit" || selected.nodes.filter(node => node.type === "audit").length > 1)} onRemove={() => void save(removeWorkflowPhase(selected, selectedNode.id)).then(() => setNodeId(null)).catch(() => {})} /> : <p className="text-center text-xs text-muted-foreground">Select a step to edit its instructions, tools and review settings.</p>}</section>
+          <section id="workflow-details" data-workflow-section="details" className="scroll-mt-20 space-y-4"><h3 className="text-sm font-medium">Details</h3><WorkflowSettingsEditor key={`${selected.id}:${selected.revision}`} definition={selected} busy={busy} onSave={save} /></section>
+          <section id="workflow-triggers" data-workflow-section="triggers" className="scroll-mt-20 space-y-4"><WorkflowTriggers workflow={selected} disabled={busy} /></section>
+          <section id="workflow-runs" data-workflow-section="runs" className="scroll-mt-20 space-y-4"><h3 className="text-sm font-medium">Runs</h3><WorkflowRuns workflowId={selected.id} busy={busy} onAction={perform} /></section>
+          <section id="workflow-definition" data-workflow-section="definition" className="scroll-mt-20"><details className="rounded-2xl bg-muted/20 p-4"><summary className="cursor-pointer text-sm font-medium">Definition · JSON</summary><div className="mt-4"><WorkflowDefinitionEditor key={`${selected.id}:${selected.revision}`} definition={selected} busy={busy} onSave={save} /></div></details></section>
+        </div>
+      </div>
     </>}
     <Dialog open={runCandidate !== null} onOpenChange={open => { if (!open && !busy) setRunCandidate(null); }}><DialogContent showCloseButton={!busy} onCloseAutoFocus={event => { event.preventDefault(); runTrigger.current?.focus(); }} className="max-h-[85dvh] overflow-y-auto sm:max-w-lg"><DialogHeader><DialogTitle>Run {runCandidate?.name}?</DialogTitle><DialogDescription>Run these enabled phases in a new conversation.</DialogDescription></DialogHeader><div className="space-y-4 text-sm"><p className="break-all"><span className="text-muted-foreground">Target: </span>{runCandidate?.target}</p><p className="text-xs text-muted-foreground">Reviewed revision {runCandidate?.revision}</p>{reviewedAudits.map(node => <div key={node.id} className="space-y-2"><p>{node.label}</p>{node.execution?.instructions && <p className="whitespace-pre-wrap text-xs text-muted-foreground">{node.execution.instructions}</p>}{node.plan && <p className="text-xs text-muted-foreground">{node.plan.goal.replaceAll("-", " ")} · {node.plan.runCount} {node.plan.executionMode} runs · {node.plan.depth} · {Math.round(node.plan.timeCapMs / 60000)} minutes · ${node.plan.costCapUsd} per phase</p>}{node.execution?.allowedAgentTools !== undefined && <p className="text-xs text-muted-foreground">Agent tools: {node.execution.allowedAgentTools.join(", ") || "None"}. Built-in pipeline checks run separately.</p>}</div>)}{error && <p role="alert" className="text-destructive">{error}</p>}</div><DialogFooter><Button variant="ghost" disabled={busy} onClick={() => setRunCandidate(null)}>Cancel</Button><Button disabled={busy || !reviewedAudits.length} onClick={run}>{busy ? "Starting…" : "Run workflow"}</Button></DialogFooter></DialogContent></Dialog>
     <Dialog open={deleteCandidate !== null} onOpenChange={open => { if (!open && !busy) setDeleteCandidate(null); }}><DialogContent showCloseButton={!busy} onCloseAutoFocus={event => { event.preventDefault(); if (deleteTrigger.current?.isConnected) deleteTrigger.current.focus(); else page.current?.focus(); }} className="sm:max-w-sm"><DialogHeader><DialogTitle>Delete {deleteCandidate?.name}?</DialogTitle><DialogDescription>The saved workflow will be removed. Prior run records remain available.</DialogDescription></DialogHeader>{error && <p role="alert" className="text-sm text-destructive">{error}</p>}<DialogFooter><Button variant="ghost" disabled={busy} onClick={() => setDeleteCandidate(null)}>Cancel</Button><Button variant="destructive" disabled={busy} onClick={() => { if (!deleteCandidate) return; const reviewed = deleteCandidate; void perform(async () => { await webFetchJson(`${DEFINITIONS}/${reviewed.id}?revision=${reviewed.revision}`, { method: "DELETE" }); setDeleteCandidate(null); select(null); await cache.invalidateQueries({ queryKey: ["workflow-definitions"] }); }).catch(() => {}); }}>Delete workflow</Button></DialogFooter></DialogContent></Dialog>
