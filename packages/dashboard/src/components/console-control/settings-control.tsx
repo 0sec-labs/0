@@ -19,12 +19,18 @@ export const settingsCategories = [
   { id: "conversation", label: "Conversation" },
   { id: "agents", label: "Agents & execution" },
   { id: "privacy", label: "Data & privacy" },
-  { id: "terminal", label: "Terminal" },
 ] as const;
 export type SettingsCategory = typeof settingsCategories[number]["id"];
-const terminalKeys: Record<string, true> = { mouseSupport: true, composerStyle: true, symbolPreset: true, leaderKey: true, showStatusBar: true, showObjective: true, logoAnimation: true };
+// These preferences are consumed by the terminal renderer, not the web console.
+// Keep their persisted values available to the CLI without exposing ineffective controls here.
+const cliPresentationKeys = new Set([
+  "showStatusBar", "showComposerHints", "composerSuggestions", "mouseSupport", "showLogo",
+  "showRuntimeNotices", "showTurnSummary", "showSubagents", "showTimestamps", "showObjective",
+  "showScope", "density", "composerStyle", "transcriptStyle", "roleLabelStyle", "toolCardStyle",
+  "richToolCards", "transcriptDetail", "showTokenUsage", "showCost", "showContextMeter",
+  "modelDisplay", "elapsedTimer", "logoAnimation", "symbolPreset", "rosterSort", "leaderKey",
+]);
 function categoryFor(def: SettingDefinition): SettingsCategory {
-  if (terminalKeys[def.key]) return "terminal";
   if (def.group === "Privacy") return "privacy";
   if (def.group === "Security") return "agents";
   if (def.group === "Updates") return "general";
@@ -33,12 +39,20 @@ function categoryFor(def: SettingDefinition): SettingsCategory {
 }
 
 function settingLabel(definition: SettingDefinition): string {
-  return definition.key === "analyticsLevel" ? "Usage metrics" : definition.label;
+  const labels: Record<string, string> = { analyticsLevel: "Usage metrics", busyInputMode: "Messages while working" };
+  return labels[definition.key] ?? definition.label;
 }
 
 function SettingRow({ definition, value, scope, pending, apply }: { definition: SettingDefinition; value: unknown; scope: "global" | "project"; pending: boolean; apply: (key: string, value: unknown, scope: "global" | "project") => void }) {
   const label = settingLabel(definition);
-  const description = definition.key === "updatePolicy" ? "Check for updates when 0 starts." : definition.description.replace(/\s*Applies to this computer\.?/g, "");
+  const descriptions: Record<string, string> = {
+    updatePolicy: "Check for updates when 0 starts.",
+    reduceMotion: "Reduce animations.",
+    busyInputMode: "Interrupt with your next message, or queue it until the current turn ends.",
+    autoCompaction: "Summarize older messages when context fills up.",
+    compactionThreshold: "When to summarize older messages.",
+  };
+  const description = descriptions[definition.key] ?? definition.description.replace(/\s*Applies to this computer\.?/g, "");
   const enabledChoice = definition.kind === "enum" && definition.choices?.length === 2 && definition.choices.includes("off") ? definition.choices.find(choice => choice !== "off") : undefined;
   const isToggle = definition.kind === "boolean" || enabledChoice !== undefined;
   const applyValue = (next: unknown) => apply(definition.key, next, definition.operatorOnly ? "global" : scope);
@@ -88,12 +102,11 @@ export function SettingsControl({ presentationOnly = false, category = "general"
     return data;
   }, onSuccess: data => { queryClient.setQueryData(["console-settings"], data); setMessage("Saved."); } });
   const reset = useMutation({ mutationFn: async () => {
-    const data = await webFetchJson<SettingsResponse>("/api/console/settings/reset", jsonBody(resetKeys?.length ? { keys: resetKeys } : {}));
+    const data = await webFetchJson<SettingsResponse>("/api/console/settings/reset", jsonBody({ keys: resetKeys?.length ? resetKeys : allDefinitions.map(def => def.key) }));
     if (data.persisted === false) throw new Error("Couldn't reset settings.");
     return data;
   }, onSuccess: data => { queryClient.setQueryData(["console-settings"], data); setResetKeys(null); setMessage("Reset to defaults."); } });
-  const presentationKeys: Record<string, true> = { density: true, transcriptStyle: true, roleLabelStyle: true, toolCardStyle: true, richToolCards: true, transcriptDetail: true, showTimestamps: true, showTokenUsage: true, showCost: true, showContextMeter: true, modelDisplay: true, reduceMotion: true, showComposerHints: true };
-  const allDefinitions = settings.data?.definitions.filter(def => (!presentationOnly || presentationKeys[def.key]) && def.key !== "theme") ?? [];
+  const allDefinitions = settings.data?.definitions.filter(def => !cliPresentationKeys.has(def.key) && def.key !== "theme" && (!presentationOnly || def.key === "reduceMotion")) ?? [];
   const definitions = allDefinitions.filter(def => `${settingLabel(def)} ${def.label} ${def.description} ${def.key} ${def.group}`.toLowerCase().includes(filter.toLowerCase()) && (filter.trim() || presentationOnly || categoryFor(def) === category));
   return <div className="space-y-4">
     {!presentationOnly && category === "agents" && <ExecutionControl />}
@@ -103,6 +116,6 @@ export function SettingsControl({ presentationOnly = false, category = "general"
     <Dialog open={resetKeys !== null} onOpenChange={open => { if (!open && !reset.isPending) setResetKeys(null); }}><DialogContent showCloseButton={!reset.isPending} onCloseAutoFocus={event => { event.preventDefault(); resetTriggerRef.current?.focus(); }}><DialogHeader><DialogTitle>Reset {resetKeys?.length ? settings.data?.definitions.find(def => def.key === resetKeys[0])?.label ?? "this setting" : "all settings"}?</DialogTitle><DialogDescription>Restore defaults and remove saved overrides for this computer and project.</DialogDescription></DialogHeader><Feedback error={reset.error} /><DialogFooter><Button variant="ghost" onClick={() => setResetKeys(null)} disabled={reset.isPending}>Cancel</Button><SubmitButton variant="destructive" pending={reset.isPending} onClick={() => reset.mutate()}>Reset</SubmitButton></DialogFooter></DialogContent></Dialog>
     <section className="divide-y divide-foreground/5 rounded-2xl border border-foreground/10 px-4">{definitions.map(def => <SettingRow key={def.key} definition={def} value={settings.data!.settings[def.key]} scope={scope} pending={save.isPending || reset.isPending} apply={(key, value, layer) => save.mutate({ key, value, scope: layer })} />)}</section>
     {settings.data && definitions.length === 0 && (filter.trim() || category !== "general") && <Empty>No matching settings.</Empty>}
-    {!presentationOnly && category === "general" && !filter.trim() && <div className="flex items-center justify-between gap-4 py-4"><div><h3 className="text-sm font-medium">Reset settings</h3><p className="mt-1 text-xs text-muted-foreground">Restore defaults for this computer and project.</p></div><Button variant="outline" disabled={save.isPending || reset.isPending} onClick={() => openReset([])}>Reset all</Button></div>}
+    {!presentationOnly && category === "general" && !filter.trim() && <div className="flex items-center justify-between gap-4 py-4"><div><h3 className="text-sm font-medium">Reset settings</h3><p className="mt-1 text-xs text-muted-foreground">Restore web settings to defaults.</p></div><Button variant="outline" disabled={save.isPending || reset.isPending} onClick={() => openReset([])}>Reset all</Button></div>}
   </div>;
 }
