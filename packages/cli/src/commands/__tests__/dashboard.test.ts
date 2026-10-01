@@ -91,6 +91,9 @@ type RequestHandler = (
   res: import("node:http").ServerResponse,
 ) => unknown;
 
+const instanceMock = vi.hoisted(() => vi.fn().mockResolvedValue(false));
+vi.mock("../../web/dashboard-instance.js", () => ({ findDashboardInstance: instanceMock }));
+
 const httpState: {
   lastHandler: RequestHandler | null;
   listenCalls: Array<{ port: number; host: string }>;
@@ -109,6 +112,7 @@ vi.mock("node:http", async () => {
           if (cb) cb();
           return this;
         },
+        on() { return this; },
         once() {
           return this;
         },
@@ -485,6 +489,7 @@ let logSpy: ReturnType<typeof vi.spyOn>;
 let errSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
+  instanceMock.mockResolvedValue(false);
   // Reset http capture.
   httpState.lastHandler = null;
   httpState.listenCalls.length = 0;
@@ -1350,3 +1355,11 @@ describe("dashboard — prune-stopped-workers", () => {
     expect(dbState.deleteByStatusCalls).toEqual(["stopped"]);
   });
 });
+
+ it("reopens the existing dashboard without creating another server", async () => {
+   instanceMock.mockResolvedValue(true);
+   expect(await runCli(["web", "--ready-json"])).toBeUndefined();
+   expect(httpState.listenCalls).toHaveLength(0);
+   expect(execFileMock).toHaveBeenCalled();
+   expect(logSpy).toHaveBeenCalledWith('ZERO_DASHBOARD_READY {"url":"http://127.0.0.1:48123"}');
+ });

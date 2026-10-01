@@ -26,6 +26,7 @@ import { WebWorkflowService } from "../web/workflows.js";
 import { WorkflowTriggerService } from "../web/workflow-triggers.js";
 import { GitHubPublicationAuth } from "../web/github-auth.js";
 import { DASHBOARD_ASSETS, type EmbeddedDashboardAsset } from "../dashboard-assets.generated.js";
+import { findDashboardInstance } from "../web/dashboard-instance.js";
 
 type DashboardOptions = {
   dbPath?: string;
@@ -1821,6 +1822,13 @@ export function registerDashboardCommand(program: Command): void {
       }
 
 
+      if (port !== 0 && !opts.dbPath && !opts.assetDir && !opts.devUrl && await findDashboardInstance(origin)) {
+        console.log(chalk.gray(`  0 web is already running: ${origin}`));
+        if (opts.readyJson) console.log(`ZERO_DASHBOARD_READY ${JSON.stringify({ url: origin })}`);
+        if (opts.open !== false) openBrowser(`${origin}/console`);
+        return;
+      }
+
       const { path: assetDir, cleanup: cleanupAssetDir } = resolveDashboardAssetDir(opts.assetDir);
       const controlToken = randomUUID();
       const consoleGateway = new ConsoleGateway({ dbPath: opts.dbPath });
@@ -1897,7 +1905,19 @@ export function registerDashboardCommand(program: Command): void {
       };
       server.once("close", cleanupDashboardAssets);
 
-      server.listen(port, host, () => {
+      let retriedPort = false;
+      server.on("error", (error: NodeJS.ErrnoException) => {
+        if (error.code === "EADDRINUSE" && port !== 0 && !retriedPort) {
+          retriedPort = true;
+          console.log(chalk.gray(`  Port ${port} is in use; opening 0 web on a free port.`));
+          server.listen(0, host, onListening);
+          return;
+        }
+        console.error(`Unable to start 0 web: ${error.message}`);
+        cleanupDashboardAssets();
+        process.exit(1);
+      });
+      const onListening = () => {
         const address = server.address();
         if (address && typeof address !== "string") {
           origin = `http://${host.includes(":") ? `[${host}]` : host}:${address.port}`;
@@ -1908,7 +1928,8 @@ export function registerDashboardCommand(program: Command): void {
         if (opts.readyJson) console.log(`ZERO_DASHBOARD_READY ${JSON.stringify({ url })}`);
         console.log(chalk.gray("  Ctrl+C to stop"));
         if (opts.open !== false) openBrowser(`${url}/console`);
-      });
+      };
+      server.listen(port, host, onListening);
 
       let shuttingDown = false;
       const shutdown = () => {
