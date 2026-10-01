@@ -1,12 +1,18 @@
-import { Plug, Search, Workflow } from "lucide-react";
-import zeroMascotUrl from "@/assets/zero-peek.png";
+import curiousUrl from "@/assets/zero-curious.webp";
+import planningUrl from "@/assets/zero-planning.webp";
+import connectUrl from "@/assets/zero-connect.webp";
 import { cn } from "@/lib/utils";
 
-/** Decorative page companion; the existing Zero artwork stays the source of truth. */
-export function ZeroMascot({ scene, compact = false }: { scene: "findings" | "workflows" | "plugins"; compact?: boolean }) {
-  const Icon = { findings: Search, workflows: Workflow, plugins: Plug }[scene];
-  return <div aria-hidden="true" className={cn("relative isolate shrink-0", compact ? "hidden w-16 sm:block" : "w-24")}>
-    <img src={zeroMascotUrl} alt="" width={320} height={240} className="h-auto w-full object-contain" />
-    <span className={cn("absolute -bottom-1 -right-1 flex items-center justify-center rounded-full bg-background text-primary ring-2 ring-background", compact ? "size-6" : "size-8")}><Icon className={compact ? "size-3.5" : "size-4"} /></span>
+const scenes = {
+  findings: { src: curiousUrl, width: 640, height: 640 },
+  workflows: { src: planningUrl, width: 256, height: 256 },
+  plugins: { src: connectUrl, width: 366, height: 332 },
+};
+
+/** Existing transparent Zero poses from the canonical 0cloud artwork library. */
+export function ZeroMascot({ scene, compact = false }: { scene: keyof typeof scenes; compact?: boolean }) {
+  const artwork = scenes[scene];
+  return <div aria-hidden="true" className={cn("shrink-0", compact ? "hidden h-16 w-20 sm:block" : "size-28")}>
+    <img src={artwork.src} alt="" width={artwork.width} height={artwork.height} className="h-full w-full object-contain" />
   </div>;
 }
