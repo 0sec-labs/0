@@ -1,3 +1,4 @@
+import { BackendConnectionPicker } from "./backend-connection-picker";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Menu, MessageSquare, Plus, Plug, Settings, ShieldCheck, Workflow } from "lucide-react";
@@ -30,7 +31,7 @@ export function SharedWorkspaceLayout({ children, onNew }: {
         </div>
       </header>
       <main className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-5 py-5 sm:px-8">{children}</div>
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-5 py-5 sm:px-8"><BackendConnectionPicker />{children}</div>
       </main>
     </div>
     <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}>

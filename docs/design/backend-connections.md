@@ -200,7 +200,7 @@ replay, automatic recovery, or a generic persistent remote executor.
   the previous view rather than changing the destination of its pending requests.
   Handshake epoch/capability changes require a fresh view and authoritative snapshot.
   Live production-console checks switched local and remote engines and confirmed
-  separate drafts, settings, and sessions. Development StrictMode switching was
+  separate drafts, settings, and sessions. Development StrictMode was
   also checked against the running local listener.
 - The trusted registry validates configured endpoints, keeps bearer values out of
   public descriptors, rejects unsupported API routes/capabilities before dispatch,
@@ -217,8 +217,10 @@ replay, automatic recovery, or a generic persistent remote executor.
   case confirms cancellation acknowledgement leaves the run `running` until
   assessment abort cleanup finishes, then retains partial findings as `cancelled`.
 - A live two-engine smoke check confirmed distinct handshake identities, equal
-  workflow IDs with distinct definitions, separate remote sessions, and remote CLI
-  template discovery. These checks establish transport and ownership behavior on
+  workflow IDs with distinct definitions, separate remote sessions, remote CLI
+  template discovery, and remote MCP workflow discovery and retained run inspection.
+  It also confirmed remote control authorization and rejection of a stale approval
+  addressed to another engine. These checks establish transport and ownership behavior on
   the local qualification host; they do not demonstrate a real external provider
   assessment, a different remote operating system, or an internet deployment.
 - HTTP loopback tunnel setup is the operator baseline. HTTPS endpoint admission

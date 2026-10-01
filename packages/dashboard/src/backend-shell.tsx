@@ -3,9 +3,10 @@ import { BrowserRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BackendDescriptorSchema, BackendListSchema, parseBackendHandshake, type BackendDescriptor } from "@0/shared/dist/backend-protocol.js";
 import { createBackendApi, localControlFetch } from "./api";
-import { BackendApiContext } from "./backend-context";
+import { BackendApiContext, BackendSelectionContext } from "./backend-context";
 import { backendRoute } from "./lib/backend-client";
 import { App } from "./App";
+import { BackendConnectionPicker } from "./components/backend-connection-picker";
 
 async function controlJson(path: string, signal?: AbortSignal) {
   const response = await localControlFetch(path, { signal });
@@ -99,11 +100,7 @@ export function BackendShell() {
     setSelected(null); setConnectionStatus("connecting");
     setRoute({ backendId, basename: `/b/${backendId}` });
   };
-  return <div className="backend-shell flex h-dvh flex-col overflow-hidden">
-    <div className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-2 text-xs">
-      <label className="flex items-center gap-2">Engine<select aria-label="Execution engine" className="max-w-64 rounded bg-muted px-2 py-1" value={route.backendId} onChange={event => select(event.target.value)}>{backends.length ? backends.map(backend => <option key={backend.id} value={backend.id}>{backend.name} · {backend.status}</option>) : <option value={route.backendId}>{route.backendId}</option>}</select></label>
-      <span className="text-muted-foreground">{selected ? `${connectionStatus} · ${selected.platform?.os ?? "Engine workspace"} · paths belong to this engine` : error ? "Disconnected" : "Connecting…"}</span>
-    </div>
-    {selected ? <BackendView key={`${route.backendId}:${refresh}`} descriptor={selected} basename={route.basename} /> : <div className="mx-auto max-w-xl p-8 text-sm" role="status">{error || "Connecting to execution engine…"}{error && <button className="ml-3 underline" onClick={() => setRefresh(value => value + 1)}>Reconnect</button>}</div>}
-  </div>;
+  return <BackendSelectionContext value={{ backends, backendId: route.backendId, status: connectionStatus, select, reconnect: () => setRefresh(value => value + 1) }}><div className="backend-shell flex h-dvh flex-col overflow-hidden">
+    {selected ? <BackendView key={`${route.backendId}:${refresh}`} descriptor={selected} basename={route.basename} /> : <div className="mx-auto max-w-xl p-8 text-sm" role="status"><BackendConnectionPicker />{error || "Connecting…"}{error && <button className="ml-3 underline" onClick={() => setRefresh(value => value + 1)}>Reconnect</button>}</div>}
+  </div></BackendSelectionContext>;
 }

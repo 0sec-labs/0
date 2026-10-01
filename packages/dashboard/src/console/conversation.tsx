@@ -8,6 +8,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { ProviderIcon } from "@/components/provider-icon";
 import { ReasoningPicker } from "./reasoning-picker";
+import { BackendConnectionPicker } from "@/components/backend-connection-picker";
 import { FilePathPicker } from "./file-path-picker";
 import { HomeAnalytics } from "./home-analytics";
 import { QueuedMessages } from "./queued-messages";
@@ -268,7 +269,7 @@ function Composer({ workspace, snapshot, worker, onSubmit, onStop, sendBehavior 
     <div className="mx-auto max-w-3xl">
       <div className="console-composer-stack">
       <div className="console-workspace-bar flex items-center justify-between gap-3">
-        <FilePathPicker workspace={workspace} sessionId={snapshot.session.id} cwd={snapshot.workspacePath ?? snapshot.scopeEnforcement.projectPath} workspaceDisabled={active || workspace.busy || closed || snapshot.workers.some(item => ["queued", "running", "parked"].includes(item.status))} disabled={closed} />
+        <div className="flex min-w-0 items-center gap-1"><BackendConnectionPicker /><FilePathPicker workspace={workspace} sessionId={snapshot.session.id} cwd={snapshot.workspacePath ?? snapshot.scopeEnforcement.projectPath} workspaceDisabled={active || workspace.busy || closed || snapshot.workers.some(item => ["queued", "running", "parked"].includes(item.status))} disabled={closed} /></div>
         {(stopping || startingWorkspace) && <span role="status" className="flex items-center gap-2 px-2 text-xs text-muted-foreground"><LoadingDots />{stopping ? "Stopping…" : "Starting workspace…"}</span>}
       </div>
       <div className="relative console-composer flex flex-col gap-3 p-3 focus-within:ring-2 focus-within:ring-primary/10">
