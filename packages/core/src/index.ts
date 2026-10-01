@@ -1026,7 +1026,7 @@ export type { ParseSeedFindingsOptions } from "./seed-findings.js";
 
 // Agent system
 export { runAgentLoop, runNativeAgentLoop, ToolExecutor, getToolsForRole, TOOL_DEFINITIONS, features, estimateCost } from "./agent/index.js";
-export { McpHost, parseMcpConfig, connectMcpServers, type McpStdioServerConfig } from "./agent/mcp-host.js";
+export { McpHost, parseMcpConfig, connectMcpServers, type McpStdioServerConfig, type McpHttpServerConfig, type McpServerConfig } from "./agent/mcp-host.js";
 export { ToolHealthTracker } from "./agent/index.js";
 export type {
   ToolHealthCategory,

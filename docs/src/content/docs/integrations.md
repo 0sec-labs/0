@@ -9,7 +9,7 @@ Choose the integration direction first:
 |---|---|---|
 | Let a coding agent run a complete review or scan | [Direct CLI](#coding-agent-workflows) | The agent launches the local CLI with your configured model runtime |
 | Give an external agent selected live-target tools | [MCP server](#mcp-server) | The client owns reasoning; a local stdio process executes the exposed tools |
-| Give 0 tools from another MCP server | [MCP client configuration](#connect-external-mcp-tools-to-0) | 0 launches operator-configured stdio servers |
+| Give 0 tools from another MCP server | [MCP client configuration](#connect-external-mcp-tools-to-0) | 0 connects operator-configured local or remote servers |
 | Install a third-party tool | [Hackstore plugins](#cli-managed-operator-plugins) | Enabled JavaScript runs as a local child process, not in a sandbox |
 | Let the model author executable tools | [Self-extension](#model-authored-executable-plugins-self-extension) | Generated TypeScript runs in disposable Docker or smolvm guests |
 
@@ -185,7 +185,7 @@ systems you do not own or have permission to assess.
 ## Connect external MCP tools to 0
 
 This is the reverse direction: `0 console` and the OpenTUI connect external
-stdio servers from the **JSON array** in `ZERO_MCP`. It is not a
+stdio or Streamable HTTP servers from the **JSON array** in `ZERO_MCP`. It is not a
 `{"mcpServers": ...}` object or a config-file path:
 
 ```bash
@@ -194,7 +194,7 @@ env 'ZERO_MCP=[{"id":"workspace","command":"node","args":["/absolute/path/to/mcp
 ```
 
 Replace the command with an installed MCP server you trust; the same environment
-works with `0 tui`. Each entry accepts `id`, `command`, and optional `args`,
+works with `0 tui`. Local entries accept `id`, `command`, and optional `args`,
 `env` (string values), and `cwd`. For a Python stdio server, use `command:
 "python3"` and its script path in `args`; no Python-specific 0 plugin API is
 required. Provision server dependencies yourself.
@@ -208,9 +208,40 @@ access its workflow needs.
 Malformed entries and failed connections are skipped rather than preventing
 console startup. If no tools appear, check the JSON array, executable path,
 server arguments and stdio handshake; do not assume an empty roster means the
-server connected successfully. The CLI configuration here supports stdio,
-not an HTTP/SSE URL. An SDK caller can supply its own transport to
-`McpHost.register`; that does not create a remote-transport CLI option.
+server connected successfully. Remote entries accept `id`, `url`, and optional
+`headers` (string values). Use Streamable HTTP, not a legacy SSE endpoint.
+HTTPS is required except on loopback; redirects are rejected so authentication
+headers are never forwarded to a different endpoint. HTTP and stdio entries can
+share the same array. External MCP tools currently attach to **local execution**
+sessions; they are not forwarded into the smolvm workbench.
+
+### Elastic
+
+Connect to Elastic Agent Builder using its Kibana MCP endpoint and an API key
+with Agent Builder application privileges. Use the encoded API key returned by
+Elastic. A custom Kibana Space uses `/s/<space>/api/agent_builder/mcp` instead.
+
+Set `KIBANA_URL` and `ELASTIC_API_KEY` through your environment or secret manager,
+then create the server configuration without putting the key in a command argument:
+
+```bash
+export ZERO_MCP="$(node --input-type=module -e '
+  const { KIBANA_URL, ELASTIC_API_KEY } = process.env;
+  if (!KIBANA_URL || !ELASTIC_API_KEY) throw new Error("Set KIBANA_URL and ELASTIC_API_KEY");
+  console.log(JSON.stringify([{
+    id: "elastic",
+    url: new URL("api/agent_builder/mcp", KIBANA_URL.replace(/\/$/, "") + "/").href,
+    headers: { Authorization: "ApiKey " + ELASTIC_API_KEY }
+  }]));
+')"
+0 console
+```
+
+The tools are discovered from your Elastic deployment; Zero does not hardcode a
+catalog or install Tracecat. API key privileges determine which data and actions
+Elastic permits. See [Elastic MCP authentication](https://www.elastic.co/docs/explore-analyze/ai-features/agent-builder/mcp-server-api-keys)
+for account setup. This is an engine configuration, not yet a connection form in
+the web Plugins page.
 
 **Sources:** [`mcp-host.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/agent/mcp-host.ts),
 [`console.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/console.ts),

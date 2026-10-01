@@ -117,7 +117,10 @@ describe("parseMcpConfig", () => {
     const cfg = parseMcpConfig(
       JSON.stringify([{ id: "s", command: "c", args: ["a", 1, "b"], env: { A: "1", B: 2 } }]),
     );
-    expect(cfg[0]!.args).toEqual(["a", "b"]);
-    expect(cfg[0]!.env).toEqual({ A: "1" });
+    const first = cfg[0]!;
+    expect("command" in first).toBe(true);
+    if (!("command" in first)) throw new Error("Expected stdio config");
+    expect(first.args).toEqual(["a", "b"]);
+    expect(first.env).toEqual({ A: "1" });
   });
 });
