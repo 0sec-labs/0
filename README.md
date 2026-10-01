@@ -51,17 +51,15 @@ browser, use **Workflows** for reusable reviews and **Plugins** to connect your 
 
 ### Chat
 
-Plan a security review in chat.
+Review code, prioritize findings, and plan fixes in chat.
 
-![Example conversation in the Zero web app](assets/screenshots/web-chat.jpg)
+![Customer API security review in the Zero web app](assets/screenshots/web-chat.jpg)
 
 ### Workflows
 
 Customize review phases, tools, and triggers.
 
-![Repository review workflow in the Zero web app](assets/screenshots/web-workflow.jpg)
-
-*Actual frontend with example content. No scan results are shown.*
+![Customer API security workflow in the Zero web app](assets/screenshots/web-workflow.jpg)
 
 </details>
 
