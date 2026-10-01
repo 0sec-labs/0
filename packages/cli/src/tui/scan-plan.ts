@@ -62,7 +62,7 @@ export function formatGoal(goal: ScanGoal): string {
 }
 
 export function formatExecutionMode(mode: ScanExecutionMode): string {
-  return mode === "sequential" ? "sequential (calmer)" : "parallel (faster)";
+  return mode === "sequential" ? "sequential (calmer)" : "parallel (overlapping)";
 }
 export function cycleNumber<T extends number>(
   items: readonly T[],
@@ -73,3 +73,21 @@ export function cycleNumber<T extends number>(
   const next = index < 0 ? 0 : (index + delta + items.length) % items.length;
   return items[next]!;
 }
+
+export function scanGoalExplanation(kind: PlannerTargetKind, goal: ScanGoal): string {
+  const scope = kind === "web" ? "live surface" : kind === "package" ? "package" : "source";
+  if (goal === "unknown-vulnerabilities") return `Investigate ${scope} behavior beyond known patterns. Unknown vulnerabilities are an objective, not a promised result.`;
+  if (goal === "known-vulnerabilities") return `Check the selected ${scope} for known vulnerability patterns and evidence that they apply.`;
+  return `Check the selected ${scope} for exposed or unsafe configuration.`;
+}
+
+export function scanDepthExplanation(goal: ScanGoal): string {
+  return goal === "unknown-vulnerabilities"
+    ? "Deep is suggested for broader investigation and reproduction; it takes more effort. Your selected limits still apply."
+    : "Default is suggested for focused checks and reproduction without the effort of a deep investigation.";
+}
+
+export const SCAN_RUNS_HELP = "Start with 1 run. Extra runs repeat the selected scope; each run can already use subagents. All runs share the same limits.";
+export const SCAN_MODE_HELP = "Sequential is suggested for lower concurrency. Parallel overlaps runs and may finish sooner, but can consume the shared budget sooner.";
+export const SCAN_TIME_HELP = "Wall-clock limit for the whole plan, including concurrent runs. Reaching it cancels work; unfinished checks remain incomplete.";
+export const SCAN_COST_HELP = "Estimated USD limit shared by every run and subagent. In-flight requests can exceed it before usage is reported. Unknown cost is not zero; this is not a guaranteed provider charge ceiling.";
