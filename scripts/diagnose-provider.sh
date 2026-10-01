@@ -7,6 +7,8 @@ git rev-parse HEAD >> "$receipt/runtime.txt"
 uname -a >> "$receipt/runtime.txt"
 cat > "$receipt/preload.mjs" <<'JS'
 import { readdirSync, readFileSync } from "node:fs";
+import childProcess from "node:child_process";
+import { syncBuiltinESMExports } from "node:module";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 const started = performance.now();
@@ -21,6 +23,22 @@ function address(input) {
   catch { return "<non-url>"; }
 }
 log("preload", { node: process.version, platform: process.platform });
+for (const method of ['execSync','execFileSync','spawnSync']) {
+  const original = childProcess[method];
+  childProcess[method] = function (...args) {
+    const at = performance.now();
+    log('child.start', {method, command:String(args[0]).slice(0,120),caller:new Error().stack?.split('\n').slice(2,7)});
+    try { return Reflect.apply(original,this,args); }
+    finally { log('child.end',{method,msTaken:Math.round(performance.now()-at)}); }
+  };
+}
+syncBuiltinESMExports();
+const originalWrite = process.stderr.write;
+process.stderr.write = function(chunk,...args) {
+  const value = String(chunk);
+  if (value.startsWith('[0]') || value.startsWith('[0:hb]')) originalWrite.call(this,'ZERO_DIAG '+JSON.stringify({event:'engine.log',ms:Math.round(performance.now()-started),line:value.trim()})+'\n');
+  return originalWrite.call(this,chunk,...args);
+};
 const originalAbort = AbortController.prototype.abort;
 AbortController.prototype.abort = function (...args) {
   log("abort", { alreadyAborted: this.signal.aborted, reason: errorInfo(args[0]), caller: new Error().stack?.split("\n").slice(2, 8) });
@@ -72,7 +90,7 @@ for arm in baseline globals native; do
   for file in index helper value; do
     printf "console.log('fixture');\n" > "$caseDir/tinyrepo/$file.js"
   done
-  args=(node)
+  args=(node --cpu-prof --cpu-prof-dir "$receipt" --cpu-prof-name "$arm.cpuprofile")
   if [ "$arm" = globals ]; then args+=(--import "$receipt/preload.mjs");
   elif [ "$arm" = native ]; then args+=(--import "$receipt/native.mjs"); fi
   args+=("$PWD/dist/0.js")
