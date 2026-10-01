@@ -443,7 +443,7 @@ enough. Keep the original database and its sibling run artifacts, then pass both
 
 The scan ID is printed at the start of the original run.
 `0 console --resume` is separate: it loads a saved chat transcript, not a scan
-checkpoint. See [console resume](/console/#resume) for its scope and model
+checkpoint. See [console resume](/console/#sessions-and-resume) for its scope and model
 limitations.
 
 ## TUI / Console

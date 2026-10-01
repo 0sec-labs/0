@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - "docs/**"
+      - "README.md"
+      - "scripts/check-docs-site.mjs"
       - "packages/cli/**"
       - "packages/shared/**"
       - "scripts/sync-cli-docs.mjs"
@@ -12,6 +14,10 @@ on:
       - "pnpm-lock.yaml"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
+
+concurrency:
+  group: docs-production
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -33,9 +39,16 @@ jobs:
       - name: Check CLI documentation freshness
         run: pnpm docs:check
       - run: pnpm --filter @0/docs build
+      - name: Check built documentation links
+        run: node scripts/check-docs-site.mjs --write-marker
       # Publish docs/dist to the Cloudflare Pages project `0-docs`
       # (custom domain docs.0.security). Uses npx to avoid wrangler-action's
       # `pnpm add` at the workspace root (ERR_PNPM_ADDING_TO_ROOT).
+      - name: Inspect public docs routing
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: e84b55c82d29ff76b789af0aea3d9121
+        run: node scripts/diagnose-docs-routing.mjs
       - name: Deploy to Cloudflare Pages
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -47,3 +60,5 @@ jobs:
         run: |
           npx --yes wrangler@4 pages project create 0-docs --production-branch=main || true
           npx --yes wrangler@4 pages deploy docs/dist --project-name=0-docs --branch=main
+      - name: Verify public documentation deployment
+        run: node scripts/check-docs-site.mjs --live

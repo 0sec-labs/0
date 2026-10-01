@@ -106,6 +106,18 @@ source read-only unless the task requires writes, and use a separate writable
 mount for the database, journal and reports.
 
 
+## Open the browser or terminal
+
+```bash
+0 web  # Browser app
+0      # Terminal chat
+```
+
+In the browser, choose a workspace folder and connect a [model provider](/api-keys/).
+Use **Chat** for investigations, **Workflows** for reusable steps and schedules,
+and **Plugins** to connect tools. See the [workflow guide](/workflow/) and
+[engine connections](/engine-connections/) for execution setup.
+
 ## Configure a provider
 
 Run `0` to open chat, then `/connect`. Choose **Use my own API key** or

@@ -1,6 +1,6 @@
 ---
-title: Workflow CLI
-description: Discover workflow templates, execute saved definitions, and inspect retained runs.
+title: Workflows
+description: Create reusable security workflows in the browser, CLI, or MCP.
 ---
 
 A template is a starter definition. A workflow is a reusable definition of steps.
@@ -8,6 +8,18 @@ A run captures one execution and its results. CLI, browser, and MCP adapters use
 the shared workflow runner; assessment steps use 0's configured model runtime.
 Configure your provider before starting assessments. The external coding agent's
 model session does not configure 0's provider.
+
+## In the browser
+
+Run `0 web` and open **Workflows**. Choose a template or describe a custom workflow
+in chat. Select a step in **Steps** to edit its instructions, tools, and limits.
+**Definition** lets you inspect and copy the saved JSON to keep a version in git
+or import it into another workspace.
+
+Set a target and use **Run** for a single execution. Use **Triggers** to configure
+manual, scheduled, or event-driven starts. An enabled schedule needs a running
+browser server and a working engine connection; closing the server stops its scheduler.
+Review execution status and results in **Runs**.
 
 ## Discover and inspect
 

@@ -78,6 +78,8 @@ export default defineConfig({
           items: [
             { label: "Install & first run", slug: "getting-started" },
             { label: "Chat & settings", slug: "console" },
+            { label: "Workflows", slug: "workflow" },
+            { label: "Engine connections", slug: "engine-connections" },
             { label: "Scan workflows", slug: "scan-workflows" },
             { label: "Scope & authorization", slug: "scope" },
             { label: "Recipes", slug: "recipes" },
@@ -108,7 +110,6 @@ export default defineConfig({
             { label: "Autonomy & workspace trust", link: "/configuration/#self-extension-and-workspace-trust" },
             { label: "Long-horizon goals", link: "/improvement-plane/#long-horizon-self-evolution" },
             { label: "Integrations & plugins", slug: "integrations" },
-            { label: "Engine connections", slug: "engine-connections" },
           ],
         },
         {
