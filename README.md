@@ -39,12 +39,7 @@ export PATH="$HOME/.0/bin:$PATH"
 0 web
 ```
 
-**One install, two interfaces:** `0 web` opens the local browser app; `0` opens
-the terminal chat. The web app is included in the CLI—no separate installation.
-Keep `0 web` running while you use the browser; press Ctrl+C to stop it.
-
-Connect a model provider and describe what you want to investigate. In the
-browser, use **Workflows** for reusable reviews and **Plugins** to connect your tools.
+**Browser:** `0 web` · **Terminal:** `0`
 
 <details>
   <summary>Preview the web app</summary>
@@ -85,16 +80,10 @@ MCP exposes target tools; it does not control browser chats or run the full CLI.
 See [integrations](https://docs.0.security/integrations/) for client configuration
 and [scope enforcement](https://docs.0.security/scope/) for target boundaries.
 
-## Finding validation
+## Plugins
 
-0 includes category-specific runtime validators: browser execution checks for
-reflected XSS, SQL injection probes, callback checks for SSRF and command
-injection, and path traversal probes. Coverage and prerequisites vary; a model's
-confidence or a reflected payload alone is not proof of exploitation.
-Scan reports can contain unverified candidates. See
-[validators and their limits](https://docs.0.security/validators/) and
-[verification results](https://docs.0.security/verification-result/) for evidence
-semantics and replay options.
+Connect GitHub, Elastic, Semgrep, Snyk, Linear, Jira, Cloudflare, Slack, and Teams.
+Add custom tools through [plugins and MCP](https://docs.0.security/integrations/).
 
 ## Guides
 
