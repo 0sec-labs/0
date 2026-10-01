@@ -25,8 +25,8 @@ export class WorkflowTriggerStore {
   constructor(dbPath?: string) {
     const path = resolveOsecDbPath(dbPath); if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
     this.#db = createShimmedDatabase(path); this.#db.pragma("busy_timeout = 5000");
-    this.#db.exec(`CREATE TABLE IF NOT EXISTS workflow_triggers (id TEXT PRIMARY KEY, workflow_id TEXT NOT NULL, enabled INTEGER NOT NULL, next_fire_at TEXT NOT NULL, active_claim TEXT, trigger_json TEXT NOT NULL);
-      CREATE INDEX IF NOT EXISTS workflow_triggers_due ON workflow_triggers(enabled, next_fire_at);`);
+    this.#db.exec("CREATE TABLE IF NOT EXISTS workflow_triggers (id TEXT PRIMARY KEY, workflow_id TEXT NOT NULL, enabled INTEGER NOT NULL, next_fire_at TEXT NOT NULL, active_claim TEXT, trigger_json TEXT NOT NULL)");
+    this.#db.exec("CREATE INDEX IF NOT EXISTS workflow_triggers_due ON workflow_triggers(enabled, next_fire_at)");
   }
   get(id: string): WorkflowTrigger | null { const row = this.#db.prepare("SELECT trigger_json FROM workflow_triggers WHERE id = ?").all(id)[0]; return row ? JSON.parse(String((row as {trigger_json:string}).trigger_json)) : null; }
   list(workflowId?: string): WorkflowTrigger[] { return this.#db.prepare("SELECT trigger_json FROM workflow_triggers WHERE (? IS NULL OR workflow_id = ?) ORDER BY next_fire_at, id LIMIT 200").all(workflowId ?? null, workflowId ?? null).map(row => JSON.parse(String((row as {trigger_json:string}).trigger_json))); }
