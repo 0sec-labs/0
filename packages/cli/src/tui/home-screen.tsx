@@ -39,6 +39,12 @@ import {
   formatGoal,
   formatTimeCap,
   cycleNumber,
+  scanGoalExplanation,
+  scanDepthExplanation,
+  SCAN_RUNS_HELP,
+  SCAN_MODE_HELP,
+  SCAN_TIME_HELP,
+  SCAN_COST_HELP,
   recommendedScanDepth,
   recommendedScanGoal,
   recommendedTimeCapMs,
@@ -120,7 +126,7 @@ export function HomeScreen({
     }
     if (!confirming) {
       setConfirming(true);
-      setNotice("Press Enter again to start.");
+      setNotice("In-flight cost may exceed the shared estimate. Enter confirms; Esc cancels.");
       return;
     }
     setNotice(null);
@@ -153,14 +159,14 @@ export function HomeScreen({
       help: "URL · path · source: · npm: · pypi: · cargo: · oci:",
       editable: true,
     },
-    { key: "goal", label: "Goal", value: formatGoal(goal) },
+    { key: "goal", label: "Goal", value: formatGoal(goal), help: scanGoalExplanation(targetKind, goal) },
     { key: "runtime", label: "Provider", value: runtime },
-    { key: "depth", label: "Depth", value: depth },
-    { key: "runs", label: "Runs", value: String(runCount) },
-    { key: "mode", label: "Mode", value: formatExecutionMode(executionMode) },
-    { key: "time", label: "Time cap", value: formatTimeCap(timeCapMs) },
-    { key: "cost", label: "Cost cap", value: `$${costCapUsd}` },
-  ], [costCapUsd, depth, executionMode, goal, inputValue, runCount, runtime, timeCapMs]);
+    { key: "depth", label: "Depth", value: depth, help: scanDepthExplanation(goal) },
+    { key: "runs", label: "Runs", value: String(runCount), help: SCAN_RUNS_HELP },
+    { key: "mode", label: "Mode", value: formatExecutionMode(executionMode), help: SCAN_MODE_HELP },
+    { key: "time", label: "Time cap", value: formatTimeCap(timeCapMs), help: SCAN_TIME_HELP },
+    { key: "cost", label: "Cost limit (estimated)", value: `$${costCapUsd}`, help: SCAN_COST_HELP },
+  ], [costCapUsd, depth, executionMode, goal, inputValue, runCount, runtime, targetKind, timeCapMs]);
 
   const adjustFocusedOption = (delta: 1 | -1) => {
     const field = fields[focusIndex]?.key;
@@ -347,7 +353,7 @@ export function HomeScreen({
     lines.push({ text: "" });
     lines.push(...wrapDialogLines(planText, inner, planTone));
     lines.push({ text: "" });
-    lines.push(...wrapDialogLines(`Suggested: ${formatGoal(recommendedGoal)} · ${recommendedDepth} · ${formatTimeCap(recommendedTime)} · $5`, inner, theme.MUTED));
+    lines.push(...wrapDialogLines(`Suggested: ${formatGoal(recommendedGoal)} · ${recommendedDepth} · ${formatTimeCap(recommendedTime)} · 1 run · sequential · $5 estimated`, inner, theme.MUTED));
     const help = fields[focusIndex]?.help;
     if (help) lines.push(...wrapDialogLines(help, inner, theme.MUTED));
     if (evolutionStatus) lines.push(...wrapDialogLines(evolutionStatus.message, inner, theme.MUTED));
