@@ -474,13 +474,13 @@ export class WebOperatorServices {
     for (const [id, error] of errors) if (!result.some((item) => item.id === id && item.kind === "plugin")) result.push({ id, kind: "plugin", name: id, version: "", description: "Installed manifest is invalid.", capabilities: [], signature: "unverified", state: "installed", loaded: false, error });
     return {
       registry: { url: publicRegistryUrl, available: fetched.ok, error: this.#registryError },
-      items: result, deferred: [...deferredPlugins],
+      items: result, deferred: [...deferredPlugins], executionProfile: consoleExecutionProfile(),
       host: { loadedPluginIds, tools: host?.toolDefinitions().map(({ name, description }) => ({ name, description })) ?? [] },
     };
   }
 
   async #pluginAction(action: string, input: unknown) {
-    if (action === "run" && consoleExecutionProfile() === "smolvm") throw new OperatorError(409, "isolated_execution_required", "Host plugin execution is refused while SmolVM is selected. Configure and run plugins inside the approved guest image.");
+    if ((action === "run" || action === "enable") && consoleExecutionProfile() === "smolvm") throw new OperatorError(409, "isolated_execution_required", "Host plugin execution is refused while SmolVM is selected. Configure and run plugins inside the approved guest image.");
     const body = object(input);
     const id = text(body.id, "plugin ID", 64);
     if (action === "install") {

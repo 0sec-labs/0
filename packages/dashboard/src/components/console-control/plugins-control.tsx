@@ -16,6 +16,7 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
   const confirmationTrigger = useRef<HTMLButtonElement | null>(null);
   const queryClient = useQueryClient();
   const inventory = useQuery({ queryKey: ["console-plugins"], queryFn: ({ signal }) => webFetchJson<PluginsResponse>("/api/console/plugins", { signal }), refetchInterval: 5000 });
+  const isolated = inventory.data?.executionProfile === "smolvm";
   const [filter, setFilter] = useState("");
   const [confirmation, setConfirmation] = useState<{ action: "install" | "enable" | "run"; item: PluginItem } | null>(null);
   const [technicalMessage, setTechnicalMessage] = useState<string | null>(null);
@@ -55,7 +56,7 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
         </div>
         <Button variant="ghost" size="icon" onClick={() => void inventory.refetch()} disabled={inventory.isFetching || mutate.isPending} aria-label="Refresh plugins and themes" title="Refresh plugins and themes"><RefreshCcw className="size-4" /></Button>
       </div>
-      <p className="text-xs text-muted-foreground">{sessionId ? "Plugin changes apply to new sessions, not this one." : "Plugin changes apply to new sessions."}</p>
+      <p className="text-xs text-muted-foreground">{isolated ? "These plugins are installed on your Mac. SmolVM chats use plugins installed and approved inside the VM image. Host approvals do not enable them in SmolVM." : sessionId ? "Plugin changes apply to new sessions, not this one." : "Plugin changes apply to new sessions."}</p>
     </div>
     {inventory.isPending && <div role="status" className="flex items-center gap-2 py-6 text-sm text-muted-foreground"><LoadingDots className="console-loading-dots-compact" />Loading plugins and themes…</div>}
     {inventory.error && <div className="space-y-3"><Feedback error={inventory.error} /><Button variant="outline" disabled={inventory.isFetching} onClick={() => void inventory.refetch()}>Try again</Button></div>}
@@ -71,18 +72,18 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
             <div className="flex items-start gap-3">
               <Icon aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
               <div className="min-w-0 flex-1"><h3 className="text-sm font-medium">{item.name}</h3><p className="mt-1 text-xs text-muted-foreground">{item.kind === "theme" ? "Theme" : "Plugin"} · {item.version}</p></div>
-              <Badge variant="outline" className="shrink-0 text-xs">{item.state}</Badge>
+              <Badge variant="outline" className="shrink-0 text-xs">{isolated && item.kind === "plugin" && item.state === "enabled" ? "Host approval saved" : item.state}</Badge>
             </div>
             {description && <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>}
             {item.error && <Feedback error={item.error} />}
             {item.state === "available" && <SubmitButton pending={mutate.isPending} disabled={!inventory.data.registry.available || Boolean(item.error)} onClick={event => { confirmationTrigger.current = event.currentTarget; requestConfirmation("install", item); }}>Install {item.kind}</SubmitButton>}
-            {item.kind === "plugin" && item.state !== "available" && <div className="flex items-center justify-between gap-4 border-t border-foreground/5 pt-4"><div><p className="text-sm font-medium">Enable plugin</p><p className="mt-1 text-xs text-muted-foreground">{item.state === "enabled" ? inventory.data.deferred.includes(item.id) ? "Loading when the current response finishes." : item.loaded ? "Ready for new sessions." : "Enabled for new sessions." : "Off for new sessions."}</p></div><Switch onClick={event => { confirmationTrigger.current = event.currentTarget; }} aria-label={`Enable ${item.name}`} checked={item.state === "enabled"} disabled={mutate.isPending || (Boolean(item.error) && item.state !== "enabled")} onCheckedChange={checked => checked ? requestConfirmation("enable", item) : mutate.mutate({ action: "disable", target: item })} /></div>}
+            {item.kind === "plugin" && item.state !== "available" && <div className="flex items-center justify-between gap-4 border-t border-foreground/5 pt-4"><div><p className="text-sm font-medium">{isolated ? "Host approval" : "Enable plugin"}</p><p className="mt-1 text-xs text-muted-foreground">{isolated ? "Unavailable in SmolVM. Configure this plugin inside the VM image." : item.state === "enabled" ? inventory.data.deferred.includes(item.id) ? "Loading when the current response finishes." : item.loaded ? "Ready for new sessions." : "Enabled for new sessions." : "Off for new sessions."}</p></div><Switch onClick={event => { confirmationTrigger.current = event.currentTarget; }} aria-label={isolated ? `Host approval for ${item.name}` : `Enable ${item.name}`} checked={item.state === "enabled"} disabled={mutate.isPending || (isolated && item.state !== "enabled") || (Boolean(item.error) && item.state !== "enabled")} onCheckedChange={checked => checked ? requestConfirmation("enable", item) : mutate.mutate({ action: "disable", target: item })} /></div>}
             {item.kind === "theme" && item.state === "installed" && <SubmitButton pending={mutate.isPending} onClick={() => mutate.mutate({ action: "theme", target: item })}>Use theme</SubmitButton>}
             {item.kind === "theme" && item.state === "active" && <p role="status" className="text-sm text-muted-foreground">In use. Change it in Settings.</p>}
             {feedbackForItem && <Feedback error={mutate.error} message={message} />}
             <ControlDisclosure title={item.kind === "theme" ? "Theme details" : "Permissions and details"}><div className="mt-4 space-y-4"><Facts entries={[["ID", item.id], ["Version", item.version], ["Signature", item.signature], ["Status", item.state], ["Loaded in current host", item.loaded ? "Yes" : "No"]]} />
               {item.kind === "plugin" && <div><p className="text-xs text-muted-foreground">Permissions</p>{item.capabilities.length ? <ul className="mt-2 list-inside list-disc space-y-1 text-sm break-words">{item.capabilities.map(capability => <li key={capability}>{capability}</li>)}</ul> : <p className="mt-1 text-sm">No extra permissions.</p>}</div>}
-              {item.kind === "plugin" && item.state === "enabled" && !item.loaded && <div className="space-y-2"><p className="text-xs leading-5 text-muted-foreground">Enabling saves your preference. Loading executes plugin code in the local host; an active response may defer it.</p><Button variant="secondary" disabled={mutate.isPending} onClick={event => { confirmationTrigger.current = event.currentTarget; requestConfirmation("run", item); }}>Load plugin</Button></div>}
+              {item.kind === "plugin" && item.state === "enabled" && !item.loaded && !isolated && <div className="space-y-2"><p className="text-xs leading-5 text-muted-foreground">Enabling saves your preference. Loading executes plugin code in the local host; an active response may defer it.</p><Button variant="secondary" disabled={mutate.isPending} onClick={event => { confirmationTrigger.current = event.currentTarget; requestConfirmation("run", item); }}>Load plugin</Button></div>}
               {feedbackForItem && technicalMessage && <p className="text-xs leading-5 text-muted-foreground">{technicalMessage}</p>}
             </div></ControlDisclosure>
           </section>;

@@ -30,7 +30,7 @@ export interface SettingDefinition { key: string; label: string; description: st
 export interface SettingsResponse { settings: Record<string, unknown>; sources: Record<string, "default" | "global" | "project">; definitions: SettingDefinition[]; defaultWriteLayer: "global" | "project"; persisted?: boolean }
 export interface ThemesResponse { active: string; themes: { name: string; label: string; description: string; mode: string; palette: Record<string, string> }[] }
 export interface PluginItem { id: string; kind: "plugin" | "theme"; name: string; version: string; description: string; capabilities: string[]; signature: "verified" | "unverified"; state: "available" | "installed" | "enabled" | "active"; loaded: boolean; error: string | null }
-export interface PluginsResponse { registry: { url: string; available: boolean; error: string | null }; items: PluginItem[]; deferred: string[]; host: { loadedPluginIds: string[]; tools: { name: string; description: string }[] } }
+export interface PluginsResponse { executionProfile: "local" | "smolvm"; registry: { url: string; available: boolean; error: string | null }; items: PluginItem[]; deferred: string[]; host: { loadedPluginIds: string[]; tools: { name: string; description: string }[] } }
 export interface PluginResult { ok: boolean; message: string; state?: string; capabilities?: string[]; deferred?: boolean }
 export interface CheckItem { id: string; name: string; prompt: string; revision: number; enabled: boolean; approvedRevision: number | null }
 export interface ChecksResponse { project: string; checks: CheckItem[] }

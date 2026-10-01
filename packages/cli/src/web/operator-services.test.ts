@@ -106,9 +106,9 @@ describe("web model connection inspection", () => {
 
 
 describe("web isolated plugin boundaries", () => {
-  it("rejects host plugin runs before reading installed plugin bytes while VM execution is selected", async () => {
+  it.each(["run", "enable"])("rejects host plugin %s before reading installed plugin bytes while VM execution is selected", async (action) => {
     execution.profile = "smolvm";
-    const result = await new WebOperatorServices().handle("/api/console/plugins/run", "POST", { id: "not-installed-fixture" }, new URLSearchParams());
+    const result = await new WebOperatorServices().handle(`/api/console/plugins/${action}`, "POST", { id: "not-installed-fixture" }, new URLSearchParams());
     expect(result).toMatchObject({ status: 409, data: { code: "isolated_execution_required" } });
     expect(execution.flush).not.toHaveBeenCalled();
   });
