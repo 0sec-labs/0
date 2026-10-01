@@ -87,6 +87,17 @@ MCP exposes target tools; it does not control browser chats or run the full CLI.
 See [integrations](https://docs.0.security/integrations/) for client configuration
 and [scope enforcement](https://docs.0.security/scope/) for target boundaries.
 
+## Finding validation
+
+0 includes category-specific runtime validators: browser execution checks for
+reflected XSS, SQL injection probes, callback checks for SSRF and command
+injection, and path traversal probes. Coverage and prerequisites vary; a model's
+confidence or a reflected payload alone is not proof of exploitation.
+Scan reports can contain unverified candidates. See
+[validators and their limits](https://docs.0.security/validators/) and
+[verification results](https://docs.0.security/verification-result/) for evidence
+semantics and replay options.
+
 ## Guides
 
 - [Installation and quick start](https://docs.0.security/getting-started/)

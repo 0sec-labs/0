@@ -375,8 +375,27 @@ export async function verifyReflectedXss(
       const page = await browser.newPage();
       let dialogMessage = "";
       page.on("dialog", async (dialog) => {
-        dialogMessage = dialog.message();
+        if (dialog.type() === "alert" && dialog.message() === token) {
+          dialogMessage = token;
+        }
         await dialog.dismiss().catch(() => {});
+      });
+      // A navigation defaults to GET. Replay the original probe's method and
+      // form body on the first main-frame request so POST-only sinks are
+      // actually exercised. Keep the real response headers (including CSP).
+      let replayed = false;
+      await page.route((candidate) => candidate.href === new URL(url).href, async (route) => {
+        const request = route.request();
+        if (!replayed && request.isNavigationRequest() && request.frame() === page.mainFrame()) {
+          replayed = true;
+          await route.continue({
+            method: init.method,
+            headers: { ...request.headers(), ...Object.fromEntries(new Headers(init.headers)) },
+            ...(typeof init.body === "string" ? { postData: init.body } : {}),
+          });
+        } else {
+          await route.continue();
+        }
       });
       await page.goto(url, { timeout: 8000, waitUntil: "domcontentloaded" });
       // allow inline scripts to run
@@ -384,7 +403,7 @@ export async function verifyReflectedXss(
       await browser.close();
       browser = null;
 
-      if (dialogMessage.includes(token)) {
+      if (dialogMessage === token) {
         return verified(
           `playwright dialog captured token=${token} message="${dialogMessage}"`
         );
@@ -632,13 +651,13 @@ export async function verifyIdor(
   }
 
   if (hits.length > 0) {
-    // IDOR is genuinely hard to auto-verify without knowing the auth model.
-    // Cap confidence below 1.0 to reflect that.
+    // Different public resources legitimately return different bodies. Keep
+    // the lead, but require an identity/ownership boundary before confirmation.
     return {
-      verified: true,
+      verified: false,
       confidence: 0.7,
       evidence: `distinct responses on id mutation: ${hits.join(", ")}`,
-      reason: "",
+      reason: "distinct ID responses are a candidate only; identity and resource ownership were not established",
     };
   }
   return notVerifiable("no distinct 200 response on id mutation");
