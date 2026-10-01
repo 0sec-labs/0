@@ -25,6 +25,10 @@
   <a href="#status-and-safety"><img src="https://img.shields.io/badge/status-research%20preview-FD802E?style=flat-square&labelColor=1A1815" alt="Status: research preview"></a>
 </p>
 
+<p align="center">
+  <img src="assets/zero-manifesto-movement.webp" alt="Zero manifesto movement" width="100%">
+</p>
+
 ## Get started
 
 Install on Apple Silicon macOS or x64/ARM64 Linux:
