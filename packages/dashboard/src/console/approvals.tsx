@@ -188,7 +188,8 @@ function DecisionForm({ decision, busy, onResolve }: ApprovalPanelProps) {
   const questions = decision.questions ?? [];
   const disabled = busy || Boolean(decision.resolved);
   const context = decision.context;
-  const resolvedLabel = decision.approved === undefined ? "Closed" : decision.approved ? "Approved" : "Declined";
+  const isQuestion = decision.kind === "operator-question";
+  const resolvedLabel = decision.approved === undefined ? "Closed" : decision.approved ? isQuestion ? "Answered" : "Approved" : "Declined";
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -218,18 +219,19 @@ function DecisionForm({ decision, busy, onResolve }: ApprovalPanelProps) {
     <form
       noValidate
       autoComplete="off"
-      aria-labelledby={`${id}-title`}
+      aria-label={isQuestion && decision.resolved ? decision.title : undefined}
+      aria-labelledby={isQuestion && decision.resolved ? undefined : `${id}-title`}
       aria-busy={busy && !decision.resolved}
       onSubmit={handleSubmit}
       className="space-y-4 rounded-2xl bg-card p-5 text-card-foreground"
     >
-      <div className="flex flex-wrap items-start gap-2">
+      {!(isQuestion && decision.resolved) && <div className="flex flex-wrap items-start gap-2">
         <Icon className="mt-0.5 size-4 shrink-0 text-primary-text" aria-hidden="true" />
         <h3 id={`${id}-title`} className="min-w-0 flex-1 break-words text-sm font-semibold">{decision.title}</h3>
         {decision.resolved && <Badge variant={decision.approved === undefined ? "neutral" : decision.approved ? "success" : "danger"}>{resolvedLabel}</Badge>}
-      </div>
-      <p className="text-sm text-muted-foreground">{presentation.explanation}</p>
-      {decision.kind !== "tool" && decision.detail && <p className="whitespace-pre-wrap break-words text-sm">{decision.detail}</p>}
+      </div>}
+      {!isQuestion && <p className="text-sm text-muted-foreground">{presentation.explanation}</p>}
+      {!isQuestion && decision.kind !== "tool" && decision.detail && <p className="whitespace-pre-wrap break-words text-sm">{decision.detail}</p>}
       {decision.reason && <DetailBlock label="Why" value={decision.reason} />}
       {decision.call && (
         <div className="space-y-2 rounded-xl bg-muted/20 p-3">
@@ -240,7 +242,7 @@ function DecisionForm({ decision, busy, onResolve }: ApprovalPanelProps) {
       {decision.requestedUrls && decision.requestedUrls.length > 0 && <DetailBlock label="Targets to allow" value={decision.requestedUrls} />}
       {decision.unresolvedTargets && decision.unresolvedTargets.length > 0 && <DetailBlock label="Unknown destinations" value={decision.unresolvedTargets} />}
       {decision.requestedPath && <DetailBlock label="Folder to allow" value={decision.requestedPath} />}
-      {(context || decision.currentScope !== undefined || decision.currentScopePath !== undefined) && (
+      {decision.kind !== "operator-question" && (context || decision.currentScope !== undefined || decision.currentScopePath !== undefined) && (
         <details aria-label="Current permissions" className="space-y-3 rounded-xl bg-muted/20 p-3">
           <summary className="cursor-pointer text-sm text-muted-foreground">Current permissions</summary>
           {context && (
