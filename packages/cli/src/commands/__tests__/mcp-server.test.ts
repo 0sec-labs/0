@@ -269,6 +269,7 @@ const workflowRuntime = {
   listTemplates: vi.fn().mockReturnValue([{ id: "repository-review", revision: 1 }]),
   getTemplate: vi.fn().mockReturnValue({ id: "repository-review", revision: 1 }),
   listWorkflows: vi.fn().mockReturnValue([]),
+  listRuns: vi.fn().mockReturnValue([]),
   getWorkflow: vi.fn(),
   saveWorkflow: vi.fn(),
   startRun: vi.fn().mockResolvedValue({ id: "run-1", status: "queued" }),
@@ -277,6 +278,8 @@ const workflowRuntime = {
   cancelRun: vi.fn().mockReturnValue({ id: "run-1", status: "cancelled" }),
   dispose: vi.fn().mockResolvedValue(undefined),
 };
+const createRemoteWorkflowRuntimeMock = vi.fn().mockResolvedValue(workflowRuntime);
+vi.mock("../../remote-workflow-runtime.js", () => ({ createRemoteWorkflowRuntime: createRemoteWorkflowRuntimeMock }));
 const createWorkflowRuntimeMock = vi.fn().mockResolvedValue(workflowRuntime);
 vi.mock("../../workflow-runtime.js", () => ({ createCliWorkflowRuntime: createWorkflowRuntimeMock }));
 
@@ -347,6 +350,7 @@ let exitSpy: { mockRestore: () => void };
 beforeEach(() => {
   transportInstances.length = 0;
   createWorkflowRuntimeMock.mockClear();
+  createRemoteWorkflowRuntimeMock.mockClear();
   for (const fn of Object.values(workflowRuntime)) fn.mockClear();
   loadScopeMock.mockReset();
   extractAttributionFromScopeJsonMock.mockReset().mockReturnValue(undefined);
@@ -1014,7 +1018,7 @@ describe("MCP workflow tools", () => {
   it("exposes lifecycle tools without constructing a live executor or database", async () => {
     expect(await runCli(["mcp-server", "--workflows", "--workspace", "/authorized/repo"])).toBeUndefined();
     expect(registerToolCalls.map(call => call.name)).toEqual([
-      "list_templates", "get_template", "list_workflows", "get_workflow", "save_workflow",
+      "list_templates", "get_template", "list_runs", "list_workflows", "get_workflow", "save_workflow",
       "start_run", "get_run", "get_run_results", "cancel_run",
     ]);
     expect(toolExecutorCtorCalls).toHaveLength(0);
@@ -1115,5 +1119,26 @@ describe("MCP typed workflow inputs and apply capability", () => {
       expect(await start.handler({ templateId: "review", target: "/repo", inputs })).toMatchObject({ isError: true });
     }
     expect(workflowRuntime.startRun).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("remote workflow MCP connections", () => {
+  it("selects the configured backend without local scope, storage or provider setup", async () => {
+    expect(await runCli(["mcp-server", "--workflows", "--backend", "engine-one", "--backends-config", "/operator/backends.json"])).toBeUndefined();
+    expect(createRemoteWorkflowRuntimeMock).toHaveBeenCalledWith({ backendId: "engine-one", configPath: "/operator/backends.json" });
+    expect(createWorkflowRuntimeMock).not.toHaveBeenCalled();
+    expect(loadScopeMock).not.toHaveBeenCalled();
+    expect(dbCtorCalls).toHaveLength(0);
+    const start = registerToolCalls.find(call => call.name === "start_run")!;
+    await start.handler({ templateId: "repository-review", target: "D:\\engine\\repo", inputs: { findingPath: "D:\\engine\\finding.json" } });
+    expect(workflowRuntime.startRun).toHaveBeenCalledWith({ templateId: "repository-review", target: "D:\\engine\\repo", inputs: { findingPath: "D:\\engine\\finding.json" } });
+  });
+  it("rejects mixed local tools and local authority flags rather than falling back", async () => {
+    for (const args of [["--tools", "start_run,http_request"], ["--workflows", "--workspace", "/repo"], ["--workflows", "--scope", "/scope.json"]]) {
+      expect(await runCli(["mcp-server", "--backend", "engine-one", ...args])).toBeInstanceOf(Error);
+      expect(createRemoteWorkflowRuntimeMock).not.toHaveBeenCalled();
+      expect(createWorkflowRuntimeMock).not.toHaveBeenCalled();
+    }
   });
 });

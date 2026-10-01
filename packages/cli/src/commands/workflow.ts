@@ -8,6 +8,7 @@ export interface WorkflowCliRuntime {
   listTemplates(): unknown | Promise<unknown>;
   getTemplate(id: string): unknown | Promise<unknown>;
   listWorkflows(): unknown | Promise<unknown>;
+  listRuns?(): unknown | Promise<unknown>;
   getWorkflow(id: string): unknown | Promise<unknown>;
   startRun(input: { templateId?: string; workflowId?: string; revision?: number; target: string; model?: string; timeCapMs?: number; costCapUsd?: number; inputs?: Record<string, unknown>; allowApply?: boolean }): SecurityWorkflowExecution | Promise<SecurityWorkflowExecution>;
   getRun(id: string): SecurityWorkflowExecution | null | Promise<SecurityWorkflowExecution | null>;
@@ -15,14 +16,16 @@ export interface WorkflowCliRuntime {
   cancelRun(id: string): unknown | Promise<unknown>;
   dispose(): void | Promise<void>;
 }
-interface WorkflowOptions { template?: string; target?: string; revision?: string; workspace?: string; scope?: string; model?: string; timeCap?: string; costCap?: string; dbPath?: string; format?: string; templates?: boolean; inputs?: string; allowApply?: boolean }
+interface WorkflowOptions { backend?: string; backendsConfig?: string; template?: string; target?: string; revision?: string; workspace?: string; scope?: string; model?: string; timeCap?: string; costCap?: string; dbPath?: string; format?: string; templates?: boolean; inputs?: string; allowApply?: boolean }
 export interface WorkflowCommandDeps {
+  createRemoteRuntime?(options: { backendId: string; configPath?: string }): Promise<WorkflowCliRuntime>;
   createRuntime(options: { ownerId: string; workspace?: string; scopePath?: string; dbPath?: string; model?: string; timeCapMs?: number; costCapUsd?: number; allowApply?: boolean }): Promise<WorkflowCliRuntime>;
   out(text: string): void;
   err(text: string): void;
   sleep(): Promise<void>;
 }
 const defaults: WorkflowCommandDeps = {
+  createRemoteRuntime: async options => (await import("../remote-workflow-runtime.js")).createRemoteWorkflowRuntime(options),
   createRuntime: async options => {
     const { createCliWorkflowRuntime } = await import("../workflow-runtime.js");
     return await createCliWorkflowRuntime(options);
@@ -48,7 +51,14 @@ async function withRuntime(options: WorkflowOptions, deps: WorkflowCommandDeps, 
     if (options.format !== undefined && !["json", "text"].includes(options.format)) throw new Error("Format must be json or text.");
     const timeCapMs = positive(options.timeCap, "Time cap", true);
     const costCapUsd = positive(options.costCap, "Cost cap");
-    runtime = await deps.createRuntime({ ownerId: "cli", workspace: options.workspace, scopePath: options.scope, dbPath: options.dbPath, model: options.model, timeCapMs, costCapUsd, ...(options.allowApply ? { allowApply: true } : {}) });
+    if (options.backendsConfig && !options.backend) throw new Error("--backends-config requires an explicit --backend.");
+    if (options.backend) {
+      if (options.workspace || options.scope || options.dbPath || options.model) throw new Error("Remote workflow execution uses the backend's workspace, scope, storage and model connection; omit local execution flags.");
+      if (!deps.createRemoteRuntime) throw new Error("Remote workflow transport is unavailable.");
+      runtime = await deps.createRemoteRuntime({ backendId: options.backend, configPath: options.backendsConfig });
+    } else {
+      runtime = await deps.createRuntime({ ownerId: "cli", workspace: options.workspace, scopePath: options.scope, dbPath: options.dbPath, model: options.model, timeCapMs, costCapUsd, ...(options.allowApply ? { allowApply: true } : {}) });
+    }
     await action(runtime);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -89,11 +99,18 @@ export async function runWorkflowCommand(id: string | undefined, options: Workfl
     }
     if (!target?.trim()) throw new Error("Supply --target or a saved workflow with a default target.");
     const inputs = options.inputs ? await readWorkflowInputs(options.inputs) : undefined;
-    const execution = await runtime.startRun({ templateId: options.template, workflowId: id, revision, target, model: options.model, timeCapMs: positive(options.timeCap, "Time cap", true), costCapUsd: positive(options.costCap, "Cost cap"), ...(inputs ? { inputs } : {}), ...(options.allowApply ? { allowApply: true } : {}) });
-    const cancel = () => { void Promise.resolve(runtime.cancelRun(execution.id)).catch(error => deps.err(String(error))); };
+    let runId: string | undefined;
+    let cancellationRequested = false;
+    const cancel = () => {
+      cancellationRequested = true;
+      if (runId) void Promise.resolve(runtime.cancelRun(runId)).catch(error => deps.err(String(error)));
+    };
     process.once("SIGINT", cancel);
     process.once("SIGTERM", cancel);
     try {
+      const execution = await runtime.startRun({ templateId: options.template, workflowId: id, revision, target, model: options.model, timeCapMs: positive(options.timeCap, "Time cap", true), costCapUsd: positive(options.costCap, "Cost cap"), ...(inputs ? { inputs } : {}), ...(options.allowApply ? { allowApply: true } : {}) });
+      runId = execution.id;
+      if (cancellationRequested) await runtime.cancelRun(runId);
       let current = execution;
       while (current.status === "queued" || current.status === "running") {
         await deps.sleep();
@@ -134,7 +151,7 @@ async function allRunResults(runtime: WorkflowCliRuntime, id: string): Promise<u
   return result;
 }
 function inspectOptions(command: Command): Command {
-  return command.option("--db-path <path>", "Control database with saved workflows and run history").option("--format <format>", "Output format: json or text", "json");
+  return command.option("--backend <id>", "Use a registered remote engine; targets and inputs are interpreted there").option("--backends-config <path>", "Operator backend connection registry JSON file").option("--db-path <path>", "Control database with saved workflows and run history").option("--format <format>", "Output format: json or text", "json");
 }
 export function registerWorkflowCommand(program: Command, deps: WorkflowCommandDeps = defaults): void {
   const workflow = program.command("workflow").description("Discover templates, inspect saved workflows, and execute a workflow");
@@ -158,6 +175,13 @@ export function registerWorkflowCommand(program: Command, deps: WorkflowCommandD
   const runs = program.command("runs").description("Inspect workflow run history");
   inspectOptions(runs.command("list").description("List retained workflow runs"))
     .action(async (options: WorkflowOptions) => {
+      if (options.backend || options.backendsConfig) {
+        await withRuntime(options, deps, async runtime => {
+          if (!runtime.listRuns) throw new Error("The selected backend does not support run listing.");
+          output(deps, await runtime.listRuns(), options.format);
+        });
+        return;
+      }
       let store: SecurityWorkflowStore | undefined;
       try { store = new SecurityWorkflowStore(options.dbPath); store.interruptActiveExecutions(); output(deps, store.listExecutions(), options.format); }
       catch (error) { deps.err(error instanceof Error ? error.message : String(error)); process.exitCode = 2; }

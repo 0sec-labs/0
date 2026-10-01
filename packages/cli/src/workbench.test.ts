@@ -41,6 +41,15 @@ describe("workbench authority boundary", () => {
     expect(persist).not.toHaveBeenCalled();
   });
 
+  it("routes explicit remote workflow clients without changing local sandbox settings or reading local provider credentials", async () => {
+    const settingsRead = vi.spyOn(settings, "loadGlobalSettings");
+    const runtime = vi.spyOn(core, "createConsoleRuntime");
+    const persist = vi.spyOn(settings, "saveSettings");
+    await expect(launchConfiguredWorkbench(["workflow", "list", "--backend", "engine-one"])).resolves.toBeUndefined();
+    await expect(launchConfiguredWorkbench(["mcp-server", "--workflows", "--backend", "engine-one"])).resolves.toBeUndefined();
+    expect(settingsRead).not.toHaveBeenCalled(); expect(runtime).not.toHaveBeenCalled(); expect(persist).not.toHaveBeenCalled();
+  });
+
   it("rejects unsupported credential forwarding instead of exposing host secrets", () => {
     const choices = { schemaVersion: 1, image: "/approved.tar", imageDigest: "sha256:" + "a".repeat(64), stateRoot: "/private/workbench", providers: ["chatgpt-codex"], github: false, cpus: 2, memoryMb: 2048, storageGb: 4 };
     expect(normalizeWorkbenchConfig(choices).providers).toEqual(["chatgpt-codex"]);

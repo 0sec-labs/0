@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, GitBranch, RefreshCcw } from "lucide-react";
-import { webFetchJson } from "@/api";
+import { useBackendApi } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ControlCard, Feedback, QueryState, SubmitButton, TextField, jsonBody } from "./control-ui";
@@ -23,6 +23,7 @@ export interface GitHubPublicationAccount {
 interface GitHubAccountResponse { github: GitHubPublicationAccount }
 
 export function useGitHubPublicationAccount() {
+  const { webFetchJson } = useBackendApi();
   return useQuery({
     queryKey: ["console-github-publication"],
     queryFn: async ({ signal }) => (await webFetchJson<GitHubAccountResponse>("/api/console/github", { signal })).github,
@@ -31,6 +32,7 @@ export function useGitHubPublicationAccount() {
 }
 
 export function GitHubPublicationControl() {
+  const { webFetchJson } = useBackendApi();
   const queryClient = useQueryClient();
   const account = useGitHubPublicationAccount();
   const [token, setToken] = useState("");

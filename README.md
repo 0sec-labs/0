@@ -79,6 +79,10 @@ The agent calls `list_templates`, `start_run`, `get_run`, and
 its runs; disconnect cancels active work. For live workflows, supply `--scope`
 and enable the scope plugin in the host project with `0 plugin enable scope`.
 
+For a registered remote engine, use `0 mcp-server --workflows --backend production`.
+The engine owns execution, scope and model configuration; disconnecting the
+client leaves remote runs active. Local execution flags are unavailable in this mode.
+
 For individual live-target tools, select them explicitly:
 
 ```bash

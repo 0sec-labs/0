@@ -1,7 +1,7 @@
 import { ListOrdered, X } from "lucide-react";
 import { Popover } from "@cloudflare/kumo/components/popover";
 import type { ConsoleSessionSnapshot } from "@0/shared";
-import { removeConsoleQueuedMessage } from "@/api";
+import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
 import type { ConsoleWorkspace } from "./use-console-workspace";
 
@@ -9,6 +9,7 @@ export function QueuedMessages({ workspace, snapshot }: {
   workspace: ConsoleWorkspace;
   snapshot: ConsoleSessionSnapshot;
 }) {
+  const { removeConsoleQueuedMessage } = useBackendApi();
   const count = snapshot.queuedMessages.length;
   const remove = (id?: string) => void workspace.perform(
     () => removeConsoleQueuedMessage(snapshot.session.id, id),

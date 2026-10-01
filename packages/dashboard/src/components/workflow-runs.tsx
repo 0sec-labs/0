@@ -1,11 +1,12 @@
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { SecurityWorkflowExecution } from "@0/shared";
-import { webFetchJson } from "@/api";
+import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
 import { ActivityIndicator } from "@/console/loading-state";
 
 export function WorkflowRuns({ workflowId, busy, onAction }: { workflowId: string; busy: boolean; onAction: (action: () => Promise<void>) => Promise<void> }) {
+  const { webFetchJson } = useBackendApi();
   const navigate = useNavigate();
   const query = useQuery({ queryKey: ["workflow-executions", workflowId], queryFn: ({ signal }) => webFetchJson<{ executions: SecurityWorkflowExecution[] }>(`/api/console/workflow-executions?workflowId=${encodeURIComponent(workflowId)}`, { signal }), refetchInterval: 3000 });
   if (query.isError) return <p role="alert" className="text-sm text-destructive">{query.error.message}</p>;

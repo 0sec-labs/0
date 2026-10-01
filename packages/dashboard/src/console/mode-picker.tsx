@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ChevronDown, Hand, Search, ShieldCheck, Zap } from "lucide-react";
 import { DropdownMenu } from "@cloudflare/kumo/components/dropdown";
 import type { DesktopConsoleAutonomyMode } from "@0/shared";
-import { configureConsoleSession } from "@/api";
+import { useBackendApi } from "@/api";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -16,6 +16,7 @@ const MODES = {
 } satisfies Record<DesktopConsoleAutonomyMode, { label: string; description: string; icon: typeof Zap }>;
 
 export function ModePicker({ workspace, sessionId, mode, disabled }: { workspace: ConsoleWorkspace; sessionId: string; mode: DesktopConsoleAutonomyMode; disabled: boolean }) {
+  const { configureConsoleSession } = useBackendApi();
   const [pending, setPending] = useState<DesktopConsoleAutonomyMode | null>(null);
   const current = MODES[mode];
   const Icon = current.icon;

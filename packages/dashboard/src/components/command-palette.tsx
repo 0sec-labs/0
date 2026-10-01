@@ -2,7 +2,7 @@ import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { FileSearch, LayoutDashboard, MessageSquare, PlayCircle, Settings, ShieldCheck, ShieldOff, SlidersHorizontal } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getFindingFamily, updateFindingFamilyTriage } from "@/api";
+import { useBackendApi } from "@/api";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -38,6 +38,7 @@ export function CommandPalette({
   dashboard?: DashboardResponse;
   scans?: ScanRecord[];
 }) {
+  const { getFindingFamily, updateFindingFamilyTriage } = useBackendApi();
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();

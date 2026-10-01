@@ -55,7 +55,7 @@ formats differ; the examples use the common `mcpServers` shape.
 **Sources:** [`mcp-server.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/mcp-server.ts),
 [`workflow-runtime.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/workflow-runtime.ts).
 
-MCP stdio currently requires an explicitly selected **host-local** execution
+Local-target MCP stdio requires an explicitly selected **host-local** execution
 profile. The SmolVM CLI bridge supports batch commands but cannot forward the
 bidirectional stdio MCP transport; startup fails before booting a VM or reading
 provider credentials. The configured execution profile remains unchanged.
@@ -63,6 +63,18 @@ Use `0 workflow` commands for isolated execution. If the operator intends host
 execution, they can explicitly choose `0 workbench disable`; this changes the
 sandbox boundary and must not be performed automatically by a connecting agent.
 Model provider configuration remains a separate prerequisite for assessments.
+
+To connect to a registered remote engine, use
+`0 mcp-server --workflows --backend production --backends-config /absolute/path/to/backends.json`.
+This host runs only the network transport; the engine supplies its workspace,
+scope, execution profile and model connection. Do not pass local `--workspace`,
+`--scope` or `--db-path` flags. The engine must advertise `workflow-engine` support.
+Remote clients detach on disconnect; engine runs persist until completion or
+explicit cancellation. `list_runs` lists that credential's runs. Foreground
+`0 workflow run ... --backend production` explicitly cancels on SIGINT.
+Cancellation responses include `cancellationAcknowledged: true` when the
+controller accepts the request. The run remains active until executor cleanup
+finishes; only then does its status become `cancelled`.
 
 ### Workflow tools
 
@@ -86,6 +98,7 @@ source access; source workflows need `--workspace`.
 | --- | --- |
 | `list_templates` / `get_template` | Read versioned templates and compatible target types |
 | `list_workflows` / `get_workflow` | Read saved definitions and their revisions |
+| `list_runs` | Read runs visible to the selected runtime owner |
 | `save_workflow` | Validate and save a definition with optional `expectedRevision` |
 | `start_run` | Start one template or saved workflow with target inputs; return the run ID |
 | `get_run` | Read the owned run's status, step outcomes, and retained events |

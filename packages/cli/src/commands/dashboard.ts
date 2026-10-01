@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, extname, join, resolve, sep } from "node:path";
@@ -12,6 +12,7 @@ import chalk from "chalk";
 import { z } from "zod";
 import {
   createPresentationEvent,
+  BackendRequestIdSchema,
   type FindingTriageStatus,
   type PresentationEvent,
   type PresentationSource,
@@ -27,6 +28,8 @@ import { WorkflowTriggerService } from "../web/workflow-triggers.js";
 import { GitHubPublicationAuth } from "../web/github-auth.js";
 import { DASHBOARD_ASSETS, type EmbeddedDashboardAsset } from "../dashboard-assets.generated.js";
 import { findDashboardInstance } from "../web/dashboard-instance.js";
+import { BackendConnectionRegistry, backendBearerFromEnv, createBackendHandshake, handleBackendConnectionRequest } from "../web/backend-connections.js";
+import { WorkflowEngineService } from "../workflow-engine-service.js";
 
 type DashboardOptions = {
   dbPath?: string;
@@ -35,6 +38,14 @@ type DashboardOptions = {
   assetDir?: string;
   devUrl?: string;
   readyJson?: boolean;
+  backendsConfig?: string;
+  engineTokenEnv?: string;
+  engineWorkspace?: string;
+  engineScope?: string;
+  engineTarget?: string;
+  engineAllowApply?: boolean;
+  engineTimeCap?: string;
+  engineCostCap?: string;
   // Commander 12 maps `--no-open` to `opts.open = false` (not `opts.noOpen = true`).
   // See: https://github.com/tj/commander.js/blob/master/Readme.md#other-option-types-negatable-boolean-and-booleanvalue
   open?: boolean;
@@ -1149,9 +1160,11 @@ function resolveAssetPath(assetDir: string, pathname: string): string | null {
   return candidate;
 }
 
-function requireControlToken(req: IncomingMessage, res: ServerResponse, controlToken: string): boolean {
+function requireControlToken(req: IncomingMessage, res: ServerResponse, controlToken: string, engineBearer?: string): boolean {
   const provided = req.headers["x-0-control-token"];
-  if (provided !== controlToken) {
+  const matches = (a: unknown, b: string) => typeof a === "string" && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  const bearer = typeof req.headers.authorization === "string" && req.headers.authorization.startsWith("Bearer ") ? req.headers.authorization.slice(7) : undefined;
+  if (!matches(provided, controlToken) && !(engineBearer && matches(bearer, engineBearer))) {
     json(res, 403, { error: "Invalid or missing control token" });
     return false;
   }
@@ -1304,6 +1317,7 @@ async function handleApiRequest(
   pathname: string,
   dbPath: string | undefined,
   controlToken: string,
+  engineBearer?: string,
 ): Promise<boolean> {
   const { osecDB } = await import("@0/db");
 
@@ -1370,7 +1384,7 @@ async function handleApiRequest(
     // Require a per-session token on all state-changing control endpoints.
     // The token is injected into the dashboard HTML at serve time and sent
     // back as a header, preventing CSRF and cross-origin abuse.
-    if (!requireControlToken(req, res, controlToken)) {
+    if (!requireControlToken(req, res, controlToken, engineBearer)) {
       return true;
     }
 
@@ -1659,7 +1673,7 @@ async function handleApiRequest(
     const db = new osecDB(dbPath);
     try {
       if (req.method === "POST" && familyPath.action === "triage") {
-        if (!requireControlToken(req, res, controlToken)) {
+        if (!requireControlToken(req, res, controlToken, engineBearer)) {
           return true;
         }
         const body = (await readJson(req)) as { triageStatus?: string; triageNote?: string };
@@ -1673,7 +1687,7 @@ async function handleApiRequest(
       }
 
       if (req.method === "POST" && familyPath.action === "workflow") {
-        if (!requireControlToken(req, res, controlToken)) {
+        if (!requireControlToken(req, res, controlToken, engineBearer)) {
           return true;
         }
         const body = (await readJson(req)) as { workflowStatus?: string; workflowAssignee?: string };
@@ -1798,6 +1812,14 @@ export function registerDashboardCommand(program: Command): void {
     .option("--host <host>", "Loopback host to bind (127.0.0.0/8 or ::1)", "127.0.0.1")
     .option("--asset-dir <path>", "Path to built dashboard assets")
     .option("--dev-url <url>", "Loopback Vite server for authenticated frontend hot reload")
+    .option("--backends-config <path>", "Trusted backend connection registry JSON (default ~/.0/backends.json)")
+    .option("--engine-token-env <name>", "Environment variable holding the engine bearer credential (32–4096 characters)")
+    .option("--engine-workspace <path>", "Engine-owned authorized workspace for persistent workflow calls")
+    .option("--engine-scope <path>", "Engine-owned scope JSON for persistent live-target workflows")
+    .option("--engine-target <target>", "Restrict persistent workflow calls to this target")
+    .option("--engine-allow-apply", "Admit explicitly approved patch application in persistent workflow calls")
+    .option("--engine-time-cap <ms>", "Server workflow deadline ceiling (default 600000 ms)")
+    .option("--engine-cost-cap <usd>", "Server workflow estimated cost ceiling (default $5)")
     .option("--ready-json", "Emit the bound dashboard URL as machine-readable JSON")
     .option("--no-open", "Do not auto-open a browser")
     .action(async (opts: DashboardOptions) => {
@@ -1822,131 +1844,177 @@ export function registerDashboardCommand(program: Command): void {
       }
 
 
-      if (port !== 0 && !opts.dbPath && !opts.assetDir && !opts.devUrl && await findDashboardInstance(origin)) {
+      if (port !== 0 && !opts.dbPath && !opts.assetDir && !opts.devUrl && !opts.backendsConfig && !opts.engineTokenEnv && !opts.engineWorkspace && !opts.engineScope && !opts.engineTarget && !opts.engineAllowApply && !opts.engineTimeCap && !opts.engineCostCap && await findDashboardInstance(origin)) {
         console.log(chalk.gray(`  0 web is already running: ${origin}`));
         if (opts.readyJson) console.log(`ZERO_DASHBOARD_READY ${JSON.stringify({ url: origin })}`);
         if (opts.open !== false) openBrowser(`${origin}/console`);
         return;
       }
 
-      const { path: assetDir, cleanup: cleanupAssetDir } = resolveDashboardAssetDir(opts.assetDir);
+      const engineBearer = backendBearerFromEnv(opts.engineTokenEnv);
+      if (!engineBearer && [opts.engineWorkspace, opts.engineScope, opts.engineTarget, opts.engineAllowApply, opts.engineTimeCap, opts.engineCostCap].some(value => value !== undefined && value !== false)) throw new Error("Engine admission options require --engine-token-env.");
+      const timeCapMs = opts.engineTimeCap === undefined ? 600_000 : Number(opts.engineTimeCap);
+      const costCapUsd = opts.engineCostCap === undefined ? 5 : Number(opts.engineCostCap);
+      if (!Number.isInteger(timeCapMs) || timeCapMs < 1 || timeCapMs > 86_400_000 || !Number.isFinite(costCapUsd) || costCapUsd <= 0 || costCapUsd > 1000) throw new Error("Engine limits must be positive, with time at most 86400000 ms and cost at most $1000.");
       const controlToken = randomUUID();
-      const consoleGateway = new ConsoleGateway({ dbPath: opts.dbPath });
-      const operator = new WebOperatorServices({ isTurnActive: () => consoleGateway.hasActiveTurns() });
-      const workflows = new WebWorkflowService({ gateway: consoleGateway, dbPath: opts.dbPath });
-      consoleGateway.attachWorkflowLifecycle({ invoke: (sessionId, name, args, capabilities) => workflows.invokeLifecycle(sessionId, name, args, capabilities) });
-      const triggers = new WorkflowTriggerService({ dbPath: opts.dbPath, adapter: {
-        async validate(trigger) {
-          const sessionId = await consoleGateway.prepareScheduledWorkflowOwner(trigger.sessionId);
-          const context = await workflows.validateScheduledWorkflow(trigger.workflowId, { sessionId, revision: trigger.workflowRevision });
-          return { model: context.model, providerId: context.providerId, ...(context.runtime instanceof LlmApiRuntime ? { connectionIdentity: context.runtime.connectionIdentity() } : {}) };
-        },
-        async launch(trigger) {
-          const sessionId = await consoleGateway.prepareScheduledWorkflowOwner(trigger.sessionId);
-          const result = await workflows.launchScheduledWorkflow(trigger.workflowId, { sessionId, revision: trigger.workflowRevision });
-          return { executionId: result.execution.id };
-        },
-      } });
-      const github = new GitHubPublicationAuth();
+      const capabilities = ["sessions", "workflows", "schedules", "approvals", "events", "workspaces", "artifacts", "model-connections", "operator-services", "process-controls", ...(engineBearer ? ["workflow-engine"] : [])];
+      const localHandshake = createBackendHandshake(opts.dbPath, capabilities);
+      const backends = new BackendConnectionRegistry({ configPath: opts.backendsConfig, localHandshake });
+      let engine: WorkflowEngineService | undefined;
+      let startupGateway: ConsoleGateway | undefined;
+      let startupOperator: WebOperatorServices | undefined;
+      let startupWorkflows: WebWorkflowService | undefined;
+      let startupTriggers: WorkflowTriggerService | undefined;
+      let startupGitHub: GitHubPublicationAuth | undefined;
+      let startupAssetCleanup: (() => void) | undefined;
+      try {
+        engine = engineBearer ? new WorkflowEngineService({ token: engineBearer, workspace: opts.engineWorkspace, scopePath: opts.engineScope, target: opts.engineTarget, allowApply: opts.engineAllowApply, dbPath: opts.dbPath, timeCapMs, costCapUsd }) : undefined;
+        await engine?.ready;
+        const { path: assetDir, cleanup: cleanupAssetDir } = resolveDashboardAssetDir(opts.assetDir);
+        startupAssetCleanup = cleanupAssetDir;
+        const consoleGateway = startupGateway = new ConsoleGateway({ dbPath: opts.dbPath });
+        const operator = startupOperator = new WebOperatorServices({ isTurnActive: () => consoleGateway.hasActiveTurns() });
+        const workflows = startupWorkflows = new WebWorkflowService({ gateway: consoleGateway, dbPath: opts.dbPath });
+        consoleGateway.attachWorkflowLifecycle({ invoke: (sessionId, name, args, capabilities) => workflows.invokeLifecycle(sessionId, name, args, capabilities) });
+        const triggers = startupTriggers = new WorkflowTriggerService({ dbPath: opts.dbPath, adapter: {
+          async validate(trigger) {
+            const sessionId = await consoleGateway.prepareScheduledWorkflowOwner(trigger.sessionId);
+            const context = await workflows.validateScheduledWorkflow(trigger.workflowId, { sessionId, revision: trigger.workflowRevision });
+            return { model: context.model, providerId: context.providerId, ...(context.runtime instanceof LlmApiRuntime ? { connectionIdentity: context.runtime.connectionIdentity() } : {}) };
+          },
+          async launch(trigger) {
+            const sessionId = await consoleGateway.prepareScheduledWorkflowOwner(trigger.sessionId);
+            const result = await workflows.launchScheduledWorkflow(trigger.workflowId, { sessionId, revision: trigger.workflowRevision });
+            return { executionId: result.execution.id };
+          },
+        } });
+        const github = startupGitHub = new GitHubPublicationAuth();
 
-      const server = createServer(async (req, res) => {
-        try { authorizeWebRequest(req, origin); }
-        catch (error) {
-          json(res, error instanceof WebRequestError ? error.statusCode : 403, { error: error instanceof Error ? error.message : "Invalid request origin." });
-          return;
-        }
-        const requestUrl = new URL(req.url ?? "/", origin);
-
-        try {
-          if (requestUrl.pathname.startsWith("/api/")) {
-            if (!requireControlToken(req, res, controlToken)) return;
-            const consoleHandled = await handleWebConsoleApiRequest(req, res, requestUrl, consoleGateway, operator, workflows, triggers, github);
-            if (consoleHandled) return;
-            const handled = await handleApiRequest(req, res, requestUrl.pathname, opts.dbPath, controlToken);
-            if (!handled) json(res, 404, { error: "Not found" });
+        const server = createServer(async (req, res) => {
+          try { authorizeWebRequest(req, origin); }
+          catch (error) {
+            json(res, error instanceof WebRequestError ? error.statusCode : 403, { error: error instanceof Error ? error.message : "Invalid request origin." });
             return;
           }
+          let requestUrl = new URL(req.url ?? "/", origin);
+          const requestId = BackendRequestIdSchema.safeParse(req.headers["x-0-request-id"]);
+          res.setHeader("X-0-Request-ID", requestId.success ? requestId.data : randomUUID());
 
-          if (devUrl) {
-            if (req.method !== "GET" && req.method !== "HEAD") throw new WebRequestError("Asset method not allowed.", 405);
-            const assetUrl = new URL(`${requestUrl.pathname}${requestUrl.search}`, devUrl);
-            const response = await fetch(assetUrl, { redirect: "error", signal: AbortSignal.timeout(15_000) });
-            const contentType = response.headers.get("content-type") ?? "application/octet-stream";
-            const data = Buffer.from(await response.arrayBuffer());
-            if (data.length > 16_000_000) throw new WebRequestError("Development asset is too large.", 413);
-            const body = contentType.includes("text/html")
-              ? data.toString("utf8").replace("</head>", `<meta name="0-control-token" content="${controlToken}"></head>`)
-              : data;
-            res.writeHead(response.status, { "Content-Type": contentType, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY" });
-            res.end(req.method === "HEAD" ? undefined : body);
-            return;
+          try {
+            if (requestUrl.pathname.startsWith("/api/")) {
+              if (!requireControlToken(req, res, controlToken, engineBearer)) return;
+              res.setHeader("X-0-Engine-ID", localHandshake.engineId);
+              const expectedEngineId = req.headers["x-0-expected-engine-id"];
+              if (expectedEngineId !== undefined && expectedEngineId !== localHandshake.engineId) throw new WebRequestError("Request belongs to a different engine identity.", 409);
+              const backendRoute = await handleBackendConnectionRequest(req, res, requestUrl, backends);
+              if (backendRoute.handled) return;
+              if (backendRoute.localPath) requestUrl = new URL(backendRoute.localPath, origin);
+              if (requestUrl.pathname === "/api/workflow-engine/call") {
+                if (!engine) throw new WebRequestError("This engine does not admit persistent workflow calls.", 403);
+                if (req.method !== "POST") throw new WebRequestError("Method not allowed.", 405);
+                const input = z.object({ name: z.string().min(1).max(128), args: z.record(z.unknown()) }).strict().parse(await readJson(req));
+                json(res, 200, await engine.invoke(input.name, input.args));
+                return;
+              }
+              const consoleHandled = await handleWebConsoleApiRequest(req, res, requestUrl, consoleGateway, operator, workflows, triggers, github);
+              if (consoleHandled) return;
+              const handled = await handleApiRequest(req, res, requestUrl.pathname, opts.dbPath, controlToken, engineBearer);
+              if (!handled) json(res, 404, { error: "Not found" });
+              return;
+            }
+
+            if (devUrl) {
+              if (req.method !== "GET" && req.method !== "HEAD") throw new WebRequestError("Asset method not allowed.", 405);
+              const assetUrl = new URL(`${requestUrl.pathname}${requestUrl.search}`, devUrl);
+              const response = await fetch(assetUrl, { redirect: "error", signal: AbortSignal.timeout(15_000) });
+              const contentType = response.headers.get("content-type") ?? "application/octet-stream";
+              const data = Buffer.from(await response.arrayBuffer());
+              if (data.length > 16_000_000) throw new WebRequestError("Development asset is too large.", 413);
+              const body = contentType.includes("text/html")
+                ? data.toString("utf8").replace("</head>", `<meta name="0-control-token" content="${controlToken}"></head>`)
+                : data;
+              res.writeHead(response.status, { "Content-Type": contentType, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY" });
+              res.end(req.method === "HEAD" ? undefined : body);
+              return;
+            }
+            const explicitAsset = resolveAssetPath(assetDir, requestUrl.pathname);
+            if (explicitAsset) {
+              sendFile(res, explicitAsset, controlToken);
+              return;
+            }
+
+            if (extname(requestUrl.pathname)) {
+              json(res, 404, { error: "Asset not found" });
+              return;
+            }
+
+            // Inject the control token into HTML so the dashboard JS can read it.
+            sendFile(res, join(assetDir, "index.html"), controlToken);
+          } catch (err) {
+            json(res, errorStatusCode(err), { error: err instanceof Error ? err.message : "Web application request failed." });
           }
-          const explicitAsset = resolveAssetPath(assetDir, requestUrl.pathname);
-          if (explicitAsset) {
-            sendFile(res, explicitAsset, controlToken);
-            return;
-          }
-
-          if (extname(requestUrl.pathname)) {
-            json(res, 404, { error: "Asset not found" });
-            return;
-          }
-
-          // Inject the control token into HTML so the dashboard JS can read it.
-          sendFile(res, join(assetDir, "index.html"), controlToken);
-        } catch (err) {
-          json(res, errorStatusCode(err), { error: err instanceof Error ? err.message : "Web application request failed." });
-        }
-      });
-      let dashboardAssetsCleaned = false;
-      const cleanupDashboardAssets = () => {
-        if (dashboardAssetsCleaned) return;
-        dashboardAssetsCleaned = true;
-        cleanupAssetDir?.();
-      };
-      server.once("close", cleanupDashboardAssets);
-
-      let retriedPort = false;
-      server.on("error", (error: NodeJS.ErrnoException) => {
-        if (error.code === "EADDRINUSE" && port !== 0 && !retriedPort) {
-          retriedPort = true;
-          console.log(chalk.gray(`  Port ${port} is in use; opening 0 web on a free port.`));
-          server.listen(0, host, onListening);
-          return;
-        }
-        console.error(`Unable to start 0 web: ${error.message}`);
-        cleanupDashboardAssets();
-        process.exit(1);
-      });
-      const onListening = () => {
-        const address = server.address();
-        if (address && typeof address !== "string") {
-          origin = `http://${host.includes(":") ? `[${host}]` : host}:${address.port}`;
-        }
-        const url = origin;
-        console.log(chalk.red.bold("  ◆ 0") + chalk.gray(" dashboard"));
-        console.log(chalk.gray(`  ${url}`));
-        if (opts.readyJson) console.log(`ZERO_DASHBOARD_READY ${JSON.stringify({ url })}`);
-        console.log(chalk.gray("  Ctrl+C to stop"));
-        if (opts.open !== false) openBrowser(`${url}/console`);
-      };
-      server.listen(port, host, onListening);
-
-      let shuttingDown = false;
-      const shutdown = () => {
-        if (shuttingDown) return;
-        shuttingDown = true;
-        void triggers.dispose().then(() => workflows.dispose()).then(() => consoleGateway.closeAll()).finally(() => {
-          operator.dispose();
-          github.dispose();
-          server.close(() => {
-            cleanupDashboardAssets();
-            process.exit(0);
-          });
         });
-      };
-      process.once("SIGINT", shutdown);
-      process.once("SIGTERM", shutdown);
+        let dashboardAssetsCleaned = false;
+        const cleanupDashboardAssets = () => {
+          if (dashboardAssetsCleaned) return;
+          dashboardAssetsCleaned = true;
+          cleanupAssetDir?.();
+        };
+        server.once("close", cleanupDashboardAssets);
+
+        let retriedPort = false;
+        server.on("error", (error: NodeJS.ErrnoException) => {
+          if (error.code === "EADDRINUSE" && port !== 0 && !retriedPort) {
+            retriedPort = true;
+            console.log(chalk.gray(`  Port ${port} is in use; opening 0 web on a free port.`));
+            server.listen(0, host, onListening);
+            return;
+          }
+          console.error(`Unable to start 0 web: ${error.message}`);
+          cleanupDashboardAssets();
+          process.exit(1);
+        });
+        const onListening = () => {
+          const address = server.address();
+          if (address && typeof address !== "string") {
+            origin = `http://${host.includes(":") ? `[${host}]` : host}:${address.port}`;
+          }
+          const url = origin;
+          console.log(chalk.red.bold("  ◆ 0") + chalk.gray(" dashboard"));
+          console.log(chalk.gray(`  ${url}`));
+          if (opts.readyJson) console.log(`ZERO_DASHBOARD_READY ${JSON.stringify({ url })}`);
+          console.log(chalk.gray("  Ctrl+C to stop"));
+          if (opts.open !== false) openBrowser(`${url}/console`);
+        };
+        server.listen(port, host, onListening);
+
+        let shuttingDown = false;
+        const shutdown = () => {
+          if (shuttingDown) return;
+          shuttingDown = true;
+          backends.dispose();
+          void Promise.resolve(engine?.dispose()).then(() => triggers.dispose()).then(() => workflows.dispose()).then(() => consoleGateway.closeAll()).finally(() => {
+            operator.dispose();
+            github.dispose();
+            server.close(() => {
+              cleanupDashboardAssets();
+              process.exit(0);
+            });
+          });
+        };
+        process.once("SIGINT", shutdown);
+        process.once("SIGTERM", shutdown);
+      } catch (error) {
+        backends.dispose();
+        await startupTriggers?.dispose().catch(() => {});
+        await startupWorkflows?.dispose().catch(() => {});
+        await startupGateway?.closeAll().catch(() => {});
+        startupOperator?.dispose();
+        startupGitHub?.dispose();
+        await engine?.dispose().catch(() => {});
+        startupAssetCleanup?.();
+        throw error;
+      }
     });
 }
 

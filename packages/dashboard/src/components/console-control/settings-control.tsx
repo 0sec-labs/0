@@ -1,7 +1,7 @@
 import type { ConsoleExecutionStatus } from "@0/shared";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { webFetchJson } from "@/api";
+import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -10,6 +10,7 @@ import { Empty, Feedback, QueryState, SubmitButton, TextField, jsonBody } from "
 import type { SettingDefinition, SettingsResponse } from "./contracts";
 
 export function useConsoleSettings() {
+  const { webFetchJson } = useBackendApi();
   return useQuery({ queryKey: ["console-settings"], queryFn: ({ signal }) => webFetchJson<SettingsResponse>("/api/console/settings", { signal }) });
 }
 
@@ -65,6 +66,7 @@ function SettingRow({ definition, value, scope, pending, apply }: { definition: 
 }
 
 function ExecutionControl() {
+  const { webFetchJson } = useBackendApi();
   const status = useQuery({ queryKey: ["console-execution"], queryFn: ({ signal }) => webFetchJson<ConsoleExecutionStatus>("/api/console/execution", { signal }), refetchInterval: 5000 });
   const execution = status.data;
   return <section className="rounded-2xl border border-foreground/10 p-4"><h2 className="mb-3 text-sm font-medium">Execution</h2>
@@ -87,6 +89,7 @@ function ExecutionControl() {
 }
 
 export function SettingsControl({ presentationOnly = false, category = "general" }: { presentationOnly?: boolean; category?: SettingsCategory }) {
+  const { webFetchJson } = useBackendApi();
   const settings = useConsoleSettings();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState("");

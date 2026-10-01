@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCcw } from "lucide-react";
-import { webFetchJson } from "@/api";
+import { useBackendApi } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -32,6 +32,7 @@ function ReviewCheckRow({ item, busy, mutate }: { item: CheckItem; busy: boolean
 }
 
 export function ProjectControl({ sessionId, onApplied }: { sessionId?: string; onApplied?: (session: SessionSummary) => void }) {
+  const { webFetchJson } = useBackendApi();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
@@ -82,6 +83,7 @@ export function ProjectControl({ sessionId, onApplied }: { sessionId?: string; o
 interface DoctorResponse { version: string; runtime: { node: string; nodeSupported: boolean; platform: string; arch: string; engine: string; engineVersion: string; releaseChannel: string }; availability: { hasApiKey: boolean; availableRuntimes: string[]; apiRuntime: { configured: boolean; valid: boolean; providerLabel: string; error?: string } }; providers: Provider[]; prerequisites: { id: string; available: boolean; required: boolean }[]; settings: { onboardingCompleted: boolean; analyticsLevel: string; diagnosticReporting: string; executionProfile: string } }
 
 export function DoctorControl() {
+  const { webFetchJson } = useBackendApi();
   const doctor = useQuery({ queryKey: ["console-doctor"], queryFn: ({ signal }) => webFetchJson<DoctorResponse>("/api/console/doctor", { signal }) });
   return <div className="space-y-5">
     <ControlCard title="Health">
@@ -113,6 +115,7 @@ export function DoctorControl() {
 }
 
 export function ToolsControl({ sessionId }: { sessionId?: string }) {
+  const { webFetchJson } = useBackendApi();
   const [filter, setFilter] = useState("");
   const [role, setRole] = useState("");
   const tools = useQuery({ queryKey: ["console-tools"], queryFn: ({ signal }) => webFetchJson<{ roles: string[]; tools: { name: string; description: string; roles: string[] }[]; plugins: { name: string; description: string }[] }>("/api/console/tools", { signal }) });

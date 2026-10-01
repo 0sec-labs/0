@@ -1,8 +1,9 @@
+import { Link } from "react-router-dom";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, Check, Clock3, Plus, RefreshCw } from "lucide-react";
 import type { SecurityWorkflow } from "@0/shared";
-import { createConsoleSession, listConsoleSessions, webFetchJson } from "@/api";
+import { useBackendApi } from "@/api";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +31,7 @@ function displayTime(value: string, timezone?: string): string {
 }
 
 export function WorkflowTriggers({ workflow, disabled = false }: { workflow: SecurityWorkflow; disabled?: boolean }) {
+  const { createConsoleSession, listConsoleSessions, webFetchJson } = useBackendApi();
   const cache = useQueryClient();
   const [adding, setAdding] = useState(false);
   const [ownerId, setOwnerId] = useState("");
@@ -92,7 +94,7 @@ export function WorkflowTriggers({ workflow, disabled = false }: { workflow: Sec
       <div className="grid gap-4 sm:grid-cols-2"><Select label="Repeat" value={cadence} options={Object.entries(CADENCES).map(([value, label]) => ({ value, label }))} disabled={inactive || !hasTarget} onValueChange={value => setCadence(value as Cadence)} /><label className="space-y-2 text-sm"><span className="block font-medium">First run · {timezone}</span><Input aria-label="First scheduled run in local time" value={firstRun} placeholder="YYYY-MM-DD HH:mm" disabled={inactive || !hasTarget} onChange={event => setFirstRun(event.target.value)} /></label></div>
       <div className="flex flex-wrap items-end gap-3"><Select className="min-w-0 flex-1" label="Run with" value={ownerId} placeholder="Choose a conversation" disabled={inactive || sessions.isPending || !hasTarget} options={[{ value: "", label: "Choose a conversation" }, ...owners.map(session => ({ value: session.id, label: `${session.title || "Conversation"} · ${session.runtime?.model || session.autonomyMode}` }))]} onValueChange={setOwnerId} /><Button variant="ghost" size="sm" disabled={inactive || !hasTarget} onClick={createOwner}><Plus aria-hidden="true" />New conversation</Button></div>
       {sessions.isError && <p role="alert" className="text-xs text-destructive">{sessions.error.message}</p>}
-      {owner && <p className="text-xs text-muted-foreground"><a className="underline underline-offset-4" href={`/console/${encodeURIComponent(owner.id)}`}>Review conversation</a></p>}
+      {owner && <p className="text-xs text-muted-foreground"><Link className="underline underline-offset-4" to={`/console/${encodeURIComponent(owner.id)}`}>Review conversation</Link></p>}
       <div className="flex flex-wrap gap-2"><Button variant="secondary" size="sm" disabled={inactive || !hasTarget || !owner} onClick={() => saveSchedule(false)}>Save paused</Button><Button size="sm" disabled={inactive || !hasTarget || !owner} onClick={() => saveSchedule(true)}><Clock3 aria-hidden="true" />Enable schedule</Button></div>
     </section>}
     {busy && <ActivityIndicator label="Updating schedule…" />}{feedback && <p role="status" className="flex items-start gap-2 text-sm text-muted-foreground"><Check aria-hidden="true" className="mt-0.5 size-4 shrink-0" />{feedback}</p>}{error && <p role="alert" className="text-sm text-destructive">{error}</p>}

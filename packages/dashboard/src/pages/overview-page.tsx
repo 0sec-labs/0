@@ -2,7 +2,7 @@ import { useId, useMemo, useState, type ComponentType } from "react";
 import { NavLink } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, AlertCircle, Database, Play, Power, RefreshCcw, Siren, Trash2 } from "lucide-react";
-import { getRecentEvents, launchRun, pruneStoppedWorkers, recoverStaleWorkers, resetDatabase, startDaemon, stopDaemon } from "@/api";
+import { useBackendApi } from "@/api";
 import { PageHeader } from "@/components/page-header";
 import { PhaseBadge, ReviewBadge, SeverityBadge, StatusBadge } from "@/components/status-badges";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { formatDuration, formatTime } from "@/lib/format";
 import type { DashboardResponse } from "@/types";
 
 export function OverviewPage({ data }: { data: DashboardResponse }) {
+  const { getRecentEvents, launchRun, pruneStoppedWorkers, recoverStaleWorkers, resetDatabase, startDaemon, stopDaemon } = useBackendApi();
   const queryClient = useQueryClient();
   const [controlMessage, setControlMessage] = useState<string | null>(null);
   const [target, setTarget] = useState("");

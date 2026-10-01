@@ -2,7 +2,7 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "rea
 import { NavLink, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Activity, AlertCircle, Siren } from "lucide-react";
-import { getScanEvents, getScanFindings, listConsoleSessions, listSavedConsoleSessions } from "@/api";
+import { useBackendApi } from "@/api";
 import { useDashboardPanel } from "@/components/dashboard-panel";
 import { EntityList, EntityListItem } from "@/components/entity-list";
 import { EventTimeline } from "@/components/event-timeline";
@@ -28,6 +28,7 @@ type TargetRunGroup = {
 };
 
 export function ScansPage({ scans }: { scans: ScanRecord[] }) {
+  const { getScanEvents, getScanFindings, listConsoleSessions, listSavedConsoleSessions } = useBackendApi();
   const { scanId } = useParams<{ scanId?: string }>();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");

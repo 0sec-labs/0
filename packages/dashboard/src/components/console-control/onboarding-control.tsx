@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check as CheckIcon } from "lucide-react";
-import { webFetch, webFetchJson } from "@/api";
+import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -29,6 +29,7 @@ const stepDescriptions: Record<StepId, string> = {
 };
 
 export function OnboardingControl({ sessionId, returnTo }: { sessionId?: string; returnTo: string }) {
+  const { webFetch, webFetchJson } = useBackendApi();
   const navigate = useNavigate();
   const [search, setSearch] = useSearchParams();
   const queryClient = useQueryClient();
@@ -158,6 +159,7 @@ export function OnboardingControl({ sessionId, returnTo }: { sessionId?: string;
 // Setup only needs "which model". Role routing and overrides stay on the Models page; an existing
 // session's routing is carried over unchanged so applying here never resets it.
 function ModelStep({ owner, onApplied }: { owner?: string; onApplied: (session: SessionSummary) => void }) {
+  const { webFetchJson } = useBackendApi();
   const providers = useProviders();
   const queryClient = useQueryClient();
   const snapshot = useQuery({ queryKey: ["console-control-session", owner], enabled: !!owner, queryFn: async ({ signal }) => (await webFetchJson<{ snapshot: SessionSnapshot }>(`/api/console/sessions/${encodeURIComponent(owner!)}`, { signal })).snapshot });

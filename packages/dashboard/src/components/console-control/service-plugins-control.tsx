@@ -5,7 +5,7 @@ import { GithubLogo } from "@phosphor-icons/react/dist/csr/GithubLogo";
 import { MicrosoftTeamsLogo } from "@phosphor-icons/react/dist/csr/MicrosoftTeamsLogo";
 import { SlackLogo } from "@phosphor-icons/react/dist/csr/SlackLogo";
 import { ArrowUpRight, Check, Cloud, CodeXml, Database, Layers, Plug, ShieldCheck, Waypoints } from "lucide-react";
-import { webFetchJson } from "@/api";
+import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,7 @@ function ServiceIcon({ id }: { id: string }) {
 }
 
 export function ServicePluginsControl({ filter = "" }: { filter?: string }) {
+  const { webFetchJson } = useBackendApi();
   const queryClient = useQueryClient();
   const inventory = useQuery({ queryKey: ["console-service-plugins"], queryFn: ({ signal }) => webFetchJson<ServicePluginsResponse>("/api/console/service-plugins", { signal }), refetchInterval: 15_000 });
   const [tab, setTab] = useState<"all" | "connected">("all");

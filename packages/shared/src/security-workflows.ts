@@ -122,7 +122,7 @@ export function parseSecurityWorkflowInput(value: unknown): SecurityWorkflowInpu
 }
 export type SecurityWorkflowExecutionStatus = "queued" | "running" | "completed" | "failed" | "cancelled" | "interrupted";
 export interface SecurityWorkflowNodeResult { status: string; jobId?: string; scanId?: string; scanIds?: string[]; dbPaths?: string[]; error?: string }
-export interface SecurityWorkflowExecution { id: string; workflowId: string; workflowRevision: number; workflow: SecurityWorkflow; sessionId: string; ownerPid: number; runnerInstanceId: string; status: SecurityWorkflowExecutionStatus; jobId?: string; nodeResults: Record<string, SecurityWorkflowNodeResult>; error?: string; createdAt: string; updatedAt: string }
+export interface SecurityWorkflowExecution { id: string; workflowId: string; workflowRevision: number; workflow: SecurityWorkflow; sessionId: string; ownerPid: number; runnerInstanceId: string; status: SecurityWorkflowExecutionStatus; jobId?: string; nodeResults: Record<string, SecurityWorkflowNodeResult>; error?: string; createdAt: string; updatedAt: string; cancellationRequested?: boolean; cancellationAcknowledged?: boolean; cancellationRequestedAt?: string }
 
 
 /** Portable declarative JSON. No identities, execution history, approvals, schedules, or code. */

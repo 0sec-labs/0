@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { workflowInput } from "./workflow-editing";
-import { webFetchJson } from "@/api";
+import { useBackendApi } from "@/api";
 
 const GOALS: Record<ScanPlan["goal"], string> = { "known-vulnerabilities": "Known vulnerabilities", "unknown-vulnerabilities": "Code vulnerabilities", misconfigurations: "Misconfigurations" };
 
@@ -27,6 +27,7 @@ export function WorkflowSettingsEditor({ definition, busy, onSave }: { definitio
 }
 
 export function WorkflowPhaseEditor({ definition, phase, busy, canRemove, onRemove, onSave }: { definition: SecurityWorkflow; phase: SecurityWorkflowNode; busy: boolean; canRemove: boolean; onRemove: () => void; onSave: (input: SecurityWorkflowInput) => Promise<void> }) {
+  const { webFetchJson } = useBackendApi();
   const [type, setType] = useState(phase.type);
   const operation = isSecurityWorkflowOperation({ type });
   const [inputOptions, setInputOptions] = useState(() => JSON.stringify(phase.inputs ?? {}, null, 2));

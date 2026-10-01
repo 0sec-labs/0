@@ -11,7 +11,7 @@ import {
   SlidersHorizontal,
   UserRound,
 } from "lucide-react";
-import { getFindingFamily, updateFindingFamilyTriage, updateFindingFamilyWorkflow } from "@/api";
+import { useBackendApi } from "@/api";
 import { EvidenceTabs } from "@/components/evidence-tabs";
 import { FindingWorkflowBoard } from "@/components/finding-workflow-board";
 import { InspectorPane } from "@/components/inspector-pane";
@@ -202,6 +202,7 @@ function patchFindingFamilyWorkflow(
 }
 
 export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
+  const { getFindingFamily, updateFindingFamilyTriage, updateFindingFamilyWorkflow } = useBackendApi();
   const { fingerprint } = useParams<{ fingerprint?: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();

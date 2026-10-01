@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, ChevronRight, Play } from "lucide-react";
 import type { SecurityWorkflow } from "@0/shared";
-import { webFetchJson } from "@/api";
+import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -19,6 +19,7 @@ export function workflowAutomationSummary(workflow: SecurityWorkflow, schedules:
 
 /** Switch state reflects persisted recurring triggers; manual runs remain available. */
 export function WorkflowAutomationControl({ workflow, disabled = false, onConfigureTarget }: { workflow: SecurityWorkflow; disabled?: boolean; onConfigureTarget: () => void }) {
+  const { webFetchJson } = useBackendApi();
   const cache = useQueryClient();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);

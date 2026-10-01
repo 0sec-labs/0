@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient, type UseMutationResult, type Use
 import { validateScanPlan } from "@0/shared/dist/types.js";
 import type { ScanPlan } from "@0/shared";
 import { ArrowUpRight, Download } from "lucide-react";
-import { listConsoleSessions, webFetchJson } from "@/api";
+import { useBackendApi } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -27,6 +27,7 @@ interface WorkflowOwnerState {
 }
 
 function useWorkflowOwner(provided?: string) {
+  const { listConsoleSessions, webFetchJson } = useBackendApi();
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -85,6 +86,7 @@ function WorkflowView({ workflow, cancel, cancelling }: { workflow: Workflow; ca
 }
 
 export function LauncherControl({ sessionId }: { sessionId?: string }) {
+  const { webFetchJson } = useBackendApi();
   const state = useWorkflowOwner(sessionId);
   const queryClient = useQueryClient();
   const [target, setTarget] = useState("");
@@ -109,6 +111,7 @@ function FixResultView({ result, title }: { result: FixResult; title: string }) 
 }
 
 export function FixControl({ sessionId }: { sessionId?: string }) {
+  const { webFetchJson } = useBackendApi();
   const location = useLocation();
   const state = useWorkflowOwner(sessionId);
   const github = useGitHubPublicationAccount();

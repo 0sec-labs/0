@@ -3,7 +3,7 @@ import { ControlDisclosure } from "./control-disclosure";
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Blocks, Palette, RefreshCcw, Search } from "lucide-react";
-import { webFetchJson } from "@/api";
+import { useBackendApi } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,7 @@ import { Facts, Feedback, SubmitButton, jsonBody } from "./control-ui";
 import type { PluginItem, PluginResult, PluginsResponse, SettingsResponse } from "./contracts";
 
 export function PluginsControl({ sessionId }: { sessionId?: string }) {
+  const { webFetchJson } = useBackendApi();
   const confirmationTrigger = useRef<HTMLButtonElement | null>(null);
   const queryClient = useQueryClient();
   const inventory = useQuery({ queryKey: ["console-plugins"], queryFn: ({ signal }) => webFetchJson<PluginsResponse>("/api/console/plugins", { signal }), refetchInterval: 5000 });

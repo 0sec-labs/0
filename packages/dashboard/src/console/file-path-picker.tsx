@@ -1,7 +1,7 @@
 import { useId, useState } from "react";
 import { Popover } from "@cloudflare/kumo/components/popover";
 import { ChevronDown, Folder } from "lucide-react";
-import { configureConsoleSession } from "@/api";
+import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ConsoleWorkspace } from "./use-console-workspace";
@@ -17,6 +17,7 @@ export interface FilePathPickerProps {
 
 /** Changes the session's working folder without shifting the composer. */
 export function FilePathPicker({ workspace, sessionId, cwd, workspaceDisabled, disabled, className }: FilePathPickerProps) {
+  const { configureConsoleSession } = useBackendApi();
   const [open, setOpen] = useState(false);
   const [path, setPath] = useState("");
   const inputId = useId();

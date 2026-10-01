@@ -40,6 +40,61 @@ afterEach(async () => {
 });
 
 describe("CLI and MCP shared workflow runtime", () => {
+  it("projects acknowledged cancellation before cleanup completes", async () => {
+    const paths = fixture();
+    let release!: () => void;
+    let entered!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const cleanup = new Promise<void>(resolve => { release = resolve; });
+    const runtime = await host({ ...paths, ownerId: "owner" }, deps({ assess: async () => {
+      entered(); await cleanup;
+      return { report: { ...report(), exitReason: "cancelled" }, rawReport: report() };
+    } }));
+    const run = await runtime.startRun({ templateId: "repository-review", target: paths.workspace });
+    await started;
+    const acknowledged = runtime.cancelRun(run.id);
+    expect(acknowledged).toMatchObject({ status: "running", cancellationRequested: true, cancellationAcknowledged: true, cancellationRequestedAt: expect.any(String) });
+    expect(runtime.getRun(run.id)).toMatchObject({ status: "running", cancellationAcknowledged: true });
+    expect(runtime.listRuns()[0]).toMatchObject({ status: "running", cancellationAcknowledged: true });
+    release();
+    await settled(runtime, run.id);
+    expect(runtime.getRun(run.id).status).toBe("cancelled");
+  });
+  it("lets requests narrow server ceilings without increasing them", async () => {
+    const paths = fixture();
+    const dependencies = deps();
+    const runtime = await host({ ...paths, ownerId: "engine-owner", timeCapMs: 2000, costCapUsd: 2 }, dependencies);
+    const first = await runtime.startRun({ templateId: "repository-review", target: paths.workspace, timeCapMs: 9000, costCapUsd: 9 });
+    await settled(runtime, first.id);
+    for (const [options] of vi.mocked(dependencies.assess).mock.calls) {
+      expect(options.timeout).toBeGreaterThan(0);
+      expect(options.timeout).toBeLessThanOrEqual(2000);
+      expect(options.costCeilingUsd).toBe(2);
+    }
+    vi.mocked(dependencies.assess).mockClear();
+    const second = await runtime.startRun({ templateId: "repository-review", target: paths.workspace, timeCapMs: 1000, costCapUsd: 1 });
+    await settled(runtime, second.id);
+    for (const [options] of vi.mocked(dependencies.assess).mock.calls) {
+      expect(options.timeout).toBeGreaterThan(0);
+      expect(options.timeout).toBeLessThanOrEqual(1000);
+      expect(options.costCeilingUsd).toBe(1);
+    }
+    expect(dependencies.assess).toHaveBeenCalled();
+  });
+  it("hosted initialization skips shared recovery and keeps browser-owned active history", async () => {
+    const paths = fixture();
+    const store = new SecurityWorkflowStore(paths.dbPath);
+    const definition = store.save({ name: "Browser run", instructions: "", target: paths.workspace,
+      nodes: [{ id: "start", type: "trigger", label: "Start", enabled: true }, { id: "audit", type: "audit", label: "Audit", enabled: true }, { id: "report", type: "report", label: "Report", enabled: true }], edges: [{ source: "start", target: "audit" }, { source: "audit", target: "report" }] });
+    const browser = store.createExecution(definition.id, "browser-owner", definition.revision);
+    store.updateExecution(browser.id, { status: "running" });
+    const recovery = vi.spyOn(SecurityWorkflowStore.prototype, "interruptActiveExecutions");
+    const runtime = await host({ ...paths, ownerId: "engine-owner", recoverInterrupted: false });
+    expect(recovery).not.toHaveBeenCalled();
+    expect(store.getExecution(browser.id)?.status).toBe("running");
+    expect(runtime.listRuns()).toEqual([]);
+    store.close();
+  });
   it("validates bounded JSON bindings and keeps application permission at the host boundary", async () => {
     expect(() => parseWorkflowRunInputs({ value: undefined })).toThrow();
     expect(() => parseWorkflowRunInputs({ note: "x".repeat(33_000) })).toThrow();

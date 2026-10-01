@@ -12,6 +12,8 @@ export interface WorkflowServiceRun {
   inputs: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+  /** Host controller accepted cancellation; terminal status still waits for executor cleanup. */
+  cancellationRequestedAt?: string;
   events: WorkflowServiceEvent[];
   oldestSequence: number;
   eventsTruncated: boolean;
@@ -105,7 +107,11 @@ export class WorkflowService {
   }
   cancel(ownerId: string, id: string): WorkflowServiceRun {
     const managed = this.require(ownerId, id);
-    if (managed.view.status === "queued" || managed.view.status === "running") managed.controller.abort(new Error("Operator cancelled this owned workflow."));
+    if ((managed.view.status === "queued" || managed.view.status === "running") && !managed.view.cancellationRequestedAt) {
+      managed.view.cancellationRequestedAt = new Date().toISOString();
+      managed.controller.abort(new Error("Operator cancelled this owned workflow."));
+      this.changed(managed);
+    }
     return this.get(ownerId, id);
   }
   wait(ownerId: string, id: string): Promise<WorkflowRunResult> { return this.require(ownerId, id).promise; }

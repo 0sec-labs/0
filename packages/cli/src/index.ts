@@ -21,6 +21,7 @@ import {
 } from "./presentation/process-output.js";
 import { setHerdrSink } from "./herdr-state.js";
 import { launchConfiguredWorkbench } from "./workbench.js";
+import { remoteBackendClientId } from "./backend-client-mode.js";
 
 // Cross the execution boundary before reading host login state, applying updates
 // or starting the console. The guest receives the original argv and terminal.
@@ -31,6 +32,7 @@ try {
   process.stderr.write(`[0] ${error instanceof Error ? error.message : String(error)}\n`);
   process.exit(125);
 }
+const isRemoteBackendClient = Boolean(remoteBackendClientId(process.argv.slice(2)));
 const isWorkbenchManagement = process.argv[2] === "workbench" || process.argv[2] === "config";
 
 
@@ -43,7 +45,7 @@ installProcessPresentationStreamBridge();
 // resolves to the chatgpt-codex provider (highest priority) instead of falling
 // through to stale AZURE_OPENAI_API_KEY / OPENAI_API_KEY. No-op in the cloud
 // worker (it sets the tokens itself) and when a token is already present.
-if (!isWorkbenchManagement) maybeLoadCodexAuth();
+if (!isWorkbenchManagement && !isRemoteBackendClient) maybeLoadCodexAuth();
 
 
 // The settings store initializes the pipeline and preserves explicit environment
@@ -88,7 +90,7 @@ enforceSourceDistFreshness({ entryUrl: import.meta.url });
 
 // Explicit automatic updates finish before command parsing or interactive work.
 // Notification-only checks stay in the background; unset settings remain opt-in.
-if (!isWorkbenchManagement) await runStartupUpdate(VERSION);
+if (!isWorkbenchManagement && !isRemoteBackendClient) await runStartupUpdate(VERSION);
 
 // The empty-argv path launches straight into the interactive TUI and needs none
 // of the subcommand modules. Importing (and registering) that barrel is the

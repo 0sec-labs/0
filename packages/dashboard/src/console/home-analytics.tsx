@@ -1,13 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { Activity, ArrowUpRight, RefreshCcw, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
-import { getDashboard, listConsoleSessions, listSavedConsoleSessions } from "@/api";
+import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
 import { formatTime } from "@/lib/format";
 import { LoadingDots } from "./loading-state";
 
 /** Read-only workspace activity below the chat welcome. Uses the operations data source. */
 export function HomeAnalytics() {
+  const { getDashboard, listConsoleSessions, listSavedConsoleSessions } = useBackendApi();
   const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: getDashboard, refetchInterval: 5000 });
   const sessions = useQuery({ queryKey: ["console-sessions"], queryFn: ({ signal }) => listConsoleSessions(signal), refetchInterval: 2000 });
   const saved = useQuery({ queryKey: ["console-saved"], queryFn: ({ signal }) => listSavedConsoleSessions(signal), refetchInterval: 5000 });

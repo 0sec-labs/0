@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { Popover } from "@cloudflare/kumo/components/popover";
 import type { ConsoleRuntimeSnapshot } from "@0/shared";
-import { configureConsoleSession } from "@/api";
+import { useBackendApi } from "@/api";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -17,6 +17,7 @@ export function ReasoningPicker({ workspace, sessionId, reasoning, disabled }: {
   reasoning: ConsoleRuntimeSnapshot["reasoning"];
   disabled: boolean;
 }) {
+  const { configureConsoleSession } = useBackendApi();
   const [draft, setDraft] = useState(reasoning?.effort ?? "medium");
   const [open, setOpen] = useState(false);
   useEffect(() => { setDraft(reasoning?.effort ?? "medium"); }, [reasoning?.effort, sessionId]);

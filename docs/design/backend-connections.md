@@ -1,7 +1,11 @@
 # One frontend, multiple execution backends
 
-Status: source-grounded design; the existing workflow runtime is merged. Remote
-backend registration and routing described here are not implemented yet.
+Status: implemented over the shared workflow runtime, with local two-engine
+HTTP lifecycle tests and live browser qualification. The connection contract,
+backend namespaces, trusted registration, authenticated proxy, and remote workflow
+adapters follow the boundaries below. This evidence does not qualify external
+providers, remote operating systems, public internet deployments, or a generic
+independent remote executor.
 
 ## What Codex actually separates
 
@@ -36,9 +40,9 @@ documentation and this pinned source: the source's
 uses an optional HTTP(S)/gRPC provider. Do not treat a documentation flag as proof
 of a transport implemented in a different release.
 
-## The corresponding boundaries in 0
+## Baseline before connection routing
 
-The dashboard currently has a single same-origin engine. `packages/dashboard/src/api.ts`
+The dashboard originally had a single same-origin engine. `packages/dashboard/src/api.ts`
 owns the local control token and HTTP transport. `packages/dashboard/src/lib/event-stream.ts`
 owns authenticated SSE. `packages/dashboard/src/console/use-console-workspace.ts`
 polls session snapshots and events. `packages/cli/src/commands/dashboard.ts`
@@ -56,7 +60,7 @@ connection transport. Its SmolVM CLI bridge does not forward bidirectional stdin
 so it cannot carry MCP stdio. A remote engine connection should have an actual
 request/event/approval protocol rather than reuse output capture as a connection.
 
-## Proposed architecture
+## Execution architecture
 
 ```mermaid
 flowchart LR
@@ -114,9 +118,40 @@ it does not move an active run, reuse its approval, or reinterpret its workspace
    bounded ingress, request IDs, idempotency, event cursor replay, reconnect, and
    connection-specific approval routing. Preserve server-side scope and action
    checks. Add a backend selector only when the underlying isolation works.
-6. Support independently deployed remote engines and remote executors as separate
-   capabilities. A remote engine can own its own local executor; a local engine
-   may later use a qualified remote executor without changing frontend identity.
+6. Support independently deployed remote engines using their existing admitted
+   local or SmolVM executors. An independently registered remote executor is a
+   separate future capability; this connection API does not qualify or expose one.
+
+## Operator and transport contract
+
+The trusted local registry is a versioned file containing backend ID, display
+name, engine URL, and an environment variable reference for that engine's bearer
+credential. The browser receives sanitized descriptors, never endpoints or token
+bindings. Registration changes require editing the trusted configuration; the
+browser cannot supply an arbitrary endpoint or credential.
+
+The remote listener uses `0 web --engine-token-env NAME` with server-owned
+`--engine-workspace`, `--engine-scope`, and optional `--engine-target` admission.
+`--engine-allow-apply` admits explicit exact-candidate application; the request and
+live proof gates still apply. `--engine-time-cap` and `--engine-cost-cap` constrain
+caller limits (defaults ten minutes and $5). The local connection service uses
+`0 web --backends-config PATH`. The remote bearer credential is
+separate from the per-browser control token. Registered URLs admit HTTPS or HTTP
+loopback tunnels. The protocol handshake is `GET /api/backend/handshake` and reports
+version, engine identity, platform, capabilities, and an optional connection epoch.
+The browser remains same-origin through registered proxy routes. Configuration may
+pin `expectedEngineId`; otherwise the registry pins its first accepted identity
+for its process lifetime. A mismatching identity is incompatible. The optional
+server instance epoch distinguishes a process restart from a different engine.
+
+CLI workflow/history commands and the MCP workflow adapter accept a configured
+backend ID. Targets, workspace references, inputs, provider selection, and database
+references resolve on that engine. Remote routing does not construct a local model
+runtime or reinterpret a server path on the laptop. Remote patch permissions are
+still checked by the owning engine; a client's local flag cannot broaden server
+admission.
+
+See `docs/src/content/docs/engine-connections.md` for the actual operator setup.
 
 ## Required lifecycle semantics
 
@@ -131,10 +166,13 @@ workspace changes cannot silently transfer pending approvals. Existing target
 authorization, candidate proof, provider-usage accounting, and filesystem gates
 remain enforced on the execution engine.
 
-Foreground CLI and stdio MCP host lifetimes retain their current cancellation
-semantics. A persistent daemon connection needs a separately defined detach policy;
-adding network transport must not accidentally change disposal into remote-run
-cancellation or silently introduce unattended execution.
+Local foreground CLI and stdio MCP hosts retain ownership of their local runs.
+A remote client is a connection to an independently running engine: disposing its
+transport detaches that client, while an explicit cancellation request targets the
+engine-owned run. Foreground remote CLI Ctrl-C sends an explicit cancellation
+request; closing an MCP adapter or proxy does not. The remote engine retains
+authoritative state and enforces its own shutdown and executor cleanup. A network connection does not add crash-safe
+replay, automatic recovery, or a generic persistent remote executor.
 
 ## Acceptance checks
 
@@ -149,3 +187,44 @@ cancellation or silently introduce unattended execution.
 - An approval from engine A cannot authorize a request on engine B.
 - Unsupported capabilities fail before dispatch; existing local workflows and
   SmolVM restrictions continue to work through the local adapter.
+
+
+## Qualification evidence and remaining boundary
+
+- The shared protocol validates version/capability negotiation and backend-bound
+  resource, request, approval, and event-cursor identities. Its unit tests cover
+  identical resource IDs on different engines and reject secret-bearing browser
+  descriptors.
+- The frontend uses permanently bound clients, backend URL namespaces, separate
+  query clients, and backend-scoped persistent drafts. Switching engines disposes
+  the previous view rather than changing the destination of its pending requests.
+  Handshake epoch/capability changes require a fresh view and authoritative snapshot.
+  Live production-console checks switched local and remote engines and confirmed
+  separate drafts, settings, and sessions. Development StrictMode switching was
+  also checked against the running local listener.
+- The trusted registry validates configured endpoints, keeps bearer values out of
+  public descriptors, rejects unsupported API routes/capabilities before dispatch,
+  pins engine identity, and bounds configuration, requests, and responses. Remote
+  event proxies forward the acknowledged SSE cursor. Remote client fixtures check
+  engine-native paths, admission errors, capability rejection, and transport-only
+  disposal. The registry's hostile-input tests cover endpoint and route admission,
+  identity pinning, credential isolation, limits, and cursor forwarding.
+- `packages/cli/src/backend-integration.test.ts` uses actual HTTP listeners,
+  registry, core runner, control store, and workflow engine service, with only the
+  assessment implementation substituted. It checks equal workflow IDs on distinct
+  engines, detach/reconnect while a run stays active, rejection of another engine's
+  results/cancellation, and retained results after engine-service restart. A separate
+  case confirms cancellation acknowledgement leaves the run `running` until
+  assessment abort cleanup finishes, then retains partial findings as `cancelled`.
+- A live two-engine smoke check confirmed distinct handshake identities, equal
+  workflow IDs with distinct definitions, separate remote sessions, and remote CLI
+  template discovery. These checks establish transport and ownership behavior on
+  the local qualification host; they do not demonstrate a real external provider
+  assessment, a different remote operating system, or an internet deployment.
+- HTTP loopback tunnel setup is the operator baseline. HTTPS endpoint admission
+  is not a generic remote-executor qualification. A separately deployed engine
+  still has to provide the compatible authenticated control API and its own runner
+  prerequisites.
+- A local engine using an independently registered remote executor remains future
+  work. No component in this rollout treats an MCP endpoint, model API, output-only
+  workbench bridge, or arbitrary SSH command as such an executor.

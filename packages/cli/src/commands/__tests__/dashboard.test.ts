@@ -343,6 +343,9 @@ vi.mock("@0/db", () => {
   }
   return {
     osecDB: FakeOsecDB,
+    // Identity persistence is covered by the real registry suite; this fake DB
+    // never creates on-disk state, including adjacent engine identity files.
+    resolveOsecDbPath: () => ":memory:",
     WorkflowTriggerStore: class {
       list() { return []; }
       close() {}
@@ -367,6 +370,14 @@ vi.mock("../db.js", () => ({
   seedVerificationWorkbench: seedVerificationWorkbenchMock,
 }));
 
+const engineInvoke = vi.hoisted(() => vi.fn(async () => ({ ok: true })));
+const engineReady = vi.hoisted(() => vi.fn(async () => {}));
+const engineDispose = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock("../../workflow-engine-service.js", () => ({ WorkflowEngineService: class {
+  ready = engineReady();
+  invoke = engineInvoke;
+  dispose = engineDispose;
+} }));
 const { registerDashboardCommand } = await import("../dashboard.js");
 
 // The action registers SIGINT handlers per invocation; raise the
@@ -446,9 +457,10 @@ function makeResponse(): {
 } {
   const captured: CapturedResponse = { statusCode: 0, headers: {}, body: "" };
   const res = {
+    setHeader(name: string, value: string) { captured.headers[name] = value; },
     writeHead(code: number, headers: Record<string, string>) {
       captured.statusCode = code;
-      captured.headers = headers;
+      captured.headers = { ...captured.headers, ...headers };
     },
     end(body?: string | Buffer) {
       if (body !== undefined) {
@@ -490,6 +502,9 @@ let errSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   instanceMock.mockResolvedValue(false);
+  engineInvoke.mockClear();
+  engineReady.mockReset().mockResolvedValue(undefined);
+  engineDispose.mockReset().mockResolvedValue(undefined);
   // Reset http capture.
   httpState.lastHandler = null;
   httpState.listenCalls.length = 0;
@@ -543,6 +558,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   logSpy.mockRestore();
   errSpy.mockRestore();
   // The action attaches a one-shot SIGINT listener and never detaches
@@ -1363,3 +1379,47 @@ describe("dashboard — prune-stopped-workers", () => {
    expect(execFileMock).toHaveBeenCalled();
    expect(logSpy).toHaveBeenCalledWith('ZERO_DASHBOARD_READY {"url":"http://127.0.0.1:48123"}');
  });
+
+
+describe("dashboard — persistent engine boundaries", () => {
+  const bearer = "engine-test-secret-" + "x".repeat(32);
+  beforeEach(async () => {
+    vi.stubEnv("ZERO_TEST_ENGINE_TOKEN", bearer);
+    expect(await runCli(["dashboard", "--no-open", "--engine-token-env", "ZERO_TEST_ENGINE_TOKEN", "--ready-json"])).toBeUndefined();
+  });
+  it("accepts the engine bearer for both outer and inner control/triage authorization", async () => {
+    const control = await invokeHandler(makeRequest({ method: "POST", url: "/api/control/recover-stale-workers", headers: { authorization: `Bearer ${bearer}` }, body: { staleAfterMs: 1000 } }));
+    expect(control.statusCode).toBe(200); expect(recoverStaleWorkersMock).toHaveBeenCalled();
+    const triage = await invokeHandler(makeRequest({ method: "POST", url: "/api/finding-family/family-1/triage", headers: { authorization: `Bearer ${bearer}` }, body: { status: "confirmed" } }));
+    expect(triage.statusCode).toBe(200); expect(dbState.triageUpdates).toHaveLength(1);
+  });
+  it("returns a compatible handshake and routes engine calls without leaking its bearer", async () => {
+    const response = await invokeHandler(makeRequest({ method: "GET", url: "/api/backend/handshake", headers: { authorization: `Bearer ${bearer}`, "x-0-request-id": "request-42" } }));
+    expect(response.statusCode).toBe(200); const handshake = JSON.parse(response.body);
+    expect(handshake.protocolVersion).toBe(1); expect(handshake.capabilities).toContain("workflow-engine"); expect(response.headers["X-0-Request-ID"]).toBe("request-42");
+    const call = await invokeHandler(makeRequest({ method: "POST", url: "/api/workflow-engine/call", headers: { authorization: `Bearer ${bearer}`, "x-0-expected-engine-id": handshake.engineId }, body: { name: "list_templates", args: {} } }));
+    expect(call.statusCode).toBe(200); expect(engineInvoke).toHaveBeenCalledWith("list_templates", {});
+    expect(logSpy.mock.calls.flat().join(" ")).not.toContain(bearer); expect(response.body).not.toContain(bearer);
+  });
+  it("rejects another engine identity before mutating or resolving an approval", async () => {
+    const response = await invokeHandler(makeRequest({ method: "POST", url: "/api/control/recover-stale-workers", headers: { authorization: `Bearer ${bearer}`, "x-0-expected-engine-id": "engine-other" }, body: {} }));
+    expect(response.statusCode).toBe(409); expect(recoverStaleWorkersMock).not.toHaveBeenCalled();
+    const approval = await invokeHandler(makeRequest({ method: "POST", url: "/api/console/sessions/same-id/decisions/same-approval", headers: { authorization: `Bearer ${bearer}`, "x-0-expected-engine-id": "engine-other" }, body: { approved: true } }));
+    expect(approval.statusCode).toBe(409);
+  });
+  it("does not reuse an existing dashboard when engine admission is explicitly configured", async () => {
+    instanceMock.mockClear().mockResolvedValue(true); httpState.listenCalls.length = 0;
+    expect(await runCli(["dashboard", "--no-open", "--engine-token-env", "ZERO_TEST_ENGINE_TOKEN"])).toBeUndefined();
+    expect(httpState.listenCalls).toHaveLength(1); expect(instanceMock).not.toHaveBeenCalled();
+  });
+});
+
+
+it("cleans up the persistent engine when startup preflight fails before listening", async () => {
+  vi.stubEnv("ZERO_TEST_ENGINE_TOKEN", "x".repeat(32));
+  engineReady.mockRejectedValueOnce(new Error("Authorized workspace is unavailable."));
+  const result = await runCli(["dashboard", "--no-open", "--engine-token-env", "ZERO_TEST_ENGINE_TOKEN"]);
+  expect(result).toBeInstanceOf(Error);
+  expect(engineDispose).toHaveBeenCalledOnce();
+  expect(httpState.listenCalls).toHaveLength(0);
+});

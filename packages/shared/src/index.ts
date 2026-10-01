@@ -17,3 +17,5 @@ export * from "./security-workflows.js";
 export * from "./security-workflow-templates.js";
 
 export * from "./service-plugins.js";
+
+export * from "./backend-protocol.js";

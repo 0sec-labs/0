@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ConsoleCreateSessionInput, ConsoleMessageInput, ConsoleSavedSession, ConsoleSessionSnapshot, DesktopConsoleEvent, DesktopConsoleSession } from "@0/shared";
-import { createConsoleSession, getConsoleEvents, getConsoleSnapshot, listConsoleSessions, listSavedConsoleSessions, sendConsoleMessage } from "@/api";
+import { useBackendApi } from "@/api";
 import { usePersistentState } from "@/lib/use-persistent-state";
 
 export interface ConsoleWorkspace {
@@ -69,6 +69,7 @@ function applyEvents(snapshot: ConsoleSessionSnapshot, events: DesktopConsoleEve
 }
 
 export function useConsoleWorkspace(sessionId: string | undefined, workerId: string | null): ConsoleWorkspace {
+  const { createConsoleSession, getConsoleEvents, getConsoleSnapshot, listConsoleSessions, listSavedConsoleSessions, sendConsoleMessage } = useBackendApi();
   const queryClient = useQueryClient();
   const sessionsQuery = useQuery({ queryKey: ["console-sessions"], queryFn: ({ signal }) => listConsoleSessions(signal), refetchInterval: 2000 });
   const savedQuery = useQuery({ queryKey: ["console-saved"], queryFn: ({ signal }) => listSavedConsoleSessions(signal), refetchInterval: 5000 });

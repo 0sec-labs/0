@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { findCommand, SLASH_COMMANDS } from "@0/shared/dist/slash-commands.js";
 import type { ConsolePublicExport, DesktopConsoleSession, HarnessSnapshot } from "@0/shared";
 import { Copy, Download, Menu, MoreHorizontal, PanelRight, Plus, Square, Trash2, Pencil, Eraser, X } from "lucide-react";
-import { archiveConsoleSession, closeConsoleSession, configureConsoleSession, controlConsoleSession, deleteConsoleSession, deleteSavedConsoleSession, exportConsoleSession, resolveConsoleDecision, resumeConsoleSession, stopConsoleWorker, webFetchJson } from "@/api";
+import { useBackendApi } from "@/api";
 import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu } from "@cloudflare/kumo/components/dropdown";
@@ -26,6 +26,7 @@ interface FeedbackResult { saved: boolean; path?: string; submitted: boolean; pr
 type ConfirmAction = { kind: "close" | "clear" | "delete" | "delete-live" | "drain"; id: string; title: string };
 
 export function ConsolePage() {
+  const { archiveConsoleSession, closeConsoleSession, configureConsoleSession, controlConsoleSession, deleteConsoleSession, deleteSavedConsoleSession, exportConsoleSession, resolveConsoleDecision, resumeConsoleSession, stopConsoleWorker, webFetchJson } = useBackendApi();
   const { sessionId } = useParams<{ sessionId: string }>();
   const [search, setSearch] = useSearchParams();
   const navigate = useNavigate();

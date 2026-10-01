@@ -151,6 +151,14 @@ Guide: [Read the workflow](/architecture/#presentation-contract).
 | `--host <host>` | `127.0.0.1` | Loopback host to bind (127.0.0.0/8 or ::1) |
 | `--asset-dir <path>` | — | Path to built dashboard assets |
 | `--dev-url <url>` | — | Loopback Vite server for authenticated frontend hot reload |
+| `--backends-config <path>` | — | Trusted backend connection registry JSON (default ~/.0/backends.json) |
+| `--engine-token-env <name>` | — | Environment variable holding the engine bearer credential (32–4096 characters) |
+| `--engine-workspace <path>` | — | Engine-owned authorized workspace for persistent workflow calls |
+| `--engine-scope <path>` | — | Engine-owned scope JSON for persistent live-target workflows |
+| `--engine-target <target>` | — | Restrict persistent workflow calls to this target |
+| `--engine-allow-apply` | — | Admit explicitly approved patch application in persistent workflow calls |
+| `--engine-time-cap <ms>` | — | Server workflow deadline ceiling (default 600000 ms) |
+| `--engine-cost-cap <usd>` | — | Server workflow estimated cost ceiling (default $5) |
 | `--ready-json` | — | Emit the bound dashboard URL as machine-readable JSON |
 | `--no-open` | — | Do not auto-open a browser |
 
@@ -2685,7 +2693,7 @@ Expose selected target tools or managed workflows over MCP stdio.
 
 Use `--workflows --workspace /absolute/path/to/repo` for template discovery and source workflow execution. Live workflow targets require `--scope` and the enabled scope plugin. Workflow assessments use 0's configured provider; individual target tools use the external agent's reasoning model. Disconnect cancels this host's active runs.
 
-MCP stdio requires operator-selected host-local execution. The SmolVM batch CLI bridge cannot forward this transport and refuses startup without changing the configured sandbox profile. Use `0 workflow` commands for isolated execution.
+Local-target MCP stdio requires operator-selected host-local execution. The SmolVM batch CLI bridge cannot forward this transport and refuses startup without changing the configured sandbox profile. Use `0 workflow` commands for isolated execution. Explicit `--workflows --backend <id>` runs a network client for a registered remote engine; the backend owns execution and remote runs survive client disconnect.
 
 Guide: [Read the workflow](/integrations/).
 
@@ -2693,6 +2701,8 @@ Guide: [Read the workflow](/integrations/).
 | --- | --- | --- |
 | `--target <target>` | — | Target URL for this MCP session |
 | `--scan-id <scanId>` | — | Scan ID to associate persisted findings and target updates with |
+| `--backend <id>` | — | Use a registered remote workflow engine; no local execution fallback |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
 | `--workflows` | `false` | Expose workflow discovery and run lifecycle tools instead of live tools |
 | `--allow-apply` | `false` | Permit explicit workflow apply requests inside the authorized workspace |
 | `--workspace <path>` | — | Absolute authorized local root for workflow source assessments |
@@ -3102,6 +3112,8 @@ List saved workflows and templates without starting an assessment.
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--templates` | — | List only templates |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
 | `--db-path <path>` | — | Control database with saved workflows and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
@@ -3120,6 +3132,8 @@ Inspect one saved workflow or select a template with `--template`.
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--template <id>` | — | Show a template definition |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
 | `--db-path <path>` | — | Control database with saved workflows and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
@@ -3148,6 +3162,8 @@ Completed execution can contain findings; consumers must inspect the results.
 | `--allow-apply` | — | Explicitly authorize supported patch application steps for this host and run |
 | `--time-cap <ms>` | — | Workflow-wide time cap in milliseconds |
 | `--cost-cap <usd>` | — | Workflow-wide cost ceiling in USD |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
 | `--db-path <path>` | — | Control database with saved workflows and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
@@ -3171,6 +3187,8 @@ List retained runs in the selected control database.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
 | `--db-path <path>` | — | Control database with saved workflows and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
@@ -3188,6 +3206,8 @@ Read one run and its retained results.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
 | `--db-path <path>` | — | Control database with saved workflows and run history |
 | `--format <format>` | `json` | Output format: json or text |
 
@@ -3207,6 +3227,8 @@ separately running engine and is not provided by editing stored history.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
 | `--db-path <path>` | — | Control database with saved workflows and run history |
 | `--format <format>` | `json` | Output format: json or text |
 

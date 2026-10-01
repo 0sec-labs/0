@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, ShieldCheck } from "lucide-react";
-import { webFetchJson } from "@/api";
+import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -28,10 +28,12 @@ function officialAuthUrl(providerId: string, raw: string | null): string | null 
 }
 
 export function useProviders() {
+  const { webFetchJson } = useBackendApi();
   return useQuery({ queryKey: ["console-providers"], queryFn: ({ signal }) => webFetchJson<ProvidersResponse>("/api/console/providers", { signal }), refetchInterval: query => query.state.data?.providers.some(provider => provider.auth.phase === "running") ? 1000 : false });
 }
 
 export function ConnectionsControl({ onConnected }: { onConnected?: () => void }) {
+  const { webFetchJson } = useBackendApi();
   const queryClient = useQueryClient();
   const providers = useProviders();
   const [selected, setSelected] = useState("");
@@ -94,6 +96,7 @@ export function ConnectionsControl({ onConnected }: { onConnected?: () => void }
 }
 
 export function ModelsControl({ sessionId, onApplied }: { sessionId?: string; onApplied?: (session: SessionSummary) => void }) {
+  const { webFetchJson } = useBackendApi();
   const providers = useProviders();
   const navigate = useNavigate();
   const queryClient = useQueryClient();

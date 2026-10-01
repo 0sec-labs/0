@@ -7,6 +7,7 @@ import type { SmolvmWorkbenchApprovedImage, SmolvmWorkbenchResult } from "@0/cor
 import { currentWorkbenchAssets } from "./workbench-assets.js";
 import { mapWorkbenchCliArguments } from "./workbench-console-protocol.js";
 import { runWorkbenchCli } from "./workbench-console-session.js";
+import { remoteBackendClientId } from "./backend-client-mode.js";
 import { PROVIDERS } from "./tui/provider-status.js";
 import { loadGlobalSettings, normalizeSettings, saveSettings } from "./tui/settings.js";
 import type { TuiSettings } from "./tui/settings.js";
@@ -149,6 +150,7 @@ export async function launchConfiguredWorkbench(args: readonly string[]): Promis
   if (process.platform === "linux" && isAdmittedSmolvmWorkbench()) return undefined;
   // The host management surface is deliberately available even after a failed VM launch.
   if (["workbench", "config", "web", "dashboard", "console", "tui", "doctor", "help", "--help", "-h", "--version", "-v"].includes(args[0] ?? "") || args.length === 0) return undefined;
+  if (remoteBackendClientId(args)) return undefined;
   const hostSettings = loadGlobalSettings(home, { requireExecutionProfile: existsSync(workbenchConfigPath(home)) });
   if (hostSettings.executionProfile !== "smolvm") return undefined;
   if (args[0] === "mcp-server") {

@@ -457,3 +457,6 @@
 .dark { --field-surface: color-mix(in srgb, var(--muted), var(--foreground) 8%); }
 [data-slot="input"], [data-slot="textarea"] { background: var(--field-surface); border-color: var(--field-border); }
 [data-slot="input"][aria-invalid="true"], [data-slot="textarea"][aria-invalid="true"] { border-color: var(--destructive); }
+
+/* The selected engine scope occupies the space below its connection bar. */
+.backend-content .console-frame { height: 100%; }

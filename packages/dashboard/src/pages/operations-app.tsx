@@ -1,7 +1,7 @@
 import { useEffect, useEffectEvent, useState, type ReactNode } from "react";
 import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { getDashboard, getScans, webFetchJson } from "@/api";
+import { useBackendApi } from "@/api";
 import { AppShell } from "@/components/app-shell";
 import { CommandPalette } from "@/components/command-palette";
 import { DashboardPanelProvider } from "@/components/dashboard-panel";
@@ -22,6 +22,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 export function OperationsApp() {
+  const { getDashboard, getScans, webFetchJson } = useBackendApi();
   const location = useLocation();
   const operationsVisible = /^\/(?:dashboard|operations|threads|findings|runs|scans|live)(?:\/|$)/.test(location.pathname);
   const [paletteOpen, setPaletteOpen] = useState(false);

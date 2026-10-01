@@ -1,3 +1,6 @@
+import type { BackendDescriptor } from "@0/shared";
+import { BackendClient } from "./lib/backend-client";
+export { useBackendApi } from "./backend-context";
 import type {
   ConsoleCreateSessionInput,
   ConsoleEventsPage,
@@ -49,7 +52,7 @@ function refreshControlToken(): Promise<string | null> {
   })().finally(() => { refreshingControlToken = undefined; });
 }
 
-export async function webFetch(path: string, init?: RequestInit): Promise<Response> {
+export async function localControlFetch(path: string, init?: RequestInit): Promise<Response> {
   if (!path.startsWith("/api/") || path.includes("\\") || new URL(path, window.location.origin).origin !== window.location.origin) {
     throw new Error("Browser controls require a same-origin API path.");
   }
@@ -78,7 +81,10 @@ export async function webFetch(path: string, init?: RequestInit): Promise<Respon
   return request();
 }
 
-export async function webFetchJson<T>(path: string, init?: RequestInit): Promise<T> {
+export function createBackendApi(backendId: string, descriptor?: BackendDescriptor) {
+  const client = new BackendClient(backendId, localControlFetch, descriptor);
+  const webFetch = (path: string, init?: RequestInit) => client.request(path, init);
+async function webFetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await webFetch(path, init);
 
   if (!response.ok) {
@@ -95,43 +101,45 @@ export async function webFetchJson<T>(path: string, init?: RequestInit): Promise
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("json")) {
     throw new Error(
-      `The local server returned ${contentType || "non-JSON content"} for ${path}. Reload this page or check connection diagnostics.`,
+      `Engine ${client.backendId} returned ${contentType || "non-JSON content"} for ${path}. Reload this page or check connection diagnostics.`,
     );
   }
-  return response.json() as Promise<T>;
+  const result = await response.json() as T;
+  client.signal.throwIfAborted();
+  return result;
 }
 
-export function getDashboard(): Promise<DashboardResponse> {
+function getDashboard(): Promise<DashboardResponse> {
   return webFetchJson("/api/dashboard");
 }
 
-export async function getScans(): Promise<ScanRecord[]> {
+async function getScans(): Promise<ScanRecord[]> {
   const data = await webFetchJson<{ scans: ScanRecord[] }>("/api/scans");
   return data.scans;
 }
 
-export async function getScan(scanId: string): Promise<ScanRecord> {
+async function getScan(scanId: string): Promise<ScanRecord> {
   const data = await webFetchJson<{ scan: ScanRecord }>(`/api/scans/${encodeURIComponent(scanId)}`);
   return data.scan;
 }
 
-export function getScanEvents(scanId: string): Promise<ScanEventsResponse> {
+function getScanEvents(scanId: string): Promise<ScanEventsResponse> {
   return webFetchJson(`/api/scans/${encodeURIComponent(scanId)}/events`);
 }
 
-export function getRecentEvents(limit = 20): Promise<RecentEventsResponse> {
+function getRecentEvents(limit = 20): Promise<RecentEventsResponse> {
   return webFetchJson(`/api/events/recent?limit=${encodeURIComponent(String(limit))}`);
 }
 
-export function getScanFindings(scanId: string): Promise<ScanFindingsResponse> {
+function getScanFindings(scanId: string): Promise<ScanFindingsResponse> {
   return webFetchJson(`/api/scans/${encodeURIComponent(scanId)}/findings`);
 }
 
-export function getFindingFamily(fingerprint: string): Promise<FindingFamilyResponse> {
+function getFindingFamily(fingerprint: string): Promise<FindingFamilyResponse> {
   return webFetchJson(`/api/finding-family/${encodeURIComponent(fingerprint)}`);
 }
 
-export function updateFindingFamilyTriage(
+function updateFindingFamilyTriage(
   fingerprint: string,
   triageStatus: "new" | "accepted" | "suppressed",
   triageNote: string,
@@ -142,7 +150,7 @@ export function updateFindingFamilyTriage(
   });
 }
 
-export function updateFindingFamilyWorkflow(
+function updateFindingFamilyWorkflow(
   fingerprint: string,
   workflowStatus: FindingWorkflowStatus,
   workflowAssignee: string,
@@ -153,21 +161,21 @@ export function updateFindingFamilyWorkflow(
   });
 }
 
-export function recoverStaleWorkers(staleAfterMs = 30_000): Promise<{ ok: true; recovered: number }> {
+function recoverStaleWorkers(staleAfterMs = 30_000): Promise<{ ok: true; recovered: number }> {
   return webFetchJson("/api/control/recover-stale-workers", {
     method: "POST",
     body: JSON.stringify({ staleAfterMs }),
   });
 }
 
-export function pruneStoppedWorkers(): Promise<{ ok: true; deleted: number }> {
+function pruneStoppedWorkers(): Promise<{ ok: true; deleted: number }> {
   return webFetchJson("/api/control/prune-stopped-workers", {
     method: "POST",
     body: JSON.stringify({}),
   });
 }
 
-export function resetDatabase(seed: "verification" | "empty"): Promise<{
+function resetDatabase(seed: "verification" | "empty"): Promise<{
   ok: true;
   path: string;
   seed: "verification" | "empty";
@@ -181,7 +189,7 @@ export function resetDatabase(seed: "verification" | "empty"): Promise<{
   });
 }
 
-export function startDaemon(args?: {
+function startDaemon(args?: {
   label?: string;
   pollIntervalMs?: number;
 }): Promise<{ ok: true; pid: number | null; label: string }> {
@@ -191,14 +199,14 @@ export function startDaemon(args?: {
   });
 }
 
-export function stopDaemon(): Promise<{ ok: true; stopped: number }> {
+function stopDaemon(): Promise<{ ok: true; stopped: number }> {
   return webFetchJson("/api/control/stop-daemon", {
     method: "POST",
     body: JSON.stringify({}),
   });
 }
 
-export function launchRun(args: {
+function launchRun(args: {
   target: string;
   depth: "quick" | "default" | "deep";
   mode: "probe" | "deep" | "mcp" | "web";
@@ -211,77 +219,81 @@ export function launchRun(args: {
   });
 }
 
-export async function listConsoleSessions(signal?: AbortSignal): Promise<DesktopConsoleSession[]> {
+async function listConsoleSessions(signal?: AbortSignal): Promise<DesktopConsoleSession[]> {
   const result = await webFetchJson<{ sessions: DesktopConsoleSession[] }>("/api/console/sessions", { signal });
   return result.sessions;
 }
 
-export async function listSavedConsoleSessions(signal?: AbortSignal): Promise<ConsoleSavedSession[]> {
+async function listSavedConsoleSessions(signal?: AbortSignal): Promise<ConsoleSavedSession[]> {
   const result = await webFetchJson<{ sessions: ConsoleSavedSession[] }>("/api/console/saved", { signal });
   return result.sessions;
 }
 
-export async function createConsoleSession(input: ConsoleCreateSessionInput): Promise<DesktopConsoleSession> {
+async function createConsoleSession(input: ConsoleCreateSessionInput): Promise<DesktopConsoleSession> {
   const result = await webFetchJson<{ session: DesktopConsoleSession }>("/api/console/sessions", { method: "POST", body: JSON.stringify(input) });
   return result.session;
 }
 
-export async function getConsoleSnapshot(id: string, signal?: AbortSignal): Promise<ConsoleSessionSnapshot> {
+async function getConsoleSnapshot(id: string, signal?: AbortSignal): Promise<ConsoleSessionSnapshot> {
   const result = await webFetchJson<{ snapshot: ConsoleSessionSnapshot }>(`/api/console/sessions/${encodeURIComponent(id)}`, { signal });
   return result.snapshot;
 }
 
-export function getConsoleEvents(id: string, after: number, signal?: AbortSignal): Promise<ConsoleEventsPage> {
+function getConsoleEvents(id: string, after: number, signal?: AbortSignal): Promise<ConsoleEventsPage> {
   return webFetchJson(`/api/console/sessions/${encodeURIComponent(id)}/events?after=${after}`, { signal });
 }
 
-export function sendConsoleMessage(id: string, input: ConsoleMessageInput): Promise<{ session: DesktopConsoleSession }> {
+function sendConsoleMessage(id: string, input: ConsoleMessageInput): Promise<{ session: DesktopConsoleSession }> {
   return webFetchJson(`/api/console/sessions/${encodeURIComponent(id)}/messages`, { method: "POST", body: JSON.stringify(input) });
 }
 
-export function removeConsoleQueuedMessage(id: string, queueId?: string): Promise<unknown> {
+function removeConsoleQueuedMessage(id: string, queueId?: string): Promise<unknown> {
   return webFetchJson(`/api/console/sessions/${encodeURIComponent(id)}/queue${queueId ? `/${encodeURIComponent(queueId)}` : ""}`, { method: "DELETE" });
 }
 
-export function configureConsoleSession(id: string, input: ConsoleSessionConfiguration): Promise<{ session: DesktopConsoleSession }> {
+function configureConsoleSession(id: string, input: ConsoleSessionConfiguration): Promise<{ session: DesktopConsoleSession }> {
   return webFetchJson(`/api/console/sessions/${encodeURIComponent(id)}/configuration`, { method: "PATCH", body: JSON.stringify(input) });
 }
 
-export function resolveConsoleDecision(id: string, decisionId: string, response: DesktopConsoleDecisionResponse): Promise<{ session: DesktopConsoleSession }> {
+function resolveConsoleDecision(id: string, decisionId: string, response: DesktopConsoleDecisionResponse): Promise<{ session: DesktopConsoleSession }> {
   return webFetchJson(`/api/console/sessions/${encodeURIComponent(id)}/decisions/${encodeURIComponent(decisionId)}`, { method: "POST", body: JSON.stringify(response) });
 }
 
-export function controlConsoleSession(id: string, action: "cancel" | "clear" | "workers/stop"): Promise<{ session: DesktopConsoleSession }> {
+function controlConsoleSession(id: string, action: "cancel" | "clear" | "workers/stop"): Promise<{ session: DesktopConsoleSession }> {
   return webFetchJson(`/api/console/sessions/${encodeURIComponent(id)}/${action}`, { method: "POST", body: "{}" });
 }
 
-export function stopConsoleWorker(id: string, workerId: string): Promise<unknown> {
+function stopConsoleWorker(id: string, workerId: string): Promise<unknown> {
   return webFetchJson(`/api/console/sessions/${encodeURIComponent(id)}/workers/${encodeURIComponent(workerId)}/stop`, { method: "POST", body: "{}" });
 }
 
-export function closeConsoleSession(id: string): Promise<{ ok: true }> {
+function closeConsoleSession(id: string): Promise<{ ok: true }> {
   return webFetchJson(`/api/console/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-export function deleteConsoleSession(id: string): Promise<{ sessionId: string; savedId?: string }> {
+function deleteConsoleSession(id: string): Promise<{ sessionId: string; savedId?: string }> {
   return webFetchJson(`/api/console/sessions/${encodeURIComponent(id)}/delete`, { method: "POST", body: "{}" });
 }
 
-export async function resumeConsoleSession(id: string, input: ConsoleCreateSessionInput = {}): Promise<DesktopConsoleSession> {
+async function resumeConsoleSession(id: string, input: ConsoleCreateSessionInput = {}): Promise<DesktopConsoleSession> {
   const result = await webFetchJson<{ session: DesktopConsoleSession }>(`/api/console/saved/${encodeURIComponent(id)}/resume`, { method: "POST", body: JSON.stringify(input) });
   return result.session;
 }
 
-export function deleteSavedConsoleSession(id: string): Promise<{ ok: true }> {
+function deleteSavedConsoleSession(id: string): Promise<{ ok: true }> {
   return webFetchJson(`/api/console/saved/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-export function exportConsoleSession(id: string, saved = false, workerId?: string): Promise<ConsolePublicExport> {
+function exportConsoleSession(id: string, saved = false, workerId?: string): Promise<ConsolePublicExport> {
   if (workerId && saved) throw new Error("Saved root exports cannot address a live worker.");
   return webFetchJson(`/api/console/${saved ? "saved" : "sessions"}/${encodeURIComponent(id)}${workerId ? `/workers/${encodeURIComponent(workerId)}` : ""}/export`);
 }
 
 
-export function archiveConsoleSession(id: string, saved = false, archived = true): Promise<{ session: ConsoleSavedSession }> {
+function archiveConsoleSession(id: string, saved = false, archived = true): Promise<{ session: ConsoleSavedSession }> {
   return webFetchJson(`/api/console/${saved ? "saved" : "sessions"}/${encodeURIComponent(id)}/archive`, { method: "POST", body: JSON.stringify({ archived }) });
 }
+
+  return { client, webFetch, webFetchJson, getDashboard, getScans, getScan, getScanEvents, getRecentEvents, getScanFindings, getFindingFamily, updateFindingFamilyTriage, updateFindingFamilyWorkflow, recoverStaleWorkers, pruneStoppedWorkers, resetDatabase, startDaemon, stopDaemon, launchRun, listConsoleSessions, listSavedConsoleSessions, createConsoleSession, getConsoleSnapshot, getConsoleEvents, sendConsoleMessage, removeConsoleQueuedMessage, configureConsoleSession, resolveConsoleDecision, controlConsoleSession, stopConsoleWorker, closeConsoleSession, deleteConsoleSession, resumeConsoleSession, deleteSavedConsoleSession, exportConsoleSession, archiveConsoleSession };
+}
+export type BackendApi = ReturnType<typeof createBackendApi>;

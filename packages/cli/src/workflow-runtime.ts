@@ -18,6 +18,8 @@ import { resolveEngagement } from "./engagement-plan.js";
 
 export interface CliWorkflowRuntimeOptions {
   ownerId: string;
+  /** Hosted servers recover shared history once before accepting requests. */
+  recoverInterrupted?: boolean;
   workspace?: string;
   target?: string;
   scopePath?: string;
@@ -87,7 +89,7 @@ export async function createCliWorkflowRuntime(options: CliWorkflowRuntimeOption
   const scope = options.scopePath ? loadScope(options.scopePath) : undefined;
   const scopeState = getScopeEnforcementState(workspace);
   const store = new SecurityWorkflowStore(options.dbPath);
-  store.interruptActiveExecutions();
+  if (options.recoverInterrupted !== false) store.interruptActiveExecutions();
   const candidateStore = createFindingCandidateStore();
   const owned = new Set<string>();
   const requests = new Map<string, { id: string; fingerprint: string }>();
@@ -206,10 +208,22 @@ export async function createCliWorkflowRuntime(options: CliWorkflowRuntimeOption
     }, { id: execution.id });
     return execution;
   };
+  const getRun = (id: string) => {
+    const execution = read(id, true);
+    if (!owned.has(id)) return execution;
+    let view: WorkflowServiceRun;
+    try { view = service.get(options.ownerId, id); }
+    catch (error) { if (!["queued", "running"].includes(execution.status)) return execution; throw error; }
+    return { ...execution, status: view.status, nodeResults: nodeLinks(view), error: view.error ?? execution.error,
+      ...(view.cancellationRequestedAt ? { cancellationRequested: true, cancellationAcknowledged: true, cancellationRequestedAt: view.cancellationRequestedAt } : {}),
+      events: view.events.map(event => ({ ...event, result: event.result ? { status: event.result.status, scanIds: event.result.scanIds, dbPaths: event.result.dbPaths, error: event.result.error } : undefined, findings: undefined })),
+      oldestSequence: view.oldestSequence, eventsTruncated: view.eventsTruncated };
+  };
   return {
     listTemplates: () => structuredClone(SECURITY_WORKFLOW_TEMPLATES),
     getTemplate: (id: string) => getSecurityWorkflowTemplate(id),
     listWorkflows: () => store.list(),
+    listRuns: () => store.listExecutions(undefined, options.ownerId).map(execution => getRun(execution.id)),
     getWorkflow: (id: string) => store.get(id),
     saveWorkflow: (definition: unknown, expectedRevision?: number) => {
       const parsed = parseSecurityWorkflowInput(definition);
@@ -230,16 +244,7 @@ export async function createCliWorkflowRuntime(options: CliWorkflowRuntimeOption
       void launch.finally(() => launches.delete(key)).catch(() => {});
       return launch;
     },
-    getRun: (id: string) => {
-      const execution = read(id, true);
-      if (!owned.has(id)) return execution;
-      let view: WorkflowServiceRun;
-      try { view = service.get(options.ownerId, id); }
-      catch (error) { if (!["queued", "running"].includes(execution.status)) return execution; throw error; }
-      return { ...execution, status: view.status, nodeResults: nodeLinks(view), error: view.error ?? execution.error,
-        events: view.events.map(event => ({ ...event, result: event.result ? { status: event.result.status, scanIds: event.result.scanIds, dbPaths: event.result.dbPaths, error: event.result.error } : undefined, findings: undefined })),
-        oldestSequence: view.oldestSequence, eventsTruncated: view.eventsTruncated };
-    },
+    getRun,
     getRunResults: (id: string, page: { cursor?: number; limit?: number } = {}) => {
       const execution = read(id, true);
       const cursor = page.cursor ?? 0;
@@ -264,7 +269,7 @@ export async function createCliWorkflowRuntime(options: CliWorkflowRuntimeOption
       }
       try { service.cancel(options.ownerId, id); }
       catch (error) { if (["queued", "running"].includes(execution.status)) throw error; }
-      return read(id);
+      return getRun(id);
     },
     dispose: async () => { if (disposed) return; disposed = true; await Promise.allSettled([...launches.values()].map(launch => launch.promise)); await service.dispose(); try { await candidateStore.dispose(); } finally { store.close(); } },
   };

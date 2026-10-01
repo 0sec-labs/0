@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
+import { useBackendApi } from "@/api";
+import { backendStorageKey } from "./backend-client";
 
-function readStoredValue<T>(key: string, fallback: T): T {
+function readStoredValue<T>(key: string, fallback: T, legacyLocalKey?: string): T {
   if (typeof window === "undefined") return fallback;
 
   try {
-    const raw = window.localStorage.getItem(key);
+    const raw = window.localStorage.getItem(key) ?? (legacyLocalKey ? window.localStorage.getItem(legacyLocalKey) : null);
     if (!raw) return fallback;
     return JSON.parse(raw) as T;
   } catch {
@@ -13,7 +15,10 @@ function readStoredValue<T>(key: string, fallback: T): T {
 }
 
 export function usePersistentState<T>(key: string, fallback: T) {
-  const [value, setValue] = useState<T>(() => readStoredValue(key, fallback));
+  const { client } = useBackendApi();
+  const legacyLocalKey = client.backendId === "local" ? key : undefined;
+  key = backendStorageKey(client.backendId, key);
+  const [value, setValue] = useState<T>(() => readStoredValue(key, fallback, legacyLocalKey));
 
   useEffect(() => {
     try {

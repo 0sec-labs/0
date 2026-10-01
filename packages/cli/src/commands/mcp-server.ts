@@ -29,6 +29,8 @@ import { SecurityWorkflowBindingsSchema, type AuthConfig } from "@0/shared";
 import { z } from "zod";
 
 type McpServerOptions = {
+  backend?: string;
+  backendsConfig?: string;
   target?: string;
   scanId?: string;
   workflows?: boolean;
@@ -75,7 +77,7 @@ const MCP_LIVE_TOOL_NAMES = new Set([
 
 const MCP_WORKFLOW_TOOL_NAMES = new Set([
   "list_templates", "get_template", "list_workflows", "get_workflow", "save_workflow",
-  "start_run", "get_run", "get_run_results", "cancel_run",
+  "start_run", "get_run", "get_run_results", "cancel_run", "list_runs",
 ]);
 
 function resolveMcpToolNames(raw: string | undefined, workflows = false): ReadonlySet<string> {
@@ -277,11 +279,12 @@ function clampRateLimitToPosture(
 
 const workflowInputsSchema = SecurityWorkflowBindingsSchema;
 
-type WorkflowRuntime = Awaited<ReturnType<typeof import("../workflow-runtime.js")["createCliWorkflowRuntime"]>>;
+type WorkflowRuntime = Awaited<ReturnType<typeof import("../workflow-runtime.js")["createCliWorkflowRuntime"]>> | Awaited<ReturnType<typeof import("../remote-workflow-runtime.js")["createRemoteWorkflowRuntime"]>>;
 
 async function registerWorkflowTools(server: McpServer, selected: ReadonlySet<string>, opts: McpServerOptions): Promise<WorkflowRuntime> {
-  const { createCliWorkflowRuntime } = await import("../workflow-runtime.js");
-  const runtime = await createCliWorkflowRuntime({
+  const runtime = opts.backend
+    ? await (await import("../remote-workflow-runtime.js")).createRemoteWorkflowRuntime({ backendId: opts.backend, configPath: opts.backendsConfig })
+    : await (await import("../workflow-runtime.js")).createCliWorkflowRuntime({
     ownerId: `mcp:${randomUUID()}`,
     workspace: opts.workspace,
     target: opts.target,
@@ -293,6 +296,7 @@ async function registerWorkflowTools(server: McpServer, selected: ReadonlySet<st
   const tools = [
     { name: "list_templates", description: "List workflow templates and supported target types.", schema: z.object({}).strict(), run: () => runtime.listTemplates() },
     { name: "get_template", description: "Read a workflow template.", schema: z.object({ id }).strict(), run: (args: any) => runtime.getTemplate(args.id) },
+    { name: "list_runs", description: "List workflow runs visible to this execution owner on the selected engine.", schema: z.object({}).strict(), run: () => runtime.listRuns() },
     { name: "list_workflows", description: "List saved workflow definitions.", schema: z.object({}).strict(), run: () => runtime.listWorkflows() },
     { name: "get_workflow", description: "Read a saved workflow and its revision.", schema: z.object({ id }).strict(), run: (args: any) => runtime.getWorkflow(args.id) },
     { name: "save_workflow", description: "Validate and save a workflow definition with optional revision protection.", schema: z.object({ definition: z.record(z.unknown()), expectedRevision: z.number().int().positive().optional() }).strict(), run: (args: any) => runtime.saveWorkflow(args.definition, args.expectedRevision) },
@@ -300,11 +304,12 @@ async function registerWorkflowTools(server: McpServer, selected: ReadonlySet<st
       if (Boolean(args.templateId) === Boolean(args.workflowId)) throw new Error("Select exactly one templateId or workflowId.");
       if (args.workflowId && !args.revision) throw new Error("Saved workflow runs require a pinned revision.");
       if (args.allowApply && !opts.allowApply) throw new Error("Applying workflow changes requires the host --allow-apply capability.");
+      if (opts.target && args.target.trim() !== opts.target.trim()) throw new Error("Target does not match this MCP connection's configured target.");
       return runtime.startRun(args);
     } },
-    { name: "get_run", description: "Read status of a run owned by this MCP session.", schema: z.object({ runId: id }).strict(), run: (args: any) => runtime.getRun(args.runId) },
+    { name: "get_run", description: "Read status of a run visible to this connection's runtime owner.", schema: z.object({ runId: id }).strict(), run: (args: any) => runtime.getRun(args.runId) },
     { name: "get_run_results", description: "Read paginated findings and artifact references from an owned run.", schema: z.object({ runId: id, cursor: z.number().int().nonnegative().optional(), limit: z.number().int().min(1).max(100).optional() }).strict(), run: (args: any) => runtime.getRunResults(args.runId, { cursor: args.cursor, limit: args.limit }) },
-    { name: "cancel_run", description: "Cancel an active run owned by this MCP session.", schema: z.object({ runId: id }).strict(), run: (args: any) => runtime.cancelRun(args.runId) },
+    { name: "cancel_run", description: "Cancel an active run visible to this connection's runtime owner.", schema: z.object({ runId: id }).strict(), run: (args: any) => runtime.cancelRun(args.runId) },
   ];
   for (const tool of tools) {
     if (!selected.has(tool.name)) continue;
@@ -344,7 +349,7 @@ async function connectWorkflowServer(server: McpServer, runtime: WorkflowRuntime
   };
   try {
     await server.connect(transport);
-    console.error("0 MCP workflow server running; assessments use 0's configured provider.");
+    console.error("0 MCP workflow server running; assessments use the selected engine's configured provider.");
   } catch (error) {
     process.off("SIGINT", interrupt);
     process.off("SIGTERM", interrupt);
@@ -359,6 +364,8 @@ export function registerMcpServerCommand(program: Command): void {
     .description("Expose selected target tools or managed workflows over MCP stdio")
     .option("--target <target>", "Target URL for this MCP session")
     .option("--scan-id <scanId>", "Scan ID to associate persisted findings and target updates with")
+    .option("--backend <id>", "Use a registered remote workflow engine; no local execution fallback")
+    .option("--backends-config <path>", "Operator backend connection registry JSON file")
     .option("--workflows", "Expose workflow discovery and run lifecycle tools instead of live tools", false)
     .option("--allow-apply", "Permit explicit workflow apply requests inside the authorized workspace", false)
     .option("--workspace <path>", "Absolute authorized local root for workflow source assessments")
@@ -381,6 +388,15 @@ export function registerMcpServerCommand(program: Command): void {
       const selectedToolNames = resolveMcpToolNames(opts.tools, opts.workflows);
       const liveEnabled = [...selectedToolNames].some(name => MCP_LIVE_TOOL_NAMES.has(name));
       const workflowsEnabled = [...selectedToolNames].some(name => MCP_WORKFLOW_TOOL_NAMES.has(name));
+      if (opts.backendsConfig && !opts.backend) throw new Error("--backends-config requires an explicit --backend.");
+      if (opts.backend) {
+        if (liveEnabled || !workflowsEnabled) throw new Error("Remote backends expose workflow tools only; select --workflows or explicit workflow tool names.");
+        if (opts.workspace || opts.scope || opts.dbPath || opts.scanId || opts.rateLimit || opts.engagementProfile || opts.allowScanners || opts.wafEvasion === false) throw new Error("The remote backend owns workspace, scope, storage and engagement settings; omit local execution flags.");
+        const server = new McpServer({ name: "0-mcp", version: "0.1.0" }, { capabilities: { logging: {} } });
+        const runtime = await registerWorkflowTools(server, selectedToolNames, opts);
+        await connectWorkflowServer(server, runtime);
+        return;
+      }
       const target = opts.target?.trim() ?? "";
       const scanId = opts.scanId?.trim() ?? "";
       if (liveEnabled && (!target || !scanId)) {

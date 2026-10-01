@@ -2,7 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Plug } from "lucide-react";
-import { webFetchJson } from "@/api";
+import { useBackendApi } from "@/api";
 import type { PluginItem, PluginsResponse } from "@/components/console-control/contracts";
 
 export interface IntegrationMentionReplacement { start: number; end: number; text: string }
@@ -20,6 +20,7 @@ export function useIntegrationPicker({ draft, caret, onSelect }: {
   caret: number;
   onSelect: (plugin: PluginItem, replacement: IntegrationMentionReplacement) => void;
 }) {
+  const { webFetchJson } = useBackendApi();
   const id = useId();
   const mention = integrationMentionAt(draft, caret);
   const key = mention ? `${mention.start}:${mention.end}:${mention.query}` : "";

@@ -1,3 +1,4 @@
+import { useBackendApi } from "@/api";
 import { eventStream } from "@/lib/event-stream";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, useSearchParams } from "react-router-dom";
@@ -184,6 +185,7 @@ function demoHuntEvents(t0: number): osecHuntEvent[] {
 }
 
 export function LivePage() {
+  const { client } = useBackendApi();
   const [params, setParams] = useSearchParams();
   const eventsUrl = params.get("events") ?? "";
   const huntUrl = params.get("huntEvents") ?? "/api/v1/presentation/events";
@@ -371,7 +373,7 @@ export function LivePage() {
     setConnection("connecting");
     let source: ReturnType<typeof eventStream> | null = null;
     try {
-      source = eventStream(eventsUrl);
+      source = eventStream(eventsUrl, client);
     } catch (error) {
       setConnection("error");
       setLastError(error instanceof Error ? error.message : String(error));
@@ -406,7 +408,7 @@ export function LivePage() {
     setHuntConnection("connecting");
     let source: ReturnType<typeof eventStream> | null = null;
     try {
-      source = eventStream(huntUrl);
+      source = eventStream(huntUrl, client);
     } catch (error) {
       setHuntConnection("error");
       setLastError(error instanceof Error ? error.message : String(error));

@@ -22,6 +22,14 @@ function setup() {
 }
 afterEach(() => { process.exitCode = 0; });
 describe("workflow CLI", () => {
+  it("remembers cancellation while a remote engine allocates a run", async () => {
+    const { runtime, deps } = setup();
+    const previous = process.listenerCount("SIGINT");
+    vi.mocked(runtime.startRun).mockImplementation(async () => { process.emit("SIGINT"); return fixture("running"); });
+    await runWorkflowCommand("saved", {}, deps);
+    expect(runtime.cancelRun).toHaveBeenCalledWith("run-1");
+    expect(process.listenerCount("SIGINT")).toBe(previous);
+  });
   it("runs a template directly and preserves findings without failing completed execution", async () => {
     const { runtime, deps } = setup();
     await runWorkflowCommand(undefined, { template: "repository-review", target: "/repo", workspace: "/repo", scope: "/scope.json", model: "configured", timeCap: "1000", costCap: "2", format: "json" }, deps);
@@ -124,5 +132,25 @@ describe("workflow CLI", () => {
     await program.parseAsync(["runs", "cancel", "run-1"], { from: "user" });
     expect(deps.err).toHaveBeenCalledWith(JSON.stringify({ error: "Run is not owned by this host." }));
     expect(process.exitCode).toBe(2);
+  });
+});
+
+
+describe("remote workflow CLI selection", () => {
+  it("uses remote targets and inputs without a local model, root or storage", async () => {
+    const { runtime, deps } = setup();
+    deps.createRemoteRuntime = vi.fn(async () => runtime);
+    await runWorkflowCommand(undefined, { template: "repository-review", backend: "engine-one", backendsConfig: "/operator/backends.json", target: "D:\\engine\\repo" }, deps);
+    expect(deps.createRemoteRuntime).toHaveBeenCalledWith({ backendId: "engine-one", configPath: "/operator/backends.json" });
+    expect(deps.createRuntime).not.toHaveBeenCalled();
+    expect(runtime.startRun).toHaveBeenCalledWith(expect.objectContaining({ target: "D:\\engine\\repo" }));
+  });
+  it("rejects local execution flags and never creates a local runtime on remote failure", async () => {
+    for (const options of [{ workspace: "/repo" }, { scope: "/scope.json" }, { dbPath: "/local.db" }, { model: "local-model" }]) {
+      const { runtime, deps } = setup(); deps.createRemoteRuntime = vi.fn(async () => runtime);
+      await runWorkflowCommand(undefined, { backend: "engine-one", template: "review", target: "/engine/repo", ...options }, deps);
+      expect(deps.createRuntime).not.toHaveBeenCalled(); expect(deps.createRemoteRuntime).not.toHaveBeenCalled();
+      expect(process.exitCode).toBe(2);
+    }
   });
 });

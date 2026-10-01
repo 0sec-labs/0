@@ -5,7 +5,7 @@ import { ArrowLeft, MessageSquare, Play, Plus, Trash2 } from "lucide-react";
 import type { SecurityWorkflow, SecurityWorkflowInput } from "@0/shared";
 import { createSecurityWorkflowTemplate } from "@0/shared/dist/security-workflow-templates.js";
 import { parseSecurityWorkflowInput, isSecurityWorkflowOperation } from "@0/shared/dist/security-workflows.js";
-import { createConsoleSession, sendConsoleMessage, webFetchJson } from "@/api";
+import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -21,6 +21,7 @@ import { ActivityIndicator } from "@/console/loading-state";
 const DEFINITIONS = "/api/console/workflow-definitions";
 
 export function WorkflowsPage() {
+  const { createConsoleSession, sendConsoleMessage, webFetchJson } = useBackendApi();
   const navigate = useNavigate();
   const cache = useQueryClient();
   const [search, setSearch] = useSearchParams();

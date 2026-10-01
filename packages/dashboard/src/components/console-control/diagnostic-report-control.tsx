@@ -1,7 +1,7 @@
 import { ControlDisclosure } from "./control-disclosure";
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { webFetchJson } from "@/api";
+import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Check, ControlCard, Facts, Feedback, Field, SubmitButton, jsonBody } from "./control-ui";
@@ -9,6 +9,7 @@ import { Check, ControlCard, Facts, Feedback, Field, SubmitButton, jsonBody } fr
 interface FeedbackResponse { saved?: boolean; path?: string; submitted: boolean; cancelled?: boolean; previewId?: string; preview?: { url: string; body: string; headers: Record<string, string>; warnings: string[] } }
 
 export function DiagnosticReportControl() {
+  const { webFetchJson } = useBackendApi();
   const [message, setMessage] = useState("");
   const [requestPreview, setRequestPreview] = useState(false);
   const [reviewed, setReviewed] = useState(false);

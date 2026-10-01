@@ -134,6 +134,54 @@ rebuild:
   satisfy the N-boot gate. Each boot contributes its own hashed dmesg artifact,
   so a 2-of-3 claim carries the full three-boot audit trail.
 
+## Execution ownership and engine connections
+
+CLI, browser, schedules, and MCP use the shared workflow runner. Assessment
+shortcuts retain a one-step run; fix, verification, research, and deep review use
+their own typed executors. An individual target tool still executes through the
+tool executor. Calling an HTTP tool does not start a full security assessment.
+
+A workflow defines steps. A run captures the definition, bound inputs, execution
+status, and returned evidence. The core runner executes connected steps
+sequentially, applies workflow and step deadlines, and shares provider spend.
+Finding severity and proof status are independent of whether execution completed.
+The control database retains workflow snapshots and combined results; filesystem
+artifacts remain on the engine that produced them.
+
+An engine connection chooses the process that owns sessions, runs, approvals,
+workspaces, provider connections, and execution environments. Model selection
+chooses a provider route within that engine. Workspace paths belong to that
+engine's filesystem. Connecting to a server does not copy a laptop repository or
+send the laptop's model credentials to it.
+
+```mermaid
+flowchart LR
+  UI[Browser / CLI / MCP] --> Connection[Selected engine connection]
+  Connection --> Local[Local engine]
+  Connection --> Remote[Authenticated remote engine]
+  Local --> LocalRunner[Shared workflow runner]
+  Remote --> RemoteRunner[Shared workflow runner]
+  LocalRunner --> LocalTools[Local workspace / admitted SmolVM / qualified tools]
+  RemoteRunner --> RemoteTools[Server workspace / admitted SmolVM / qualified tools]
+```
+
+A remote engine runs the same services on another machine and owns that machine's
+local or SmolVM execution boundaries. A remote executor would let one engine
+outsource tool execution while retaining ownership of the run. These are separate
+capabilities. The engine connection protocol does not provide a generic remote
+shell, arbitrary executor registration, or qualification of another sandbox.
+The existing runner and SmolVM contracts still apply on the selected engine.
+
+The browser uses a trusted same-origin connection proxy. Registered descriptors
+contain capability and connection metadata; remote bearer secrets remain in the
+local connection service, and provider credentials remain on the execution engine.
+Resources and approvals are bound to their selected engine. A connection failure
+is a disconnected state, not proof that the engine stopped its work. Reconnecting
+reads the owning engine's retained state.
+
+See [Engine Connections](/engine-connections/) for registration, SSH tunnel setup,
+remote workflow commands, and the current lifecycle boundaries.
+
 ## Interactive scan pipeline
 
 For web pentesting the agent is shell-first: `bash` (curl, python3, sqlmap, …)

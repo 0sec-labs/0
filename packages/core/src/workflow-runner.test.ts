@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Finding, ScanReport, SecurityWorkflowInput } from "@0/shared";
 import { executeWorkflow } from "./workflow-runner.js";
 import { WorkflowService } from "./workflow-service.js";
@@ -226,6 +226,26 @@ describe("shared workflow runner", () => {
 });
 
 describe("owned workflow service", () => {
+  it("acknowledges cancellation while executor cleanup is still pending", async () => {
+    const snapshots: Array<{ status: string; cancellationRequestedAt?: string }> = [];
+    const service = new WorkflowService({ onChange: run => { snapshots.push(run); } });
+    let release!: () => void;
+    let entered!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const cleanup = new Promise<void>(resolve => { release = resolve; });
+    service.start("owner", { workflow, executeAssessment: async () => { entered(); await cleanup; return { status: "cancelled" }; } }, { id: "pending" });
+    await started;
+    expect(() => service.cancel("other", "pending")).toThrow("not found");
+    const acknowledged = service.cancel("owner", "pending");
+    expect(acknowledged.status).toBe("running");
+    expect(acknowledged.cancellationRequestedAt).toEqual(expect.any(String));
+    expect(service.cancel("owner", "pending").cancellationRequestedAt).toBe(acknowledged.cancellationRequestedAt);
+    await vi.waitFor(() => expect(snapshots.some(run => run.status === "running" && run.cancellationRequestedAt)).toBe(true));
+    release();
+    await service.wait("owner", "pending");
+    expect(service.get("owner", "pending").status).toBe("cancelled");
+    await service.dispose();
+  });
   it("starts promptly, enforces ownership, deduplicates launches, and retains results", async () => {
     const service = new WorkflowService();
     let calls = 0;
