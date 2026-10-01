@@ -56,7 +56,7 @@ describe("local console persistent history", () => {
     seed.close();
     vi.stubEnv("ZERO_DB_PATH", path);
 
-    const session = createLocalConsoleSession({ runtime: toolRuntime("query_findings", { all_sessions: true, limit: 50 }) });
+    const session = createLocalConsoleSession({ runtime: toolRuntime("query_findings", { all_sessions: true, limit: 50 }) }, undefined, { homeDir: dirname(path) });
     try {
       const outcome = await session.send("Show the findings from old runs");
       expect(outcome.toolCalls[0].result).toMatchObject({
@@ -82,7 +82,7 @@ describe("local console persistent history", () => {
         evidence_request: "fixture request",
         evidence_response: "fixture response",
       }),
-    }, path);
+    }, path, { homeDir: dirname(path) });
     try {
       const outcome = await writer.send("Record the finding");
       expect(outcome.toolCalls[0].result.success, JSON.stringify(outcome.toolCalls[0].result)).toBe(true);
@@ -90,7 +90,7 @@ describe("local console persistent history", () => {
       await writer.cleanup();
       await writer.cleanup();
     }
-    const reader = createLocalConsoleSession({ runtime: toolRuntime("query_findings", { scan_id: writer.scanId }) }, path);
+    const reader = createLocalConsoleSession({ runtime: toolRuntime("query_findings", { scan_id: writer.scanId }) }, path, { homeDir: dirname(path) });
     try {
       const outcome = await reader.send("Read that prior session");
       expect(outcome.toolCalls[0].result).toMatchObject({
@@ -116,7 +116,7 @@ describe("local console persistent history", () => {
       autonomyMode,
       runtime: toolRuntime("read_conversation", { session_id: "prior-conversation" }),
       conversationHistory: createConversationHistory({ homeDir: home, cwd: "/history-project" }),
-    }, path);
+    }, path, { homeDir: home });
     try {
       const outcome = await session.send("Read the earlier conversation");
       expect(outcome.toolCalls[0].result).toMatchObject({
