@@ -18,9 +18,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
   const queryClient = useQueryClient();
   const [controlMessage, setControlMessage] = useState<string | null>(null);
   const [target, setTarget] = useState("");
-  const [mode, setMode] = useState<"deep" | "web" | "mcp">("deep");
   const [depth, setDepth] = useState<"quick" | "default" | "deep">("default");
-  const [runtime, setRuntime] = useState<"auto" | "api" | "codex" | "claude" | "gemini">("auto");
   const recentEventsQuery = useQuery({
     queryKey: ["recent-events"],
     queryFn: () => getRecentEvents(12),
@@ -113,12 +111,9 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
     mutationFn: () => launchRun({
       target: target.trim(),
       depth,
-      mode,
-      runtime,
-      ensureDaemon: true,
     }),
     onSuccess: async () => {
-      setControlMessage(`Scan started for ${target.trim()}.`);
+      setControlMessage(`Run started for ${target.trim()}.`);
       setTarget("");
       await refreshDashboard();
     },
@@ -220,12 +215,19 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
         )}
       />
 
+            {controlMessage ? (
+              <div className="rounded-md border border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+                {controlMessage}
+                {launchMutation.data && <NavLink to={`/console/${launchMutation.data.sessionId}`} className="ml-2 underline">Open chat</NavLink>}
+              </div>
+            ) : null}
+
       {isEmptyWorkspace ? (
         <section className="grid gap-4">
           <Card className="overflow-hidden">
             <CardHeader>
               <div>
-                <CardTitle>Start your first scan</CardTitle>
+                <CardTitle>Start your first run</CardTitle>
               </div>
             </CardHeader>
             <CardContent className="space-y-5">
@@ -234,21 +236,11 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                 <Input
                   value={target}
                   onChange={(event) => setTarget(event.target.value)}
-                  placeholder={mode === "mcp" ? "mcp://assistant-endpoint" : mode === "web" ? "https://app.example.com" : "https://api.example.com"}
+                  placeholder="Repository path or https://app.example.com"
                 />
               </div>
 
               <div className="grid gap-4 lg:grid-cols-3">
-                <SelectionField
-                  label="Mode"
-                  value={mode}
-                  onValueChange={(value) => setMode(value as typeof mode)}
-                  options={[
-                    { value: "deep", label: "API/URL" },
-                    { value: "web", label: "Web app" },
-                    { value: "mcp", label: "MCP" },
-                  ]}
-                />
                 <SelectionField
                   label="Depth"
                   value={depth}
@@ -257,18 +249,6 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                     { value: "quick", label: "Quick" },
                     { value: "default", label: "Default" },
                     { value: "deep", label: "Deep" },
-                  ]}
-                />
-                <SelectionField
-                  label="Engine"
-                  value={runtime}
-                  onValueChange={(value) => setRuntime(value as typeof runtime)}
-                  options={[
-                    { value: "auto", label: "Auto" },
-                    { value: "api", label: "API" },
-                    { value: "codex", label: "Codex" },
-                    { value: "claude", label: "Claude" },
-                    { value: "gemini", label: "Gemini" },
                   ]}
                 />
               </div>
@@ -309,7 +289,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
         <Card className="overflow-hidden">
           <CardHeader>
               <div>
-                <CardTitle>New scan</CardTitle>
+                <CardTitle>New run</CardTitle>
               </div>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -319,19 +299,9 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                 <Input
                   value={target}
                   onChange={(event) => setTarget(event.target.value)}
-                  placeholder={mode === "mcp" ? "mcp://assistant-endpoint" : mode === "web" ? "https://app.example.com" : "https://api.example.com"}
+                  placeholder="Repository path or https://app.example.com"
                 />
               </label>
-              <SelectionField
-                label="Mode"
-                value={mode}
-                onValueChange={(value) => setMode(value as typeof mode)}
-                options={[
-                  { value: "deep", label: "API/URL" },
-                  { value: "web", label: "Web app" },
-                  { value: "mcp", label: "MCP" },
-                ]}
-              />
               <SelectionField
                 label="Depth"
                 value={depth}
@@ -340,18 +310,6 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                   { value: "quick", label: "Quick" },
                   { value: "default", label: "Default" },
                   { value: "deep", label: "Deep" },
-                ]}
-              />
-              <SelectionField
-                label="Engine"
-                value={runtime}
-                onValueChange={(value) => setRuntime(value as typeof runtime)}
-                options={[
-                  { value: "auto", label: "Auto" },
-                  { value: "api", label: "API" },
-                  { value: "codex", label: "Codex" },
-                  { value: "claude", label: "Claude" },
-                  { value: "gemini", label: "Gemini" },
                 ]}
               />
             </div>
@@ -392,11 +350,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
               </Button>
             </div>
 
-            {controlMessage ? (
-              <div className="rounded-md border border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
-                {controlMessage}
-              </div>
-            ) : null}
+
           </CardContent>
         </Card>
 

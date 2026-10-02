@@ -8,7 +8,7 @@ Choose the integration direction first:
 | Goal | Interface | What runs where |
 |---|---|---|
 | Let a coding agent run a complete review or scan | [Direct CLI](#coding-agent-workflows) | The agent launches the local CLI with your configured model runtime |
-| Let an external agent launch workflows or call selected target tools | [MCP server](#mcp-server) | The client chooses operations; workflow assessments use 0's provider in a local stdio host |
+| Let an external agent launch workflows or call selected target tools | [MCP server](#mcp-server) | The client chooses operations; workflow assessments use the selected engine's provider |
 | Give 0 tools from another MCP server | [MCP client configuration](#connect-external-mcp-tools-to-0) | 0 connects operator-configured local or remote servers |
 | Install a third-party tool | [Hackstore plugins](#cli-managed-operator-plugins) | Enabled JavaScript runs as a local child process, not in a sandbox |
 | Let the model author executable tools | [Self-extension](#model-authored-executable-plugins-self-extension) | Generated TypeScript runs in disposable Docker or smolvm guests |
@@ -70,7 +70,7 @@ This host runs only the network transport; the engine supplies its workspace,
 scope, execution profile and model connection. Do not pass local `--workspace`,
 `--scope` or `--db-path` flags. The engine must advertise `workflow-engine` support.
 Remote clients detach on disconnect; engine runs persist until completion or
-explicit cancellation. `list_runs` lists that credential's runs. Foreground
+explicit cancellation. `list_runs` lists the web engine's retained runs. Foreground
 `0 workflow run ... --backend production` explicitly cancels on SIGINT.
 Cancellation responses include `cancellationAcknowledged: true` when the
 controller accepts the request. The run remains active until executor cleanup
@@ -98,12 +98,12 @@ source access; source workflows need `--workspace`.
 | --- | --- |
 | `list_templates` / `get_template` | Read versioned templates and compatible target types |
 | `list_workflows` / `get_workflow` | Read saved definitions and their revisions |
-| `list_runs` | Read runs visible to the selected runtime owner |
+| `list_runs` | Read retained runs on the selected engine |
 | `save_workflow` | Validate and save a definition with optional `expectedRevision` |
 | `start_run` | Start one template or saved workflow with target inputs; return the run ID |
 | `get_run` | Read the owned run's status, step outcomes, and retained events |
 | `get_run_results` | Page through findings and retained assessment results |
-| `cancel_run` | Cancel a run owned by this MCP host |
+| `cancel_run` | Request cancellation of an execution on the selected engine |
 
 For example, call `start_run` with:
 
@@ -143,11 +143,49 @@ and an explicit `start_run.allowApply: true`. The host must also have an
 authorized source workspace. Fix proposal remains separate from application;
 publication is not implied by either permission.
 
-Runs belong to this stdio host. Graceful disconnect cancels its active runs;
-the server is not a durable background daemon. Retained history does not grant
-a new host access to another owner's runs. Browser chat's **Connect an external
-agent** copies setup instructions; it does not attach the client to a browser
-conversation or run.
+An embedded stdio host runs the same engine services as the browser. Closing
+that host ends its execution lifetime. To use an already running web engine,
+attach the MCP transport and optionally select an existing browser session:
+
+```bash
+0 mcp-server --workflows \
+  --engine-url http://127.0.0.1:3000 --engine-token-env ENGINE_TOKEN \
+  --session SESSION_ID
+```
+
+`ENGINE_TOKEN` holds the engine's configured bearer credential; its value never
+appears in CLI arguments or client reports. Direct connections use HTTPS, or
+HTTP on loopback for a local engine or SSH tunnel. `--backend production` uses
+a trusted registered connection instead. Engine attachment requires no local
+workspace, scope, model, or target executor setup.
+
+CLI and MCP workflow clients also discover a running local web engine that owns
+the selected control database and workspace. Private metadata holds its identity
+and transport credential; these are not copied to browser descriptors or tool
+reports. Failed authentication or a changed live engine fails attachment rather
+than launching a replacement. Run from the engine's workspace and omit local
+scope, model, and apply-grant overrides when attaching automatically.
+
+`start_run.sessionId` binds the run to an existing session, overriding the
+connection's optional `--session` default. Missing sessions fail attachment;
+no session or approval is silently recreated. Sessionless launches create an
+engine session under its current admission grants. Run status, results, and
+cancellation resolve the same web-owned executions. Disconnecting an attached
+MCP client detaches its transport while the engine continues running.
+
+`start_assessment` accepts `target`, optional `sessionId`, and a complete `plan`
+with `goal`, `depth`, `runCount`, `executionMode`, `timeCapMs`, and `costCapUsd`.
+The selected engine authorizes the target and executes the structured plan.
+
+Session tools include `list_sessions`, `create_session`, `attach_session`,
+`get_session`, `get_session_events`, `send_message`, `continue_session`,
+`cancel_session`, `resolve_decision`, `list_saved_sessions`, and `resume_session`.
+Use an explicit `--tools` allowlist to expose only the desired operations.
+Saved-session resume creates a new session under current admission grants.
+`get_capabilities` reports supported operations. `resume_scan` accepts
+`sessionId`, `scanId`, optional nonnegative `branchFromEntry`, and optional
+`timeCapMs`/`costCapUsd`; it resumes persisted scan work when the engine supports
+that operation. It does not resume an interrupted workflow graph.
 
 Browser chat offers the same template and run lifecycle operations using its
 selected runtime. A chat `start_run` returns a queued `requestId`; execution
@@ -177,7 +215,12 @@ changing the chat's configuration invalidates the request.
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--workflows` | `false` | Expose workflow tools instead of the default live tools |
+| `--workflows` | `false` | Expose workflow, session, and scan resume lifecycle tools instead of the default live tools |
+| `--backend <id>` | — | Attach to a trusted registered engine |
+| `--backends-config <path>` | — | Trusted backend registry configuration |
+| `--engine-url <url>` | — | Attach directly to a running engine |
+| `--engine-token-env <name>` | — | Environment variable holding the direct engine credential |
+| `--session <id>` | — | Default existing engine session for workflow starts |
 | `--workspace <path>` | — | Absolute authorized local root for source workflows |
 | `--allow-apply` | `false` | Permit explicit apply requests inside the authorized workflow workspace |
 | `--db-path <path>` | — | Path to SQLite database for persistence |

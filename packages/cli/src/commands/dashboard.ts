@@ -13,11 +13,12 @@ import { z } from "zod";
 import {
   createPresentationEvent,
   BackendRequestIdSchema,
+  ScanResumeRequestSchema,
   type FindingTriageStatus,
   type PresentationEvent,
   type PresentationSource,
 } from "@0/shared";
-import { LlmApiRuntime, readToolCallNames } from "@0/core";
+import { LlmApiRuntime, readToolCallNames, exportReport, isReportExportFormat } from "@0/core";
 import { presentationEventBus } from "../presentation/event-bus.js";
 import { buildFindingConsoleCommand } from "../finding-handoff.js";
 import { workbenchStatus } from "./workbench.js";
@@ -30,6 +31,8 @@ import { DASHBOARD_ASSETS, type EmbeddedDashboardAsset } from "../dashboard-asse
 import { findDashboardInstance } from "../web/dashboard-instance.js";
 import { BackendConnectionRegistry, backendBearerFromEnv, createBackendHandshake, handleBackendConnectionRequest } from "../web/backend-connections.js";
 import { WorkflowEngineService } from "../workflow-engine-service.js";
+import { retainedScanSnapshot, retainedFindingSnapshot } from "../web/report-artifacts.js";
+import { assertLocalEngineAvailable, registerLocalEngine } from "../local-engine.js";
 
 type DashboardOptions = {
   dbPath?: string;
@@ -1045,43 +1048,6 @@ function stopDaemonWorkers(
   }
 }
 
-function launchRunProcess(args: {
-  dbPath?: string;
-  target: string;
-  depth: string;
-  mode: string;
-  runtime: string;
-}): { pid: number | null } {
-  const cliEntrypoint = resolveCliEntrypoint();
-  const childArgs = [
-    cliEntrypoint,
-    "scan",
-    "--target",
-    args.target,
-    "--depth",
-    args.depth,
-    "--mode",
-    args.mode,
-    "--runtime",
-    args.runtime,
-    "--format",
-    "json",
-  ];
-
-  if (args.dbPath) {
-    childArgs.push("--db-path", args.dbPath);
-  }
-
-  const child = spawn(process.execPath, childArgs, {
-    cwd: process.cwd(),
-    stdio: "ignore",
-  });
-
-  child.unref();
-  return { pid: child.pid ?? null };
-}
-
-
 function groupByKey<T, K extends keyof T>(rows: T[], key: K) {
   const map = new Map<string, T[]>();
   for (const row of rows) {
@@ -1164,7 +1130,7 @@ function requireControlToken(req: IncomingMessage, res: ServerResponse, controlT
   const provided = req.headers["x-0-control-token"];
   const matches = (a: unknown, b: string) => typeof a === "string" && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a), Buffer.from(b));
   const bearer = typeof req.headers.authorization === "string" && req.headers.authorization.startsWith("Bearer ") ? req.headers.authorization.slice(7) : undefined;
-  if (!matches(provided, controlToken) && !(engineBearer && matches(bearer, engineBearer))) {
+  if (!matches(provided, controlToken) && !matches(bearer, controlToken) && !(engineBearer && matches(bearer, engineBearer))) {
     json(res, 403, { error: "Invalid or missing control token" });
     return false;
   }
@@ -1437,53 +1403,6 @@ async function handleApiRequest(
     if (controlPath.action === "stop-daemon") {
       const stopped = stopDaemonWorkers(osecDB, dbPath);
       json(res, 200, { ok: true, stopped });
-      return true;
-    }
-
-    if (controlPath.action === "launch-run") {
-      const body = (await readJson(req)) as {
-        target?: string;
-        depth?: string;
-        mode?: string;
-        runtime?: string;
-        ensureDaemon?: boolean;
-      };
-      const target = typeof body.target === "string" ? body.target.trim() : "";
-      const depth = typeof body.depth === "string" ? body.depth.trim() : "default";
-      const mode = typeof body.mode === "string" ? body.mode.trim() : "deep";
-      const runtime = typeof body.runtime === "string" ? body.runtime.trim() : "auto";
-
-      if (!target) {
-        json(res, 400, { error: "Target is required." });
-        return true;
-      }
-
-      if (body.ensureDaemon) {
-        const db = new osecDB(dbPath);
-        try {
-          const activeWorkers = (db.listWorkers(100) as DBWorkerRow[]).filter((worker) =>
-            worker.status !== "stopped" && Date.now() - Date.parse(worker.heartbeatAt) < 20_000,
-          );
-          if (activeWorkers.length === 0) {
-            startManagedDaemon({
-              dbPath,
-              label: "control-plane-1",
-              pollIntervalMs: 2000,
-            });
-          }
-        } finally {
-          db.close();
-        }
-      }
-
-      const launched = launchRunProcess({
-        dbPath,
-        target,
-        depth,
-        mode,
-        runtime,
-      });
-      json(res, 200, { ok: true, ...launched });
       return true;
     }
 
@@ -1857,7 +1776,9 @@ export function registerDashboardCommand(program: Command): void {
       const costCapUsd = opts.engineCostCap === undefined ? 5 : Number(opts.engineCostCap);
       if (!Number.isInteger(timeCapMs) || timeCapMs < 1 || timeCapMs > 86_400_000 || !Number.isFinite(costCapUsd) || costCapUsd <= 0 || costCapUsd > 1000) throw new Error("Engine limits must be positive, with time at most 86400000 ms and cost at most $1000.");
       const controlToken = randomUUID();
-      const capabilities = ["sessions", "workflows", "schedules", "approvals", "events", "workspaces", "artifacts", "model-connections", "operator-services", "process-controls", "learning", ...(engineBearer ? ["workflow-engine"] : [])];
+      // Never recover another live host's database while opening a second UI.
+      assertLocalEngineAvailable(opts.dbPath);
+      const capabilities = ["sessions", "workflows", "schedules", "approvals", "events", "workspaces", "artifacts", "model-connections", "operator-services", "process-controls", "learning", "workflow-engine"];
       const localHandshake = createBackendHandshake(opts.dbPath, capabilities);
       const backends = new BackendConnectionRegistry({ configPath: opts.backendsConfig, localHandshake });
       let engine: WorkflowEngineService | undefined;
@@ -1868,16 +1789,16 @@ export function registerDashboardCommand(program: Command): void {
       let startupGitHub: GitHubPublicationAuth | undefined;
       let startupAssetCleanup: (() => void) | undefined;
       try {
-        engine = engineBearer ? new WorkflowEngineService({ token: engineBearer, workspace: opts.engineWorkspace, scopePath: opts.engineScope, target: opts.engineTarget, allowApply: opts.engineAllowApply, dbPath: opts.dbPath, timeCapMs, costCapUsd }) : undefined;
-        await engine?.ready;
         const { path: assetDir, cleanup: cleanupAssetDir } = resolveDashboardAssetDir(opts.assetDir);
         startupAssetCleanup = cleanupAssetDir;
-        const consoleGateway = startupGateway = new ConsoleGateway({ dbPath: opts.dbPath });
+        const consoleGateway = startupGateway = new ConsoleGateway({ dbPath: opts.dbPath, projectPath: opts.engineWorkspace });
         const operator = startupOperator = new WebOperatorServices({ isTurnActive: () => consoleGateway.hasActiveTurns() });
         const workflows = startupWorkflows = new WebWorkflowService({ gateway: consoleGateway, dbPath: opts.dbPath });
         consoleGateway.attachSourceLearning(workflows.learning.store);
         consoleGateway.attachLearningRecorder(event => workflows.learning.recordChatOutcome(event));
         consoleGateway.attachWorkflowLifecycle({ invoke: (sessionId, name, args, capabilities) => workflows.invokeLifecycle(sessionId, name, args, capabilities) });
+        engine = new WorkflowEngineService({ token: engineBearer ?? controlToken, workspace: opts.engineWorkspace, scopePath: opts.engineScope, target: opts.engineTarget, allowApply: opts.engineAllowApply, dbPath: opts.dbPath, timeCapMs, costCapUsd }, { gateway: consoleGateway, workflows });
+        await engine.ready;
         const triggers = startupTriggers = new WorkflowTriggerService({ dbPath: opts.dbPath, adapter: {
           async validate(trigger) {
             const sessionId = await consoleGateway.prepareScheduledWorkflowOwner(trigger.sessionId);
@@ -1911,11 +1832,43 @@ export function registerDashboardCommand(program: Command): void {
               const backendRoute = await handleBackendConnectionRequest(req, res, requestUrl, backends);
               if (backendRoute.handled) return;
               if (backendRoute.localPath) requestUrl = new URL(backendRoute.localPath, origin);
+              if (requestUrl.pathname === "/api/control/launch-run") {
+                if (req.method !== "POST") throw new WebRequestError("Use POST to launch a run.", 405);
+                const body = z.object({ target: z.string().trim().min(1).max(4096), depth: z.enum(["quick", "default", "deep"]).optional(), runtime: z.enum(["api", "auto"]).optional(), mode: z.enum(["deep", "web"]).optional(), ensureDaemon: z.boolean().optional() }).strict().parse(await readJson(req));
+                if (body.runtime !== undefined || body.mode !== undefined) throw new WebRequestError("The selected engine owns its model and assessment execution. Submit a target and depth, or use a workflow for specialized execution.", 400);
+                if (body.ensureDaemon) throw new WebRequestError("Engine runs do not require a separate orchestration daemon. Configure a workflow schedule for recurring work.", 400);
+                const session = await engine!.invoke("create_session", { config: { target: body.target, title: `Assessment: ${body.target}` } }) as { id: string };
+                const execution = await engine!.invoke("start_assessment", { sessionId: session.id, target: body.target, plan: { goal: "unknown-vulnerabilities", depth: body.depth ?? "default", runCount: 1, executionMode: "sequential", timeCapMs, costCapUsd } }) as { id: string; jobId?: string };
+                json(res, 202, { ok: true, engineOwned: true, sessionId: session.id, runId: execution.id, jobId: execution.jobId });
+                return;
+              }
               if (requestUrl.pathname === "/api/workflow-engine/call") {
                 if (!engine) throw new WebRequestError("This engine does not admit persistent workflow calls.", 403);
                 if (req.method !== "POST") throw new WebRequestError("Method not allowed.", 405);
                 const input = z.object({ name: z.string().min(1).max(128), args: z.record(z.unknown()) }).strict().parse(await readJson(req));
                 json(res, 200, await engine.invoke(input.name, input.args));
+                return;
+              }
+              const resumeScan = requestUrl.pathname.match(/^\/api\/scans\/([^/]+)\/resume$/);
+              if (resumeScan) {
+                if (req.method !== "POST") throw new WebRequestError("Use POST to resume a scan.", 405);
+                const request = ScanResumeRequestSchema.parse(await readJson(req));
+                const result = await workflows.resumeScan(decodeURIComponent(resumeScan[1]!), { ...request, timeCapMs: Math.min(request.timeCapMs ?? timeCapMs, timeCapMs), costCapUsd: Math.min(request.costCapUsd ?? costCapUsd, costCapUsd) });
+                json(res, result.status, result.data);
+                return;
+              }
+              const exportScan = requestUrl.pathname.match(/^\/api\/scans\/([^/]+)\/export$/);
+              if (exportScan || requestUrl.pathname === "/api/findings/export") {
+                if (req.method !== "GET") throw new WebRequestError("Use GET to export a report.", 405);
+                const requestedFormat = requestUrl.searchParams.get("format") ?? "json";
+                const format = requestedFormat === "md" ? "markdown" : requestedFormat;
+                if (!isReportExportFormat(format)) throw new WebRequestError("Unsupported report export format.", 400);
+                const report = exportScan
+                  ? retainedScanSnapshot(decodeURIComponent(exportScan[1]!), opts.dbPath, workflows.retainedScanReport(decodeURIComponent(exportScan[1]!)))
+                  : retainedFindingSnapshot((requestUrl.searchParams.get("ids") ?? "").split(",").filter(Boolean), opts.dbPath);
+                const artifact = await exportReport(report, format, exportScan ? `0-scan-${decodeURIComponent(exportScan[1]!)}` : "0-findings");
+                res.writeHead(200, { "Content-Type": artifact.contentType, "Content-Disposition": `attachment; filename="${artifact.filename}"`, "Content-Length": artifact.body.byteLength, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
+                res.end(artifact.body);
                 return;
               }
               const consoleHandled = await handleWebConsoleApiRequest(req, res, requestUrl, consoleGateway, operator, workflows, triggers, github);
@@ -1957,9 +1910,11 @@ export function registerDashboardCommand(program: Command): void {
           }
         });
         let dashboardAssetsCleaned = false;
+        let unregisterLocalEngine: (() => void) | undefined;
         const cleanupDashboardAssets = () => {
           if (dashboardAssetsCleaned) return;
           dashboardAssetsCleaned = true;
+          unregisterLocalEngine?.();
           cleanupAssetDir?.();
         };
         server.once("close", cleanupDashboardAssets);
@@ -1982,6 +1937,13 @@ export function registerDashboardCommand(program: Command): void {
             origin = `http://${host.includes(":") ? `[${host}]` : host}:${address.port}`;
           }
           const url = origin;
+          try {
+            unregisterLocalEngine = registerLocalEngine({ url, token: controlToken, engineId: localHandshake.engineId, serverInstanceId: localHandshake.serverInstanceId!, pid: process.pid, workspace: opts.engineWorkspace ?? process.cwd() }, opts.dbPath);
+          } catch (error) {
+            console.error(error instanceof Error ? error.message : "Unable to register the local engine.");
+            void Promise.resolve().then(shutdown);
+            return;
+          }
           console.log(chalk.red.bold("  ◆ 0") + chalk.gray(" dashboard"));
           console.log(chalk.gray(`  ${url}`));
           if (opts.readyJson) console.log(`ZERO_DASHBOARD_READY ${JSON.stringify({ url })}`);

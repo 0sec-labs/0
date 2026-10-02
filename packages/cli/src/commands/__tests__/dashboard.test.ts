@@ -51,8 +51,8 @@
  *     managed child this process owns.
  *   • /api/control/reset-database — refuses if active workers exist
  *     (409); otherwise calls resetOsecDatabase + reseeds.
- *   • /api/control/launch-run — 400 when target is missing; spawns
- *     scan child when target present.
+ *   • /api/control/launch-run — validates inputs and delegates assessment
+ *     ownership to the same persistent workflow engine without CLI children.
  *   • Unknown /api/* path → 404 fallthrough.
  *   • Non-/api/* request → falls through to static asset serve;
  *     unknown extension returns 404; HTML root injects control token.
@@ -90,6 +90,8 @@ type RequestHandler = (
   req: import("node:http").IncomingMessage,
   res: import("node:http").ServerResponse,
 ) => unknown;
+
+vi.mock("../../local-engine.js", () => ({ assertLocalEngineAvailable: vi.fn(), registerLocalEngine: vi.fn(() => vi.fn()) }));
 
 const instanceMock = vi.hoisted(() => vi.fn().mockResolvedValue(false));
 vi.mock("../../web/dashboard-instance.js", () => ({ findDashboardInstance: instanceMock }));
@@ -754,6 +756,22 @@ describe("dashboard — web console API", () => {
     await runCli(["dashboard", "--no-open"]);
   });
 
+  it("requires the page-bound control token before exporting retained reports", async () => {
+    const captured = await invokeHandler(makeRequest({ method: "GET", url: "/api/scans/example/export?format=json" }));
+    expect(captured.statusCode).toBe(403);
+    expect(JSON.parse(captured.body)).toEqual({ error: "Invalid or missing control token" });
+  });
+
+  it("rejects unsupported report formats and non-GET exports before reading report data", async () => {
+    const headers = { "x-0-control-token": await getControlToken() };
+    const format = await invokeHandler(makeRequest({ method: "GET", url: "/api/findings/export?format=exe", headers }));
+    expect(format.statusCode).toBe(400);
+    expect(JSON.parse(format.body).error).toContain("Unsupported report export format");
+    const method = await invokeHandler(makeRequest({ method: "POST", url: "/api/scans/example/export?format=json", headers }));
+    expect(method.statusCode).toBe(405);
+    expect(JSON.parse(method.body).error).toContain("Use GET");
+  });
+
   it("requires the page-bound control token before creating a console session", async () => {
     const captured = await invokeHandler(
       makeRequest({ method: "POST", url: "/api/console/sessions", body: {} }),
@@ -1190,42 +1208,33 @@ describe("dashboard — launch-run control", () => {
       }),
     );
     expect(captured.statusCode).toBe(400);
-    expect(JSON.parse(captured.body)).toEqual({ error: "Target is required." });
+    expect(JSON.parse(captured.body).error).toEqual(expect.any(String));
+    expect(engineInvoke).not.toHaveBeenCalled();
     expect(spawnMock).not.toHaveBeenCalled();
   });
 
-  it("spawns scan child with the target/depth/mode/runtime threaded in", async () => {
-    const token = await getControlToken();
-    const captured = await invokeHandler(
-      makeRequest({
-        method: "POST",
-        url: "/api/control/launch-run",
-        headers: { "x-0-control-token": token },
-        body: {
-          target: "https://example.com",
-          depth: "deep",
-          mode: "web",
-          runtime: "api",
-        },
-      }),
-    );
-    expect(captured.statusCode).toBe(200);
-    const body = JSON.parse(captured.body);
-    expect(body.ok).toBe(true);
-    expect(typeof body.pid).toBe("number");
-
-    expect(spawnMock).toHaveBeenCalledOnce();
-    const childArgs = spawnMock.mock.calls[0]![1] as string[];
-    expect(childArgs).toContain("scan");
-    expect(childArgs).toContain("--target");
-    expect(childArgs).toContain("https://example.com");
-    expect(childArgs).toContain("--depth");
-    expect(childArgs).toContain("deep");
-    expect(childArgs).toContain("--mode");
-    expect(childArgs).toContain("web");
-    expect(childArgs).toContain("--runtime");
-    expect(childArgs).toContain("api");
+  it("delegates session and bounded assessment to the same persistent engine", async () => {
+    engineInvoke.mockResolvedValueOnce({ id: "session-owner" } as never).mockResolvedValueOnce({ id: "assessment-run", jobId: "assessment-job" } as never);
+    const captured = await invokeHandler(makeRequest({ method: "POST", url: "/api/control/launch-run", headers: { "x-0-control-token": await getControlToken() }, body: { target: "https://example.com", depth: "deep" } }));
+    expect(captured.statusCode).toBe(202);
+    expect(JSON.parse(captured.body)).toEqual({ ok: true, engineOwned: true, sessionId: "session-owner", runId: "assessment-run", jobId: "assessment-job" });
+    expect(engineInvoke.mock.calls).toEqual([
+      ["create_session", { config: { target: "https://example.com", title: "Assessment: https://example.com" } }],
+      ["start_assessment", { sessionId: "session-owner", target: "https://example.com", plan: expect.objectContaining({ goal: "unknown-vulnerabilities", depth: "deep", runCount: 1, executionMode: "sequential", timeCapMs: expect.any(Number), costCapUsd: expect.any(Number) }) }],
+    ]);
+    expect(spawnMock).not.toHaveBeenCalled();
   });
+
+  it("rejects unsupported external runtimes and daemon ownership before invoking the engine", async () => {
+    const headers = { "x-0-control-token": await getControlToken() };
+    for (const input of [{ runtime: "claude" }, { runtime: "api" }, { mode: "deep" }, { mode: "web" }, { ensureDaemon: true }]) {
+      const captured = await invokeHandler(makeRequest({ method: "POST", url: "/api/control/launch-run", headers, body: { target: "https://example.com", ...input } }));
+      expect(captured.statusCode).toBe(400);
+    }
+    expect(engineInvoke).not.toHaveBeenCalled();
+    expect(spawnMock).not.toHaveBeenCalled();
+  });
+
 });
 
 // ── Tests: reset-database ───────────────────────────────────────────────────

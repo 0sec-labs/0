@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { BackendIdSchema, requireBackendCapability, type BackendDescriptor, type SecurityWorkflowExecution } from "@0/shared";
+import { BackendIdSchema, requireBackendCapability, type BackendDescriptor, type SecurityWorkflowExecution, type ScanPlan } from "@0/shared";
 import type { StartWorkflowRun } from "./workflow-runtime.js";
 
-export interface RemoteWorkflowRuntimeOptions { backendId: string; configPath?: string }
+export interface RemoteWorkflowRuntimeOptions { backendId?: string; configPath?: string; engineUrl?: string; engineTokenEnv?: string; sessionId?: string }
 interface Registry {
   dispose?(): void;
   handshake(id: string): Promise<{ backend: BackendDescriptor; error?: string }>;
@@ -37,11 +37,17 @@ async function readJson(response: Response): Promise<unknown> {
 
 /** Targets, paths, provider selection and application permission stay with the configured engine. */
 export async function createRemoteWorkflowRuntime(options: RemoteWorkflowRuntimeOptions, suppliedRegistry?: Registry) {
-  const backendId = BackendIdSchema.parse(options.backendId);
-  const registry = suppliedRegistry ?? new (await import("./web/backend-connections.js")).BackendConnectionRegistry({ configPath: options.configPath });
-  const connection = await registry.handshake(backendId);
-  if (connection.backend.transport !== "http") throw new Error("Select a registered remote HTTP backend; local execution cannot use this transport.");
-  requireBackendCapability(connection.backend, "workflow-engine");
+  if (options.engineUrl && (options.backendId || options.configPath)) throw new Error("--engine-url cannot be combined with a registered backend.");
+  if (Boolean(options.engineUrl) !== Boolean(options.engineTokenEnv)) throw new Error("Direct engine attachment requires both --engine-url and --engine-token-env.");
+  const backendId = BackendIdSchema.parse(options.backendId ?? (options.engineUrl ? "attached-engine" : undefined));
+  const registry = suppliedRegistry ?? new (await import("./web/backend-connections.js")).BackendConnectionRegistry(options.engineUrl
+    ? { connections: [{ id: backendId, name: "Attached engine", url: options.engineUrl, bearerTokenEnv: options.engineTokenEnv! }] }
+    : { configPath: options.configPath });
+  try {
+    const connection = await registry.handshake(backendId);
+    if (connection.backend.transport !== "http") throw new Error("Select a registered remote HTTP backend; local execution cannot use this transport.");
+    requireBackendCapability(connection.backend, "workflow-engine");
+  } catch (error) { if (!suppliedRegistry) registry.dispose?.(); throw error; }
   let disposed = false;
   const active = new Set<AbortController>();
   const invoke = async (name: string, args: Record<string, unknown> = {}): Promise<unknown> => {
@@ -52,17 +58,39 @@ export async function createRemoteWorkflowRuntime(options: RemoteWorkflowRuntime
     try { return await readJson(await registry.request(backendId, "/api/workflow-engine/call", { method: "POST", body: { name, args }, signal: abort.signal })); }
     finally { clearTimeout(timeout); active.delete(abort); }
   };
+  if (options.sessionId !== undefined) {
+    try {
+      z.string().trim().min(1).max(160).parse(options.sessionId);
+      const session = await invoke("attach_session", { sessionId: options.sessionId });
+      if (!session) throw new Error("The selected engine session no longer exists.");
+    } catch (error) { if (!suppliedRegistry) registry.dispose?.(); throw error; }
+  }
   return {
+    getCapabilities: () => invoke("get_capabilities"),
+    resumeScan: (request: { sessionId: string; scanId: string; branchFromEntry?: number; timeCapMs?: number; costCapUsd?: number }) => invoke("resume_scan", request),
+    listSessions: () => invoke("list_sessions"),
+    createSession: (config?: Record<string, unknown>) => invoke("create_session", config ? { config } : {}),
+    attachSession: (sessionId: string) => invoke("attach_session", { sessionId }),
+    getSessionEvents: (sessionId: string, after?: number) => invoke("get_session_events", { sessionId, ...(after !== undefined ? { after } : {}) }),
+    getSession: (sessionId: string) => invoke("get_session", { sessionId }),
+    sendMessage: (sessionId: string, text: string) => invoke("send_message", { sessionId, text }),
+    continueSession: (sessionId: string, text?: string) => invoke("continue_session", { sessionId, ...(text !== undefined ? { text } : {}) }),
+    cancelSession: (sessionId: string) => invoke("cancel_session", { sessionId }),
+    resolveDecision: (sessionId: string, decisionId: string, response: Record<string, unknown>) => invoke("resolve_decision", { sessionId, decisionId, response }),
+    listSavedSessions: () => invoke("list_saved_sessions"),
+    resumeSession: (savedSessionId: string) => invoke("resume_session", { savedSessionId }),
     listTemplates: () => invoke("list_templates"),
     getTemplate: (id: string) => invoke("get_template", { id }),
     listWorkflows: () => invoke("list_workflows"),
     listRuns: () => invoke("list_runs"),
     getWorkflow: (id: string) => invoke("get_workflow", { id }),
     saveWorkflow: (definition: unknown, expectedRevision?: number) => invoke("save_workflow", { definition, ...(expectedRevision !== undefined ? { expectedRevision } : {}) }),
-    startRun: async (request: StartWorkflowRun): Promise<SecurityWorkflowExecution> => {
+    startAssessment: async (request: { sessionId?: string; target: string; plan: ScanPlan }): Promise<SecurityWorkflowExecution> =>
+      executionSchema.parse(await invoke("start_assessment", { ...(options.sessionId ? { sessionId: options.sessionId } : {}), ...request })) as unknown as SecurityWorkflowExecution,
+    startRun: async (request: StartWorkflowRun & { sessionId?: string }): Promise<SecurityWorkflowExecution> => {
       if (request.model !== undefined) throw new Error("The selected backend owns its configured model connection.");
       const { model: _model, ...args } = request;
-      return executionSchema.parse(await invoke("start_run", args)) as unknown as SecurityWorkflowExecution;
+      return executionSchema.parse(await invoke("start_run", { ...(options.sessionId ? { sessionId: options.sessionId } : {}), ...args })) as unknown as SecurityWorkflowExecution;
     },
     getRun: async (id: string): Promise<SecurityWorkflowExecution | null> => {
       const result = await invoke("get_run", { runId: id });

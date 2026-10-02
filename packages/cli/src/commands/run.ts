@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { tmpdir } from "node:os";
+import { tmpdir, homedir } from "node:os";
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -374,11 +374,85 @@ function printCrossValidatedLeads(summary: CrossValidatedLeadsSummary): void {
   }
 }
 
+type AttachedEngine = NonNullable<Awaited<ReturnType<typeof import("../local-engine.js")["connectLocalEngine"]>>>;
+
+function attachedAssessmentTarget(opts: RunOptions): string {
+  const accepted = new Set(["target", "targetType", "depth", "format", "runtime", "timeout", "verbose", "plan", "signal", "suppressOutput", "suppressUi", "dbPath", "reportPath", "tui", "onEvent", "onReport", "onOutcome", "sessionUiFactory", "costCeilingUsd", "embedded", "mode", "reviewStrategy"]);
+  const inactiveFalse = new Set(["changedOnly", "race", "egats", "allowScanners", "seedOnly", "npmDynamicDiscovery", "emitPrDryRun"]);
+  const unsupported = Object.entries(opts).filter(([key, value]) => value !== undefined && !accepted.has(key) && (value !== false || !inactiveFalse.has(key))).map(([key]) => key);
+  if (opts.runtime !== "api" && opts.runtime !== "auto") unsupported.push("runtime");
+  if (opts.mode !== undefined && opts.mode !== "web") unsupported.push("mode");
+  if (opts.reviewStrategy !== undefined && opts.reviewStrategy !== "lenses") unsupported.push("reviewStrategy");
+  if (unsupported.length) throw new Error(`The running engine cannot represent these assessment overrides: ${[...new Set(unsupported)].join(", ")}. Configure or select an engine that supports them; no separate assessment was started.`);
+  const prefix = ({ "npm-package": "npm:", "pypi-package": "pypi:", "cargo-package": "cargo:", "oci-image": "oci:", "source-code": "source:" } as Record<string, string>)[opts.targetType ?? ""];
+  if (prefix === "source:" || opts.target.startsWith("source:")) {
+    const source = opts.target.startsWith("source:") ? opts.target.slice("source:".length).trim() : opts.target;
+    if (!source) throw new Error("source: requires a local path or git URL.");
+    const local = source === "~" ? homedir() : source.startsWith("~/") ? join(homedir(), source.slice(2)) : source;
+    return `source:${/^[a-z][a-z0-9+.-]*:\/\//i.test(source) || source.startsWith("git@") ? source : resolve(local)}`;
+  }
+  return prefix && !opts.target.startsWith(prefix) ? `${prefix}${opts.target}` : opts.target;
+}
+
+async function executeAttachedAssessment(engine: AttachedEngine, opts: RunOptions, onEvent: (event: unknown) => void): Promise<{ report: ScanReport; rawReport: ScanReport; runId: string }> {
+  let runId: string | undefined;
+  let cancellation: Promise<unknown> | undefined;
+  const cancel = () => { if (runId && !cancellation) cancellation = engine.cancelRun(runId).catch(() => undefined); };
+  opts.signal?.addEventListener("abort", cancel, { once: true });
+  process.once("SIGINT", cancel);
+  try {
+    opts.signal?.throwIfAborted();
+    const plan: ScanPlan = opts.plan ? { ...opts.plan, ...(opts.costCeilingUsd !== undefined ? { costCapUsd: Math.min(opts.plan.costCapUsd, opts.costCeilingUsd) } : {}) } : { goal: opts.targetType?.endsWith("-package") || opts.targetType === "oci-image" ? "known-vulnerabilities" : "unknown-vulnerabilities", depth: opts.depth, runCount: 1, executionMode: "sequential", timeCapMs: opts.timeout, costCapUsd: opts.costCeilingUsd ?? 5 };
+    validateScanPlan(plan);
+    const launched = await engine.startAssessment({ target: attachedAssessmentTarget(opts), plan });
+    runId = launched.id;
+    if (opts.signal?.aborted) cancel();
+    let sequence = 0;
+    let run;
+    do {
+      run = await engine.getRun(runId);
+      if (!run) throw new Error(`Engine assessment ${runId} disappeared before its result was retained.`);
+      for (const event of ((run as unknown as { events?: Array<{ sequence: number }> }).events ?? [])) if (event.sequence > sequence) { sequence = event.sequence; onEvent(event); }
+      if (["queued", "running"].includes(run.status)) await new Promise(resolve => setTimeout(resolve, 100));
+    } while (["queued", "running"].includes(run.status));
+    const findings: ScanReport["findings"] = [];
+    let cursor = 0;
+    let retained: { report?: ScanReport; reports?: Array<Partial<ScanReport>>; costUsd?: number; error?: string } | undefined;
+    while (true) {
+      const page = await engine.getRunResults(runId, { cursor, limit: 100 }) as NonNullable<typeof retained> & { findings?: ScanReport["findings"]; nextCursor?: number | null };
+      retained ??= page;
+      if (!Array.isArray(page.findings)) throw new Error(`Engine assessment ${runId} returned an invalid finding page.`);
+      findings.push(...page.findings);
+      if (page.nextCursor === null || page.nextCursor === undefined) break;
+      if (!Number.isSafeInteger(page.nextCursor) || page.nextCursor <= cursor) throw new Error(`Engine assessment ${runId} returned an invalid result cursor.`);
+      cursor = page.nextCursor;
+    }
+    if (!retained?.report) throw new Error(`Engine assessment ${runId} ${run.status}; retained report unavailable: ${retained?.error ?? run.error ?? "no report"}`);
+    const report: ScanReport = { ...retained.reports?.[0], ...retained.report, target: opts.target, findings,
+      ...(retained.costUsd !== undefined ? { estimatedCostUsd: retained.costUsd } : {}),
+      ...(run.status !== "completed" ? { executionSuccessful: false, error: retained.error ?? run.error, exitReason: run.status === "cancelled" ? "cancelled" : "failed" } : {}) };
+    return { report, rawReport: report, runId };
+  } finally {
+    opts.signal?.removeEventListener("abort", cancel);
+    process.removeListener("SIGINT", cancel);
+    await cancellation;
+    await engine.dispose();
+  }
+}
+
 export async function runUnified(opts: RunOptions): Promise<void> {
   if (opts.plan) validateScanPlan(opts.plan);
   const { target, format, runtime, timeout } = opts;
   const depth = opts.plan?.depth ?? opts.depth;
-  const core = await loadCoreModule();
+  const attachedEngine = !opts.embedded && !opts.resumeScanId
+    ? await (await import("../local-engine.js")).connectLocalEngine({ dbPath: opts.dbPath, workspace: process.cwd(), model: opts.model, scopePath: opts.scopeFile })
+    : null;
+  if (attachedEngine) {
+    try { opts.signal?.throwIfAborted(); attachedAssessmentTarget(opts); } catch (error) { await attachedEngine.dispose(); throw error; }
+  }
+  let core: CoreModule;
+  try { core = await loadCoreModule(); }
+  catch (error) { await attachedEngine?.dispose(); throw error; }
   // ── Journal-based resume (0#374) ───────────────────────────────
   let effectiveResumeScanId = opts.resumeScanId;
 
@@ -452,7 +526,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
     runtime === "codex" &&
     (!!process.env["ZERO_CHATGPT_ACCESS_TOKEN"]?.trim() ||
       !!process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"]?.trim());
-  if (!opts.nativeRuntime && runtime !== "api" && runtime !== "auto" && !directCodexProviderConfigured) {
+  if (!attachedEngine && !opts.nativeRuntime && runtime !== "api" && runtime !== "auto" && !directCodexProviderConfigured) {
     const rt = core.createRuntime({ type: runtime, timeout });
     const available = await rt.isAvailable();
     if (!available) {
@@ -463,7 +537,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
     }
   }
 
-  if (format === "terminal") await checkRuntimeAvailability(runtime);
+  if (!attachedEngine && format === "terminal") await checkRuntimeAvailability(runtime);
 
   // Ink TUI for terminal, silent for json/md
   let inkUI: { onEvent: (event: any) => void; setReport: (report: any) => void; waitForExit: () => Promise<void>; getPendingUserMessages?: () => string[] } | null = null;
@@ -517,12 +591,16 @@ export async function runUnified(opts: RunOptions): Promise<void> {
       emitOutDir: _emitOutDir, reviewStrategy: _reviewStrategy,
       ...assessmentOptions
     } = opts;
-    const retainedStore = opts.embedded ? undefined : new (await import("@0/db")).SecurityWorkflowStore(opts.dbPath);
+    const retainedStore = opts.embedded || attachedEngine ? undefined : new (await import("@0/db")).SecurityWorkflowStore(opts.dbPath);
     const scanIds: string[] = [];
     const dbPaths: string[] = [];
     let assessment: Awaited<ReturnType<CoreModule["executeAssessmentRun"]>>;
     try {
-      assessment = await core.executeAssessmentRun({
+      if (attachedEngine) {
+        const attached = await executeAttachedAssessment(attachedEngine, opts, eventHandler);
+        workflowRunId = attached.runId;
+        assessment = attached;
+      } else assessment = await core.executeAssessmentRun({
         ...assessmentOptions,
         // Journal branching above retains the CLI progress message.
         branchFromEntry: undefined,

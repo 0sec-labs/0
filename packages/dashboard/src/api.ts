@@ -209,10 +209,8 @@ function stopDaemon(): Promise<{ ok: true; stopped: number }> {
 function launchRun(args: {
   target: string;
   depth: "quick" | "default" | "deep";
-  mode: "probe" | "deep" | "mcp" | "web";
-  runtime: "api" | "claude" | "codex" | "gemini" | "auto";
-  ensureDaemon?: boolean;
-}): Promise<{ ok: true; pid: number | null }> {
+  runtime?: "api" | "auto";
+}): Promise<{ ok: true; engineOwned: true; sessionId: string; runId: string; jobId?: string }> {
   return webFetchJson("/api/control/launch-run", {
     method: "POST",
     body: JSON.stringify(args),

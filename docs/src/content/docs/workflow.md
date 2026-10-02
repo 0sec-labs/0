@@ -123,13 +123,44 @@ and evidence to distinguish findings from an execution failure.
 0 runs show RUN_ID --format json
 ```
 
-Run history does not implicitly resume interrupted work. CLI runs live in their
-foreground process, and MCP runs live in their stdio host. Cancellation requires
-that active owning host. Use Ctrl-C for a foreground CLI run, or the browser/MCP
-host's cancellation API for its run. `0 runs cancel RUN_ID` cannot signal an
-unrelated process or turn a stored status into proof that execution stopped;
-it reports an ownership error when the current host does not own the active run.
-Durable cross-process control requires a separately running engine.
+Run history does not implicitly resume interrupted work. An embedded CLI or MCP
+host runs the same session and workflow services as the web server; closing that
+host ends its execution lifetime. Attach to a running web engine to inspect,
+start, or cancel the runs already visible in the browser:
+
+```bash
+# ENGINE_TOKEN contains the running engine's configured bearer token.
+0 sessions list --engine-url http://127.0.0.1:3000 --engine-token-env ENGINE_TOKEN
+0 workflow run --template repository-review --target /engine/repo \
+  --engine-url http://127.0.0.1:3000 --engine-token-env ENGINE_TOKEN \
+  --session SESSION_ID
+0 runs show RUN_ID --engine-url http://127.0.0.1:3000 --engine-token-env ENGINE_TOKEN
+```
+
+When a web engine already owns the selected control database and workspace,
+CLI and MCP workflow clients discover it through private local metadata and
+attach automatically. Use `--session SESSION_ID` to select an existing browser
+chat. A live engine that cannot be authenticated or reached produces an error;
+the client does not create a replacement host. With no registered local engine,
+the CLI starts an embedded host using the same engine services.
+
+Use `--backend production` for a connection in the trusted backend registry
+instead of the direct URL and token environment options. The engine supplies its
+workspace, scope, model, and execution profile. A selected `--session` must
+already exist; attachment never recreates it or restores approval grants.
+Without `--session`, a run creates an engine session under its current admission
+grants. Targets and artifact paths are interpreted on that engine.
+
+`0 sessions show`, `events`, `send`, `continue`, and `cancel` use the same live
+session as the browser. `sessions list --saved` and `sessions resume SAVED_ID`
+inspect retained snapshots and restore a new session under current grants.
+`0 runs resume SCAN_ID --session SESSION_ID --backend production` resumes a
+persisted scan in that live session. `--branch-from-entry 0` optionally selects a
+retained history entry, and time/cost caps narrow the engine's limits. Scan
+resume requires the engine's scan resume capability; it does not restart a
+workflow graph. `0 runs cancel RUN_ID` requests cancellation from the owning engine. An attached
+client disconnect leaves that engine running; foreground `workflow run` still
+requests cancellation on Ctrl-C.
 
 ## Steps, evidence, and limits
 

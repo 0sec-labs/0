@@ -1,3 +1,4 @@
+import { EngineAssessmentSchema } from "@0/core";
 import { randomUUID } from "node:crypto";
 import { isAbsolute } from "node:path";
 import type { Command } from "commander";
@@ -34,6 +35,9 @@ type McpServerOptions = {
   target?: string;
   scanId?: string;
   workflows?: boolean;
+  session?: string;
+  engineUrl?: string;
+  engineTokenEnv?: string;
   workspace?: string;
   allowApply?: boolean;
   dbPath?: string;
@@ -78,6 +82,7 @@ const MCP_LIVE_TOOL_NAMES = new Set([
 const MCP_WORKFLOW_TOOL_NAMES = new Set([
   "list_templates", "get_template", "list_workflows", "get_workflow", "save_workflow",
   "start_run", "get_run", "get_run_results", "cancel_run", "list_runs",
+  "list_sessions", "create_session", "attach_session", "get_session", "send_message", "continue_session", "cancel_session", "resolve_decision", "list_saved_sessions", "resume_session", "get_session_events", "get_capabilities", "resume_scan", "start_assessment",
 ]);
 
 function resolveMcpToolNames(raw: string | undefined, workflows = false): ReadonlySet<string> {
@@ -282,8 +287,8 @@ const workflowInputsSchema = SecurityWorkflowBindingsSchema;
 type WorkflowRuntime = Awaited<ReturnType<typeof import("../workflow-runtime.js")["createCliWorkflowRuntime"]>> | Awaited<ReturnType<typeof import("../remote-workflow-runtime.js")["createRemoteWorkflowRuntime"]>>;
 
 async function registerWorkflowTools(server: McpServer, selected: ReadonlySet<string>, opts: McpServerOptions): Promise<WorkflowRuntime> {
-  const runtime = opts.backend
-    ? await (await import("../remote-workflow-runtime.js")).createRemoteWorkflowRuntime({ backendId: opts.backend, configPath: opts.backendsConfig })
+  const runtime = opts.backend || opts.engineUrl
+    ? await (await import("../remote-workflow-runtime.js")).createRemoteWorkflowRuntime({ backendId: opts.backend, configPath: opts.backendsConfig, sessionId: opts.session, engineUrl: opts.engineUrl, engineTokenEnv: opts.engineTokenEnv })
     : await (await import("../workflow-runtime.js")).createCliWorkflowRuntime({
     ownerId: `mcp:${randomUUID()}`,
     workspace: opts.workspace,
@@ -292,20 +297,39 @@ async function registerWorkflowTools(server: McpServer, selected: ReadonlySet<st
     dbPath: opts.dbPath,
     allowApply: opts.allowApply,
   });
+  if (opts.session && !opts.backend && !opts.engineUrl) {
+    try { if (!await runtime.attachSession(opts.session)) throw new Error("The selected engine session no longer exists."); }
+    catch (error) { await runtime.dispose(); throw error; }
+  }
   const id = z.string().trim().min(1).max(160);
+  const sessionRuntime = runtime;
   const tools = [
+    { name: "start_assessment", description: "Start a structured assessment in the selected engine session using an explicit goal, depth, run count, execution mode, and budgets.", schema: EngineAssessmentSchema, run: (args: any) => sessionRuntime.startAssessment({ ...(opts.session ? { sessionId: opts.session } : {}), ...args }) },
+    { name: "get_capabilities", description: "Read the engine's supported operations and resume capabilities.", schema: z.object({}).strict(), run: () => sessionRuntime.getCapabilities() },
+    { name: "resume_scan", description: "Resume a retained scan in a selected session; this does not restart a workflow graph.", schema: z.object({ sessionId: id, scanId: id, branchFromEntry: z.number().int().nonnegative().optional(), timeCapMs: z.number().int().positive().max(86_400_000).optional(), costCapUsd: z.number().positive().max(1000).optional() }).strict(), run: (args: any) => sessionRuntime.resumeScan(args) },
+    { name: "get_session_events", description: "Read session events after an engine event cursor.", schema: z.object({ sessionId: id, after: z.number().int().nonnegative().optional() }).strict(), run: (args: any) => sessionRuntime.getSessionEvents(args.sessionId, args.after) },
+    { name: "list_sessions", description: "List live sessions on the selected engine.", schema: z.object({}).strict(), run: () => sessionRuntime.listSessions() },
+    { name: "create_session", description: "Create a session within the engine's configured admission grants.", schema: z.object({ config: z.record(z.unknown()).optional() }).strict(), run: (args: any) => sessionRuntime.createSession(args.config) },
+    { name: "attach_session", description: "Attach to an existing engine session without recreating it.", schema: z.object({ sessionId: id }).strict(), run: (args: any) => sessionRuntime.attachSession(args.sessionId) },
+    { name: "get_session", description: "Read an existing engine session.", schema: z.object({ sessionId: id }).strict(), run: (args: any) => sessionRuntime.getSession(args.sessionId) },
+    { name: "send_message", description: "Send a message to an engine session.", schema: z.object({ sessionId: id, text: z.string().min(1).max(65536) }).strict(), run: (args: any) => sessionRuntime.sendMessage(args.sessionId, args.text) },
+    { name: "continue_session", description: "Continue an engine session.", schema: z.object({ sessionId: id, text: z.string().max(65536).optional() }).strict(), run: (args: any) => sessionRuntime.continueSession(args.sessionId, args.text) },
+    { name: "cancel_session", description: "Explicitly cancel an engine session's active work.", schema: z.object({ sessionId: id }).strict(), run: (args: any) => sessionRuntime.cancelSession(args.sessionId) },
+    { name: "resolve_decision", description: "Respond to a pending engine session decision.", schema: z.object({ sessionId: id, decisionId: id, response: z.record(z.unknown()) }).strict(), run: (args: any) => sessionRuntime.resolveDecision(args.sessionId, args.decisionId, args.response) },
+    { name: "list_saved_sessions", description: "List retained session snapshots on the engine.", schema: z.object({}).strict(), run: () => sessionRuntime.listSavedSessions() },
+    { name: "resume_session", description: "Resume a saved snapshot as a new session; admission grants are revalidated.", schema: z.object({ savedSessionId: id }).strict(), run: (args: any) => sessionRuntime.resumeSession(args.savedSessionId) },
     { name: "list_templates", description: "List workflow templates and supported target types.", schema: z.object({}).strict(), run: () => runtime.listTemplates() },
     { name: "get_template", description: "Read a workflow template.", schema: z.object({ id }).strict(), run: (args: any) => runtime.getTemplate(args.id) },
     { name: "list_runs", description: "List workflow runs visible to this execution owner on the selected engine.", schema: z.object({}).strict(), run: () => runtime.listRuns() },
     { name: "list_workflows", description: "List saved workflow definitions.", schema: z.object({}).strict(), run: () => runtime.listWorkflows() },
     { name: "get_workflow", description: "Read a saved workflow and its revision.", schema: z.object({ id }).strict(), run: (args: any) => runtime.getWorkflow(args.id) },
     { name: "save_workflow", description: "Validate and save a workflow definition with optional revision protection.", schema: z.object({ definition: z.record(z.unknown()), expectedRevision: z.number().int().positive().optional() }).strict(), run: (args: any) => runtime.saveWorkflow(args.definition, args.expectedRevision) },
-    { name: "start_run", description: "Start a template or saved workflow using 0's configured model provider. Returns a run ID promptly. Target must be within the server's authorized workspace or live scope.", schema: z.object({ templateId: id.optional(), workflowId: id.optional(), revision: z.number().int().positive().optional(), target: z.string().trim().min(1).max(4096), idempotencyKey: id.optional(), inputs: workflowInputsSchema.optional(), allowApply: z.boolean().optional(), timeCapMs: z.number().int().positive().max(86_400_000).optional(), costCapUsd: z.number().positive().max(1000).optional() }).strict(), run: (args: any) => {
+    { name: "start_run", description: "Start a template or saved workflow using 0's configured model provider. Returns a run ID promptly. Target must be within the server's authorized workspace or live scope.", schema: z.object({ sessionId: id.optional(), templateId: id.optional(), workflowId: id.optional(), revision: z.number().int().positive().optional(), target: z.string().trim().min(1).max(4096), idempotencyKey: id.optional(), inputs: workflowInputsSchema.optional(), allowApply: z.boolean().optional(), timeCapMs: z.number().int().positive().max(86_400_000).optional(), costCapUsd: z.number().positive().max(1000).optional() }).strict(), run: (args: any) => {
       if (Boolean(args.templateId) === Boolean(args.workflowId)) throw new Error("Select exactly one templateId or workflowId.");
       if (args.workflowId && !args.revision) throw new Error("Saved workflow runs require a pinned revision.");
       if (args.allowApply && !opts.allowApply) throw new Error("Applying workflow changes requires the host --allow-apply capability.");
       if (opts.target && args.target.trim() !== opts.target.trim()) throw new Error("Target does not match this MCP connection's configured target.");
-      return runtime.startRun(args);
+      return runtime.startRun({ ...(opts.session ? { sessionId: opts.session } : {}), ...args });
     } },
     { name: "get_run", description: "Read status of a run visible to this connection's runtime owner.", schema: z.object({ runId: id }).strict(), run: (args: any) => runtime.getRun(args.runId) },
     { name: "get_run_results", description: "Read paginated findings and artifact references from an owned run.", schema: z.object({ runId: id, cursor: z.number().int().nonnegative().optional(), limit: z.number().int().min(1).max(100).optional() }).strict(), run: (args: any) => runtime.getRunResults(args.runId, { cursor: args.cursor, limit: args.limit }) },
@@ -366,6 +390,9 @@ export function registerMcpServerCommand(program: Command): void {
     .option("--scan-id <scanId>", "Scan ID to associate persisted findings and target updates with")
     .option("--backend <id>", "Use a registered remote workflow engine; no local execution fallback")
     .option("--backends-config <path>", "Operator backend connection registry JSON file")
+    .option("--engine-url <url>", "Attach directly to a running trusted engine")
+    .option("--engine-token-env <name>", "Environment variable holding the attached engine token")
+    .option("--session <id>", "Attach workflow runs to an existing session on the selected engine")
     .option("--workflows", "Expose workflow discovery and run lifecycle tools instead of live tools", false)
     .option("--allow-apply", "Permit explicit workflow apply requests inside the authorized workspace", false)
     .option("--workspace <path>", "Absolute authorized local root for workflow source assessments")
@@ -388,8 +415,10 @@ export function registerMcpServerCommand(program: Command): void {
       const selectedToolNames = resolveMcpToolNames(opts.tools, opts.workflows);
       const liveEnabled = [...selectedToolNames].some(name => MCP_LIVE_TOOL_NAMES.has(name));
       const workflowsEnabled = [...selectedToolNames].some(name => MCP_WORKFLOW_TOOL_NAMES.has(name));
+      if (opts.session && !workflowsEnabled) throw new Error("--session requires workflow or session lifecycle tools.");
       if (opts.backendsConfig && !opts.backend) throw new Error("--backends-config requires an explicit --backend.");
-      if (opts.backend) {
+      if (opts.engineTokenEnv && !opts.engineUrl) throw new Error("--engine-token-env requires --engine-url.");
+      if (opts.backend || opts.engineUrl) {
         if (liveEnabled || !workflowsEnabled) throw new Error("Remote backends expose workflow tools only; select --workflows or explicit workflow tool names.");
         if (opts.workspace || opts.scope || opts.dbPath || opts.scanId || opts.rateLimit || opts.engagementProfile || opts.allowScanners || opts.wafEvasion === false) throw new Error("The remote backend owns workspace, scope, storage and engagement settings; omit local execution flags.");
         const server = new McpServer({ name: "0-mcp", version: "0.1.0" }, { capabilities: { logging: {} } });

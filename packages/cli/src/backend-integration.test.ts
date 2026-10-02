@@ -3,18 +3,22 @@ import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { NativeRuntime, AssessmentOptions } from "@0/core";
+import type { NativeRuntime } from "@0/core";
 import type { ScanReport, SecurityWorkflowExecution } from "@0/shared";
 import { createCliWorkflowRuntime } from "./workflow-runtime.js";
 import { WorkflowEngineService } from "./workflow-engine-service.js";
 import { createRemoteWorkflowRuntime } from "./remote-workflow-runtime.js";
 import { BackendConnectionRegistry, createBackendHandshake } from "./web/backend-connections.js";
+import { ConsoleGateway, type ConsoleExecutionContext } from "./web/console-gateway.js";
+import { WebWorkflowService } from "./web/workflows.js";
+import type { RunOptions, RunOutcome } from "./commands/run.js";
 
 const roots: string[] = [];
 const engines: WorkflowEngineService[] = [];
 const servers: Server[] = [];
 const registries: BackendConnectionRegistry[] = [];
 const releaseGates: Array<() => void> = [];
+const hostCleanup: Array<() => Promise<void>> = [];
 const token = "integration-server-secret".repeat(2);
 function report(target: string): ScanReport {
   return { target, scanDepth: "quick", startedAt: "2026-01-01", completedAt: "2026-01-01", durationMs: 1,
@@ -26,11 +30,25 @@ function location() {
   const workspace = join(root, "repo"); mkdirSync(workspace);
   return { workspace, dbPath: join(root, "history.db") };
 }
-async function engine(paths: ReturnType<typeof location>, assess: (options: AssessmentOptions) => Promise<{ report: ScanReport; rawReport: ScanReport }>) {
-  let service = new WorkflowEngineService({ token, ...paths }, options => createCliWorkflowRuntime(options, {
-    createRuntime: () => ({ type: "api", isAvailable: async () => true, executeNative: async () => ({ content: [] }) }) as unknown as NativeRuntime,
-    assess,
-  }));
+async function engine(paths: ReturnType<typeof location>, assess: (options: RunOptions) => Promise<{ report: ScanReport; rawReport: ScanReport }>) {
+  const createHost = () => {
+    const gateway = new ConsoleGateway({ projectPath: paths.workspace, dbPath: paths.dbPath, homeDir: paths.workspace });
+    const context = { runtime: { type: "api", isAvailable: async () => true, executeNative: vi.fn() } as unknown as NativeRuntime,
+      model: "fixture", providerId: "fixture", target: paths.workspace, status: "ready", autonomyMode: "standard", role: "audit",
+      scopeEnforcement: { pluginId: "scope", enabled: false, projectPath: paths.workspace, message: "Fixture" } } as ConsoleExecutionContext;
+    vi.spyOn(gateway, "getExecutionContext").mockResolvedValue(context);
+    vi.spyOn(gateway, "authorizeWorkflowTarget").mockResolvedValue(context);
+    const workflows = new WebWorkflowService({ gateway, dbPath: paths.dbPath, runAssessment: async request => {
+      const result = await assess(request); request.onReport?.(result.report);
+      request.onOutcome?.({ attempts: [{ status: result.report.exitReason === "cancelled" ? "cancelled" : "completed" }], exit_reason: result.report.exitReason ?? "completed" } as unknown as RunOutcome);
+    } });
+    let closed = false;
+    const close = async () => { if (closed) return; closed = true; await workflows.dispose(); await gateway.closeAll(); };
+    hostCleanup.push(close);
+    return { gateway, workflows, close };
+  };
+  let host = createHost();
+  let service = new WorkflowEngineService({ token, ...paths }, host);
   engines.push(service); await service.ready;
   const handshake = createBackendHandshake(paths.dbPath, ["workflow-engine"]);
   const server = createServer(async (req, res) => {
@@ -48,10 +66,8 @@ async function engine(paths: ReturnType<typeof location>, assess: (options: Asse
   });
   servers.push(server); await new Promise<void>(done => server.listen(0, "127.0.0.1", done));
   const address = server.address(); if (!address || typeof address === "string") throw new Error("No engine port");
-  return { url: `http://127.0.0.1:${address.port}/`, engineId: handshake.engineId,
-    restart: async () => { await service.dispose(); service = new WorkflowEngineService({ token, ...paths }, options => createCliWorkflowRuntime(options, {
-      createRuntime: () => ({ type: "api", isAvailable: async () => true }) as unknown as NativeRuntime, assess,
-    })); engines.push(service); await service.ready; },
+  return { url: `http://127.0.0.1:${address.port}/`, engineId: handshake.engineId, host,
+    restart: async () => { await service.dispose(); await host.close(); host = createHost(); service = new WorkflowEngineService({ token, ...paths }, host); engines.push(service); await service.ready; },
   };
 }
 function registry(peers: Array<{ id: string; url: string; engineId: string }>) {
@@ -68,6 +84,8 @@ afterEach(async () => {
   for (const release of releaseGates.splice(0)) release();
   for (const registry of registries.splice(0)) registry.dispose();
   for (const service of engines.splice(0)) await service.dispose();
+  for (const dispose of hostCleanup.splice(0)) await dispose();
+  vi.restoreAllMocks();
   for (const server of servers.splice(0)) { server.closeAllConnections(); await new Promise<void>(done => server.close(() => done())); }
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
@@ -88,6 +106,10 @@ describe("real HTTP workflow engines and retained lifecycle", () => {
     expect(workflowA.id).toBe(workflowB.id);
     const runA = await clientA.startRun({ workflowId: workflowA.id, revision: workflowA.revision, target: pathsA.workspace });
     await entered.promise; expect((await clientA.getRun(runA.id))?.status).toBe("running");
+    const embedded = await createCliWorkflowRuntime({ ownerId: "cli", workspace: pathsA.workspace }, { host: a.host });
+    expect(await embedded.getRun(runA.id)).toMatchObject({ id: runA.id, sessionId: a.host.workflows.getExecution(runA.id)!.sessionId });
+    expect(a.host.workflows.getExecution(runA.id)?.status).toBe("running");
+    await embedded.dispose();
     await clientA.dispose(); connection.dispose();
     const reconnected = registry(peers);
     const again = await createRemoteWorkflowRuntime({ backendId: "a" }, reconnected);

@@ -5,9 +5,10 @@ import { isAbsolute, relative, sep } from "node:path";
 import { promisify } from "node:util";
 import { z } from "zod";
 import { validateScanPlan, SECURITY_WORKFLOW_TEMPLATES, createSecurityWorkflowTemplate, isSecurityWorkflowOperation, SecurityWorkflowBindingsSchema, getSecurityWorkflowTemplate, checkSecurityWorkflowTemplateTarget, DEFAULT_SECURITY_WORKFLOW_PLAN, parseSecurityWorkflowInput, type Finding, type ScanReport, type SecurityWorkflow, type SecurityWorkflowNode, type SecurityWorkflowExecution } from "@0/shared";
-import { SecurityWorkflowStore } from "@0/db";
+import { SecurityWorkflowStore, osecDB } from "@0/db";
+import { ScanResumeRequestSchema, resolvePersistedScanResume, type PersistedScanResumeTarget } from "@0/shared";
 import {
-  executeWorkflow,
+  WorkflowService,
   orderWorkflowNodes,
   type WorkflowAssessmentContext,
   type WorkflowExecutorRegistry,
@@ -215,28 +216,84 @@ async function repositoryState(repoRoot: string): Promise<{ head: string; dirty:
 export class WebWorkflowService {
   readonly #gateway: WebWorkflowGateway;
   readonly #dbPath?: string;
+  readonly #runAssessment: typeof runUnified;
+  readonly #pendingResumes = new Set<string>();
   readonly #jobs = new Map<string, ManagedJob>();
   readonly #fixes = new Map<string, ManagedFix>();
   readonly #repositoryJobs = new Map<string, string>();
   readonly #definitions: SecurityWorkflowStore;
   readonly learning: WebLearningService;
+  readonly #graphService = new WorkflowService();
   readonly #graphJobs = new Map<string, string>();
   readonly #graphConnections = new Map<string, string | null>();
   readonly #workflowCandidates = new Map<string, FindingCandidateStore>();
   readonly #lifecycleKeys = new Map<string, { request: string; promise: Promise<unknown> }>();
   #disposing = false;
 
-  constructor(options: { gateway: WebWorkflowGateway; dbPath?: string; learning?: LearningServiceOptions }) {
+  constructor(options: { gateway: WebWorkflowGateway; dbPath?: string; learning?: LearningServiceOptions; runAssessment?: typeof runUnified; recoverInterrupted?: boolean }) {
     this.#gateway = options.gateway;
     this.#dbPath = options.dbPath;
+    this.#runAssessment = options.runAssessment ?? runUnified;
     this.#definitions = new SecurityWorkflowStore(options.dbPath);
-    this.#definitions.interruptActiveExecutions();
+    if (options.recoverInterrupted !== false) this.#definitions.interruptActiveExecutions();
     this.learning = new WebLearningService(this.#definitions, options.learning);
+  }
+
+  /** Trusted engine adapters use durable IDs; HTTP/session authorization stays in handle/invokeLifecycle. */
+  getExecution(id: string): SecurityWorkflowExecution | null {
+    const execution = this.#definitions.getExecution(id);
+    if (!execution) return null;
+    try {
+      const view = this.#graphService.get(execution.sessionId, id);
+      if (view.cancellationRequestedAt) return { ...execution, cancellationRequested: true, cancellationAcknowledged: true, cancellationRequestedAt: view.cancellationRequestedAt };
+    } catch { /* Retained runs from another host have no live controller here. */ }
+    return execution;
+  }
+  listExecutions(): SecurityWorkflowExecution[] { return this.#definitions.listExecutions().map(execution => this.getExecution(execution.id)!); }
+  /** Exact scan/report associations only; a graph's combined report is not an individual scan report. */
+  retainedScanReport(scanId: string): ScanReport | undefined {
+    for (const job of this.#jobs.values()) {
+      if (job.view.kind === "run" && job.view.runs?.length === 1 && job.view.runs[0]!.scanId === scanId && job.view.report) return snapshot(job.view.report);
+    }
+    for (const execution of this.#definitions.listExecutions()) {
+      if (!Object.values(execution.nodeResults).some(node => node.scanIds?.includes(scanId))) continue;
+      const persisted = this.#definitions.getExecutionResults(execution.id) as WorkflowRunResult | null;
+      let live: WorkflowRunResult | undefined;
+      if (!persisted) { try { live = this.#graphService.getResults(execution.sessionId, execution.id); } catch { /* Other engine's execution has no live state here. */ } }
+      for (const node of Object.values((persisted ?? live)?.nodeResults ?? {})) {
+        if (node.scanIds?.length !== node.reports?.length) continue;
+        const index = node.scanIds?.indexOf(scanId) ?? -1;
+        if (index >= 0 && node.reports?.[index]) return snapshot(node.reports[index]!);
+      }
+    }
+    return undefined;
+  }
+  runEvents(id: string, after = 0): WebWorkflowEvent[] {
+    const jobId = this.#graphJobs.get(id) ?? this.#definitions.getExecution(id)?.jobId;
+    const job = jobId ? this.#jobs.get(jobId) : undefined;
+    return job ? this.#project(job, after).events : [];
+  }
+
+  /** One-step assessment shortcut uses the same owned graph lifecycle and retained history. */
+  async launchAssessment(sessionId: string, input: { target: string; plan: import("@0/shared").ScanPlan }): Promise<SecurityWorkflowExecution> {
+    const request = parse(z.object({ target: z.string().trim().min(1).max(4096), plan: planSchema }).strict(), input);
+    const now = new Date().toISOString();
+    const definition: SecurityWorkflow = {
+      id: `assessment-${randomUUID()}`, revision: 1, name: "Security assessment", instructions: "", target: request.target,
+      createdAt: now, updatedAt: now,
+      nodes: [{ id: "start", type: "trigger", label: "Start", enabled: true },
+        { id: "assessment", type: "audit", label: "Assessment", enabled: true, plan: request.plan },
+        { id: "report", type: "report", label: "Report", enabled: true }],
+      edges: [{ source: "start", target: "assessment" }, { source: "assessment", target: "report" }],
+    };
+    const launched = await this.#runDefinition(definition.id, { sessionId, revision: 1, approval: "launch-authorized-run" }, true, definition);
+    return (launched.data as { execution: SecurityWorkflowExecution }).execution;
   }
 
   /** Session-owned lifecycle calls; launches require an idle gateway and host capabilities. */
   async invokeLifecycle(sessionId: string, name: string, args: Record<string, unknown>, capabilities: { allowApply?: boolean } = {}): Promise<unknown> {
     parse(idSchema, sessionId);
+    if (name === "list_runs") { parse(z.object({}).strict(), args); return { runs: this.#definitions.listExecutions(undefined, sessionId).map(execution => this.getExecution(execution.id)!) }; }
     if (name === "list_templates") { parse(z.object({}).strict(), args); return { templates: snapshot(SECURITY_WORKFLOW_TEMPLATES) }; }
     if (name === "get_template") { const request = parse(z.object({ id: idSchema, revision: z.number().int().positive().optional() }).strict(), args); return { template: getSecurityWorkflowTemplate(request.id, request.revision) }; }
     if (name === "list_workflows") { parse(z.object({}).strict(), args); return { workflows: this.#definitions.list() }; }
@@ -277,15 +334,18 @@ export class WebWorkflowService {
       return promise;
     }
     const request = parse(z.object({ runId: idSchema, cursor: z.number().int().nonnegative().optional(), limit: z.number().int().positive().max(100).optional() }).strict(), args);
-    const execution = this.#definitions.getExecution(request.runId);
+    const execution = this.getExecution(request.runId);
     if (!execution || execution.sessionId !== sessionId) throw new WorkflowError("Workflow run was not found for this session.", 404);
-    if (name === "get_run") return { run: { ...execution, id: execution.id, ownerId: sessionId } };
+    if (name === "get_run") return { run: { ...execution, id: execution.id, ownerId: sessionId }, events: this.runEvents(execution.id, request.cursor ?? 0) };
     if (name === "get_run_results") {
-      const result = this.#definitions.getExecutionResults(execution.id) as WorkflowRunResult | null;
+      const persisted = this.#definitions.getExecutionResults(execution.id) as WorkflowRunResult | null;
+      let live: WorkflowRunResult | undefined;
+      if (!persisted) { try { live = this.#graphService.getResults(sessionId, execution.id); } catch { /* No owned live result after restart. */ } }
+      const result = persisted ?? live;
       const cursor = request.cursor ?? 0; const limit = request.limit ?? 50;
       const findings = result?.findings ?? [];
-      return { runId: execution.id, status: execution.status, findings: findings.slice(cursor, cursor + limit), totalFindings: findings.length,
-        nextCursor: cursor + limit < findings.length ? cursor + limit : null, outputs: result?.outputs ?? [], report: result?.report ? { ...result.report, findings: findings.slice(cursor, cursor + limit) } : undefined };
+      return { runId: execution.id, status: execution.status, retained: Boolean(persisted), pending: !result && ["queued", "running"].includes(execution.status), ...(result && !persisted ? { retentionWarning: "Run results are available in memory but were not persisted." } : {}), findings: findings.slice(cursor, cursor + limit), totalFindings: findings.length,
+        nextCursor: cursor + limit < findings.length ? cursor + limit : null, outputs: result?.outputs ?? [], reports: result?.reports.map(report => ({ ...report, findings: undefined })), costUsd: result?.costUsd, durationMs: result?.durationMs, error: result?.error ?? execution.error, report: result?.report ? { ...result.report, findings: findings.slice(cursor, cursor + limit) } : undefined };
     }
     if (name === "cancel_run") {
       const jobId = this.#graphJobs.get(execution.id); const job = jobId ? this.#jobs.get(jobId) : undefined;
@@ -356,6 +416,7 @@ export class WebWorkflowService {
     this.#disposing = true;
     for (const job of this.#jobs.values()) this.#cancel(job);
     await Promise.all([...this.#jobs.values()].map(job => job.promise));
+    await this.#graphService.dispose();
     await Promise.all([...this.#workflowCandidates.values()].map(store => store.dispose()));
     await this.learning.dispose();
     this.#definitions.close();
@@ -369,7 +430,7 @@ export class WebWorkflowService {
       if (method === "POST") return { status: 201, data: { definition: this.#definitions.save(parseSecurityWorkflowInput(input)) } };
       throw new WorkflowError("Use GET or POST for workflow definitions.", 405);
     }
-    if (pathname === executionsPath && method === "GET") return { status: 200, data: { executions: this.#definitions.listExecutions(query.get("workflowId") ?? undefined, query.get("sessionId") ?? undefined) } };
+    if (pathname === executionsPath && method === "GET") return { status: 200, data: { executions: this.#definitions.listExecutions(query.get("workflowId") ?? undefined, query.get("sessionId") ?? undefined).map(execution => this.getExecution(execution.id)!) } };
     const definitionRoute = pathname.match(/^\/api\/console\/workflow-definitions\/([^/]+)(?:\/(run|executions|versions|rollback))?$/);
     if (definitionRoute) {
       const id = parse(idSchema, decodeURIComponent(definitionRoute[1]!));
@@ -379,7 +440,7 @@ export class WebWorkflowService {
         return { status: 200, data: { definition: this.#definitions.rollback(id, request.revision, request.expectedRevision) } };
       }
       if (definitionRoute[2] === "run" && method === "POST") return this.#runDefinition(id, input);
-      if (definitionRoute[2] === "executions" && method === "GET") return { status: 200, data: { executions: this.#definitions.listExecutions(id, query.get("sessionId") ?? undefined) } };
+      if (definitionRoute[2] === "executions" && method === "GET") return { status: 200, data: { executions: this.#definitions.listExecutions(id, query.get("sessionId") ?? undefined).map(execution => this.getExecution(execution.id)!) } };
       if (!definitionRoute[2]) {
         if (method === "GET") {
           const definition = this.#definitions.get(id);
@@ -405,7 +466,7 @@ export class WebWorkflowService {
     if (executionRoute) {
       const id = parse(idSchema, decodeURIComponent(executionRoute[1]!));
       const sessionId = executionRoute[2] === "/cancel" ? parse(cancelSchema, input).sessionId : parse(idSchema, query.get("sessionId"));
-      const execution = this.#definitions.getExecution(id);
+      const execution = this.getExecution(id);
       if (!execution || execution.sessionId !== sessionId) throw new WorkflowError("Workflow execution was not found for this session.", 404);
       if (executionRoute[2] === "/results" && method === "GET") return { status: 200, data: { results: this.#definitions.getExecutionResults(id) } };
       if (executionRoute[2] === "/cancel" && method === "POST") {
@@ -413,7 +474,7 @@ export class WebWorkflowService {
         const job = jobId ? this.#jobs.get(jobId) : undefined;
         if (!job && (execution.status === "queued" || execution.status === "running")) throw new WorkflowError("This execution belongs to another local engine. Cancel it in that engine.");
         if (job) this.#cancel(job);
-        return { status: 200, data: { execution: this.#definitions.getExecution(id) } };
+        return { status: 200, data: { execution: this.getExecution(id) } };
       }
       if (!executionRoute[2] && method === "GET") return { status: 200, data: { execution } };
       throw new WorkflowError("Unsupported workflow execution action.", 405);
@@ -504,10 +565,10 @@ export class WebWorkflowService {
     const nodeResults = Object.create(null) as SecurityWorkflowExecution["nodeResults"];
     for (const node of ordered) nodeResults[node.id] = { status: node.enabled ? "queued" : "skipped" };
     this.#definitions.updateExecution(execution.id, { jobId: parent.view.id, nodeResults });
-    this.#start(parent, async () => {
-      this.#definitions.updateExecution(execution.id, { status: "running" });
-      const { createdAt: _createdAt, updatedAt: _updatedAt, ...workflowInput } = definition;
-      const result = await executeWorkflow({
+    const { createdAt: _createdAt, updatedAt: _updatedAt, ...workflowInput } = definition;
+    // The core service owns graph execution; web jobs retain the browser
+    // projection and session authorization hooks around its executors.
+    this.#graphService.start(request.sessionId, {
         workflow: workflowInput,
         signal: parent.controller.signal,
         target: typed.length ? target.plan.target : definition.target,
@@ -559,7 +620,10 @@ export class WebWorkflowService {
             ...(child.view.error ? { error: child.view.error } : {}),
           };
         },
-      });
+      }, { id: execution.id });
+    this.#start(parent, async () => {
+      this.#definitions.updateExecution(execution.id, { status: "running" });
+      const result = await this.#graphService.wait(request.sessionId, execution.id);
       try { this.#definitions.saveExecutionResults(execution.id, result); }
       catch (error) { this.#event(parent, "report", { resultsPersisted: false, reason: errorMessage(error) }); }
       for (const [nodeId, step] of Object.entries(result.nodeResults)) {
@@ -582,11 +646,35 @@ export class WebWorkflowService {
       }
       this.#graphConnections.delete(parent.view.id);
       this.#graphJobs.delete(execution.id);
-    });
+    }, true);
     return { status: 202, data: { workflow: this.#project(parent), execution: this.#definitions.getExecution(execution.id) } };
   }
 
-  async #launch(input: unknown, owningGraphId?: string, retainLinks?: (job: WebWorkflow) => void, execution?: SecurityWorkflowNode["execution"], interactive = true, assessment?: WorkflowAssessmentContext, onAssessmentReport?: (report: ScanReport) => void): Promise<{ status: number; data: unknown }> {
+  /** Resume persisted assessment evidence through current engine approvals, never conversation replay. */
+  async resumeScan(scanId: string, input: unknown): Promise<{ status: number; data: unknown }> {
+    try {
+      const id = parse(idSchema, scanId);
+      const request = parse(ScanResumeRequestSchema, input);
+      const context = await this.#gateway.getExecutionContext(request.sessionId);
+      const db = new osecDB(context.dbPath ?? this.#dbPath);
+      let scan;
+      try { scan = db.getScan(id); } finally { db.close(); }
+      if (!scan) throw new WorkflowError("Persisted scan was not found in this engine.", 404);
+      if (this.#pendingResumes.has(id) || [...this.#jobs.values()].some(job => active(job) && ((job.view.request as { resumeScanId?: string })?.resumeScanId === id || job.view.runs?.some(run => run.scanId === id)))) throw new WorkflowError("This scan already has an active workflow in this engine.");
+      let parsed: PersistedScanResumeTarget;
+      try { parsed = resolvePersistedScanResume(scan); } catch (error) { throw new WorkflowError(error instanceof Error ? error.message : String(error), 400); }
+      const target = parsed.targetType === "source-code" ? `source:${parsed.target}` : /^(npm|pypi|cargo|oci):/.test(scan.target) ? scan.target : parsed.target;
+      this.#pendingResumes.add(id);
+      try { return await this.#launch({ sessionId: request.sessionId, target, approval: request.approval,
+        plan: { ...DEFAULT_SECURITY_WORKFLOW_PLAN, depth: parsed.depth, runCount: 1, executionMode: "sequential", ...(request.timeCapMs !== undefined ? { timeCapMs: request.timeCapMs } : {}), ...(request.costCapUsd !== undefined ? { costCapUsd: request.costCapUsd } : {}) },
+      }, undefined, undefined, undefined, true, undefined, undefined, { ...parsed, resumeScanId: id, branchFromEntry: request.branchFromEntry, dbPath: context.dbPath ?? this.#dbPath }); }
+      finally { this.#pendingResumes.delete(id); }
+    } catch (error) {
+      return { status: error instanceof WorkflowError ? error.status : 500, data: { error: error instanceof Error ? error.message : String(error) } };
+    }
+  }
+
+  async #launch(input: unknown, owningGraphId?: string, retainLinks?: (job: WebWorkflow) => void, execution?: SecurityWorkflowNode["execution"], interactive = true, assessment?: WorkflowAssessmentContext, onAssessmentReport?: (report: ScanReport) => void, resume?: PersistedScanResumeTarget & { resumeScanId: string; branchFromEntry?: number; dbPath?: string }): Promise<{ status: number; data: unknown }> {
     if (this.#disposing) throw new WorkflowError("Workflow service is shutting down.", 503);
     const graphSignal = owningGraphId ? this.#jobs.get(owningGraphId)?.controller.signal : undefined;
     graphSignal?.throwIfAborted();
@@ -596,6 +684,7 @@ export class WebWorkflowService {
     const resolution = resolveEngagement(request.target);
     if (!resolution.ok) throw new WorkflowError(resolution.message, 400);
     const context = await this.#gateway.getExecutionContext(request.sessionId);
+    if (resume && (context.dbPath ?? this.#dbPath) !== resume.dbPath) throw new WorkflowError("Session storage changed during resume. Review the scan and launch again.");
     if (this.#disposing) throw new WorkflowError("Workflow service is shutting down.", 503);
     graphSignal?.throwIfAborted();
     if (execution) withWorkflowAuditExecutionPolicy(execution, () => assertWorkflowNativeRuntime(context.runtime));
@@ -603,13 +692,14 @@ export class WebWorkflowService {
     if (owningGraphId && context.runtime instanceof LlmApiRuntime && (context.runtime.connectionIdentity() ?? null) !== this.#graphConnections.get(owningGraphId)) throw new WorkflowError("Session connection changed during this workflow. Review it and run again.");
     if (context.autonomyMode === "recon") throw new WorkflowError("Recon mode is read-only; switch modes before approving an effectful bounded scan.", 403);
     const resolved = snapshot(resolution.plan);
-    const job = this.#createJob("run", request.sessionId, { ...request, resolved }, context, owningGraphId);
+    const job = this.#createJob("run", request.sessionId, { ...request, resolved, ...(resume ? { resumeScanId: resume.resumeScanId, branchFromEntry: resume.branchFromEntry } : {}) }, context, owningGraphId);
     const cancelFromGraph = () => this.#cancel(job);
     graphSignal?.addEventListener("abort", cancelFromGraph, { once: true });
     this.#start(job, async () => {
       const authorized = await this.#gateway.authorizeWorkflowTarget(request.sessionId, {
         target: resolved.kind === "package" ? request.target : resolved.target, kind: resolved.kind,
       }, job.controller.signal, job.view.id, { interactive });
+      if (resume && (identity(selection(authorized)) !== identity(selection(context)) || (authorized.dbPath ?? this.#dbPath) !== resume.dbPath)) throw new WorkflowError("Session runtime or storage changed during resume authorization. Review it and launch again.");
       if (owningGraphId && identity(selection(authorized)) !== identity(this.#jobs.get(owningGraphId)!.view.runtime)) throw new WorkflowError("Session model or routing changed during workflow authorization. Review it and run again.");
       if (owningGraphId && authorized.runtime instanceof LlmApiRuntime && (authorized.runtime.connectionIdentity() ?? null) !== this.#graphConnections.get(owningGraphId)) throw new WorkflowError("Session connection changed during workflow authorization. Review it and run again.");
       if (authorized.autonomyMode === "recon") throw new WorkflowError("Recon mode cannot authorize an effectful bounded scan.", 403);
@@ -620,9 +710,10 @@ export class WebWorkflowService {
         }
       }
       job.controller.signal.throwIfAborted();
-      await withWorkflowAuditExecutionPolicy(execution, () => withScopeEnforcement(authorized.scopeEnforcement, () => runUnified({
-        target: resolved.target,
-        targetType: resolved.targetType,
+      await withWorkflowAuditExecutionPolicy(execution, () => withScopeEnforcement(authorized.scopeEnforcement, () => this.#runAssessment({
+        target: resume?.target ?? resolved.target,
+        targetType: resume?.targetType ?? resolved.targetType,
+        ...(resume ? { resumeScanId: resume.resumeScanId, branchFromEntry: resume.branchFromEntry, mode: resume.mode, packageVersion: resume.packageVersion } : {}),
         reviewPackageEcosystem: resolved.ecosystem,
         depth: executionPlan.depth,
         format: "json",
@@ -823,11 +914,13 @@ export class WebWorkflowService {
     return job;
   }
 
-  #start(job: ManagedJob, operation: () => Promise<void>, onSettled?: () => void): void {
+  #start(job: ManagedJob, operation: () => Promise<void>, onSettled?: () => void, observeCancelled = false): void {
     job.promise = Promise.resolve().then(async () => {
-      job.controller.signal.throwIfAborted();
-      job.view.status = "running";
-      this.#event(job, "state", { status: "running" });
+      if (!observeCancelled) job.controller.signal.throwIfAborted();
+      if (!job.controller.signal.aborted) {
+        job.view.status = "running";
+        this.#event(job, "state", { status: "running" });
+      }
       await operation();
       // A completed irreversible action remains completed even if cancellation
       // arrived after its success. Never claim remote publication was undone.
@@ -846,6 +939,7 @@ export class WebWorkflowService {
   #cancel(job: ManagedJob): void {
     if (!active(job) || job.controller.signal.aborted) return;
     job.view.status = "cancelling";
+    if (job.view.kind === "workflow" && job.view.executionId) this.#graphService.cancel(job.view.sessionId, job.view.executionId);
     job.controller.abort(new Error("Operator cancelled this owned workflow."));
     this.#event(job, "state", { status: "cancelling", cancellationRequested: true });
   }

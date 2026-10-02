@@ -1,3 +1,4 @@
+import { ReportExportControl } from "@/components/report-export-control";
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { NavLink, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -16,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardEmpty, CardHeader, CardList, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Workspace, WorkspaceMain, WorkspaceSidebar } from "@/components/workspace";
+import { ScanResumeControl } from "@/components/scan-resume-control";
 import { formatDuration, formatTime } from "@/lib/format";
 import type { ScanEventsResponse, ScanFindingsResponse, ScanRecord } from "@/types";
 
@@ -243,6 +245,8 @@ function ScanDetail({
         actions={(
           <div className="flex items-center gap-2">
             <StatusBadge value={scan.status} />
+            <ScanResumeControl key={scan.id} scan={scan} />
+            <ReportExportControl path={`/api/scans/${encodeURIComponent(scan.id)}/export`} />
             <Button variant="outline" size="sm" onClick={openTargetPanel}>
               Details
             </Button>

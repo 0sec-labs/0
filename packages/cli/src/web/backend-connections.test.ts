@@ -98,6 +98,34 @@ describe("trusted backend registry", () => {
     const stream = await registry.request("remote", "/api/v1/presentation/events", { stream: true });
     await expect(stream.text()).rejects.toThrow("event exceeds");
   });
+  it("preserves safe report attachment filenames across the HTTP proxy and strips unsafe dispositions", async () => {
+    const { registry, call } = fixture();
+    await registry.handshake("remote");
+    let disposition = 'attachment; filename="0-scan-retained.pdf"';
+    const bytes = new TextEncoder().encode("%PDF-export-bytes");
+    call.mockImplementation(async () => new Response(bytes, { headers: { "Content-Type": "application/pdf", "Content-Disposition": disposition, "X-0-Engine-ID": "engine-a", "Set-Cookie": "upstream-secret=value" } }));
+    const proxy = createServer(async (req, res) => {
+      try { await handleBackendConnectionRequest(req, res, new URL(req.url!, "http://localhost"), registry); }
+      catch (error) { res.statusCode = 500; res.end(String(error)); }
+    });
+    servers.push(proxy);
+    await new Promise<void>(done => proxy.listen(0, "127.0.0.1", done));
+    const { port } = proxy.address() as { port: number };
+    const url = `http://127.0.0.1:${port}/api/backends/remote/proxy/api/scans/retained/export?format=pdf`;
+    const exported = await fetch(url);
+    expect(exported.status).toBe(200);
+    expect(exported.headers.get("content-disposition")).toBe(disposition);
+    expect(exported.headers.get("content-type")).toBe("application/pdf");
+    expect(exported.headers.get("set-cookie")).toBeNull();
+    expect(new Uint8Array(await exported.arrayBuffer())).toEqual(bytes);
+    for (const unsafe of ['attachment; filename="../outside.pdf"', 'inline; filename="report.pdf"', 'attachment; filename="report.pdf"; extra=unexpected']) {
+      disposition = unsafe;
+      const stripped = await fetch(url);
+      expect(stripped.status).toBe(200);
+      expect(stripped.headers.get("content-disposition")).toBeNull();
+      expect(new Uint8Array(await stripped.arrayBuffer())).toEqual(bytes);
+    }
+  });
   it("isolates credentials across two same-ID engines through the HTTP proxy", async () => {
     const records: Array<{ authorization?: string; cookie?: string; browserToken?: string; cursor?: string; expected?: string }> = [];
     const upstream = createServer((req, res) => { records.push({ authorization: req.headers.authorization, cookie: req.headers.cookie, browserToken: req.headers["x-0-control-token"] as string, cursor: req.headers["last-event-id"] as string, expected: req.headers["x-0-expected-engine-id"] as string }); res.setHeader("X-0-Engine-ID", req.url!.startsWith("/a/") ? "engine-a" : "engine-b"); res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(req.url!.endsWith("handshake") ? handshake(req.url!.startsWith("/a/") ? "engine-a" : "engine-b") : { id: "same-id" })); }); servers.push(upstream);

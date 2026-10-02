@@ -96,6 +96,20 @@ For a registered remote engine, use `0 mcp-server --workflows --backend producti
 0's model provider is separate from the connecting agent's session.
 
 Browser chat's **Connect an external agent** copies a setup prompt.
+CLI and MCP workflow clients automatically attach to a running local web engine
+for the same workspace and control database. To attach explicitly to the sessions
+and runs already open in an engine:
+
+```bash
+0 mcp-server --workflows --engine-url http://127.0.0.1:3000 \
+  --engine-token-env ENGINE_TOKEN --session SESSION_ID
+0 sessions list --engine-url http://127.0.0.1:3000 --engine-token-env ENGINE_TOKEN
+```
+
+Set `ENGINE_TOKEN` to the engine's configured bearer credential. Attached clients
+share the browser's session and run lifecycle; disconnecting leaves the engine
+running. Omit `--session` to create a session under the engine's admission grants.
+
 See [MCP setup and individual tools](https://docs.0.security/integrations/) or
 [local and remote engines](https://docs.0.security/engine-connections/).
 

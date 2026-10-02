@@ -7,7 +7,7 @@ tableOfContents:
 ---
 
 Find the command, arguments, and options for your task. This reference covers
-**60 top-level commands** and their registered subcommands.
+**61 top-level commands** and their registered subcommands.
 
 For a worked example, start with [Scan Workflows](/scan-workflows/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
@@ -2703,6 +2703,9 @@ Guide: [Read the workflow](/integrations/).
 | `--scan-id <scanId>` | — | Scan ID to associate persisted findings and target updates with |
 | `--backend <id>` | — | Use a registered remote workflow engine; no local execution fallback |
 | `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--session <id>` | — | Attach workflow runs to an existing session on the selected engine |
 | `--workflows` | `false` | Expose workflow discovery and run lifecycle tools instead of live tools |
 | `--allow-apply` | `false` | Permit explicit workflow apply requests inside the authorized workspace |
 | `--workspace <path>` | — | Absolute authorized local root for workflow source assessments |
@@ -3112,6 +3115,8 @@ List saved workflows and templates without starting an assessment.
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--templates` | — | List only templates |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--backends-config <path>` | — | Operator backend connection registry JSON file |
 | `--db-path <path>` | — | Control database with saved workflows and run history |
@@ -3132,6 +3137,8 @@ Inspect one saved workflow or select a template with `--template`.
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--template <id>` | — | Show a template definition |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--backends-config <path>` | — | Operator backend connection registry JSON file |
 | `--db-path <path>` | — | Control database with saved workflows and run history |
@@ -3152,6 +3159,7 @@ Completed execution can contain findings; consumers must inspect the results.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
+| `--session <id>` | — | Attach the run to an existing session on the selected engine |
 | `--template <id>` | — | Execute a template without saving a copy |
 | `--revision <revision>` | — | Require this workflow or template revision |
 | `--target <target>` | — | Bind the authorized target |
@@ -3162,6 +3170,8 @@ Completed execution can contain findings; consumers must inspect the results.
 | `--allow-apply` | — | Explicitly authorize supported patch application steps for this host and run |
 | `--time-cap <ms>` | — | Workflow-wide time cap in milliseconds |
 | `--cost-cap <usd>` | — | Workflow-wide cost ceiling in USD |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--backends-config <path>` | — | Operator backend connection registry JSON file |
 | `--db-path <path>` | — | Control database with saved workflows and run history |
@@ -3175,7 +3185,7 @@ Inspect retained workflow execution history.
 0 runs
 ```
 
-Subcommands: [list](#runs-list) · [show](#runs-show) · [cancel](#runs-cancel).
+Subcommands: [resume](#runs-resume) · [list](#runs-list) · [show](#runs-show) · [cancel](#runs-cancel).
 
 #### runs list
 
@@ -3187,6 +3197,8 @@ List retained runs in the selected control database.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--backends-config <path>` | — | Operator backend connection registry JSON file |
 | `--db-path <path>` | — | Control database with saved workflows and run history |
@@ -3206,6 +3218,8 @@ Read one run and its retained results.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--backends-config <path>` | — | Operator backend connection registry JSON file |
 | `--db-path <path>` | — | Control database with saved workflows and run history |
@@ -3213,9 +3227,10 @@ Read one run and its retained results.
 
 #### runs cancel
 
-Cancel a run owned by this host. Use Ctrl-C for foreground CLI execution or the
-owning browser/MCP host's lifecycle API. Cross-process cancellation requires a
-separately running engine and is not provided by editing stored history.
+Request cancellation from the selected or discovered owning engine. This controls
+the same run visible in the browser. Ctrl-C also requests cancellation for a
+foreground workflow run; disconnecting an attached transport leaves the engine
+running. Stored history alone does not restart or stop execution.
 
 ```text
 0 runs cancel [options] <id>
@@ -3227,6 +3242,275 @@ separately running engine and is not provided by editing stored history.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### runs resume
+
+Resume a persisted assessment scan in an existing engine session. The selected engine supplies the stored target, model, and current scope; optional branch and budget limits narrow the request. This resumes scan work rather than restarting a workflow graph.
+
+```text
+0 runs resume [options] <scan-id>
+```
+
+```bash
+0 runs resume SCAN_ID --session SESSION_ID --backend production
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `scan-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--session <id>` **required** | — | Existing engine session |
+| `--branch-from-entry <index>` | — | Nonnegative retained history entry index |
+| `--time-cap <ms>` | — | Resume time ceiling in milliseconds |
+| `--cost-cap <usd>` | — | Resume cost ceiling in USD |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+### sessions
+
+Inspect and control the same live sessions used by the browser. Attach with --backend or --engine-url/--engine-token-env, or use the discovered local engine. Session operations preserve current engine admission grants.
+
+```text
+0 sessions
+```
+
+```bash
+0 sessions list --backend production
+```
+
+Subcommands: [list](#sessions-list) · [show](#sessions-show) · [create](#sessions-create) · [send](#sessions-send) · [continue](#sessions-continue) · [cancel](#sessions-cancel) · [events](#sessions-events) · [resume](#sessions-resume) · [decide](#sessions-decide).
+
+#### sessions list
+
+List live sessions, or retained snapshots with --saved. Listing does not resume work.
+
+```text
+0 sessions list [options]
+```
+
+```bash
+0 sessions list --saved --backend production
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--saved` | — | List retained session snapshots |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### sessions show
+
+Read an existing live session without recreating it or restoring approvals.
+
+```text
+0 sessions show [options] <id>
+```
+
+```bash
+0 sessions show SESSION_ID --backend production
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### sessions create
+
+Create a session within the engine's authorized workspace, scope, and model configuration. --config reads a bounded JSON object; it cannot expand engine grants.
+
+```text
+0 sessions create [options]
+```
+
+```bash
+0 sessions create --config session.json --backend production
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--config <path>` | — | Session configuration JSON object |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### sessions send
+
+Send text to a live engine session. The engine runs the turn using its configured provider and tools.
+
+```text
+0 sessions send [options] <id> <text>
+```
+
+```bash
+0 sessions send SESSION_ID "Review the current findings" --backend production
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `text` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### sessions continue
+
+Continue the selected live session with optional text. This preserves the existing engine context.
+
+```text
+0 sessions continue [options] <id> [text]
+```
+
+```bash
+0 sessions continue SESSION_ID --backend production
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `text` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### sessions cancel
+
+Explicitly cancel the session's active work. Transport disconnect alone does not request cancellation from an attached engine.
+
+```text
+0 sessions cancel [options] <id>
+```
+
+```bash
+0 sessions cancel SESSION_ID --backend production
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### sessions events
+
+Read engine session events after an optional nonnegative cursor. Cursors belong to that engine and session.
+
+```text
+0 sessions events [options] <id>
+```
+
+```bash
+0 sessions events SESSION_ID --after 0 --backend production
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--after <cursor>` | — | Nonnegative engine event cursor |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### sessions resume
+
+Restore a retained snapshot as a new session under current engine grants. Stored transcripts do not restore approval or filesystem grants.
+
+```text
+0 sessions resume [options] <saved-id>
+```
+
+```bash
+0 sessions resume SAVED_ID --backend production
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `saved-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### sessions decide
+
+Respond to an existing session decision using a JSON response file. The engine checks the decision belongs to that live session.
+
+```text
+0 sessions decide [options] <id> <decision-id>
+```
+
+```bash
+0 sessions decide SESSION_ID DECISION_ID --response response.json --backend production
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `decision-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--response <path>` **required** | — | Decision response JSON object |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
 | `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
 | `--backends-config <path>` | — | Operator backend connection registry JSON file |
 | `--db-path <path>` | — | Control database with saved workflows and run history |

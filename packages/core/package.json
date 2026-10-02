@@ -25,13 +25,15 @@
     "tree-sitter": "file:../../vendor/tree-sitter-0.21.1-node24.tgz",
     "tree-sitter-c": "0.21.4",
     "yaml": "^2.4.0",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "pdfkit": "^0.15.2"
   },
   "optionalDependencies": {
     "playwright": "^1.52.0"
   },
   "devDependencies": {
     "typescript": "^5.7.2",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "@types/pdfkit": "^0.13.9"
   }
 }

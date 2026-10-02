@@ -227,7 +227,7 @@ export class BackendConnectionRegistry {
         return new Response(body, { status: response.status, headers: { "Content-Type": type, "X-0-Request-ID": requestId, ...(response.headers.get("x-0-engine-id") ? { "X-0-Engine-ID": response.headers.get("x-0-engine-id")! } : {}) } });
       }
       const data = await boundedResponse(response, MAX_RESPONSE, signal);
-      return new Response([204, 205, 304].includes(response.status) || method === "HEAD" ? null : data as BodyInit, { status: response.status, headers: { "Content-Type": type, "X-0-Request-ID": requestId, ...(response.headers.get("x-0-engine-id") ? { "X-0-Engine-ID": response.headers.get("x-0-engine-id")! } : {}) } });
+      return new Response([204, 205, 304].includes(response.status) || method === "HEAD" ? null : data as BodyInit, { status: response.status, headers: { "Content-Type": type, ...attachmentHeaders(response.headers), "X-0-Request-ID": requestId, ...(response.headers.get("x-0-engine-id") ? { "X-0-Engine-ID": response.headers.get("x-0-engine-id")! } : {}) } });
     } catch (error) { if (error instanceof BackendConnectionError) throw error; if (timeout.signal.aborted) throw new BackendConnectionError("Backend request timed out.", 504); if (options.signal?.aborted) throw new BackendConnectionError("Backend request disconnected.", 499); throw new BackendConnectionError("Backend transport failed."); }
     finally { clearTimeout(timer); if (!retained) this.#active--; }
   }
@@ -240,6 +240,13 @@ async function requestJson(req: IncomingMessage): Promise<unknown> {
   if (!length) return undefined;
   try { return JSON.parse(Buffer.concat(chunks, length).toString("utf8")); } catch { throw new BackendConnectionError("Backend request must contain valid JSON.", 400); }
 }
+/** Only the engine's bounded ASCII attachment filename crosses the proxy. */
+function attachmentHeaders(headers: Headers): Record<string, string> {
+  const value = headers.get("content-disposition");
+  const match = value?.match(/^attachment;\s*filename="([A-Za-z0-9][A-Za-z0-9_.-]{0,159})"$/i);
+  return match ? { "Content-Disposition": `attachment; filename="${match[1]}"` } : {};
+}
+
 function json(res: ServerResponse, status: number, value: unknown) { res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" }); res.end(JSON.stringify(value)); }
 /** Call only after local origin and control-token authorization. Returns a local dispatch rewrite. */
 export async function handleBackendConnectionRequest(req: IncomingMessage, res: ServerResponse, url: URL, registry: BackendConnectionRegistry): Promise<{ handled: boolean; localPath?: string }> {
@@ -259,7 +266,7 @@ export async function handleBackendConnectionRequest(req: IncomingMessage, res: 
     const stream = req.headers.accept?.includes("text/event-stream") === true;
     const response = await registry.request(id, path, { method: req.method, body, stream, signal: abort.signal, lastEventId: typeof req.headers["last-event-id"] === "string" ? req.headers["last-event-id"] : undefined, requestId: typeof req.headers["x-0-request-id"] === "string" ? req.headers["x-0-request-id"] : undefined });
     if (res.destroyed) return { handled: true };
-    res.writeHead(response.status, { "Content-Type": response.headers.get("content-type") ?? "application/json", "Cache-Control": "no-store", "X-0-Request-ID": response.headers.get("x-0-request-id") ?? randomUUID(), ...(response.headers.get("x-0-engine-id") ? { "X-0-Engine-ID": response.headers.get("x-0-engine-id")! } : {}), "X-Content-Type-Options": "nosniff", ...(stream ? { "X-Accel-Buffering": "no" } : {}) });
+    res.writeHead(response.status, { "Content-Type": response.headers.get("content-type") ?? "application/json", ...attachmentHeaders(response.headers), "Cache-Control": "no-store", "X-0-Request-ID": response.headers.get("x-0-request-id") ?? randomUUID(), ...(response.headers.get("x-0-engine-id") ? { "X-0-Engine-ID": response.headers.get("x-0-engine-id")! } : {}), "X-Content-Type-Options": "nosniff", ...(stream ? { "X-Accel-Buffering": "no" } : {}) });
     if (!response.body) { res.end(); return { handled: true }; }
     const reader = response.body.getReader();
     const onAbort = () => { void reader.cancel().catch(() => {}); };

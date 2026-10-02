@@ -2,7 +2,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LlmApiRuntime, type NativeRuntime } from "@0/core";
+import { WorkflowService, LlmApiRuntime, type NativeRuntime } from "@0/core";
+import { SecurityWorkflowStore } from "@0/db";
 import { DEFAULT_SECURITY_WORKFLOW_PLAN, createSecurityWorkflowTemplate, type SecurityWorkflow, type SecurityWorkflowExecution, type SecurityWorkflowInput, type ScanReport } from "@0/shared";
 import type { RunOptions, RunOutcome } from "../commands/run.js";
 import { WebWorkflowService, type WebWorkflowExecutionContext } from "./workflows.js";
@@ -62,9 +63,83 @@ beforeEach(() => {
 afterEach(async () => {
   await Promise.all(services.splice(0).map(instance => instance.dispose()));
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
+  vi.restoreAllMocks();
 });
 
 describe("manual security workflow execution", () => {
+  it("retains exact scan reports and owned evidence when result persistence fails", async () => {
+    const persistence = vi.spyOn(SecurityWorkflowStore.prototype, "saveExecutionResults").mockImplementation(() => { throw new Error("Storage full."); });
+    const report = { target: "https://example.test", scanDepth: "default", startedAt: "2026-01-01", completedAt: "2026-01-01", durationMs: 10,
+      summary: { totalAttacks: 1, totalFindings: 1, critical: 0, high: 1, medium: 0, low: 0, info: 0 }, findings: [{ id: "retained-evidence", severity: "high", title: "Evidence", templateId: "fixture", category: "other", description: "Retained original evidence", status: "discovered", evidence: { request: "Fixture request", response: "Retained response" }, timestamp: Date.now() }], warnings: [{ stage: "report", message: "Original warning" }] } as ScanReport;
+    runner.mockImplementationOnce(async (options: RunOptions) => {
+      options.onEvent?.({ type: "scan_started", data: { scanId: "exact-scan", persisted: true } });
+      options.onReport?.(report);
+      options.onOutcome?.({ attempts: [{ status: "completed" }], exit_reason: "completed" } as unknown as RunOutcome);
+    });
+    const { instance } = service();
+    const draft = await instance.handle("/api/console/workflow-definitions", "POST", { ...definition, nodes: definition.nodes.map(node => node.id === "last" ? { ...node, enabled: false } : node) }, new URLSearchParams());
+    const launched = await run(instance, (draft?.data as { definition: SecurityWorkflow }).definition);
+    const executionId = (launched?.data as { execution: SecurityWorkflowExecution }).execution.id;
+    await finished(instance, executionId);
+    expect(persistence).toHaveBeenCalled();
+    expect(await instance.invokeLifecycle("owner", "get_run_results", { runId: executionId })).toMatchObject({ retained: false, pending: false, findings: [{ id: "retained-evidence" }], report: { warnings: report.warnings } });
+    await expect(instance.invokeLifecycle("other", "get_run_results", { runId: executionId })).rejects.toThrow("not found");
+    expect(instance.retainedScanReport("exact-scan")).toEqual(report);
+    expect(instance.retainedScanReport("other-scan")).toBeUndefined();
+  });
+  it("owns graph runs in the shared lifecycle and exposes durable engine projections", async () => {
+    const started = vi.spyOn(WorkflowService.prototype, "start");
+    const waited = vi.spyOn(WorkflowService.prototype, "wait");
+    const { instance } = service();
+    const launched = await run(instance, await save(instance));
+    const id = (launched?.data as { execution: SecurityWorkflowExecution }).execution.id;
+    const execution = await finished(instance, id);
+    expect(started).toHaveBeenCalledWith("owner", expect.objectContaining({ workflow: expect.objectContaining({ name: definition.name }) }), { id });
+    expect(waited).toHaveBeenCalledWith("owner", id);
+    expect(instance.getExecution(id)).toEqual(execution);
+    expect(instance.listExecutions()).toEqual([execution]);
+    expect(instance.runEvents(id)).toEqual(expect.arrayContaining([expect.objectContaining({ type: "state", data: { status: "completed" } })]));
+    expect(await instance.invokeLifecycle("owner", "list_runs", {})).toEqual({ runs: [execution] });
+    expect(await instance.invokeLifecycle("other", "list_runs", {})).toEqual({ runs: [] });
+  });
+
+  it("waits for shared graph cancellation cleanup before disposing the browser adapter", async () => {
+    const aborted = Promise.withResolvers<void>();
+    const cleanup = Promise.withResolvers<void>();
+    runner.mockImplementationOnce(async (options: RunOptions) => {
+      options.signal!.addEventListener("abort", () => aborted.resolve(), { once: true });
+      await aborted.promise;
+      await cleanup.promise;
+      throw options.signal!.reason;
+    });
+    const cancelled = vi.spyOn(WorkflowService.prototype, "cancel");
+    const { instance } = service();
+    const launched = await run(instance, await save(instance));
+    const id = (launched?.data as { execution: SecurityWorkflowExecution }).execution.id;
+    await vi.waitFor(() => expect(runner).toHaveBeenCalledTimes(1));
+    let disposed = false;
+    const disposal = instance.dispose().then(() => { disposed = true; });
+    await aborted.promise;
+    expect(disposed).toBe(false);
+    expect(cancelled).toHaveBeenCalledWith("owner", id);
+    cleanup.resolve();
+    await disposal;
+    services.splice(services.indexOf(instance), 1);
+    expect(disposed).toBe(true);
+    expect(runner).toHaveBeenCalledTimes(1);
+  });
+
+  it("launches assessment shortcuts through an inline owned graph without saving a draft", async () => {
+    const { instance, authorize } = service();
+    const execution = await instance.launchAssessment("owner", { target: "https://example.test", plan: { ...DEFAULT_SECURITY_WORKFLOW_PLAN, runCount: 1 } });
+    expect(execution.sessionId).toBe("owner");
+    expect((await finished(instance, execution.id)).status).toBe("completed");
+    expect(runner).toHaveBeenCalledTimes(1);
+    expect(authorize).toHaveBeenCalledTimes(1);
+    expect((await instance.handle("/api/console/workflow-definitions", "GET", undefined, new URLSearchParams()))?.data).toEqual({ definitions: [] });
+    expect(instance.listExecutions()[0].id).toBe(execution.id);
+  });
+
   it("skips disabled audit nodes, executes enabled nodes through authorization, and persists scan links", async () => {
     const { instance, authorize } = service();
     const workflow = await save(instance);
@@ -239,6 +314,80 @@ describe("browser workflow lifecycle", () => {
   it("requires host capability in addition to an application request", async () => {
     const { instance } = service();
     await expect(instance.invokeLifecycle("owner", "start_run", { templateId: "fix-candidate", target: "/fixture", allowApply: true })).rejects.toThrow("host approval");
+    expect(runner).not.toHaveBeenCalled();
+  });
+});
+
+describe("persisted assessment resume", () => {
+  function persisted(target = "https://example.test") {
+    const directory = mkdtempSync(join(tmpdir(), "web-resume-")); directories.push(directory);
+    const path = join(directory, "engine.db");
+    return { path, target };
+  }
+  async function scanFixture(target = "https://example.test", mode: "deep" | "web" = "deep") {
+    const paths = persisted(target);
+    const { osecDB } = await import("@0/db");
+    const db = new osecDB(paths.path);
+    db.createScan({ target, depth: "deep", format: "json", mode, runtime: "api" }, "prior-scan");
+    db.close();
+    return paths;
+  }
+  const approved = { sessionId: "owner", approval: "launch-authorized-run" };
+  it("routes persisted scan state through current approvals and model, without replay", async () => {
+    const paths = await scanFixture("web:https://example.test", "web");
+    const { instance, authorize } = service(paths.path);
+    const launched = await instance.resumeScan("prior-scan", { ...approved, branchFromEntry: 0, timeCapMs: 2000, costCapUsd: 1 });
+    expect(launched.status).toBe(202);
+    await vi.waitFor(() => expect(runner).toHaveBeenCalledOnce());
+    expect(authorize).toHaveBeenCalledWith("owner", { target: "https://example.test", kind: "web" }, expect.any(AbortSignal), expect.any(String), { interactive: true });
+    expect(runner).toHaveBeenCalledWith(expect.objectContaining({ resumeScanId: "prior-scan", branchFromEntry: 0, target: "https://example.test", targetType: "web-app", mode: "web", depth: "deep", model: "synthetic-model", dbPath: paths.path, plan: expect.objectContaining({ runCount: 1, executionMode: "sequential", timeCapMs: 2000, costCapUsd: 1 }) }));
+    expect(runner.mock.calls[0]![0]).not.toHaveProperty("messages");
+  });
+  it("rejects caller authority overrides, missing scans and conversations before launch", async () => {
+    const paths = await scanFixture();
+    const { instance, authorize } = service(paths.path);
+    expect((await instance.resumeScan("prior-scan", { ...approved, target: "/other" })).status).toBe(400);
+    expect((await instance.resumeScan("missing", approved)).status).toBe(404);
+    expect((await instance.resumeScan("prior-scan", { ...approved, branchFromEntry: -1 })).status).toBe(400);
+    expect(authorize).not.toHaveBeenCalled(); expect(runner).not.toHaveBeenCalled();
+  });
+  it("authorizes source scope before branching or running", async () => {
+    const paths = await scanFixture("repo:/outside/source");
+    const { instance, authorize } = service(paths.path);
+    authorize.mockRejectedValue(new Error("Source target is outside approved scope."));
+    const result = await instance.resumeScan("prior-scan", { ...approved, branchFromEntry: 2 });
+    expect(result.status).toBe(202);
+    await vi.waitFor(async () => {
+      const id = (result.data as { workflow: { id: string } }).workflow.id;
+      const job = await instance.handle(`/api/console/workflows/${id}`, "GET", undefined, new URLSearchParams("sessionId=owner"));
+      expect((job?.data as { workflow: { status: string } }).workflow.status).toBe("failed");
+    });
+    expect(runner).not.toHaveBeenCalled();
+  });
+  it("blocks concurrent resumes of the same persisted scan", async () => {
+    const paths = await scanFixture();
+    const { instance } = service(paths.path);
+    const cleanup = Promise.withResolvers<void>();
+    runner.mockImplementationOnce(async (options: RunOptions) => {
+      await cleanup.promise;
+      options.onOutcome?.({ attempts: [{ status: "completed" }], exit_reason: "completed" } as unknown as RunOutcome);
+    });
+    const [first, second] = await Promise.all([instance.resumeScan("prior-scan", approved), instance.resumeScan("prior-scan", approved)]);
+    expect([first.status, second.status].sort()).toEqual([202, 409]);
+    await vi.waitFor(() => expect(runner).toHaveBeenCalledOnce());
+    cleanup.resolve();
+  });
+  it("keeps canonical local source boundaries before journal branch mutation", async () => {
+    const outside = mkdtempSync(join(tmpdir(), "resume-outside-")); directories.push(outside);
+    const approvedRoot = mkdtempSync(join(tmpdir(), "resume-approved-")); directories.push(approvedRoot);
+    const paths = await scanFixture(`repo:${outside}`);
+    const { instance } = service(paths.path, { localScopePath: approvedRoot, scopeEnforcement: { ...context.scopeEnforcement, enabled: true } });
+    const result = await instance.resumeScan("prior-scan", { ...approved, branchFromEntry: 2 });
+    const id = (result.data as { workflow: { id: string } }).workflow.id;
+    await vi.waitFor(async () => {
+      const job = await instance.handle(`/api/console/workflows/${id}`, "GET", undefined, new URLSearchParams("sessionId=owner"));
+      expect((job?.data as { workflow: { status: string; error?: string } }).workflow).toMatchObject({ status: "failed", error: expect.stringContaining("outside the explicitly approved local scope") });
+    });
     expect(runner).not.toHaveBeenCalled();
   });
 });

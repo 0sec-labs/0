@@ -23,6 +23,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ScanReport } from "@0/shared";
 import * as formatters from "../../formatters/index.js";
 
+const { connectLocalEngineMock } = vi.hoisted(() => ({ connectLocalEngineMock: vi.fn() }));
+vi.mock("../../local-engine.js", () => ({ connectLocalEngine: connectLocalEngineMock }));
+beforeEach(() => { connectLocalEngineMock.mockReset().mockResolvedValue(null); });
+
 // ── Module-level mocks ──────────────────────────────────────────────────────
 //
 // `runUnified` calls `loadCoreModule()` which does a dynamic
@@ -264,7 +268,7 @@ describe("runUnified — runtime gating", () => {
     };
     try {
       agenticScanMock.mockResolvedValueOnce(cleanReport({
-        summary: { ...emptySummary(), high: 1, totalFindings: 1 },
+        summary: { ...emptySummary(), high: 1, low: 1, totalFindings: 2 },
       }));
       await runUnified({
         target: "https://example.com",
@@ -799,7 +803,7 @@ describe("runUnified — retained shortcut runs", () => {
     agenticScanMock.mockImplementationOnce(async scannerOptions => {
       scannerOptions.onEvent({ type: "scan_started", message: "started", data: { persisted: true, scanId: "scan-one", dbPath: "/tmp/scan.db" } });
       expect(workflowStoreMock.createExecutionFromSnapshot).toHaveBeenCalledWith(expect.objectContaining({ target: options.target, id: "cli-scan" }), "cli");
-      return cleanReport({ summary: { ...emptySummary(), high: 1, totalFindings: 1 } });
+      return cleanReport({ summary: { ...emptySummary(), high: 1, low: 1, totalFindings: 2 } });
     });
     await runUnified({ ...options, onOutcome }).catch(() => {});
     expect(onOutcome).toHaveBeenCalledWith(expect.objectContaining({ workflowRunId: "cli-run" }));
@@ -837,5 +841,76 @@ describe("runUnified — retained shortcut runs", () => {
     await runUnified(options).catch(() => {});
     expect(workflowStoreMock.updateExecution).toHaveBeenCalledWith("cli-run", expect.objectContaining({ status: "completed", error: "Run completed, but result retention failed: disk full" }));
     expect(tracker.firstCode).toBe(2);
+  });
+});
+
+describe("runUnified attaches assessments to a running local engine", () => {
+  afterEach(() => vi.restoreAllMocks());
+  it("resolves client-relative source paths before crossing the engine boundary", async () => {
+    const engine = { startAssessment: vi.fn(async () => ({ id: "source-run" })), getRun: vi.fn(async () => ({ id: "source-run", status: "completed" })), getRunResults: vi.fn(async () => ({ report: cleanReport(), findings: [], nextCursor: null })), cancelRun: vi.fn(), dispose: vi.fn() };
+    connectLocalEngineMock.mockResolvedValue(engine);
+    vi.spyOn(console, "log").mockImplementation(() => undefined); vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const exit = makeExitMock({});
+    await runUnified({ target: "./client-repo", targetType: "source-code", depth: "quick", format: "json", runtime: "api", timeout: 1000, verbose: false }).catch(() => undefined);
+    expect(engine.startAssessment).toHaveBeenCalledWith(expect.objectContaining({ target: `source:${process.cwd()}/client-repo` }));
+    expect(engine.dispose).toHaveBeenCalledOnce(); exit.mockRestore();
+  });
+  it("does not allocate an assessment when the caller was already cancelled", async () => {
+    const engine = { startAssessment: vi.fn(), dispose: vi.fn() }; connectLocalEngineMock.mockResolvedValue(engine);
+    const controller = new AbortController(); controller.abort(new Error("Already stopped"));
+    await expect(runUnified({ target: "./repo", targetType: "source-code", depth: "quick", format: "json", runtime: "api", timeout: 1000, verbose: false, signal: controller.signal })).rejects.toThrow("Already stopped");
+    expect(engine.startAssessment).not.toHaveBeenCalled(); expect(engine.dispose).toHaveBeenCalledOnce();
+  });
+  it("launches and paginates an engine assessment while retaining normal output and outcome", async () => {
+    const findings = [{ id: "engine-finding", severity: "high", status: "hypothesis", title: "Untrusted evidence" }, { id: "engine-second", severity: "low", status: "discovered", title: "Other evidence" }];
+    const resultReport = cleanReport({ findings: findings as unknown as ScanReport["findings"], summary: { ...emptySummary(), high: 1, low: 1, totalFindings: 2 } });
+    const engine = {
+      startAssessment: vi.fn(async () => ({ id: "engine-run" })),
+      getRun: vi.fn(async () => ({ id: "engine-run", status: "completed", events: [{ sequence: 1, type: "node_completed" }] })),
+      getRunResults: vi.fn(async (_id: string, page: { cursor: number }) => ({ report: { ...resultReport, findings: findings.slice(page.cursor, page.cursor + 1) }, findings: findings.slice(page.cursor, page.cursor + 1), nextCursor: page.cursor === 0 ? 1 : null, costUsd: 0.5 })),
+      cancelRun: vi.fn(), dispose: vi.fn(),
+    };
+    connectLocalEngineMock.mockResolvedValue(engine);
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const exit = makeExitMock({}); const onReport = vi.fn(); const onOutcome = vi.fn(); const onEvent = vi.fn();
+    const oldCalls = agenticScanMock.mock.calls.length;
+    const retainedCalls = workflowStoreMock.createExecutionFromSnapshot.mock.calls.length;
+    await runUnified({ target: "https://example.com", targetType: "url", depth: "quick", format: "json", runtime: "auto", timeout: 1000, verbose: false, onReport, onOutcome, onEvent }).catch(() => undefined);
+    expect(engine.startAssessment).toHaveBeenCalledWith({ target: "https://example.com", plan: expect.objectContaining({ depth: "quick", runCount: 1, timeCapMs: 1000 }) });
+    expect(onReport).toHaveBeenCalledWith(expect.objectContaining({ findings, estimatedCostUsd: 0.5 }));
+    expect(onOutcome).toHaveBeenCalledWith(expect.objectContaining({ workflowRunId: "engine-run", exitCode: 1, finding_count: 2 }));
+    expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ sequence: 1 }));
+    expect(agenticScanMock.mock.calls.length).toBe(oldCalls);
+    expect(workflowStoreMock.createExecutionFromSnapshot.mock.calls.length).toBe(retainedCalls);
+    expect(log).toHaveBeenCalledWith("FORMATTED_REPORT");
+    expect(engine.dispose).toHaveBeenCalled(); exit.mockRestore();
+  });
+  it("forwards cancellation that arrives while the engine is allocating the run", async () => {
+    const controller = new AbortController();
+    const engine = {
+      startAssessment: vi.fn(async () => { controller.abort(new Error("Operator stop")); return { id: "cancelled-engine-run" }; }),
+      getRun: vi.fn(async () => ({ id: "cancelled-engine-run", status: "cancelled" })),
+      getRunResults: vi.fn(async () => ({ report: cleanReport(), findings: [], nextCursor: null })),
+      cancelRun: vi.fn(async () => undefined), dispose: vi.fn(),
+    };
+    connectLocalEngineMock.mockResolvedValue(engine);
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const exit = makeExitMock({}); const onOutcome = vi.fn();
+    await runUnified({ target: "https://example.com", depth: "quick", format: "json", runtime: "api", timeout: 1000, verbose: false, signal: controller.signal, onOutcome }).catch(() => undefined);
+    expect(engine.cancelRun).toHaveBeenCalledOnce();
+    expect(engine.cancelRun).toHaveBeenCalledWith("cancelled-engine-run");
+    expect(onOutcome).toHaveBeenCalledWith(expect.objectContaining({ exitCode: 2, exit_reason: "cancelled", workflowRunId: "cancelled-engine-run" }));
+    expect(engine.dispose).toHaveBeenCalled(); exit.mockRestore();
+  });
+  it("rejects unsupported execution overrides without starting a separate scan", async () => {
+    const engine = { startAssessment: vi.fn(), dispose: vi.fn() };
+    connectLocalEngineMock.mockResolvedValue(engine);
+    await expect(runUnified({ target: "/fixture", targetType: "source-code", depth: "default", format: "json", runtime: "api", timeout: 1000, verbose: false, reviewProfile: "linux-kernel" })).rejects.toThrow("cannot represent");
+    expect(engine.startAssessment).not.toHaveBeenCalled();
+    expect(engine.dispose).toHaveBeenCalled();
+    await expect(runUnified({ target: "https://example.com", depth: "default", format: "json", runtime: "api", timeout: 1000, verbose: false, wafEvasion: false })).rejects.toThrow("wafEvasion");
+    expect(engine.startAssessment).not.toHaveBeenCalled();
   });
 });

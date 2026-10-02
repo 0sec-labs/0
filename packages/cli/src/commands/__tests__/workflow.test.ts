@@ -22,6 +22,68 @@ function setup() {
 }
 afterEach(() => { process.exitCode = 0; });
 describe("workflow CLI", () => {
+  it("binds a remote run to the selected web session without opening local storage", async () => {
+    const { runtime, deps } = setup();
+    deps.createRemoteRuntime = vi.fn(async () => runtime);
+    await runWorkflowCommand("saved", { backend: "engine", session: "web-session" }, deps);
+    expect(deps.createRemoteRuntime).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "web-session" }));
+    expect(runtime.startRun).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "web-session" }));
+    expect(deps.createRuntime).not.toHaveBeenCalled();
+  });
+  it("attaches directly to an engine and rejects an unbound session", async () => {
+    const { runtime, deps } = setup();
+    deps.createRemoteRuntime = vi.fn(async () => runtime);
+    await runWorkflowCommand("saved", { engineUrl: "http://127.0.0.1:3000", engineTokenEnv: "ENGINE_TOKEN", session: "web-session" }, deps);
+    expect(deps.createRemoteRuntime).toHaveBeenCalledWith(expect.objectContaining({ engineUrl: "http://127.0.0.1:3000", engineTokenEnv: "ENGINE_TOKEN" }));
+    vi.mocked(runtime.startRun).mockClear();
+    await runWorkflowCommand("saved", { session: "web-session" }, deps);
+    expect(runtime.startRun).not.toHaveBeenCalled();
+    expect(deps.err).toHaveBeenCalledWith("The selected engine does not support session attachment.");
+  });
+  it("uses engine session lifecycle methods and keeps disconnect separate from cancellation", async () => {
+    const { runtime, deps } = setup();
+    runtime.listSessions = vi.fn(() => [{ id: "web-session" }]);
+    runtime.getSession = vi.fn(() => ({ id: "web-session" }));
+    runtime.continueSession = vi.fn();
+    runtime.cancelSession = vi.fn();
+    runtime.getSessionEvents = vi.fn(() => []);
+    deps.createRemoteRuntime = vi.fn(async () => runtime);
+    for (const args of [["list"], ["show", "web-session"], ["continue", "web-session", "continue"], ["events", "web-session", "--after", "0"]]) {
+      const program = new Command(); registerWorkflowCommand(program, deps);
+      await program.parseAsync(["sessions", ...args, "--backend", "engine"], { from: "user" });
+    }
+    expect(runtime.listSessions).toHaveBeenCalledOnce();
+    expect(runtime.getSession).toHaveBeenCalledWith("web-session");
+    expect(runtime.continueSession).toHaveBeenCalledWith("web-session", "continue");
+    expect(runtime.getSessionEvents).toHaveBeenCalledWith("web-session", 0);
+    expect(runtime.cancelSession).not.toHaveBeenCalled();
+    expect(runtime.cancelRun).not.toHaveBeenCalled();
+    const program = new Command(); registerWorkflowCommand(program, deps);
+    await program.parseAsync(["sessions", "cancel", "web-session", "--backend", "engine"], { from: "user" });
+    expect(runtime.cancelSession).toHaveBeenCalledWith("web-session");
+    expect(deps.createRuntime).not.toHaveBeenCalled();
+  });
+  it("resumes a scan in the selected engine session without claiming a workflow restart", async () => {
+    const { runtime, deps } = setup();
+    runtime.resumeScan = vi.fn(() => ({ runId: "scan-resume-run" }));
+    deps.createRemoteRuntime = vi.fn(async () => runtime);
+    const program = new Command(); registerWorkflowCommand(program, deps);
+    await program.parseAsync(["runs", "resume", "scan-1", "--session", "web-session", "--backend", "engine", "--branch-from-entry", "0", "--time-cap", "1000"], { from: "user" });
+    expect(runtime.resumeScan).toHaveBeenCalledWith({ sessionId: "web-session", scanId: "scan-1", branchFromEntry: 0, timeCapMs: 1000 });
+    expect(runtime.startRun).not.toHaveBeenCalled();
+  });
+  it("binds an automatically discovered engine session and fails if that session disappeared", async () => {
+    const { runtime, deps } = setup();
+    runtime.attachSession = vi.fn(() => ({ id: "web-session" }));
+    await runWorkflowCommand("saved", { session: "web-session" }, deps);
+    expect(runtime.attachSession).toHaveBeenCalledWith("web-session");
+    expect(runtime.startRun).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "web-session" }));
+    vi.mocked(runtime.startRun).mockClear();
+    vi.mocked(runtime.attachSession).mockReturnValue(null);
+    await runWorkflowCommand("saved", { session: "gone" }, deps);
+    expect(runtime.startRun).not.toHaveBeenCalled();
+    expect(deps.err).toHaveBeenCalledWith("The selected engine session no longer exists.");
+  });
   it("remembers cancellation while a remote engine allocates a run", async () => {
     const { runtime, deps } = setup();
     const previous = process.listenerCount("SIGINT");

@@ -1,3 +1,4 @@
+import { ReportExportControl } from "@/components/report-export-control";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -498,6 +499,7 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
         summary=""
         actions={(
           <>
+            <ReportExportControl path={selectedGroup ? `/api/findings/export?ids=${encodeURIComponent(selectedGroup.latest.id)}` : `/api/findings/export?ids=${encodeURIComponent(visibleGroups.map(group => group.latest.id).join(","))}`} disabled={!selectedGroup && visibleGroups.length === 0} />
             <Button variant="outline" onClick={() => setFiltersOpen(true)}>
               <SlidersHorizontal className="size-4" />
               Filters
