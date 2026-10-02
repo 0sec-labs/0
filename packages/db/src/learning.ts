@@ -20,7 +20,7 @@ export interface LearningEvent extends LearningEventInput { id: string; createdA
 export type KnowledgeStatus = "current" | "stale" | "disabled";
 export interface KnowledgeInput { projectId: string; summary: string; evidenceEventIds: string[]; sourceLinks: LearningSourceLink[] }
 export interface KnowledgeEntry extends KnowledgeInput { id: string; status: KnowledgeStatus; createdAt: string; updatedAt: string }
-export type ImprovementStatus = "canary" | "proposed" | "evaluating" | "validated" | "rejected" | "active" | "retired";
+export type ImprovementStatus = "applied" | "canary" | "proposed" | "evaluating" | "validated" | "rejected" | "active" | "retired";
 export interface LearningRegistryProvenance { registryVersionId: string; registryStorePath: string; snapshotDigest: string; registryStatus: "candidate" | "canary" | "active" | "retired" }
 export interface ImprovementInput { projectId: string; kind: string; targetId: string; baseVersion: string; proposal: string; evidenceEventIds: string[]; artifactDigest?: string; registry?: LearningRegistryProvenance }
 export interface LearningEvaluationInput { suiteDigest: string; baselineDigest: string; candidateDigest: string; passed: boolean; outcome?: "passed" | "failed" | "inconclusive"; evaluatorDigest?: string; evaluationKind?: "output-fixture" | "security-proof"; metrics: Record<string, number> }
@@ -65,6 +65,7 @@ export function initializeLearningTables(db: ShimmedDatabase): void {
   db.exec(`CREATE TABLE IF NOT EXISTS learning_events(id TEXT PRIMARY KEY,idempotency_key TEXT NOT NULL UNIQUE,project_id TEXT NOT NULL,body TEXT NOT NULL,updated_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS learning_knowledge(id TEXT PRIMARY KEY,project_id TEXT NOT NULL,body TEXT NOT NULL,updated_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS learning_candidates(id TEXT PRIMARY KEY,project_id TEXT NOT NULL,body TEXT NOT NULL,updated_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS learning_suggestion_keys(key TEXT PRIMARY KEY,candidate_id TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS learning_active(project_id TEXT NOT NULL,kind TEXT NOT NULL,target_id TEXT NOT NULL,candidate_id TEXT NOT NULL,PRIMARY KEY(project_id,kind,target_id));
     CREATE TABLE IF NOT EXISTS learning_work(id TEXT PRIMARY KEY,event_id TEXT NOT NULL,kind TEXT NOT NULL,status TEXT NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,available_at INTEGER NOT NULL,lease_until INTEGER,claim_token TEXT,owner TEXT,UNIQUE(event_id,kind));
     CREATE INDEX IF NOT EXISTS learning_events_project ON learning_events(project_id,updated_at);
@@ -140,6 +141,16 @@ export class LearningStore {
     if (input.registry) { for (const field of ["registryVersionId", "registryStorePath", "snapshotDigest"] as const) bounded(input.registry[field], field, 4096); if (!["candidate", "canary", "active", "retired"].includes(input.registry.registryStatus)) fail("Invalid registry status."); }
     const now = new Date().toISOString(); const value: ImprovementCandidate = { projectId: input.projectId, kind: input.kind, targetId: input.targetId, baseVersion: input.baseVersion, proposal: input.proposal, evidenceEventIds: input.evidenceEventIds, artifactDigest: learningArtifactDigest(input.proposal), ...(input.registry ? {registry: input.registry} : {}), id: randomUUID(), status: "proposed", revision: 1, evaluations: [], createdAt: now, updatedAt: now }; write(this.#db, "learning_candidates", value); return value;
   }
+  createWorkflowSuggestion(input: ImprovementInput): ImprovementCandidate | null {
+    if (input.kind !== "workflow-restore" || input.registry) fail("Invalid workflow suggestion.");
+    const key = learningArtifactDigest(JSON.stringify([input.projectId,input.targetId,input.baseVersion,input.proposal]));
+    return this.#db.transaction(() => {
+      if (this.#db.prepare("SELECT candidate_id FROM learning_suggestion_keys WHERE key=?").all(key).length) return null;
+      const candidate = this.createCandidate(input);
+      this.#db.prepare("INSERT INTO learning_suggestion_keys(key,candidate_id) VALUES(?,?)").run(key,candidate.id);
+      return candidate;
+    })();
+  }
   getCandidate(id: string): ImprovementCandidate | null { return read(this.#db, "learning_candidates", id); }
   listCandidates(options?: LearningListOptions): ImprovementCandidate[] { return this.#list("learning_candidates", options); }
   #candidate(id: string, revision: number): ImprovementCandidate { const value = this.getCandidate(id); if (!value) fail("Candidate not found.", 404); if (value.revision !== revision) fail("Candidate changed. Reload before updating.", 409); return value; }
@@ -155,6 +166,13 @@ export class LearningStore {
     if (input.outcome !== undefined && input.passed !== (input.outcome === "passed")) fail("Contradictory evaluation outcome.");
     if (typeof input.passed !== "boolean" || !input.metrics || typeof input.metrics !== "object" || Array.isArray(input.metrics) || Object.keys(input.metrics).length > 32 || Object.entries(input.metrics).some(([key, value]) => key.length > 128 || typeof value !== "number" || !Number.isFinite(value))) fail("Invalid evaluation metrics.");
     return this.#db.transaction(() => { const value = this.#candidate(id, revision); if (value.evaluations.length >= 64) fail("Too many evaluation receipts."); if (value.status !== "evaluating") fail("Candidate is not evaluating.", 409); if (input.candidateDigest !== value.artifactDigest) fail("Evaluation does not match the candidate artifact.", 409); value.evaluations.push({ ...(input.evaluatorDigest ? {evaluatorDigest: input.evaluatorDigest} : {}), ...(input.evaluationKind ? {evaluationKind: input.evaluationKind} : {}), ...(input.outcome ? {outcome: input.outcome} : {}), suiteDigest: input.suiteDigest, baselineDigest: input.baselineDigest, candidateDigest: input.candidateDigest, passed: input.passed, metrics: input.metrics, id: randomUUID(), createdAt: new Date().toISOString() }); value.status = input.outcome === "inconclusive" ? "evaluating" : input.passed ? "validated" : "rejected"; return this.#saveCandidate(value); })();
+  }
+  /** Reviewed workflow edit, distinct from evaluated security deployment. */
+  markWorkflowSuggestionApplied(id: string, revision: number): ImprovementCandidate {
+    const value = this.#candidate(id, revision);
+    if (value.kind !== "workflow-restore" || value.registry || value.status !== "proposed") fail("Suggestion is no longer available.", 409);
+    value.status = "applied";
+    return this.#saveCandidate(value);
   }
   getActiveCandidate(projectId: string, kind: string, targetId: string): ImprovementCandidate | null { const row = this.#db.prepare("SELECT candidate_id FROM learning_active WHERE project_id=? AND kind=? AND target_id=?").all(projectId, kind, targetId)[0] as {candidate_id:string} | undefined; return row ? this.getCandidate(row.candidate_id) : null; }
   activateCandidate(id: string, revision: number, expectedActiveId: string | null = null): ImprovementCandidate {

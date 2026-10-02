@@ -17,6 +17,15 @@ describe("tenant-local durable learning", () => {
     expect(() => second.appendEvent({...event(), outcome:"failed"})).toThrow(/different event/);
     expect(second.getEvent(saved.id)?.outcome).toBe("completed");
   });
+  it("deduplicates workflow suggestions durably even after dismissal and reopen", () => {
+    const dir = mkdtempSync(join(tmpdir(), "learning-suggestion-")); directories.push(dir); const path=join(dir,"control.db");
+    const first=open(path);const source=first.appendEvent(event());
+    const input={projectId:"project-a",kind:"workflow-restore",targetId:"workflow",baseVersion:"2",proposal:"Restore the reviewed earlier instructions",evidenceEventIds:[source.id]};
+    const candidate=first.createWorkflowSuggestion(input)!;
+    first.transitionCandidate(candidate.id,1,"rejected");first.close();stores.pop();
+    const second=open(path);expect(second.createWorkflowSuggestion(input)).toBeNull();expect(second.listCandidates()).toHaveLength(1);
+    expect(second.createWorkflowSuggestion({...input,baseVersion:"3"})).not.toBeNull();
+  });
   it("enforces bounded structured inputs without storing opaque capture or credentials", () => {
     const store = open(); expect(() => store.appendEvent({...event(), summary:"api_key=sk-secret"})).toThrow(/Credential/);
     expect(() => store.appendEvent({...event(), summary:"x".repeat(4001)})).toThrow(/summary/);

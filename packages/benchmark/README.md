@@ -642,3 +642,7 @@ policy, Wilson-CI reporting) lives in the
 issue [#1029]. The historical fairness implementation reference is
 `packages/core/src/stages/craft-scan.ts`, commit `704b84b5`; inspect the selected
 runner's current protocol rather than treating the old receipt as a fresh result.
+
+## Learning comparison
+
+A small, live baseline-versus-remembered-context experiment is available with `pnpm --filter @0/benchmark learning:paired`. Add `--live --model <deployed-model> --provider <provider> --output <path>` to make at most five tool-free model calls. Without `--live`, it runs local SQL/path validators only. See [the measured result and its limits](../../docs/benchmarks/learning-paired-2026-10-01.md): the first run showed **no lift**, with both versions finding 2/2 vulnerabilities and no false-positive candidates.

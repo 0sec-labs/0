@@ -1,0 +1,184 @@
+{
+  "schemaVersion": 1,
+  "startedAt": "2026-10-02T05:22:21.671Z",
+  "imageDigest": "sha256:37ff93702b3182deb9781cb6b5fba1c7f33def98f8339ada6535fceaac255f7b",
+  "profile": "core-web",
+  "network": false,
+  "providerCalls": 0,
+  "imageDownloads": 0,
+  "resources": {
+    "cpus": 2,
+    "memoryMb": 4096,
+    "storageGb": 20,
+    "timeoutMs": 240000,
+    "maxOutputBytes": 262144
+  },
+  "execution": {
+    "exitCode": 0,
+    "timedOut": false,
+    "cleanupFailed": false,
+    "durationMs": 195903.898958
+  },
+  "guest": {
+    "platform": "linux",
+    "arch": "arm64",
+    "uid": 501,
+    "profile": "core-web",
+    "probes": [
+      {
+        "name": "0",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "node",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "npm",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "bun",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "claude",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "codex",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "gemini",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "bash",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "python3",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "git",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "gh",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "jq",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "rg",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "curl",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "wget",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "nmap",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "sqlmap",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "ffuf",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "gobuster",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "foxguard",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "npx",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "file",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "nc",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "socat",
+        "passed": true,
+        "exitCode": 0
+      },
+      {
+        "name": "ssh",
+        "passed": false,
+        "exitCode": null,
+        "diagnostic": "Required tool startup failed: ssh (exit null, ENOENT)"
+      }
+    ],
+    "checks": [
+      {
+        "name": "non-root Linux ARM64",
+        "passed": true
+      },
+      {
+        "name": "Python modules",
+        "passed": true
+      },
+      {
+        "name": "read-only fixture",
+        "passed": true
+      },
+      {
+        "name": "native parser",
+        "passed": true
+      },
+      {
+        "name": "offline browser",
+        "passed": true
+      },
+      {
+        "name": "owned loopback HTTP and TCP scan",
+        "passed": true
+      }
+    ]
+  },
+  "outcome": "failed",
+  "finishedAt": "2026-10-02T05:25:37.585Z"
+}

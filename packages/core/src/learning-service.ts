@@ -1,5 +1,5 @@
 import { randomUUID, createHash } from "node:crypto";
-import { LearningStore, type LearningEvaluationInput, type ImprovementCandidate, type LearningEvent, type KnowledgeEntry, type KnowledgeInput } from "@0/db";
+import { SecurityWorkflowStore, workflowRestorePolicy, learningProjectId, LearningStore, type LearningEvaluationInput, type ImprovementCandidate, type LearningEvent, type KnowledgeEntry, type KnowledgeInput } from "@0/db";
 import type { HuntMemoryStore } from "./memory/hunt-memory.js";
 import { evolutionDigest, loadEvolutionRegistry, loadEvolutionReceipt, verifyEvolutionSnapshot, receiptsDir } from "./improvement/registry.js";
 import { readEvolutionArtifact } from "./improvement/artifacts.js";
@@ -13,12 +13,13 @@ export interface LearningEvaluator {
 }
 export interface LearningServiceOptions {
   evaluator?: LearningEvaluator;
+  workflows?: SecurityWorkflowStore;
   /** Trusted host derivation only; event text is untrusted and never becomes instructions by default. */
   deriveKnowledge?: (event: Readonly<LearningEvent>) => KnowledgeInput | null;
   maxEventsPerTick?: number;
   evaluationTimeoutMs?: number;
 }
-export interface LearningTickResult { processed: number; retained: number; skipped: number; retried: number }
+export interface LearningTickResult { proposed: number; processed: number; retained: number; skipped: number; retried: number }
 
 function sourceStillCurrent(root: string, path: string, hash: string): boolean {
   if (isAbsolute(path) || path.split(/[\\/]/).some(part => part === "..") || !/^sha256:[a-f0-9]{64}$/i.test(hash)) return false;
@@ -59,7 +60,7 @@ export class LearningService {
       improvements: this.store.listCandidates({ projectId, limit: 200 }).length, queue: this.store.queueStatus(projectId) };
   }
   async processPending(options: { projectId?: string; limit?: number } = {}): Promise<LearningTickResult> {
-    const result: LearningTickResult = { processed: 0, retained: 0, skipped: 0, retried: 0 };
+    const result: LearningTickResult = { proposed: 0, processed: 0, retained: 0, skipped: 0, retried: 0 };
     if (this.running) return result;
     this.running = true;
     const cap = Math.min(this.maxEvents, Math.max(1, Math.floor(Number.isFinite(options.limit) ? options.limit! : this.maxEvents)));
@@ -72,6 +73,7 @@ export class LearningService {
           if (options.projectId && event?.projectId !== options.projectId) {
             this.store.retryWork(work.id, work.claimToken!, 1_000); result.retried++; continue;
           }
+          if (event && this.proposeWorkflowRestore(event)) result.proposed++;
           const derived = event && work.kind === "derive-knowledge" ? this.options.deriveKnowledge?.(structuredClone(event)) : null;
           if (event && derived) {
             if (derived.projectId !== event.projectId || !derived.evidenceEventIds.includes(event.id)) throw new Error("Derived knowledge must cite its same-project source event.");
@@ -89,6 +91,32 @@ export class LearningService {
     return result;
   }
   tick(options: { projectId?: string; limit?: number } = {}): Promise<LearningTickResult> { return this.processPending(options); }
+
+  private proposeWorkflowRestore(event: LearningEvent): boolean {
+    const workflows = this.options.workflows;
+    if (!workflows || event.kind !== "workflow-step" || event.outcome !== "failed" || !event.workflowId || !event.stepId) return false;
+    const current = workflows.get(event.workflowId);
+    if (!current || current.revision !== event.workflowRevision || event.projectId !== learningProjectId(current.target || current.id)) return false;
+    const runs = workflows.listExecutions(current.id);
+    const failures = runs.filter(run => run.workflowRevision === current.revision && run.status === "failed" && run.nodeResults[event.stepId!]?.status === "failed");
+    if (new Set(failures.map(run => run.id)).size < 3) return false;
+    const baseline = runs.find(run => run.status === "completed" && run.workflowRevision < current.revision && workflowRestorePolicy(run.workflow) === workflowRestorePolicy(current));
+    if (!baseline || !workflows.getVersion(current.id, baseline.workflowRevision)) return false;
+    const prose = (workflow: typeof current) => JSON.stringify({ name: workflow.name, instructions: workflow.instructions,
+      nodes: workflow.nodes.map(node => ({ label: node.label, instructions: node.execution?.instructions })) });
+    if (prose(baseline.workflow) === prose(current)) return false;
+    const failedIds = new Set(failures.slice(0, 3).map(run => run.id));
+    const evidence = this.store.listEvents({projectId: event.projectId, limit: 200}).filter(item => item.workflowId === current.id
+      && (item.executionId === baseline.id && item.kind === "workflow-run" && item.outcome === "completed"
+        || item.executionId && failedIds.has(item.executionId) && item.kind === "workflow-step" && item.stepId === event.stepId && item.outcome === "failed"));
+    if (!evidence.some(item => item.executionId === baseline.id) || new Set(evidence.filter(item => item.outcome === "failed").map(item => item.executionId)).size < 3) return false;
+    // Fixed host-written prose: failure text never becomes executable instructions.
+    const proposal = JSON.stringify({ action: "restore-workflow-instructions", workflowId: current.id, fromRevision: current.revision,
+      restoreRevision: baseline.workflowRevision, failedStepId: event.stepId, failedRuns: 3,
+      summary: `This step failed in three runs. Version ${baseline.workflowRevision} finished successfully. Try its earlier instructions?` });
+    return Boolean(this.store.createWorkflowSuggestion({projectId: event.projectId, kind: "workflow-restore", targetId: current.id,
+      baseVersion: String(current.revision), proposal, evidenceEventIds: evidence.slice(0, 64).map(item => item.id)}));
+  }
 
   /** Existing source memory owns bounded file hashing, scope checks, and redaction. */
   importCodebaseNotes(projectId: string, root: string, memory: HuntMemoryStore, limit = 8): KnowledgeEntry[] {

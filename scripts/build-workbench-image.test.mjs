@@ -17,6 +17,13 @@ test("default profile plans current CLI on immutable ARM64 base without choosing
   assert.equal(plan.commands[0].args.includes("KALI_IMAGE="), false);
   assert.equal(plan.maximumArchiveBytes, 6 * 1024 ** 3);
 });
+test("core recipe installs SSH and every profile requires its startup probe", () => {
+  const core = resolveWorkbenchProfile("core-web");
+  assert.ok(core.packages.includes("openssh-client"));
+  for (const name of ["core-web", "source", "kali"]) {
+    assert.ok(resolveWorkbenchProfile(name).probes.some(([tool, args]) => tool === "ssh" && args.includes("-V")), `${name} must reject an image without SSH`);
+  }
+});
 test("source inherits core tools and explicitly adds development probes", () => {
   const source = resolveWorkbenchProfile("source");
   assert.ok(source.packages.includes("nmap")); assert.ok(source.packages.includes("gdb"));

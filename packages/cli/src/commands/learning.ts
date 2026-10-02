@@ -23,9 +23,10 @@ export interface LearningCommandDependencies {
 
 async function defaultService(): Promise<LearningCommandService> {
   const { LearningService, HuntMemoryStore } = await import("@0/core");
-  const { LearningStore, learningProjectId } = await import("@0/db");
-  const store = new LearningStore();
-  const service = new LearningService(store);
+  const { SecurityWorkflowStore, learningProjectId } = await import("@0/db");
+  const workflows = new SecurityWorkflowStore();
+  const store = workflows.learningStore();
+  const service = new LearningService(store, { workflows });
   const project = (value: string) => /^sha256:[a-f0-9]{64}$/.test(value) ? value : learningProjectId(value);
   return {
     status: projectId => service.status(projectId === undefined ? undefined : project(projectId)),
@@ -43,7 +44,7 @@ async function defaultService(): Promise<LearningCommandService> {
       return service.processPending({ ...options, projectId: selected === undefined ? undefined : project(selected) });
     },
     mirrorEvolutionRun: (projectId, config, result) => service.mirrorEvolutionRun(project(projectId), config, result),
-    close: () => store.close(),
+    close: () => { store.close(); workflows.close(); },
   };
 }
 

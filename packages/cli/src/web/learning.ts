@@ -1,4 +1,4 @@
-import { LearningStore, LearningStoreError, learningProjectId, type SecurityWorkflowStore } from "@0/db";
+import { LearningStore, LearningStoreError, SecurityWorkflowStoreError, learningProjectId, type SecurityWorkflowStore } from "@0/db";
 import { HuntMemoryStore, LearningService, type LearningServiceOptions } from "@0/core";
 import { z } from "zod";
 
@@ -18,7 +18,7 @@ export class WebLearningService {
   constructor(definitions: SecurityWorkflowStore, options: LearningServiceOptions = {}) {
     this.#definitions = definitions;
     this.store = definitions.learningStore();
-    this.service = new LearningService(this.store, options);
+    this.service = new LearningService(this.store, { ...options, workflows: definitions });
     this.#timer = setInterval(() => { void this.process().catch(() => undefined); }, 5000);
     this.#timer.unref();
   }
@@ -66,13 +66,18 @@ export class WebLearningService {
         const value = z.object({ status: z.enum(["disabled", "current"]) }).strict().parse(input);
         return { status: 200, data: { knowledge: this.store.setKnowledgeStatus(knowledge[1]!, value.status) } };
       }
-      const candidate = path.match(/^\/api\/console\/learning\/improvements\/([A-Za-z0-9_.:-]+)(?:\/(reject|evaluate))?$/);
+      const candidate = path.match(/^\/api\/console\/learning\/improvements\/([A-Za-z0-9_.:-]+)(?:\/(reject|evaluate|apply))?$/);
       if (candidate) {
         const value = this.store.getCandidate(candidate[1]!);
         if (!value) return { status: 404, data: { error: "Improvement not found." } };
         if (!candidate[2] && method === "GET") return { status: 200, data: { improvement: value } };
         if (candidate[2] && method === "POST") {
           if (value.registry) return { status: 409, data: { error: "This improvement is owned by the evolution registry. Use the evolution CLI to change its deployment state." } };
+          if (candidate[2] === "apply") {
+            const expected = z.object({ revision: z.number().int().positive(), workflowRevision: z.number().int().positive() }).strict().parse(input);
+            return { status: 200, data: { workflow: this.#definitions.applyLearningRestore(value.id, expected.revision, expected.workflowRevision), improvement: this.store.getCandidate(value.id) } };
+          }
+          if (candidate[2] === "evaluate" && value.kind === "workflow-restore") return { status: 409, data: { error: "Review this workflow suggestion before applying it." } };
           const expected = revision.parse(input);
           if (value.revision !== expected.revision) return { status: 409, data: { error: "Improvement changed. Reload before updating." } };
           return { status: 200, data: { improvement: candidate[2] === "reject"
@@ -81,8 +86,8 @@ export class WebLearningService {
       }
       return { status: 405, data: { error: "Unsupported learning operation." } };
     } catch (error) {
-      return { status: error instanceof z.ZodError ? 400 : error instanceof LearningStoreError ? error.statusCode : 409,
-        data: { error: error instanceof LearningStoreError || error instanceof z.ZodError ? error.message : "Learning evaluation is unavailable or failed. No improvement was activated." } };
+      return { status: error instanceof z.ZodError ? 400 : error instanceof LearningStoreError || error instanceof SecurityWorkflowStoreError ? error.statusCode : 409,
+        data: { error: error instanceof LearningStoreError || error instanceof SecurityWorkflowStoreError || error instanceof z.ZodError ? error.message : "Learning evaluation is unavailable or failed. No improvement was activated." } };
     }
   }
 

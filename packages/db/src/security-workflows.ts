@@ -5,6 +5,14 @@ import { parseSecurityWorkflowInput, type SecurityWorkflow, type SecurityWorkflo
 import { resolveOsecDbPath } from "./database.js";
 import { createShimmedDatabase, type ShimmedDatabase } from "./wasm-shim.js";
 
+/** Restores prose only: target, graph, tools, budgets and fix modes must match exactly. */
+export function workflowRestorePolicy(workflow: SecurityWorkflow): string {
+  return JSON.stringify({ target: workflow.target, template: workflow.template, edges: workflow.edges,
+    nodes: workflow.nodes.map(({ label: _label, execution, ...node }) => ({ ...node,
+      ...(execution ? { execution: { allowedAgentTools: execution.allowedAgentTools } } : {}) })) });
+}
+export interface WorkflowRestoreSuggestion { action: "restore-workflow-instructions"; workflowId: string; fromRevision: number; restoreRevision: number; failedStepId: string; failedRuns: number; summary: string }
+
 export class SecurityWorkflowStoreError extends Error {
   constructor(message: string, readonly statusCode: number) { super(message); this.name = "SecurityWorkflowStoreError"; }
 }
@@ -85,6 +93,29 @@ export class SecurityWorkflowStore {
         .run(workflow.revision, JSON.stringify(workflow), workflow.updatedAt, id, expectedRevision);
       this.#recordVersion(workflow, current.revision, targetRevision);
       return workflow;
+    })();
+  }
+  applyLearningRestore(candidateId: string, candidateRevision: number, expectedWorkflowRevision: number): SecurityWorkflow {
+    return this.#db.transaction(() => {
+      const learning = this.learningStore();
+      const candidate = learning.getCandidate(candidateId);
+      if (!candidate || candidate.kind !== "workflow-restore" || candidate.status !== "proposed" || candidate.revision !== candidateRevision) throw new SecurityWorkflowStoreError("Suggestion changed. Reload before applying.", 409);
+      const proposal = JSON.parse(candidate.proposal) as WorkflowRestoreSuggestion;
+      const current = this.get(candidate.targetId);
+      const previous = this.getVersion(candidate.targetId, proposal.restoreRevision)?.definition;
+      if (!current || !previous || proposal.action !== "restore-workflow-instructions" || proposal.workflowId !== current.id
+        || current.revision !== expectedWorkflowRevision || proposal.fromRevision !== current.revision
+        || candidate.baseVersion !== String(current.revision) || candidate.projectId !== learningProjectId(current.target || current.id)
+        || workflowRestorePolicy(current) !== workflowRestorePolicy(previous)) throw new SecurityWorkflowStoreError("Workflow changed or its scope differs. Review it again.", 409);
+      const updated: SecurityWorkflow = { ...previous, revision: current.revision + 1, createdAt: current.createdAt, updatedAt: new Date().toISOString() };
+      this.#db.prepare("UPDATE workflow_definitions SET revision = ?, definition_json = ?, updated_at = ? WHERE id = ? AND revision = ?")
+        .run(updated.revision, JSON.stringify(updated), updated.updatedAt, current.id, current.revision);
+      this.#recordVersion(updated, current.revision, previous.revision);
+      learning.markWorkflowSuggestionApplied(candidate.id, candidateRevision);
+      appendLearningEvent(this.#db, { idempotencyKey: `workflow-suggestion-applied:${candidate.id}`, projectId: candidate.projectId,
+        kind: "workflow-suggestion", outcome: "applied", summary: "Earlier workflow instructions restored after review.",
+        evidenceStrength: "operational", workflowId: current.id, workflowRevision: updated.revision, evidenceRefs: [candidate.id] });
+      return updated;
     })();
   }
   save(value: unknown): SecurityWorkflow {

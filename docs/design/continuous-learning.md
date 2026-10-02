@@ -4,13 +4,15 @@ Status: architecture and implementation plan, researched 2026-10-01. The initial
 service now implements local events/outbox, source-note mirroring and invalidation,
 workflow version history/restore, the Learning UI, and registry-backed evolution
 provenance through `0 learning evolve`. The default background worker makes no
-model calls and does not generate or activate workflow changes automatically.
+model calls. It can suggest restoring earlier workflow instructions after repeated
+failures; suggestions require review and never apply themselves.
 Independent security capability evaluation and signed release distribution remain
 follow-up work. Five independent
 research passes covered the code, learning research, evaluation, workflow UX,
 and enterprise boundaries. Implementation tests exercise persistence, lifecycle
-integration, source invalidation and evaluator identity; no live security capability
-benchmarks were executed for this investigation.
+integration, source invalidation and evaluator identity. A small live paired
+source-review benchmark found no performance lift; see the [measured results](../benchmarks/learning-paired-2026-10-01.md). Real SmolVM lifecycle and image checks
+are recorded in the [qualification report](smolvm-qualification-20261001.md).
 
 ## Decision
 

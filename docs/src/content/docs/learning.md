@@ -13,11 +13,11 @@ sections of a saved workflow.
   metadata. Completion, cancellation and infrastructure failure do not become
   positive or negative vulnerability labels. Chat capture excludes message text
   and raw tool output.
-- **Knowledge:** existing opted-in source-grounded codebase notes, with source
+- **Notes:** existing opted-in source-grounded codebase notes, with source
   hashes and evidence references. Eligible native runs continue to use the
   existing memory retrieval rules. Changed, missing or replaced source files
   invalidate retained notes when the source-learning context is refreshed.
-- **Improvements:** proposed and evaluated versions, including their evidence,
+- **Suggestions:** proposed and evaluated versions, including their evidence,
   evaluation kind and actual deployment state. The existing evolution registry
   remains the authority for evolved artifact activation.
 
@@ -76,14 +76,28 @@ missing historical revisions are not invented. Schedules retain their reviewed
 revision and require review after definition changes. A restored definition does
 not authorize new targets, tools or credentials.
 
+## Automatic workflow suggestions
+
+If the same step fails in three separate runs after its instructions change,
+Learning can suggest the instructions from an earlier version that finished
+successfully. It reads the last 200 runs and events; chat errors, cancellations
+and ordinary completions do not create suggestions.
+
+Suggestions keep the same target, step graph, tools, budgets, inputs and fix
+settings. They never run or apply themselves. Review the earlier instructions,
+then apply the suggestion to save a new workflow version. If someone edits the
+workflow or dismisses the suggestion first, applying it fails rather than
+replacing their changes. Existing schedules still need their own revision review.
+A successful earlier run is operational evidence, not proof of better security.
+
 ## Isolated workspace observations
 
 SmolVM console sessions can retain bounded source references before guest teardown.
 The host checks each file hash against the approved workspace and scope; changed,
 out-of-scope, symlinked and oversized files are refused. Guest prose and memory
 summaries are not imported. These references appear as hypothesis-level Activity,
-not verified findings or reusable Knowledge. Full semantic guest-note transfer and
-live VM qualification remain separate work.
+not verified findings or reusable Knowledge. Full semantic guest-note transfer remains separate work. See the
+[SmolVM qualification report](https://github.com/0sec-labs/0/blob/main/docs/design/smolvm-qualification-20261001.md) for the tested image and remaining blockers.
 
 ## Deployment boundary
 
@@ -93,6 +107,6 @@ customer-data export or hosted evaluator. Execution sandbox qualification and
 model-provider residency remain separate deployment concerns.
 
 For the wider architecture and remaining work—fresh-task security evaluation,
-workflow-specific candidate generation, promotion policy and optional signed
+broader candidate generation, promotion policy and optional signed
 release distribution—see the repository's
 [continuous-learning design](https://github.com/0sec-labs/0/blob/main/docs/design/continuous-learning.md).

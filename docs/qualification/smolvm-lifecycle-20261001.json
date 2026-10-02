@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-01",
+  "platform": "darwin-arm64",
+  "backend": "smolvm",
+  "network": false,
+  "providerCalls": 0,
+  "imageDownloads": 0,
+  "imageDigest": "sha256:a2986e852a463d33243ae0adf23e9853eb8eb776d3d0045a02c00ac0ea0b1495",
+  "outcome": "passed",
+  "caseCount": 13,
+  "cases": [
+    {
+      "name": "offline worker cannot reach controlled host loopback",
+      "outcome": "passed",
+      "durationMs": 25603
+    },
+    {
+      "name": "stdin, argv, non-root, resources, secrets and ambient config",
+      "outcome": "passed",
+      "durationMs": 27842
+    },
+    {
+      "name": "read-only source and writable isolated workspace",
+      "outcome": "passed",
+      "durationMs": 96958
+    },
+    {
+      "name": "guest nonzero exit and separated streams",
+      "outcome": "passed",
+      "durationMs": 15949
+    },
+    {
+      "name": "guest disk exhaustion stays within storage cap",
+      "outcome": "passed",
+      "durationMs": 42336
+    },
+    {
+      "name": "archive integrity rejects changed identity",
+      "outcome": "passed",
+      "durationMs": 1242
+    },
+    {
+      "name": "missing runtime never runs guest commands on host",
+      "outcome": "passed",
+      "durationMs": 384
+    },
+    {
+      "name": "pre-cancellation does not boot a worker",
+      "outcome": "passed",
+      "durationMs": 0
+    },
+    {
+      "name": "startup deadline closes owned lifecycle",
+      "outcome": "passed",
+      "durationMs": 103
+    },
+    {
+      "name": "running workload deadline removes descendants",
+      "outcome": "passed",
+      "durationMs": 30431
+    },
+    {
+      "name": "running workload cancellation removes descendants",
+      "outcome": "passed",
+      "durationMs": 30669
+    },
+    {
+      "name": "stdout flood is capped and terminated",
+      "outcome": "passed",
+      "durationMs": 13581
+    },
+    {
+      "name": "stderr flood is capped and terminated",
+      "outcome": "passed",
+      "durationMs": 12168
+    }
+  ]
+}
