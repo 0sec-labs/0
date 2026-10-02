@@ -9,6 +9,19 @@ export interface WorkbenchFrame { type: string; id?: string; [key: string]: unkn
 /** Source metadata only: guest prose, credentials and transcript content never cross this seam. */
 export interface WorkbenchSourceContextArtifact { sourceLinks: Array<{ path: string; hash: string }> }
 export const WORKBENCH_SOURCE_CONTEXT_LIMIT = 8;
+/** Bounded source-backed prose is data, never execution/configuration authority. */
+export interface WorkbenchSourceLesson extends WorkbenchSourceContextArtifact { title: string; summary: string }
+export function validateWorkbenchSourceLesson(value: unknown, workspace: string, scopePath: string): WorkbenchSourceLesson {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid source lesson");
+  const record = value as Record<string, unknown>;
+  if (Object.keys(record).some(key => !["title", "summary", "sourceLinks"].includes(key))) throw new Error("Unexpected source lesson fields");
+  const { title, summary } = record;
+  if (typeof title !== "string" || !title.trim() || title.length > 200 || typeof summary !== "string" || !summary.trim() || summary.length > 2000) throw new Error("Invalid source lesson prose");
+  const text = title + "\n" + summary;
+  if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(text) || /-----BEGIN .*PRIVATE KEY-----|\b(?:sk-[a-zA-Z0-9_-]{16,}|ghp_[a-zA-Z0-9]{20,}|github_pat_[a-zA-Z0-9_]{20,}|Bearer\s+[a-zA-Z0-9_.-]{16,})|(?:password|api[_ -]?key|access[_ -]?token|secret)\s*[:=]\s*["']?[^\s"']{8,}/i.test(text)) throw new Error("Source lesson may contain credentials");
+  if (Array.isArray(record.sourceLinks) && record.sourceLinks.some(link => !link || typeof link !== "object" || Object.keys(link).some(key => !["path", "hash"].includes(key)))) throw new Error("Unexpected source lesson link fields");
+  return { title: title.trim(), summary: summary.trim(), ...validateWorkbenchSourceContext(record, workspace, scopePath) };
+}
 
 /** Revalidate guest evidence against the host snapshot origin, using only host-owned scope. */
 export function validateWorkbenchSourceContext(value: unknown, workspace: string, scopePath: string): WorkbenchSourceContextArtifact {
@@ -108,7 +121,7 @@ export function serializeWorkbenchConfig(config: Omit<ConsoleSessionConfig, "run
     if (config[key] !== undefined) throw new Error(`Host ${key} cannot execute through the workbench controller`);
   }
   const result: Record<string, unknown> = { workspaceRoot: "/workspace", target: mapWorkbenchTarget(config.target ?? "", workspace) };
-  for (const key of ["role", "tools", "scanId", "maxToolIterations", "allowScanners", "systemPrompt", "autonomyMode", "refineObjective", "allowModelSelfExtension", "costModel", "contextWindowTokens", "compaction", "initialMessages"] as const) {
+  for (const key of ["role", "tools", "codebaseLearning", "scanId", "maxToolIterations", "allowScanners", "systemPrompt", "autonomyMode", "refineObjective", "allowModelSelfExtension", "costModel", "contextWindowTokens", "compaction", "initialMessages"] as const) {
     if (config[key] !== undefined) result[key] = structuredClone(config[key]);
   }
   if (config.maxTurnTokens !== undefined && Number.isFinite(config.maxTurnTokens)) result.maxTurnTokens = config.maxTurnTokens;

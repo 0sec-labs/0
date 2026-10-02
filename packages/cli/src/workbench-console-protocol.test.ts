@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
-import { WorkbenchFrameReader, encodeWorkbenchFrame, guestWorkspacePath, hostWorkspacePath, mapWorkbenchTarget, serializeWorkbenchConfig, mapWorkbenchCliArguments, validateWorkbenchSourceContext } from "./workbench-console-protocol.js";
+import { WorkbenchFrameReader, encodeWorkbenchFrame, guestWorkspacePath, hostWorkspacePath, mapWorkbenchTarget, serializeWorkbenchConfig, mapWorkbenchCliArguments, validateWorkbenchSourceContext, validateWorkbenchSourceLesson } from "./workbench-console-protocol.js";
 
 describe("workbench controller boundary", () => {
   it("frames partial streams and rejects method-shaped or oversized messages", () => {
@@ -68,3 +68,22 @@ describe("guest source references", () => {
     expect(() => validateWorkbenchSourceContext({ sourceLinks: [{ ...artifact.sourceLinks[0], path: "approved/large.ts" }] }, root, scope)).toThrow("source file");
   });
 });
+
+ describe("semantic source lesson boundary", () => {
+  it("accepts only bounded source-backed prose and rehashes it for the approved scope", () => {
+    const { root, scope, artifact } = sourceFixture();
+    const lesson = { ...artifact, title: "Ownership checks", summary: "Check the ownership condition in code.ts before testing tenant isolation." };
+    expect(validateWorkbenchSourceLesson(lesson, root, scope)).toEqual(lesson);
+    for (const value of [{ ...lesson, summary: "x".repeat(2001) }, { ...lesson, config: { permissions: "all" } },
+      { ...lesson, sourceLinks: [{ ...artifact.sourceLinks[0], credential: "secret" }] },
+      { ...lesson, summary: "api_key=supersecretcredential123" }, { ...lesson, summary: "-----BEGIN RSA PRIVATE KEY-----" }]) {
+      expect(() => validateWorkbenchSourceLesson(value, root, scope)).toThrow();
+    }
+    writeFileSync(join(scope, "code.ts"), "changed");
+    expect(() => validateWorkbenchSourceLesson(lesson, root, scope)).toThrow("digest mismatch");
+  });
+  it("serializes only the learning opt-in flag, never host stores or callbacks", () => {
+    const serial = serializeWorkbenchConfig({ workspaceRoot: "/operator/repo", codebaseLearning: true, learningStore: {} as never, huntMemoryStore: {} as never } , "/operator/repo");
+    expect(serial).toEqual({ workspaceRoot: "/workspace", target: "", codebaseLearning: true });
+  });
+ });

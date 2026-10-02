@@ -1,8 +1,10 @@
 import { existsSync, realpathSync } from "node:fs";
-import { createWorkbenchProviderBroker, isAdmittedSmolvmWorkbench } from "@0/core";
+import { createWorkbenchProviderBroker, isAdmittedSmolvmWorkbench, HuntMemoryStore, LearningService } from "@0/core";
 import type { ConsoleSession, ConsoleSessionConfig, LlmApiRuntime } from "@0/core";
 import { findingSchema, type ConsoleExecutionSnapshot, type Finding } from "@0/shared";
 import { osecDB, LearningStore, learningProjectId, learningArtifactDigest } from "@0/db";
+import { relative, resolve, sep } from "node:path";
+import { validateWorkbenchSourceLesson } from "./workbench-console-protocol.js";
 import { randomUUID } from "node:crypto";
 import { currentWorkbenchAssets } from "./workbench-assets.js";
 import { loadGlobalSettings } from "./tui/settings.js";
@@ -13,6 +15,8 @@ export interface ConsoleExecutionOptions {
   homeDir?: string;
   dbPath?: string;
   workspaceRoot?: string;
+  /** Trusted host/test asset selection; never read from browser or guest input. */
+  assets?: { cliDist: string; dependencies?: string };
   onExecution?: (execution: ConsoleExecutionSnapshot) => void;
 }
 
@@ -42,19 +46,54 @@ export function createIsolatedConsoleSession(
   const models = [...new Set([model, ...Object.values(routing?.agentModels ?? {}).filter(value => value !== "auto")])];
   if (!runtime.workbenchCredentialResolver) throw new Error("The selected runtime cannot bind its account to the host provider broker.");
   const broker = createWorkbenchProviderBroker({ provider, models, resolveCredentials: runtime.workbenchCredentialResolver() });
-  const { runtime: _runtime, ...guestConfig } = config;
+  const { runtime: _runtime, learningStore: hostLearningStore, huntMemoryStore: hostMemoryStore, sourceLessonHints: _hostHints, ...guestConfig } = config;
+  const learningEnabled = config.codebaseLearning === true && config.role !== "verify";
+  if (/^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "")) guestConfig.codebaseLearning = false;
+  let memory: HuntMemoryStore | undefined = hostMemoryStore;
+  const hostMemory = () => memory ??= new HuntMemoryStore({ home: options.homeDir });
+  const withLearning = <T>(use: (service: LearningService) => T): T => {
+    const store = hostLearningStore ?? new LearningStore(options.dbPath);
+    try { return use(new LearningService(store)); } finally { if (!hostLearningStore) store.close(); }
+  };
+  const approvedWorkspace = realpathSync(workbench.workspaceRoot ?? options.workspaceRoot ?? config.workspaceRoot ?? process.cwd());
   const scanId = config.scanId ?? `console-${randomUUID()}`;
   try {
     return createWorkbenchConsoleSession({
-      config: { ...guestConfig, scanId, workspaceRoot: realpathSync(workbench.workspaceRoot ?? options.workspaceRoot ?? config.workspaceRoot ?? process.cwd()) },
+      config: { ...guestConfig, scanId, workspaceRoot: approvedWorkspace },
       workbench,
       selection: { provider, model, contextWindowTokens: config.contextWindowTokens, ...routing },
       provider: { ...broker.grant, request: broker.request, close: broker.close },
-      pluginHomeDir: options.homeDir, assets: currentWorkbenchAssets(), guestSettings: resolveWorkbenchGuestSettings(loadGlobalSettings(options.homeDir)),
+      pluginHomeDir: options.homeDir, assets: options.assets ?? currentWorkbenchAssets(), guestSettings: resolveWorkbenchGuestSettings(loadGlobalSettings(options.homeDir)),
       network: workbenchNetworkEnabled(),
       onExecution: options.onExecution,
+      onSourceLesson: (artifact, context) => {
+        if (!learningEnabled || /^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "")) return;
+        if (realpathSync(context.workspaceRoot) !== approvedWorkspace) throw new Error("Source lesson workspace differs from host grant");
+        const lesson = validateWorkbenchSourceLesson(artifact, approvedWorkspace, context.scopePath);
+        const memory = hostMemory();
+        const paths = lesson.sourceLinks.map(link => relative(context.scopePath, resolve(context.workspaceRoot, link.path)).split(sep).join("/"));
+        // Identical source lessons reuse the admitted record so repeated exports cannot resurrect disabled knowledge.
+        const prior = memory.all().find(note => note.codebase?.root === realpathSync(context.scopePath) && note.title === lesson.title && note.summary === lesson.summary &&
+          JSON.stringify(note.codebase?.files.map(file => ({ path: file.path, hash: file.digest }))) === JSON.stringify(lesson.sourceLinks.map((link, index) => ({ path: paths[index], hash: link.hash }))));
+        if (!prior) memory.rememberCodebase({ root: context.scopePath, paths, title: lesson.title, summary: lesson.summary, source: `smolvm:${context.scanId}` });
+        withLearning(service => service.importCodebaseNotes(learningProjectId(context.scopePath), context.scopePath, memory, 8));
+      },
+      readSourceLessons: context => {
+        if (!learningEnabled || /^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "")) return [];
+        if (realpathSync(context.workspaceRoot) !== approvedWorkspace) return [];
+        const memory = hostMemory();
+        return withLearning(service => {
+          const entries = service.importCodebaseNotes(learningProjectId(context.scopePath), context.scopePath, memory, 8);
+          return memory.recallCodebase(context.scopePath, 6).flatMap(note => {
+            const sourceLinks = note.codebase!.files.map(file => ({ path: file.path, hash: file.digest }));
+            if (!entries.some(entry => entry.status === "current" && entry.summary === note.summary && JSON.stringify(entry.sourceLinks) === JSON.stringify(sourceLinks))) return [];
+            const lesson = { title: note.title, summary: note.summary, sourceLinks: sourceLinks.map(link => ({ ...link, path: relative(context.workspaceRoot, resolve(context.scopePath, link.path)).split(sep).join("/") })) };
+            try { return [validateWorkbenchSourceLesson(lesson, context.workspaceRoot, context.scopePath)]; } catch { return []; }
+          });
+        });
+      },
       onSourceContext: (artifact, context) => {
-        if (/^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "")) return;
+        if (!learningEnabled || /^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "")) return;
         const store = new LearningStore(options.dbPath);
         try {
           const digest = learningArtifactDigest(JSON.stringify(artifact.sourceLinks));

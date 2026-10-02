@@ -1,15 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { realpathSync } from "node:fs";
+import { realpathSync, statSync } from "node:fs";
 import { mkdir, mkdtemp, realpath } from "node:fs/promises";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { DEFAULT_MAX_TOOL_ITERATIONS, getScopeEnforcementState, runSmolvmWorkbench, ScopePolicy } from "@0/core";
 import type { ConsoleSession, ConsoleSessionConfig, ConsoleSessionCheckpoint, ConsoleRenderCallbacks, ConsoleTurnOutcome, SmolvmWorkbenchResult, SmolvmWorkbenchOptions } from "@0/core";
 import { findingSchema, type Finding } from "@0/shared";
 import type { TuiSettings } from "./tui/settings.js";
 import type { WorkbenchConfig } from "./workbench.js";
 import { prepareWorkbenchPlugins, GUEST_PLUGIN_ASSETS } from "./workbench-plugins.js";
-import { encodeWorkbenchFrame, WorkbenchFrameReader, WORKBENCH_MAX_PENDING, guestWorkspacePath, hostWorkspacePath, mapWorkbenchTarget, mapWorkbenchCheckpoint, serializeWorkbenchConfig, validateWorkbenchSourceContext } from "./workbench-console-protocol.js";
-import type { WorkbenchFrame, WorkbenchSourceContextArtifact } from "./workbench-console-protocol.js";
+import { encodeWorkbenchFrame, WorkbenchFrameReader, WORKBENCH_MAX_PENDING, guestWorkspacePath, hostWorkspacePath, mapWorkbenchTarget, mapWorkbenchCheckpoint, serializeWorkbenchConfig, validateWorkbenchSourceContext, validateWorkbenchSourceLesson } from "./workbench-console-protocol.js";
+import type { WorkbenchFrame, WorkbenchSourceContextArtifact, WorkbenchSourceLesson } from "./workbench-console-protocol.js";
 import { servicePluginSecretRedactor, validateGuestServicePluginConnections } from "./workbench-service-plugins.js";
 
 export interface WorkbenchExecutionSnapshot {
@@ -39,9 +39,11 @@ export interface WorkbenchConsoleSessionOptions extends WorkbenchControllerOptio
   onFindings?: (findings: Finding[], completion?: { outcome?: ConsoleTurnOutcome }) => void | Promise<void>;
   /** Trusted host persistence adapter; source references have been rehashed and scoped on host. */
   onSourceContext?: (artifact: WorkbenchSourceContextArtifact, context: { workspaceRoot: string; scanId: string; runId: string }) => void | Promise<void>;
+  onSourceLesson?: (lesson: WorkbenchSourceLesson, context: { workspaceRoot: string; scopePath: string; scanId: string; runId: string }) => void | Promise<void>;
+  readSourceLessons?: (context: { workspaceRoot: string; scopePath: string }) => WorkbenchSourceLesson[] | Promise<WorkbenchSourceLesson[]>;
 }
 const EVENTS = new Set(["onHarnessUpdate", "onAssistantDelta", "onReasoningDelta", "onToolStart", "onToolResult", "onUsage", "onNotice", "onCompaction"]);
-const DECISIONS = new Set(["requestScope", "requestLocalScope", "approveTool", "escalateScopedAudit", "askOperator", "historyList", "historyRead"]);
+const DECISIONS = new Set(["requestScope", "requestLocalScope", "approveTool", "escalateScopedAudit", "askOperator", "historyList", "historyRead", "sourceLessons"]);
 function validateOptions(options: WorkbenchControllerOptions): void {
   if (options.provider.provider !== "chatgpt-codex" || (options.selection.provider && options.selection.provider !== "chatgpt-codex") || !options.provider.models.includes(options.selection.model)) throw new Error("Workbench requires an explicit host provider/model grant");
   for (const model of Object.values(options.selection.agentModels ?? {})) if (model !== "auto" && !options.provider.models.includes(model)) throw new Error("Workbench worker model is outside the host provider grant");
@@ -185,13 +187,26 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
   const config = { ...options.config, scanId: options.config.scanId ?? `console-${randomUUID()}` };
   const serial = serializeWorkbenchConfig(config, workspace);
   const callbacks = [...DECISIONS].filter(name => name === "historyList" || name === "historyRead" ? !!config.conversationHistory : typeof (config as unknown as Record<string, unknown>)[name] === "function");
-  const scopeEnforcement = getScopeEnforcementState(workspace);
+  const sourceLearningEnabled = config.codebaseLearning === true && config.role !== "verify" && !/^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "");
+  if (sourceLearningEnabled && options.readSourceLessons) callbacks.push("sourceLessons");
+  const scopeEnforcement = getScopeEnforcementState(workspace, options.pluginHomeDir);
   const controller = new Controller({ ...options, workbench: { ...options.workbench, workspaceRoot: workspace } }, { config: serial, callbacks, scopeEnforcement }, false);
   let messages = structuredClone(config.initialMessages ?? config.initialCheckpoint?.messages ?? []);
   let checkpoint = config.initialCheckpoint;
   let target = config.target ?? ""; let scope = config.scope; let localScopePath = config.initialCheckpoint?.localScopePath ?? undefined;
   // Guest state never creates authority. Only the host's initial grant and approval callback do.
-  let sourceScopePath = config.initialCheckpoint?.localScopePath ?? (scopeEnforcement.enabled ? undefined : workspace);
+  let explicitYoloSourceGrant = !!options.workbench.workspaceRoot && config.autonomyMode === "yolo";
+  let sourceScopePath = config.initialCheckpoint?.localScopePath ?? (!scopeEnforcement.enabled || explicitYoloSourceGrant ? workspace : undefined);
+  const authorizedSourceRoot = (guestPath: unknown): string | undefined => {
+    if (!sourceScopePath || typeof guestPath !== "string") return undefined;
+    try {
+      const requested = realpathSync(hostWorkspacePath(guestPath, workspace));
+      const approved = realpathSync(sourceScopePath);
+      if (!statSync(requested).isDirectory()) return undefined;
+      if (requested === approved || (explicitYoloSourceGrant && (requested === workspace || requested.startsWith(workspace + sep)))) return requested;
+    } catch { /* Unknown or foreign scope is not authority. */ }
+    return undefined;
+  };
   const sourceArtifacts = new Set<string>();
   let sourceFrames = 0;
   let sourcePersistence = Promise.resolve();
@@ -202,6 +217,16 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
   const deferred: Promise<unknown>[] = [];
   const queue = (op: string, value?: unknown) => { if (!controller.done) { serial[op === "autonomy" ? "autonomyMode" : op] = value; return; } const pending = controller.request(op, { value }); deferred.push(pending); void pending.catch(() => {}); };
   controller.decision = async (name, args) => {
+    if (name === "sourceLessons") {
+      if (!sourceLearningEnabled || !sourceScopePath || !options.readSourceLessons || /^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "") || args.length !== 1 || typeof args[0] !== "string") return [];
+      const requested = authorizedSourceRoot(args[0]);
+      if (!requested) return []; // Only exact scope or a subtree of an explicit host YOLO grant.
+      await flushSourceContext();
+      const notes = await options.readSourceLessons({ workspaceRoot: workspace, scopePath: requested });
+      return notes.slice(0, 6).flatMap(note => {
+        try { return [validateWorkbenchSourceLesson(note, workspace, requested)]; } catch { return []; }
+      });
+    }
     if (name === "historyList") return config.conversationHistory!.list(...args as Parameters<NonNullable<ConsoleSessionConfig["conversationHistory"]>["list"]>);
     if (name === "historyRead") return config.conversationHistory!.read(...args as Parameters<NonNullable<ConsoleSessionConfig["conversationHistory"]>["read"]>);
     const callback = (config as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>)[name];
@@ -219,9 +244,22 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
     return callback(...args);
   };
   controller.receive = frame => {
-    if (frame.type === "source-context") {
+    if (frame.type === "source-lesson") {
+      if (++sourceFrames > 128) throw new Error("Workbench source export limit reached");
+      if (!sourceLearningEnabled || !options.onSourceLesson || !sourceScopePath || /^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "")) return;
+      const lessonScope = frame.scopePath === undefined ? sourceScopePath : authorizedSourceRoot(frame.scopePath);
+      if (!lessonScope) return;
+      let lesson: WorkbenchSourceLesson;
+      try { lesson = validateWorkbenchSourceLesson(frame.lesson, workspace, lessonScope); } catch { return; }
+      const key = JSON.stringify({ scopePath: lessonScope, lesson });
+      if (sourceArtifacts.has(key)) return;
+      sourceArtifacts.add(key);
+      const scopePath = lessonScope;
+      sourcePersistence = sourcePersistence.then(() => options.onSourceLesson!(lesson, { workspaceRoot: workspace, scopePath, scanId: config.scanId, runId: controller.runId }));
+      void sourcePersistence.catch(() => {});
+    } else if (frame.type === "source-context") {
       if (++sourceFrames > 128) throw new Error("Workbench source context export limit reached");
-      if (!options.onSourceContext || !sourceScopePath) return;
+      if (!sourceLearningEnabled || !options.onSourceContext || !sourceScopePath || /^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "")) return;
       let artifact: WorkbenchSourceContextArtifact;
       try { artifact = validateWorkbenchSourceContext(frame.artifact, workspace, sourceScopePath); } catch { return; } // Untrusted or stale guest evidence grants nothing.
       const key = JSON.stringify(artifact);
@@ -249,7 +287,11 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
   return {
     scanId: config.scanId, ready: Promise.resolve(), get execution() { return controller.execution; }, get systemPrompt() { return systemPrompt; }, get tools() { return tools; }, get messages() { return messages; },
     get target() { return target; }, get scope() { return scope; }, get localScopePath() { return localScopePath; }, get autonomyMode() { return autonomyMode; }, scopeEnforcement,
-    setAutonomyMode(mode) { autonomyMode = mode; queue("autonomy", mode); },
+    setAutonomyMode(mode) {
+      autonomyMode = mode;
+      if (mode === "yolo" && options.workbench.workspaceRoot) { explicitYoloSourceGrant = true; sourceScopePath ??= workspace; }
+      queue("autonomy", mode);
+    },
     configureEngagement(selection) { if (selection.target !== undefined) target = selection.target; if (selection.scope !== undefined) scope = selection.scope ?? undefined;
       const value = { ...(selection.target === undefined ? {} : { target: mapWorkbenchTarget(selection.target, workspace) }), ...(selection.scope === undefined ? {} : { scope: selection.scope?.raw ?? null }) };
       if (!controller.done) Object.assign(serial, value); else queue("configure", value); },

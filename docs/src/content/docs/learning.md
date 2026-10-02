@@ -89,12 +89,20 @@ A successful earlier run is operational evidence, not proof of better security.
 
 ## Isolated workspace observations
 
-SmolVM console sessions can retain bounded source references before guest teardown.
-The host checks each file hash against the approved workspace and scope; changed,
-out-of-scope, symlinked and oversized files are refused. Guest prose and memory
-summaries are not imported. These references remain internal hypothesis-level records,
-not verified findings or reusable lessons. Full semantic guest-note transfer remains separate work. See the
-[SmolVM qualification report](https://github.com/0sec-labs/0/blob/main/docs/design/smolvm-qualification-20261001.md) for the tested image and remaining blockers.
+SmolVM chats can save bounded source-linked lessons on their host engine before
+teardown. A fresh VM requests current lessons for its approved directory before
+model calls. Both sides check file hashes; lessons stay out of saved chat history
+and do not grant tools or permissions. Disabled lessons and changed files are
+excluded. Host memory stores, database handles and provider credentials are not
+serialized into the guest.
+
+Standard mode needs host-approved local scope. YOLO mode can use an explicitly
+granted workbench workspace and its subdirectories; an implicit current directory
+is not a host scope grant. Learning opt-out and verifier isolation still apply.
+
+The [runtime qualification report](https://github.com/0sec-labs/0/blob/main/docs/design/smolvm-qualification-20261002.md)
+records the tested distribution and runtime limits. Complete toolbox qualification
+is separate: the selected image still lacks SSH and needs a rebuilt archive.
 
 ## Deployment boundary
 

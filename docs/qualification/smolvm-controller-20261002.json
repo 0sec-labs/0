@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-02",
+  "outcome": "passed",
+  "provider": "host SSE fixture",
+  "providerRequests": 4,
+  "imageDigest": "sha256:a2986e852a463d33243ae0adf23e9853eb8eb776d3d0045a02c00ac0ea0b1495",
+  "resources": {
+    "cpus": 2,
+    "memoryMb": 2048,
+    "storageGb": 4,
+    "lifetimeMs": 90000
+  },
+  "network": false,
+  "hostCredentialsForwarded": false,
+  "registeredController": true,
+  "tools": [
+    {
+      "name": "read_file",
+      "success": true
+    },
+    {
+      "name": "apply_patch",
+      "success": true
+    }
+  ],
+  "stopReason": "end_turn",
+  "cancelledTurnStopReason": "cancelled",
+  "sourceUnmodified": true,
+  "exportedOutputMatches": true,
+  "executionStatus": "stopped",
+  "limitations": [
+    "Small Node fixture image, not complete toolbox.",
+    "Latest semantic source-memory handoff was not built or qualified by this run.",
+    "First attempt refused a protected dependency mount before boot and made zero provider calls; dependency directory corrected without bypassing the guard.",
+    "The exported patch content has no trailing newline; the receipt compares the exact observed expected text, not an assumed newline."
+  ],
+  "headAtTest": "3c2bc3a5f378b23912d088907d5e04ffc54b00bf",
+  "buildIdentity": {
+    "entryDigest": "sha256:037dea313cae4f43017f1af206476de71f0635bc825e09577650640406845e01",
+    "treeDigest": "sha256:97b17091ef3f2da137d13a863d23ddd9038014958c2f041f30ce702ceeac61cd",
+    "manifestAlgorithm": "sha256 of JSON array sorted by relative POSIX path, each row {path,bytes,digest}; UTF-8 compact JSON",
+    "fileCount": 305,
+    "hostControllerModuleDigest": "sha256:8e0fc022b8538ddc4c13bb55fe8b7b6d193c8b4dfbb1e834d8830c23aaf04e38",
+    "buildCommitVerified": false,
+    "provenance": "Existing dist built before HEAD-at-test commit; hashes captured after runs while parent confirmed no dist rebuild. This receipt does not qualify all source at HEAD."
+  },
+  "exportedOutputExpected": "guest execution wrote this"
+}

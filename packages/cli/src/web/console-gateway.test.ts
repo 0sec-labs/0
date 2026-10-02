@@ -465,6 +465,24 @@ describe("ConsoleGateway isolated execution boundaries", () => {
     return { cleanup, reconfigure };
   }
 
+  it("passes the lesson store to the host VM adapter without opening host tool resources", async () => {
+    const { instance } = isolatedGateway(); admitFixture();
+    const store = new LearningStore(join(homes.at(-1)!, "lessons.db"));
+    try {
+      instance.attachSourceLearning(store);
+      const created = instance.create();
+      await instance.send(created.id, "Inspect source"); await idle(instance, created.id);
+      const config = isolated.localFactory.mock.calls[0]?.[0];
+      expect(config.codebaseLearning).toBe(true);
+      expect(config.learningStore).toBe(store);
+      expect(config.pluginHost).toBeUndefined();
+      expect(config.mcpHost).toBeUndefined();
+      expect(isolated.pluginManager).not.toHaveBeenCalled();
+      await instance.closeAll();
+      expect(store.listKnowledge()).toEqual([]);
+    } finally { store.close(); }
+  });
+
   it("rejects a VM model/account change after history without changing the grant or transcript", async () => {
     const { instance, info } = isolatedGateway(); const { cleanup, reconfigure } = admitFixture();
     const created = instance.create({ runtime: { providerId: "chatgpt-codex", model: info.model } });

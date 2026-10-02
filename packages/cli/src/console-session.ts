@@ -25,6 +25,7 @@ export function createLocalConsoleSession(
   dbPath?: string,
   options: ConsoleExecutionOptions = {},
 ): ConsoleSession {
+  config = { ...config, codebaseLearning: config.codebaseLearning ?? true };
   const isolated = createIsolatedConsoleSession(config, { ...options, dbPath });
   if (isolated) return isolated;
   options.onExecution?.({ backend: "local", status: "ready", workspacePath: options.workspaceRoot ?? config.workspaceRoot ?? process.cwd() });

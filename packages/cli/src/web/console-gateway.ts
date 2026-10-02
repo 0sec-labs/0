@@ -732,7 +732,8 @@ export class ConsoleGateway {
           session = createLocalConsoleSession({
             runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
             scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, scope: managed.scope,
-            initialMessages: managed.initialMessages, workspaceRoot: managed.workspacePath ?? this.#projectPath,
+            initialMessages: managed.initialMessages, workspaceRoot: managed.workspacePath ?? this.#projectPath, codebaseLearning: true,
+            ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}),
             allowModelSelfExtension: settings.allowModelSelfExtension, compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
             onHarnessUpdate: (harness) => { managed.harness = harness; this.#emit(managed, { type: "harness", harness }); }, ...callbacks,
           }, this.#options.dbPath, { homeDir: this.#options.homeDir, workspaceRoot: managed.workspacePath ?? this.#projectPath,

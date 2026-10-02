@@ -2,7 +2,8 @@
 
 Status: architecture and implementation plan, researched 2026-10-01. The initial
 service now implements local events/outbox, source-note mirroring and invalidation,
-workflow version history/restore, the Learning UI, and registry-backed evolution
+workflow version history/restore, source-linked console lesson save/recall, the
+Learning UI, and registry-backed evolution
 provenance through `0 learning evolve`. The default background worker makes no
 model calls. It can suggest restoring earlier workflow instructions after repeated
 failures; suggestions require review and never apply themselves.
@@ -11,8 +12,10 @@ follow-up work. Five independent
 research passes covered the code, learning research, evaluation, workflow UX,
 and enterprise boundaries. Implementation tests exercise persistence, lifecycle
 integration, source invalidation and evaluator identity. A small live paired
-source-review benchmark found no performance lift; see the [measured results](../benchmarks/learning-paired-2026-10-01.md). Real SmolVM lifecycle and image checks
-are recorded in the [qualification report](smolvm-qualification-20261001.md).
+source-review benchmark found no performance lift. A later [real console comparison](../benchmarks/learning-console-paired-2026-10-02.md) also found no accuracy gain and measured 23.7% more input tokens with remembered context.
+Real SmolVM lesson handoff across fresh guests and provider checks are recorded
+in the [October 2 qualification report](smolvm-qualification-20261002.md); the selected
+full toolbox still requires a rebuilt image.
 
 ## Decision
 
@@ -26,8 +29,10 @@ Unify provenance and lifecycle ingestion; do not merge their distinct trust
 levels into a single “learned” flag. Start as modules and a durable worker within
 the engine, not a collection of new microservices.
 
-The defensible product promise is: “The engine retains relevant experience and
-tests proposed improvements before using them.” Every run provides observations;
+The initial product promise is: “0 saves source-linked lessons for later
+investigations and lets you review suggested workflow changes.” Lessons are
+untrusted hints, and operational restore suggestions have not passed a security
+benchmark. Evaluated evolution has its own separate evidence. Every run provides observations;
 every run does not necessarily improve capability.
 
 ## Initial code audit
@@ -169,8 +174,14 @@ disposable execution VMs, within the selected customer deployment. Each SmolVM
 receives only its scoped workspace, authorized tools and pinned relevant
 artifacts. The host ingests bounded results and evidence. Run candidate
 generation/evaluation in separate disposable environments with explicit budgets.
-This is a proposed execution arrangement, not a claim that current SmolVM
-provisioning or every validator is fully qualified.
+The implemented console handoff validates bounded source-linked lesson prose
+against host-owned scope and cited file hashes, then persists it on the host.
+Fresh guests fetch current lessons before model calls and recheck the hashes.
+Disabled lessons stay disabled across new run records. Standard mode requires
+host-approved scope; an explicit host YOLO workspace grant also covers child
+directories. Guest state, prose and transcripts do not create authority. This
+roundtrip has been tested in three fresh VMs. It does not qualify every toolbox
+image, provider or validator.
 
 Learning inference uses the customer's selected approved provider or self-hosted
 model. Private provider connectivity does not by itself mean inference executes
@@ -186,10 +197,11 @@ stable labeled datasets, measured benefit and deployment support.
 
 ## Product surface
 
-Add one Learning page with activity, knowledge and improvement views using the
-shared page layout. Show concrete events such as “Retained repository context,”
-“Excluded stale note,” and “Candidate reduced verification cost.” Display
-scope, evidence, last use and current/stale/disabled state for knowledge.
+The Learning page uses the shared page layout with **Lessons** and **Suggestions**.
+Ordinary chat completion and run identifiers stay in the internal ledger, not the
+main Learning view. Show the lesson itself, its supporting files and whether it is
+current, stale or disabled. A lesson is useful investigation context, not evidence
+that a vulnerability exists or that capability has improved.
 
 Improvement detail shows what changes, supporting evidence, baseline comparison,
 regressions, cost and activation history. Workflow detail gains Learning and

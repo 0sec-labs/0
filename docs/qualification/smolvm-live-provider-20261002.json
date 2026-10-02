@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "timestamp": "2026-10-02T20:49:35.281Z",
+  "provider": "chatgpt-codex",
+  "model": "gpt-5.6-sol",
+  "imageDigest": "sha256:a2986e852a463d33243ae0adf23e9853eb8eb776d3d0045a02c00ac0ea0b1495",
+  "selectedImageDigest": "sha256:37ff93702b3182deb9781cb6b5fba1c7f33def98f8339ada6535fceaac255f7b",
+  "liveAccountCatalogVerified": true,
+  "hostCredentialsForwarded": false,
+  "providerCalls": 3,
+  "httpStatuses": [
+    200,
+    200,
+    200
+  ],
+  "sourceUnchanged": true,
+  "guestOutputAbsentOnHostSource": true,
+  "exportedOutputMatches": true,
+  "outcome": "passed",
+  "buildIdentity": {
+    "entryDigest": "sha256:95b50bd840a7b0259a7e4d1d2329bca89dd8fbb075e1680320e51d6a30348307",
+    "treeDigest": "sha256:72974c318a5997e9fcfd8c5572872507aa753e02ceda1d92ff92e7341fafac78",
+    "fileCount": 306,
+    "hostControllerModuleDigest": "sha256:d10e39baad532df6f4febdac93764876c4455819145440c6acfec5fdb0db79c9",
+    "buildCommitVerified": false
+  },
+  "buildUnchanged": true,
+  "headAtTest": "3c2bc3a5f378b23912d088907d5e04ffc54b00bf",
+  "network": false,
+  "result": {
+    "exitCode": 0,
+    "timedOut": false,
+    "cleanupFailed": false
+  },
+  "tools": [
+    "read_file",
+    "apply_patch"
+  ],
+  "limits": {
+    "providerRequests": 8,
+    "providerConcurrency": 1,
+    "requestTimeoutMs": 90000,
+    "vmLifetimeMs": 240000
+  },
+  "limitations": [
+    "One selected account/model and one synthetic task; no comparative quality claim.",
+    "Small approved Node fixture image with explicit Linux dependencies; selected toolbox/global configuration unchanged.",
+    "Distribution rebuilt from current dirty source; exact hashes identify qualified artifact, HEAD-at-test is context rather than verified build commit."
+  ],
+  "priorReceipt": "smolvm-live-provider-20261002-before-semantic.json"
+}

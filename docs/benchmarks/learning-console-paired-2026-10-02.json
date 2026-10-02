@@ -1,0 +1,539 @@
+{
+  "schema": "0.learning-console-paired/v1",
+  "startedAt": "2026-10-02T20:44:49.044Z",
+  "model": "gpt-5.6-sol",
+  "provider": "chatgpt-codex",
+  "sourceDigest": "d09e14a9c65dc59ef68b9ad59f0dfe9ff80a5d83e8d315b99452680eb0a481f1",
+  "harnessDigest": "b118fb6c389fd16f700b603460d805a298f50b7457cf0715139a5789cbc752c9",
+  "engineDigest": "a63fb46a438ba948bb2de4383fc7a9431b8d653de2745deb71f6169ea627a7e2",
+  "limits": {
+    "investigations": 5,
+    "modelCallsPerInvestigation": 6,
+    "timeoutPerInvestigationMs": 90000,
+    "maxTurnTokens": 16000,
+    "tools": [
+      "read_file",
+      "remember_codebase (development only)"
+    ]
+  },
+  "oracle": [
+    {
+      "id": "A",
+      "expected": true,
+      "confirmed": true,
+      "legitimate": {
+        "status": 200,
+        "containsMarker": true
+      },
+      "unauthorized": {
+        "status": 200,
+        "containsMarker": true
+      },
+      "anonymous": {
+        "status": 401,
+        "containsMarker": false
+      }
+    },
+    {
+      "id": "B",
+      "expected": false,
+      "confirmed": false,
+      "legitimate": {
+        "status": 200,
+        "containsMarker": true
+      },
+      "unauthorized": {
+        "status": 403,
+        "containsMarker": false
+      },
+      "anonymous": {
+        "status": 401,
+        "containsMarker": false
+      }
+    },
+    {
+      "id": "C",
+      "expected": true,
+      "confirmed": true,
+      "legitimate": {
+        "status": 200,
+        "containsMarker": true
+      },
+      "unauthorized": {
+        "status": 200,
+        "containsMarker": true
+      },
+      "anonymous": {
+        "status": 401,
+        "containsMarker": false
+      }
+    },
+    {
+      "id": "D",
+      "expected": false,
+      "confirmed": false,
+      "legitimate": {
+        "status": 200,
+        "containsMarker": true
+      },
+      "unauthorized": {
+        "status": 403,
+        "containsMarker": false
+      },
+      "anonymous": {
+        "status": 401,
+        "containsMarker": false
+      }
+    }
+  ],
+  "development": {
+    "text": "Saved exactly one trust-boundary lesson citing `platform.mjs`.",
+    "stopReason": "end_turn",
+    "usage": {
+      "inputTokens": 1951,
+      "outputTokens": 154
+    },
+    "toolCalls": [
+      {
+        "name": "read_file",
+        "input": {
+          "path": "platform.mjs"
+        },
+        "success": true
+      },
+      {
+        "name": "remember_codebase",
+        "input": {
+          "title": "Platform trust boundary and tenant scoping",
+          "summary": "Identity is verified upstream, but manager authority is tenant-scoped rather than global; report IDs and query parameters remain untrusted, and sensitive-record access requires ownership checks.",
+          "paths": [
+            "platform.mjs"
+          ],
+          "tags": [
+            "trust-boundary",
+            "tenant-isolation",
+            "authorization"
+          ]
+        },
+        "success": true
+      }
+    ],
+    "calls": [
+      {
+        "usage": {
+          "inputTokens": 464,
+          "outputTokens": 38
+        },
+        "durationMs": 1924,
+        "stopReason": "tool_use",
+        "recalledLesson": false,
+        "tools": [
+          {
+            "name": "read_file",
+            "input": {
+              "path": "platform.mjs"
+            }
+          }
+        ]
+      },
+      {
+        "usage": {
+          "inputTokens": 609,
+          "outputTokens": 99
+        },
+        "durationMs": 4525,
+        "stopReason": "tool_use",
+        "recalledLesson": false,
+        "tools": [
+          {
+            "name": "remember_codebase",
+            "input": {
+              "title": "Platform trust boundary and tenant scoping",
+              "summary": "Identity is verified upstream, but manager authority is tenant-scoped rather than global; report IDs and query parameters remain untrusted, and sensitive-record access requires ownership checks.",
+              "paths": [
+                "platform.mjs"
+              ],
+              "tags": [
+                "trust-boundary",
+                "tenant-isolation",
+                "authorization"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "usage": {
+          "inputTokens": 878,
+          "outputTokens": 17
+        },
+        "durationMs": 1335,
+        "stopReason": "end_turn",
+        "recalledLesson": true,
+        "tools": []
+      }
+    ],
+    "historyIncludesRecalledLesson": false
+  },
+  "cells": [
+    {
+      "repeat": 0,
+      "arm": "baseline",
+      "text": "{\"findings\":[{\"id\":\"A\",\"category\":\"access-control\"},{\"id\":\"C\",\"category\":\"access-control\"}]}",
+      "stopReason": "end_turn",
+      "usage": {
+        "inputTokens": 1099,
+        "outputTokens": 136
+      },
+      "toolCalls": [
+        {
+          "name": "read_file",
+          "input": {
+            "path": "platform.mjs"
+          },
+          "success": true
+        },
+        {
+          "name": "read_file",
+          "input": {
+            "path": "routes.mjs"
+          },
+          "success": true
+        }
+      ],
+      "calls": [
+        {
+          "usage": {
+            "inputTokens": 320,
+            "outputTokens": 52
+          },
+          "durationMs": 2277,
+          "stopReason": "tool_use",
+          "recalledLesson": false,
+          "tools": [
+            {
+              "name": "read_file",
+              "input": {
+                "path": "platform.mjs"
+              }
+            },
+            {
+              "name": "read_file",
+              "input": {
+                "path": "routes.mjs"
+              }
+            }
+          ]
+        },
+        {
+          "usage": {
+            "inputTokens": 779,
+            "outputTokens": 84
+          },
+          "durationMs": 3107,
+          "stopReason": "end_turn",
+          "recalledLesson": false,
+          "tools": []
+        }
+      ],
+      "historyIncludesRecalledLesson": false,
+      "predictions": [
+        {
+          "id": "A",
+          "category": "access-control"
+        },
+        {
+          "id": "C",
+          "category": "access-control"
+        }
+      ],
+      "score": {
+        "confirmed": 2,
+        "falsePositiveCandidates": 0,
+        "missed": 0,
+        "recall": 1
+      }
+    },
+    {
+      "repeat": 0,
+      "arm": "learned",
+      "text": "{\"findings\":[{\"id\":\"A\",\"category\":\"access-control\"},{\"id\":\"C\",\"category\":\"access-control\"}]}",
+      "stopReason": "end_turn",
+      "usage": {
+        "inputTokens": 1359,
+        "outputTokens": 137
+      },
+      "toolCalls": [
+        {
+          "name": "read_file",
+          "input": {
+            "path": "platform.mjs"
+          },
+          "success": true
+        },
+        {
+          "name": "read_file",
+          "input": {
+            "path": "routes.mjs"
+          },
+          "success": true
+        }
+      ],
+      "calls": [
+        {
+          "usage": {
+            "inputTokens": 450,
+            "outputTokens": 52
+          },
+          "durationMs": 3180,
+          "stopReason": "tool_use",
+          "recalledLesson": true,
+          "tools": [
+            {
+              "name": "read_file",
+              "input": {
+                "path": "platform.mjs"
+              }
+            },
+            {
+              "name": "read_file",
+              "input": {
+                "path": "routes.mjs"
+              }
+            }
+          ]
+        },
+        {
+          "usage": {
+            "inputTokens": 909,
+            "outputTokens": 85
+          },
+          "durationMs": 4444,
+          "stopReason": "end_turn",
+          "recalledLesson": true,
+          "tools": []
+        }
+      ],
+      "historyIncludesRecalledLesson": false,
+      "predictions": [
+        {
+          "id": "A",
+          "category": "access-control"
+        },
+        {
+          "id": "C",
+          "category": "access-control"
+        }
+      ],
+      "score": {
+        "confirmed": 2,
+        "falsePositiveCandidates": 0,
+        "missed": 0,
+        "recall": 1
+      }
+    },
+    {
+      "repeat": 1,
+      "arm": "learned",
+      "text": "{\"findings\":[{\"id\":\"A\",\"category\":\"access-control\"},{\"id\":\"C\",\"category\":\"access-control\"}]}",
+      "stopReason": "end_turn",
+      "usage": {
+        "inputTokens": 1359,
+        "outputTokens": 138
+      },
+      "toolCalls": [
+        {
+          "name": "read_file",
+          "input": {
+            "path": "platform.mjs"
+          },
+          "success": true
+        },
+        {
+          "name": "read_file",
+          "input": {
+            "path": "routes.mjs"
+          },
+          "success": true
+        }
+      ],
+      "calls": [
+        {
+          "usage": {
+            "inputTokens": 450,
+            "outputTokens": 52
+          },
+          "durationMs": 1681,
+          "stopReason": "tool_use",
+          "recalledLesson": true,
+          "tools": [
+            {
+              "name": "read_file",
+              "input": {
+                "path": "platform.mjs"
+              }
+            },
+            {
+              "name": "read_file",
+              "input": {
+                "path": "routes.mjs"
+              }
+            }
+          ]
+        },
+        {
+          "usage": {
+            "inputTokens": 909,
+            "outputTokens": 86
+          },
+          "durationMs": 3505,
+          "stopReason": "end_turn",
+          "recalledLesson": true,
+          "tools": []
+        }
+      ],
+      "historyIncludesRecalledLesson": false,
+      "predictions": [
+        {
+          "id": "A",
+          "category": "access-control"
+        },
+        {
+          "id": "C",
+          "category": "access-control"
+        }
+      ],
+      "score": {
+        "confirmed": 2,
+        "falsePositiveCandidates": 0,
+        "missed": 0,
+        "recall": 1
+      }
+    },
+    {
+      "repeat": 1,
+      "arm": "baseline",
+      "text": "{\"findings\":[{\"id\":\"A\",\"category\":\"access-control\"},{\"id\":\"C\",\"category\":\"access-control\"}]}",
+      "stopReason": "end_turn",
+      "usage": {
+        "inputTokens": 1099,
+        "outputTokens": 119
+      },
+      "toolCalls": [
+        {
+          "name": "read_file",
+          "input": {
+            "path": "platform.mjs"
+          },
+          "success": true
+        },
+        {
+          "name": "read_file",
+          "input": {
+            "path": "routes.mjs"
+          },
+          "success": true
+        }
+      ],
+      "calls": [
+        {
+          "usage": {
+            "inputTokens": 320,
+            "outputTokens": 52
+          },
+          "durationMs": 2333,
+          "stopReason": "tool_use",
+          "recalledLesson": false,
+          "tools": [
+            {
+              "name": "read_file",
+              "input": {
+                "path": "platform.mjs"
+              }
+            },
+            {
+              "name": "read_file",
+              "input": {
+                "path": "routes.mjs"
+              }
+            }
+          ]
+        },
+        {
+          "usage": {
+            "inputTokens": 779,
+            "outputTokens": 67
+          },
+          "durationMs": 3570,
+          "stopReason": "end_turn",
+          "recalledLesson": false,
+          "tools": []
+        }
+      ],
+      "historyIncludesRecalledLesson": false,
+      "predictions": [
+        {
+          "id": "A",
+          "category": "access-control"
+        },
+        {
+          "id": "C",
+          "category": "access-control"
+        }
+      ],
+      "score": {
+        "confirmed": 2,
+        "falsePositiveCandidates": 0,
+        "missed": 0,
+        "recall": 1
+      }
+    }
+  ],
+  "status": "completed",
+  "limitations": [
+    "Four synthetic routes; two independent vulnerable implementations; repeated runs are not additional independent cases.",
+    "Both versions may read the same development contract. The remembered note is a summary, not new source information.",
+    "Same-project source review and host-owned authenticated probes; no full browser scan, exploit generation, production authentication, workflow, or SmolVM execution.",
+    "Same token/time/call ceilings per investigation; actual usage and training overhead reported separately.",
+    "OAuth requests cannot enforce an exact output-token ceiling; engine stops between calls and timeouts abort in flight."
+  ],
+  "savedLessons": [
+    {
+      "title": "Platform trust boundary and tenant scoping",
+      "summary": "Identity is verified upstream, but manager authority is tenant-scoped rather than global; report IDs and query parameters remain untrusted, and sensitive-record access requires ownership checks.",
+      "sourceLinks": [
+        {
+          "path": "platform.mjs",
+          "digest": "sha256:94897971e26f7e293462be72a687e7f0a2fa90306abf074b3dbc117518115e69"
+        }
+      ]
+    }
+  ],
+  "retainedKnowledge": [
+    {
+      "status": "current",
+      "summary": "Identity is verified upstream, but manager authority is tenant-scoped rather than global; report IDs and query parameters remain untrusted, and sensitive-record access requires ownership checks."
+    }
+  ],
+  "summary": {
+    "baseline": {
+      "investigations": 2,
+      "meanRecall": 1,
+      "falsePositiveCandidates": 0,
+      "inputTokens": 2198,
+      "outputTokens": 255,
+      "modelCalls": 4,
+      "recalledInCalls": 0
+    },
+    "learned": {
+      "investigations": 2,
+      "meanRecall": 1,
+      "falsePositiveCandidates": 0,
+      "inputTokens": 2718,
+      "outputTokens": 275,
+      "modelCalls": 4,
+      "recalledInCalls": 4
+    },
+    "recallDelta": 0
+  }
+}

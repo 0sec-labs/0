@@ -11,7 +11,7 @@ import { installWorkbenchPlugins } from "./workbench-plugins.js";
 import { createSessionPluginHostManager, type SessionPluginHostManager } from "./tui/session-plugin-host.js";
 import { VERSION } from "@0/shared";
 import { createLocalConsoleSession } from "./console-session.js";
-import { encodeWorkbenchFrame, WorkbenchFrameReader, WORKBENCH_MAX_PENDING, WORKBENCH_FRAME_BYTES, WORKBENCH_SOURCE_CONTEXT_LIMIT } from "./workbench-console-protocol.js";
+import { encodeWorkbenchFrame, WorkbenchFrameReader, WORKBENCH_MAX_PENDING, WORKBENCH_FRAME_BYTES, WORKBENCH_SOURCE_CONTEXT_LIMIT, validateWorkbenchSourceLesson } from "./workbench-console-protocol.js";
 import type { WorkbenchFrame } from "./workbench-console-protocol.js";
 import { servicePluginSecretRedactor, validateGuestServicePluginConnections } from "./workbench-service-plugins.js";
 
@@ -34,6 +34,8 @@ async function runGuest(cli: boolean): Promise<number> {
   let pluginManager: SessionPluginHostManager | undefined;
   let servicePluginHost: McpHost | undefined;
   const exportedSourceReferences = new Set<string>();
+  const exportedSourceLessons = new Set<string>();
+  let sourceLearningEnabled = false;
   let initialized = false;
   let closing = false;
   let turn: AbortController | undefined;
@@ -73,7 +75,8 @@ async function runGuest(cli: boolean): Promise<number> {
     emit({ type: "state", snapshot: checkpoint?.harnessRoot ? { ...snapshot, checkpoint: undefined } : snapshot });
     const db = new osecDB("/home/zero/.0/controller.sqlite");
     try { const rows = db.getFindings(session.scanId); if (rows.length > 1000) throw new Error("Finding export limit reached"); emit({ type: "findings", findings: rows.map(findingFromRow) }); } finally { db.close(); }
-    // Export only current source references. Free-form guest memory stays inside the VM.
+    // Only bounded source-backed notes cross the seam. Never export transcripts or the full memory log.
+    if (!sourceLearningEnabled || /^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "")) return;
     const memory = new HuntMemoryStore({ home: "/home/zero" });
     const roots = [...new Set(memory.all().map(note => note.codebase?.root).filter((root): root is string => !!root && (root === "/workspace" || root.startsWith("/workspace/"))))].slice(0, WORKBENCH_SOURCE_CONTEXT_LIMIT);
     let count = 0;
@@ -83,9 +86,12 @@ async function runGuest(cli: boolean): Promise<number> {
         const prefix = root === "/workspace" ? "" : root.slice("/workspace/".length) + "/";
         const artifact = { sourceLinks: note.codebase.files.map(file => ({ path: prefix + file.path, hash: file.digest })) };
         const key = JSON.stringify(artifact);
-        if (exportedSourceReferences.has(key)) continue;
-        exportedSourceReferences.add(key);
-        emit({ type: "source-context", artifact });
+        if (!exportedSourceReferences.has(key)) { exportedSourceReferences.add(key); emit({ type: "source-context", artifact }); }
+        try {
+          const lesson = validateWorkbenchSourceLesson({ ...artifact, title: note.title, summary: note.summary }, "/workspace", root);
+          const lessonKey = JSON.stringify(lesson);
+          if (!exportedSourceLessons.has(lessonKey)) { exportedSourceLessons.add(lessonKey); emit({ type: "source-lesson", scopePath: root, lesson }); }
+        } catch { /* Oversized, unsafe or secret-bearing prose never leaves the guest. */ }
       }
       if (count >= WORKBENCH_SOURCE_CONTEXT_LIMIT) break;
     }
@@ -138,6 +144,7 @@ async function runGuest(cli: boolean): Promise<number> {
             return;
           }
           const config = frame.config as Record<string, unknown>;
+          sourceLearningEnabled = config.codebaseLearning === true && config.role !== "verify" && !/^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "");
           const approvedPolicy = frame.scopeEnforcement as ScopeEnforcementState;
           if (!approvedPolicy || typeof approvedPolicy.enabled !== "boolean" || typeof approvedPolicy.pluginId !== "string") throw new Error("Missing scope approval snapshot");
           policy = { ...approvedPolicy, projectPath: "/workspace" };
@@ -146,6 +153,11 @@ async function runGuest(cli: boolean): Promise<number> {
             const value = await callback(name, args);
             if (name === "requestScope" && value && typeof value === "object") { const resolution = value as { target: string; scope: ConstructorParameters<typeof ScopePolicy>[0] }; return { ...resolution, scope: new ScopePolicy(resolution.scope) }; }
             return value;
+          };
+          if (sourceLearningEnabled && (frame.callbacks as string[]).includes("sourceLessons")) callbacks.sourceLessonHints = async (root: string) => {
+            const value = await callback("sourceLessons", [root]);
+            if (!Array.isArray(value) || value.length > 6) return [];
+            return value.flatMap(note => { try { return [validateWorkbenchSourceLesson(note, "/workspace", root)]; } catch { return []; } });
           };
           if ((frame.callbacks as string[]).includes("historyList")) callbacks.conversationHistory = { list: (...args: unknown[]) => callback("historyList", args), read: (...args: unknown[]) => callback("historyRead", args) };
           pluginManager = await createSessionPluginHostManager({ projectPath: "/workspace", reservedToolNames: Object.values(TOOL_DEFINITIONS).map(tool => tool.name), coreVersion: VERSION });

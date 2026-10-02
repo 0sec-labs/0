@@ -97,6 +97,29 @@ describe("console source lessons", () => {
     expect(learning.listKnowledge()).toEqual([]);
   });
 
+  it("refreshes transient host hints before every planner request without storing them", async () => {
+    const hint = { title: "Tenant checks", summary: "Use the ownership fixture before tenant access tests.", sourceLinks: [{ path: "routes.ts", hash: "sha256:" + "a".repeat(64) }] };
+    let calls = 0;
+    const provider = vi.fn(async (_root: string) => ++calls === 1 ? [hint] : []);
+    const runtime = new Runtime([inspect(root), inspect(root), done()]);
+    const current = session(runtime, { sourceLessonHints: provider });
+    await current.send("Investigate");
+    expect(provider).toHaveBeenCalledTimes(2);
+    expect(provider.mock.calls[0]?.[0]).toBe(root);
+    expect(JSON.stringify(runtime.calls[1]?.messages)).toContain(hint.summary);
+    expect(JSON.stringify(runtime.calls[2]?.messages)).not.toContain(hint.summary);
+    expect(memory.all()).toEqual([]);
+    expect(JSON.stringify(current.exportCheckpoint().messages)).not.toContain(hint.summary);
+    await current.cleanup();
+  });
+  it("does not add or dispatch the save-lesson tool through an explicit empty tool restriction", async () => {
+    const runtime = new Runtime([save(), done()]);
+    const current = session(runtime, { tools: [] });
+    await current.send("Inspect"); await current.cleanup();
+    expect(runtime.calls[0]?.tools.some(tool => tool.name === "remember_codebase")).toBe(false);
+    expect(memory.all()).toEqual([]);
+  });
+
   it.each(["verify", "disabled", "opt-out", "unscoped", "traversal"])("does not retain source lessons when %s", async mode => {
     if (mode === "disabled") vi.stubEnv("ZERO_DISABLE_HUNT_MEMORY", "1");
     const runtime = new Runtime([...(mode === "unscoped" ? [] : [inspect(root)]),

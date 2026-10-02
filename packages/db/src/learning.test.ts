@@ -9,6 +9,18 @@ const open = (path = ":memory:") => { const store = new LearningStore(path); sto
 const event = (key = "event-a", projectId = "project-a") => ({ idempotencyKey: key, projectId, kind: "workflow-terminal", outcome: "completed", evidenceStrength: "operational" as const, summary: "Workflow execution completed." });
 afterEach(() => { for (const store of stores.splice(0)) { try {store.close();} catch {} } for (const dir of directories.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 describe("tenant-local durable learning", () => {
+  it("keeps an identical disabled source lesson disabled across fresh run evidence", () => {
+    const store = open();
+    const first = store.appendEvent(event("first-source"));
+    const links = [{ path: "a.ts", hash: "hash-a" }, { path: "b.ts", hash: "hash-b" }];
+    const input = { projectId: "project-a", summary: "Check ownership before accessing tenant reports.", sourceLinks: links, evidenceEventIds: [first.id] };
+    const lesson = store.putKnowledge(input);
+    store.setKnowledgeStatus(lesson.id, "disabled");
+    const next = store.appendEvent(event("another-source-run"));
+    expect(store.putKnowledge({ ...input, sourceLinks: [...links].reverse(), evidenceEventIds: [next.id] })).toMatchObject({ id: lesson.id, status: "disabled" });
+    expect(store.listKnowledge()).toHaveLength(1);
+    expect(store.putKnowledge({ ...input, sourceLinks: [{ path: "a.ts", hash: "fresh-source" }], evidenceEventIds: [next.id] }).status).toBe("current");
+  });
   it("keeps experiences and outbox after reopen; retries are idempotent and conflicts fail", () => {
     const dir = mkdtempSync(join(tmpdir(), "learning-")); directories.push(dir); const path = join(dir, "control.db");
     const first = open(path); const saved = first.recordExperience(event()); first.close(); stores.pop();

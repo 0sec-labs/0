@@ -125,7 +125,9 @@
     "triage-data": "tsx src/triage-data-collector.ts",
     "triage-data:results": "tsx src/triage-data-collector.ts --results results/xbow-latest.json --output results/triage-data-latest.jsonl",
     "test": "vitest run",
-    "learning:paired": "node scripts/learning-paired.mjs"
+    "learning:paired": "node scripts/learning-paired.mjs",
+    "learning:console-paired": "node scripts/learning-console-paired.mjs",
+    "test:learning": "node --test scripts/learning-paired.test.mjs scripts/learning-console-paired.test.mjs"
   },
   "dependencies": {
     "@0/core": "workspace:*",

@@ -120,6 +120,16 @@ export class LearningStore {
   #checkEvidence(projectId: string, ids: string[]): void { refs(ids, "evidence event IDs"); if (!ids.length) fail("Evidence is required."); for (const id of ids) { const event = this.getEvent(id); if (!event || event.projectId !== projectId) fail("Evidence must belong to the same project."); } }
   putKnowledge(input: KnowledgeInput): KnowledgeEntry {
     bounded(input.projectId, "project ID"); bounded(input.summary, "knowledge summary", 4000); sources(input.sourceLinks); this.#checkEvidence(input.projectId, input.evidenceEventIds);
+    // A new run or memory-record ID must not undo an operator's choice to stop
+    // using the same source lesson. Fresh source hashes still admit a new lesson.
+    if (input.sourceLinks.length) {
+      const fingerprint = (links: LearningSourceLink[]) => JSON.stringify([...links].sort((a, b) => a.path.localeCompare(b.path) || a.hash.localeCompare(b.hash)));
+      const matching = this.#db.prepare("SELECT body FROM learning_knowledge WHERE project_id=? AND json_extract(body,'$.summary')=? AND json_extract(body,'$.status')='disabled'").all(input.projectId, input.summary);
+      for (const row of matching) {
+        const prior = JSON.parse((row as { body: string }).body) as KnowledgeEntry;
+        if (fingerprint(prior.sourceLinks) === fingerprint(input.sourceLinks)) return prior;
+      }
+    }
     const identity = `knowledge:${createHash("sha256").update(JSON.stringify({ projectId: input.projectId, summary: input.summary, sourceLinks: [...input.sourceLinks].sort((a,b) => a.path.localeCompare(b.path)), evidenceEventIds: [...input.evidenceEventIds].sort() })).digest("hex")}`;
     const existing = this.getKnowledge(identity); if (existing) return existing;
     const now = new Date().toISOString(); const entry: KnowledgeEntry = { projectId: input.projectId, summary: input.summary, sourceLinks: input.sourceLinks, evidenceEventIds: input.evidenceEventIds, id: identity, status: "current", createdAt: now, updatedAt: now }; write(this.#db, "learning_knowledge", entry); return entry;
