@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { homeStateDir } from "@0/shared";
 import { loadLayeredSettings } from "../tui/settings.js";
+import { terminalProgress } from "./terminal-progress.js";
 
 const REPO = "0sec-labs/0";
 const INSTALL_URL = `https://raw.githubusercontent.com/${REPO}/main/install.sh`;
@@ -155,11 +156,25 @@ export async function performAutoUpdate(options: AutoUpdateOptions = {}): Promis
     const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs! > 0
       ? Math.min(options.timeoutMs!, INSTALL_TIMEOUT_MS) : INSTALL_TIMEOUT_MS;
     return await new Promise<AutoUpdateResult>((resolve) => {
+      const interactive = Boolean(process.stderr.isTTY && process.env["TERM"] !== "dumb");
+      const progress = interactive ? terminalProgress(`Updating 0 to ${normalizedTag}`, process.stderr, loadLayeredSettings().settings.reduceMotion) : undefined;
       // bash, not /bin/sh: dash does not implement pipefail. Every descendant
       // belongs to this process group so the deadline stops the whole pipeline.
       const child = spawn("bash", ["-o", "pipefail", "-c", `curl -fsSL --connect-timeout 10 --max-time 30 "${INSTALL_URL}" | bash`], {
-        stdio: "inherit", env, detached: true,
+        stdio: interactive ? ["inherit", "pipe", "pipe"] : "inherit", env, detached: true,
       });
+      let details = "";
+      let pendingLine = "";
+      const report = (chunk: Buffer) => {
+        const text = chunk.toString("utf8");
+        details = (details + text).slice(-16_384);
+        const lines = (pendingLine + text).split(/[\r\n]/);
+        pendingLine = lines.pop()!.slice(-2048);
+        const stage = lines.filter(line => line.trim()).at(-1);
+        if (stage) progress?.update(stage);
+      };
+      child.stdout?.on("data", report);
+      child.stderr?.on("data", report);
       let timedOut = false;
       let settled = false;
       let parentSignal: NodeJS.Signals | undefined;
@@ -167,6 +182,9 @@ export async function performAutoUpdate(options: AutoUpdateOptions = {}): Promis
       const finish = (result: AutoUpdateResult) => {
         if (settled) return;
         settled = true;
+        progress?.finish(result.success ? `✓ Installed ${normalizedTag}` : result.signal ? "Update cancelled." : "Update failed.");
+        // Keep actionable installer errors and optional-companion warnings visible.
+        if (interactive && details && (!result.success || /0 installer:|Could not update/.test(details))) process.stderr.write(details.endsWith("\n") ? details : `${details}\n`);
         clearTimeout(timer);
         clearTimeout(killTimer);
         process.removeListener("SIGINT", onInterrupt);
@@ -234,7 +252,7 @@ export async function maybeNotifyUpdate(currentVersion: string, options: NotifyO
   if (attemptedAutomaticTags.has(tag) || (cache.lastInstallTag === tag && recent(cache.lastInstallAttemptAt, now))) return;
   attemptedAutomaticTags.add(tag);
   writeCache({ ...cache, lastInstallTag: tag, lastInstallAttemptAt: new Date(now).toISOString() });
-  process.stderr.write(`[0] Updating to ${tag} before starting the console…\n`);
+  if (!process.stderr.isTTY || process.env["TERM"] === "dumb") process.stderr.write(`[0] Updating to ${tag} before starting 0…\n`);
   const result = await performAutoUpdate({ version: tag });
   if (result.signal) {
     process.kill(process.pid, result.signal);

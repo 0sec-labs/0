@@ -484,6 +484,11 @@ Startup behavior depends on the **saved global** `updatePolicy`:
   proceeding. This can delay startup; the current process keeps its running
   version, so restart to use the installed binary.
 
+In an interactive terminal, updates show one status line with the current stage
+and elapsed time. Reduced motion keeps the indicator still. Redirected output
+stays plain text, and installer errors remain visible. Direct `install.sh`
+downloads show a terminal progress bar.
+
 If no global policy is saved, the built-in setting default alone does not grant
 automatic installation. The compatibility path checks asynchronously only when
 `ZERO_UPDATE_CHECK=1`. All startup paths require a TTY and honor `CI`,

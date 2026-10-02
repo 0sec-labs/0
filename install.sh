@@ -48,17 +48,29 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-printf '%s\n' "Downloading ${ASSET}…" >&2
+download() {
+  task_download_url="$1"
+  task_download_path="$2"
+  shift 2
+  if [ -t 2 ] && [ "${TERM:-}" != "dumb" ]; then
+    curl --fail --location --progress-bar --show-error --retry 3 --retry-delay 1 "$@" "$task_download_url" -o "$task_download_path"
+  else
+    curl --fail --location --silent --show-error --retry 3 --retry-delay 1 "$@" "$task_download_url" -o "$task_download_path"
+  fi
+}
+printf '%s\n' "Fetching release checksums…" >&2
 curl --fail --location --silent --show-error --retry 3 --retry-delay 1 \
   "${RELEASE_BASE_URL}/checksums.txt" -o "$manifest"
-curl --fail --location --silent --show-error --retry 3 --retry-delay 1 \
-  "${RELEASE_BASE_URL}/${ASSET}" -o "$binary"
+printf '%s\n' "Downloading ${ASSET}…" >&2
+download "${RELEASE_BASE_URL}/${ASSET}" "$binary"
 
+printf '%s\n' "Verifying ${ASSET}…" >&2
 expected="$(awk -v asset="$ASSET" '$2 == asset || $2 == ("*" asset) { print $1; exit }' "$manifest")"
 [ -n "$expected" ] || fail "checksums.txt has no entry for ${ASSET}"
 actual="$(sha256_file "$binary")"
 [ "$expected" = "$actual" ] || fail "checksum mismatch for ${ASSET}; refusing to install"
 
+printf '%s\n' "Installing 0…" >&2
 chmod 755 "$binary"
 mv -f "$binary" "${INSTALL_DIR}/0"
 binary=""
@@ -92,9 +104,8 @@ if [ "${INSTALL_FOXGUARD:-1}" != "0" ]; then
     fg_binary="$(mktemp "${INSTALL_DIR}/.${FG_ASSET}.XXXXXX")"
 
     printf '%s\n' "Downloading FoxGuard ${FOXGUARD_TAG} companion (${FG_ASSET})…" >&2
-    if curl --fail --location --silent --show-error --connect-timeout 10 \
-      --max-time 30 --retry 1 --retry-delay 1 --retry-max-time 35 \
-      "https://github.com/${FOXGUARD_REPO}/releases/download/${FOXGUARD_TAG}/${FG_ASSET}" -o "$fg_binary"; then
+    if download "https://github.com/${FOXGUARD_REPO}/releases/download/${FOXGUARD_TAG}/${FG_ASSET}" "$fg_binary" \
+      --connect-timeout 10 --max-time 30 --retry 1 --retry-delay 1 --retry-max-time 35; then
       actual="$(sha256_file "$fg_binary")"
       if [ "$FG_SHA256" = "$actual" ]; then
         chmod 755 "$fg_binary"
