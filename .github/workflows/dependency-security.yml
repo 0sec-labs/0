@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   npm:
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -35,7 +35,7 @@ jobs:
         run: pnpm audit --audit-level=high
 
   cargo:
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6

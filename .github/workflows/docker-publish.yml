@@ -39,10 +39,10 @@ jobs:
   build-and-push:
     if: >-
       github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository
-    # Self-hosted X64 runner (same as worker-publish/dashboard-build) — far
-    # faster than GitHub's 2-vCPU hosted runners and shares the buildx layer
-    # cache with the other image builds. amd64-only (below) so no QEMU needed.
-    runs-on: [self-hosted, Linux, X64]
+    # Isolate build/pull storage from the shared runner pool. Layers are reused
+    # through the scoped Actions cache below; amd64 requires no emulation.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     env:
       # Suppress build-record artifact upload — see the 0-side fix.
       # docker/build-push-action v6 uploads a `.dockerbuild` record per
@@ -160,6 +160,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push — retry
+        id: build_retry
         if: steps.build.outcome == 'failure'
         uses: docker/build-push-action@v7
         with:
@@ -198,12 +199,12 @@ jobs:
           # months of runs (e52a2e8, 2026-07-27) while the push underneath had
           # succeeded perfectly.
           #
-          # `steps.build.outputs.digest` is the immutable digest the push step
-          # just produced. It cannot drift from what was pushed, it cannot be
+          # Use the successful attempt's immutable digest, including retries.
+          # It cannot drift from what was pushed, it cannot be
           # reordered by a tag-plan change, and it is exactly the reference the
           # release manifest pins — so this now smoke-tests the artifact we
           # actually promote.
-          IMAGE="ghcr.io/${{ github.repository_owner }}/0@${{ steps.build.outputs.digest }}"
+          IMAGE="${{ steps.image.outputs.name }}@${{ steps.build_retry.outputs.digest || steps.build.outputs.digest }}"
           echo "Smoke-testing $IMAGE"
           docker pull "$IMAGE"
           # Exec every tool as the non-root `ubuntu` user the image drops to.

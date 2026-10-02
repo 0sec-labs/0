@@ -13,7 +13,8 @@ concurrency:
 
 jobs:
   verify:
-    runs-on: [self-hosted, Linux, X64]
+    # Fresh job-local storage avoids failures from the shared runner pool's full disk.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
