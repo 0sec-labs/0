@@ -7,8 +7,6 @@ import { cn } from "@/lib/utils";
 import { LoadingDots } from "./loading-state";
 import type { ConsoleWorkspace } from "./use-console-workspace";
 import { orderSessionRail } from "./session-rail-order";
-import { FindingSidebar } from "./finding-sidebar";
-import type { FindingRecord } from "@/types";
 
 function SessionActivity({ status }: { status: DesktopConsoleSession["status"] }) {
   if (status === "ready" || status === "closed") return null;
@@ -22,7 +20,7 @@ function SessionActivity({ status }: { status: DesktopConsoleSession["status"] }
   </span>;
 }
 
-export function ConsoleSessionRail({ workspace, selectedId, onCreate, onArchiveLive, onArchive, onDeleteLive, onResume, onDelete, onSelect, onAddFinding }: {
+export function ConsoleSessionRail({ workspace, selectedId, onCreate, onArchiveLive, onArchive, onDeleteLive, onResume, onDelete, onSelect }: {
   workspace: ConsoleWorkspace;
   selectedId?: string;
   onCreate: () => void;
@@ -34,7 +32,6 @@ export function ConsoleSessionRail({ workspace, selectedId, onCreate, onArchiveL
   onDelete: (saved: ConsoleSavedSession) => void;
   onExport: (id: string, saved: boolean) => void;
   onSelect?: () => void;
-  onAddFinding: (finding: FindingRecord) => void;
 }) {
   const [query, setQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
@@ -68,7 +65,6 @@ export function ConsoleSessionRail({ workspace, selectedId, onCreate, onArchiveL
       </div>;
       })}{!rows.length && <p className="px-2 py-6 text-center text-xs text-muted-foreground">{needle ? "No matching chats." : showArchived ? "No archived chats." : "No chats yet."}</p>}
     </div>
-    {!showArchived && <div className="max-h-[40%] shrink-0 overflow-y-auto"><FindingSidebar query={query} busy={workspace.busy || !workspace.snapshot} onAdd={onAddFinding} /></div>}
     <div className="space-y-2 p-3 lg:hidden"><div className="flex items-center justify-between text-sm text-muted-foreground"><Link to={selectedId ? `/settings?session=${encodeURIComponent(selectedId)}&return=${encodeURIComponent(`/console/${selectedId}`)}` : "/settings"} className="flex items-center gap-1.5 rounded-lg px-1 py-1 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"><Settings className="size-3.5" />Settings</Link><Link to="/findings" className="flex items-center gap-1.5 rounded-lg px-1 py-1 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"><ShieldCheck className="size-3.5" />Findings</Link></div></div>
     <div className="shrink-0 p-2 pt-1">
       <button type="button" aria-controls="chat-sidebar-list" aria-pressed={showArchived} onClick={() => setShowArchived(value => !value)} className={cn("flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-normal transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40", showArchived ? "bg-muted text-foreground" : "text-muted-foreground")}><Archive aria-hidden="true" className="size-4 shrink-0" />{showArchived ? "Back to chats" : "Archived chats"}</button>

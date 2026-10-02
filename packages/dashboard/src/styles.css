@@ -314,7 +314,6 @@
 .session-row button:focus-visible { box-shadow: none; outline: 1px solid var(--primary); outline-offset: 2px; }
 .console-controls .border-border { border-color: transparent; }
 .console-controls .border-dashed { border-style: none; background: var(--muted); border-radius: 16px; }
-.console-frame details:not([role]), .console-controls details { border-color: transparent; border-radius: 16px; background: color-mix(in srgb, var(--muted), transparent 35%); }
 .session-row { min-height: 40px; }
 
 /* Keep panel contents mounted so both opening and closing can finish smoothly. */
