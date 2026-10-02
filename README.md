@@ -74,14 +74,13 @@ Use `0 learning status` or open Learning in the browser.
 
 ## See Zero at work
 
-![Ask Zero and inspect a source review in the web app](assets/product-preview/chat.png)
+A source review of the included [demo API](assets/examples/demo-api/), with code locations and suggested fixes.
 
-![Plan a reusable security workflow in the web app](assets/product-preview/workflow.png)
+![Demo API source review in Zero](assets/screenshots/web-chat.jpg)
 
-A real source-only review of the included [demo API](assets/examples/demo-api/).
-The review identifies source flaws; it does not show runtime exploit verification.
-[Full-resolution chat](assets/screenshots/web-chat.jpg) · [Full-resolution workflow](assets/screenshots/web-workflow.jpg)
+Start a workflow from a template and edit its steps.
 
+![Workflow editor in Zero](assets/screenshots/web-workflow.jpg)
 
 ## Use 0 from another agent
 
