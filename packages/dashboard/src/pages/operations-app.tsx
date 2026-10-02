@@ -1,9 +1,9 @@
-import { useEffect, useEffectEvent, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
 import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useBackendApi } from "@/api";
 import { AppShell } from "@/components/app-shell";
-import { CommandPalette, type SearchMode } from "@/components/command-palette";
+import { CommandPalette, type SearchMode, type SearchRequest } from "@/components/command-palette";
 import { DashboardPanelProvider } from "@/components/dashboard-panel";
 import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,8 @@ export function OperationsApp() {
   const { client, getDashboard, getScans, webFetchJson } = useBackendApi();
   const location = useLocation();
   const operationsVisible = /^\/(?:dashboard|operations|threads|findings|runs|scans|live)(?:\/|$)/.test(location.pathname);
+  const searchReturnFocus = useRef<HTMLElement | null>(null);
+  const rememberSearchFocus = () => { searchReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; };
   const [searchMode, setSearchMode] = useState<SearchMode>("all");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const dashboardQuery = useQuery({ queryKey: ["dashboard", client.backendId], queryFn: getDashboard, enabled: operationsVisible || paletteOpen, refetchInterval: 5000 });
@@ -74,17 +76,25 @@ export function OperationsApp() {
   const handleHotkey = useEffectEvent((event: KeyboardEvent) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
       event.preventDefault();
+      if (!paletteOpen) rememberSearchFocus();
       setSearchMode("all");
       setPaletteOpen((value) => !value);
     } else if (!paletteOpen && event.key === "/" && !isTypingTarget(event.target)) {
       event.preventDefault();
+      rememberSearchFocus();
       setSearchMode("all");
       setPaletteOpen(true);
     }
   });
   useEffect(() => {
     const listener = (event: KeyboardEvent) => handleHotkey(event);
-    const openSearch = (event: Event) => { setSearchMode((event as CustomEvent<SearchMode>).detail === "chats" ? "chats" : "all"); setPaletteOpen(true); };
+    const openSearch = (event: Event) => {
+      const request = (event as CustomEvent<SearchRequest>).detail;
+      rememberSearchFocus();
+      if (request.returnFocus) searchReturnFocus.current = request.returnFocus;
+      setSearchMode(request.mode === "chats" ? "chats" : "all");
+      setPaletteOpen(true);
+    };
     window.addEventListener("keydown", listener);
     window.addEventListener("zero:open-search", openSearch);
     return () => { window.removeEventListener("keydown", listener); window.removeEventListener("zero:open-search", openSearch); };
@@ -107,7 +117,7 @@ export function OperationsApp() {
   return (
     <DashboardPanelProvider>
       <AppShell>
-        <CommandPalette mode={searchMode} onModeChange={setSearchMode} open={paletteOpen} onOpenChange={setPaletteOpen} dashboard={dashboard} scans={scansQuery.data} />
+        <CommandPalette returnFocus={searchReturnFocus} mode={searchMode} onModeChange={setSearchMode} open={paletteOpen} onOpenChange={setPaletteOpen} dashboard={dashboard} scans={scansQuery.data} />
         <Routes>
           <Route path="/" element={<Navigate to="/console" replace />} />
           <Route path="/console" element={<ConsolePage />} />

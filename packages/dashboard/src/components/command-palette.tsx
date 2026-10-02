@@ -28,8 +28,9 @@ type PaletteAction = {
 };
 
 export type SearchMode = "all" | "chats";
-export function openAppSearch(mode: SearchMode = "all") {
-  window.dispatchEvent(new CustomEvent("zero:open-search", { detail: mode }));
+export type SearchRequest = { mode: SearchMode; returnFocus?: HTMLElement };
+export function openAppSearch(mode: SearchMode = "all", returnFocus?: HTMLElement) {
+  window.dispatchEvent(new CustomEvent<SearchRequest>("zero:open-search", { detail: { mode, returnFocus } }));
 }
 
 const GROUPS: PaletteAction["group"][] = ["Recent chats", "Actions", "Pages", "Findings", "Runs"];
@@ -41,6 +42,7 @@ export function CommandPalette({
   scans,
   mode = "all",
   onModeChange,
+  returnFocus,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -48,6 +50,7 @@ export function CommandPalette({
   scans?: ScanRecord[];
   mode?: SearchMode;
   onModeChange?: (mode: SearchMode) => void;
+  returnFocus?: React.RefObject<HTMLElement | null>;
 }) {
   const { client, getFindingFamily, updateFindingFamilyTriage, webFetch, listConsoleSessions, listSavedConsoleSessions, resumeConsoleSession } = useBackendApi();
   const navigate = useNavigate();
@@ -332,7 +335,7 @@ export function CommandPalette({
   const chatsError = chatsQuery.error;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onOpenAutoFocus={() => { restoreFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }} onCloseAutoFocus={event => { event.preventDefault(); restoreFocus.current?.focus(); }} className="gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-[720px] dark:bg-[#222222]" showCloseButton={false}>
+      <DialogContent onOpenAutoFocus={() => { restoreFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }} onCloseAutoFocus={event => { event.preventDefault(); const target = returnFocus?.current ?? restoreFocus.current; if (target?.isConnected) target.focus(); }} className="gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-[720px] dark:bg-[#222222]" showCloseButton={false}>
         <DialogHeader className="sr-only">
           <DialogTitle>Search</DialogTitle>
           <DialogDescription>Search chats, pages, findings and runs. Use the arrow keys to select a result.</DialogDescription>
