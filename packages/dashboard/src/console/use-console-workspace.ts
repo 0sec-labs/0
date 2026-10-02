@@ -13,6 +13,7 @@ export interface ConsoleWorkspace {
   error: string | undefined;
   busy: boolean;
   draft: string;
+  rootDraft: string;
   dismissError(): void;
   setDraft(value: string): void;
   setRootDraft(value: string): void;
@@ -157,10 +158,10 @@ export function useConsoleWorkspace(sessionId: string | undefined, workerId: str
     error: error && (error.source === "action" || !error.sessionId || error.sessionId === sessionId) ? error.message : (sessionsQuery.error ?? savedQuery.error)?.message,
     dismissError: () => setError(null),
     busy: pending.length > 0, draft,
+    rootDraft: typeof drafts[`${sessionId ?? "new"}:root`] === "string" ? drafts[`${sessionId ?? "new"}:root`]! : "",
     setDraft: (value: string) => setDrafts((previous) => ({ ...previous, [draftKey]: value })),
     setRootDraft: (value: string) => setDrafts((previous) => ({ ...previous, [`${sessionId ?? "new"}:root`]: value })),
     forgetDrafts: (id: string) => setDrafts((previous) => Object.fromEntries(Object.entries(previous).filter(([key]) => !key.startsWith(`${id}:`)))),
     perform, send, create, refresh,
   };
 }
-

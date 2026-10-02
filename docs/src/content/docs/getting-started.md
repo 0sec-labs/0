@@ -120,6 +120,9 @@ Choose **Auto** to work autonomously within the engagement and ask before
 expanding beyond it when [scope enforcement](/scope/) is enabled. Auto uses the
 engine's `copilot` mode. Both modes can ask for missing context or decisions;
 saved chats retain their existing permission mode.
+Saved findings update in the chat sidebar with a count and recent titles.
+Findings belonging to the current conversation also appear above its transcript.
+**Add to chat** appends a finding reference to your draft; review it before sending.
 Use **Chat** for investigations, **Workflows** for reusable steps and schedules,
 and **Plugins** to connect tools. See the [workflow guide](/workflow/) and
 [engine connections](/engine-connections/) for execution setup.

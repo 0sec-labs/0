@@ -458,5 +458,27 @@
 [data-slot="input"], [data-slot="textarea"] { background: var(--field-surface); border-color: var(--field-border); }
 [data-slot="input"][aria-invalid="true"], [data-slot="textarea"][aria-invalid="true"] { border-color: var(--destructive); }
 
-/* The selected engine scope occupies the space below its connection bar. */
+/* The selected backend scope fills its mounted workspace. */
 .backend-content .console-frame { height: 100%; }
+
+/* Interaction feedback also covers native controls and Kumo's portal items.
+   A translucent overlay preserves filled/semantic colors and works on quiet
+   controls whose hover utility otherwise matches their surrounding surface. */
+:where(button, a[href], [role="button"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="option"], summary, select, input[type="checkbox"], input[type="radio"]):not(:disabled):not([aria-disabled="true"]):not([data-disabled]) {
+  cursor: pointer;
+}
+:where(button, [role="button"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="option"], summary):not(:disabled):not([aria-disabled="true"]):not([data-disabled]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+@media (hover: hover) {
+  :where(button, a[data-slot="button"], [role="button"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="option"], summary):not(:disabled):not([aria-disabled="true"]):not([data-disabled]):hover {
+    background-image: linear-gradient(color-mix(in srgb, var(--foreground) 10%, transparent), color-mix(in srgb, var(--foreground) 10%, transparent));
+  }
+}
+:where([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="option"]):not([aria-disabled="true"]):not([data-disabled])[data-highlighted] {
+  background-image: linear-gradient(color-mix(in srgb, var(--foreground) 10%, transparent), color-mix(in srgb, var(--foreground) 10%, transparent));
+}
+:where(button, [role="button"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="option"], select, input[type="checkbox"], input[type="radio"]):is(:disabled, [aria-disabled="true"], [data-disabled]) {
+  cursor: default;
+}

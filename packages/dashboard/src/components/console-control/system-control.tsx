@@ -1,5 +1,5 @@
 import { ControlDisclosure } from "./control-disclosure";
-import { DEFAULT_AUTONOMY_MODE } from "@0/shared";
+import { DEFAULT_AUTONOMY_MODE } from "@0/shared/dist/desktop-console.js";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
