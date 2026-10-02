@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query";
 import { findCommand, SLASH_COMMANDS } from "@0/shared/dist/slash-commands.js";
 import type { ConsolePublicExport, DesktopConsoleSession, HarnessSnapshot } from "@0/shared";
+import { DEFAULT_AUTONOMY_MODE } from "@0/shared";
 import { Copy, Download, Menu, MoreHorizontal, PanelRight, Plus, Square, Trash2, Pencil, Eraser, X } from "lucide-react";
 import { useBackendApi } from "@/api";
 import { BrandMark } from "@/components/brand-mark";
@@ -115,7 +116,7 @@ export function ConsolePage() {
     }
     creatingSession.current = true;
     try {
-      const created = await workspace.create({ title: "New chat", role: "audit", autonomyMode: "standard" });
+      const created = await workspace.create({ title: "New chat", role: "audit", autonomyMode: DEFAULT_AUTONOMY_MODE });
       if (created) navigate(`/console/${created.id}${search.get("search") === "1" ? "?search=1" : ""}`);
     } finally { creatingSession.current = false; }
   };

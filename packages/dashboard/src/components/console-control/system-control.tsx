@@ -1,4 +1,5 @@
 import { ControlDisclosure } from "./control-disclosure";
+import { DEFAULT_AUTONOMY_MODE } from "@0/shared";
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -16,7 +17,7 @@ export const autonomyDescriptions: Record<string, string> = {
   standard: "Asks you before each action.",
   recon: "Read-only. Active and exploit tools are blocked.",
   copilot: "Doesn't ask per action. May add related targets; asks before new ones.",
-  yolo: "Never asks. Your exclusions, private networks and credentials stay protected.",
+  yolo: "Runs tools without per-action prompts. Can still ask for context or necessary decisions.",
 };
 
 function ReviewCheckRow({ item, busy, mutate }: { item: CheckItem; busy: boolean; mutate: (mutation: Record<string, unknown>) => void }) {
@@ -39,7 +40,7 @@ export function ProjectControl({ sessionId, onApplied }: { sessionId?: string; o
   const [path, setPath] = useState("");
   const [inspected, setInspected] = useState("");
   const [target, setTarget] = useState("");
-  const [mode, setMode] = useState("standard");
+  const [mode, setMode] = useState<string>(DEFAULT_AUTONOMY_MODE);
   const [autonomyApproved, setAutonomyApproved] = useState(false);
   const [name, setName] = useState("");
   const [prompt, setPrompt] = useState("");
@@ -70,10 +71,10 @@ export function ProjectControl({ sessionId, onApplied }: { sessionId?: string; o
           <Field label="In scope" hint="One per line."><Textarea rows={4} value={inScope} onChange={event => { setInScope(event.target.value); setScopeApproved(false); }} /></Field>
           <Field label="Out of scope" hint="One per line."><Textarea rows={4} value={outOfScope} onChange={event => { setOutOfScope(event.target.value); setScopeApproved(false); }} /></Field>
         </div></ControlDisclosure>
-        <Field label="Autonomy mode" hint={autonomyDescriptions[mode]}><Select aria-label="Autonomy mode" value={mode} onValueChange={value => { setMode(value); setAutonomyApproved(false); }} options={Object.keys(autonomyDescriptions).map(value => ({ value, label: value }))} /></Field>
+        <Field label="Autonomy mode" hint={autonomyDescriptions[mode]}><Select aria-label="Autonomy mode" value={mode} onValueChange={value => { setMode(value); setAutonomyApproved(false); }} options={Object.keys(autonomyDescriptions).map(value => ({ value, label: value === "copilot" ? "Auto" : value === "yolo" ? "YOLO" : value === "recon" ? "Read-only" : "Ask each action" }))} /></Field>
         {["copilot", "yolo"].includes(mode) && <Check checked={autonomyApproved} onChange={setAutonomyApproved}>I understand this mode won't ask before each action.</Check>}
         <Check checked={scopeApproved} onChange={setScopeApproved}>I reviewed this target and scope.</Check>
-        <div className="flex flex-wrap gap-2"><SubmitButton type="submit" pending={configuration.isPending} disabled={!scopeApproved || (["copilot", "yolo"].includes(mode) && !autonomyApproved)}>{sessionId ? "Save" : "Start"}</SubmitButton><Button type="button" variant="outline" onClick={() => { setTarget(snapshot.data?.session.target ?? ""); setMode(snapshot.data?.session.autonomyMode ?? "standard"); setInScope(snapshot.data?.scope?.in_scope?.join("\n") ?? ""); setOutOfScope(snapshot.data?.scope?.out_of_scope?.join("\n") ?? ""); setScopeApproved(false); setAutonomyApproved(false); configuration.reset(); }}>Reset</Button></div>
+        <div className="flex flex-wrap gap-2"><SubmitButton type="submit" pending={configuration.isPending} disabled={!scopeApproved || (["copilot", "yolo"].includes(mode) && !autonomyApproved)}>{sessionId ? "Save" : "Start"}</SubmitButton><Button type="button" variant="outline" onClick={() => { setTarget(snapshot.data?.session.target ?? ""); setMode(snapshot.data?.session.autonomyMode ?? DEFAULT_AUTONOMY_MODE); setInScope(snapshot.data?.scope?.in_scope?.join("\n") ?? ""); setOutOfScope(snapshot.data?.scope?.out_of_scope?.join("\n") ?? ""); setScopeApproved(false); setAutonomyApproved(false); configuration.reset(); }}>Reset</Button></div>
       </form><Feedback error={configuration.error} message={message} />
     </ControlCard>
     {project.data && <ControlCard title="Review checks"><QueryState pending={checks.isPending} error={checks.error} retry={checks.refetch} />{checks.data?.checks.length === 0 && <Empty>No checks yet.</Empty>}{checks.data?.checks.map(item => <ReviewCheckRow key={item.id} item={item} busy={changeCheck.isPending} mutate={mutation => changeCheck.mutate(mutation)} />)}<ControlDisclosure className="border-t border-border pt-4" open={checks.data?.checks.length === 0 || undefined} title={<>Add a check</>}><form className="mt-4 space-y-4" onSubmit={event => { event.preventDefault(); changeCheck.mutate({ action: approveNew ? "add" : "propose", name: name.trim(), prompt: prompt.trim(), ...(approveNew ? { approved: true } : {}) }); }}><TextField label="New check name" value={name} onChange={event => setName(event.target.value)} required maxLength={120} /><Field label="What to check"><Textarea value={prompt} onChange={event => setPrompt(event.target.value)} required maxLength={2000} rows={4} /></Field><Check checked={approveNew} onChange={setApproveNew}>Turn on now (otherwise saved as a draft).</Check><SubmitButton type="submit" pending={changeCheck.isPending} disabled={!name.trim() || !prompt.trim()}>{approveNew ? "Add check" : "Save draft"}</SubmitButton></form></ControlDisclosure><Feedback error={changeCheck.error} /></ControlCard>}
@@ -131,7 +132,7 @@ export function ToolsControl({ sessionId }: { sessionId?: string }) {
     </ControlCard>
     <ControlCard title="All tools">
       <QueryState pending={tools.isPending} error={tools.error} retry={tools.refetch} />
-      <div className="grid gap-4 sm:grid-cols-2"><TextField label="Find a tool" type="search" value={filter} onChange={event => setFilter(event.target.value)} /><Field label="Role"><Select aria-label="Role" value={role} onValueChange={setRole} options={[{ value: "", label: "All roles" }, ...(tools.data?.roles.map(value => ({ value, label: value })) ?? [])]} /></Field></div>
+      <div className="grid gap-4 sm:grid-cols-2"><TextField label="Find a tool" type="search" value={filter} onChange={event => setFilter(event.target.value)} /><Field label="Role"><Select aria-label="Role" value={role} onValueChange={setRole} options={[{ value: "", label: "All roles" }, ...(tools.data?.roles.map(value => ({ value, label: value === "copilot" ? "Auto" : value === "yolo" ? "YOLO" : value === "recon" ? "Read-only" : "Ask each action" })) ?? [])]} /></Field></div>
       {tools.data && rows.length === 0 && <Empty>No tools match these filters.</Empty>}
       <ul className="divide-y divide-border">{rows.map(tool => <li key={tool.name} className="space-y-1 py-3"><h3 className="font-medium text-sm">{tool.name}</h3><p className="text-xs leading-relaxed text-muted-foreground">{tool.description}</p></li>)}</ul>
     </ControlCard>

@@ -115,6 +115,11 @@ mount for the database, journal and reports.
 
 The **Command Center** is the browser workspace for chats, workflows, findings,
 and tool connections. Choose a workspace folder and connect a [model provider](/api-keys/).
+New chats default to **YOLO**, which runs tools without per-action approval.
+Choose **Auto** to work autonomously within the engagement and ask before
+expanding beyond it when [scope enforcement](/scope/) is enabled. Auto uses the
+engine's `copilot` mode. Both modes can ask for missing context or decisions;
+saved chats retain their existing permission mode.
 Use **Chat** for investigations, **Workflows** for reusable steps and schedules,
 and **Plugins** to connect tools. See the [workflow guide](/workflow/) and
 [engine connections](/engine-connections/) for execution setup.

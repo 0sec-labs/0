@@ -77,6 +77,18 @@ async function idle(instance: ConsoleGateway, id: string): Promise<void> {
 }
 
 describe("ConsoleGateway", () => {
+  it("starts new web chats in YOLO and applies Auto through the copilot engine mode", async () => {
+    const createSession = vi.fn(engine);
+    const instance = gateway(createSession);
+    const created = instance.create({ title: "New chat", role: "audit" });
+    expect(created.autonomyMode).toBe("yolo");
+    await instance.send(created.id, "Inspect the workspace.");
+    await idle(instance, created.id);
+    expect(createSession.mock.calls[0]?.[0].autonomyMode).toBe("yolo");
+    await instance.configure(created.id, { autonomyMode: "copilot" });
+    expect(instance.get(created.id).session.autonomyMode).toBe("copilot");
+    expect(instance.get(created.id).pendingDecisions).toEqual([]);
+  });
   it("reopens scheduled working context once without restoring authorization or sending messages", async () => {
     const createSession = vi.fn(engine);
     const instance = gateway(createSession);
