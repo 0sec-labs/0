@@ -273,7 +273,17 @@ const resetOsecDatabaseMock = vi.fn();
 vi.mock("@0/db", () => {
   // The web workflow service owns a separate definition/history store.
   // Keep that boundary mocked too, rather than opening SQLite in HTTP tests.
+  class FakeLearningStore {
+    listEvents(): unknown[] { return []; }
+    listKnowledge(): unknown[] { return []; }
+    listCandidates(): unknown[] { return []; }
+    queueStatus() { return { pending: 0, claimed: 0, completed: 0 }; }
+    claimWork(): null { return null; }
+    recordExperience(): void {}
+    close(): void {}
+  }
   class FakeSecurityWorkflowStore {
+    learningStore() { return new FakeLearningStore(); }
     interruptActiveExecutions(): number { return 0; }
     list(): unknown[] { return []; }
     close(): void {}
@@ -353,6 +363,9 @@ vi.mock("@0/db", () => {
     nextWorkflowTriggerFire: () => new Date().toISOString(),
     SecurityWorkflowStore: FakeSecurityWorkflowStore,
     SecurityWorkflowStoreError: FakeSecurityWorkflowStoreError,
+    LearningStore: FakeLearningStore,
+    LearningStoreError: FakeSecurityWorkflowStoreError,
+    learningProjectId: (root: string) => root,
     resetOsecDatabase: resetOsecDatabaseMock,
   };
 });
@@ -998,7 +1011,7 @@ describe("dashboard — browser request boundaries", () => {
     await runCli(["dashboard", "--no-open"]);
   });
 
-  it.each(["/api/dashboard", "/api/scans", "/api/console/sessions", "/api/console/providers", "/api/console/workflow-triggers"])(
+  it.each(["/api/dashboard", "/api/scans", "/api/console/sessions", "/api/console/providers", "/api/console/workflow-triggers", "/api/console/learning"])(
     "refuses unauthenticated reads of %s before opening the database",
     async (url) => {
       const captured = await invokeHandler(makeRequest({ method: "GET", url }));
@@ -1014,6 +1027,13 @@ describe("dashboard — browser request boundaries", () => {
     const captured = await invokeHandler(makeRequest({ method: "GET", url: "/api/console/workflow-triggers", headers: { "x-0-control-token": token } }));
     expect(captured.statusCode).toBe(200);
     expect(JSON.parse(captured.body)).toEqual({ triggers: [] });
+  });
+
+  it("lists learning state through the authenticated router", async () => {
+    const token = await getControlToken();
+    const captured = await invokeHandler(makeRequest({ method: "GET", url: "/api/console/learning", headers: { "x-0-control-token": token } }));
+    expect(captured.statusCode).toBe(200);
+    expect(JSON.parse(captured.body)).toMatchObject({ events: [], knowledge: [], improvements: [], worker: { events: 0, knowledge: 0, improvements: 0, queue: { pending: 0, claimed: 0, completed: 0 } } });
   });
 
   it.each(["attacker.example:48123", "127.0.0.1:9000", ""])(
