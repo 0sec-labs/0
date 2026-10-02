@@ -39,7 +39,7 @@ export PATH="$HOME/.0/bin:$PATH"
 0 web
 ```
 
-**Browser:** `0 web` · **Terminal:** `0`
+**Command Center (browser):** `0 web` · **Terminal:** `0`
 
 Configure a [model provider](https://docs.0.security/api-keys/) before running AI workflows.
 

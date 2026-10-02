@@ -1,11 +1,12 @@
-# Zero page artwork
+# Retained Zero artwork
 
-These existing transparent poses are copied unchanged from the sibling
-`0cloud/0-www/public/open-horizon` artwork library:
+These source assets are retained for provenance and are no longer rendered or
+bundled in the Command Center. The transparent poses were copied unchanged from
+the sibling `0cloud/0-www/public/open-horizon` artwork library:
 
-- `zero-curious.webp`: `zero-curious-cutout.webp` (catalog 53), empty Findings.
-- `zero-planning.webp`: `zero-infrastructure.webp`, Workflows planning.
-- `zero-connect.webp`: `zero-connect.webp`, Plugins connections.
+- `zero-curious.webp`: `zero-curious-cutout.webp` (catalog 53).
+- `zero-planning.webp`: `zero-infrastructure.webp`.
+- `zero-connect.webp`: `zero-connect.webp`.
 
 The canonical identity and numbered pose references live in
 `0cloud/0-www/public/zero-library/README.md` and `manifest.json`.

@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { BrandMark } from "@/components/brand-mark";
-import zeroMascotUrl from "../../assets/zero-peek.png";
 import { cn } from "@/lib/utils";
 import { ConnectionsControl, useProviders } from "./connections-control";
 import { useConsoleSettings } from "./settings-control";
@@ -103,10 +102,6 @@ export function OnboardingControl({ sessionId, returnTo }: { sessionId?: string;
   return <div className="mx-auto grid min-h-[calc(100dvh-160px)] w-full max-w-5xl items-center gap-8 py-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-16">
     <aside className="text-center lg:sticky lg:top-12 lg:self-center">
       <BrandMark className="mx-auto mb-6" />
-      <div className={cn("relative mx-auto w-40 lg:w-56", current.id !== "welcome" && "hidden lg:block")}>
-        <div aria-hidden="true" className="absolute inset-5 rounded-full bg-primary/10 blur-3xl" />
-        <img src={zeroMascotUrl} alt="" width={224} height={168} className="relative h-auto w-full" />
-      </div>
       <p className="mx-auto mt-6 max-w-64 text-sm leading-6 text-muted-foreground">{stepDescriptions[current.id]}</p>
       <p className="mt-3 text-xs text-muted-foreground">Step {step + 1} of {steps.length}</p>
     </aside>

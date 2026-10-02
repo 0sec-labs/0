@@ -37,8 +37,8 @@ export function SharedWorkspaceLayout({ children, onNew }: {
     </div>
     <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}>
       <SheetContent side="left" className="w-64 p-3">
-        <SheetHeader className="px-3 py-4"><BrandMark compact className="size-7" /><SheetTitle className="sr-only">Workspace navigation</SheetTitle></SheetHeader>
-        <nav aria-label="All workspace pages" className="flex flex-col gap-1">
+        <SheetHeader className="px-3 py-4"><BrandMark compact className="size-7" /><SheetTitle className="sr-only">Command Center navigation</SheetTitle></SheetHeader>
+        <nav aria-label="Command Center pages" className="flex flex-col gap-1">
           {destinations.map(({ to, label, icon: Icon }) => <Button key={to} variant="ghost" asChild className="justify-start"><Link to={to} onClick={() => setNavigationOpen(false)}><Icon className="size-4" />{label}</Link></Button>)}
         </nav>
       </SheetContent>
