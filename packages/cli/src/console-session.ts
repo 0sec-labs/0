@@ -43,6 +43,7 @@ export function createLocalConsoleSession(
     }
     const engineConfig: ConsoleSessionConfig = {
       ...config,
+      codebaseLearning: config.codebaseLearning ?? true,
       scanId,
       db,
       conversationHistory: config.conversationHistory ?? createConversationHistory(),

@@ -3,27 +3,24 @@ title: Learning
 description: Local experience, source-grounded knowledge, and evaluated improvements across security workflows.
 ---
 
-Learning retains experience on your engine and makes improvement history visible.
-Open **Learning** in the browser sidebar, or the **Learning** and **Versions**
-sections of a saved workflow.
+Learning saves useful lessons so later investigations can start with what you
+already know. Open **Learning** in the browser sidebar.
 
-## What is retained
+## Lessons and suggestions
 
-- **Activity:** terminal workflow/step outcomes and conversation lifecycle
-  metadata. Completion, cancellation and infrastructure failure do not become
-  positive or negative vulnerability labels. Chat capture excludes message text
-  and raw tool output.
-- **Notes:** existing opted-in source-grounded codebase notes, with source
-  hashes and evidence references. Eligible native runs continue to use the
-  existing memory retrieval rules. Changed, missing or replaced source files
-  invalidate retained notes when the source-learning context is refreshed.
-- **Suggestions:** proposed and evaluated versions, including their evidence,
-  evaluation kind and actual deployment state. The existing evolution registry
-  remains the authority for evolved artifact activation.
+- **Lessons:** source-linked notes about a codebase: useful files to inspect,
+  trust boundaries, and investigation or testing approaches. Authorized local
+  CLI and web chats can save these with `remember_codebase`. Later chats on the
+  same codebase recall matching lessons and recheck the cited file hashes before
+  each model request. Changed files and disabled lessons are excluded.
+- **Suggestions:** changes to workflow instructions that you can review before
+  applying. Run evidence is shown with each suggestion.
 
-Metadata-only activity does not create boilerplate knowledge or automatically
-rewrite workflow instructions. Verifiers retain their independent context.
-Source-memory opt-in and `ZERO_DISABLE_HUNT_MEMORY` continue to apply.
+A finished chat is history, not a lesson. Completion events remain internal
+records; they do not populate the Lessons view or label vulnerabilities.
+Lessons are hints to check against the source, not verified findings or model
+training. Verifiers do not receive them. `ZERO_DISABLE_HUNT_MEMORY=1` disables
+source memory; the engine API also accepts `codebaseLearning: false`.
 
 ## Process local experience
 
@@ -95,8 +92,8 @@ A successful earlier run is operational evidence, not proof of better security.
 SmolVM console sessions can retain bounded source references before guest teardown.
 The host checks each file hash against the approved workspace and scope; changed,
 out-of-scope, symlinked and oversized files are refused. Guest prose and memory
-summaries are not imported. These references appear as hypothesis-level Activity,
-not verified findings or reusable Knowledge. Full semantic guest-note transfer remains separate work. See the
+summaries are not imported. These references remain internal hypothesis-level records,
+not verified findings or reusable lessons. Full semantic guest-note transfer remains separate work. See the
 [SmolVM qualification report](https://github.com/0sec-labs/0/blob/main/docs/design/smolvm-qualification-20261001.md) for the tested image and remaining blockers.
 
 ## Deployment boundary

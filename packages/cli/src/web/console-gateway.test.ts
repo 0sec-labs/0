@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eventBus, type ConsoleSession, type ConsoleTurnOutcome, type NativeMessage, type ToolCall } from "@0/core";
+import { LearningStore } from "@0/db";
 import { ConsoleGateway, ConsoleGatewayError, type ConsoleGatewaySessionFactoryInput, type ConsoleExecutionContext } from "./console-gateway.js";
 import { loadSession, saveSession } from "../tui/session-store.js";
 
@@ -77,6 +78,21 @@ async function idle(instance: ConsoleGateway, id: string): Promise<void> {
 }
 
 describe("ConsoleGateway", () => {
+  it("shares the web lesson store with local chats without transferring its ownership", async () => {
+    const createSession = vi.fn(engine);
+    const instance = gateway(createSession);
+    const store = new LearningStore(join(homes.at(-1)!, "learning.db"));
+    try {
+      instance.attachSourceLearning(store);
+      const created = instance.create({ title: "Lessons" });
+      await instance.send(created.id, "Inspect the workspace.");
+      await idle(instance, created.id);
+      expect(createSession.mock.calls[0]?.[0].codebaseLearning).toBe(true);
+      expect(createSession.mock.calls[0]?.[0].learningStore).toBe(store);
+      await instance.closeAll();
+      expect(store.listKnowledge()).toEqual([]);
+    } finally { store.close(); }
+  });
   it("starts new web chats in YOLO and applies Auto through the copilot engine mode", async () => {
     const createSession = vi.fn(engine);
     const instance = gateway(createSession);

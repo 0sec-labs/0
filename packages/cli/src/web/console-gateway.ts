@@ -1,7 +1,7 @@
 import { loadServicePluginConnections } from "./service-plugins.js";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { SecurityWorkflowStore } from "@0/db";
+import { SecurityWorkflowStore, type LearningStore } from "@0/db";
 import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -282,6 +282,7 @@ export class ConsoleGateway {
   readonly #createId: () => string;
   readonly #options: ConsoleGatewayOptions;
   #workflowLifecycle?: ConsoleWorkflowLifecycleAdapter;
+  #sourceLearningStore?: LearningStore;
   #learningRecorder?: (event: { id: string; project: string; outcome: string }) => void;
   readonly #callIds = new WeakMap<object, string>();
   constructor(options: ConsoleGatewayOptions = {}) { this.#options = options; this.#now = options.now ?? (() => new Date()); this.#createId = options.createId ?? randomUUID; }
@@ -725,7 +726,7 @@ export class ConsoleGateway {
         const settings = getSettings();
         const callbacks = this.#decisionCallbacks(managed);
         if (this.#options.createSession) {
-          session = await this.#options.createSession({ scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, scope: managed.scope, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
+          session = await this.#options.createSession({ scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, scope: managed.scope, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, codebaseLearning: true, ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}), ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
         } else if (consoleExecutionProfile(this.#options.homeDir) === "smolvm") {
           if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection); managed.runtime = created.runtime; managed.info = created.info; }
           session = createLocalConsoleSession({
@@ -747,7 +748,8 @@ export class ConsoleGateway {
             session = createLocalConsoleSession({ runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
               compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
               scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, scope: managed.scope,
-              initialMessages: managed.initialMessages,
+              initialMessages: managed.initialMessages, codebaseLearning: true,
+              ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}),
               ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}),
               workflowAuthoring: {
                 list: () => { const store = new SecurityWorkflowStore(this.#options.dbPath); try { return store.list(); } finally { store.close(); } },
@@ -799,6 +801,8 @@ export class ConsoleGateway {
     };
   }
   /** Records lifecycle metadata only; conversation text and tool output stay out of learning. */
+  attachSourceLearning(store: LearningStore): void { this.#sourceLearningStore = store; }
+
   attachLearningRecorder(recorder: (event: { id: string; project: string; outcome: string }) => void): void { this.#learningRecorder = recorder; }
   async #startTurn(managed: ManagedSession, body: string): Promise<void> {
     managed.executionEpoch++;

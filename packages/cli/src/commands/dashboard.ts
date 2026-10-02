@@ -1875,6 +1875,7 @@ export function registerDashboardCommand(program: Command): void {
         const consoleGateway = startupGateway = new ConsoleGateway({ dbPath: opts.dbPath });
         const operator = startupOperator = new WebOperatorServices({ isTurnActive: () => consoleGateway.hasActiveTurns() });
         const workflows = startupWorkflows = new WebWorkflowService({ gateway: consoleGateway, dbPath: opts.dbPath });
+        consoleGateway.attachSourceLearning(workflows.learning.store);
         consoleGateway.attachLearningRecorder(event => workflows.learning.recordChatOutcome(event));
         consoleGateway.attachWorkflowLifecycle({ invoke: (sessionId, name, args, capabilities) => workflows.invokeLifecycle(sessionId, name, args, capabilities) });
         const triggers = startupTriggers = new WorkflowTriggerService({ dbPath: opts.dbPath, adapter: {
@@ -1994,7 +1995,7 @@ export function registerDashboardCommand(program: Command): void {
           if (shuttingDown) return;
           shuttingDown = true;
           backends.dispose();
-          void Promise.resolve(engine?.dispose()).then(() => triggers.dispose()).then(() => workflows.dispose()).then(() => consoleGateway.closeAll()).finally(() => {
+          void Promise.resolve(engine?.dispose()).then(() => triggers.dispose()).then(() => consoleGateway.closeAll()).then(() => workflows.dispose()).finally(() => {
             operator.dispose();
             github.dispose();
             server.close(() => {
@@ -2008,8 +2009,8 @@ export function registerDashboardCommand(program: Command): void {
       } catch (error) {
         backends.dispose();
         await startupTriggers?.dispose().catch(() => {});
-        await startupWorkflows?.dispose().catch(() => {});
         await startupGateway?.closeAll().catch(() => {});
+        await startupWorkflows?.dispose().catch(() => {});
         startupOperator?.dispose();
         startupGitHub?.dispose();
         await engine?.dispose().catch(() => {});
