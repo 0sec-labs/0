@@ -1173,6 +1173,14 @@ async function handleWebConsoleApiRequest(
     if (workflow) { json(res, workflow.status, workflow.data); return true; }
     const service = await operator.handle(requestUrl.pathname, method, input, requestUrl.searchParams);
     if (service) { json(res, service.status, service.data); return true; }
+    if (path === "search" && method === "GET") {
+      json(res, 200, await gateway.search({
+        q: requestUrl.searchParams.get("q") ?? "",
+        ...(requestUrl.searchParams.has("limit") ? { limit: Number(requestUrl.searchParams.get("limit")) } : {}),
+        ...(requestUrl.searchParams.has("offset") ? { offset: Number(requestUrl.searchParams.get("offset")) } : {}),
+      }));
+      return true;
+    }
     if (path === "sessions") {
       if (method === "GET") json(res, 200, { sessions: gateway.list() });
       else if (method === "POST") json(res, 201, { session: gateway.create(input) });

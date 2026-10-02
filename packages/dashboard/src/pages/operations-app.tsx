@@ -3,7 +3,7 @@ import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query";
 import { useBackendApi } from "@/api";
 import { AppShell } from "@/components/app-shell";
-import { CommandPalette } from "@/components/command-palette";
+import { CommandPalette, type SearchMode } from "@/components/command-palette";
 import { DashboardPanelProvider } from "@/components/dashboard-panel";
 import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
 import { Button } from "@/components/ui/button";
@@ -23,14 +23,15 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 export function OperationsApp() {
-  const { getDashboard, getScans, webFetchJson } = useBackendApi();
+  const { client, getDashboard, getScans, webFetchJson } = useBackendApi();
   const location = useLocation();
   const operationsVisible = /^\/(?:dashboard|operations|threads|findings|runs|scans|live)(?:\/|$)/.test(location.pathname);
+  const [searchMode, setSearchMode] = useState<SearchMode>("all");
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const dashboardQuery = useQuery({ queryKey: ["dashboard"], queryFn: getDashboard, enabled: operationsVisible || paletteOpen, refetchInterval: 5000 });
-  const scansQuery = useQuery({ queryKey: ["scans"], queryFn: getScans, enabled: operationsVisible || paletteOpen, refetchInterval: 5000 });
+  const dashboardQuery = useQuery({ queryKey: ["dashboard", client.backendId], queryFn: getDashboard, enabled: operationsVisible || paletteOpen, refetchInterval: 5000 });
+  const scansQuery = useQuery({ queryKey: ["scans", client.backendId], queryFn: getScans, enabled: operationsVisible || paletteOpen, refetchInterval: 5000 });
   const themesQuery = useQuery({
-    queryKey: ["console-themes"],
+    queryKey: ["console-themes", client.backendId],
     queryFn: ({ signal }) => webFetchJson<ThemesResponse>("/api/console/themes", { signal }),
     refetchInterval: 5000,
   });
@@ -73,16 +74,20 @@ export function OperationsApp() {
   const handleHotkey = useEffectEvent((event: KeyboardEvent) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
       event.preventDefault();
+      setSearchMode("all");
       setPaletteOpen((value) => !value);
     } else if (!paletteOpen && event.key === "/" && !isTypingTarget(event.target)) {
       event.preventDefault();
+      setSearchMode("all");
       setPaletteOpen(true);
     }
   });
   useEffect(() => {
     const listener = (event: KeyboardEvent) => handleHotkey(event);
+    const openSearch = (event: Event) => { setSearchMode((event as CustomEvent<SearchMode>).detail === "chats" ? "chats" : "all"); setPaletteOpen(true); };
     window.addEventListener("keydown", listener);
-    return () => window.removeEventListener("keydown", listener);
+    window.addEventListener("zero:open-search", openSearch);
+    return () => { window.removeEventListener("keydown", listener); window.removeEventListener("zero:open-search", openSearch); };
   }, [handleHotkey]);
 
   const operations = (content: ReactNode) => {
@@ -102,7 +107,7 @@ export function OperationsApp() {
   return (
     <DashboardPanelProvider>
       <AppShell>
-        <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} dashboard={dashboard} scans={scansQuery.data} />
+        <CommandPalette mode={searchMode} onModeChange={setSearchMode} open={paletteOpen} onOpenChange={setPaletteOpen} dashboard={dashboard} scans={scansQuery.data} />
         <Routes>
           <Route path="/" element={<Navigate to="/console" replace />} />
           <Route path="/console" element={<ConsolePage />} />

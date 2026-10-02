@@ -78,6 +78,21 @@ async function idle(instance: ConsoleGateway, id: string): Promise<void> {
 }
 
 describe("ConsoleGateway", () => {
+  it("searches live and saved replies once, pages results and validates search bounds", async () => {
+    const instance = gateway();
+    const blank = instance.create({ title: "Blank chat" });
+    const live = instance.create({ title: "Customer review" });
+    await instance.send(live.id, "ownership check"); await idle(instance, live.id);
+    instance.save(live.id);
+    saveSession({ id: "saved-search", savedAt: 1, cwd: "/fixture", messageCount: 0, preview: "", summary: "Archived review", archived: true, messages: [{ role: "assistant", content: "ownership check" }] }, homes.at(-1)!);
+    const first = await instance.search({ q: "ownership", limit: 1 });
+    expect(first.results).toEqual([expect.objectContaining({ id: live.id, source: "live" })]);
+    expect(first.hasMore).toBe(true); expect(first.nextOffset).toBe(1);
+    expect((await instance.search({ q: "ownership", limit: 1, offset: first.nextOffset })).results).toEqual([expect.objectContaining({ id: "saved-search", archived: true })]);
+    expect((await instance.search()).results.map(row => row.id)).not.toContain(blank.id);
+    expect((await instance.search({ q: "Complete final text" })).results).toHaveLength(1);
+    for (const query of [{ q: "x".repeat(201) }, { limit: 0 }, { offset: -1 }, { limit: 101 }, { offset: 10_001 }]) await expect(instance.search(query)).rejects.toMatchObject({ statusCode: 400 });
+  });
   it("shares the web lesson store with local chats without transferring its ownership", async () => {
     const createSession = vi.fn(engine);
     const instance = gateway(createSession);

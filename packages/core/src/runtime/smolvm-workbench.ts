@@ -14,6 +14,7 @@ import {
 import type { SmolvmRuntime } from "./smolvm-provision.js";
 import { startWorkbenchBroker } from "./smolvm-broker.js";
 import type { WorkbenchBrokerController } from "./smolvm-broker.js";
+import { assertSmolvmAdmissionAvailable } from "./smolvm-admission-preflight.js";
 
 export interface SmolvmWorkbenchApprovedImage { reference: string; archive: string; digest: string; }
 export interface SmolvmWorkbenchTransport {
@@ -25,6 +26,8 @@ export interface SmolvmWorkbenchTransport {
   maxOutputBytes?: number;
 }
 export interface SmolvmWorkbenchOptions {
+  /** Human-readable startup phases; no guest output or credentials. */
+  onStartupProgress?: (message: string) => void;
   image: string;
   workspaceRoot: string;
   stateRoot: string;
@@ -173,10 +176,13 @@ export async function runSmolvmWorkbench(options: SmolvmWorkbenchOptions): Promi
     lifetime.signal.throwIfAborted();
     await privateSmolvmDirectory(options.stateRoot);
     if (resolve(options.stateRoot) !== await realpath(options.stateRoot)) throw new Error("Workbench state path must not traverse symlinks");
+    await assertSmolvmAdmissionAvailable(options.stateRoot);
+    options.onStartupProgress?.("Checking workspace");
     const sourceWorkspace = await workspaceGrant(options.workspaceRoot, options.stateRoot);
     const assets = await Promise.all((options.readOnlyMounts ?? []).map(async mount => ({ source: await workspaceGrant(mount.source, options.stateRoot), target: mount.target })));
     const status = await getSmolvmWorkbenchStatus({ stateRoot: options.stateRoot, image: options.image });
     if (!status.runtimeReady || !status.imageApproved) throw new Error("Workbench runtime/image prerequisites are missing; run explicit workbench setup first");
+    options.onStartupProgress?.("Checking workspace image");
     const image = await approvedSmolvmWorkbenchImage(options.image, options.stateRoot, lifetime.signal);
     for (const sandboxImage of options.approvedImages ?? []) {
       const approved = await approvedSmolvmWorkbenchImage(sandboxImage.archive, options.stateRoot, lifetime.signal);
@@ -196,11 +202,13 @@ export async function runSmolvmWorkbench(options: SmolvmWorkbenchOptions): Promi
     await privateSmolvmDirectory(guestHome);
     let workspace = sourceWorkspace;
     if (options.workspaceMode === "snapshot") {
+      options.onStartupProgress?.("Copying workspace");
       privateWorkspace = join(runRoot, "workspace"); privateState = guestState;
       await snapshotSmolvmWorkspace(sourceWorkspace, privateWorkspace, options.snapshotLimits, lifetime.signal);
       workspace = privateWorkspace;
     }
     const archive = join(root, "image.tar");
+    options.onStartupProgress?.("Preparing workspace image");
     await copyFile(image.path, archive, constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE);
     await chmod(archive, 0o400);
     if (await smolvmArchiveDigest(archive, lifetime.signal) !== image.digest) throw new Error("Approved workbench archive changed during private staging");
@@ -300,6 +308,7 @@ export async function runSmolvmWorkbench(options: SmolvmWorkbenchOptions): Promi
           try { await lease.writeFile(JSON.stringify({ schemaVersion: 1, root, token, cpus: options.cpus, memoryMb: options.memoryMb, storageGb: options.storageGb })); await lease.sync(); }
           finally { await lease.close(); }
           lifetime.signal.throwIfAborted();
+          options.onStartupProgress?.("Starting workspace");
           control.write("launch\n");
         } catch (error) { result.error = error instanceof Error ? error.message : String(error); cancel(); }
       }

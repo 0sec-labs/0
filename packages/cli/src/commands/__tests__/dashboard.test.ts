@@ -756,6 +756,17 @@ describe("dashboard — web console API", () => {
     await runCli(["dashboard", "--no-open"]);
   });
 
+  it("protects chat search and validates bounded pagination before reading history", async () => {
+    const denied = await invokeHandler(makeRequest({ method: "GET", url: "/api/console/search?q=review" }));
+    expect(denied.statusCode).toBe(403);
+    const headers = { "x-0-control-token": await getControlToken() };
+    const invalid = await invokeHandler(makeRequest({ method: "GET", url: "/api/console/search?q=review&limit=101", headers }));
+    expect(invalid.statusCode).toBe(400);
+    expect(JSON.parse(invalid.body).error).toContain("Search limit");
+    const oversized = await invokeHandler(makeRequest({ method: "GET", url: `/api/console/search?q=${"x".repeat(201)}`, headers }));
+    expect(oversized.statusCode).toBe(400);
+  });
+
   it("requires the page-bound control token before exporting retained reports", async () => {
     const captured = await invokeHandler(makeRequest({ method: "GET", url: "/api/scans/example/export?format=json" }));
     expect(captured.statusCode).toBe(403);

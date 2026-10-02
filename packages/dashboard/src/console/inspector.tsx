@@ -1,6 +1,6 @@
 import type { ConsoleSessionSnapshot, HarnessUiEvent, HarnessViewBlock } from "@0/shared";
 import { Link } from "react-router-dom";
-import { Check, Circle, Minus } from "lucide-react";
+import { Check, Circle, Minus, Monitor, Box } from "lucide-react";
 import { LoadingDots } from "./loading-state";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -21,6 +21,10 @@ export function ConsoleInspector({ snapshot, busy, stagePrompt, onScope, onDrain
       <span className="mt-0.5 shrink-0 text-muted-foreground" aria-hidden="true">{todo.status === "completed" ? <Check className="size-3.5" /> : todo.status === "cancelled" ? <Minus className="size-3.5" /> : todo.status === "in_progress" ? <LoadingDots className="console-loading-dots-compact" /> : <Circle className="size-3.5" />}</span>
       <span className={todo.status === "completed" || todo.status === "cancelled" ? "text-muted-foreground line-through" : ""}>{todo.content}<span className="sr-only"> · {todo.status.replaceAll("_", " ")}</span></span>
     </li>)}</ol></section>}
+    {snapshot.execution && <section className="space-y-3"><div className="flex items-center justify-between gap-3"><h3 className="text-sm font-medium">Environment</h3><Button asChild variant="ghost" size="sm" className="h-7 px-2"><Link to={`/settings${controlsQuery}&section=agents`}>Change</Link></Button></div>
+      <div className="flex items-center gap-3 rounded-xl bg-muted/30 px-3 py-3">{snapshot.execution.backend === "smolvm" ? <Box aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" /> : <Monitor aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />}<div className="min-w-0 space-y-1"><p className="text-xs font-medium">{snapshot.execution.backend === "smolvm" ? "SmolVM · Linux sandbox" : "This computer"}</p><p role="status" className="text-xs text-muted-foreground">{snapshot.execution.status === "pending" ? snapshot.execution.message ?? "Not started" : snapshot.execution.status === "running" ? "Running" : snapshot.execution.status === "ready" ? "Ready" : snapshot.execution.status === "failed" ? "Couldn’t start" : "Stopped"}</p></div></div>
+      {snapshot.execution.backend === "smolvm" && snapshot.execution.cpus && snapshot.execution.memoryMb && <p className="text-xs text-muted-foreground">{snapshot.execution.cpus} CPUs · {snapshot.execution.memoryMb / 1024} GiB memory</p>}
+    </section>}
     {(snapshot.workspacePath || snapshot.localScopePath) && <section className="space-y-2"><h3 className="text-sm font-medium">Workspace</h3><p className="break-words text-xs leading-5 text-muted-foreground">{snapshot.workspacePath ?? snapshot.localScopePath}</p></section>}
     <ChatFindings sessionId={snapshot.session.id} savedId={snapshot.session.savedId} busy={busy} onAdd={onAddFinding} />
     <section className="space-y-3"><div className="flex items-center justify-between gap-3"><h3 className="text-sm font-medium">Chat settings</h3><Button asChild variant="ghost" size="sm" className="h-7 px-2"><Link to={`/models${controlsQuery}`}>Change</Link></Button></div>

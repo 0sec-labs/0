@@ -1,4 +1,5 @@
 import { loadServicePluginConnections } from "./service-plugins.js";
+import { matchChat, searchSavedChats, type ChatSearchResult } from "./chat-search.js";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { SecurityWorkflowStore, type LearningStore } from "@0/db";
@@ -504,6 +505,27 @@ export class ConsoleGateway {
     const raw = object(value, "Saved session query"); allowedKeys(raw, ["cwd", "limit"]);
     if (raw.limit !== undefined && (!Number.isSafeInteger(raw.limit) || (raw.limit as number) < 1 || (raw.limit as number) > 1_000)) throw new ConsoleGatewayError("Saved session limit must be 1–1,000.", 400);
     return listSessions(this.#options.homeDir, { ...(raw.cwd !== undefined ? { cwd: text(raw.cwd, "Working directory", MAX_TARGET_LENGTH) } : {}), ...(raw.limit !== undefined ? { limit: raw.limit as number } : {}) });
+  }
+  async search(value: unknown = {}): Promise<{ results: ChatSearchResult[]; hasMore: boolean; nextOffset: number | null; truncated: boolean }> {
+    const raw = object(value, "Chat search"); allowedKeys(raw, ["q", "limit", "offset"]);
+    const query = raw.q === undefined ? "" : text(raw.q, "Search query", 200, true).trim();
+    const limit = raw.limit ?? 30; const offset = raw.offset ?? 0;
+    if (!Number.isSafeInteger(limit) || (limit as number) < 1 || (limit as number) > 100) throw new ConsoleGatewayError("Search limit must be 1–100.", 400);
+    if (!Number.isSafeInteger(offset) || (offset as number) < 0 || (offset as number) > 10_000) throw new ConsoleGatewayError("Search offset must be 0–10,000.", 400);
+    const excluded = new Set<string>(); const live: ChatSearchResult[] = [];
+    for (const managed of this.#sessions.values()) {
+      // Closed transcripts come from disk so their archive state stays authoritative.
+      if (managed.status === "closed") continue;
+      excluded.add(managed.id); if (managed.savedId) excluded.add(managed.savedId);
+      const messages = [...(managed.session?.messages ?? managed.initialMessages), ...managed.queued.map(message => ({ role: "user", content: message.text }))];
+      if (!messages.length) continue;
+      const result = matchChat({ id: managed.id, ...(managed.savedId ? { savedId: managed.savedId } : {}), title: managed.title, updatedAt: managed.updatedAt, archived: false, status: managed.status, source: "live", messages }, query);
+      if (result) live.push(result);
+    }
+    const saved = await searchSavedChats(this.#options.homeDir, query, excluded);
+    const all = [...live, ...saved.results].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id));
+    const end = (offset as number) + (limit as number); const hasMore = all.length > end;
+    return { results: all.slice(offset as number, end), hasMore, nextOffset: hasMore ? end : null, truncated: saved.truncated };
   }
   loadSaved(id: string): { meta: ConsoleSavedSession; messages: ConsolePublicMessage[] } {
     const stored = this.#stored(id); const { messages, consoleState: _displayOnly, ...meta } = stored; return { meta, messages: publicMessages(messages) };

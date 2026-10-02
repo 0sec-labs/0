@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Archive, ArchiveRestore, CircleAlert, MessageCircleQuestion, SquarePen, Search, Trash2, Settings, ShieldCheck } from "lucide-react";
 import type { ConsoleSavedSession, DesktopConsoleSession } from "@0/shared";
-import { Input } from "@/components/ui/input";
+import { openAppSearch } from "@/components/command-palette";
 import { cn } from "@/lib/utils";
 import { LoadingDots } from "./loading-state";
 import type { ConsoleWorkspace } from "./use-console-workspace";
@@ -33,15 +33,13 @@ export function ConsoleSessionRail({ workspace, selectedId, onCreate, onArchiveL
   onExport: (id: string, saved: boolean) => void;
   onSelect?: () => void;
 }) {
-  const [query, setQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
-  const needle = query.trim().toLowerCase();
-  const live = workspace.sessions.filter((session) => !showArchived && session.status !== "closed" && ((session.messageCount ?? 0) > 0 || session.status !== "ready") && `${session.title ?? ""} ${session.target} ${session.role} ${session.runtime?.model ?? ""} ${session.status}`.toLowerCase().includes(needle));
+  const live = workspace.sessions.filter((session) => !showArchived && session.status !== "closed" && ((session.messageCount ?? 0) > 0 || session.status !== "ready"));
   const activeIds = new Set(workspace.sessions.filter(session => session.status !== "closed").flatMap(session => [session.id, ...("savedId" in session && typeof session.savedId === "string" ? [session.savedId] : [])]));
-  const saved = workspace.saved.filter(session => session.messageCount > 0 && !activeIds.has(session.id)).filter((session) => Boolean(session.archived) === showArchived).filter((session) => `${session.summary ?? ""} ${session.preview} ${session.target ?? ""} ${session.model ?? ""}`.toLowerCase().includes(needle));
+  const saved = workspace.saved.filter(session => session.messageCount > 0 && !activeIds.has(session.id)).filter((session) => Boolean(session.archived) === showArchived);
   const rows = orderSessionRail(live, saved, workspace.saved);
   return <div className="session-rail flex h-full min-h-0 flex-col">
-    <div className="shrink-0 space-y-2 p-2"><button type="button" className="relative h-9 w-full rounded-lg pl-8 pr-3 text-left text-sm font-normal text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50" disabled={workspace.busy} onClick={onCreate}><SquarePen aria-hidden="true" className="pointer-events-none absolute left-2.5 top-2.5 size-3.5" />New chat</button><div className="relative"><Search className="pointer-events-none absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} className="h-9 pl-8 text-sm" placeholder="Search chats" aria-label="Search chats" /></div></div>
+    <div className="shrink-0 space-y-2 p-2"><button type="button" className="relative h-9 w-full rounded-lg pl-8 pr-3 text-left text-sm font-normal text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50" disabled={workspace.busy} onClick={onCreate}><SquarePen aria-hidden="true" className="pointer-events-none absolute left-2.5 top-2.5 size-3.5" />New chat</button><button type="button" onClick={() => { onSelect?.(); openAppSearch("chats"); }} className="relative h-9 w-full rounded-lg pl-8 pr-3 text-left text-sm font-normal text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40" aria-keyshortcuts="Meta+K Control+K"><Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-2.5 size-3.5" />Search chats</button></div>
     <div id="chat-sidebar-list" className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2" aria-label={showArchived ? "Archived chats" : "Chats"}>
       {rows.map((row) => {
         if (row.kind === "live") {
@@ -63,7 +61,7 @@ export function ConsoleSessionRail({ workspace, selectedId, onCreate, onArchiveL
           <button type="button" aria-label={`Delete ${session.summary || session.target || "chat"}`} title="Delete chat" disabled={workspace.busy} onClick={() => onDelete(session)} className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-red-500/10 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50"><Trash2 aria-hidden="true" className="size-4" /></button>
         </div>
       </div>;
-      })}{!rows.length && <p className="px-2 py-6 text-center text-xs text-muted-foreground">{needle ? "No matching chats." : showArchived ? "No archived chats." : "No chats yet."}</p>}
+      })}{!rows.length && <p className="px-2 py-6 text-center text-xs text-muted-foreground">{showArchived ? "No archived chats." : "No chats yet."}</p>}
     </div>
     <div className="space-y-2 p-3 lg:hidden"><div className="flex items-center justify-between text-sm text-muted-foreground"><Link to={selectedId ? `/settings?session=${encodeURIComponent(selectedId)}&return=${encodeURIComponent(`/console/${selectedId}`)}` : "/settings"} className="flex items-center gap-1.5 rounded-lg px-1 py-1 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"><Settings className="size-3.5" />Settings</Link><Link to="/findings" className="flex items-center gap-1.5 rounded-lg px-1 py-1 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"><ShieldCheck className="size-3.5" />Findings</Link></div></div>
     <div className="shrink-0 p-2 pt-1">

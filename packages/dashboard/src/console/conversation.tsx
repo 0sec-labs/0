@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { consoleErrorMessage, needsProviderSignIn } from "./provider-error";
-import { ArrowDown, ArrowUp, ChevronDown, Plus, FolderSearch, ListChecks, ShieldCheck, Square, Wrench } from "lucide-react";
+import { ArrowDown, ArrowUp, Box, Monitor, ChevronDown, Plus, FolderSearch, ListChecks, ShieldCheck, Square, Wrench } from "lucide-react";
 import type { ConsoleSessionSnapshot, ConsoleWorker, DesktopConsoleDecisionResponse } from "@0/shared";
 import { SLASH_COMMANDS } from "@0/shared/dist/slash-commands.js";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -197,6 +197,17 @@ const COMMAND_SUMMARIES: Record<string, string> = {
   connect: "Connect a provider", usage: "Check usage and cost", back: "Go back", scope: "Manage approved scope", doctor: "Check your setup", exit: "Close this conversation",
 };
 
+function WorkspaceStartup({ message, runId }: { message?: string; runId?: string }) {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    const started = Date.now();
+    setSeconds(0);
+    const timer = setInterval(() => setSeconds(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => clearInterval(timer);
+  }, [runId]);
+  return <Tooltip content="The first message starts an isolated VM and copies your workspace. Later messages reuse it while this chat stays open."><span role="status" className="flex items-center gap-2 px-2 text-xs text-muted-foreground"><LoadingDots />{message ?? "Starting workspace"}…{seconds >= 5 && <span className="tabular-nums">{seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`}</span>}</span></Tooltip>;
+}
+
 function Composer({ workspace, snapshot, worker, onSubmit, onStop, sendBehavior }: { sendBehavior: SendBehavior; workspace: ConsoleWorkspace; snapshot: ConsoleSessionSnapshot; worker?: ConsoleWorker; onSubmit: () => void; onStop: () => void }) {
   const { configureConsoleSession, webFetchJson } = useBackendApi();
   const navigate = useNavigate();
@@ -246,6 +257,9 @@ function Composer({ workspace, snapshot, worker, onSubmit, onStop, sendBehavior 
   const currentTurn = useMemo(() => reduceConversation(snapshot).at(-1), [snapshot]);
   const stopping = active && Boolean(currentTurn?.notices.some(notice => notice.startsWith("Cancellation requested.")));
   const startingWorkspace = active && !worker && snapshot.execution?.backend === "smolvm" && snapshot.execution.status === "pending";
+  const environmentName = snapshot.execution?.backend === "smolvm" ? "SmolVM" : snapshot.execution?.backend === "local" ? "Local" : "Environment";
+  const environmentStatus = snapshot.execution?.status === "pending" ? (active ? "Starting" : "Not started") : snapshot.execution?.status ? snapshot.execution.status[0].toUpperCase() + snapshot.execution.status.slice(1) : undefined;
+  const environmentSettings = `/settings?section=agents&session=${encodeURIComponent(snapshot.session.id)}&return=${encodeURIComponent(`/console/${snapshot.session.id}`)}`;
   const closed = snapshot.session.status === "closed";
   const workerReadOnly = Boolean(worker && !["running", "queued", "parked"].includes(worker.status));
   const canSend = Boolean(workspace.draft.trim()) && workspace.draft.length <= 32000 && !workspace.busy && !closed && !workerReadOnly;
@@ -266,9 +280,10 @@ function Composer({ workspace, snapshot, worker, onSubmit, onStop, sendBehavior 
   return <div className="shrink-0  bg-background p-3 sm:px-6">
     <div className="mx-auto max-w-3xl">
       <div className="console-composer-stack">
-      <div className="console-workspace-bar flex items-center justify-between gap-3">
+      <div className="console-workspace-bar flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <div className="flex min-w-0 items-center gap-1"><BackendConnectionPicker /><FilePathPicker workspace={workspace} sessionId={snapshot.session.id} cwd={snapshot.workspacePath ?? snapshot.scopeEnforcement.projectPath} workspaceDisabled={active || workspace.busy || closed || snapshot.workers.some(item => ["queued", "running", "parked"].includes(item.status))} disabled={closed} /></div>
-        {(stopping || startingWorkspace) && <span role="status" className="flex items-center gap-2 px-2 text-xs text-muted-foreground"><LoadingDots />{stopping ? "Stopping…" : "Starting workspace…"}</span>}
+        <Tooltip content="Change environment for new chats"><Link to={environmentSettings} aria-label={`Environment: ${environmentName}${environmentStatus ? ` ${environmentStatus}` : ""}. Change environment for new chats`} className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary">{snapshot.execution?.backend === "smolvm" ? <Box aria-hidden="true" className="size-3.5" /> : <Monitor aria-hidden="true" className="size-3.5" />}<span>{environmentName}</span>{environmentStatus && <span className="text-muted-foreground/70">· {environmentStatus}</span>}<ChevronDown aria-hidden="true" className="size-3" /></Link></Tooltip>
+        {stopping ? <span role="status" className="flex items-center gap-2 px-2 text-xs text-muted-foreground"><LoadingDots />Stopping…</span> : startingWorkspace && <WorkspaceStartup message={snapshot.execution?.message} runId={snapshot.execution?.runId} />}
       </div>
       <div className="relative console-composer flex flex-col gap-3 p-3 focus-within:ring-2 focus-within:ring-primary/10">
         <IntegrationPicker picker={integrations} />

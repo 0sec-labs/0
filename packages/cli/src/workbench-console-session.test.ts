@@ -10,11 +10,13 @@ vi.mock("@0/core", () => ({
   DEFAULT_MAX_TOOL_ITERATIONS: 100,
   ScopePolicy: class { constructor(readonly raw: unknown) {} },
   getScopeEnforcementState: (projectPath: string, homeDir?: string) => ({ pluginId: "scope", enabled: mock.scopeHome ? homeDir === mock.scopeHome : mock.scopeEnabled, projectPath, message: "scope snapshot" }),
-  runSmolvmWorkbench: (options: { signal: AbortSignal; transport: { initialInput: string; onStdout(data: string): void; onReady(input: { write(data: string): void; end(): void }): void } }) => {
+  runSmolvmWorkbench: (options: { signal: AbortSignal; onStartupProgress?: (message: string) => void; transport: { initialInput: string; onStdout(data: string): void; onReady(input: { write(data: string): void; end(): void }): void } }) => {
     mock.launches.push(options); mock.output = options.transport.onStdout;
     const init = JSON.parse(options.transport.initialInput);
     const emit = (frame: unknown) => options.transport.onStdout(JSON.stringify(frame) + "\n");
     return new Promise(resolve => {
+      options.onStartupProgress?.("Copying workspace");
+      options.onStartupProgress?.("Starting workspace");
       const finish = () => { mock.destroyed = true; resolve({ exitCode: 0, cleanupFailed: mock.cleanupFailed, timedOut: false, ...(mock.cleanupFailed ? { error: "Workbench teardown unconfirmed" } : {}) }); };
       options.signal.addEventListener("abort", finish, { once: true });
       options.transport.onReady({ write(data) {
@@ -41,6 +43,17 @@ async function options() {
   return { config: { workspaceRoot: root, target: root }, workbench: { schemaVersion: 1 as const, image: "/approved.tar", imageDigest: "sha256:" + "a".repeat(64), stateRoot: join(root, "state"), workspaceRoot: root, providers: ["chatgpt-codex"], github: false, cpus: 1, memoryMb: 512, storageGb: 1 }, selection: { model: "granted" }, provider: { provider: "chatgpt-codex" as const, models: ["granted"], request: vi.fn() }, network: false };
 }
 describe("host console VM controller", () => {
+  it("publishes startup phases and clears their message when the guest is ready", async () => {
+    const opts = await options();
+    const updates: Array<{ status: string; message?: string }> = [];
+    const session = createWorkbenchConsoleSession({ ...opts, onExecution: value => updates.push(value) });
+    await session.send("hello");
+    expect(updates).toContainEqual(expect.objectContaining({ status: "pending", message: "Copying workspace" }));
+    expect(updates).toContainEqual(expect.objectContaining({ status: "pending", message: "Starting workspace" }));
+    expect(session.execution).toMatchObject({ status: "ready" });
+    expect(session.execution.message).toBeUndefined();
+    await session.cleanup();
+  });
   it("starts lazily once, routes turns to guest, and uses snapshot isolation", async () => {
     const input = await options(); const session = createWorkbenchConsoleSession(input); const delta = vi.fn();
     await session.ready; session.setAutonomyMode("copilot"); expect(mock.launches).toHaveLength(0);

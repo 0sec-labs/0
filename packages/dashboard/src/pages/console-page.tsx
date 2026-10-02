@@ -1,3 +1,4 @@
+import { openAppSearch } from "@/components/command-palette";
 import { BackendConnectionPicker } from "@/components/backend-connection-picker";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -131,8 +132,7 @@ export function ConsolePage() {
   }, [sessionId, findingId, search, workspace.sessionsLoaded, activeSession]);
   useEffect(() => {
     if (search.get("search") !== "1" || !sessionId) return;
-    if (window.matchMedia("(min-width: 1024px)").matches) sessionRailElement.current?.querySelector<HTMLInputElement>('input[aria-label="Search chats"]')?.focus();
-    else setRailOpen(true);
+    openAppSearch("chats");
     const next = new URLSearchParams(search); next.delete("search"); setSearch(next, { replace: true });
   }, [sessionId, search, setSearch]);
   useEffect(() => {

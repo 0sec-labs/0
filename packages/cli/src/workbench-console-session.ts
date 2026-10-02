@@ -90,7 +90,7 @@ class Controller {
   write(frame: WorkbenchFrame): void { if (!this.input || this.abort.signal.aborted) throw new Error("Workbench VM is unavailable"); this.input.write(encodeWorkbenchFrame(frame)); }
   touch(): void { clearTimeout(this.idle); this.idle = setTimeout(() => { this.abort.abort(new Error("Workbench idle deadline expired")); }, this.options.idleMs ?? 5 * 60_000); this.idle.unref(); }
   async start(): Promise<void> {
-    if (this.started) return this.ready; this.started = true; this.status("pending", "Starting isolated workbench");
+    if (this.started) return this.ready; this.started = true; this.status("pending", "Preparing workspace");
     let stagedPlugins: Awaited<ReturnType<typeof prepareWorkbenchPlugins>> | undefined;
     this.lifetime = setTimeout(() => this.abort.abort(new Error("Workbench lifetime expired")), this.options.lifetimeMs ?? 30 * 60_000); this.lifetime.unref();
     try {
@@ -102,6 +102,7 @@ class Controller {
       this.redact = servicePluginSecretRedactor(servicePluginConnections);
       const plugins = stagedPlugins = await prepareWorkbenchPlugins(this.workspace, this.options.pluginHomeDir);
       this.done = runSmolvmWorkbench({ image: this.options.workbench.image, stateRoot: this.options.workbench.stateRoot, workspaceRoot: this.workspace,
+        onStartupProgress: message => this.status("pending", message),
         command: launch.command, environment: { ZERO_PROVIDER: "chatgpt-codex", ZERO_NO_TELEMETRY: "1", DO_NOT_TRACK: "1" }, network: this.options.network,
         tty: false, cpus: this.options.workbench.cpus, memoryMb: this.options.workbench.memoryMb, storageGb: this.options.workbench.storageGb,
         approvedImages: this.options.workbench.approvedImages, signal: this.abort.signal, workspaceMode: "snapshot", artifactDirectory: artifacts,
