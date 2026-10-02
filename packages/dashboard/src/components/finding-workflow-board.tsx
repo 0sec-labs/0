@@ -1,3 +1,5 @@
+import { BusinessPriorityBadge } from "./business-priority-badge";
+import { getFindingPriority } from "@0/shared/dist/finding-priority.js";
 import { useMemo, useState } from "react";
 import {
   DndContext,
@@ -282,13 +284,14 @@ function WorkflowCard({
           <div className="line-clamp-2 text-sm font-semibold leading-5 text-foreground">
             {group.latest.title}
           </div>
+          <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{getFindingPriority(group.latest).rationale}</p>
           {summaryLabel ? (
             <div className="mt-1 text-xs text-muted-foreground">
               {summaryLabel}
             </div>
           ) : null}
         </div>
-        <SeverityBadge severity={group.latest.severity} />
+        <div className="flex shrink-0 flex-col items-end gap-1"><BusinessPriorityBadge finding={group.latest} /><span className="flex items-center gap-1 text-[10px] text-muted-foreground" title="Technical severity">Technical <SeverityBadge severity={group.latest.severity} /></span></div>
       </div>
     </button>
   );

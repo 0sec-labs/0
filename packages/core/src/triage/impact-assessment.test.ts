@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Finding } from "@0/shared";
 import type { NativeRuntime, NativeRuntimeResult } from "../runtime/types.js";
 import {
@@ -131,15 +131,12 @@ describe("parseImpactAssessment", () => {
 // ── heuristicImpact ─────────────────────────────────────────────────
 
 describe("heuristicImpact", () => {
-  it("maps severity → business_impact and category → weaponizability", () => {
-    const a = heuristicImpact(makeFinding({ severity: "critical", category: "sql-injection" }));
-    expect(a.business_impact).toBe("headline");
-    expect(a.weaponizability).toBe("rce");
-  });
-
-  it("treats low/info severity as noise", () => {
-    expect(heuristicImpact(makeFinding({ severity: "low" })).business_impact).toBe("noise");
-    expect(heuristicImpact(makeFinding({ severity: "info" })).business_impact).toBe("noise");
+  it("does not infer business impact, reachability or code execution from severity/category", () => {
+    const high = heuristicImpact(makeFinding({ severity: "critical", category: "sql-injection" }));
+    const low = heuristicImpact(makeFinding({ severity: "info" }));
+    expect(high).toEqual(low);
+    expect(high).toMatchObject({ business_impact: "unassessed", reachability_tier: "unknown", weaponizability: "unknown", assessment_source: "heuristic" });
+    expect(businessImpactOf(makeFinding({ impactAssessment: high }))).toBe("unassessed");
   });
 });
 
@@ -164,6 +161,7 @@ describe("assessImpact", () => {
     const a = await assessImpact(NFC_CRASH, { runtime });
     expect(a.reachability_tier).toBe("proximity-rf");
     expect(a.business_impact).toBe("headline");
+    expect(a.assessment_source).toBe("model");
   });
 
   it("qualifies a nominally-critical FS-image UAF down to noise", async () => {
@@ -193,6 +191,19 @@ describe("assessImpact", () => {
     const a = await assessImpact(NFC_CRASH, { runtime });
     expect(a).toEqual(heuristicImpact(NFC_CRASH));
   });
+  it("asks for customer and operational consequences while preserving unknown context and technical CVSS", async () => {
+    const runtime = stubRuntime(JSON.stringify(heuristicImpact(NFC_CRASH)));
+    const execute = vi.spyOn(runtime, "executeNative");
+    const finding = makeFinding({ cvssScore: 9.8, cvssVector: "CVSS:3.1/AV:N", description: "Parser crash; deployment and affected users unknown." });
+    const result = await assessImpact(finding, { runtime });
+    expect(execute.mock.calls[0]![0]).toContain("customer");
+    expect(execute.mock.calls[0]![0]).toContain("fraud");
+    expect(execute.mock.calls[0]![0]).toContain("Do not invent");
+    expect(JSON.stringify(execute.mock.calls[0]![1])).toContain("CVSS technical context: 9.8");
+    expect(result).toMatchObject({ business_impact: "unassessed", assessment_source: "model" });
+    expect(finding.cvssScore).toBe(9.8);
+  });
+
 });
 
 // ── mapping + ranking ───────────────────────────────────────────────
@@ -204,32 +215,35 @@ describe("impact ranking", () => {
     expect(BUSINESS_IMPACT_RANK.modest).toBeGreaterThan(BUSINESS_IMPACT_RANK.noise);
   });
 
-  it("ranks an unassessed finding as neutral (modest)", () => {
-    expect(businessImpactOf(makeFinding())).toBe("modest");
-    expect(impactRank(makeFinding())).toBe(BUSINESS_IMPACT_RANK.modest);
+  it("keeps missing and legacy deterministic assessments explicitly unassessed", () => {
+    expect(businessImpactOf(makeFinding())).toBe("unassessed");
+    expect(impactRank(makeFinding())).toBe(BUSINESS_IMPACT_RANK.unassessed);
+    expect(businessImpactOf(makeFinding({ impactAssessment: { ...heuristicImpact(makeFinding()), business_impact: "headline", assessment_source: undefined, rationale: "Deterministic fallback derived from severity + category (no model assessment available)." } }))).toBe("unassessed");
   });
 
   it("sorts a headline finding above a noise finding regardless of nominal severity", () => {
     const headline = makeFinding({
       id: "h",
       severity: "high",
+      cvssScore: 7.2,
       impactAssessment: {
         reachability_tier: "remote-unauth",
-        blast_radius: "all",
+        blast_radius: "Production customer records across all tenants",
         weaponizability: "rce",
         business_impact: "headline",
-        rationale: "",
+        rationale: "Observed business consequence supported by deployment evidence",
       },
     });
     const noise = makeFinding({
       id: "n",
       severity: "critical",
+      cvssScore: 9.8,
       impactAssessment: {
         reachability_tier: "needs-host-migration",
-        blast_radius: "few",
+        blast_radius: "Unused offline test utility; no customer or operational exposure",
         weaponizability: "lpe-to-root",
         business_impact: "noise",
-        rationale: "",
+        rationale: "Observed business consequence supported by deployment evidence",
       },
     });
     const sorted = [noise, headline].sort(compareByImpactDesc);
@@ -259,4 +273,11 @@ describe("impact ranking", () => {
     );
     expect((col as Record<string, unknown>).injected).toBeUndefined();
   });
+  it("preserves provenance and unknown values through parsing and persistence", () => {
+    const fallback = heuristicImpact(makeFinding());
+    expect(parseImpactAssessment(JSON.stringify(fallback))).toEqual(fallback);
+    expect(impactAssessmentToColumn(fallback)).toEqual(fallback);
+    expect(parseImpactAssessment(JSON.stringify({ ...fallback, assessment_source: "fabricated" }))).toBeNull();
+  });
+
 });

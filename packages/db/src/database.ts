@@ -3,7 +3,7 @@ import {
   createDrizzleFromShim,
   type ShimmedDatabase,
 } from "./wasm-shim.js";
-import { homeStateDir } from "@0/shared";
+import { homeStateDir, ImpactAssessmentSchema, type ImpactAssessment } from "@0/shared";
 import { ensureDatabaseDirectory } from "./db-directory.js";
 import { asc, eq, desc, and, gt, inArray, or } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
@@ -41,6 +41,8 @@ import {
   type FindingStatusDB,
   type FindingWorkflowStatusDB,
 } from "./schema.js";
+
+import { iterateLatestFindingMetadata, getFindingFamilyMetadata, selectFindingFamiliesByBusinessPriority, selectFindingsByBusinessPriority, type BusinessPriorityFindingOptions } from "./finding-priority.js";
 
 const DEFAULT_DB_DIR = homeStateDir();
 const DEFAULT_DB_PATH = join(DEFAULT_DB_DIR, "0.db");
@@ -1439,6 +1441,25 @@ export class osecDB {
     return query.all();
   }
 
+  /** Globally rank current family assessments before the body/row limit. Historical review counts remain intact. */
+  listFindingFamiliesByBusinessPriority(opts?: BusinessPriorityFindingOptions) {
+    return selectFindingFamiliesByBusinessPriority(this.sqlite, opts);
+  }
+
+  /** Bounded row-level native --all list; historical rows are independently ranked. */
+  listFindingsByBusinessPriority(opts?: BusinessPriorityFindingOptions) {
+    return selectFindingsByBusinessPriority(this.sqlite, opts);
+  }
+
+  /** Uncapped paged metadata for exact cross-database latest-family merging; no evidence bodies. */
+  iterateLatestFindingMetadata(opts?: Omit<BusinessPriorityFindingOptions, "limit">) {
+    return iterateLatestFindingMetadata(this.sqlite, opts);
+  }
+
+  getFindingFamilyMetadata(key: string, opts?: { scanId?: string }) {
+    return getFindingFamilyMetadata(this.sqlite, key, opts);
+  }
+
   /** Alias for listFindings — backward compat with core agent tools */
   queryFindings(opts?: {
     scanId?: string;
@@ -1459,6 +1480,15 @@ export class osecDB {
       .where(eq(schema.findings.id, findingId))
       .run();
     if (finding?.fingerprint) this.syncFindingGraph(finding.scanId, finding.fingerprint);
+  }
+
+  /** Operator business context is metadata; never changes verification or execution authority. */
+  updateFindingImpactAssessment(findingId: string, assessment: ImpactAssessment | null): boolean {
+    const parsed = assessment === null ? null : ImpactAssessmentSchema.parse(assessment);
+    const result = this.db.update(schema.findings)
+      .set({ impactAssessment: parsed === null ? null : JSON.stringify(parsed) })
+      .where(eq(schema.findings.id, findingId)).run();
+    return result.changes > 0;
   }
 
   saveFindingPocExecution(findingId: string, execution: unknown): void {
@@ -2826,6 +2856,7 @@ CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
 CREATE INDEX IF NOT EXISTS idx_findings_category ON findings(category);
 CREATE INDEX IF NOT EXISTS idx_findings_status ON findings(status);
 CREATE INDEX IF NOT EXISTS idx_findings_fingerprint ON findings(fingerprint);
+CREATE INDEX IF NOT EXISTS idx_findings_priority_latest ON findings(COALESCE(fingerprint,id),timestamp DESC,id DESC);
 CREATE INDEX IF NOT EXISTS idx_findings_triageStatus ON findings(triageStatus);
 CREATE INDEX IF NOT EXISTS idx_findings_workflowStatus ON findings(workflowStatus);
 CREATE INDEX IF NOT EXISTS idx_attack_results_scanId ON attack_results(scanId);

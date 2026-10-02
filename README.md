@@ -47,6 +47,10 @@ Configure a [model provider](https://docs.0.security/api-keys/) before running A
 
 Browser, CLI, and MCP share one workflow runner with retained results.
 
+Findings are prioritized by business impact: affected customers and data, fraud,
+critical services, and disruption. Each priority includes a rationale; missing
+context stays **Not assessed**. CVSS remains available as technical severity.
+
 | Work | Built-in templates |
 | --- | --- |
 | Assess | Repositories, dependencies, APIs, web configuration, scoped penetration tests, package behavior, smart contracts, native code |

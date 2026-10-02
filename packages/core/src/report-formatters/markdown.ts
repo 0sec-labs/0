@@ -1,3 +1,4 @@
+import { getFindingPriority, compareFindingsByBusinessPriority } from "@0/shared";
 import type { ScanReport, Finding, FindingRemediation, PocStep } from "@0/shared";
 
 /**
@@ -37,6 +38,11 @@ export function formatMarkdown(report: ScanReport): string {
   lines.push("");
   lines.push(`- **Attacks:** ${report.summary.totalAttacks}`);
   lines.push(`- **Findings:** ${report.summary.totalFindings}`);
+  for (const label of ["Urgent", "High", "Moderate", "Low", "Not assessed"]) {
+    const count = report.findings.filter(finding => getFindingPriority(finding).label === label).length;
+    if (count) lines.push(`- **Business priority — ${label}:** ${count}`);
+  }
+  lines.push("", "### Technical severity", "");
   if (report.summary.critical > 0)
     lines.push(`- **Critical:** ${report.summary.critical}`);
   if (report.summary.high > 0) lines.push(`- **High:** ${report.summary.high}`);
@@ -69,7 +75,7 @@ export function formatMarkdown(report: ScanReport): string {
   if (report.findings.length > 0) {
     lines.push("## Findings");
     lines.push("");
-    for (const finding of report.findings) {
+    for (const finding of [...report.findings].sort(compareFindingsByBusinessPriority)) {
       lines.push(formatFinding(finding));
     }
   } else {
@@ -184,10 +190,13 @@ function reproductionSection(steps: PocStep[]): string[] {
 
 function formatFinding(finding: Finding): string {
   const lines: string[] = [];
-  const badge = severityBadge(finding.severity);
+  const priority = getFindingPriority(finding);
 
-  lines.push(`### ${badge} ${finding.title}`);
+  lines.push(`### [${priority.label}] ${finding.title}`);
   lines.push("");
+  lines.push(`- **Business priority:** ${priority.label}`);
+  lines.push(`- **Business impact rationale:** ${priority.rationale}`);
+  lines.push(`- **Technical severity:** ${finding.severity}`);
   lines.push(`- **Category:** ${finding.category}`);
   lines.push(`- **Status:** ${finding.status}`);
   // Severity justification: a bare "high" is an assertion; a CVSS vector is a
@@ -230,15 +239,4 @@ function formatFinding(finding: Finding): string {
   lines.push("");
 
   return lines.join("\n");
-}
-
-function severityBadge(severity: string): string {
-  const badges: Record<string, string> = {
-    critical: "[CRITICAL]",
-    high: "[HIGH]",
-    medium: "[MEDIUM]",
-    low: "[LOW]",
-    info: "[INFO]",
-  };
-  return badges[severity] ?? `[${severity.toUpperCase()}]`;
 }

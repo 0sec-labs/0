@@ -595,3 +595,22 @@ describe("advisory ranking validation and opt-in boundaries", () => {
     expect(evaluate).not.toHaveBeenCalled();
   });
 });
+
+
+describe("business-first advisory ranking", () => {
+  it("does not let easier exploitation and stronger proof outweigh evidenced customer consequences", async () => {
+    const targets = [
+      { ...makeItem("offline"), businessContext: "Unused offline utility; no customer or operational dependency." },
+      { ...makeItem("customer"), businessContext: "Cross-tenant customer record exposure in production." },
+    ];
+    const evaluator: JevEvaluator = { evaluate: async request => {
+      expect(JSON.stringify(request.state)).toContain("Cross-tenant customer");
+      expect(request.questions.f0_impact!.type).toBe("choice");
+      return priorityEvaluation(request, { f0_impact: "low", f1_impact: "high", f1_exploitability: "low", f1_evidence: "low" });
+    } };
+    const result = await rankIncremental(targets, queueRuntime([]), { jevEvaluator: evaluator });
+    expect(result.updates.map(item => item.id)).toEqual(["customer", "offline"]);
+    // Advisory component scores stay separate from confidence or proof; business impact owns ordering.
+    expect(result.updates[0]!.priority!.score).toBeLessThan(result.updates[1]!.priority!.score);
+  });
+});

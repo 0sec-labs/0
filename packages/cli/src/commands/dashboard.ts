@@ -1,3 +1,4 @@
+import { ImpactAssessmentSchema } from "@0/shared/dist/finding-priority.js";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
@@ -32,6 +33,7 @@ import { findDashboardInstance } from "../web/dashboard-instance.js";
 import { BackendConnectionRegistry, backendBearerFromEnv, createBackendHandshake, handleBackendConnectionRequest } from "../web/backend-connections.js";
 import { WorkflowEngineService } from "../workflow-engine-service.js";
 import { retainedScanSnapshot, retainedFindingSnapshot } from "../web/report-artifacts.js";
+import { handleFindingImpactRequest } from "../web/finding-impact.js";
 import { assertLocalEngineAvailable, registerLocalEngine } from "../local-engine.js";
 
 type DashboardOptions = {
@@ -109,9 +111,12 @@ type DBFindingRow = {
   timestamp: number;
   score?: number | null;
   confidence?: number | null;
+  cvssScore?: number | null;
+  cvssVector?: string | null;
   evidenceRequest: string;
   evidenceResponse: string;
   evidenceAnalysis?: string | null;
+  impactAssessment?: unknown;
 };
 
 type DBScanRow = {
@@ -516,8 +521,12 @@ function summarizeQueue(workItems: DBWorkItemRow[], workers: DBWorkerRow[]) {
 }
 
 function normalizeFinding(row: DBFindingRow) {
+  let impact: unknown = row.impactAssessment;
+  if (typeof impact === "string") { try { impact = JSON.parse(impact); } catch { impact = undefined; } }
+  const parsedImpact = ImpactAssessmentSchema.safeParse(impact);
   return {
     ...row,
+    impactAssessment: parsedImpact.success ? parsedImpact.data : null,
     triageStatus: normalizeTriageStatus(row.triageStatus),
     workflowStatus: normalizeWorkflowStatus(row.workflowStatus, row),
     workflowAssignee: row.workflowAssignee ?? null,
@@ -528,10 +537,11 @@ function normalizeFinding(row: DBFindingRow) {
 function buildWorkflowSummary(
   rows: DBFindingRow[],
   verdicts: DBVerdictRow[],
-  sessions: DBSessionRow[],
+  sessions: Array<Pick<DBSessionRow, "status" | "agentRole">>,
+  historicalVerdictCounts?: { truePositive: number; falsePositive: number; unsure: number; total: number },
 ) {
   const latest = rows[0]!;
-  const verdictCounts = verdicts.reduce(
+  const verdictCounts = historicalVerdictCounts ?? verdicts.reduce(
     (acc, verdict) => {
       if (verdict.verdict === "TRUE_POSITIVE") acc.truePositive += 1;
       else if (verdict.verdict === "FALSE_POSITIVE") acc.falsePositive += 1;
@@ -1458,17 +1468,14 @@ async function handleApiRequest(
       const db = new osecDB(dbPath);
       try {
         const scans = db.listScans(100) as DBScanRow[];
-        const findings = db.listFindings({ limit: 5000 }) as DBFindingRow[];
-        const verdicts = db.listVerdicts(findings.map((finding) => finding.id)) as DBVerdictRow[];
-        const sessions = db.listSessions({
-          scanIds: [...new Set(findings.map((finding) => finding.scanId))],
-          status: "running",
-        }) as DBSessionRow[];
-        const groups = groupFindings(
-          findings,
-          groupByKey(verdicts, "findingId"),
-          groupByKey(sessions, "scanId"),
-        );
+        // Rank current family assessments globally before fetching bounded evidence bodies.
+        // Historical verdicts and running roles still determine the same review gates.
+        const families = db.listFindingFamiliesByBusinessPriority({ limit: 5000 });
+        const groups = families.map(family => {
+          const latest = normalizeFinding(family.latest as DBFindingRow);
+          return { fingerprint: family.key, latest, count: family.count, scanCount: family.scanCount,
+            workflow: buildWorkflowSummary([latest], [], family.activeSessions, family.verdictCounts) };
+        });
         const workItems = (db.listWorkItems?.({ limit: 5000 }) ?? []) as DBWorkItemRow[];
         const workers = (db.listWorkers?.(50) ?? []) as DBWorkerRow[];
         const derivedCases = buildCases(scans, groups);
@@ -1864,6 +1871,11 @@ export function registerDashboardCommand(program: Command): void {
                 const result = await workflows.resumeScan(decodeURIComponent(resumeScan[1]!), { ...request, timeCapMs: Math.min(request.timeCapMs ?? timeCapMs, timeCapMs), costCapUsd: Math.min(request.costCapUsd ?? costCapUsd, costCapUsd) });
                 json(res, result.status, result.data);
                 return;
+              }
+              if (/^\/api\/findings\/[^/]+\/impact-assessment$/.test(requestUrl.pathname)) {
+                const input = req.method === "POST" || req.method === "DELETE" ? await readJson(req) : undefined;
+                const result = handleFindingImpactRequest(requestUrl.pathname, req.method ?? "GET", input, { dbPath: opts.dbPath });
+                if (result) { json(res, result.status, result.data); return; }
               }
               const exportScan = requestUrl.pathname.match(/^\/api\/scans\/([^/]+)\/export$/);
               if (exportScan || requestUrl.pathname === "/api/findings/export") {

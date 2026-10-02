@@ -3,13 +3,14 @@ import {
   normalizeStageAction,
   normalizeStageEndDetail,
 } from "@0/core";
-import type { ReviewCheckResult } from "@0/shared";
+import { ImpactAssessmentSchema, type ImpactAssessment, type ReviewCheckResult } from "@0/shared";
 import { buildShareUrl } from "../utils.js";
 
 export type SessionMode = "audit" | "review" | "scan";
 export type StageStatusKind = "pending" | "running" | "done" | "error";
 
 export interface StageFinding {
+  impactAssessment?: ImpactAssessment;
   severity: string;
   title: string;
 }
@@ -79,10 +80,13 @@ export interface SessionEvent {
 }
 
 function upsertFinding(findings: StageFinding[], finding: StageFinding): StageFinding[] {
-  const exists = findings.some(
-    (item) => item.severity.toLowerCase() === finding.severity.toLowerCase() && item.title === finding.title,
-  );
-  return exists ? findings : [...findings, finding];
+  const matches = (item: StageFinding) =>
+    item.severity.toLowerCase() === finding.severity.toLowerCase() && item.title === finding.title;
+  if (!findings.some(matches)) return [...findings, finding];
+  if (!finding.impactAssessment) return findings;
+  return findings.map((item) => matches(item)
+    ? { ...item, impactAssessment: finding.impactAssessment }
+    : item);
 }
 
 function parseSavedFinding(action: string): StageFinding | null {
@@ -390,11 +394,12 @@ export function applySessionEvent(state: SessionState, event: SessionEvent): Ses
   if (event.type === "finding") {
     const running = next.stages.find((stage) => stage.status === "running") ?? next.stages.find((stage) => stage.id === "attack");
     const severity = (event.data as { severity?: string } | undefined)?.severity ?? "info";
+    const impact = ImpactAssessmentSchema.safeParse((event.data as { impactAssessment?: unknown } | undefined)?.impactAssessment);
     const title = cleanDisplayText(msg.replace(/^\[[\w]+\]\s*/g, "").trim() || "Finding from AI analysis", 200);
     if (running) {
       next.stages = updateStage(next.stages, running.id, (stage) => ({
         ...stage,
-        findings: upsertFinding(stage.findings, { severity, title }),
+        findings: upsertFinding(stage.findings, { severity, title, ...(impact.success ? { impactAssessment: impact.data } : {}) }),
       }));
     }
     next.transcript.push(transcriptItem("finding", `[${severity}] ${title}`, { stage: running?.id, tone: severity === "critical" || severity === "high" ? "error" : severity === "medium" ? "warning" : "info" }));

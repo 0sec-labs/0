@@ -1,3 +1,6 @@
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, afterEach } from "vitest";
 import { createShimmedDatabase, isBunRuntime } from "./wasm-shim.js";
 
@@ -112,5 +115,54 @@ describe("ShimmedDatabase (WASM engine, in-memory)", () => {
     } finally {
       db.close();
     }
+  });
+});
+
+describe("Node WASM statement lifetime across file connections", () => {
+  it("releases get cursors, preserves reusable statements and closes unused prepared statements", () => {
+    const root = mkdtempSync(join(tmpdir(), "0-shim-cursors-"));
+    const path = join(root, "shared.db");
+    const first = createShimmedDatabase(path);
+    let second: ReturnType<typeof createShimmedDatabase> | undefined;
+    try {
+      first.exec("CREATE TABLE kv (id INTEGER PRIMARY KEY, value TEXT); INSERT INTO kv VALUES(1,'first')");
+      const read = first.prepare("SELECT id,value FROM kv ORDER BY id");
+      expect(read.get()).toEqual({ id: 1, value: "first" });
+      expect(existsSync(`${path}.lock`)).toBe(false);
+      second = createShimmedDatabase(path);
+      second.prepare("INSERT INTO kv VALUES(?,?)").run(2, "second");
+      expect(read.all()).toEqual([{ id: 1, value: "first" }, { id: 2, value: "second" }]);
+      expect(read.raw().get()).toEqual([1, "first"]);
+      expect(read.raw().all()).toEqual([[1, "first"], [2, "second"]]);
+      expect(read.get()).toEqual({ id: 1, value: "first" });
+      first.prepare("SELECT * FROM kv"); // Prepared but never executed: close must still finalize it.
+      first.close();
+      expect(existsSync(`${path}.lock`)).toBe(false);
+      second.prepare("INSERT INTO kv VALUES(?,?)").run(3, "third");
+      expect(() => read.get()).toThrow("closed");
+    } finally { if (first.open) first.close(); second?.close(); rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it("releases exceptional executions and RETURNING reads without weakening explicit transactions", () => {
+    const root = mkdtempSync(join(tmpdir(), "0-shim-errors-"));
+    const path = join(root, "shared.db");
+    const first = createShimmedDatabase(path);
+    const second = createShimmedDatabase(path);
+    try {
+      first.exec("CREATE TABLE kv (id INTEGER PRIMARY KEY, value TEXT); INSERT INTO kv VALUES(1,'first')");
+      const insert = first.prepare("INSERT INTO kv VALUES(?,?)");
+      expect(() => insert.run(1, "duplicate")).toThrow();
+      expect(existsSync(`${path}.lock`)).toBe(false);
+      second.prepare("INSERT INTO kv VALUES(?,?)").run(2, "second");
+      insert.run(3, "third");
+      expect(first.prepare("INSERT INTO kv VALUES(4,'fourth'),(5,'fifth') RETURNING id").get()).toEqual({ id: 4 });
+      expect(second.prepare("SELECT COUNT(*) AS count FROM kv").get()).toEqual({ count: 5 });
+      first.transaction(() => {
+        expect(first.prepare("SELECT COUNT(*) AS count FROM kv").get()).toEqual({ count: 5 });
+        expect(() => second.prepare("INSERT INTO kv VALUES(6,'blocked')").run()).toThrow("locked");
+      })();
+      expect(existsSync(`${path}.lock`)).toBe(false);
+      second.prepare("INSERT INTO kv VALUES(6,'unblocked')").run();
+    } finally { first.close(); second.close(); rmSync(root, { recursive: true, force: true }); }
   });
 });

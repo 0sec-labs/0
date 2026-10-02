@@ -28,8 +28,10 @@ import {
 import {
   describeFindingsFilters,
   findingFromRow,
-  groupFindings,
+  findingRowPriority,
+  compareFindingRowsByBusinessPriority,
   type FindingsRow,
+  type FindingGroup,
   type FindingsScreenOptions,
 } from "./findings-data.js";
 import { findingImpactLines } from "./finding-detail-layout.js";
@@ -48,31 +50,20 @@ import {
 
 
 
-/**
- * Rank used only to make the dialog's severity groups contiguous, so the
- * shared picker emits one heading per severity. A severity this does not
- * recognise sorts last into its own honest `unrated` heading rather than
- * being folded into a bucket it was never assigned.
- */
-const FINDING_SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"] as const;
-
-function findingSeverityRank(severity: string): number {
-  const index = FINDING_SEVERITY_ORDER.indexOf(String(severity).toLowerCase() as (typeof FINDING_SEVERITY_ORDER)[number]);
-  return index < 0 ? FINDING_SEVERITY_ORDER.length : index;
-}
-
-function findingSeverityHeading(severity: string): string {
-  const value = String(severity).trim();
-  return value.length === 0 ? "unrated" : value.toUpperCase();
-}
-
 export function FindingsScreen({ options, onExit, shell, onSourceFix }: { options: FindingsScreenOptions; onExit: () => void; shell?: ShellNav; onSourceFix?: (findingId: string) => void }) {
   const theme = useTheme();
+  const priorityTone = (row: FindingsRow) => {
+    const priority = findingRowPriority(row);
+    return priority.assessed
+      ? severityToneFor(theme, ({ Urgent: "critical", High: "high", Moderate: "medium", Low: "low" } as Record<string, string>)[priority.label])
+      : theme.MUTED;
+  };
   const { mouseSupport } = useSettings();
   // Right-click context menu over a finding row. Opens only on a right press
   // and only when mouse support is on; the left-click path is untouched.
   const contextMenu = useContextMenu();
   const [rows, setRows] = useState<FindingsRow[]>([]);
+  const [families, setFamilies] = useState<FindingGroup[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [index, setIndex] = useState(0);
   const [reloadNonce, setReloadNonce] = useState(0);
@@ -118,16 +109,28 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
         const { osecDB } = await import("@0/db");
         const db = new osecDB(options.dbPath);
         try {
-          const findings = db.listFindings({
+          const filters = {
             scanId: options.scan,
             severity: options.severity,
             category: options.category,
             status: options.status,
             triageStatus: options.triage,
-            limit: options.all ? options.limit : 1000,
-          }) as FindingsRow[];
+            limit: Math.min(options.limit, 5000),
+          };
+          // The database ranks lightweight metadata before loading the capped evidence bodies.
+          const groups = options.all ? [] : db.listFindingFamiliesByBusinessPriority(filters);
+          const findings = options.all
+            ? db.listFindingsByBusinessPriority(filters)
+            : groups.map((group) => group.latest);
           if (!alive) return;
-          setRows(findings);
+          setRows(findings as FindingsRow[]);
+          setFamilies(groups.map((group) => ({
+            fingerprint: group.key,
+            latest: group.latest as FindingsRow,
+            count: group.count,
+            scans: group.scanCount,
+          })));
+          if (options.limit > 5000) setNotice("Showing the top 5000 findings by business priority.");
           applyIndex(0);
           setError(null);
         } finally {
@@ -144,15 +147,11 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
     };
   }, [options, reloadNonce]);
 
-  const groups = useMemo(() => groupFindings(rows).slice(0, options.limit), [rows, options.limit]);
+  const groups = families;
   const items = options.all ? rows.slice(0, options.limit) : groups;
   const itemCount = items.length;
 
-  // ── dialog interior: the same rows/families, grouped by severity ────────
-  // Severity becomes the picker's category and its `tone`, so colour means
-  // exactly what `severityToneFor` means everywhere else. The rows are the
-  // same ones the legacy list draws; only their order is stabilised so each
-  // severity emits a single heading.
+  // Business-priority categories stay contiguous; severity is supporting metadata.
   const findingsItems = useMemo<DialogItem[]>(() => {
     if (options.all) {
       const visible = rows.slice(0, options.limit);
@@ -160,13 +159,13 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
         return [{ id: "finding:none", label: "No findings found.", category: "Findings", disabled: true }];
       }
       return [...visible]
-        .sort((a, b) => findingSeverityRank(a.severity) - findingSeverityRank(b.severity))
+        .sort(compareFindingRowsByBusinessPriority)
         .map((row) => ({
           id: `row:${row.id}`,
           label: row.title,
-          description: `${row.category} · ${row.status}${row.triageStatus && row.triageStatus !== "new" ? ` · ${row.triageStatus}` : ""}`,
-          category: findingSeverityHeading(row.severity),
-          tone: severityToneFor(theme, row.severity),
+          description: `Technical severity: ${row.severity} · ${row.category} · ${row.status}${row.triageStatus && row.triageStatus !== "new" ? ` · ${row.triageStatus}` : ""}`,
+          category: findingRowPriority(row).label,
+          tone: priorityTone(row),
           // The gutter dot marks a family whose triage decision is in effect;
           // an untriaged row carries none.
           current: (row.triageStatus ?? "new") !== "new",
@@ -176,14 +175,14 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
       return [{ id: "finding:none", label: "No findings found.", category: "Findings", disabled: true }];
     }
     return [...groups]
-      .sort((a, b) => findingSeverityRank(a.latest.severity) - findingSeverityRank(b.latest.severity))
+      .sort((a, b) => compareFindingRowsByBusinessPriority(a.latest, b.latest))
       .map((group) => ({
         id: `group:${group.fingerprint}`,
         label: group.latest.title,
-        description: `${group.latest.category} · ${group.latest.status}${group.latest.triageStatus && group.latest.triageStatus !== "new" ? ` · ${group.latest.triageStatus}` : ""}`,
+        description: `Technical severity: ${group.latest.severity} · ${group.latest.category} · ${group.latest.status}${group.latest.triageStatus && group.latest.triageStatus !== "new" ? ` · ${group.latest.triageStatus}` : ""}`,
         meta: group.count > 1 ? `${group.count}×` : "",
-        category: findingSeverityHeading(group.latest.severity),
-        tone: severityToneFor(theme, group.latest.severity),
+        category: findingRowPriority(group.latest).label,
+        tone: priorityTone(group.latest),
         current: (group.latest.triageStatus ?? "new") !== "new",
       }));
   }, [options.all, options.limit, rows, groups, theme]);
@@ -367,7 +366,8 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
   const copyFinding = (row: FindingsRow) => {
     const text = [
       row.title,
-      `${row.severity} · ${row.status} · ${row.triageStatus ?? "new"}`,
+      `Business priority: ${findingRowPriority(row).label}`,
+      `Technical severity: ${row.severity} · ${row.status} · ${row.triageStatus ?? "new"}`,
       "",
       row.description,
       "",
@@ -512,12 +512,13 @@ export function FindingsScreen({ options, onExit, shell, onSourceFix }: { option
       lines.push(...wrapDialogLines(sanitizeTuiText(value), inner, fg));
     };
 
-    lines.push({ text: options.all ? "FINDING" : "FAMILY", fg: row ? severityToneFor(theme, row.severity) : theme.PRIMARY });
+    lines.push({ text: options.all ? "FINDING" : "FAMILY", fg: theme.PRIMARY });
     if (!row) {
       push("No finding selected", theme.MUTED);
     } else {
       push(row.title, theme.TEXT);
-      push(`${row.severity} · ${row.status} · ${row.triageStatus ?? "new"}`, severityToneFor(theme, row.severity));
+      push(`Business priority: ${findingRowPriority(row).label}`, theme.PRIMARY);
+      push(`Technical severity: ${row.severity} · ${row.status} · ${row.triageStatus ?? "new"}`, theme.MUTED);
       if (group) push(`seen ${group.count}× in ${group.scans} scan${group.scans === 1 ? "" : "s"}`, theme.MUTED);
       push(`id ${row.id}`, theme.MUTED);
       if (row.triageNote) push(row.triageNote, theme.ACCENT);

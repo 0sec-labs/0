@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import type { ScanReport, Finding, Severity } from "@0/shared";
-import { severityRank } from "@0/shared";
+import { getFindingPriority, compareFindingsByBusinessPriority } from "@0/shared";
 import { buildShareUrl } from "../utils.js";
 
 // ── Severity Design System ──
@@ -120,12 +120,7 @@ export function formatTerminal(report: ScanReport): string {
     lines.push(`  ${chalk.bold.white("FINDINGS")}`);
     lines.push("");
 
-    // Critical first. #629: the shared severityRank is critical=4 (the local
-    // copy this replaced was critical=0), so sort DESCENDING to keep the
-    // identical critical→info order — do not flip back to a-b.
-    const sorted = [...report.findings].sort(
-      (a, b) => severityRank(b.severity) - severityRank(a.severity)
-    );
+    const sorted = [...report.findings].sort(compareFindingsByBusinessPriority);
 
     for (const finding of sorted) {
       lines.push(formatFinding(finding));
@@ -156,7 +151,11 @@ export function formatTerminal(report: ScanReport): string {
     chalk.gray(`${summary.low} low`),
     chalk.gray(`${summary.info} info`),
   ].join(chalk.gray("  "));
-  lines.push(`  ${sev}`);
+  for (const label of ["Urgent", "High", "Moderate", "Low", "Not assessed"]) {
+    const count = report.findings.filter(finding => getFindingPriority(finding).label === label).length;
+    if (count) lines.push(`  Business priority ${label}: ${count}`);
+  }
+  lines.push(`  ${chalk.gray("Technical severity:")} ${sev}`);
   lines.push(`  ${chalk.white.bold(String(summary.totalFindings))} findings ${chalk.gray("in")} ${chalk.white(formatDuration(report.durationMs))}`);
   lines.push(`  ${chalk.gray("Share:")} ${chalk.cyan(buildShareUrl(report))}`);
   lines.push("");
@@ -167,11 +166,13 @@ export function formatTerminal(report: ScanReport): string {
 // ── Finding Card ──
 
 function formatFinding(finding: Finding): string {
-  const style = SEVERITY_STYLE[finding.severity];
+  const priority = getFindingPriority(finding);
   const lines: string[] = [];
 
   // Badge + Title
-  lines.push(`  ${style.badge(style.label.toUpperCase().padEnd(8))} ${chalk.bold.white(finding.title)}`);
+  lines.push(`  ${chalk.bold(`Business priority: ${priority.label}`)} ${chalk.bold.white(finding.title)}`);
+  lines.push(`    ${chalk.gray("Business impact rationale:")} ${priority.rationale}`);
+  lines.push(`    ${chalk.gray("Technical severity:")} ${finding.severity}${finding.cvssScore !== undefined ? `  CVSS: ${finding.cvssScore}` : ""}${finding.cvssVector ? `  CVSS vector: ${finding.cvssVector}` : ""}`);
 
   // Category + OWASP
   const meta: string[] = [];

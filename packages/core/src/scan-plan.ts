@@ -1,3 +1,4 @@
+import { compareFindingsByBusinessPriority } from "@0/shared";
 import { validateScanPlan } from "@0/shared";
 import type { Finding, ScanAttemptOutcome, ScanAttemptStatus, ScanPlan, ScanPlanExecution } from "@0/shared";
 import type { NativeRuntime } from "./runtime/types.js";
@@ -173,7 +174,7 @@ export async function executeScanPlan<T extends ExecutionReport>(options: {
     await Promise.all(Array.from({ length: concurrency }, worker));
     const fulfilled = reports.filter((report): report is T => report !== undefined);
     const report = { ...(fulfilled[0] ?? options.emptyReport()) };
-    report.findings = reports.flatMap((current, index) => current?.findings.map(finding => ({ ...finding, runIndex: index + 1 })) ?? []);
+    report.findings = reports.flatMap((current, index) => current?.findings.map(finding => ({ ...finding, runIndex: index + 1 })) ?? []).sort(compareFindingsByBusinessPriority);
     const keys = ["totalAttacks", "totalFindings", "critical", "high", "medium", "low", "info"] as const;
     report.summary = Object.fromEntries(keys.map(key => [key, fulfilled.reduce((sum, current) => sum + current.summary[key], 0)])) as T["summary"];
     const incomplete = attempts.filter(attempt => attempt.status !== "completed");

@@ -1,4 +1,4 @@
-import type { BackendDescriptor } from "@0/shared";
+import type { BackendDescriptor, ImpactAssessment } from "@0/shared";
 import { BackendClient } from "./lib/backend-client";
 export { useBackendApi } from "./backend-context";
 import type {
@@ -137,6 +137,13 @@ function getScanFindings(scanId: string): Promise<ScanFindingsResponse> {
 
 function getFindingFamily(fingerprint: string): Promise<FindingFamilyResponse> {
   return webFetchJson(`/api/finding-family/${encodeURIComponent(fingerprint)}`);
+}
+
+function updateFindingImpactAssessment(findingId: string, impactAssessment: ImpactAssessment): Promise<{ findingId: string; impactAssessment: ImpactAssessment }> {
+  return webFetchJson(`/api/findings/${encodeURIComponent(findingId)}/impact-assessment`, { method: "POST", body: JSON.stringify(impactAssessment) });
+}
+function clearFindingImpactAssessment(findingId: string): Promise<{ findingId: string; impactAssessment: null }> {
+  return webFetchJson(`/api/findings/${encodeURIComponent(findingId)}/impact-assessment`, { method: "DELETE" });
 }
 
 function updateFindingFamilyTriage(
@@ -292,6 +299,6 @@ function archiveConsoleSession(id: string, saved = false, archived = true): Prom
   return webFetchJson(`/api/console/${saved ? "saved" : "sessions"}/${encodeURIComponent(id)}/archive`, { method: "POST", body: JSON.stringify({ archived }) });
 }
 
-  return { client, webFetch, webFetchJson, getDashboard, getScans, getScan, getScanEvents, getRecentEvents, getScanFindings, getFindingFamily, updateFindingFamilyTriage, updateFindingFamilyWorkflow, recoverStaleWorkers, pruneStoppedWorkers, resetDatabase, startDaemon, stopDaemon, launchRun, listConsoleSessions, listSavedConsoleSessions, createConsoleSession, getConsoleSnapshot, getConsoleEvents, sendConsoleMessage, removeConsoleQueuedMessage, configureConsoleSession, resolveConsoleDecision, controlConsoleSession, stopConsoleWorker, closeConsoleSession, deleteConsoleSession, resumeConsoleSession, deleteSavedConsoleSession, exportConsoleSession, archiveConsoleSession };
+  return { client, webFetch, webFetchJson, getDashboard, getScans, getScan, getScanEvents, getRecentEvents, getScanFindings, getFindingFamily, updateFindingImpactAssessment, clearFindingImpactAssessment, updateFindingFamilyTriage, updateFindingFamilyWorkflow, recoverStaleWorkers, pruneStoppedWorkers, resetDatabase, startDaemon, stopDaemon, launchRun, listConsoleSessions, listSavedConsoleSessions, createConsoleSession, getConsoleSnapshot, getConsoleEvents, sendConsoleMessage, removeConsoleQueuedMessage, configureConsoleSession, resolveConsoleDecision, controlConsoleSession, stopConsoleWorker, closeConsoleSession, deleteConsoleSession, resumeConsoleSession, deleteSavedConsoleSession, exportConsoleSession, archiveConsoleSession };
 }
 export type BackendApi = ReturnType<typeof createBackendApi>;

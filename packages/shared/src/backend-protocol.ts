@@ -107,6 +107,7 @@ export function backendCapabilitiesForApiPath(pathname: string): BackendCapabili
   if (pathname === "/api/workflow-engine/call") return ["workflow-engine"];
   if (parts[0] === "control" && parts.length === 2 && ["recover-stale-workers", "prune-stopped-workers", "reset-database", "start-daemon", "stop-daemon", "launch-run"].includes(parts[1]!)) return ["process-controls"];
   if (pathname === "/api/dashboard" || parts[0] === "scans" || parts[0] === "finding-family" || pathname === "/api/findings/export") add("artifacts");
+  if (parts[0] === "findings" && parts.length === 3 && parts[2] === "impact-assessment") add("artifacts");
   if (parts[0] === "scans" && parts[2] === "resume") { add("workflows"); add("sessions"); }
   else if (parts[0] === "events" || pathname === "/api/v1/presentation/events") add("events");
   else if (parts[0] === "console") {

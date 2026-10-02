@@ -247,6 +247,7 @@ const dbState: {
     id: string;
     scanId: string;
     fingerprint?: string | null;
+    [key: string]: unknown;
   }>;
   recentEvents: Array<{
     id: string;
@@ -302,6 +303,26 @@ vi.mock("@0/db", () => {
     }
     listFindings(): unknown[] {
       return dbState.findings;
+    }
+    listFindingFamiliesByBusinessPriority() {
+      const families = new Map<string, typeof dbState.findings>();
+      for (const finding of dbState.findings) {
+        const key = finding.fingerprint ?? finding.id;
+        const rows = families.get(key) ?? [];
+        rows.push(finding);
+        families.set(key, rows);
+      }
+      return [...families.entries()].map(([key, rows]) => ({
+        key, latest: [...rows].sort((a, b) => Number(b.timestamp) - Number(a.timestamp))[0],
+        count: rows.length, scanCount: new Set(rows.map(row => row.scanId)).size,
+        verdictCounts: { truePositive: 0, falsePositive: 0, unsure: 0, total: 0 }, activeSessions: [],
+      }));
+    }
+    updateFindingImpactAssessment(id: string, impactAssessment: unknown): boolean {
+      const finding = dbState.findings.find(row => row.id === id);
+      if (!finding) return false;
+      finding.impactAssessment = impactAssessment === null ? null : JSON.stringify(impactAssessment);
+      return true;
     }
     listVerdicts(): unknown[] {
       return [];
@@ -880,6 +901,18 @@ describe("dashboard — read APIs", () => {
     // DB lifecycle: opened with the configured --db-path, closed exactly once.
     expect(dbState.ctorPaths[dbState.ctorPaths.length - 1]).toBe("/tmp/fake.db");
     expect(dbState.closes).toBeGreaterThanOrEqual(1);
+  });
+
+  it("returns validated business impact objects and keeps absent or malformed assessments unknown", async () => {
+    const impact = { reachability_tier: "remote-auth", blast_radius: "All customer billing records", weaponizability: "info-leak", business_impact: "headline", rationale: "Exposure of regulated customer data", assessment_source: "provided" };
+    const base = { scanId: "scan-impact", title: "Customer data access", description: "Access control failure", severity: "medium", category: "idor", status: "confirmed", timestamp: 1800000000000, evidenceRequest: "GET /billing", evidenceResponse: "record", evidenceAnalysis: "Confirmed" };
+    dbState.findings.push({ ...base, id: "assessed", fingerprint: "assessed", impactAssessment: JSON.stringify(impact) }, { ...base, id: "malformed", fingerprint: "malformed", severity: "critical", impactAssessment: '{"business_impact":"headline"}' }, { ...base, id: "absent", fingerprint: "absent", severity: "critical" });
+    const captured = await invokeHandler(makeRequest({ method: "GET", url: "/api/dashboard", headers: { "x-0-control-token": await getControlToken() } }));
+    expect(captured.statusCode).toBe(200);
+    const groups = JSON.parse(captured.body).groups;
+    expect(groups.find((group: { latest: { id: string } }) => group.latest.id === "assessed").latest.impactAssessment).toEqual(impact);
+    expect(groups.find((group: { latest: { id: string } }) => group.latest.id === "malformed").latest.impactAssessment).toBeNull();
+    expect(groups.find((group: { latest: { id: string } }) => group.latest.id === "absent").latest.impactAssessment).toBeNull();
   });
 
   it("GET /api/scans returns summarized scans", async () => {
@@ -1462,4 +1495,40 @@ it("cleans up the persistent engine when startup preflight fails before listenin
   expect(result).toBeInstanceOf(Error);
   expect(engineDispose).toHaveBeenCalledOnce();
   expect(httpState.listenCalls).toHaveLength(0);
+});
+
+describe("business impact metadata mutations", () => {
+  const assessment = { reachability_tier: "unknown", blast_radius: "Customer billing records", weaponizability: "info-leak", business_impact: "notable", rationale: "Confirm access controls on the billing service.", assessment_source: "model" };
+  beforeEach(async () => {
+    await runCli(["dashboard", "--no-open", "--db-path", "/tmp/business-impact-engine.db"]);
+    dbState.findings.push({ id: "same-id", scanId: "scan-impact", severity: "critical", cvssScore: 9.8, status: "discovered", verification_result: "original verification", impactAssessment: null });
+  });
+
+  it("authenticates and validates engine-owned metadata before changing stored priority", async () => {
+    const initial = structuredClone(dbState.findings[0]);
+    const denied = await invokeHandler(makeRequest({ method: "POST", url: "/api/findings/same-id/impact-assessment", body: assessment }));
+    expect(denied.statusCode).toBe(403);
+    const headers = { "x-0-control-token": await getControlToken() };
+    const invalid = await invokeHandler(makeRequest({ method: "POST", url: "/api/findings/same-id/impact-assessment", headers, body: { ...assessment, severity: "low", dbPath: "/another/engine.db" } }));
+    expect(invalid.statusCode).toBe(400);
+    expect(dbState.findings[0]).toEqual(initial);
+    const saved = await invokeHandler(makeRequest({ method: "POST", url: "/api/findings/same-id/impact-assessment", headers, body: assessment }));
+    expect(saved.statusCode).toBe(200);
+    expect(JSON.parse(saved.body)).toEqual({ findingId: "same-id", impactAssessment: { ...assessment, assessment_source: "provided" } });
+    expect(dbState.findings[0]).toEqual({ ...initial, impactAssessment: JSON.stringify({ ...assessment, assessment_source: "provided" }) });
+    expect(dbState.ctorPaths).toContain("/tmp/business-impact-engine.db");
+    expect(dbState.ctorPaths).not.toContain("/another/engine.db");
+  });
+
+  it("clears only impact metadata and rejects unsupported methods or a missing finding", async () => {
+    const headers = { "x-0-control-token": await getControlToken() };
+    const missing = await invokeHandler(makeRequest({ method: "POST", url: "/api/findings/foreign-id/impact-assessment", headers, body: assessment }));
+    expect(missing.statusCode).toBe(404);
+    const method = await invokeHandler(makeRequest({ method: "GET", url: "/api/findings/same-id/impact-assessment", headers }));
+    expect(method.statusCode).toBe(405);
+    const cleared = await invokeHandler(makeRequest({ method: "DELETE", url: "/api/findings/same-id/impact-assessment", headers }));
+    expect(cleared.statusCode).toBe(200);
+    expect(JSON.parse(cleared.body)).toEqual({ findingId: "same-id", impactAssessment: null });
+    expect(dbState.findings[0]).toMatchObject({ severity: "critical", cvssScore: 9.8, status: "discovered", verification_result: "original verification" });
+  });
 });

@@ -139,7 +139,9 @@ describe.skipIf(process.platform !== "darwin" || process.arch !== "arm64")("nati
       JSON.stringify({ schemaVersion: 1, exitCode: -1, cleanupFailed: true, cancelled: true, reason: "unconfirmed" }), { mode: 0o600 });
     try {
       const refused = await runSmolvmWorkbench(options);
-      expect(refused.error).toMatch(/admission remains reserved/);
+      expect(refused.error).toBe(kind === "missing"
+        ? "Another chat is using the isolated workspace. Stop or close that chat before trying again."
+        : "Previous workspace teardown is unconfirmed; inspect the retained run before retrying");
       expect(await readFile(leasePath, "utf8")).toBe(lease);
       expect(await readFile(canary, "utf8")).toBe("must survive uncertain cleanup");
       await expect(stat(effect)).rejects.toMatchObject({ code: "ENOENT" });

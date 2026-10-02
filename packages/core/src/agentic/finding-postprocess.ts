@@ -204,7 +204,7 @@ export async function applyFindingPostProcess(
     const canonicals = findings.filter((f) => f.semanticDedupe?.isCanonical ?? true);
     const { updates } = await rankIncremental(
       canonicals.map((f) => {
-        const item = toDedupeItem(f);
+        const item = { ...toDedupeItem(f), businessContext: f.impactAssessment ? JSON.stringify(f.impactAssessment).slice(0, 2_000) : "Business consequences and deployment context are unassessed." };
         if (!opts.jevRankEvaluator) return item;
         const receipt = f.verification_result;
         return {

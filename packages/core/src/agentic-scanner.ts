@@ -1,3 +1,4 @@
+import { compareFindingsByBusinessPriority } from "@0/shared";
 import type {
   ScanConfig,
   ScanReport,
@@ -3219,8 +3220,8 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
       // Impact assessment is supplied inline by the model at save_finding
       // time (0#1103). No separate report-time LLM call is made — the
       // findings already carry `impactAssessment` when the evidence
-      // supported it, and unassessed findings fall through to heuristic
-      // defaults in CVSS/advisory consumers without a postpass.
+      // supported it. Missing business context remains explicitly unassessed;
+      // technical CVSS suggestions stay separate and no model postpass runs.
 
       // Attach remediation guidance to confirmed/verified findings
       await attachRemediation(
@@ -3357,6 +3358,7 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
       }
     }
 
+    allFindings.sort(compareFindingsByBusinessPriority);
     const report = await runReportStage(
       { allFindings, attackState, discoveryState, config, scanId, routingDecisions },
       { db, emit, emitScanCompleted, attachEnforcementSummary, attachEngagementPosture },
@@ -3394,7 +3396,7 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
     if (config.plan || config.signal?.aborted || err instanceof ScanBudgetError) {
       startPhase("report");
       const persisted = db.getFindings(scanId).map(dbFindingToFinding);
-      const findings = Array.from(new Map([...allFindings, ...persisted].map(finding => [finding.id, finding])).values());
+      const findings = Array.from(new Map([...allFindings, ...persisted].map(finding => [finding.id, finding])).values()).sort(compareFindingsByBusinessPriority);
       const costExceeded = scanCostLedger.totalCostUsd() >= (config.costCeilingUsd ?? Infinity);
       const reason = costExceeded ? "cost_ceiling_exceeded" : config.signal?.reason instanceof ScanBudgetError
         ? config.signal.reason.status : err instanceof ScanBudgetError ? err.status : config.signal?.aborted ? "cancelled" : "failed";

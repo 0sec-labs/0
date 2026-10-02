@@ -34,6 +34,8 @@ describe("backend frontend/engine contract", () => {
     expect(backendResourceKey("run", first)).not.toBe(backendResourceKey("session", first));
   });
   it("classifies nested approval, cursor, model, workspace, and host operations consistently", () => {
+    expect(backendCapabilitiesForApiPath("/api/findings/finding-1/impact-assessment")).toEqual(["artifacts"]);
+    expect(backendCapabilitiesForApiPath("/api/findings/finding-1/impact-assessment/unrecognized")).toEqual([]);
     expect(backendCapabilitiesForApiPath("/api/console/sessions/same/decisions/request")).toEqual(["sessions", "approvals"]);
     expect(backendCapabilitiesForApiPath("/api/console/sessions/same/events")).toEqual(["sessions", "events"]);
     expect(backendCapabilitiesForApiPath("/api/console/sessions/same/models")).toEqual(["sessions", "model-connections"]);

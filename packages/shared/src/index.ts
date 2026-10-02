@@ -21,3 +21,4 @@ export * from "./service-plugins.js";
 export * from "./backend-protocol.js";
 export * from "./scan-resume.js";
 export * from "./engine-operations.js";
+export * from "./finding-priority.js";

@@ -1,3 +1,6 @@
+import { FindingImpactEditor } from "@/components/finding-impact-editor";
+import { getFindingPriority, compareFindingsByBusinessPriority } from "@0/shared/dist/finding-priority.js";
+import { BusinessPriorityBadge } from "@/components/business-priority-badge";
 import { ReportExportControl } from "@/components/report-export-control";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -87,7 +90,7 @@ type WorkflowMutationInput = {
 };
 
 type ThreadViewMode = "inbox" | "review" | "board";
-type QueueSortMode = "attention" | "newest" | "severity";
+type QueueSortMode = "business-impact" | "attention" | "newest" | "severity";
 type ThreadConsoleState = {
   search: string;
   workflowFilter: "all" | FindingWorkflowPhase;
@@ -109,12 +112,15 @@ const DEFAULT_THREAD_CONSOLE_STATE: ThreadConsoleState = {
   assigneeFilter: "all",
   activeOnly: false,
   viewMode: "inbox",
-  queueSort: "attention",
+  queueSort: "business-impact",
 };
 
 function matchesSearch(haystack: DashboardResponse["groups"][number], normalized: string) {
   return [
     haystack.latest.title,
+    getFindingPriority(haystack.latest).label,
+    getFindingPriority(haystack.latest).rationale,
+    haystack.latest.impactAssessment?.blast_radius ?? "",
     haystack.latest.category,
     haystack.latest.severity,
     haystack.latest.triageStatus,
@@ -266,20 +272,20 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
     });
   }, [activeOnly, assigneeFilter, consensusFilter, dashboard.groups, deferredSearch, reviewFilter, severityFilter, workflowFilter]);
 
-  const reviewGroups = useMemo(
-    () => filteredGroups.filter((group) => group.workflow.reviewGate !== "none"),
-    [filteredGroups],
-  );
-
   const queueGroups = useMemo(() => {
     const ranked = [...filteredGroups];
     ranked.sort((left, right) => {
+      if (queueSort === "business-impact") return compareFindingsByBusinessPriority(left.latest, right.latest) || right.latest.timestamp - left.latest.timestamp;
       if (queueSort === "newest") return right.latest.timestamp - left.latest.timestamp;
       if (queueSort === "severity") return severityRank(right.latest.severity) - severityRank(left.latest.severity);
-      return attentionRank(right) - attentionRank(left);
+      return getFindingPriority(right.latest).rank - getFindingPriority(left.latest).rank
+        || attentionRank(right) - attentionRank(left)
+        || right.latest.timestamp - left.latest.timestamp;
     });
     return ranked;
   }, [filteredGroups, queueSort]);
+
+  const reviewGroups = useMemo(() => queueGroups.filter(group => group.workflow.reviewGate !== "none"), [queueGroups]);
 
   const readyGroups = useMemo(
     () =>
@@ -314,7 +320,7 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
     [reviewGroups],
   );
 
-  const visibleGroups = viewMode === "review" ? reviewGroups : viewMode === "board" ? filteredGroups : queueGroups;
+  const visibleGroups = viewMode === "review" ? reviewGroups : queueGroups;
   const selectedFingerprint = fingerprint ?? null;
 
   const familyQuery = useQuery({
@@ -546,7 +552,7 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
       <div className="min-w-0 space-y-4">
         {viewMode === "board" ? (
           <FindingWorkflowBoard
-            groups={filteredGroups}
+            groups={queueGroups}
             selectedFingerprint={selectedFingerprint}
             pendingFingerprint={workflowMutation.isPending ? workflowMutation.variables?.fingerprint ?? null : null}
             onSelect={(nextFingerprint) => navigate(`/findings/${nextFingerprint}`)}
@@ -797,11 +803,14 @@ function FindingFamilyInspector({
         }
       >
         <div className="flex flex-wrap items-center gap-2">
-          <SeverityBadge severity={data.latest.severity} />
+          <BusinessPriorityBadge finding={data.latest} />
+          <span className="flex items-center gap-1 text-xs text-muted-foreground" title={data.latest.cvssVector || "Technical severity"}>Technical <SeverityBadge severity={data.latest.severity} />{typeof data.latest.cvssScore === "number" && Number.isFinite(data.latest.cvssScore) ? ` · CVSS ${data.latest.cvssScore}` : null}</span>
           <PhaseBadge value={data.workflow.phase} />
           <ReviewBadge value={data.workflow.reviewGate} />
           {data.latest.triageStatus !== "new" ? <StatusBadge value={data.latest.triageStatus} /> : null}
         </div>
+        <p className="text-sm leading-6 text-muted-foreground">{getFindingPriority(data.latest).rationale}</p>
+        <FindingImpactEditor key={data.latest.id} finding={data.latest} />
         {findingLocation ? <div className="text-sm text-muted-foreground">{findingLocation}</div> : null}
 
         {blockedWorkItem || data.workflow.phase === "blocked" ? (
@@ -1034,7 +1043,7 @@ function ThreadInbox({
   onSortChange: (value: QueueSortMode) => void;
   onSelect: (fingerprint: string) => void;
 }) {
-  const sections = [
+  const sections = queueSort === "business-impact" || queueSort === "attention" ? [{ title: queueSort === "attention" ? "Needs attention" : "Business impact", entries: groups }] : [
     { title: "Ready", entries: readyGroups },
     { title: "In progress", entries: activeGroups },
     { title: "Needs input", entries: blockedGroups },
@@ -1043,9 +1052,10 @@ function ThreadInbox({
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-2">
         <span className="mr-auto" />
+        <Button variant={queueSort === "business-impact" ? "default" : "ghost"} size="sm" onClick={() => onSortChange("business-impact")}>Business impact</Button>
         <Button variant={queueSort === "attention" ? "default" : "ghost"} size="sm" onClick={() => onSortChange("attention")}>Needs attention</Button>
         <Button variant={queueSort === "newest" ? "default" : "ghost"} size="sm" onClick={() => onSortChange("newest")}>Newest</Button>
-        <Button variant={queueSort === "severity" ? "default" : "ghost"} size="sm" onClick={() => onSortChange("severity")}>Severity</Button>
+        <Button variant={queueSort === "severity" ? "default" : "ghost"} size="sm" onClick={() => onSortChange("severity")}>Technical severity</Button>
       </div>
       {groups.length === 0 ? <EmptyState title="No findings" /> : null}
       {sections.filter((section) => section.entries.length > 0).map((section) => (
@@ -1180,12 +1190,14 @@ function ThreadListItem({
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 space-y-1">
             <div className="text-sm font-semibold leading-5 text-foreground">{group.latest.title}</div>
+            <div className="line-clamp-2 text-xs leading-5 text-muted-foreground">{getFindingPriority(group.latest).rationale}</div>
             {helperText ? <div className="text-xs leading-5 text-muted-foreground">{helperText}</div> : null}
           </div>
           <div className="flex shrink-0 flex-wrap justify-end gap-2">
             {mode === "inbox" ? <ReviewBadge value={group.workflow.reviewGate} /> : null}
             {group.latest.triageStatus !== "new" ? <StatusBadge value={group.latest.triageStatus} /> : null}
-            <SeverityBadge severity={group.latest.severity} />
+            <BusinessPriorityBadge finding={group.latest} />
+            <span className="flex items-center gap-1 text-xs text-muted-foreground" title="Technical severity">Technical <SeverityBadge severity={group.latest.severity} /></span>
           </div>
         </div>
         <div className="mt-1 text-xs text-muted-foreground">

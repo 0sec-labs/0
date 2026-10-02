@@ -151,7 +151,7 @@ export const findingsToolDefinitions: Record<string, ToolDefinition> = {
       impact_assessment: {
         type: "string",
         description:
-          'OPTIONAL JSON-encoded ImpactAssessment. Shape: { reachability_tier: "remote-unauth"|"remote-auth"|"proximity-rf"|"local-unpriv"|"local-priv"|"needs-hardware"|"needs-host-migration", blast_radius: string, weaponizability: "dos-crash"|"info-leak"|"integrity-tampering"|"lpe-to-root"|"rce", business_impact: "headline"|"notable"|"modest"|"noise", rationale: string }. Supply ONLY when evidence supports it. Leave unset when you lack concrete reachability or blast-radius facts.',
+          'OPTIONAL JSON-encoded ImpactAssessment. Shape: { reachability_tier: "remote-unauth"|"remote-auth"|"proximity-rf"|"local-unpriv"|"local-priv"|"needs-hardware"|"needs-host-migration"|"unknown", blast_radius: string, weaponizability: "dos-crash"|"info-leak"|"integrity-tampering"|"lpe-to-root"|"rce"|"unknown", business_impact: "headline"|"notable"|"modest"|"noise"|"unassessed", rationale: string }. Prioritize evidenced customer-data exposure, fraud, affected business services, and disruption; technical severity/CVSS alone does not determine business impact. Use unassessed/unknown or omit when context is missing, explaining the missing facts. Do not invent financial loss, customer counts, deployment reachability, or successful exploitation.',
       },
       // Self-reported calibration of how confident the agent is that this
       // finding is a true positive. The cloud DB stores it in

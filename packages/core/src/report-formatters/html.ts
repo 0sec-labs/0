@@ -1,5 +1,5 @@
 import type { ScanReport, Finding, Severity } from "@0/shared";
-import { SEVERITY_RANK } from "@0/shared";
+import { SEVERITY_RANK, getFindingPriority, compareFindingsByBusinessPriority } from "@0/shared";
 
 function escapeHtml(str: string): string {
   return str
@@ -45,6 +45,7 @@ function riskLevel(summary: { critical: number; high: number; medium: number; lo
 
 function renderFinding(finding: Finding, index: number): string {
   const sev = SEVERITY_COLORS[finding.severity];
+  const priority = getFindingPriority(finding);
   const confidence = finding.confidence != null ? `${Math.round(finding.confidence * 100)}%` : null;
   const cvss = finding.cvssScore != null ? finding.cvssScore.toFixed(1) : null;
   const rank = finding.findingRank != null ? `Rank: ${finding.findingRank}` : null;
@@ -53,14 +54,17 @@ function renderFinding(finding: Finding, index: number): string {
   return `
     <div class="finding-card">
       <div class="finding-header">
-        <span class="severity-badge" style="background:${sev.bg};color:${sev.text}">${finding.severity.toUpperCase()}</span>
+        <span class="severity-badge" style="background:#1a1a2e;color:#fff">Business priority: ${priority.label}</span>
         <span class="finding-title">${escapeHtml(finding.title)}</span>
       </div>
+      <p class="finding-desc"><strong>Business impact rationale:</strong> ${escapeHtml(priority.rationale)}</p>
       <div class="finding-meta">
+        <span class="meta-tag" style="background:${sev.bg};color:${sev.text}">Technical severity: ${finding.severity}</span>
         <span class="meta-tag">Category: ${formatCategory(finding.category)}</span>
         ${finding.status === "confirmed" ? '<span class="meta-tag confirmed">Confirmed</span>' : `<span class="meta-tag">${escapeHtml(finding.status)}</span>`}
         ${confidence ? `<span class="meta-tag">Confidence: ${confidence}</span>` : ""}
         ${cvss ? `<span class="meta-tag">CVSS: ${cvss}</span>` : ""}
+        ${finding.cvssVector ? `<span class="meta-tag">CVSS vector: ${escapeHtml(finding.cvssVector)}</span>` : ""}
         ${rank ? `<span class="meta-tag">${rank}</span>` : ""}
         ${dedupe ? `<span class="meta-tag">${dedupe}</span>` : ""}
       </div>
@@ -97,9 +101,8 @@ function renderSeverityBar(summary: { critical: number; high: number; medium: nu
 
 export function formatHtml(report: ScanReport): string {
   const risk = riskLevel(report.summary);
-  const sorted = [...report.findings].sort(
-    (a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity),
-  );
+  const sorted = [...report.findings].sort(compareFindingsByBusinessPriority);
+  const businessPriority = sorted[0] ? getFindingPriority(sorted[0]).label : "No findings";
 
   const findingsHtml = sorted.length > 0
     ? sorted.map((f, i) => renderFinding(f, i)).join("\n")
@@ -401,10 +404,11 @@ export function formatHtml(report: ScanReport): string {
         <div class="brand">ZERO</div>
         <div class="brand-sub">Security Scan Report</div>
       </div>
-      <div class="risk-badge" style="background:${risk.color};color:#fff">${risk.label} RISK</div>
+      <div class="risk-badge" style="background:#1a1a2e;color:#fff">Business priority: ${businessPriority}</div>
     </div>
     <div class="meta-grid">
       <span><strong>Target:</strong> ${escapeHtml(report.target)}</span>
+      <span><strong>Technical risk:</strong> ${risk.label}</span>
       <span><strong>Depth:</strong> ${report.scanDepth}</span>
       <span><strong>Duration:</strong> ${formatDuration(report.durationMs)}</span>
       <span><strong>Started:</strong> ${escapeHtml(report.startedAt)}</span>
@@ -415,6 +419,8 @@ export function formatHtml(report: ScanReport): string {
     <div class="stat-box">
       <h3>Findings</h3>
       <div class="big-num">${report.summary.totalFindings}</div>
+      <div class="sev-counts">${["Urgent", "High", "Moderate", "Low", "Not assessed"].map(label => { const count = report.findings.filter(finding => getFindingPriority(finding).label === label).length; return count ? `<span>Business priority ${label}: ${count}</span>` : ""; }).join(" ")}</div>
+      <h3>Technical severity</h3>
       <div class="sev-counts">
         ${sevCountsHtml}
       </div>

@@ -1,4 +1,4 @@
-import type { Finding } from "@0/shared";
+import { compareFindingsByBusinessPriority, getFindingPriority, type Finding } from "@0/shared";
 import { parseImpactAssessment } from "@0/core";
 import type { NativeRuntime } from "@0/core";
 import type { RuntimeAvailability } from "../utils.js";
@@ -36,6 +36,8 @@ export interface FindingsRow {
   triageNote?: string | null;
   timestamp: number;
   score?: number | null;
+  cvssScore?: number | null;
+  cvssVector?: string | null;
   templateId: string;
   description: string;
   evidenceRequest: string;
@@ -141,7 +143,18 @@ export function groupFindings(rows: FindingsRow[]): FindingGroup[] {
         scans: new Set(sorted.map((item) => item.scanId)).size,
       };
     })
-    .sort((a, b) => b.latest.timestamp - a.latest.timestamp);
+    .sort((a, b) => compareFindingRowsByBusinessPriority(a.latest, b.latest));
+}
+
+export function findingRowPriority(row: FindingsRow) {
+  return getFindingPriority({ severity: row.severity, impactAssessment: parseJsonColumn(row.impactAssessment) });
+}
+
+export function compareFindingRowsByBusinessPriority(a: FindingsRow, b: FindingsRow): number {
+  return compareFindingsByBusinessPriority(
+    { severity: a.severity, cvssScore: a.cvssScore ?? undefined, impactAssessment: parseJsonColumn(a.impactAssessment) },
+    { severity: b.severity, cvssScore: b.cvssScore ?? undefined, impactAssessment: parseJsonColumn(b.impactAssessment) },
+  ) || b.timestamp - a.timestamp;
 }
 
 
@@ -169,6 +182,8 @@ export function findingFromRow(row: FindingsRow): Finding {
     title: row.title,
     description: row.description,
     severity: row.severity,
+    cvssScore: row.cvssScore ?? undefined,
+    cvssVector: row.cvssVector ?? undefined,
     category: row.category,
     status: row.status,
     fingerprint: row.fingerprint ?? undefined,

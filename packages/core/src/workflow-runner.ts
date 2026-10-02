@@ -1,3 +1,4 @@
+import { compareFindingsByBusinessPriority } from "@0/shared";
 import { parseSecurityWorkflowInput, DEFAULT_SECURITY_WORKFLOW_PLAN, SecurityWorkflowBindingsSchema } from "@0/shared";
 import type { Finding, ScanPlan, ScanReport, SecurityWorkflowInput, SecurityWorkflowNode, SecurityWorkflowOperation } from "@0/shared";
 import { ScanCostLedger } from "./agent/cost-ledger.js";
@@ -247,6 +248,7 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
   for (const node of nodes) if (!nodeResults[node.id]) {
     nodeResults[node.id] = { status: !node.enabled ? "skipped" : status === "cancelled" ? "cancelled" : "blocked" };
   }
+  findings.sort(compareFindingsByBusinessPriority);
   const report: ScanReport | undefined = reports.length ? {
     target, scanDepth: reports[reports.length - 1]!.scanDepth,
     startedAt: new Date(started).toISOString(), completedAt: new Date().toISOString(), durationMs: Date.now() - started,

@@ -145,6 +145,14 @@ vi.mock("@0/db", () => {
       if (opts?.triageStatus) out = out.filter((r) => r.triageStatus === opts.triageStatus);
       return out;
     }
+    listFindingsByBusinessPriority(opts?: Parameters<FakeOsecDB["listFindings"]>[0]): FakeFindingRow[] {
+      return this.listFindings(opts).slice(0, opts?.limit ?? 100);
+    }
+    listFindingFamiliesByBusinessPriority(opts?: Parameters<FakeOsecDB["listFindings"]>[0]) {
+      const groups = new Map<string, FakeFindingRow[]>();
+      for (const row of this.listFindings(opts)) { const key = row.fingerprint ?? row.id; groups.set(key, [...groups.get(key) ?? [], row]); }
+      return [...groups.entries()].map(([key, rows]) => ({ key, latest: [...rows].sort((a, b) => b.timestamp - a.timestamp)[0]!, count: rows.length, scanCount: new Set(rows.map(row => row.scanId)).size })).slice(0, opts?.limit ?? 100);
+    }
     updateFindingTriage(findingId: string, status: FindingTriageStatus, note?: string): void {
       dbState.calls.push({ method: "updateFindingTriage", args: [findingId, status, note] });
     }
@@ -371,8 +379,8 @@ describe("findings list — read surface", () => {
     expect(err).toBeUndefined();
 
     const allOutput = logSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
-    expect(allOutput).toContain("row-limit-1");
-    expect(allOutput).not.toContain("row-limit-2");
+    expect(allOutput).toMatch(/row-limit-[12]/);
+    expect(allOutput.match(/row-limit-[12]/g)).toHaveLength(1);
   });
 
   it("--severity / --scan / --category / --status / --triage are threaded into listFindings", async () => {

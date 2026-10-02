@@ -1418,6 +1418,27 @@ describe("ToolExecutor", () => {
     expect(ctx.findings).toHaveLength(0);
   });
 
+  it("save_finding preserves explicit missing business context without inventing risk or proof", async () => {
+    const result = await executor.execute({ name: "save_finding", arguments: {
+      title: "Context needed", severity: "critical", category: "xss", evidence_request: "x", evidence_response: "y",
+      impact_assessment: JSON.stringify({ reachability_tier: "unknown", blast_radius: "Deployment and affected customers are not established.", weaponizability: "unknown", business_impact: "unassessed", rationale: "Confirm whether the affected service handles customer data in production.", estimatedLoss: 1_000_000 }),
+    } });
+    expect(result.success).toBe(true);
+    expect(ctx.findings[0].impactAssessment).toMatchObject({ business_impact: "unassessed", reachability_tier: "unknown", weaponizability: "unknown", assessment_source: "provided" });
+    expect(ctx.findings[0].impactAssessment).not.toHaveProperty("estimatedLoss");
+    expect(ctx.findings[0].severity).toBe("critical");
+    expect(ctx.findings[0].status).not.toBe("verified");
+  });
+
+  it("save_finding rejects invalid assessment provenance before recording the finding", async () => {
+    const result = await executor.execute({ name: "save_finding", arguments: {
+      title: "Bad provenance", severity: "high", category: "xss", evidence_request: "x", evidence_response: "y",
+      impact_assessment: JSON.stringify({ reachability_tier: "remote-auth", blast_radius: "Customer records", weaponizability: "info-leak", business_impact: "notable", rationale: "Customer data exposure", assessment_source: "verified" }),
+    } });
+    expect(result.success).toBe(false);
+    expect(ctx.findings).toHaveLength(0);
+  });
+
   it("save_finding leaves impactAssessment undefined when arg is absent", async () => {
     const result = await executor.execute({
       name: "save_finding",

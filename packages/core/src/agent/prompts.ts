@@ -145,15 +145,24 @@ supply an \`impact_assessment\` JSON object with your \`save_finding\` call:
 - \`blast_radius\`: Brief sentence naming who/what is affected
 - \`weaponizability\`: What the attacker gains — \`rce\` > \`lpe-to-root\` >
   \`integrity-tampering\` > \`info-leak\` > \`dos-crash\`
-- \`business_impact\`: The coarse ranking tier — \`headline\` | \`notable\` |
-  \`modest\` | \`noise\`
+- \`business_impact\`: The business-priority tier — \`headline\` | \`notable\` |
+  \`modest\` | \`noise\` | \`unassessed\`. Assess consequences for the actual
+  affected business: customer or tenant data exposure, fraud or unauthorized
+  transactions, revenue-critical services, service disruption, and safety where
+  supported. Reachability, affected users/assets, and existing controls qualify
+  that consequence. CVSS and technical severity are separate context, not a
+  substitute for business priority.
 - \`rationale\`: 1-2 sentence justification
 
 Only supply this when the evidence genuinely supports it. When you lack
 concrete reachability, blast-radius, or weaponizability facts, leave
 \`impact_assessment\` unset — downstream consumers (CVSS generators, advisory
 templates) handle an absent assessment independently. Do NOT fabricate or
-default values. Supply the full object or omit it entirely.`;
+default values. Missing business context is \`unassessed\`; use \`unknown\` for
+reachability or weaponizability you cannot establish. Explain the missing facts
+and next question in the rationale. Do not invent revenue, financial loss,
+affected customer counts, regulatory obligations, or successful exploitation.
+Supply the full object or omit it entirely.`;
 
 // Typed TODO ledger guidance. Appended to the attack-oriented system prompts,
 // flag-gated, mirroring LOOT_LEDGER_INSTRUCTION above. The ledger itself is

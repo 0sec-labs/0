@@ -21,6 +21,30 @@ hourly, daily, or weekly schedules. An enabled schedule needs a running
 browser server and a working engine connection; closing the server stops its scheduler.
 Review execution status and results in **Runs**.
 
+## Prioritize findings
+
+Findings use business impact as their default priority in the browser, terminal,
+and reports. Assess the affected customers, services and data, possible fraud or
+unauthorized transactions, and operational disruption using the available
+evidence and business context. Each assessed priority retains its rationale.
+
+The priority labels are **Urgent**, **High**, **Moderate**, and **Low**. Missing
+context is **Not assessed**, shown after High and before Moderate so it stays
+visible for triage. A high CVSS score alone does not create an urgent business
+priority. Technical severity and CVSS remain separate fields and only break ties
+within an equal business priority. Existing explicit newest or technical-severity
+sorts remain available.
+
+Source/model assessments are advisory. They do not prove exploitation, production
+reachability, financial loss, or affected customer counts. Older severity-derived
+heuristics are also treated as unassessed. Business priority does not change
+verification results, review gates, or permission to apply fixes.
+
+In a finding's details, use **Edit business impact** to record your affected
+business/services and rationale, or clear an assessment when context is missing.
+Operator edits are marked as provided assessments and update the queue; they do
+not change the finding's technical severity or verification status.
+
 ## Discover and inspect
 
 ```bash

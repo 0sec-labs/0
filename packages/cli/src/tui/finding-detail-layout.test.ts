@@ -10,6 +10,7 @@ import {
   computeFindingKvLayout,
   computeScrollWindow,
   findingActions,
+  findingImpactLines,
   findingDetailTitle,
   maxScrollOffset,
   paneTitleColumns,
@@ -501,15 +502,17 @@ describe("paneTitleColumns (finding-detail)", () => {
   });
 });
 
-describe("buildFindingRows — the title and severity hierarchy", () => {
-  it("leads with a wrapped title row then a severity kv row", () => {
+describe("buildFindingRows — the title and business priority hierarchy", () => {
+  it("leads with a wrapped title and business priority before technical severity", () => {
     const rows = buildFindingRows(SAMPLE, 60);
     // First row: wrapped title as text
     expect(rows[0].kind).toBe("text");
     expect(rows[0].kind === "text" && rows[0].text).toContain("Reflected XSS");
-    // Second row: severity as a key/value row.
+    // Missing context stays explicit before supplementary technical severity.
     expect(rows[1].kind).toBe("kv");
-    const sev = rows[1];
+    expect(rows[1].kind === "kv" && rows[1].label).toContain("Business priority");
+    expect(rows[1].kind === "kv" && rows[1].value).toBe("Not assessed");
+    const sev = rows[2];
     if (sev.kind !== "kv") throw new Error("expected kv row");
     expect(sev.label).toContain("Severity");
     expect(sev.value).toBe("HIGH");
@@ -521,5 +524,30 @@ describe("buildFindingRows — the title and severity hierarchy", () => {
     const sev = rows.find((r) => r.kind === "kv" && r.label.includes("Severity"));
     expect(sev).toBeDefined();
     expect(sev && sev.kind === "kv" && sev.value).toBe("—");
+  });
+});
+
+describe("impact provenance", () => {
+  const assessment = {
+    reachability_tier: "remote-auth", weaponizability: "info-leak", blast_radius: "Tenant records",
+    business_impact: "notable", rationale: "Tenant data may be disclosed.",
+  } as const;
+
+  it("attributes only explicitly recorded model or provided assessments", () => {
+    expect(findingImpactLines({ ...SAMPLE, impactAssessment: { ...assessment, assessment_source: "provided" } })[0])
+      .toBe("Provided assessment — not reproduction proof.");
+    expect(findingImpactLines({ ...SAMPLE, impactAssessment: { ...assessment, assessment_source: "model" } })[0])
+      .toBe("Model's estimate — not reproduction proof.");
+    expect(findingImpactLines({ ...SAMPLE, impactAssessment: assessment })[0])
+      .toBe("Assessment source not recorded — not reproduction proof.");
+  });
+
+  it("shows missing business context instead of promoting heuristic values", () => {
+    const text = findingImpactLines({ ...SAMPLE, impactAssessment: { ...assessment, assessment_source: "heuristic" } }).join("\n");
+    expect(text).toContain("Not assessed");
+    expect(text).toContain("Heuristic baseline");
+    expect(text).toContain("affected services, customers, data");
+    expect(text).not.toContain("Business impact: notable");
+    expect(text).not.toContain("Model's estimate");
   });
 });

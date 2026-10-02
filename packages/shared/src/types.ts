@@ -549,7 +549,8 @@ export type ReachabilityTier =
   | "local-unpriv"
   | "local-priv"
   | "needs-hardware"
-  | "needs-host-migration";
+  | "needs-host-migration"
+  | "unknown";
 
 /**
  * What the attacker gets once they trigger the bug. Ordered least→most severe.
@@ -566,7 +567,8 @@ export type Weaponizability =
   | "info-leak"
   | "integrity-tampering"
   | "lpe-to-root"
-  | "rce";
+  | "rce"
+  | "unknown";
 
 /**
  * Deployment context of a finding's exploit path — where the vulnerable code
@@ -584,10 +586,11 @@ export type Weaponizability =
 export type DeploymentContext = "prod_reachable" | "dev_only" | "test_only" | "build_only";
 
 /**
- * The coarse, ranking-facing tier. This is the single knob the engine sorts on:
- * `noise` gets deprioritized, `headline` gets escalated. Ordered.
+ * Business-consequence tier, separate from technical severity and CVSS.
+ * `unassessed` means missing context, never negligible impact. Its queue position
+ * remains visible between assessed high and moderate priorities.
  */
-export type BusinessImpact = "headline" | "notable" | "modest" | "noise";
+export type BusinessImpact = "headline" | "notable" | "modest" | "noise" | "unassessed";
 
 /**
  * Structured impact assessment attached to a {@link Finding} by the
@@ -604,6 +607,8 @@ export interface ImpactAssessment {
   business_impact: BusinessImpact;
   /** Short human-readable justification, stable for the same input. */
   rationale: string;
+  /** Assessment provenance; a heuristic is never an assessed business consequence. */
+  assessment_source?: "model" | "provided" | "heuristic";
 }
 
 export type LayerVerdictKind =
@@ -699,7 +704,8 @@ export interface Finding {
    */
   workflowUpdatedAt?: string | null;
   /**
-   * CVSS-like 0–100 score, populated during the "scored" stage (0#414).
+   * Legacy technical ranking score (0–100), populated during the "scored" stage.
+   * This is neither a CVSS score nor an assessed business priority.
    * Optional and additive. The shared `Finding` keeps it loosely typed
    * (numeric only) so it can be threaded through the persistence round-trip
    * without coupling shared to the scoring engine.

@@ -1,3 +1,4 @@
+import { compareFindingsByBusinessPriority } from "@0/shared";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join, basename } from "node:path";
@@ -2721,7 +2722,7 @@ async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport>
       completedAt: new Date().toISOString(),
       durationMs,
       summary,
-      findings: confirmedFindings,
+      findings: [...confirmedFindings].sort(compareFindingsByBusinessPriority),
       warnings,
       ...(reviewCheckResults ? { reviewChecks: reviewCheckResults } : {}),
       estimatedCostUsd: costLedger.hasUnpricedUsage() ? undefined : costLedger.runCostUsd(),
@@ -2777,7 +2778,7 @@ async function runPipelineSingle(opts: PipelineOptions): Promise<PipelineReport>
       const partial: PipelineReport = {
         target: opts.target, targetType: prepared.resolvedType,
         startedAt: new Date(startTime).toISOString(), completedAt: new Date().toISOString(), durationMs: Date.now() - startTime,
-        findings: partialFindings, summary: buildSummary(partialFindings, usageTotals.turns),
+        findings: [...partialFindings].sort(compareFindingsByBusinessPriority), summary: buildSummary(partialFindings, usageTotals.turns),
         warnings: [...warnings, { stage: "report", message: `Scan interrupted: ${msg}. Findings are partial.` }],
         executionSuccessful: false, researchFailed: reason === "failed", exitReason: reason,
         error: msg,

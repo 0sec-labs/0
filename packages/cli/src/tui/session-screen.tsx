@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { sleekScrollbar } from "./scrollbar.js";
 import { useKeyboard } from "@opentui/react";
 import { useTheme, type Theme } from "./theme-context.js";
-import { severityToneFor } from "./themes.js";
+import { compareFindingsByBusinessPriority, getFindingPriority } from "@0/shared";
 import { fitTuiText, fitTuiUrl } from "./text.js";
 import { useSettings } from "./settings-store.js";
 import { frameAt } from "./animation.js";
@@ -900,8 +900,8 @@ export function SessionScreen({ state, onExit, shell, queueUserMessage }: { stat
             <box flexDirection="column" minWidth={0}>
               {state.stages.flatMap((stage) => stage.findings).length === 0 ? (
                 <text fg={theme.TEXT}>{fitTuiText("No findings yet.", sidebarTextWidth)}</text>
-              ) : state.stages.flatMap((stage) => stage.findings).slice(0, SESSION_MAX_SIDEBAR_FINDINGS).map((finding, index) => (
-                <text key={`${finding.title}-${index}`} fg={severityToneFor(theme, finding.severity)}>{fitTuiText(`${finding.severity} · ${finding.title}`, sidebarTextWidth)}</text>
+              ) : state.stages.flatMap((stage) => stage.findings).sort(compareFindingsByBusinessPriority).slice(0, SESSION_MAX_SIDEBAR_FINDINGS).map((finding, index) => (
+                <text key={`${finding.title}-${index}`} fg={getFindingPriority(finding).assessed ? theme.TEXT : theme.MUTED}>{fitTuiText(`${getFindingPriority(finding).label} · ${finding.title} · technical ${finding.severity}`, sidebarTextWidth)}</text>
               ))}
             </box>
           </PanelSection>

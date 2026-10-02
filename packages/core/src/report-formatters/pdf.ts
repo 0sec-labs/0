@@ -8,7 +8,7 @@
 import { createRequire } from "node:module";
 import { createWriteStream } from "node:fs";
 import type { ScanReport, Finding, Severity, ReportSummary } from "@0/shared";
-import { severityRank } from "@0/shared";
+import { getFindingPriority, compareFindingsByBusinessPriority } from "@0/shared";
 import type PDFDocumentType from "pdfkit";
 
 type PDFDoc = InstanceType<typeof PDFDocumentType>;
@@ -164,7 +164,10 @@ function renderCoverPage(doc: PDFDoc, report: ScanReport): void {
     .text(`Date: ${formatDate(report.startedAt)}`, PAGE_MARGIN, 390, { align: "center" })
     .text(`Duration: ${formatDuration(report.durationMs)}`, PAGE_MARGIN, 410, { align: "center" });
 
-  // Risk badge
+  const firstFinding = [...report.findings].sort(compareFindingsByBusinessPriority)[0];
+  if (firstFinding) doc.fontSize(14).font("Helvetica-Bold").fillColor(COLORS.white).text(`Business priority: ${getFindingPriority(firstFinding).label}`, PAGE_MARGIN, 440, { align: "center" });
+
+  // Technical risk badge
   const score = riskScore(report.summary);
   const rating = riskRating(score);
 
@@ -172,7 +175,7 @@ function renderCoverPage(doc: PDFDoc, report: ScanReport): void {
     .fontSize(14)
     .font("Helvetica-Bold")
     .fillColor(COLORS.accent)
-    .text(`Risk Score: ${score}/100 (${rating})`, PAGE_MARGIN, 460, { align: "center" });
+    .text(`Technical Risk Score: ${score}/100 (${rating})`, PAGE_MARGIN, 460, { align: "center" });
 
   // Footer
   doc
@@ -206,14 +209,20 @@ function renderExecutiveSummary(doc: PDFDoc, report: ScanReport): void {
 
   doc.moveDown(0.5);
   doc.text(
-    `The overall risk score is ${score}/100 (${rating}). ` +
+    `The technical risk score is ${score}/100 (${rating}). ` +
     `A total of ${summary.totalFindings} finding(s) were identified across ${summary.totalAttacks} attack(s).`,
     { width: CONTENT_WIDTH },
   );
 
   // Severity breakdown
   doc.moveDown(1);
-  subSectionTitle(doc, "Findings by Severity");
+  subSectionTitle(doc, "Business priority");
+  for (const label of ["Urgent", "High", "Moderate", "Low", "Not assessed"]) {
+    const count = report.findings.filter(finding => getFindingPriority(finding).label === label).length;
+    if (count) doc.fontSize(10).font("Helvetica").fillColor(COLORS.text).text(`${label}: ${count}`);
+  }
+  doc.moveDown(0.5);
+  subSectionTitle(doc, "Findings by Technical Severity");
 
   const severities: Severity[] = ["critical", "high", "medium", "low", "info"];
   const sevCounts: Record<Severity, number> = {
@@ -276,7 +285,7 @@ function renderFindingsTable(doc: PDFDoc, report: ScanReport): void {
   doc.addPage();
   sectionTitle(doc, "Findings Overview");
 
-  const colWidths = { severity: 70, title: 220, category: 120, status: 80 };
+  const colWidths = { severity: 90, title: 210, category: 105, status: 80 };
   const tableX = PAGE_MARGIN;
 
   // Header row
@@ -284,18 +293,15 @@ function renderFindingsTable(doc: PDFDoc, report: ScanReport): void {
   doc.rect(tableX, headerY, CONTENT_WIDTH, 20).fill(COLORS.primary);
 
   doc.fontSize(9).font("Helvetica-Bold").fillColor(COLORS.white);
-  doc.text("Severity", tableX + 5, headerY + 5, { width: colWidths.severity });
+  doc.text("Business priority", tableX + 5, headerY + 5, { width: colWidths.severity });
   doc.text("Title", tableX + colWidths.severity + 5, headerY + 5, { width: colWidths.title });
   doc.text("Category", tableX + colWidths.severity + colWidths.title + 5, headerY + 5, { width: colWidths.category });
   doc.text("Status", tableX + colWidths.severity + colWidths.title + colWidths.category + 5, headerY + 5, { width: colWidths.status });
 
   doc.y = headerY + 22;
 
-  // Sort findings by severity, critical first (#629: shared severityRank,
-  // critical=4, so sort descending — replaces the local critical=0 map).
-  const sorted = [...report.findings].sort(
-    (a, b) => severityRank(b.severity) - severityRank(a.severity),
-  );
+  // Business impact leads; technical severity breaks ties.
+  const sorted = [...report.findings].sort(compareFindingsByBusinessPriority);
 
   for (let i = 0; i < sorted.length; i++) {
     const finding = sorted[i];
@@ -316,9 +322,9 @@ function renderFindingsTable(doc: PDFDoc, report: ScanReport): void {
 
     // Severity (colored)
     doc
-      .fillColor(COLORS.severity[finding.severity])
+      .fillColor(COLORS.text)
       .font("Helvetica-Bold")
-      .text(severityLabel(finding.severity), tableX + 5, rowY + 5, { width: colWidths.severity });
+      .text(getFindingPriority(finding).label, tableX + 5, rowY + 5, { width: colWidths.severity });
 
     // Title
     doc
@@ -341,30 +347,33 @@ function renderFindingsTable(doc: PDFDoc, report: ScanReport): void {
 function renderFindingDetails(doc: PDFDoc, report: ScanReport): void {
   if (report.findings.length === 0) return;
 
-  // Critical first (#629: shared severityRank, critical=4 → sort descending).
-  const sorted = [...report.findings].sort(
-    (a, b) => severityRank(b.severity) - severityRank(a.severity),
-  );
+  // Keep details in the same business priority order as the overview.
+  const sorted = [...report.findings].sort(compareFindingsByBusinessPriority);
 
   for (const finding of sorted) {
     doc.addPage();
     sectionTitle(doc, finding.title);
 
-    // Metadata line
+    const priority = getFindingPriority(finding);
+    doc.fontSize(11).font("Helvetica-Bold").fillColor(COLORS.text).text(`Business priority: ${priority.label}`);
+    doc.fontSize(10).font("Helvetica").text(`Business impact rationale: ${priority.rationale}`, { width: CONTENT_WIDTH });
+    doc.moveDown(0.5);
+
+    // Technical metadata
     doc
       .fontSize(10)
       .font("Helvetica-Bold")
       .fillColor(COLORS.severity[finding.severity])
-      .text(`${severityLabel(finding.severity)} Severity`, PAGE_MARGIN, doc.y, { continued: true })
+      .text(`Technical severity: ${severityLabel(finding.severity)}`, PAGE_MARGIN, doc.y, { continued: true })
       .fillColor(COLORS.textLight)
       .font("Helvetica")
       .text(`  |  ${finding.category}  |  ${finding.status}  |  ID: ${finding.id}`);
 
-    if (finding.cvssScore != null) {
+    if (finding.cvssScore != null || finding.cvssVector) {
       doc
         .fontSize(9)
         .fillColor(COLORS.text)
-        .text(`CVSS Score: ${finding.cvssScore}${finding.cvssVector ? ` (${finding.cvssVector})` : ""}`, PAGE_MARGIN, doc.y + 2);
+        .text(`CVSS Score: ${finding.cvssScore ?? "Not provided"}${finding.cvssVector ? ` (${finding.cvssVector})` : ""}`, PAGE_MARGIN, doc.y + 2);
     }
 
     // Description
@@ -537,16 +546,15 @@ function codeBlock(doc: PDFDoc, text: string): void {
   });
 
   const blockHeight = Math.min(textHeight + 16, 300);
-  const y = doc.y;
-
   // Check for page overflow
-  if (y + blockHeight > 740) {
+  if (doc.y + blockHeight > 740) {
     doc.addPage();
   }
 
-  // Background
+  const blockY = doc.y;
+  // Drawing the background does not advance PDFKit's text cursor.
   doc
-    .rect(PAGE_MARGIN, doc.y, CONTENT_WIDTH, blockHeight)
+    .rect(PAGE_MARGIN, blockY, CONTENT_WIDTH, blockHeight)
     .fill("#f1f3f5");
 
   // Text
@@ -554,13 +562,13 @@ function codeBlock(doc: PDFDoc, text: string): void {
     .fontSize(8)
     .font("Courier")
     .fillColor(COLORS.text)
-    .text(displayText, PAGE_MARGIN + 10, doc.y - blockHeight + 8, {
+    .text(displayText, PAGE_MARGIN + 10, blockY + 8, {
       width: CONTENT_WIDTH - 20,
       height: blockHeight - 16,
       ellipsis: true,
     });
 
-  doc.y = doc.y + 4;
+  doc.y = blockY + blockHeight + 4;
 }
 
 function renderFooters(doc: PDFDoc): void {

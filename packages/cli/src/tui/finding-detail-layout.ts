@@ -32,7 +32,7 @@
  */
 
 import type { Finding, Severity } from "@0/shared";
-import { parseImpactAssessment } from "@0/core";
+import { getFindingPriority, ImpactAssessmentSchema, isHeuristicImpactAssessment } from "@0/shared";
 
 import { computeKvSplit } from "./pane-layout.js";
 import { shellChromeRows, wrapCells } from "./settings-layout.js";
@@ -197,12 +197,19 @@ function findingCvssLine(finding: Finding, injected: string | undefined): string
 
 /** Render only an existing assessment, independently of replay/source proof. */
 export function findingImpactLines(finding: Finding): string[] {
-  const assessment = finding.impactAssessment
-    ? parseImpactAssessment(JSON.stringify(finding.impactAssessment))
-    : null;
-  if (!assessment) return ["Not assessed."];
+  const parsed = ImpactAssessmentSchema.safeParse(finding.impactAssessment);
+  const priority = getFindingPriority(finding);
+  if (!priority.assessed) return [
+    "Not assessed.",
+    ...(parsed.success && isHeuristicImpactAssessment(parsed.data) ? ["Heuristic baseline; business consequences have not been established."] : []),
+    priority.rationale,
+  ];
+  if (!parsed.success) return ["Not assessed.", priority.rationale];
+  const assessment = parsed.data;
   return [
-    "Model's estimate — not reproduction proof.",
+    assessment.assessment_source === "model" ? "Model's estimate — not reproduction proof."
+      : assessment.assessment_source === "provided" ? "Provided assessment — not reproduction proof."
+        : "Assessment source not recorded — not reproduction proof.",
     `Business impact: ${assessment.business_impact}`,
     `Reachability: ${assessment.reachability_tier}`,
     `Blast radius: ${assessment.blast_radius}`,
@@ -259,6 +266,10 @@ export function buildFindingRows(
 
   // Title — wrapped so long titles stay readable, severity carried below.
   pushWrapped(rows, findingText(finding.title || EM_DASH), width, "title");
+
+  const priority = getFindingPriority(finding);
+  rows.push({ kind: "kv", label: `${icon.status} Business priority`, value: priority.label,
+    tone: priority.label === "Urgent" || priority.label === "High" ? "error" : priority.label === "Moderate" ? "warn" : "muted" });
 
   // Severity — explicit kv row (coloured badge tone for critical/high).
   rows.push({

@@ -79,4 +79,12 @@ describe("renderAdvisoryMarkdown — Impact section", () => {
     expect(advisory.cvssVector).toContain("/AV:N/");
     expect(advisory.cvssScore).toBeGreaterThan(0);
   });
+  it("does not present compatibility fallback prerequisites or gains as observed facts", () => {
+    const fallback = { ...REMOTE, reachability_tier: "local-unpriv" as const, weaponizability: "rce" as const, rationale: "Deterministic fallback derived from severity + category" };
+    const markdown = renderAdvisoryMarkdown(mkFinding(fallback));
+    expect(markdown).not.toContain("**Attacker gains:**");
+    expect(markdown).not.toContain("**Attack prerequisites:**");
+    expect(markdown).not.toContain("Deterministic fallback");
+  });
+
 });

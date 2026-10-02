@@ -276,4 +276,16 @@ describe("owned workflow service", () => {
     expect(service.get("owner", "run").status).toBe("cancelled");
     expect(states.at(-1)).toBe("cancelled");
   });
+  it("orders retained aggregate findings by evidenced business impact before technical CVSS", async () => {
+    const customer = { ...finding, id: "customer", severity: "high", cvssScore: 7.2, impactAssessment: { reachability_tier: "remote-auth", weaponizability: "info-leak", blast_radius: "Production customer records across tenants", business_impact: "headline", rationale: "Replay demonstrates cross-tenant customer record access", assessment_source: "provided" } } as Finding;
+    const offline = { ...finding, id: "offline", severity: "critical", cvssScore: 9.8, impactAssessment: { reachability_tier: "local-unpriv", weaponizability: "dos-crash", blast_radius: "Unused offline test utility", business_impact: "noise", rationale: "Deployment inventory confirms no operational or customer dependency", assessment_source: "provided" } } as Finding;
+    const unknown = { ...finding, id: "unknown", severity: "critical", cvssScore: 10 } as Finding;
+    const result = await executeWorkflow({ workflow, executeAssessment: async context => ({ status: "completed", reports: [report(context.node.id === "first" ? [offline, unknown] : [customer])] }) });
+    expect(result.findings.map(item => item.id)).toEqual(["customer", "unknown", "offline"]);
+    expect(result.report?.findings.map(item => item.id)).toEqual(["customer", "unknown", "offline"]);
+    expect(result.findings.find(item => item.id === "offline")?.cvssScore).toBe(9.8);
+    expect(result.findings.find(item => item.id === "customer")?.status).toBe("hypothesis");
+    expect(result.reports[0]!.findings.map(item => item.id)).toEqual(["offline", "unknown"]);
+  });
+
 });

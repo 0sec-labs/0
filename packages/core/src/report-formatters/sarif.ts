@@ -1,3 +1,4 @@
+import { getFindingPriority, compareFindingsByBusinessPriority } from "@0/shared";
 import type { PocStep, ScanReport, Finding, Severity } from "@0/shared";
 import { VERSION } from "@0/shared";
 
@@ -126,13 +127,19 @@ function findingToResult(finding: Finding, target: string): SarifResult {
   const codeFlows = pocStepsToCodeFlows(finding.pocSteps, target);
   if (codeFlows) result.codeFlows = codeFlows;
 
+  const priority = getFindingPriority(finding);
   result.properties = {
+    businessPriority: priority.label,
+    businessPriorityRank: priority.rank,
+    businessPriorityAssessed: priority.assessed,
+    businessPriorityRationale: priority.rationale,
     findingId: finding.id,
     category: finding.category,
     severity: finding.severity,
     status: finding.status,
     evidence: finding.evidence,
   };
+  if (finding.impactAssessment) result.properties["impactAssessment"] = finding.impactAssessment;
   if (finding.cvssScore !== undefined) result.properties["cvssScore"] = finding.cvssScore;
   if (finding.cvssVector) result.properties["cvssVector"] = finding.cvssVector;
   if (finding.confidence !== undefined) result.properties["confidence"] = finding.confidence;
@@ -194,7 +201,7 @@ export function formatSarif(report: ScanReport): string {
           },
         },
         results: [
-          ...report.findings.map((f) => findingToResult(f, report.target)),
+          ...[...report.findings].sort(compareFindingsByBusinessPriority).map((f) => findingToResult(f, report.target)),
           ...(report.reviewChecks ?? []).map(check => ({
             ruleId: `review-check/${check.id}`,
             kind: check.status === "pass" ? "pass" : check.status === "issue" ? "fail" : "open",

@@ -1,3 +1,4 @@
+import { getFindingPriority } from "@0/shared";
 /**
  * #928 — evidence-pack assembler for coordinated disclosure.
  *
@@ -118,7 +119,7 @@ function impactForSeverity(severity: string): string {
 function impactLine(finding: Finding): string {
   const base = impactForSeverity(finding.severity);
   const a = finding.impactAssessment;
-  if (!a) return base;
+  if (!a || !getFindingPriority(finding).assessed) return base;
   const gain: Record<string, string> = {
     rce: "remote code execution",
     "lpe-to-root": "local privilege escalation to root/SYSTEM",

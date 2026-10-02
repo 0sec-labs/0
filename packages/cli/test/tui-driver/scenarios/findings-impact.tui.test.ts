@@ -70,8 +70,12 @@ test.each([false, true])("persisted impact follows selection and filtered action
     cols: 160, rows: 60,
     route: { type: "findings", options: { dbPath: fixture.dbPath, severity: "high", limit: 10, all } },
   });
+  const first = await tui.waitForText(all ? /Business impact: headline/ : /Business impact: notable/);
+  expect(first).toContain(all ? "Business priority: Urgent" : "Business priority: High");
+  await tui.sendKeys("/Alpha latest");
+  await tui.sendKey("return");
   const alpha = await tui.waitForText(/Business impact: modest/);
-  expect(alpha).toContain("not reproduction proof");
+  expect(alpha).toMatch(/not\s+reproduction proof/);
   expect(alpha).toContain("One account cache");
   expect(alpha).not.toContain("Stale scope");
   expect(alpha).not.toContain("FILTERS");
@@ -80,14 +84,13 @@ test.each([false, true])("persisted impact follows selection and filtered action
   expect(alpha.indexOf("EVIDENCE")).toBeLessThan(alpha.indexOf("SOURCE FIX"));
   expect(alpha).toContain("severity:high");
 
-  await tui.sendKey("down");
+  await tui.sendKeys("/Beta");
+  await tui.sendKey("return");
   const beta = await tui.waitForText(/Business impact: notable/);
-  expect(beta).toContain("not reproduction proof");
+  expect(beta).toMatch(/not\s+reproduction proof/);
   expect(beta).toContain("Authenticated tenant records");
   expect(beta).not.toContain("One account cache");
 
-  await tui.sendKeys("/Beta");
-  await tui.sendKey("return");
   await tui.sendKeys("a");
   await tui.waitForText(/Marked accepted/);
   const db = new osecDB(fixture.dbPath);
@@ -101,7 +104,7 @@ test.each([false, true])("persisted impact follows selection and filtered action
   await tui.sendKey("return");
   const detail = await tui.waitForText(/FINDING · F-beta/);
   expect(detail).toContain("Beta tenant");
-  expect(detail).toContain("not reproduction proof");
+  expect(detail).toMatch(/not\s+reproduction proof/);
   expect(detail).toContain("Business impact: notable");
   expect(detail).not.toContain("FILTERS");
   await tui.sendKey("end");
@@ -112,7 +115,7 @@ test.each(["Gamma", "Delta"])("%s has no inferred impact in preview or full deta
   vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 503 }));
   const fixture = seed();
   tui = await launch({ cols: 160, rows: 60, route: { type: "findings", options: { dbPath: fixture.dbPath, limit: 10 } } });
-  await tui.waitForText(/Business impact: modest/);
+  await tui.waitForText(/Business impact: notable/);
   await tui.sendKeys(`/${title}`);
   await tui.sendKey("return");
   const preview = await tui.waitForText(/Not assessed/);
@@ -134,6 +137,9 @@ test("the finding preview keeps evidence beyond the former forty-row truncation 
     cols: 160, rows: 60, settings: { mouseSupport: true },
     route: { type: "findings", options: { dbPath: fixture.dbPath, limit: 10 } },
   });
+  await tui.waitForText(/Business impact: notable/);
+  await tui.sendKeys("/Alpha latest");
+  await tui.sendKey("return");
   await tui.waitForText(/Business impact: modest/);
   const requestRow = frameLines(tui.rawFrame())
     .map((line, y) => ({ line, y }))
@@ -145,4 +151,16 @@ test("the finding preview keeps evidence beyond the former forty-row truncation 
   }
   expect(tui.captureFrame()).toContain("EVIDENCE_TAIL_RETAINED");
   expect(tui.captureFrame()).toContain("SOURCE FIX");
+});
+
+test.each([false, true])("business priority is applied before the display limit in raw mode %s", async (all) => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 503 }));
+  const fixture = seed();
+  tui = await launch({
+    cols: 160, rows: 60,
+    route: { type: "findings", options: { dbPath: fixture.dbPath, limit: 1, all } },
+  });
+  const frame = await tui.waitForText(all ? /Business priority: Urgent/ : /Business priority: High/);
+  expect(frame).toContain(all ? "Alpha stale" : "Beta tenant");
+  expect(frame).not.toContain("Alpha latest");
 });
