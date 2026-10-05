@@ -404,7 +404,7 @@ describe("runNativeAgentLoop", () => {
   });
 
   it("regression: preserves error summary instead of clobbering with 'reached max turns'", async () => {
-    // Every multi-turn scan that hit a terminal Azure/OpenAI API error on
+    // Every multi-turn scan that hit a terminal provider API error on
     // turn N < maxTurns used to end up with an internally inconsistent
     // stage summary like "Retry (5 turns): Agent reached max turns (10)".
     // Root cause: the error-bail break at native-loop.ts:~263 set
@@ -419,7 +419,7 @@ describe("runNativeAgentLoop", () => {
         return {
           content: [],
           stopReason: "error",
-          error: "Azure OpenAI API error 401: Invalid API key",
+          error: "OpenRouter API error 401: Invalid API key",
           durationMs: 30_000,
         };
       },
@@ -441,7 +441,7 @@ describe("runNativeAgentLoop", () => {
 
     expect(state.done).toBe(false);
     expect(state.summary).toMatch(/^Error:/);
-    expect(state.summary).toContain("Azure OpenAI API error 401: Invalid API key");
+    expect(state.summary).toContain("OpenRouter API error 401: Invalid API key");
     expect(state.summary).not.toContain("reached max turns");
     expect(state.turnCount).toBeLessThan(10);
   });
