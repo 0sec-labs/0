@@ -177,7 +177,9 @@ const EXTERNAL_MEMORY_MAX_CHARS = 2000;
  * for the agent loop's bounded same-turn retry.
  */
 export function isTransientLlmError(errorMsg: string): boolean {
-  return /\b(429|529|502|503|504)\b|overloaded|rate.?limit|temporarily|too many requests|ETIMEDOUT|ECONNRESET|throttl|stall/i.test(errorMsg);
+  // LlmApiRuntime normalizes its per-request timeout to this message, so
+  // matching only the transport's ETIMEDOUT code misses timed-out child calls.
+  return /\b(429|529|502|503|504)\b|overloaded|rate.?limit|temporarily|too many requests|API request timed out|ETIMEDOUT|ECONNRESET|throttl|stall/i.test(errorMsg);
 }
 
 /**

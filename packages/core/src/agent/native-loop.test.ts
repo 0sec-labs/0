@@ -404,7 +404,7 @@ describe("runNativeAgentLoop", () => {
   });
 
   it("regression: preserves error summary instead of clobbering with 'reached max turns'", async () => {
-    // Every multi-turn scan that hit a transient Azure/OpenAI API error on
+    // Every multi-turn scan that hit a terminal Azure/OpenAI API error on
     // turn N < maxTurns used to end up with an internally inconsistent
     // stage summary like "Retry (5 turns): Agent reached max turns (10)".
     // Root cause: the error-bail break at native-loop.ts:~263 set
@@ -419,7 +419,7 @@ describe("runNativeAgentLoop", () => {
         return {
           content: [],
           stopReason: "error",
-          error: "Azure OpenAI API request timed out",
+          error: "Azure OpenAI API error 401: Invalid API key",
           durationMs: 30_000,
         };
       },
@@ -441,7 +441,7 @@ describe("runNativeAgentLoop", () => {
 
     expect(state.done).toBe(false);
     expect(state.summary).toMatch(/^Error:/);
-    expect(state.summary).toContain("Azure OpenAI API request timed out");
+    expect(state.summary).toContain("Azure OpenAI API error 401: Invalid API key");
     expect(state.summary).not.toContain("reached max turns");
     expect(state.turnCount).toBeLessThan(10);
   });
@@ -2374,6 +2374,9 @@ describe("isTransientLlmError", () => {
     expect(isTransientLlmError("OpenRouter API error 429: too many requests")).toBe(true);
     expect(isTransientLlmError("provider overloaded")).toBe(true);
     expect(isTransientLlmError("fetch failed: ETIMEDOUT")).toBe(true);
+    expect(isTransientLlmError("OpenRouter API request timed out")).toBe(true);
+    expect(isTransientLlmError("OpenAI API request timed out")).toBe(true);
+    expect(isTransientLlmError("Anthropic API request timed out")).toBe(true);
     expect(
       isTransientLlmError("ChatGPT (Codex backend) stream stalled — no SSE events for 120s (transient)"),
     ).toBe(true);
