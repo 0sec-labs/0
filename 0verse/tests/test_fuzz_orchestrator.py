@@ -650,6 +650,8 @@ def test_directed_concolic_reserves_each_solve_and_stops_after_expiry(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _install_directed_budget_fakes(monkeypatch)
+    # A fresh CI host can have less uptime than the run's wall-clock limit.
+    monkeypatch.setattr("zeroverse.preflight.time.monotonic", lambda: 1.0)
     monkeypatch.setattr(
         orchestrator, "_queue_inputs", lambda *args: [b"first", b"second"]
     )
@@ -671,7 +673,7 @@ def test_directed_concolic_reserves_each_solve_and_stops_after_expiry(
 
         def solve(self, _binary, stuck, **_kwargs):  # type: ignore[no-untyped-def]
             solver_calls.append(stuck)
-            budget.started_monotonic = 0.0
+            budget.started_monotonic -= budget.budget.wall_clock_seconds + 1.0
 
     monkeypatch.setattr(orchestrator, "AngrCfgDistance", NoDistance)
     monkeypatch.setattr(orchestrator, "AngrConcolicSolver", ExpiringSolver)
