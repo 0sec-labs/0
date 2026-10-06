@@ -1,10 +1,16 @@
 import { afterEach, expect, test } from "vitest";
 import { launch, type TuiHandle } from "../index.js";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { saveCredentials } from "../../../src/tui/credential-store.js";
+import { saveConnectionConfig } from "../../../src/web/connection-config.js";
 
 let tui: TuiHandle | undefined;
-afterEach(async () => { await tui?.close(); tui = undefined; });
+let savedHome: string | undefined;
+afterEach(async () => { await tui?.close(); tui = undefined; if (savedHome) rmSync(savedHome, { recursive: true, force: true }); savedHome = undefined; });
 
-test("ClinePass picker keeps public catalog access unverified and sends the exact subscription slug", async () => {
+test.each(["exported", "saved"])("ClinePass picker uses the %s connection and sends the exact subscription slug", async connection => {
   const requests: Array<{ url: string; model: string }> = [];
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = input instanceof Request ? input.url : String(input);
@@ -23,10 +29,16 @@ test("ClinePass picker keeps public catalog access unverified and sends the exac
     }
     return new Response(null, { status: 503 });
   };
+  if (connection === "saved") {
+    savedHome = mkdtempSync(join(tmpdir(), "0-cline-saved-tui-"));
+    saveCredentials({ cline: "synthetic-cline-picker-key" }, savedHome);
+    saveConnectionConfig("cline", { baseUrl: "https://cline.fixture/api/v1" }, savedHome);
+  }
   tui = await launch({ cols: 120, rows: 34, fetchImpl,
     route: { type: "chat", options: { providerId: "cline", model: "cline-pass/glm-5.3" } },
     settings: { onboardingCompleted: true },
-    env: { CLINE_API_KEY: "synthetic-cline-picker-key", CLINE_BASE_URL: "https://cline.fixture/api/v1", ZERO_SELECTED_PROVIDER: "cline", ZERO_MODEL: "cline-pass/glm-5.3" },
+    env: { ...(savedHome ? { HOME: savedHome } : { CLINE_API_KEY: "synthetic-cline-picker-key", CLINE_BASE_URL: "https://cline.fixture/api/v1" }),
+      ZERO_SELECTED_PROVIDER: "cline", ZERO_MODEL: "cline-pass/glm-5.3" },
   });
   await tui.waitForText(/type to chat/);
   await tui.sendKeys("/model");

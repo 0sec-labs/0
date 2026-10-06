@@ -147,11 +147,11 @@ import {
   isProviderConfigured,
 } from "./provider-status.js";
 import {
-  credentialEnvPatch,
   loadCredentials,
   redactSecret,
   saveCredentials,
 } from "./credential-store.js";
+import { savedConnectionEnvPatch } from "../connection-env.js";
 import {
   connectionRecoveryForError,
   type ConnectionRecovery,
@@ -1868,7 +1868,7 @@ export function ChatScreen({
     const buildEpoch = ++sessionBuildEpoch.current;
     // Resolve credentials into this construction only. Explicit shell exports
     // win, and changing a connection never mutates a live runtime's environment.
-    const env = { ...process.env, ...credentialEnvPatch(loadCredentials(), process.env) };
+    const env = { ...process.env, ...savedConnectionEnvPatch(process.env) };
     const { runtime, explicitChoice } = await createPreferredConsoleRuntime({
       model: (opts.providerId !== undefined ? opts.model : opts.model ?? options?.model) || undefined,
       provider: opts.providerId ?? options?.providerId,
@@ -2088,7 +2088,7 @@ export function ChatScreen({
     const runtime = runtimeRef.current;
     if (!runtime) return;
     // A live switch uses the same explicit credential environment as construction.
-    const env = { ...process.env, ...credentialEnvPatch(loadCredentials(), process.env) };
+    const env = { ...process.env, ...savedConnectionEnvPatch(process.env) };
     const currentProvider = runtime.getConfigurationDiagnostics().provider;
     // Prefer the selected row's provider identity over model-family inference.
     let targetProvider: string | undefined = sel.providerId;
@@ -3072,7 +3072,9 @@ export function ChatScreen({
           `repo ${repoRoot}`, `test command ${testCommand}`,
           "Working on isolated copies; your checkout is untouched. /fix cancel stops it.",
         ]);
-        const runtime = createRuntime({ type: "api", timeout: 600_000, model: modelId ?? undefined, provider: options?.providerId });
+        const runtime = createRuntime({ type: "api", timeout: 600_000, model: modelId ?? undefined, provider: options?.providerId,
+          env: Object.fromEntries(Object.entries({ ...process.env, ...savedConnectionEnvPatch(process.env) })
+            .filter((entry): entry is [string, string] => entry[1] !== undefined)) });
         if (!isNativeRuntime(runtime) || !(await runtime.isAvailable())) throw new Error("selected API runtime is unavailable; connect a provider first");
         const result = await runSourceFix({
           repoRoot, finding: focus.finding, runtime, testCommand,
