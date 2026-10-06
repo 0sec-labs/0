@@ -1,16 +1,12 @@
 name: "0verse: Main"
 
 # 0verse is the binary-native research engine exported into this repository
-# under 0verse/ (ADR-094). Consistent with the public PR policy, contributor
-# code executes only after review: this workflow runs on pushes to main and on
-# same-repository pull requests, never on fork checkouts.
+# under 0verse/ (ADR-094). Repository branch pushes validate trusted changes
+# before merge. Fork PRs use the protected public-PR policy-only workflow.
 
 on:
   push:
-    branches: [main]
-    paths: ["0verse/**", ".github/workflows/0verse.yml"]
-  pull_request:
-    branches: [main]
+    branches: ["**"]
     paths: ["0verse/**", ".github/workflows/0verse.yml"]
 
 permissions:
@@ -22,11 +18,6 @@ concurrency:
 
 jobs:
   core:
-    # Same-repo PRs only. Fork checkouts are never executed; the public PR
-    # policy workflow (public-pr.yml) is the only fork-facing job.
-    if: >-
-      github.event_name == 'push' ||
-      github.event.pull_request.head.repo.full_name == github.repository
     # Core checks use the locked dev environment and need no bench hardware.
     # The repository has no online Linux/X64 self-hosted runner.
     runs-on: ubuntu-24.04
