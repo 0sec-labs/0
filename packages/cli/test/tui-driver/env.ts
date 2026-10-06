@@ -26,6 +26,10 @@ const MANAGED_KEYS = [
   "ZERO_NO_TELEMETRY",
   "ZERO_TUI_TEST",
   "ZERO_TUI_REDUCE_MOTION",
+  "TERM",
+  "COLORTERM",
+  "FORCE_COLOR",
+  "NO_COLOR",
   // The console resolves a registry URL from this; an explicit empty value is a
   // deliberate "no store" so the marketplace route never reaches the network.
   "ZERO_REGISTRY_URL",
@@ -104,6 +108,11 @@ export function withDeterministicEnv(
   process.env["ZERO_NO_TELEMETRY"] = "1";
   process.env["ZERO_TUI_TEST"] = "1";
   process.env["ZERO_TUI_REDUCE_MOTION"] = "1";
+  // The headless renderer supports RGB. Theme assertions must not inherit
+  // GitHub's monochrome terminal or the operator's color-disable settings.
+  process.env["TERM"] = "xterm-256color";
+  process.env["COLORTERM"] = "truecolor";
+  process.env["FORCE_COLOR"] = "3";
   process.env["ZERO_REGISTRY_URL"] = "";
   process.env["ZERO_MCP"] = "";
   process.env["ZERO_CHATGPT_AUTH_FILE"] = join(homeDir, "no-codex-auth.json");
