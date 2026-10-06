@@ -3,6 +3,8 @@ name: "0: Main"
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
@@ -13,6 +15,11 @@ concurrency:
 
 jobs:
   verify:
+    # Validate repository branches before merge; fork code stays in the
+    # isolated public-PR policy workflow.
+    if: >-
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     # Fresh job-local storage avoids failures from the shared runner pool's full disk.
     runs-on: ubuntu-24.04
     timeout-minutes: 30
