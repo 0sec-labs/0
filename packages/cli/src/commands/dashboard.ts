@@ -364,7 +364,7 @@ function presentationEventFromDashboardRow(
     sequence,
     at,
     eventType: event.eventType,
-    payload: payload ?? { rawPayload: event.payload },
+    payload: event.eventType === "tool_artifact" && payload ? { ...payload, presentationEventId: event.id } : payload ?? { rawPayload: event.payload },
     scanId: event.scanId,
   });
 }

@@ -173,3 +173,20 @@ describe("web isolated plugin boundaries", () => {
     expect(execution.flush).toHaveBeenCalledOnce();
   });
 });
+
+
+it("shows ClinePass public inventory without implying active subscription entitlement", async () => {
+  vi.stubEnv("CLINE_API_KEY", "synthetic-cline-key");
+  vi.spyOn(LlmApiRuntime.prototype, "availableModelCatalog").mockResolvedValue([
+    { id: "cline-pass/glm-5.3", source: "catalog" }, { id: "anthropic/claude-sonnet-4-6", source: "catalog" },
+  ]);
+  const service = new WebOperatorServices();
+  const inventory = await service.handle("/api/console/models", "GET", undefined, new URLSearchParams("providerId=cline"));
+  expect(inventory?.data).toMatchObject({ models: [
+    { id: "cline-pass/glm-5.3", provider: "cline", source: "public-catalog", price: "ClinePass plan (access unverified)" },
+    { id: "anthropic/claude-sonnet-4-6", provider: "cline", source: "public-catalog" },
+  ] });
+  const runtime = new LlmApiRuntime({ type: "api", provider: "openai", model: "gpt-4o", timeout: 1000 });
+  const selected = await applyWebConsoleRuntimeSelection(runtime, { providerId: "cline", model: "cline-pass/glm-5.3" });
+  expect(selected).toMatchObject({ providerId: "cline", model: "cline-pass/glm-5.3", configured: true });
+});

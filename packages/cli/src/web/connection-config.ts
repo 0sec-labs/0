@@ -7,7 +7,7 @@ import { homeStateDir } from "@0/shared";
 const BASE_URL_VARS: Readonly<Record<string, string>> = {
   deepseek: "DEEPSEEK_BASE_URL", anthropic: "ANTHROPIC_BASE_URL", azure: "AZURE_OPENAI_BASE_URL",
   openai: "OPENAI_BASE_URL", "z-ai": "Z_AI_BASE_URL", kimi: "KIMI_BASE_URL", qwen: "QWEN_BASE_URL",
-  xai: "XAI_BASE_URL", opencode: "OPENCODE_BASE_URL", copilot: "COPILOT_BASE_URL",
+  xai: "XAI_BASE_URL", opencode: "OPENCODE_BASE_URL", cline: "CLINE_BASE_URL", copilot: "COPILOT_BASE_URL",
 };
 export interface ConnectionConfig { baseUrl?: string; model?: string; projectId?: string }
 

@@ -330,9 +330,9 @@ export class WebOperatorServices {
     const metadata = new Map(buildFullModelCatalog().map(model => [`${model.provider}/${model.id}`, model]));
     const rows = discovered.models.map(model => ({
       id: model.id, provider: model.provider,
-      price: model.provider === "chatgpt-codex" ? "Included in subscription" : metadata.get(`${model.provider}/${model.id}`)?.price ?? "Unknown rate",
+      price: model.provider === "chatgpt-codex" ? "Included in subscription" : model.provider === "cline" && model.id.startsWith("cline-pass/") ? "ClinePass plan (access unverified)" : metadata.get(`${model.provider}/${model.id}`)?.price ?? "Unknown rate",
       contextWindowTokens: model.contextTokens ?? resolveContextLimit({ modelId: model.id, providerId: model.provider })?.tokens ?? null,
-      source: "account" as const,
+      source: model.source === "catalog" ? "public-catalog" as const : "account" as const,
     }));
     return { models: rows, providerId: providerId ?? null,
       diagnostics: discovered.diagnostics.map(item => ({ ...item, message: publicMessage(item.message) })), roles: MODEL_ROLES };

@@ -47,6 +47,7 @@ const MANAGED_KEYS = [
   "ANTHROPIC_BASE_URL",
   "DEEPSEEK_BASE_URL",
   "OPENCODE_BASE_URL",
+  "CLINE_BASE_URL",
 ] as const;
 
 export interface DeterministicEnv {

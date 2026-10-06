@@ -1,9 +1,9 @@
 import { LlmApiRuntime, type RuntimeConfig } from "@0/core";
 
-export interface AvailableModel { id: string; provider: string; contextTokens?: number }
+export interface AvailableModel { id: string; provider: string; contextTokens?: number; source?: "catalog" }
 export interface ModelDiscoveryResult { models: AvailableModel[]; diagnostics: Array<{ providerId: string; message: string }> }
 
-/** Resolve each connection independently; public catalogs can enrich these IDs, never add IDs. */
+/** Resolve each connection independently; preserve public Cline catalog provenance. */
 export async function discoverConnectionModels(
   env: Readonly<Record<string, string | undefined>>,
   providerIds: readonly string[],

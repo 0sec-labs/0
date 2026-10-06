@@ -1,3 +1,5 @@
+import { appendAccessMilestone } from "@0/shared/dist/access-milestone.js";
+import { AccessMilestoneBanner } from "@/components/access-milestone";
 import { useBackendApi } from "@/api";
 import { eventStream } from "@/lib/event-stream";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -195,6 +197,7 @@ export function LivePage() {
   const [alarms, setAlarms] = useState<ProbeAlarmRow[]>([]);
   const [leads, setLeads] = useState<LeadRow[]>([]);
   const [huntCards, setHuntCards] = useState<HuntCard[]>([]);
+  const [accessMilestones, setAccessMilestones] = useState<Array<{ milestone: Extract<osecHuntEvent, { kind: "access_milestone" }>["milestone"]; scanId: string; ts: number }>>([]);
   const [scanMeta, setScanMeta] = useState<{ repo?: string; model_id?: string; layer?: number } | null>(null);
   const [filesSeen, setFilesSeen] = useState<string[]>([]);
   const [endSummary, setEndSummary] = useState<{ files_seen?: number; chunks_scored?: number; leads_emitted?: number; elapsed_seconds?: number } | null>(null);
@@ -288,6 +291,7 @@ export function LivePage() {
     if (baseTsRef.current === null && typeof event.ts === "number") {
       baseTsRef.current = event.ts;
     }
+    if (event.kind === "access_milestone") setAccessMilestones(previous => appendAccessMilestone(previous, { milestone: event.milestone, scanId: event.scanId, ts: event.ts }));
     // Resolve provenance: for tool_use + finding events with file:line, try
     // to find a lead whose window contains the cited line. Done eagerly on
     // ingest so the card → lead lookup is O(1) at render time.
@@ -311,7 +315,10 @@ export function LivePage() {
       event,
       citedLeadId,
     };
-    setHuntCards((prev) => [card, ...prev].slice(0, MAX_HUNT_ROWS));
+    setHuntCards((prev) => {
+      if (event.kind === "access_milestone" && prev.some(existing => existing.event.kind === "access_milestone" && existing.event.milestone.key === event.milestone.key)) return prev;
+      return [card, ...prev].slice(0, MAX_HUNT_ROWS);
+    });
   }, [mkId]);
 
   const resetState = useCallback(() => {
@@ -319,6 +326,7 @@ export function LivePage() {
     setAlarms([]);
     setLeads([]);
     setHuntCards([]);
+    setAccessMilestones([]);
     setScanMeta(null);
     setFilesSeen([]);
     setEndSummary(null);
@@ -405,6 +413,7 @@ export function LivePage() {
   useEffect(() => {
     if (demoMode || !huntUrl) return;
     setHuntCards([]);
+    setAccessMilestones([]);
     setHuntConnection("connecting");
     let source: ReturnType<typeof eventStream> | null = null;
     try {
@@ -508,6 +517,8 @@ export function LivePage() {
           </>
         )}
       />
+
+      {accessMilestones.slice(-3).map(item => <AccessMilestoneBanner key={item.milestone.key} milestone={item.milestone} scanId={item.scanId} at={item.ts * 1000} />)}
 
       <Card className="overflow-hidden">
         <CardHeader>
@@ -884,6 +895,7 @@ function HuntCardView({
   const body =
     event.kind === "tool_use" ? <ToolUseBody event={event} /> :
     event.kind === "finding" ? <FindingBody event={event} /> :
+    event.kind === "access_milestone" ? <AccessMilestoneBanner milestone={event.milestone} scanId={event.scanId} at={event.ts * 1000} /> :
     <StageBody event={event} />;
 
   const footer = (

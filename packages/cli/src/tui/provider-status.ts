@@ -161,6 +161,13 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
     hint: "sign in with your xAI account, or set XAI_API_KEY from console.x.ai (endpoint override: XAI_BASE_URL)",
   },
   {
+    id: "cline",
+    label: "Cline / ClinePass",
+    methods: ["api-key"],
+    envVars: ["CLINE_API_KEY"],
+    hint: "set CLINE_API_KEY from app.cline.bot Settings > API Keys; choose cline-pass/* for your active ClinePass plan (endpoint override: CLINE_BASE_URL)",
+  },
+  {
     id: "opencode",
     label: "OpenCode Zen",
     methods: ["api-key"],

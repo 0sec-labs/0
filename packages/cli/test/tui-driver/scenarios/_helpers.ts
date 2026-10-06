@@ -7,6 +7,21 @@ import type { LaunchOptions, TuiHandle } from "../index.js";
 import { degradePalette, detectColorDepth, getTheme, parseHex } from "../../../src/tui/themes.js";
 import type { CapturedFrame } from "@opentui/core";
 
+/** Model discovery for exactly the synthetic fixture credentials; all other HTTP fails offline. */
+export const fixtureModelFetch: typeof fetch = async (input, init) => {
+  const url = input instanceof Request ? input.url : String(input);
+  const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+  const authorization = headers.get("Authorization");
+  if (url === "https://api.deepseek.com/models" &&
+    ["Bearer test-key", "Bearer synthetic-existing-key"].includes(authorization ?? "")) {
+    return Response.json({ data: ["deepseek-chat", "deepseek-flash", "deepseek-reasoner", "deepseek-v4-flash"].map(id => ({ id, context_length: 128_000 })) });
+  }
+  if (url === "https://api.anthropic.com/v1/models" && headers.get("x-api-key") === "synthetic-embedded-anthropic-key") {
+    return Response.json({ data: [{ id: "claude-fable-5-1", max_input_tokens: 200_000 }, { id: "claude-sonnet-4-6", max_input_tokens: 200_000 }] });
+  }
+  return new Response(null, { status: 503 });
+};
+
 /**
  * Pin a direct provider and model for deterministic picker navigation. The
  * fixture supplies a credential and an active model from the first paint;
@@ -15,6 +30,7 @@ import type { CapturedFrame } from "@opentui/core";
 export function modelsByokLaunch(opts: { mouse?: boolean } = {}): LaunchOptions {
   return {
     route: { type: "models" },
+    fetchImpl: fixtureModelFetch,
     settings: opts.mouse ? { mouseSupport: true } : {},
     env: {
       DEEPSEEK_API_KEY: "test-key",

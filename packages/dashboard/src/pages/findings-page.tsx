@@ -1,3 +1,4 @@
+import { AssessmentAccessMilestones } from "@/components/access-milestone";
 import { FindingImpactEditor } from "@/components/finding-impact-editor";
 import { getFindingPriority, compareFindingsByBusinessPriority } from "@0/shared/dist/finding-priority.js";
 import { BusinessPriorityBadge } from "@/components/business-priority-badge";
@@ -984,6 +985,7 @@ function FindingFamilyInspector({
 
           <TabsContent value="evidence">
             <div className="space-y-3">
+              <AssessmentAccessMilestones scanId={data.latest.scanId} />
               <EvidenceTabs
                 request={data.latest.evidenceRequest}
                 response={data.latest.evidenceResponse}

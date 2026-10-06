@@ -1,4 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { LlmApiRuntime } from "@0/core";
 import { launch, type TuiHandle } from "../index.js";
 
 vi.mock("../../../src/tui/credential-store.js", async (original) => ({
@@ -9,6 +10,13 @@ let tui: TuiHandle | undefined;
 afterEach(async () => { await tui?.close(); tui = undefined; vi.restoreAllMocks(); });
 
 function fixture(discovery: "ok" | "denied" = "ok", publicDiscovery: "ok" | "denied" = "denied") {
+  const originalCatalog = LlmApiRuntime.prototype.availableModelCatalog;
+  vi.spyOn(LlmApiRuntime.prototype, "availableModelCatalog").mockImplementation(async function(this: LlmApiRuntime, signal) {
+    if (this.resolvedProvider() === "azure" && process.env.AZURE_OPENAI_API_KEY === "synthetic-azure-key" && process.env.AZURE_OPENAI_BASE_URL === "https://azure.fixture/v1") {
+      return [{ id: "gpt-5.5" }];
+    }
+    return originalCatalog.call(this, signal);
+  });
   const requests: Array<{ url: string; model: string }> = [];
   let publicRequests = 0;
   const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
@@ -21,6 +29,9 @@ function fixture(discovery: "ok" | "denied" = "ok", publicDiscovery: "ok" | "den
         } },
         "chatgpt-codex": { models: { "aaa-public-subscription": {} } },
       });
+    }
+    if (url === "https://api.openai.com/v1/models" && new Headers(init?.headers).get("Authorization") === "Bearer synthetic-api-key") {
+      return Response.json({ data: [{ id: "aaa-automatic-model", context_length: 524288 }, { id: "gpt-5.5" }] });
     }
     if (url.includes("/codex/models?")) {
       return discovery === "denied" ? new Response(null, { status: 403 }) : Response.json({ models: [
@@ -170,7 +181,7 @@ test("Azure roles retain OpenAI-named models while excluding subscription-only r
   await tui!.waitForText(/discovery: gpt-5.5 set/);
 });
 
-test("new public models appear unfiltered, survive a forced offline reload, and keep their API route", async () => {
+test("connection-discovered models appear unfiltered, retain pricing through an offline refresh, and keep their API route", async () => {
   const { requests, publicRequestCount, setPublicDiscovery } = fixture("ok", "ok");
   await start("synthetic-api-key", "openai");
   await tui!.sendKeys("/model");
@@ -180,10 +191,10 @@ test("new public models appear unfiltered, survive a forced offline reload, and 
   expect(publicRequestCount()).toBe(1);
   setPublicDiscovery("denied");
   await tui!.sendKey("r", { ctrl: true });
-  await tui!.waitForText(/Catalog offline/);
+  await tui!.waitForText(/Pricing offline/);
   expect(publicRequestCount()).toBe(2);
   expect(tui!.captureFrame()).toContain("aaa-automatic-model");
-  await tui!.sendKey("down");
+  await tui!.sendKeys("aaa-automatic-model");
   await tui!.sendKey("return");
   await tui!.waitForText(/◈ aaa-automatic-model/);
   await tui!.sendKeys("synthetic discovered-model request");

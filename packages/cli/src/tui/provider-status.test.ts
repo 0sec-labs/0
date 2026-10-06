@@ -93,6 +93,7 @@ describe("PROVIDERS", () => {
         "azure",
         "chatgpt-codex",
         "copilot",
+        "cline",
         "deepseek",
         "google",
         "kimi",

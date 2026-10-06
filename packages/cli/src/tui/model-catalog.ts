@@ -52,7 +52,7 @@ export function buildModelCatalog(currentModel?: string): CatalogModel[] {
     .map((id) => {
       const provider = modelProvider(id);
       const rates = getRates(Object.hasOwn(METERED_CATALOG_PROVIDERS, provider) ? `${provider}/${id}` : id);
-      return { id, provider, price: formatModelPrice(rates.input, rates.output) };
+      return { id, provider, price: provider === "cline" && id.startsWith("cline-pass/") ? "ClinePass plan (access unverified)" : formatModelPrice(rates.input, rates.output) };
     });
 
   // The active model floats to the top: it is the row the operator most
@@ -102,8 +102,8 @@ export function catalogExtras(opts: CatalogSyncOptions = {}): CatalogModel[] {
   for (const m of loadCatalogModels(opts).models) {
     // Skip only the priced core's own rows (same id, same provider).
     if (priced.has(m.id.toLowerCase()) && m.provider === modelProvider(m.id)) continue;
-    const plan = Object.hasOwn(PLAN_PROVIDERS, m.provider);
-    let price = plan ? "subscription" : "—";
+    const plan = Object.hasOwn(PLAN_PROVIDERS, m.provider) || (m.provider === "cline" && m.id.startsWith("cline-pass/"));
+    let price = m.provider === "cline" && plan ? "ClinePass plan (access unverified)" : plan ? "subscription" : "—";
     if (!plan && m.input !== undefined && m.output !== undefined) {
       const rates = Object.hasOwn(METERED_CATALOG_PROVIDERS, m.provider)
         ? getRates(`${m.provider}/${m.id}`)

@@ -338,3 +338,10 @@ describe("catalog merge (priced core + synced extras)", () => {
     expect(full.filter((model) => model.id === "custom-deployment-x")).toHaveLength(1);
   });
 });
+
+
+it("normalizes ClinePass slugs without registering subscription zeroes as metered charges", () => {
+  const models = normalizeModelsDev({ "cline-pass": { models: { "deepseek-v4-flash": { cost: { input: 0, output: 0 } } } } });
+  expect(models).toMatchObject([{ id: "cline-pass/deepseek-v4-flash", provider: "cline", input: 0, output: 0 }]);
+  expect(getRates("cline/cline-pass/deepseek-v4-flash")).toMatchObject({ input: 0.44, output: 1.32 });
+});

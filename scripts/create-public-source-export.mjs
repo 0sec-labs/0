@@ -41,6 +41,7 @@ const publicRoots = [
   ".github/CONTRIBUTING.md",
   "scripts/create-public-source-export.mjs",
   "scripts/create-public-source-export.test.mjs",
+  "scripts/dashboard-browser-imports.test.mjs",
   "scripts/docker/Dockerfile",
   "scripts/docker/Dockerfile.workbench",
   "LICENSE",

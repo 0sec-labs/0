@@ -848,6 +848,29 @@ const QWEN_TOKEN_PLAN_DEEPSEEK_MODEL = "deepseek-v4-flash-0731";
 const XAI_DEFAULT_BASE_URL = "https://api.x.ai/v1";
 const XAI_DEFAULT_MODEL = "grok-4.6";
 
+// Cline API keys support both usage billing and ClinePass model slugs. Never
+// reuse extension account tokens or infer a Pass subscription from key presence.
+const CLINE_DEFAULT_BASE_URL = "https://api.cline.bot/api/v1";
+const CLINE_DEFAULT_MODEL = "anthropic/claude-sonnet-4-6";
+function clineModelId(model: string): string { return model.replace(/^cline\//i, ""); }
+
+/** Cline non-streaming Chat may wrap the OpenAI response in success/data. */
+function clineChatResponse(value: unknown): Record<string, unknown> {
+  const record = (input: unknown): input is Record<string, unknown> =>
+    input !== null && typeof input === "object" && !Array.isArray(input);
+  if (!record(value)) throw new Error("Cline returned an invalid chat response.");
+  let response = value;
+  if (Object.hasOwn(value, "success")) {
+    if (value.success !== true || !record(value.data)) throw new Error("Cline returned an unsuccessful or invalid chat response.");
+    response = value.data;
+  }
+  if (!Array.isArray(response.choices) || response.choices.length === 0 ||
+    !record(response.choices[0]) || !record(response.choices[0].message)) {
+    throw new Error("Cline returned an invalid chat response.");
+  }
+  return response;
+}
+
 // ── OpenCode Zen (API-key gateway, https://opencode.ai/zen/v1) ─────────────
 //
 // Zen proxies several native APIs. Route each documented model family to its
@@ -1005,7 +1028,7 @@ export function parseLlmFallbackChain(env: Readonly<NodeJS.ProcessEnv> = process
   const entries: FallbackEntry[] = [];
   const VALID_PROVIDERS: Record<string, true> = {
     openrouter: true, anthropic: true, openai: true, azure: true, deepseek: true,
-    "chatgpt-codex": true, "z-ai": true, kimi: true, qwen: true, xai: true, opencode: true,
+    "chatgpt-codex": true, "z-ai": true, kimi: true, qwen: true, xai: true, opencode: true, cline: true,
     copilot: true, google: true,
   };
   for (const part of raw.split(",")) {
@@ -1113,6 +1136,11 @@ export function resolveFailoverProvider(
       const key = apiKey ?? env.XAI_API_KEY;
       if (!key) return undefined;
       return { apiKey: key, baseUrl: env.XAI_BASE_URL ?? XAI_DEFAULT_BASE_URL, wireApi: openAICompatibleWireApi(env, "XAI_WIRE_API") };
+    }
+    case "cline": {
+      const key = apiKey ?? env.CLINE_API_KEY;
+      if (!key?.trim()) return undefined;
+      return { apiKey: key, baseUrl: env.CLINE_BASE_URL ?? CLINE_DEFAULT_BASE_URL, wireApi: "chat_completions" };
     }
     case "opencode": {
       const key = apiKey ?? env.OPENCODE_API_KEY;
@@ -1962,6 +1990,7 @@ function providerForModel(model: string | undefined, env: Readonly<NodeJS.Proces
   if (m === QWEN_TOKEN_PLAN_DEEPSEEK_MODEL) {
     return env.QWEN_API_KEY ? "qwen" : undefined;
   }
+  if (m.startsWith("cline/") || m.startsWith("cline-pass/")) return env.CLINE_API_KEY?.trim() ? "cline" : undefined;
   if (m.startsWith("openrouter/")) return env.OPENROUTER_API_KEY ? "openrouter" : undefined;
   // GLM / Z.ai.
   if (m.startsWith("glm-") || m.startsWith("z-ai/") || m.includes("glm")) {
@@ -2016,7 +2045,7 @@ const DEFAULT_PROVIDER_MODELS: Record<ApiProvider, string | undefined> = {
   openai: DEFAULT_OPENAI_MODEL, azure: undefined, deepseek: DEEPSEEK_DEFAULT_MODEL,
   "chatgpt-codex": CODEX_DEFAULT_MODEL, "z-ai": ZAI_DEFAULT_MODEL,
   kimi: KIMI_DEFAULT_MODEL, qwen: QWEN_DEFAULT_MODEL, xai: XAI_DEFAULT_MODEL,
-  opencode: OPENCODE_DEFAULT_MODEL, copilot: COPILOT_DEFAULT_MODEL,
+  cline: CLINE_DEFAULT_MODEL, opencode: OPENCODE_DEFAULT_MODEL, copilot: COPILOT_DEFAULT_MODEL,
   google: GEMINI_DEFAULT_MODEL,
 };
 
@@ -2077,6 +2106,17 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
   const pinnedProviderRaw =
     forcedProviderRaw ??
     (selectedProviderApplies ? selectedProviderRaw : undefined);
+  if (preferredModel && /^(?:cline\/|cline-pass\/)/i.test(preferredModel)) {
+    if (pinnedProviderRaw && pinnedProviderRaw !== "cline") {
+      throw new Error("Cline model IDs require the Cline provider; choose the Cline connection.");
+    }
+    if (configApiKey && !pinnedProviderRaw) {
+      throw new Error("Cline model IDs with RuntimeConfig.apiKey require an explicit Cline provider.");
+    }
+    if (!configApiKey && !env.CLINE_API_KEY?.trim()) {
+      throw new Error("Cline model requires CLINE_API_KEY credentials. Connect Cline in Connections.");
+    }
+  }
   if (pinnedProviderRaw) {
     const source = pinnedProviderRaw === forcedProviderRaw
       ? "ZERO_FORCE_PROVIDER"
@@ -2176,6 +2216,9 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
     case "xai":
       return { provider: "xai", apiKey: env.XAI_API_KEY as string,
         baseUrl: env.XAI_BASE_URL ?? XAI_DEFAULT_BASE_URL, defaultModel: XAI_DEFAULT_MODEL, wireApi: openAICompatibleWireApi(env, "XAI_WIRE_API") };
+    case "cline":
+      return { provider: "cline", apiKey: env.CLINE_API_KEY as string,
+        baseUrl: env.CLINE_BASE_URL ?? CLINE_DEFAULT_BASE_URL, defaultModel: CLINE_DEFAULT_MODEL, wireApi: "chat_completions" };
     case "opencode":
       return { provider: "opencode", apiKey: env.OPENCODE_API_KEY as string,
         baseUrl: env.OPENCODE_BASE_URL ?? OPENCODE_DEFAULT_BASE_URL, defaultModel: OPENCODE_DEFAULT_MODEL, wireApi: opencodeWireApiForModel(preferredModel) };
@@ -2364,6 +2407,12 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
       defaultModel: OPENCODE_DEFAULT_MODEL,
       wireApi: opencodeWireApiForModel(preferredModel),
     };
+  }
+
+  if (env.CLINE_API_KEY?.trim()) {
+    return { provider: "cline", apiKey: env.CLINE_API_KEY,
+      baseUrl: env.CLINE_BASE_URL ?? CLINE_DEFAULT_BASE_URL,
+      defaultModel: CLINE_DEFAULT_MODEL, wireApi: "chat_completions" };
   }
 
   const copilotToken = env["ZERO_COPILOT_GITHUB_TOKEN"];
@@ -2563,6 +2612,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       this.model = copilotModelId(this.model);
     }
 
+    // Strip only our routing prefix; cline-pass/ is part of the upstream ID.
+    if (this.provider === "cline") this.model = clineModelId(this.model);
+
     // These deployments reject function tools plus reasoning_effort on
     // /chat/completions. The Responses endpoint supports the agent loop, so
     // upgrade only the exact provider/model pairs rather than changing every
@@ -2646,8 +2698,8 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     return loadCodexModelCatalog({ signal, resolveCredentials: () => refreshChatGptCodexAuthState(state) });
   }
 
-  /** Discover callable IDs from this captured connection, never from public pricing metadata. */
-  async availableModelCatalog(signal?: AbortSignal): Promise<Array<{ id: string; contextTokens?: number }>> {
+  /** Discover endpoint inventory; Cline explicitly marks its public catalog provenance. */
+  async availableModelCatalog(signal?: AbortSignal): Promise<Array<{ id: string; contextTokens?: number; source?: "catalog" }>> {
     if (this.provider === "chatgpt-codex") return this.codexModelCatalog(signal);
     const { discoverProviderModels } = await import("./provider-model-discovery.js");
     // Discovery uses the same resolved endpoint and credential snapshot as inference.
@@ -2722,7 +2774,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         ? opencodeModelId(sel.model)
         : this.provider === "copilot"
           ? copilotModelId(sel.model)
-          : sel.model;
+          : this.provider === "cline" ? clineModelId(sel.model) : sel.model;
       if (model !== this.model) {
         this.model = model;
         this.config = { ...this.config, model };
@@ -2819,7 +2871,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         ? opencodeModelId(id)
         : this.provider === "copilot"
           ? copilotModelId(id)
-          : id;
+          : this.provider === "cline" ? clineModelId(id) : id;
     const model = stripProviderPrefix(selectedModel);
     // Operator-approved allowlist: the parent's own model, or any FIXED pin in
     // agentModels (the "auto" sentinel is not a real pin, so it is excluded).
@@ -2869,6 +2921,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       this.provider === "qwen" ||
       this.provider === "xai" ||
       this.provider === "copilot" ||
+      this.provider === "cline" ||
       (this.provider === "opencode" &&
         (this.wireApi === "chat_completions" || this.wireApi === "responses")) ||
       // chatgpt-codex always speaks Responses API; treat it as
@@ -3003,7 +3056,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       } else {
         headers["Authorization"] = `Bearer ${this.apiKey}`;
       }
-      if (this.provider === "openrouter") {
+      if (this.provider === "openrouter" || this.provider === "cline") {
         headers["HTTP-Referer"] = "https://0.security";
         headers["X-Title"] = "0 Security Scanner";
       }
@@ -3261,6 +3314,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       case "qwen": return "Qwen (Alibaba Model Studio)";
       case "xai": return "xAI (Grok)";
       case "opencode": return "OpenCode Zen";
+      case "cline": return "Cline";
       case "copilot": return "GitHub Copilot";
       case "google": return "Google Gemini (Code Assist)";
     }
@@ -3279,6 +3333,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       "  export KIMI_API_KEY=...                (Moonshot Kimi K3 — flat-rate coding, Anthropic-compatible)\n" +
       "  export QWEN_API_KEY=...                (Alibaba Qwen — Token Plan sub, OpenAI-compatible)\n" +
       "  export XAI_API_KEY=...                 (xAI Grok — OpenAI-compatible)\n" +
+      "  export CLINE_API_KEY=...               (Cline — API key; cline-pass/* needs ClinePass)\n" +
       "  export OPENCODE_API_KEY=...            (OpenCode Zen — multi-wire gateway)\n" +
       "  export ZERO_COPILOT_GITHUB_TOKEN=...   (GitHub Copilot — device-code OAuth token)"
     );
@@ -3400,7 +3455,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         ? opencodeModelId(entry.model)
         : entry.provider === "copilot"
           ? copilotModelId(entry.model)
-          : entry.model;
+          : entry.provider === "cline" ? clineModelId(entry.model) : entry.model;
       this.apiKey = cfg.apiKey;
       this.baseUrl = cfg.baseUrl;
       this.wireApi = cfg.wireApi;
@@ -3783,7 +3838,8 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       const parsedBody = JSON.parse(body);
       // Code Assist wraps the whole generateContent response in `{ response }`;
       // unwrap it so the shared Google parser (below) sees the native shape.
-      const json = this.isGeminiCodeAssist ? (parsedBody.response ?? parsedBody) : parsedBody;
+      const json = this.provider === "cline" ? clineChatResponse(parsedBody)
+        : this.isGeminiCodeAssist ? (parsedBody.response ?? parsedBody) : parsedBody;
 
       // Extract text from response (different formats)
       let text: string;
@@ -4436,7 +4492,8 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       const parsedResponse = JSON.parse(responseText);
       // Code Assist wraps the generateContent response in `{ response }`; unwrap
       // it so the shared Google parser (below) sees the native candidates shape.
-      const json = this.isGeminiCodeAssist ? (parsedResponse.response ?? parsedResponse) : parsedResponse;
+      const json = this.provider === "cline" ? clineChatResponse(parsedResponse)
+        : this.isGeminiCodeAssist ? (parsedResponse.response ?? parsedResponse) : parsedResponse;
       appendNativeTrace({
         kind: "native-response",
         provider: this.providerLabel,

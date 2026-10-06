@@ -40,6 +40,9 @@ export function connectionRecoveryForError(error: string): ConnectionRecovery | 
       detail,
     };
   }
+  if (/\bcline(?:pass)?\b|cline_api_key/i.test(detail)) {
+    return { providerId: "cline", title: "Cline credentials need attention", detail };
+  }
   if (/anthropic|claude/i.test(detail)) {
     return {
       providerId: "anthropic",
