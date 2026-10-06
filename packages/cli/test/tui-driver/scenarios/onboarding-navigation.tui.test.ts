@@ -21,12 +21,13 @@ async function firstRun(cols = 100, rows = 34, openSetup = true) {
   vi.spyOn(process, "exit").mockImplementation(() => { throw new Error("Unexpected application exit"); });
   const screen = await launch({ ...modelsByokLaunch(), route: { type: "chat" }, cols, rows,
     settings: { onboardingCompleted: false, mouseSupport: true } });
+  // Retain the handle even if startup fails, so afterEach restores the worker.
+  tui = screen;
+  await screen.waitForText(/type to chat or \/ for commands|draft here · restore access to send|Provider unavailable/i);
   if (openSetup) {
     await screen.sendKeys("/onboard");
     await screen.sendKey("return");
     await screen.waitForText(/Step 1 of 5/);
-  } else {
-    await screen.waitForText(/type to chat or \/ for commands|draft here · restore access to send|Provider unavailable/i);
   }
   return screen;
 }

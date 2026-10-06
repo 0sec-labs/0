@@ -7,13 +7,15 @@ import { createServer } from "node:http";
 import { delimiter, join, resolve } from "node:path";
 
 const [tempArg, scenario, ...invocation] = process.argv.slice(2);
-assert.ok(tempArg && invocation.length, "usage: smoke-cli-provider.mjs <temp-dir> <review|scan|review-auth-error|scan-auth-error> <CLI argv...>");
-assert.ok(["review", "scan", "review-auth-error", "scan-auth-error"].includes(scenario), "unknown smoke scenario");
+assert.ok(tempArg && invocation.length, "usage: smoke-cli-provider.mjs <temp-dir> <review|scan|review-auth-error|scan-auth-error|cline-review|cline-review-auth-error|cline-review-saved|cline-scan|cline-scan-auth-error|cline-scan-saved> <CLI argv...>");
+assert.ok(["review", "scan", "review-auth-error", "scan-auth-error", "cline-review", "cline-review-auth-error", "cline-review-saved", "cline-scan", "cline-scan-auth-error", "cline-scan-saved"].includes(scenario), "unknown smoke scenario");
 const temp = resolve(tempArg);
-const review = scenario.startsWith("review");
+const cline = scenario.startsWith("cline-");
+const savedConnection = cline && scenario.endsWith("-saved");
+const review = scenario.includes("review");
 const rejectAuth = scenario.endsWith("auth-error");
-const key = "0-cli-smoke-local-provider";
-const model = "claude-sonnet-4-6";
+const key = cline ? "0-cli-smoke-local-cline-provider" : "0-cli-smoke-local-provider";
+const model = cline ? "cline-pass/glm-5.3" : "claude-sonnet-4-6";
 const files = ["index.js", "helper.js", "value.js"];
 // Resolve local entrypoints before changing cwd, so project config and plugins
 // cannot come from the operator's checkout. Bare runtime names still use PATH.
@@ -59,7 +61,7 @@ console.log(JSON.stringify({ schema_version: "1.0.0", findings: [], target: { fi
   let fixtureError;
   const server = createServer(async (request, response) => {
     try {
-      if (request.url !== "/v1/messages" || request.method !== "POST") {
+      if (request.url !== (cline ? "/api/v1/chat/completions" : "/v1/messages") || request.method !== "POST") {
         if (request.url?.startsWith("/target")) counters.targetRequests++;
         else counters.unexpectedRequests++;
         throw new Error(`unexpected fixture traffic: ${request.method} ${request.url}`);
@@ -67,12 +69,18 @@ console.log(JSON.stringify({ schema_version: "1.0.0", findings: [], target: { fi
       const body = await readJson(request);
       counters.modelRequests++;
       assert.ok(counters.modelRequests <= 2, "agent did not finish within two provider turns");
-      assert.equal(request.headers["x-api-key"], key);
-      assert.equal(request.headers["anthropic-version"], "2023-06-01");
+      if (cline) {
+        assert.equal(request.headers.authorization, `Bearer ${key}`);
+        assert.equal(request.headers["x-api-key"], undefined, "Cline used Anthropic auth");
+        assert.equal(body.stream, false, "Cline must explicitly select non-streaming Chat");
+      } else {
+        assert.equal(request.headers["x-api-key"], key);
+        assert.equal(request.headers["anthropic-version"], "2023-06-01");
+      }
       assert.equal(body.model, model);
-      assert.ok(Array.isArray(body.messages) && body.messages.length > 0, "missing Anthropic messages");
-      assert.notEqual(body.stream, true, "Anthropic fixture expects the CLI's non-streaming Messages wire");
-      const names = (body.tools ?? []).map((tool) => tool.name);
+      assert.ok(Array.isArray(body.messages) && body.messages.length > 0, "missing provider messages");
+      assert.notEqual(body.stream, true, "fixture expects the CLI's non-streaming wire");
+      const names = (body.tools ?? []).map((tool) => cline ? tool.function?.name : tool.name);
       assert.ok(names.includes("done"), "agent completion tool was not advertised");
       if (!review) {
         // Discovery advertises HTTP tools; shell-first attack must also run.
@@ -89,11 +97,13 @@ console.log(JSON.stringify({ schema_version: "1.0.0", findings: [], target: { fi
         content = files.map((file, index) => ({ type: "tool_use", id: `toolu_smoke_read_${index}`, name: "read_file", input: { path: join(target, file) } }));
       } else {
         if (review) {
-          const receipts = body.messages.flatMap((message) => Array.isArray(message.content) ? message.content : [])
-            .filter((block) => block.type === "tool_result" && block.tool_use_id?.startsWith("toolu_smoke_read_"));
+          const receipts = cline
+            ? body.messages.filter((message) => message.role === "tool" && message.tool_call_id?.startsWith("toolu_smoke_read_"))
+            : body.messages.flatMap((message) => Array.isArray(message.content) ? message.content : [])
+              .filter((block) => block.type === "tool_result" && block.tool_use_id?.startsWith("toolu_smoke_read_"));
           assert.equal(receipts.length, files.length, "review did not return all source reads");
           for (let index = 0; index < files.length; index++) {
-            const receipt = receipts.find((block) => block.tool_use_id === `toolu_smoke_read_${index}`);
+            const receipt = receipts.find((block) => (cline ? block.tool_call_id : block.tool_use_id) === `toolu_smoke_read_${index}`);
             assert.ok(receipt && !receipt.is_error, "review source read failed");
             assert.match(JSON.stringify(receipt.content), /console\.log/, "source read did not return fixture code");
           }
@@ -101,6 +111,16 @@ console.log(JSON.stringify({ schema_version: "1.0.0", findings: [], target: { fi
         }
         counters.doneResponses++;
         content = [{ type: "tool_use", id: `toolu_smoke_done_${counters.modelRequests}`, name: "done", input: { summary: "Local bootstrap fixture completed; no findings and no target requests." } }];
+      }
+      if (cline) {
+        sendJson(response, 200, { success: true, data: {
+          id: `chatcmpl_0_cli_smoke_${counters.modelRequests}`, object: "chat.completion", model,
+          choices: [{ index: 0, finish_reason: "tool_calls", message: {
+            role: "assistant", content: null,
+            tool_calls: content.map((tool) => ({ id: tool.id, type: "function", function: { name: tool.name, arguments: JSON.stringify(tool.input) } })),
+          } }], usage: { prompt_tokens: 32, completion_tokens: 16, prompt_tokens_details: { cached_tokens: 8 } },
+        } });
+        return;
       }
       sendJson(response, 200, {
         id: `msg_0_cli_smoke_${counters.modelRequests}`, type: "message", role: "assistant", model,
@@ -122,6 +142,16 @@ console.log(JSON.stringify({ schema_version: "1.0.0", findings: [], target: { fi
     const address = server.address();
     assert.ok(address && typeof address !== "string", "fixture did not bind a TCP port");
     const origin = `http://127.0.0.1:${address.port}`;
+    if (savedConnection) {
+      // Match homeStateDir(home) and the public CLI's account/config files;
+      // only this throwaway HOME receives the synthetic loopback credentials.
+      const state = join(home, ".0");
+      await mkdir(state, { recursive: true, mode: 0o700 });
+      await writeFile(join(state, "credentials.json"), JSON.stringify({ version: 2, providers: {
+        cline: { activeAccountId: "smoke", accounts: { smoke: { kind: "api_key", secret: key } } },
+      } }), { mode: 0o600 });
+      await writeFile(join(state, "web-connections.json"), JSON.stringify({ cline: { baseUrl: `${origin}/api/v1` } }), { mode: 0o600 });
+    }
     const scope = join(home, "scope.json");
     await writeFile(scope, JSON.stringify({ in_scope: ["127.0.0.1"] }), { mode: 0o600 });
     const args = review
@@ -135,14 +165,18 @@ console.log(JSON.stringify({ schema_version: "1.0.0", findings: [], target: { fi
       XDG_CONFIG_HOME: join(home, "config"), XDG_DATA_HOME: join(home, "data"), XDG_CACHE_HOME: join(home, "cache"),
       TMPDIR: home, CI: "1", NO_COLOR: "1", TERM: "dumb",
       ZERO_NO_TELEMETRY: "1", DO_NOT_TRACK: "1",
-      ANTHROPIC_API_KEY: key, ANTHROPIC_BASE_URL: origin,
-      ZERO_FORCE_PROVIDER: "anthropic", ZERO_SELECTED_PROVIDER: "anthropic", ZERO_MODEL: model,
+      ...(cline ? savedConnection ? {} : { CLINE_API_KEY: key, CLINE_BASE_URL: `${origin}/api/v1` } : { ANTHROPIC_API_KEY: key, ANTHROPIC_BASE_URL: origin }),
+      ZERO_FORCE_PROVIDER: cline ? "cline" : "anthropic", ZERO_SELECTED_PROVIDER: cline ? "cline" : "anthropic", ZERO_MODEL: model,
       ZERO_CHATGPT_AUTH_FILE: join(home, "no-auth.json"), ZERO_CODEX_AUTH_JSON_PATH: join(home, "no-auth.json"),
       CODEX_HOME: join(home, "codex"), CLAUDE_CONFIG_DIR: join(home, "claude"),
       // Existing offline switches prevent deterministic recon outside the agent.
       // The model only asks for source reads and done, never any network tool.
       ZERO_FEATURE_WEB_RECON: "0", ZERO_FEATURE_WP_FINGERPRINT: "0",
     };
+    if (savedConnection) {
+      assert.equal(env.CLINE_API_KEY, undefined, "saved connection fixture must not export a key");
+      assert.equal(env.CLINE_BASE_URL, undefined, "saved connection fixture must not export an endpoint");
+    }
     const child = spawn(command, [...prefix, ...args], { cwd: home, env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
@@ -183,6 +217,7 @@ console.log(JSON.stringify({ schema_version: "1.0.0", findings: [], target: { fi
     assert.equal(interruption, undefined, interruption);
     assert.equal(signal, null, `CLI terminated by ${signal}`);
     assert.equal(fixtureError, undefined, String(fixtureError));
+    assert.equal(stdout.includes(key) || stderr.includes(key), false, "fixture credential appeared in CLI output");
     assert.equal(counters.targetRequests, 0, "CLI contacted its target during bootstrap smoke");
     assert.equal(counters.unexpectedRequests, 0, "CLI used an unexpected provider route");
     assert.equal(code, rejectAuth ? 2 : 0, `${scenario} CLI exit ${code}; expected ${rejectAuth ? 2 : 0}`);
@@ -206,6 +241,11 @@ console.log(JSON.stringify({ schema_version: "1.0.0", findings: [], target: { fi
     } else {
       assert.equal(counters.modelRequests, 2, "bootstrap bypassed a real provider turn");
       assert.equal(counters.sourceReceipts, review ? 3 : 0);
+      if (cline) {
+        assert.equal(report.usage?.inputTokens, 64, "Cline envelope input usage was lost across provider turns");
+        assert.equal(report.usage?.outputTokens, 32, "Cline envelope output usage was lost across provider turns");
+        assert.equal(report.usage?.cachedInputTokens, 16, "Cline cached token usage was lost across provider turns");
+      }
       assert.equal(counters.doneResponses, review ? 1 : 2);
       assert.equal(report.findings.length, 0, "bootstrap fixture unexpectedly generated findings");
       assert.notEqual(report.executionSuccessful, false, "scan reported execution failure");

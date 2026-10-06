@@ -92,6 +92,10 @@ connect **Cline / ClinePass** in the console's Connections screen or export
 `CLINE_BASE_URL` changes the endpoint. 0 does not read desktop or extension
 account tokens.
 
+Saved API-key credentials and custom endpoints are reused by terminal chat,
+the model picker, and `review` / `scan`. Explicit environment variables take
+precedence over saved connection settings.
+
 Cline usage billing and ClinePass share this API key and endpoint. The model ID
 selects the billing lane: ordinary IDs such as `anthropic/claude-sonnet-4-6` use
 usage billing, while full `cline-pass/*` slugs require an active Pass subscription.

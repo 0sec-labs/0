@@ -75,7 +75,7 @@
 
 import React, { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { CodexCatalogRefreshError, loadCodexModelCatalog, type CodexCatalogModel, type RuntimeConfig } from "@0/core";
-import { credentialEnvPatch, loadCredentials } from "./credential-store.js";
+import { savedConnectionEnvPatch } from "../connection-env.js";
 import { discoverConnectionModels, type ModelDiscoveryResult } from "./available-models.js";
 import { useKeyboard, usePaste } from "@opentui/react";
 import { decodePasteBytes, TextAttributes } from "@opentui/core";
@@ -261,7 +261,7 @@ export function ModelScreen({
   const inDialog = useDialogSurface();
   const [reload, setReload] = useState(0);
   const env = useMemo(() => suppliedEnv ?? {
-    ...process.env, ...credentialEnvPatch(loadCredentials(), process.env),
+    ...process.env, ...savedConnectionEnvPatch(process.env),
   }, [suppliedEnv, reload]);
 
   // One picker for every connected route. The active runtime determines the

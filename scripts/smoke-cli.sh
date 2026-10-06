@@ -167,6 +167,18 @@ run_ai_smoke review-auth-error > "$TMP/review-auth.out" 2> "$TMP/review-auth.err
 }
 grep '^\[smoke\].* transport:' "$TMP/review-auth.err"
 
+# ClinePass exercises a separate OpenAI Chat wire through the built CLI and
+# real loopback HTTP. It must round-trip source tool receipts and unwrap usage;
+# auth rejection must retain the same partial-report/exit contract.
+for scenario in cline-review cline-review-auth-error cline-review-saved cline-scan cline-scan-auth-error cline-scan-saved; do
+  say "$scenario (ClinePass Chat Completions)"
+  run_ai_smoke "$scenario" > "$TMP/$scenario.out" 2> "$TMP/$scenario.err" || {
+    cat "$TMP/$scenario.out" "$TMP/$scenario.err" >&2 || true
+    fail "$scenario did not preserve the ClinePass provider contract"
+  }
+  grep '^\[smoke\].* transport:' "$TMP/$scenario.err"
+done
+
 # ── 6. scan --mode web (template loader + agent bootstrap) ────────────────
 # Discovery and attack each receive an actual Messages tool_use response that
 # calls done without target traffic. Existing offline recon switches keep the

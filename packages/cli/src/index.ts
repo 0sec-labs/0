@@ -22,6 +22,7 @@ import {
 import { setHerdrSink } from "./herdr-state.js";
 import { launchConfiguredWorkbench } from "./workbench.js";
 import { remoteBackendClientId } from "./backend-client-mode.js";
+import { savedConnectionEnvPatch } from "./connection-env.js";
 
 // Cross the execution boundary before reading host login state, applying updates
 // or starting the console. The guest receives the original argv and terminal.
@@ -104,6 +105,11 @@ async function buildProgram(): Promise<Command> {
     .description("Open-source multi-model security research harness")
     .version(VERSION)
     .enablePositionalOptions();
+  program.hook("preAction", (_command, action) => {
+    if (!isWorkbenchManagement && !isRemoteBackendClient && ["review", "scan"].includes(action.name())) {
+      Object.assign(process.env, savedConnectionEnvPatch(process.env));
+    }
+  });
   c.registerScanCommand(program);
   c.registerResumeCommand(program);
   c.registerReplayCommand(program);

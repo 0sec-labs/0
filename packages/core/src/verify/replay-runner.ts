@@ -853,18 +853,18 @@ async function runDockerCommand(args: {
   let stderrBytes = 0;
   let timedOut = false;
   let settled = false;
-  let timeoutCleanup: Promise<void> | undefined;
+  let timeoutCleanup: Promise<string | undefined> | undefined;
   let child: ChildProcess;
 
   const finish = async (exitCode: number | null, launchError?: string): Promise<void> => {
     if (settled) return;
     settled = true;
     clearTimeout(timer);
-    if (timeoutCleanup) await timeoutCleanup;
+    const cleanupError = timeoutCleanup ? await timeoutCleanup : undefined;
     const containerStarted = existsSync(args.cidPath);
-    rmSync(args.cidPath, { force: true });
+    if (!cleanupError) rmSync(args.cidPath, { force: true });
     const startError =
-      launchError ??
+      launchError ?? cleanupError ??
       (exitCode !== 0 && !timedOut && !containerStarted
         ? `Docker sandbox did not start (exit ${exitCode ?? "unknown"}): ${excerpt(stderr, 512)}`
         : undefined);
@@ -897,6 +897,8 @@ async function runDockerCommand(args: {
       args.dockerBinary,
       args.cidPath,
       args.runDir,
+    ).then(() => undefined, (error: unknown) =>
+      `Docker timeout cleanup could not be confirmed: ${error instanceof Error ? error.message : String(error)}`,
     ).finally(() => killProcessGroup(child));
   }, args.stepTimeoutMs);
 
@@ -943,39 +945,53 @@ async function stopDockerContainer(
     setTimeout(resolve, 25);
     await promise;
   }
-  if (!containerId) return;
+  if (!containerId) throw new Error("container ID was unavailable at the cleanup deadline");
   await runDockerControl(dockerBinary, ["kill", containerId], runDir);
-  await runDockerControl(dockerBinary, ["rm", "--force", containerId], runDir);
+  // `run --rm` starts automatic removal after kill. A simultaneous explicit
+  // rm can fail with "removal ... already in progress" before it has finished.
+  // Do not return until removal succeeds or Docker confirms the ID is absent.
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const result = await runDockerControl(dockerBinary, ["rm", "--force", containerId], runDir);
+    if (result.exitCode === 0 || (result.exitCode === 1 && /no such (?:container|object)/i.test(result.stderr))) return;
+    if (result.exitCode !== 1 || !/removal .*already in progress/i.test(result.stderr)) {
+      throw new Error(result.stderr || `docker rm exited ${result.exitCode ?? "without an exit code"}`);
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error("container removal remained in progress beyond the cleanup deadline");
 }
 
 function runDockerControl(
   dockerBinary: string,
   args: string[],
   cwd: string,
-): Promise<void> {
-  const { promise, resolve } = promiseWithResolvers.withResolvers<void>();
+): Promise<{ exitCode: number | null; stderr: string }> {
+  const { promise, resolve } = promiseWithResolvers.withResolvers<{ exitCode: number | null; stderr: string }>();
   let child: ChildProcess;
+  let stderr = "";
   try {
     child = spawn(dockerBinary, args, {
       cwd,
       env: allowlistedChildEnv({ "ZERO_VERIFY": "1" }),
-      stdio: "ignore",
+      stdio: ["ignore", "ignore", "pipe"],
       detached: nodePlatform !== "win32",
     });
-  } catch {
-    resolve();
+  } catch (error) {
+    resolve({ exitCode: null, stderr: error instanceof Error ? error.message : String(error) });
     return promise;
   }
   const timer = setTimeout(() => {
+    stderr ||= "Docker cleanup command timed out";
     killProcessGroup(child);
   }, 5_000);
-  child.once("error", () => {
+  child.stderr?.on("data", (chunk: Buffer) => { stderr += chunk.toString("utf8").slice(0, Math.max(0, 512 - stderr.length)); });
+  child.once("error", (error) => {
     clearTimeout(timer);
-    resolve();
+    resolve({ exitCode: null, stderr: error.message });
   });
-  child.once("close", () => {
+  child.once("close", (code) => {
     clearTimeout(timer);
-    resolve();
+    resolve({ exitCode: code, stderr });
   });
   return promise;
 }
