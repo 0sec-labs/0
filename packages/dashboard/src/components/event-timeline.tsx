@@ -1,3 +1,5 @@
+import { accessMilestoneFromArtifact, appendAccessMilestone, type AccessMilestone } from "@0/shared/dist/access-milestone.js";
+import { AccessMilestoneBanner } from "./access-milestone";
 import {
   Activity,
   Bot,
@@ -17,14 +19,19 @@ export function EventTimeline({
 }: {
   events: ScanEventsResponse["events"];
 }) {
+  const milestones = events.reduce<Array<{ milestone: AccessMilestone; scanId: string; at: number }>>((items, event) => {
+    const milestone = accessMilestoneFromArtifact(event.eventType, event.payload, event.scanId, event.id);
+    return milestone ? appendAccessMilestone(items, { milestone, scanId: event.scanId, at: event.timestamp }) : items;
+  }, []);
   return (
-    <Card className="overflow-hidden">
+    <Card id="activity" className="overflow-hidden">
       <CardHeader>
         <div>
           <CardTitle className="mt-2">Activity</CardTitle>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {milestones.map(({ milestone, scanId, at }) => <AccessMilestoneBanner key={milestone.key} milestone={milestone} scanId={scanId} at={at} />)}
         {events.length === 0 ? (
           <CardEmpty>No activity yet.</CardEmpty>
         ) : (
@@ -40,9 +47,10 @@ export function EventTimeline({
             <TableBody>
               {events.map((event) => {
                 const Icon = iconForEvent(event.stage, event.eventType);
+                const milestone = accessMilestoneFromArtifact(event.eventType, event.payload, event.scanId, event.id);
 
                 return (
-                  <TableRow key={event.id}>
+                  <TableRow key={event.id} id={`evidence-${encodeURIComponent(event.id)}`}>
                     <TableCell>
                       <div className="flex items-start gap-3">
                         <div className="mt-0.5 inline-flex size-8 items-center justify-center rounded-md border border-border bg-muted text-primary-text">
@@ -54,7 +62,7 @@ export function EventTimeline({
                       </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {summarizePayload(event.payload)}
+                      {milestone ? milestone.headline : summarizePayload(event.payload)}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {formatTime(event.timestamp)}

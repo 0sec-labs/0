@@ -209,3 +209,22 @@ test("Cloud credentials do not add hosted inference to connected model choices",
   expect(frame).not.toMatch(/^\s*HOSTED\s*$/m);
 });
 
+
+
+test("explicit Connections selection survives asynchronous model discovery", async () => {
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  const options = modelsByokLaunch();
+  tui = await launch({ ...options, fetchImpl: async (input, init) => {
+    if (String(input) === "https://api.deepseek.com/models") await pending;
+    return options.fetchImpl!(input, init);
+  } });
+  await tui.waitForText(/Connect another provider/);
+  await tui.sendKey("end");
+  expect(highlightedRow(tui.captureSpans()).text).toMatch(/Connect another provider/);
+  release();
+  await tui.waitForText(/per M/);
+  expect(highlightedRow(tui.captureSpans()).text).toMatch(/Connect another provider/);
+  await tui.sendKey("home");
+  expect(highlightedRow(tui.captureSpans()).text).toMatch(/deepseek-chat/);
+});

@@ -373,10 +373,11 @@ export function ModelScreen({
     const scoped = scopeModelCatalog(catalog, { showAll: all, filter: query, currentModel: activeModel });
     const metadata = new Map(catalog.map(model => [`${model.provider}/${model.id}`, model]));
     const scopedIds = new Set(scoped.map(model => `${model.provider}/${model.id}`));
-    // Live connection inventories define choices; pricing metadata only decorates them.
+    // Connection inventories define choices; Cline publishes a public catalog,
+    // whose Pass rows still require subscription access. Pricing only decorates IDs.
     return [
       ...connectionModels.filter(model => !metadata.has(`${model.provider}/${model.id}`) || scopedIds.has(`${model.provider}/${model.id}`)).map(model => ({ id: model.id, provider: model.provider,
-        price: metadata.get(`${model.provider}/${model.id}`)?.price ?? "—" })),
+        price: model.provider === "cline" && model.id.startsWith("cline-pass/") ? "Pass · access unverified" : metadata.get(`${model.provider}/${model.id}`)?.price ?? "—" })),
       ...(codexModels ?? []).map(model => ({ id: model.id, provider: "chatgpt-codex", price: "subscription" })),
     ].filter(model => role === null || model.provider === providerId);
   };
@@ -423,8 +424,18 @@ export function ModelScreen({
       : items.find((item) => item.row?.active)?.id ?? items[0]?.id,
   );
   const selectedIdRef = useRef(selectedId);
-  const selectionIndex = (visible: ModelDialogItem[], selection = selectedIdRef.current) =>
-    clampDialogSelection(visible, visible.findIndex((item) => item.id === selection));
+  const selectionTouchedRef = useRef(false);
+  const selectionIndex = (visible: ModelDialogItem[], selection = selectedIdRef.current) => {
+    // The first paint can contain only Connections while discovery is pending.
+    // Until the operator selects a row, hydration should focus their current
+    // model (or the first discovered model), not retain that placeholder action.
+    if (!selectionTouchedRef.current) {
+      const initial = visible.findIndex((item) => item.row?.active);
+      const firstModel = visible.findIndex((item) => item.row !== undefined);
+      if (initial >= 0 || firstModel >= 0) return clampDialogSelection(visible, initial >= 0 ? initial : firstModel);
+    }
+    return clampDialogSelection(visible, visible.findIndex((item) => item.id === selection));
+  };
   const cursor = selectionIndex(items, selectedId);
 
   // Every width and row count comes off the layout module, from the surface
@@ -479,6 +490,7 @@ export function ModelScreen({
   };
   const highlight = (index: number, visible = currentItems()) => {
     const item = visible[clampDialogSelection(visible, index)];
+    selectionTouchedRef.current = true;
     selectedIdRef.current = item?.id;
     setSelectedId(item?.id);
   };

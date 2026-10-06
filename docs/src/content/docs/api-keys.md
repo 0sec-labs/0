@@ -22,6 +22,7 @@ provide model inference to the local console.
 | **Alibaba Qwen** | `QWEN_API_KEY` | `qwen3.8-max` | Chat completions |
 | **xAI Grok** | `XAI_API_KEY` | `grok-4.6` | Chat completions by default; optional Responses |
 | **OpenCode Zen** | `OPENCODE_API_KEY` | `muse-spark-1.3-contributor-free` | Per-model (Responses, Anthropic Messages, Google generateContent, or Chat completions) |
+| **Cline / ClinePass** | `CLINE_API_KEY` | `anthropic/claude-sonnet-4-6` (usage billed); select a `cline-pass/*` ID for Pass | Chat completions |
 | **GitHub Copilot** | `ZERO_COPILOT_GITHUB_TOKEN` | `gpt-4o` | Chat completions (device sign-in) |
 | **Google Gemini Code Assist** | `ZERO_GEMINI_ACCESS_TOKEN` / `ZERO_GEMINI_OAUTH_REFRESH_TOKEN` | `gemini-2.5-pro` | Code Assist generateContent (browser sign-in) |
 | **Anthropic** | `ANTHROPIC_API_KEY` | `claude-sonnet-4-6` | Anthropic Messages |
@@ -83,6 +84,35 @@ tiers cost more.
 at peak rates ($0.30 input / $1.20 output per million tokens); off-peak is half
 price. Gateway prices and subscription billing can differ from direct API rates.
 
+## Cline and ClinePass
+
+Create a programmatic API key at **app.cline.bot → Settings → API Keys**, then
+connect **Cline / ClinePass** in the console's Connections screen or export
+`CLINE_API_KEY`. Inference uses `https://api.cline.bot/api/v1`; an explicit
+`CLINE_BASE_URL` changes the endpoint. 0 does not read desktop or extension
+account tokens.
+
+Cline usage billing and ClinePass share this API key and endpoint. The model ID
+selects the billing lane: ordinary IDs such as `anthropic/claude-sonnet-4-6` use
+usage billing, while full `cline-pass/*` slugs require an active Pass subscription.
+The default Cline model uses usage billing, so select a Pass model explicitly:
+
+```bash
+export CLINE_API_KEY="..."
+env ZERO_SELECTED_PROVIDER=cline ZERO_MODEL=cline-pass/glm-5.3 \
+  0 review ./authorized-repo --runtime api
+```
+
+The model picker reads Cline's public catalog and marks Pass choices **access
+unverified**. Catalog presence does not prove subscription entitlement. ClinePass
+has rolling 5-hour, weekly and monthly quotas. Pass cost estimates use reference
+quota rates, not additional API charges or remaining quota; check the Cline
+dashboard for actual usage. DeepSeek estimates use peak rates and Qwen Plus
+estimates use the ≤256K input tier.
+
+See Cline's official [authentication guide](https://github.com/cline/cline/blob/main/docs/api/authentication.mdx)
+and [ClinePass guide](https://github.com/cline/cline/blob/main/docs/getting-started/clinepass.mdx).
+
 ## Credential priority
 
 Within the API runtime, when there is no provider pin or model-to-provider match,
@@ -99,9 +129,10 @@ the following ambient credential order applies. `--model` takes precedence over
 8. **Alibaba Qwen** — `QWEN_API_KEY`
 9. **xAI Grok** — `XAI_API_KEY`
 10. **OpenCode Zen** — `OPENCODE_API_KEY`
-11. **GitHub Copilot** — `ZERO_COPILOT_GITHUB_TOKEN`
-12. **Google Gemini Code Assist** — `ZERO_GEMINI_ACCESS_TOKEN` or `ZERO_GEMINI_OAUTH_REFRESH_TOKEN`
-13. **Anthropic** — `ANTHROPIC_API_KEY`
+11. **Cline** — `CLINE_API_KEY`
+12. **GitHub Copilot** — `ZERO_COPILOT_GITHUB_TOKEN`
+13. **Google Gemini Code Assist** — `ZERO_GEMINI_ACCESS_TOKEN` or `ZERO_GEMINI_OAUTH_REFRESH_TOKEN`
+14. **Anthropic** — `ANTHROPIC_API_KEY`
 
 Without a usable provider credential, the runtime reports a missing-credential
 failure. Saved Cloud credentials do not become a model provider.
@@ -135,6 +166,8 @@ when more than one credential is present.
 | `grok*`, `xai/*`, `x-ai/*` | xAI Grok | Configured compatible wire |
 | `opencode/<model-id>` | OpenCode Zen | Prefix stripped; wire chosen by model family |
 | `muse-spark*`, `mimo*`, `ling*`, `big-pickle`, `nemotron*`, `minimax*` | OpenCode Zen | Muse uses Responses; the other listed families use Chat Completions |
+| `cline/<provider>/<model-id>` | Cline API | Strip only `cline/`; keep the vendor/model slug |
+| `cline-pass/*` | Cline API | Preserve the full slug; active ClinePass subscription required |
 | `copilot/*` | GitHub Copilot | Prefix stripped; independently authenticated connection |
 | `gemini*`, `google/*` | Google Gemini Code Assist | Requires Google OAuth; not the public Gemini API-key route |
 | `claude*`, `anthropic/*`, IDs containing `sonnet`, `opus`, `haiku` | Anthropic, then OpenRouter | OpenRouter fallback requires its key |

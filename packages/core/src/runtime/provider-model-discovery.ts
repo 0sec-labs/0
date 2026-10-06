@@ -3,6 +3,8 @@ import { execFile } from "node:child_process";
 export interface DiscoveredProviderModel {
   id: string;
   contextTokens?: number;
+  /** Public provider catalogs do not establish account entitlement. */
+  source?: "catalog";
 }
 
 /** Injectable read-only Azure CLI runner. Output is parsed internally, never surfaced in errors. */
@@ -121,6 +123,44 @@ async function readProviderModels(options: ProviderModelDiscoveryOptions, base: 
   throw new Error("Provider model discovery exceeded its pagination limit.");
 }
 
+/** Cline publishes a public catalog, separate from Pass account/quota status. */
+async function readClineModels(options: ProviderModelDiscoveryOptions, base: URL, signal: AbortSignal): Promise<DiscoveredProviderModel[]> {
+  const read = async (suffix: string): Promise<unknown> => {
+    const url = new URL(base);
+    url.pathname = `${url.pathname.replace(/\/+$/, "")}/ai/cline/${suffix}`;
+    let response: Response;
+    try {
+      response = await (options.fetchImpl ?? fetch)(url.href, {
+        method: "GET", headers: { Accept: "application/json" }, signal, redirect: "error",
+      });
+    } catch { throw new Error("Cline model catalog could not reach the selected endpoint."); }
+    if (!response.ok) throw new Error(`Cline model catalog failed (HTTP ${response.status}).`);
+    try { return await response.json(); }
+    catch { throw new Error("Cline returned an invalid model catalog."); }
+  };
+  // Both are public inventory endpoints. In particular, never send credentials
+  // or call this catalog proof of subscription/model access.
+  const [catalogValue, recommendedValue] = await Promise.all([read("models"), read("recommended-models")]);
+  signal.throwIfAborted();
+  const catalog = Array.isArray(catalogValue) ? catalogValue : record(catalogValue)?.data;
+  const recommendedEnvelope = record(recommendedValue);
+  const recommended = record(recommendedEnvelope?.data) ?? recommendedEnvelope;
+  if (!Array.isArray(catalog) || !recommended ||
+    (recommended.clinePass !== undefined && !Array.isArray(recommended.clinePass))) {
+    throw new Error("Cline returned an invalid model catalog.");
+  }
+  const models: DiscoveredProviderModel[] = [];
+  const seen = new Set<string>();
+  for (const row of [...(recommended.clinePass as unknown[] ?? []), ...catalog]) {
+    const model = parseModel(row, "cline");
+    if (model && !seen.has(model.id)) {
+      seen.add(model.id);
+      models.push({ ...model, source: "catalog" });
+    }
+  }
+  return models;
+}
+
 const defaultAzureRunner: AzureModelDiscoveryRunner = (args, signal) => new Promise((resolve, reject) => {
   execFile("az", [...args], {
     encoding: "utf8", timeout: DISCOVERY_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024,
@@ -205,7 +245,7 @@ async function readAzureDeployments(options: ProviderModelDiscoveryOptions, base
   return models;
 }
 
-/** Only models discovered for the selected endpoint; no public-catalog or configured-model fallback. */
+/** Discover the selected endpoint inventory. Cline explicitly reports public catalog provenance. */
 export async function discoverProviderModels(options: ProviderModelDiscoveryOptions): Promise<DiscoveredProviderModel[]> {
   if (options.provider === "google") throw new Error("Google Code Assist does not support account model discovery here. Select a provider with model discovery support.");
   if (options.provider === "chatgpt-codex") throw new Error("Use the active ChatGPT account's Codex model discovery.");
@@ -214,5 +254,6 @@ export async function discoverProviderModels(options: ProviderModelDiscoveryOpti
     : AbortSignal.timeout(DISCOVERY_TIMEOUT_MS);
   signal.throwIfAborted();
   const base = endpoint(options.baseUrl);
+  if (options.provider === "cline") return readClineModels(options, base, signal);
   return options.provider === "azure" ? readAzureDeployments(options, base, signal) : readProviderModels(options, base, signal);
 }

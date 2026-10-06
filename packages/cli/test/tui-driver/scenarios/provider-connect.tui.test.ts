@@ -3,7 +3,7 @@ import { launch, type TuiHandle } from "../index.js";
 import { loadCredentials, saveCredentials } from "../../../src/tui/credential-store.js";
 import { PROVIDERS } from "../../../src/tui/provider-status.js";
 import { getSettings } from "../../../src/tui/settings-store.js";
-import { frameLines } from "./_helpers.js";
+import { frameLines, fixtureModelFetch } from "./_helpers.js";
 
 let tui: TuiHandle | undefined;
 afterEach(async () => {
@@ -77,7 +77,7 @@ test("missing Codex on the process PATH shows prerequisite guidance and leaves o
 
 test.each([[64, 24], [40, 12]])("compact embedded controls go back or advance without saving or completing setup (%ix%i)", async (cols, rows) => {
   vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 503 }));
-  tui = await launch({ route: { type: "onboard" }, cols, rows,
+  tui = await launch({ fetchImpl: fixtureModelFetch, route: { type: "onboard" }, cols, rows,
     env: { ...emptyProviderEnv, DEEPSEEK_API_KEY: "synthetic-existing-key", ZERO_PROVIDER: "deepseek", ZERO_MODEL: "deepseek-chat" },
     settings: { onboardingCompleted: false, mouseSupport: true } });
   await tui.waitForText(/Step 1 of 5/);
@@ -97,7 +97,7 @@ test.each([[64, 24], [40, 12]])("compact embedded controls go back or advance wi
 
 test("embedded Connect opens the selected key form; Cancel does not persist a draft", async () => {
   vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 503 }));
-  tui = await launch({ route: { type: "onboard" }, cols: 64, rows: 24,
+  tui = await launch({ fetchImpl: fixtureModelFetch, route: { type: "onboard" }, cols: 64, rows: 24,
     env: { ...emptyProviderEnv, DEEPSEEK_API_KEY: "synthetic-existing-key", ZERO_PROVIDER: "deepseek", ZERO_MODEL: "deepseek-chat" },
     settings: { onboardingCompleted: false, mouseSupport: true } });
   await tui.waitForText(/Step 1 of 5/);

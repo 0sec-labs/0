@@ -196,3 +196,42 @@ describe("Azure endpoint deployment discovery", () => {
     await expect(discoverProviderModels({ ...azureOptions, runAzureCli })).rejects.toThrow("invalid deployment row");
   });
 });
+
+
+describe("Cline public model catalogs", () => {
+  it("uses the selected API base, keeps Pass slugs, deduplicates and marks public provenance without sending credentials", async () => {
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ data: [{ id: "anthropic/claude-sonnet-4-6", context_length: 200_000 }, { id: "cline-pass/glm-5.3" }, { id: "text-embedding-3-large" }] }))
+      .mockResolvedValueOnce(Response.json({ data: { clinePass: [{ id: "cline-pass/glm-5.3", context_length: 128_000 }] } }));
+    expect(await discoverProviderModels({ provider: "cline", baseUrl, headers, fetchImpl })).toEqual([
+      { id: "cline-pass/glm-5.3", contextTokens: 128_000, source: "catalog" },
+      { id: "anthropic/claude-sonnet-4-6", contextTokens: 200_000, source: "catalog" },
+    ]);
+    expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
+      "https://selected.example/private/v1/ai/cline/models", "https://selected.example/private/v1/ai/cline/recommended-models",
+    ]);
+    for (const [, init] of fetchImpl.mock.calls) {
+      expect(init).toMatchObject({ method: "GET", redirect: "error" });
+      expect(new Headers(init?.headers).has("Authorization")).toBe(false);
+    }
+  });
+
+  it("supports the official bare catalog and recommended payloads", async () => {
+    const fetchImpl = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json([{ id: "openai/gpt-4o" }]))
+      .mockResolvedValueOnce(Response.json({ clinePass: [{ id: "cline-pass/kimi-k3" }] }));
+    expect(await discoverProviderModels({ provider: "cline", baseUrl, headers, fetchImpl })).toEqual([
+      { id: "cline-pass/kimi-k3", source: "catalog" }, { id: "openai/gpt-4o", source: "catalog" },
+    ]);
+  });
+
+  it.each([{ data: "invalid" }, { data: [null] }, { data: [{ id: "bad\nmodel" }] }])("rejects invalid catalogs with no invented model fallback", async catalog => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json(catalog)).mockResolvedValueOnce(Response.json({ clinePass: [] }));
+    await expect(discoverProviderModels({ provider: "cline", baseUrl, headers, fetchImpl })).rejects.toThrow(/invalid/);
+  });
+
+  it("does not use a stale or hardcoded Pass inventory when catalog discovery fails", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response("synthetic-private-response", { status: 403 }));
+    await expect(discoverProviderModels({ provider: "cline", baseUrl, headers, fetchImpl })).rejects.toThrow("Cline model catalog failed (HTTP 403)");
+  });
+});

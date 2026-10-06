@@ -14,6 +14,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     include: ["test/**/*.tui.test.ts"],
+    setupFiles: ["test/tui-driver/setup.ts"],
     // One fork, serialized files. Each launch() mutates process-wide state
     // (process.env, the settings store), so files must not overlap.
     pool: "forks",

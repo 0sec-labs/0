@@ -37,7 +37,7 @@ describe("buildModelCatalog", () => {
       expect(model.id.length).toBeGreaterThan(0);
       expect(model.provider.length).toBeGreaterThan(0);
       expect(model.provider).toBe(modelProvider(model.id));
-      expect(model.price === "free" || model.price.endsWith(" per M")).toBe(true);
+      expect(model.price === "free" || model.price.endsWith(" per M") || (model.provider === "cline" && model.id.startsWith("cline-pass/") && model.price === "ClinePass plan (access unverified)")).toBe(true);
     }
   });
 
