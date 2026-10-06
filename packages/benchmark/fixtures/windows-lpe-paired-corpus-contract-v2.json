@@ -4,8 +4,8 @@
   "profile": "contract",
   "createdAt": "2026-07-14T00:00:00.000Z",
   "labelCommitments": {
-    "developmentSha256": "68511985c22fd0a71f27e3784a92a3a428bb79053b37833a87e69a9890dbca68",
-    "holdoutSha256": "0049dfd031980ee6e71d5acc17364e1fe9756d0b15595e5371b280019a658c98"
+    "developmentSha256": "2346cfc4623cfd62244034bd42b1392029f4f638cca92735a1d9f0d89dbca3d5",
+    "holdoutSha256": "ef3b0cba3626b5fc33b6a4ac35d148d1ca6d437866c8cb98dbc60ace48124ecf"
   },
   "evaluation": {
     "minimumPositiveGrade": "reproduced",
