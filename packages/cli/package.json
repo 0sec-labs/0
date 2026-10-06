@@ -18,7 +18,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "@opentui/core": "0.5.4",
     "@opentui/react": "0.5.4",
     "@0/benchmark": "workspace:*",
