@@ -170,7 +170,7 @@ grep '^\[smoke\].* transport:' "$TMP/review-auth.err"
 # ClinePass exercises a separate OpenAI Chat wire through the built CLI and
 # real loopback HTTP. It must round-trip source tool receipts and unwrap usage;
 # auth rejection must retain the same partial-report/exit contract.
-for scenario in cline-review cline-review-auth-error cline-review-saved; do
+for scenario in cline-review cline-review-auth-error cline-review-saved cline-scan cline-scan-auth-error cline-scan-saved; do
   say "$scenario (ClinePass Chat Completions)"
   run_ai_smoke "$scenario" > "$TMP/$scenario.out" 2> "$TMP/$scenario.err" || {
     cat "$TMP/$scenario.out" "$TMP/$scenario.err" >&2 || true

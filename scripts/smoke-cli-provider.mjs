@@ -7,11 +7,11 @@ import { createServer } from "node:http";
 import { delimiter, join, resolve } from "node:path";
 
 const [tempArg, scenario, ...invocation] = process.argv.slice(2);
-assert.ok(tempArg && invocation.length, "usage: smoke-cli-provider.mjs <temp-dir> <review|scan|review-auth-error|scan-auth-error|cline-review|cline-review-auth-error|cline-review-saved> <CLI argv...>");
-assert.ok(["review", "scan", "review-auth-error", "scan-auth-error", "cline-review", "cline-review-auth-error", "cline-review-saved"].includes(scenario), "unknown smoke scenario");
+assert.ok(tempArg && invocation.length, "usage: smoke-cli-provider.mjs <temp-dir> <review|scan|review-auth-error|scan-auth-error|cline-review|cline-review-auth-error|cline-review-saved|cline-scan|cline-scan-auth-error|cline-scan-saved> <CLI argv...>");
+assert.ok(["review", "scan", "review-auth-error", "scan-auth-error", "cline-review", "cline-review-auth-error", "cline-review-saved", "cline-scan", "cline-scan-auth-error", "cline-scan-saved"].includes(scenario), "unknown smoke scenario");
 const temp = resolve(tempArg);
 const cline = scenario.startsWith("cline-");
-const savedConnection = scenario === "cline-review-saved";
+const savedConnection = cline && scenario.endsWith("-saved");
 const review = scenario.includes("review");
 const rejectAuth = scenario.endsWith("auth-error");
 const key = cline ? "0-cli-smoke-local-cline-provider" : "0-cli-smoke-local-provider";
