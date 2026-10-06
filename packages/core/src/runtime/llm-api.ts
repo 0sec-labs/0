@@ -3745,6 +3745,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           res = await this.postWithRetry(
             () => JSON.stringify({
               model: this.model,
+              ...(this.provider === "cline" ? { stream: false } : {}),
               [this.maxTokensParamKey]: NATIVE_COMPLETION_TOKEN_LIMIT,
               messages,
               // See executeNative: explicit reasoning_effort passthrough only.
@@ -4074,6 +4075,8 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
 
           const body: Record<string, unknown> = {
             model: this.model,
+            // Cline defaults to SSE; this path consumes a complete JSON response.
+            ...(this.provider === "cline" ? { stream: false } : {}),
             [this.maxTokensParamKey]: NATIVE_COMPLETION_TOKEN_LIMIT,
             messages: chatMessages,
           };

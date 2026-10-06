@@ -16,6 +16,47 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.restoreAllMocks(); });
 
 describe("Cline and ClinePass transport", () => {
+  it.each(["ordinary", "native"])("requests JSON explicitly on the %s path when Cline defaults to streaming", async path => {
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      return body.stream === false ? Response.json(completion)
+        : new Response('data: {"choices":[{"delta":{"content":"Cline answer"}}]}\n\ndata: [DONE]\n\n', {
+          headers: { "Content-Type": "text/event-stream" },
+        });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const rt = runtime();
+    if (path === "ordinary") expect(await rt.execute("Review")).toMatchObject({ exitCode: 0, output: "Cline answer" });
+    else expect(await rt.executeNative("Review", messages, tools)).toMatchObject({ stopReason: "end_turn", content: [{ type: "text", text: "Cline answer" }] });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("continues a Pass conversation after a tool result on the same connection", async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ success: true, data: {
+        choices: [{ message: { content: null, tool_calls: [{ id: "call-read", type: "function", function: { name: "read_file", arguments: '{"path":"src/main.ts"}' } }] }, finish_reason: "tool_calls" }],
+      } }))
+      .mockResolvedValueOnce(Response.json(completion));
+    vi.stubGlobal("fetch", fetchMock);
+    const rt = runtime();
+    const first = await rt.executeNative("Review", messages, tools);
+    expect(first.stopReason).toBe("tool_use");
+    const result = await rt.executeNative("Review", [...messages,
+      { role: "assistant", content: first.content },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "call-read", content: "export const answer = 42;" }] },
+    ], tools);
+    expect(result.stopReason).toBe("end_turn");
+    const [url, init] = fetchMock.mock.calls[1];
+    expect(url).toBe("https://selected.example/api/v1/chat/completions");
+    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer synthetic-cline-key");
+    expect(JSON.parse(String(init?.body))).toMatchObject({ model: "cline-pass/glm-5.3", stream: false,
+      messages: expect.arrayContaining([
+        { role: "assistant", content: null, tool_calls: [{ id: "call-read", type: "function", function: { name: "read_file", arguments: '{"path":"src/main.ts"}' } }] },
+        { role: "tool", tool_call_id: "call-read", content: "export const answer = 42;" },
+      ]),
+    });
+  });
+
   it.each(["cline-pass/glm-5.3", "cline/anthropic/claude-sonnet-4-6", "cline/cline-pass/deepseek-v4-flash"])("uses its own key and preserves upstream model IDs for %s", async model => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(Response.json(completion));
     vi.stubGlobal("fetch", fetchMock);
