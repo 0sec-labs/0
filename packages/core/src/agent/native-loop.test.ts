@@ -419,7 +419,7 @@ describe("runNativeAgentLoop", () => {
         return {
           content: [],
           stopReason: "error",
-          error: "Azure OpenAI API request timed out",
+          error: "Azure OpenAI API error 400: invalid request",
           durationMs: 30_000,
         };
       },
@@ -441,7 +441,7 @@ describe("runNativeAgentLoop", () => {
 
     expect(state.done).toBe(false);
     expect(state.summary).toMatch(/^Error:/);
-    expect(state.summary).toContain("Azure OpenAI API request timed out");
+    expect(state.summary).toContain("Azure OpenAI API error 400: invalid request");
     expect(state.summary).not.toContain("reached max turns");
     expect(state.turnCount).toBeLessThan(10);
   });
@@ -2374,6 +2374,7 @@ describe("isTransientLlmError", () => {
     expect(isTransientLlmError("OpenRouter API error 429: too many requests")).toBe(true);
     expect(isTransientLlmError("provider overloaded")).toBe(true);
     expect(isTransientLlmError("fetch failed: ETIMEDOUT")).toBe(true);
+    expect(isTransientLlmError("OpenRouter API request timed out")).toBe(true);
     expect(
       isTransientLlmError("ChatGPT (Codex backend) stream stalled — no SSE events for 120s (transient)"),
     ).toBe(true);
@@ -2414,6 +2415,20 @@ describe("runNativeAgentLoop — transient retry interruption", () => {
     expect(executeNative).toHaveBeenCalledTimes(1);
     expect(state.summary).toBe("Error: Agent execution cancelled.");
     expect(state.errorExit).toBeUndefined();
+  });
+
+  it("retries the same turn after a runtime request timeout", async () => {
+    const executeNative = vi.fn<NativeRuntime["executeNative"]>()
+      .mockResolvedValueOnce({ content: [], stopReason: "error", error: "OpenRouter API request timed out", durationMs: 60_000 })
+      .mockResolvedValueOnce({ content: [{ type: "text", text: "Recovered." }], stopReason: "end_turn", durationMs: 1 });
+    const state = await runNativeAgentLoop({
+      config: { role: "discovery", systemPrompt: "test", tools: [], maxTurns: 1, target: "https://example.com", scanId: randomUUID() },
+      runtime: { type: "api", isAvailable: async () => true, executeNative }, db: null,
+    });
+    expect(executeNative).toHaveBeenCalledTimes(2);
+    expect(executeNative.mock.calls[1]![1]).toEqual(executeNative.mock.calls[0]![1]);
+    expect(state.errorExit).toBeUndefined();
+    expect(state.summary).not.toContain("timed out");
   });
 
   it("treats a runtime cancellation as terminal even if its text looks retryable", async () => {

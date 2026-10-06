@@ -174,10 +174,12 @@ const EXTERNAL_MEMORY_MAX_CHARS = 2000;
 
 /**
  * Classify transient provider overloads, rate limits and transport failures
- * for the agent loop's bounded same-turn retry.
+ * for the agent loop's bounded same-turn retry. Includes the runtime's own
+ * per-call timeout, which `LlmApiRuntime` reports as
+ * "<provider> API request timed out" rather than a transport code.
  */
 export function isTransientLlmError(errorMsg: string): boolean {
-  return /\b(429|529|502|503|504)\b|overloaded|rate.?limit|temporarily|too many requests|ETIMEDOUT|ECONNRESET|throttl|stall/i.test(errorMsg);
+  return /\b(429|529|502|503|504)\b|overloaded|rate.?limit|temporarily|too many requests|ETIMEDOUT|ECONNRESET|throttl|stall|API request timed out/i.test(errorMsg);
 }
 
 /**

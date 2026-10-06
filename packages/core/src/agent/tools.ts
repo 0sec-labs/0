@@ -353,6 +353,12 @@ export function selfExtensionRegistryOf(ctx: ToolContext): SelfExtensionRegistry
 // See https://github.com/0sec-labs/0/issues/181
 
 const DEFAULT_BASH_WALLCLOCK_MS = 120_000;
+/**
+ * Per-request model timeout for spawned subagents. Matches the runtime
+ * default and the other fork sites: non-streaming wires (e.g. OpenRouter
+ * chat completions) must finish the whole generation inside this window.
+ */
+const SUBAGENT_MODEL_TIMEOUT_MS = 120_000;
 const BASH_GRACE_MS = 2_000;
 
 function resolveBashWallclockCeilingMs(): number {
@@ -6138,7 +6144,7 @@ export class ToolExecutor {
       const { runNativeAgentLoop } = deps ?? (await this.loadSubagentDeps());
       signal.throwIfAborted();
 
-      const rt = await this._childRuntimeFactory(60_000, selection);
+      const rt = await this._childRuntimeFactory(SUBAGENT_MODEL_TIMEOUT_MS, selection);
       signal.throwIfAborted();
       if (!(await rt.isAvailable())) {
         eventBus.emit("subagent_lifecycle", { ...base,
@@ -6353,7 +6359,7 @@ export class ToolExecutor {
     if (!this._childRuntimeFactory) throw new Error("Parent runtime does not support subagent inference");
     const { runNativeAgentLoop } = await this.loadSubagentDeps();
     signal?.throwIfAborted();
-    const rt = await this._childRuntimeFactory(60_000, selection);
+    const rt = await this._childRuntimeFactory(SUBAGENT_MODEL_TIMEOUT_MS, selection);
     signal?.throwIfAborted();
     if (!(await rt.isAvailable())) throw new Error("No API key available for persistent agent");
     signal?.throwIfAborted();
