@@ -412,7 +412,7 @@ describe("ConsoleGateway", () => {
     await instance.clear(first.id); expect(instance.get(first.id).messages).toEqual([]); expect(instance.worker(first.id, nested).transcript[0]?.assistant).toBe("Owned observation.");
   });
 
-  it("stages autonomy changes at the turn boundary and delivers queued operator messages exactly once", async () => {
+  it("changes Local autonomy during a turn and delivers queued operator messages exactly once", async () => {
     const gate = Promise.withResolvers<void>(); const delivered: string[] = []; const observedModes: string[] = [];
     const instance = gateway((input) => {
       const session = engine(input);
@@ -424,9 +424,31 @@ describe("ConsoleGateway", () => {
     await instance.send(created.id, { text: "Withdraw this queued instruction.", mode: "queue" });
     const withdrawal = instance.get(created.id).queuedMessages.find((message) => message.text === "Withdraw this queued instruction.")!;
     instance.removeQueued(created.id, withdrawal.id);
-    expect(instance.get(created.id).session.autonomyMode).toBe("standard"); expect(instance.get(created.id).pendingConfiguration?.autonomyMode).toBe("recon");
+    expect(instance.get(created.id).session.autonomyMode).toBe("recon"); expect(instance.get(created.id).pendingConfiguration?.autonomyMode).toBeUndefined();
     gate.resolve(); await vi.waitFor(() => expect(delivered).toEqual(["First instruction.", "Second instruction."])); await idle(instance, created.id);
     expect(observedModes).toEqual(["standard", "recon"]); expect(instance.get(created.id).queuedMessages).toEqual([]);
+  });
+
+  it("updates approval mode while waiting without resolving the outstanding decision", async () => {
+    let session: ConsoleSession;
+    const instance = gateway(input => {
+      session = engine(input);
+      session.send = async () => {
+        await input.approveTool!({ name: "bash", arguments: { command: "echo fixture" } });
+        return outcome();
+      };
+      return session;
+    });
+    const created = instance.create({ autonomyMode: "standard" });
+    await instance.send(created.id, "Fixture");
+    await vi.waitFor(() => expect(instance.get(created.id).pendingDecisions).toHaveLength(1));
+    const decision = instance.get(created.id).pendingDecisions[0]!;
+    await instance.configure(created.id, { autonomyMode: "yolo" });
+    expect(session!.autonomyMode).toBe("yolo");
+    expect(instance.get(created.id).session.autonomyMode).toBe("yolo");
+    expect(instance.get(created.id).pendingDecisions[0]!.id).toBe(decision.id);
+    instance.resolveDecision(created.id, decision.id, { approve: true });
+    await idle(instance, created.id);
   });
 
   it("continues saved role and target context with explicit overrides taking precedence", async () => {

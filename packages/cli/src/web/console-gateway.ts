@@ -467,7 +467,18 @@ export class ConsoleGateway {
     }
     if (input.title !== undefined) managed.title = input.title;
     const execution = { ...input }; delete execution.title;
-    if (!Object.keys(execution).length) { this.#emitSession(managed); return this.#summary(managed); }
+    // Local approval policy is mutable during a turn; runtime, scope and folder
+    // changes still wait for the safe turn boundary. Guest requests are serialized.
+    if (input.autonomyMode !== undefined && managed.execution.backend === "local" && !managed.initialization && !managed.configuration) {
+      managed.session?.setAutonomyMode(input.autonomyMode);
+      managed.autonomyMode = input.autonomyMode;
+      delete execution.autonomyMode;
+      if (managed.pendingConfiguration?.autonomyMode !== undefined) {
+        delete managed.pendingConfiguration.autonomyMode;
+        if (!Object.keys(managed.pendingConfiguration).length) managed.pendingConfiguration = undefined;
+      }
+    }
+    if (!Object.keys(execution).length) { this.#emitSession(managed); this.#save(managed); return this.#summary(managed); }
     managed.executionEpoch++;
     managed.pendingConfiguration = { ...managed.pendingConfiguration, ...execution, ...(execution.runtime ? { runtime: { ...managed.pendingConfiguration?.runtime, ...execution.runtime } } : {}) };
     if (managed.turn || managed.initialization || managed.configuration || managed.pending.size) { this.#emitSession(managed); return this.#summary(managed); }
