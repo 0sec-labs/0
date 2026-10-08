@@ -221,7 +221,7 @@ function Composer({ workspace, snapshot, worker, onSubmit, onStop, sendBehavior 
   const stopping = active && Boolean(currentTurn?.notices.some(notice => notice.startsWith("Cancellation requested.")));
   const startingWorkspace = active && !worker && snapshot.execution?.backend === "smolvm" && snapshot.execution.status === "pending";
   const environmentName = snapshot.execution?.backend === "smolvm" ? "SmolVM" : snapshot.execution?.backend === "local" ? "Local" : "Environment";
-  const environmentStatus = snapshot.execution?.status === "pending" ? (active ? "Starting" : "Not started") : snapshot.execution?.status ? snapshot.execution.status[0].toUpperCase() + snapshot.execution.status.slice(1) : undefined;
+  const environmentStatus = snapshot.execution?.backend !== "smolvm" ? undefined : snapshot.execution.status === "pending" ? (active ? "Starting" : "Not started") : snapshot.execution.status[0].toUpperCase() + snapshot.execution.status.slice(1);
   const environmentSettings = `/settings?section=agents&session=${encodeURIComponent(snapshot.session.id)}&return=${encodeURIComponent(`/console/${snapshot.session.id}`)}`;
   const closed = snapshot.session.status === "closed";
   const workerReadOnly = Boolean(worker && !["running", "queued", "parked"].includes(worker.status));
