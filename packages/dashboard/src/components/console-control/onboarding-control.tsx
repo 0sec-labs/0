@@ -6,6 +6,8 @@ import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { WorkspaceChoice } from "@/components/workspace-choice";
+import { useTeamAccess } from "@/components/team-access";
 import { BrandMark } from "@/components/brand-mark";
 import { cn } from "@/lib/utils";
 import { ConnectionsControl, useProviders } from "./connections-control";
@@ -15,6 +17,7 @@ import type { ModelsResponse, SessionSnapshot, SessionSummary, SettingsResponse 
 
 const steps = [
   { id: "welcome", label: "Welcome", title: "Welcome to 0" },
+  { id: "workspace", label: "Workspace", title: "Work on your own or with a team?" },
   { id: "connect", label: "Connect", title: "Connect a provider" },
   { id: "model", label: "Model", title: "Choose a model" },
   { id: "privacy", label: "Privacy", title: "Privacy" },
@@ -22,6 +25,7 @@ const steps = [
 type StepId = typeof steps[number]["id"];
 const stepDescriptions: Record<StepId, string> = {
   welcome: "Your security teammate, ready to explore.",
+  workspace: "Choose where your work belongs.",
   connect: "Bring the provider you already use.",
   model: "Pick the model that fits your work.",
   privacy: "Choose what you share. You stay in control.",
@@ -30,6 +34,7 @@ const stepDescriptions: Record<StepId, string> = {
 export function OnboardingControl({ sessionId, returnTo }: { sessionId?: string; returnTo: string }) {
   const { webFetch, webFetchJson } = useBackendApi();
   const navigate = useNavigate();
+  const team = useTeamAccess();
   const [search, setSearch] = useSearchParams();
   const queryClient = useQueryClient();
   const providers = useProviders();
@@ -94,6 +99,7 @@ export function OnboardingControl({ sessionId, returnTo }: { sessionId?: string;
   const preference = providers.data?.preference ?? null;
   const done: Record<StepId, boolean> = {
     welcome: step > 0 || settings.data?.settings.onboardingCompleted === true,
+    workspace: step > 1 || team.enabled,
     connect: connected.length > 0,
     model: !!preference?.model,
     privacy: settings.data?.settings.diagnosticReportingPrompted === true,
@@ -128,6 +134,7 @@ export function OnboardingControl({ sessionId, returnTo }: { sessionId?: string;
             <p className="text-sm text-muted-foreground">Connect a provider and pick a model. </p>
             <div className="flex flex-wrap gap-2"><Button onClick={() => setStep(1)}>Get started<ArrowRight className="size-4" /></Button><Button variant="ghost" onClick={() => navigate(exitTo)}>Later</Button></div>
           </div>)}
+    {current.id === "workspace" && <WorkspaceChoice initialMode={search.get("mode") === "team" ? "team" : "personal"} teamName={team.enabled ? team.workspace?.name : undefined} onContinue={() => setStep(step + 1)} />}
     {current.id === "connect" && <ConnectionsControl onConnected={() => setStep(step + 1)} />}
     {current.id === "model" && (sessionGate || <ModelStep owner={owner} onApplied={applied} />)}
     {current.id === "privacy" && <div className="space-y-5">
@@ -144,7 +151,7 @@ export function OnboardingControl({ sessionId, returnTo }: { sessionId?: string;
       <Button variant="ghost" disabled={complete.isPending} onClick={() => setStep(step - 1)}><ArrowLeft className="size-4" />Back</Button>
       <div className="flex gap-2">
         <Button variant="ghost" disabled={complete.isPending} onClick={() => navigate(exitTo)}>Exit</Button>
-        {step < steps.length - 1 && <Button variant={done[current.id] ? "default" : "outline"} onClick={() => setStep(step + 1)}>{done[current.id] ? "Continue" : "Skip"}<ArrowRight className="size-4" /></Button>}
+        {step < steps.length - 1 && current.id !== "workspace" && <Button variant={done[current.id] ? "default" : "outline"} onClick={() => setStep(step + 1)}>{done[current.id] ? "Continue" : "Skip"}<ArrowRight className="size-4" /></Button>}
       </div>
     </div>}
     </div>
