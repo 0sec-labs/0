@@ -240,3 +240,28 @@ test("live tool activity survives assistant text, tool completions and cancellat
     await rm(temporary, { recursive: true, force: true });
   }
 });
+
+test("streaming word fades preserve Markdown text, links, and code", async () => {
+  const dashboard = resolve(repoRoot, "packages/dashboard");
+  const temporary = await mkdtemp(resolve(dashboard, ".streaming-text-test-"));
+  try {
+    const output = resolve(temporary, "fixture.mjs");
+    await build({ stdin: { contents: `
+      import React from "react";
+      import { renderToStaticMarkup } from "react-dom/server";
+      import ReactMarkdown from "react-markdown";
+      import { streamWordFade } from "./src/console/streaming-text";
+      export const render = text => renderToStaticMarkup(React.createElement(ReactMarkdown, { remarkPlugins: [streamWordFade], children: text }));
+    `, resolveDir: dashboard, loader: "tsx" }, outfile: output, bundle: true, platform: "node", format: "esm", packages: "external", jsx: "automatic", logLevel: "silent" });
+    const { render } = await import(pathToFileURL(output).href);
+    const html = render("Hello **world** 👋 café.\n\n[Docs](https://example.com) and `literal code`.\n\n```js\nconst n = 1;\n```");
+    assert.match(html, /<strong><span class="console-stream-word">world<\/span><\/strong>/);
+    assert.match(html, /👋/);
+    assert.match(html, /café/);
+    assert.match(html, /href="https:\/\/example.com"/);
+    assert.match(html, /<code>literal code<\/code>/);
+    assert.match(html, /<pre><code class="language-js">const n = 1;\n<\/code><\/pre>/);
+    assert.match(render("Hello world"), /<span class="console-stream-word">Hello <\/span>/);
+    assert.match(render("Hello world again"), /<span class="console-stream-word">Hello <\/span>/);
+  } finally { await rm(temporary, { recursive: true, force: true }); }
+});
