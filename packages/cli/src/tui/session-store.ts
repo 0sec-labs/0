@@ -267,11 +267,12 @@ const workerTurnSchema = z.object({
   turn: finite, ts: finite, assistant: boundedString.optional(), reasoning_summary: boundedString.optional(), partial: z.boolean().optional(),
   tools: z.array(z.object({ callIndex: finite, call: toolCallSchema, result: jsonValueSchema, running: z.boolean().optional() }).strict()).max(1_000).optional(),
 }).strict();
+const messageAuthorSchema = z.object({ userId: z.string().min(1).max(256), displayName: z.string().min(1).max(256), proposalId: z.string().min(1).max(256).optional() }).strict();
 const workerSchema = z.object({
   id: z.string().max(256), parentId: z.string().max(256), name: z.string().max(200),
   status: z.enum(["queued", "running", "parked", "completed", "failed", "stopped"]), task: boundedString,
   transcript: z.array(workerTurnSchema).max(10_000), telemetry: z.record(jsonValueSchema).optional(),
-  operatorMessages: z.array(z.object({ id: z.string().max(256), text: boundedString, createdAt: z.string().max(64) }).strict()).max(10_000).optional(),
+  operatorMessages: z.array(z.object({ id: z.string().max(256), text: boundedString, createdAt: z.string().max(64), author: messageAuthorSchema.optional() }).strict()).max(10_000).optional(),
   summary: boundedString.optional(), error: boundedString.optional(), model: z.string().max(256).optional(), role: z.string().max(64).optional(),
 }).strict();
 const consoleStateSchema = z.object({
@@ -302,7 +303,8 @@ const consoleStateSchema = z.object({
   }).strict().nullable(),
   workers: z.array(workerSchema).max(1_000),
   compaction: jsonValueSchema.nullable(),
-  queuedMessages: z.array(z.object({ id: z.string().max(256), text: boundedString, createdAt: z.string().max(64) }).strict()).max(20),
+  queuedMessages: z.array(z.object({ id: z.string().max(256), text: boundedString, createdAt: z.string().max(64), author: messageAuthorSchema.optional() }).strict()).max(20),
+  userAttributions: z.array(z.object({ text: boundedString, author: messageAuthorSchema.optional() }).strict()).max(10000).optional(),
   focusedFindingId: z.string().max(256).optional(),
   stagedPrompt: boundedString.optional(),
 }).strict();

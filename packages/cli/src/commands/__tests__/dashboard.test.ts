@@ -1144,6 +1144,16 @@ describe("dashboard — browser request boundaries", () => {
     expect(dbState.ctorPaths).toHaveLength(0);
   });
 
+  it("allows only the top-level OIDC callback to reach its state validator", async () => {
+    const callback = await invokeHandler(makeRequest({ method: "GET", url: "/api/team/auth/callback?state=untrusted&code=untrusted", headers: { "sec-fetch-site": "cross-site" } }));
+    expect(callback.statusCode).toBe(404); // TeamAuth refuses the unconfigured provider.
+    expect(JSON.parse(callback.body).error).toContain("not configured");
+    for (const [method, url] of [["POST", "/api/team/auth/callback"], ["GET", "/api/team/auth/sso"], ["GET", "/api/team/auth/callback/other"]]) {
+      const other = await invokeHandler(makeRequest({ method: method!, url: url!, headers: { "sec-fetch-site": "cross-site" } }));
+      expect(other.statusCode).toBe(403);
+    }
+  });
+
   it("accepts the browser's matching Origin and token", async () => {
     const token = await getControlToken();
     const captured = await invokeHandler(makeRequest({ method: "GET", url: "/api/scans",

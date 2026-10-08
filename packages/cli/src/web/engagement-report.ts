@@ -14,7 +14,7 @@ export function engagementMarkdown(report: EngagementReport): string {
   const { engagement, summary } = report;
   const lines = [`# ${text(engagement.name)}`, "", engagement.description ? text(engagement.description) : "", "",
     "This report collects evidence from the selected retained runs. It does not establish complete asset coverage or that every finding was verified.", "",
-    `Engagement ID: ${engagement.id}`, `Updated: ${engagement.updatedAt}`, "",
+    `Engagement ID: ${engagement.id}`, `Revision: ${engagement.revision}`, `Updated: ${engagement.updatedAt}`, ...(engagement.updatedBy ? [`Updated by: ${text(engagement.updatedBy.displayName)} (${text(engagement.updatedBy.userId)})`] : []), "",
     `Runs: ${summary.scanCount} · Finding occurrences: ${summary.findingCount} · Unique findings: ${summary.uniqueFindingCount}`,
     `Verified: ${summary.verified} · Rejected: ${summary.rejected} · Unreviewed: ${summary.unreviewed}`, "",
     "## Engagement notes", "", engagement.notes ? text(engagement.notes) : "No notes recorded.", "", "## Source runs", ""];

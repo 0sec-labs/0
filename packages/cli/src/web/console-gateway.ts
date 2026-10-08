@@ -16,7 +16,7 @@ import {
   SecurityWorkflowBindingsSchema,
   DEFAULT_AUTONOMY_MODE, DESKTOP_CONSOLE_SCHEMA_VERSION, MODEL_PRICING, estimateCost,
   type ConsoleEventsPage, type ConsoleJsonValue, type ConsoleMessageInput, type ConsolePublicExport,
-  type ConsolePublicMessage, type ConsoleQueuedMessage, type ConsoleRuntimeSelection, type ConsoleRuntimeSnapshot,
+  type ConsolePublicMessage, type ConsoleQueuedMessage, type ConsoleMessageAuthor, type ConsoleUserAttribution, type ConsoleRuntimeSelection, type ConsoleRuntimeSnapshot,
   type ConsoleSavedSession, type ConsoleSessionConfiguration, type ConsoleSessionSnapshot,
   type ConsoleTodos, type ConsoleExecutionSnapshot, type ConsoleTurnOutcome, type ConsoleWorker, type DesktopConsoleAutonomyMode,
   type DesktopConsoleDecision, type DesktopConsoleDecisionResponse, type DesktopConsoleEvent,
@@ -97,6 +97,7 @@ type ManagedSession = {
   events: DesktopConsoleEvent[]; listeners: Set<(event: DesktopConsoleEvent) => void>;
   pending: Map<string, PendingDecision>; abort: AbortController | null; turn: Promise<void> | null; turnOwner: string | null;
   initialMessages: NativeMessage[]; savedId?: string; workers: Map<string, ConsoleWorker>; ownedIds: Set<string>;
+  userAttributions: ConsoleUserAttribution[];
   busUnsubscribe: (() => void) | null; messagingHome?: string; queued: ConsoleQueuedMessage[]; pauseQueue: boolean;
   pendingConfiguration?: ConsoleSessionConfiguration; configuration: Promise<void> | null;
   usage: ConsoleSessionSnapshot["usage"]; contextInputTokens?: number;
@@ -209,6 +210,24 @@ function publicMessages(messages: readonly unknown[]): ConsolePublicMessage[] {
   });
 }
 function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error); }
+const serverAuthorSchema = z.object({ userId: z.string().min(1).max(256), displayName: z.string().min(1).max(256), proposalId: z.string().min(1).max(256).optional() });
+/** Match backwards so repeated prompts, including anonymous turns, retain their own author. */
+function attributedMessages(messages: readonly unknown[], attributions: readonly ConsoleUserAttribution[]): ConsolePublicMessage[] {
+  const projected = publicMessages(messages);
+  let before = projected.length;
+  for (let index = attributions.length - 1; index >= 0; index--) {
+    const attribution = attributions[index]!;
+    for (let candidate = before - 1; candidate >= 0; candidate--) {
+      const message = projected[candidate]!;
+      const blocks = message.content.filter(block => block.type === "text");
+      if (message.role === "user" && blocks.length && blocks.map(block => block.text).join("") === attribution.text) {
+        if (attribution.author) message.author = structuredClone(attribution.author);
+        before = candidate; break;
+      }
+    }
+  }
+  return projected;
+}
 function parseDecisionResponse(value: unknown): DesktopConsoleDecisionResponse {
   const raw = object(value, "Decision response"); allowedKeys(raw, ["approve", "answers"]);
   if (typeof raw.approve !== "boolean") throw new ConsoleGatewayError("Decision response must include an approve boolean.", 400);
@@ -326,7 +345,7 @@ export class ConsoleGateway {
       title: raw.title === undefined ? "New chat" : text(raw.title, "Title", 200),
       scope: raw.scope === undefined ? undefined : scopePolicy(raw.scope), selection: raw.runtime === undefined ? {} : runtimeSelection(raw.runtime),
       runtime: null, info: null, session: null, initialization: null, status: "ready", sequence: 0, events: [], listeners: new Set(), pending: new Map(),
-      abort: null, turn: null, turnOwner: null, initialMessages: [], workers: new Map(), ownedIds: new Set([id]), busUnsubscribe: null,
+      abort: null, turn: null, turnOwner: null, initialMessages: [], userAttributions: [], workers: new Map(), ownedIds: new Set([id]), busUnsubscribe: null,
       queued: [], pauseQueue: false, configuration: null, usage: { inputTokens: 0, outputTokens: 0, costUnavailable: true }, lastOutcome: null, compaction: null, harness: null, objective: "", todos: null,
       workflowRequests: new Map(), workflowDraining: false,
       executionEpoch: 0, execution: { backend: consoleExecutionProfile(this.#options.homeDir), status: "pending", workspacePath: this.#projectPath },
@@ -338,7 +357,7 @@ export class ConsoleGateway {
     const managed = this.#require(id); const session = managed.session;
     return {
       session: this.#summary(managed), title: managed.title, cursor: managed.sequence,
-      messages: publicMessages(session?.messages ?? managed.initialMessages), events: structuredClone(managed.events),
+      messages: attributedMessages(session?.messages ?? managed.initialMessages, managed.userAttributions), events: structuredClone(managed.events),
       pendingDecisions: [...managed.pending.values()].map((pending) => structuredClone(pending.decision)),
       execution: structuredClone(managed.execution), workers: this.workers(id), queuedMessages: structuredClone(managed.queued), runtime: managed.info ? structuredClone(managed.info) : null,
       scope: structuredClone(session?.scope?.raw ?? managed.scope?.raw ?? null), scopeEnforcement: { ...(session?.scopeEnforcement ?? getScopeEnforcementState(this.#projectPath, this.#options.homeDir)) },
@@ -362,20 +381,21 @@ export class ConsoleGateway {
   subscribe(id: string, listener: (event: DesktopConsoleEvent) => void): () => void {
     const managed = this.#require(id); managed.listeners.add(listener); return () => managed.listeners.delete(listener);
   }
-  async send(id: string, value: unknown): Promise<DesktopConsoleSession> {
+  async send(id: string, value: unknown, author?: ConsoleMessageAuthor): Promise<DesktopConsoleSession> {
     const managed = this.#requireOpen(id);
     if (managed.workflowDraining) throw new ConsoleGatewayError("Wait for the queued workflow launch and decisions to finish.", 409);
     const input = messageInput(value);
-    if (input.workerId) return this.sendWorker(id, input.workerId, input.text);
+    const attribution = author === undefined ? undefined : serverAuthorSchema.parse(author);
+    if (input.workerId) return this.sendWorker(id, input.workerId, input.text, attribution);
     if (managed.turn || managed.initialization || managed.configuration || managed.status === "working" || managed.pending.size) {
       if (input.mode !== "queue" && input.mode !== "steer") throw new ConsoleGatewayError("Console session is already processing a turn; choose queue or steer.", 409);
       if (managed.queued.length >= MAX_QUEUED_MESSAGES) throw new ConsoleGatewayError("The message queue is full.", 409);
-      managed.queued.push({ id: this.#createId(), text: input.text, createdAt: this.#now().toISOString() }); managed.pauseQueue = false;
+      managed.queued.push({ id: this.#createId(), text: input.text, createdAt: this.#now().toISOString(), ...(attribution ? { author: attribution } : {}) }); managed.pauseQueue = false;
       this.#emit(managed, { type: "queued", messages: structuredClone(managed.queued) });
       if (input.mode === "steer" && managed.abort) this.#cancelTurn(managed);
       return this.#summary(managed);
     }
-    await this.#startTurn(managed, input.text); return this.#summary(managed);
+    await this.#startTurn(managed, input.text, attribution); return this.#summary(managed);
   }
   async cancel(id: string): Promise<DesktopConsoleSession> {
     const managed = this.#requireOpen(id);
@@ -408,19 +428,19 @@ export class ConsoleGateway {
   async clear(id: string): Promise<DesktopConsoleSession> {
     const managed = this.#requireOpen(id); this.#assertIdle(managed);
     managed.executionEpoch++;
-    managed.session?.clearConversation(); managed.initialMessages = []; managed.queued = []; managed.objective = ""; managed.todos = null;
+    managed.session?.clearConversation(); managed.initialMessages = []; managed.userAttributions = []; managed.queued = []; managed.objective = ""; managed.todos = null;
     managed.lastOutcome = null; managed.compaction = null; managed.contextInputTokens = undefined;
     // clear is a conversation operation, not revocation of granted/denied authorization or worker cleanup.
     managed.events = []; this.#emit(managed, { type: "clear" }); this.#save(managed); this.#emitSession(managed); return this.#summary(managed);
   }
-  async continue(id: string, value: unknown = {}): Promise<DesktopConsoleSession> {
+  async continue(id: string, value: unknown = {}, author?: ConsoleMessageAuthor): Promise<DesktopConsoleSession> {
     const managed = this.#requireOpen(id); this.#assertIdle(managed);
     if (managed.lastOutcome?.stopReason !== "output_cap") throw new ConsoleGatewayError("This session has no output-capped turn to continue.", 409);
     const raw = object(value, "Continuation"); allowedKeys(raw, ["text"]);
     const remaining = raw.text === undefined
       ? "Continue the remaining task from the retained observations and plan. Do not replay completed tool calls or incomplete function calls. Keep the next answer concise."
       : text(raw.text, "Remaining task", MAX_MESSAGE_LENGTH);
-    return this.send(id, remaining);
+    return this.send(id, remaining, author);
   }
   async harness(id: string, value: unknown): Promise<{ snapshot: HarnessSnapshot; requestedPrompt?: string }> {
     const managed = this.#requireOpen(id); this.#assertIdle(managed);
@@ -539,7 +559,7 @@ export class ConsoleGateway {
     return { results: all.slice(offset as number, end), hasMore, nextOffset: hasMore ? end : null, truncated: saved.truncated };
   }
   loadSaved(id: string): { meta: ConsoleSavedSession; messages: ConsolePublicMessage[] } {
-    const stored = this.#stored(id); const { messages, consoleState: _displayOnly, ...meta } = stored; return { meta, messages: publicMessages(messages) };
+    const stored = this.#stored(id); const { messages, consoleState: _displayOnly, ...meta } = stored; return { meta, messages: attributedMessages(messages, stored.consoleState?.userAttributions ?? []) };
   }
   async resume(id: string, value: unknown = {}): Promise<DesktopConsoleSession> {
     const stored = this.#stored(id);
@@ -569,6 +589,7 @@ export class ConsoleGateway {
     managed.objective = stored.summary ?? "";
     if (stored.consoleState) {
       const state = stored.consoleState;
+      managed.userAttributions = state.userAttributions ?? [];
       managed.title = raw.title === undefined ? state.title : managed.title;
       managed.objective = state.objective; managed.todos = state.todos; managed.usage = state.usage;
       managed.lastOutcome = state.lastOutcome; managed.compaction = state.compaction; managed.contextInputTokens = state.contextInputTokens;
@@ -615,15 +636,16 @@ export class ConsoleGateway {
   worker(id: string, workerId: string): ConsoleWorker {
     const worker = this.#require(id).workers.get(workerId); if (!worker) throw new ConsoleGatewayError("Worker does not belong to this session.", 404); return structuredClone(worker);
   }
-  sendWorker(id: string, workerId: string, value: unknown): DesktopConsoleSession {
+  sendWorker(id: string, workerId: string, value: unknown, author?: ConsoleMessageAuthor): DesktopConsoleSession {
     const managed = this.#requireOpen(id); const body = text(value, "Worker message", MAX_OPERATOR_TEXT_LENGTH); const worker = managed.workers.get(workerId);
+    const attribution = author === undefined ? undefined : serverAuthorSchema.parse(author);
     if (!worker || !Object.hasOwn(ACTIVE_WORKERS, worker.status)) throw new ConsoleGatewayError("Worker is not reachable in this session.", 404);
     if (managed.execution.backend === "smolvm") throw new ConsoleGatewayError("Worker messages must be delivered inside the isolated workspace. Host mailbox delivery is refused until the guest messaging bridge is available.", 409);
     const settings = getSettings();
     const result = sendOperatorMessage({ selfId: "Main", selfRole: "operator", siblingChannelEnabled: false, operatorChannelEnabled: settings.allowSubagentOperatorMessaging, projectPath: managed.workspacePath ?? this.#projectPath, homeDir: managed.messagingHome, knownPeerIds: [...managed.workers.values()].filter((worker) => Object.hasOwn(ACTIVE_WORKERS, worker.status)).map((worker) => worker.id) }, workerId, body, this.#now().getTime());
     if (!result.ok) throw new ConsoleGatewayError(result.reason ?? "Worker message could not be delivered.", 409);
     worker.operatorMessages ??= [];
-    worker.operatorMessages.push({ id: this.#createId(), text: clampOutboundBody(body).body, createdAt: this.#now().toISOString() });
+    worker.operatorMessages.push({ id: this.#createId(), text: clampOutboundBody(body).body, createdAt: this.#now().toISOString(), ...(attribution ? { author: attribution } : {}) });
     this.#emitWorker(managed, worker, undefined, worker.operatorMessages.at(-1));
     this.#emit(managed, { type: "notice", text: `Message delivered to ${worker.name}${result.truncated ? " (truncated by the mailbox limit)" : ""}.` }); return this.#summary(managed);
   }
@@ -838,7 +860,7 @@ export class ConsoleGateway {
   attachSourceLearning(store: LearningStore): void { this.#sourceLearningStore = store; }
 
   attachLearningRecorder(recorder: (event: { id: string; project: string; outcome: string }) => void): void { this.#learningRecorder = recorder; }
-  async #startTurn(managed: ManagedSession, body: string): Promise<void> {
+  async #startTurn(managed: ManagedSession, body: string, author?: ConsoleMessageAuthor): Promise<void> {
     managed.executionEpoch++;
     managed.status = "working"; this.#emitSession(managed);
     let session: ConsoleSession;
@@ -852,7 +874,9 @@ export class ConsoleGateway {
       managed.title = body.replace(/\s+/g, " ").trim().slice(0, 80);
     }
     const fallbackTitle = managed.title;
-    this.#emitSession(managed); this.#emit(managed, { type: "user", text: body });
+    managed.userAttributions.push({ text: body, ...(author ? { author: structuredClone(author) } : {}) });
+    if (managed.userAttributions.length > 10000) managed.userAttributions.splice(0, managed.userAttributions.length - 10000);
+    this.#emitSession(managed); this.#emit(managed, { type: "user", text: body, ...(author ? { author: structuredClone(author) } : {}) });
     const turn = (async () => {
       try {
         const outcome = await session.send(body, {
@@ -1006,7 +1030,7 @@ export class ConsoleGateway {
       if (managed.pauseQueue || managed.pendingConfiguration || !managed.queued.length) return;
       const next = managed.queued.shift()!;
       this.#emit(managed, { type: "queued", messages: structuredClone(managed.queued) });
-      try { await this.#startTurn(managed, next.text); }
+      try { await this.#startTurn(managed, next.text, next.author); }
       catch (error) {
         managed.queued.unshift(next); managed.pauseQueue = true;
         this.#emit(managed, { type: "queued", messages: structuredClone(managed.queued) });
@@ -1162,6 +1186,7 @@ export class ConsoleGateway {
       lastOutcome: managed.lastOutcome as StoredConsoleState["lastOutcome"], todos: managed.todos,
       workers: this.workers(managed.id) as StoredConsoleState["workers"], compaction: managed.compaction,
       queuedMessages: structuredClone(managed.queued),
+      userAttributions: structuredClone(managed.userAttributions),
       ...(managed.focusedFinding ? { focusedFindingId: managed.focusedFinding.id } : {}),
       ...(managed.stagedPrompt ? { stagedPrompt: managed.stagedPrompt } : {}),
     };

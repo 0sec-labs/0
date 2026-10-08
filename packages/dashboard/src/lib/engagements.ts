@@ -2,7 +2,9 @@ import type { Finding } from "@0/shared";
 
 export interface EngagementRecord {
   id: string; name: string; description: string; notes?: string;
-  scanIds: string[]; createdAt: string; updatedAt: string;
+  scanIds: string[]; createdAt: string; updatedAt: string; revision: number;
+  createdBy?: { userId: string; displayName: string };
+  updatedBy?: { userId: string; displayName: string };
 }
 export interface EngagementReport {
   schemaVersion: 1; engagement: EngagementRecord;

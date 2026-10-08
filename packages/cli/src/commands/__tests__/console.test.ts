@@ -62,24 +62,15 @@ describe("console launch authorization", () => {
     await program.parseAsync(["console", ...args], { from: "user" });
   }
 
-  it("opens interactive YOLO without scope so the operator can approve targets", async () => {
+  it("directs interactive console and chat users to the account-free browser", async () => {
+    const notice = vi.spyOn(console, "log").mockImplementation(() => {});
     await launch();
-    expect(startup.showConsole).toHaveBeenCalledOnce();
+    expect(notice).toHaveBeenCalledWith(expect.stringContaining("Run 0 web (no account required)"));
+    expect(startup.showConsole).not.toHaveBeenCalled();
     expect(process.exitCode).toBeUndefined();
-  });
-
-  it("uses the engine's round default unless the operator supplies a cap", async () => {
-    const { DEFAULT_MAX_TOOL_ITERATIONS } = await import("@0/core");
-    await launch();
-    expect(startup.showConsole).toHaveBeenLastCalledWith(expect.objectContaining({ maxToolIterations: DEFAULT_MAX_TOOL_ITERATIONS }));
-    await launch(["--max-tool-calls", "7"]);
-    expect(startup.showConsole).toHaveBeenLastCalledWith(expect.objectContaining({ maxToolIterations: 7 }));
-  });
-
-  it("retains configured-scope requirements for the Node fallback", async () => {
-    startup.bun = false;
-    await launch();
-    expect(process.exitCode).toBe(2);
+    const program = new Command();
+    registerConsoleCommand(program);
+    await program.parseAsync(["chat"], { from: "user" });
     expect(startup.showConsole).not.toHaveBeenCalled();
   });
 
@@ -109,7 +100,10 @@ describe("headless console completion status", () => {
     vi.restoreAllMocks();
   });
 
-  it.each(["error", "end_turn"] as const)("exits appropriately after a returned %s outcome and cleans up", async (stopReason) => {
+  it.each([
+    ["error", "console", "--print"], ["end_turn", "console", "--print"],
+    ["end_turn", "chat", "--prompt"],
+  ] as const)("exits appropriately after a returned %s outcome via %s %s and cleans up", async (stopReason, command, promptFlag) => {
     const error = "ChatGPT API error 400: requested model is not supported";
     const send = vi.fn(async (_text: string, _callbacks?: unknown) => ({
       stopReason, error: stopReason === "error" ? error : undefined,
@@ -120,7 +114,7 @@ describe("headless console completion status", () => {
     startup.createSession.mockReturnValue({ send, cleanup });
     const program = new Command();
     registerConsoleCommand(program);
-    await program.parseAsync(["console", "--mode", "standard", "--model", "requested-model", "--print", "verify the selected target"], { from: "user" });
+    await program.parseAsync([command, "--mode", "standard", "--model", "requested-model", promptFlag, "verify the selected target"], { from: "user" });
 
     expect(send).toHaveBeenCalledOnce();
     expect(send.mock.calls[0][0]).toBe("verify the selected target");

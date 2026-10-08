@@ -31,6 +31,39 @@ beforeEach(() => {
 afterEach(() => rmSync(directory, { recursive: true, force: true }));
 
 describe("operator-local engagements", () => {
+  it("attributes server identity and rejects stale edits without losing the first save", () => {
+    const alice = { userId: "alice", displayName: "Alice" };
+    const bob = { userId: "bob", displayName: "Bob" };
+    const initial = store.create({ name: "Shared report" }, alice);
+    const other = new EngagementStore({ workspace, stateDir: directory, dbPath });
+    expect(initial).toMatchObject({ revision: 1, createdBy: alice, updatedBy: alice });
+    const saved = other.update(initial.id, { notes: "Reviewed evidence", expectedRevision: initial.revision }, bob);
+    expect(saved).toMatchObject({ revision: 2, createdBy: alice, updatedBy: bob });
+    expect(() => store.update(initial.id, { notes: "Stale notes", expectedRevision: 1 }, alice)).toThrow("Report changed");
+    expect(store.get(initial.id)).toEqual(saved);
+    expect(() => store.update(initial.id, { notes: "Unversioned edit" }, alice)).toThrow("latest report");
+    expect(store.report(initial.id).engagement.updatedBy).toEqual(bob);
+  });
+  it("never accepts identity metadata from request bodies and migrates legacy revisions", () => {
+    const actor = { userId: "server-user", displayName: "Server user" };
+    expect(() => store.create({ name: "Forged", createdBy: actor })).toThrow();
+    const initial = store.create({ name: "Legacy" });
+    expect(() => store.update(initial.id, { expectedRevision: 1, updatedBy: actor })).toThrow();
+    const path = join(directory, "engagements", readdirSync(join(directory, "engagements"))[0]!);
+    const state = JSON.parse(readFileSync(path, "utf8")); delete state.engagements[0].revision;
+    writeFileSync(path, JSON.stringify(state));
+    expect(store.get(initial.id).revision).toBe(1);
+    expect(store.update(initial.id, { notes: "Local compatible" }).revision).toBe(2);
+    expect(store.get(initial.id).updatedBy).toBeUndefined();
+  });
+  it("does not write through another process lock", () => {
+    const initial = store.create({ name: "Shared" });
+    const path = join(directory, "engagements", readdirSync(join(directory, "engagements"))[0]!);
+    writeFileSync(`${path}.lock`, String(process.pid), { mode: 0o600 });
+    expect(() => store.update(initial.id, { name: "Overwrite", expectedRevision: initial.revision })).toThrow("Another report edit");
+    expect(store.get(initial.id)).toEqual(initial);
+    expect(readdirSync(join(directory, "engagements"))).not.toContain(`${path.split("/").at(-1)}.lock.recovery`);
+  });
   it("persists named records privately and updates only allowed fields", () => {
     expect(store.list()).toEqual([]);
     const row = store.create({ name: " Review ", description: "Scope", scanIds: ["scan-a"], notes: "Internal note" });

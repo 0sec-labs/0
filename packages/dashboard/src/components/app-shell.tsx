@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useDashboardPanel } from "@/components/dashboard-panel";
 import { SharedWorkspaceLayout } from "@/components/shared-workspace-layout";
 import { ConsoleNavigationRail } from "@/console/navigation-rail";
+import { TeamAccount } from "@/components/team-access";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -10,7 +11,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const { panel, dismissPanel } = useDashboardPanel();
   const isConsole = pathname.startsWith("/console");
-  const sessionId = isConsole ? pathname.split("/")[2] : undefined;
+  const sessionId = isConsole && !pathname.startsWith("/console/saved/") ? pathname.split("/")[2] : undefined;
   const workerId = new URLSearchParams(search).get("worker");
   const controlsQuery = sessionId
     ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(`/console/${sessionId}${workerId ? `?worker=${encodeURIComponent(workerId)}` : ""}`)}`
@@ -18,7 +19,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Keep the rail mounted across route changes so its hover/focus survives.
   return <div className="console-frame flex min-w-0 overflow-hidden bg-background text-foreground">
     <ConsoleNavigationRail settingsHref={isConsole ? `/settings${controlsQuery}` : "/settings"} />
-    <div className="min-w-0 flex-1">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <TeamAccount />
     {isConsole ? children : <SharedWorkspaceLayout onNew={() => navigate("/console?new=1")}>
     {children}
     <Sheet open={Boolean(panel)} onOpenChange={(open) => { if (!open) dismissPanel(); }}>

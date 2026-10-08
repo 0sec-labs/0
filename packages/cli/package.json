@@ -30,6 +30,7 @@
     "@0/test-targets": "workspace:*",
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
+    "jose": "^6.1.0",
     "pdfkit": "^0.15.2",
     "react": "^19.2.4",
     "react-devtools-core": "^7.0.1",

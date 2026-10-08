@@ -7,6 +7,7 @@ import { BackendApiContext, BackendSelectionContext } from "./backend-context";
 import { backendRoute } from "./lib/backend-client";
 import { App } from "./App";
 import { BackendConnectionPicker } from "./components/backend-connection-picker";
+import { TeamAccess } from "./components/team-access";
 
 async function controlJson(path: string, signal?: AbortSignal) {
   const response = await localControlFetch(path, { signal });
@@ -33,6 +34,12 @@ function BackendView({ descriptor, basename }: { descriptor: BackendDescriptor; 
 }
 
 export function BackendShell() {
+  const api = useMemo(() => createBackendApi("local"), []);
+  const cache = useMemo(() => new QueryClient(), []);
+  return <BackendApiContext value={api}><QueryClientProvider client={cache}><TeamAccess><ConnectedBackendShell /></TeamAccess></QueryClientProvider></BackendApiContext>;
+}
+
+function ConnectedBackendShell() {
   const [route, setRoute] = useState(() => backendRoute(window.location.pathname));
   const [backends, setBackends] = useState<BackendDescriptor[]>([]);
   const [selected, setSelected] = useState<BackendDescriptor | null>(null);

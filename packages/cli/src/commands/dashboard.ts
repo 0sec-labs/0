@@ -1,6 +1,6 @@
 import { ImpactAssessmentSchema } from "@0/shared/dist/finding-priority.js";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, extname, join, resolve, sep } from "node:path";
@@ -36,6 +36,10 @@ import { retainedScanSnapshot, retainedFindingSnapshot } from "../web/report-art
 import { handleFindingImpactRequest } from "../web/finding-impact.js";
 import { EngagementStore } from "../web/engagements.js";
 import { engagementMarkdown } from "../web/engagement-report.js";
+import { TeamAuth } from "../web/team-auth.js";
+import { CollaborationService } from "../web/collaboration.js";
+import { authorizeTeamApi, handleTeamRequest, assertTeamConsoleMutation } from "../web/team-web.js";
+import { homeStateDir } from "@0/shared";
 import { assertLocalEngineAvailable, registerLocalEngine } from "../local-engine.js";
 
 type DashboardOptions = {
@@ -46,6 +50,7 @@ type DashboardOptions = {
   devUrl?: string;
   readyJson?: boolean;
   backendsConfig?: string;
+  teamConfig?: string;
   engineTokenEnv?: string;
   engineWorkspace?: string;
   engineScope?: string;
@@ -83,7 +88,10 @@ function authorizeWebRequest(req: IncomingMessage, origin: string): void {
   if (req.headers.origin !== undefined && req.headers.origin !== requestOrigin.origin) {
     throw new WebRequestError("Cross-origin web application requests are not allowed.", 403);
   }
-  if (req.url?.startsWith("/api/") && req.headers["sec-fetch-site"] === "cross-site") {
+  // An OIDC provider returns through a top-level cross-site GET. Its one-use
+  // state and browser cookie are checked by TeamAuth before issuing a session.
+  const ssoCallback = req.method === "GET" && /^\/api\/team\/auth\/callback(?:\?|$)/.test(req.url ?? "");
+  if (req.url?.startsWith("/api/") && req.headers["sec-fetch-site"] === "cross-site" && !ssoCallback) {
     throw new WebRequestError("Cross-site control requests are not allowed.", 403);
   }
   if (!req.url?.startsWith("/") || req.url.startsWith("//")) throw new WebRequestError("Invalid request target.", 400);
@@ -1168,11 +1176,24 @@ async function handleWebConsoleApiRequest(
   workflows: WebWorkflowService,
   triggers: WorkflowTriggerService,
   github: GitHubPublicationAuth,
+  team?: { auth: TeamAuth; collaboration?: CollaborationService },
 ): Promise<boolean> {
   if (!requestUrl.pathname.startsWith("/api/console/")) return false;
   const method = req.method ?? "GET";
   const path = requestUrl.pathname.slice("/api/console/".length);
   const input = method === "GET" || method === "HEAD" ? undefined : await readJson(req);
+  const member = team?.auth.resolveSession(req);
+  const author = member ? { userId: member.userId, displayName: member.displayName } : undefined;
+  if (team && method !== "GET" && method !== "HEAD") {
+    const readResume = /^saved\/[^/]+\/resume$/.test(path) && input !== null && typeof input === "object" && Object.keys(input).length === 0;
+    if (/^saved\/[^/]+\/resume$/.test(path) && team.auth.resolveSession(req)?.role !== "owner" && !readResume) throw new WebRequestError("Only workspace owners can override a saved conversation's configuration.", 403);
+    const liveId = /^sessions\/([^/]+)/.exec(path)?.[1];
+    const bodyId = input && typeof input === "object" && "sessionId" in input && typeof input.sessionId === "string" ? input.sessionId : undefined;
+    const savedId = /^saved\/([^/]+)/.exec(path)?.[1];
+    const savedLiveId = savedId ? gateway.list().find(item => item.id === savedId || item.savedId === savedId)?.id : undefined;
+    const id = liveId ?? bodyId ?? savedLiveId;
+    if (id && !readResume) assertTeamConsoleMutation(req, id, team.auth, team.collaboration, gateway);
+  }
   try {
     if (path === "execution" && method === "GET") { json(res, 200, await workbenchStatus()); return true; }
     if (path === "github" && method === "GET") { json(res, 200, { github: await github.status() }); return true; }
@@ -1227,11 +1248,13 @@ async function handleWebConsoleApiRequest(
       json(res, 200, { ok: true });
     } else if (action === "events" && method === "GET") {
       json(res, 200, gateway.eventsAfter(id, consoleEventsAfter(requestUrl.searchParams.get("after"))));
-    } else if (action === "messages" && method === "POST") json(res, 202, { session: await gateway.send(id, input) });
+    } else if (action === "messages" && method === "POST") {
+      json(res, 202, { session: await gateway.send(id, input, author) });
+    }
     else if (action === "cancel" && method === "POST") json(res, 200, { session: await gateway.cancel(id) });
     else if (action === "configuration" && method === "PATCH") json(res, 200, { session: await gateway.configure(id, input) });
     else if (action === "clear" && method === "POST") json(res, 200, { session: await gateway.clear(id) });
-    else if (action === "continue" && method === "POST") json(res, 202, { session: await gateway.continue(id, input) });
+    else if (action === "continue" && method === "POST") json(res, 202, { session: await gateway.continue(id, input, author) });
     else if (action === "harness" && method === "POST") json(res, 200, await gateway.harness(id, input));
     else if (action === "save" && method === "POST") json(res, 200, { session: gateway.save(id) });
     else if (action === "archive" && method === "POST") {
@@ -1252,7 +1275,7 @@ async function handleWebConsoleApiRequest(
       else if (workerId && parts[4] === "stop" && method === "POST") json(res, 200, { worker: await gateway.stopWorker(id, workerId) });
       else if (workerId && parts[4] === "messages" && method === "POST") {
         const body = z.object({ text: z.unknown() }).strict().parse(input);
-        json(res, 202, { session: gateway.sendWorker(id, workerId, body.text) });
+        json(res, 202, { session: gateway.sendWorker(id, workerId, body.text, author) });
       } else json(res, 405, { error: "Method not allowed." });
     } else json(res, 405, { error: "Method not allowed." });
     return true;
@@ -1749,6 +1772,7 @@ export function registerDashboardCommand(program: Command): void {
     .option("--asset-dir <path>", "Path to built dashboard assets")
     .option("--dev-url <url>", "Loopback Vite server for authenticated frontend hot reload")
     .option("--backends-config <path>", "Trusted backend connection registry JSON (default ~/.0/backends.json)")
+    .option("--team-config <path>", "Enable workspace accounts, roles, and shared conversation controls")
     .option("--engine-token-env <name>", "Environment variable holding the engine bearer credential (32–4096 characters)")
     .option("--engine-workspace <path>", "Engine-owned authorized workspace for persistent workflow calls")
     .option("--engine-scope <path>", "Engine-owned scope JSON for persistent live-target workflows")
@@ -1788,11 +1812,15 @@ export function registerDashboardCommand(program: Command): void {
       }
 
       const engineBearer = backendBearerFromEnv(opts.engineTokenEnv);
-      if (!engineBearer && [opts.engineWorkspace, opts.engineScope, opts.engineTarget, opts.engineAllowApply, opts.engineTimeCap, opts.engineCostCap].some(value => value !== undefined && value !== false)) throw new Error("Engine admission options require --engine-token-env.");
+      if (!engineBearer && !opts.teamConfig && !process.env.ZERO_TEAM_CONFIG && [opts.engineWorkspace, opts.engineScope, opts.engineTarget, opts.engineAllowApply, opts.engineTimeCap, opts.engineCostCap].some(value => value !== undefined && value !== false)) throw new Error("Engine admission options require --engine-token-env or --team-config.");
       const timeCapMs = opts.engineTimeCap === undefined ? 600_000 : Number(opts.engineTimeCap);
       const costCapUsd = opts.engineCostCap === undefined ? 5 : Number(opts.engineCostCap);
       if (!Number.isInteger(timeCapMs) || timeCapMs < 1 || timeCapMs > 86_400_000 || !Number.isFinite(costCapUsd) || costCapUsd <= 0 || costCapUsd > 1000) throw new Error("Engine limits must be positive, with time at most 86400000 ms and cost at most $1000.");
       const controlToken = randomUUID();
+      const teamAuth = new TeamAuth({ configPath: opts.teamConfig ?? process.env.ZERO_TEAM_CONFIG, origin });
+      const teamDirectory = teamAuth.enabled ? join(homeStateDir(), "teams", createHash("sha256").update(teamAuth.workspaceId!).digest("hex")) : undefined;
+      if (teamDirectory) { mkdirSync(teamDirectory, { recursive: true, mode: 0o700 }); opts.dbPath ??= join(teamDirectory, "data.db"); }
+      const collaboration = teamAuth.enabled ? new CollaborationService({ workspaceId: teamAuth.workspaceId!, stateDir: join(teamDirectory!, "collaboration"), resolveSession: sessionId => teamAuth.resolveSessionId(sessionId) }) : undefined;
       // Never recover another live host's database while opening a second UI.
       assertLocalEngineAvailable(opts.dbPath);
       const capabilities = ["sessions", "workflows", "schedules", "approvals", "events", "workspaces", "artifacts", "model-connections", "operator-services", "process-controls", "learning", "workflow-engine"];
@@ -1808,8 +1836,8 @@ export function registerDashboardCommand(program: Command): void {
       try {
         const { path: assetDir, cleanup: cleanupAssetDir } = resolveDashboardAssetDir(opts.assetDir);
         startupAssetCleanup = cleanupAssetDir;
-        const consoleGateway = startupGateway = new ConsoleGateway({ dbPath: opts.dbPath, projectPath: opts.engineWorkspace });
-        const engagements = new EngagementStore({ workspace: opts.engineWorkspace ?? process.cwd(), dbPath: opts.dbPath });
+        const consoleGateway = startupGateway = new ConsoleGateway({ dbPath: opts.dbPath, projectPath: opts.engineWorkspace, ...(teamDirectory ? { homeDir: teamDirectory } : {}) });
+        const engagements = new EngagementStore({ workspace: opts.engineWorkspace ?? process.cwd(), dbPath: opts.dbPath, ...(teamDirectory ? { stateDir: teamDirectory } : {}) });
         const operator = startupOperator = new WebOperatorServices({ isTurnActive: () => consoleGateway.hasActiveTurns() });
         const workflows = startupWorkflows = new WebWorkflowService({ gateway: consoleGateway, dbPath: opts.dbPath });
         consoleGateway.attachSourceLearning(workflows.learning.store);
@@ -1843,7 +1871,18 @@ export function registerDashboardCommand(program: Command): void {
 
           try {
             if (requestUrl.pathname.startsWith("/api/")) {
-              if (!requireControlToken(req, res, controlToken, engineBearer)) return;
+              const ssoNavigation = requestUrl.pathname === "/api/team/auth/sso" || requestUrl.pathname === "/api/team/auth/callback";
+              if (!(ssoNavigation && req.method === "GET") && !requireControlToken(req, res, controlToken, engineBearer)) return;
+              const teamReply = await handleTeamRequest(req, requestUrl, teamAuth, collaboration, consoleGateway, () => readJson(req));
+              if (teamReply) {
+                for (const [name, value] of Object.entries(teamReply.headers ?? {})) res.setHeader(name, value);
+                if (teamReply.redirect) { res.writeHead(teamReply.status, { Location: teamReply.redirect, "Cache-Control": "no-store" }); res.end(); }
+                else json(res, teamReply.status, teamReply.data);
+                return;
+              }
+              const bearer = req.headers.authorization;
+              const engineRequest = Boolean(engineBearer && typeof bearer === "string" && bearer.startsWith("Bearer ") && Buffer.byteLength(bearer.slice(7)) === Buffer.byteLength(engineBearer) && timingSafeEqual(Buffer.from(bearer.slice(7)), Buffer.from(engineBearer)));
+              if (!engineRequest) authorizeTeamApi(teamAuth, req, requestUrl.pathname);
               res.setHeader("X-0-Engine-ID", localHandshake.engineId);
               const expectedEngineId = req.headers["x-0-expected-engine-id"];
               if (expectedEngineId !== undefined && expectedEngineId !== localHandshake.engineId) throw new WebRequestError("Request belongs to a different engine identity.", 409);
@@ -1852,6 +1891,8 @@ export function registerDashboardCommand(program: Command): void {
               if (backendRoute.localPath) requestUrl = new URL(backendRoute.localPath, origin);
               const engagementRoute = requestUrl.pathname.match(/^\/api\/engagements(?:\/([^/]+)(?:\/(report))?)?$/);
               if (engagementRoute) {
+                const member = teamAuth.resolveSession(req);
+                const engagementActor = member ? { userId: member.userId, displayName: member.displayName } : undefined;
                 const id = engagementRoute[1] ? decodeURIComponent(engagementRoute[1]) : undefined;
                 if (engagementRoute[2]) {
                   if (req.method !== "GET") throw new WebRequestError("Use GET to read an engagement report.", 405);
@@ -1861,8 +1902,8 @@ export function registerDashboardCommand(program: Command): void {
                   if (format === "json") { res.setHeader("Content-Disposition", `attachment; filename="engagement-${id}.json"`); json(res, 200, report); }
                   else { res.writeHead(200, { "Content-Type": "text/markdown; charset=utf-8", "Content-Disposition": `attachment; filename="engagement-${id}.md"`, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" }); res.end(engagementMarkdown(report)); }
                 } else if (req.method === "GET") json(res, 200, id ? { engagement: engagements.get(id) } : { engagements: engagements.list() });
-                else if (req.method === "POST" && !id) json(res, 201, { engagement: engagements.create(await readJson(req)) });
-                else if (req.method === "PATCH" && id) json(res, 200, { engagement: engagements.update(id, await readJson(req)) });
+                else if (req.method === "POST" && !id) json(res, 201, { engagement: engagements.create(await readJson(req), engagementActor) });
+                else if (req.method === "PATCH" && id) json(res, 200, { engagement: engagements.update(id, await readJson(req), engagementActor) });
                 else throw new WebRequestError("Method not allowed.", 405);
                 return;
               }
@@ -1880,6 +1921,7 @@ export function registerDashboardCommand(program: Command): void {
                 if (!engine) throw new WebRequestError("This engine does not admit persistent workflow calls.", 403);
                 if (req.method !== "POST") throw new WebRequestError("Method not allowed.", 405);
                 const input = z.object({ name: z.string().min(1).max(128), args: z.record(z.unknown()) }).strict().parse(await readJson(req));
+                if (!engineRequest && typeof input.args.sessionId === "string") assertTeamConsoleMutation(req, input.args.sessionId, teamAuth, collaboration, consoleGateway);
                 json(res, 200, await engine.invoke(input.name, input.args));
                 return;
               }
@@ -1910,7 +1952,7 @@ export function registerDashboardCommand(program: Command): void {
                 res.end(artifact.body);
                 return;
               }
-              const consoleHandled = await handleWebConsoleApiRequest(req, res, requestUrl, consoleGateway, operator, workflows, triggers, github);
+              const consoleHandled = await handleWebConsoleApiRequest(req, res, requestUrl, consoleGateway, operator, workflows, triggers, github, engineRequest ? undefined : { auth: teamAuth, collaboration });
               if (consoleHandled) return;
               const handled = await handleApiRequest(req, res, requestUrl.pathname, opts.dbPath, controlToken, engineBearer);
               if (!handled) json(res, 404, { error: "Not found" });

@@ -19,16 +19,62 @@ test("assessment milestone surfaces load without Node-only shared modules", asyn
       "packages/dashboard/src/lib/hunt-stream.ts",
       "packages/dashboard/src/pages/engagements-page.tsx",
       "packages/dashboard/src/console/chat-findings.tsx",
+      "packages/dashboard/src/console/team-collaboration.tsx",
+      "packages/dashboard/src/lib/team-client.ts",
     ],
     outdir: "/tmp/0-dashboard-boundary-test",
     bundle: true,
     write: false,
     platform: "browser",
     format: "esm",
+    loader: { ".svg": "dataurl" },
     treeShaking: false,
     alias: { "@": resolve(repoRoot, "packages/dashboard/src") },
     logLevel: "silent",
   });
+});
+
+test("team controls require a live lease in this browser and owning backend", async () => {
+  const dashboard = resolve(repoRoot, "packages/dashboard");
+  const temporary = await mkdtemp(resolve(dashboard, ".team-client-test-"));
+  try {
+    const output = resolve(temporary, "fixture.mjs");
+    await build({ entryPoints: [resolve(dashboard, "src/lib/team-client.ts")], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
+    const { createTeamClient, getTeamLeaseToken, clearTeamLeaseTokens } = await import(pathToFileURL(output).href);
+    const calls = [];
+    let denied = false;
+    let expiresAt = Date.now() + 30000;
+    const transport = async (path, init) => {
+      calls.push({ path, init });
+      if (denied) return Response.json({ error: "Membership revoked" }, { status: 403 });
+      if (path.endsWith("/control")) return Response.json({ leaseToken: "only-in-memory", expiresAt });
+      return Response.json({ conversationId: "chat", canControl: true, revision: 1 });
+    };
+    const client = createTeamClient("owner-engine", transport);
+    assert.equal((await client.snapshot("chat")).canControl, false, "same cookie in another tab is insufficient without its lease");
+    await client.control("chat", { action: "claim", expectedRevision: 0 });
+    assert.equal(getTeamLeaseToken("owner-engine", "chat"), "only-in-memory");
+    assert.equal(getTeamLeaseToken("other-engine", "chat"), undefined);
+    assert.equal(getTeamLeaseToken("owner-engine", "other-chat"), undefined);
+    const start = calls.length;
+    await client.presence("chat", { viewing: true, typing: true });
+    assert.equal(calls[start].path, "/api/team/conversations/chat/control");
+    assert.equal(calls[start].init.headers.get("X-0-Team-Lease"), "only-in-memory");
+    assert.deepEqual(JSON.parse(calls[start].init.body), { action: "renew" });
+    await client.decide("chat", "proposal/id", { action: "accept", expectedRevision: 1 });
+    assert.equal(calls.at(-2).path, "/api/team/conversations/chat/proposals/proposal%2Fid");
+    assert.deepEqual(JSON.parse(calls.at(-2).init.body), { action: "accept" });
+    await client.control("chat", { action: "release", expectedRevision: 1 });
+    assert.equal(getTeamLeaseToken("owner-engine", "chat"), undefined);
+    await client.control("chat", { action: "claim", expectedRevision: 1 });
+    denied = true;
+    await assert.rejects(client.presence("chat", { viewing: true, typing: false }), /Membership revoked/);
+    assert.equal(getTeamLeaseToken("owner-engine", "chat"), undefined);
+    denied = false;
+    expiresAt = Date.now() - 1;
+    await assert.rejects(client.control("chat", { action: "claim", expectedRevision: 1 }), /controller lease/);
+    clearTeamLeaseTokens("owner-engine");
+  } finally { await rm(temporary, { recursive: true, force: true }); }
 });
 
 test("live tool activity survives assistant text, tool completions and cancellation", async () => {

@@ -11,8 +11,10 @@ export class EngagementError extends Error {
 }
 const scanIdsSchema = z.array(z.string().trim().min(1).max(160)).max(100).refine(ids => new Set(ids).size === ids.length, "Scan IDs must be unique.");
 const fieldsSchema = z.object({ name: z.string().trim().min(1).max(160), description: z.string().trim().max(8000).default(""), scanIds: scanIdsSchema.default([]), notes: z.string().trim().max(16000).optional() }).strict();
-const recordSchema = fieldsSchema.extend({ id: z.string().uuid(), createdAt: z.string().datetime(), updatedAt: z.string().datetime() });
-const updateSchema = fieldsSchema.partial().strict();
+const actorSchema = z.object({ userId: z.string().trim().min(1).max(256), displayName: z.string().trim().min(1).max(256) }).strict();
+export type EngagementActor = z.infer<typeof actorSchema>;
+const recordSchema = fieldsSchema.extend({ id: z.string().uuid(), revision: z.number().int().positive().default(1), createdAt: z.string().datetime(), updatedAt: z.string().datetime(), createdBy: actorSchema.optional(), updatedBy: actorSchema.optional() });
+const updateSchema = fieldsSchema.partial().extend({ expectedRevision: z.number().int().positive().optional() }).strict();
 const stateSchema = z.object({ schemaVersion: z.literal(1), workspace: z.string(), engagements: z.array(recordSchema).max(200) }).strict();
 export type EngagementRecord = z.infer<typeof recordSchema>;
 export type EngagementInput = z.input<typeof fieldsSchema>;
@@ -65,29 +67,63 @@ export class EngagementStore {
     try { for (const id of ids) if (!db.getScan(id)) throw new EngagementError(`Selected scan was not found: ${id}`, 404); }
     finally { db.close(); }
   }
+  #transaction<T>(apply: (rows: EngagementRecord[]) => T): T {
+    mkdirSync(this.#directory, { recursive: true, mode: 0o700 });
+    const lock = `${this.#path}.lock`;
+    let fd: number;
+    try { fd = openSync(lock, "wx", 0o600); }
+    catch (cause) {
+      if ((cause as NodeJS.ErrnoException).code !== "EEXIST") throw new EngagementError("Report storage is unavailable.", 500);
+      const recoveryPath = `${lock}.recovery`;
+      let recovery: number;
+      try { recovery = openSync(recoveryPath, "wx", 0o600); }
+      catch { throw new EngagementError("Another report edit is in progress. Retry after it finishes.", 409); }
+      try {
+        let pid: number;
+        try { pid = Number(readFileSync(lock, "utf8")); if (!Number.isSafeInteger(pid) || pid < 1) throw new Error("pid"); }
+        catch { throw new EngagementError("Report lock needs operator recovery.", 503); }
+        try { process.kill(pid, 0); }
+        catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "ESRCH") {
+            try { unlinkSync(lock); } catch { throw new EngagementError("Another report edit is in progress. Retry after it finishes.", 409); }
+            return this.#transaction(apply);
+          }
+        }
+        throw new EngagementError("Another report edit is in progress. Retry after it finishes.", 409);
+      } finally { closeSync(recovery); unlinkSync(recoveryPath); }
+    }
+    try { writeFileSync(fd, String(process.pid)); const rows = this.#read(); const result = apply(rows); this.#write(rows); return result; }
+    finally { closeSync(fd); unlinkSync(lock); }
+  }
   list(): EngagementRecord[] { return this.#read().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)); }
   get(id: string): EngagementRecord {
     const row = this.#read().find(item => item.id === id);
     if (!row) throw new EngagementError("Engagement not found in this workspace.", 404);
     return row;
   }
-  create(input: unknown): EngagementRecord {
+  create(input: unknown, actor?: EngagementActor): EngagementRecord {
     const fields = parse(fieldsSchema, input);
+    const attribution = actor ? parse(actorSchema, actor) : undefined;
     this.#validateScans(fields.scanIds);
-    const rows = this.#read();
-    if (rows.length >= 200) throw new EngagementError("Engagement limit reached.", 409);
-    const now = new Date().toISOString();
-    const row: EngagementRecord = { ...fields, id: randomUUID(), createdAt: now, updatedAt: now };
-    this.#write([...rows, row]); return structuredClone(row);
+    return this.#transaction(rows => {
+      if (rows.length >= 200) throw new EngagementError("Engagement limit reached.", 409);
+      const now = new Date().toISOString();
+      const row: EngagementRecord = { ...fields, id: randomUUID(), revision: 1, createdAt: now, updatedAt: now, ...(attribution ? { createdBy: attribution, updatedBy: attribution } : {}) };
+      rows.push(row); return structuredClone(row);
+    });
   }
-  update(id: string, input: unknown): EngagementRecord {
-    const patch = parse(updateSchema, input);
-    const rows = this.#read();
-    const index = rows.findIndex(row => row.id === id);
-    if (index < 0) throw new EngagementError("Engagement not found in this workspace.", 404);
+  update(id: string, input: unknown, actor?: EngagementActor): EngagementRecord {
+    const { expectedRevision, ...patch } = parse(updateSchema, input);
+    const attribution = actor ? parse(actorSchema, actor) : undefined;
     if (patch.scanIds) this.#validateScans(patch.scanIds);
-    const row = parse(recordSchema, { ...rows[index], ...patch, updatedAt: new Date().toISOString() });
-    rows[index] = row; this.#write(rows); return structuredClone(row);
+    return this.#transaction(rows => {
+      const index = rows.findIndex(row => row.id === id);
+      if (index < 0) throw new EngagementError("Engagement not found in this workspace.", 404);
+      if (attribution && expectedRevision === undefined) throw new EngagementError("Review the latest report before saving. Your draft has been kept.", 409);
+      if (expectedRevision !== undefined && rows[index]!.revision !== expectedRevision) throw new EngagementError("Report changed. Your draft has been kept. Reload the latest version before saving.", 409);
+      const row = parse(recordSchema, { ...rows[index], ...patch, revision: rows[index]!.revision + 1, updatedAt: new Date().toISOString(), ...(attribution ? { updatedBy: attribution } : {}) });
+      rows[index] = row; return structuredClone(row);
+    });
   }
   report(id: string): EngagementReport {
     const engagement = this.get(id);
@@ -125,7 +161,7 @@ function reviewStatus(finding: Finding): ReviewStatus {
   return "unreviewed";
 }
 /** Exact selected evidence only. Conflicting family review states remain unreviewed. */
-export function assembleEngagementReport(engagement: EngagementRecord, sources: EngagementReportSource[]): EngagementReport {
+export function assembleEngagementReport(engagement: z.input<typeof recordSchema>, sources: EngagementReportSource[]): EngagementReport {
   const record = parse(recordSchema, engagement);
   const byScan = new Map(sources.map(source => [source.scan.id, source]));
   if (byScan.size !== sources.length || sources.length !== record.scanIds.length || record.scanIds.some(id => !byScan.has(id))) throw new EngagementError("Report sources must match exactly the selected scan IDs.", 404);

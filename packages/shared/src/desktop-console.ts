@@ -160,7 +160,7 @@ interface DesktopConsoleEventBase {
 
 export type DesktopConsoleEventPayload =
   | { type: "session"; session: DesktopConsoleSession }
-  | { type: "user"; text: string }
+  | { type: "user"; text: string; author?: ConsoleMessageAuthor }
   | { type: "assistant-delta"; text: string }
   | { type: "reasoning-delta"; text: string }
   | { type: "tool-start"; call: DesktopConsoleToolCall }
@@ -228,8 +228,18 @@ export interface ConsoleSessionConfiguration {
   runtime?: ConsoleRuntimeSelection;
 }
 
+/** Server-derived attribution; never an identity assertion from message input. */
+export interface ConsoleMessageAuthor {
+  userId: string;
+  displayName: string;
+  proposalId?: string;
+}
+
+export interface ConsoleUserAttribution { text: string; author?: ConsoleMessageAuthor }
+
 export interface ConsolePublicMessage {
   role: "user" | "assistant";
+  author?: ConsoleMessageAuthor;
   content: Array<
     | { type: "text"; text: string }
     | { type: "tool_use"; id: string; name: string; input: Record<string, ConsoleJsonValue> }
@@ -251,6 +261,7 @@ export interface ConsoleQueuedMessage {
   id: string;
   text: string;
   createdAt: string;
+  author?: ConsoleMessageAuthor;
 }
 
 export interface ConsoleWorkerTurn {

@@ -7,7 +7,7 @@ tableOfContents:
 ---
 
 Find the command, arguments, and options for your task. This reference covers
-**61 top-level commands** and their registered subcommands.
+**62 top-level commands** and their registered subcommands.
 
 For a worked example, start with [Scan Workflows](/scan-workflows/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
@@ -57,8 +57,8 @@ a handler may resolve configuration or require an explicit value. Inverse
 `--no-*` options show the underlying positive boolean default. See
 [Configuration](/configuration/) for environment and runtime resolution.
 
-- With no arguments, Bun opens the interactive interface and Node prints installation guidance. See [Console](/console/).
-- `0 -r [id]` / `0 --resume [id]` resume a console session; `0 -c` / `0 --continue` reopen the newest conversation; `0 -p` / `0 --print` run one console prompt. Scan sessions use `0 resume`.
+- With no arguments, `0` opens the account-free browser console under Node or the standalone binary. See [Console](/console/).
+- `0 -p` / `0 --print` run one headless chat prompt. Combine `--resume <id>` or `--continue` with a prompt to continue a saved conversation. Scan sessions use `0 resume`.
 - Use explicit commands in automation. Recognizable bare targets are routed automatically; ambiguous input is refused.
 - Commands register `--help`; root routing can prevent reaching a registration. See the [triage routing limitation](/troubleshooting/#triage-command-reports-an-ambiguous-target).
 - Scope, provider authentication, target authentication, filesystem access, and execution isolation have independent controls. See [Scope & Authorization](/scope/).
@@ -76,35 +76,38 @@ Run chat with the full tool registry: recon, web, source-scan, variant-hunt, ver
 0 console [options]
 ```
 
-Full TUI use requires Bun and a usable TTY. Headless/readline approval limitations are documented in [Console](/console/). Model credentials, target scope, and managed-service credentials are separate.
+Interactive chat uses `0 web`. `0 console --print` and `0 chat --prompt` run headlessly; without a prompt they point to the browser. Model credentials, target scope, and managed-service credentials are separate.
 
 Guide: [Read the workflow](/console/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--target <url>` | — | Engagement target the tools operate against (optional; can be named in-chat) |
-| `--scope <file>` | — | Initial authorization scope. Non-TUI YOLO requires at least one in_scope entry; a scope file is not an OS-isolation boundary. |
+| `--scope <file>` | — | Initial authorization scope. Headless YOLO requires at least one in_scope entry when scope enforcement is active; scope is not OS isolation. |
 | `--finding <id>` | — | Focus the chat on one persisted finding |
 | `--finding-intent <intent>` | — | Finding workflow: investigate, verify, draft_fix, or impact. These instructions do not independently enforce tool permissions. |
 | `--db-path <path>` | — | Persistent findings database (defaults to ZERO_DB_PATH or the local store) |
-| `-m, --model <id>` | — | Model selection for the console. Saved-session precedence differs across TUI, readline, and print paths; see Console. |
+| `-m, --model <id>` | — | Model selection for headless chat; saved-session model takes precedence when resuming. |
 | `--role <role>` | — | Tool set to expose: audit, review, discovery, attack, verify, or report. Defaults to audit; role selection is not authorization or OS isolation. |
 | `--mode <mode>` | — | Autonomy mode: standard, recon, copilot, yolo. YOLO accepts absolute public-network targets without a launch target; explicit restrictions and exclusions still apply. |
 | `--yolo` | — | Shortcut for --mode yolo. Omits per-action approval prompts; explicit restrictions and exclusions still apply. |
 | `--autonomy <mode>` | — | Alias of --mode (standard\|copilot\|yolo\|recon); --mode/--yolo take precedence. |
 | `--max-tool-calls <n>` | `100` | Safety cap on tool-call rounds per message |
 | `--allow-scanners` | — | Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off |
-| `--resume [id]` | — | Reopen a saved console session by id (or unique prefix); with no id, opens a session picker. Also reachable as `0 -r [id]`. |
-| `--continue` | — | Reopen the most recent console session, no picker. Also reachable as `0 -c`. |
+| `--resume [id]` | — | With a headless prompt, reopen a saved session by id or unique prefix; use browser history for a picker. |
+| `--continue` | — | With a headless prompt, continue the most recent saved console session. |
 | `-p, --print [prompt]` | — | Non-interactive: run ONE prompt through the engine, print the result, and exit (no TUI). Reads the prompt from the argument or piped stdin. Combine with --continue/--resume to query a saved session. Also reachable as `0 -p &lt;prompt&gt;`. |
+| `--prompt <text>` | — | Run one headless prompt (alias for --print) |
+
+Aliases: `chat`.
 
 #### Slash commands
 
-See [Console](/console/) for slash commands and readline support.
+Interactive controls are in the browser console. The readline REPL is retired.
 
 #### Keybindings
 
-See [Console keyboard shortcuts](/console/#keyboard-shortcuts).
+Terminal keybindings are retired; use keyboard-accessible browser controls.
 
 #### Autonomy modes
 
@@ -124,7 +127,8 @@ The canonical settings reference is [Configuration](/configuration/).
 
 ### tui
 
-Open the interactive engagement interface (Bun-only).
+Retired terminal UI compatibility entrypoint. Prints instructions to run `0 web`;
+it does not launch terminal rendering. Alias: `watch`.
 
 ```text
 0 tui
@@ -132,11 +136,9 @@ Open the interactive engagement interface (Bun-only).
 
 Aliases: `watch`.
 
-Guide: [Read the workflow](/console/).
-
 ### dashboard
 
-Open a local dashboard for scans and findings.
+Open the local browser workspace for chats, scans and findings.
 
 ```text
 0 dashboard [options]
@@ -152,6 +154,7 @@ Guide: [Read the workflow](/architecture/#presentation-contract).
 | `--asset-dir <path>` | — | Path to built dashboard assets |
 | `--dev-url <url>` | — | Loopback Vite server for authenticated frontend hot reload |
 | `--backends-config <path>` | — | Trusted backend connection registry JSON (default ~/.0/backends.json) |
+| `--team-config <path>` | — | Enable workspace accounts, roles, and shared conversation controls |
 | `--engine-token-env <name>` | — | Environment variable holding the engine bearer credential (32–4096 characters) |
 | `--engine-workspace <path>` | — | Engine-owned authorized workspace for persistent workflow calls |
 | `--engine-scope <path>` | — | Engine-owned scope JSON for persistent live-target workflows |
@@ -580,7 +583,7 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--rate-limit <spec>` | — | Per-host requests/sec cap, e.g. '5' or 'host=5,*=3' (default 5) |
 | `--engagement-profile <name>` | — | Engagement posture: standard (default) or conservative (quieter) |
 | `--no-waf-evasion` | — | Disable adaptive WAF-evasion retries |
-| `--tui` | `false` | Open the terminal UI after the scan completes |
+| `--tui` | `false` | Retired terminal view flag; scan still completes and points to 0 web. |
 | `--features <list>` | — | Comma-separated feature flags to enable, e.g. 'fp-moat' |
 | `--no-decoy-detection` | — | Disable the anti-honeypot flag validator |
 | `--dispatch <mode>` | `auto` | Tool-call protocol: json, xml, auto (legacy loop only) |
@@ -659,7 +662,7 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
 | `--cost-ceiling <usd>` | — | Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD. |
-| `--tui` | `false` | Open the local terminal UI after the audit completes |
+| `--tui` | `false` | Retired terminal view flag; audit still completes and points to 0 web. |
 | `--resume <run-id>` | — | Resume a previous run from its journal on disk (0#374) |
 | `--branch-from <entry-index>` | — | Branch the journal at the given entry index before resuming (requires --resume). |
 | `--verbose` | `false` | Show detailed output |
@@ -690,7 +693,7 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
 | `--cost-ceiling <usd>` | — | Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD. |
-| `--tui` | `false` | Open the local terminal UI after the review completes |
+| `--tui` | `false` | Retired terminal view flag; review still completes and points to 0 web. |
 | `--diff-base <ref>` | — | Git base ref to review against (for diff-aware review) |
 | `--changed-only` | `false` | Restrict static scanner leads + prioritization to changed files |
 | `--profile <profile>` | `default` | Review profile: default (web/JS/TS/Python), c-library (C/C++ memory safety, tier-1/2/3 harness), linux-kernel (kernel-aware static review), cardano-onchain (Aiken/Plutus validator logic), solana-onchain (Anchor/native Rust account-model authorization), evm-onchain (Solidity/Foundry/Hardhat DeFi/bridge — reentrancy, oracle manipulation, cross-chain replay), cairo-onchain (Cairo/Starknet DeFi — caller-auth gaps, share-rounding, L1↔L2 messages), move-onchain (Sui/Aptos Move — object/capability binding, shared-math overflow, reward-index accounting), cardano-haskell (first-party Cardano Haskell node stack — ledger/plutus/ouroboros/cardano-base), xnu-kernel (Apple XNU macOS/iOS source review), or xnu-re (decompiled Apple kext pseudo-C) |
@@ -3572,3 +3575,64 @@ Run the existing evolution controller with an explicit configuration and retain 
 Registration entry point: `packages/cli/src/index.ts`. Command implementations
 are exported through `packages/cli/src/commands/index.ts`. Workflow guides explain
 handler behavior and prerequisites beyond the registered flags.
+
+## Team workspace setup
+
+### team
+
+```text
+0 team
+```
+
+Provision opt-in accounts for a customer-controlled team engine. Account-free local
+use remains the default. Creating a config does not activate it on a running host.
+See [Team workspaces](/team-workspaces/) for roles and deployment boundaries.
+
+Subcommands: [init](#team-init) · [add-user](#team-add-user) · [list](#team-list).
+
+### team init
+
+Create a private configuration with the first owner account. The password is read
+from protected terminal input or stdin; it is stored as a salted password hash.
+No email invitation is sent. Then start `0 web --team-config <path>`.
+
+```text
+0 team init [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--config <path>` **required** | — | Configuration file to create |
+| `--name <name>` **required** | — | Workspace name |
+| `--owner <id>` **required** | — | Owner account ID |
+| `--display-name <name>` **required** | — | Owner display name |
+
+### team add-user
+
+Add an explicit account to a private configuration. Assign `owner`, `editor` or
+`viewer`; viewer access does not grant agent control. Restart the team engine to
+load configuration changes. Password input is not a command-line argument.
+
+```text
+0 team add-user [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--config <path>` **required** | — | Team configuration |
+| `--user <id>` **required** | — | Account ID |
+| `--display-name <name>` **required** | — | Display name |
+| `--role <role>` **required** | — | owner, editor or viewer |
+
+### team list
+
+List configured account IDs, display names and roles without password hashes.
+The configuration must remain a private regular file.
+
+```text
+0 team list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--config <path>` **required** | — | Team configuration |

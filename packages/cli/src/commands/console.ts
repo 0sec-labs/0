@@ -1,7 +1,6 @@
 import { loadServicePluginConnections } from "../web/service-plugins.js";
 import { consoleExecutionProfile } from "../console-execution.js";
-import { createInterface } from "node:readline";
-import { stdin, stdout } from "node:process";
+import { stdin } from "node:process";
 
 import type { Command } from "commander";
 import chalk from "chalk";
@@ -22,10 +21,6 @@ import type {
   ToolResult,
 } from "@0/core";
 import { DEFAULT_AUTONOMY_MODE } from "@0/shared";
-import { canUseOpenTui, isBunRuntime } from "../tui/runtime.js";
-import { findCommand,
-getCommandByName,
-SLASH_COMMANDS, } from "@0/shared"
 import {
   processPresentationOutput,
   type ProcessPresentationOutput,
@@ -56,6 +51,7 @@ interface ConsoleOptions {
   continue?: boolean;
   /** `-p/--print [prompt]`: one-shot non-interactive prompt (or `true` → stdin). */
   print?: string | boolean;
+  prompt?: string;
 }
 
 /** Read a piped prompt from stdin (for `--print` with no inline argument). */
@@ -135,8 +131,9 @@ export function resolveConsoleAutonomyMode(opts: {
 export function registerConsoleCommand(program: Command): void {
   program
     .command("console")
+    .alias("chat")
     .description(
-      "Interactive chat console to drive the engine and its tools from one prompt",
+      "Run a headless chat prompt; interactive conversations use 0 web",
     )
     .option("--target <url>", "Engagement target the tools operate against (optional; can be named in-chat)")
     .option("--scope <file>", "Initial policy for the optional scope plugin; activate with `0 plugin enable scope`")
@@ -145,15 +142,21 @@ export function registerConsoleCommand(program: Command): void {
     .option("--db-path <path>", "Persistent findings database (defaults to ZERO_DB_PATH or the local store)")
     .option("-m, --model <id>", "Override the LLM model id (else provider default)")
     .option("--role <role>", "Tool set to expose: audit|review|discovery|attack|verify (default audit = every tool)")
-    .option("--mode <mode>", "Approval mode: standard|recon|copilot|yolo (default yolo); cycle with Shift+Tab")
+    .option("--mode <mode>", "Approval mode: standard|recon|copilot|yolo (default yolo)")
     .option("--yolo", "Shortcut for --mode yolo (no per-action prompts; independent credential, private-network and sandbox protections remain).")
     .option("--autonomy <mode>", "Alias of --mode (standard|copilot|yolo|recon); --mode/--yolo take precedence.")
     .option("--max-tool-calls <n>", "Safety cap on tool-call rounds per message", String(DEFAULT_MAX_TOOL_ITERATIONS))
     .option("--allow-scanners", "Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off")
-    .option("--resume [id]", "Reopen a saved console session by id (or unique prefix); with no id, opens a session picker. Also reachable as `0 -r [id]`.")
-    .option("--continue", "Reopen the most recent console session, no picker. Also reachable as `0 -c`.")
+    .option("--resume [id]", "With a headless prompt, reopen a saved session by id or unique prefix; use browser history for a picker.")
+    .option("--continue", "With a headless prompt, continue the most recent saved console session.")
     .option("-p, --print [prompt]", "Non-interactive: run ONE prompt through the engine, print the result, and exit (no TUI). Reads the prompt from the argument or piped stdin. Combine with --continue/--resume to query a saved session. Also reachable as `0 -p <prompt>`.")
+    .option("--prompt <text>", "Run one headless prompt (alias for --print)")
     .action(async (opts: ConsoleOptions) => {
+      if (opts.prompt !== undefined) opts.print = opts.prompt;
+      if (opts.print === undefined) {
+        console.log("Interactive conversations are in the browser. Run 0 web (no account required). For automation use 0 chat --prompt \"your request\" or 0 -p \"your request\".");
+        return;
+      }
       let maxToolIterations = DEFAULT_MAX_TOOL_ITERATIONS;
       if (opts.maxToolCalls !== undefined) {
         const parsed = Number(opts.maxToolCalls);
@@ -188,9 +191,8 @@ export function registerConsoleCommand(program: Command): void {
         return;
       }
       const autonomyMode: ConsoleAutonomyMode = autonomyResolution.mode;
-      const useOpenTui = opts.print === undefined && isBunRuntime() && canUseOpenTui();
       const scopeEnforcement = getScopeEnforcementState();
-      if (!useOpenTui) console.error(chalk.dim(scopeEnforcement.message));
+      console.error(chalk.dim(scopeEnforcement.message));
 
       let scope;
       if (opts.scope) {
@@ -203,7 +205,7 @@ export function registerConsoleCommand(program: Command): void {
         }
       }
 
-      if (scopeEnforcement.enabled && autonomyMode === "yolo" && !hasConfiguredScope(scope) && !useOpenTui) {
+      if (scopeEnforcement.enabled && autonomyMode === "yolo" && !hasConfiguredScope(scope)) {
         console.error(chalk.red("YOLO mode requires --scope <file> with at least one in_scope entry."));
         process.exitCode = 2;
         return;
@@ -237,7 +239,6 @@ export function registerConsoleCommand(program: Command): void {
       let resumeMessages: readonly unknown[] | undefined;
       let resumedModel: string | undefined;
       let resumedTarget: string | undefined;
-      let openResumePicker = false;
       if (opts.continue || opts.resume !== undefined) {
         const { listSessions, loadSession } = await import("../tui/session-store.js");
         const idArg = typeof opts.resume === "string" ? opts.resume.trim() : "";
@@ -264,7 +265,9 @@ export function registerConsoleCommand(program: Command): void {
           resumedModel = stored.model;
           resumedTarget = stored.target;
         } else {
-          openResumePicker = true; // bare `--resume` / `0 -r` → the picker
+          console.error("Choose a saved session id with --resume <id>, or open saved conversations in 0 web.");
+          process.exitCode = 2;
+          return;
         }
       }
 
@@ -324,196 +327,6 @@ export function registerConsoleCommand(program: Command): void {
         return;
       }
 
-      // Attach any configured MCP servers (ZERO_MCP = JSON array of
-      // {id,command,args?}) once, before either interactive front-end launches.
-      // Connecting here (not inside React) keeps the TUI session build
-      // synchronous — the connected host is threaded down as an option. The
-      // session closes the host on cleanup. Fail-soft: a bad config or a server
-      // that won't connect degrades to no MCP tools, never blocks the console.
-      const mcpHost = consoleExecutionProfile() === "smolvm" ? undefined : await connectServicePlugins(loadServicePluginConnections(), await connectMcpServers(parseMcpConfig(process.env["ZERO_MCP"])));
-      if (mcpHost) {
-        console.log(chalk.dim(`MCP: connected ${mcpHost.serverIds().length} server(s) — ${mcpHost.registeredTools().length} tool(s)`));
-      }
-
-      if (useOpenTui) {
-        // `run.tsx` imports Bun-only OpenTUI dependencies, so Node must not
-        // resolve it before falling back to the readline console.
-        const { showOpenTuiConsole, showOpenTuiResume } = await import("../tui/run.js");
-        type TuiOpts = NonNullable<Parameters<typeof showOpenTuiConsole>[0]>;
-        const baseOptions: TuiOpts = {
-          target: focusedTarget,
-          scope,
-          dbPath: opts.dbPath,
-          model: opts.model ?? resumedModel,
-          role,
-          initialPrompt: findingPrompt,
-          maxToolIterations,
-          allowScanners: opts.allowScanners,
-          autonomyMode,
-          ...(mcpHost ? { mcpHost } : {}),
-        };
-        if (openResumePicker) {
-          await showOpenTuiResume(baseOptions);
-        } else {
-          await showOpenTuiConsole({
-            ...baseOptions,
-            initialMessages: resumeMessages as TuiOpts["initialMessages"],
-          });
-        }
-        return;
-      }
-
-      if (scopeEnforcement.enabled && !scope) {
-        console.error(chalk.red("0 console under Node requires --scope <file>."));
-        console.error(chalk.dim("The readline fallback cannot approve session-only scope extensions; use the Bun TUI for scope-on-demand."));
-        if (mcpHost) await mcpHost.closeAll();
-        process.exitCode = 2;
-        return;
-      }
-
-      let session: ConsoleSession;
-      try {
-        const runtime = createConsoleRuntime({ model: opts.model });
-        const resolvedModel = runtime.resolvedModel();
-        // MCP host was connected once above (shared with the TUI path); the
-        // session closes it on cleanup (rl close).
-        session = createLocalConsoleSession({
-          runtime,
-          target: focusedTarget,
-          costModel: resolvedModel,
-          role,
-          maxToolIterations,
-          allowScanners: opts.allowScanners,
-          scope,
-          autonomyMode,
-          ...(mcpHost ? { mcpHost } : {}),
-          // A resumed session seeds the model's history so it continues where it
-          // left off (the readline fallback can't repaint the old transcript, but
-          // the conversation context carries over).
-          ...(resumeMessages ? { initialMessages: resumeMessages as NativeMessage[] } : {}),
-          // Readline has no approval surface, so session-only scope extensions are denied.
-          requestScope: async () => null,
-          approveTool: autonomyMode === "copilot" ? async () => false : undefined,
-        }, opts.dbPath);
-      } catch (err) {
-        console.error(chalk.red(err instanceof Error ? err.message : String(err)));
-        console.error(
-          chalk.dim(
-            "The console needs an LLM provider. Set ANTHROPIC_API_KEY (or another supported provider key) and retry.",
-          ),
-        );
-        process.exitCode = 2;
-        return;
-      }
-      const presentationOutput = processPresentationOutput;
-
-      printBanner(session, focusedTarget);
-      if (findingPrompt) {
-        await runTurn(session, findingPrompt, presentationOutput);
-      }
-
-
-      const rl = createInterface({ input: stdin, output: stdout });
-      const prompt = () => rl.setPrompt(chalk.bold.cyan("operator › "));
-      prompt();
-      rl.prompt();
-
-      rl.on("line", async (line) => {
-        const text = line.trim();
-        if (text === "") {
-          rl.prompt();
-          return;
-        }
-
-        const parsed = findCommand(text);
-
-        // Non-slash input → normal operator message for the engine
-        if (!parsed.isSlash) {
-          rl.pause();
-          try {
-            await runTurn(session, text, presentationOutput);
-          } catch (err) {
-            presentationOutput.stderr(
-              chalk.red(`\nturn failed: ${err instanceof Error ? err.message : String(err)}\n`),
-              "console.turn.failure",
-            );
-          }
-          rl.resume();
-          rl.prompt();
-          return;
-        }
-
-        // Unknown slash command → local notice, never reaches the LLM
-        if (parsed.isUnknown) {
-          console.log(chalk.yellow(`\nUnknown command. Type ${chalk.cyan("/help")} for available commands.\n`));
-          rl.prompt();
-          return;
-        }
-
-        // Known command — resolve metadata
-        const cmd = getCommandByName(parsed.command!);
-        if (!cmd) {
-          rl.prompt();
-          return;
-        }
-
-        // TUI-only commands explain they need the Bun TUI
-        if (cmd.tuiOnly) {
-          console.log(
-            chalk.yellow(
-              `\n"${text}" requires the Bun-backed TUI console. ` +
-              `Use the \`0\` command (no flags) for the full interactive experience.\n`,
-            ),
-          );
-          rl.prompt();
-          return;
-        }
-
-        // ── Console-supported commands ──
-        switch (parsed.command) {
-          case "exit": {
-            rl.close();
-            return;
-          }
-          case "help": {
-            printHelp();
-            rl.prompt();
-            return;
-          }
-          case "tools": {
-            printTools(session);
-            rl.prompt();
-            return;
-          }
-          case "status": {
-            printStatus(session);
-            rl.prompt();
-            return;
-          }
-          case "clear": {
-            session.clearConversation();
-            console.log(chalk.dim("\nConversation cleared.\n"));
-            rl.prompt();
-            return;
-          }
-          default: {
-            // Fail locally if a registered command lacks a readline handler.
-            console.log(
-              chalk.yellow(
-                `\n/${parsed.command} isn't available in the line-mode console. ` +
-                `Use the \`0\` command (no flags) for the full interactive TUI.\n`,
-              ),
-            );
-            rl.prompt();
-            return;
-          }
-        }
-      });
-
-      rl.on("close", async () => {
-        await session.cleanup().catch(() => {});
-        console.log(chalk.dim("\nconsole session ended."));
-      });
     });
 }
 
@@ -579,85 +392,6 @@ function previewResult(result: ToolResult): string {
   return flat.length > 100 ? flat.slice(0, 97) + "…" : flat;
 }
 
-function printBanner(session: ConsoleSession, target?: string): void {
-  console.log("");
-  console.log(chalk.bold("0 console") + chalk.dim(" — interactive chat"));
-  console.log(chalk.dim(`  session ${session.scanId}`));
-  console.log(chalk.dim(`  ${session.tools.length} tools available${target ? ` · target ${target}` : " · no target set"}`));
-  console.log(chalk.dim(`  mode: ${modeLabel(session.autonomyMode)}`));
-  console.log(chalk.dim("  /help for commands · /exit to quit"));
-  console.log("");
-}
-
-function printTools(session: ConsoleSession): void {
-  console.log(chalk.bold(`\n${session.tools.length} tools:`));
-  for (const tool of session.tools) {
-    console.log(`  ${chalk.cyan(tool.name)} ${chalk.dim("- " + firstSentence(tool.description))}`);
-  }
-  console.log("");
-}
-
-function printHelp(): void {
-  console.log(chalk.bold("\nslash commands:"));
-
-  // Group commands by category for the readline help
-  const entries: Array<{ name: string; usage: string; description: string }> = [];
-  for (const cmd of SLASH_COMMANDS.filter((c: { tuiOnly?: boolean }) => !c.tuiOnly)) {
-    const aliases = cmd.aliases.length ? ` (${cmd.aliases.map((a: string) => `/${a}`).join(", ")})` : "";
-    const usage = cmd.usage ? ` ${cmd.usage}` : ` /${cmd.name}${aliases}`;
-    entries.push({ name: cmd.name, usage, description: cmd.description });
-  }
-
-  // Order: info, session, mode, system
-  const order: Record<string, number> = { info: 0, session: 1, mode: 2, system: 3 };
-  entries.sort((a, b) => (order[findCategory(a.name)] ?? 99) - (order[findCategory(b.name)] ?? 99));
-
-  let lastCat = "";
-  for (const e of entries) {
-    const cat = findCategory(e.name);
-    if (cat !== lastCat) {
-      console.log(`  ${chalk.underline(cat)}`);
-      lastCat = cat;
-    }
-    console.log(`    ${chalk.cyan(e.usage.padEnd(30))} ${e.description}`);
-  }
-
-  console.log(chalk.dim("  Modes: Standard runs automatically in scope and can request a narrow session-only extension; Co-pilot adds approval for every non-read-only tool; YOLO runs only inside an explicit configured scope and never requests extensions."));
-  console.log(chalk.dim("  The Node fallback cannot approve scope extensions or Co-pilot actions; use the Bun TUI for those approvals."));
-  console.log(chalk.dim("  Non-slash input is sent to the engine as an operator message; unknown slash commands stay local.\n"));
-  console.log(chalk.dim("  Other commands require the Bun TUI. Switch agents in the inline chat worklist."));
-  console.log(chalk.dim("  Run the bare `0` command for the full interactive experience.\n"));
-}
-
-function findCategory(name: string): string {
-  const cmd = getCommandByName(name);
-  return cmd?.category ?? "system";
-}
-
-function printStatus(session: ConsoleSession): void {
-  console.log(chalk.bold("\nsession status:"));
-  console.log(`  ${chalk.cyan("id")}       ${session.scanId}`);
-  console.log(`  ${chalk.cyan("mode")}     ${modeLabel(session.autonomyMode)}`);
-  console.log(`  ${chalk.cyan("target")}  ${session.target || "(not set)"}`);
-  console.log(`  ${chalk.cyan("tools")}   ${session.tools.length} available`);
-  console.log(`  ${chalk.cyan("scope")}   ${session.scopeEnforcement.enabled ? (hasConfiguredScope(session.scope) ? "enforced" : "enabled; no policy") : "disabled — authorization not enforced"}`);
-  console.log(`  ${chalk.cyan("turns")}   ${Math.ceil(session.messages.length / 2)}`);
-  console.log("");
-}
-
-
-function modeLabel(mode: ConsoleAutonomyMode): string {
-  if (mode === "standard") return "Standard";
-  if (mode === "recon") return "Recon";
-  return mode === "copilot" ? "Co-pilot" : "YOLO";
-}
-
 function hasConfiguredScope(scope: ConsoleSession["scope"]): boolean {
   return (scope?.raw.in_scope?.length ?? 0) > 0;
-}
-
-function firstSentence(text: string): string {
-  const end = text.indexOf(". ");
-  const s = end > 0 ? text.slice(0, end) : text;
-  return s.length > 90 ? s.slice(0, 87) + "…" : s;
 }

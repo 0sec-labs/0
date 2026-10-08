@@ -93,10 +93,7 @@ enforceSourceDistFreshness({ entryUrl: import.meta.url });
 // Notification-only checks stay in the background; unset settings remain opt-in.
 if (!isWorkbenchManagement && !isRemoteBackendClient) await runStartupUpdate(VERSION);
 
-// The empty-argv path launches straight into the interactive TUI and needs none
-// of the subcommand modules. Importing (and registering) that barrel is the
-// single biggest chunk of cold-start import cost, so defer it behind a dynamic
-// import that only runs when the user actually passes a command/args.
+// Load command implementations only after startup configuration is ready.
 async function buildProgram(): Promise<Command> {
   const c = await import("./commands/index.js");
   const program = new Command();
@@ -122,6 +119,7 @@ async function buildProgram(): Promise<Command> {
   c.registerDoctorCommand(program);
   c.registerDashboardCommand(program);
   c.registerTuiCommand(program);
+  c.registerTeamCommand(program);
   c.registerOrchestrateCommand(program);
   c.registerDbCommand(program);
   c.registerMcpServerCommand(program);
@@ -173,33 +171,12 @@ async function buildProgram(): Promise<Command> {
 }
 
 
-// ── Interactive menu ──
-//
-// Under Bun, launches the OpenTUI home (`@opentui/react`-based mission
-// control). Under Node, the interactive menu was Ink-based and was
-// removed in v0.9.0 — print install instructions for the standalone
-// binary and exit so the user gets the full TUI experience.
-async function showInteractiveMenu(): Promise<void> {
-  const { isBunRuntime } = await import("./tui/runtime.js");
-  if (isBunRuntime()) {
-    const { showOpenTuiHome } = await import("./tui/run.js");
-    await showOpenTuiHome();
-    return;
-  }
-
-  console.log("");
-  console.log(`  ${chalk.bold("0")} ${chalk.dim(`v${VERSION}`)}`);
-  console.log("");
-  console.log(`  ${chalk.dim("From v0.9.0 onwards, 0 ships as a self-contained binary.")}`);
-  console.log(`  ${chalk.dim("The full TUI (mission control + live scan view) needs Bun's runtime.")}`);
-  console.log("");
-  console.log(`  ${chalk.bold("Install")} (single curl, no Node / Bun required):`);
-  console.log(`    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash`);
-  console.log("");
-  console.log(`  ${chalk.dim("After install, run:")}`);
-  console.log(`    0 scan --target https://example.com`);
-  console.log(`    0 --help`);
-  console.log("");
+// Default to the account-free browser console under both Node and Bun.
+async function showWebConsole(): Promise<void> {
+  const { registerDashboardCommand } = await import("./commands/dashboard.js");
+  const program = new Command();
+  registerDashboardCommand(program);
+  await program.parseAsync(["web"], { from: "user" });
 }
 
 // Debounce timers are unreferenced; flush the final batch of a short-lived
@@ -210,11 +187,11 @@ process.once("beforeExit", () => {
 
 // ── Entry point ──
 const userArgs = process.argv.slice(2);
-const knownCommands = ["scan", "resume", "replay", "history", "findings", "secure", "review", "fix", "audit", "deps", "doctor", "dashboard", "web", "tui", "watch", "orchestrate", "db", "mcp-server", "workflow", "runs", "sessions", "triage", "eval", "bench", "ingest", "kernel", "disclose", "verify", "exploit", "hunt", "recency-hunt", "deep-review", "lens-synth", "memsafety", "assumption-hunt", "specdrift", "protocol-check", "cve", "upgrade", "update", "h1", "intel", "recon", "js-recon", "npm-discovery", "identity", "adgraph", "entragraph", "cloud", "xnu-fuzz", "research", "radar", "timeline", "console", "agent-assure", "binary", "plugin", "theme", "config", "workbench", "checks", "evolve", "learning", "hackstore", "hack", "store", "help"];
+const knownCommands = ["scan", "resume", "replay", "history", "findings", "secure", "review", "fix", "audit", "deps", "doctor", "dashboard", "web", "chat", "team", "tui", "watch", "orchestrate", "db", "mcp-server", "workflow", "runs", "sessions", "triage", "eval", "bench", "ingest", "kernel", "disclose", "verify", "exploit", "hunt", "recency-hunt", "deep-review", "lens-synth", "memsafety", "assumption-hunt", "specdrift", "protocol-check", "cve", "upgrade", "update", "h1", "intel", "recon", "js-recon", "npm-discovery", "identity", "adgraph", "entragraph", "cloud", "xnu-fuzz", "research", "radar", "timeline", "console", "agent-assure", "binary", "plugin", "theme", "config", "workbench", "checks", "evolve", "learning", "hackstore", "hack", "store", "help"];
 
 if (userArgs.length === 0) {
-  // Fast path: straight into the TUI without ever importing the command barrel.
-  showInteractiveMenu().catch((err) => {
+  // Default browser path avoids importing the full command barrel.
+  showWebConsole().catch((err) => {
     console.error(chalk.red(err instanceof Error ? err.message : String(err)));
     process.exit(2);
   });
