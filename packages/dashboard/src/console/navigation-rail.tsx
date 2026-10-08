@@ -1,3 +1,4 @@
+import { TeamAccount } from "@/components/team-access";
 import { NavLink } from "react-router-dom";
 import { BookOpen, MessageSquare, ShieldCheck, Plug, Settings, Workflow } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
@@ -27,6 +28,7 @@ export function ConsoleNavigationRail({ settingsHref }: { settingsHref: string }
       <div className="mt-auto flex flex-col gap-1">
         <span aria-label={`Version ${__ZERO_VERSION__}`} title={`0.security v${__ZERO_VERSION__}`} className="block text-center font-mono text-[9px] leading-4 tracking-tight text-muted-foreground/60">v{__ZERO_VERSION__}</span>
         <NavLink to={settingsHref} title="Settings" aria-label="Settings" className={({ isActive }) => cn(control, isActive && "bg-muted text-foreground")}><Settings className={icon} /><span className={label}>Settings</span></NavLink>
+        <TeamAccount rail />
       </div>
     </nav>
   </div>;
