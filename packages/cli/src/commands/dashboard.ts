@@ -36,9 +36,10 @@ import { retainedScanSnapshot, retainedFindingSnapshot } from "../web/report-art
 import { handleFindingImpactRequest } from "../web/finding-impact.js";
 import { EngagementStore } from "../web/engagements.js";
 import { engagementMarkdown } from "../web/engagement-report.js";
-import { TeamAuth } from "../web/team-auth.js";
+import { TeamAuth, getSessionId } from "../web/team-auth.js";
 import { CollaborationService } from "../web/collaboration.js";
 import { authorizeTeamApi, handleTeamRequest, assertTeamConsoleMutation } from "../web/team-web.js";
+import { handleTeamPresenceStream } from "../web/team-presence-stream.js";
 import { homeStateDir } from "@0/shared";
 import { assertLocalEngineAvailable, registerLocalEngine } from "../local-engine.js";
 
@@ -1203,7 +1204,14 @@ async function handleWebConsoleApiRequest(
     const trigger = await triggers.handle(method, requestUrl, input);
     if (trigger) { json(res, trigger.status, trigger.data); return true; }
     const workflow = await workflows.handle(requestUrl.pathname, method, input, requestUrl.searchParams);
-    if (workflow) { json(res, workflow.status, workflow.data); return true; }
+    if (workflow) {
+      if (team?.collaboration && method !== "GET" && method !== "HEAD" && workflow.status >= 200 && workflow.status < 300) {
+        const definition = workflow.data && typeof workflow.data === "object" && "definition" in workflow.data ? workflow.data.definition : undefined;
+        const id = definition && typeof definition === "object" && "id" in definition && typeof definition.id === "string" ? definition.id : /^\/api\/console\/workflow-definitions\/([^/]+)/.exec(requestUrl.pathname)?.[1];
+        if (id) team.collaboration.notifyChanged("workflow", decodeURIComponent(id));
+      }
+      json(res, workflow.status, workflow.data); return true;
+    }
     const service = await operator.handle(requestUrl.pathname, method, input, requestUrl.searchParams);
     if (service) { json(res, service.status, service.data); return true; }
     if (path === "search" && method === "GET") {
@@ -1216,7 +1224,11 @@ async function handleWebConsoleApiRequest(
     }
     if (path === "sessions") {
       if (method === "GET") json(res, 200, { sessions: gateway.list() });
-      else if (method === "POST") json(res, 201, { session: gateway.create(input) });
+      else if (method === "POST") {
+        const session = gateway.create(input);
+        if (team?.auth.enabled && team.collaboration) team.collaboration.register(session.id, getSessionId(req)!);
+        json(res, 201, { session });
+      }
       else json(res, 405, { error: "Method not allowed." });
       return true;
     }
@@ -1249,7 +1261,8 @@ async function handleWebConsoleApiRequest(
     } else if (action === "events" && method === "GET") {
       json(res, 200, gateway.eventsAfter(id, consoleEventsAfter(requestUrl.searchParams.get("after"))));
     } else if (action === "messages" && method === "POST") {
-      json(res, 202, { session: await gateway.send(id, input, author) });
+      const message = author && input && typeof input === "object" && !("workerId" in input) && (!("mode" in input) || input.mode === "send") ? { ...input, mode: "queue" } : input;
+      json(res, 202, { session: await gateway.send(id, message, author) });
     }
     else if (action === "cancel" && method === "POST") json(res, 200, { session: await gateway.cancel(id) });
     else if (action === "configuration" && method === "PATCH") json(res, 200, { session: await gateway.configure(id, input) });
@@ -1873,7 +1886,12 @@ export function registerDashboardCommand(program: Command): void {
             if (requestUrl.pathname.startsWith("/api/")) {
               const ssoNavigation = requestUrl.pathname === "/api/team/auth/sso" || requestUrl.pathname === "/api/team/auth/callback";
               if (!(ssoNavigation && req.method === "GET") && !requireControlToken(req, res, controlToken, engineBearer)) return;
-              const teamReply = await handleTeamRequest(req, requestUrl, teamAuth, collaboration, consoleGateway, () => readJson(req));
+              if (handleTeamPresenceStream(req, res, requestUrl, teamAuth, collaboration)) return;
+              const teamReply = await handleTeamRequest(req, requestUrl, teamAuth, collaboration, consoleGateway, () => readJson(req), async (kind, id) => {
+                if (kind === "report") { engagements.get(id); return; }
+                const definition = await workflows.handle(`/api/console/workflow-definitions/${encodeURIComponent(id)}`, "GET", undefined, new URLSearchParams());
+                if (!definition || definition.status !== 200) throw new WebRequestError("Workflow was not found.", 404);
+              });
               if (teamReply) {
                 for (const [name, value] of Object.entries(teamReply.headers ?? {})) res.setHeader(name, value);
                 if (teamReply.redirect) { res.writeHead(teamReply.status, { Location: teamReply.redirect, "Cache-Control": "no-store" }); res.end(); }
@@ -1902,8 +1920,16 @@ export function registerDashboardCommand(program: Command): void {
                   if (format === "json") { res.setHeader("Content-Disposition", `attachment; filename="engagement-${id}.json"`); json(res, 200, report); }
                   else { res.writeHead(200, { "Content-Type": "text/markdown; charset=utf-8", "Content-Disposition": `attachment; filename="engagement-${id}.md"`, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" }); res.end(engagementMarkdown(report)); }
                 } else if (req.method === "GET") json(res, 200, id ? { engagement: engagements.get(id) } : { engagements: engagements.list() });
-                else if (req.method === "POST" && !id) json(res, 201, { engagement: engagements.create(await readJson(req), engagementActor) });
-                else if (req.method === "PATCH" && id) json(res, 200, { engagement: engagements.update(id, await readJson(req), engagementActor) });
+                else if (req.method === "POST" && !id) {
+                  const engagement = engagements.create(await readJson(req), engagementActor);
+                  collaboration?.notifyChanged("report", engagement.id);
+                  json(res, 201, { engagement });
+                }
+                else if (req.method === "PATCH" && id) {
+                  const engagement = engagements.update(id, await readJson(req), engagementActor);
+                  collaboration?.notifyChanged("report", engagement.id);
+                  json(res, 200, { engagement });
+                }
                 else throw new WebRequestError("Method not allowed.", 405);
                 return;
               }

@@ -1,6 +1,6 @@
 import type { BackendDescriptor, ImpactAssessment } from "@0/shared";
 import { BackendClient } from "./lib/backend-client";
-import { createTeamClient, getTeamLeaseToken } from "./lib/team-client";
+import { createTeamClient } from "./lib/team-client";
 export { useBackendApi } from "./backend-context";
 import type {
   ConsoleCreateSessionInput,
@@ -84,15 +84,7 @@ export async function localControlFetch(path: string, init?: RequestInit): Promi
 
 export function createBackendApi(backendId: string, descriptor?: BackendDescriptor) {
   const client = new BackendClient(backendId, localControlFetch, descriptor);
-  const webFetch = (path: string, init?: RequestInit) => {
-    let id = /^\/api\/console\/sessions\/([^/]+)/.exec(path)?.[1];
-    if (!id && (path.startsWith("/api/console/") || path === "/api/workflow-engine/call") && typeof init?.body === "string") {
-      try { const body = JSON.parse(init.body); const owner = body?.sessionId ?? body?.args?.sessionId; if (typeof owner === "string") id = owner; } catch { /* Payload validation belongs to the server. */ }
-    }
-    const lease = id && getTeamLeaseToken(backendId, decodeURIComponent(id));
-    if (lease) { const headers = new Headers(init?.headers); headers.set("X-0-Team-Lease", lease); return client.request(path, { ...init, headers }); }
-    return client.request(path, init);
-  };
+  const webFetch = (path: string, init?: RequestInit) => client.request(path, init);
   const teamClient = createTeamClient(backendId, webFetch);
 async function webFetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await webFetch(path, init);

@@ -19,6 +19,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { usePersistentState } from "@/lib/use-persistent-state";
 import { ConversationSkeleton } from "@/console/loading-state";
 import { consoleErrorMessage, needsProviderSignIn } from "@/console/provider-error";
+import { TeamCollaboration } from "@/console/team-collaboration";
 import { Conversation } from "@/console/conversation";
 import { AgentActivity } from "@/console/agent-activity";
 import { ConsoleInspector } from "@/console/inspector";
@@ -32,7 +33,7 @@ interface FeedbackResult { saved: boolean; path?: string; submitted: boolean; pr
 type ConfirmAction = { kind: "close" | "clear" | "delete" | "delete-live" | "drain"; id: string; title: string };
 
 export function ConsolePage() {
-  const { archiveConsoleSession, closeConsoleSession, configureConsoleSession, controlConsoleSession, deleteConsoleSession, deleteSavedConsoleSession, exportConsoleSession, resolveConsoleDecision, resumeConsoleSession, stopConsoleWorker, webFetchJson } = useBackendApi();
+  const { client, teamClient, archiveConsoleSession, closeConsoleSession, configureConsoleSession, controlConsoleSession, deleteConsoleSession, deleteSavedConsoleSession, exportConsoleSession, resolveConsoleDecision, resumeConsoleSession, stopConsoleWorker, webFetchJson } = useBackendApi();
   const team = useTeamAccess();
   const readOnlyTeam = team.enabled && team.user?.role === "viewer";
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -109,7 +110,7 @@ export function ConsolePage() {
     if (session.status !== "ready" || session.messageCount !== 0) return false;
     return !live || (live.messages.length === 0 && live.queuedMessages.length === 0 && !live.stagedPrompt && !live.events.some((event) => event.type === "user"));
   };
-  const findBlankSession = () => workspace.sessions.find((item) => item.id === sessionId && isBlankSession(item)) ?? workspace.sessions.find(isBlankSession);
+  const findBlankSession = () => team.enabled ? undefined : workspace.sessions.find((item) => item.id === sessionId && isBlankSession(item)) ?? workspace.sessions.find(isBlankSession);
   const createSession = async () => {
     if (readOnlyTeam) { const available = workspace.sessions.find(item => item.status !== "closed"); if (available) navigate(`/console/${available.id}`); return; }
     if (creatingSession.current) return;
@@ -267,7 +268,7 @@ export function ConsolePage() {
       <aside ref={sessionRailElement} className="hidden w-64 shrink-0  lg:block">{rail}</aside>
       <section className="flex min-w-0 flex-1 flex-col">
         <header className="flex shrink-0 items-center justify-between gap-2  px-3 py-3 sm:px-5">
-          <div className="flex min-w-0 items-center gap-2"><Button variant="ghost" size="icon-sm" aria-label="Open conversations" className="lg:hidden" onClick={() => setRailOpen(true)}><Menu className="size-4" /></Button><div className="min-w-0"><h1 className="truncate text-sm font-semibold">{snapshot?.title || "Chat"}</h1></div></div>
+          <div className="flex min-w-0 items-center gap-2"><Button variant="ghost" size="icon-sm" aria-label="Open conversations" className="lg:hidden" onClick={() => setRailOpen(true)}><Menu className="size-4" /></Button><div className="flex min-w-0 items-center gap-2"><h1 className="truncate text-sm font-semibold">{snapshot?.title || "Chat"}</h1>{snapshot && team.enabled && client.backendId === "local" && <TeamCollaboration sessionId={snapshot.session.id} client={teamClient} draft={workspace.draft} />}</div></div>
           <div className="flex items-center gap-1">{!snapshot && <BackendConnectionPicker />}{snapshot && <AgentActivity sendBehavior={mode} onSendBehaviorChange={setMode} snapshot={snapshot} workerId={workerId} active={["working", "waiting"].includes(snapshot.session.status)} onSelect={(id) => { const next = new URLSearchParams(search); if (id) next.set("worker", id); else next.delete("worker"); setSearch(next); }} />}<Button size="icon-sm" variant="ghost" className="lg:hidden" aria-label="New chat" onClick={() => void createSession()}><Plus className="size-4" /></Button>{snapshot && <><DropdownMenu><DropdownMenu.Trigger aria-label="Chat actions" className="flex size-8 items-center justify-center rounded-full hover:bg-muted focus-visible:outline-2 focus-visible:outline-primary"><button type="button"><MoreHorizontal className="size-4" /></button></DropdownMenu.Trigger><DropdownMenu.Content align="end">
 <DropdownMenu.Item icon={<Pencil className="size-4" />} onClick={() => { setRename(snapshot.session); setRenameValue(snapshot.title); }}>Rename</DropdownMenu.Item>
 <DropdownMenu.Item disabled={!canExport} icon={<Copy className="size-4" />} onClick={() => void openExport(snapshot.session.id, false, true, workerId ?? undefined)}>Copy chat</DropdownMenu.Item>

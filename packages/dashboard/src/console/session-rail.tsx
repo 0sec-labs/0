@@ -8,6 +8,9 @@ import { LoadingDots } from "./loading-state";
 import type { ConsoleWorkspace } from "./use-console-workspace";
 import { orderSessionRail } from "./session-rail-order";
 import { useTeamAccess } from "@/components/team-access";
+import { useBackendApi } from "@/api";
+import { TeamPresenceAvatars } from "./team-collaboration";
+import { useTeamOverview } from "./team-overview";
 
 function SessionActivity({ status }: { status: DesktopConsoleSession["status"] }) {
   if (status === "ready" || status === "closed") return null;
@@ -36,10 +39,13 @@ export function ConsoleSessionRail({ workspace, selectedId, onCreate, onArchiveL
 }) {
   const [showArchived, setShowArchived] = useState(false);
   const team = useTeamAccess();
+  const { teamClient } = useBackendApi();
+  const presence = useTeamOverview(teamClient, { enabled: team.enabled && Boolean(team.user) });
+  const presenceFor = (id: string) => presence.isError ? [] : presence.data?.rooms.find(room => room.kind === "conversation" && room.id === id)?.presence ?? [];
   const readOnlyTeam = team.enabled && team.user?.role === "viewer";
-  const live = workspace.sessions.filter((session) => !showArchived && session.status !== "closed" && ((session.messageCount ?? 0) > 0 || session.status !== "ready"));
+  const live = workspace.sessions.filter((session) => !showArchived && session.status !== "closed" && (team.enabled || (session.messageCount ?? 0) > 0 || session.status !== "ready"));
   const activeIds = new Set(workspace.sessions.filter(session => session.status !== "closed").flatMap(session => [session.id, ...("savedId" in session && typeof session.savedId === "string" ? [session.savedId] : [])]));
-  const saved = workspace.saved.filter(session => session.messageCount > 0 && !activeIds.has(session.id)).filter((session) => Boolean(session.archived) === showArchived);
+  const saved = workspace.saved.filter(session => (team.enabled || session.messageCount > 0) && !activeIds.has(session.id)).filter((session) => Boolean(session.archived) === showArchived);
   const rows = orderSessionRail(live, saved, workspace.saved);
   return <div className="session-rail flex h-full min-h-0 flex-col">
     <div className="shrink-0 space-y-2 p-2"><button type="button" className="relative h-9 w-full rounded-lg pl-8 pr-3 text-left text-sm font-normal text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50" disabled={workspace.busy || readOnlyTeam} onClick={onCreate}><SquarePen aria-hidden="true" className="pointer-events-none absolute left-2.5 top-2.5 size-3.5" />New chat</button><button type="button" onClick={event => { const button = event.currentTarget; onSelect?.(); openAppSearch("chats", button); }} className="relative h-9 w-full rounded-lg pl-8 pr-3 text-left text-sm font-normal text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40" aria-keyshortcuts="Meta+K Control+K"><Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-2.5 size-3.5" />Search chats</button></div>
@@ -50,6 +56,7 @@ export function ConsoleSessionRail({ workspace, selectedId, onCreate, onArchiveL
           return <div key={row.key} className={cn("session-row group relative flex items-center rounded-xl", selectedId === session.id ? "bg-muted" : "hover:bg-muted/50")}>
         <Link to={`/console/${session.id}`} onClick={onSelect} className="min-w-0 flex-1 rounded-xl px-3 py-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40" title={session.target || undefined}><div className="truncate text-sm">{session.title || session.target || "Untitled chat"}</div></Link>
         <SessionActivity status={session.status} />
+        <TeamPresenceAvatars presence={presenceFor(session.id)} compact />
         <div className="session-row-actions mr-1 flex w-0 shrink-0 items-center overflow-hidden opacity-0 transition-[width,opacity] duration-150 motion-reduce:transition-none group-hover:w-14 group-hover:opacity-100 group-has-[:focus-visible]:w-14 group-has-[:focus-visible]:opacity-100 max-lg:w-14 max-lg:opacity-100 [@media(hover:none)]:w-14 [@media(hover:none)]:opacity-100">
           <button type="button" aria-label={`Archive ${session.title || "chat"}`} title="Archive chat" disabled={workspace.busy || readOnlyTeam || !session.messageCount} onClick={() => onArchiveLive(session)} className="flex size-7 shrink-0 items-center justify-center rounded-lg hover:bg-background/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50"><Archive aria-hidden="true" className="size-4" /></button>
           <button type="button" aria-label={`Delete ${session.title || "chat"}`} title="Delete chat" disabled={workspace.busy || readOnlyTeam} onClick={() => onDeleteLive(session)} className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-red-500/10 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50"><Trash2 aria-hidden="true" className="size-4" /></button>
@@ -59,6 +66,7 @@ export function ConsoleSessionRail({ workspace, selectedId, onCreate, onArchiveL
         const session = row.session;
         return <div key={row.key} className="session-row group flex items-center rounded-xl hover:bg-muted/50">
         <button type="button" className="min-w-0 flex-1 rounded-xl px-3 py-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 text-left" title={`${new Date(session.savedAt).toLocaleDateString()} · ${session.messageCount} messages`} onClick={() => onResume(session)}><div className="truncate text-sm">{session.summary || session.target || session.preview || "Past chat"}</div></button>
+        <TeamPresenceAvatars presence={presenceFor(session.id)} compact />
         <div className="session-row-actions mr-1 flex w-0 shrink-0 items-center overflow-hidden opacity-0 transition-[width,opacity] duration-150 motion-reduce:transition-none group-hover:w-14 group-hover:opacity-100 group-has-[:focus-visible]:w-14 group-has-[:focus-visible]:opacity-100 max-lg:w-14 max-lg:opacity-100 [@media(hover:none)]:w-14 [@media(hover:none)]:opacity-100">
           <button type="button" aria-label={`${showArchived ? "Restore" : "Archive"} ${session.summary || session.target || "chat"}`} title={showArchived ? "Restore chat" : "Archive chat"} disabled={workspace.busy || readOnlyTeam} onClick={() => onArchive(session, !showArchived)} className="flex size-7 shrink-0 items-center justify-center rounded-lg hover:bg-background/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50">{showArchived ? <ArchiveRestore aria-hidden="true" className="size-4" /> : <Archive aria-hidden="true" className="size-4" />}</button>
           <button type="button" aria-label={`Delete ${session.summary || session.target || "chat"}`} title="Delete chat" disabled={workspace.busy || readOnlyTeam} onClick={() => onDelete(session)} className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-red-500/10 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-50"><Trash2 aria-hidden="true" className="size-4" /></button>

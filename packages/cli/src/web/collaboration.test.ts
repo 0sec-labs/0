@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { CollaborationService, type CollaborationIdentity } from "./collaboration.js";
 
 let directory: string;
@@ -9,7 +9,7 @@ let now: number;
 let identities: Map<string, CollaborationIdentity>;
 let service: CollaborationService;
 const actor = (userId: string, role: CollaborationIdentity["role"] = "editor", workspaceId = "team-a"): CollaborationIdentity => ({ userId, displayName: userId.toUpperCase(), workspaceId, role });
-function reopen() { return new CollaborationService({ workspaceId: "team-a", stateDir: directory, resolveSession: session => identities.get(session), now: () => now, leaseMs: 3000, presenceMs: 2000 }); }
+function reopen() { return new CollaborationService({ workspaceId: "team-a", stateDir: directory, resolveSession: session => identities.get(session), now: () => now, presenceMs: 2000 }); }
 beforeEach(() => {
   directory = mkdtempSync(join(tmpdir(), "0-collaboration-")); now = 10000;
   identities = new Map([["owner-session", actor("alice", "owner")], ["bob-session", actor("bob")], ["alice-other-session", actor("alice", "owner")], ["viewer-session", actor("reader", "viewer")], ["foreign-session", actor("mallory", "owner", "team-b")]]);
@@ -17,128 +17,114 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(directory, { recursive: true, force: true }));
 
-describe("authenticated workspace collaboration", () => {
-  it("requires a real authenticated workspace session for every read and mutation", () => {
+describe("authenticated shared resource rooms", () => {
+  it("requires authenticated workspace sessions for reads, overview, presence and writes", () => {
     expect(() => service.snapshot("chat-a", "missing")).toThrow("authenticated team session");
+    expect(() => service.overview("missing")).toThrow("authenticated team session");
     expect(() => service.snapshot("chat-a", "foreign-session")).toThrow("does not belong");
-    expect(() => service.heartbeat("chat-a", "bob-session", { typing: true, userId: "alice" })).toThrow("booleans");
-    expect(() => service.propose("chat-a", "bob-session", { text: "Inspect", submittedBy: { userId: "alice" } })).toThrow("text only");
-    expect(() => service.assertController("chat-a", "missing", "made-up")).toThrow("authenticated");
-    expect(() => service.acquireController("chat-a", "foreign-session")).toThrow("does not belong");
+    expect(() => service.assertWriter("chat-a", "foreign-session")).toThrow("does not belong");
+    expect(() => service.heartbeat("chat-a", "bob-session", { typing: true, userId: "alice" })).toThrow("Invalid presence update");
   });
-  it("allows viewers to join and read but not mutate agent control or propose actions", () => {
+  it("allows all owner/editor sessions to write directly without exclusive ownership", () => {
+    expect(service.assertWriter("chat-a", "owner-session").userId).toBe("alice");
+    expect(service.assertWriter("chat-a", "bob-session").userId).toBe("bob");
+    expect(reopen().assertWriter("chat-a", "alice-other-session").userId).toBe("alice");
+    expect(service.snapshot("chat-a", "bob-session").canWrite).toBe(true);
+    expect(service.snapshot("chat-a", "alice-other-session").canWrite).toBe(true);
+    expect(service.snapshot("chat-a", "bob-session")).not.toHaveProperty("controller");
+    expect(service.snapshot("chat-a", "bob-session")).not.toHaveProperty("proposals");
+    expect(() => service.assertWriter("missing", "bob-session")).toThrow("not found");
+  });
+  it("lets viewers join/view but denies resource writes and honors current role revocation", () => {
     expect(service.heartbeat("chat-a", "viewer-session", { typing: false }).viewer.role).toBe("viewer");
-    expect(() => service.acquireController("chat-a", "viewer-session")).toThrow("viewers");
-    expect(() => service.propose("chat-a", "viewer-session", { text: "Run command" })).toThrow("viewers");
-    const controller = service.acquireController("chat-a", "owner-session");
-    expect(() => service.assertController("chat-a", "viewer-session", controller.leaseToken)).toThrow("viewers");
+    expect(service.snapshot("chat-a", "viewer-session").canWrite).toBe(false);
+    expect(() => service.assertWriter("chat-a", "viewer-session")).toThrow("viewers");
+    identities.set("bob-session", actor("bob", "viewer"));
+    expect(() => service.assertWriter("chat-a", "bob-session")).toThrow("viewers");
+    identities.delete("owner-session");
+    expect(() => service.assertWriter("chat-a", "owner-session")).toThrow("authenticated");
   });
-  it("persists attributable membership while deriving current role from authenticated session", () => {
+  it("persists joined member attribution privately without persisting live presence", () => {
     service.heartbeat("chat-a", "bob-session", { typing: true });
     const snapshot = reopen().snapshot("chat-a", "bob-session");
     expect(snapshot.members.map(member => member.userId)).toEqual(["alice", "bob"]);
-    expect(snapshot.members.find(member => member.userId === "bob")?.role).toBe("editor");
-    identities.set("bob-session", actor("bob", "viewer"));
-    expect(snapshot.viewer.role).toBe("editor");
-    expect(service.snapshot("chat-a", "bob-session").viewer.role).toBe("viewer");
-    expect(() => service.acquireController("chat-a", "bob-session")).toThrow("viewers");
+    expect(snapshot.presence).toEqual([]);
     const path = join(directory, readdirSync(directory).find(name => name.endsWith(".json"))!);
     expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(JSON.stringify(snapshot)).not.toContain("bob-session");
   });
-  it("keeps leases exclusive across instances and distinct authenticated sessions of the same user", () => {
-    const lease = service.acquireController("chat-a", "owner-session");
-    const peer = reopen();
-    expect(() => peer.acquireController("chat-a", "bob-session")).toThrow("Another authenticated session");
-    expect(() => peer.acquireController("chat-a", "alice-other-session")).toThrow("Another authenticated session");
-    expect(peer.snapshot("chat-a", "alice-other-session").canControl).toBe(false);
-    expect(() => peer.assertController("chat-a", "alice-other-session", lease.leaseToken)).toThrow("current controller lease");
-    expect(peer.assertController("chat-a", "owner-session", lease.leaseToken).userId).toBe("alice");
-    expect(JSON.stringify(peer.snapshot("chat-a", "bob-session"))).not.toContain(lease.leaseToken);
-    expect(JSON.stringify(peer.snapshot("chat-a", "bob-session"))).not.toContain("owner-session");
-  });
-  it("expires leases and fences old holders after a takeover", () => {
-    const old = service.acquireController("chat-a", "owner-session");
-    now += 3001;
-    expect(service.snapshot("chat-a", "bob-session").controller).toBeNull();
-    const next = service.acquireController("chat-a", "bob-session");
-    expect(next.leaseToken).not.toBe(old.leaseToken);
-    expect(() => service.assertController("chat-a", "owner-session", old.leaseToken)).toThrow("current controller lease");
-    expect(() => service.renewController("chat-a", "owner-session", old.leaseToken)).toThrow("current controller lease");
-    expect(() => service.releaseController("chat-a", "owner-session", old.leaseToken)).toThrow("current controller lease");
-    expect(service.snapshot("chat-a", "bob-session").canControl).toBe(true);
-  });
-  it("renews only the holder's lease and ends viewing/typing presence after expiry or logout", () => {
-    const lease = service.acquireController("chat-a", "owner-session");
-    now += 1000;
-    service.heartbeat("chat-a", "bob-session", { typing: true });
-    expect(service.snapshot("chat-a", "owner-session").controller?.expiresAt).toBe(13000);
+  it("aggregates presence by user across browser sessions and resource kind without leaking session credentials", () => {
     service.heartbeat("chat-a", "owner-session", { typing: false });
-    expect(service.snapshot("chat-a", "owner-session").controller?.expiresAt).toBe(14000);
-    expect(service.renewController("chat-a", "owner-session", lease.leaseToken).leaseToken).toBe(lease.leaseToken);
-    service.heartbeat("chat-a", "bob-session", { typing: true, viewing: false });
-    expect(service.snapshot("chat-a", "owner-session").presence.find(item => item.userId === "bob")?.typing).toBe(false);
+    service.heartbeat("chat-a", "alice-other-session", { typing: true });
+    service.registerRoom("report", "chat-a", "bob-session");
+    service.heartbeatRoom("report", "chat-a", "bob-session", { typing: false });
+    service.registerRoom("workflow", "workflow-a", "viewer-session");
+    service.heartbeatRoom("workflow", "workflow-a", "viewer-session", { typing: false });
+    const overview = service.overview("viewer-session");
+    expect(overview.rooms.map(room => [room.kind, room.id])).toEqual([["conversation", "chat-a"], ["report", "chat-a"], ["workflow", "workflow-a"]]);
+    expect(overview.rooms[0]?.presence).toEqual([{ userId: "alice", displayName: "ALICE", viewing: true, typing: true, updatedAt: 10000 }]);
+    expect(overview.rooms[1]?.presence[0]?.userId).toBe("bob");
+    expect(JSON.stringify(overview)).not.toContain("owner-session");
+    service.heartbeat("chat-a", "alice-other-session", { typing: true, viewing: false });
+    expect(service.snapshot("chat-a", "bob-session").presence[0]?.typing).toBe(false);
+  });
+  it("expires viewing/typing presence, removes logout and never invents active participants", () => {
+    service.heartbeat("chat-a", "bob-session", { typing: true });
     identities.delete("bob-session");
-    expect(service.snapshot("chat-a", "owner-session").presence.map(item => item.userId)).toEqual(["alice"]);
+    expect(service.overview("viewer-session").rooms).toEqual([]);
+    service.heartbeat("chat-a", "owner-session", { typing: true });
     now += 2001;
-    expect(service.snapshot("chat-a", "owner-session").presence).toEqual([]);
-    identities.delete("owner-session");
-    expect(() => service.assertController("chat-a", "owner-session", lease.leaseToken)).toThrow("authenticated");
+    expect(service.snapshot("chat-a", "viewer-session").presence).toEqual([]);
+    expect(service.overview("viewer-session").rooms).toEqual([]);
   });
-  it("attributes proposals to server identity and prevents non-controller resolution", () => {
-    const proposal = service.propose("chat-a", "bob-session", { text: " Inspect the finding " });
-    expect(proposal).toMatchObject({ text: "Inspect the finding", submittedBy: { userId: "bob", displayName: "BOB" }, status: "pending" });
-    const lease = service.acquireController("chat-a", "owner-session");
-    expect(() => service.rejectProposal("chat-a", "bob-session", proposal.id, lease.leaseToken)).toThrow("current controller lease");
-    expect(service.rejectProposal("chat-a", "owner-session", proposal.id, lease.leaseToken)).toMatchObject({ status: "rejected", resolvedBy: { userId: "alice" } });
-    expect(() => service.rejectProposal("chat-a", "owner-session", proposal.id, lease.leaseToken)).toThrow("already been");
-    service.register("chat-b", "owner-session");
-    const second = service.acquireController("chat-b", "owner-session");
-    expect(() => service.rejectProposal("chat-b", "owner-session", proposal.id, second.leaseToken)).toThrow("not found");
+  it("tracks tabs sharing one authenticated cookie independently and aggregates their user presence", () => {
+    const tabA = "e29cc625-63b4-4517-a7a8-08f3e2ae44f0";
+    const tabB = "e29cc625-63b4-4517-a7a8-08f3e2ae44f1";
+    service.heartbeat("chat-a", "bob-session", { typing: true, clientId: tabA });
+    service.heartbeat("chat-a", "bob-session", { typing: false, clientId: tabB });
+    expect(service.snapshot("chat-a", "viewer-session").presence).toEqual([{ userId: "bob", displayName: "BOB", viewing: true, typing: true, updatedAt: now }]);
+    service.heartbeat("chat-a", "bob-session", { typing: false, viewing: false, clientId: tabA });
+    expect(service.snapshot("chat-a", "viewer-session").presence[0]).toMatchObject({ userId: "bob", typing: false });
+    // Legacy clients remain a separate compatible tab slot.
+    service.heartbeat("chat-a", "bob-session", { typing: true });
+    service.heartbeat("chat-a", "bob-session", { typing: false, viewing: false });
+    expect(service.snapshot("chat-a", "viewer-session").presence[0]).toMatchObject({ userId: "bob", typing: false });
+    service.heartbeat("chat-a", "bob-session", { typing: true, clientId: tabA });
+    now += 2001;
+    expect(service.overview("viewer-session").rooms).toEqual([]);
+    service.heartbeat("chat-a", "bob-session", { typing: true, clientId: tabA });
+    service.heartbeat("chat-a", "bob-session", { typing: true, clientId: tabB });
+    identities.delete("bob-session");
+    expect(service.snapshot("chat-a", "viewer-session").presence).toEqual([]);
   });
-  it("admits a proposal exactly once while another accept races with dispatch", async () => {
-    const proposal = service.propose("chat-a", "bob-session", { text: "Inspect evidence" });
-    const lease = service.acquireController("chat-a", "owner-session");
-    let finish!: () => void;
-    const dispatch = vi.fn(() => new Promise<void>(resolve => { finish = resolve; }));
-    const first = service.acceptProposal("chat-a", "owner-session", proposal.id, lease.leaseToken, dispatch);
-    expect(dispatch).toHaveBeenCalledWith("Inspect evidence", { userId: "bob", displayName: "BOB" }, proposal.id);
-    expect(reopen().snapshot("chat-a", "owner-session").proposals[0]?.status).toBe("dispatching");
-    await expect(reopen().acceptProposal("chat-a", "owner-session", proposal.id, lease.leaseToken, dispatch)).rejects.toThrow("already been");
-    finish();
-    expect(await first).toMatchObject({ status: "accepted", resolvedBy: { userId: "alice" } });
-    expect(dispatch).toHaveBeenCalledTimes(1);
-    await expect(service.acceptProposal("chat-a", "owner-session", proposal.id, lease.leaseToken, dispatch)).rejects.toThrow("already been");
+  it("rejects invalid tab IDs and bounds active tabs without blocking existing tab refresh or leave", () => {
+    expect(() => service.heartbeat("chat-a", "bob-session", { typing: false, clientId: "owner-session" })).toThrow("Invalid presence update");
+    for (let index = 0; index < 512; index++) service.heartbeat("chat-a", "bob-session", { typing: false, clientId: "00000000-0000-4000-8000-" + String(index).padStart(12, "0") });
+    const tab = "00000000-0000-4000-8000-000000000000";
+    expect(() => service.heartbeat("chat-a", "bob-session", { typing: true, clientId: tab })).not.toThrow();
+    expect(() => service.heartbeat("chat-a", "bob-session", { typing: false, clientId: "00000000-0000-4000-8000-999999999999" })).toThrow("active tab limit");
+    service.heartbeat("chat-a", "bob-session", { typing: false, viewing: false, clientId: tab });
+    expect(() => service.heartbeat("chat-a", "bob-session", { typing: false, clientId: "00000000-0000-4000-8000-999999999999" })).not.toThrow();
   });
-  it("never retries an uncertain failed dispatch or replays a crash-interrupted dispatch", async () => {
-    const proposal = service.propose("chat-a", "bob-session", { text: "Inspect evidence" });
-    const lease = service.acquireController("chat-a", "owner-session");
-    const dispatch = vi.fn(() => { throw new Error("SECRET provider error"); });
-    const result = await service.acceptProposal("chat-a", "owner-session", proposal.id, lease.leaseToken, dispatch);
-    expect(result.status).toBe("failed");
-    expect(result.error).toContain("may have applied");
-    expect(result.error).not.toContain("SECRET");
-    await expect(reopen().acceptProposal("chat-a", "owner-session", proposal.id, lease.leaseToken, dispatch)).rejects.toThrow("already been");
-    const pending = service.propose("chat-a", "bob-session", { text: "Separate action" });
-    void service.acceptProposal("chat-a", "owner-session", pending.id, lease.leaseToken, () => new Promise(() => {}));
-    expect(reopen().snapshot("chat-a", "owner-session").proposals.find(item => item.id === pending.id)?.status).toBe("dispatching");
-    await expect(reopen().acceptProposal("chat-a", "owner-session", pending.id, lease.leaseToken, dispatch)).rejects.toThrow("already been");
-    expect(dispatch).toHaveBeenCalledTimes(1);
-  });
-  it("requires owner permission for legacy sharing and refuses corrupted persisted attribution", () => {
-    expect(() => service.importConversation("private-chat", "bob-session")).toThrow("workspace owner");
-    expect(service.importConversation("private-chat", "owner-session").conversationId).toBe("private-chat");
+  it("migrates prior joined rooms and removes obsolete controller/proposal state", () => {
     const path = join(directory, readdirSync(directory).find(name => name.endsWith(".json"))!);
+    const prior = JSON.parse(readFileSync(path, "utf8"));
+    writeFileSync(path, JSON.stringify({ schemaVersion: 1, workspaceId: prior.workspaceId, conversations: prior.rooms.map((room: Record<string, unknown>) => ({ ...room, lease: { token: "obsolete" }, proposals: [{ text: "obsolete" }] })) }));
+    expect(reopen().snapshot("chat-a", "owner-session").members[0]?.userId).toBe("alice");
+    service.heartbeat("chat-a", "bob-session", { typing: false });
+    const updated = readFileSync(path, "utf8");
+    expect(JSON.parse(updated).schemaVersion).toBe(2);
+    expect(updated).not.toContain("obsolete");
+  });
+  it("fails closed on corrupted workspace storage and live locks, recovers dead writer locks", () => {
+    const path = join(directory, readdirSync(directory).find(name => name.endsWith(".json"))!);
+    writeFileSync(path + ".lock", String(process.pid));
+    expect(() => service.heartbeat("chat-a", "owner-session", { typing: false })).toThrow("busy");
+    writeFileSync(path + ".lock", "2147483647");
+    expect(service.heartbeat("chat-a", "owner-session", { typing: false }).canWrite).toBe(true);
     const saved = JSON.parse(readFileSync(path, "utf8"));
     writeFileSync(path, JSON.stringify({ ...saved, workspaceId: "foreign-team" }));
     expect(() => service.snapshot("chat-a", "owner-session")).toThrow("Invalid collaboration storage");
-    expect(() => service.propose("chat-a", "bob-session", { text: "Do not overwrite" })).toThrow("Invalid collaboration storage");
-  });
-  it("fails closed while another writer is alive and recovers a dead writer lock", () => {
-    const path = join(directory, readdirSync(directory).find(name => name.endsWith(".json"))!);
-    writeFileSync(path + ".lock", String(process.pid));
-    expect(() => service.acquireController("chat-a", "owner-session")).toThrow("busy");
-    writeFileSync(path + ".lock", "2147483647");
-    expect(service.acquireController("chat-a", "owner-session").snapshot.canControl).toBe(true);
-    expect(readdirSync(directory).some(name => name.endsWith(".lock") || name.endsWith(".recovery"))).toBe(false);
+    expect(() => service.heartbeat("chat-a", "bob-session", { typing: false })).toThrow("Invalid collaboration storage");
   });
 });

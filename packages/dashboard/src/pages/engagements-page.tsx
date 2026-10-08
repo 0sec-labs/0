@@ -9,6 +9,8 @@ import { ReportExportControl } from "@/components/report-export-control";
 import type { EngagementRecord, EngagementReport } from "@/lib/engagements";
 import type { ScanRecord } from "@/types";
 import { useTeamAccess } from "@/components/team-access";
+import { TeamCollaboration, TeamPresenceAvatars } from "@/console/team-collaboration";
+import { useTeamOverview } from "@/console/team-overview";
 
 type EngagementDraft = Pick<EngagementRecord, "name" | "description" | "scanIds" | "notes"> & { expectedRevision: number };
 const draftFor = (engagement: EngagementRecord): EngagementDraft => ({ name: engagement.name, description: engagement.description, notes: engagement.notes ?? "", scanIds: engagement.scanIds, expectedRevision: engagement.revision });
@@ -18,8 +20,10 @@ const draftChanged = (draft: EngagementDraft, engagement: EngagementRecord) => d
 const sessionDrafts = new Map<string, EngagementDraft>();
 
 export function EngagementsPage() {
-  const { client, webFetchJson, getScans, listSavedConsoleSessions } = useBackendApi();
+  const { client, teamClient, webFetchJson, getScans, listSavedConsoleSessions } = useBackendApi();
   const team = useTeamAccess();
+  const teamEnabled = team.enabled && client.backendId === "local";
+  const livePresence = useTeamOverview(teamClient, { enabled: teamEnabled });
   const readOnly = team.enabled && team.user?.role === "viewer";
   const draftScope = team.enabled && team.user ? `${client.backendId}:${JSON.stringify([team.user.workspaceId, team.user.userId])}` : client.backendId;
   const cache = useQueryClient();
@@ -32,7 +36,7 @@ export function EngagementsPage() {
   const [drafts, setDrafts] = useState<Record<string, EngagementDraft>>(() => Object.fromEntries(sessionDrafts));
   useEffect(() => { sessionDrafts.clear(); for (const [id, draft] of Object.entries(drafts)) sessionDrafts.set(id, draft); }, [drafts]);
   const key = ["engagements", client.backendId];
-  const collection = useQuery({ queryKey: key, queryFn: ({ signal }) => webFetchJson<{ engagements: EngagementRecord[] }>("/api/engagements", { signal }), refetchInterval: team.enabled ? 3000 : false });
+  const collection = useQuery({ queryKey: key, queryFn: ({ signal }) => webFetchJson<{ engagements: EngagementRecord[] }>("/api/engagements", { signal }), refetchInterval: teamEnabled && !livePresence.connected ? 15000 : false });
   const scans = useQuery({ queryKey: ["engagement-runs", client.backendId], queryFn: getScans, refetchInterval: 5000 });
   const chats = useQuery({ queryKey: ["engagement-chat-titles", client.backendId], queryFn: ({ signal }) => listSavedConsoleSessions(signal) });
   const runNames = new Map(chats.data?.map(item => [item.id, item.summary || item.preview || "Chat investigation"]));
@@ -70,12 +74,12 @@ export function EngagementsPage() {
     }); }}><Input aria-label="New assessment name" placeholder="Assessment name" value={name} maxLength={160} disabled={busy || readOnly} onChange={event => setName(event.target.value)} /><Button type="submit" disabled={busy || readOnly || !name.trim()}><Plus className="size-4" />Create report</Button></form>
     {(error || collection.error || scans.error) && <p role="alert" className="text-sm text-destructive">{error || (collection.error ?? scans.error)?.message}</p>}
     {collection.isPending ? <p role="status" className="text-sm text-muted-foreground">Loading reports…</p> : <div className="grid items-start gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
-      <nav aria-label="Assessment reports" className="space-y-1">{collection.data?.engagements.length ? collection.data.engagements.map(item => <button type="button" key={item.id} disabled={busy} aria-current={item.id === selectedId ? "page" : undefined} onClick={() => select(item.id)} className={`block w-full rounded-xl px-3 py-3 text-left hover:bg-muted/50 ${item.id === selectedId ? "bg-muted" : ""}`}><span className="block break-words text-sm font-medium">{item.name}</span><span className="mt-1 block text-xs text-muted-foreground">{item.scanIds.length} {item.scanIds.length === 1 ? "run" : "runs"}</span></button>) : <p className="py-3 text-sm text-muted-foreground">No reports yet.</p>}</nav>
+      <nav aria-label="Assessment reports" className="space-y-1">{collection.data?.engagements.length ? collection.data.engagements.map(item => <button type="button" key={item.id} disabled={busy} aria-current={item.id === selectedId ? "page" : undefined} onClick={() => select(item.id)} className={`block w-full rounded-xl px-3 py-3 text-left hover:bg-muted/50 ${item.id === selectedId ? "bg-muted" : ""}`}><span className="flex items-center justify-between gap-2"><span className="block break-words text-sm font-medium">{item.name}</span>{teamEnabled && !livePresence.isError && <TeamPresenceAvatars compact presence={livePresence.data?.rooms.find(room => room.kind === "report" && room.id === item.id)?.presence ?? []} />}</span><span className="mt-1 block text-xs text-muted-foreground">{item.scanIds.length} {item.scanIds.length === 1 ? "run" : "runs"}</span></button>) : <p className="py-3 text-sm text-muted-foreground">No reports yet.</p>}</nav>
       {selected ? <div className="min-w-0 space-y-6">
         {editing && drafts[draftKey] && drafts[draftKey].expectedRevision !== selected.revision && <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-3 text-xs"><span>Report changed. Your draft is kept.</span><Button variant="outline" size="xs" disabled={busy} onClick={() => { setDrafts(current => { const next = { ...current }; delete next[draftKey]; return next; }); setError(""); }}>Reload latest</Button></div>}
         {editing && <EngagementEditor key={`${draftScope}:${selected.id}`} engagement={selected} draft={drafts[draftKey] ?? draftFor(selected)} onDraft={draft => setDrafts(current => ({ ...current, [draftKey]: draft }))} scans={scans.data ?? []} report={report.data} runNames={runNames} busy={busy || readOnly} onSave={save} />}
         <section aria-label="Engagement report" className="space-y-4 rounded-2xl border border-border p-4 sm:p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-medium">{selected.name}</h2><div className="flex flex-wrap gap-2"><Button variant="ghost" size="sm" disabled={busy || readOnly} onClick={() => setEditing(!editing)}>{editing ? "Close editor" : "Edit"}</Button><ReportExportControl path={`/api/engagements/${encodeURIComponent(selected.id)}/report`} allowedFormats={["json", "markdown"]} disabled={busy || !report.data || Boolean(drafts[draftKey] && draftChanged(drafts[draftKey], selected))} /></div></div>
+          <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-2"><h2 className="font-medium">{selected.name}</h2>{teamEnabled && <TeamCollaboration room={{ kind: "report", id: selected.id }} client={teamClient} draft={editing ? JSON.stringify(drafts[draftKey] ?? {}) : ""} />}</div><div className="flex flex-wrap gap-2"><Button variant="ghost" size="sm" disabled={busy || readOnly} onClick={() => setEditing(!editing)}>{editing ? "Close editor" : "Edit"}</Button><ReportExportControl path={`/api/engagements/${encodeURIComponent(selected.id)}/report`} allowedFormats={["json", "markdown"]} disabled={busy || !report.data || Boolean(drafts[draftKey] && draftChanged(drafts[draftKey], selected))} /></div></div>
           {report.error ? <p role="alert" className="text-sm text-destructive">{report.error.message}</p> : report.isPending ? <p role="status" className="text-sm text-muted-foreground">Loading report…</p> : report.data && <>
             {report.data.findingGroups.length ? <ul className="divide-y divide-border">{report.data.findingGroups.map(group => {
               const first = group.occurrences[0]!;

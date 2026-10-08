@@ -22,9 +22,9 @@ Keep the file private (`0600`). Initialization never overwrites an existing file
 Changes to members take effect when the engine restarts; restarting also ends
 existing sessions.
 
-Owners and editors can change workspace work. Viewers can read it. An active
-conversation has one controller; other members can view the run and propose a
-message. Members' presence shows who is viewing or typing. Assessment reports
+Owners and editors can change workspace work. Viewers can read it. Members work independently and can write directly into shared conversations.
+Messages keep their authors. Requests in an active conversation queue safely.
+Avatars beside chats, reports and workflows show who is viewing or typing. Assessment reports
 collect retained runs and findings for review and export.
 
 Team mode does not isolate members into separate data tenants: they share the
