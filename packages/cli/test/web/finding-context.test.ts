@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { addFindingToDraft, findingsForChat } from "../../../dashboard/src/console/finding-context";
+import { addFindingToDraft, existingFindingsForChat, findingsForChat } from "../../../dashboard/src/console/finding-context";
 import type { FindingGroup, FindingRecord } from "../../../dashboard/src/types";
 
 const finding = (id: string, scanId: string, timestamp = 1): FindingRecord => ({
@@ -28,4 +28,35 @@ test("automatic chat findings use conversation identity, never a matching target
   expect(findingsForChat(groups, "live-chat", "original-chat").map(item => item.latest.id)).toEqual(["saved", "own"]);
   expect(findingsForChat(groups, "other-chat").map(item => item.latest.id)).toEqual(["other"]);
   expect(groups[0]).toBe(own);
+});
+
+test("explicit finding picker includes other sources while excluding own and suppressed findings", () => {
+  const groups = [
+    group(finding("own", "live-chat", 9)),
+    group(finding("saved", "saved-chat", 8)),
+    group(finding("older", "source-scan", 1)),
+    group({ ...finding("hidden", "other-chat", 7), triageStatus: "suppressed" }),
+    group(finding("newer", "other-chat", 3)),
+  ];
+  expect(existingFindingsForChat(groups, "live-chat", "saved-chat").map(item => item.latest.id)).toEqual(["newer", "older"]);
+  expect(groups.map(item => item.latest.id)).toEqual(["own", "saved", "older", "hidden", "newer"]);
+  expect(findingsForChat(groups, "live-chat", "saved-chat").map(item => item.latest.id)).toEqual(["own", "saved"]);
+});
+
+test("existing finding search matches title, severity, source and ID with all search terms", () => {
+  const groups = [group(finding("finding-1", "review-repo")), group({ ...finding("finding-2", "web-scan"), title: "SQL injection", severity: "critical" })];
+  expect(existingFindingsForChat(groups, "current", undefined, " HIGH authorization ").map(item => item.latest.id)).toEqual(["finding-1"]);
+  expect(existingFindingsForChat(groups, "current", undefined, "web-scan critical").map(item => item.latest.id)).toEqual(["finding-2"]);
+  expect(existingFindingsForChat(groups, "current", undefined, "finding-2")).toHaveLength(1);
+  expect(existingFindingsForChat(groups, "current", undefined, "web-scan high")).toEqual([]);
+});
+
+test("attaching another chat's finding preserves the draft and uses an evidence reference once", () => {
+  const selected = existingFindingsForChat([group(finding("external", "other-chat"))], "current")[0]!.latest;
+  const draft = addFindingToDraft("Compare this with the current investigation.", selected);
+  expect(draft).toContain("Compare this with the current investigation.");
+  expect(draft).toContain("Saved finding: external (scan: other-chat)");
+  expect(draft).toContain("Inspect the stored finding and its evidence");
+  expect(addFindingToDraft(draft, selected)).toBe(draft);
+  expect(draft).not.toContain(selected.description);
 });

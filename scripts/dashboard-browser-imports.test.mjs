@@ -17,6 +17,8 @@ test("assessment milestone surfaces load without Node-only shared modules", asyn
       "packages/dashboard/src/components/access-milestone.tsx",
       "packages/dashboard/src/components/event-timeline.tsx",
       "packages/dashboard/src/lib/hunt-stream.ts",
+      "packages/dashboard/src/pages/engagements-page.tsx",
+      "packages/dashboard/src/console/chat-findings.tsx",
     ],
     outdir: "/tmp/0-dashboard-boundary-test",
     bundle: true,

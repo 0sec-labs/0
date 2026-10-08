@@ -13,6 +13,7 @@ import { OverviewPage } from "@/pages/overview-page";
 import { ScansPage } from "@/pages/scans-page";
 import { ConsolePage } from "@/pages/console-page";
 import { LearningPage } from "@/pages/learning-page";
+import { EngagementsPage } from "@/pages/engagements-page";
 import { WorkflowsPage } from "@/pages/workflows-page";
 import { WebConsoleControlsPage } from "@/pages/console-controls-page";
 import type { ThemesResponse } from "@/components/console-control/contracts";
@@ -127,6 +128,7 @@ export function OperationsApp() {
           ))}
           {["workflows", "audits", "launcher", "launch"].map(route => <Route key={route} path={`/${route}`} element={<WorkflowsPage />} />)}
           <Route path="/learning" element={<LearningPage />} />
+          <Route path="/engagements" element={<EngagementsPage />} />
           <Route path="/dashboard" element={operations(dashboard ? <OverviewPage data={dashboard} /> : <EmptyState title="Nothing here yet" action={startChat} />)} />
           <Route path="/operations" element={<Navigate to="/dashboard" replace />} />
           <Route path="/threads" element={findings} />

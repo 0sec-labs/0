@@ -794,6 +794,26 @@ describe("dashboard — web console API", () => {
     expect(JSON.parse(captured.body)).toEqual({ error: "Invalid or missing control token" });
   });
 
+  it("requires the control token for engagement collections, edits and reports", async () => {
+    for (const request of [
+      { method: "GET", url: "/api/engagements" },
+      { method: "POST", url: "/api/engagements", body: { name: "Fixture" } },
+      { method: "PATCH", url: "/api/engagements/fixture", body: { notes: "Fixture" } },
+      { method: "GET", url: "/api/engagements/fixture/report" },
+    ]) {
+      const response = await invokeHandler(makeRequest(request));
+      expect(response.statusCode).toBe(403);
+    }
+  });
+
+  it("rejects unsupported engagement report formats and methods before storage reads", async () => {
+    const headers = { "x-0-control-token": await getControlToken() };
+    const format = await invokeHandler(makeRequest({ method: "GET", url: "/api/engagements/fixture/report?format=html", headers }));
+    expect(format.statusCode).toBe(400);
+    const method = await invokeHandler(makeRequest({ method: "POST", url: "/api/engagements/fixture/report", headers }));
+    expect(method.statusCode).toBe(405);
+  });
+
   it("rejects unsupported report formats and non-GET exports before reading report data", async () => {
     const headers = { "x-0-control-token": await getControlToken() };
     const format = await invokeHandler(makeRequest({ method: "GET", url: "/api/findings/export?format=exe", headers }));

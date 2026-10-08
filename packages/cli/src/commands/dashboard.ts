@@ -34,6 +34,8 @@ import { BackendConnectionRegistry, backendBearerFromEnv, createBackendHandshake
 import { WorkflowEngineService } from "../workflow-engine-service.js";
 import { retainedScanSnapshot, retainedFindingSnapshot } from "../web/report-artifacts.js";
 import { handleFindingImpactRequest } from "../web/finding-impact.js";
+import { EngagementStore } from "../web/engagements.js";
+import { engagementMarkdown } from "../web/engagement-report.js";
 import { assertLocalEngineAvailable, registerLocalEngine } from "../local-engine.js";
 
 type DashboardOptions = {
@@ -1807,6 +1809,7 @@ export function registerDashboardCommand(program: Command): void {
         const { path: assetDir, cleanup: cleanupAssetDir } = resolveDashboardAssetDir(opts.assetDir);
         startupAssetCleanup = cleanupAssetDir;
         const consoleGateway = startupGateway = new ConsoleGateway({ dbPath: opts.dbPath, projectPath: opts.engineWorkspace });
+        const engagements = new EngagementStore({ workspace: opts.engineWorkspace ?? process.cwd(), dbPath: opts.dbPath });
         const operator = startupOperator = new WebOperatorServices({ isTurnActive: () => consoleGateway.hasActiveTurns() });
         const workflows = startupWorkflows = new WebWorkflowService({ gateway: consoleGateway, dbPath: opts.dbPath });
         consoleGateway.attachSourceLearning(workflows.learning.store);
@@ -1847,6 +1850,22 @@ export function registerDashboardCommand(program: Command): void {
               const backendRoute = await handleBackendConnectionRequest(req, res, requestUrl, backends);
               if (backendRoute.handled) return;
               if (backendRoute.localPath) requestUrl = new URL(backendRoute.localPath, origin);
+              const engagementRoute = requestUrl.pathname.match(/^\/api\/engagements(?:\/([^/]+)(?:\/(report))?)?$/);
+              if (engagementRoute) {
+                const id = engagementRoute[1] ? decodeURIComponent(engagementRoute[1]) : undefined;
+                if (engagementRoute[2]) {
+                  if (req.method !== "GET") throw new WebRequestError("Use GET to read an engagement report.", 405);
+                  const format = requestUrl.searchParams.get("format") ?? "json";
+                  if (format !== "json" && format !== "markdown") throw new WebRequestError("Use json or markdown for an engagement report.", 400);
+                  const report = engagements.report(id!);
+                  if (format === "json") { res.setHeader("Content-Disposition", `attachment; filename="engagement-${id}.json"`); json(res, 200, report); }
+                  else { res.writeHead(200, { "Content-Type": "text/markdown; charset=utf-8", "Content-Disposition": `attachment; filename="engagement-${id}.md"`, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" }); res.end(engagementMarkdown(report)); }
+                } else if (req.method === "GET") json(res, 200, id ? { engagement: engagements.get(id) } : { engagements: engagements.list() });
+                else if (req.method === "POST" && !id) json(res, 201, { engagement: engagements.create(await readJson(req)) });
+                else if (req.method === "PATCH" && id) json(res, 200, { engagement: engagements.update(id, await readJson(req)) });
+                else throw new WebRequestError("Method not allowed.", 405);
+                return;
+              }
               if (requestUrl.pathname === "/api/control/launch-run") {
                 if (req.method !== "POST") throw new WebRequestError("Use POST to launch a run.", 405);
                 const body = z.object({ target: z.string().trim().min(1).max(4096), depth: z.enum(["quick", "default", "deep"]).optional(), runtime: z.enum(["api", "auto"]).optional(), mode: z.enum(["deep", "web"]).optional(), ensureDaemon: z.boolean().optional() }).strict().parse(await readJson(req));
