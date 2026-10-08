@@ -414,6 +414,22 @@ vi.mock("../../workflow-engine-service.js", () => ({ WorkflowEngineService: clas
   invoke = engineInvoke;
   dispose = engineDispose;
 } }));
+const skillsHttp = vi.hoisted(() => ({
+  list: vi.fn(() => ({ skills: [], mounts: [], diagnostics: [] })),
+  create: vi.fn((input: unknown) => ({ id: "mount/workspace/test-review", input })),
+  get: vi.fn((id: string) => ({ id, content: "standard skill" })),
+  export: vi.fn((id: string) => ({ format: "agent-skill", version: 1, name: "test-review", id, files: [] })),
+  import: vi.fn(() => ({ id: "mount/workspace/imported-review" })),
+  update: vi.fn((id: string, input: unknown) => ({ id, input })),
+  mount: vi.fn(() => ({ id: "mount-one" })),
+  unmount: vi.fn(),
+}));
+vi.mock("../../web/skills.js", () => ({ SkillsStore: class {
+  discoveryOptions() { return { homeDir: null, mounts: [] }; }
+  list = skillsHttp.list; create = skillsHttp.create; get = skillsHttp.get;
+  export = skillsHttp.export; import = skillsHttp.import; update = skillsHttp.update;
+  mount = skillsHttp.mount; unmount = skillsHttp.unmount;
+} }));
 const { registerDashboardCommand } = await import("../dashboard.js");
 
 // The action registers SIGINT handlers per invocation; raise the
@@ -459,6 +475,7 @@ function makeRequest(opts: {
   // before the async handler started reading and the consumer would
   // miss the events. (This mirrors how a real http.IncomingMessage
   // would deliver data only once consumers are attached via .on.)
+  emitter.resume = (() => emitter) as import("node:http").IncomingMessage["resume"];
   const originalOn = emitter.on.bind(emitter);
   (emitter as unknown as { on: EventEmitter["on"] }).on = function patchedOn(
     event: string | symbol,
@@ -537,6 +554,7 @@ let logSpy: ReturnType<typeof vi.spyOn>;
 let errSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
+  Object.values(skillsHttp).forEach(mock => mock.mockClear());
   instanceMock.mockResolvedValue(false);
   engineInvoke.mockClear();
   engineReady.mockReset().mockResolvedValue(undefined);
@@ -1560,5 +1578,44 @@ describe("business impact metadata mutations", () => {
     expect(cleared.statusCode).toBe(200);
     expect(JSON.parse(cleared.body)).toEqual({ findingId: "same-id", impactAssessment: null });
     expect(dbState.findings[0]).toMatchObject({ severity: "critical", cvssScore: 9.8, status: "discovered", verification_result: "original verification" });
+  });
+});
+
+
+describe("dashboard — skills HTTP library", () => {
+  beforeEach(async () => { await runCli(["dashboard", "--no-open"]); });
+  async function call(method: string, url: string, body?: unknown) {
+    return invokeHandler(makeRequest({ method, url, body, headers: { "x-0-control-token": await getControlToken() } }));
+  }
+  it("routes create, detail, revision edit and portable export/import with decoded skill IDs", async () => {
+    expect((await call("POST", "/api/skills", { content: "SKILL.md source" })).statusCode).toBe(201);
+    expect(skillsHttp.create).toHaveBeenCalledWith({ content: "SKILL.md source" });
+    const id = "mount/workspace/test-review";
+    expect((await call("GET", `/api/skills/${encodeURIComponent(id)}`)).statusCode).toBe(200);
+    expect(skillsHttp.get).toHaveBeenCalledWith(id);
+    const edited = { content: "New source", expectedRevision: "a".repeat(64) };
+    expect((await call("PUT", `/api/skills/${encodeURIComponent(id)}`, edited)).statusCode).toBe(200);
+    expect(skillsHttp.update).toHaveBeenCalledWith(id, edited);
+    const exported = await call("GET", `/api/skills/${encodeURIComponent(id)}/export`);
+    expect(exported.statusCode).toBe(200); expect(exported.headers["Content-Disposition"]).toContain("test-review.skill.json"); expect(skillsHttp.export).toHaveBeenCalledWith(id);
+    const bundle = JSON.parse(exported.body);
+    expect((await call("POST", "/api/skills/import", { bundle })).statusCode).toBe(201);
+    expect(skillsHttp.import).toHaveBeenCalledWith({ bundle });
+  });
+  it("accepts base64-sized portable imports without expanding unrelated API body limits", async () => {
+    const imported = { bundle: { files: [{ content: "a".repeat(11_200_000) }] } };
+    expect((await call("POST", "/api/skills/import", imported)).statusCode).toBe(201);
+    expect(skillsHttp.import).toHaveBeenCalledOnce();
+    expect((await call("POST", "/api/skills", { content: "a".repeat(1_000_001) })).statusCode).toBe(413);
+    expect(skillsHttp.create).not.toHaveBeenCalled();
+    expect((await call("POST", "/api/skills/import", { bundle: "a".repeat(12 * 1024 * 1024) })).statusCode).toBe(413);
+    expect(skillsHttp.import).toHaveBeenCalledOnce();
+  });
+  it("rejects malformed escaped skill IDs with an actionable client error", async () => {
+    for (const path of ["/api/skills/%ZZ", "/api/skills/%ZZ/export", "/api/skills/mounts/%ZZ"]) {
+      const result = await call(path.includes("mounts") ? "DELETE" : "GET", path);
+      expect(result.statusCode).toBe(400); expect(JSON.parse(result.body).error).toBe("Invalid skill identifier.");
+    }
+    expect(skillsHttp.get).not.toHaveBeenCalled(); expect(skillsHttp.export).not.toHaveBeenCalled(); expect(skillsHttp.unmount).not.toHaveBeenCalled();
   });
 });

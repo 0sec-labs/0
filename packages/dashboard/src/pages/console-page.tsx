@@ -191,7 +191,7 @@ export function ConsolePage() {
     const command = findCommand(text);
     if (command.isSlash) {
       if (command.isUnknown) { setNotice(`Unknown command /${command.rawName}. Type /help to see commands.`); return; }
-      const destinations: Record<string, string> = { onboard: "/setup", capabilities: "/tools", tools: "/tools", settings: "/settings", keybindings: "/settings", theme: "/settings", connect: "/connections", model: "/models", history: "/runs", findings: "/findings", launcher: "/audits", ops: "/dashboard", hackstore: "/plugins", scope: "/project", doctor: "/doctor", fix: "/fix" };
+      const destinations: Record<string, string> = { onboard: "/setup", capabilities: "/tools", tools: "/tools", settings: "/settings", keybindings: "/settings", theme: "/settings", connect: "/connections", model: "/models", history: "/runs", findings: "/findings", launcher: "/audits", ops: "/dashboard", skills: "/skills", hackstore: "/plugins", scope: "/project", doctor: "/doctor", fix: "/fix" };
       const name = command.command!;
       if (workerId && (name === "clear" || name === "exit")) { setNotice(`Switch back to the main conversation to use /${name}.`); return; }
       if (name === "help") { setHelpOpen(true); workspace.setDraft(""); return; }

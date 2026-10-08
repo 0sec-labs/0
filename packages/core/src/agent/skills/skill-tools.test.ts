@@ -1,5 +1,8 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { fileURLToPath } from "node:url";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ToolExecutor, TOOL_DEFINITIONS, getToolsForRole } from "../tools.js";
 import { clearSkillRegistry, loadSkillRegistry } from "./index.js";
 import type { ToolContext } from "../types.js";
@@ -19,6 +22,7 @@ function makeCtx(overrides?: Partial<ToolContext>): ToolContext {
     attackResults: [],
     targetInfo: {},
     role: "attack",
+    skillDiscoveryOptions: { homeDir: null },
     ...overrides,
   };
 }
@@ -40,6 +44,45 @@ describe("Skill Tools (#457)", () => {
   });
 
   // ── list_skills ─────────────────────────────────────────────────
+
+  it("lists standard folder metadata and loads instructions only on demand", async () => {
+    const root = mkdtempSync(join(tmpdir(), "zero-skill-tool-"));
+    try {
+      const directory = join(root, "binary-review");
+      mkdirSync(directory);
+      writeFileSync(join(directory, "SKILL.md"), "---\nname: binary-review\ndescription: Review a binary.\n---\nInspect the binary header first.");
+      let mounted = false;
+      const executor = new ToolExecutor(makeCtx({ skillDiscoveryOptions: () => ({ homeDir: null, mounts: mounted ? [{ path: root, id: "workspace" }] : [] }) }));
+      const beforeMount = await executor.execute({ name: "list_skills", arguments: {} });
+      expect(JSON.stringify(beforeMount.output)).not.toContain("mount/workspace/binary-review");
+      mounted = true;
+      const listed = await executor.execute({ name: "list_skills", arguments: {} });
+      const output = listed.output as { skills: Array<{ id: string; content?: string }> };
+      const metadata = output.skills.find((item) => item.id === "mount/workspace/binary-review");
+      expect(metadata).toBeDefined();
+      expect(metadata).not.toHaveProperty("content");
+      const loaded = await executor.execute({ name: "load_skill", arguments: { skill_id: metadata!.id } });
+      expect(loaded.success).toBe(true);
+      expect((loaded.output as { content: string }).content).toContain("Inspect the binary header first.");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each(["discovery", "verify", "report"])("allows %s agents to load standard folder skills", async (role) => {
+    const root = mkdtempSync(join(tmpdir(), "zero-skill-role-"));
+    try {
+      mkdirSync(join(root, "evidence-review"));
+      writeFileSync(join(root, "evidence-review", "SKILL.md"), "---\nname: evidence-review\ndescription: Review collected evidence.\n---\nConfirm the evidence supports each finding.");
+      expect(getToolsForRole(role).map((tool) => tool.name)).toContain("load_skill");
+      const executor = new ToolExecutor(makeCtx({ role, skillDiscoveryOptions: { homeDir: null, mounts: [{ path: root, id: "shared" }] } }));
+      const loaded = await executor.execute({ name: "load_skill", arguments: { skill_id: "mount/shared/evidence-review" } });
+      expect(loaded.success).toBe(true);
+      expect((loaded.output as { content: string }).content).toContain("Confirm the evidence");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 
   describe("list_skills", () => {
     it("returns summaries for all skills", async () => {
@@ -245,9 +288,9 @@ describe("Skill Tools (#457)", () => {
     });
   });
 
-  // ── Feature flag gating ─────────────────────────────────────────
+  // Skills remain available independently of automatic JIT methodology.
 
-  describe("feature flag gating", () => {
+  describe("skill availability", () => {
     const originalEnv = process.env["ZERO_FEATURE_JIT_SKILLS"];
 
     afterEach(() => {
@@ -258,15 +301,17 @@ describe("Skill Tools (#457)", () => {
       }
     });
 
-    it("both tools are absent from all roles when feature flag is off", () => {
+    it("skill tools remain available to working agent roles when automatic JIT is off", async () => {
       process.env["ZERO_FEATURE_JIT_SKILLS"] = "0";
 
-      for (const role of ["discovery", "attack", "verify", "report", "audit", "review"]) {
+      for (const role of ["discovery", "attack", "audit", "review"]) {
         const tools = getToolsForRole(role);
         const names = tools.map((t) => t.name);
-        expect(names).not.toContain("list_skills");
-        expect(names).not.toContain("load_skill");
+        expect(names).toContain("list_skills");
+        expect(names).toContain("load_skill");
       }
+      const executor = new ToolExecutor(makeCtx());
+      expect((await executor.execute({ name: "list_skills", arguments: {} })).success).toBe(true);
     });
 
     it("both tools are present for attack role when feature flag is on", () => {

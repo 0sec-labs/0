@@ -414,6 +414,7 @@ export interface NativeAgentConfig {
   codebaseLearning?: boolean;
   /** Captured canonical workspace root for live-harness trust/enablement decisions. */
   workspaceRoot?: string;
+  skillDiscoveryOptions?: ToolContext["skillDiscoveryOptions"];
   /** Live harness snapshot change callback. Fired on generation transitions, view updates, and errors. */
   onHarnessUpdate?: (snapshot: HarnessSnapshot) => void;
 }
@@ -805,6 +806,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   }) : undefined;
   toolCtx.liveHarness = harness;
   toolCtx.workspaceRoot = workspaceRoot;
+  toolCtx.skillDiscoveryOptions = config.skillDiscoveryOptions;
   const executionAbort = new AbortController();
   const executionSignal = opts.signal
     ? AbortSignal.any([opts.signal, executionAbort.signal])

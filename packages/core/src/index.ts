@@ -1067,7 +1067,8 @@ export {
   loadSkillRegistry,
   matchTriggers,
 } from "./agent/skills/index.js";
-export type { SkillDefinition, SkillSummary } from "./agent/skills/index.js";
+export type { SkillDefinition, SkillSummary, AgentSkillDiscoveryOptions, AgentSkillMetadata, AgentSkillDiscovery } from "./agent/skills/index.js";
+export { discoverAgentSkills, loadAgentSkill, validateAgentSkillContent } from "./agent/skills/index.js";
 export {
   branchJournal,
   createJournalWriter,

@@ -503,17 +503,11 @@ export const features = {
   },
 
   /**
-   * JIT skill loading (`packages/core/src/agent/skills/`).
-   * When enabled, the agent gains `list_skills` and `load_skill` tools
-   * that let it browse a registry of focused methodology guides and load
-   * them into working context mid-scan. Skills replace the monolithic
-   * playbook injection with targeted, on-demand knowledge (#410, #457).
-   *
-   * Default OFF unless an assigned cloud methodology manifest opts this run in.
-   * An explicit feature flag still takes precedence over that default.
-   * Implemented as a getter so the CLI `--features` flag — which sets
-   * the env var inside the command action, AFTER this module has been
-   * imported — is still honored at tool-dispatch time.
+   * Additional skill-discovery hints in security task prompts.
+   * The list_skills and load_skill tools are always available; this legacy
+   * flag controls extra prompting, rather than access to skill folders.
+   * Default OFF unless an assigned cloud methodology manifest opts the run in.
+   * Explicit feature settings take precedence over that default.
    */
   get jitSkills(): boolean {
     return env("ZERO_FEATURE_JIT_SKILLS", Boolean(process.env["ZERO_AUDIT_SKILLS_MANIFEST"]?.trim()));
