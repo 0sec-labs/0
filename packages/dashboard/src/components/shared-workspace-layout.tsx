@@ -1,3 +1,4 @@
+import { TeamAccount } from "./team-access";
 import { BackendConnectionPicker } from "./backend-connection-picker";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
@@ -36,11 +37,12 @@ export function SharedWorkspaceLayout({ children, onNew }: {
       </main>
     </div>
     <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}>
-      <SheetContent side="left" className="w-64 p-3">
+      <SheetContent side="left" className="flex w-64 flex-col p-3">
         <SheetHeader className="px-3 py-4"><BrandMark compact className="size-7" /><SheetTitle className="sr-only">Command Center navigation</SheetTitle></SheetHeader>
         <nav aria-label="Command Center pages" className="flex flex-col gap-1">
           {destinations.map(({ to, label, icon: Icon }) => <Button key={to} variant="ghost" asChild className="justify-start"><Link to={to} onClick={() => setNavigationOpen(false)}><Icon className="size-4" />{label}</Link></Button>)}
         </nav>
+        <div className="mt-auto"><TeamAccount /></div>
       </SheetContent>
     </Sheet>
   </div>;

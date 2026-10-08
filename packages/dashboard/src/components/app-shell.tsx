@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useDashboardPanel } from "@/components/dashboard-panel";
 import { SharedWorkspaceLayout } from "@/components/shared-workspace-layout";
 import { ConsoleNavigationRail } from "@/console/navigation-rail";
-import { TeamAccount } from "@/components/team-access";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -20,7 +19,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   return <div className="console-frame flex min-w-0 overflow-hidden bg-background text-foreground">
     <ConsoleNavigationRail settingsHref={isConsole ? `/settings${controlsQuery}` : "/settings"} />
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-    <TeamAccount />
     {isConsole ? children : <SharedWorkspaceLayout onNew={() => navigate("/console?new=1")}>
     {children}
     <Sheet open={Boolean(panel)} onOpenChange={(open) => { if (!open) dismissPanel(); }}>

@@ -3,6 +3,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { localControlFetch, useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DropdownMenu } from "@cloudflare/kumo/components/dropdown";
+import { LogOut } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { BrandMark } from "@/components/brand-mark";
 
 type TeamUser = { workspaceId: string; userId: string; displayName: string; role: "owner" | "editor" | "viewer" };
@@ -33,11 +36,31 @@ export function TeamAccess({ children }: { children: ReactNode }) {
   return <TeamAccessContext key={value.user ? `${value.user.workspaceId}:${value.user.userId}` : "local"} value={value}>{children}</TeamAccessContext>;
 }
 
-export function TeamAccount() {
+export function TeamAccount({ rail = false }: { rail?: boolean }) {
   const team = useTeamAccess();
   const cache = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   if (!team.enabled || !team.user) return null;
-  return <div className="flex items-center gap-2 px-4 py-2 text-xs text-muted-foreground"><span className="truncate">{team.workspace?.name} · {team.user.displayName}</span><Button size="sm" variant="ghost" disabled={busy} onClick={async () => { setBusy(true); setError(""); try { const response = await localControlFetch("/api/team/auth/logout", { method: "POST", body: "{}" }); if (!response.ok) throw new Error("Sign-out failed."); cache.clear(); window.location.reload(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Sign-out failed."); } finally { setBusy(false); } }}>Sign out</Button>{error && <span role="alert" className="text-destructive">{error}</span>}</div>;
+  const initials = team.user.displayName.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join("").toUpperCase();
+  const signOut = async () => {
+    setBusy(true); setError("");
+    try {
+      const response = await localControlFetch("/api/team/auth/logout", { method: "POST", body: "{}" });
+      if (!response.ok) throw new Error("Sign-out failed.");
+      cache.clear(); window.location.reload();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Sign-out failed."); }
+    finally { setBusy(false); }
+  };
+  return <DropdownMenu>
+    <DropdownMenu.Trigger aria-label={`Account: ${team.user.displayName}`} className="flex h-10 w-full items-center gap-3 overflow-hidden rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"><button type="button">
+      <span aria-hidden="true" className="mx-1.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-foreground">{initials || "?"}</span>
+      <span className={cn("truncate text-sm", rail && "opacity-0 transition-opacity duration-150 motion-reduce:transition-none group-has-[:focus-visible]:opacity-100 [@media(hover:hover)]:group-hover:opacity-100")}>{team.user.displayName}</span>
+    </button></DropdownMenu.Trigger>
+    <DropdownMenu.Content side={rail ? "right" : "top"} align="end" sideOffset={8} className="w-64 rounded-2xl p-1.5">
+      <div className="space-y-1 px-3 py-2"><p className="truncate text-sm font-medium">{team.user.displayName}</p><p className="truncate text-xs text-muted-foreground">{team.workspace?.name}</p></div>
+      <DropdownMenu.Item disabled={busy} onClick={() => void signOut()}><LogOut className="size-4" />{busy ? "Signing out…" : "Sign out"}</DropdownMenu.Item>
+      {error && <p role="alert" className="px-3 py-2 text-xs text-destructive">{error}</p>}
+    </DropdownMenu.Content>
+  </DropdownMenu>;
 }
