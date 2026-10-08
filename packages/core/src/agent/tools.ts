@@ -147,6 +147,7 @@ import {
 } from "./skills/index.js";
 import type { SkillDefinition } from "./skills/index.js";
 import { loadSkillBundleFromManifest } from "./skills/markdown-bundle.js";
+import { discoverAgentSkills, loadAgentSkill } from "./skills/agent-skills.js";
 import { eventBus } from "../events/bus.js";
 import type {
   SubagentLifecyclePayload,
@@ -6156,6 +6157,7 @@ export class ToolExecutor {
           allowModelSelfExtension: subTools.some(tool => tool.name === "self_extend") && (this.ctx.selfExtension?.isEnabled() ?? false),
           executablePlugins: this.ctx.executablePluginConfiguration,
           workspaceRoot: this.ctx.workspaceRoot,
+          skillDiscoveryOptions: this.ctx.skillDiscoveryOptions,
           executableEvolutionProfiles: this.ctx.executableEvolutionProfiles,
           enforcement: this.ctx.enforcement,
           rateLimiter: this.ctx.rateLimiter,
@@ -6312,6 +6314,7 @@ export class ToolExecutor {
         allowModelSelfExtension: subTools.some(tool => tool.name === "self_extend") && (this.ctx.selfExtension?.isEnabled() ?? false),
         executablePlugins: this.ctx.executablePluginConfiguration,
         workspaceRoot: this.ctx.workspaceRoot,
+        skillDiscoveryOptions: this.ctx.skillDiscoveryOptions,
         executableEvolutionProfiles: this.ctx.executableEvolutionProfiles,
         enforcement: this.ctx.enforcement,
         rateLimiter: this.ctx.rateLimiter,
@@ -8822,11 +8825,16 @@ export class ToolExecutor {
   }
 
   private listSkills(args: Record<string, unknown>): ToolResult {
-    if (!featureFlags.jitSkills) {
-      return { success: false, output: null, error: "JIT skills are not enabled." };
-    }
     const tag = typeof args.tag === "string" ? args.tag : undefined;
     const summaries = listSkillSummaries({ tag, role: this.ctx.role });
+    const discovered = discoverAgentSkills({
+      projectRoot: this.ctx.workspaceRoot ?? this.ctx.scopePath,
+      ...(typeof this.ctx.skillDiscoveryOptions === "function" ? this.ctx.skillDiscoveryOptions() : this.ctx.skillDiscoveryOptions),
+    });
+    const folderSummaries = discovered.skills.filter((skill) => !tag || skill.tags.includes(tag)).map((skill) => ({
+      id: skill.id, name: skill.name, description: skill.description, tags: skill.tags,
+      estimated_tokens: skill.estimated_tokens, suggested: false, source: skill.source,
+    }));
 
     // Merge cloud audit skills from env manifest if configured
     const cloudBundle = this.ensureCloudSkillBundle();
@@ -8846,6 +8854,7 @@ export class ToolExecutor {
           cloudSummaries.filter((s) => s.tags.includes(tag)),
         )
       : summaries.concat(cloudSummaries);
+    mergedSummaries.push(...folderSummaries);
 
     // Compute suggested flags from recent tool output context
     const registry = loadSkillRegistry();
@@ -8878,14 +8887,12 @@ export class ToolExecutor {
         skills: enriched,
         total,
         suggested_count,
+        diagnostics: discovered.diagnostics,
       },
     };
   }
 
   private loadSkill(args: Record<string, unknown>): ToolResult {
-    if (!featureFlags.jitSkills) {
-      return { success: false, output: null, error: "JIT skills are not enabled." };
-    }
     const skillId = args.skill_id as string;
     if (!skillId) {
       return { success: false, output: null, error: "skill_id is required" };
@@ -8900,6 +8907,18 @@ export class ToolExecutor {
     }
 
     let skill = getSkillById(skillId);
+    let isFolderSkill = false;
+    if (!skill) {
+      const discovered = discoverAgentSkills({
+        projectRoot: this.ctx.workspaceRoot ?? this.ctx.scopePath,
+        ...(typeof this.ctx.skillDiscoveryOptions === "function" ? this.ctx.skillDiscoveryOptions() : this.ctx.skillDiscoveryOptions),
+      });
+      const metadata = discovered.skills.find((candidate) => candidate.id === skillId);
+      if (metadata) {
+        skill = loadAgentSkill(metadata);
+        isFolderSkill = true;
+      }
+    }
 
     // Fall through to cloud audit skills bundle if not found in built-in registry
     if (!skill) {
@@ -8918,7 +8937,7 @@ export class ToolExecutor {
     }
 
     // Enforce role applicability
-    if (!skill.applicable_roles.includes(this.ctx.role as any)) {
+    if (!isFolderSkill && !skill.applicable_roles.includes(this.ctx.role as any)) {
       return {
         success: false,
         output: null,
@@ -9260,7 +9279,7 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
   const payloadTools = ["payload_lookup"];
   const wpTools = featureFlags.wpFingerprint ? ["wp_fingerprint"] : [];
   const mongoTools = featureFlags.mongoObjectIdForge ? ["mongo_objectid"] : [];
-  const skillTools = featureFlags.jitSkills ? ["list_skills", "load_skill"] : [];
+  const skillTools = ["list_skills", "load_skill"];
   // 0#567 — loot retrieval tool, only when the ledger feature is on.
   const lootTools = featureFlags.lootLedger ? ["use_loot"] : [];
   // Typed TODO ledger — the `plan` tool, only when the feature is on.
@@ -9322,10 +9341,9 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
   ];
   const fileTools = ["read_file", "str_replace", "apply_patch", "run_command", ...binaryTools];
   const allEnabledTools = Object.keys(TOOL_DEFINITIONS).filter((name) =>
-    (featureFlags.jitSkills || (name !== "list_skills" && name !== "load_skill"))
     // Keep use_loot out of the audit/review "everything" set when the loot
-    // ledger feature is off (parity with the JIT-skill gating above).
-    && (featureFlags.lootLedger || name !== "use_loot")
+    // ledger feature is off.
+    (featureFlags.lootLedger || name !== "use_loot")
     // The `plan` tool follows the same gating: out of the audit/review
     // "everything" set when the plan ledger feature is off.
     && (featureFlags.agentPlan || name !== "plan")
@@ -9373,8 +9391,7 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     && ((featureFlags.cveAdapt && authorized) || !CVE_ADAPT_TOOL_NAMES.includes(name)),
   );
   const scopedSourceTools = Object.keys(SCOPED_SOURCE_AUDIT_TOOLS).filter((name) =>
-    name !== "remember_codebase" && (featureFlags.zeroverse || name !== "analyze_binary")
-    && (featureFlags.jitSkills || (name !== "list_skills" && name !== "load_skill")),
+    name !== "remember_codebase" && (featureFlags.zeroverse || name !== "analyze_binary"),
   );
 
 
@@ -9383,7 +9400,7 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     attack: networkTools,
     // Verify agent gets file tools when there's a local scope (audit/review mode)
     verify: authorized ? [...networkTools, ...fileTools] : networkTools,
-    report: [...common],
+    report: [...common, ...skillTools],
     audit: opts?.hasScope ? scopedSourceTools : allEnabledTools,
     review: opts?.hasScope ? scopedSourceTools : allEnabledTools,
   };

@@ -19,7 +19,8 @@ export function authorizeTeamApi(auth: TeamAuth, req: IncomingMessage, path: str
   const ownerResource = /^\/api\/(?:control|workflow-engine|backends\/[^/]+\/proxy|console\/(?:checks|connections|credentials|auth|github|settings|plugins|mcp|services|processes|environment|execution|themes|models|project|doctor|tools|learning))(?:\/|$)/;
   if (!readOnly(method) && actor.role === "viewer") throw new TeamAuthError("This account has read-only workspace access.", 403);
   if (!readOnly(method) && ownerResource.test(path) && actor.role !== "owner") throw new TeamAuthError("Only workspace owners can change engine settings.", 403);
-  const editorResource = /^\/api\/(?:engagements|findings|finding-family|console\/(?:sessions|workflows|workflow-definitions|workflow-executions|workflow-triggers))(?:\/|$)/;
+  if (!readOnly(method) && /^\/api\/skills\/mounts(?:\/|$)/.test(path) && actor.role !== "owner") throw new TeamAuthError("Only workspace owners can mount host folders.", 403);
+  const editorResource = /^\/api\/(?:skills|engagements|findings|finding-family|console\/(?:sessions|workflows|workflow-definitions|workflow-executions|workflow-triggers))(?:\/|$)/;
   const resumeRead = method === "POST" && /^\/api\/console\/saved\/[^/]+\/resume$/.test(path);
   if (!readOnly(method) && actor.role !== "owner" && !editorResource.test(path) && !resumeRead) throw new TeamAuthError("This action requires a workspace owner.", 403);
   return actor;

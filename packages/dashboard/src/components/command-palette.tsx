@@ -146,6 +146,7 @@ export function CommandPalette({
         ["connections", "Connections", "API keys and accounts"],
         ["models", "Models", "Choose which models 0 uses"],
         ["settings", "Settings", "Preferences, shortcuts, appearance"],
+        ["skills", "Skills", "Reusable agent instructions"],
         ["plugins", "Plugins", "Add and manage extensions"],
         ["learning", "Learning", "Lessons that help with future reviews"],
         ["doctor", "Diagnostics", "Check that everything works"],

@@ -50,6 +50,17 @@ describe("shared room HTTP authorization", () => {
     }
     expect(() => authorizeTeamApi(auth, request("GET", cookies.editor), "/api/backends/remote/proxy/api/dashboard")).toThrow("workspace owner");
   });
+  it("lets editors share skills while reserving host mounts for owners", () => {
+    for (const [method, path] of [["GET", "/api/skills"], ["POST", "/api/skills"], ["POST", "/api/skills/import"], ["PUT", "/api/skills/mount%2Fworkspace%2Ftest-review"]]) {
+      expect(authorizeTeamApi(auth, request(method, cookies.editor), path)?.role).toBe("editor");
+      if (method !== "GET") expect(() => authorizeTeamApi(auth, request(method, cookies.viewer), path)).toThrow("read-only");
+    }
+    for (const [method, path] of [["POST", "/api/skills/mounts"], ["DELETE", "/api/skills/mounts/example"]]) {
+      expect(() => authorizeTeamApi(auth, request(method, cookies.editor), path)).toThrow("owners");
+      expect(authorizeTeamApi(auth, request(method, cookies.owner), path)?.role).toBe("owner");
+    }
+    expect(() => authorizeTeamApi(auth, request("GET"), "/api/skills")).toThrow("Sign in");
+  });
   it("allows independently authenticated writers to mutate any shared conversation with no exclusive lease", async () => {
     await route("conversations/chat-a", "GET", "owner");
     const mutations: Array<[string, string]> = [["POST", "messages"], ["PATCH", "configuration"], ["POST", "cancel"], ["POST", "clear"], ["POST", "continue"], ["POST", "harness"], ["POST", "save"], ["POST", "archive"], ["POST", "delete"], ["DELETE", "queue"], ["POST", "decisions/decision-a"], ["POST", "workers/stop"], ["POST", "workers/worker-a/messages"], ["DELETE", ""]];

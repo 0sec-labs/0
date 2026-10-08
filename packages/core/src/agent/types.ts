@@ -713,6 +713,8 @@ export interface ToolContext {
    * process.cwd() at session creation time.
    */
   workspaceRoot?: string;
+  /** Explicit Agent Skills roots; homeDir:null keeps shared workspaces isolated. */
+  skillDiscoveryOptions?: import("./skills/agent-skills.js").AgentSkillDiscoveryOptions | (() => import("./skills/agent-skills.js").AgentSkillDiscoveryOptions);
   /**
    * Shared per-scan cost ledger (see agent/cost-ledger.ts). Threaded onto the
    * ToolContext so the `spawn_agent` / `spawn_agents` handlers can pass it into

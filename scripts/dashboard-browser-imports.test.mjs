@@ -18,6 +18,7 @@ test("assessment milestone surfaces load without Node-only shared modules", asyn
       "packages/dashboard/src/components/event-timeline.tsx",
       "packages/dashboard/src/lib/hunt-stream.ts",
       "packages/dashboard/src/pages/engagements-page.tsx",
+      "packages/dashboard/src/pages/skills-page.tsx",
       "packages/dashboard/src/console/chat-findings.tsx",
       "packages/dashboard/src/console/team-collaboration.tsx",
       "packages/dashboard/src/console/session-rail.tsx",
