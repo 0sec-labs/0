@@ -272,27 +272,6 @@ export interface SkillListedPayload {
   role?: string;
 }
 
-// ── Inbound prompt-injection defense (#558) ───────────────────────────────
-
-/**
- * Fired when `sanitizeUntrustedToolResult` neutralizes one or more injection
- * markers in untrusted tool output (HTTP body, crawled HTML, file content,
- * MCP result) BEFORE that content re-enters model context. This is the
- * self-defense analogue of the `mcp-indirect-prompt-injection` probe: the
- * probe records a finding when the *target* is vulnerable; this event records
- * that OUR harness defanged an attempted indirect injection against itself.
- */
-export interface UntrustedInputSanitizedPayload {
-  /** The untrusted-source tool whose result was sanitized. */
-  tool: string;
-  /** Agent turn the sanitization happened on. */
-  turn?: number;
-  role?: string;
-  /** Distinct marker labels neutralized (e.g. "instruction-override"). */
-  markers: string[];
-  [k: string]: unknown;
-}
-
 /**
  * Inline validation / validate-on-save verdict (#554). Emitted by the native
  * attack loop's onFindingSaved hook when a high/critical finding's PoC is
@@ -327,7 +306,7 @@ export interface InlineValidationPayload {
  * bus lets `cloudEventSink` serialize it (→ worker → orchestrator
  * `scan_events`), so the dashboard can join it to the finding by `findingId`
  * and render the "deterministically verified vs heuristic" badge that is the
- * core low-false-positive story. Mirrors `untrusted_input_sanitized` (#558).
+ * core low-false-positive story.
  */
 export interface PovOraclePayload {
   /** Id of the finding the oracle adjudicated. */
@@ -770,7 +749,6 @@ export type osecEvent =
   | { type: "delta"; payload: DeltaPayload }
   | { type: "skill_loaded"; payload: SkillLoadedPayload }
   | { type: "skill_listed"; payload: SkillListedPayload }
-  | { type: "untrusted_input_sanitized"; payload: UntrustedInputSanitizedPayload }
   | { type: "inline_validation"; payload: InlineValidationPayload }
   | { type: "pov_oracle"; payload: PovOraclePayload }
   | { type: "oast_confirmed"; payload: OastConfirmedPayload }

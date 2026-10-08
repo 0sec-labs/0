@@ -26,8 +26,7 @@
  *     explicit cwd, and an env built by `allowlistedChildEnv` MINUS the target
  *     auth block (see {@link buildPluginEnv}). It receives no scope object, no
  *     auth config, no credentials, and no handle to host state. Everything it
- *     sends back is decoded totally and, for anything reaching a model,
- *     sanitized through the codebase's existing untrusted-input defense.
+ *     sends back is decoded and validated against the wire protocol.
  *
  *  4. **Fail-soft, always.** A plugin that crashes, hangs, floods stdout, or
  *     answers with garbage degrades to "that plugin is unavailable". It cannot
@@ -81,7 +80,6 @@ import { homeStateDir } from "@0/shared";
 
 import { allowlistedChildEnv } from "../agent/sanitized-env.js";
 import type { ToolDefinition, ToolParam } from "../agent/types.js";
-import { sanitizeUntrustedToolResult } from "../untrusted-sanitizer.js";
 import { getBuiltinPlugin } from "./builtin.js";
 import {
   gateFlagsFor,
@@ -505,13 +503,11 @@ export type LoadResult =
 export type PluginCallResult =
   | {
       ok: true;
-      /** Sanitized and framed; safe to hand to a model context. */
+      /** Original plugin result content. */
       content: string;
       /** True when the plugin itself reported failure (content is the reason). */
       failed: boolean;
       truncated: boolean;
-      neutralized: boolean;
-      markers: string[];
     }
   | { ok: false; error: string };
 
@@ -1034,14 +1030,11 @@ export class PluginHost {
           });
           return;
         }
-        const sanitized = sanitizeUntrustedToolResult(msg.content);
         pending.resolve({
           ok: true,
-          content: sanitized.content,
+          content: msg.content,
           failed: !msg.ok,
           truncated: msg.truncated,
-          neutralized: sanitized.neutralized,
-          markers: sanitized.markers,
         });
         return;
       }

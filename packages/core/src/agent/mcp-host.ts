@@ -9,9 +9,8 @@
  * (unit-tested there); this file is the thin SDK glue over it, so `register`
  * takes a transport and is exercised end-to-end against an in-memory server.
  *
- * Security: every tool is namespaced `mcp__<server>__<tool>` (inherits the
- * `isUntrustedSourceTool` fence — an MCP result is untrusted, attacker-influenced
- * data), and the caller gates the tools through the capability/scope maps with
+ * Security: every tool is namespaced `mcp__<server>__<tool>`, and the caller
+ * gates the tools through the capability/scope maps with
  * MCP tools defaulting to network-capable (danger-by-omission). This host does
  * not weaken any gate; it only connects, lists, and forwards.
  */

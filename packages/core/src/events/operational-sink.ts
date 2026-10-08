@@ -54,7 +54,6 @@ const ALLOWLISTED_EVENTS: Partial<Record<EventType, true>> = {
   todos: true,
   session_objective: true,
   cross_validated_leads: true,
-  untrusted_input_sanitized: true,
   oast_confirmed: true,
   pov_oracle: true,
   inline_validation: true,
@@ -264,16 +263,6 @@ function buildSafePayload(
       // severity, confidence — finding-level details)
       break;
 
-    case "untrusted_input_sanitized":
-      safe.tool = safeStr(raw.tool);
-      if (Array.isArray(raw.markers)) {
-        const markers = raw.markers.map(safeStr).filter(
-          (marker): marker is string => marker !== undefined,
-        );
-        if (markers.length > 0) safe.markers = markers;
-      }
-      // turn, role — excluded (not needed for operational observability)
-      break;
 
     case "oast_confirmed":
       safe.findingId = safeStr(raw.findingId);

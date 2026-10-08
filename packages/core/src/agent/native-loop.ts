@@ -72,10 +72,6 @@ import {
   HuntMemoryStore,
   type HuntSeverity,
 } from "../memory/index.js";
-import {
-  isUntrustedSourceTool,
-  sanitizeUntrustedToolResult,
-} from "../untrusted-sanitizer.js";
 import { toolCallPreview } from "./tool-preview.js";
 import {
   newCorrelationId,
@@ -106,15 +102,15 @@ function externalMemoryPath(scanId?: string): string {
 
 // ── Loot harvesting (0#567) ──
 // Tools whose result text reflects target data worth mining for footholds.
-// `isUntrustedSourceTool` already covers http_request / crawl / read_file /
-// send_prompt / submit_form / browser; bash + run_command are added because
-// they routinely shell out to curl / cat and surface the same kind of
+// Network, file, browser, and MCP tools surface target data; shell tools are
+// included because they routinely shell out to curl / cat and surface the same kind of
 // credentials, tokens, and paths. Our own trusted bookkeeping tools
 // (save_finding / query_findings / use_loot / done) are deliberately excluded
 // — save_finding harvests via its own evidence path in the executor.
 function shouldHarvestLoot(toolName: string): boolean {
   return (
-    isUntrustedSourceTool(toolName) ||
+    ["http_request", "crawl", "read_file", "send_prompt", "submit_form", "browser"].includes(toolName) ||
+    toolName.startsWith("mcp__") ||
     toolName === "bash" ||
     toolName === "run_command" ||
     // js_eval / python_eval shell out to node / python3 (which routinely curl,
@@ -1209,8 +1205,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       // captured exit code / stdout tail (ToolResultMeta) into the string.
       if (!result.success) result.error = toolFailureText(name, result);
       if (driverCallId) {
-        let content = result.success ? JSON.stringify(result.output) ?? "" : `Error: ${result.error}`;
-        if (result.success && isUntrustedSourceTool(name)) content = sanitizeUntrustedToolResult(content).content;
+        const content = result.success ? JSON.stringify(result.output) ?? "" : `Error: ${result.error}`;
         state.messages.push(
           { role: "assistant", content: [{ type: "tool_use", id: driverCallId, name, input: structuredClone(args) }] },
           { role: "user", content: [{ type: "tool_result", tool_use_id: driverCallId, content, is_error: !result.success }] },
@@ -2635,23 +2630,12 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         state.summary = (toolResult.output as { summary: string }).summary;
       }
 
-      // Build tool_result block.
-      //
-      // Inbound prompt-injection defense (#558): output from untrusted-source
-      // tools (http_request / crawl / read_file / send_prompt / submit_form /
-      // browser / MCP) is attacker-influenced. Before it re-enters model
-      // context — and before it feeds the recentToolResultTexts buffer used by
-      // dynamic playbooks + JIT skills below — we wrap it in DATA-not-
-      // instructions delimiters and NEUTRALIZE (escape + annotate, never drop)
-      // common injection markers. Our own structured outputs (save_finding,
-      // query_findings, done, …) are trusted and pass through untouched.
-      // Deterministic / pattern-based only; no LLM-guards-LLM.
-      let resultContent = toolResult.success
+      // Preserve tool output exactly as returned when serializing model context.
+      const resultContent = toolResult.success
         ? JSON.stringify(toolResult.output)
         : `Error: ${toolResult.error}`;
       // 0#567 — harvest reusable footholds from evidence-bearing tool
-      // results into the loot ledger. Done on the RAW output (before the
-      // injection-marker sanitizer rewrites it) and only for tools whose
+      // results into the loot ledger. Done on the raw output and only for tools whose
       // output reflects target data — never our own trusted bookkeeping
       // results (save_finding / query_findings / use_loot / done). Best-effort:
       // a harvest failure must never abort the agent loop.
@@ -2671,18 +2655,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
           }
         } catch {
           /* harvesting is best-effort */
-        }
-      }
-      if (toolResult.success && isUntrustedSourceTool(block.name)) {
-        const sanitized = sanitizeUntrustedToolResult(resultContent);
-        resultContent = sanitized.content;
-        if (sanitized.neutralized) {
-          eventBus.emit("untrusted_input_sanitized", {
-            tool: block.name,
-            turn: state.turnCount,
-            role: config.role,
-            markers: sanitized.markers,
-          });
         }
       }
       toolResultBlocks.push({

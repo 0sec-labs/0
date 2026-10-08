@@ -612,7 +612,7 @@ results.
 | `done` | All | Signal completion. |
 | `send_prompt` | LLM | Send prompts to AI/LLM apps. |
 | `read_file` | Source, npm | Read source for code review. |
-| `run_command` | Profiles that expose local execution | Run an allowlisted command on the host (not a sandbox); not part of every scoped read-only review. |
+| `run_command` | Profiles that expose local execution | Run an installed command on the host (not a sandbox); not part of every scoped read-only review. |
 | `list_files` | Source, npm | Enumerate a directory. |
 | `search_files` | Scoped source, npm | Literal search in regular text files, subject to scope and size limits. |
 | `crawl` / `submit_form` / `http_request` | Network roles | Structured HTTP alongside shell-first workflows. |

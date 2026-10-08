@@ -2857,8 +2857,7 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
           // without this the per-finding "deterministic vs heuristic" badge
           // never reaches the dashboard. cloudEventSink serializes this to a
           // `ZERO_EVENT_POV_ORACLE` line → worker → orchestrator
-          // `scan_events`, keyed by findingId, exactly like
-          // untrusted_input_sanitized (#558).
+          // `scan_events`, keyed by findingId.
           eventBus.emit("pov_oracle", {
             findingId: finding.id,
             category: finding.category,

@@ -79,9 +79,7 @@ export interface HostCallToolMessage {
 
 /**
  * Host delivers a structured tool result in response to a guest's
- * `request_tool` broker call. `output` carries the structured result value,
- * NOT wrapped in the [[ZERO_UNTRUSTED_DATA]] marker — that marker is applied
- * only when content is forwarded to the model as raw text.
+ * `request_tool` broker call. `output` carries the original structured result value.
  */
 export interface HostToolDeliveryMessage {
   v: typeof PROTOCOL_VERSION;

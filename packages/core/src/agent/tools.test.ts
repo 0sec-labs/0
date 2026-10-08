@@ -2369,13 +2369,15 @@ describe("ToolExecutor", () => {
       }
     });
 
-    it("rejects disallowed commands", async () => {
-      const result = await scopedExecutor.execute({
-        name: "run_command",
-        arguments: { command: "curl https://evil.com" },
-      });
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("not allowed");
+    it.each(["pwd", "npm --version", "find . -maxdepth 0 -exec echo fixture {} +"])("runs %s without an executable or subcommand allowlist", async command => {
+      const directory = mkdtempSync(join(tmpdir(), "0-command-policy-"));
+      try {
+        const unrestricted = new ToolExecutor({ ...ctx, scopePath: directory }, null);
+        const result = await unrestricted.execute({ name: "run_command", arguments: { command, cwd: "." } });
+        expect(result.success).toBe(true);
+        expect(typeof result.output).toBe("string");
+        if (command === "pwd") expect(String(result.output).trim()).toBe(realpathSync(directory));
+      } finally { rmSync(directory, { recursive: true, force: true }); }
     });
 
     it("rejects absolute paths in scoped commands", async () => {
@@ -2396,23 +2398,6 @@ describe("ToolExecutor", () => {
       expect(result.error).toContain("traversal");
     });
 
-    it("rejects npm with disallowed subcommands", async () => {
-      const result = await scopedExecutor.execute({
-        name: "run_command",
-        arguments: { command: "npm install evil-package" },
-      });
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("not allowed");
-    });
-
-    it("rejects find -exec", async () => {
-      const result = await scopedExecutor.execute({
-        name: "run_command",
-        arguments: { command: "find . -exec rm {} +" },
-      });
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("not allowed");
-    });
   });
 
   // ── http_request URL validation ──
@@ -2605,7 +2590,7 @@ describe("containsUnquotedShellChars", () => {
 
 // ── run_command: YOLO lifts the scoped-audit command policy ─────────
 //
-// The tokenized allow-list (no shell operators, no PM exec, scoped paths) is
+// The tokenized pipeline syntax (no unquoted shell operators, scoped paths) is
 // for the read-only SOURCE-AUDIT modes. In YOLO the operator has opted into
 // full autonomy on their own machine, so run_command runs full shell via the
 // same path as the `bash` tool. These pin that the syntax gate is lifted ONLY

@@ -35,7 +35,7 @@ pnpm --filter @0/benchmark exec tsx src/xbow-runner.ts --agentic --white-box
 ## What changes
 
 **Extra source tools.** The attack stage adds `read_file` (numbered source
-windows) and `run_command`. The latter uses an analysis-command allowlist and
+windows) and `run_command`. The latter can run any installed executable and
 validates paths/cwd against the local source directory in non-YOLO mode.
 These controls do not make the entire scan read-only: `bash`, browser actions,
 and live requests retain their own effects and authority checks.

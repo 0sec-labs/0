@@ -75,7 +75,7 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
   run_command: {
     name: "run_command",
     description:
-      "Run a local command for code analysis. Allowed commands: grep, rg, find, ls, cat, head, tail, wc, foxguard, semgrep, codeql, jq, file, stat, npm (audit/view/ls). Supports piping with |. Examples: 'rg --files .', 'grep -rn \"eval\" .', 'find . -name \"*.js\"', 'cat package.json | jq .main', 'rg \"__proto__\" . | head -20'.",
+      "Run any installed local command for code analysis, builds, tests, or other project work. Supports piping with |. Examples: 'rg --files .', 'grep -rn \"eval\" .', 'find . -name \"*.js\"', 'cat package.json | jq .main', 'rg \"__proto__\" . | head -20'.",
     parameters: {
       command: { type: "string", description: "Command to execute. Use pipe (|) for chaining. No shell operators like ;, &&, <, >, $." },
       cwd: { type: "string", description: "Working directory (defaults to package/repo root)" },
