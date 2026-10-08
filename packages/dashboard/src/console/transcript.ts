@@ -110,6 +110,7 @@ export function reduceTurns(
   let turns: ReducedTurn[] = [];
   let current: ReducedTurn | undefined;
   let eventStatus: DesktopConsoleSessionStatus | undefined;
+  let separateReasoning = false;
   const ensureTurn = (sequence: number) => {
     if (!current) {
       current = createTurn(`leading-${sequence}`, "", sequence);
@@ -147,10 +148,16 @@ export function reduceTurns(
         break;
       }
       case "reasoning-delta": {
-        ensureTurn(event.sequence).reasoningText += event.text;
+        const turn = ensureTurn(event.sequence);
+        if (event.text) {
+          if (separateReasoning && turn.reasoningText && !turn.reasoningText.endsWith("\n\n")) turn.reasoningText += "\n\n";
+          turn.reasoningText += event.text;
+          separateReasoning = false;
+        }
         break;
       }
       case "tool-start": {
+        separateReasoning = true;
         const turn = ensureTurn(event.sequence);
         const id = event.call.id ?? `tool-${event.sequence}`;
         const existing = turn.toolCalls.find((tool) => tool.id === id);
@@ -380,8 +387,24 @@ export function reduceConversation(snapshot: ConsoleSessionSnapshot): ReducedTur
         if (existing) Object.assign(existing, decision);
         else turn.decisions.push(decision);
       }
+      // Native history uses provider call IDs; live events may use gateway IDs.
+      // Match occurrences one-to-one, newest first for a truncated event journal.
+      // Never collapse repeated calls within either source.
+      const matchedTools = new Map<ToolCallState, ToolCallState>();
+      const available = new Set(turn.toolCalls);
+      const journalIds = new Set(entry.toolCalls.map(tool => tool.id));
+      for (const tool of [...entry.toolCalls].reverse()) {
+        const exact = turn.toolCalls.find(candidate => candidate.id === tool.id);
+        const existing = exact ?? [...available].reverse().find(candidate =>
+          !journalIds.has(candidate.id) && candidate.name === tool.name &&
+          JSON.stringify(candidate.arguments) === JSON.stringify(tool.arguments));
+        if (existing) {
+          matchedTools.set(tool, existing);
+          available.delete(existing);
+        }
+      }
       for (const tool of entry.toolCalls) {
-        const existing = turn.toolCalls.find((candidate) => candidate.id === tool.id);
+        const existing = matchedTools.get(tool);
         if (existing) {
           existing.name = tool.name;
           existing.arguments = tool.arguments;

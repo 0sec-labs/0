@@ -26,46 +26,9 @@ import { ComposerPickerSurface, IntegrationPicker, useIntegrationPicker } from "
 import { ActivityIndicator, LoadingDots } from "./loading-state";
 import { ApprovalPanel } from "./approvals";
 import { ActivityRow } from "./activity-row";
-import { toolCallStatus } from "./tool-call-status";
-import { reduceConversation, type ToolCallState } from "./transcript";
+import { ToolActivity } from "./tool-activity";
+import { reduceConversation } from "./transcript";
 import type { ConsoleWorkspace } from "./use-console-workspace";
-
-export function ToolResult({ call }: { call: ToolCallState }) {
-  const argumentsText = useMemo(() => typeof call.arguments === "string" ? call.arguments : JSON.stringify(call.arguments, null, 2) ?? "", [call.arguments]);
-  const resultText = useMemo(() => typeof call.result === "string" ? call.result : JSON.stringify(call.result, null, 2) ?? "", [call.result]);
-  const status = toolCallStatus(call);
-  return (
-    <ActivityRow icon={<Wrench />} title={call.name} status={status} running={call.isRunning} failed={status === "Error"}>
-      <div className="space-y-3">
-        <div><div className="mb-1 text-muted-foreground">Input</div><pre tabIndex={0} aria-label={`${call.name} input`} className="max-h-96 overflow-auto whitespace-pre-wrap break-words font-mono">{argumentsText}</pre></div>
-        {call.result !== undefined && <div><div className="mb-1 text-muted-foreground">Output</div><pre tabIndex={0} aria-label={`${call.name} output`} className="max-h-[32rem] overflow-auto whitespace-pre-wrap break-words font-mono">{resultText}</pre></div>}
-        {call.isRunning && <ActivityIndicator label="Running tool…" />}
-      </div>
-    </ActivityRow>
-  );
-}
-
-function ToolActivity({ calls, reasoning, working = false }: { calls: ToolCallState[]; reasoning?: string; working?: boolean }) {
-  const [expanded, setExpanded] = useState(false);
-  const previousWorking = useRef(working);
-  useEffect(() => {
-    if (previousWorking.current && !working) setExpanded(false);
-    previousWorking.current = working;
-  }, [working]);
-  if (!calls.length && !reasoning) return null;
-  const running = calls.find(call => call.isRunning);
-  const failed = calls.filter(call => toolCallStatus(call) === "Error").length;
-  const label = working ? running ? `Using ${running.name}` : "Thinking…" : calls.length > 1 ? `Used ${calls.length} tools` : calls.length === 1 ? `Used ${calls[0]!.name}` : "Thought process";
-  return <details open={expanded} onToggle={event => setExpanded(event.currentTarget.open)} className="console-tool-activity rounded-xl bg-muted/20">
-    <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
-      {working ? <LoadingDots className="console-loading-dots-compact" /> : <Wrench className="size-3.5" />}<span className={working ? "console-working-label" : undefined}>{label}{failed > 0 && <span className="text-destructive"> · {failed} failed</span>}</span><ChevronDown className={`ml-auto size-3.5 transition-transform duration-150 motion-reduce:transition-none ${expanded ? "rotate-180" : ""}`} />
-    </summary>
-    <div className="px-3 pb-2">
-      {reasoning && <div className="py-2 text-xs leading-6 whitespace-pre-wrap text-muted-foreground">{reasoning}</div>}
-      {calls.map(call => <ToolResult key={call.id} call={call} />)}
-    </div>
-  </details>;
-}
 
 function WorkerConversation({ worker }: { worker: ConsoleWorker }) {
   return (
@@ -148,7 +111,7 @@ export function Conversation({ workspace, worker, onResolve, onSubmit, onStop, r
         <div ref={content} className="mx-auto max-w-3xl space-y-7">
           {worker ? <WorkerConversation worker={worker} /> : turns.length ? turns.map((turn) => <article key={turn.id} className="space-y-3">
             {turn.user.text && <div className="ml-auto min-w-0 max-w-[92%] console-message-surface bg-muted/50 px-4 py-3 text-sm break-words [&_p]:whitespace-pre-wrap"><Markdown text={turn.user.text} /></div>}
-            {(turn.toolCalls.length > 0 || turn.reasoningText) && <ToolActivity calls={turn.toolCalls} reasoning={turn.reasoningText} working={turn.isWorking && !turn.assistantText} />}
+            {(turn.toolCalls.length > 0 || turn.reasoningText) && <ToolActivity calls={turn.toolCalls} reasoning={turn.reasoningText} working={turn.isWorking} />}
             {turn.decisions.filter((decision) => decision.resolved).map((decision) => <ActivityRow key={decision.id} icon={<ShieldCheck />} title={`${decision.title} · ${decision.approved === undefined ? "closed" : decision.approved ? decision.kind === "operator-question" ? "answered" : "approved" : "declined"}`} status=""><ApprovalPanel decision={decision} busy={workspace.busy} onResolve={(response) => onResolve(decision.id, response)} /></ActivityRow>)}
             {turn.assistantText && <Markdown text={turn.assistantText} streaming={turn.isWorking && snapshot.session.status === "working"} />}
             {turn.notices.filter(notice => !notice.startsWith("Cancellation requested.")).map((notice, index) => <p key={index} className="border-l-2 border-border pl-3 text-xs whitespace-pre-wrap text-muted-foreground">{notice.startsWith("Cancellation requested.") ? "Stop requested" : notice}</p>)}

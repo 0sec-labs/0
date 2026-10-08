@@ -327,13 +327,13 @@
 
 @supports (interpolate-size: allow-keywords) {
   @media (prefers-reduced-motion: no-preference) {
-    .console-tool-activity::details-content {
+    .console-tool-activity > details::details-content {
       interpolate-size: allow-keywords;
       block-size: 0;
       overflow: clip;
       transition: block-size 160ms ease-out, content-visibility 160ms allow-discrete;
     }
-    .console-tool-activity[open]::details-content { block-size: auto; }
+    .console-tool-activity > details[open]::details-content { block-size: auto; }
   }
 }
 
