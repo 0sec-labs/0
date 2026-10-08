@@ -12,6 +12,8 @@ import type { VulnClass } from "../prompts.js";
 import { EMBEDDED_SKILL_YAML } from "./skills.generated.js";
 
 export type { SkillDefinition, SkillSummary } from "./types.js";
+export { discoverAgentSkills, loadAgentSkill, validateAgentSkillContent } from "./agent-skills.js";
+export type { AgentSkillDiscoveryOptions, AgentSkillMetadata, AgentSkillDiscovery } from "./agent-skills.js";
 
 /**
  * Maps an EGATS vuln class (#557) to the methodology skill that should be

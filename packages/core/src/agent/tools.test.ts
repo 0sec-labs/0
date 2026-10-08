@@ -112,11 +112,11 @@ describe("getToolsForRole", () => {
     expect(names).toContain("save_finding");
     expect(names).toContain("payload_lookup");
     expect(names).toContain("wp_fingerprint");
-    expect(names).not.toContain("list_skills");
-    expect(names).not.toContain("load_skill");
+    expect(names).toContain("list_skills");
+    expect(names).toContain("load_skill");
   });
 
-  it("adds JIT skill tools only when enabled", () => {
+  it("provides skill tools when automatic JIT methodology is enabled", () => {
     process.env["ZERO_FEATURE_JIT_SKILLS"] = "1";
     const names = getToolsForRole("attack").map((t) => t.name);
     expect(names).toContain("list_skills");
@@ -151,8 +151,7 @@ describe("getToolsForRole", () => {
   it("audit role gets all enabled tools", () => {
     process.env["ZERO_FEATURE_JIT_SKILLS"] = "0";
     // Pin the loot flag ON so the count is deterministic regardless of ambient
-    // env: use_loot (0#567) is then in the enabled set, leaving exactly
-    // the two JIT-skill tools gated out below.
+    // env: use_loot (0#567) is then in the enabled set.
     process.env["ZERO_FEATURE_LOOT_LEDGER"] = "1";
     // Pin the cloud-surface flag ON too (0#925): the cloud tools are then
     // in the enabled set, so they cancel out of both sides of the count below
@@ -160,8 +159,8 @@ describe("getToolsForRole", () => {
     process.env["ZERO_FEATURE_CLOUD_SURFACE"] = "1";
     const tools = getToolsForRole("audit");
     const names = tools.map((t) => t.name);
-    expect(names).not.toContain("list_skills");
-    expect(names).not.toContain("load_skill");
+    expect(names).toContain("list_skills");
+    expect(names).toContain("load_skill");
     expect(names).toContain("use_loot");
     expect(names).toContain("cloud_s3_probe");
     for (const name of names) {

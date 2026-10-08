@@ -600,6 +600,8 @@ export interface ConsoleSessionConfig {
   allowModelSelfExtension?: boolean;
   /** Captured once; model-authored source cannot change the workspace trust root. */
   workspaceRoot?: string;
+  /** Server-owned skill roots; evaluated for each catalog/load request. */
+  skillDiscoveryOptions?: ToolContext["skillDiscoveryOptions"];
   onHarnessUpdate?: (snapshot: HarnessSnapshot) => void;
   executablePlugins?: ExecutablePluginConfiguration;
   /** Evaluation contracts owned by the operator, not editable by generated code. */
@@ -2022,6 +2024,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   }) : undefined;
   toolContext.liveHarness = harness;
   toolContext.workspaceRoot = workspaceRoot;
+  toolContext.skillDiscoveryOptions = config.skillDiscoveryOptions;
   toolContext.selfExtension = selfExtension;
   toolContext.executablePlugins = executablePlugins;
   toolContext.executablePluginConfiguration = config.executablePlugins;

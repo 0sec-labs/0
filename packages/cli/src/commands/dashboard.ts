@@ -34,6 +34,7 @@ import { BackendConnectionRegistry, backendBearerFromEnv, createBackendHandshake
 import { WorkflowEngineService } from "../workflow-engine-service.js";
 import { retainedScanSnapshot, retainedFindingSnapshot } from "../web/report-artifacts.js";
 import { handleFindingImpactRequest } from "../web/finding-impact.js";
+import { SkillsStore } from "../web/skills.js";
 import { EngagementStore } from "../web/engagements.js";
 import { engagementMarkdown } from "../web/engagement-report.js";
 import { TeamAuth, getSessionId } from "../web/team-auth.js";
@@ -282,7 +283,7 @@ function sendFile(res: ServerResponse, filePath: string, controlToken?: string):
   res.end(content);
 }
 
-function readJson(req: IncomingMessage): Promise<unknown> {
+function readJson(req: IncomingMessage, maxBytes = 1_000_000): Promise<unknown> {
   const { promise, resolve, reject } = Promise.withResolvers<unknown>();
   const chunks: Buffer[] = [];
   let bytes = 0;
@@ -291,7 +292,7 @@ function readJson(req: IncomingMessage): Promise<unknown> {
     if (settled) return;
     const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     bytes += data.length;
-    if (bytes > 1_000_000) {
+    if (bytes > maxBytes) {
       settled = true;
       req.removeListener("data", onData);
       req.resume();
@@ -1849,7 +1850,8 @@ export function registerDashboardCommand(program: Command): void {
       try {
         const { path: assetDir, cleanup: cleanupAssetDir } = resolveDashboardAssetDir(opts.assetDir);
         startupAssetCleanup = cleanupAssetDir;
-        const consoleGateway = startupGateway = new ConsoleGateway({ dbPath: opts.dbPath, projectPath: opts.engineWorkspace, ...(teamDirectory ? { homeDir: teamDirectory } : {}) });
+        const skills = new SkillsStore({ workspace: opts.engineWorkspace ?? process.cwd(), stateDir: teamDirectory ?? homeStateDir(), team: teamAuth.enabled });
+        const consoleGateway = startupGateway = new ConsoleGateway({ dbPath: opts.dbPath, projectPath: opts.engineWorkspace, skillDiscoveryOptions: workspaceRoot => ({ ...skills.discoveryOptions(), ...(teamAuth.enabled ? {} : { projectRoot: workspaceRoot }) }), ...(teamDirectory ? { homeDir: teamDirectory } : {}) });
         const engagements = new EngagementStore({ workspace: opts.engineWorkspace ?? process.cwd(), dbPath: opts.dbPath, ...(teamDirectory ? { stateDir: teamDirectory } : {}) });
         const operator = startupOperator = new WebOperatorServices({ isTurnActive: () => consoleGateway.hasActiveTurns() });
         const workflows = startupWorkflows = new WebWorkflowService({ gateway: consoleGateway, dbPath: opts.dbPath });
@@ -1907,6 +1909,26 @@ export function registerDashboardCommand(program: Command): void {
               const backendRoute = await handleBackendConnectionRequest(req, res, requestUrl, backends);
               if (backendRoute.handled) return;
               if (backendRoute.localPath) requestUrl = new URL(backendRoute.localPath, origin);
+              const skillsRoute = requestUrl.pathname.match(/^\/api\/skills(?:\/(.*))?$/);
+              if (skillsRoute) {
+                const path = skillsRoute[1] ?? "";
+                let decodedPath: string;
+                try { decodedPath = decodeURIComponent(path); } catch { throw new WebRequestError("Invalid skill identifier.", 400); }
+                const method = req.method ?? "GET";
+                if (!path && method === "GET") json(res, 200, skills.list());
+                else if (!path && method === "POST") json(res, 201, { skill: skills.create(await readJson(req)) });
+                else if (path === "import" && method === "POST") json(res, 201, { skill: skills.import(await readJson(req, 12 * 1024 * 1024)) });
+                else if (path === "mounts" && method === "POST") json(res, 201, { mount: skills.mount(await readJson(req)) });
+                else if (path.startsWith("mounts/") && method === "DELETE") { skills.unmount(decodedPath.slice(7)); json(res, 200, { ok: true }); }
+                else if (path.endsWith("/export") && method === "GET") {
+                  const id = decodedPath.slice(0, -7); const bundle = skills.export(id);
+                  res.setHeader("Content-Disposition", `attachment; filename="${bundle.name}.skill.json"`); json(res, 200, bundle);
+                }
+                else if (path && method === "GET") json(res, 200, { skill: skills.get(decodedPath) });
+                else if (path && method === "PUT") json(res, 200, { skill: skills.update(decodedPath, await readJson(req)) });
+                else throw new WebRequestError("Method not allowed.", 405);
+                return;
+              }
               const engagementRoute = requestUrl.pathname.match(/^\/api\/engagements(?:\/([^/]+)(?:\/(report))?)?$/);
               if (engagementRoute) {
                 const member = teamAuth.resolveSession(req);

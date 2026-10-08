@@ -79,6 +79,7 @@ export default defineConfig({
             { label: "Install & first run", slug: "getting-started" },
             { label: "Chat & settings", slug: "console" },
             { label: "Workflows", slug: "workflow" },
+            { label: "Skills", slug: "skills" },
             { label: "Engine connections", slug: "engine-connections" },
             { label: "Scan workflows", slug: "scan-workflows" },
             { label: "Scope & authorization", slug: "scope" },

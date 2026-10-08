@@ -46,7 +46,7 @@ it("rejects malformed declared frontmatter instead of treating it as plain Markd
 });
 
 
-it("exposes and loads an assigned methodology through the real tool dispatcher, while honoring explicit opt-out", async () => {
+it("exposes assigned skills independently of automatic JIT methodology", async () => {
   const value = bundle("Inspect transaction isolation before approving the repair.");
   vi.stubEnv("ZERO_AUDIT_SKILLS_MANIFEST", value.path);
   vi.stubEnv("ZERO_FEATURE_JIT_SKILLS", undefined);
@@ -59,6 +59,6 @@ it("exposes and loads an assigned methodology through the real tool dispatcher, 
   expect(result.success).toBe(true);
   expect(JSON.stringify(result.output)).toContain("Inspect transaction isolation before approving the repair.");
   vi.stubEnv("ZERO_FEATURE_JIT_SKILLS", "0");
-  expect(getToolsForRole("audit", { hasScope: true }).some(tool => tool.name === "load_skill")).toBe(false);
-  expect((await executor.execute({ id: "denied", name: "load_skill", arguments: { skill_id: `cloud/${value.snapshot.skillId}` } })).success).toBe(false);
+  expect(getToolsForRole("audit", { hasScope: true }).some(tool => tool.name === "load_skill")).toBe(true);
+  expect((await executor.execute({ id: "again", name: "load_skill", arguments: { skill_id: `cloud/${value.snapshot.skillId}` } })).success).toBe(true);
 });
