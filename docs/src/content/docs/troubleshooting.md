@@ -443,30 +443,26 @@ enough. Keep the original database and its sibling run artifacts, then pass both
 
 The scan ID is printed at the start of the original run.
 `0 console --resume` is separate: it loads a saved chat transcript, not a scan
-checkpoint. See [console resume](/console/#sessions-and-resume) for its scope and model
+checkpoint. See [console resume](/console/#saved-sessions) for its scope and model
 limitations.
 
-## TUI / Console
+## Browser console
 
 ### Console doesn't start
 
-The full UI needs the standalone Bun-compiled release, or Bun plus an installed
-source checkout, and both stdin and stdout must be TTYs. Node and redirected
-stdio do not select the TUI.
+Run `0` or `0 web` for interactive conversations. Both Node and the standalone
+binary open the browser interface; terminal rendering and the readline REPL
+are retired. In a source checkout, install dependencies and build before
+starting the web app.
 
 ```bash
-# Verify prerequisites
 0 doctor
+0 web
 ```
 
-For a source checkout, install the repository dependencies and run
-`bun packages/cli/dist/index.js` after building. Running the same entry point
-with Node selects readline, which requires `--scope`; default YOLO also requires
-a nonempty `in_scope` list. The Docker image similarly uses Node.
-
-See [launch and approval limitations](/console/#launch) before substituting
-readline or `--print`: Standard without an approval callback is not fail-closed,
-and Co-pilot does not prompt for each effectful call.
+For automation, use `0 chat --prompt` or `0 console --print`. See
+[headless approval limitations](/console/#non-interactive-approval-limitations)
+when the task requires a human decision.
 
 ### Saved provider credential appears missing
 

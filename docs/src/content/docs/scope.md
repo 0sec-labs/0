@@ -135,12 +135,12 @@ identifies that condition; other tool
 restrictions may still apply. Local code acquisition, model requests, and tools
 can require network access.
 
-The interactive console's YOLO mode distinguishes public repository checkout
+Chat's YOLO mode distinguishes public repository checkout
 from live-target authorization. A standalone HTTPS `git clone` can acquire
 source without adding the hosting service to the engagement scope. Explicit
 host/address exclusions apply only while the scope plugin is enabled; private-network restrictions always remain. Other
 commands do not inherit that checkout permission. See
-[public repository acquisition](/console/#acquiring-a-public-repository-in-yolo).
+[public repository acquisition](/console/#acquiring-public-source).
 
 `ZERO_REQUIRE_SCOPE=1` and `scan --require-scope` make the **enabled** plugin
 fail closed in unscoped local modes too. Neither activates the plugin or creates
