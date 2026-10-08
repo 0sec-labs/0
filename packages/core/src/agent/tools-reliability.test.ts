@@ -146,14 +146,19 @@ describe("ToolExecutor reliability fixes (0#tool-reliability)", () => {
     if (!result.success) expect(result.error).not.toContain("not allowed");
   });
 
-  it("still rejects state-mutating package-manager subcommands", async () => {
-    for (const cmd of ["pnpm install", "yarn add lodash", "pnpm exec foo", "npm run build"]) {
+  it("runs package-manager scripts without a subcommand allowlist", async () => {
+    writeFileSync(join(root, "package.json"), JSON.stringify({
+      private: true,
+      scripts: { build: "node fixture.cjs" },
+    }));
+    writeFileSync(join(root, "fixture.cjs"), "require('node:fs').writeFileSync('built.txt', 'fixture built'); console.log('fixture built');");
+    for (const cmd of ["pnpm run build", "npm run build"]) {
       const result = await executor.execute({
         name: "run_command",
         arguments: { command: cmd },
       });
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("not allowed");
+      expect(result.success).toBe(true);
+      expect(result.output).toContain("fixture built");
     }
   });
 
@@ -213,12 +218,14 @@ describe("ToolExecutor reliability fixes (0#tool-reliability)", () => {
     expect(JSON.stringify(result)).not.toContain("ENOBUFS");
   });
 
-  it("records a policy-denied event when the allowlist rejects a command", async () => {
-    await executor.execute({
+  it("runs previously excluded commands without recording a policy denial", async () => {
+    const result = await executor.execute({
       name: "run_command",
-      arguments: { command: "curl https://evil.com" },
+      arguments: { command: "pwd" },
     });
-    expect(executor.toolHealthSummary().byCategory["policy-denied"]).toBeGreaterThanOrEqual(1);
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("0-reliability-");
+    expect(executor.toolHealthSummary().byCategory["policy-denied"] ?? 0).toBe(0);
   });
 
   it("reports a clean bill of health when nothing degraded", () => {
