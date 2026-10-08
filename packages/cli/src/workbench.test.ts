@@ -19,6 +19,14 @@ function temporaryHome(): string {
 }
 
 describe("workbench authority boundary", () => {
+  it.each([[], ["web"], ["chat"], ["team", "list"], ["tui"], ["watch"]].map(args => ({ args })))("keeps browser, team setup and retired entrypoints on the host: %j", async ({ args }) => {
+    const read = vi.spyOn(settings, "loadGlobalSettings").mockReturnValue({ ...DEFAULT_SETTINGS, executionProfile: "smolvm" });
+    const launch = vi.spyOn(controller, "runWorkbenchCli");
+    await expect(launchConfiguredWorkbench(args)).resolves.toBeUndefined();
+    expect(read).not.toHaveBeenCalled();
+    expect(launch).not.toHaveBeenCalled();
+  });
+
   it("refuses unsupported MCP stdio before launching a VM or resolving provider credentials", async () => {
     const selected = { ...DEFAULT_SETTINGS, executionProfile: "smolvm" as const };
     vi.spyOn(settings, "loadGlobalSettings").mockReturnValue(selected);

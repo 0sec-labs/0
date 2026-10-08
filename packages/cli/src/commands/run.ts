@@ -9,7 +9,7 @@ import { VERSION, validateScanPlan } from "@0/shared";
 import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig, ScanReport, SeedFinding, ScanPlan, ScanAttemptOutcome } from "@0/shared";
 import type { CostBreakdownEntry, ScanCostLedger, NativeRuntime, RuntimeConfig, ScopePolicy } from "@0/core";
 import { formatAuditReport, formatReviewReport, formatReport, generatePdfReport } from "../formatters/index.js";
-import { buildShareUrl, checkRuntimeAvailability, getRuntimeAvailability } from "../utils.js";
+import { buildShareUrl, checkRuntimeAvailability } from "../utils.js";
 import { formatCrossValidatedLeads, type CrossValidatedLeadsSummary } from "./cross-validated-leads.js";
 
 interface ScanCompletedCost {
@@ -551,28 +551,9 @@ export async function runUnified(opts: RunOptions): Promise<void> {
     if (opts.sessionUiFactory) {
       inkUI = await opts.sessionUiFactory({ target, depth, mode });
     } else {
-      const { isBunRuntime } = await import("../tui/runtime.js");
-      if (isBunRuntime()) {
-        const { createOpenTuiSession } = await import("../tui/run.js");
-        const availability = await getRuntimeAvailability();
-        inkUI = await createOpenTuiSession({
-          target,
-          depth,
-          mode,
-          runtime,
-          apiProviderLabel: availability.apiRuntime.providerLabel,
-          apiConfigured: availability.apiRuntime.configured,
-          apiConnected: availability.hasApiKey && availability.apiRuntime.valid,
-          localRuntimes: availability.availableRuntimes,
-          model: opts.model,
-        });
-      } else {
-        // Node fallback: plain stdout streaming (one tagged line per scan
-        // event). The full TUI is OpenTUI under the standalone binary, installed
-        // with `curl -fsSL .../install.sh | bash`.
-        const { renderScanStream } = await import("../ui/scan-stream.js");
-        inkUI = renderScanStream({ version: VERSION, target, depth, mode });
-      }
+      // All binary and npm runtimes use the same plain event stream.
+      const { renderScanStream } = await import("../ui/scan-stream.js");
+      inkUI = renderScanStream({ version: VERSION, target, depth, mode });
     }
     eventHandler = (event) => {
       opts.onEvent?.(event);
@@ -689,17 +670,8 @@ export async function runUnified(opts: RunOptions): Promise<void> {
       }
     }
 
-    if (opts.tui && process.stdout.isTTY && process.stdin.isTTY && !(globalThis as { Bun?: unknown }).Bun) {
-      // The post-scan operator TUI was Ink-based; in v0.9.0 we shipped
-      // binary-only and dropped Ink. Tell the user where to find the
-      // OpenTUI replacement and continue (don't fail the scan).
-      // Gated on `!Bun` because under Bun the OpenTUI replacement is
-      // already available — printing this message there would be wrong.
-      console.log("");
-      console.log(chalk.gray("  --tui post-scan view is no longer bundled in the npm package."));
-      console.log(chalk.gray("  Install the standalone binary for the full OpenTUI experience:"));
-      console.log(chalk.gray("    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash"));
-      console.log("");
+    if (opts.tui) {
+      console.log(chalk.gray("Interactive terminal views are retired. Run 0 web to review this scan in the browser."));
     }
 
     if (!opts.suppressOutput && format === "terminal" && crossValidatedLeads) {

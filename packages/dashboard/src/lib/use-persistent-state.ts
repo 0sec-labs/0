@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useBackendApi } from "@/api";
+import { useTeamAccess } from "@/components/team-access";
 import { backendStorageKey } from "./backend-client";
 
 function readStoredValue<T>(key: string, fallback: T, legacyLocalKey?: string): T {
@@ -16,8 +17,10 @@ function readStoredValue<T>(key: string, fallback: T, legacyLocalKey?: string): 
 
 export function usePersistentState<T>(key: string, fallback: T) {
   const { client } = useBackendApi();
-  const legacyLocalKey = client.backendId === "local" ? key : undefined;
-  key = backendStorageKey(client.backendId, key);
+  const team = useTeamAccess();
+  const account = team.enabled && team.user ? JSON.stringify([team.user.workspaceId, team.user.userId]) : undefined;
+  const legacyLocalKey = client.backendId === "local" && !account ? key : undefined;
+  key = backendStorageKey(client.backendId, account ? `account:${account}:${key}` : key);
   const [value, setValue] = useState<T>(() => readStoredValue(key, fallback, legacyLocalKey));
 
   useEffect(() => {

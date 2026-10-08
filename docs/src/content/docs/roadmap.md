@@ -14,6 +14,7 @@ Use these guides for current instructions. The dated plans below preserve earlie
 | Find, verify, and repair | [Scan Workflows](/scan-workflows/) and [`secure`](/commands/#secure) | Reproduction, repair verification, publication, and overall completion are separate outcomes. Local repair executes with the worker's permissions. |
 | Saved scan continuation | [Scan Workflows](/scan-workflows/) | Resume routing and available state vary by producer; it is not universal recovery for every command. |
 | Findings and triage | [Commands](/commands/#findings) and [Finding Triage](/triage/) | Triage state is not proof that a vulnerability was reproduced or fixed. |
+| Assessment handoff | [Assessment Reports](/assessment-reports/) | Selected retained-run reports and explicit cross-chat finding references are local primitives; authenticated team membership and live presence require the managed identity layer. |
 | Diff-aware review and CI | [Integrations](/integrations/) and [GitHub CI](/ci/github-action/) | Local/scripted CI support does not imply a published composite action. |
 | Deterministic verification | [Verification Results](/verification-result/) | Replay requires executable inputs and valid setup; it does not cover every candidate automatically. |
 | Research adapters | [Research Workflows](/research-workflows/) | Imported evidence is distinct from execution performed by 0. |

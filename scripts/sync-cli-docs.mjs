@@ -8,6 +8,9 @@ const referencePath = resolve(root, "docs/src/content/docs/commands.md");
 
 // These are reviewed corrections to registered help, not generated prose.
 const optionDescriptions = new Map([
+  ["0 scan|--tui", "Retired terminal view flag; scan still completes and points to 0 web."],
+  ["0 audit|--tui", "Retired terminal view flag; audit still completes and points to 0 web."],
+  ["0 review|--tui", "Retired terminal view flag; review still completes and points to 0 web."],
   ["0 scan|--require-scope", "Set ZERO_REQUIRE_SCOPE for scope-aware execution paths. Ordinary live-target scan already refuses missing scope, independently of this flag."],
   ["0 scan|--dry-run", "For --emit pr only: print proposed git/gh emission commands. The scan itself still executes."],
   ["0 review|--dry-run", "For --emit pr only: print proposed git/gh emission commands. The source review itself still executes."],
@@ -24,8 +27,8 @@ const optionDescriptions = new Map([
   ["0 ingest|--cost-ceiling", "Estimated model-cost ceiling for subsystem review, not a guaranteed whole-job billing cap."],
   ["0 console|--role", "Tool set to expose: audit, review, discovery, attack, verify, or report. Defaults to audit; role selection is not authorization or OS isolation."],
   ["0 console|--finding-intent", "Finding workflow: investigate, verify, draft_fix, or impact. These instructions do not independently enforce tool permissions."],
-  ["0 console|--scope", "Initial authorization scope. Non-TUI YOLO requires at least one in_scope entry; a scope file is not an OS-isolation boundary."],
-  ["0 console|--model", "Model selection for the console. Saved-session precedence differs across TUI, readline, and print paths; see Console."],
+  ["0 console|--scope", "Initial authorization scope. Headless YOLO requires at least one in_scope entry when scope enforcement is active; scope is not OS isolation."],
+  ["0 console|--model", "Model selection for headless chat; saved-session model takes precedence when resuming."],
   ["0 review|--target", "Alias for --profile; accepts the supported review profiles, with app normalized to default."],
 ]);
 

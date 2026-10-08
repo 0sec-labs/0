@@ -18,8 +18,8 @@ retain their existing technical names.
 
 ## Install
 
-Choose the standalone release for the full terminal UI, the npm package for
-Node-based commands, a source checkout for development, or the container for a
+Choose the standalone release or npm package for browser and headless workflows,
+a source checkout for development, or the container for a
 separate execution environment. Documentation follows the source checkout:
 compare `0 --version` and command-specific `--help` with your installed release.
 
@@ -63,15 +63,15 @@ npm install -g @0/cli
 0 --help
 ```
 
-The published package installs both command names, but Node execution does not
-provide the Bun TUI. Use the standalone binary for interactive onboarding.
+The published package installs the `0` command. Run `0` or `0 web` for the
+account-free browser console; automation commands run headlessly.
 
 
 ### Build from source
 
 Use Node.js 24 or newer and pnpm 9 or newer. The repository pins pnpm through
-`packageManager`. The full terminal UI needs Bun; Node can run non-interactive
-commands. See [Console](/console/) for that runtime distinction.
+`packageManager`. Both Node and the standalone binary support the browser
+console and headless commands. The interactive terminal UI is retired.
 
 ```bash
 git clone https://github.com/0sec-labs/0.git
@@ -101,16 +101,16 @@ docker run --rm ghcr.io/0sec-labs/0:latest --help
 For a real scan, mount scope and persist any output you need before using
 `--rm`; files left only inside the container disappear when it exits.
 The image runs the Node bundle as the non-root `ubuntu` user (UID 1000), with
-`/work` as its working directory. It does **not** provide the Bun TUI. Mount
+`/work` as its working directory. Container execution is headless. Mount
 source read-only unless the task requires writes, and use a separate writable
 mount for the database, journal and reports.
 
 
-## Open the browser or terminal
+## Open the browser
 
 ```bash
 0 web  # Command Center
-0      # Terminal chat
+0      # Opens the same browser console
 ```
 
 The **Command Center** is the browser workspace for chats, workflows, findings,
@@ -129,12 +129,11 @@ and **Plugins** to connect tools. See the [workflow guide](/workflow/) and
 
 ## Configure a provider
 
-Run `0` to open chat, then `/connect`. Choose **Use my own API key** or
-**Provider subscription**. Source-based terminal UI execution requires Bun;
-the release binary includes its runtime.
+Run `0` to open the browser console, then open **Connections**. Choose an API
+key or a supported provider subscription.
 
-`0` starts in chat, including on a fresh installation. Use `/onboard` for
-optional guided setup. Choose a connected provider's model in `/model`.
+`0` starts the browser console, including on a fresh installation. Choose a
+connected provider's model with the conversation model picker.
 The interactive console does not route inference through 0cloud; managed-service
 access is arranged separately from local model access.
 
@@ -167,17 +166,12 @@ subscription entry. Provider account restrictions and model availability still a
 
 Start with one connected provider route that can serve the models you want.
 For example, a gateway such as OpenRouter can expose models from multiple
-vendors through one account. In `/model`, use **Ctrl+Left / Ctrl+Right** to target
-the parent or a worker role, select the desired model, and press **Enter**.
-**Ctrl+Backspace** removes that role's override so it inherits the parent.
-**Ctrl+S** toggles single-model mode; when enabled it takes precedence over role
-choices.
-
+vendors through one account. Choose a model in the browser conversation picker.
+Programmatic worker-role overrides remain available through the embedding API.
 Workers inherit the parent's provider, credentials and endpoint: a role choice
 does not automatically switch accounts to another configured provider. See
 [multi-model role routing](/configuration/#multi-model-role-routing) for a
-concrete configuration and precedence, and [Console](/console/#model-picker)
-for live changes. These controls are exposed in the TUI and embedding API,
+concrete configuration and precedence. Worker-role controls are exposed in the embedding API,
 not as a general CLI role-map flag or environment variable. A role override
 chooses a model when that role runs; it does not guarantee every workflow
 spawns that role or verifies every finding.
@@ -190,16 +184,12 @@ For an initial authorized source review without a live network target:
 0 review ./authorized-repo --runtime api --depth quick --cost-ceiling 2
 ```
 
-For interactive work with approval prompts, launch the standalone binary or
-Bun TUI explicitly in Standard mode:
+For interactive work, run `0 web` and choose the desired autonomy mode in the
+browser conversation. Describe the repository path and objective there.
 
-```bash
-0 console --mode standard
-```
-
-Then describe the repository path and objective. The default no-argument console
-mode is **YOLO**, not Standard. Node/readline and `--print` have no interactive
-approval surface; see [approval limitations](/console/#non-interactive-approval-limitations).
+For headless work, use `0 chat --prompt "your request"` or `0 -p "your request"`.
+Headless prompts do not have an interactive approval surface. Combine saved-session
+`--resume <id>` or `--continue` with a headless prompt to retain conversation context.
 
 ## Run your first scan
 

@@ -1,5 +1,6 @@
 import type { BackendDescriptor, ImpactAssessment } from "@0/shared";
 import { BackendClient } from "./lib/backend-client";
+import { createTeamClient } from "./lib/team-client";
 export { useBackendApi } from "./backend-context";
 import type {
   ConsoleCreateSessionInput,
@@ -84,6 +85,7 @@ export async function localControlFetch(path: string, init?: RequestInit): Promi
 export function createBackendApi(backendId: string, descriptor?: BackendDescriptor) {
   const client = new BackendClient(backendId, localControlFetch, descriptor);
   const webFetch = (path: string, init?: RequestInit) => client.request(path, init);
+  const teamClient = createTeamClient(backendId, webFetch);
 async function webFetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await webFetch(path, init);
 
@@ -299,6 +301,6 @@ function archiveConsoleSession(id: string, saved = false, archived = true): Prom
   return webFetchJson(`/api/console/${saved ? "saved" : "sessions"}/${encodeURIComponent(id)}/archive`, { method: "POST", body: JSON.stringify({ archived }) });
 }
 
-  return { client, webFetch, webFetchJson, getDashboard, getScans, getScan, getScanEvents, getRecentEvents, getScanFindings, getFindingFamily, updateFindingImpactAssessment, clearFindingImpactAssessment, updateFindingFamilyTriage, updateFindingFamilyWorkflow, recoverStaleWorkers, pruneStoppedWorkers, resetDatabase, startDaemon, stopDaemon, launchRun, listConsoleSessions, listSavedConsoleSessions, createConsoleSession, getConsoleSnapshot, getConsoleEvents, sendConsoleMessage, removeConsoleQueuedMessage, configureConsoleSession, resolveConsoleDecision, controlConsoleSession, stopConsoleWorker, closeConsoleSession, deleteConsoleSession, resumeConsoleSession, deleteSavedConsoleSession, exportConsoleSession, archiveConsoleSession };
+  return { client, teamClient, webFetch, webFetchJson, getDashboard, getScans, getScan, getScanEvents, getRecentEvents, getScanFindings, getFindingFamily, updateFindingImpactAssessment, clearFindingImpactAssessment, updateFindingFamilyTriage, updateFindingFamilyWorkflow, recoverStaleWorkers, pruneStoppedWorkers, resetDatabase, startDaemon, stopDaemon, launchRun, listConsoleSessions, listSavedConsoleSessions, createConsoleSession, getConsoleSnapshot, getConsoleEvents, sendConsoleMessage, removeConsoleQueuedMessage, configureConsoleSession, resolveConsoleDecision, controlConsoleSession, stopConsoleWorker, closeConsoleSession, deleteConsoleSession, resumeConsoleSession, deleteSavedConsoleSession, exportConsoleSession, archiveConsoleSession };
 }
 export type BackendApi = ReturnType<typeof createBackendApi>;

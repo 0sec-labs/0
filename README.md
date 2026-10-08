@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <strong>Open-source security workflows in your browser, terminal, or coding agent.</strong><br/>
+  <strong>Open-source security workflows in your browser or coding agent.</strong><br/>
   <sub>Backed by Y Combinator · The Swiss Applied AI &amp; Cybersecurity Research Lab</sub><br/>
   <a href="https://0.security/">0.security</a> ·
   <a href="https://docs.0.security/">Documentation</a> ·
@@ -134,7 +134,9 @@ See [CONTRIBUTING.md](https://github.com/0sec-labs/0/blob/main/.github/CONTRIBUT
 ## Status and safety
 
 **Research preview.** Assess authorized systems and review findings and fixes.
-The terminal defaults to YOLO; use `0 console --mode standard` for confirmations.
+Run `0` or `0 web` to open the browser console without an account.
+The interactive terminal UI is retired; headless CLI, automation, MCP and binary commands remain available.
+Use `0 chat --prompt "your request"` for one-shot automation; set `--mode standard` for explicit scope checks.
 The optional [scope plugin](https://docs.0.security/scope/) enforces target boundaries.
 
 Report vulnerabilities through [SECURITY.md](https://github.com/0sec-labs/0/blob/main/.github/SECURITY.md).

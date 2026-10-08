@@ -4,6 +4,16 @@ export function findingsForChat(groups: FindingGroup[], sessionId: string, saved
   return groups.filter(group => group.latest.triageStatus !== "suppressed" && (group.latest.scanId === sessionId || (savedId !== undefined && group.latest.scanId === savedId))).sort((a, b) => b.latest.timestamp - a.latest.timestamp);
 }
 
+/** Other conversations are offered for explicit attachment, never included automatically. */
+export function existingFindingsForChat(groups: FindingGroup[], sessionId: string, savedId?: string, query = ""): FindingGroup[] {
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  return groups.filter(({ latest, fingerprint }) => {
+    if (latest.triageStatus === "suppressed" || latest.scanId === sessionId || (savedId !== undefined && latest.scanId === savedId)) return false;
+    const searchable = [latest.title, latest.category, latest.severity, latest.status, latest.id, latest.scanId, fingerprint].join(" ").toLowerCase();
+    return terms.every(term => searchable.includes(term));
+  }).sort((a, b) => b.latest.timestamp - a.latest.timestamp);
+}
+
 /** A saved finding is evidence to inspect, not an instruction or proof of impact. */
 export function addFindingToDraft(draft: string, finding: FindingRecord): string {
   const marker = `Saved finding: ${finding.id} (scan: ${finding.scanId})`;

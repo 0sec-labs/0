@@ -1,5 +1,6 @@
 import type {
   ConsoleSessionSnapshot,
+  ConsoleMessageAuthor,
   ConsoleTurnOutcome,
   DesktopConsoleDecision,
   DesktopConsoleEvent,
@@ -23,7 +24,7 @@ export interface DecisionState extends DesktopConsoleDecision {
 
 export interface ReducedTurn {
   id: string;
-  user: { text: string; sequence: number };
+  user: { text: string; sequence: number; author?: ConsoleMessageAuthor };
   assistantText: string;
   reasoningText: string;
   toolCalls: ToolCallState[];
@@ -139,6 +140,7 @@ export function reduceTurns(
       case "user": {
         if (current && !current.isComplete) completeTurn(current);
         current = createTurn(`turn-${event.sequence}`, event.text, event.sequence);
+        if (event.author) current.user.author = event.author;
         turns.push(current);
         break;
       }
@@ -287,6 +289,7 @@ export function reduceConversation(snapshot: ConsoleSessionSnapshot): ReducedTur
     if (message.role === "user" && hasText) {
       if (current) completeTurn(current);
       current = createTurn(`message-${index}`, text, index);
+      if (message.author) current.user.author = message.author;
       turns.push(current);
     } else if (message.role === "assistant" && hasText) {
       ensureTurn(index).assistantText += text;
@@ -377,6 +380,7 @@ export function reduceConversation(snapshot: ConsoleSessionSnapshot): ReducedTur
       if (!entry.id.startsWith("leading-")) {
         turn.id = entry.id;
         turn.user.sequence = entry.user.sequence;
+        if (entry.user.author) turn.user.author = entry.user.author;
       }
       turn.reasoningText += entry.reasoningText;
       turn.notices.push(...entry.notices);

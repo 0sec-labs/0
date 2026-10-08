@@ -45,5 +45,6 @@ export function isBunRuntime(): boolean {
 }
 
 export function canUseOpenTui(): boolean {
-  return !!(process.stdout.isTTY && process.stdin.isTTY);
+  // Interactive terminal rendering is retired; shared runtime metadata remains.
+  return false;
 }

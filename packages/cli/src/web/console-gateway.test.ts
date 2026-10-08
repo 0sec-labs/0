@@ -78,6 +78,47 @@ async function idle(instance: ConsoleGateway, id: string): Promise<void> {
 }
 
 describe("ConsoleGateway", () => {
+  it("accepts attribution only from a server argument and retains repeated-prompt authors after save/resume", async () => {
+    const instance = gateway(); const created = instance.create();
+    const alice = { userId: "alice", displayName: "Alice" };
+    const bob = { userId: "bob", displayName: "Bob", proposalId: "proposal-1" };
+    await expect(instance.send(created.id, { text: "Same prompt", author: alice })).rejects.toThrow("Unsupported input field");
+    await instance.send(created.id, "Same prompt", alice); await idle(instance, created.id);
+    await instance.send(created.id, "Same prompt"); await idle(instance, created.id);
+    await instance.send(created.id, "Same prompt", bob); await idle(instance, created.id);
+    const users = instance.get(created.id).messages.filter(message => message.role === "user");
+    expect(users.map(message => message.author)).toEqual([alice, undefined, bob]);
+    expect(instance.get(created.id).events.filter(event => event.type === "user").map(event => event.type === "user" ? event.author : undefined)).toEqual([alice, undefined, bob]);
+    const saved = instance.save(created.id); await instance.close(created.id);
+    expect(instance.loadSaved(saved.id).messages.filter(message => message.role === "user").map(message => message.author)).toEqual([alice, undefined, bob]);
+    const resumed = await instance.resume(saved.id);
+    expect(instance.get(resumed.id).messages.filter(message => message.role === "user").map(message => message.author)).toEqual([alice, undefined, bob]);
+  });
+
+  it("preserves queued proposal authors across a retained checkpoint and their eventual user event", async () => {
+    const gate = Promise.withResolvers<void>();
+    const first = gateway(input => {
+      const session = engine(input); const send = session.send;
+      session.send = async (...args) => { const result = await send(...args); await gate.promise; return result; };
+      return session;
+    });
+    const created = first.create();
+    await first.send(created.id, "Owner request", { userId: "alice", displayName: "Alice" });
+    const bob = { userId: "bob", displayName: "Bob", proposalId: "proposal-queued" };
+    await first.send(created.id, { text: "Queued evidence review", mode: "queue" }, bob);
+    const saved = first.save(created.id);
+    const retained = loadSession(saved.id, homes.at(-1))!;
+    expect(retained.consoleState?.queuedMessages[0]?.author).toEqual(bob);
+    expect(saveSession({ ...retained, id: "queued-checkpoint" }, homes.at(-1))).toBe(true);
+    await first.cancel(created.id); gate.resolve(); await idle(first, created.id);
+    const resumed = await first.resume("queued-checkpoint");
+    expect(first.get(resumed.id).queuedMessages[0]?.author).toEqual(bob);
+    await first.send(resumed.id, "Continue checkpoint", { userId: "alice", displayName: "Alice" });
+    await vi.waitFor(() => expect(first.get(resumed.id).events.filter(event => event.type === "user").some(event => event.type === "user" && event.text === "Queued evidence review" && event.author?.proposalId === "proposal-queued")).toBe(true));
+    await idle(first, resumed.id);
+    const queuedUser = first.get(resumed.id).messages.find(message => message.role === "user" && message.content.some(block => block.type === "text" && block.text === "Queued evidence review"));
+    expect(queuedUser?.author).toEqual(bob);
+  });
   it("searches live and saved replies once, pages results and validates search bounds", async () => {
     const instance = gateway();
     const blank = instance.create({ title: "Blank chat" });
@@ -385,8 +426,10 @@ describe("ConsoleGateway", () => {
     expect(snapshot.lastOutcome?.budget.tokenBudget).toBeNull();
     expect(() => first.deleteSaved(saved.id)).toThrow(ConsoleGatewayError);
     await expect(first.delete(created.id)).rejects.toBeInstanceOf(ConsoleGatewayError);
-    await first.continue(resumed.id, { text: "Summarize only the remaining observations." }); await idle(first, resumed.id);
+    const continuationAuthor = { userId: "reviewer", displayName: "Reviewer" };
+    await first.continue(resumed.id, { text: "Summarize only the remaining observations." }, continuationAuthor); await idle(first, resumed.id);
     expect(first.get(resumed.id).messages.at(-1)?.content).toEqual([{ type: "text", text: "Summarize only the remaining observations." }]);
+    expect(first.get(resumed.id).messages.at(-1)?.author).toEqual(continuationAuthor);
     const deleted = await first.delete(resumed.id);
     expect(deleted.savedId).toBe(saved.id);
     expect(() => first.get(resumed.id)).toThrow(ConsoleGatewayError);
@@ -410,6 +453,22 @@ describe("ConsoleGateway", () => {
     expect(instance.exportWorker(first.id, nested).source).toBe("published-worker-trace");
     expect(instance.worker(second.id, other).status).toBe("running");
     await instance.clear(first.id); expect(instance.get(first.id).messages).toEqual([]); expect(instance.worker(first.id, nested).transcript[0]?.assistant).toBe("Owned observation.");
+  });
+
+  it("attributes worker operator messages through live events and retained worker history", async () => {
+    const instance = gateway(); const created = instance.create();
+    await instance.send(created.id, "Investigate"); await idle(instance, created.id);
+    const workerId = `${created.id}-sub-reviewer`;
+    eventBus.emit("subagent_lifecycle", { agent_id: workerId, parent_scan_id: created.id, status: "running", task: "Inspect", max_turns: 3 });
+    const author = { userId: "alice", displayName: "Alice" };
+    instance.sendWorker(created.id, workerId, "Inspect the retained evidence", author);
+    expect(instance.worker(created.id, workerId).operatorMessages?.[0]?.author).toEqual(author);
+    expect(instance.get(created.id).events.filter(event => event.type === "worker").some(event => event.type === "worker" && event.worker.operatorMessages?.[0]?.author?.userId === "alice")).toBe(true);
+    const saved = instance.save(created.id); await instance.close(created.id);
+    expect(loadSession(saved.id, homes.at(-1))?.consoleState?.workers[0]?.operatorMessages?.[0]?.author).toEqual(author);
+    const resumed = await instance.resume(saved.id);
+    expect(instance.worker(resumed.id, workerId).operatorMessages?.[0]?.author).toEqual(author);
+    expect(instance.worker(resumed.id, workerId).status).toBe("stopped");
   });
 
   it("changes Local autonomy during a turn and delivers queued operator messages exactly once", async () => {

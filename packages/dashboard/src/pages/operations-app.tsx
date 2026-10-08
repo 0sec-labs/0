@@ -12,7 +12,9 @@ import { LivePage } from "@/pages/live-page";
 import { OverviewPage } from "@/pages/overview-page";
 import { ScansPage } from "@/pages/scans-page";
 import { ConsolePage } from "@/pages/console-page";
+import { SavedConversationPage } from "@/pages/saved-conversation-page";
 import { LearningPage } from "@/pages/learning-page";
+import { EngagementsPage } from "@/pages/engagements-page";
 import { WorkflowsPage } from "@/pages/workflows-page";
 import { WebConsoleControlsPage } from "@/pages/console-controls-page";
 import type { ThemesResponse } from "@/components/console-control/contracts";
@@ -122,11 +124,13 @@ export function OperationsApp() {
           <Route path="/" element={<Navigate to="/console" replace />} />
           <Route path="/console" element={<ConsolePage />} />
           <Route path="/console/:sessionId" element={<ConsolePage />} />
+          <Route path="/console/saved/:savedId" element={<SavedConversationPage />} />
           {["setup", "connections", "models", "settings", "plugins", "doctor", "tools", "project", "fix"].map((route) => (
             <Route key={route} path={`/${route}`} element={<WebConsoleControlsPage />} />
           ))}
           {["workflows", "audits", "launcher", "launch"].map(route => <Route key={route} path={`/${route}`} element={<WorkflowsPage />} />)}
           <Route path="/learning" element={<LearningPage />} />
+          <Route path="/engagements" element={<EngagementsPage />} />
           <Route path="/dashboard" element={operations(dashboard ? <OverviewPage data={dashboard} /> : <EmptyState title="Nothing here yet" action={startChat} />)} />
           <Route path="/operations" element={<Navigate to="/dashboard" replace />} />
           <Route path="/threads" element={findings} />
