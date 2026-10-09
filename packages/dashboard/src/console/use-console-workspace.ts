@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ConsoleCreateSessionInput, ConsoleMessageInput, ConsoleSavedSession, ConsoleSessionSnapshot, DesktopConsoleEvent, DesktopConsoleSession } from "@0/shared";
 import { useBackendApi } from "@/api";
+import { useTeamAccess } from "@/components/team-access";
+import type { ModelsResponse } from "@/components/console-control/contracts";
+import { connectionVerified, errorProvider, type ConnectionRecovery } from "./connection-recovery";
 import { usePersistentState } from "@/lib/use-persistent-state";
 
 export interface ConsoleWorkspace {
@@ -11,6 +14,7 @@ export interface ConsoleWorkspace {
   saved: ConsoleSavedSession[];
   loading: boolean;
   error: string | undefined;
+  connectionRecovery?: ConnectionRecovery;
   busy: boolean;
   draft: string;
   rootDraft: string;
@@ -70,8 +74,10 @@ function applyEvents(snapshot: ConsoleSessionSnapshot, events: DesktopConsoleEve
 }
 
 export function useConsoleWorkspace(sessionId: string | undefined, workerId: string | null): ConsoleWorkspace {
-  const { createConsoleSession, getConsoleEvents, getConsoleSnapshot, listConsoleSessions, listSavedConsoleSessions, sendConsoleMessage } = useBackendApi();
+  const { client, createConsoleSession, getConsoleEvents, getConsoleSnapshot, listConsoleSessions, listSavedConsoleSessions, sendConsoleMessage, webFetchJson } = useBackendApi();
   const queryClient = useQueryClient();
+  const team = useTeamAccess();
+  const canReloadConnection = client.backendId !== "local" || !team.enabled || Boolean(team.user && team.user.role !== "viewer");
   const sessionsQuery = useQuery({ queryKey: ["console-sessions"], queryFn: ({ signal }) => listConsoleSessions(signal), refetchInterval: 2000 });
   const savedQuery = useQuery({ queryKey: ["console-saved"], queryFn: ({ signal }) => listSavedConsoleSessions(signal), refetchInterval: 5000 });
   const [storedDrafts, setDrafts] = usePersistentState<Record<string, string>>("0-console-drafts", {});
@@ -83,6 +89,44 @@ export function useConsoleWorkspace(sessionId: string | undefined, workerId: str
   const draftKey = `${sessionId ?? "new"}:${workerId ?? "root"}`;
   const draft = typeof drafts[draftKey] === "string" ? drafts[draftKey] : "";
   const snapshot = storedSnapshot?.session.id === sessionId ? storedSnapshot : null;
+  const reloadedFailure = useRef<string | null>(null);
+  const providerFailure = useMemo(() => {
+    const fallback = snapshot?.runtime?.providerId;
+    const failures = (snapshot?.events ?? []).flatMap(event => {
+      const message = event.type === "error" ? event.message : event.type === "turn-complete" ? event.error : undefined;
+      const providerId = message ? errorProvider(message, fallback) : undefined;
+      return providerId ? [{ providerId, sequence: event.sequence }] : [];
+    });
+    const localProvider = error?.source === "action" && (!error.sessionId || error.sessionId === sessionId) ? errorProvider(error.message, fallback) : undefined;
+    const retainedProvider = snapshot?.lastOutcome?.error ? errorProvider(snapshot.lastOutcome.error, fallback) : undefined;
+    return localProvider ? { providerId: localProvider, sequence: `action:${error!.message}` } : failures.at(-1) ?? (retainedProvider ? { providerId: retainedProvider, sequence: `retained:${snapshot!.lastOutcome!.error}` } : undefined);
+  }, [snapshot, error, sessionId]);
+  const failureKey = providerFailure ? `${client.backendId}:${sessionId}:${providerFailure.providerId}:${providerFailure.sequence}` : null;
+  const idle = !["working", "waiting"].includes(snapshot?.session.status ?? "");
+  const connectionCheck = useQuery({
+    queryKey: ["console-connection-health", client.backendId, sessionId, providerFailure?.providerId, providerFailure?.sequence],
+    enabled: Boolean(providerFailure && idle),
+    queryFn: async ({ signal }) => {
+      const result = await webFetchJson<ModelsResponse>(`/api/console/models?providerId=${encodeURIComponent(providerFailure!.providerId)}`, { signal });
+      if (!connectionVerified(providerFailure!.providerId, result)) return false;
+      // Reconnection is automatic at an idle boundary, never during a turn.
+      if (sessionId && canReloadConnection && failureKey !== reloadedFailure.current) {
+        await webFetchJson(`/api/console/sessions/${encodeURIComponent(sessionId)}/connection/reload`, { method: "POST", body: "{}", signal });
+        reloadedFailure.current = failureKey;
+      }
+      return true;
+    },
+    retry: false,
+    staleTime: 0,
+    refetchOnWindowFocus: "always",
+    refetchInterval: query => query.state.data === true ? false : 10_000,
+  });
+  const healthy = connectionCheck.isSuccess && connectionCheck.data === true;
+  useEffect(() => {
+    if (!healthy || !providerFailure) return;
+    setError(previous => previous?.source === "action" && errorProvider(previous.message, providerFailure.providerId) === providerFailure.providerId ? null : previous);
+  }, [healthy, providerFailure?.providerId]);
+
 
   useEffect(() => {
     if (!sessionId) return;
@@ -156,6 +200,7 @@ export function useConsoleWorkspace(sessionId: string | undefined, workerId: str
     snapshot, sessionsLoaded: sessionsQuery.isSuccess, sessions: sessionsQuery.data ?? [], saved: savedQuery.data ?? [],
     loading: Boolean(sessionId && !snapshot && !(error && (!error.sessionId || error.sessionId === sessionId))),
     error: error && (error.source === "action" || !error.sessionId || error.sessionId === sessionId) ? error.message : (sessionsQuery.error ?? savedQuery.error)?.message,
+    connectionRecovery: providerFailure ? { providerId: providerFailure.providerId, healthy, checking: connectionCheck.isFetching } : undefined,
     dismissError: () => setError(null),
     busy: pending.length > 0, draft,
     rootDraft: typeof drafts[`${sessionId ?? "new"}:root`] === "string" ? drafts[`${sessionId ?? "new"}:root`]! : "",
