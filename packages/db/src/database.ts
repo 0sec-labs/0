@@ -1414,6 +1414,18 @@ export class osecDB {
       .get();
   }
 
+  /** Stable bounded keyset projection for read-only external findings APIs. */
+  listFindingsApiPage(options: { limit: number; scanId?: string; severity?: string; status?: string; includeSuppressed?: boolean; before?: { timestamp: number; id: string } }) {
+    if (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 101) throw new Error("Finding API page limit must be between 1 and 101.");
+    return this.sqlite.prepare(`SELECT id, scanId, timestamp FROM findings
+      WHERE (@scanId IS NULL OR scanId = @scanId) AND (@severity IS NULL OR severity = @severity)
+      AND (@status IS NULL OR status = @status) AND (@includeSuppressed = 1 OR COALESCE(triageStatus, 'new') != 'suppressed')
+      AND (@beforeTimestamp IS NULL OR timestamp < @beforeTimestamp OR (timestamp = @beforeTimestamp AND id < @beforeId))
+      ORDER BY timestamp DESC, id DESC LIMIT @limit`).all({ limit: options.limit, scanId: options.scanId ?? null,
+      severity: options.severity ?? null, status: options.status ?? null, includeSuppressed: options.includeSuppressed ? 1 : 0,
+      beforeTimestamp: options.before?.timestamp ?? null, beforeId: options.before?.id ?? null }) as Array<{ id: string; scanId: string; timestamp: number }>;
+  }
+
   listFindings(opts?: {
     scanId?: string;
     severity?: string;

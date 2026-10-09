@@ -148,6 +148,7 @@ import {
 import type { SkillDefinition } from "./skills/index.js";
 import { loadSkillBundleFromManifest } from "./skills/markdown-bundle.js";
 import { discoverAgentSkills, loadAgentSkill } from "./skills/agent-skills.js";
+import { executeSkillAuthoring } from "./skills/skill-authoring.js";
 import { eventBus } from "../events/bus.js";
 import type {
   SubagentLifecyclePayload,
@@ -527,6 +528,11 @@ const SCOPED_SOURCE_AUDIT_TOOLS: Record<string, true> = {
   // Methodology reads return bounded registry text, never execute its contents.
   list_skills: true,
   load_skill: true,
+  // Skill library edits use a host-issued adapter, never target file access.
+  read_skill: true,
+  create_skill: true,
+  save_skill: true,
+  copy_skill: true,
   query_findings: true,
   save_finding: true,
   update_finding: true,
@@ -6158,6 +6164,7 @@ export class ToolExecutor {
           executablePlugins: this.ctx.executablePluginConfiguration,
           workspaceRoot: this.ctx.workspaceRoot,
           skillDiscoveryOptions: this.ctx.skillDiscoveryOptions,
+          skillAuthoring: this.ctx.skillAuthoring,
           executableEvolutionProfiles: this.ctx.executableEvolutionProfiles,
           enforcement: this.ctx.enforcement,
           rateLimiter: this.ctx.rateLimiter,
@@ -6315,6 +6322,7 @@ export class ToolExecutor {
         executablePlugins: this.ctx.executablePluginConfiguration,
         workspaceRoot: this.ctx.workspaceRoot,
         skillDiscoveryOptions: this.ctx.skillDiscoveryOptions,
+        skillAuthoring: this.ctx.skillAuthoring,
         executableEvolutionProfiles: this.ctx.executableEvolutionProfiles,
         enforcement: this.ctx.enforcement,
         rateLimiter: this.ctx.rateLimiter,
@@ -8824,6 +8832,22 @@ export class ToolExecutor {
     return this._cloudSkillBundle;
   }
 
+  private readSkill(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeSkillAuthoring("read", args, typeof this.ctx.skillAuthoring === "function" ? this.ctx.skillAuthoring() : this.ctx.skillAuthoring);
+  }
+
+  private createSkill(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeSkillAuthoring("create", args, typeof this.ctx.skillAuthoring === "function" ? this.ctx.skillAuthoring() : this.ctx.skillAuthoring);
+  }
+
+  private saveSkill(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeSkillAuthoring("update", args, typeof this.ctx.skillAuthoring === "function" ? this.ctx.skillAuthoring() : this.ctx.skillAuthoring);
+  }
+
+  private copySkill(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeSkillAuthoring("copy", args, typeof this.ctx.skillAuthoring === "function" ? this.ctx.skillAuthoring() : this.ctx.skillAuthoring);
+  }
+
   private listSkills(args: Record<string, unknown>): ToolResult {
     const tag = typeof args.tag === "string" ? args.tag : undefined;
     const summaries = listSkillSummaries({ tag, role: this.ctx.role });
@@ -9279,7 +9303,7 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
   const payloadTools = ["payload_lookup"];
   const wpTools = featureFlags.wpFingerprint ? ["wp_fingerprint"] : [];
   const mongoTools = featureFlags.mongoObjectIdForge ? ["mongo_objectid"] : [];
-  const skillTools = ["list_skills", "load_skill"];
+  const skillTools = ["list_skills", "load_skill", "read_skill", "create_skill", "save_skill", "copy_skill"];
   // 0#567 — loot retrieval tool, only when the ledger feature is on.
   const lootTools = featureFlags.lootLedger ? ["use_loot"] : [];
   // Typed TODO ledger — the `plan` tool, only when the feature is on.

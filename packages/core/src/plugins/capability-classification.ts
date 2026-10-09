@@ -42,6 +42,7 @@ export const READ_ONLY_TOOLS: Readonly<Record<string, true>> = Object.freeze({
   query_findings: true,
   list_skills: true,
   load_skill: true,
+  read_skill: true,
   intel_search_advisories: true,
   intel_lookup_cve: true,
   intel_search_similar: true,

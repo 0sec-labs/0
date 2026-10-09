@@ -20,6 +20,7 @@ const configSchema = z.object({
   oidc: z.object({ issuer: z.string().url(), clientId: z.string().min(1), clientSecretEnv: z.string().min(1).optional(), redirectUri: z.string().url() }).strict().optional(),
 }).strict();
 export type TeamConfig = z.infer<typeof configSchema>;
+export function parseTeamConfig(input: unknown): TeamConfig { return configSchema.parse(input); }
 export interface TeamIdentity { workspaceId: string; userId: string; displayName: string; role: "owner" | "editor" | "viewer" }
 export class TeamAuthError extends Error { constructor(message: string, public readonly statusCode = 401) { super(message); } }
 function opaque(): string { return randomBytes(32).toString("base64url"); }
@@ -86,6 +87,25 @@ export class TeamAuth {
   lookupUser(id: string): TeamIdentity | null {
     const user = this.config?.users.find(row => row.id === id);
     return user ? { workspaceId: this.config!.workspace.id, userId: user.id, displayName: user.name, role: user.role } : null;
+  }
+  /** Trusted server configuration only; never serialize this through a browser API. */
+  snapshotConfig(): TeamConfig {
+    if (!this.config) throw new TeamAuthError("Team sign-in is not configured", 404);
+    return structuredClone(this.config);
+  }
+  configurationDigest(): string { return createHash("sha256").update(JSON.stringify(this.snapshotConfig())).digest("hex"); }
+  members(): Array<Pick<TeamIdentity, "userId" | "displayName" | "role">> {
+    return (this.config?.users ?? []).map(user => ({ userId: user.id, displayName: user.name, role: user.role }));
+  }
+  /** Called only after an owner-authorized member has been durably persisted. */
+  addMember(input: { id: string; name: string; role: "editor" | "viewer"; passwordHash: string }): TeamIdentity {
+    if (!this.config) throw new TeamAuthError("Team sign-in is not configured", 404);
+    const member = userSchema.extend({ role: z.enum(["editor", "viewer"]), passwordHash: z.string() }).parse(input);
+    if (!validHash(member.passwordHash)) throw new TeamAuthError("Invalid password hash", 400);
+    if (this.config.users.some(user => user.id === member.id)) throw new TeamAuthError("That account ID already exists", 409);
+    if (this.config.users.length >= 1000) throw new TeamAuthError("Workspace member limit reached", 409);
+    this.config.users.push(member);
+    return this.lookupUser(member.id)!;
   }
   resolveSessionId(id: string | undefined): TeamIdentity | null {
     if (!id) return null;

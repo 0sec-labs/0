@@ -80,6 +80,7 @@ export default defineConfig({
             { label: "Chat & settings", slug: "console" },
             { label: "Workflows", slug: "workflow" },
             { label: "Skills", slug: "skills" },
+            { label: "Findings API", slug: "findings-api" },
             { label: "Engine connections", slug: "engine-connections" },
             { label: "Scan workflows", slug: "scan-workflows" },
             { label: "Scope & authorization", slug: "scope" },

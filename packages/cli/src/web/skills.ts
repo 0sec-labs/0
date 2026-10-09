@@ -13,6 +13,7 @@ const bundleSchema = z.object({ format: z.literal("agent-skill"), version: z.lit
 export type SkillBundle = z.infer<typeof bundleSchema>;
 type SkillFile = { path: string; bytes: Buffer };
 type Mount = z.infer<typeof mountSchema>;
+export type SkillAccess = { allowHostEdits?: boolean; canWrite?: boolean };
 export type WebSkill = { id: string; name: string; description: string; scope: "workspace" | "mounted" | "project" | "personal" | "builtin"; revision: string; writable: boolean; fileCount: number; source: string };
 function parse<T extends z.ZodTypeAny>(schema: T, input: unknown): z.output<T> { const value = schema.safeParse(input); if (!value.success) throw new SkillsError("Invalid skill request."); return value.data; }
 function filePath(path: string): void {
@@ -57,8 +58,10 @@ export class SkillsStore {
   }
   #discovery() { return discoverAgentSkills(this.discoveryOptions()); }
   #builtin(id: string): { metadata: WebSkill; files: SkillFile[] } | undefined {
-    if (!id.startsWith("builtin/")) return;
-    const skill = loadSkillRegistry().get(id.slice(8)); if (!skill) return;
+    const builtinId = id.startsWith("builtin/") ? id.slice(8) : id.includes("/") ? undefined : id;
+    if (!builtinId) return;
+    const skill = loadSkillRegistry().get(builtinId); if (!skill) return;
+    id = `builtin/${builtinId}`;
     const name = skill.id; const content = `---\nname: ${name}\ndescription: ${JSON.stringify(skill.description)}\n---\n\n${skill.content}\n`;
     const files = [{ path: "SKILL.md", bytes: Buffer.from(content) }];
     return { metadata: { id, name, description: skill.description, scope: "builtin", revision: revision(files), writable: false, fileCount: 1, source: "Built in" }, files };
@@ -73,13 +76,14 @@ export class SkillsStore {
     const files = readFiles(skill.directory); const shared = skill.root === this.#shared || skill.directory.startsWith(this.#shared + "/");
     return { metadata: { id, name: skill.name, description: skill.description, scope: (shared ? "workspace" : skill.source === "mount" ? "mounted" : skill.source) as WebSkill["scope"], revision: revision(files), writable: shared, fileCount: files.length, source: shared ? "Workspace" : skill.directory }, files, directory: skill.directory };
   }
-  list() {
+  #access(metadata: WebSkill, access: SkillAccess = {}): WebSkill { return { ...metadata, writable: access.canWrite !== false && metadata.scope !== "builtin" && (metadata.scope === "workspace" || access.allowHostEdits === true) }; }
+  list(access: SkillAccess = {}) {
     const found = this.#discovery(); const diagnostics = [...found.diagnostics]; const skills: WebSkill[] = [];
-    for (const item of found.skills) { try { skills.push(this.#describe(item).metadata); } catch (cause) { diagnostics.push({ path: item.directory, message: cause instanceof Error ? cause.message : "Skill cannot be read." }); } }
+    for (const item of found.skills) { try { skills.push(this.#access(this.#describe(item).metadata, access)); } catch (cause) { diagnostics.push({ path: item.directory, message: cause instanceof Error ? cause.message : "Skill cannot be read." }); } }
     for (const skill of loadSkillRegistry().values()) skills.push(this.#builtin(`builtin/${skill.id}`)!.metadata);
     return { skills, mounts: this.mounts(), diagnostics, workspacePath: this.workspacePath };
   }
-  get(id: string) { const row = this.#entry(id); return { ...row.metadata, content: row.files.find(file => file.path === "SKILL.md")!.bytes.toString("utf8"), files: row.files.map(file => ({ path: file.path, size: file.bytes.length })) }; }
+  get(id: string, access: SkillAccess = {}) { const row = this.#entry(id); return { ...this.#access(row.metadata, access), content: row.files.find(file => file.path === "SKILL.md")!.bytes.toString("utf8"), files: row.files.map(file => ({ path: file.path, size: file.bytes.length })) }; }
   export(id: string): SkillBundle { const row = this.#entry(id); return { format: "agent-skill", version: 1, name: row.metadata.name, files: row.files.map(file => ({ path: file.path, encoding: "base64", content: file.bytes.toString("base64") })) }; }
   #validate(content: string, name?: string) { try { return validateAgentSkillContent(content, name); } catch (cause) { throw new SkillsError(cause instanceof Error ? cause.message : "Invalid SKILL.md."); } }
   #transaction<T>(apply: () => T): T {
@@ -101,6 +105,7 @@ export class SkillsStore {
   }
   #write(files: SkillFile[], name: string): string { return this.#transaction(() => this.#writeUnlocked(files, name)); }
   #writeUnlocked(files: SkillFile[], name: string): string {
+    if (files.length > MAX_FILES || files.reduce((total, file) => total + file.bytes.length, 0) > MAX_BYTES) throw new SkillsError("Skill bundle exceeds its size limit.");
     this.#validate(files.find(file => file.path === "SKILL.md")?.bytes.toString("utf8") ?? "", name);
     mkdirSync(this.#shared, { recursive: true, mode: 0o700 }); const destination = join(this.#shared, name);
     try { lstatSync(destination); throw new SkillsError("A skill with this name already exists.", 409); } catch (cause) { if ((cause as NodeJS.ErrnoException).code !== "ENOENT") throw cause; }
@@ -121,13 +126,43 @@ export class SkillsStore {
     const files = bundle.files.map(file => { filePath(file.path); if (names.has(file.path)) throw new SkillsError("Duplicate skill file path."); names.add(file.path); if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(file.content)) throw new SkillsError("Invalid file encoding."); const bytes = Buffer.from(file.content, "base64"); total += bytes.length; if (total > MAX_BYTES) throw new SkillsError("Skill bundle exceeds 8 MB."); return { path: file.path, bytes }; });
     if (!names.has("SKILL.md")) throw new SkillsError("Skill bundle needs SKILL.md."); return this.get(this.#write(files, bundle.name));
   }
-  update(id: string, input: unknown) { return this.#transaction(() => this.#update(id, input)); }
-  #update(id: string, input: unknown) {
+  update(id: string, input: unknown, access: SkillAccess = {}) { return this.#transaction(() => this.#update(id, input, access)); }
+  #update(id: string, input: unknown, access: SkillAccess) {
     const { content, expectedRevision } = parse(z.object({ content: z.string().min(1).max(MAX_BYTES), expectedRevision: z.string().regex(/^[a-f0-9]{64}$/) }).strict(), input);
-    const row = this.#entry(id); if (!row.metadata.writable) throw new SkillsError("Mounted and built-in skills are read only. Import a copy to edit.", 403);
+    const row = this.#entry(id); if (!this.#access(row.metadata, access).writable) throw new SkillsError(row.metadata.scope === "builtin" ? "Save a workspace copy to edit this built-in skill." : "This account cannot edit this skill folder. Save a workspace copy instead.", 403);
     if (row.metadata.revision !== expectedRevision) throw new SkillsError("This skill changed. Reload it before saving.", 409);
     this.#validate(content, row.metadata.name);
-    const target = join(row.directory!, "SKILL.md"); const pending = join(this.#state, `.edit-${randomUUID()}`); try { writeFileSync(pending, content, { flag: "wx", mode: 0o600 }); renameSync(pending, target); } finally { rmSync(pending, { force: true }); } return this.get(id);
+    if (row.files.reduce((total, file) => total + (file.path === "SKILL.md" ? Buffer.byteLength(content) : file.bytes.length), 0) > MAX_BYTES) throw new SkillsError("Skill bundle exceeds its size limit.");
+    const target = join(row.directory!, "SKILL.md"); const pending = join(row.directory!, `.skill-edit-${randomUUID()}.tmp`); try { writeFileSync(pending, content, { flag: "wx", mode: lstatSync(target).mode & 0o777 }); renameSync(pending, target); } finally { rmSync(pending, { force: true }); } return this.get(id, access);
+  }
+  copy(id: string, input: unknown, access: SkillAccess = {}) {
+    if (access.canWrite === false) throw new SkillsError("This account has read-only workspace access.", 403);
+    return this.#transaction(() => {
+      const { content, expectedRevision } = parse(z.object({ content: z.string().min(1).max(MAX_BYTES), expectedRevision: z.string().regex(/^[a-f0-9]{64}$/) }).strict(), input);
+      const row = this.#entry(id);
+      if (row.metadata.revision !== expectedRevision) throw new SkillsError("This skill changed. Reload it before copying.", 409);
+      const { name } = this.#validate(content);
+      const files = row.files.map(file => file.path === "SKILL.md" ? { path: file.path, bytes: Buffer.from(content) } : file);
+      return this.get(this.#writeUnlocked(files, name), access);
+    });
+  }
+  /** Server-only adapter: capabilities come from authenticated actor policy, never tool input. */
+  authoring(access: SkillAccess = {}, projectRoot?: string): {
+    list: () => ReturnType<SkillsStore["list"]>;
+    read: (id: string) => ReturnType<SkillsStore["get"]>;
+    create: (content: string) => ReturnType<SkillsStore["get"]>;
+    update: (id: string, input: { content: string; expectedRevision: string }) => ReturnType<SkillsStore["get"]>;
+    copy: (id: string, input: { content: string; expectedRevision: string }) => ReturnType<SkillsStore["get"]>;
+  } {
+    if (!this.#team && projectRoot && realpathSync(projectRoot) !== this.workspacePath) return new SkillsStore({ workspace: projectRoot, stateDir: resolve(this.#state, "..") }).authoring(access);
+    const assertWrite = () => { if (access.canWrite === false) throw new SkillsError("This account has read-only workspace access.", 403); };
+    return {
+      list: () => this.list(access),
+      read: (id: string) => this.get(id, access),
+      create: (content: string) => { assertWrite(); return this.create({ content }); },
+      update: (id: string, input: { content: string; expectedRevision: string }) => { assertWrite(); return this.update(id, input, access); },
+      copy: (id: string, input: { content: string; expectedRevision: string }) => { assertWrite(); return this.copy(id, input, access); },
+    };
   }
   mount(input: unknown) { return this.#transaction(() => this.#mount(input)); }
   #mount(input: unknown) {
