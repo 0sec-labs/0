@@ -93,6 +93,59 @@ type RequestHandler = (
 
 vi.mock("../../local-engine.js", () => ({ assertLocalEngineAvailable: vi.fn(), registerLocalEngine: vi.fn(() => vi.fn()) }));
 
+const setupHttp = vi.hoisted(() => ({ pending: false, directories: [] as string[] }));
+vi.mock("../../web/team-setup.js", async importOriginal => {
+  const original = await importOriginal<typeof import("../../web/team-setup.js")>();
+  const { TeamAuth, TeamAuthError, hashTeamPassword } = await vi.importActual<typeof import("../../web/team-auth.js")>("../../web/team-auth.js");
+  const fs = await vi.importActual<typeof import("node:fs")>("node:fs");
+  const os = await vi.importActual<typeof import("node:os")>("node:os");
+  return { ...original, findTeamConfigPath: () => undefined,
+    TeamSetupService: class {
+      constructor(private options: ConstructorParameters<typeof original.TeamSetupService>[0]) {}
+      status() { return { available: !this.options.currentAuth().enabled, pending: setupHttp.pending }; }
+      async setup(input: { workspaceName: string; displayName: string; userId: string; password: string }) {
+        const config = { workspace: { id: "http-team-workspace", name: input.workspaceName }, users: [{ id: input.userId, name: input.displayName, role: "owner" as const, passwordHash: await hashTeamPassword(input.password) }] };
+        const auth = new TeamAuth({ config, origin: this.options.origin() });
+        const session = await auth.login({ userId: input.userId, password: input.password });
+        const stateDir = fs.mkdtempSync(os.tmpdir() + "/zero-http-team-"); setupHttp.directories.push(stateDir);
+        setupHttp.pending = true;
+        try { await this.options.activate({ auth, stateDir, dbPath: stateDir + "/data.db", configPath: stateDir + "/team.json", workspaceId: config.workspace.id, name: config.workspace.name }); }
+        finally { setupHttp.pending = false; }
+        return { ...session, workspace: config.workspace };
+      }
+      members(req: import("node:http").IncomingMessage) { const auth = this.options.currentAuth(); if (!auth.resolveSession(req)) throw new TeamAuthError("Sign in to this workspace."); return { users: auth.members() }; }
+    },
+  };
+});
+
+const scopedApi = vi.hoisted(() => ({ token: "0_find_" + "A".repeat(43), revoked: false }));
+vi.mock("../../web/findings-access-tokens.js", async importOriginal => {
+  const original = await importOriginal<typeof import("../../web/findings-access-tokens.js")>();
+  return { ...original, FindingsAccessTokenStore: class {
+    readonly workspaceId: string;
+    constructor(options: { workspaceId: string }) { this.workspaceId = options.workspaceId; }
+    list() { return []; }
+    create() { return { credential: { id: "11111111-1111-4111-8111-111111111111", workspaceId: this.workspaceId, name: "Reporting", scopes: ["read:findings"] }, token: scopedApi.token }; }
+    revoke() { scopedApi.revoked = true; return {}; }
+    authenticate(req: import("node:http").IncomingMessage, url: URL) {
+      if (!req.headers.authorization?.startsWith("Bearer 0_find_")) return null;
+      if (req.headers.authorization !== `Bearer ${scopedApi.token}` || scopedApi.revoked) throw new original.FindingsAccessError("Invalid API key.", 401);
+      if (!original.findingsReadPath(req.method ?? "GET", url.pathname)) throw new original.FindingsAccessError("Findings keys are read-only.", 403);
+      return { workspaceId: this.workspaceId };
+    }
+  } };
+});
+vi.mock("../../web/findings-read-api.js", async importOriginal => {
+  const original = await importOriginal<typeof import("../../web/findings-read-api.js")>();
+  return { ...original, FindingsReadApi: class {
+    readonly workspaceId: string;
+    constructor(options: { workspaceId: string }) { this.workspaceId = options.workspaceId; }
+    list() { return { schemaVersion: 1, workspaceId: this.workspaceId, findings: [], page: { limit: 50, nextCursor: null, hasMore: false } }; }
+    detail(id: string) { return { schemaVersion: 1, workspaceId: this.workspaceId, finding: { id } }; }
+    export() { return { coverage: "selected-retained-findings", report: {} }; }
+  } };
+});
+
 const instanceMock = vi.hoisted(() => vi.fn().mockResolvedValue(false));
 vi.mock("../../web/dashboard-instance.js", () => ({ findDashboardInstance: instanceMock }));
 
@@ -375,6 +428,7 @@ vi.mock("@0/db", () => {
     }
   }
   return {
+    findingStatuses: ["discovered", "verified", "confirmed", "scored", "reported", "fixed", "false-positive"],
     osecDB: FakeOsecDB,
     // Identity persistence is covered by the real registry suite; this fake DB
     // never creates on-disk state, including adjacent engine identity files.
@@ -420,6 +474,7 @@ const skillsHttp = vi.hoisted(() => ({
   get: vi.fn((id: string) => ({ id, content: "standard skill" })),
   export: vi.fn((id: string) => ({ format: "agent-skill", version: 1, name: "test-review", id, files: [] })),
   import: vi.fn(() => ({ id: "mount/workspace/imported-review" })),
+  copy: vi.fn((id: string, input: unknown) => ({ id: "mount/workspace/copied-review", input })),
   update: vi.fn((id: string, input: unknown) => ({ id, input })),
   mount: vi.fn(() => ({ id: "mount-one" })),
   unmount: vi.fn(),
@@ -427,7 +482,7 @@ const skillsHttp = vi.hoisted(() => ({
 vi.mock("../../web/skills.js", () => ({ SkillsStore: class {
   discoveryOptions() { return { homeDir: null, mounts: [] }; }
   list = skillsHttp.list; create = skillsHttp.create; get = skillsHttp.get;
-  export = skillsHttp.export; import = skillsHttp.import; update = skillsHttp.update;
+  export = skillsHttp.export; import = skillsHttp.import; update = skillsHttp.update; copy = skillsHttp.copy;
   mount = skillsHttp.mount; unmount = skillsHttp.unmount;
 } }));
 const { registerDashboardCommand } = await import("../dashboard.js");
@@ -509,7 +564,9 @@ function makeResponse(): {
   captured: CapturedResponse;
 } {
   const captured: CapturedResponse = { statusCode: 0, headers: {}, body: "" };
+  const events = new EventEmitter();
   const res = {
+    once: events.once.bind(events),
     setHeader(name: string, value: string) { captured.headers[name] = value; },
     writeHead(code: number, headers: Record<string, string>) {
       captured.statusCode = code;
@@ -519,6 +576,7 @@ function makeResponse(): {
       if (body !== undefined) {
         captured.body = Buffer.isBuffer(body) ? body.toString("utf-8") : body;
       }
+      events.emit("finish");
     },
   } as unknown as import("node:http").ServerResponse;
   return { res, captured };
@@ -1592,10 +1650,12 @@ describe("dashboard — skills HTTP library", () => {
     expect(skillsHttp.create).toHaveBeenCalledWith({ content: "SKILL.md source" });
     const id = "mount/workspace/test-review";
     expect((await call("GET", `/api/skills/${encodeURIComponent(id)}`)).statusCode).toBe(200);
-    expect(skillsHttp.get).toHaveBeenCalledWith(id);
+    expect(skillsHttp.get).toHaveBeenCalledWith(id, { allowHostEdits: true, canWrite: true });
     const edited = { content: "New source", expectedRevision: "a".repeat(64) };
     expect((await call("PUT", `/api/skills/${encodeURIComponent(id)}`, edited)).statusCode).toBe(200);
-    expect(skillsHttp.update).toHaveBeenCalledWith(id, edited);
+    expect(skillsHttp.update).toHaveBeenCalledWith(id, edited, { allowHostEdits: true, canWrite: true });
+    expect((await call("POST", `/api/skills/${encodeURIComponent(id)}/copy`, edited)).statusCode).toBe(201);
+    expect(skillsHttp.copy).toHaveBeenCalledWith(id, edited, { allowHostEdits: true, canWrite: true });
     const exported = await call("GET", `/api/skills/${encodeURIComponent(id)}/export`);
     expect(exported.statusCode).toBe(200); expect(exported.headers["Content-Disposition"]).toContain("test-review.skill.json"); expect(skillsHttp.export).toHaveBeenCalledWith(id);
     const bundle = JSON.parse(exported.body);
@@ -1617,5 +1677,49 @@ describe("dashboard — skills HTTP library", () => {
       expect(result.statusCode).toBe(400); expect(JSON.parse(result.body).error).toBe("Invalid skill identifier.");
     }
     expect(skillsHttp.get).not.toHaveBeenCalled(); expect(skillsHttp.export).not.toHaveBeenCalled(); expect(skillsHttp.unmount).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("same-server workspace setup", () => {
+  afterEach(async () => {
+    const fs = await vi.importActual<typeof import("node:fs")>("node:fs");
+    for (const directory of setupHttp.directories.splice(0)) fs.rmSync(directory, { recursive: true, force: true });
+    setupHttp.pending = false;
+  });
+  it("switches service ownership and accounts without opening another HTTP listener", async () => {
+    await runCli(["web", "--no-open"]);
+    const token = await getControlToken(); const listeners = httpState.listenCalls.length;
+    const reply = await invokeHandler(makeRequest({ method: "POST", url: "/api/team/setup", headers: { "x-0-control-token": token }, body: { workspaceName: "HTTP team", displayName: "Test owner", userId: "test-owner", password: "Disposable test password" } }));
+    expect(reply.statusCode).toBe(201); expect(httpState.listenCalls).toHaveLength(listeners);
+    const cookie = reply.headers["Set-Cookie"].split(";")[0];
+    const status = await invokeHandler(makeRequest({ method: "GET", url: "/api/team/session", headers: { "x-0-control-token": token, cookie } }));
+    expect(JSON.parse(status.body)).toMatchObject({ enabled: true, workspace: { name: "HTTP team" }, user: { userId: "test-owner", role: "owner" } });
+    const anonymous = await invokeHandler(makeRequest({ method: "GET", url: "/api/dashboard", headers: { "x-0-control-token": token } }));
+    expect(anonymous.statusCode).toBe(401);
+    const users = await invokeHandler(makeRequest({ method: "GET", url: "/api/team/users", headers: { "x-0-control-token": token, cookie } }));
+    expect(JSON.parse(users.body).users).toEqual([{ userId: "test-owner", displayName: "Test owner", role: "owner" }]);
+  });
+  it("blocks ordinary API calls while the workspace transition is pending", async () => {
+    await runCli(["web", "--no-open"]); const token = await getControlToken(); setupHttp.pending = true;
+    const response = await invokeHandler(makeRequest({ method: "GET", url: "/api/dashboard", headers: { "x-0-control-token": token } }));
+    expect(response.statusCode).toBe(503);
+  });
+});
+
+
+describe("external read-only findings API", () => {
+  afterEach(() => { scopedApi.revoked = false; });
+  it("accepts a scoped machine key without a browser cookie or control token", async () => {
+    await runCli(["web", "--no-open"]);
+    const missing = await invokeHandler(makeRequest({ method: "GET", url: "/api/v1/findings" })); expect(missing.statusCode).toBe(401);
+    const allowed = await invokeHandler(makeRequest({ method: "GET", url: "/api/v1/findings", headers: { authorization: `Bearer ${scopedApi.token}` } }));
+    expect(allowed.statusCode).toBe(200); expect(JSON.parse(allowed.body)).toMatchObject({ schemaVersion: 1, findings: [] });
+  });
+  it("does not promote findings keys to browser or admin permissions", async () => {
+    await runCli(["web", "--no-open"]); const token = await getControlToken();
+    const denied = await invokeHandler(makeRequest({ method: "POST", url: "/api/control/launch-run", headers: { authorization: `Bearer ${scopedApi.token}`, "x-0-control-token": token }, body: { target: "https://example.test" } })); expect(denied.statusCode).toBe(403);
+    scopedApi.revoked = true;
+    const revoked = await invokeHandler(makeRequest({ method: "GET", url: "/api/v1/findings", headers: { authorization: `Bearer ${scopedApi.token}` } })); expect(revoked.statusCode).toBe(401);
   });
 });

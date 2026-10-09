@@ -34,10 +34,14 @@ import { BackendConnectionRegistry, backendBearerFromEnv, createBackendHandshake
 import { WorkflowEngineService } from "../workflow-engine-service.js";
 import { retainedScanSnapshot, retainedFindingSnapshot } from "../web/report-artifacts.js";
 import { handleFindingImpactRequest } from "../web/finding-impact.js";
+import { FindingsAccessError, FindingsAccessTokenStore, handleFindingsAccessTokenRequest } from "../web/findings-access-tokens.js";
+import { FindingsReadApi, handleFindingsReadRequest } from "../web/findings-read-api.js";
 import { SkillsStore } from "../web/skills.js";
 import { EngagementStore } from "../web/engagements.js";
 import { engagementMarkdown } from "../web/engagement-report.js";
-import { TeamAuth, getSessionId } from "../web/team-auth.js";
+import { createWorkspaceServices } from "../web/workspace-services.js";
+import { findTeamConfigPath, handleTeamSetupRequest, TeamSetupService } from "../web/team-setup.js";
+import { TeamAuth, TeamAuthError, getSessionId } from "../web/team-auth.js";
 import { CollaborationService } from "../web/collaboration.js";
 import { authorizeTeamApi, handleTeamRequest, assertTeamConsoleMutation } from "../web/team-web.js";
 import { handleTeamPresenceStream } from "../web/team-presence-stream.js";
@@ -1826,20 +1830,22 @@ export function registerDashboardCommand(program: Command): void {
       }
 
       const engineBearer = backendBearerFromEnv(opts.engineTokenEnv);
-      if (!engineBearer && !opts.teamConfig && !process.env.ZERO_TEAM_CONFIG && [opts.engineWorkspace, opts.engineScope, opts.engineTarget, opts.engineAllowApply, opts.engineTimeCap, opts.engineCostCap].some(value => value !== undefined && value !== false)) throw new Error("Engine admission options require --engine-token-env or --team-config.");
+      const explicitTeamConfig = opts.teamConfig ?? process.env.ZERO_TEAM_CONFIG;
+      const teamConfigPath = findTeamConfigPath({ workspacePath: opts.engineWorkspace ?? process.cwd(), explicitConfigPath: explicitTeamConfig });
+      if (!engineBearer && !teamConfigPath && [opts.engineWorkspace, opts.engineScope, opts.engineTarget, opts.engineAllowApply, opts.engineTimeCap, opts.engineCostCap].some(value => value !== undefined && value !== false)) throw new Error("Engine admission options require --engine-token-env or --team-config.");
       const timeCapMs = opts.engineTimeCap === undefined ? 600_000 : Number(opts.engineTimeCap);
       const costCapUsd = opts.engineCostCap === undefined ? 5 : Number(opts.engineCostCap);
       if (!Number.isInteger(timeCapMs) || timeCapMs < 1 || timeCapMs > 86_400_000 || !Number.isFinite(costCapUsd) || costCapUsd <= 0 || costCapUsd > 1000) throw new Error("Engine limits must be positive, with time at most 86400000 ms and cost at most $1000.");
       const controlToken = randomUUID();
-      const teamAuth = new TeamAuth({ configPath: opts.teamConfig ?? process.env.ZERO_TEAM_CONFIG, origin });
-      const teamDirectory = teamAuth.enabled ? join(homeStateDir(), "teams", createHash("sha256").update(teamAuth.workspaceId!).digest("hex")) : undefined;
-      if (teamDirectory) { mkdirSync(teamDirectory, { recursive: true, mode: 0o700 }); opts.dbPath ??= join(teamDirectory, "data.db"); }
-      const collaboration = teamAuth.enabled ? new CollaborationService({ workspaceId: teamAuth.workspaceId!, stateDir: join(teamDirectory!, "collaboration"), resolveSession: sessionId => teamAuth.resolveSessionId(sessionId) }) : undefined;
+      let teamAuth = new TeamAuth({ configPath: teamConfigPath, origin });
+      let teamDirectory = teamAuth.enabled ? join(homeStateDir(), "teams", createHash("sha256").update(teamAuth.workspaceId!).digest("hex")) : undefined;
+      if (teamDirectory) { mkdirSync(teamDirectory, { recursive: true, mode: 0o700 }); if (!explicitTeamConfig) opts.dbPath = join(teamDirectory, "data.db"); else opts.dbPath ??= join(teamDirectory, "data.db"); }
+      let collaboration = teamAuth.enabled ? new CollaborationService({ workspaceId: teamAuth.workspaceId!, stateDir: join(teamDirectory!, "collaboration"), resolveSession: sessionId => teamAuth.resolveSessionId(sessionId) }) : undefined;
       // Never recover another live host's database while opening a second UI.
       assertLocalEngineAvailable(opts.dbPath);
       const capabilities = ["sessions", "workflows", "schedules", "approvals", "events", "workspaces", "artifacts", "model-connections", "operator-services", "process-controls", "learning", "workflow-engine"];
-      const localHandshake = createBackendHandshake(opts.dbPath, capabilities);
-      const backends = new BackendConnectionRegistry({ configPath: opts.backendsConfig, localHandshake });
+      let localHandshake = createBackendHandshake(opts.dbPath, capabilities);
+      let backends = new BackendConnectionRegistry({ configPath: opts.backendsConfig, localHandshake });
       let engine: WorkflowEngineService | undefined;
       let startupGateway: ConsoleGateway | undefined;
       let startupOperator: WebOperatorServices | undefined;
@@ -1850,31 +1856,41 @@ export function registerDashboardCommand(program: Command): void {
       try {
         const { path: assetDir, cleanup: cleanupAssetDir } = resolveDashboardAssetDir(opts.assetDir);
         startupAssetCleanup = cleanupAssetDir;
-        const skills = new SkillsStore({ workspace: opts.engineWorkspace ?? process.cwd(), stateDir: teamDirectory ?? homeStateDir(), team: teamAuth.enabled });
-        const consoleGateway = startupGateway = new ConsoleGateway({ dbPath: opts.dbPath, projectPath: opts.engineWorkspace, skillDiscoveryOptions: workspaceRoot => ({ ...skills.discoveryOptions(), ...(teamAuth.enabled ? {} : { projectRoot: workspaceRoot }) }), ...(teamDirectory ? { homeDir: teamDirectory } : {}) });
-        const engagements = new EngagementStore({ workspace: opts.engineWorkspace ?? process.cwd(), dbPath: opts.dbPath, ...(teamDirectory ? { stateDir: teamDirectory } : {}) });
-        const operator = startupOperator = new WebOperatorServices({ isTurnActive: () => consoleGateway.hasActiveTurns() });
-        const workflows = startupWorkflows = new WebWorkflowService({ gateway: consoleGateway, dbPath: opts.dbPath });
-        consoleGateway.attachSourceLearning(workflows.learning.store);
-        consoleGateway.attachLearningRecorder(event => workflows.learning.recordChatOutcome(event));
-        consoleGateway.attachWorkflowLifecycle({ invoke: (sessionId, name, args, capabilities) => workflows.invokeLifecycle(sessionId, name, args, capabilities) });
-        engine = new WorkflowEngineService({ token: engineBearer ?? controlToken, workspace: opts.engineWorkspace, scopePath: opts.engineScope, target: opts.engineTarget, allowApply: opts.engineAllowApply, dbPath: opts.dbPath, timeCapMs, costCapUsd }, { gateway: consoleGateway, workflows });
-        await engine.ready;
-        const triggers = startupTriggers = new WorkflowTriggerService({ dbPath: opts.dbPath, adapter: {
-          async validate(trigger) {
-            const sessionId = await consoleGateway.prepareScheduledWorkflowOwner(trigger.sessionId);
-            const context = await workflows.validateScheduledWorkflow(trigger.workflowId, { sessionId, revision: trigger.workflowRevision });
-            return { model: context.model, providerId: context.providerId, ...(context.runtime instanceof LlmApiRuntime ? { connectionIdentity: context.runtime.connectionIdentity() } : {}) };
+        const buildServices = (auth: TeamAuth, dbPath = opts.dbPath, stateDir = teamDirectory) => createWorkspaceServices({ auth, dbPath, stateDir, workspace: opts.engineWorkspace, scopePath: opts.engineScope, target: opts.engineTarget, allowApply: opts.engineAllowApply, controlToken, engineBearer, timeCapMs, costCapUsd });
+        let services = await buildServices(teamAuth);
+        let { skills, gateway: consoleGateway, engagements, operator, workflows, triggers, github } = services;
+        engine = services.engine;
+        startupGateway = consoleGateway; startupOperator = operator; startupWorkflows = workflows; startupTriggers = triggers; startupGitHub = github;
+        let findingsAccess = new FindingsAccessTokenStore({ workspaceId: teamAuth.workspaceId ?? localHandshake.engineId, stateDir: join(teamDirectory ?? homeStateDir(), "findings-api-access") });
+        let findingsRead = new FindingsReadApi({ workspaceId: teamAuth.workspaceId ?? localHandshake.engineId, dbPath: opts.dbPath });
+        const activeResponses = new Set<ServerResponse>();
+        let setupResponse: ServerResponse | undefined;
+        const setup = new TeamSetupService({ workspacePath: opts.engineWorkspace ?? process.cwd(), configPath: teamConfigPath, origin: () => origin, currentAuth: () => teamAuth,
+          activate: async prepared => {
+            if (consoleGateway.hasActiveTurns() || workflows.hasActiveWork()) throw new TeamAuthError("Finish active work before creating a team workspace.", 409);
+            const next = await buildServices(prepared.auth, prepared.dbPath, prepared.stateDir);
+            let nextBackends: BackendConnectionRegistry | undefined;
+            let nextUnregister: (() => void) | undefined;
+            try {
+              const nextHandshake = createBackendHandshake(prepared.dbPath, capabilities);
+              nextBackends = new BackendConnectionRegistry({ configPath: opts.backendsConfig, localHandshake: nextHandshake });
+              const nextAccess = new FindingsAccessTokenStore({ workspaceId: prepared.workspaceId, stateDir: join(prepared.stateDir, "findings-api-access") });
+              const nextRead = new FindingsReadApi({ workspaceId: prepared.workspaceId, dbPath: prepared.dbPath });
+              const nextCollaboration = new CollaborationService({ workspaceId: prepared.workspaceId, stateDir: join(prepared.stateDir, "collaboration"), resolveSession: sessionId => prepared.auth.resolveSessionId(sessionId) });
+              nextUnregister = registerLocalEngine({ url: origin, token: controlToken, engineId: nextHandshake.engineId, serverInstanceId: nextHandshake.serverInstanceId!, pid: process.pid, workspace: opts.engineWorkspace ?? process.cwd() }, prepared.dbPath);
+              if (consoleGateway.hasActiveTurns() || workflows.hasActiveWork()) throw new TeamAuthError("Finish active work before creating a team workspace.", 409);
+              await services.dispose();
+              for (const response of activeResponses) if (response !== setupResponse) response.end();
+              backends.dispose(); unregisterLocalEngine?.();
+              services = next; teamAuth = prepared.auth; teamDirectory = prepared.stateDir; opts.dbPath = prepared.dbPath; collaboration = nextCollaboration; localHandshake = nextHandshake; backends = nextBackends; unregisterLocalEngine = nextUnregister;
+              ({ skills, gateway: consoleGateway, engagements, operator, workflows, triggers, github } = next); engine = next.engine; findingsAccess = nextAccess; findingsRead = nextRead;
+              startupGateway = consoleGateway; startupOperator = operator; startupWorkflows = workflows; startupTriggers = triggers; startupGitHub = github;
+            } catch (cause) { nextBackends?.dispose(); nextUnregister?.(); await next.dispose().catch(() => {}); throw cause; }
           },
-          async launch(trigger) {
-            const sessionId = await consoleGateway.prepareScheduledWorkflowOwner(trigger.sessionId);
-            const result = await workflows.launchScheduledWorkflow(trigger.workflowId, { sessionId, revision: trigger.workflowRevision });
-            return { executionId: result.execution.id };
-          },
-        } });
-        const github = startupGitHub = new GitHubPublicationAuth();
+        });
 
         const server = createServer(async (req, res) => {
+          activeResponses.add(res); const releaseResponse = () => activeResponses.delete(res); res.once("close", releaseResponse); res.once("finish", releaseResponse);
           try { authorizeWebRequest(req, origin); }
           catch (error) {
             json(res, error instanceof WebRequestError ? error.statusCode : 403, { error: error instanceof Error ? error.message : "Invalid request origin." });
@@ -1886,8 +1902,24 @@ export function registerDashboardCommand(program: Command): void {
 
           try {
             if (requestUrl.pathname.startsWith("/api/")) {
+              const findingsCredential = findingsAccess.authenticate(req, requestUrl);
+              if (requestUrl.pathname === "/api/v1/findings" || requestUrl.pathname.startsWith("/api/v1/findings/")) {
+                if (setup.status().pending) throw new WebRequestError("Workspace setup is in progress. Try again shortly.", 503);
+                if (!findingsCredential) throw new FindingsAccessError("A findings API key is required in the Authorization header.", 401);
+                const reply = handleFindingsReadRequest(req, requestUrl, findingsRead);
+                if (!reply) throw new FindingsAccessError("Findings API route was not found.", 404);
+                json(res, reply.status, reply.data); return;
+              }
               const ssoNavigation = requestUrl.pathname === "/api/team/auth/sso" || requestUrl.pathname === "/api/team/auth/callback";
               if (!(ssoNavigation && req.method === "GET") && !requireControlToken(req, res, controlToken, engineBearer)) return;
+              if (requestUrl.pathname === "/api/team/setup" || requestUrl.pathname === "/api/team/users") {
+                if (requestUrl.pathname === "/api/team/setup" && req.method === "POST" && !setup.status().pending) setupResponse = res;
+                try {
+                  const reply = await handleTeamSetupRequest(req, requestUrl, setup, () => readJson(req));
+                  if (reply) { for (const [name, value] of Object.entries(reply.headers ?? {})) res.setHeader(name, value); json(res, reply.status, reply.data); return; }
+                } finally { if (setupResponse === res) setupResponse = undefined; }
+              }
+              if (setup.status().pending && requestUrl.pathname !== "/api/team/session") throw new WebRequestError("Workspace setup is in progress. Try again shortly.", 503);
               if (handleTeamPresenceStream(req, res, requestUrl, teamAuth, collaboration)) return;
               const teamReply = await handleTeamRequest(req, requestUrl, teamAuth, collaboration, consoleGateway, () => readJson(req), async (kind, id) => {
                 if (kind === "report") { engagements.get(id); return; }
@@ -1906,26 +1938,31 @@ export function registerDashboardCommand(program: Command): void {
               res.setHeader("X-0-Engine-ID", localHandshake.engineId);
               const expectedEngineId = req.headers["x-0-expected-engine-id"];
               if (expectedEngineId !== undefined && expectedEngineId !== localHandshake.engineId) throw new WebRequestError("Request belongs to a different engine identity.", 409);
+              const findingsAccessReply = await handleFindingsAccessTokenRequest(req, requestUrl, teamAuth, findingsAccess, () => readJson(req));
+              if (findingsAccessReply) { json(res, findingsAccessReply.status, findingsAccessReply.data); return; }
               const backendRoute = await handleBackendConnectionRequest(req, res, requestUrl, backends);
               if (backendRoute.handled) return;
               if (backendRoute.localPath) requestUrl = new URL(backendRoute.localPath, origin);
               const skillsRoute = requestUrl.pathname.match(/^\/api\/skills(?:\/(.*))?$/);
               if (skillsRoute) {
+                const member = teamAuth.resolveSession(req);
+                const access = { allowHostEdits: !teamAuth.enabled || engineRequest || member?.role === "owner", canWrite: !teamAuth.enabled || engineRequest || member?.role !== "viewer" };
                 const path = skillsRoute[1] ?? "";
                 let decodedPath: string;
                 try { decodedPath = decodeURIComponent(path); } catch { throw new WebRequestError("Invalid skill identifier.", 400); }
                 const method = req.method ?? "GET";
-                if (!path && method === "GET") json(res, 200, skills.list());
+                if (!path && method === "GET") json(res, 200, skills.list(access));
                 else if (!path && method === "POST") json(res, 201, { skill: skills.create(await readJson(req)) });
                 else if (path === "import" && method === "POST") json(res, 201, { skill: skills.import(await readJson(req, 12 * 1024 * 1024)) });
                 else if (path === "mounts" && method === "POST") json(res, 201, { mount: skills.mount(await readJson(req)) });
                 else if (path.startsWith("mounts/") && method === "DELETE") { skills.unmount(decodedPath.slice(7)); json(res, 200, { ok: true }); }
+                else if (path.endsWith("/copy") && method === "POST") json(res, 201, { skill: skills.copy(decodedPath.slice(0, -5), await readJson(req), access) });
                 else if (path.endsWith("/export") && method === "GET") {
                   const id = decodedPath.slice(0, -7); const bundle = skills.export(id);
                   res.setHeader("Content-Disposition", `attachment; filename="${bundle.name}.skill.json"`); json(res, 200, bundle);
                 }
-                else if (path && method === "GET") json(res, 200, { skill: skills.get(decodedPath) });
-                else if (path && method === "PUT") json(res, 200, { skill: skills.update(decodedPath, await readJson(req)) });
+                else if (path && method === "GET") json(res, 200, { skill: skills.get(decodedPath, access) });
+                else if (path && method === "PUT") json(res, 200, { skill: skills.update(decodedPath, await readJson(req), access) });
                 else throw new WebRequestError("Method not allowed.", 405);
                 return;
               }

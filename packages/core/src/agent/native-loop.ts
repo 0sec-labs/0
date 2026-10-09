@@ -415,6 +415,7 @@ export interface NativeAgentConfig {
   /** Captured canonical workspace root for live-harness trust/enablement decisions. */
   workspaceRoot?: string;
   skillDiscoveryOptions?: ToolContext["skillDiscoveryOptions"];
+  skillAuthoring?: ToolContext["skillAuthoring"];
   /** Live harness snapshot change callback. Fired on generation transitions, view updates, and errors. */
   onHarnessUpdate?: (snapshot: HarnessSnapshot) => void;
 }
@@ -807,6 +808,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   toolCtx.liveHarness = harness;
   toolCtx.workspaceRoot = workspaceRoot;
   toolCtx.skillDiscoveryOptions = config.skillDiscoveryOptions;
+  toolCtx.skillAuthoring = config.skillAuthoring;
   const executionAbort = new AbortController();
   const executionSignal = opts.signal
     ? AbortSignal.any([opts.signal, executionAbort.signal])

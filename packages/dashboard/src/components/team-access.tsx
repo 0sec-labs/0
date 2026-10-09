@@ -1,11 +1,11 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { localControlFetch, useBackendApi } from "@/api";
+import { localControlFetch } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DropdownMenu } from "@cloudflare/kumo/components/dropdown";
 import { useNavigate } from "react-router-dom";
-import { LogOut, Monitor, Users } from "lucide-react";
+import { LogOut, Monitor, Users, KeyRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "@/components/brand-mark";
 
@@ -15,9 +15,9 @@ const TeamAccessContext = createContext<TeamStatus>({ enabled: false, sso: false
 export const useTeamAccess = () => useContext(TeamAccessContext);
 
 export function TeamAccess({ children }: { children: ReactNode }) {
-  const { client, webFetchJson } = useBackendApi();
+  const readTeamStatus = async (signal?: AbortSignal): Promise<TeamStatus> => { const response = await localControlFetch("/api/team/session", { signal }); if (!response.ok) throw new Error("Could not open this workspace."); return response.json() as Promise<TeamStatus>; };
   const cache = useQueryClient();
-  const status = useQuery({ queryKey: ["team-session", client.backendId], queryFn: ({ signal }) => webFetchJson<TeamStatus>("/api/team/session", { signal }), retry: false, refetchInterval: 30_000 });
+  const status = useQuery({ queryKey: ["team-session"], queryFn: ({ signal }) => readTeamStatus(signal), retry: false, refetchInterval: 30_000 });
   const [userId, setUserId] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -25,7 +25,8 @@ export function TeamAccess({ children }: { children: ReactNode }) {
   const login = async () => {
     setBusy(true); setError("");
     try {
-      await webFetchJson("/api/team/auth/login", { method: "POST", body: JSON.stringify({ userId, password }) });
+      const response = await localControlFetch("/api/team/auth/login", { method: "POST", body: JSON.stringify({ userId, password }) });
+      if (!response.ok) { const failure = await response.json() as { error?: string }; throw new Error(failure.error || "Sign-in failed."); }
       setPassword(""); cache.clear(); await status.refetch();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Sign-in failed."); }
     finally { setBusy(false); }
@@ -33,7 +34,7 @@ export function TeamAccess({ children }: { children: ReactNode }) {
   if (status.isPending) return <div role="status" className="grid min-h-dvh place-items-center text-sm text-muted-foreground">Opening workspace…</div>;
   if (status.error) return <div role="alert" className="grid min-h-dvh place-items-center p-6"><div className="space-y-3 text-sm"><p>{status.error.message}</p><Button onClick={() => void status.refetch()}>Retry</Button></div></div>;
   const value = status.data!;
-  if (value.enabled && !value.user) return <main className="grid min-h-dvh place-items-center bg-background p-6 text-foreground"><div className="w-full max-w-sm space-y-6"><BrandMark /><h1 className="text-xl font-medium">Sign in to {value.workspace?.name ?? "your workspace"}</h1><form className="space-y-4" onSubmit={event => { event.preventDefault(); void login(); }}><label className="block space-y-2 text-sm"><span>Account</span><Input autoComplete="username" required value={userId} onChange={event => setUserId(event.target.value)} disabled={busy} /></label><label className="block space-y-2 text-sm"><span>Password</span><Input type="password" autoComplete="current-password" required value={password} onChange={event => setPassword(event.target.value)} disabled={busy} /></label>{error && <p role="alert" className="text-sm text-destructive">{error}</p>}<Button type="submit" disabled={busy || !userId || !password} className="w-full">{busy ? "Signing in…" : "Sign in"}</Button></form>{value.sso && <Button variant="outline" className="w-full" onClick={() => { window.location.assign(client.route("/api/team/auth/sso")); }}>Continue with SSO</Button>}</div></main>;
+  if (value.enabled && !value.user) return <main className="grid min-h-dvh place-items-center bg-background p-6 text-foreground"><div className="w-full max-w-sm space-y-6"><BrandMark /><h1 className="text-xl font-medium">Sign in to {value.workspace?.name ?? "your workspace"}</h1><form className="space-y-4" onSubmit={event => { event.preventDefault(); void login(); }}><label className="block space-y-2 text-sm"><span>Account</span><Input autoComplete="username" required value={userId} onChange={event => setUserId(event.target.value)} disabled={busy} /></label><label className="block space-y-2 text-sm"><span>Password</span><Input type="password" autoComplete="current-password" required value={password} onChange={event => setPassword(event.target.value)} disabled={busy} /></label>{error && <p role="alert" className="text-sm text-destructive">{error}</p>}<Button type="submit" disabled={busy || !userId || !password} className="w-full">{busy ? "Signing in…" : "Sign in"}</Button></form>{value.sso && <Button variant="outline" className="w-full" onClick={() => { window.location.assign("/api/team/auth/sso"); }}>Continue with SSO</Button>}</div></main>;
   return <TeamAccessContext key={value.user ? `${value.user.workspaceId}:${value.user.userId}` : "local"} value={value}>{children}</TeamAccessContext>;
 }
 
@@ -62,7 +63,8 @@ export function TeamAccount({ rail = false }: { rail?: boolean }) {
     </button></DropdownMenu.Trigger>
     <DropdownMenu.Content side={rail ? "right" : "top"} align="end" sideOffset={8} className="w-64 rounded-2xl p-1.5">
       <div className="space-y-1 px-3 py-2"><p className="truncate text-sm font-medium">{displayName}</p><p className="truncate text-xs text-muted-foreground">{personal ? "No account needed" : team.workspace?.name}</p></div>
-      <DropdownMenu.Item onClick={() => navigate(personal ? "/setup?step=workspace&mode=team" : "/setup?step=workspace")}><Users className="size-4" />{personal ? "Join a team" : "Workspace setup"}</DropdownMenu.Item>
+      <DropdownMenu.Item onClick={() => navigate(personal ? "/setup?step=workspace&mode=team" : "/team")}><Users className="size-4" />{personal ? "Set up a team" : "Workspace settings"}</DropdownMenu.Item>
+      {(personal || team.user?.role === "owner") && <DropdownMenu.Item onClick={() => navigate("/api-access")}><KeyRound className="size-4" />Findings API</DropdownMenu.Item>}
       {!personal && <DropdownMenu.Item disabled={busy} onClick={() => void signOut()}><LogOut className="size-4" />{busy ? "Signing out…" : "Sign out"}</DropdownMenu.Item>}
       {error && <p role="alert" className="px-3 py-2 text-xs text-destructive">{error}</p>}
     </DropdownMenu.Content>

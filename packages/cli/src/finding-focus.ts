@@ -40,7 +40,7 @@ function databasePaths(dbPath?: string): string[] {
   ].map((path) => resolve(path)))];
 }
 
-function findingFromRow(
+export function findingFromRow(
   row: PersistedFindingRow,
   reviewFields: Record<string, unknown>,
 ): Finding {

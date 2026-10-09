@@ -78,6 +78,33 @@ async function idle(instance: ConsoleGateway, id: string): Promise<void> {
 }
 
 describe("ConsoleGateway", () => {
+  it("binds skill authoring to each trusted turn and retains the actor in background work", async () => {
+    const seen: unknown[] = [];
+    const gate = Promise.withResolvers<void>();
+    let background: Promise<void> | undefined;
+    const instance = new ConsoleGateway({
+      skillAuthoring: author => ({ read: () => author?.userId ?? "anonymous", create: () => undefined, update: () => undefined, copy: () => undefined }),
+      createSession: input => {
+        const session = engine(input);
+        const adapter = () => typeof input.skillAuthoring === "function" ? input.skillAuthoring() : input.skillAuthoring;
+        session.send = async text => {
+          seen.push(await adapter()!.read("skill"));
+          if (text === "Owner request") background = (async () => { await gate.promise; seen.push(await adapter()!.read("skill")); })();
+          return outcome();
+        };
+        return session;
+      },
+    });
+    gateways.push(instance);
+    const chat = instance.create();
+    await instance.send(chat.id, "Owner request", { userId: "owner", displayName: "Owner" }); await idle(instance, chat.id);
+    await instance.send(chat.id, "Editor request", { userId: "editor", displayName: "Editor" }); await idle(instance, chat.id);
+    gate.resolve(); await background;
+    expect(seen).toEqual(["owner", "editor", "owner"]);
+    await instance.send(chat.id, "Anonymous request"); await idle(instance, chat.id);
+    expect(seen.at(-1)).toBe("anonymous");
+  });
+
   it("accepts attribution only from a server argument and retains repeated-prompt authors after save/resume", async () => {
     const instance = gateway(); const created = instance.create();
     const alice = { userId: "alice", displayName: "Alice" };

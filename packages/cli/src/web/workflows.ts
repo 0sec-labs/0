@@ -249,6 +249,7 @@ export class WebWorkflowService {
     } catch { /* Retained runs from another host have no live controller here. */ }
     return execution;
   }
+  hasActiveWork(): boolean { return this.#pendingResumes.size > 0 || [...this.#jobs.values()].some(active); }
   listExecutions(): SecurityWorkflowExecution[] { return this.#definitions.listExecutions().map(execution => this.getExecution(execution.id)!); }
   /** Exact scan/report associations only; a graph's combined report is not an individual scan report. */
   retainedScanReport(scanId: string): ScanReport | undefined {

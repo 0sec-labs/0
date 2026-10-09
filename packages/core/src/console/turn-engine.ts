@@ -602,6 +602,7 @@ export interface ConsoleSessionConfig {
   workspaceRoot?: string;
   /** Server-owned skill roots; evaluated for each catalog/load request. */
   skillDiscoveryOptions?: ToolContext["skillDiscoveryOptions"];
+  skillAuthoring?: ToolContext["skillAuthoring"];
   onHarnessUpdate?: (snapshot: HarnessSnapshot) => void;
   executablePlugins?: ExecutablePluginConfiguration;
   /** Evaluation contracts owned by the operator, not editable by generated code. */
@@ -2025,6 +2026,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   toolContext.liveHarness = harness;
   toolContext.workspaceRoot = workspaceRoot;
   toolContext.skillDiscoveryOptions = config.skillDiscoveryOptions;
+  toolContext.skillAuthoring = config.skillAuthoring;
   toolContext.selfExtension = selfExtension;
   toolContext.executablePlugins = executablePlugins;
   toolContext.executablePluginConfiguration = config.executablePlugins;
