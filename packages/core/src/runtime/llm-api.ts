@@ -2787,6 +2787,16 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     }
   }
 
+  /** Explicit idle-boundary reconnect; ordinary model picks retain captured credentials. */
+  refreshConnection(env: NodeJS.ProcessEnv): void {
+    const effort = this.reasoningEffort;
+    this.applyConfiguration({ ...this.config, apiKey: undefined,
+      provider: this.provider as RuntimeConfig["provider"], model: this.model,
+      env: Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined)),
+    });
+    this.reasoningEffort = effort;
+  }
+
   /** Modern OpenAI tool calls use Responses, shared by roots and forks. */
   private applyModelWireApi(): void {
     const normalizedModel = this.model.toLowerCase();

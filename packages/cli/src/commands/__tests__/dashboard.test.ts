@@ -909,6 +909,24 @@ describe("dashboard — web console API", () => {
     expect(JSON.parse(captured.body)).toEqual({ error: "Invalid or missing control token" });
   });
 
+  it("dispatches explicit connection reload through the control-token gate and rejects body overrides", async () => {
+    const { ConsoleGateway, ConsoleGatewayError } = await import("../../web/console-gateway.js");
+    const token = await getControlToken(); const headers = { "x-0-control-token": token };
+    const created = await invokeHandler(makeRequest({ method: "POST", url: "/api/console/sessions", headers, body: { title: "Reconnect fixture" } }));
+    const session = JSON.parse(created.body).session;
+    const reload = vi.spyOn(ConsoleGateway.prototype, "reloadConnection").mockResolvedValue(session);
+    const url = `/api/console/sessions/${session.id}/connection/reload`;
+    const missingToken = await invokeHandler(makeRequest({ method: "POST", url, body: {} }));
+    expect(missingToken.statusCode).toBe(403); expect(reload).not.toHaveBeenCalled();
+    const response = await invokeHandler(makeRequest({ method: "POST", url, headers, body: {} }));
+    expect(response.statusCode).toBe(200); expect(JSON.parse(response.body)).toEqual({ session }); expect(reload).toHaveBeenCalledWith(session.id);
+    const overrides = await invokeHandler(makeRequest({ method: "POST", url, headers, body: { providerId: "different-provider" } }));
+    expect(overrides.statusCode).toBe(400); expect(reload).toHaveBeenCalledTimes(1);
+    reload.mockRejectedValue(new ConsoleGatewayError("Wait for the current turn and decisions to finish.", 409));
+    const busy = await invokeHandler(makeRequest({ method: "POST", url, headers, body: {} }));
+    expect(busy.statusCode).toBe(409); expect(JSON.parse(busy.body).error).toContain("current turn");
+  });
+
   it("returns Codex device-auth status without exposing credential material", async () => {
     const token = await getControlToken();
     const captured = await invokeHandler(

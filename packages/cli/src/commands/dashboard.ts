@@ -1270,6 +1270,10 @@ async function handleWebConsoleApiRequest(
       json(res, 202, { session: await gateway.send(id, message, author) });
     }
     else if (action === "cancel" && method === "POST") json(res, 200, { session: await gateway.cancel(id) });
+    else if (action === "connection" && parts[3] === "reload" && parts.length === 4 && method === "POST") {
+      z.object({}).strict().parse(input ?? {});
+      json(res, 200, { session: await gateway.reloadConnection(id) });
+    }
     else if (action === "configuration" && method === "PATCH") json(res, 200, { session: await gateway.configure(id, input) });
     else if (action === "clear" && method === "POST") json(res, 200, { session: await gateway.clear(id) });
     else if (action === "continue" && method === "POST") json(res, 202, { session: await gateway.continue(id, input, author) });

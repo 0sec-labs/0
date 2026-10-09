@@ -198,6 +198,24 @@ export async function createWebConsoleRuntime(selection: ConsoleRuntimeSelection
   return { runtime, info: describeWebConsoleRuntime(runtime) };
 }
 
+/** Explicit reconnect validates current stored credentials before replacing a session's captured connection. */
+export async function reloadWebConsoleRuntimeConnection(runtime: LlmApiRuntime): Promise<ConsoleRuntimeSnapshot> {
+  const providerId = runtime.resolvedProvider(); const model = runtime.resolvedModel();
+  const effort = runtime.reasoningConfiguration()?.effort;
+  const env = webRuntimeEnv();
+  const { runtime: candidate } = await createPreferredConsoleRuntime({
+    provider: providerId as RuntimeConfig["provider"], model, ...runtime.modelSelection(), env,
+  });
+  if (candidate.resolvedProvider() !== providerId || candidate.resolvedModel() !== model) throw new OperatorError(409, "connection_changed", "Reconnect the conversation's selected provider and model first.");
+  await validateRuntimeModels(candidate);
+  if (effort !== undefined) candidate.setReasoningEffort(effort);
+  runtime.refreshConnection(env);
+  runtimeEnvironments.set(runtime, env);
+  const contextTokens = runtimeContextLimits.get(candidate);
+  if (contextTokens) runtimeContextLimits.set(runtime, contextTokens); else runtimeContextLimits.delete(runtime);
+  return describeWebConsoleRuntime(runtime);
+}
+
 export async function applyWebConsoleRuntimeSelection(runtime: LlmApiRuntime, selection: ConsoleRuntimeSelection): Promise<ConsoleRuntimeSnapshot> {
   validateSelection(selection);
   const currentProvider = runtime.resolvedProvider();

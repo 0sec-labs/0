@@ -242,3 +242,19 @@ it("scopes Google preferences to the captured credential and effective project a
   expect(google("synthetic-google-access-a", "synthetic-google-refresh-a", "project-b").connectionIdentity()).not.toBe(saved);
   expect(google("synthetic-google-access-b", "synthetic-google-refresh-b", "project-a").connectionIdentity()).not.toBe(saved);
 });
+
+
+it("explicit reconnect refreshes captured credentials while preserving model, effort, roles and prior forks", async () => {
+  const runtime = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "chatgpt-codex", model: "gpt-6.1-sol", agentModels: { review: "gpt-6.1-sol" }, singleModel: true, autoRoute: true,
+    env: { ...environment(), ZERO_CHATGPT_ACCESS_TOKEN: "synthetic-old-access", ZERO_CHATGPT_ACCOUNT_ID: "old-account", ZERO_CHATGPT_OAUTH_REFRESH_TOKEN: "" } });
+  runtime.setReasoningEffort("high"); const priorIdentity = runtime.connectionIdentity(); const fork = await runtime.forkForSubagent(1000);
+  runtime.refreshConnection({ ...environment(), ZERO_CHATGPT_ACCESS_TOKEN: "synthetic-new-access", ZERO_CHATGPT_ACCOUNT_ID: "new-account", ZERO_CHATGPT_OAUTH_REFRESH_TOKEN: "" });
+  expect(runtime.resolvedModel()).toBe("gpt-6.1-sol"); expect(runtime.reasoningConfiguration()?.effort).toBe("high");
+  expect(runtime.modelSelection()).toEqual({ agentModels: { review: "gpt-6.1-sol" }, singleModel: true, autoRoute: true });
+  expect(runtime.connectionIdentity()).not.toBe(priorIdentity); expect(fork.connectionIdentity()).toBe(priorIdentity);
+  const fetchMock = vi.fn<typeof fetch>(async (_url, options) => {
+    const headers = new Headers(options?.headers); expect(headers.get("Authorization")).toBe("Bearer synthetic-new-access"); expect(headers.get("ChatGPT-Account-Id")).toBe("new-account");
+    return Response.json({ models: [{ slug: "gpt-6.1-sol" }] });
+  });
+  vi.stubGlobal("fetch", fetchMock); await runtime.codexModelCatalog(); expect(fetchMock).toHaveBeenCalled();
+});

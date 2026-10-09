@@ -266,3 +266,24 @@ test("streaming word fades preserve Markdown text, links, and code", async () =>
     assert.match(render("Hello world again"), /<span class="console-stream-word">Hello <\/span>/);
   } finally { await rm(temporary, { recursive: true, force: true }); }
 });
+
+test("connection recovery requires verified access to the failed provider", async () => {
+  const temporary = await mkdtemp(resolve(repoRoot, ".connection-recovery-test-"));
+  try {
+    const output = resolve(temporary, "fixture.mjs");
+    await build({ entryPoints: [resolve(repoRoot, "packages/dashboard/src/console/connection-recovery.ts")], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
+    const { connectionVerified, errorProvider, recoveredProviderError } = await import(pathToFileURL(output).href);
+    const response = { providerId: "chatgpt-codex", models: [{ id: "test-model", provider: "chatgpt-codex", source: "account" }], diagnostics: [] };
+    assert.equal(connectionVerified("chatgpt-codex", response), true);
+    assert.equal(connectionVerified("chatgpt-codex", { ...response, models: [] }), false, "configured alone is not verified");
+    assert.equal(connectionVerified("chatgpt-codex", { ...response, diagnostics: [{ providerId: "chatgpt-codex", message: "HTTP 401" }] }), false);
+    assert.equal(connectionVerified("chatgpt-codex", { ...response, models: [{ ...response.models[0], source: "public-catalog" }] }), false, "offline public inventory does not prove sign-in");
+    assert.equal(connectionVerified("chatgpt-codex", { ...response, providerId: "openai" }), false);
+    const recovery = { providerId: "chatgpt-codex", healthy: true };
+    assert.equal(errorProvider("Codex model discovery failed (HTTP 401)"), "chatgpt-codex");
+    assert.equal(recoveredProviderError("Codex model discovery failed (HTTP 401)", recovery), true, "saved auth warnings clear after recovery");
+    assert.equal(recoveredProviderError("OpenAI API error 401", recovery), false, "a different provider remains failed");
+    assert.equal(recoveredProviderError("Tool execution failed", recovery), false, "unrelated failures remain visible");
+    assert.equal(recoveredProviderError("Codex model discovery failed (HTTP 401)", { ...recovery, healthy: false }), false, "a failed recheck retains the warning");
+  } finally { await rm(temporary, { recursive: true, force: true }); }
+});
