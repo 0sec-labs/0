@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { usePersistentState } from "@/lib/use-persistent-state";
 import { ConversationSkeleton } from "@/console/loading-state";
+import { recoveredProviderError } from "@/console/connection-recovery";
 import { consoleErrorMessage, needsProviderSignIn } from "@/console/provider-error";
 import { TeamCollaboration } from "@/console/team-collaboration";
 import { Conversation } from "@/console/conversation";
@@ -74,7 +75,7 @@ export function ConsolePage() {
   const requestedIntent = search.get("intent");
   const controlsQuery = sessionId ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(`/console/${sessionId}${workerId ? `?worker=${encodeURIComponent(workerId)}` : ""}`)}` : "?return=/console";
   const active = snapshot && ["working", "waiting"].includes(snapshot.session.status);
-  const visibleError = workspace.error && workspace.error !== snapshot?.lastOutcome?.error ? workspace.error : undefined;
+  const visibleError = workspace.error && !recoveredProviderError(workspace.error, workspace.connectionRecovery) && workspace.error !== snapshot?.lastOutcome?.error ? workspace.error : undefined;
   const dialogError = workspace.error && <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs leading-5 text-destructive">{workspace.error}</p>;
 
   useEffect(() => {

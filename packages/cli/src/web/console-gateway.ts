@@ -31,7 +31,7 @@ import { exportChatConversation } from "../tui/chat-export.js";
 import { getSettings } from "../tui/settings-store.js";
 import type { TuiSettings } from "../tui/settings.js";
 import { deleteSession, isValidSessionId, listSessions, loadSession, saveSession, setSessionArchived, type StoredConsoleState, type StoredSession } from "../tui/session-store.js";
-import { applyWebConsoleRuntimeSelection, createWebConsoleRuntime, describeWebConsoleRuntime, savedWebRuntimeSelection, flushWebConsolePlugins, getWebConsolePluginHostManager } from "./operator-services.js";
+import { applyWebConsoleRuntimeSelection, reloadWebConsoleRuntimeConnection, createWebConsoleRuntime, describeWebConsoleRuntime, savedWebRuntimeSelection, flushWebConsolePlugins, getWebConsolePluginHostManager } from "./operator-services.js";
 
 const MAX_EVENTS = 2_000;
 const MAX_MESSAGE_LENGTH = 1_000_000;
@@ -514,6 +514,25 @@ export class ConsoleGateway {
       return this.#summary(managed);
     }
     await this.#applyPendingConfiguration(managed); return this.#summary(managed);
+  }
+  async reloadConnection(id: string): Promise<DesktopConsoleSession> {
+    const managed = this.#requireOpen(id); this.#assertIdle(managed);
+    if (managed.pendingConfiguration || managed.workflowDraining || [...managed.workflowRequests.values()].some(request => ["queued", "awaiting-approval", "starting"].includes(request.status)) || [...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Finish active agents and queued configuration changes before reconnecting this conversation.", 409);
+    if (managed.execution.backend === "smolvm" && managed.session) throw new ConsoleGatewayError("The SmolVM account grant is fixed for this run. Resume saved work in a new chat to use a reconnected account.", 409);
+    const operation = (async () => {
+      // A failed initialization has no runtime; ensureSession retries with fresh stored credentials.
+      const hadRuntime = managed.runtime !== null;
+      await this.#ensureSession(managed);
+      if (hadRuntime && managed.runtime) {
+        managed.info = await reloadWebConsoleRuntimeConnection(managed.runtime);
+        managed.session?.reconfigureRuntime({ contextWindowTokens: managed.info.contextWindowTokens });
+      }
+      if (managed.status !== "closed") managed.status = "ready";
+      this.#emitSession(managed); this.#save(managed);
+    })();
+    managed.configuration = operation;
+    try { await operation; return this.#summary(managed); }
+    finally { if (managed.configuration === operation) managed.configuration = null; }
   }
   async setRuntime(id: string, value: unknown): Promise<DesktopConsoleSession> { return this.configure(id, { runtime: value }); }
   async setAutonomy(id: string, value: unknown): Promise<DesktopConsoleSession> { return this.configure(id, { autonomyMode: value }); }

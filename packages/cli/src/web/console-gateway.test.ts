@@ -12,6 +12,7 @@ const isolated = vi.hoisted(() => ({
   localFactory: vi.fn(),
   runtimeFactory: vi.fn(),
   applyRuntime: vi.fn(),
+  reloadConnection: vi.fn(),
   pluginManager: vi.fn(),
   flushPlugins: vi.fn(),
 }));
@@ -21,13 +22,14 @@ vi.mock("./operator-services.js", async (importOriginal) => ({
   ...await importOriginal<typeof import("./operator-services.js")>(),
   createWebConsoleRuntime: (...args: unknown[]) => isolated.runtimeFactory(...args),
   applyWebConsoleRuntimeSelection: (...args: unknown[]) => isolated.applyRuntime(...args),
+  reloadWebConsoleRuntimeConnection: (...args: unknown[]) => isolated.reloadConnection(...args),
   getWebConsolePluginHostManager: (...args: unknown[]) => isolated.pluginManager(...args),
   flushWebConsolePlugins: (...args: unknown[]) => isolated.flushPlugins(...args),
 }));
 beforeEach(() => {
   isolated.profile = "local";
   isolated.localFactory.mockReset(); isolated.runtimeFactory.mockReset();
-  isolated.applyRuntime.mockReset(); isolated.pluginManager.mockReset();
+  isolated.applyRuntime.mockReset(); isolated.reloadConnection.mockReset(); isolated.pluginManager.mockReset();
   isolated.flushPlugins.mockReset().mockResolvedValue([]);
 });
 
@@ -612,6 +614,7 @@ describe("ConsoleGateway isolated execution boundaries", () => {
     await instance.send(created.id, "Keep the authorized account and model."); await idle(instance, created.id);
     const before = instance.get(created.id);
     await expect(instance.configure(created.id, { runtime: { providerId: "openai", model: "different-model" } })).rejects.toThrow(/grant is fixed/);
+    await expect(instance.reloadConnection(created.id)).rejects.toThrow(/grant is fixed/);
     const after = instance.get(created.id);
     expect(after.messages).toEqual(before.messages);
     expect(after.runtime).toEqual(before.runtime);
@@ -834,4 +837,51 @@ it("acknowledges stop before an active turn finishes teardown", async () => {
  expect(instance.get(created.id).events.some(event => event.type === "notice" && event.text.startsWith("Cancellation requested."))).toBe(true);
  release(); await idle(instance, created.id);
  expect(instance.get(created.id).session.status).toBe("ready");
+});
+
+
+describe("explicit connection reload", () => {
+  it("retries failed initialization in the same conversation without discarding selection or history", async () => {
+    const factory = vi.fn(async (input: ConsoleGatewaySessionFactoryInput) => engine(input));
+    factory.mockRejectedValueOnce(new Error("Connection expired"));
+    const instance = gateway(factory);
+    const created = instance.create({ title: "Keep this chat", runtime: { providerId: "chatgpt-codex", model: "gpt-6.1-sol", reasoningEffort: "high" } });
+    await expect(instance.send(created.id, "Retry after reconnect")).rejects.toThrow("Connection expired");
+    const before = instance.get(created.id);
+    const result = await instance.reloadConnection(created.id);
+    expect(result.id).toBe(created.id); expect(result.title).toBe("Keep this chat"); expect(result.status).toBe("ready");
+    expect(instance.get(created.id).messages).toEqual(before.messages);
+    expect(factory).toHaveBeenCalledTimes(2); expect(isolated.reloadConnection).not.toHaveBeenCalled();
+    await instance.send(created.id, "Continue with the same model"); await idle(instance, created.id);
+    const stored = loadSession(created.id, homes.at(-1)!);
+    expect(stored?.consoleState?.configuration?.runtime).toMatchObject({ providerId: "chatgpt-codex", model: "gpt-6.1-sol", reasoningEffort: "high" });
+  });
+  it("replaces only connection diagnostics on idle reload and preserves the initialized transcript", async () => {
+    const home = mkdtempSync(join(tmpdir(), "0-web-refresh-test-")); homes.push(home);
+    const runtime = { resolvedModel: () => "gpt-6.1-sol", resolvedProvider: () => "chatgpt-codex", modelSelection: () => ({ agentModels: {}, singleModel: true, autoRoute: false }) };
+    const info = { providerId: "chatgpt-codex", providerLabel: "ChatGPT", model: "gpt-6.1-sol", configured: true, connectionIdentity: "account-a", diagnostics: { valid: true, reason: null, message: null }, agentModels: {}, singleModel: true, autoRoute: false, reasoning: { effort: "high", options: ["high"] }, contextWindowTokens: 100_000 };
+    isolated.runtimeFactory.mockResolvedValue({ runtime, info });
+    isolated.pluginManager.mockResolvedValue({ refresh: async () => undefined, acquire: () => ({ host: {}, release: () => undefined }) });
+    const reconfigure = vi.fn(); const cleanup = vi.fn(async () => undefined);
+    isolated.localFactory.mockImplementation((config: ConsoleGatewaySessionFactoryInput) => { const session = engine(config); session.reconfigureRuntime = reconfigure; session.cleanup = cleanup; return session; });
+    const instance = new ConsoleGateway({ homeDir: home, projectPath: "/fixture" }); gateways.push(instance);
+    const created = instance.create({ runtime: { providerId: "chatgpt-codex", model: info.model } });
+    await instance.send(created.id, "Keep the history"); await idle(instance, created.id);
+    const before = instance.get(created.id);
+    isolated.reloadConnection.mockResolvedValue({ ...info, connectionIdentity: "account-b" });
+    const result = await instance.reloadConnection(created.id);
+    expect(result.runtime?.connectionIdentity).toBe("account-b"); expect(instance.get(created.id).messages).toEqual(before.messages);
+    expect(isolated.reloadConnection).toHaveBeenCalledWith(runtime); expect(reconfigure).toHaveBeenCalledWith({ contextWindowTokens: 100_000 });
+    expect(cleanup).not.toHaveBeenCalled(); expect(isolated.localFactory).toHaveBeenCalledTimes(1);
+  });
+  it("refuses active turns and running owned workers before reconnecting", async () => {
+    const gate = Promise.withResolvers<void>();
+    const instance = gateway(input => { const session = engine(input); session.send = async () => { await gate.promise; return outcome(); }; return session; });
+    const created = instance.create(); await instance.send(created.id, "Working");
+    await expect(instance.reloadConnection(created.id)).rejects.toThrow("current turn");
+    gate.resolve(); await idle(instance, created.id);
+    eventBus.emit("subagent_lifecycle", { agent_id: `${created.id}-worker`, parent_scan_id: created.id, status: "running", task: "Inspect", max_turns: 3 });
+    await expect(instance.reloadConnection(created.id)).rejects.toThrow("active agents");
+    expect(isolated.reloadConnection).not.toHaveBeenCalled();
+  });
 });

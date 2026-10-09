@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { pluginsRootDir, readEnablement, LlmApiRuntime } from "@0/core";
 import { saveSession, loadSession, type StoredSession } from "../tui/session-store.js";
 import { PROVIDERS } from "../tui/provider-status.js";
-import { applyWebConsoleRuntimeSelection, describeWebConsoleRuntime, savedWebRuntimeSelection, flushWebConsolePlugins, WebOperatorServices } from "./operator-services.js";
+import { applyWebConsoleRuntimeSelection, reloadWebConsoleRuntimeConnection, describeWebConsoleRuntime, savedWebRuntimeSelection, flushWebConsolePlugins, WebOperatorServices } from "./operator-services.js";
 
 const execution = vi.hoisted(() => ({ profile: "local" as "local" | "smolvm", flush: vi.fn(async () => []) }));
 vi.mock("../console-execution.js", () => ({ consoleExecutionProfile: () => execution.profile }));
@@ -189,4 +189,25 @@ it("shows ClinePass public inventory without implying active subscription entitl
   const runtime = new LlmApiRuntime({ type: "api", provider: "openai", model: "gpt-4o", timeout: 1000 });
   const selected = await applyWebConsoleRuntimeSelection(runtime, { providerId: "cline", model: "cline-pass/glm-5.3" });
   expect(selected).toMatchObject({ providerId: "cline", model: "cline-pass/glm-5.3", configured: true });
+});
+
+
+describe("explicit captured connection refresh", () => {
+  it("uses current credentials without losing the selected model or reasoning", async () => {
+    const runtime = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "openai", model: "gpt-6.1-sol", env: { ZERO_SKIP_PROVIDER_BANNER: "1", OPENAI_API_KEY: "synthetic-old-key" }, agentModels: { review: "gpt-6.1-sol" } });
+    runtime.setReasoningEffort("high"); const prior = runtime.connectionIdentity();
+    const result = await reloadWebConsoleRuntimeConnection(runtime);
+    expect(result).toMatchObject({ model: "gpt-6.1-sol", providerId: "openai", reasoning: { effort: "high" }, agentModels: { review: "gpt-6.1-sol" } });
+    expect(result.connectionIdentity).not.toBe(prior);
+    const expected = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "openai", model: "gpt-6.1-sol" });
+    expect(result.connectionIdentity).toBe(expected.connectionIdentity());
+  });
+  it("retains the captured runtime if a fresh ChatGPT account cannot validate its catalog", async () => {
+    vi.stubEnv("ZERO_CHATGPT_ACCESS_TOKEN", "synthetic-reconnected-token"); vi.stubEnv("ZERO_CHATGPT_ACCOUNT_ID", "new-account");
+    const runtime = new LlmApiRuntime({ type: "api", timeout: 120_000, provider: "chatgpt-codex", model: "gpt-6.1-sol", env: { ZERO_SKIP_PROVIDER_BANNER: "1", ZERO_CHATGPT_ACCESS_TOKEN: "synthetic-old-token", ZERO_CHATGPT_ACCOUNT_ID: "old-account", ZERO_CHATGPT_OAUTH_REFRESH_TOKEN: "" } });
+    const prior = runtime.connectionIdentity();
+    vi.spyOn(LlmApiRuntime.prototype, "codexModelCatalog").mockRejectedValue(new Error("Codex model discovery failed (HTTP 401)"));
+    await expect(reloadWebConsoleRuntimeConnection(runtime)).rejects.toThrow("expired");
+    expect(runtime.connectionIdentity()).toBe(prior); expect(runtime.resolvedModel()).toBe("gpt-6.1-sol");
+  });
 });
