@@ -3,7 +3,7 @@
 // Uses three fresh VMs, deterministic host SSE fixtures, no live account or networking.
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdtemp, mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';
 import { realpathSync, existsSync } from 'node:fs';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -31,7 +31,9 @@ const buildAtStart=await identity();
 const {resolveSmolvmImage}=await import(repository+'/packages/core/dist/runtime/smolvm.js');
 const imageDigest=await resolveSmolvmImage(image);
 const originalConfig=loadWorkbenchConfig(); assert(originalConfig,'Existing approved workbench is required');
-const root=realpathSync(await mkdtemp(join(dirname(repository),'0-learning-vm-qualification-')));
+// Scratch lives beside the checkout, not os.tmpdir(): workbench refuses workspaces under /var (macOS tmpdir is /private/var/folders).
+const scratchRoot=process.env.ZERO_QUALIFICATION_TMPDIR?resolve(process.env.ZERO_QUALIFICATION_TMPDIR):dirname(repository);
+const root=realpathSync(await mkdtemp(join(scratchRoot,'0-learning-vm-qualification-')));
 const home=join(root,'operator'),workspace=join(root,'source'),dbPath=join(root,'learning.sqlite'),sourceRoot=join(workspace,'service');
 await mkdir(home,{mode:0o700});await mkdir(workspace,{mode:0o700});await mkdir(sourceRoot,{mode:0o700});
 await writeFile(join(sourceRoot,'routes.ts'),'export const routeMarker = "customer-route";\n');
@@ -103,4 +105,6 @@ finally {
  await writeFile(reportPath,JSON.stringify(report,null,2)+'\n',{mode:0o600});
  console.log(JSON.stringify({outcome:report.outcome,error:report.error,checks:report.checks,providerRequests:report.providerRequests,report:reportPath}));
  process.exitCode=report.outcome==='passed'?0:1;
+ // Isolated operator home, learning DB and source fixture are scratch; the report is the durable record.
+ await rm(root,{recursive:true,force:true});
 }
