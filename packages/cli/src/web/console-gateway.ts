@@ -1,5 +1,6 @@
 import { loadServicePluginConnections } from "./service-plugins.js";
 import { matchChat, searchSavedChats, type ChatSearchResult } from "./chat-search.js";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { SecurityWorkflowStore, type LearningStore } from "@0/db";
@@ -68,6 +69,7 @@ export interface ConsoleGatewayOptions {
   homeDir?: string;
   projectPath?: string;
   skillDiscoveryOptions?: (workspaceRoot: string) => AgentSkillDiscoveryOptions;
+  skillAuthoring?: (author: ConsoleMessageAuthor | undefined, workspaceRoot: string) => NonNullable<ConsoleSessionConfig["skillAuthoring"]>;
 }
 export interface ConsoleExecutionContext {
   runtime: NativeRuntime;
@@ -302,6 +304,7 @@ export class ConsoleGateway {
   readonly #now: () => Date;
   readonly #createId: () => string;
   readonly #options: ConsoleGatewayOptions;
+  readonly #skillActor = new AsyncLocalStorage<ConsoleMessageAuthor | undefined>();
   #workflowLifecycle?: ConsoleWorkflowLifecycleAdapter;
   #sourceLearningStore?: LearningStore;
   #learningRecorder?: (event: { id: string; project: string; outcome: string }) => void;
@@ -781,9 +784,10 @@ export class ConsoleGateway {
         managed.messagingHome ??= mkdtempSync(join(tmpdir(), "0-web-messaging-"));
         const settings = getSettings();
         const callbacks = this.#decisionCallbacks(managed);
+        const skillAuthoring = this.#options.skillAuthoring ? () => { const adapter = this.#options.skillAuthoring!(this.#skillActor.getStore(), managed.workspacePath ?? this.#projectPath ?? process.cwd()); return typeof adapter === "function" ? adapter() : adapter; } : undefined;
         const skillDiscoveryOptions = this.#options.skillDiscoveryOptions ? () => this.#options.skillDiscoveryOptions!(managed.workspacePath ?? this.#projectPath ?? process.cwd()) : undefined;
         if (this.#options.createSession) {
-          session = await this.#options.createSession({ scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, scope: managed.scope, skillDiscoveryOptions, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, codebaseLearning: true, ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}), ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
+          session = await this.#options.createSession({ scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, scope: managed.scope, skillDiscoveryOptions, skillAuthoring, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, codebaseLearning: true, ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}), ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
         } else if (consoleExecutionProfile(this.#options.homeDir) === "smolvm") {
           if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection); managed.runtime = created.runtime; managed.info = created.info; }
           session = createLocalConsoleSession({
@@ -806,7 +810,7 @@ export class ConsoleGateway {
             session = createLocalConsoleSession({ runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
               compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
               scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, scope: managed.scope,
-              initialMessages: managed.initialMessages, codebaseLearning: true, skillDiscoveryOptions,
+              initialMessages: managed.initialMessages, codebaseLearning: true, skillDiscoveryOptions, skillAuthoring,
               ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}),
               ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}),
               workflowAuthoring: {
@@ -881,7 +885,7 @@ export class ConsoleGateway {
     this.#emitSession(managed); this.#emit(managed, { type: "user", text: body, ...(author ? { author: structuredClone(author) } : {}) });
     const turn = (async () => {
       try {
-        const outcome = await session.send(body, {
+        const outcome = await this.#skillActor.run(author, () => session.send(body, {
           onAssistantDelta: (text) => this.#emit(managed, { type: "assistant-delta", text }), onReasoningDelta: (text) => this.#emit(managed, { type: "reasoning-delta", text }),
           onToolStart: (call) => this.#emit(managed, { type: "tool-start", call: this.#withCallId(call) }),
           onToolResult: (call, result) => this.#emit(managed, { type: "tool-result", call: this.#withCallId(call), result: json(result) }),
@@ -899,7 +903,7 @@ export class ConsoleGateway {
           onNotice: (text) => this.#emit(managed, { type: "notice", text }),
           onCompaction: (event) => { managed.compaction = json({ ...event, preCompactionMessages: publicMessages(event.preCompactionMessages) }); this.#emit(managed, { type: "compaction", compaction: managed.compaction }); },
           onHarnessUpdate: (harness) => { managed.harness = harness; this.#emit(managed, { type: "harness", harness }); },
-        }, { signal: abort.signal, generateTitle });
+        }, { signal: abort.signal, generateTitle }));
         if (outcome.stopReason === "end_turn" && outcome.conversationTitle && managed.title === fallbackTitle) {
           managed.title = outcome.conversationTitle;
           this.#emitSession(managed);

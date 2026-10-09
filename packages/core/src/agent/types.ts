@@ -715,6 +715,8 @@ export interface ToolContext {
   workspaceRoot?: string;
   /** Explicit Agent Skills roots; homeDir:null keeps shared workspaces isolated. */
   skillDiscoveryOptions?: import("./skills/agent-skills.js").AgentSkillDiscoveryOptions | (() => import("./skills/agent-skills.js").AgentSkillDiscoveryOptions);
+  /** Server-issued skill editing capability, resolved for the current author. */
+  skillAuthoring?: import("./skills/skill-authoring.js").SkillAuthoringAdapter | (() => import("./skills/skill-authoring.js").SkillAuthoringAdapter | undefined);
   /**
    * Shared per-scan cost ledger (see agent/cost-ledger.ts). Threaded onto the
    * ToolContext so the `spawn_agent` / `spawn_agents` handlers can pass it into
