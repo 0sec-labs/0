@@ -19,6 +19,7 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
   const queryClient = useQueryClient();
   const inventory = useQuery({ queryKey: ["console-plugins"], queryFn: ({ signal }) => webFetchJson<PluginsResponse>("/api/console/plugins", { signal }), refetchInterval: 5000 });
   const isolated = inventory.data?.executionProfile === "smolvm";
+  const [section, setSection] = useState<"integrations" | "extensions">("integrations");
   const [filter, setFilter] = useState("");
   const [confirmation, setConfirmation] = useState<{ action: "install" | "enable" | "run"; item: PluginItem } | null>(null);
   const [technicalMessage, setTechnicalMessage] = useState<string | null>(null);
@@ -51,17 +52,21 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
   const items = inventory.data?.items.filter(entry => `${entry.name} ${entry.id} ${entry.description}`.toLowerCase().includes(filter.toLowerCase())) ?? [];
   return <div className="space-y-6">
     <div className="space-y-3">
+      <div role="group" aria-label="Plugin collection" className="inline-flex gap-1 rounded-xl bg-muted/30 p-1">
+        {(["integrations", "extensions"] as const).map(value => <Button key={value} variant={section === value ? "secondary" : "ghost"} size="sm" aria-pressed={section === value} onClick={() => { setSection(value); setFilter(""); }}>{value === "integrations" ? "Integrations" : "Extensions"}</Button>)}
+      </div>
       <div className="flex items-center gap-2">
         <div className="relative min-w-0 flex-1 sm:max-w-sm">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input data-1p-ignore data-lpignore="true" autoComplete="off" aria-label="Search plugins" type="search" placeholder="Search plugins" value={filter} onChange={event => setFilter(event.target.value)} className="pl-9" />
+          <Input data-1p-ignore data-lpignore="true" autoComplete="off" aria-label={section === "integrations" ? "Search integrations" : "Search extensions"} type="search" placeholder={section === "integrations" ? "Search integrations" : "Search extensions"} value={filter} onChange={event => setFilter(event.target.value)} className="pl-9" />
         </div>
         <Button variant="ghost" size="icon" onClick={() => { void inventory.refetch(); void queryClient.invalidateQueries({ queryKey: ["console-service-plugins"] }); }} disabled={inventory.isFetching || mutate.isPending} aria-label="Refresh plugins" title="Refresh plugins"><RefreshCcw className="size-4" /></Button>
       </div>
     </div>
-    <ServicePluginsControl filter={filter} />
-    <div className="space-y-3 border-t border-foreground/5 pt-6">
-      <h2 className="text-base font-medium">Installed plugins & themes</h2>
+    <div hidden={section !== "integrations"}><ServicePluginsControl filter={filter} /></div>
+    {section === "extensions" && <>
+    <div className="space-y-2">
+      <h2 className="text-base font-medium">Plugins & themes</h2>
       <p className="text-xs text-muted-foreground">{isolated ? "Approved plugins are copied into each new SmolVM chat and run inside its VM. Plugin changes apply to new chats." : sessionId ? "Plugin changes apply to new sessions, not this one." : "Plugin changes apply to new sessions."}</p>
     </div>
     {inventory.isPending && <div role="status" className="flex items-center gap-2 py-6 text-sm text-muted-foreground"><LoadingDots className="console-loading-dots-compact" />Loading plugins and themes…</div>}
@@ -99,6 +104,7 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
       <ControlDisclosure title="Registry details"><div className="mt-4 space-y-4"><Facts entries={[["Registry", inventory.data.registry.url], ...(!isolated ? [["Loaded plugins", inventory.data.host.loadedPluginIds.length ? inventory.data.host.loadedPluginIds.join(", ") : "None"], ["Waiting to load", inventory.data.deferred.length ? inventory.data.deferred.join(", ") : "None"]] as [string, string][] : [])]} />
         {!isolated && inventory.data.host.tools.length > 0 && <div className="space-y-3"><p className="text-xs text-muted-foreground">Plugin tools</p><ul className="space-y-3">{inventory.data.host.tools.map(tool => <li key={tool.name}><p className="text-sm font-medium">{tool.name}</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{tool.description}</p></li>)}</ul></div>}
       </div></ControlDisclosure>
+    </>}
     </>}
     <Dialog open={Boolean(confirmation)} onOpenChange={open => { if (!open && !mutate.isPending) { setConfirmation(null); mutate.reset(); } }}><DialogContent showCloseButton={!mutate.isPending} onCloseAutoFocus={event => { event.preventDefault(); confirmationTrigger.current?.focus(); }} onEscapeKeyDown={event => { if (mutate.isPending) event.preventDefault(); }} onInteractOutside={event => { if (mutate.isPending) event.preventDefault(); }}><DialogHeader><DialogTitle>{confirmation?.action === "enable" ? "Enable" : confirmation?.action === "run" ? "Load" : "Install"} {confirmation?.item.name}</DialogTitle><DialogDescription>{confirmation?.action === "enable" ? isolated ? "Approve this version and its permissions for new SmolVM chats. Its files will be copied and its code loaded inside the VM automatically. Existing chats keep their current tools." : "Approve this version and its permissions, and allow its code to load in the local host. Existing sessions keep their current tools." : confirmation?.action === "run" ? "This runs the plugin's code in the local host. An active response may defer loading." : "Install this artifact from the configured registry."}</DialogDescription></DialogHeader>
       {confirmation && <div className="space-y-3 text-sm"><p className="text-muted-foreground">{confirmation.item.name} {confirmation.item.version}</p>{confirmation.action === "install" && confirmation.item.signature === "unverified" && <p className="leading-6">The signature is unverified. Only install if you trust this source.</p>}{confirmation.item.kind === "plugin" && confirmation.action !== "run" && <div><p className="font-medium">Permissions</p>{confirmation.item.capabilities.length ? <ul className="mt-2 list-inside list-disc space-y-1 break-words">{confirmation.item.capabilities.map(capability => <li key={capability}>{capability}</li>)}</ul> : <p className="mt-2 text-muted-foreground">No extra permissions.</p>}</div>}<Feedback error={mutate.error} /></div>}

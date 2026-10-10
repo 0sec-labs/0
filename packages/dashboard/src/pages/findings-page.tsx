@@ -507,7 +507,7 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
         actions={(
           <>
             <Button variant="outline" asChild><Link to="/engagements">Assessment reports</Link></Button>
-            <ReportExportControl path={selectedGroup ? `/api/findings/export?ids=${encodeURIComponent(selectedGroup.latest.id)}` : `/api/findings/export?ids=${encodeURIComponent(visibleGroups.map(group => group.latest.id).join(","))}`} disabled={!selectedGroup && visibleGroups.length === 0} />
+            <ReportExportControl label={selectedGroup ? "Export finding" : `Export ${visibleGroups.length} finding${visibleGroups.length === 1 ? "" : "s"}`} path={selectedGroup ? `/api/findings/export?ids=${encodeURIComponent(selectedGroup.latest.id)}` : `/api/findings/export?ids=${encodeURIComponent(visibleGroups.map(group => group.latest.id).join(","))}`} disabled={!selectedGroup && visibleGroups.length === 0} />
             <Button variant="outline" onClick={() => setFiltersOpen(true)}>
               <SlidersHorizontal className="size-4" />
               Filters
@@ -1339,9 +1339,10 @@ function FilterRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className={`space-y-3 rounded-2xl bg-muted/30 px-4 py-4 ${className ?? ""}`}>
-      <div className="flex flex-wrap gap-1.5">{children}</div>
-    </div>
+    <fieldset className={`min-w-0 rounded-2xl bg-muted/30 px-4 py-4 ${className ?? ""}`}>
+      <legend className="float-left w-full text-sm font-medium">{label}</legend>
+      <div className="clear-both flex flex-wrap gap-1.5 pt-3">{children}</div>
+    </fieldset>
   );
 }
 
@@ -1356,6 +1357,8 @@ function FilterChip({
 }) {
   return (
     <Button
+      type="button"
+      aria-pressed={active}
       variant={active ? "default" : "outline"}
       size="xs"
       onClick={onClick}
