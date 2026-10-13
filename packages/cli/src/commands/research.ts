@@ -11,7 +11,12 @@ async function managedResearch<T extends ResearchTarget, C extends ResearchCandi
     execute: async context => {
       const bound = target.kind === "pipeline.unified" ? { ...target, config: { ...target.config as object, options: { ...(target.config as UnifiedPipelineTargetConfig).options,
         signal: context.signal, costLedger: context.costLedger, costCeilingUsd: context.plan.costCapUsd, timeout: Math.max(1, context.deadline - Date.now()) } } } as T : target;
-      return engine(adapter, bound, { ...options, signal: context.signal });
+      const result = await engine(adapter, bound, { ...options, signal: context.signal });
+      // Runtime controls (signal, cost ledger) are bound for the adapter only.
+      // The returned result must stay portable: executeWorkflow snapshots
+      // results with structuredClone, and a bound ledger's listener functions
+      // are not cloneable.
+      return { ...result, target };
     },
     status: result => result.completed === false ? "failed" : "completed",
     reports: result => {
@@ -71,6 +76,52 @@ export function registerResearchCommand(program: Command): void {
       ));
     });
 
+
+  research
+    .command("counterexample")
+    .description("Search a C/C++ source target for sanitizer-confirmed counterexample inputs; optional mitigation replay")
+    .requiredOption("--source <dir>", "C/C++ source tree root")
+    .requiredOption("--fn <name>", "Suspect function name")
+    .requiredOption("--header <path>", "Header declaring the suspect function")
+    .requiredOption("--declaration <decl>", "C declaration of the suspect function")
+    .option("--input-shape <shape>", "bytesAndLen, bytesPtr, or bytesAndLenOut", "bytesAndLen")
+    .option("--build-system <system>", "auto, autotools, cmake, or meson", "auto")
+    .option("--timeout <sec>", "Fuzz wall-clock budget in seconds")
+    .option("--mitigation-source <files...>", "Reference-mitigation source file(s) for replay")
+    .option("--mitigation-include <dirs...>", "Extra include directories for the mitigation build")
+    .option("--witness <files...>", "Finding-proposed witness input file(s) to replay through the sanitizer build")
+    .option("--artifact-root <path>", "Research artifact root", ".0-research")
+    .action(async (opts: { source: string; fn: string; header: string; declaration: string; inputShape: string; buildSystem: string; timeout?: string; mitigationSource?: string[]; mitigationInclude?: string[]; witness?: string[]; artifactRoot: string }) => {
+      // Deferred like the sibling actions above: statically importing @0/core
+      // would load the full engine into every `0` invocation, including --help.
+      const { UserspaceCounterexampleResearchAdapter, runResearch } = await import("@0/core");
+      const SHAPES: Record<string, true> = { bytesAndLen: true, bytesPtr: true, bytesAndLenOut: true };
+      if (!SHAPES[opts.inputShape]) throw new Error(`unsupported --input-shape ${opts.inputShape}`);
+      const SYSTEMS: Record<string, true> = { auto: true, autotools: true, cmake: true, meson: true };
+      if (!SYSTEMS[opts.buildSystem]) throw new Error(`unsupported --build-system ${opts.buildSystem}`);
+      print(await managedResearch(
+        new UserspaceCounterexampleResearchAdapter(),
+        {
+          kind: "userspace.counterexample",
+          id: `counterexample:${opts.source}:${opts.fn}`,
+          location: resolve(opts.source),
+          config: {
+            sourceRoot: resolve(opts.source),
+            buildSystem: opts.buildSystem as "auto" | "autotools" | "cmake" | "meson",
+            suspectFunction: {
+              header: opts.header,
+              functionName: opts.fn,
+              declaration: opts.declaration,
+              inputShape: opts.inputShape as "bytesAndLen" | "bytesPtr" | "bytesAndLenOut",
+            },
+            ...(opts.witness?.length ? { witnessInputs: opts.witness.map(path => resolve(path)) } : {}),
+            ...(opts.timeout ? { timeoutSec: Number.parseInt(opts.timeout, 10) } : {}),
+            ...(opts.mitigationSource?.length ? { mitigation: { sourceFiles: opts.mitigationSource, ...(opts.mitigationInclude?.length ? { includeDirs: opts.mitigationInclude } : {}) } } : {}),
+          },
+        },
+        { artifactRoot: resolve(opts.artifactRoot), log: (message) => process.stderr.write(message + "\n") }, runResearch,
+      ));
+    });
   research
     .command("mobile")
     .description("Run passive mobile intake; indicators remain hypotheses and only scoped adapters may hand off targets")

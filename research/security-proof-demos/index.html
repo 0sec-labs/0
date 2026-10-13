@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Zero · Security proof lab</title>
+<style>
+:root{color-scheme:dark;font:16px/1.6 system-ui;background:#10151d;color:#e3e9f3}body{max-width:1100px;margin:48px auto;padding:0 24px}h1{font-size:42px;line-height:1.15;margin-bottom:18px}h2{line-height:1.25}p{color:#b1bfd2}.eyebrow{letter-spacing:.18em;color:#91dfc1;font-size:12px}button{font:inherit;cursor:pointer;border:1px solid #40516b;background:#1b2637;color:#e3e9f3;border-radius:9px;padding:10px 16px;margin:4px}button.active{border-color:#91dfc1;color:#91dfc1}button:disabled{opacity:.45;cursor:default}.panel{border:1px solid #344156;background:#161f2c;border-radius:14px;padding:22px;margin:20px 0}.columns{display:grid;grid-template-columns:1fr 1fr;gap:20px}.step{padding:16px;margin:12px 0;border-left:3px solid #ecb27c;background:#1e2939}.good .step{border-color:#91dfc1}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;color:#d1dded}#proof{color:#ecce83}.fine{font-size:13px}label{display:block}input{width:min(95%,540px)}@media(max-width:700px){.columns{grid-template-columns:1fr}body{margin-top:28px}h1{font-size:32px}}
+</style>
+<body><div class="eyebrow">ZERO / LOCAL RESEARCH LAB</div><h1>Watch a security claim fail.<br>Then check the repaired model.</h1>
+<p>Three familiar application bugs, executable counterexamples, and precisely scoped Lean theorems.</p>
+<div class="panel"><strong id="proof">Lean proof observation: loading</strong><p id="checks" class="fine"></p>
+<p class="fine">The JavaScript checks cover finite input ranges. Lean theorems quantify over the formal definitions. No compiler equivalence proof connects the two; no claim of a new vulnerability or verified production system.</p></div>
+<nav id="tabs" aria-label="Choose security demo"></nav><main id="demo"></main>
+<details class="panel"><summary>Inspect recorded proof evidence</summary><pre id="evidence"></pre></details>
+<script>
+let data, selected=0, count=1;
+const el=id=>document.getElementById(id);
+function escapeText(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function trace(items){return items.slice(0,count).map(item=>`<div class="step"><strong>${escapeText(item.step)}</strong><pre>${escapeText(JSON.stringify(Object.fromEntries(Object.entries(item).filter(([key])=>key!=='step')),null,2))}</pre></div>`).join('');}
+function render(){const d=data.demos[selected];const max=Math.max(d.buggy.length,d.corrected.length);
+ el('tabs').innerHTML=data.demos.map((x,i)=>`<button data-demo="${i}" class="${i===selected?'active':''}" aria-pressed="${i===selected}">${escapeText(x.title)}</button>`).join('');
+ el('tabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{selected=Number(b.dataset.demo);count=1;render();});
+ el('demo').innerHTML=`<h2>${escapeText(d.title)}</h2><p>${escapeText(d.claim)}</p><button id="next" ${count>=max?'disabled':''}>Advance trace</button><button id="reset">Reset</button><span class="fine"> Step ${count} / ${max}</span><div class="columns"><section class="panel"><h3>Buggy transition</h3>${trace(d.buggy)}</section><section class="panel good"><h3>Corrected transition</h3>${trace(d.corrected)}</section></div><p class="fine">Model assumptions: ${escapeText(d.assumption)}</p>`;
+ el('next').onclick=()=>{count=Math.min(count+1,max);render();};el('reset').onclick=()=>{count=1;render();};
+}
+fetch('/api/demos').then(r=>{if(!r.ok)throw Error('Demo data unavailable');return r.json();}).then(d=>{data=d;
+ el('proof').textContent=d.proof.status==='verified'?`Lean: recorded successful checker observation (${d.proof.method})`:`Lean: pending verification — ${d.proof.reason}`;
+ el('checks').textContent=`JavaScript bounded checks: ${d.checks.status}; ${d.checks.tenantCases} tenant cases, ${d.checks.paymentCases} payment sequences, ${d.checks.nonceCases} counter positions.`;
+ el('evidence').textContent=JSON.stringify(d.proof,null,2);render();
+}).catch(e=>{el('proof').textContent=e.message;});
+</script></body></html>

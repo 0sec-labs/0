@@ -1,6 +1,6 @@
 import { TeamAccount } from "@/components/team-access";
 import { NavLink } from "react-router-dom";
-import { BookOpen, MessageSquare, ShieldCheck, Plug, Settings, Workflow, Library } from "lucide-react";
+import { BookOpen, MessageSquare, ShieldCheck, Plug, Settings, Workflow, Library, Server } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -19,6 +19,7 @@ export function ConsoleNavigationRail({ settingsHref }: { settingsHref: string }
     { to: "/findings", label: "Findings", icon: ShieldCheck },
     { to: "/workflows", label: "Workflows", icon: Workflow },
     { to: "/skills", label: "Skills", icon: Library },
+    { to: "/workers", label: "Workers", icon: Server },
     { to: "/plugins", label: "Plugins", icon: Plug },
     { to: "/learning", label: "Learning", icon: BookOpen },
   ];

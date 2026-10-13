@@ -47,6 +47,8 @@ import { authorizeTeamApi, handleTeamRequest, assertTeamConsoleMutation } from "
 import { handleTeamPresenceStream } from "../web/team-presence-stream.js";
 import { homeStateDir } from "@0/shared";
 import { assertLocalEngineAvailable, registerLocalEngine } from "../local-engine.js";
+import { deployWorker } from "../worker-deploy.js";
+import { discoverSshHosts } from "../worker-hosts.js";
 
 type DashboardOptions = {
   dbPath?: string;
@@ -1994,6 +1996,29 @@ export function registerDashboardCommand(program: Command): void {
                   json(res, 200, { engagement });
                 }
                 else throw new WebRequestError("Method not allowed.", 405);
+                return;
+              }
+              if (requestUrl.pathname === "/api/workers/hosts") {
+                if (req.method !== "GET") throw new WebRequestError("Method not allowed.", 405);
+                json(res, 200, { hosts: discoverSshHosts() });
+                return;
+              }
+              if (requestUrl.pathname === "/api/workers/deploy") {
+                if (req.method !== "POST") throw new WebRequestError("Use POST to deploy a worker.", 405);
+                const body = z.object({
+                  ssh: z.string().trim().min(1).max(512).optional(),
+                  lima: z.string().trim().min(1).max(128).optional(),
+                  targetGit: z.string().trim().max(4096).optional(),
+                  forwardProviderKey: z.boolean().optional(),
+                  enginePort: z.number().int().min(1).max(65535).optional(),
+                }).strict().parse(await readJson(req));
+                const result = await deployWorker({
+                  ...(body.ssh ? { ssh: body.ssh } : { lima: body.lima ?? "zero-worker" }),
+                  ...(body.targetGit ? { targetGit: body.targetGit } : {}),
+                  ...(body.enginePort ? { enginePort: body.enginePort } : {}),
+                  forwardProviderKey: body.forwardProviderKey === true,
+                });
+                json(res, 202, result);
                 return;
               }
               if (requestUrl.pathname === "/api/control/launch-run") {

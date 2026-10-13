@@ -79,7 +79,7 @@ const pocStepKindEnum = z.enum([
 
 // ── PocStep schema ──────────────────────────────────────────────────────────
 
-const pocStepActionSchema = z.discriminatedUnion("type", [
+export const pocStepActionSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("shell"),
     cmd: z.string(),
@@ -101,9 +101,9 @@ const pocStepActionSchema = z.discriminatedUnion("type", [
     type: z.literal("note"),
     text: z.string(),
   }),
-]);
+])
 
-const pocStepExpectSchema = z.discriminatedUnion("type", [
+export const pocStepExpectSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("exit-zero") }),
   z.object({
     type: z.literal("http-status"),
@@ -112,7 +112,7 @@ const pocStepExpectSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("body-contains"), text: z.string() }),
   z.object({ type: z.literal("body-matches"), pattern: z.string() }),
   z.object({ type: z.literal("file-exists"), path: z.string() }),
-]);
+])
 
 export const pocStepSchema = z.object({
   id: z.string(),

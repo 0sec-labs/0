@@ -5,6 +5,7 @@ import type { Finding, ScanReport } from "@0/shared";
 import {
   LinuxBootMatrixImportAdapter, LinuxKernelResearchAdapter, MobileStaticResearchAdapter,
   UnifiedPipelineResearchAdapter, runResearch, runPipeline, workflowPolicyRuntime,
+  UserspaceCounterexampleResearchAdapter,
   type NativeRuntime, type WorkflowExecutorRegistry, type WorkflowAssessmentContext,
   type ResearchRunResult,
 } from "@0/core";
@@ -12,11 +13,18 @@ import { loadFindingFocus } from "./finding-focus.js";
 
 const integer = z.number().int().positive();
 const researchInputs = z.object({
-  engine: z.enum(["pipeline", "mobile", "linux-matrix", "linux"]).default("pipeline"),
+  engine: z.enum(["pipeline", "mobile", "linux-matrix", "linux", "counterexample"]).default("pipeline"),
   artifactRoot: z.string().min(1).optional(), targetType: z.enum(["url", "web-app", "source-code", "npm-package", "pypi-package", "cargo-package", "oci-image"]).optional(),
   profile: z.string().min(1).optional(), matrixPath: z.string().min(1).optional(), reproducerPath: z.string().min(1).optional(),
   expectedSignature: z.string().trim().min(1).optional(), boots: integer.max(16).default(3), minHits: integer.max(16).default(2),
   findingId: z.string().min(1).optional(), fromStep: z.string().optional(), scanId: z.string().optional(), artifactId: z.string().optional(),
+  fn: z.string().min(1).optional(), header: z.string().min(1).optional(), declaration: z.string().min(1).optional(),
+  inputShape: z.enum(["bytesAndLen", "bytesPtr", "bytesAndLenOut"]).optional(),
+  buildSystem: z.enum(["auto", "autotools", "cmake", "meson"]).optional(),
+  timeoutSec: integer.optional(),
+  witnesses: z.array(z.string().min(1)).max(32).optional(),
+  mitigationSources: z.array(z.string().min(1)).max(32).optional(),
+  mitigationIncludes: z.array(z.string().min(1)).max(32).optional(),
 });
 const deepInputs = z.object({
   profile: z.string().min(1).optional(), subsystem: z.string().min(1).optional(), models: z.array(z.string().min(1)).min(1).max(8).optional(),
@@ -33,8 +41,8 @@ async function scopedPath(workspace: string, input: string, existing = true): Pr
   while (true) {
     try {
       const canonical = await realpath(ancestor);
-      if (!contained(root, canonical)) throw new Error("Research path is outside the workflow workspace.");
-      if (existing && ancestor !== path) throw new Error("Research input path does not exist.");
+      if (!contained(root, canonical)) throw new Error(`Research path is outside the workflow workspace: ${input}`);
+      if (existing && ancestor !== path) throw new Error(`Research input path does not exist: ${input} (resolved: ${path})`);
       return resolve(canonical, relative(ancestor, path));
     } catch (error) {
       if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) throw error;
@@ -80,6 +88,14 @@ export async function validateResearchWorkflowInputs(type: "research" | "deep-re
       const matrix = await scopedPath(scope.workspace, (value.matrixPath ?? scope.target)!);
       await validateMatrixPaths(scope.workspace, matrix);
     }
+    if (value.engine === "counterexample") {
+      if (!value.fn || !value.header || !value.declaration) throw new Error("Counterexample research requires fn, header, and declaration inputs.");
+      // The executor scope-checks context.target itself; scope.target here may
+      // arrive relative while scope.workspace is already the resolved target.
+      for (const path of [...value.witnesses ?? [], ...value.mitigationSources ?? [], ...value.mitigationIncludes ?? []]) {
+        await scopedPath(scope.workspace, path);
+      }
+    }
   }
 }
 export interface ResearchWorkflowExecutorOptions { runtime: NativeRuntime; workspace: string; dbPath?: string; model?: string }
@@ -104,6 +120,24 @@ export function createResearchWorkflowExecutors(options: ResearchWorkflowExecuto
       } else if (input.engine === "mobile") {
         const target = await scopedPath(options.workspace, context.target);
         result = await runResearch(new MobileStaticResearchAdapter(), { kind: "mobile.static-intake", id: context.node.id, location: target, config: {} }, { artifactRoot, signal: context.signal });
+      } else if (input.engine === "counterexample") {
+        // Counterexample config is explicit (fn/header/declaration); unlike the
+        // Linux engines it does not require a bound prior finding.
+        const sourceTarget = await scopedPath(options.workspace, context.target);
+        const witnesses = await Promise.all((input.witnesses ?? []).map(path => scopedPath(options.workspace, path)));
+        const mitigationSources = await Promise.all((input.mitigationSources ?? []).map(path => scopedPath(options.workspace, path)));
+        const mitigationIncludes = await Promise.all((input.mitigationIncludes ?? []).map(path => scopedPath(options.workspace, path)));
+        result = await runResearch(new UserspaceCounterexampleResearchAdapter(), {
+          kind: "userspace.counterexample", id: context.node.id, location: sourceTarget,
+          config: {
+            sourceRoot: sourceTarget,
+            suspectFunction: { header: input.header!, functionName: input.fn!, declaration: input.declaration!, ...(input.inputShape ? { inputShape: input.inputShape } : {}) },
+            ...(input.buildSystem ? { buildSystem: input.buildSystem } : {}),
+            ...(input.timeoutSec ? { timeoutSec: input.timeoutSec } : {}),
+            ...(witnesses.length > 0 ? { witnessInputs: witnesses } : {}),
+            ...(mitigationSources.length > 0 ? { mitigation: { sourceFiles: mitigationSources, ...(mitigationIncludes.length > 0 ? { includeDirs: mitigationIncludes } : {}) } } : {}),
+          },
+        }, { artifactRoot, signal: context.signal });
       } else {
         const finding = boundFinding(context, input.findingId, options.dbPath);
         if (input.engine === "linux-matrix") {

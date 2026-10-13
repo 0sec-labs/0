@@ -18,7 +18,7 @@ import type {
   VerificationBehaviorStep,
   NamedIdentity,
 } from "@0/shared";
-import { resolveIdentities, compareRoles, DEFAULT_AUTONOMY_MODE, createJevEvaluator, jevConfigFromEnvironment, ImpactAssessmentSchema, type JevEvaluator } from "@0/shared";
+import { resolveIdentities, compareRoles, DEFAULT_AUTONOMY_MODE, createJevEvaluator, jevConfigFromEnvironment, ImpactAssessmentSchema, pocStepActionSchema, pocStepExpectSchema, type JevEvaluator } from "@0/shared";
 import type { ToolDefinition, ToolCall, ToolResult, ToolResultMeta, ToolContext, AgentRole } from "./types.js";
 import type {
   OperatorQuestion,
@@ -1430,27 +1430,23 @@ function validatePocStep(raw: unknown): PocStep | null {
   if (!id || !summary || !kind) return null;
   if (!isPlainRecord(raw.action)) return null;
   const actionType = raw.action.type;
-  if (typeof actionType !== "string" || !POC_ACTION_TYPES.has(actionType)) return null;
-  // We trust the rest of the action fields to the PocStepAction discriminated
-  // union; downstream executors validate per-variant before running anything.
+  // Validate the full variant payload against the shared discriminated union:
+  // stored findings are re-validated strictly on read (fix/disclose/verify
+  // paths), so a step with a missing variant field must never persist.
+  const action = pocStepActionSchema.safeParse(raw.action);
+  if (!action.success) return null;
   const step: PocStep = {
     id,
     kind: kind as PocStep["kind"],
     summary,
-    action: raw.action as PocStep["action"],
+    action: action.data as PocStep["action"],
   };
   if (raw.expect != null) {
-    if (
-      isPlainRecord(raw.expect) &&
-      typeof raw.expect.type === "string" &&
-      POC_EXPECT_TYPES.has(raw.expect.type)
-    ) {
-      step.expect = raw.expect as PocStep["expect"];
-    } else {
-      // Malformed expect — drop just the predicate, keep the step. The step is
-      // still useful for screenshot rendering and advisory prose even without
-      // an executable predicate.
-    }
+    // Malformed expect — drop just the predicate, keep the step. The step is
+    // still useful for screenshot rendering and advisory prose even without
+    // an executable predicate.
+    const expect = pocStepExpectSchema.safeParse(raw.expect);
+    if (expect.success) step.expect = expect.data as PocStep["expect"];
   }
   return step;
 }

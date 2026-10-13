@@ -1,0 +1,24 @@
+theory SharedConsume
+begin
+
+// Atomic linear resource: any node can consume it; it is never reissued.
+rule Issue:
+  [ Fr(~ticket) ]
+  --[ Init() ]->
+  [ Unused(~ticket), !Node('a'), !Node('b'), Out(~ticket) ]
+
+rule Accept:
+  [ Unused(ticket), !Node(node), In(ticket) ]
+  --[ Accept(node, ticket) ]->
+  [ ]
+
+restriction OneIssue:
+  "All #i #j. Init() @ i & Init() @ j ==> #i = #j"
+
+lemma acceptance_exists: exists-trace
+  "Ex node ticket #i. Accept(node, ticket) @ i"
+
+lemma at_most_once:
+  "All a b ticket #i #j. Accept(a, ticket) @ i & Accept(b, ticket) @ j ==> #i = #j"
+
+end

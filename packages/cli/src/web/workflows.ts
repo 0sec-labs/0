@@ -540,21 +540,22 @@ export class WebWorkflowService {
     const inputs = options.inputs ?? {};
     const typed = auditNodes.filter(node => node.type !== "audit");
     let registry: WorkflowExecutorRegistry = {};
+    let canonicalTarget: string | undefined;
     if (typed.length) {
       if (target.plan.kind !== "source" || /^[a-z][a-z0-9+.-]*:\/\//i.test(target.plan.target) || target.plan.target.startsWith("git@")) throw new WorkflowError("Typed workflow operations require an authorized local source workspace.", 400);
       const authorized = await this.#gateway.authorizeWorkflowTarget(request.sessionId, { target: target.plan.target, kind: target.plan.kind }, undefined, undefined, { interactive });
       if (authorized.autonomyMode === "recon") throw new WorkflowError("Recon mode cannot authorize workflow operations.", 403);
       if (identity(selection(authorized)) !== identity(selection(context))) throw new WorkflowError("Session model or routing changed while authorizing workflow inputs.");
       if (authorized.runtime instanceof LlmApiRuntime && context.runtime instanceof LlmApiRuntime && authorized.runtime.connectionIdentity() !== context.runtime.connectionIdentity()) throw new WorkflowError("Session connection changed while authorizing workflow inputs.");
-      const workspace = await realpath(target.plan.target);
-      if (authorized.scopeEnforcement.enabled && (!authorized.localScopePath || !contained(await realpath(authorized.localScopePath), workspace))) throw new WorkflowError("Workflow inputs are outside the approved local scope.", 403);
-      const typedDefinition = { ...definition, target: workspace };
+      canonicalTarget = await realpath(target.plan.target);
+      if (authorized.scopeEnforcement.enabled && (!authorized.localScopePath || !contained(await realpath(authorized.localScopePath), canonicalTarget))) throw new WorkflowError("Workflow inputs are outside the approved local scope.", 403);
+      const typedDefinition = { ...definition, target: canonicalTarget };
       let candidateStore = this.#workflowCandidates.get(request.sessionId);
       if (!candidateStore) { candidateStore = createFindingCandidateStore(); this.#workflowCandidates.set(request.sessionId, candidateStore); }
-      const findingOptions = { runtime: context.runtime, workspace, dbPath: context.dbPath ?? this.#dbPath, allowApply: options.allowApply === true, candidateStore };
+      const findingOptions = { runtime: context.runtime, workspace: canonicalTarget, dbPath: context.dbPath ?? this.#dbPath, allowApply: options.allowApply === true, candidateStore };
       await validateFindingWorkflowInputs(typedDefinition, inputs, findingOptions);
-      for (const node of typed) if (node.type === "research" || node.type === "deep-review") await validateResearchWorkflowInputs(node.type, { ...inputs, ...node.inputs, ...node.input }, { workspace, target: workspace });
-      registry = { ...createFindingWorkflowExecutors(findingOptions), ...createResearchWorkflowExecutors({ runtime: context.runtime, workspace, dbPath: context.dbPath ?? this.#dbPath, model: context.model }) };
+      for (const node of typed) if (node.type === "research" || node.type === "deep-review") await validateResearchWorkflowInputs(node.type, { ...inputs, ...node.inputs, ...node.input }, { workspace: canonicalTarget, target: canonicalTarget });
+      registry = { ...createFindingWorkflowExecutors(findingOptions), ...createResearchWorkflowExecutors({ runtime: context.runtime, workspace: canonicalTarget, dbPath: context.dbPath ?? this.#dbPath, model: context.model }) };
     }
     const parent = this.#createJob("workflow", request.sessionId, { workflowId: id, revision: request.revision, definition, limits }, context);
     let execution: SecurityWorkflowExecution;
@@ -572,7 +573,9 @@ export class WebWorkflowService {
     this.#graphService.start(request.sessionId, {
         workflow: workflowInput,
         signal: parent.controller.signal,
-        target: typed.length ? target.plan.target : definition.target,
+        // Executors scope-check this against their (already canonical) workspace;
+        // a relative target here would double-resolve against it.
+        target: canonicalTarget ?? definition.target,
         inputs,
         timeCapMs: options.timeCapMs ?? limits.timeCapMs,
         costCapUsd: options.costCapUsd ?? limits.costCapUsd,
