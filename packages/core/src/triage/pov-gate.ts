@@ -862,7 +862,7 @@ async function adjudicateWithOracle(
   }
 
   // Not verified. Distinguish a clean "did not reproduce" from an infra error.
-  if (isOracleInfraError(oracleResult.reason)) {
+  if (oracleResult.inconclusive || isOracleInfraError(oracleResult.reason)) {
     return {
       hasPov: false,
       povArtifact: submitted.artifact || null,

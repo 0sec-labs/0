@@ -3,7 +3,7 @@ import type { Command } from "commander";
 import { Option } from "commander";
 import chalk from "chalk";
 import { z } from "zod";
-import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig } from "@0/shared";
+import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig, NamedIdentity, AccessControlFixture } from "@0/shared";
 import { getScopeEnforcementState, networkScopeRequiredRefusal, targetRequiresScope } from "@0/core";
 import { renderReplay } from "../formatters/replay.js";
 import { runUnified } from "./run.js";
@@ -46,6 +46,40 @@ function parseAuthFlag(value: string): AuthConfig {
   }
 
   return obj as unknown as AuthConfig;
+}
+
+const identityAuthSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("bearer"), token: z.string().min(1) }).strict(),
+  z.object({ type: z.literal("cookie"), value: z.string().min(1) }).strict(),
+  z.object({ type: z.literal("basic"), username: z.string().min(1), password: z.string().min(1) }).strict(),
+  z.object({ type: z.literal("header"), name: z.string().regex(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/), value: z.string().min(1) }).strict(),
+]);
+const identitiesSchema = z.array(z.object({
+  label: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+  role: z.string().min(1).max(64).optional(),
+  auth: identityAuthSchema.optional(),
+}).strict()).min(2).max(16).refine(ids => new Set(ids.map(id => id.label)).size === ids.length);
+
+/** File-only input keeps credentials out of command history. Errors never echo credentials. */
+export function parseIdentitiesFile(path: string): NamedIdentity[] {
+  try {
+    const parsed = identitiesSchema.safeParse(JSON.parse(readFileSync(path, "utf8")));
+    if (!parsed.success) throw new Error("invalid schema");
+    return parsed.data;
+  } catch {
+    throw new Error("Invalid --identities file: expected 2–16 identities with unique labels and valid auth credentials");
+  }
+}
+
+const fixtureSchema = z.array(z.object({
+  url: z.string().url().refine(url => /^https?:/.test(url)),
+  ownerIdentity: z.string().min(1),
+  comparisonIdentities: z.array(z.string().min(1)).min(1).max(16),
+  ownershipMarker: z.string().min(16).max(500),
+}).strict()).min(1).max(100);
+export function parseAccessControlFixturesFile(path: string): AccessControlFixture[] {
+  try { return fixtureSchema.parse(JSON.parse(readFileSync(path, "utf8"))); }
+  catch { throw new Error("Invalid --access-control-fixtures file: expected read-only ownership fixtures with URLs, owner/comparison labels and private markers"); }
 }
 
 /**
@@ -167,6 +201,8 @@ export function registerScanCommand(program: Command): void {
     .option("--api-key <key>", "API key for LLM provider")
     .option("-m, --model <model>", "LLM model to use")
     .option("--repo <path>", "Source code path for white-box scanning")
+    .option("--access-control-fixtures <file>", "JSON file of known private resource ownership fixtures for IDOR verification")
+    .option("--identities <file>", "Restricted JSON file with named test identities for access-control replay")
     .option("--auth <json>", "Auth credentials: JSON string or path (bearer, cookie, basic, header)")
     .option("--scope <path>", "Path to a JSON scope policy (enable with `0 plugin enable scope`)")
     .option("--allow-scanners", "Expose generic scanner tools in scope-enforced scans", false)
@@ -357,6 +393,29 @@ export function registerScanCommand(program: Command): void {
         process.env["ZERO_REQUIRE_SCOPE"] = "1";
       }
 
+      let identities: NamedIdentity[] | undefined;
+      if (opts.identities) {
+        try {
+          if (opts.auth) throw new Error("Use either --identities or --auth");
+          identities = parseIdentitiesFile(String(opts.identities));
+        } catch (err) {
+          console.error(chalk.red(err instanceof Error ? err.message : String(err)));
+          process.exit(2);
+        }
+      }
+      let accessControlFixtures: AccessControlFixture[] | undefined;
+      if (opts.accessControlFixtures) {
+        try {
+          accessControlFixtures = parseAccessControlFixturesFile(String(opts.accessControlFixtures));
+          const labels = new Set(identities?.map(id => id.label));
+          if (!identities || accessControlFixtures.some(f => !labels.has(f.ownerIdentity) || f.comparisonIdentities.some(label => !labels.has(label) || label === f.ownerIdentity))) {
+            throw new Error("Ownership fixtures require --identities with distinct configured owner/comparison labels");
+          }
+        } catch (err) {
+          console.error(chalk.red(err instanceof Error ? err.message : String(err)));
+          process.exit(2);
+        }
+      }
       // Parse --auth flag if provided
       let authConfig: AuthConfig | undefined;
       if (opts.auth) {
@@ -541,6 +600,8 @@ export function registerScanCommand(program: Command): void {
         model: opts.model as string | undefined,
         repoPath: opts.repo as string | undefined,
         auth: authConfig,
+        identities,
+        accessControlFixtures,
         apiSpecPath: opts.apiSpec as string | undefined,
         exportTarget: opts.export as string | undefined,
         race: opts.race as boolean | undefined,

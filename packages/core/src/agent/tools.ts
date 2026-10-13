@@ -1,3 +1,4 @@
+import { parseRequest, type OracleResult } from "../triage/oracles.js";
 import { assertWorkspaceIdentity, captureWorkspaceIdentity, type WorkspaceIdentity } from "./workspace-identity.js";
 import { filterWorkflowAgentTools, isWorkflowAgentToolAllowed } from "../workflow-execution-policy.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -1936,33 +1937,20 @@ const is2xx = (s: number): boolean => s >= 200 && s < 300;
  * Logic:
  *  - comparison 401/403 → `properly_denied` (the control works).
  *  - baseline not 2xx → `inconclusive` (no authorized resource to leak).
- *  - comparison 2xx + body ~identical to baseline → broken object-level authz
- *    (BOLA/IDOR); annotated as vertical privesc when the comparison identity
- *    is lower-privileged than the baseline.
- *  - comparison 2xx + different body, but the caller said it SHOULD be denied
- *    (or it's a lower-priv identity) → broken function-level authz (BFLA).
+ *  - comparison 2xx + a declared restricted owner marker in both successful
+ *    responses + expectDenied → confirmed owner-resource disclosure.
+ *  - body similarity or role difference without that proof → unverified lead.
  *  - comparison 2xx + different body otherwise → `accessible_distinct_resource`
  *    (likely its own data; flagged for manual review, not a confirmed break).
  */
 export function diffAccessResponses(
   baseline: Pick<ProbeResponse, "status" | "body">,
   comparison: Pick<ProbeResponse, "status" | "body">,
-  opts: { baselineRole?: string; comparisonRole?: string; expectDenied?: boolean },
+  opts: { baselineRole?: string; comparisonRole?: string; expectDenied?: boolean; ownershipMarker?: string },
 ): AccessDiffResult {
   const sim = bodySimilarity(baseline.body, comparison.body);
   const statusMatch = baseline.status === comparison.status;
   const vertical = compareRoles(opts.comparisonRole, opts.baselineRole) < 0;
-
-  if (comparison.status === 401 || comparison.status === 403) {
-    return {
-      broken: false,
-      verdict: "properly_denied",
-      severity: "info",
-      bodySimilarity: sim,
-      statusMatch,
-      note: `comparison identity was correctly denied (HTTP ${comparison.status})`,
-    };
-  }
 
   if (!is2xx(baseline.status)) {
     return {
@@ -1975,34 +1963,32 @@ export function diffAccessResponses(
     };
   }
 
+  if (comparison.status === 401 || comparison.status === 403) {
+    return {
+      broken: false,
+      verdict: "properly_denied",
+      severity: "info",
+      bodySimilarity: sim,
+      statusMatch,
+      note: `comparison identity was correctly denied (HTTP ${comparison.status})`,
+    };
+  }
+
   if (is2xx(comparison.status)) {
-    if (sim >= 0.9) {
+    const marker = opts.ownershipMarker;
+    if (opts.expectDenied && marker && baseline.body.includes(marker) && comparison.body.includes(marker)) {
       return {
         broken: true,
         verdict: vertical ? "vertical_privilege_escalation" : "broken_object_level_authorization",
-        severity: "high",
-        bodySimilarity: sim,
-        statusMatch,
-        note: `comparison identity retrieved the SAME resource as the baseline (body similarity ${sim.toFixed(2)}) — broken access control confirmed`,
-      };
-    }
-    if (opts.expectDenied || vertical) {
-      return {
-        broken: true,
-        verdict: vertical ? "vertical_privilege_escalation" : "broken_function_level_authorization",
-        severity: "high",
-        bodySimilarity: sim,
-        statusMatch,
-        note: `comparison identity reached a resource it should not access (HTTP ${comparison.status}; body differs from baseline) — likely function-level authorization break`,
+        severity: "high", bodySimilarity: sim, statusMatch,
+        note: "comparison identity retrieved the declared restricted owner marker from the authorized resource",
       };
     }
     return {
       broken: false,
-      verdict: "accessible_distinct_resource",
-      severity: "info",
-      bodySimilarity: sim,
-      statusMatch,
-      note: `comparison identity got HTTP ${comparison.status} but a distinct body — may be its OWN resource at this path; verify manually before flagging`,
+      verdict: opts.expectDenied || vertical || sim >= 0.9 ? "unverified_access_candidate" : "accessible_distinct_resource",
+      severity: "info", bodySimilarity: sim, statusMatch,
+      note: "HTTP success or body similarity alone does not establish restricted ownership; provide expect_denied and a known private ownership_marker, or verify a workflow postcondition",
     };
   }
 
@@ -3652,6 +3638,47 @@ export class ToolExecutor {
     return manager.execute(call.name, call.arguments ?? {}, this._executableContext(call.name));
   }
 
+  /** Exact fixture matching keeps model-supplied ownership claims out of verification. */
+  async verifyAccessControlFinding(finding: Finding, target: string): Promise<OracleResult | undefined> {
+    const request = parseRequest(finding.evidence?.request ?? "", target);
+    if (request.method !== "GET") return undefined;
+    const fixture = this.ctx.accessControlFixtures?.find(f => new URL(f.url).href === new URL(request.url).href);
+    if (!fixture) return undefined;
+    const result = await this.accessControlProbe({
+      url: fixture.url, baseline_identity: fixture.ownerIdentity,
+      compare_identities: fixture.comparisonIdentities,
+      ownership_marker: fixture.ownershipMarker, expect_denied: true,
+    });
+    if (!result.success) return { verified: false, inconclusive: true, confidence: 0, evidence: "", reason: "ownership replay failed: " + result.error };
+    const output = result.output as { broken_count: number; verdict: string };
+    return {
+      verified: output.broken_count > 0,
+      inconclusive: output.verdict === "inconclusive",
+      confidence: output.broken_count > 0 ? 1 : 0,
+      evidence: JSON.stringify(result.output),
+      reason: output.broken_count > 0 ? "" : output.verdict === "inconclusive" ? "ownership replay unavailable or inconclusive" : "restricted owner marker was not exposed to comparison identities",
+    };
+  }
+
+  /** Category validators use the same transport and session as HTTP tools. */
+  async fetchOracleRequest(rawUrl: string, init: RequestInit): Promise<Response> {
+    const url = validateTargetUrl(this.ctx.target, rawUrl, this.ctx.scope, this.ctx.enforcement, this.ctx.publicNetwork);
+    // Recorded auth is stale/untrusted; restore it from the opaque identity context.
+    const headers = new Headers(init.headers);
+    const authNames = new Set(["authorization", "cookie", "proxy-authorization", "x-api-key", "x-auth-token"]);
+    for (const identity of this.resolveProbeIdentities()) {
+      for (const name of Object.keys(identity.headers())) authNames.add(name.toLowerCase());
+    }
+    for (const name of authNames) headers.delete(name);
+    for (const [name, value] of Object.entries(this.activeAuthHeaders(url))) headers.set(name, value);
+    const request = applyAttribution(url, { ...init, headers, redirect: "manual" }, this.ctx.attribution, this.ctx.scope)!;
+    if (this.ctx.rateLimiter) await this.ctx.rateLimiter.acquire(url);
+    const res = await this.fetchTarget(url, request);
+    if (this.ctx.rateLimiter) this.ctx.rateLimiter.noteResponse(url, res);
+    this.captureActiveCookies(res, url);
+    return res;
+  }
+
   private fetchTarget(
     url: string,
     init: RequestInit,
@@ -4400,7 +4427,14 @@ export class ToolExecutor {
   ): Promise<ProbeResponse> {
     // Same-origin / scope / path-allowlist enforcement as every other tool.
     const url = validateTargetUrl(this.ctx.target, rawUrl, this.ctx.scope, this.ctx.enforcement, this.ctx.publicNetwork);
-    const headers = { "Content-Type": "application/json", ...principal.headers(), ...extraHeaders };
+    const principalHeaders = principal.headers();
+    const authNames = new Set(["authorization", "cookie", "proxy-authorization", "host", "x-api-key", "x-auth-token"]);
+    const allHeaders = this.resolveProbeIdentities().flatMap(p => Object.entries(p.headers()));
+    for (const [name] of allHeaders) authNames.add(name.toLowerCase());
+    if (Object.keys(extraHeaders).some(name => authNames.has(name.toLowerCase()))) {
+      throw new Error("Replay headers cannot override identity credentials or Host");
+    }
+    const headers = { "Content-Type": "application/json", ...extraHeaders, ...principalHeaders };
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 30_000);
@@ -4428,7 +4462,7 @@ export class ToolExecutor {
         method,
         status: res.status,
         contentType: res.headers.get("content-type") ?? "",
-        body: text.slice(0, 10_000),
+        body: redactAuthValues(text, allHeaders.flatMap(([name, value]) => [value, value.replace(/^(?:Bearer|Basic)\s+/i, ""), ...(name.toLowerCase() === "cookie" ? value.split(";").map(pair => pair.slice(pair.indexOf("=") + 1).trim()) : [])])).slice(0, 10_000),
         ...(text.length > 10_000 ? { truncated: true } : {}),
       };
     } finally {
@@ -4436,13 +4470,27 @@ export class ToolExecutor {
     }
   }
 
+  private static readonly accessProbeSchema = z.object({
+    url: z.string().min(1),
+    method: z.enum(["GET", "POST", "PUT", "DELETE", "PATCH"]).optional(),
+    body: z.string().optional(), headers: z.record(z.string()).optional(),
+    baseline_identity: z.string().min(1).optional(),
+    compare_identities: z.array(z.string().min(1)).min(1).max(16).optional(),
+    expect_denied: z.boolean().optional(),
+    ownership_marker: z.string().min(16).max(500).optional(),
+  }).strict();
+
   private async accessControlProbe(args: Record<string, unknown>): Promise<ToolResult> {
+    const validated = ToolExecutor.accessProbeSchema.safeParse(args);
+    if (!validated.success) return { success: false, output: null, error: "Invalid access-control probe arguments" };
+    args = validated.data;
     const rawUrl = args.url as string;
     if (!rawUrl) return { success: false, output: null, error: "url is required" };
     const method = ((args.method as string) ?? "GET").toUpperCase();
     const body = args.body as string | undefined;
     const extraHeaders = (args.headers as Record<string, string>) ?? {};
     const expectDenied = args.expect_denied === true;
+    const ownershipMarker = args.ownership_marker;
 
     const principals = this.resolveProbeIdentities();
     if (principals.length < 2) {
@@ -4470,6 +4518,17 @@ export class ToolExecutor {
       compareLabels = (args.compare_identities as unknown[]).map(String);
     } else {
       compareLabels = principals.filter((p) => p.label !== baselineLabel).map((p) => p.label);
+    }
+
+    if (compareLabels.some(label => label === baselineLabel)) {
+      return { success: false, output: null, error: "Comparison identity must differ from baseline identity" };
+    }
+    const authFingerprint = (p: ProbePrincipal) => JSON.stringify(Object.entries(p.headers()).map(([k, v]) => [k.toLowerCase(), v]).sort());
+    if (compareLabels.some(label => {
+      const p = principals.find(p => p.label === label);
+      return p && authFingerprint(p) === authFingerprint(baseline);
+    })) {
+      return { success: false, output: null, error: "Comparison identities must have distinct authentication" };
     }
 
     // Authorized baseline request.
@@ -4500,6 +4559,7 @@ export class ToolExecutor {
         baselineRole: baseline.role,
         comparisonRole: principal.role,
         expectDenied,
+        ownershipMarker: typeof ownershipMarker === "string" ? ownershipMarker : undefined,
       });
       comparisons.push({
         identity: label,
@@ -4511,6 +4571,7 @@ export class ToolExecutor {
     }
 
     const broken = comparisons.filter((c) => c.broken === true);
+    const uncertain = comparisons.some(c => c.error || c.verdict === "inconclusive" || c.verdict === "unverified_access_candidate");
     const output = {
       url: baselineResp.url,
       method,
@@ -4522,14 +4583,15 @@ export class ToolExecutor {
       },
       comparisons,
       broken_count: broken.length,
-      verdict: broken.length > 0 ? "broken_access_control" : "no_break_detected",
+      verdict: broken.length > 0 ? "broken_access_control" : uncertain ? "inconclusive" : "no_break_detected",
       summary:
         broken.length > 0
           ? `Authorization boundary broken: ${broken
               .map((b) => `${b.identity} (${b.verdict})`)
               .join(", ")} reached ${baseline.label}'s resource at ${baselineResp.url}. ` +
             `Save a finding with the A-vs-B evidence below.`
-          : `No access-control break detected at ${baselineResp.url}: all comparison identities were denied or got distinct resources.`,
+          : uncertain ? `Access-control result is inconclusive at ${baselineResp.url}; review the comparison evidence.`
+          : `No access-control break reproduced at ${baselineResp.url}.`,
     };
 
     this.persistToolArtifact("access_control_probe", {

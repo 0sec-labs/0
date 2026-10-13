@@ -85,6 +85,15 @@ the assessed application. Managed-service tokens do not configure a model provid
 
 Keep credential files out of version control and prefer a file over secrets in shell history. [API Keys](/api-keys/) covers provider authentication; [White-Box Mode](/white-box-mode/) covers adding `--repo` source context to a live assessment.
 
+### Multi-identity ownership verification
+
+For tenant isolation, use `--identities ./identities.json` instead of `--auth`.
+The file contains an array of `{ "label", "role", "auth" }` entries; `auth` uses
+the same shapes above. Add `--access-control-fixtures ./fixtures.json` for exact
+known-owner GET resources. See [Finding Validators](/validators/#authenticated-idor-fixtures)
+for the fixture contract and evidence limits. Similar response bodies alone do
+not confirm restricted ownership. Mutation workflows require a state observation.
+
 ## Depth and cost controls
 
 `--depth quick`, `default`, and `deep` select different investigation budgets. They are not guaranteed wall-clock deadlines, and a clean result does not prove the absence of vulnerabilities.

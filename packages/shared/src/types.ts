@@ -157,7 +157,16 @@ export interface NamedIdentity {
   auth?: AuthConfig;
 }
 
+/** Operator-provided ownership contract for deterministic, read-only BOLA replay. */
+export interface AccessControlFixture {
+  url: string;
+  ownerIdentity: string;
+  comparisonIdentities: string[];
+  ownershipMarker: string;
+}
+
 export interface ScanConfig {
+  accessControlFixtures?: AccessControlFixture[];
   target: string;
   depth: ScanDepth;
   format: OutputFormat;

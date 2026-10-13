@@ -182,3 +182,12 @@ describe("scoreEvidence — inline confirmation dominates regex (#554)", () => {
     expect(un.evidence.some((e) => e.source === "inline_validation")).toBe(false);
   });
 });
+
+
+it("keeps explicit missing-ownership evidence inconclusive even without an infrastructure error string", async () => {
+  const result = await validateFindingInline(makeFinding(), "https://target.test", {
+    oracle: oracleOf({ verified: false, inconclusive: true, confidence: 0.7, evidence: "distinct IDs", reason: "ownership not established" }),
+  });
+  expect(result.confirmed).toBe(false);
+  expect(result.inconclusive).toBe(true);
+});

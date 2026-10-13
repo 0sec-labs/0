@@ -22,9 +22,18 @@ import type { AttackCategory, Finding } from "@0/shared";
 
 export interface OracleResult {
   verified: boolean;
+  /** Missing evidence or failed transport must not be treated as a refutation. */
+  inconclusive?: boolean;
   confidence: number; // 0-1
   evidence: string; // concrete artifact proving exploit
   reason: string; // why it failed if !verified
+}
+
+export interface OracleContext {
+  /** Scoped, identity-aware transport supplied by the scan executor. */
+  fetch?: (url: string, init: RequestInit) => Promise<Response>;
+  /** Replay an exact operator-provided ownership fixture, if available. */
+  verifyAccessControl?: (finding: Finding, target: string) => Promise<OracleResult | undefined>;
 }
 
 interface ParsedRequest {
@@ -42,7 +51,7 @@ interface ParsedRequest {
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 function notVerifiable(reason: string): OracleResult {
-  return { verified: false, confidence: 0, evidence: "", reason };
+  return { verified: false, inconclusive: true, confidence: 0, evidence: "", reason };
 }
 
 function verified(evidence: string, confidence = 1.0): OracleResult {
@@ -82,6 +91,8 @@ export function parseRequest(
     return parsed;
   }
 
+  requestText = requestText.replace(/\r\n/g, "\n");
+
   // curl form: "curl -X POST http://foo/bar --data 'a=b'"
   const curlUrl = requestText.match(
     /\bcurl\b[^\n]*?\s(https?:\/\/\S+)/i
@@ -100,7 +111,9 @@ export function parseRequest(
     parsed.method = startLine[1]!.toUpperCase();
     const path = startLine[2]!;
     const hostHeader = requestText.match(/^Host:\s*(\S+)/im);
-    if (hostHeader) {
+    if (/^https?:\/\//i.test(path)) {
+      parsed.url = path;
+    } else if (hostHeader) {
       const scheme = fallbackTarget.startsWith("https") ? "https" : "http";
       parsed.url = `${scheme}://${hostHeader[1]}${path}`;
     } else if (path.startsWith("/")) {
@@ -113,9 +126,19 @@ export function parseRequest(
     } else {
       parsed.url = path;
     }
+    const headerBlock = requestText.split("\n\n", 1)[0] ?? "";
+    for (const line of headerBlock.split("\n").slice(1)) {
+      const colon = line.indexOf(":");
+      if (colon > 0) {
+        const name = line.slice(0, colon).trim().toLowerCase();
+        if (!["host", "content-length", "connection", "transfer-encoding"].includes(name)) {
+          parsed.headers[name] = line.slice(colon + 1).trim();
+        }
+      }
+    }
     // body after blank line
     const sep = requestText.indexOf("\n\n");
-    if (sep >= 0) parsed.body = requestText.slice(sep + 2).trim();
+    if (sep >= 0) parsed.body = requestText.slice(sep + 2);
   }
 
   // Pull query params from URL
@@ -128,12 +151,16 @@ export function parseRequest(
     /* relative URL, ignore */
   }
 
-  // Pull form params from body
-  if (parsed.body && parsed.body.includes("=") && !parsed.body.startsWith("{")) {
-    for (const pair of parsed.body.split("&")) {
-      const [k, v] = pair.split("=");
-      if (k) parsed.params[decodeURIComponent(k)] = decodeURIComponent(v ?? "");
-    }
+  // Retain JSON structure; only top-level scalar fields are mutation candidates.
+  if (parsed.body.trimStart().startsWith("{")) {
+    try {
+      const json = JSON.parse(parsed.body) as Record<string, unknown>;
+      for (const [key, value] of Object.entries(json)) {
+        if (typeof value === "string" || typeof value === "number") parsed.params[key] = String(value);
+      }
+    } catch { /* malformed captured body is not a parameter source */ }
+  } else if (parsed.body.includes("=")) {
+    new URLSearchParams(parsed.body).forEach((value, key) => { parsed.params[key] = value; });
   }
 
   return parsed;
@@ -144,41 +171,38 @@ function buildProbeRequest(
   parsed: ParsedRequest,
   newParams: Record<string, string>
 ): { url: string; init: RequestInit } {
-  const merged = { ...parsed.params, ...newParams };
   const method = parsed.method || "GET";
-  const init: RequestInit = { method, headers: parsed.headers };
-
-  if (method === "GET" || method === "DELETE") {
-    try {
-      const u = new URL(parsed.url);
-      // clear & re-set
-      Array.from(u.searchParams.keys()).forEach((k) => u.searchParams.delete(k));
-      for (const [k, v] of Object.entries(merged)) u.searchParams.set(k, v);
-      return { url: u.toString(), init };
-    } catch {
-      return { url: parsed.url, init };
-    }
+  const init: RequestInit = { method, headers: { ...parsed.headers } };
+  const url = new URL(parsed.url);
+  let json: Record<string, unknown> | undefined;
+  if (parsed.body.trimStart().startsWith("{")) {
+    try { json = JSON.parse(parsed.body) as Record<string, unknown>; } catch { /* retain raw body */ }
   }
-
-  // Body-bearing methods: send form-encoded
-  init.body = new URLSearchParams(merged).toString();
-  init.headers = {
-    "content-type": "application/x-www-form-urlencoded",
-    ...parsed.headers,
-  };
-  return { url: parsed.url, init };
+  const form = !json && parsed.body.includes("=") ? new URLSearchParams(parsed.body) : undefined;
+  for (const [key, value] of Object.entries(newParams)) {
+    if (method !== "GET" && json && Object.hasOwn(json, key)) json[key] = value;
+    else if (method !== "GET" && form?.has(key)) form.set(key, value);
+    else url.searchParams.set(key, value);
+  }
+  if (method !== "GET") {
+    init.body = json ? JSON.stringify(json) : form ? form.toString() : parsed.body || undefined;
+    if (json) init.headers = { "content-type": "application/json", ...parsed.headers };
+    else if (form) init.headers = { "content-type": "application/x-www-form-urlencoded", ...parsed.headers };
+  }
+  return { url: url.toString(), init };
 }
 
-async function timedFetch(
+async function fetchWithTimeout(
   url: string,
   init: RequestInit,
-  timeoutMs = DEFAULT_TIMEOUT_MS
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  context: OracleContext = {},
 ): Promise<{ status: number; body: string; latencyMs: number } | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const start = Date.now();
   try {
-    const res = await fetch(url, { ...init, signal: controller.signal });
+    const res = await (context.fetch ?? fetch)(url, { ...init, redirect: "manual", signal: controller.signal });
     const body = await res.text();
     return { status: res.status, body, latencyMs: Date.now() - start };
   } catch {
@@ -241,8 +265,11 @@ function pickInjectableParam(
 
 export async function verifySqli(
   finding: Finding,
-  target: string
+  target: string,
+  context: OracleContext = {},
 ): Promise<OracleResult> {
+  const timedFetch = (url: string, init: RequestInit, timeoutMs?: number) =>
+    fetchWithTimeout(url, init, timeoutMs, context);
   const parsed = parseRequest(finding.evidence?.request ?? "", target);
   const victim = pickInjectableParam(parsed);
   if (!victim)
@@ -339,8 +366,11 @@ export async function verifySqli(
 
 export async function verifyReflectedXss(
   finding: Finding,
-  target: string
+  target: string,
+  context: OracleContext = {},
 ): Promise<OracleResult> {
+  const timedFetch = (url: string, init: RequestInit, timeoutMs?: number) =>
+    fetchWithTimeout(url, init, timeoutMs, context);
   const parsed = parseRequest(finding.evidence?.request ?? "", target);
   const victim = pickInjectableParam(parsed);
   if (!victim)
@@ -384,10 +414,28 @@ export async function verifyReflectedXss(
       // form body on the first main-frame request so POST-only sinks are
       // actually exercised. Keep the real response headers (including CSP).
       let replayed = false;
-      await page.route((candidate) => candidate.href === new URL(url).href, async (route) => {
+      await page.route(context.fetch ? "**/*" : (candidate) => candidate.href === new URL(url).href, async (route) => {
         const request = route.request();
-        if (!replayed && request.isNavigationRequest() && request.frame() === page.mainFrame()) {
-          replayed = true;
+        const initial = !replayed && request.isNavigationRequest() && request.frame() === page.mainFrame();
+        if (initial) replayed = true;
+        const replayInit: RequestInit = {
+          method: initial ? init.method : request.method(),
+          headers: initial ? init.headers : request.headers(),
+          body: initial ? init.body : request.postData(),
+          redirect: "manual",
+        };
+        if (context.fetch) {
+          try {
+            const response = await context.fetch(request.url(), replayInit);
+            const headers = Object.fromEntries(response.headers);
+            // The transport returns decoded bytes. Do not retain compression/length metadata.
+            delete headers["content-encoding"];
+            delete headers["content-length"];
+            await route.fulfill({ status: response.status, headers, body: Buffer.from(await response.arrayBuffer()) });
+          } catch {
+            await route.abort();
+          }
+        } else if (initial) {
           await route.continue({
             method: init.method,
             headers: { ...request.headers(), ...Object.fromEntries(new Headers(init.headers)) },
@@ -417,6 +465,7 @@ export async function verifyReflectedXss(
         evidence: htmlReflected
           ? `html_reflection: payload reflected in body`
           : "",
+        inconclusive: true,
         reason: `playwright navigation failed: ${(err as Error).message}`,
       };
     }
@@ -476,8 +525,11 @@ async function withCollector<T>(
 
 export async function verifySsrf(
   finding: Finding,
-  target: string
+  target: string,
+  context: OracleContext = {},
 ): Promise<OracleResult> {
+  const timedFetch = (url: string, init: RequestInit, timeoutMs?: number) =>
+    fetchWithTimeout(url, init, timeoutMs, context);
   const parsed = parseRequest(finding.evidence?.request ?? "", target);
   const victim = pickInjectableParam(parsed);
   if (!victim)
@@ -512,8 +564,11 @@ export async function verifySsrf(
 
 export async function verifyRce(
   finding: Finding,
-  target: string
+  target: string,
+  context: OracleContext = {},
 ): Promise<OracleResult> {
+  const timedFetch = (url: string, init: RequestInit, timeoutMs?: number) =>
+    fetchWithTimeout(url, init, timeoutMs, context);
   const parsed = parseRequest(finding.evidence?.request ?? "", target);
   const victim = pickInjectableParam(parsed);
   if (!victim)
@@ -556,8 +611,11 @@ const PASSWD_PATTERN = /root:x:0:0:|\/bin\/(bash|sh|dash)/;
 
 export async function verifyPathTraversal(
   finding: Finding,
-  target: string
+  target: string,
+  context: OracleContext = {},
 ): Promise<OracleResult> {
+  const timedFetch = (url: string, init: RequestInit, timeoutMs?: number) =>
+    fetchWithTimeout(url, init, timeoutMs, context);
   const parsed = parseRequest(finding.evidence?.request ?? "", target);
   const victim = pickInjectableParam(parsed);
   if (!victim)
@@ -594,9 +652,16 @@ export async function verifyPathTraversal(
 
 export async function verifyIdor(
   finding: Finding,
-  target: string
+  target: string,
+  context: OracleContext = {},
 ): Promise<OracleResult> {
+  const timedFetch = (url: string, init: RequestInit, timeoutMs?: number) =>
+    fetchWithTimeout(url, init, timeoutMs, context);
+  const boundary = await context.verifyAccessControl?.(finding, target);
+  if (boundary) return boundary;
   const parsed = parseRequest(finding.evidence?.request ?? "", target);
+
+  if (parsed.method !== "GET") return notVerifiable("read-only IDOR oracle requires GET; use an explicitly opted-in state-observing workflow for mutations");
 
   // Look for a numeric id-like param
   let idKey: string | null = null;
@@ -656,6 +721,7 @@ export async function verifyIdor(
     return {
       verified: false,
       confidence: 0.7,
+      inconclusive: true,
       evidence: `distinct responses on id mutation: ${hits.join(", ")}`,
       reason: "distinct ID responses are a candidate only; identity and resource ownership were not established",
     };
@@ -669,26 +735,27 @@ export async function verifyIdor(
 
 export async function verifyOracleByCategory(
   finding: Finding,
-  target: string
+  target: string,
+  context: OracleContext = {},
 ): Promise<OracleResult> {
   const category = finding.category as AttackCategory;
 
   switch (category) {
     case "sql-injection":
-      return verifySqli(finding, target);
+      return verifySqli(finding, target, context);
     case "xss":
-      return verifyReflectedXss(finding, target);
+      return verifyReflectedXss(finding, target, context);
     case "ssrf":
-      return verifySsrf(finding, target);
+      return verifySsrf(finding, target, context);
     case "command-injection":
     case "code-injection":
-      return verifyRce(finding, target);
+      return verifyRce(finding, target, context);
     case "path-traversal":
-      return verifyPathTraversal(finding, target);
+      return verifyPathTraversal(finding, target, context);
     // Heuristic: "information-disclosure" findings referencing an id param
     // look a lot like IDOR. We route them through the IDOR oracle as well.
     case "information-disclosure":
-      return verifyIdor(finding, target);
+      return verifyIdor(finding, target, context);
     default:
       return {
         verified: false,

@@ -94,8 +94,8 @@ export async function runNativeDiscovery(
   // `auth` with `identities` and surface the access_control_probe guidance.
   const identities = resolveIdentities(config);
   const basePrompt = isWeb
-    ? webPentestDiscoveryPrompt(config.target, config.auth) + buildAccessControlPromptBlock(identities)
-    : discoveryPrompt(config.target, config.auth) + buildAccessControlPromptBlock(identities);
+    ? webPentestDiscoveryPrompt(config.target, config.auth) + buildAccessControlPromptBlock(identities, config.accessControlFixtures)
+    : discoveryPrompt(config.target, config.auth) + buildAccessControlPromptBlock(identities, config.accessControlFixtures);
   let systemPrompt = apiSpecPromptText
     ? basePrompt + "\n\n" + apiSpecPromptText
     : basePrompt;
@@ -117,6 +117,7 @@ export async function runNativeDiscovery(
       scanId,
       sessionId: db.getSession(scanId, "discovery")?.id,
       authConfig: config.auth,
+      accessControlFixtures: config.accessControlFixtures,
       identities,
       scope: resolveScopeForConfig(config),
       rateLimiter: getOrCreateRateLimiter(config),
@@ -199,10 +200,20 @@ export async function runNativeAttack(
   // White-box mode: add read_file + run_command when source code path is provided
   const hasSource = !!config.repoPath;
   const identities = resolveIdentities(config);
+  // Authenticated web scans take the STRUCTURED path instead (parity with
+  // runLegacyAttack): webPentestAttackPrompt + the full attack-role network
+  // toolset (http_request / crawl / submit_form / access_control_probe …).
+  // The shell-first path hands the agent bash/curl only, which bypasses the
+  // SessionEngine — configured cookies/auth headers, scope checks,
+  // attribution and rate limits never reach the wire, and the agent ends up
+  // firing unauthenticated curls into a login wall.
+  const authenticatedWeb = isWeb && identities.length > 0;
   let basePrompt = isWeb
-    ? shellPentestPrompt(config.target, config.repoPath, { hasBrowser, auth: config.auth })
+    ? authenticatedWeb
+      ? webPentestAttackPrompt(config.target, formatWebDiscoveryInfo(targetInfo), config.auth)
+      : shellPentestPrompt(config.target, config.repoPath, { hasBrowser, auth: config.auth })
     : attackPrompt(config.target, targetInfo, categories, config.auth);
-  basePrompt += buildAccessControlPromptBlock(identities);
+  basePrompt += buildAccessControlPromptBlock(identities, config.accessControlFixtures);
   // Inject API spec knowledge if available
   if (apiSpecPromptText) basePrompt += "\n\n" + apiSpecPromptText;
 
@@ -319,7 +330,11 @@ export async function runNativeAttack(
   // (send_prompt, http_request). On repos with no such surface the finder burned
   // its turns probing for prompt-injection / SSO-federation instead of auditing
   // code, then found nothing. Scoping the toolset removes that drift.
-  const tools = (isWeb || hasSource) ? shellTools : getToolsForRole("attack", { hasBrowser, allowScanners: config.allowScanners });
+  const tools = authenticatedWeb
+    ? getToolsForRole("attack", { webMode: true, hasBrowser, allowScanners: config.allowScanners })
+    : (isWeb || hasSource)
+      ? shellTools
+      : getToolsForRole("attack", { hasBrowser, allowScanners: config.allowScanners });
 
   const effectiveMaxTurns =
     isWeb && config.maxAttackTurns === undefined ? Math.max(maxTurns, 15) : maxTurns;
@@ -356,6 +371,7 @@ export async function runNativeAttack(
       sessionId: db.getSession(scanId, "attack")?.id,
       retryCount: 0,
       authConfig: config.auth,
+      accessControlFixtures: config.accessControlFixtures,
       identities,
       scope: resolveScopeForConfig(config),
       rateLimiter: getOrCreateRateLimiter(config),
@@ -434,6 +450,7 @@ export async function runNativeAttack(
         scopePath: config.repoPath,
         retryCount: 1,
         authConfig: config.auth,
+        accessControlFixtures: config.accessControlFixtures,
         identities,
         scope: resolveScopeForConfig(config),
         rateLimiter: getOrCreateRateLimiter(config),
@@ -697,6 +714,7 @@ export async function runNativeVerify(
         scanId,
         sessionId: db?.getSession?.(scanId, "verify")?.id,
         authConfig: config.auth,
+        accessControlFixtures: config.accessControlFixtures,
         identities: resolveIdentities(config),
         scope: resolveScopeForConfig(config),
         rateLimiter: getOrCreateRateLimiter(config),
@@ -760,7 +778,7 @@ export async function runLegacyDiscovery(
   const basePrompt =
     (isWeb
       ? webPentestDiscoveryPrompt(config.target, config.auth)
-      : discoveryPrompt(config.target, config.auth)) + buildAccessControlPromptBlock(identities);
+      : discoveryPrompt(config.target, config.auth)) + buildAccessControlPromptBlock(identities, config.accessControlFixtures);
   const systemPrompt = apiSpecPromptText
     ? basePrompt + "\n\n" + apiSpecPromptText
     : basePrompt;
@@ -780,6 +798,7 @@ export async function runLegacyDiscovery(
       attachTargetToolsMcp: true,
       dbPath,
       authConfig: config.auth,
+      accessControlFixtures: config.accessControlFixtures,
       identities,
       scope: resolveScopeForConfig(config),
       rateLimiter: getOrCreateRateLimiter(config),
@@ -842,7 +861,7 @@ export async function runLegacyAttack(
   let baseAttackPrompt = isWeb
     ? webPentestAttackPrompt(config.target, formatWebDiscoveryInfo(targetInfo), config.auth)
     : attackPrompt(config.target, targetInfo, categories, config.auth);
-  baseAttackPrompt += buildAccessControlPromptBlock(identities);
+  baseAttackPrompt += buildAccessControlPromptBlock(identities, config.accessControlFixtures);
   if (apiSpecPromptText) baseAttackPrompt += "\n\n" + apiSpecPromptText;
   const systemPrompt = baseAttackPrompt;
   const tools = isWeb
@@ -864,6 +883,7 @@ export async function runLegacyAttack(
       dbPath,
       identities,
       authConfig: config.auth,
+      accessControlFixtures: config.accessControlFixtures,
       scope: resolveScopeForConfig(config),
       rateLimiter: getOrCreateRateLimiter(config),
       enforcement: resolveEnforcementForConfig(config),
@@ -935,6 +955,7 @@ export async function runLegacyVerify(
       attachTargetToolsMcp: true,
       dbPath,
       authConfig: config.auth,
+      accessControlFixtures: config.accessControlFixtures,
       identities: resolveIdentities(config),
       scope: resolveScopeForConfig(config),
       rateLimiter: getOrCreateRateLimiter(config),

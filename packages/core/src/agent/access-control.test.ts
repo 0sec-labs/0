@@ -41,13 +41,13 @@ describe("bodySimilarity", () => {
 });
 
 describe("diffAccessResponses", () => {
-  const body = '{"id":1,"email":"alice@example.com","ssn":"redacted"}';
+  const body = '{"id":1,"email":"alice@example.com","marker":"PRIVATE_ALICE_CANARY_12345"}';
 
   it("flags broken object-level auth when B retrieves the SAME resource (BOLA/IDOR)", () => {
     const d = diffAccessResponses(
       { status: 200, body },
       { status: 200, body },
-      { baselineRole: "user", comparisonRole: "user", expectDenied: true },
+      { baselineRole: "user", comparisonRole: "user", expectDenied: true, ownershipMarker: "PRIVATE_ALICE_CANARY_12345" },
     );
     expect(d.broken).toBe(true);
     expect(d.verdict).toBe("broken_object_level_authorization");
@@ -59,7 +59,7 @@ describe("diffAccessResponses", () => {
     const d = diffAccessResponses(
       { status: 200, body },
       { status: 200, body },
-      { baselineRole: "admin", comparisonRole: "user" },
+      { baselineRole: "admin", comparisonRole: "user", expectDenied: true, ownershipMarker: "PRIVATE_ALICE_CANARY_12345" },
     );
     expect(d.broken).toBe(true);
     expect(d.verdict).toBe("vertical_privilege_escalation");
@@ -73,14 +73,14 @@ describe("diffAccessResponses", () => {
     }
   });
 
-  it("flags BFLA when a lower-priv identity reaches a function it should not (2xx, different body)", () => {
+  it("keeps HTTP success without an observed state transition unverified", () => {
     const d = diffAccessResponses(
       { status: 200, body: '{"admin":"panel"}' },
       { status: 200, body: '{"ok":true}' },
       { baselineRole: "admin", comparisonRole: "user" },
     );
-    expect(d.broken).toBe(true);
-    expect(d.verdict).toBe("vertical_privilege_escalation");
+    expect(d.broken).toBe(false);
+    expect(d.verdict).toBe("unverified_access_candidate");
   });
 
   it("does NOT flag a distinct resource for a same-tier identity (likely its own data)", () => {
@@ -140,7 +140,7 @@ const TWO_IDENTITIES: NamedIdentity[] = [
 
 describe("accessControlProbe integration (0#564)", () => {
   it("confirms a BOLA finding when identity B retrieves identity A's object", async () => {
-    const aliceObject = '{"id":1,"owner":"alice","email":"alice@example.com"}';
+    const aliceObject = '{"id":1,"owner":"alice","email":"alice@example.com","marker":"PRIVATE_ALICE_CANARY_12345"}';
     // Vulnerable server: returns alice's object to ANYONE with a valid token.
     vi.mocked(fetchScoped).mockImplementation(async () => new Response(aliceObject, {
       status: 200,
@@ -155,6 +155,7 @@ describe("accessControlProbe integration (0#564)", () => {
         baseline_identity: "alice",
         compare_identities: ["bob"],
         expect_denied: true,
+        ownership_marker: "PRIVATE_ALICE_CANARY_12345",
       },
     });
 

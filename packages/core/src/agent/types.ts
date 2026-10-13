@@ -376,6 +376,7 @@ export interface AgentConfig {
    * `authConfig` for back-compat with the env-var / fallback paths.
    */
   identities?: NamedIdentity[];
+  accessControlFixtures?: import("@0/shared").AccessControlFixture[];
   /**
    * Stateful per-identity HTTP session engine (0#564). Built once per
    * scan and shared across discovery/attack/verify phases so cookies persist.
@@ -602,6 +603,7 @@ export interface ToolContext {
    * to enumerate the principals it can replay requests as.
    */
   identities?: NamedIdentity[];
+  accessControlFixtures?: import("@0/shared").AccessControlFixture[];
   /**
    * Stateful per-identity HTTP session engine (0#564). When present, the
    * HTTP tools (`http_request`/`crawl`/`submit_form`) act as `session.activeLabel`,

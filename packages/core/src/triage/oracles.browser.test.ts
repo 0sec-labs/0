@@ -1,3 +1,6 @@
+import { ToolExecutor } from "../agent/tools.js";
+import { SessionEngine } from "../agent/session.js";
+import { verifyOracleByCategory } from "./oracles.js";
 import { createServer, type Server } from "node:http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Finding } from "@0/shared";
@@ -18,6 +21,7 @@ describe.runIf(process.env.ZERO_TEST_BROWSER_ORACLES === "1")("real browser XSS 
         res.setHeader("content-type", "application/json");
         res.end(JSON.stringify({ publicResource: url.searchParams.get("id") })); return;
       }
+      if (req.headers.cookie !== "fixture_session=synthetic") { res.writeHead(401); res.end("missing test session"); return; }
       const payload = req.method === "POST"
         ? new URLSearchParams(body).get("q") ?? ""
         : url.searchParams.get("q") ?? "";
@@ -53,8 +57,13 @@ describe.runIf(process.env.ZERO_TEST_BROWSER_ORACLES === "1")("real browser XSS 
       confidence: 0.7, timestamp: Date.now(),
       evidence: { request: method === "POST" ? `curl -X POST ${url} --data 'q=seed'` : `curl ${url}`, response: "" },
     } as Finding;
-    // Real save_finding validator path; no mocked oracle or browser.
-    return validateFindingInline(finding, url);
+    // Real authenticated scoped transport and browser, including POST/CSP controls.
+    const ex = new ToolExecutor({ target: origin, scanId: "browser-replay", findings: [], attackResults: [], targetInfo: {},
+      session: new SessionEngine([{ label: "tester", auth: { type: "cookie", value: "fixture_session=synthetic" } }]),
+    }, null);
+    return validateFindingInline(finding, url, { oracle: (f, t) => verifyOracleByCategory(f, t, {
+      fetch: (u, init) => ex.fetchOracleRequest(u, init),
+    }) });
   }
   it("confirms actual GET script execution with a fresh token", async () => {
     const result = await check("/get");

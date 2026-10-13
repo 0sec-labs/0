@@ -569,6 +569,8 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
 | `--repo <path>` | — | Source code path for white-box scanning |
+| `--access-control-fixtures <file>` | — | JSON file of known private resource ownership fixtures for IDOR verification |
+| `--identities <file>` | — | Restricted JSON file with named test identities for access-control replay |
 | `--auth <json>` | — | Auth credentials: JSON string or path (bearer, cookie, basic, header) |
 | `--scope <path>` | — | Path to a JSON scope policy (enable with `0 plugin enable scope`) |
 | `--allow-scanners` | `false` | Expose generic scanner tools in scope-enforced scans |
