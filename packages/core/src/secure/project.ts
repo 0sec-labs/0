@@ -74,6 +74,7 @@ import type {
 } from "./types.js";
 import { runBehavioralRepair } from "./behavioral-repair.js";
 import { normalizeSourcePath, resolveSourceScope } from "./source-scope.js";
+import { withLocalSourceBoundary } from "../scope/local-source-boundary.js";
 import { ProjectLock, LockHeldError } from "./project-lock.js";
 import {
   type SecureProjectState,
@@ -847,13 +848,13 @@ export async function runSecureProject(
     if (state.phase === "investigate") {
       emit(makeEvent("investigate", "Running source investigation pipeline"));
 
-      const investigation = await investigateSource(
+      const investigation = await withLocalSourceBoundary(sourcePath === "." ? undefined : investigationPath, () => investigateSource(
         investigationPath, depth, costCeilingUsd, workflowTimeoutMs, combinedSignal,
         projectContext,
         revision,
         checkoutPath,
         sourcePath,
-      );
+      ));
 
       if (investigation.error) {
         emit(makeEvent("investigate", investigation.error));

@@ -6,6 +6,7 @@ import { afterEach, expect, it, vi } from "vitest";
 const pipeline = vi.hoisted(() => vi.fn());
 vi.mock("../unified-pipeline.js", () => ({ runPipeline: pipeline }));
 import { runSecureProject } from "./project.js";
+import { getLocalSourceBoundary } from "../scope/local-source-boundary.js";
 
 const directories: string[] = [];
 afterEach(() => { directories.splice(0).forEach(path => rmSync(path, { recursive: true, force: true })); pipeline.mockReset(); });
@@ -19,7 +20,10 @@ function fixture() {
 }
 
 it("investigates the exact pinned checkout folder and records scope for resume", async () => {
-  const f = fixture(); pipeline.mockResolvedValue({ findings: [], researchFailed: false });
+  const f = fixture(); pipeline.mockImplementation(async (options) => {
+    expect(getLocalSourceBoundary()).toBe(realpathSync(options.target));
+    return { findings: [], researchFailed: false };
+  });
   const result = await runSecureProject({ ...f, repoRoot: f.repo, sourcePath: "service", testCommand: "true", runtime: "api" });
   expect(result.status).toBe("completed"); expect(result.revision).toBe(f.revision); expect(result.sourcePath).toBe("service");
   expect(pipeline.mock.calls[0][0].target).toBe(realpathSync(join(f.stateDir, "checkout/service")));

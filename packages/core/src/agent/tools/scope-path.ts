@@ -9,6 +9,7 @@
 import { lstatSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, resolve, sep } from "node:path";
 import { isScopeEnforcementEnabled } from "../../scope/activation.js";
+import { getLocalSourceBoundary } from "../../scope/local-source-boundary.js";
 
 function pathEntryExists(path: string): boolean {
   try {
@@ -49,6 +50,12 @@ function isScopedPath(scopePath: string, inputPath: string): boolean {
 }
 
 export function resolveScopedPath(scopePath: string | undefined, inputPath: string): string {
+  const boundary = getLocalSourceBoundary();
+  if (boundary) {
+    const base = scopePath ? realpathSync(scopePath) : process.cwd();
+    const candidate = isAbsolute(inputPath) ? resolve(inputPath) : resolve(base, inputPath);
+    if (!isScopedPath(boundary, candidate)) throw new Error(`Path escapes the approved source folder: ${inputPath}`);
+  }
   if (isScopeEnforcementEnabled() && (!scopePath || !isScopedPath(scopePath, inputPath))) {
     throw new Error(`Path escapes the allowed scope: ${inputPath}`);
   }

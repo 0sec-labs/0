@@ -212,6 +212,7 @@ import {
 } from "./tools/offensive-engines.js";
 import { executeBrowser, type BrowserDriverHost } from "./tools/browser.js";
 import { resolveScopedPath } from "./tools/scope-path.js";
+import { getLocalSourceBoundary, withLocalSourceBoundary } from "../scope/local-source-boundary.js";
 import { windowFileContent } from "./tools/read-file-window.js";
 import { buildEvalCommand, parseEvalArgs, type EvalLanguage } from "./tools/eval.js";
 import { executeOverseScan, validateOverseArgs } from "./tools/0verse.js";
@@ -3005,6 +3006,7 @@ export class ToolExecutor {
    */
   private _todos: TodoTracker;
   private _workspaceIdentity?: WorkspaceIdentity;
+  private readonly _localSourceBoundary = getLocalSourceBoundary();
 
   /** Called only after explicit operator folder approval while the engine is idle. */
   configureWorkspace(path: string): void {
@@ -3323,7 +3325,7 @@ export class ToolExecutor {
       : ownAuthority ?? inheritedAuthority;
     const scopeEnforcement = getScopeEnforcementState();
     this.ctx.scopeEnforcement = scopeEnforcement;
-    return withScopeEnforcement(scopeEnforcement, () => this._executionContext.run({ correlationId: opts?.correlationId, signal, assertAuthority }, async () => {
+    return withLocalSourceBoundary(this._localSourceBoundary ?? getLocalSourceBoundary(), () => withScopeEnforcement(scopeEnforcement, () => this._executionContext.run({ correlationId: opts?.correlationId, signal, assertAuthority }, async () => {
     try {
       signal?.throwIfAborted();
       assertAuthority?.();
@@ -3365,7 +3367,7 @@ export class ToolExecutor {
       const msg = err instanceof Error ? err.message : String(err);
       return { success: false, output: null, error: msg };
     }
-    }));
+    })));
   }
 
   /**
@@ -3395,9 +3397,11 @@ export class ToolExecutor {
     // requirement is also what stops YOLO from ever granting execution rights
     // when no scope exists.
     const inScopedSourceAudit =
+      !!getLocalSourceBoundary() ||
+      (
       (this.ctx.role === "audit" || this.ctx.role === "review") &&
       typeof this.ctx.scopePath === "string" &&
-      this.ctx.scopePath.length > 0;
+      this.ctx.scopePath.length > 0);
     if (!inScopedSourceAudit) return null;
 
     // Allow-listed tools always run — they are never a candidate for
@@ -3409,6 +3413,9 @@ export class ToolExecutor {
       output: null,
       error: `Tool "${call.name}" is not available in a scoped source audit`,
     };
+    // Neither autonomy nor a later escalation can widen an explicit folder's
+    // read-only investigation into shell execution or repair outside the phase.
+    if (getLocalSourceBoundary()) return denied;
 
     // YOLO or CO-PILOT with a configured scope: the allow-list no longer
     // restricts execution. Neither mode has per-action prompts under the
