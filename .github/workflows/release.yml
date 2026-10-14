@@ -92,6 +92,10 @@ jobs:
           mv node_modules node_modules.release-build
           trap 'mv node_modules.release-build node_modules; rm -rf "$smoke_dir"' EXIT
           cp "dist-bin/${{ matrix.asset }}" "$smoke_dir/0"
+          # A release binary can be launched from inside any source checkout.
+          # Its embedded UI must win over an unrelated stale workspace build.
+          mkdir -p "$smoke_dir/packages/dashboard/dist"
+          printf '<html><body>stale checkout dashboard</body></html>' > "$smoke_dir/packages/dashboard/dist/index.html"
           (
             cd "$smoke_dir"
             ./0 --version

@@ -1129,10 +1129,6 @@ function resolveDashboardAssetDir(explicitAssetDir?: string): DashboardAssetDire
     ...(explicitAssetDir ? [resolve(explicitAssetDir)] : []),
     join(moduleDir, "dashboard"),
     join(moduleDir, "..", "dashboard"),
-    // A source checkout must serve the freshly built workspace dashboard,
-    // not an unrelated stale root bundle left by an earlier packaging run.
-    join(process.cwd(), "packages", "dashboard", "dist"),
-    join(process.cwd(), "dist", "dashboard"),
   ];
 
   for (const candidate of candidates) {
@@ -1143,6 +1139,19 @@ function resolveDashboardAssetDir(explicitAssetDir?: string): DashboardAssetDire
 
   const embedded = materializeEmbeddedDashboardAssets(DASHBOARD_ASSETS);
   if (embedded) return embedded;
+
+  // The checked-in embedded-assets stub is empty in source and Node builds,
+  // so development falls back to the workspace dashboard. Standalone binaries
+  // must use their embedded release assets even when launched inside a checkout
+  // that happens to contain an older packages/dashboard/dist build.
+  for (const candidate of [
+    join(process.cwd(), "packages", "dashboard", "dist"),
+    join(process.cwd(), "dist", "dashboard"),
+  ]) {
+    if (existsSync(join(candidate, "index.html"))) {
+      return { path: candidate };
+    }
+  }
   throw new Error("Dashboard assets not found. Run `pnpm build` to generate the dashboard app.");
 }
 
