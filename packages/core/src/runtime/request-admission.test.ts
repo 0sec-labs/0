@@ -44,3 +44,19 @@ it("does not fetch catalogs for ordinary external-provider behavior", async () =
   await post(runtime(false), JSON.stringify({ input: "Fixture" })); expect(fetch).toHaveBeenCalledTimes(1);
   expect(fetch.mock.calls[0][1]?.method).toBe("POST");
 });
+it("clears failed catalog reads without retrying inference, so a later explicit call can recover", async () => {
+  const fetch = vi.fn().mockResolvedValueOnce(new Response("unavailable", { status: 503 }))
+    .mockResolvedValueOnce(Response.json(catalog())).mockResolvedValueOnce(new Response("ok"));
+  vi.stubGlobal("fetch", fetch); const rt = runtime(); const body = JSON.stringify({ input: "Fixture" });
+  await expect(post(rt, body)).rejects.toThrow("LOCAL_REQUEST_ADMISSION_UNAVAILABLE");
+  expect(fetch).toHaveBeenCalledTimes(1);
+  await expect(post(rt, body)).resolves.toHaveProperty("status", 200);
+  expect(fetch.mock.calls.map(c => c[1]?.method ?? "GET")).toEqual(["GET", "GET", "POST"]);
+});
+it("preserves proof of no POST when cancellation interrupts the catalog GET", async () => {
+  const controller = new AbortController();
+  const fetch = vi.fn(async () => { controller.abort(); throw new Error("Aborted catalog read"); }); vi.stubGlobal("fetch", fetch);
+  const result = await runtime().executeNative("Task", [{ role: "user", content: [{ type: "text", text: "Fixture" }] }], [], undefined, controller.signal);
+  expect(result.error).toContain("LOCAL_REQUEST_ADMISSION_UNAVAILABLE"); expect(result.cancelled).toBe(true);
+  expect(result.usage).toBeUndefined(); expect(fetch).toHaveBeenCalledTimes(1);
+});

@@ -12,7 +12,7 @@ import type {
   NativeContentBlock,
 } from "./types.js";
 
-import { assertRequestAdmission, isLocalAdmissionLimit, parseRequestAdmission, type RequestAdmission } from "./request-admission.js";
+import { assertRequestAdmission, isLocalAdmissionFailure, LOCAL_ADMISSION_UNAVAILABLE, parseRequestAdmission, type RequestAdmission } from "./request-admission.js";
 import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -3500,19 +3500,34 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
    * refresh) so a token that rotated during the wait is picked up.
    */
   private async gatewayRequestAdmission(signal: AbortSignal): Promise<RequestAdmission> {
-    if (this.workbenchProviderProxy) throw new Error("Gateway request admission cannot use a workbench proxy");
-    const identity = JSON.stringify([this.provider, this.baseUrl, this.model, this.wireApi]);
+    if (this.workbenchProviderProxy) throw new Error(`${LOCAL_ADMISSION_UNAVAILABLE} gateway admission cannot use a workbench proxy; no inference request sent`);
+    const model = this.model;
+    const baseUrl = this.baseUrl;
+    const identity = JSON.stringify([this.provider, baseUrl, model, this.wireApi]);
     if (!this.requestAdmission || this.requestAdmissionIdentity !== identity) {
       this.requestAdmissionIdentity = identity;
-      this.requestAdmission = (async () => {
-        // Same configured provider origin and credentials; redirects cannot move the capability.
-        // foxguard: ignore[js/no-ssrf]
-        const response = await fetch(`${this.baseUrl.replace(/\/+$/, "")}/models`, {
-          headers: await this.ensureFreshHeaders(), signal, redirect: "error",
-        });
-        if (!response.ok) throw new Error(`Gateway admission catalog unavailable (HTTP ${response.status}); no inference request sent`);
-        return parseRequestAdmission(await response.json(), this.model);
+      const pending = (async () => {
+        try {
+          // Same configured provider origin and credentials; redirects cannot move the capability.
+          // foxguard: ignore[js/no-ssrf]
+          const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/models`, {
+            headers: await this.ensureFreshHeaders(), signal, redirect: "error",
+          });
+          if (!response.ok) throw new Error(`${LOCAL_ADMISSION_UNAVAILABLE} catalog HTTP ${response.status}; no inference request sent`);
+          return parseRequestAdmission(await response.json(), model);
+        } catch (error) {
+          if (error instanceof Error && error.message.startsWith(LOCAL_ADMISSION_UNAVAILABLE)) throw error;
+          throw new Error(`${LOCAL_ADMISSION_UNAVAILABLE} catalog unavailable or invalid; no inference request sent`);
+        }
       })();
+      this.requestAdmission = pending;
+      void pending.catch(() => {
+        // An older failed GET must not erase a newer route's successful cache.
+        if (this.requestAdmission === pending && this.requestAdmissionIdentity === identity) {
+          this.requestAdmission = undefined;
+          this.requestAdmissionIdentity = undefined;
+        }
+      });
     }
     return this.requestAdmission;
   }
@@ -3996,7 +4011,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     let attempt = 0;
     for (attempt = 1; attempt <= maxAttempts; attempt++) {
       result = await this.executeNativeAttempt(system, messages, tools, callbacks, signal);
-      if (isLocalAdmissionLimit(result.error)) return result;
+      if (isLocalAdmissionFailure(result.error)) return result;
       if (this.env["ZERO_REQUIRE_RETRY_SAFE_RECEIPT"] === "1" && (result.stopReason === "error" || result.error)) {
         return { ...result, error: `${result.error ?? "Incomplete gateway response"}. Request outcome may be unknown. Automatic replay is disabled` };
       }
@@ -4727,6 +4742,12 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       };
     } catch (err) {
       clearTimeout(timer);
+      // Local admission failures prove no inference POST even if cancellation
+      // arrived during the catalog read; preserve that accounting authority.
+      if (err instanceof Error && isLocalAdmissionFailure(err.message)) return {
+        content: [], stopReason: "error", durationMs: Date.now() - start, error: err.message,
+        ...(call.operatorAborted() ? { cancelled: true } : {}),
+      };
       // Operator cancellation, checked BEFORE the timeout classification
       // below: an aborted `fetch` and an aborted stream read both reject with
       // an anonymous AbortError whose message contains "abort", so without
@@ -4748,9 +4769,6 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         };
       }
       const msg = err instanceof Error ? err.message : String(err);
-      if (isLocalAdmissionLimit(msg)) return {
-        content: [], stopReason: "error", durationMs: Date.now() - start, error: msg,
-      };
       const timedOut = msg.includes("abort") || msg.includes("timeout");
       return {
         content: [{ type: "text", text: "" }],

@@ -1,4 +1,4 @@
-import { isLocalAdmissionLimit } from "../runtime/request-admission.js";
+import { isLocalAdmissionLimit, isLocalAdmissionFailure } from "../runtime/request-admission.js";
 import { verifyOracleByCategory } from "../triage/oracles.js";
 import { assertWorkspaceIdentity, type WorkspaceIdentity } from "./workspace-identity.js";
 import { assertWorkflowNativeRuntime, filterWorkflowAgentTools, workflowPhasePrompt } from "../workflow-execution-policy.js";
@@ -190,7 +190,7 @@ function isNonReplayableLlmError(errorMsg: string): boolean {
  * request; rate limits and generic 5xx never prune history.
  */
 export function isContextWindowError(errorMsg: string): boolean {
-  if (isLocalAdmissionLimit(errorMsg) || isNonReplayableLlmError(errorMsg)) return false;
+  if (isLocalAdmissionFailure(errorMsg) || isNonReplayableLlmError(errorMsg)) return false;
   if (/\bAPI error 429:/i.test(errorMsg)) return false;
   return /context.{0,40}(?:window|length|limit)|(?:maximum|max).{0,20}context|too many tokens|prompt.{0,30}(?:too long|too large)|input.{0,30}(?:too long|too large|limit(?:_exceeded)?)/i.test(
     errorMsg,
@@ -2268,6 +2268,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
           },
         });
       } catch (error) {
+        if (error instanceof ContextSummaryReceiptError && error.unpriced) config.costLedger?.markUnpricedUsage();
         state.errorExit = { error: error instanceof Error ? error.message : String(error), turn: state.turnCount };
         state.summary = `Error: ${state.errorExit.error}`;
         break;
@@ -2280,7 +2281,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         continue;
       }
     }
-    if (config.requirePricedUsage && !result.usage && !isLocalAdmissionLimit(result.error)) {
+    if (config.requirePricedUsage && !result.usage && !isLocalAdmissionFailure(result.error)) {
       config.costLedger?.markUnpricedUsage();
       state.errorExit = { error: result.error ?? "Runtime did not report usage; cannot continue a cost-bounded scan.", turn: state.turnCount };
       state.summary = `Error: ${state.errorExit.error}`;
@@ -3405,6 +3406,9 @@ export const SCAN_SUMMARIZER_INSTRUCTION =
 
 /** Options bag for {@link compactMessagesWithLLM}. All optional; the defaults
  * reproduce the scan loop's original behavior exactly. */
+export class ContextSummaryReceiptError extends Error {
+  constructor(message: string, readonly unpriced: boolean) { super(message); this.name = "ContextSummaryReceiptError"; }
+}
 export interface CompactMessagesOptions {
   /** Local admission recovery requires a successful metered summary, never a fallback after an unknown outcome. */
   requireSummaryReceipt?: boolean;
@@ -3458,6 +3462,7 @@ export async function compactMessagesWithLLM(
   opts: CompactMessagesOptions = {},
 ): Promise<CompactMessagesResult> {
   void systemPrompt;
+  if (opts.signal?.aborted) return { messages, summaryText: "", degraded: false };
   const preserveTailCount = opts.preserveTailCount ?? 10;
   const summarizerInstruction = opts.summarizerInstruction ?? SCAN_SUMMARIZER_INSTRUCTION;
   const summarizerSystem = opts.summarizerInstruction === undefined
@@ -3469,7 +3474,13 @@ export async function compactMessagesWithLLM(
   }
 
   const firstMessage = messages[0]!;
-  const tailStart = messages.length - preserveTailCount;
+  let tailStart = messages.length - preserveTailCount;
+  if (opts.requireSummaryReceipt) {
+    // Extra user warnings can follow a tool result. Keep the complete latest
+    // assistant/call + result exchange, not a fixed two-message suffix.
+    while (tailStart > 1 && messages[tailStart]!.role !== "assistant") tailStart--;
+    if (messages[tailStart]?.role !== "assistant") return { messages, summaryText: "", degraded: false };
+  }
   const tail = messages.slice(tailStart);
   const middle = messages.slice(1, tailStart);
 
@@ -3489,6 +3500,7 @@ export async function compactMessagesWithLLM(
   // Try LLM summarization
   let summaryText: string;
   let degraded = false;
+  let summaryUsageObserved = false;
   try {
     const summaryResult = await runtime.executeNative(
       summarizerSystem,
@@ -3506,8 +3518,16 @@ export async function compactMessagesWithLLM(
       opts.signal,
     );
 
-    if (summaryResult.usage) opts.onSummaryUsage?.(summaryResult.usage);
-    if (opts.signal?.aborted) return { messages, summaryText: "", degraded: false };
+    if (summaryResult.usage) {
+      summaryUsageObserved = true;
+      opts.onSummaryUsage?.(summaryResult.usage);
+    }
+    if (opts.signal?.aborted) {
+      if (opts.requireSummaryReceipt && !summaryUsageObserved && !isLocalAdmissionFailure(summaryResult.error)) {
+        throw new Error(summaryResult.error ?? "Context summary cancelled without a usage receipt");
+      }
+      return { messages, summaryText: "", degraded: false };
+    }
     if (summaryResult.stopReason !== "end_turn" || summaryResult.error) throw new Error(summaryResult.error ?? "Incomplete context summary");
     if (opts.requireSummaryReceipt && !summaryResult.usage) throw new Error("Context summary did not report usage; cannot continue admission recovery");
 
@@ -3521,8 +3541,11 @@ export async function compactMessagesWithLLM(
       throw new Error("LLM summary too short or empty");
     }
   } catch (error) {
+    if (opts.requireSummaryReceipt) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new ContextSummaryReceiptError(message, !summaryUsageObserved && !isLocalAdmissionFailure(message));
+    }
     if (opts.signal?.aborted) return { messages, summaryText: "", degraded: false };
-    if (opts.requireSummaryReceipt) throw error;
     // Fallback to regex extraction
     degraded = true;
     summaryText = [

@@ -7,6 +7,7 @@ export interface RequestAdmission {
   perToolBytes: number;
 }
 export const LOCAL_ADMISSION_LIMIT = "LOCAL_REQUEST_ADMISSION_LIMIT:";
+export const LOCAL_ADMISSION_UNAVAILABLE = "LOCAL_REQUEST_ADMISSION_UNAVAILABLE:";
 export function parseRequestAdmission(catalog: unknown, model: string): RequestAdmission {
   const data = (catalog as { data?: unknown })?.data;
   const row = Array.isArray(data) ? data.find(r => r?.id === model) : undefined;
@@ -32,3 +33,7 @@ export function assertRequestAdmission(body: string, contract: RequestAdmission)
   }
 }
 export function isLocalAdmissionLimit(error?: string): boolean { return error?.startsWith(LOCAL_ADMISSION_LIMIT) === true; }
+
+export function isLocalAdmissionFailure(error?: string): boolean {
+  return isLocalAdmissionLimit(error) || error?.startsWith(LOCAL_ADMISSION_UNAVAILABLE) === true;
+}
