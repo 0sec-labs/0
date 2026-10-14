@@ -25,13 +25,13 @@ try {
   // foxguard: ignore[js/no-command-injection] fixed executable and arguments reference only the owned scratch directory.
   execFileSync(openssl, ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
     '-config', join(scratch, 'cert.cnf'), '-keyout', join(scratch, 'key.pem'),
-    '-out', join(scratch, 'cert.pem')], { stdio: 'ignore', timeout: 10000 });
+    '-out', join(scratch, 'cert.pem')], { stdio: 'ignore', timeout: 10000 }); // foxguard: ignore[js/no-command-injection]
   const runs = [];
   for (const mode of ['anti-replay', 'disabled-control']) {
     // foxguard: ignore[js/no-command-injection] executable was just compiled into the owned scratch directory and argv contains fixed owned paths.
     const stdout = execFileSync(join(scratch, 'replay'),
       [join(scratch, 'cert.pem'), join(scratch, 'key.pem'), mode],
-      { encoding: 'utf8', timeout: 15000 });
+      { encoding: 'utf8', timeout: 15000 }); // foxguard: ignore[js/no-command-injection]
     const events = stdout.trim().split('\n').map(line => JSON.parse(line));
     assert.equal(events.length, 6);
     const servers = events.filter(event => event.side === 'server').sort((a,b) => a.connection-b.connection);
