@@ -1,3 +1,4 @@
+import { verifyOracleByCategory } from "../triage/oracles.js";
 import { assertWorkspaceIdentity, type WorkspaceIdentity } from "./workspace-identity.js";
 import { assertWorkflowNativeRuntime, filterWorkflowAgentTools, workflowPhasePrompt } from "../workflow-execution-policy.js";
 import { randomUUID } from "node:crypto";
@@ -289,6 +290,7 @@ export interface NativeAgentConfig {
    * omitted.
    */
   identities?: import("@0/shared").NamedIdentity[];
+  accessControlFixtures?: import("@0/shared").AccessControlFixture[];
   /**
    * Pre-built session engine (0#564). Normally left unset — the loop
    * constructs one from `identities`/`authConfig`. Provided only when a caller
@@ -743,6 +745,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     persistFindings: db !== null,
     authConfig: config.authConfig,
     identities,
+    accessControlFixtures: config.accessControlFixtures,
     session,
     scope: config.scope,
     rateLimiter: config.rateLimiter,
@@ -1850,7 +1853,10 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         ) {
           const inlineStartedAt = Date.now();
           const outcome = await validateFindingInline(saved, config.target, {
-            oracle: inlineValidationOracle,
+            oracle: inlineValidationOracle ?? ((finding, target) => verifyOracleByCategory(finding, target, {
+              fetch: (url, init) => executor.fetchOracleRequest(url, init),
+              verifyAccessControl: (finding, target) => executor.verifyAccessControlFinding(finding, target),
+            })),
           });
           const contribution = currentRunContribution();
           if (contribution && Object.values(contribution.receipt.capture).every(Boolean) && contribution.client.permission(contribution.receipt)) {

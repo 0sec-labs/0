@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createServer, type Server } from "node:http";
-import type { BackendHandshake } from "@0/shared";
+import { homeStateDir, type BackendHandshake } from "@0/shared";
 import { BackendConnectionRegistry, createBackendHandshake, handleBackendConnectionRequest, loadBackendConnectionConfig } from "./backend-connections.js";
 const temporary: string[] = [];
 const registries: BackendConnectionRegistry[] = [];
@@ -21,6 +21,46 @@ function fixture(capabilities?: string[]) {
 }
 afterEach(async () => { for (const registry of registries.splice(0)) registry.dispose(); for (const server of servers.splice(0)) { server.closeAllConnections(); await new Promise<void>(done => server.close(() => done())); } for (const path of temporary.splice(0)) rmSync(path, { recursive: true, force: true }); });
 describe("trusted backend registry", () => {
+  it("reloads operator registrations and reads worker credentials without a dashboard restart", async () => {
+    const configPath = join(directory(), "backends.json");
+    writeFileSync(configPath, JSON.stringify({ schemaVersion: 1, backends: [] }));
+    const registry = new BackendConnectionRegistry({ configPath, env: {}, localHandshake: handshake("local-engine"), fetch: async (_url, options) => {
+      expect(new Headers(options?.headers).get("authorization")).toBe(`Bearer ${"b".repeat(32)}`);
+      return response(handshake());
+    } });
+    registries.push(registry);
+    const id = `worker-test-${Date.now()}`;
+    const workerPath = join(homeStateDir(), "workers", `${id}.env`);
+    mkdirSync(join(homeStateDir(), "workers"), { recursive: true });
+    writeFileSync(workerPath, `TEST_WORKER_TOKEN=${"b".repeat(32)}\n`, { mode: 0o600 });
+    temporary.push(workerPath);
+    writeFileSync(configPath, JSON.stringify({ schemaVersion: 1, backends: [{ id, name: "Worker", url: "http://127.0.0.1:12345/", bearerTokenEnv: "TEST_WORKER_TOKEN" }] }));
+    registry.reload();
+    expect((await registry.handshake(id)).backend.status).toBe("connected");
+    expect(JSON.stringify(registry.list())).not.toContain("b".repeat(32));
+    writeFileSync(workerPath, `TEST_WORKER_TOKEN=${"c".repeat(32)}\n`, { mode: 0o600 });
+    registry.reload();
+    expect((await registry.handshake(id)).backend.status).toBe("disconnected");
+  });
+  it("removes only the selected persisted registration and its saved credential", () => {
+    const configPath = join(directory(), "backends.json");
+    const id = `remove-test-${Date.now()}`;
+    const row = { id, name: "Worker", url: "http://127.0.0.1:12345/", bearerTokenEnv: "REMOVE_TOKEN" };
+    writeFileSync(configPath, JSON.stringify({ schemaVersion: 1, backends: [row, { ...row, id: "kept", bearerTokenEnv: "KEPT_TOKEN" }] }));
+    const credential = join(homeStateDir(), "workers", `${id}.env`);
+    mkdirSync(join(homeStateDir(), "workers"), { recursive: true });
+    writeFileSync(credential, `REMOVE_TOKEN=${"a".repeat(32)}\n`, { mode: 0o600 });
+    temporary.push(credential);
+    const registry = new BackendConnectionRegistry({ configPath, env: {}, localHandshake: handshake("local-engine") });
+    registries.push(registry);
+    expect(() => registry.remove("local")).toThrow("cannot be removed");
+    expect(() => registry.remove("missing")).toThrow("not registered");
+    registry.remove(id);
+    expect(registry.list().map(value => value.id)).toEqual(["local", "kept"]);
+    expect(loadBackendConnectionConfig(configPath).map(value => value.id)).toEqual(["kept"]);
+    expect(existsSync(credential)).toBe(false);
+    expect(readFileSync(configPath, "utf8")).not.toContain(id);
+  });
   it("persists random engine identity per database while rotating connection epochs", () => {
     const path = directory();
     const a = createBackendHandshake(join(path, "a.db")); const restarted = createBackendHandshake(join(path, "a.db")); const b = createBackendHandshake(join(path, "b.db"));

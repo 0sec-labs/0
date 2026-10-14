@@ -2555,3 +2555,9 @@ export * from "./learning-service.js";
 export { HuntMemoryStore } from "./memory/hunt-memory.js";
 
 export * from "./report-export.js";
+
+// Scoped formal-model verification; does not confer a real-target verdict.
+export { verifyFormalArtifact, formalArtifactDigest, formalChallengeDigest } from "./verify/formal-artifact.js";
+export { runFormalResearchCampaign } from "./research/formal-campaign.js";
+export type { FormalResearchTask, FormalGenerationContext, FormalResearchAttempt, FormalResearchTaskResult, FormalResearchCampaignOptions, FormalResearchCampaignResult } from "./research/formal-campaign.js";
+export type { FormalChallenge, FormalProofCandidate, FormalCheckerReceipt, FormalCheckerRequest, FormalArtifactChecker, FormalArtifactOptions, FormalArtifactResult } from "./verify/formal-artifact.js";

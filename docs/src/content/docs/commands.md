@@ -7,7 +7,7 @@ tableOfContents:
 ---
 
 Find the command, arguments, and options for your task. This reference covers
-**62 top-level commands** and their registered subcommands.
+**63 top-level commands** and their registered subcommands.
 
 For a worked example, start with [Scan Workflows](/scan-workflows/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
@@ -569,6 +569,8 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
 | `--repo <path>` | — | Source code path for white-box scanning |
+| `--access-control-fixtures <file>` | — | JSON file of known private resource ownership fixtures for IDOR verification |
+| `--identities <file>` | — | Restricted JSON file with named test identities for access-control replay |
 | `--auth <json>` | — | Auth credentials: JSON string or path (bearer, cookie, basic, header) |
 | `--scope <path>` | — | Path to a JSON scope policy (enable with `0 plugin enable scope`) |
 | `--allow-scanners` | `false` | Expose generic scanner tools in scope-enforced scans |
@@ -1357,7 +1359,7 @@ Run target-specific engines through the shared evidence research plane
 
 Guide: [Read the workflow](/research-workflows/).
 
-Subcommands: [pipeline](#research-pipeline) · [mobile](#research-mobile) · [linux-matrix](#research-linux-matrix) · [linux](#research-linux).
+Subcommands: [pipeline](#research-pipeline) · [counterexample](#research-counterexample) · [mobile](#research-mobile) · [linux-matrix](#research-linux-matrix) · [linux](#research-linux).
 
 #### research pipeline
 
@@ -1419,6 +1421,35 @@ Run a supplied Linux kernel reproducer through the shared N-boot evidence gate
 | `--expected-signature <literal>` **required** | — | Literal crash signature that every counted boot must contain |
 | `--boots <n>` | `3` | Fresh boots |
 | `--min-hits <n>` | `2` | Required reproducing boots |
+| `--artifact-root <path>` | `.0-research` | Research artifact root |
+
+#### research counterexample
+
+Build a sanitizer-backed harness for a suspect C/C++ function, search for failing
+inputs, and retain evidence under the artifact root. Supply the source tree,
+header, function name and C declaration. Optional witness inputs replay proposed
+failures; mitigation sources let the same inputs be replayed against a reference
+fix. Review the recorded build, replay and sanitizer results before treating a
+candidate as a confirmed finding.
+
+```text
+0 research counterexample [options]
+```
+
+Guide: [Read the workflow](/research-workflows/).
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--source <dir>` **required** | — | C/C++ source tree root |
+| `--fn <name>` **required** | — | Suspect function name |
+| `--header <path>` **required** | — | Header declaring the suspect function |
+| `--declaration <decl>` **required** | — | C declaration of the suspect function |
+| `--input-shape <shape>` | `bytesAndLen` | bytesAndLen, bytesPtr, or bytesAndLenOut |
+| `--build-system <system>` | `auto` | auto, autotools, cmake, or meson |
+| `--timeout <sec>` | — | Fuzz wall-clock budget in seconds |
+| `--mitigation-source <files...>` | — | Reference-mitigation source file(s) for replay |
+| `--mitigation-include <dirs...>` | — | Extra include directories for the mitigation build |
+| `--witness <files...>` | — | Finding-proposed witness input file(s) to replay through the sanitizer build |
 | `--artifact-root <path>` | `.0-research` | Research artifact root |
 
 ### hunt
@@ -2685,6 +2716,71 @@ Adapt a public PoC for <cve-id> until it reproduces on the target kernel.
 | `--format <fmt>` | `json` | Output format: json \| table |
 
 ## Automation & integration
+
+### worker
+
+Deploy and manage remote Zero engine workers. A worker is a remote engine that
+runs chats and workflows on its host; select its registered backend in the
+browser's computer menu to work there.
+
+```text
+0 worker
+```
+
+Subcommands: [deploy](#worker-deploy) · [stop](#worker-stop) · [hosts](#worker-hosts).
+
+#### worker deploy
+
+Deploy the built CLI engine onto a running Linux Lima instance or an SSH host and
+register its connection locally. Run `pnpm build` in a source checkout first.
+Use `--ssh` for an SSH host alias or `user@host`; otherwise the command uses the
+`zero-worker` Lima instance. SSH deployment uses noninteractive key authentication.
+
+```text
+0 worker deploy [options]
+```
+
+Use `--target-git` to clone your repository into the remote workspace. Forwarding
+`OPENAI_API_KEY` is explicit through `--forward-provider-key`; use it only for a
+host you own. Deployment installs runtime dependencies and starts the engine on
+the remote machine. Inspect the returned backend ID and connection details, then
+select that computer in the browser before starting remote work.
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--ssh <user@host>` | — | SSH target host (BatchMode; key auth from ssh config/agent) |
+| `--lima <name>` | `zero-worker` | Lima instance name |
+| `--target-git <url>` | — | Repository the worker clones into the engine workspace instead of the bundled demo target |
+| `--backends-config <path>` | — | Backend registry path |
+| `--ssh-config <path>` | — | OpenSSH config file for the SSH target (e.g. a Lima instance's ssh.config) |
+| `--engine-port <port>` | — | Engine port on the worker (default: stable port derived from host) |
+| `--forward-provider-key` | `false` | Forward this machine's OPENAI_API_KEY to the worker engine (user-owned hosts only) |
+
+#### worker stop
+
+Stop a worker engine that Zero deployed and disconnect its owned local tunnel.
+The command verifies the saved deployment metadata, remote working directory,
+PID and process command before sending a termination signal. It retains the
+remote workspace and the saved backend registration so the worker can be
+redeployed later.
+
+```text
+0 worker stop <backend-id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `backend-id` | Yes |  |
+
+#### worker hosts
+
+List SSH host aliases discovered from `~/.ssh/config`, with their resolved host
+and user when present. This lists configuration entries rather than checking
+connectivity or whether each host supports a Linux engine.
+
+```text
+0 worker hosts
+```
 
 ### mcp-server
 

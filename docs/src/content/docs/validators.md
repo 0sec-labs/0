@@ -17,7 +17,7 @@ A model's agreement or confidence score does not establish runtime exploitation.
 | SSRF | A local HTTP collector receives the probe's fresh nonce. | The target must be able to reach the collector. A remote target's loopback is not the scanner's loopback. |
 | Command/code injection | A local collector receives a nonce after command-shaped probes. | Callback evidence needs review to distinguish command execution from other URL-fetch behavior; this is not a general RCE harness. |
 | Path traversal | A traversal response contains a passwd-like signature. | Static text can resemble that signature. A controlled, unpredictable file marker is stronger evidence and is not yet this oracle's default. |
-| ID/resource mutation | Different bodies are returned for adjacent numeric IDs. | Kept as an unverified candidate. Proving IDOR requires an identity and resource-ownership boundary. |
+| ID/resource access | An exact operator-provided fixture is replayed as owner and comparison identities; both successful responses contain the known private owner marker. | Requires distinct credentials and declared restricted ownership. Without a matching fixture, numeric-ID response differences remain unverified candidates. Write authorization needs an owner-side workflow postcondition. |
 
 These checks use the finding's recorded request and the scan target. The
 agentic web scan runs category checks during verification. Its save-finding
@@ -62,11 +62,48 @@ skipped; when explicitly requested, a missing browser must fail qualification.
 Run probes only in the approved environment. The category oracle's direct HTTP
 transport is not yet a complete scope-enforcement boundary: evidence URLs,
 redirects, response sizes and total execution budgets need further hardening.
-The request parser does not restore original authentication headers or cookies;
-authenticated reproduction requires additional integration and qualification.
+Inline, batch, and delegated PoV category checks use the scan executor's scoped
+transport. Raw HTTP evidence retains application headers and JSON/form bodies;
+configured identity credentials replace recorded authentication. Browser probes
+also route network requests through that transport and retain response CSP.
+Batch checks start from configured credentials; they do not inherit a previous
+agent phase's rotated cookie jar. Curl evidence parsing remains best-effort.
+Standalone oracle calls without a supplied context still use direct fetch;
+this qualification does not establish scope enforcement for those callers.
 Do not infer isolation or target authorization from a validator result.
 
 The separate runtime-verifier stage still has a placeholder provisioning driver;
 it does not automatically boot an arbitrary repository into a working target.
 Nor does this qualification establish end-to-end SmolVM or private Azure/AWS
 deployment. Those require separate environment tests.
+
+
+## Authenticated IDOR fixtures
+
+Supply restricted, file-backed credentials with `scan --identities identities.json`.
+Use unique labels for an owner Admin, a second tenant Admin, and a Member. An
+identity with no `auth` is an anonymous control. Do not combine `--auth` and
+`--identities`.
+
+`--access-control-fixtures fixtures.json` accepts an array of known read-only
+ownership contracts. Seed a private synthetic marker in the owner tenant first:
+
+```json
+[
+  {
+    "url": "https://app.example.test/api/artifacts/known-uuid",
+    "ownerIdentity": "tenant-a-admin",
+    "comparisonIdentities": ["tenant-b-admin", "tenant-a-member"],
+    "ownershipMarker": "PRIVATE_SYNTHETIC_OWNER_CANARY_12345"
+  }
+]
+```
+
+Do not use public names or shared fields as markers. Fixtures match the exact
+GET URL, including its query string; a fixture cannot authorize a destination.
+The IDOR oracle returns request/response evidence with identity labels and
+credential redaction. Public pages, successful status codes without a private
+marker, stale sessions, identical credentials and unavailable transport cannot
+confirm an ownership break. For unauthorized changes, use
+`access_control_workflow` with a disposable resource and an owner-side state
+observation before and after the actor's actions.

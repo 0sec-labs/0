@@ -44,6 +44,7 @@ export { registerEntraGraphCommand } from "./entragraph.js";
 export { registerCloudCommand } from "./cloud.js";
 export { registerXnuFuzzCommand } from "./xnu-fuzz.js";
 export { registerResearchCommand } from "./research.js";
+export { registerWorkerCommand } from "./worker.js";
 export { registerRadarCommand } from "./radar.js";
 export { registerTimelineCommand } from "./timeline.js";
 export { runUnified } from "./run.js";

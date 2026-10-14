@@ -6,7 +6,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import { VERSION, validateScanPlan } from "@0/shared";
-import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig, ScanReport, SeedFinding, ScanPlan, ScanAttemptOutcome } from "@0/shared";
+import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig, NamedIdentity, ScanReport, SeedFinding, ScanPlan, ScanAttemptOutcome } from "@0/shared";
 import type { CostBreakdownEntry, ScanCostLedger, NativeRuntime, RuntimeConfig, ScopePolicy } from "@0/core";
 import { formatAuditReport, formatReviewReport, formatReport, generatePdfReport } from "../formatters/index.js";
 import { buildShareUrl, checkRuntimeAvailability } from "../utils.js";
@@ -81,6 +81,8 @@ export interface RunOptions {
   reportPath?: string;
   repoPath?: string;
   auth?: AuthConfig;
+  identities?: NamedIdentity[];
+  accessControlFixtures?: import("@0/shared").AccessControlFixture[];
   apiSpecPath?: string;
   exportTarget?: string;
   race?: boolean;

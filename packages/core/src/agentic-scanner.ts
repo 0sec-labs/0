@@ -1,3 +1,4 @@
+import { SessionEngine } from "./agent/session.js";
 import { compareFindingsByBusinessPriority } from "@0/shared";
 import type {
   ScanConfig,
@@ -20,7 +21,7 @@ import { runAgentLoop } from "./agent/loop.js";
 import { runNativeAgentLoop } from "./agent/native-loop.js";
 import { assertWorkflowNativeRuntime, getWorkflowAuditExecutionPolicy } from "./workflow-execution-policy.js";
 import { toolCallPreview } from "./agent/tool-preview.js";
-import { getToolsForRole, TOOL_DEFINITIONS, parsePocStepsArg } from "./agent/tools.js";
+import { ToolExecutor, getToolsForRole, TOOL_DEFINITIONS, parsePocStepsArg } from "./agent/tools.js";
 import {
   discoveryPrompt,
   attackPrompt,
@@ -2679,6 +2680,17 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
       // confidence and mark the finding accepted. If it fails and we have an
       // oracle for the category, downgrade severity to low and annotate.
       // Categories without oracles fall through to the LLM-verify stage.
+      const oracleExecutor = new ToolExecutor({
+        target: config.target, scanId, findings: [], attackResults: [], targetInfo: {},
+        authConfig: config.auth, identities: resolveIdentities(config),
+        session: resolveIdentities(config).length ? new SessionEngine(resolveIdentities(config)) : undefined,
+        accessControlFixtures: config.accessControlFixtures,
+        scope: resolveScopeForConfig(config),
+        scopeEnforcement: getScopeEnforcementState(),
+        enforcement: resolveEnforcementForConfig(config),
+        rateLimiter: getOrCreateRateLimiter(config),
+        attribution: buildAttributionForConfig(config),
+      }, null);
       const oracleStartedAt = Date.now();
       const oracleAllowed = routerAllowsLayer("oracle");
       // Captured so the PoV gate can reuse a deterministic oracle run instead
@@ -2705,7 +2717,12 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
               reason: "",
             }
           : oracleAllowed
-            ? await verifyOracleByCategory(finding, config.target)
+            ? await verifyOracleByCategory(finding, config.target, {
+                fetch: (url, init) => oracleExecutor.fetchOracleRequest(url, { ...init,
+                  signal: config.signal ? (init.signal ? AbortSignal.any([config.signal, init.signal]) : config.signal) : init.signal,
+                }),
+                verifyAccessControl: (finding, target) => oracleExecutor.verifyAccessControlFinding(finding, target),
+              })
             : { verified: false, confidence: 0, evidence: "", reason: "skipped by dynamic_router" };
         // Reuse for the PoV gate whenever the oracle actually produced a
         // verdict here — either it ran, or we reused an inline confirmation.
@@ -2747,6 +2764,11 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
           // any non-OAST oracle. See that helper for the exact gate.
           const oastEvent = oastConfirmedPayload(finding, oracle);
           if (oastEvent) eventBus.emit("oast_confirmed", oastEvent);
+        } else if (oracle.inconclusive) {
+          pushLayerVerdict(finding, {
+            layer: "oracle", verdict: "skip", confidence: oracle.confidence,
+            reason: `inconclusive: ${oracle.reason}`, startedAt: oracleStartedAt,
+          });
         } else if (
           oracle.reason &&
           !oracle.reason.startsWith("no oracle for category")
@@ -2814,6 +2836,10 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
           // browser / collector.
           const povOracleKind = oracleForCategory(finding.category);
           const pov = await generatePov(finding, config.target, nativeRuntime, 5, {
+            oracle: (finding, target) => verifyOracleByCategory(finding, target, {
+              fetch: (url, init) => oracleExecutor.fetchOracleRequest(url, init),
+              verifyAccessControl: (finding, target) => oracleExecutor.verifyAccessControlFinding(finding, target),
+            }),
             precomputedOracle:
               povOracleKind !== "regex-fallback"
                 ? oracleOutcomeForPov

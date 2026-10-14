@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "status": "expected-results-confirmed",
+  "version": "tamarin-prover 1.12.0, (C) David Basin, Cas Cremers, Jannik Dreier, Simon Meier, Ralf Sasse, Benedikt Schmidt, 2010-2023\n\nThis program comes with ABSOLUTELY NO WARRANTY. It is free software, and you\nare welcome to redistribute it according to its LICENSE, see\n'https://github.com/tamarin-prover/tamarin-prover/blob/master/LICENSE'.\n\nGenerated from:\nTamarin version 1.12.0\nMaude version 3.5.1\nGit revision: UNKNOWN, branch: UNKNOWN\nCompiled at: 2026-03-08 09:49:47.765662 UTC\nmaude tool: 'maude'\n checking version: 3.5.1. OK.\n checking installation: OK.",
+  "timeoutPerModelMs": 60000,
+  "modelsRun": [
+    {
+      "model": "local-caches.spthy",
+      "status": "expected-results-confirmed",
+      "exitCode": 0,
+      "error": null,
+      "results": {
+        "distributed_replay_exists": {
+          "expected": "verified",
+          "observed": "verified"
+        },
+        "at_most_once": {
+          "expected": "falsified",
+          "observed": "falsified"
+        }
+      },
+      "log": "local-caches.log"
+    },
+    {
+      "model": "shared-consume.spthy",
+      "status": "expected-results-confirmed",
+      "exitCode": 0,
+      "error": null,
+      "results": {
+        "acceptance_exists": {
+          "expected": "verified",
+          "observed": "verified"
+        },
+        "at_most_once": {
+          "expected": "verified",
+          "observed": "verified"
+        }
+      },
+      "log": "shared-consume.log"
+    }
+  ]
+}

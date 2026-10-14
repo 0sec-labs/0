@@ -987,8 +987,9 @@ async function runCLoop(
   ctx.log(`[userspace-fuzz] compiling Tier-2 harness: ${compile_command}`);
   const compileRes = await runChild("sh", ["-c", compile_command], sourceRoot, ctx.timeoutMs);
   if (compileRes.signalled || /error:|fatal error:/i.test(compileRes.output)) {
-    // A compile failure is not a crash — surface it as a log line and bail
-    // honestly rather than inventing a finding.
+    // A compile failure is not a crash, and it is not a clean run either:
+    // mark coverage incomplete so machine consumers cannot confuse the two.
+    ctx.toolingMissing.push("tier2-harness-compile");
     ctx.log(`[userspace-fuzz] Tier-2 harness failed to compile:\n${compileRes.output.slice(-2000)}`);
     return finish(crashes, iterations, sourceRoot, ctx, "tier2");
   }

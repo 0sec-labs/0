@@ -178,7 +178,14 @@ export async function runResearch<
       ...(item.executionContext ? { executionContext: item.executionContext } : {}),
       ...(item.reportingPolicy ? { reportingPolicy: item.reportingPolicy } : {}),
       artifacts: artifactReceipts(item),
-      native: { oracleKind: adapter.kind, oraclePayload: item.evidence },
+      // Evidence records may carry the finding itself as a data payload (e.g.
+      // the unified pipeline adapter's verify record). Attaching the envelope
+      // back onto finding.researchEvidence would then create a JSON cycle;
+      // embed a stable reference instead of a second copy.
+      native: { oracleKind: adapter.kind, oraclePayload: item.evidence.map(record =>
+        record.data === item.finding
+          ? { ...record, data: { ref: "finding", id: item.finding.id, title: item.finding.title } }
+          : record) },
     }));
     for (let i = 0; i < findings.length; i++) {
       const envelope = envelopes[i];

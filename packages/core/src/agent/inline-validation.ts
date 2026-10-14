@@ -114,7 +114,7 @@ export async function validateFindingInline(
 
   // Not verified. Distinguish an infra error (inconclusive) from a clean
   // "did not reproduce" negative.
-  if (isOracleInfraError(result.reason)) {
+  if (result.inconclusive || isOracleInfraError(result.reason)) {
     return {
       ...base,
       confirmed: false,

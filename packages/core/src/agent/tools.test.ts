@@ -4952,3 +4952,23 @@ describe("approved workspace shell directory", () => {
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 });
+
+describe("parsePocStepsArg strictness (0#stored-finding-revalidation)", () => {
+  it("drops a shell step missing cmd instead of persisting a record readers reject", async () => {
+    const { parsePocStepsArg } = await import("./tools.js");
+    const steps = parsePocStepsArg([
+      { id: "s1", kind: "exploit", summary: "trigger", action: { type: "shell" } },
+      { id: "s2", kind: "exploit", summary: "valid", action: { type: "shell", cmd: "true" } },
+    ]);
+    expect(steps?.map(step => step.id)).toEqual(["s2"]);
+  });
+
+  it("keeps malformed expect off the step while retaining the valid action", async () => {
+    const { parsePocStepsArg } = await import("./tools.js");
+    const steps = parsePocStepsArg([
+      { id: "s1", kind: "verify", summary: "check", action: { type: "note", text: "observe" }, expect: { type: "http-status" } },
+    ]);
+    expect(steps?.[0]?.expect).toBeUndefined();
+    expect(steps?.[0]?.action).toEqual({ type: "note", text: "observe" });
+  });
+});

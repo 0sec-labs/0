@@ -155,6 +155,7 @@ async function buildProgram(): Promise<Command> {
   c.registerCloudCommand(program);
   c.registerXnuFuzzCommand(program);
   c.registerResearchCommand(program);
+  c.registerWorkerCommand(program);
   c.registerRadarCommand(program);
   c.registerTimelineCommand(program);
   c.registerAgentAssureCommand(program);
@@ -187,7 +188,7 @@ process.once("beforeExit", () => {
 
 // ── Entry point ──
 const userArgs = process.argv.slice(2);
-const knownCommands = ["scan", "resume", "replay", "history", "findings", "secure", "review", "fix", "audit", "deps", "doctor", "dashboard", "web", "chat", "team", "tui", "watch", "orchestrate", "db", "mcp-server", "workflow", "runs", "sessions", "triage", "eval", "bench", "ingest", "kernel", "disclose", "verify", "exploit", "hunt", "recency-hunt", "deep-review", "lens-synth", "memsafety", "assumption-hunt", "specdrift", "protocol-check", "cve", "upgrade", "update", "h1", "intel", "recon", "js-recon", "npm-discovery", "identity", "adgraph", "entragraph", "cloud", "xnu-fuzz", "research", "radar", "timeline", "console", "agent-assure", "binary", "plugin", "theme", "config", "workbench", "checks", "evolve", "learning", "hackstore", "hack", "store", "help"];
+const knownCommands = ["scan", "resume", "replay", "history", "findings", "secure", "review", "fix", "audit", "deps", "doctor", "dashboard", "web", "chat", "team", "tui", "watch", "orchestrate", "db", "mcp-server", "workflow", "runs", "sessions", "triage", "eval", "bench", "ingest", "kernel", "disclose", "verify", "exploit", "hunt", "recency-hunt", "deep-review", "lens-synth", "memsafety", "assumption-hunt", "specdrift", "protocol-check", "cve", "upgrade", "update", "h1", "intel", "recon", "js-recon", "npm-discovery", "identity", "adgraph", "entragraph", "cloud", "xnu-fuzz", "research", "worker", "radar", "timeline", "console", "agent-assure", "binary", "plugin", "theme", "config", "workbench", "checks", "evolve", "learning", "hackstore", "hack", "store", "help"];
 
 if (userArgs.length === 0) {
   // Default browser path avoids importing the full command barrel.

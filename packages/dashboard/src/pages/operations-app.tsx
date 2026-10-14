@@ -19,6 +19,7 @@ import { WorkflowsPage } from "@/pages/workflows-page";
 import { FindingsApiAccessPage } from "@/pages/findings-api-access-page";
 import { TeamSettingsPage } from "@/pages/team-settings-page";
 import { SkillsPage } from "@/pages/skills-page";
+import { WorkersPage } from "@/pages/workers-page";
 import { WebConsoleControlsPage } from "@/pages/console-controls-page";
 import type { ThemesResponse } from "@/components/console-control/contracts";
 
@@ -142,6 +143,7 @@ export function OperationsApp() {
           <Route path="/threads" element={findings} />
           <Route path="/threads/:fingerprint" element={findings} />
           <Route path="/findings" element={findings} />
+          <Route path="/workers" element={<WorkersPage />} />
           <Route path="/findings/:fingerprint" element={findings} />
           <Route path="/runs" element={operations(<ScansPage scans={scans} />)} />
           <Route path="/runs/:scanId" element={operations(<ScansPage scans={scans} />)} />

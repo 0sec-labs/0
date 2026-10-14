@@ -14,6 +14,7 @@ import { z } from "zod";
 import {
   createPresentationEvent,
   BackendRequestIdSchema,
+  BackendDescriptorSchema,
   ScanResumeRequestSchema,
   type FindingTriageStatus,
   type PresentationEvent,
@@ -47,6 +48,8 @@ import { authorizeTeamApi, handleTeamRequest, assertTeamConsoleMutation } from "
 import { handleTeamPresenceStream } from "../web/team-presence-stream.js";
 import { homeStateDir } from "@0/shared";
 import { assertLocalEngineAvailable, registerLocalEngine } from "../local-engine.js";
+import { loadManagedWorker, validateWorkerOptions, type WorkerDeployResult } from "../worker-deploy.js";
+import { discoverSshHosts } from "../worker-hosts.js";
 
 type DashboardOptions = {
   dbPath?: string;
@@ -1994,6 +1997,59 @@ export function registerDashboardCommand(program: Command): void {
                   json(res, 200, { engagement });
                 }
                 else throw new WebRequestError("Method not allowed.", 405);
+                return;
+              }
+              if (requestUrl.pathname === "/api/workers/hosts") {
+                if (req.method !== "GET") throw new WebRequestError("Method not allowed.", 405);
+                json(res, 200, { hosts: discoverSshHosts() });
+                return;
+              }
+              if (requestUrl.pathname === "/api/workers/managed") {
+                if (req.method !== "GET") throw new WebRequestError("Method not allowed.", 405);
+                const workers = backends.list().flatMap(backend => {
+                  try { loadManagedWorker(backend.id); return [{ backendId: backend.id }]; } catch { return []; }
+                });
+                json(res, 200, { workers });
+                return;
+              }
+              const workerStop = requestUrl.pathname.match(/^\/api\/workers\/([^/]+)\/stop$/);
+              if (workerStop) {
+                if (req.method !== "POST") throw new WebRequestError("Use POST to stop a worker.", 405);
+                const backendId = BackendDescriptorSchema.shape.id.parse(decodeURIComponent(workerStop[1]!));
+                const compiledBinary = import.meta.url.startsWith("file:///$bunfs/") || import.meta.url.startsWith("/$bunfs/");
+                const args = [...(compiledBinary ? [] : [resolveCliEntrypoint()]), "worker", "stop", backendId];
+                const result = await new Promise<unknown>((resolveStop, reject) => {
+                  // foxguard: ignore[js/no-command-injection] process.execPath and the CLI entrypoint are trusted; backendId is schema-validated and execFile never invokes a shell.
+                  execFile(process.execPath, args, { timeout: 60_000, maxBuffer: 65_536 }, (error, stdout, stderr) => { // foxguard: ignore[js/no-command-injection]
+                    if (error) { reject(new WebRequestError(stderr.includes("no managed deployment metadata") ? "This connection has no managed deployment metadata. Stop its engine directly on the host." : "Worker could not be stopped safely. Check the host connection and managed engine PID.", 409)); return; }
+                    try { resolveStop(JSON.parse(stdout)); } catch { reject(new WebRequestError("Worker stop returned an invalid result.", 502)); }
+                  });
+                });
+                json(res, 200, result);
+                return;
+              }
+              if (requestUrl.pathname === "/api/workers/deploy") {
+                if (req.method !== "POST") throw new WebRequestError("Use POST to deploy a worker.", 405);
+                const body = z.object({
+                  ssh: z.string().trim().min(1).max(512).optional(),
+                  lima: z.string().trim().min(1).max(128).optional(),
+                  targetGit: z.string().trim().max(4096).optional(),
+                  forwardProviderKey: z.boolean().optional(),
+                  enginePort: z.number().int().min(1).max(65535).optional(),
+                }).strict().parse(await readJson(req));
+                validateWorkerOptions(body);
+                const compiledBinary = import.meta.url.startsWith("file:///$bunfs/") || import.meta.url.startsWith("/$bunfs/");
+                const args = [...(compiledBinary ? [] : [resolveCliEntrypoint()]), "worker", "deploy", ...(body.ssh ? ["--ssh", body.ssh] : ["--lima", body.lima ?? "zero-worker"]), ...(body.targetGit ? ["--target-git", body.targetGit] : []), ...(body.enginePort ? ["--engine-port", String(body.enginePort)] : []), ...(body.forwardProviderKey ? ["--forward-provider-key"] : []), ...(opts.backendsConfig ? ["--backends-config", opts.backendsConfig] : [])];
+                const result = await new Promise<WorkerDeployResult>((resolveDeploy, reject) => {
+                  // foxguard: ignore[js/no-command-injection] all request values are strict-schema validated and passed as execFile argv without a shell.
+                  execFile(process.execPath, args, { timeout: 3_600_000, maxBuffer: 1_000_000 }, (error, stdout, stderr) => { // foxguard: ignore[js/no-command-injection]
+                    if (error && stderr.includes("Worker deployment requires the built CLI")) { reject(new WebRequestError("Worker deployment needs the npm or repository build with dist/ and vendor/ assets. Install with npm install -g 0sec-cli, or run pnpm build from the repository.", 422)); return; }
+                    if (error) { reject(new WebRequestError("Worker deployment failed. Check SSH access and the worker's installation requirements.", 502)); return; }
+                    try { resolveDeploy(JSON.parse(stdout)); } catch { reject(new WebRequestError("Worker deployment returned an invalid result.", 502)); }
+                  });
+                });
+                backends.reload();
+                json(res, 202, result);
                 return;
               }
               if (requestUrl.pathname === "/api/control/launch-run") {
