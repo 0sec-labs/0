@@ -8,6 +8,7 @@ import { BackendConnectionRegistry } from "./web/backend-connections.js";
 import { createRemoteWorkflowRuntime } from "./remote-workflow-runtime.js";
 
 const MAX_DESCRIPTOR = 16 * 1024;
+const HAS_POSIX_PERMISSIONS = process.platform !== "win32";
 const schema = z.object({
   schemaVersion: z.literal(1), nonce: z.string().uuid(),
   url: z.string().min(1).max(4096), token: z.string().min(32).max(4096).regex(/^[^\s\x00-\x1f\x7f]+$/),
@@ -31,7 +32,7 @@ function secureMetadata(path: string, create: boolean): boolean {
   let stat;
   try { stat = lstatSync(directory); }
   catch (error) { if (!create && (error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; }
-  if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0 || (process.getuid && stat.uid !== process.getuid())) throw new Error("Local engine discovery directory must be owned by this user with private permissions (0700).");
+  if (!stat.isDirectory() || stat.isSymbolicLink() || (HAS_POSIX_PERMISSIONS && (stat.mode & 0o077) !== 0) || (process.getuid && stat.uid !== process.getuid())) throw new Error("Local engine discovery directory must be owned by this user with private permissions (0700).");
   return true;
 }
 function loopbackUrl(value: string): string {
@@ -50,7 +51,7 @@ function readDescriptor(path: string): Descriptor | null {
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw new Error("Cannot safely read local engine discovery metadata.", { cause: error }); }
   try {
     const stat = fstatSync(fd);
-    if (!stat.isFile() || stat.size > MAX_DESCRIPTOR || (stat.mode & 0o077) !== 0 || (process.getuid && stat.uid !== process.getuid())) throw new Error("Local engine descriptor must be a private regular file owned by this user, at most 16 KiB.");
+    if (!stat.isFile() || stat.size > MAX_DESCRIPTOR || (HAS_POSIX_PERMISSIONS && (stat.mode & 0o077) !== 0) || (process.getuid && stat.uid !== process.getuid())) throw new Error("Local engine descriptor must be a private regular file owned by this user, at most 16 KiB.");
     const buffer = Buffer.alloc(MAX_DESCRIPTOR + 1);
     let length = 0;
     while (length < buffer.length) { const bytes = readSync(fd, buffer, length, buffer.length - length, length); if (!bytes) break; length += bytes; }
