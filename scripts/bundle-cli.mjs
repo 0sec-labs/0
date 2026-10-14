@@ -207,7 +207,7 @@ const publishPkg = {
   type: "module",
   description: rootPkg.description,
   bin: { "0": "0.js", "0sec": "0.js" },
-  files: ["0.js", "cli-path-traversal-fixture.js", "chunks", "attacks", "dashboard", "vendor"],
+  files: ["0.js", "cli-path-traversal-fixture.js", "chunks", "attacks", "dashboard", "vendor", "worker-assets"],
   // npm resolves nested local tarballs before extracting their parent package.
   // Bundle the patched parser and its peer grammar as real source so registry
   // installs never fetch an unpatched peer or depend on an unavailable file:
@@ -241,3 +241,10 @@ copyFileSync("LICENSE", `${outdir}/LICENSE`);
 copyFileSync("README.md", `${outdir}/README.md`);
 
 console.log(`Bundled 0 v${rootPkg.version} → ${outdir}/`);
+
+// Include the optional worker demo workspace in published CLI packages.
+for (const asset of ["README.md", "include/decoder.h", "src/decoder.c", "patched-decoder.c", "witness-65537x1.bin"]) {
+  const destination = `${outdir}/worker-assets/demo-target/${asset}`;
+  mkdirSync(dirname(destination), { recursive: true });
+  copyFileSync(`research/counterexample-decoder/demo-target/${asset}`, destination);
+}

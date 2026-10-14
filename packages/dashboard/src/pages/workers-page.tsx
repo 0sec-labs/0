@@ -1,19 +1,27 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Play, Plus, Server } from "lucide-react";
-import { useBackendApi } from "@/api";
+import { localControlFetch } from "@/api";
+import { useBackendSelection } from "@/backend-context";
+import type { BackendDescriptor } from "@0/shared/dist/backend-protocol.js";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 interface SshHostEntry { alias: string; hostname?: string; user?: string; port?: string }
-interface BackendRow { id: string; name: string; url: string; status?: string }
+async function workerControlJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await localControlFetch(path, init);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || `Worker controls returned ${response.status}.`);
+  return data as T;
+}
 interface DeployResult { backendId: string; engine: string; target: string; backendsConfig: string; tokenEnv: string }
 
 export function WorkersPage() {
-  const { webFetchJson } = useBackendApi();
   const cache = useQueryClient();
-  const hosts = useQuery({ queryKey: ["worker-hosts"], queryFn: ({ signal }) => webFetchJson<{ hosts: SshHostEntry[] }>("/api/workers/hosts", { signal }) });
-  const backends = useQuery({ queryKey: ["worker-backends"], queryFn: ({ signal }) => webFetchJson<{ backends: BackendRow[] }>("/api/backends", { signal }), refetchInterval: 15000 });
+  const connection = useBackendSelection();
+  const hosts = useQuery({ queryKey: ["worker-hosts"], queryFn: ({ signal }) => workerControlJson<{ hosts: SshHostEntry[] }>("/api/workers/hosts", { signal }) });
+  const backends = useQuery({ queryKey: ["worker-backends"], queryFn: ({ signal }) => workerControlJson<{ backends: BackendDescriptor[] }>("/api/backends", { signal }), refetchInterval: 15000 });
+  const remoteBackends = backends.data?.backends.filter(backend => backend.id !== "local") ?? [];
   const [ssh, setSsh] = useState("");
   const [targetGit, setTargetGit] = useState("");
   const [forwardKey, setForwardKey] = useState(false);
@@ -25,7 +33,7 @@ export function WorkersPage() {
     if (busy) return;
     setBusy(label); setError(""); setResult(null);
     try {
-      const deployed = await webFetchJson<DeployResult>("/api/workers/deploy", { method: "POST", body: JSON.stringify(body) });
+      const deployed = await workerControlJson<DeployResult>("/api/workers/deploy", { method: "POST", body: JSON.stringify(body) });
       setResult(deployed);
       await cache.invalidateQueries({ queryKey: ["worker-backends"] });
     } catch (cause) {
@@ -47,12 +55,15 @@ export function WorkersPage() {
 
       <section className="space-y-3">
         <h2 className="text-sm font-medium">Registered backends</h2>
-        {(backends.data?.backends ?? []).length === 0 && <p className="text-sm text-muted-foreground">No remote backends registered. Deploy one below.</p>}
+        {backends.isPending && <p className="text-sm text-muted-foreground">Loading registered computers…</p>}
+        {backends.error && <p role="alert" className="text-sm text-destructive">{backends.error.message}</p>}
+        {backends.isSuccess && remoteBackends.length === 0 && <p className="text-sm text-muted-foreground">No remote backends registered. Deploy one below.</p>}
         <div className="space-y-2">
-          {(backends.data?.backends ?? []).map(backend => (
+          {remoteBackends.map(backend => (
             <div key={backend.id} className="flex items-center justify-between rounded-2xl bg-muted px-4 py-3 text-sm">
               <span className="font-medium">{backend.name}</span>
-              <span className="text-muted-foreground">{backend.id} · {backend.url}</span>
+              <span className="text-muted-foreground">{backend.id} · {backend.status}</span>
+              <Button size="sm" variant="outline" onClick={() => connection?.select(backend.id)}>Connect</Button>
             </div>
           ))}
         </div>
@@ -60,7 +71,8 @@ export function WorkersPage() {
 
       <section className="space-y-3">
         <h2 className="text-sm font-medium">Discovered SSH hosts</h2>
-        {(hosts.data?.hosts ?? []).length === 0 && <p className="text-sm text-muted-foreground">No hosts found in ~/.ssh/config.</p>}
+        {hosts.error && <p role="alert" className="text-sm text-destructive">{hosts.error.message}</p>}
+        {hosts.isSuccess && (hosts.data?.hosts ?? []).length === 0 && <p className="text-sm text-muted-foreground">No hosts found in ~/.ssh/config.</p>}
         <div className="space-y-2">
           {(hosts.data?.hosts ?? []).map(host => (
             <div key={host.alias} className="flex items-center justify-between rounded-2xl bg-muted px-4 py-3 text-sm">

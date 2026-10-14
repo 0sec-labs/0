@@ -100,6 +100,15 @@ function ConnectedBackendShell() {
     const timer = setInterval(() => { void heartbeat(); }, 10_000);
     return () => { clearInterval(timer); controller.abort(); };
   }, [selected?.id]);
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = setInterval(() => {
+      void controlJson("/api/backends", controller.signal).then(value => {
+        if (!controller.signal.aborted) setBackends(BackendListSchema.parse(value).backends);
+      }).catch(() => {});
+    }, 15_000);
+    return () => { clearInterval(timer); controller.abort(); };
+  }, []);
   const select = (backendId: string) => {
     if (backendId === route.backendId) return;
     // Resource navigation never carries another engine's session/run IDs.

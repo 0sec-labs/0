@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { constants, closeSync, fstatSync, mkdirSync, openSync, readSync, writeFileSync } from "node:fs";
+import { constants, closeSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
@@ -118,9 +118,13 @@ export class BackendConnectionRegistry {
   readonly #fetch: typeof fetch;
   readonly #local: BackendHandshake;
   readonly #timeoutMs: number;
+  readonly #configPath: string | undefined;
+  readonly #reloadFromDisk: boolean;
   readonly #abort = new AbortController();
   #active = 0;
   constructor(options: BackendConnectionRegistryOptions = {}) {
+    this.#configPath = options.configPath;
+    this.#reloadFromDisk = options.connections === undefined;
     const rows = options.connections ?? loadBackendConnectionConfig(options.configPath);
     const parsed = configSchema.parse({ schemaVersion: 1, backends: rows }).backends;
     if (new Set(parsed.map(row => row.id)).size !== parsed.length) throw new BackendConnectionError("Backend IDs must be unique.", 400);
@@ -129,7 +133,30 @@ export class BackendConnectionRegistry {
     this.#timeoutMs = options.timeoutMs ?? 30_000;
     this.#local = parseBackendHandshake(options.localHandshake ?? createBackendHandshake());
     this.#descriptors.set("local", { id: "local", name: "Local engine", transport: "local", status: "connected", protocolVersion: this.#local.protocolVersion, capabilities: this.#local.capabilities, platform: this.#local.platform });
-    for (const row of parsed) this.#descriptors.set(row.id, { id: row.id, name: row.name, transport: "http", status: "disconnected", capabilities: [] });
+    this.reload();
+    for (const row of parsed) if (!this.#descriptors.has(row.id)) this.#descriptors.set(row.id, { id: row.id, name: row.name, transport: "http", status: "disconnected", capabilities: [] });
+  }
+  reload(): void {
+    if (!this.#reloadFromDisk) return;
+    const rows = loadBackendConnectionConfig(this.#configPath);
+    for (const id of this.#connections.keys()) if (!rows.some(row => row.id === id)) {
+      this.#connections.delete(id); this.#descriptors.delete(id); this.#handshakes.delete(id); this.#pins.delete(id);
+    }
+    for (const row of rows) {
+      const normalized = { ...row, url: endpoint(row.url).href };
+      const previous = this.#connections.get(row.id);
+      if (JSON.stringify(previous) !== JSON.stringify(normalized)) {
+        this.#connections.set(row.id, normalized); this.#handshakes.delete(row.id); this.#pins.delete(row.id);
+        this.#descriptors.set(row.id, { id: row.id, name: row.name, transport: "http", status: "disconnected", capabilities: [] });
+      }
+      {
+        try {
+          const value = readFileSync(join(homeStateDir(), "workers", `${row.id}.env`), "utf8");
+          const token = value.split("\n").find(line => line.startsWith(`${row.bearerTokenEnv}=`))?.slice(row.bearerTokenEnv.length + 1);
+          if (token) this.#env[row.bearerTokenEnv] = backendBearerFromEnv(row.bearerTokenEnv, { [row.bearerTokenEnv]: token });
+        } catch { /* Credential remains unavailable until configured by the operator. */ }
+      }
+    }
   }
   list(): BackendDescriptor[] { return structuredClone([...this.#descriptors.values()]); }
   async handshake(id: string): Promise<{ backend: BackendDescriptor; handshake?: BackendHandshake; error?: string }> {
@@ -250,7 +277,7 @@ function attachmentHeaders(headers: Headers): Record<string, string> {
 function json(res: ServerResponse, status: number, value: unknown) { res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" }); res.end(JSON.stringify(value)); }
 /** Call only after local origin and control-token authorization. Returns a local dispatch rewrite. */
 export async function handleBackendConnectionRequest(req: IncomingMessage, res: ServerResponse, url: URL, registry: BackendConnectionRegistry): Promise<{ handled: boolean; localPath?: string }> {
-  if (url.pathname === "/api/backends") { if (req.method !== "GET") throw new BackendConnectionError("Backend registry is read-only.", 405); json(res, 200, { backends: registry.list() }); return { handled: true }; }
+  if (url.pathname === "/api/backends") { if (req.method !== "GET") throw new BackendConnectionError("Backend registry is read-only.", 405); registry.reload(); json(res, 200, { backends: registry.list() }); return { handled: true }; }
   if (url.pathname === "/api/backend/handshake") { if (req.method !== "GET") throw new BackendConnectionError("Method not allowed.", 405); json(res, 200, (await registry.handshake("local")).handshake); return { handled: true }; }
   const match = url.pathname.match(/^\/api\/backends\/([^/]+)\/(handshake|proxy(?:\/.*)?)$/);
   if (!match) return { handled: false };

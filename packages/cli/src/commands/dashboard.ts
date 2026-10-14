@@ -47,7 +47,7 @@ import { authorizeTeamApi, handleTeamRequest, assertTeamConsoleMutation } from "
 import { handleTeamPresenceStream } from "../web/team-presence-stream.js";
 import { homeStateDir } from "@0/shared";
 import { assertLocalEngineAvailable, registerLocalEngine } from "../local-engine.js";
-import { deployWorker } from "../worker-deploy.js";
+import { validateWorkerOptions, type WorkerDeployResult } from "../worker-deploy.js";
 import { discoverSshHosts } from "../worker-hosts.js";
 
 type DashboardOptions = {
@@ -2012,12 +2012,17 @@ export function registerDashboardCommand(program: Command): void {
                   forwardProviderKey: z.boolean().optional(),
                   enginePort: z.number().int().min(1).max(65535).optional(),
                 }).strict().parse(await readJson(req));
-                const result = await deployWorker({
-                  ...(body.ssh ? { ssh: body.ssh } : { lima: body.lima ?? "zero-worker" }),
-                  ...(body.targetGit ? { targetGit: body.targetGit } : {}),
-                  ...(body.enginePort ? { enginePort: body.enginePort } : {}),
-                  forwardProviderKey: body.forwardProviderKey === true,
+                validateWorkerOptions(body);
+                const compiledBinary = import.meta.url.startsWith("file:///$bunfs/") || import.meta.url.startsWith("/$bunfs/");
+                const args = [...(compiledBinary ? [] : [resolveCliEntrypoint()]), "worker", "deploy", ...(body.ssh ? ["--ssh", body.ssh] : ["--lima", body.lima ?? "zero-worker"]), ...(body.targetGit ? ["--target-git", body.targetGit] : []), ...(body.enginePort ? ["--engine-port", String(body.enginePort)] : []), ...(body.forwardProviderKey ? ["--forward-provider-key"] : []), ...(opts.backendsConfig ? ["--backends-config", opts.backendsConfig] : [])];
+                const result = await new Promise<WorkerDeployResult>((resolveDeploy, reject) => {
+                  execFile(process.execPath, args, { timeout: 3_600_000, maxBuffer: 1_000_000 }, (error, stdout, stderr) => {
+                    if (error && stderr.includes("Worker deployment requires the built CLI")) { reject(new WebRequestError("Worker deployment needs the npm or repository build with dist/ and vendor/ assets. Install with npm install -g 0sec-cli, or run pnpm build from the repository.", 422)); return; }
+                    if (error) { reject(new WebRequestError("Worker deployment failed. Check SSH access and the worker's installation requirements.", 502)); return; }
+                    try { resolveDeploy(JSON.parse(stdout)); } catch { reject(new WebRequestError("Worker deployment returned an invalid result.", 502)); }
+                  });
                 });
+                backends.reload();
                 json(res, 202, result);
                 return;
               }

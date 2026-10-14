@@ -1,7 +1,9 @@
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { homeStateDir } from "@0/shared";
 
 export interface WorkerDeployOptions {
@@ -18,6 +20,7 @@ export interface WorkerDeployOptions {
   forwardProviderKey?: boolean;
   /** OpenSSH config file for the SSH target (e.g. a Lima instance's ssh.config). */
   sshConfig?: string;
+  backendsConfig?: string;
 }
 
 export interface WorkerDeployResult {
@@ -56,7 +59,18 @@ const LIMA_NAME_PATTERN = /^[\w.-]+$/;
 const TARGET_GIT_PATTERN = /^[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s'"]+$/;
 const sq = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
 
+export function resolveWorkerRepoRoot(moduleUrl = import.meta.url): string {
+  let directory = dirname(fileURLToPath(moduleUrl));
+  while (true) {
+    if ((existsSync(join(directory, "dist/0.js")) || existsSync(join(directory, "0.js"))) && existsSync(join(directory, "vendor/tree-sitter-0.21.1-node24.tgz"))) return directory;
+    const parent = dirname(directory);
+    if (parent === directory) throw new Error("Worker deployment requires the built CLI dist/ and vendor/ assets. Run pnpm build first.");
+    directory = parent;
+  }
+}
+
 export function validateWorkerOptions(options: WorkerDeployOptions): void {
+  if (options.enginePort !== undefined && (!Number.isInteger(options.enginePort) || options.enginePort < 1 || options.enginePort > 65535)) throw new Error("enginePort must be 1-65535");
   if (options.ssh && (!SSH_HOST_PATTERN.test(options.ssh) || options.ssh.startsWith("-"))) {
     throw new Error("--ssh must be an OpenSSH host name or user@host (no options or shell characters)");
   }
@@ -97,11 +111,12 @@ export function createRunner(options: Pick<WorkerDeployOptions, "ssh" | "lima" |
 /** Deploy a Zero engine onto a remote worker and register it as a backend. Idempotent. */
 export async function deployWorker(options: WorkerDeployOptions, runner: WorkerRunner = createRunner(options)): Promise<WorkerDeployResult> {
   validateWorkerOptions(options);
-  const repoRoot = options.repoRoot ?? new URL("../../", import.meta.url).pathname;
-  const port = options.enginePort ?? 8100;
+  const repoRoot = options.repoRoot ?? resolveWorkerRepoRoot();
+  const port = options.enginePort ?? 20000 + Number.parseInt(createHash("sha256").update(runner.label).digest("hex").slice(0, 4), 16) % 20000;
   const token = createHash("sha256").update(randomBytes(32)).digest("hex");
-  const backendId = options.ssh ? "ssh-worker" : "lima-worker";
-  const tokenEnv = options.ssh ? "ZERO_SSH_WORKER_TOKEN" : "ZERO_LIMA_WORKER_TOKEN";
+  const identity = createHash("sha256").update(`${options.ssh ? "ssh" : "lima"}:${runner.label}`).digest("hex").slice(0, 12);
+  const backendId = `${options.ssh ? "ssh" : "lima"}-worker-${identity}`;
+  const tokenEnv = `ZERO_WORKER_${identity.toUpperCase()}_TOKEN`;
   const { shell } = runner;
 
   if (!options.ssh) {
@@ -120,17 +135,27 @@ export async function deployWorker(options: WorkerDeployOptions, runner: WorkerR
     shell("sudo apt-get update -qq && sudo apt-get install -y -qq clang build-essential python3 >/dev/null && clang --version | head -1", 900_000);
   }
 
-  execFileSync("tar", ["-czf", "/tmp/zero-engine-bundle.tar.gz", "-C", repoRoot, "dist"], { stdio: "inherit" });
-  execFileSync("tar", ["-czf", "/tmp/zero-demo-target.tar.gz", "-C", join(repoRoot, "research/counterexample-decoder"), "demo-target"], { stdio: "inherit" });
+  const staging = mkdtempSync(join(tmpdir(), "zero-worker-"));
+  try {
+  const bundleRoot = existsSync(join(repoRoot, "dist/0.js")) ? repoRoot : staging;
+  if (bundleRoot === staging) {
+    mkdirSync(join(staging, "dist"));
+    for (const asset of ["0.js", "cli-path-traversal-fixture.js", "chunks", "attacks", "dashboard", "worker-assets"]) {
+      if (existsSync(join(repoRoot, asset))) cpSync(join(repoRoot, asset), join(staging, "dist", asset), { recursive: true });
+    }
+  }
+  execFileSync("tar", ["-czf", join(staging, "bundle.tar.gz"), "-C", bundleRoot, "dist"], { stdio: "inherit", env: { ...process.env, COPYFILE_DISABLE: "1" } });
+  const demoRoot = existsSync(join(bundleRoot, "dist/worker-assets/demo-target")) ? join(bundleRoot, "dist/worker-assets") : join(repoRoot, "research/counterexample-decoder");
+  if (!options.targetGit) execFileSync("tar", ["-czf", join(staging, "demo-target.tar.gz"), "-C", demoRoot, "demo-target"], { stdio: "inherit", env: { ...process.env, COPYFILE_DISABLE: "1" } });
   shell(`rm -rf ${REMOTE_DIR} && mkdir -p ${REMOTE_DIR}/vendor`);
-  runner.copy("/tmp/zero-engine-bundle.tar.gz", `${REMOTE_DIR}/bundle.tar.gz`);
-  runner.copy("/tmp/zero-demo-target.tar.gz", `${REMOTE_DIR}/demo-target.tar.gz`);
+  runner.copy(join(staging, "bundle.tar.gz"), `${REMOTE_DIR}/bundle.tar.gz`);
+  if (!options.targetGit) runner.copy(join(staging, "demo-target.tar.gz"), `${REMOTE_DIR}/demo-target.tar.gz`);
   runner.copy(join(repoRoot, "vendor/tree-sitter-0.21.1-node24.tgz"), `${REMOTE_DIR}/vendor/tree-sitter-0.21.1-node24.tgz`);
-  shell(`cd ${REMOTE_DIR} && tar -xzf bundle.tar.gz && tar -xzf demo-target.tar.gz && ls dist/0.js demo-target/src/decoder.c`);
+  shell(`cd ${REMOTE_DIR} && tar -xzf bundle.tar.gz && ${options.targetGit ? "ls dist/0.js" : "tar -xzf demo-target.tar.gz && ls dist/0.js demo-target/src/decoder.c"}`);
 
-  writeFileSync("/tmp/zero-engine-package.json", JSON.stringify({ name: "zero-engine-remote", private: true, dependencies: REMOTE_DEPS }, null, 2));
-  runner.copy("/tmp/zero-engine-package.json", `${REMOTE_DIR}/package.json`);
-  shell(`cd ${REMOTE_DIR} && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --omit=dev --no-audit --no-fund 2>&1 | tail -2`, 900_000);
+  writeFileSync(join(staging, "package.json"), JSON.stringify({ name: "zero-engine-remote", private: true, dependencies: REMOTE_DEPS }, null, 2));
+  runner.copy(join(staging, "package.json"), `${REMOTE_DIR}/package.json`);
+  shell(`cd ${REMOTE_DIR} && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --omit=dev --no-audit --no-fund > install.log 2>&1 || { tail -20 install.log; exit 1; }`, 900_000);
   let targetPath: string;
   if (options.targetGit) {
     shell(`rm -rf ${REMOTE_DIR}/work && mkdir -p ${REMOTE_DIR}/work && git clone --depth 1 ${sq(options.targetGit!)} ${REMOTE_DIR}/work/target`, 900_000);
@@ -142,7 +167,7 @@ export async function deployWorker(options: WorkerDeployOptions, runner: WorkerR
 
   // Bracket pattern avoids pkill matching the shell's own command line.
   shell(`pkill -f 'dist/0[.]js dashboard' || true`);
-  const providerEnv = options.forwardProviderKey && process.env.OPENAI_API_KEY ? `OPENAI_API_KEY=${process.env.OPENAI_API_KEY} ` : "";
+  const providerEnv = options.forwardProviderKey && process.env.OPENAI_API_KEY ? `OPENAI_API_KEY=${sq(process.env.OPENAI_API_KEY)} ` : "";
   try {
     // The ssh shell is reaped on teardown; the setsid'd engine survives detached.
     shell(`cd ${REMOTE_DIR} && ${providerEnv}ZERO_WORKER_TOKEN=${token} setsid nohup node dist/0.js dashboard --host 127.0.0.1 --port ${port} --no-open --ready-json --engine-token-env ZERO_WORKER_TOKEN --engine-workspace ${REMOTE_DIR}/work > engine.log 2>&1 < /dev/null & echo started`, 30_000);
@@ -158,12 +183,14 @@ export async function deployWorker(options: WorkerDeployOptions, runner: WorkerR
 
   const stateDir = join(homeStateDir(), "workers");
   mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-  const backendsConfig = join(homeStateDir(), "backends.json");
+  const backendsConfig = options.backendsConfig ?? join(homeStateDir(), "backends.json");
   let registry: { schemaVersion: 1; backends: Array<Record<string, unknown>> } = { schemaVersion: 1, backends: [] };
   try { registry = JSON.parse(await (await import("node:fs/promises")).readFile(backendsConfig, "utf8")); } catch { /* first registration */ }
   registry.backends = [...registry.backends.filter(row => row.id !== backendId), { id: backendId, name: `${runner.label} worker`, url: `http://127.0.0.1:${port}/`, bearerTokenEnv: tokenEnv }];
   writeFileSync(backendsConfig, JSON.stringify(registry, null, 2) + "\n", { mode: 0o600 });
   writeFileSync(join(stateDir, `${backendId}.env`), `${tokenEnv}=${token}\n`, { mode: 0o600 });
 
+  process.env[tokenEnv] = token;
   return { backendId, engine: `http://127.0.0.1:${port}/`, target: targetPath, backendsConfig, tokenEnv };
+  } finally { rmSync(staging, { recursive: true, force: true }); }
 }

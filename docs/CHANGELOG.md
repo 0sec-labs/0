@@ -12,6 +12,49 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-10-13
+
+### Added
+
+- Shared assessments, reports, cross-chat finding selection, authenticated team
+  workspaces and live presence, with personal and team onboarding.
+- Agent Skills library with editing, mounting and team sharing, plus a read-only
+  findings API for integrations.
+- Remote worker deployment and shared web sessions and workflows across the CLI
+  and MCP.
+- Local source lessons, evidence retention and versioned workflow history, with
+  reviewed workflow restore suggestions and execution measurements.
+- Cline provider support, evidence-grounded assessment milestones and finding
+  prioritization based on business impact.
+- A research counterexample evidence lane.
+
+### Changed
+
+- Make the browser the primary interface and simplify Command Center navigation,
+  account controls, chat search and execution choices.
+- Surface live findings and tool activity throughout chat turns; new chats default
+  to YOLO and also offer Auto approval mode.
+- Show animated CLI update stages and download progress, and discover model
+  availability from each provider connection.
+
+### Fixed
+
+- Show registered worker connections and connection errors in the Workers page,
+  refresh deployed engines and saved credentials without restarting, and show
+  the selected computer when confirming a workflow run.
+- Keep the browser responsive during worker deployment, package demo inputs
+  for npm installs, and assign distinct worker identities and default ports.
+  Worker deployment currently requires the npm package or a built source checkout;
+  standalone binaries explain this requirement.
+- Recover chats after provider reconnects and preserve editor drafts and saved
+  chat ordering.
+- Retry subagent model request timeouts, isolate MCP authorization credentials,
+  and explicitly request JSON responses from Cline.
+- Restore saved terminal connections, clean up Docker timeouts and allow Local
+  approval mode changes during active turns.
+- Repair browser documentation links and public routes, harden release recovery
+  and CI isolation, and update vulnerable dependencies.
+
 ## [0.23.0] - 2026-10-01
 
 ### Added

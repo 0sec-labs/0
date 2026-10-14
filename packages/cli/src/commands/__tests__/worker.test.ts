@@ -22,7 +22,7 @@ describe("worker deploy command", () => {
     mocks.deployWorker.mockResolvedValue({ backendId: "ssh-worker", engine: "http://127.0.0.1:8100/", target: "/tmp/zero-engine/work/target", backendsConfig: "/x/backends.json", tokenEnv: "ZERO_SSH_WORKER_TOKEN" });
     const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     await runCli(["worker", "deploy", "--ssh", "ops@build-1", "--target-git", "https://example.test/repo.git"]);
-    expect(mocks.deployWorker).toHaveBeenCalledWith(expect.objectContaining({ ssh: "ops@build-1", targetGit: "https://example.test/repo.git", enginePort: 8100 }));
+    expect(mocks.deployWorker).toHaveBeenCalledWith(expect.objectContaining({ ssh: "ops@build-1", targetGit: "https://example.test/repo.git" }));
     expect(JSON.parse(String(write.mock.calls[0]![0])).backendId).toBe("ssh-worker");
     write.mockRestore();
   });
