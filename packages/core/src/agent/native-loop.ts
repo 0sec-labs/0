@@ -1,3 +1,4 @@
+import { isLocalAdmissionLimit } from "../runtime/request-admission.js";
 import { verifyOracleByCategory } from "../triage/oracles.js";
 import { assertWorkspaceIdentity, type WorkspaceIdentity } from "./workspace-identity.js";
 import { assertWorkflowNativeRuntime, filterWorkflowAgentTools, workflowPhasePrompt } from "../workflow-execution-policy.js";
@@ -189,7 +190,7 @@ function isNonReplayableLlmError(errorMsg: string): boolean {
  * request; rate limits and generic 5xx never prune history.
  */
 export function isContextWindowError(errorMsg: string): boolean {
-  if (isNonReplayableLlmError(errorMsg)) return false;
+  if (isLocalAdmissionLimit(errorMsg) || isNonReplayableLlmError(errorMsg)) return false;
   if (/\bAPI error 429:/i.test(errorMsg)) return false;
   return /context.{0,40}(?:window|length|limit)|(?:maximum|max).{0,20}context|too many tokens|prompt.{0,30}(?:too long|too large)|input.{0,30}(?:too long|too large|limit(?:_exceeded)?)/i.test(
     errorMsg,
@@ -1296,6 +1297,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   // is needed; a provider rejection is the only trigger for destructive
   // drop-oldest pruning, and the retry cap prevents an endless shrink loop.
   let contextOverflowRecoveries = 0;
+  let localAdmissionRecoveries = 0;
 
   // Dynamic playbook injection. `playbookInjected` now only records that the
   // FIRST injection has happened (for event labelling); the structured
@@ -2246,7 +2248,39 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         turn: state.turnCount,
       });
     }
-    if (config.requirePricedUsage && !result.usage) {
+    if (!result.error && result.stopReason !== "error") localAdmissionRecoveries = 0;
+    // The transport measured this exact request locally: no provider call or
+    // usage occurred. Compact a new request, never replay an unknown outcome.
+    if (!driven && isLocalAdmissionLimit(result.error) && !executionSignal.aborted && localAdmissionRecoveries < 2) {
+      localAdmissionRecoveries++;
+      const beforeCount = state.messages.length;
+      const beforeBytes = Buffer.byteLength(JSON.stringify(state.messages), "utf8");
+      let compacted: CompactMessagesResult;
+      try {
+        compacted = await compactMessagesWithLLM(state.messages, runtime, config.systemPrompt, {
+          preserveTailCount: 2, signal: executionSignal, requireSummaryReceipt: true,
+          onSummaryUsage: usage => {
+            state.totalUsage.inputTokens += usage.inputTokens;
+            state.totalUsage.outputTokens += usage.outputTokens;
+            state.totalUsage.cachedInputTokens += usage.cachedInputTokens ?? 0;
+            config.costLedger?.add(usage, pricingModel());
+            state.estimatedCostUsd = estimateCost(state.totalUsage, pricingModel());
+          },
+        });
+      } catch (error) {
+        state.errorExit = { error: error instanceof Error ? error.message : String(error), turn: state.turnCount };
+        state.summary = `Error: ${state.errorExit.error}`;
+        break;
+      }
+      if (Buffer.byteLength(JSON.stringify(compacted.messages), "utf8") < beforeBytes) {
+        state.messages = compacted.messages;
+        onEvent?.("context_compacted", { reason: "local_request_admission", messagesBefore: beforeCount,
+          messagesAfter: state.messages.length, recovery: localAdmissionRecoveries, degraded: compacted.degraded });
+        if (state.turnCount > 0) state.turnCount--;
+        continue;
+      }
+    }
+    if (config.requirePricedUsage && !result.usage && !isLocalAdmissionLimit(result.error)) {
       config.costLedger?.markUnpricedUsage();
       state.errorExit = { error: result.error ?? "Runtime did not report usage; cannot continue a cost-bounded scan.", turn: state.turnCount };
       state.summary = `Error: ${state.errorExit.error}`;
@@ -3372,6 +3406,8 @@ export const SCAN_SUMMARIZER_INSTRUCTION =
 /** Options bag for {@link compactMessagesWithLLM}. All optional; the defaults
  * reproduce the scan loop's original behavior exactly. */
 export interface CompactMessagesOptions {
+  /** Local admission recovery requires a successful metered summary, never a fallback after an unknown outcome. */
+  requireSummaryReceipt?: boolean;
   /** How many trailing messages to preserve verbatim. Default 10. */
   preserveTailCount?: number;
   /**
@@ -3472,7 +3508,8 @@ export async function compactMessagesWithLLM(
 
     if (summaryResult.usage) opts.onSummaryUsage?.(summaryResult.usage);
     if (opts.signal?.aborted) return { messages, summaryText: "", degraded: false };
-    if (summaryResult.stopReason !== "end_turn" || summaryResult.error) throw new Error("Incomplete context summary");
+    if (summaryResult.stopReason !== "end_turn" || summaryResult.error) throw new Error(summaryResult.error ?? "Incomplete context summary");
+    if (opts.requireSummaryReceipt && !summaryResult.usage) throw new Error("Context summary did not report usage; cannot continue admission recovery");
 
     // Extract text from result
     const textBlocks = summaryResult.content.filter(
@@ -3483,8 +3520,9 @@ export async function compactMessagesWithLLM(
     if (!summaryText || summaryText.length < 50) {
       throw new Error("LLM summary too short or empty");
     }
-  } catch {
+  } catch (error) {
     if (opts.signal?.aborted) return { messages, summaryText: "", degraded: false };
+    if (opts.requireSummaryReceipt) throw error;
     // Fallback to regex extraction
     degraded = true;
     summaryText = [

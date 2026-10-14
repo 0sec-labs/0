@@ -12,6 +12,7 @@ import type {
   NativeContentBlock,
 } from "./types.js";
 
+import { assertRequestAdmission, isLocalAdmissionLimit, parseRequestAdmission, type RequestAdmission } from "./request-admission.js";
 import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -2484,6 +2485,8 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   private config!: RuntimeConfig;
   // Not readonly: a live provider switch re-freezes env from the new account.
   private env!: Readonly<NodeJS.ProcessEnv>;
+  private requestAdmission?: Promise<RequestAdmission>;
+  private requestAdmissionIdentity?: string;
   private codexAuthState?: ChatGptCodexAuthState;
   private workbenchProviderProxy?: { url: string; model: string };
   private geminiAuthState?: GeminiCodeAssistAuthState;
@@ -2558,6 +2561,8 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       ...(config.agentModels ? { agentModels: Object.freeze({ ...config.agentModels }) } : {}),
     };
     this.env = Object.freeze({ ...process.env, ...config.env });
+    this.requestAdmission = undefined;
+    this.requestAdmissionIdentity = undefined;
     this.workbenchProviderProxy = resolveWorkbenchProviderProxy(this.env);
     this.azureConfig = parseCodexAzureConfig(this.env);
     this.fallbackChain = (this.workbenchProviderProxy ? [] : getFallbackChain(this.env)).map(entry => ({
@@ -3494,6 +3499,24 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
    * Headers are re-resolved per attempt (via ensureFreshHeaders → OAuth
    * refresh) so a token that rotated during the wait is picked up.
    */
+  private async gatewayRequestAdmission(signal: AbortSignal): Promise<RequestAdmission> {
+    if (this.workbenchProviderProxy) throw new Error("Gateway request admission cannot use a workbench proxy");
+    const identity = JSON.stringify([this.provider, this.baseUrl, this.model, this.wireApi]);
+    if (!this.requestAdmission || this.requestAdmissionIdentity !== identity) {
+      this.requestAdmissionIdentity = identity;
+      this.requestAdmission = (async () => {
+        // Same configured provider origin and credentials; redirects cannot move the capability.
+        // foxguard: ignore[js/no-ssrf]
+        const response = await fetch(`${this.baseUrl.replace(/\/+$/, "")}/models`, {
+          headers: await this.ensureFreshHeaders(), signal, redirect: "error",
+        });
+        if (!response.ok) throw new Error(`Gateway admission catalog unavailable (HTTP ${response.status}); no inference request sent`);
+        return parseRequestAdmission(await response.json(), this.model);
+      })();
+    }
+    return this.requestAdmission;
+  }
+
   private async postWithRetry(
     bodyFactory: () => string,
     signal: AbortSignal,
@@ -3507,6 +3530,10 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       // refresh never gets a request issued for it. `abort` is undefined for
       // every caller that passes no operator signal, making this a no-op.
       abort?.throwIfCancelled();
+      const body = bodyFactory();
+      if (this.env["ZERO_REQUIRE_REQUEST_ADMISSION"] === "1") {
+        assertRequestAdmission(body, await this.gatewayRequestAdmission(signal));
+      }
       let res: Response;
       try {
         // buildUrl() is the configured LLM provider endpoint (operator-set via
@@ -3515,11 +3542,11 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         // foxguard: ignore[js/no-ssrf]
         res = this.workbenchProviderProxy ? await fetch(this.workbenchProviderProxy.url, {
           method: "POST", redirect: "error", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ provider: this.provider, model: this.model, body: bodyFactory() }), signal,
+          body: JSON.stringify({ provider: this.provider, model: this.model, body }), signal,
         }) : await fetch(this.buildUrl(), {
           method: "POST",
           headers: await this.ensureFreshHeaders(),
-          body: bodyFactory(),
+          body,
           signal,
         });
       } catch (error) {
@@ -3969,6 +3996,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     let attempt = 0;
     for (attempt = 1; attempt <= maxAttempts; attempt++) {
       result = await this.executeNativeAttempt(system, messages, tools, callbacks, signal);
+      if (isLocalAdmissionLimit(result.error)) return result;
       if (this.env["ZERO_REQUIRE_RETRY_SAFE_RECEIPT"] === "1" && (result.stopReason === "error" || result.error)) {
         return { ...result, error: `${result.error ?? "Incomplete gateway response"}. Request outcome may be unknown. Automatic replay is disabled` };
       }
@@ -4720,6 +4748,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         };
       }
       const msg = err instanceof Error ? err.message : String(err);
+      if (isLocalAdmissionLimit(msg)) return {
+        content: [], stopReason: "error", durationMs: Date.now() - start, error: msg,
+      };
       const timedOut = msg.includes("abort") || msg.includes("timeout");
       return {
         content: [{ type: "text", text: "" }],
