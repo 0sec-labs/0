@@ -3528,6 +3528,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         // it FIRST so it can never be treated as a retryable transport fault
         // or wrapped as a "transport failure".
         abort?.throwIfCancelled();
+        if (this.env["ZERO_REQUIRE_RETRY_SAFE_RECEIPT"] === "1") {
+          throw new Error(`${this.providerLabel} request outcome may be unknown. Automatic replay is disabled`, { cause: error });
+        }
         const cause = error instanceof Error ? error.cause : undefined;
         const causeCode =
           cause && typeof cause === "object" && "code" in cause && typeof cause.code === "string"
@@ -3564,6 +3567,10 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         throw new Error(`${this.providerLabel} transport failure [${causeCode}${causeHost}]: ${message}`, {
           cause: error,
         });
+      }
+      if (!res.ok && this.env["ZERO_REQUIRE_RETRY_SAFE_RECEIPT"] === "1" && res.headers.get("x-0-retry-safe") !== "1") {
+        await res.body?.cancel();
+        throw new Error(`${this.providerLabel} gateway HTTP ${res.status}; request outcome may be unknown. Automatic replay is disabled`);
       }
       if (res.ok || !isRetryableHttpStatus(res.status)) {
         return res;
@@ -3962,6 +3969,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     let attempt = 0;
     for (attempt = 1; attempt <= maxAttempts; attempt++) {
       result = await this.executeNativeAttempt(system, messages, tools, callbacks, signal);
+      if (this.env["ZERO_REQUIRE_RETRY_SAFE_RECEIPT"] === "1" && (result.stopReason === "error" || result.error)) {
+        return { ...result, error: `${result.error ?? "Incomplete gateway response"}. Request outcome may be unknown. Automatic replay is disabled` };
+      }
       if (attempt >= maxAttempts || !shouldRetryNativeStream(result) || signal?.aborted) break;
 
       const backoff = streamRetryBackoffMs(attempt);

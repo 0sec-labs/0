@@ -2332,6 +2332,17 @@ describe("runNativeAgentLoop — inline validation (#554)", () => {
 // ── transient LLM error classifier (bounded retry vs loud exit) ──
 
 describe("isTransientLlmError", () => {
+  it("honors a terminal unknown-outcome decision above retryable status and context text", () => {
+    for (const error of [
+      "0 hosted request returned HTTP 502; its outcome may be unknown. Automatic replay is disabled",
+      "API error 429: unresolved_inference_charge",
+      "503 recovery_requires_review",
+      "context window rejected; request outcome is unknown; Automatic replay is disabled",
+    ]) {
+      expect(isTransientLlmError(error)).toBe(false);
+      expect(isContextWindowError(error)).toBe(false);
+    }
+  });
   it("classifies rate-limit/overload/timeout/stall as transient", () => {
     expect(isTransientLlmError("OpenRouter API error 429: too many requests")).toBe(true);
     expect(isTransientLlmError("provider overloaded")).toBe(true);
@@ -2363,6 +2374,16 @@ describe("isTransientLlmError", () => {
 });
 
 describe("runNativeAgentLoop — transient retry interruption", () => {
+  it("never replays an unknown gateway request or prunes its context to dispatch again", async () => {
+    const executeNative = vi.fn(async (): Promise<NativeRuntimeResult> => ({ content: [], stopReason: "error",
+      error: "HTTP 502 context window failure; outcome may be unknown. Automatic replay is disabled", durationMs: 1 }));
+    const state = await runNativeAgentLoop({
+      config: { role: "discovery", systemPrompt: "test", tools: [], maxTurns: 15, target: "https://example.com", scanId: randomUUID() },
+      runtime: { type: "api", isAvailable: async () => true, executeNative }, db: null,
+    });
+    expect(executeNative).toHaveBeenCalledTimes(1);
+    expect(state.summary).toContain("Automatic replay is disabled");
+  });
   it("stops a retry backoff on interruption without dispatching again", async () => {
     const controller = new AbortController();
     const executeNative = vi.fn(async (): Promise<NativeRuntimeResult> => ({

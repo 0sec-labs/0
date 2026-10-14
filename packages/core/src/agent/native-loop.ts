@@ -176,7 +176,12 @@ const EXTERNAL_MEMORY_MAX_CHARS = 2000;
  * "<provider> API request timed out" rather than a transport code.
  */
 export function isTransientLlmError(errorMsg: string): boolean {
+  if (isNonReplayableLlmError(errorMsg)) return false;
   return /\b(429|529|502|503|504)\b|overloaded|rate.?limit|temporarily|too many requests|ETIMEDOUT|ECONNRESET|throttl|stall|API request timed out/i.test(errorMsg);
+}
+
+function isNonReplayableLlmError(errorMsg: string): boolean {
+  return /automatic replay (?:is )?disabled|outcome.{0,30}unknown|unresolved_inference_charge|recovery_requires_review|settlement_ambiguous|usage_settlement_unconfirmed/i.test(errorMsg);
 }
 
 /**
@@ -184,6 +189,7 @@ export function isTransientLlmError(errorMsg: string): boolean {
  * request; rate limits and generic 5xx never prune history.
  */
 export function isContextWindowError(errorMsg: string): boolean {
+  if (isNonReplayableLlmError(errorMsg)) return false;
   if (/\bAPI error 429:/i.test(errorMsg)) return false;
   return /context.{0,40}(?:window|length|limit)|(?:maximum|max).{0,20}context|too many tokens|prompt.{0,30}(?:too long|too large)|input.{0,30}(?:too long|too large|limit(?:_exceeded)?)/i.test(
     errorMsg,
