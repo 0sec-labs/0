@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createServer, type Server } from "node:http";
@@ -41,6 +41,25 @@ describe("trusted backend registry", () => {
     writeFileSync(workerPath, `TEST_WORKER_TOKEN=${"c".repeat(32)}\n`, { mode: 0o600 });
     registry.reload();
     expect((await registry.handshake(id)).backend.status).toBe("disconnected");
+  });
+  it("removes only the selected persisted registration and its saved credential", () => {
+    const configPath = join(directory(), "backends.json");
+    const id = `remove-test-${Date.now()}`;
+    const row = { id, name: "Worker", url: "http://127.0.0.1:12345/", bearerTokenEnv: "REMOVE_TOKEN" };
+    writeFileSync(configPath, JSON.stringify({ schemaVersion: 1, backends: [row, { ...row, id: "kept", bearerTokenEnv: "KEPT_TOKEN" }] }));
+    const credential = join(homeStateDir(), "workers", `${id}.env`);
+    mkdirSync(join(homeStateDir(), "workers"), { recursive: true });
+    writeFileSync(credential, `REMOVE_TOKEN=${"a".repeat(32)}\n`, { mode: 0o600 });
+    temporary.push(credential);
+    const registry = new BackendConnectionRegistry({ configPath, env: {}, localHandshake: handshake("local-engine") });
+    registries.push(registry);
+    expect(() => registry.remove("local")).toThrow("cannot be removed");
+    expect(() => registry.remove("missing")).toThrow("not registered");
+    registry.remove(id);
+    expect(registry.list().map(value => value.id)).toEqual(["local", "kept"]);
+    expect(loadBackendConnectionConfig(configPath).map(value => value.id)).toEqual(["kept"]);
+    expect(existsSync(credential)).toBe(false);
+    expect(readFileSync(configPath, "utf8")).not.toContain(id);
   });
   it("persists random engine identity per database while rotating connection epochs", () => {
     const path = directory();

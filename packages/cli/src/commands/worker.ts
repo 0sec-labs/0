@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { deployWorker, validateWorkerOptions } from "../worker-deploy.js";
+import { deployWorker, stopWorker, validateWorkerOptions } from "../worker-deploy.js";
 import { discoverSshHosts } from "../worker-hosts.js";
 
 export function registerWorkerCommand(program: Command): void {
@@ -30,6 +30,13 @@ export function registerWorkerCommand(program: Command): void {
         forwardProviderKey: opts.forwardProviderKey,
       });
       process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    });
+
+  worker
+    .command("stop <backend-id>")
+    .description("Stop a managed worker engine and its owned tunnel; retain remote files and registration")
+    .action(async (backendId: string) => {
+      process.stdout.write(JSON.stringify(await stopWorker(backendId)) + "\n");
     });
 
   worker

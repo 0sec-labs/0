@@ -1,5 +1,6 @@
+import { loadManagedWorker, stopManagedTunnel } from "../worker-deploy.js";
 import { randomUUID } from "node:crypto";
-import { constants, closeSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
+import { constants, closeSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
@@ -158,6 +159,26 @@ export class BackendConnectionRegistry {
       }
     }
   }
+  /** Remove this dashboard's trusted connection; remote engine files are untouched. */
+  remove(id: string): void {
+    id = BackendDescriptorSchema.shape.id.parse(id);
+    if (id === "local") throw new BackendConnectionError("The local engine cannot be removed.", 400);
+    if (!this.#reloadFromDisk) throw new BackendConnectionError("This backend registry is not persisted.", 409);
+    const rows = loadBackendConnectionConfig(this.#configPath);
+    const row = rows.find(value => value.id === id);
+    if (!row) throw new BackendConnectionError("Backend is not registered.", 404);
+    const path = this.#configPath ?? join(homeStateDir(), "backends.json");
+    const temporary = `${path}.${randomUUID()}.tmp`;
+    try {
+      writeFileSync(temporary, `${JSON.stringify({ schemaVersion: 1, backends: rows.filter(value => value.id !== id) }, null, 2)}\n`, { mode: 0o600, flag: "wx" });
+      renameSync(temporary, path);
+    } finally { rmSync(temporary, { force: true }); }
+    try { stopManagedTunnel(loadManagedWorker(id)); } catch { /* Unmanaged connections have no owned tunnel to stop. */ }
+    rmSync(join(homeStateDir(), "workers", `${id}.json`), { force: true });
+    rmSync(join(homeStateDir(), "workers", `${id}.env`), { force: true });
+    if (!rows.some(value => value.id !== id && value.bearerTokenEnv === row.bearerTokenEnv)) delete this.#env[row.bearerTokenEnv];
+    this.#connections.delete(id); this.#descriptors.delete(id); this.#handshakes.delete(id); this.#pins.delete(id);
+  }
   list(): BackendDescriptor[] { return structuredClone([...this.#descriptors.values()]); }
   async handshake(id: string): Promise<{ backend: BackendDescriptor; handshake?: BackendHandshake; error?: string }> {
     if (id === "local") return { backend: this.list()[0]!, handshake: structuredClone(this.#local) };
@@ -279,6 +300,13 @@ function json(res: ServerResponse, status: number, value: unknown) { res.writeHe
 export async function handleBackendConnectionRequest(req: IncomingMessage, res: ServerResponse, url: URL, registry: BackendConnectionRegistry): Promise<{ handled: boolean; localPath?: string }> {
   if (url.pathname === "/api/backends") { if (req.method !== "GET") throw new BackendConnectionError("Backend registry is read-only.", 405); registry.reload(); json(res, 200, { backends: registry.list() }); return { handled: true }; }
   if (url.pathname === "/api/backend/handshake") { if (req.method !== "GET") throw new BackendConnectionError("Method not allowed.", 405); json(res, 200, (await registry.handshake("local")).handshake); return { handled: true }; }
+  const removal = url.pathname.match(/^\/api\/backends\/([^/]+)$/);
+  if (removal) {
+    if (req.method !== "DELETE") throw new BackendConnectionError("Use DELETE to remove a backend registration.", 405);
+    registry.remove(decodeURIComponent(removal[1]!));
+    json(res, 200, { removed: true, remoteEngineRemoved: false });
+    return { handled: true };
+  }
   const match = url.pathname.match(/^\/api\/backends\/([^/]+)\/(handshake|proxy(?:\/.*)?)$/);
   if (!match) return { handled: false };
   const id = decodeURIComponent(match[1]!);

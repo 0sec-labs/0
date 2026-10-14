@@ -1,6 +1,6 @@
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -34,7 +34,7 @@ export interface WorkerDeployResult {
 export interface WorkerRunner {
   shell(command: string, timeout?: number): string;
   copy(local: string, remote: string): void;
-  tunnel(port: number): void;
+  tunnel(port: number): number | void;
   readonly label: string;
 }
 
@@ -88,8 +88,9 @@ export function createRunner(options: Pick<WorkerDeployOptions, "ssh" | "lima" |
         execFileSync("ssh", ["-o", "BatchMode=yes", "-o", "ConnectTimeout=15", ...configArgs, "--", host, "bash", "-s"], { input: command, encoding: "utf8", timeout }),
       copy: (local, remote) => execFileSync("scp", ["-q", "-o", "BatchMode=yes", ...configArgs, "--", local, `${host}:${remote}`], { stdio: "inherit", timeout: 600_000 }),
       tunnel: (port) => {
-        spawnSync("pkill", ["-f", `ssh.*-N.*-L.*${port}:127.0.0.1:${port}.*${host}`], { stdio: "ignore" });
-        spawn("ssh", ["-o", "BatchMode=yes", ...configArgs, "-N", "-L", `${port}:127.0.0.1:${port}`, "--", host], { stdio: "ignore", detached: true }).unref();
+        const child = spawn("ssh", ["-o", "BatchMode=yes", ...configArgs, "-N", "-L", `${port}:127.0.0.1:${port}`, "--", host], { stdio: "ignore", detached: true });
+        child.unref();
+        return child.pid;
       },
     };
   }
@@ -102,8 +103,9 @@ export function createRunner(options: Pick<WorkerDeployOptions, "ssh" | "lima" |
     tunnel: (port) => {
       const configPath = "/tmp/zero-worker-ssh.conf";
       writeFileSync(configPath, execFileSync("limactl", ["show-ssh", "--format", "config", vm], { encoding: "utf8" }), { mode: 0o600 });
-      spawnSync("pkill", ["-f", `zero-worker-ssh.conf.*${port}`], { stdio: "ignore" });
-      spawn("ssh", ["-F", configPath, "-N", "-L", `${port}:127.0.0.1:${port}`, `lima-${vm}`], { stdio: "ignore", detached: true }).unref();
+      const child = spawn("ssh", ["-F", configPath, "-N", "-L", `${port}:127.0.0.1:${port}`, `lima-${vm}`], { stdio: "ignore", detached: true });
+      child.unref();
+      return child.pid;
     },
   };
 }
@@ -147,6 +149,13 @@ export async function deployWorker(options: WorkerDeployOptions, runner: WorkerR
   execFileSync("tar", ["-czf", join(staging, "bundle.tar.gz"), "-C", bundleRoot, "dist"], { stdio: "inherit", env: { ...process.env, COPYFILE_DISABLE: "1" } });
   const demoRoot = existsSync(join(bundleRoot, "dist/worker-assets/demo-target")) ? join(bundleRoot, "dist/worker-assets") : join(repoRoot, "research/counterexample-decoder");
   if (!options.targetGit) execFileSync("tar", ["-czf", join(staging, "demo-target.tar.gz"), "-C", demoRoot, "demo-target"], { stdio: "inherit", env: { ...process.env, COPYFILE_DISABLE: "1" } });
+  // Match both the owned workspace and engine command before replacing a process.
+  shell(`for entry in /proc/[0-9]*/cwd; do
+    test "$(readlink "$entry" 2>/dev/null)" = "${REMOTE_DIR}" || continue
+    pid=$(echo "$entry" | cut -d/ -f3)
+    command=$(tr '\\000' ' ' < /proc/$pid/cmdline 2>/dev/null) || continue
+    case "$command" in 'node dist/0.js dashboard '*|'node /tmp/zero-engine/dist/0.js dashboard '*) kill "$pid" || true;; esac
+  done`);
   shell(`rm -rf ${REMOTE_DIR} && mkdir -p ${REMOTE_DIR}/vendor`);
   runner.copy(join(staging, "bundle.tar.gz"), `${REMOTE_DIR}/bundle.tar.gz`);
   if (!options.targetGit) runner.copy(join(staging, "demo-target.tar.gz"), `${REMOTE_DIR}/demo-target.tar.gz`);
@@ -165,17 +174,15 @@ export async function deployWorker(options: WorkerDeployOptions, runner: WorkerR
     targetPath = `${REMOTE_DIR}/work/demo-target`;
   }
 
-  // Bracket pattern avoids pkill matching the shell's own command line.
-  shell(`pkill -f 'dist/0[.]js dashboard' || true`);
   const providerEnv = options.forwardProviderKey && process.env.OPENAI_API_KEY ? `OPENAI_API_KEY=${sq(process.env.OPENAI_API_KEY)} ` : "";
   try {
     // The ssh shell is reaped on teardown; the setsid'd engine survives detached.
-    shell(`cd ${REMOTE_DIR} && ${providerEnv}ZERO_WORKER_TOKEN=${token} setsid nohup node dist/0.js dashboard --host 127.0.0.1 --port ${port} --no-open --ready-json --engine-token-env ZERO_WORKER_TOKEN --engine-workspace ${REMOTE_DIR}/work > engine.log 2>&1 < /dev/null & echo started`, 30_000);
+    shell(`cd ${REMOTE_DIR} || exit 1; ${providerEnv}ZERO_WORKER_TOKEN=${token} setsid nohup node dist/0.js dashboard --host 127.0.0.1 --port ${port} --no-open --ready-json --engine-token-env ZERO_WORKER_TOKEN --engine-workspace ${REMOTE_DIR}/work > engine.log 2>&1 < /dev/null & echo $! > ${REMOTE_DIR}/engine.pid; echo started`, 30_000);
   } catch { /* shell reaped; engine detached */ }
   const ready = shell(`for i in $(seq 1 30); do grep -q ZERO_DASHBOARD_READY ${REMOTE_DIR}/engine.log 2>/dev/null && echo ready && break; sleep 1; done; tail -2 ${REMOTE_DIR}/engine.log`, 60_000);
   if (!ready.includes("ready")) throw new Error(`engine did not become ready: ${ready.trim()}`);
 
-  runner.tunnel(port);
+  const tunnelPid = runner.tunnel(port);
   const tunnelReady = Promise.withResolvers<void>();
   setTimeout(tunnelReady.resolve, 2000);
   await tunnelReady.promise;
@@ -190,7 +197,45 @@ export async function deployWorker(options: WorkerDeployOptions, runner: WorkerR
   writeFileSync(backendsConfig, JSON.stringify(registry, null, 2) + "\n", { mode: 0o600 });
   writeFileSync(join(stateDir, `${backendId}.env`), `${tokenEnv}=${token}\n`, { mode: 0o600 });
 
+  writeFileSync(join(stateDir, `${backendId}.json`), JSON.stringify({ schemaVersion: 1, backendId, ssh: options.ssh, lima: options.ssh ? undefined : options.lima ?? "zero-worker", sshConfig: options.sshConfig, port, tunnelPid, remoteDir: REMOTE_DIR }, null, 2) + "\n", { mode: 0o600 });
   process.env[tokenEnv] = token;
   return { backendId, engine: `http://127.0.0.1:${port}/`, target: targetPath, backendsConfig, tokenEnv };
   } finally { rmSync(staging, { recursive: true, force: true }); }
+}
+
+export interface ManagedWorker {
+  schemaVersion: 1; backendId: string; ssh?: string; lima?: string; sshConfig?: string; port: number; tunnelPid?: number; remoteDir: string;
+}
+export function loadManagedWorker(backendId: string): ManagedWorker {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(backendId)) throw new Error("Invalid worker ID.");
+  let worker: ManagedWorker;
+  try { worker = JSON.parse(readFileSync(join(homeStateDir(), "workers", `${backendId}.json`), "utf8")); }
+  catch { throw new Error("This connection has no managed deployment metadata. Stop its engine directly on the host."); }
+  if (worker.schemaVersion !== 1 || worker.backendId !== backendId || worker.remoteDir !== REMOTE_DIR || (!!worker.ssh === !!worker.lima)) throw new Error("Invalid managed deployment metadata.");
+  validateWorkerOptions({ ...worker, enginePort: worker.port });
+  return worker;
+}
+export function stopManagedTunnel(worker: ManagedWorker): boolean {
+  if (!Number.isSafeInteger(worker.tunnelPid) || worker.tunnelPid! <= 1) return false;
+  const result = spawnSync("ps", ["-p", String(worker.tunnelPid), "-o", "comm=", "-o", "args="], { encoding: "utf8" });
+  const command = result.stdout?.trim() ?? "";
+  const destination = worker.ssh ?? `lima-${worker.lima}`;
+  if (!/^\S*ssh\s/.test(command) || !command.includes(` ${worker.port}:127.0.0.1:${worker.port} `) || !command.endsWith(` ${destination}`)) return false;
+  try { process.kill(worker.tunnelPid!, "SIGTERM"); return true; } catch { return false; }
+}
+export async function stopWorker(backendId: string, suppliedRunner?: WorkerRunner): Promise<{ stopped: true; tunnelStopped: boolean; remoteFilesRemoved: false }> {
+  const worker = loadManagedWorker(backendId);
+  const runner = suppliedRunner ?? createRunner(worker);
+  runner.shell(`set -eu
+if test ! -f ${REMOTE_DIR}/engine.pid; then echo 'Managed engine PID is unavailable; engine was not stopped.' >&2; exit 1; fi
+pid=$(cat ${REMOTE_DIR}/engine.pid)
+case "$pid" in ''|*[!0-9]*) echo 'Invalid engine PID' >&2; exit 1;; esac
+if test "$pid" -le 1; then echo 'Invalid engine PID' >&2; exit 1; fi
+if test -e /proc/$pid/cmdline; then
+  if test "$(readlink /proc/$pid/cwd)" != "${REMOTE_DIR}"; then echo 'Engine working directory does not match managed Zero engine' >&2; exit 1; fi
+  command=$(tr '\\000' ' ' < /proc/$pid/cmdline)
+  case "$command" in 'node dist/0.js dashboard '*|'node /tmp/zero-engine/dist/0.js dashboard '*) kill "$pid";; *) echo 'Engine PID does not match managed Zero engine' >&2; exit 1;; esac
+fi
+rm -f ${REMOTE_DIR}/engine.pid`, 30_000);
+  return { stopped: true, tunnelStopped: stopManagedTunnel(worker), remoteFilesRemoved: false };
 }

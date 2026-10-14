@@ -2753,7 +2753,7 @@ select that computer in the browser before starting remote work.
 | `--target-git <url>` | — | Repository the worker clones into the engine workspace instead of the bundled demo target |
 | `--backends-config <path>` | — | Backend registry path |
 | `--ssh-config <path>` | — | OpenSSH config file for the SSH target (e.g. a Lima instance's ssh.config) |
-| `--engine-port <port>` | `8100` | Engine port on the worker |
+| `--engine-port <port>` | — | Engine port on the worker (default: stable port derived from host) |
 | `--forward-provider-key` | `false` | Forward this machine's OPENAI_API_KEY to the worker engine (user-owned hosts only) |
 
 #### worker hosts

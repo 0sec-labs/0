@@ -14,6 +14,7 @@ import { z } from "zod";
 import {
   createPresentationEvent,
   BackendRequestIdSchema,
+  BackendDescriptorSchema,
   ScanResumeRequestSchema,
   type FindingTriageStatus,
   type PresentationEvent,
@@ -47,7 +48,7 @@ import { authorizeTeamApi, handleTeamRequest, assertTeamConsoleMutation } from "
 import { handleTeamPresenceStream } from "../web/team-presence-stream.js";
 import { homeStateDir } from "@0/shared";
 import { assertLocalEngineAvailable, registerLocalEngine } from "../local-engine.js";
-import { validateWorkerOptions, type WorkerDeployResult } from "../worker-deploy.js";
+import { loadManagedWorker, validateWorkerOptions, type WorkerDeployResult } from "../worker-deploy.js";
 import { discoverSshHosts } from "../worker-hosts.js";
 
 type DashboardOptions = {
@@ -2001,6 +2002,29 @@ export function registerDashboardCommand(program: Command): void {
               if (requestUrl.pathname === "/api/workers/hosts") {
                 if (req.method !== "GET") throw new WebRequestError("Method not allowed.", 405);
                 json(res, 200, { hosts: discoverSshHosts() });
+                return;
+              }
+              if (requestUrl.pathname === "/api/workers/managed") {
+                if (req.method !== "GET") throw new WebRequestError("Method not allowed.", 405);
+                const workers = backends.list().flatMap(backend => {
+                  try { loadManagedWorker(backend.id); return [{ backendId: backend.id }]; } catch { return []; }
+                });
+                json(res, 200, { workers });
+                return;
+              }
+              const workerStop = requestUrl.pathname.match(/^\/api\/workers\/([^/]+)\/stop$/);
+              if (workerStop) {
+                if (req.method !== "POST") throw new WebRequestError("Use POST to stop a worker.", 405);
+                const backendId = BackendDescriptorSchema.shape.id.parse(decodeURIComponent(workerStop[1]!));
+                const compiledBinary = import.meta.url.startsWith("file:///$bunfs/") || import.meta.url.startsWith("/$bunfs/");
+                const args = [...(compiledBinary ? [] : [resolveCliEntrypoint()]), "worker", "stop", backendId];
+                const result = await new Promise<unknown>((resolveStop, reject) => {
+                  execFile(process.execPath, args, { timeout: 60_000, maxBuffer: 65_536 }, (error, stdout, stderr) => {
+                    if (error) { reject(new WebRequestError(stderr.includes("no managed deployment metadata") ? "This connection has no managed deployment metadata. Stop its engine directly on the host." : "Worker could not be stopped safely. Check the host connection and managed engine PID.", 409)); return; }
+                    try { resolveStop(JSON.parse(stdout)); } catch { reject(new WebRequestError("Worker stop returned an invalid result.", 502)); }
+                  });
+                });
+                json(res, 200, result);
                 return;
               }
               if (requestUrl.pathname === "/api/workers/deploy") {

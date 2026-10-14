@@ -46,6 +46,9 @@ on the published npm package and the GitHub Release tag.
   for npm installs, and assign distinct worker identities and default ports.
   Worker deployment currently requires the npm package or a built source checkout;
   standalone binaries explain this requirement.
+- Manage deployed engines from the Workers page: stop a verified Zero process and
+  its owned tunnel without deleting remote files, or remove a saved connection,
+  credential and managed tunnel. Never stop an unverified remote process.
 - Recover chats after provider reconnects and preserve editor drafts and saved
   chat ordering.
 - Retry subagent model request timeouts, isolate MCP authorization credentials,
