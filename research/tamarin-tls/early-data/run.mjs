@@ -22,12 +22,14 @@ try {
     { encoding: 'utf8', timeout: 20000 });
   const conf = `[req]\ndistinguished_name=dn\nx509_extensions=ext\nprompt=no\n[dn]\nCN=localhost\n[ext]\nsubjectAltName=DNS:localhost,IP:127.0.0.1\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,digitalSignature,keyEncipherment,keyCertSign\nextendedKeyUsage=serverAuth\n`;
   writeFileSync(join(scratch, 'cert.cnf'), conf, { mode: 0o600 });
-  execFileSync(openssl, ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', // foxguard: ignore[js/no-command-injection] fixed executable and owned scratch paths.
+  // foxguard: ignore[js/no-command-injection] fixed executable and arguments reference only the owned scratch directory.
+  execFileSync(openssl, ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
     '-config', join(scratch, 'cert.cnf'), '-keyout', join(scratch, 'key.pem'),
     '-out', join(scratch, 'cert.pem')], { stdio: 'ignore', timeout: 10000 });
   const runs = [];
   for (const mode of ['anti-replay', 'disabled-control']) {
-    const stdout = execFileSync(join(scratch, 'replay'), // foxguard: ignore[js/no-command-injection] executable was just compiled into the owned scratch directory.
+    // foxguard: ignore[js/no-command-injection] executable was just compiled into the owned scratch directory and argv contains fixed owned paths.
+    const stdout = execFileSync(join(scratch, 'replay'),
       [join(scratch, 'cert.pem'), join(scratch, 'key.pem'), mode],
       { encoding: 'utf8', timeout: 15000 });
     const events = stdout.trim().split('\n').map(line => JSON.parse(line));

@@ -35,7 +35,8 @@ export async function proofEvidence() {
 export function boundedChecks() {
   let tenantCases = 0, paymentCases = 0, nonceCases = 0;
   for (let actor = 0; actor <= 8; actor++) for (let owner = 0; owner <= 8; owner++) {
-    const secret = `private tenant ${owner}`; // foxguard: ignore[js/no-hardcoded-secret] deterministic test fixture, never an authentication credential.
+    // foxguard: ignore[js/no-hardcoded-secret] deterministic authorization test fixture, never an authentication credential.
+    const secret = `private tenant ${owner}`;
     const response = readResource(actor, { tenant: owner, secret });
     if (actor !== owner) { assert.equal(response.status, 403); assert.notEqual(response.body, secret); }
     else { assert.equal(response.status, 200); assert.equal(response.body, secret); }

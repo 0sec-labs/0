@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 
 const home = dirname(fileURLToPath(import.meta.url));
 const executable = 'tamarin-prover';
-const version = spawnSync(executable, ['--version'], { encoding: 'utf8', timeout: 10000 }); // foxguard: ignore[js/no-command-injection] fixed executable and static argv, without a shell.
+// foxguard: ignore[js/no-command-injection] fixed executable and static argv, without a shell.
+const version = spawnSync(executable, ['--version'], { encoding: 'utf8', timeout: 10000 });
 const save = result => {
   writeFileSync(join(home, 'tamarin-result.json'), JSON.stringify(result, null, 2) + '\n');
   console.log(JSON.stringify(result, null, 2));
@@ -25,7 +26,8 @@ const cases = [
 ];
 const modelsRun = [];
 for (const item of cases) {
-  const run = spawnSync(executable, [join(home, item.file), '--prove'], { // foxguard: ignore[js/no-command-injection] executable and model filenames are fixed in this script.
+  // foxguard: ignore[js/no-command-injection] executable and model filenames come from the fixed cases table; no shell is used.
+  const run = spawnSync(executable, [join(home, item.file), '--prove'], {
     encoding: 'utf8', timeout: 60000, killSignal: 'SIGKILL', maxBuffer: 4 * 1024 * 1024,
   });
   const stdout = run.stdout ?? '';
