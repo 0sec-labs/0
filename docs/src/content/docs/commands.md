@@ -2727,7 +2727,7 @@ browser's computer menu to work there.
 0 worker
 ```
 
-Subcommands: [deploy](#worker-deploy) · [hosts](#worker-hosts).
+Subcommands: [deploy](#worker-deploy) · [stop](#worker-stop) · [hosts](#worker-hosts).
 
 #### worker deploy
 
@@ -2755,6 +2755,22 @@ select that computer in the browser before starting remote work.
 | `--ssh-config <path>` | — | OpenSSH config file for the SSH target (e.g. a Lima instance's ssh.config) |
 | `--engine-port <port>` | — | Engine port on the worker (default: stable port derived from host) |
 | `--forward-provider-key` | `false` | Forward this machine's OPENAI_API_KEY to the worker engine (user-owned hosts only) |
+
+#### worker stop
+
+Stop a worker engine that Zero deployed and disconnect its owned local tunnel.
+The command verifies the saved deployment metadata, remote working directory,
+PID and process command before sending a termination signal. It retains the
+remote workspace and the saved backend registration so the worker can be
+redeployed later.
+
+```text
+0 worker stop <backend-id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `backend-id` | Yes |  |
 
 #### worker hosts
 
