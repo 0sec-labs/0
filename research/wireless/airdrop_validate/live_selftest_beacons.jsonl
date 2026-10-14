@@ -1,0 +1,3 @@
+{"ts": 1791955859.0, "mac": "02:00:00:00:00:00", "rssi": -50, "name": "planted-0", "labels": ["AirDrop"], "mfg": "4c0005049d5d5da4"}
+{"ts": 1791955860.0, "mac": "02:00:00:00:00:01", "rssi": -50, "name": "planted-1", "labels": ["AirDrop"], "mfg": "4c000504cb4444ad"}
+{"ts": 1791955861.0, "mac": "02:00:00:00:00:02", "rssi": -50, "name": "planted-2", "labels": ["AirDrop"], "mfg": "4c0005048afefec0"}

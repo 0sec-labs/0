@@ -1,0 +1,227 @@
+
+===== DEVICE MAP — 104 tracks =====
+
+faint ████████████████████ (no name)
+    FindMy | seen 4x over 57s | rssi 999..-70
+faint ████████████████████ (no name)
+    FindMy | seen 2x over 12s | rssi 999..-44
+faint ████████████████████ (no name)
+    FindMy | seen 4x over 108s | rssi 999..-75
+right-here(<3m) ███████████████████ 'PeakPhone'
+    HeySiri,NearbyInfo | seen 105x over 120s | rssi -41..-57
+right-here(<3m) ███████████████████ (no name)
+    FindMy | seen 3x over 40s | rssi -42..-54
+right-here(<3m) ██████████████████ (no name)
+    Handoff,NearbyInfo | seen 338x over 121s | rssi -44..-76
+right-here(<3m) ██████████████████ (no name)
+    NearbyAction | seen 48x over 118s | rssi -45..-59
+right-here(<3m) █████████████████ (no name)
+    NearbyInfo | seen 144x over 118s | rssi -47..-68
+right-here(<3m) █████████████████ (no name)
+    NearbyAction | seen 54x over 121s | rssi -47..-67
+right-here(<3m) █████████████████ (no name)
+    FindMy | seen 23x over 63s | rssi -49..-63
+near(3-10m) ██████████████ (no name)
+    ProximityPairing | seen 60x over 120s | rssi -56..-79
+near(3-10m) ██████████████ (no name)
+    FindMy | seen 6x over 90s | rssi -57..-65
+near(3-10m) ██████████████ (no name)
+    NearbyAction | seen 6x over 96s | rssi -57..-65
+near(3-10m) ██████████████ (no name)
+    HeySiri,NearbyInfo | seen 109x over 119s | rssi -57..-70
+near(3-10m) █████████████ (no name)
+    ProximityPairing | seen 5x over 14s | rssi -59..-70
+near(3-10m) █████████████ (no name)
+    FindMy | seen 5x over 69s | rssi -59..-68
+near(3-10m) █████████████ (no name)
+    NearbyInfo | seen 113x over 121s | rssi -60..-79
+near(3-10m) █████████████ (no name)
+    ProximityPairing | seen 30x over 104s | rssi -60..-94
+near(3-10m) █████████████ (no name)
+    NearbyInfo | seen 113x over 117s | rssi -60..-80
+near(3-10m) █████████████ (no name)
+    NearbyAction | seen 52x over 114s | rssi -61..-83
+near(3-10m) █████████████ (no name)
+    NearbyAction | seen 52x over 112s | rssi -61..-80
+near(3-10m) ████████████ (no name)
+    Handoff,NearbyInfo | seen 190x over 120s | rssi -62..-81
+near(3-10m) ████████████ (no name)
+    FindMy | seen 4x over 81s | rssi -62..-78
+near(3-10m) ████████████ (no name)
+    FindMy | seen 5x over 84s | rssi -62..-75
+near(3-10m) ████████████ (no name)
+    NearbyInfo | seen 151x over 108s | rssi -62..-84
+near(3-10m) ████████████ (no name)
+    NearbyAction | seen 41x over 120s | rssi -63..-81
+near(3-10m) ████████████ (no name)
+    ProximityPairing | seen 11x over 102s | rssi -63..-74
+near(3-10m) ████████████ (no name)
+    iBeacon | seen 93x over 118s | rssi -63..-83
+near(3-10m) ████████████ (no name)
+    NearbyAction | seen 43x over 114s | rssi -63..-80
+near(3-10m) ████████████ (no name)
+    FindMy | seen 1x over 0s | rssi -63..-63
+near(3-10m) ████████████ (no name)
+    AirDrop | seen 48x over 108s | rssi -64..-84
+near(3-10m) ████████████ (no name)
+    Handoff,NearbyInfo | seen 349x over 119s | rssi -64..-81
+near(3-10m) ████████████ (no name)
+    AirPrint | seen 80x over 118s | rssi -64..-79
+near(3-10m) ███████████ (no name)
+    NearbyInfo | seen 45x over 116s | rssi -65..-92
+near(3-10m) ███████████ (no name)
+    HeySiri,NearbyInfo | seen 76x over 120s | rssi -65..-84
+near(3-10m) ███████████ (no name)
+    FindMy | seen 1x over 0s | rssi -65..-65
+near(3-10m) ███████████ (no name)
+    NearbyAction | seen 6x over 85s | rssi -65..-75
+near(3-10m) ███████████ (no name)
+    NearbyAction | seen 52x over 117s | rssi -65..-79
+near(3-10m) ███████████ (no name)
+    NearbyInfo | seen 120x over 40s | rssi -66..-80
+near(3-10m) ███████████ (no name)
+    HeySiri,NearbyInfo | seen 141x over 120s | rssi -66..-86
+near(3-10m) ███████████ (no name)
+    ProximityPairing | seen 88x over 117s | rssi -66..-87
+near(3-10m) ███████████ (no name)
+    HeySiri,NearbyInfo | seen 53x over 118s | rssi -66..-89
+near(3-10m) ███████████ (no name)
+    FindMy | seen 9x over 94s | rssi -66..-72
+near(3-10m) ███████████ (no name)
+    NearbyInfo | seen 25x over 48s | rssi -66..-80
+near(3-10m) ███████████ (no name)
+    NearbyInfo | seen 16x over 9s | rssi -67..-83
+near(3-10m) ███████████ (no name)
+    Handoff,NearbyInfo | seen 166x over 116s | rssi -67..-88
+near(3-10m) ███████████ (no name)
+    NearbyInfo | seen 38x over 57s | rssi -67..-83
+near(3-10m) ███████████ (no name)
+    NearbyAction | seen 58x over 117s | rssi -67..-85
+near(3-10m) ███████████ (no name)
+    FindMy,ProximityPairing | seen 6x over 96s | rssi -67..-74
+near(3-10m) ███████████ (no name)
+    FindMy | seen 6x over 96s | rssi -67..-81
+near(3-10m) ███████████ (no name)
+    NearbyAction | seen 45x over 120s | rssi -67..-87
+near(3-10m) ███████████ (no name)
+    ProximityPairing | seen 49x over 107s | rssi -67..-83
+near(3-10m) ███████████ (no name)
+    FindMy | seen 8x over 78s | rssi -67..-81
+near(3-10m) ██████████ (no name)
+    HeySiri,NearbyInfo | seen 70x over 120s | rssi -68..-93
+near(3-10m) ██████████ (no name)
+    FindMy | seen 4x over 39s | rssi -68..-77
+near(3-10m) ██████████ (no name)
+    NearbyInfo | seen 52x over 118s | rssi -68..-89
+near(3-10m) ██████████ (no name)
+    FindMy | seen 4x over 84s | rssi -68..-86
+near(3-10m) ██████████ (no name)
+    FindMy,ProximityPairing | seen 5x over 52s | rssi -68..-71
+near(3-10m) ██████████ (no name)
+    ProximityPairing | seen 8x over 102s | rssi -68..-76
+near(3-10m) ██████████ (no name)
+    AirDrop | seen 5x over 9s | rssi -68..-79
+near(3-10m) ██████████ '4'
+    HeySiri,NearbyInfo | seen 79x over 120s | rssi -68..-87
+near(3-10m) ██████████ (no name)
+    ProximityPairing | seen 42x over 119s | rssi -69..-83
+near(3-10m) ██████████ (no name)
+    FindMy | seen 8x over 104s | rssi -69..-91
+near(3-10m) ██████████ (no name)
+    Handoff,NearbyInfo | seen 296x over 121s | rssi -69..-89
+near(3-10m) ██████████ (no name)
+    FindMy | seen 7x over 92s | rssi -69..-82
+near(3-10m) ██████████ (no name)
+    NearbyAction | seen 67x over 119s | rssi -70..-88
+near(3-10m) ██████████ (no name)
+    HeySiri,NearbyInfo | seen 75x over 85s | rssi -70..-91
+near(3-10m) ██████████ (no name)
+    FindMy | seen 3x over 26s | rssi -70..-74
+near(3-10m) █████████ (no name)
+    FindMy | seen 4x over 104s | rssi -71..-81
+near(3-10m) █████████ (no name)
+    NearbyAction | seen 40x over 119s | rssi -72..-94
+near(3-10m) █████████ (no name)
+    FindMy | seen 3x over 34s | rssi -72..-81
+near(3-10m) █████████ (no name)
+    NearbyAction | seen 2x over 90s | rssi -72..-78
+near(3-10m) █████████ (no name)
+    NearbyInfo | seen 38x over 111s | rssi -72..-92
+near(3-10m) ████████ (no name)
+    FindMy | seen 1x over 0s | rssi -74..-74
+near(3-10m) ████████ (no name)
+    HeySiri,NearbyInfo | seen 24x over 28s | rssi -75..-86
+far(10-25m) ███████ 'BCPro_203739'
+    iBeacon | seen 14x over 118s | rssi -77..-88
+far(10-25m) ██████ (no name)
+    NearbyInfo | seen 54x over 115s | rssi -80..-96
+far(10-25m) ██████ (no name)
+    NearbyAction | seen 31x over 119s | rssi -80..-96
+far(10-25m) ██████ (no name)
+    ProximityPairing | seen 3x over 11s | rssi -82..-88
+far(10-25m) █████ (no name)
+    NearbyInfo | seen 38x over 98s | rssi -85..-97
+far(10-25m) █████ (no name)
+    FindMy | seen 4x over 90s | rssi -85..-86
+far(10-25m) ████ (no name)
+    iBeacon | seen 18x over 115s | rssi -86..-93
+far(10-25m) ████ (no name)
+    NearbyAction | seen 7x over 82s | rssi -87..-94
+far(10-25m) ███ (no name)
+    NearbyInfo | seen 6x over 85s | rssi -90..-92
+far(10-25m) ███ (no name)
+    FindMy | seen 1x over 0s | rssi -90..-90
+far(10-25m) ███ (no name)
+    NearbyInfo | seen 4x over 111s | rssi -90..-95
+faint ███ (no name)
+    FindMy | seen 2x over 20s | rssi -91..-92
+faint ███ (no name)
+    FindMy | seen 1x over 0s | rssi -91..-91
+faint ██ (no name)
+    NearbyAction | seen 2x over 8s | rssi -92..-94
+faint ██ (no name)
+    NearbyInfo | seen 2x over 20s | rssi -92..-94
+faint ██ (no name)
+    NearbyAction | seen 1x over 0s | rssi -93..-93
+faint ██ (no name)
+    FindMy | seen 1x over 0s | rssi -93..-93
+faint ██ (no name)
+    NearbyAction | seen 1x over 0s | rssi -94..-94
+faint ██ (no name)
+    NearbyAction | seen 1x over 0s | rssi -94..-94
+faint ██ (no name)
+    NearbyInfo | seen 3x over 21s | rssi -94..-96
+faint ██ (no name)
+    NearbyInfo | seen 4x over 100s | rssi -95..-96
+faint ██ (no name)
+    NearbyInfo | seen 1x over 0s | rssi -95..-95
+faint ██ (no name)
+    NearbyInfo | seen 2x over 9s | rssi -95..-96
+faint ██ (no name)
+    FindMy | seen 1x over 0s | rssi -95..-95
+faint ██ (no name)
+    FindMy | seen 1x over 0s | rssi -95..-95
+faint ██ (no name)
+    ProximityPairing | seen 1x over 0s | rssi -95..-95
+faint ██ (no name)
+    NearbyAction | seen 1x over 0s | rssi -96..-96
+faint ██ (no name)
+    FindMy | seen 1x over 0s | rssi -97..-97
+faint ██ (no name)
+    NearbyAction | seen 1x over 0s | rssi -98..-98
+
+===== CATEGORY SUMMARY =====
+FindMy: 32 devices
+NearbyAction: 22 devices
+NearbyInfo: 20 devices
+ProximityPairing: 10 devices
+HeySiri: 9 devices
+Handoff: 5 devices
+iBeacon: 3 devices
+AirDrop: 2 devices
+AirPrint: 1 devices
+
+===== NAMED DEVICES (3) =====
+  'PeakPhone' right-here(<3m) rssi=-41 HeySiri,NearbyInfo
+  '4' near(3-10m) rssi=-68 HeySiri,NearbyInfo
+  'BCPro_203739' far(10-25m) rssi=-77 iBeacon

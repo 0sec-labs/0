@@ -1,0 +1,113 @@
+openjdk version "21.0.8" 2025-07-15 LTS
+OpenJDK Runtime Environment Microsoft-11933201 (build 21.0.8+9-LTS)
+OpenJDK 64-Bit Server VM Microsoft-11933201 (build 21.0.8+9-LTS, mixed mode)
+INFO  Using log config file: jar:file:/Users/peak/tools/ghidra_12.1.4_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml (LoggingInitialization)  
+INFO  Using log file: /Users/peak/Library/ghidra/ghidra_12.1.4_PUBLIC/application.log (LoggingInitialization)  
+INFO  Loading user preferences: /Users/peak/Library/ghidra/ghidra_12.1.4_PUBLIC/preferences (Preferences)  
+INFO  Searching for classes... (ClassSearcher)  
+INFO  Class search complete (876 ms) (ClassSearcher)  
+INFO  Initializing SSL Context (DefaultSSLContextInitializer)  
+INFO  Initializing Random Number Generator... (SecureRandomFactory)  
+INFO  Random Number Generator initialization complete: NativePRNGNonBlocking (SecureRandomFactory)  
+INFO  Trust manager disabled, cacerts have not been set (DefaultTrustManagerFactory)  
+INFO  Headless startup complete (1847 ms) (AnalyzeHeadless)  
+INFO  Class searcher loaded 59 extension points (20 false positives) (ClassSearcher)  
+INFO  HEADLESS Script Paths:
+    /Users/peak/tools/ghidra_12.1.4_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /Users/peak/tools/ghidra_12.1.4_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /Users/peak/tools/ghidra_12.1.4_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /Users/peak/tools/ghidra_12.1.4_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /Users/peak/tools/ghidra_12.1.4_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /Users/peak/tools/ghidra_12.1.4_PUBLIC/Ghidra/Features/SwiftDemangler/ghidra_scripts
+    /Users/peak/tools/ghidra_12.1.4_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /Users/peak/tools/ghidra_12.1.4_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /Users/peak/tools/ghidra_12.1.4_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /Users/peak/tools/ghidra_12.1.4_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /Users/peak/tools/ghidra_12.1.4_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /Users/peak/tools/ghidra_12.1.4_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts
+    /Users/peak/tools/ghidra_12.1.4_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /Users/peak/tools/ghidra_12.1.4_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /Users/peak/tools/ghidra_12.1.4_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /Users/peak/tools/ghidra_12.1.4_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts
+    /Users/peak/tools/ghidra_12.1.4_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /Users/peak/tools/ghidra_12.1.4_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /Users/peak/tools/ghidra_12.1.4_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /Users/peak/tools/ghidra_12.1.4_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /Users/peak/tools/ghidra_12.1.4_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts
+    /Users/peak/tools/ghidra_12.1.4_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /Users/peak/coding/0sec-labs/0/research/wireless (HeadlessAnalyzer)  
+INFO  HEADLESS: execution starts (HeadlessAnalyzer)  
+INFO  Creating project: /tmp/ghidra-proj/q_CoreBluetooth/CoreBluetooth (HeadlessAnalyzer)  
+INFO  Creating project: /tmp/ghidra-proj/q_CoreBluetooth/CoreBluetooth (DefaultProject)  
+INFO  REPORT: Processing input files:  (HeadlessAnalyzer)  
+INFO       project: /tmp/ghidra-proj/q_CoreBluetooth/CoreBluetooth (HeadlessAnalyzer)  
+INFO  IMPORTING: file:///private/tmp/dsc/CoreBluetooth (HeadlessAnalyzer)  
+INFO  Using Loader: Mac OS X Mach-O (ProgramLoader)  
+INFO  Using Language/Compiler: AARCH64:LE:64:AppleSilicon:default (ProgramLoader)  
+INFO  Using Library Search Path: [., /System/Library/dyld/dyld_shared_cache_arm64e, /System/Library/dyld/dyld_shared_cache_x86_64, /System/Library/dyld/dyld_shared_cache_x86_64h, /System/Cryptexes/OS/System/Library/dyld/dyld_shared_cache_arm64e, /System/Cryptexes/OS/System/Library/dyld/dyld_shared_cache_x86_64, /System/Cryptexes/OS/System/Library/dyld/dyld_shared_cache_x86_64h, /Users/peak/Library/Java/Extensions, /Library/Java/Extensions, /Network/Library/Java/Extensions, /System/Library/Java/Extensions, /usr/lib/java] (ProgramLoader)  
+INFO  Additional info:
+Loading file:///private/tmp/dsc/CoreBluetooth?MD5=2f3640135f69c6fbb1bf21ab350cffea...
+CoreBluetooth: installed 8 objc SpecExtensions
+------------------------------------------------
+
+Linking the External Programs of 'CoreBluetooth' to imported libraries...
+  [/System/Library/Frameworks/IOKit.framework/Versions/A/IOKit] -> not found in project
+  [/System/Library/Frameworks/Security.framework/Versions/A/Security] -> not found in project
+  [/System/Library/Frameworks/SystemConfiguration.framework/Versions/A/SystemConfiguration] -> not found in project
+  [/System/Library/PrivateFrameworks/TCC.framework/Versions/A/TCC] -> not found in project
+  [/System/Library/PrivateFrameworks/CoreUtils.framework/Versions/A/CoreUtils] -> not found in project
+  [/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation] -> not found in project
+  [/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation] -> not found in project
+  [/usr/lib/libSystem.B.dylib] -> not found in project
+  [/usr/lib/libobjc.A.dylib] -> not found in project
+------------------------------------------------
+
+ (ProgramLoader)  
+INFO  IMPORTING: Loaded 0 additional files (HeadlessAnalyzer)  
+INFO  ANALYZING all memory and code: file:///private/tmp/dsc/CoreBluetooth (HeadlessAnalyzer)  
+INFO  hit non-returning function, restarting decompiler switch analyzer later (DecompilerSwitchAnalyzer)  
+INFO  Packed database cache: /var/tmp/peak-ghidra/packed-db-cache (PackedDatabaseCache)  
+INFO  Applied data type archive: mac_osx (ApplyDataArchiveAnalyzer)  
+INFO  -----------------------------------------------------
+    AARCH64 ELF PLT Thunks                     0.000 secs
+    ASCII Strings                              0.430 secs
+    Apply Data Archives                        0.330 secs
+    Basic Constant Reference Analyzer          3.655 secs
+    CFStrings                                  0.168 secs
+    Call Convention ID                         0.026 secs
+    Call-Fixup Installer                       0.059 secs
+    Create Address Tables                      0.219 secs
+    Create Address Tables - One Time           0.179 secs
+    Create Function                            0.240 secs
+    Data Reference                             0.304 secs
+    Decompiler Switch Analysis                79.790 secs
+    Decompiler Switch Analysis - One Time      2.289 secs
+    Demangler GNU                              1.657 secs
+    Disassemble                                2.817 secs
+    Disassemble Entry Points                   2.665 secs
+    Disassemble Entry Points - One Time        0.223 secs
+    Embedded Media                             0.036 secs
+    External Entry References                  0.001 secs
+    Function ID                                0.052 secs
+    Function Start Search                      0.114 secs
+    Function Start Search After Code           0.087 secs
+    Function Start Search After Data           0.073 secs
+    Function Start Search delayed - One Time   0.365 secs
+    Mach-O Function Starts                     0.550 secs
+    Non-Returning Functions - Discovered       0.386 secs
+    Non-Returning Functions - Known            0.036 secs
+    Objective-C Message Analyzer               0.004 secs
+    Objective-C Type Metadata Analyzer         0.148 secs
+    Reference                                  0.202 secs
+    Shared Return Calls                        0.545 secs
+    Stack                                      3.850 secs
+    Subroutine References                      0.181 secs
+    Subroutine References - One Time           0.000 secs
+-----------------------------------------------------
+     Total Time   101 secs
+-----------------------------------------------------
+ (AutoAnalysisManager)  
+INFO  REPORT: Analysis succeeded for file: file:///private/tmp/dsc/CoreBluetooth (HeadlessAnalyzer)  
+INFO  REPORT: Execute script: GhidraFullDecomp.java '/Users/peak/coding/0sec-labs/0/research/wireless/decomp'  (HeadlessAnalyzer)  
+INFO  SCRIPT: /Users/peak/coding/0sec-labs/0/research/wireless/GhidraFullDecomp.java (HeadlessAnalyzer)  
+INFO  GhidraFullDecomp.java> DECOMP CoreBluetooth functions=6163 (GhidraScript)  

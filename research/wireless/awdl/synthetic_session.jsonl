@@ -1,0 +1,92 @@
+{"ts": 1791964481.653, "iso": "", "kind": "awdl_mac_change", "data": {"iface": "awdl0", "from": null, "to": "aa:bb:cc:00:00:01", "note": "session_start"}}
+{"ts": 1791964481.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN2-BLEID-BBBB-2222", "labels": ["NearbyInfo"], "rssi": -70, "mfg": ""}}
+{"ts": 1791964481.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN3-BLEID-CCCC-3333", "labels": [], "rssi": -80, "mfg": ""}}
+{"ts": 1791964531.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN2-BLEID-BBBB-2222", "labels": ["NearbyInfo"], "rssi": -70, "mfg": ""}}
+{"ts": 1791964571.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN2-BLEID-BBBB-2222", "labels": ["NearbyInfo"], "rssi": -70, "mfg": ""}}
+{"ts": 1791964581.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "de:ad:be:ef:01:23", "raw": "presence"}}
+{"ts": 1791964581.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964581.853, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964582.053, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964601.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN3-BLEID-CCCC-3333", "labels": [], "rssi": -80, "mfg": ""}}
+{"ts": 1791964601.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "de:ad:be:ef:01:23", "raw": "presence"}}
+{"ts": 1791964601.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964601.853, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964602.053, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964621.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN2-BLEID-BBBB-2222", "labels": ["NearbyInfo"], "rssi": -70, "mfg": ""}}
+{"ts": 1791964621.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "de:ad:be:ef:01:23", "raw": "presence"}}
+{"ts": 1791964621.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964621.853, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964622.053, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964641.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "de:ad:be:ef:01:23", "raw": "presence"}}
+{"ts": 1791964641.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964641.853, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964642.053, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964661.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN2-BLEID-BBBB-2222", "labels": ["NearbyInfo"], "rssi": -70, "mfg": ""}}
+{"ts": 1791964661.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "de:ad:be:ef:01:23", "raw": "presence"}}
+{"ts": 1791964661.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964661.853, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964662.053, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964681.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "de:ad:be:ef:01:23", "raw": "presence"}}
+{"ts": 1791964681.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964681.853, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964682.053, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964701.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "de:ad:be:ef:01:23", "raw": "presence"}}
+{"ts": 1791964701.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964701.853, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964702.053, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964711.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN2-BLEID-BBBB-2222", "labels": ["NearbyInfo"], "rssi": -70, "mfg": ""}}
+{"ts": 1791964721.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN3-BLEID-CCCC-3333", "labels": [], "rssi": -80, "mfg": ""}}
+{"ts": 1791964721.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "de:ad:be:ef:01:23", "raw": "presence"}}
+{"ts": 1791964721.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964721.853, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964722.053, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964741.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "de:ad:be:ef:01:23", "raw": "presence"}}
+{"ts": 1791964741.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964741.853, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964742.053, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964751.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN2-BLEID-BBBB-2222", "labels": ["NearbyInfo"], "rssi": -70, "mfg": ""}}
+{"ts": 1791964761.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "de:ad:be:ef:01:23", "raw": "presence"}}
+{"ts": 1791964761.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964761.853, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964762.053, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo", "Handoff"], "rssi": -58, "mfg": ""}}
+{"ts": 1791964781.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "de:ad:be:ef:01:23", "raw": "presence"}}
+{"ts": 1791964801.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN2-BLEID-BBBB-2222", "labels": ["NearbyInfo"], "rssi": -70, "mfg": ""}}
+{"ts": 1791964801.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "de:ad:be:ef:01:23", "raw": "presence"}}
+{"ts": 1791964821.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "de:ad:be:ef:01:23", "raw": "presence"}}
+{"ts": 1791964841.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN2-BLEID-BBBB-2222", "labels": ["NearbyInfo"], "rssi": -70, "mfg": ""}}
+{"ts": 1791964841.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN3-BLEID-CCCC-3333", "labels": [], "rssi": -80, "mfg": ""}}
+{"ts": 1791964841.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "de:ad:be:ef:01:23", "raw": "presence"}}
+{"ts": 1791964861.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "de:ad:be:ef:01:23", "raw": "presence"}}
+{"ts": 1791964881.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "de:ad:be:ef:01:23", "raw": "presence"}}
+{"ts": 1791964891.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN2-BLEID-BBBB-2222", "labels": ["NearbyInfo"], "rssi": -70, "mfg": ""}}
+{"ts": 1791964901.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "de:ad:be:ef:01:23", "raw": "presence"}}
+{"ts": 1791964901.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "ca:fe:ba:be:99:99", "raw": "presence"}}
+{"ts": 1791964921.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "de:ad:be:ef:01:23", "raw": "presence"}}
+{"ts": 1791964931.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN2-BLEID-BBBB-2222", "labels": ["NearbyInfo"], "rssi": -70, "mfg": ""}}
+{"ts": 1791964941.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "de:ad:be:ef:01:23", "raw": "presence"}}
+{"ts": 1791964961.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN3-BLEID-CCCC-3333", "labels": [], "rssi": -80, "mfg": ""}}
+{"ts": 1791964961.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "de:ad:be:ef:01:23", "raw": "presence"}}
+{"ts": 1791964981.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN2-BLEID-BBBB-2222", "labels": ["NearbyInfo"], "rssi": -70, "mfg": ""}}
+{"ts": 1791964981.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "de:ad:be:ef:01:23", "raw": "presence"}}
+{"ts": 1791964981.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo"], "rssi": -57, "mfg": ""}}
+{"ts": 1791964981.853, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo"], "rssi": -57, "mfg": ""}}
+{"ts": 1791964982.053, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo"], "rssi": -57, "mfg": ""}}
+{"ts": 1791965001.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "de:ad:be:ef:01:23", "raw": "presence"}}
+{"ts": 1791965001.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo"], "rssi": -57, "mfg": ""}}
+{"ts": 1791965001.853, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo"], "rssi": -57, "mfg": ""}}
+{"ts": 1791965002.053, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo"], "rssi": -57, "mfg": ""}}
+{"ts": 1791965021.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN2-BLEID-BBBB-2222", "labels": ["NearbyInfo"], "rssi": -70, "mfg": ""}}
+{"ts": 1791965021.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "de:ad:be:ef:01:23", "raw": "presence"}}
+{"ts": 1791965021.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo"], "rssi": -57, "mfg": ""}}
+{"ts": 1791965021.853, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo"], "rssi": -57, "mfg": ""}}
+{"ts": 1791965022.053, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo"], "rssi": -57, "mfg": ""}}
+{"ts": 1791965031.653, "iso": "", "kind": "awdl_mac_change", "data": {"iface": "awdl0", "from": "aa:bb:cc:00:00:01", "to": "aa:bb:cc:00:00:02"}}
+{"ts": 1791965041.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "de:ad:be:ef:01:23", "raw": "presence"}}
+{"ts": 1791965041.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo"], "rssi": -57, "mfg": ""}}
+{"ts": 1791965041.853, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo"], "rssi": -57, "mfg": ""}}
+{"ts": 1791965042.053, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo"], "rssi": -57, "mfg": ""}}
+{"ts": 1791965061.653, "iso": "", "kind": "awdl_peer", "data": {"event": "presence", "peer_mac": "de:ad:be:ef:01:23", "raw": "presence"}}
+{"ts": 1791965061.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo"], "rssi": -57, "mfg": ""}}
+{"ts": 1791965061.853, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo"], "rssi": -57, "mfg": ""}}
+{"ts": 1791965062.053, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN1-BLEID-AAAA-1111", "labels": ["NearbyInfo"], "rssi": -57, "mfg": ""}}
+{"ts": 1791965071.653, "iso": "", "kind": "ble_obs", "data": {"source": "ble_map", "mac": "SYN2-BLEID-BBBB-2222", "labels": ["NearbyInfo"], "rssi": -70, "mfg": ""}}

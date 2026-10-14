@@ -1,0 +1,1079 @@
+{
+  "binary": "/tmp/re_wifianalyticsd_arm64e",
+  "triage": "Mach-O arm64 (64-bit little)  kind=EXEC  nx=on pie=on canary=on",
+  "stages_run": [
+    "ingest",
+    "preflight",
+    "decompile",
+    "lift",
+    "analyze",
+    "foxguard-prepass",
+    "seed-prime",
+    "bugclass-lens",
+    "reason",
+    "grounding"
+  ],
+  "findings": [
+    {
+      "source": "getenv",
+      "sink": "strlcat",
+      "function": "FUN_100051868",
+      "origin": "slice",
+      "source_addr": "0x1000518a0",
+      "sink_addr": "0x1000518c4",
+      "bug_class": "unknown",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.5,
+      "escalated": true,
+      "explanation": "mock verdict (no LLM configured)",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "FUN_100051868 ->* strlcat",
+            "type": "reachability",
+            "load_bearing": true,
+            "verdict": "UNKNOWN",
+            "fact": "target 'strlcat' not a known symbol \u2014 undecidable"
+          },
+          {
+            "claim": "<export> ->* FUN_100051868",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "_swift_bridgeObjectRelease:conditional-free-use(DVar26)",
+      "function": "FUN_1000026f4",
+      "origin": "bugclass:uaf",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (_swift_bridgeObjectRelease:conditional-free-use(DVar26))",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_1000026f4",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "_swift_bridgeObjectRelease:conditional-free-use(lVar7)",
+      "function": "FUN_100009620",
+      "origin": "bugclass:uaf",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (_swift_bridgeObjectRelease:conditional-free-use(lVar7))",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_100009620",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "_swift_bridgeObjectRelease:conditional-free-use(param_1)",
+      "function": "FUN_10000234c",
+      "origin": "bugclass:uaf",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (_swift_bridgeObjectRelease:conditional-free-use(param_1))",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_10000234c",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "_swift_bridgeObjectRelease:conditional-free-use(param_1)",
+      "function": "FUN_100002450",
+      "origin": "bugclass:uaf",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (_swift_bridgeObjectRelease:conditional-free-use(param_1))",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_100002450",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "_swift_bridgeObjectRelease:conditional-free-use(param_3)",
+      "function": "FUN_1000062c4",
+      "origin": "bugclass:uaf",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (_swift_bridgeObjectRelease:conditional-free-use(param_3))",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_1000062c4",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "_swift_bridgeObjectRelease:conditional-free-use(param_3)",
+      "function": "FUN_100006394",
+      "origin": "bugclass:uaf",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (_swift_bridgeObjectRelease:conditional-free-use(param_3))",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_100006394",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "_swift_bridgeObjectRelease:conditional-free-use(puVar1)",
+      "function": "FUN_100008fd8",
+      "origin": "bugclass:uaf",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (_swift_bridgeObjectRelease:conditional-free-use(puVar1))",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_100008fd8",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "_swift_bridgeObjectRelease:conditional-free-use(uVar1)",
+      "function": "FUN_100006628",
+      "origin": "bugclass:uaf",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (_swift_bridgeObjectRelease:conditional-free-use(uVar1))",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_100006628",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "_swift_bridgeObjectRelease:conditional-free-use(uVar2)",
+      "function": "FUN_100008978",
+      "origin": "bugclass:uaf",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (_swift_bridgeObjectRelease:conditional-free-use(uVar2))",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_100008978",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "_swift_release:conditional-free-use(lVar3)",
+      "function": "FUN_100007254",
+      "origin": "bugclass:uaf",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (_swift_release:conditional-free-use(lVar3))",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_100007254",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "_swift_release:conditional-free-use(lVar8)",
+      "function": "FUN_100004698",
+      "origin": "bugclass:uaf",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (_swift_release:conditional-free-use(lVar8))",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_100004698",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "_swift_release:conditional-free-use(lVar8)",
+      "function": "FUN_1000048c4",
+      "origin": "bugclass:uaf",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (_swift_release:conditional-free-use(lVar8))",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_1000048c4",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "_swift_release:conditional-free-use(param_1)",
+      "function": "FUN_100001cec",
+      "origin": "bugclass:uaf",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (_swift_release:conditional-free-use(param_1))",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_100001cec",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "_swift_release:conditional-free-use(plVar11)",
+      "function": "FUN_100008408",
+      "origin": "bugclass:uaf",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (_swift_release:conditional-free-use(plVar11))",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_100008408",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "_swift_release:conditional-free-use(puVar5)",
+      "function": "FUN_1000069d0",
+      "origin": "bugclass:uaf",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (_swift_release:conditional-free-use(puVar5))",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_1000069d0",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "_swift_release:conditional-free-use(puVar5)",
+      "function": "FUN_1000076f0",
+      "origin": "bugclass:uaf",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (_swift_release:conditional-free-use(puVar5))",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_1000076f0",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "off-by-one:off-by-one",
+      "function": "canProcessWiFiAnalyticsMessageJSONFiles:",
+      "origin": "bugclass:logic",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (off-by-one:off-by-one)",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* canProcessWiFiAnalyticsMessageJSONFiles:",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "off-by-one:off-by-one",
+      "function": "FUN_100001cec",
+      "origin": "bugclass:logic",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (off-by-one:off-by-one)",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_100001cec",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "off-by-one:off-by-one",
+      "function": "FUN_100002594",
+      "origin": "bugclass:logic",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (off-by-one:off-by-one)",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_100002594",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "off-by-one:off-by-one",
+      "function": "FUN_1000026f4",
+      "origin": "bugclass:logic",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (off-by-one:off-by-one)",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_1000026f4",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "off-by-one:off-by-one",
+      "function": "FUN_1000042f8",
+      "origin": "bugclass:logic",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (off-by-one:off-by-one)",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_1000042f8",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "off-by-one:off-by-one",
+      "function": "FUN_100004698",
+      "origin": "bugclass:logic",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (off-by-one:off-by-one)",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_100004698",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "off-by-one:off-by-one",
+      "function": "FUN_1000048c4",
+      "origin": "bugclass:logic",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (off-by-one:off-by-one)",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_1000048c4",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "off-by-one:off-by-one",
+      "function": "FUN_100005e40",
+      "origin": "bugclass:logic",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (off-by-one:off-by-one)",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_100005e40",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "off-by-one:off-by-one",
+      "function": "FUN_100008978",
+      "origin": "bugclass:logic",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (off-by-one:off-by-one)",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_100008978",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "off-by-one:off-by-one",
+      "function": "FUN_100009620",
+      "origin": "bugclass:logic",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (off-by-one:off-by-one)",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_100009620",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "off-by-one:off-by-one",
+      "function": "FUN_100009e6c",
+      "origin": "bugclass:logic",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (off-by-one:off-by-one)",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_100009e6c",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "off-by-one:off-by-one",
+      "function": "FUN_10000b884",
+      "origin": "bugclass:logic",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (off-by-one:off-by-one)",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_10000b884",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "off-by-one:off-by-one",
+      "function": "FUN_10000c198",
+      "origin": "bugclass:logic",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (off-by-one:off-by-one)",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_10000c198",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "off-by-one:off-by-one",
+      "function": "FUN_10000c2a8",
+      "origin": "bugclass:logic",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (off-by-one:off-by-one)",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_10000c2a8",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "off-by-one:off-by-one",
+      "function": "FUN_10000c3dc",
+      "origin": "bugclass:logic",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (off-by-one:off-by-one)",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_10000c3dc",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "stdin",
+      "sink": "off-by-one:off-by-one",
+      "function": "FUN_10000c510",
+      "origin": "bugclass:logic",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (off-by-one:off-by-one)",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.39,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.39), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_10000c510",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    },
+    {
+      "source": "iokit:handler",
+      "sink": "copyin",
+      "function": "FUN_100048d28",
+      "origin": "seed:iokit.user-client.dispatch",
+      "source_addr": "0x0",
+      "sink_addr": "0x0",
+      "bug_class": "suspected (copyin)",
+      "severity": "info",
+      "confirmed": false,
+      "hypothesis": false,
+      "pruned": false,
+      "rank_score": 0.34,
+      "escalated": false,
+      "explanation": "cheap-ranked (score=0.34), not LLM-escalated",
+      "grounding": {
+        "status": "grounded",
+        "proposed_severity": "info",
+        "final_severity": "info",
+        "claims": [
+          {
+            "claim": "<export> ->* FUN_100048d28",
+            "type": "reachability_export",
+            "load_bearing": false,
+            "verdict": "UNKNOWN",
+            "fact": "no export set recovered \u2014 attacker reach unprovable"
+          }
+        ],
+        "reprompt": []
+      }
+    }
+  ]
+}

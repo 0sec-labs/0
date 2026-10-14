@@ -1,0 +1,171 @@
+session: session.jsonl  span 596s (2026-10-14 08:02:56Z +)
+records: 0 awdl_peer events, 7642 ble_obs, 2 awdl_mac_change
+
+== (b1) own awdl0 randomized-MAC rotation ==
+  no rotation observed during session (common when idle)
+
+== BLE identity surface: 153 distinct identifiers ==
+  47A7FFC9-BE6F-F4A7-5B21-30BDCA9B38EF   n=1486 rssi=-73..127     labels={'Handoff': 740, 'HeySiri': 1486, 'NearbyInfo': 1486}
+  F685EF51-A236-7C9F-A80E-66FD2B30F5B3   n= 713 rssi=-97..-72     labels={'Handoff': 357, 'HeySiri': 713, 'NearbyInfo': 713}
+  7C962449-A565-5D7B-1F85-618202771D9D   n= 529 rssi=-96..-85     labels={'NearbyInfo': 529}
+  4AC13569-81FD-381E-DDF2-A72B04D85362   n= 503 rssi=-96..-85     labels={'NearbyAction': 503}
+  0990CDA5-4803-6A5D-5231-03D021068765   n= 498 rssi=-94..-82     labels={'NearbyInfo': 498}
+  B8259539-ED2D-DFF3-7261-FAE55885C4E6   n= 411 rssi=-97..-81     labels={'ProximityPairing': 411}
+  0676CB70-8B9F-F1F5-ADE1-06B8FC301A5D   n= 404 rssi=-97..-88     labels={'NearbyInfo': 404}
+  365926CB-0B7B-ED2D-F51D-2EB3DB0CE9DA   n= 287 rssi=-96..-77     labels={'NearbyInfo': 287, 'HeySiri': 285, 'Handoff': 275}
+  445FC404-ECF4-14BA-C16C-BD25F3B08A08   n= 278 rssi=-84..-72     labels={'FindMy': 278}
+  62CC8C46-8F57-81B4-6FE0-FF9D39957FA1   n= 274 rssi=-99..-87     labels={'NearbyInfo': 274}
+  2ED9293A-3E12-3A78-8DC7-F8208389EF78   n= 192 rssi=-99..-90     labels={'NearbyInfo': 192}
+  E7D22132-E9CC-4AA3-E810-6C1C7DBEA335   n= 165 rssi=-95..-85     labels={}
+  3D84ACC9-FED3-5E3C-6409-E95460C77E2C   n= 137 rssi=-98..-90     labels={'NearbyInfo': 137}
+  F9839FDF-A319-1AD6-DFF9-7B6661AD2D53   n= 102 rssi=-94..-80     labels={'FindMy': 102}
+  EADE31D1-3E87-8275-A10B-F81415D8015E   n=  76 rssi=-62..-43     labels={'FindMy': 76}
+  EAE30E27-0ECC-3DA8-119A-B983AB114560   n=  68 rssi=-96..-73     labels={'FindMy': 68}
+  FD329453-42ED-ACC9-E244-38F32A273AB3   n=  58 rssi=-99..-82     labels={'FindMy': 58}
+  D0AC3C91-AFD8-EA6C-75D8-8745DF69B070   n=  58 rssi=-87..-83     labels={'NearbyInfo': 58}
+  06B257FB-C3D5-E526-D5A1-538CE30195F6   n=  56 rssi=-86..-83     labels={'FindMy': 56}
+  6097AF63-7705-0F0B-2623-724CFCE569DB   n=  54 rssi=-95..-89     labels={'FindMy': 54}
+  F3A79568-8AE5-8603-C06D-68C8E9CB988B   n=  54 rssi=-93..-82     labels={'FindMy': 54}
+  0233C327-F0E1-3D70-EB93-2E87FDF71B78   n=  54 rssi=-93..-82     labels={'NearbyAction': 54}
+  16B79062-1DE3-6CDC-6186-D617179C63F2   n=  54 rssi=-88..-83     labels={'NearbyInfo': 54}
+  72C4EA5D-AFD5-04C4-BA93-A1AE1ECD9B91   n=  48 rssi=-96..-79     labels={'FindMy': 48}
+  CB305A1C-976B-8D45-CE63-2E769C78067C   n=  46 rssi=-88..-85     labels={'NearbyInfo': 46}
+  54326809-4C70-192B-0EF9-B087BEBEB15E   n=  42 rssi=-93..-74     labels={'NearbyAction': 42}
+  E08E4874-28F8-04F5-9F82-E75EFA00AE35   n=  40 rssi=-89..-77     labels={'NearbyInfo': 40}
+  6AA34F08-02D3-E5FD-3873-5682E97A45A6   n=  36 rssi=-97..-82     labels={'FindMy': 36}
+  5C8D153B-30D2-020A-8D88-4F53993C579E   n=  32 rssi=-84..-76     labels={'NearbyInfo': 32}
+  F67C0213-4605-3C71-627E-805BF8ED6906   n=  30 rssi=-89..-85     labels={'NearbyInfo': 30}
+  73D4F313-9FEB-4DB2-6922-742404777FC1   n=  26 rssi=-97..-80     labels={'FindMy': 26}
+  9F83BF7F-664A-A6C5-25B9-9E56BF149FB8   n=  24 rssi=-97..-92     labels={'NearbyInfo': 24}
+  DF0915E8-B72E-8192-BBAC-FD438466EE97   n=  24 rssi=-79..127     labels={'NearbyInfo': 24}
+  31EC6ADA-09A3-78C9-0BD7-BBC7150CD525   n=  23 rssi=-97..-91     labels={'FindMy': 23}
+  C534FEC2-D55D-DA99-EF0E-5DEDB97A3117   n=  22 rssi=-86..-81     labels={'FindMy': 22}
+  DCD1E35F-2200-707A-70FC-F81884F01C9A   n=  22 rssi=-97..-90     labels={'FindMy': 22}
+  18D1B329-F4F1-73D4-72A1-5CD7876A4727   n=  22 rssi=-97..-90     labels={'FindMy': 22}
+  8C323AEF-018B-CDBD-0126-1F61CDC37601   n=  22 rssi=-80..-77     labels={'NearbyInfo': 22}
+  EA8C278A-B491-B950-784C-03027B946E96   n=  20 rssi=-87..-83     labels={'NearbyInfo': 20}
+  6E53E105-2F59-F7BA-37E9-914E0795BD01   n=  16 rssi=-95..-90     labels={'FindMy': 16}
+  B736F33C-FE1D-27CB-37D2-39CEC058FA59   n=  16 rssi=-94..-78     labels={'NearbyAction': 16}
+  A8DF1CDF-94DA-63D8-66C8-0CB4EC3E48EA   n=  14 rssi=-96..-94     labels={'FindMy': 14}
+  8F26ED58-A1D1-48E1-D2B0-2E2D1BC94728   n=  14 rssi=-88..-85     labels={'NearbyInfo': 14}
+  A109094F-5BFA-20AB-B9B1-9D1F678DEAAB   n=  14 rssi=-85..-83     labels={'NearbyInfo': 14}
+  895AAAF8-A8EE-C4E9-172F-1E6CEB39B724   n=  12 rssi=-88..-77     labels={'NearbyAction': 12}
+  C8D15F65-4432-B580-A56F-DDF0402863F0   n=  12 rssi=-90..-85     labels={'NearbyAction': 12}
+  EBD62B5E-1AEF-FD5B-BD21-BA62F05B5C5E   n=  12 rssi=-88..-77     labels={'NearbyAction': 12}
+  753DB25E-3AE8-88D8-9EF8-CABEF36C4340   n=  12 rssi=-87..-86     labels={'NearbyInfo': 12}
+  CCC49450-EEAA-6F7F-A240-0C21332FA0AF   n=  12 rssi=-87..-77     labels={'NearbyAction': 12}
+  C59B70E5-C5A5-C7EB-F6F8-0602A1761CE3   n=  10 rssi=-87..-79     labels={'NearbyAction': 10}
+  45ABC0EE-736C-5ACC-7438-02D581B24C1C   n=  10 rssi=-93..-85     labels={'NearbyInfo': 10}
+  78DF5DAC-2644-9D42-AD8E-8DB4ECD1B809   n=   8 rssi=-88..-84     labels={'NearbyInfo': 8}
+  FC656ECC-6B90-11C0-A973-511E87A805F7   n=   8 rssi=-89..-85     labels={'NearbyAction': 8}
+  F7DF517B-8F38-2115-B2DA-51845C232656   n=   8 rssi=-88..-79     labels={'NearbyInfo': 8}
+  A27EA4B2-BAFE-D355-CD87-F67D2FDC9338   n=   8 rssi=-88..-86     labels={'NearbyAction': 8}
+  26EED376-668C-D014-13DA-760C7C46C771   n=   8 rssi=-89..-86     labels={'NearbyAction': 8}
+  42B67A26-CDFF-AC67-F7CF-D57DDD29FE1F   n=   8 rssi=-90..-86     labels={'NearbyAction': 8}
+  11BD4E24-94AE-09BD-6252-0F345ABC9D98   n=   8 rssi=-89..-79     labels={'NearbyAction': 8}
+  60FFC7BD-C044-B6A6-3772-E45AEE0D8874   n=   8 rssi=-86..-79     labels={'NearbyInfo': 8}
+  4A80F4BD-3FED-36B4-83DB-9D3B87566E86   n=   8 rssi=-88..-85     labels={'NearbyAction': 8}
+  5A299CC1-827D-17D1-0A5F-7F91E9293223   n=   8 rssi=-89..-85     labels={'NearbyAction': 8}
+  20A05BDD-F972-269D-A441-38D74B292A13   n=   8 rssi=-93..-93     labels={'NearbyInfo': 8}
+  48D0DA30-DDA6-14BF-9471-B769D97003AB   n=   8 rssi=-89..-84     labels={'NearbyAction': 8}
+  DC38300C-AE1A-98D7-6639-F5137CA507B1   n=   8 rssi=-95..-93     labels={'NearbyAction': 8}
+  E5A9C0D1-EA71-25F1-505C-E0053D781C7C   n=   8 rssi=-88..-86     labels={'NearbyInfo': 8}
+  91C2A7A1-9801-9588-7FC1-F7C9AA33C5E5   n=   8 rssi=-95..-90     labels={'NearbyInfo': 8}
+  8C50AC52-6C35-A825-96DE-029FF0749230   n=   8 rssi=-84..-83     labels={'NearbyAction': 8}
+  644EA9C1-5279-1D2E-0A6C-BC42015BE173   n=   8 rssi=-83..-79     labels={'NearbyInfo': 8}
+  11D5A373-5621-847D-A99A-9615E6BCEE26   n=   8 rssi=-87..-77     labels={'NearbyAction': 8}
+  2690181D-C65F-502A-035E-11914B7EF61F   n=   8 rssi=-87..-84     labels={'NearbyAction': 8}
+  27305D04-FB21-F327-7C46-987F1A0F8B21   n=   8 rssi=-87..-77     labels={'NearbyInfo': 8}
+  E5823B71-1F58-4CBD-AB11-644B434BA92F   n=   8 rssi=-87..-84     labels={'NearbyInfo': 8}
+  D2A5D384-967C-124D-308A-6AFC06A16B6F   n=   8 rssi=-85..-83     labels={'NearbyInfo': 8}
+  F4E47ACD-4670-48D0-A5AD-F5E74E6D2A81   n=   6 rssi=-99..-98     labels={'Handoff': 6, 'NearbyInfo': 6}
+  006ABCFD-623A-19CB-4B59-0700CC1DDA88   n=   6 rssi=-88..-86     labels={'NearbyAction': 6}
+  DE9CA1E2-9244-66BB-CAEF-BF8022C69E40   n=   6 rssi=-89..-86     labels={'NearbyAction': 6}
+  FFC455E9-8C8A-1DD6-A177-813A099394A3   n=   6 rssi=-85..-84     labels={'NearbyAction': 6}
+  AC5FD2D4-549C-EDB5-FE8B-552671296F24   n=   6 rssi=-85..-84     labels={'NearbyInfo': 6}
+  12FFFEFC-D4FD-7F2D-AF54-98D3B2C7E159   n=   6 rssi=-96..-92     labels={'NearbyAction': 6}
+  4DC304CB-8720-234A-4AE4-C8D76EEB5B53   n=   6 rssi=-85..-83     labels={'NearbyInfo': 6}
+  FFDC3808-1233-C03A-F1D9-EDBDE79CD6FD   n=   6 rssi=-88..-76     labels={'NearbyAction': 6}
+  2FC89660-040F-EA24-6C37-661251D64B59   n=   6 rssi=-98..-92     labels={'NearbyAction': 6}
+  3CB25768-1D3E-0EB0-3609-78BB0BE08C94   n=   6 rssi=-90..-85     labels={'NearbyInfo': 6}
+  037D1526-B8B1-7FB1-FB60-ACCAE33C67EE   n=   6 rssi=-93..-92     labels={'NearbyInfo': 6}
+  6A9E8329-5347-08E0-D3A5-EE27696CA8B2   n=   6 rssi=-95..-91     labels={'NearbyAction': 6}
+  9D917960-F0BF-DA8F-693C-A760F59962E7   n=   6 rssi=-84..-79     labels={'NearbyAction': 6}
+  BA8084ED-BA30-1C9E-1892-7B0567C7AB13   n=   6 rssi=-86..-83     labels={'NearbyAction': 6}
+  B2E34DAD-7F7E-C617-F38E-E15CD90C3362   n=   6 rssi=-96..-88     labels={'NearbyInfo': 6}
+  8D220624-24DD-5BF6-398E-22B32986F7C7   n=   6 rssi=-96..-95     labels={'NearbyInfo': 6}
+  2B29C2A6-A654-D9AD-6A97-F673E66F688C   n=   6 rssi=-86..-79     labels={'NearbyInfo': 6}
+  B1744E91-E796-0E1D-B58C-3CA1BB2DF7BE   n=   6 rssi=-86..-83     labels={'NearbyInfo': 6}
+  B8E4A909-F096-8D06-4B43-61607E7E8C01   n=   4 rssi=-85..-84     labels={'NearbyAction': 4}
+  D8D7ABA6-C49F-B432-D8F6-2D8E60828DAD   n=   4 rssi=-87..-85     labels={'NearbyAction': 4}
+  3B114F51-865D-DBEF-C131-159BF7C6DC88   n=   4 rssi=-89..-89     labels={'NearbyInfo': 4}
+  108F223F-2D56-1D55-D42A-B3E61EBBC8F7   n=   4 rssi=-89..-86     labels={'NearbyAction': 4}
+  63C00A4A-4CB6-9D5D-644D-D98D9CD58D5B   n=   4 rssi=-94..-88     labels={'NearbyAction': 4}
+  3D485A23-EAF1-A0C2-C62B-8FE77959C980   n=   4 rssi=-87..-87     labels={'NearbyInfo': 4}
+  0A0BA6D9-824F-CE0F-7CA2-FA8E3B9926CA   n=   4 rssi=-86..-85     labels={'NearbyAction': 4}
+  1AC4E1C8-A9DE-F98B-5A0A-B870E6F6F6E6   n=   4 rssi=-86..-86     labels={'NearbyInfo': 4}
+  55CFCB48-3B77-2918-31C4-BB47F4A26738   n=   4 rssi=-88..-87     labels={'NearbyInfo': 4}
+  CBBF21EF-1E7E-DD33-4C69-EC910F49A9DE   n=   4 rssi=-78..-77     labels={'NearbyInfo': 4}
+  D20C8470-1AB9-C396-5B5C-51FEF9E241A0   n=   4 rssi=-86..-86     labels={'NearbyInfo': 4}
+  EB5CAECB-B9E4-7E0A-837F-CDA4B977451C   n=   4 rssi=-87..-86     labels={'NearbyInfo': 4}
+  FE90C764-6170-1BB6-445C-76D980EA6899   n=   4 rssi=-86..-85     labels={'NearbyAction': 4}
+  A80D7EB4-6757-4C8E-3495-11933EB4A258   n=   4 rssi=-86..-86     labels={'NearbyInfo': 4}
+  ECBA0BDD-DD57-33EC-97C5-69F87D9051C0   n=   4 rssi=-86..-85     labels={'NearbyAction': 4}
+  08B06524-80F4-41FF-8053-A7DF54AE1F72   n=   4 rssi=-85..-85     labels={'NearbyInfo': 4}
+  4BD87727-B3A5-52C6-1C58-010994CC0EE7   n=   4 rssi=-86..-86     labels={'NearbyInfo': 4}
+  185CDEB4-2982-EAC1-8DB4-47A5CDC54BFE   n=   4 rssi=-97..-89     labels={'NearbyInfo': 4}
+  7AE09548-B3A3-FA1C-62EC-19839A086FBB   n=   4 rssi=-86..-86     labels={'NearbyAction': 4}
+  AF804403-2641-100B-063A-D2CAEE2F08E1   n=   4 rssi=-98..-93     labels={'FindMy': 4}
+  ECB13E66-DA3F-0E0A-329F-55298B7B2D4D   n=   4 rssi=-88..-86     labels={'NearbyAction': 4}
+  46CF480E-B02F-10AE-839E-F98AED867EB0   n=   4 rssi=-93..-93     labels={'NearbyInfo': 4}
+  0E4AFBF6-E1BC-1A7F-28C4-65265AE0A6EF   n=   4 rssi=-90..-90     labels={'NearbyInfo': 4}
+  645FD8A3-8A6A-7821-9F14-F3E01767B382   n=   4 rssi=-86..-86     labels={'NearbyInfo': 4}
+  1B6788A5-4646-8181-CD24-529AD9EAA165   n=   4 rssi=-83..-82     labels={'FindMy': 4}
+  FFB7E176-D99D-4C13-77CA-3F59D89B391B   n=   4 rssi=-86..-85     labels={'NearbyInfo': 4}
+  D0F8B8FB-541F-C353-8960-E9A999EFBF26   n=   4 rssi=-85..-85     labels={'NearbyInfo': 4}
+  821E14F1-1A36-D34F-5A58-1592A8651E2D   n=   4 rssi=-90..-89     labels={'NearbyInfo': 4}
+  3D462CAF-ED72-D617-DE85-9AE1C3AF3B78   n=   4 rssi=-97..-96     labels={'NearbyInfo': 4}
+  41C4CD77-494A-DA8A-2070-0C88753EB29A   n=   4 rssi=-79..-79     labels={'NearbyInfo': 4}
+  D3BEC5AB-70F3-82F6-C8D1-4C964BE26744   n=   4 rssi=-78..-77     labels={'NearbyAction': 4}
+  9D6E9373-0C39-48F4-CE02-AA6EC9ED8A75   n=   4 rssi=-88..-77     labels={'NearbyAction': 4}
+  F3BB9F20-6CC2-DEC1-4752-1159DBB03796   n=   4 rssi=-88..-87     labels={'NearbyInfo': 4}
+  A8E49B54-52D7-BD90-CBC5-582F936B2F90   n=   4 rssi=-85..-85     labels={'NearbyAction': 4}
+  270A1EF8-BFBB-34D1-721E-38B3E2228FB1   n=   4 rssi=-92..-90     labels={'NearbyInfo': 4}
+  27CB5C06-8047-8ED9-B9A6-8A6BFE8AE066   n=   4 rssi=-85..-85     labels={'NearbyAction': 4}
+  F1B9AA1A-2C09-7C35-2F54-0C572B9301B3   n=   4 rssi=-94..-94     labels={'NearbyInfo': 4}
+  62A7CFA9-4E2C-E239-4AAD-AE9363C4B72A   n=   4 rssi=-84..-82     labels={'NearbyInfo': 4}
+  E06CA11D-91D4-52B4-C8BA-931F4D8A8315   n=   4 rssi=-96..-95     labels={'NearbyAction': 4}
+  2FA9AC31-1EFD-B1F7-9C41-AF01C069852F   n=   4 rssi=-97..-94     labels={'NearbyAction': 4}
+  12573500-E189-845E-7C8D-4DD163A40022   n=   4 rssi=-96..-96     labels={'NearbyInfo': 4}
+  F1FDCA24-99E1-9AAA-6CE4-4395C0F4365D   n=   4 rssi=-80..-80     labels={'NearbyInfo': 4}
+  C87C5EAB-ECF0-CE96-A1FA-E1C1D077F490   n=   4 rssi=-83..-79     labels={'NearbyAction': 4}
+  D96B3298-000E-A4FA-5D0A-B838118C486F   n=   4 rssi=-85..-84     labels={'NearbyInfo': 4}
+  BBE2F39F-6ADE-5EE5-BA48-EB44AA800809   n=   4 rssi=-86..-84     labels={'NearbyAction': 4}
+  14A409A2-503A-7F84-1CC9-0D0819B5E717   n=   2 rssi=-86..-86     labels={'NearbyAction': 2}
+  61EB5818-63DA-1457-509A-33A15EE216F3   n=   2 rssi=-96..-96     labels={'NearbyInfo': 2}
+  DFEBAC1B-3404-CBF7-5067-3621C5A57923   n=   2 rssi=-87..-87     labels={'NearbyInfo': 2}
+  78C6E452-E20C-3C0F-7DFD-2D3AF1B281A6   n=   2 rssi=-88..-88     labels={'NearbyAction': 2}
+  FAFC0B07-AF5D-72A9-2082-28DDD507FADC   n=   2 rssi=-84..-84     labels={'NearbyInfo': 2}
+  36615DF7-8464-225D-A1DC-7CFBFC6041B2   n=   2 rssi=-89..-89     labels={'NearbyInfo': 2}
+  2128B9C3-DDB1-DD29-5F0F-D0FC562B6E3E   n=   2 rssi=-85..-85     labels={'NearbyAction': 2}
+  7810E41C-DE07-DFCE-6BCC-3F0159209F34   n=   2 rssi=-96..-96     labels={'NearbyAction': 2}
+  2A2F15ED-D896-EBF7-7444-95356244EA34   n=   2 rssi=-80..-80     labels={'NearbyInfo': 2}
+  3E7295F1-2EE3-1E7A-3251-B200AD8780ED   n=   2 rssi=-86..-86     labels={'NearbyInfo': 2}
+  6E93E3BC-672C-ABB9-67CC-DF812BE45B22   n=   2 rssi=-84..-84     labels={'NearbyInfo': 2}
+  DF09754A-89A5-4E9A-587E-0B3036D2F47E   n=   2 rssi=-92..-92     labels={'NearbyAction': 2}
+  32CF0540-5F6B-2783-D0FB-E796E5A387F7   n=   2 rssi=-84..-84     labels={'NearbyAction': 2}
+  9DB6C937-9220-804A-411E-635BD0035C7F   n=   2 rssi=-95..-95     labels={'NearbyInfo': 2}
+  023E8915-4D9A-F107-F31B-95D7035CB6CE   n=   2 rssi=-84..-84     labels={'NearbyAction': 2}
+  6DC8651E-89F0-29B7-E541-F1882B6BC349   n=   2 rssi=-83..-83     labels={'NearbyAction': 2}
+  8E5F2C63-09F7-D425-AB1A-9E8711BDEF71   n=   2 rssi=-91..-91     labels={'FindMy': 2}
+
+== (a) time-window correlation (+-10s around AWDL presence) ==
+  (no AWDL peer presence events captured)
+
+== (b2) BLE-id <-> AWDL-MAC stability graph (tight +-2s, lift+precision-filtered) ==
+  no stable co-occurrence edges (need longer session or active AirDrop/Handoff stimulus)
+  AWDL peer MACs this session: 0 distinct, 
+
+== (c) BT-off signature scan (AWDL alive while BLE silent) ==
+  no BLE-silence-with-AWDL-alive interval observed
+  (definitive proof requires the team-device BT toggle — see btoff_experiment.md)

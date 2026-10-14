@@ -1,0 +1,19 @@
+# Large data artifacts (never commit)
+rainbow_4179.tsv
+radar_live.jsonl
+demo.jsonl
+ble_map.jsonl
+
+# Decompiled sources and function lists (multi-MB)
+decomp/*.c
+decomp/*.functions.txt
+
+# Images
+*.png
+
+# Compiled binaries
+airdrop_brute
+ble_map
+ble_scan
+build_rainbow
+__pycache__/

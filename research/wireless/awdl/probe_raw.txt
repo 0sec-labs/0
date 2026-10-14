@@ -1,0 +1,658 @@
+
+==============================================================
+## P1. ifconfig awdl0 — interface state + randomized AWDL MAC
+==============================================================
+awdl0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
+	options=6460<TSO4,TSO6,CHANNEL_IO,PARTIAL_CSUM,ZEROINVERT_CSUM>
+	ether e6:c7:c4:89:b5:c0
+	inet6 fe80::e4c7:c4ff:fe89:b5c0%awdl0 prefixlen 64 scopeid 0x14 
+	nd6 options=201<PERFORMNUD,DAD>
+	media: autoselect
+	status: active
+--- en0 for comparison:
+en0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
+	options=6460<TSO4,TSO6,CHANNEL_IO,PARTIAL_CSUM,ZEROINVERT_CSUM>
+	ether 52:17:35:fa:86:83
+	inet6 fe80::14eb:4f2:ffba:5db2%en0 prefixlen 64 secured scopeid 0xe 
+awdl0 MAC = e6:c7:c4:89:b5:c0   en0 MAC = 52:17:35:fa:86:83
+locally-administered bit (0x02 of first octet) set on awdl0 MAC? True  (en0: True = hardware/universal)
+DELTA note: AWDL uses a per-interface randomized MAC that is NOT the hardware Wi-Fi MAC and rotates over time; track with awdl_collect.py.
+
+==============================================================
+## P2. netstat -I awdl0 — traffic counters (proof awdl0 is carrying traffic)
+==============================================================
+Name       Mtu   Network       Address            Ipkts Ierrs    Opkts Oerrs  Coll
+awdl0      1500  <Link#20>   e6:c7:c4:89:b5:c0   168573     0    17092     0     0
+awdl0      1500  fe80::e4c7: fe80:14::e4c7:c4f   168573     -    17092     -     -
+--- 3s sampled deltas (typically zero when no AWDL session is active):
+            input        (awdl0)           output
+   packets  errs      bytes    packets  errs      bytes colls
+         0     0          0          0     0          0     0
+         0     0          0          0     0          0     0
+         0     0          0          0     0          0     0
+
+==============================================================
+## P3. dns-sd browse — mDNS service discovery incl. AWDL-reachable peers
+==============================================================
+--- default browse _airplay._tcp (10s): AWDL peers surface on en0's index when synced
+Browsing for _airplay._tcp.local.
+DATE: ---Wed 14 Oct 2026---
+ 1:01:21.264  ...STARTING...
+Timestamp     A/R    Flags  if Domain               Service Type         Instance Name
+ 1:01:21.264  Add        3  14 local.               _airplay._tcp.       Roku Streambar   YL005T115568
+ 1:01:21.264  Add        3   1 local.               _airplay._tcp.       PeakBook Pro
+ 1:01:21.264  Add        3  14 local.               _airplay._tcp.       PeakBook Pro
+ 1:01:21.264  Add        2  14 local.               _airplay._tcp.       MacBook Pro von Fabian
+--- -includeAWDL browse _airplay._tcp (10s): explicit AWDL inclusion (same surface)
+Setting kDNSServiceFlagsIncludeAWDL
+Browsing for _airplay._tcp.local.
+DATE: ---Wed 14 Oct 2026---
+ 1:01:31.797  ...STARTING...
+Timestamp     A/R    Flags  if Domain               Service Type         Instance Name
+ 1:01:31.799  Add        3  14 local.               _airplay._tcp.       Roku Streambar   YL005T115568
+ 1:01:31.799  Add        3   1 local.               _airplay._tcp.       PeakBook Pro
+ 1:01:31.799  Add        3  14 local.               _airplay._tcp.       PeakBook Pro
+ 1:01:31.799  Add        2  14 local.               _airplay._tcp.       MacBook Pro von Fabian
+ 1:01:40.435  Rmv        0  14 local.               _airplay._tcp.       MacBook Pro von Fabian
+--- -p2p browse _airplay._tcp (10s): P2P/AWDL interface index -3 view
+Using interface -3
+Browsing for _airplay._tcp.local.
+DATE: ---Wed 14 Oct 2026---
+ 1:01:42.303  ...STARTING...
+Timestamp     A/R    Flags  if Domain               Service Type         Instance Name
+ 1:01:42.304  Add        2   0 local.               _airplay._tcp.       PeakBook Pro
+--- -i awdl0 browse (10s): UNSUPPORTED — silently empty
+Using interface 20
+Browsing for _airplay._tcp.local.
+DATE: ---Wed 14 Oct 2026---
+ 1:01:52.812  ...STARTING...
+--- _airdrop._tcp browse (10s): AirDrop registrants
+Setting kDNSServiceFlagsIncludeAWDL
+Browsing for _airdrop._tcp.local.
+DATE: ---Wed 14 Oct 2026---
+ 1:02:03.318  ...STARTING...
+
+==============================================================
+## P4. log show airportd — WiFi-manager view (passwordless)
+==============================================================
+2026-10-14 00:57:15.316916-0700 0x17db8d9  Default     0x0                  470    0    airportd: (CoreWiFi) [com.apple.WiFiManager:] [corewifi] BEGIN REQ [GET RSSI] (pid=89885 proc=python3.12 bundleID=(null) codesignID=- service=com.apple.corewlan-xpc qos=21 intf=en0 uuid=63D8E info=(null))
+2026-10-14 00:57:15.319720-0700 0x17db8d9  Default     0x0                  470    0    airportd: (CoreWiFi) [com.apple.WiFiManager:] [corewifi] END REQ [GET RSSI] took 0.002739208s (pid=89885 proc=python3.12 bundleID=(null) codesignID=- service=com.apple.corewlan-xpc qos=21 intf=en0 uuid=63D8E err=0 reply=<redacted>
+2026-10-14 00:57:15.319893-0700 0x17db8da  Default     0x0                  470    0    airportd: (CoreWiFi) [com.apple.WiFiManager:] [corewifi] BEGIN REQ [GET TX RATE] (pid=89885 proc=python3.12 bundleID=(null) codesignID=- service=com.apple.corewlan-xpc qos=21 intf=en0 uuid=C3D3B info=(null))
+2026-10-14 00:57:15.320277-0700 0x17db8d9  Default     0x0                  470    0    airportd: (CoreWiFi) [com.apple.WiFiManager:] [corewifi] END REQ [GET TX RATE] took 0.000369625s (pid=89885 proc=python3.12 bundleID=(null) codesignID=- service=com.apple.corewlan-xpc qos=21 intf=en0 uuid=C3D3B err=0 reply=<redacted>
+2026-10-14 00:57:16.318762-0700 0x17db8d9  Default     0x0                  470    0    airportd: (CoreWiFi) [com.apple.WiFiManager:] [corewifi] BEGIN REQ [GET RSSI] (pid=89885 proc=python3.12 bundleID=(null) codesignID=- service=com.apple.corewlan-xpc qos=21 intf=en0 uuid=42719 info=(null))
+2026-10-14 00:57:16.320795-0700 0x17d6b66  Default     0x0                  470    0    airportd: (CoreWiFi) [com.apple.WiFiManager:] [corewifi] END REQ [GET RSSI] took 0.001992500s (pid=89885 proc=python3.12 bundleID=(null) codesignID=- service=com.apple.corewlan-xpc qos=21 intf=en0 uuid=42719 err=0 reply=<redacted>
+2026-10-14 00:57:16.320837-0700 0x17db8da  Default     0x0                  470    0    airportd: (CoreWiFi) [com.apple.WiFiManager:] [corewifi] BEGIN REQ [GET TX RATE] (pid=89885 proc=python3.12 bundleID=(null) codesignID=- service=com.apple.corewlan-xpc qos=21 intf=en0 uuid=1E9FD info=(null))
+2026-10-14 00:57:16.321167-0700 0x17db8da  Default     0x0                  470    0    airportd: (CoreWiFi) [com.apple.WiFiManager:] [corewifi] END REQ [GET TX RATE] took 0.000301875s (pid=89885 proc=python3.12 bundleID=(null) codesignID=- service=com.apple.corewlan-xpc qos=21 intf=en0 uuid=1E9FD err=0 reply=<redacted>
+2026-10-14 00:57:17.320864-0700 0x17d6b66  Default     0x0                  470    0    airportd: (CoreWiFi) [com.apple.WiFiManager:] [corewifi] BEGIN REQ [GET RSSI] (pid=89885 proc=python3.12 bundleID=(null) codesignID=- service=com.apple.corewlan-xpc qos=21 intf=en0 uuid=44509 info=(null))
+2026-10-14 00:57:17.322934-0700 0x17db8da  Default     0x0                  470    0    airportd: (CoreWiFi) [com.apple.WiFiManager:] [corewifi] END REQ [GET RSSI] took 0.002020709s (pid=89885 proc=python3.12 bundleID=(null) codesignID=- service=com.apple.corewlan-xpc qos=21 intf=en0 uuid=44509 err=0 reply=<redacted>
+2026-10-14 00:57:17.323108-0700 0x17d6b65  Default     0x0                  470    0    airportd: (CoreWiFi) [com.apple.WiFiManager:] [corewifi] BEGIN REQ [GET TX RATE] (pid=89885 proc=python3.12 bundleID=(null) codesignID=- service=com.apple.corewlan-xpc qos=21 intf=en0 uuid=62FE6 info=(null))
+2026-10-14 00:57:17.323473-0700 0x17d6b65  Default     0x0                  470    0    airportd: (CoreWiFi) [com.apple.WiFiManager:] [corewifi] END REQ [GET TX RATE] took 0.000326125s (pid=89885 proc=python3.12 bundleID=(null) codesignID=- service=com.apple.corewlan-xpc qos=21 intf=en0 uuid=62FE6 err=0 reply=<redacted>
+2026-10-14 00:57:18.319712-0700 0x11b5     Default     0x0                  470    0    airportd: (IO80211) [com.apple.WiFiManager:] Driver Event: <airport[470]> _bsd_80211_event_callback: APPLE80211_M_WEIGHT_AVG_LQM_UPDATE/145 (en0)
+2026-10-14 00:57:18.325890-0700 0x17db8da  Default     0x0                  470    0    airportd: (CoreWiFi) [com.apple.WiFiManager:] [corewifi] BEGIN REQ [GET RSSI] (pid=89885 proc=python3.12 bundleID=(null) codesignID=- service=com.apple.corewlan-xpc qos=21 intf=en0 uuid=3F4B0 info=(null))
+2026-10-14 00:57:18.327507-0700 0x17d6b65  Default     0x0                  470    0    airportd: (CoreWiFi) [com.apple.WiFiManager:] [corewifi] END REQ [GET RSSI] took 0.001576291s (pid=89885 proc=python3.12 bundleID=(null) codesignID=- service=com.apple.corewlan-xpc qos=21 intf=en0 uuid=3F4B0 err=0 reply=<redacted>
+
+==============================================================
+## P5. log show wifip2pd — THE AWDL PEER FEED (passwordless)
+==============================================================
+--- last 24h distinct AWDL peer MACs observed:
+02:08:ca:2a:ff:2b
+02:64:00:63:ee:b8
+02:67:7c:b0:5e:c6
+02:76:82:03:4a:8b
+02:96:b6:44:a0:5c
+02:c4:f2:25:a3:f8
+02:d9:37:58:ea:04
+06:35:28:ef:6b:84
+06:51:09:e0:71:81
+06:67:59:9e:b2:8d
+06:a0:a0:e0:1a:14
+06:a3:d5:52:f8:2a
+06:cc:67:d8:e2:97
+06:d0:d1:a8:19:1d
+0a:38:bb:1a:c3:12
+0a:46:7f:05:26:43
+0a:5d:f1:8c:43:a8
+0a:64:84:19:54:64
+0a:79:ab:f3:b1:02
+0a:8f:db:e4:67:1e
+0a:99:ee:17:0b:34
+0a:9e:3b:ee:0c:bb
+0a:ce:c2:fd:a6:5e
+0e:08:de:03:86:fa
+0e:0a:5d:55:94:60
+0e:2b:f7:19:f8:c6
+0e:59:9b:79:ce:a8
+0e:64:a8:1c:53:d5
+0e:6d:3a:36:34:99
+0e:6f:20:84:c8:8b
+0e:79:3d:5a:e5:42
+0e:80:b7:27:06:02
+0e:fc:80:e0:00:f0
+12:49:1c:f8:88:62
+12:60:e6:47:e9:37
+12:65:d6:0a:9a:ac
+12:68:ad:70:c1:32
+12:6b:db:5d:7a:b8
+12:76:69:3b:c3:39
+12:a8:9e:d3:36:fe
+12:b8:f5:e2:01:38
+16:20:36:2a:bc:34
+16:36:d7:3e:99:61
+16:38:1f:1f:d6:83
+16:43:ba:0d:5a:7d
+16:4e:21:61:22:ed
+16:7d:24:06:35:ee
+16:84:a3:7b:0c:d4
+16:ea:41:ff:fb:fb
+1a:07:e9:61:5b:d7
+1a:18:05:cd:21:6d
+1a:1a:06:63:d1:e5
+1a:54:fe:99:1a:39
+1a:63:be:9a:29:c6
+1a:6e:30:3a:9e:9c
+1a:72:f9:f7:21:98
+1a:75:b5:93:6e:5e
+1a:77:c4:d8:ff:20
+1a:7d:53:19:10:ce
+1a:ba:7a:56:5b:e8
+1a:d8:2b:07:a2:9d
+1e:46:23:27:12:42
+1e:66:43:07:8c:99
+1e:a2:67:26:b6:44
+1e:ad:eb:55:7c:c2
+1e:b2:4a:42:23:c9
+1e:c8:5d:c2:22:44
+1e:d1:d4:99:c1:b2
+22:23:56:52:28:ae
+22:2e:b0:4a:1b:9b
+22:49:7f:e1:84:a7
+22:71:76:16:ef:1d
+22:93:ec:1d:a2:17
+22:a5:1e:f8:d7:bb
+22:e9:4e:f3:36:e7
+26:40:b3:53:1f:a3
+26:63:22:a8:2b:a3
+26:86:2f:c0:11:2a
+26:a3:2d:8e:5d:88
+26:d2:dc:8d:1d:80
+2a:03:cb:e3:4f:79
+2a:3a:a4:93:d7:97
+2a:46:12:ea:92:f8
+2a:50:03:28:97:28
+2a:9c:3f:65:87:48
+2a:9d:56:ef:9d:f0
+2a:d0:1d:36:e9:78
+2a:dd:5f:8c:3b:3a
+2a:ff:ca:0f:1b:8e
+2e:04:eb:73:9e:95
+2e:06:63:07:5e:5a
+2e:07:65:37:dd:e2
+2e:11:f5:05:c1:58
+2e:55:e9:2f:ea:8e
+2e:59:b5:be:eb:3b
+2e:6a:29:7d:5a:fb
+2e:73:e8:f6:02:ce
+2e:76:1c:d2:37:d0
+2e:92:f5:89:70:80
+2e:94:ea:41:db:4c
+2e:b5:c1:c5:89:e6
+32:7e:15:a8:f6:1d
+32:a3:ef:fc:ae:a0
+32:ce:6e:7f:11:30
+32:d2:04:44:7f:f8
+32:f7:0d:a3:c0:68
+36:09:b5:42:32:0d
+36:7d:bb:54:5d:b0
+36:7e:ce:98:75:92
+3a:45:63:9a:1f:a0
+3a:62:57:44:a2:7a
+3a:6c:dc:ff:ed:37
+3a:75:e2:67:86:b0
+3a:9e:26:5e:c1:2c
+3a:ae:d8:b6:ff:9a
+3a:cb:08:94:e9:a5
+3a:cb:10:d4:56:89
+3a:d6:1f:68:06:58
+3a:d8:f8:55:13:91
+3a:e5:51:d8:7e:1b
+3a:f7:47:36:1e:42
+3e:15:d9:00:52:e9
+3e:2a:81:86:3e:fd
+3e:32:44:4e:ec:31
+3e:4f:15:10:22:d2
+3e:67:bc:9b:af:29
+3e:6e:9b:00:3e:5a
+3e:76:1f:0d:80:a8
+3e:77:84:7d:b2:96
+3e:77:8e:88:9a:6a
+3e:a1:1b:a4:36:63
+3e:d7:6e:0d:77:01
+3e:f2:99:69:57:30
+42:14:05:42:0e:4d
+42:1d:9a:e5:c5:6a
+42:76:32:07:9c:72
+42:a6:06:10:32:dd
+42:b2:bb:4f:6b:29
+42:c7:72:3e:80:e6
+42:fb:90:f8:51:c7
+46:1b:cd:67:44:56
+46:7a:cd:42:c2:ac
+46:97:49:16:cc:af
+46:a5:37:93:69:23
+46:f7:c5:5a:cf:34
+46:f8:d6:ce:6a:b4
+4a:0f:4c:f3:b9:59
+4a:17:3e:68:42:e6
+4a:3a:49:6f:c6:fd
+4a:3d:8d:9d:3d:5f
+4a:46:18:36:09:55
+4a:69:6d:82:2e:e8
+4a:79:11:9d:25:cd
+4a:dc:5f:10:e5:a6
+4e:66:02:c5:ee:ed
+4e:75:0a:00:fe:c2
+4e:91:cf:34:16:d7
+4e:b8:9b:34:27:38
+4e:c6:62:b7:e2:ac
+52:1f:d6:e1:bf:d2
+52:38:bc:f5:f3:15
+52:3f:4d:77:1e:a1
+52:57:78:e8:db:c7
+52:5a:1b:9d:c7:32
+52:65:09:0a:bd:5c
+52:67:6c:51:f6:7d
+52:71:72:84:4e:76
+52:83:4e:8a:ab:d6
+52:87:73:3e:80:63
+52:b1:ea:be:db:1e
+52:b6:66:e2:de:3f
+52:c1:4c:e4:39:f3
+52:d4:c2:a7:95:c2
+56:4f:bd:44:01:7f
+56:86:1a:05:66:4f
+56:c5:a9:b1:48:89
+56:c8:44:f9:fe:ea
+56:cb:4e:f1:da:c7
+56:d4:7f:e4:77:97
+56:e3:9f:62:ee:b6
+5a:13:85:99:ed:f0
+5a:1e:7c:e8:44:80
+5a:28:3f:3f:a4:5e
+5a:3f:bb:a3:2f:42
+5a:7a:69:ad:cf:01
+5a:b1:79:5b:74:df
+5a:ed:0f:1b:7c:d0
+5a:ef:26:ef:58:01
+5e:00:10:45:14:9d
+5e:03:d0:f0:b1:74
+5e:0b:fc:7a:60:5f
+5e:37:03:ba:35:26
+5e:9e:bf:11:7b:73
+5e:b9:b2:09:0a:3b
+5e:bc:26:95:1c:9e
+5e:cc:d8:28:e4:0c
+5e:e1:47:a8:39:f4
+5e:f0:e8:85:6b:3e
+5e:f5:d0:0f:e2:ba
+62:01:75:7b:48:a1
+62:08:c7:78:e0:57
+62:10:ac:5c:de:4b
+62:14:0d:45:5e:71
+62:45:31:82:a8:73
+62:48:ef:19:0c:4d
+62:4a:d9:19:f8:f8
+62:6b:27:e3:48:35
+62:6b:66:81:26:d0
+62:91:88:ec:5c:f2
+62:9e:5e:3c:d3:ab
+66:71:26:b0:d3:af
+66:76:09:38:f9:53
+66:86:38:38:f2:ab
+66:89:d4:29:56:96
+66:8a:19:29:76:12
+66:9d:54:43:45:15
+66:b1:9e:0d:b9:99
+66:e1:60:e9:74:6f
+6a:3c:f8:ce:48:16
+6a:3d:60:50:d6:86
+6a:51:b1:fc:83:bf
+6a:59:57:d6:fb:90
+6a:a2:bd:6d:f5:eb
+6a:a3:f4:ba:19:4a
+6a:ab:c8:24:f1:6c
+6a:bc:ff:95:0f:a8
+6a:c4:01:0d:9b:38
+6a:c5:e5:71:67:e1
+6a:df:9f:a3:11:a3
+6a:e9:2c:f8:30:5d
+6a:f5:a2:fe:9e:96
+6e:08:fa:de:d9:5c
+6e:13:34:80:d1:57
+6e:22:f6:55:40:e1
+6e:7e:6e:e5:9e:f0
+6e:a6:3e:1b:52:9f
+6e:b5:74:46:72:64
+72:49:c8:62:7f:61
+72:8c:a2:2e:1e:a1
+72:8c:d6:41:dd:b6
+72:c0:32:d5:20:3b
+72:d0:3f:e6:10:c5
+72:e1:f6:05:8c:2f
+72:ea:ba:81:57:45
+76:13:23:bd:46:dc
+76:17:0c:bb:8f:4a
+76:22:96:24:92:20
+76:25:58:eb:c3:8b
+76:45:7d:4f:39:84
+76:52:b8:bd:c5:32
+76:56:30:c3:83:67
+76:97:f1:3b:e4:37
+76:c7:e8:09:8e:47
+76:c8:5c:8c:9d:d5
+7a:13:21:85:e3:35
+7a:95:14:1e:b5:2b
+7a:ad:4e:30:d3:e6
+7a:b0:93:df:e0:42
+7a:e1:27:6f:73:5b
+7a:f3:6a:cf:5f:bc
+7e:36:54:58:01:48
+7e:6a:8d:7b:9c:74
+7e:84:b9:c1:a8:c7
+7e:93:ed:cc:83:21
+7e:9c:1e:09:41:4b
+7e:a3:1e:b7:60:96
+7e:cf:18:01:db:52
+82:38:0c:f8:9e:2f
+82:a0:27:74:09:8d
+82:b6:3a:38:c8:e8
+82:c2:7e:76:63:3a
+82:ec:10:5d:23:2c
+82:ec:62:72:90:2f
+86:26:32:ff:2a:85
+86:68:3a:c3:b4:15
+86:7c:16:c5:1d:8f
+86:aa:5d:48:e1:74
+86:b6:5c:d4:07:1d
+86:e2:82:0d:67:8c
+86:ea:21:8c:f8:02
+86:ed:33:e0:6b:90
+8a:0e:42:e0:3e:51
+8a:4a:73:32:f6:52
+8a:54:65:07:97:ed
+8a:56:ba:48:a5:98
+8a:7a:e7:0e:58:db
+8a:c4:32:d0:eb:f2
+8a:d1:2b:33:b8:79
+8a:e0:fc:d1:e2:93
+8e:02:67:74:6c:22
+8e:29:0c:30:6d:5b
+8e:7b:62:c4:33:fe
+8e:8d:86:ec:20:6a
+8e:a3:da:46:07:b9
+8e:a4:15:0f:52:38
+92:18:d3:86:9b:fa
+92:35:1a:23:54:5c
+92:3f:97:ba:bb:48
+92:40:d8:20:fa:70
+92:51:75:4c:88:d7
+92:6c:bf:19:ec:ee
+92:9e:04:3a:9d:a2
+92:b9:ac:72:aa:23
+92:c5:e9:0f:48:40
+92:da:7b:0e:b7:4b
+92:ea:b9:ff:76:f3
+96:2f:3c:ad:27:80
+96:2f:50:0f:02:1f
+96:5d:99:a9:c1:ab
+96:89:0e:47:18:c0
+96:9c:bd:ba:4a:32
+96:a2:9e:74:b1:90
+96:cf:2f:4c:14:1f
+9a:28:89:08:74:52
+9a:38:3f:92:a4:8d
+9a:4e:b3:cd:a7:73
+9a:98:33:86:2a:cb
+9a:b7:30:71:16:02
+9e:01:00:c3:63:97
+9e:12:ee:67:10:2a
+9e:35:8b:80:10:f1
+9e:35:9f:bd:49:e1
+9e:52:a6:b8:89:f5
+9e:69:cf:e7:36:0f
+9e:8e:81:3d:c4:95
+9e:a9:18:3e:cb:55
+9e:a9:3f:86:64:c8
+9e:b1:16:cf:62:c4
+9e:b3:0d:98:ed:c5
+9e:bd:36:20:3e:e6
+a2:6c:43:3d:36:ac
+a2:95:46:56:d1:2b
+a2:99:aa:43:30:03
+a2:b2:1c:66:c6:58
+a2:bd:17:6c:bb:73
+a2:bf:57:fc:da:90
+a2:ca:c3:29:73:a9
+a2:d8:fd:57:3d:f5
+a2:e5:20:b8:3d:20
+a6:05:58:ef:07:6a
+a6:0e:fc:c9:f3:d3
+a6:11:01:24:a8:bf
+a6:13:06:a4:0c:b3
+a6:2e:75:0d:22:70
+a6:3d:c3:6f:16:c4
+a6:64:a2:04:c8:27
+a6:8a:0b:7e:c4:51
+a6:92:ec:a5:4a:58
+a6:97:d0:35:72:46
+a6:ea:fc:87:19:35
+a6:fe:d0:e8:29:5a
+aa:8d:c1:cf:8f:71
+aa:90:ae:5e:07:41
+aa:9e:21:fb:f9:de
+ae:20:e1:0f:17:42
+ae:24:5f:dc:42:c3
+ae:72:ac:f6:37:5b
+ae:82:3b:10:07:0a
+ae:b4:f8:0a:20:4c
+ae:c9:de:aa:9f:f9
+b2:29:3e:dd:66:b3
+b2:2c:93:04:04:6c
+b2:33:ac:b7:e8:6e
+b2:81:f2:84:6d:01
+b2:82:87:60:72:0c
+b2:c0:1e:4d:04:27
+b2:d9:50:13:9f:c2
+b6:2b:39:4d:70:39
+b6:4b:d8:38:4d:10
+b6:5f:bd:da:e7:1e
+b6:6f:4b:21:77:25
+b6:79:51:d9:7e:b5
+b6:9d:72:b5:30:cb
+b6:b9:0d:a3:7e:70
+ba:0d:21:84:7e:5d
+ba:13:7a:26:78:0f
+ba:1b:95:f2:46:5f
+ba:45:87:be:b1:10
+ba:59:f8:2c:e1:f0
+ba:b3:b6:7f:2f:64
+ba:be:67:56:6a:86
+ba:c2:b5:39:22:4f
+ba:e2:4e:8a:ab:bd
+ba:f1:3d:d8:66:71
+be:43:14:2b:03:ab
+be:44:fa:47:cb:d9
+be:8c:d2:fb:8e:1c
+be:91:6f:ef:76:9c
+be:91:8f:ff:90:cc
+be:d3:12:01:c2:c1
+be:d4:ad:4d:f4:c6
+be:fa:b6:22:53:09
+c2:25:19:29:cd:af
+c2:30:1e:20:34:b0
+c2:34:bf:69:da:52
+c2:54:76:62:f8:51
+c2:6a:2f:78:33:4c
+c2:86:43:15:23:d3
+c2:9c:5e:54:93:6d
+c2:ae:1b:e8:0d:70
+c2:f6:9b:da:46:36
+c6:10:2f:2a:0f:0a
+c6:27:a8:c9:06:13
+c6:34:c7:b1:b3:cc
+c6:36:41:94:64:1f
+c6:4f:bc:0a:4d:f8
+c6:53:7d:19:28:77
+c6:88:65:21:fc:d7
+c6:9b:16:39:c6:7c
+c6:b1:26:45:d2:10
+c6:cd:0a:ed:bd:82
+c6:cf:7d:e3:82:9a
+c6:f5:76:fc:4c:4b
+ca:25:e4:8e:b1:57
+ca:29:32:89:f9:e8
+ca:5e:d8:1c:6a:a5
+ca:b7:07:93:c3:a2
+ca:de:0c:ba:03:74
+ce:3a:65:54:71:f2
+ce:66:b0:a2:07:9e
+ce:78:4a:c6:57:43
+ce:af:9b:9d:52:f3
+ce:d1:73:24:99:c3
+d2:1a:5f:c0:0e:50
+d2:47:7e:63:91:8f
+d2:4e:ad:9e:af:66
+d2:5e:8b:7f:4e:68
+d2:66:05:e2:d2:be
+d2:91:ba:87:d1:8a
+d2:9a:85:c2:bd:da
+d2:c8:77:a1:59:29
+d2:df:61:ff:41:d3
+d6:05:8e:ba:85:ac
+d6:24:c8:d8:84:d8
+d6:3b:01:67:0d:58
+d6:69:af:18:53:53
+d6:7e:23:40:3e:cc
+d6:a6:57:a2:90:d1
+d6:b0:73:f2:ba:ed
+d6:c1:51:18:95:2a
+d6:cc:ea:80:5f:84
+d6:d9:39:08:2e:92
+d6:f2:79:d2:f5:12
+da:0e:9d:49:85:fb
+da:13:16:00:e1:25
+da:31:b2:19:9b:df
+da:45:b0:fd:03:d8
+da:48:f8:ae:e2:17
+da:57:ec:f7:ce:81
+da:5a:eb:0d:3d:69
+da:69:2e:a8:47:db
+da:7c:8f:71:37:6e
+da:8c:c9:48:56:68
+da:b6:88:fd:e9:93
+da:cc:b2:29:17:a5
+da:ee:ab:1d:38:d3
+da:fb:c0:7d:e1:19
+de:4c:01:6a:42:86
+de:61:54:bd:eb:fc
+de:81:88:92:35:b2
+de:92:a1:b7:65:82
+de:a6:62:ab:ed:5a
+de:b9:eb:3a:0f:49
+de:c3:84:4c:38:df
+de:cb:ea:fd:39:31
+de:d8:f8:37:1b:73
+de:f5:a8:23:29:50
+e2:1d:7d:13:d7:11
+e2:50:80:64:58:f2
+e2:90:0d:95:7e:7c
+e2:a7:38:64:e4:90
+e2:bb:21:07:aa:e3
+e2:bd:12:4a:97:55
+e2:c2:29:73:bf:f5
+e2:dc:a3:3f:d4:33
+e6:01:f9:17:c7:90
+e6:58:2a:62:a7:b1
+e6:72:54:d6:ef:1e
+e6:7b:db:6c:57:57
+e6:ba:ad:63:a7:ad
+e6:d6:71:d8:f8:79
+e6:d8:c5:c2:fe:83
+ea:5e:09:e2:7a:a8
+ea:a7:ee:6c:fa:aa
+ea:ff:3e:6f:c5:e9
+ea:ff:f7:dd:e9:ad
+ee:18:23:40:e1:52
+ee:98:7c:b0:6c:6a
+ee:b5:df:28:b6:d6
+ee:bf:30:33:04:8f
+ee:cb:3a:70:37:20
+ee:fb:3d:1c:0c:8c
+f2:07:b9:b0:32:b0
+f2:19:2f:e6:00:58
+f2:20:71:4c:7d:25
+f2:21:96:cc:83:97
+f2:54:b6:9b:f4:c4
+f2:7a:75:b0:a6:47
+f2:7d:ec:fb:dc:93
+f2:81:d9:d6:37:82
+f2:8a:3c:ef:ee:8d
+f2:cd:88:25:0b:9b
+f2:d0:bb:ec:d0:cf
+f2:e2:ed:63:e1:c1
+f6:0c:d1:97:03:c9
+f6:13:c8:a1:66:e9
+f6:2d:0f:0b:b8:b6
+f6:75:41:e3:c2:c3
+f6:8b:95:c6:e3:13
+f6:8d:aa:fe:cf:60
+f6:a6:3f:a2:4c:ae
+f6:c5:3e:c1:0d:9e
+f6:e8:e0:a7:10:05
+f6:f4:dd:80:b9:67
+f6:f5:ad:b5:20:ab
+fa:16:07:6e:c4:7f
+fa:28:20:1b:b8:70
+fa:2d:87:9d:a3:4e
+fa:8b:4a:6e:e6:de
+fa:92:90:d0:f7:08
+fa:9c:5c:45:79:96
+fa:d8:7b:8f:14:68
+fe:11:c7:ac:da:6c
+fe:1f:99:d5:8a:2b
+fe:30:ed:89:e0:1b
+fe:54:0d:7b:ad:64
+fe:ac:1c:0e:94:57
+fe:c9:95:77:0b:ea
+--- last 24h AWDL enable events (own randomized MAC rotates here):
+Timestamp                       Thread     Type        Activity             PID    TTL  
+2026-10-13 23:57:33.215793-0700 0x1796604  Default     0x0                  766    0    wifip2pd: [com.apple.awdl:interface] AWDLInterface<P2PController<AppleIO80211Driver>>[awdl0]<e6:c7:c4:89:b5:c0> disabled AWDL after 0 retries
+2026-10-13 23:59:44.311770-0700 0x179604a  Default     0x0                  766    0    wifip2pd: [com.apple.awdl:interface] AWDLInterface<P2PController<AppleIO80211Driver>>[awdl0]<e6:c7:c4:89:b5:c0> enabled AWDL after 0 retries
+2026-10-13 23:59:59.306261-0700 0x17975f2  Default     0x0                  766    0    wifip2pd: [com.apple.awdl:interface] AWDLInterface<P2PController<AppleIO80211Driver>>[awdl0]<e6:c7:c4:89:b5:c0> disabled AWDL after 0 retries
+2026-10-14 00:05:29.147623-0700 0x1796604  Default     0x0                  766    0    wifip2pd: [com.apple.awdl:interface] AWDLInterface<P2PController<AppleIO80211Driver>>[awdl0]<e6:c7:c4:89:b5:c0> enabled AWDL after 0 retries
+
+==============================================================
+## P6. log stream — live follow (passwordless, used by awdl_collect.py)
+==============================================================
+Filtering the log data using "process == "wifip2pd" AND composedMessage CONTAINS[c] "peer""
+
+==============================================================
+## P7. /var/run/syslog — legacy socket
+==============================================================
+srw-rw-rw-  1 root  daemon  0 Oct  6 15:05 /var/run/syslog
+-rw-r--r--@ 1 root  daemon  4 Oct  6 15:05 /var/run/syslog.pid
+cat: ai_family not supported: Operation not supported on socket
+cat: /var/run/syslog: Invalid argument
+
+==============================================================
+## P8. system_profiler SPAirPortDataType — AWDL status + PHY info (passwordless)
+==============================================================
+        awdl0:
+          MAC Address: e6:c7:c4:89:b5:c0
+          Supported Channels: 1 (2GHz), 2 (2GHz), 3 (2GHz), 4 (2GHz), 5 (2GHz), 6 (2GHz), 7 (2GHz), 8 (2GHz), 9 (2GHz), 10 (2GHz), 11 (2GHz), 12 (2GHz), 13 (2GHz), 36 (5GHz), 40 (5GHz), 44 (5GHz), 48 (5GHz), 52 (5GHz), 56 (5GHz), 60 (5GHz), 64 (5GHz), 100 (5GHz), 104 (5GHz), 108 (5GHz), 112 (5GHz), 116 (5GHz), 120 (5GHz), 124 (5GHz), 128 (5GHz), 132 (5GHz), 136 (5GHz), 140 (5GHz), 144 (5GHz), 149 (5GHz), 153 (5GHz), 157 (5GHz), 161 (5GHz), 165 (5GHz)
+          Current Network Information:
+              Network Type: Infrastructure
+
+
+==============================================================
+## DONE
+==============================================================
