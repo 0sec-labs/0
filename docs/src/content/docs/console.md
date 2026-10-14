@@ -73,3 +73,11 @@ are retired. See [model routing](/configuration/#multi-model-role-routing).
 
 Terminal keybindings are retired. Browser controls are available with normal
 keyboard navigation.
+
+## Acquiring public source
+
+In YOLO, a standalone public HTTPS repository checkout can acquire source for
+review without authorizing tests against the hosting service. Ask the chat to
+acquire the repository, then inspect it in subsequent tool calls. Checkout
+does not change engagement scope; configured exclusions and private-network
+restrictions still apply. See [scope rules](/scope/#local-workflows-and-strict-scope-mode).
