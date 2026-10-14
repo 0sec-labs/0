@@ -49,7 +49,8 @@ export function build(workDir, name, sourcePath) {
 
 export function replay(binPath, witnessPath) {
   try {
-    const out = execFileSync(binPath, [witnessPath], {
+    // foxguard: ignore[js/no-command-injection] the caller supplies owned replay artifacts and execFileSync passes argv without a shell.
+    const out = execFileSync(binPath, [witnessPath], { // foxguard: ignore[js/no-command-injection]
       encoding: "utf8", timeout: 15_000, env: { ...process.env, ASAN_OPTIONS: "detect_leaks=0" },
     });
     return { exitCode: 0, signal: null, output: out };

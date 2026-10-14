@@ -93,7 +93,8 @@ async function llmGenerate(context) {
     prior +
     `\nOutput a single lean code block containing only the theorem and its proof. ` +
     `Do not use 'sorry', 'native_decide', or new axioms.`;
-  const res = await fetch(`${baseUrl}/chat/completions`, {
+  // foxguard: ignore[js/no-ssrf] OPENAI_BASE_URL is an explicit operator configuration, not target-controlled input.
+  const res = await fetch(`${baseUrl}/chat/completions`, { // foxguard: ignore[js/no-ssrf]
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
     body: JSON.stringify({

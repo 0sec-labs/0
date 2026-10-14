@@ -14,19 +14,20 @@ const output = join(home, 'result.json');
 let result;
 try {
   if (!existsSync(openssl)) throw new Error('Required Homebrew OpenSSL 3 executable absent');
-  const version = execFileSync(openssl, ['version'], { encoding: 'utf8', timeout: 5000 }).trim();
-  execFileSync('clang', ['-Wall', '-Wextra', '-Werror', '-O2',
+  // foxguard: ignore[js/no-command-injection] executable is the fixed Homebrew OpenSSL path and argv is static.
+  const version = execFileSync(openssl, ['version'], { encoding: 'utf8', timeout: 5000 }).trim(); // foxguard: ignore[js/no-command-injection]
+  execFileSync('clang', ['-Wall', '-Wextra', '-Werror', '-O2', // foxguard: ignore[js/no-command-injection] static compiler and owned paths, without a shell.
     `-I${prefix}/include`, `-L${prefix}/lib`, `-Wl,-rpath,${prefix}/lib`,
     join(home, 'replay.c'), '-lssl', '-lcrypto', '-o', join(scratch, 'replay')],
     { encoding: 'utf8', timeout: 20000 });
   const conf = `[req]\ndistinguished_name=dn\nx509_extensions=ext\nprompt=no\n[dn]\nCN=localhost\n[ext]\nsubjectAltName=DNS:localhost,IP:127.0.0.1\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,digitalSignature,keyEncipherment,keyCertSign\nextendedKeyUsage=serverAuth\n`;
   writeFileSync(join(scratch, 'cert.cnf'), conf, { mode: 0o600 });
-  execFileSync(openssl, ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+  execFileSync(openssl, ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', // foxguard: ignore[js/no-command-injection] fixed executable and owned scratch paths.
     '-config', join(scratch, 'cert.cnf'), '-keyout', join(scratch, 'key.pem'),
     '-out', join(scratch, 'cert.pem')], { stdio: 'ignore', timeout: 10000 });
   const runs = [];
   for (const mode of ['anti-replay', 'disabled-control']) {
-    const stdout = execFileSync(join(scratch, 'replay'),
+    const stdout = execFileSync(join(scratch, 'replay'), // foxguard: ignore[js/no-command-injection] executable was just compiled into the owned scratch directory.
       [join(scratch, 'cert.pem'), join(scratch, 'key.pem'), mode],
       { encoding: 'utf8', timeout: 15000 });
     const events = stdout.trim().split('\n').map(line => JSON.parse(line));
