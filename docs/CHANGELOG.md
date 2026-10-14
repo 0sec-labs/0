@@ -12,6 +12,13 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.24.1] - 2026-10-13
+
+### Fixed
+
+- Prefer the dashboard embedded in a standalone release binary over stale
+  checkout build artifacts when `0` or `0 web` is launched inside a source tree.
+
 ## [0.24.0] - 2026-10-13
 
 ### Added
