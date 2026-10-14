@@ -8,6 +8,7 @@ import type { SecureEvent, SecureProjectResult } from "@0/core";
 
 interface SecureOptions {
   testCommand: string;
+  sourcePath?: string;
   setupCommand?: string;
   stateDir?: string;
   runtime: string;
@@ -44,6 +45,7 @@ export function registerSecureCommand(program: Command): void {
     .description("Find, reproduce, fix, and verify vulnerabilities in a repo; optionally open repair PRs")
     .argument("<repo>", "Local Git repository or HTTPS Git URL; execution occurs in the current worker, not a newly provisioned sandbox")
     .requiredOption("--test-command <command>", "Operator-approved regression command; must pass before and after repair")
+    .option("--source-path <path>", "Repository-relative folder to investigate and repair; setup and tests run at the repository root")
     .option("--setup-command <command>", "Operator-approved setup/build command run in each disposable checkout")
     .option("--state-dir <path>", "Persistent run directory; defaults to a stable per-repository path so learnings accumulate")
     .option("--runtime <runtime>", "Native repair runtime: auto or api", "api")
@@ -82,6 +84,7 @@ export function registerSecureCommand(program: Command): void {
       try {
         const result: SecureProjectResult = await runSecureProject({
           repoRoot: repo,
+          sourcePath: options.sourcePath,
           stateDir,
           testCommand: options.testCommand,
           setupCommand: options.setupCommand,

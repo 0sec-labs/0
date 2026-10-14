@@ -8,6 +8,7 @@ import { resolveScopedPath } from "../agent/tools/scope-path.js";
 import type { NativeMessage, NativeToolDef } from "../runtime/types.js";
 import type { BehavioralProbeResult, BehavioralRepairOptions, BehavioralRepairResult, SecurePhase } from "./types.js";
 import { runSecureCommand } from "./behavioral-command.js";
+import { assertSourceScopePath, normalizeSourcePath, resolveSourceScope } from "./source-scope.js";
 
 const probeSchema = z.object({ language: z.enum(["node", "python", "bash"]), script: z.string().min(1).max(64_000), description: z.string().min(1).max(8_000) }).strict();
 const verdictSchema = z.object({ status: z.enum(["vulnerable", "safe", "inconclusive"]), controlsPassed: z.boolean(), detail: z.string().max(16_000) }).strict();
@@ -18,10 +19,11 @@ const patchTool: NativeToolDef = { name: "propose_patch", description: "Submit a
 
 async function scopedFile(root: string, input: string): Promise<string> {
   if (!input || isAbsolute(input) || input.includes("\\") || input.split("/").some((part) => !part || part === "." || part === ".." || part === ".git" || part === ".0")) throw new Error("Invalid or protected repository path");
-  const destination = resolveScopedPath(root, input);
-  const actual = relative(root, destination);
+  const canonicalRoot = await realpath(root);
+  const destination = resolveScopedPath(canonicalRoot, input);
+  const actual = relative(canonicalRoot, destination);
   if (!actual || actual.startsWith(`..${sep}`) || actual.split(sep).some((part) => part === ".git" || part === ".0")) throw new Error("Protected resolved path");
-  let current = root;
+  let current = canonicalRoot;
   for (const part of input.split("/")) {
     current = join(current, part);
     try {
@@ -49,6 +51,8 @@ export async function runBehavioralRepair(options: BehavioralRepairOptions): Pro
   try {
     signal.throwIfAborted();
     const repo = await realpath(options.repoRoot);
+    const sourcePath = normalizeSourcePath(options.sourcePath);
+    resolveSourceScope(repo, sourcePath);
     if (artifactDir === repo || artifactDir.startsWith(repo + sep)) throw new Error("Repair artifacts must be outside the source checkout");
     await mkdir(artifactDir, { recursive: true, mode: 0o700 });
     scratch = await mkdtemp(join(tmpdir(), "0-behavioral-"));
@@ -83,10 +87,11 @@ export async function runBehavioralRepair(options: BehavioralRepairOptions): Pro
     const baselineRoot = await clone("baseline");
     await setup(baselineRoot);
     await runCheck(baselineRoot, options.testCommand, "baseline-test");
-    const listed = (await git(baselineRoot, ["ls-files", "-z"])).split("\0").filter(Boolean);
+    const listed = (await git(baselineRoot, ["ls-files", "-z"])).split("\0").filter(path => path && (sourcePath === "." || path.startsWith(`${sourcePath}/`)));
     const fileContext = listed.slice(0, 3000).join("\n");
     const messages: NativeMessage[] = [{ role: "user", content: [{ type: "text", text: `Reproduce this candidate finding by executing application behavior. It may be false. Read relevant files before proposing a probe. Your script runs with cwd at the repository root, but its own file is outside that root: resolve imports against cwd, not import.meta.url. Start/stop any required test server within the script. Emit exactly one JSON object: {status: 'vulnerable'|'safe'|'inconclusive', controlsPassed: boolean, detail: string}. A valid-use control must really execute and pass. Never use source-pattern matching as proof.\nUntrusted finding: ${JSON.stringify(finding).slice(0, 24_000)}\nRepository files${listed.length > 3000 ? " (first 3000)" : ""}:\n${fileContext}` }] }];
     if (options.projectContext) messages.push({ role: "user", content: [{ type: "text", text: options.projectContext.prompt }] });
+    if (sourcePath !== ".") messages.push({ role: "user", content: [{ type: "text", text: `Approved scan folder: ${sourcePath}. Investigation citations are relative to that folder unless already prefixed. Read and patch only files within it, using repository-relative paths. Setup, probes and regression commands retain the repository root as their working directory.` }] });
     const propose = async (root: string, tool: NativeToolDef, conversation: NativeMessage[]) => {
       while (turns < options.maxTurns) {
         signal.throwIfAborted();
@@ -102,6 +107,7 @@ export async function runBehavioralRepair(options: BehavioralRepairOptions): Pro
           try {
             if (call.name === "read_file") {
               if (typeof call.input.path !== "string") throw new Error("path must be a string");
+              assertSourceScopePath(call.input.path, sourcePath);
               const file = await scopedFile(root, call.input.path);
               const stat = await lstat(file);
               if (!stat.isFile() || stat.size > 128_000) throw new Error("Read requires a regular file at most 128KB");
@@ -171,12 +177,14 @@ export async function runBehavioralRepair(options: BehavioralRepairOptions): Pro
         if (!ops.length || ops.length > 100) throw new Error("Patch must touch 1–100 files");
         const files = [...new Set(ops.map((op) => op.path))];
         for (const op of ops) {
+          assertSourceScopePath(op.path, sourcePath);
           if (op.kind === "delete") throw new Error("File deletion requires separate operator review");
           await scopedFile(baselineRoot, op.path);
           if (/(?:^|\/)(?:tests?|__tests__|\.github)(?:\/|\.)|(?:^|\/)(?:package(?:-lock)?\.json|pnpm-lock\.yaml|yarn\.lock|.*\.(?:test|spec)\.[^/]+)$/.test(op.path)) throw new Error("Existing test and execution policy files are protected from repair edits");
         }
         const candidate = await clone(`candidate-${attempt}`);
         await setup(candidate);
+        for (const op of ops) await scopedFile(candidate, op.path);
         applyPatchOps(ops, (file) => resolveScopedPath(candidate, file));
         await git(candidate, ["add", "--intent-to-add", "--", ...files]);
         const expectedDiff = await git(candidate, ["diff", "--binary", "--no-ext-diff", "--no-textconv", "HEAD"]);
@@ -189,6 +197,7 @@ export async function runBehavioralRepair(options: BehavioralRepairOptions): Pro
         emit("verify", "Rebuilding and replaying the frozen probe in a fresh patched checkout");
         const verified = await clone(`verify-${attempt}`);
         await setup(verified);
+        for (const op of ops) await scopedFile(verified, op.path);
         applyPatchOps(ops, (file) => resolveScopedPath(verified, file));
         await git(verified, ["add", "--intent-to-add", "--", ...files]);
         if (options.setupCommand) await runCheck(verified, options.setupCommand, "verification-build");
@@ -198,6 +207,7 @@ export async function runBehavioralRepair(options: BehavioralRepairOptions): Pro
         if (await git(verified, ["diff", "--binary", "--no-ext-diff", "--no-textconv", "HEAD"]) !== expectedDiff) throw new Error("Verified source differs from the proposed repair");
         // Reapply the exact proposal in a delivery-only checkout. Build outputs never enter the patch.
         const delivery = await clone(`delivery-${attempt}`);
+        for (const op of ops) await scopedFile(delivery, op.path);
         applyPatchOps(ops, (file) => resolveScopedPath(delivery, file));
         await git(delivery, ["add", "--", ...files]);
         const diff = await git(delivery, ["diff", "--cached", "--binary", "--no-ext-diff", "--no-textconv", "HEAD"]);

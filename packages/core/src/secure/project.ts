@@ -73,6 +73,7 @@ import type {
   BehavioralRepairResult,
 } from "./types.js";
 import { runBehavioralRepair } from "./behavioral-repair.js";
+import { normalizeSourcePath, resolveSourceScope } from "./source-scope.js";
 import { ProjectLock, LockHeldError } from "./project-lock.js";
 import {
   type SecureProjectState,
@@ -305,6 +306,8 @@ async function investigateSource(
   signal: AbortSignal | undefined,
   projectContext: PreparedProjectContext | undefined,
   sourceRevision: string,
+  repositoryRoot: string = checkoutPath,
+  sourcePath: string = ".",
 ): Promise<InvestigationResult> {
   let contextSuggestions: ProjectContextSuggestions | undefined;
   const opts: PipelineOptions = {
@@ -315,7 +318,10 @@ async function investigateSource(
     timeout: timeoutMs,
     projectContext,
     onProjectObservations: projectContext ? observations => {
-      contextSuggestions = captureProjectSuggestions(observations, checkoutPath, sourceRevision, projectContext);
+      const scopedObservations = sourcePath === "." ? observations : observations.map(observation => ({ ...observation,
+        files: observation.files?.map(path => `${sourcePath}/${path}`),
+      }));
+      contextSuggestions = captureProjectSuggestions(scopedObservations, repositoryRoot, sourceRevision, projectContext);
     } : undefined,
   };
 
@@ -614,6 +620,9 @@ export async function runSecureProject(
   } = options;
 
   const runId = randomUUID();
+  let sourcePath: string;
+  try { sourcePath = normalizeSourcePath(options.sourcePath); }
+  catch (error) { return resultFromPhase(runId, repoRoot, "prepare", "blocked", [error instanceof Error ? error.message : "Invalid scan folder."]); }
   let projectContext: PreparedProjectContext | undefined;
   try {
     projectContext = prepareProjectContext(process.env["ZERO_PROJECT_CONTEXT"]);
@@ -710,6 +719,7 @@ export async function runSecureProject(
       // and the mismatch check was vacuous.
       const configFields: IdentityFields = {
         source: repoRoot,
+        sourcePath: sourcePath === "." ? undefined : sourcePath,
         testCommand,
         setupCommand,
         runtime: runtimeMode,
@@ -760,6 +770,7 @@ export async function runSecureProject(
 
       const configFields: IdentityFields = {
         source: repoRoot,
+        sourcePath: sourcePath === "." ? undefined : sourcePath,
         testCommand,
         setupCommand,
         runtime: runtimeMode,
@@ -824,13 +835,24 @@ export async function runSecureProject(
 
     // ── Phase: Investigate ──────────────────────────────────────────────
 
+    let investigationPath: string;
+    try { investigationPath = resolveSourceScope(checkoutPath, sourcePath); }
+    catch (error) {
+      addError(state, `Invalid scan folder: ${error instanceof Error ? error.message : "Unavailable directory."}`);
+      state = advanceState(state, "deliver", "failed");
+      writeState(stateDir, state);
+      return buildResult(state);
+    }
+
     if (state.phase === "investigate") {
       emit(makeEvent("investigate", "Running source investigation pipeline"));
 
       const investigation = await investigateSource(
-        checkoutPath, depth, costCeilingUsd, workflowTimeoutMs, combinedSignal,
+        investigationPath, depth, costCeilingUsd, workflowTimeoutMs, combinedSignal,
         projectContext,
         revision,
+        checkoutPath,
+        sourcePath,
       );
 
       if (investigation.error) {
@@ -844,7 +866,9 @@ export async function runSecureProject(
         return buildResult(state);
       }
 
-      state.findings = investigation.findings;
+      state.findings = investigation.findings.map(finding => sourcePath === "." || !finding.reviewAnnotation ? finding : {
+        ...finding, reviewAnnotation: { ...finding.reviewAnnotation, path: `${sourcePath}/${finding.reviewAnnotation.path}` },
+      });
       if (investigation.costUsd != null) {
         // Real metered investigation cost joins the repair-phase ledger.
         state.costUsd += investigation.costUsd;
@@ -940,6 +964,7 @@ export async function runSecureProject(
 
         const repairOptions: BehavioralRepairOptions = {
           repoRoot: checkoutPath,
+          sourcePath: sourcePath === "." ? undefined : sourcePath,
           finding,
           artifactDir,
           runtime: costTrackingRuntime,
@@ -1144,6 +1169,7 @@ function buildResult(state: SecureProjectState): SecureProjectResult {
     status: state.status as SecureProjectResult["status"],
     phase: state.phase,
     repoRoot: state.source,
+    sourcePath: state.identity?.sourcePath,
     revision: state.revision,
     startedAt: state.startedAt,
     completedAt: state.completedAt,
