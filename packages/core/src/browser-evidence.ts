@@ -1,5 +1,13 @@
 import { createHash } from "node:crypto";
-import { getCloudSinkConfig } from "./cloud-sink.js";
+type CloudSinkConfig = { sinkUrl: string; scanId: string; token?: string; orgId?: string };
+function getCloudSinkConfig(): CloudSinkConfig | null {
+  if (process.env["ZERO_FEATURE_CLOUD_SINK"] === "0") return null;
+  const sinkUrl = process.env["ZERO_CLOUD_SINK"]?.trim();
+  const scanId = process.env["ZERO_CLOUD_SCAN_ID"]?.trim();
+  if (!sinkUrl || !scanId) return null;
+  return { sinkUrl, scanId, token: process.env["ZERO_CLOUD_TOKEN"]?.trim() || undefined,
+    orgId: process.env["ZERO_CLOUD_ORG_ID"]?.trim() || undefined };
+}
 
 /** Upload full PNG bytes, never the truncated model-facing preview. */
 export async function retainBrowserScreenshot(base64: string, signal?: AbortSignal, sourceUrl?: string, caption = "Browser observation"): Promise<{ sha256: string; reference: string } | null> {

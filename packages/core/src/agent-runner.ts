@@ -739,7 +739,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
       scopePath,
       costCeilingUsd: config.costCeilingUsd,
       costModel: config.model,
-      costLedger: config.costLedger,
+      costLedger: config.costLedger as import("./agent/cost-ledger.js").ScanCostLedger | undefined,
       requirePricedUsage: Boolean(config.plan),
       signal: config.signal,
       scope: config.scope,
