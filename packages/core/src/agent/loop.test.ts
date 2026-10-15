@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { runAgentLoop } from "./loop.js";
+import { ScanCostLedger } from "./cost-ledger.js";
+import { estimateCost } from "./cost.js";
 import {
   BUDGET_WARNING_SOFT,
   BUDGET_WARNING_HARD,
@@ -526,5 +528,63 @@ describe("runAgentLoop budget-bound termination (#S1)", () => {
     expect(state.costCeilingExceeded).toBeFalsy();
     expect(state.turnCount).toBe(3);
     expect(state.summary).toContain("max turns");
+  });
+});
+
+
+describe("legacy shared-ledger runtime receipts", () => {
+  const usage = { inputTokens: 1_000_000, outputTokens: 0 };
+  async function run(receipt: Partial<RuntimeResult>, ledger: ScanCostLedger | undefined = new ScanCostLedger(), withoutLedger = false) {
+    let calls = 0;
+    const runtime: Runtime = {
+      type: "api",
+      async isAvailable() { return true; },
+      async execute() { calls++; return { output: "continue", exitCode: 0, timedOut: false, durationMs: 1, ...receipt }; },
+    };
+    const state = await runAgentLoop({ config: {
+      role: "audit", systemPrompt: "test", tools: [], maxTurns: 3,
+      target: "https://example.test", scanId: "ledger-receipt",
+      costLedger: withoutLedger ? undefined : ledger, costCeilingUsd: 0.01, costModel: "gpt-4o", requirePricedUsage: true,
+    }, runtime, db: null });
+    return { state, ledger, calls };
+  }
+  it("prices per-model-only usage and stops at the shared ceiling without marking it unpriced", async () => {
+    const {state, ledger, calls} = await run({usageByModel: [{model: "gpt-4o", usage}]});
+    expect(ledger!.tokenUsage().inputTokens).toBe(usage.inputTokens);
+    expect(ledger!.hasUnpricedUsage()).toBe(false);
+    expect(state.costCeilingExceeded).toBe(true);
+    expect(calls).toBe(1);
+  });
+  it("prices mixed-model-only receipts without a shared ledger and stops before another turn", async () => {
+    const usageByModel = [{ model: "gpt-4o", usage }, { model: "gpt-4o-mini", usage: { inputTokens: 500_000, outputTokens: 100_000 } }];
+    const {state, calls} = await run({usageByModel}, undefined, true);
+    expect(state.totalUsage.inputTokens).toBe(1_500_000);
+    expect(state.totalUsage.outputTokens).toBe(100_000);
+    expect(state.estimatedCostUsd).toBeCloseTo(usageByModel.reduce((sum, bucket) => sum + estimateCost(bucket.usage, bucket.model), 0));
+    expect(state.costCeilingExceeded).toBe(true);
+    expect(calls).toBe(1);
+  });
+  it("counts aggregate-only receipts exactly once", async () => {
+    const {state, ledger} = await run({usage});
+    expect(ledger!.tokenUsage().inputTokens).toBe(usage.inputTokens);
+    expect(state.totalUsage.inputTokens).toBe(usage.inputTokens);
+    expect(state.estimatedCostUsd).toBeCloseTo(estimateCost(usage, "gpt-4o"));
+  });
+  it("does not add aggregate usage again when model buckets describe the same response", async () => {
+    const {ledger} = await run({usage, usageByModel: [{model: "gpt-4o", usage}]});
+    expect(ledger!.tokenUsage().inputTokens).toBe(usage.inputTokens);
+  });
+  it("accounts billed error responses before exiting", async () => {
+    const {state, ledger, calls} = await run({output: "", error: "provider failed after billing", usageByModel: [{model: "gpt-4o", usage}]});
+    expect(ledger!.tokenUsage().inputTokens).toBe(usage.inputTokens);
+    expect(ledger!.hasUnpricedUsage()).toBe(false);
+    expect(state.errorExit?.error).toBe("provider failed after billing");
+    expect(calls).toBe(1);
+  });
+  it("still rejects a response without aggregate or model usage", async () => {
+    const {state, ledger, calls} = await run({});
+    expect(ledger!.hasUnpricedUsage()).toBe(true);
+    expect(state.errorExit?.error).toContain("did not report usage");
+    expect(calls).toBe(1);
   });
 });

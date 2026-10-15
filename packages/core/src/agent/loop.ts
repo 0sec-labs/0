@@ -217,6 +217,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
   // Runtime usage is normalized to include cache reads and writes in prompt
   // tokens, while carrying their separate counts for the shared tariff.
   const totalUsage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, cacheWriteTokens: 0 };
+  let sessionCostUsd = 0;
 
   // Two-stage budget warnings (Strix-inspired, 0#408). Same
   // closure-state pattern as native-loop.ts so unit tests share the
@@ -240,15 +241,13 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
     // running cost estimate has reached the ceiling. `maxTurns` (the while
     // guard) stays the runaway backstop. Mirrors native-loop.ts:1042.
     if (config.costCeilingUsd) {
-      const model = runtime.resolvedModel?.() || config.costModel;
-      if ((config.costLedger?.totalCostUsd() ?? estimateCost(totalUsage, model === "auto" ? undefined : model)) >= config.costCeilingUsd) {
+      if ((config.costLedger?.totalCostUsd() ?? sessionCostUsd) >= config.costCeilingUsd) {
         state.costCeilingExceeded = true;
         state.summary = `Agent reached cost ceiling ($${config.costCeilingUsd}) after ${state.turnCount} turns.`;
         break;
       }
     }
-    const budgetModel = runtime.resolvedModel?.() || config.costModel;
-    for (const warning of costBudgetWarnings(config.costLedger?.totalCostUsd() ?? estimateCost(totalUsage, budgetModel === "auto" ? undefined : budgetModel))) {
+    for (const warning of costBudgetWarnings(config.costLedger?.totalCostUsd() ?? sessionCostUsd)) {
       state.messages.push({ role: "user", content: warning.message });
     }
     state.turnCount++;
@@ -296,7 +295,21 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
           }
         : undefined,
     });
-    if (config.requirePricedUsage && !result.usage) config.costLedger?.markUnpricedUsage();
+    // Account every billed response, including failures and per-model-only usage.
+    addRuntimeUsage(config.costLedger, result, runtime.resolvedModel?.() || config.costModel);
+    // Per-model receipts are authoritative when present; aggregate usage is
+    // the fallback, never an additional charge for the same response.
+    const buckets = result.usageByModel?.length ? result.usageByModel
+      : result.usage ? [{ usage: result.usage, model: runtime.resolvedModel?.() || config.costModel }] : [];
+    for (const { usage, model } of buckets) {
+      totalUsage.inputTokens += usage.inputTokens;
+      totalUsage.outputTokens += usage.outputTokens;
+      totalUsage.cachedInputTokens += usage.cachedInputTokens ?? 0;
+      totalUsage.cacheWriteTokens += usage.cacheWriteTokens ?? 0;
+      sessionCostUsd += estimateCost(usage, model === "auto" ? undefined : model);
+    }
+    const hasUsage = Boolean(result.usage || result.usageByModel?.length);
+    if (config.requirePricedUsage && !hasUsage) config.costLedger?.markUnpricedUsage();
 
     if (result.error && !result.output) {
       state.messages.push({
@@ -319,16 +332,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
       break;
     }
 
-    // Record the real response, including opaque CLI per-model breakdowns.
-    if (result.usage) {
-      config.costLedger?.add(result.usage, (runtime.resolvedModel?.() || config.costModel) === "auto" ? undefined : runtime.resolvedModel?.() || config.costModel);
-      totalUsage.inputTokens += result.usage.inputTokens;
-      totalUsage.outputTokens += result.usage.outputTokens;
-      totalUsage.cachedInputTokens += result.usage.cachedInputTokens ?? 0;
-      totalUsage.cacheWriteTokens += result.usage.cacheWriteTokens ?? 0;
-      addRuntimeUsage(config.costLedger as ScanCostLedger | undefined, result, runtime.resolvedModel?.() || config.costModel);
-    }
-    if (config.requirePricedUsage && !result.usage) {
+    if (config.requirePricedUsage && !hasUsage) {
       config.costLedger?.markUnpricedUsage();
       state.errorExit = { error: "Runtime did not report usage; cannot continue a cost-bounded scan.", turn: state.turnCount };
       state.summary = `Error: ${state.errorExit.error}`;
@@ -512,7 +516,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
   state.targetInfo = toolCtx.targetInfo;
 
   state.totalUsage = totalUsage;
-  state.estimatedCostUsd = estimateCost(totalUsage, runtime.resolvedModel?.() || config.costModel);
+  state.estimatedCostUsd = sessionCostUsd;
   if (!state.done && !state.costCeilingExceeded && !state.errorExit && !config.signal?.aborted) {
     state.summary = `Agent reached max turns (${config.maxTurns}) without completing.`;
   }
