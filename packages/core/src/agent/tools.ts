@@ -1,6 +1,7 @@
 import { parseRequest, type OracleResult } from "../triage/oracles.js";
 import { assertWorkspaceIdentity, captureWorkspaceIdentity, type WorkspaceIdentity } from "./workspace-identity.js";
 import { filterWorkflowAgentTools, isWorkflowAgentToolAllowed } from "../workflow-execution-policy.js";
+import { retainBrowserScreenshot } from "../browser-evidence.js";
 import { createHash, randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { readFileSync, statSync, existsSync, writeFileSync } from "node:fs";
@@ -6010,6 +6011,18 @@ export class ToolExecutor {
       signal: execution?.signal,
       assertAuthority: execution?.assertAuthority,
     });
+
+    if (result.success && result.meta?.image?.mimeType === "image/png") {
+      execution?.assertAuthority?.();
+      const output = result.output as Record<string, unknown>;
+      try {
+        const receipt = await retainBrowserScreenshot(result.meta.image.imageBase64, execution?.signal, typeof output.url === "string" ? output.url : undefined, typeof output.screenshot_caption === "string" ? output.screenshot_caption : undefined);
+        output.evidence_retention = receipt ? "retained" : "local_only";
+        if (receipt) { output.evidence_reference = receipt.reference; output.evidence_sha256 = receipt.sha256; }
+      } catch {
+        output.evidence_retention = "unavailable";
+      }
+    }
 
     // Evidence trail: persist the action + resulting URL, as the old handler did.
     if (result.success) {

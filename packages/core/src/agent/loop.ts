@@ -1,3 +1,4 @@
+import { createCostBudgetWarnings } from "./cost-budget-warning.js";
 import { randomUUID } from "node:crypto";
 import type {
   AgentConfig,
@@ -221,6 +222,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
   // closure-state pattern as native-loop.ts so unit tests share the
   // computeBudgetWarningTurns helper.
   const budgetThresholds = computeBudgetWarningTurns(config.maxTurns);
+  const costBudgetWarnings = createCostBudgetWarnings(config.costCeilingUsd);
   const budgetWarningsFired: { soft: boolean; hard: boolean } = {
     soft: false,
     hard: false,
@@ -244,6 +246,10 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
         state.summary = `Agent reached cost ceiling ($${config.costCeilingUsd}) after ${state.turnCount} turns.`;
         break;
       }
+    }
+    const budgetModel = runtime.resolvedModel?.() || config.costModel;
+    for (const warning of costBudgetWarnings(config.costLedger?.totalCostUsd() ?? estimateCost(totalUsage, budgetModel === "auto" ? undefined : budgetModel))) {
+      state.messages.push({ role: "user", content: warning.message });
     }
     state.turnCount++;
 
@@ -315,6 +321,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
 
     // Record the real response, including opaque CLI per-model breakdowns.
     if (result.usage) {
+      config.costLedger?.add(result.usage, (runtime.resolvedModel?.() || config.costModel) === "auto" ? undefined : runtime.resolvedModel?.() || config.costModel);
       totalUsage.inputTokens += result.usage.inputTokens;
       totalUsage.outputTokens += result.usage.outputTokens;
       totalUsage.cachedInputTokens += result.usage.cachedInputTokens ?? 0;

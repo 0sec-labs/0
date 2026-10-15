@@ -357,6 +357,8 @@ export interface AgentConfig {
    * the turn cap applies.
    */
   costCeilingUsd?: number;
+  /** Shared estimated inference accounting across legacy scan stages. */
+  costLedger?: ScanCostLedger;
   /** Pricing model id for `estimateCost`; defaults to the shared default rates. */
   costModel?: string;
   costLedger?: ScanCostLedgerLike;
