@@ -1,5 +1,5 @@
 import type { WorkspaceIdentity } from "./workspace-identity.js";
-import type { Finding, AttackResult, TargetInfo, AuthConfig, NamedIdentity, ScanCostLedgerLike } from "@0/shared";
+import type { Finding, AttackResult, TargetInfo, AuthConfig, NamedIdentity } from "@0/shared";
 import type { ScopePolicy } from "../scope/scope.js";
 import type { ScopeEnforcementState } from "../scope/activation.js";
 import type { RateLimiter } from "../scope/rate-limit.js";
@@ -361,7 +361,6 @@ export interface AgentConfig {
   costLedger?: ScanCostLedger;
   /** Pricing model id for `estimateCost`; defaults to the shared default rates. */
   costModel?: string;
-  costLedger?: ScanCostLedgerLike;
   signal?: AbortSignal;
   requirePricedUsage?: boolean;
   target: string;
