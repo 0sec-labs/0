@@ -770,6 +770,7 @@ Guide: [Scope & Authorization](/scope/).
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--test-command <command>` **required** | — | Operator-approved regression command; must pass before and after repair |
+| `--source-path <path>` | — | Repository-relative folder to investigate and repair; setup and tests run at the repository root |
 | `--setup-command <command>` | — | Operator-approved setup/build command run in each disposable checkout |
 | `--state-dir <path>` | — | Persistent run directory; defaults to a stable per-repository path so learnings accumulate |
 | `--runtime <runtime>` | `api` | Native repair runtime: auto or api |
