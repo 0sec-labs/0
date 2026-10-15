@@ -2,6 +2,7 @@ import { isLocalAdmissionLimit, isLocalAdmissionFailure } from "../runtime/reque
 import { verifyOracleByCategory } from "../triage/oracles.js";
 import { assertWorkspaceIdentity, type WorkspaceIdentity } from "./workspace-identity.js";
 import { assertWorkflowNativeRuntime, filterWorkflowAgentTools, workflowPhasePrompt } from "../workflow-execution-policy.js";
+import { createCostBudgetWarnings } from "./cost-budget-warning.js";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
@@ -1418,6 +1419,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   // fires at most once per run. Thresholds are precomputed so the test
   // suite can assert the exact turn numbers.
   const budgetThresholds = computeBudgetWarningTurns(config.maxTurns);
+  const costBudgetWarnings = createCostBudgetWarnings(config.costCeilingUsd);
   const budgetWarningsFired: { soft: boolean; hard: boolean } = {
     soft: false,
     hard: false,
@@ -2077,6 +2079,11 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
 
     // ── Inject user messages queued from the TUI ──
     injectPendingUserMessages?.();
+
+    for (const warning of costBudgetWarnings(config.costLedger?.totalCostUsd() ?? estimateCost(state.totalUsage, pricingModel()))) {
+      state.messages.push({ role: "user", content: [{ type: "text", text: warning.message }] });
+      onEvent?.("budget_warning", { turn: state.turnCount, stage: warning.stage, basis: "inference_cost_usd", spent_usd: warning.spentUsd, ceiling_usd: warning.limitUsd });
+    }
 
     // ── Two-stage budget warnings (#408, Strix-inspired) ──
     // Fire before the LLM call on the turn the threshold is reached so

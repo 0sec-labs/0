@@ -72,6 +72,7 @@ export const browserToolDefinitions: Record<string, ToolDefinition> = {
           "--remote-debugging-port. New tabs open in the browser's already-authenticated context so " +
           "cookies/MFA/SSO carry over. Only ever supply an endpoint the operator explicitly provides.",
       },
+      caption: { type: "string", description: "screenshot: short description of the test step this image supports (up to 200 characters)" },
       tab: {
         type: "string",
         description: `Named tab to act on (default "${DEFAULT_TAB}"). For close, omit and set all:true to release every tab.`,
@@ -741,6 +742,7 @@ export async function executeBrowser(
 ): Promise<ToolResult> {
   const action = args.action as string | undefined;
   if (!action) return fail("action is required");
+  if (args.caption !== undefined && (typeof args.caption !== "string" || args.caption.length > 200 || !args.caption.trim())) return fail("Screenshot caption must be 1 to 200 characters");
   if (!(BROWSER_ACTIONS as readonly string[]).includes(action)) {
     return fail(`Unknown browser action: ${action}. Valid: ${BROWSER_ACTIONS.join(", ")}`);
   }
@@ -952,6 +954,7 @@ export async function executeBrowser(
             tab: tabName,
             url,
             screenshot_base64: fullBase64.slice(0, 50_000),
+            screenshot_caption: typeof args.caption === "string" ? args.caption.trim() : "Browser observation",
             dialogs: page.drainDialogs(),
           },
           meta: {
