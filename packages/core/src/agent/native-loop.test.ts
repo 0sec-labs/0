@@ -11,6 +11,9 @@ import {
   BUDGET_WARNING_SOFT,
   BUDGET_WARNING_HARD,
   MAX_OUTPUT_CAP_CONTINUATIONS,
+  NATIVE_REQUEST_PREFLIGHT_BYTES,
+  estimateNativeRequestBytes,
+  compactMessagesForRequestPreflight,
 } from "./native-loop.js";
 import { ScanCostLedger } from "./cost-ledger.js";
 import { detectPlaybooks, buildPlaybookInjection, PLAYBOOKS } from "./playbooks.js";
@@ -1612,6 +1615,59 @@ describe("context overflow recovery", () => {
     expect(executeNative).toHaveBeenCalledTimes(1);
     expect(state.errorExit?.error).toContain("input_limit_exceeded");
     expect(state.summary).not.toContain("max turns");
+  });
+});
+
+describe("request-size preflight compaction", () => {
+  const summarizingRuntime: NativeRuntime = {
+    type: "api",
+    async executeNative() {
+      return {
+        content: [{
+          type: "text",
+          text: "## Summary\n- Preserved the objective, findings, and next investigative steps.",
+        }],
+        stopReason: "end_turn",
+        durationMs: 1,
+      };
+    },
+    async isAvailable() { return true; },
+  };
+
+  it("compacts an oversized conversation below the guarded request budget", async () => {
+    const messages: NativeMessage[] = [{
+      role: "user",
+      content: [{ type: "text", text: "Opening security test objective" }],
+    }];
+    for (let index = 1; index < 30; index++) {
+      messages.push({
+        role: index % 2 ? "assistant" : "user",
+        content: [{ type: "text", text: `${index}: ${"x".repeat(12_000)}` }],
+      });
+    }
+
+    expect(estimateNativeRequestBytes("system", messages, []))
+      .toBeGreaterThan(NATIVE_REQUEST_PREFLIGHT_BYTES);
+    const result = await compactMessagesForRequestPreflight(
+      messages,
+      summarizingRuntime,
+      "system",
+      [],
+    );
+
+    expect(result.compacted).toBe(true);
+    expect(result.messages[0]).toBe(messages[0]);
+    expect(estimateNativeRequestBytes("system", result.messages, []))
+      .toBeLessThanOrEqual(NATIVE_REQUEST_PREFLIGHT_BYTES);
+  });
+
+  it("fails locally when fixed request framing exceeds the guarded budget", async () => {
+    await expect(compactMessagesForRequestPreflight(
+      [{ role: "user", content: [{ type: "text", text: "task" }] }],
+      summarizingRuntime,
+      "s".repeat(NATIVE_REQUEST_PREFLIGHT_BYTES + 1),
+      [],
+    )).rejects.toThrow("preflight limit after context compaction");
   });
 });
 

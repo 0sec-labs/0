@@ -197,6 +197,63 @@ export function isContextWindowError(errorMsg: string): boolean {
   );
 }
 
+/**
+ * Keep the request assembled by the engine below the managed inference
+ * gateway's 256 kB admission ceiling. Provider adapters add framing after
+ * this check, so retain 25% headroom rather than aiming at the hard limit.
+ */
+export const NATIVE_REQUEST_PREFLIGHT_BYTES = 192 * 1024;
+
+export function estimateNativeRequestBytes(
+  systemPrompt: string,
+  messages: NativeMessage[],
+  tools: NativeToolDef[],
+): number {
+  return Buffer.byteLength(JSON.stringify({ system: systemPrompt, messages, tools }), "utf8")
+    + 1024
+    + 64 * (messages.length + tools.length);
+}
+
+/**
+ * Compact before dispatch when a large tool result makes the next request too
+ * large. Token-based compaction runs after a completed turn and cannot prevent
+ * this boundary failure. If summarization is still too large, preserve the
+ * opening task and successively smaller recent tails.
+ */
+export async function compactMessagesForRequestPreflight(
+  messages: NativeMessage[],
+  runtime: NativeRuntime,
+  systemPrompt: string,
+  tools: NativeToolDef[],
+  byteLimit = NATIVE_REQUEST_PREFLIGHT_BYTES,
+  opts: CompactMessagesOptions = {},
+): Promise<{ messages: NativeMessage[]; compacted: boolean; degraded: boolean }> {
+  if (estimateNativeRequestBytes(systemPrompt, messages, tools) <= byteLimit) {
+    return { messages, compacted: false, degraded: false };
+  }
+
+  const summarized = await compactMessagesWithLLM(messages, runtime, systemPrompt, opts);
+  let next = summarized.messages;
+  let degraded = summarized.degraded;
+  if (estimateNativeRequestBytes(systemPrompt, next, tools) <= byteLimit) {
+    return { messages: next, compacted: true, degraded };
+  }
+
+  for (const tailCount of [6, 3, 1]) {
+    const pruned = dropOldestMessages(next, tailCount);
+    if (pruned === next) continue;
+    next = pruned;
+    degraded = true;
+    if (estimateNativeRequestBytes(systemPrompt, next, tools) <= byteLimit) break;
+  }
+  if (estimateNativeRequestBytes(systemPrompt, next, tools) > byteLimit) {
+    throw new Error(
+      `inference request remains above the ${byteLimit}-byte preflight limit after context compaction`,
+    );
+  }
+  return { messages: next, compacted: true, degraded };
+}
+
 /** Total extra output-cap requests permitted in one loop/console turn. */
 export const MAX_OUTPUT_CAP_CONTINUATIONS = 3;
 export const OUTPUT_CAP_CONTINUATION_PROMPT =
@@ -2140,6 +2197,41 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     let streamedThinkingText = "";
     let streamedUsageInputTokens: number | undefined;
     let streamedUsageOutputTokens: number | undefined;
+
+    // A large tool result can push the next serialized request over the
+    // managed gateway limit before post-turn token compaction runs.
+    const preflight = await compactMessagesForRequestPreflight(
+      state.messages,
+      runtime,
+      config.systemPrompt,
+      nativeTools,
+      NATIVE_REQUEST_PREFLIGHT_BYTES,
+      {
+        signal: executionSignal,
+        onSummaryUsage: usage => {
+          state.totalUsage.inputTokens += usage.inputTokens;
+          state.totalUsage.outputTokens += usage.outputTokens;
+          state.totalUsage.cachedInputTokens += usage.cachedInputTokens ?? 0;
+          config.costLedger?.add(usage, pricingModel());
+          state.estimatedCostUsd = estimateCost(state.totalUsage, pricingModel());
+        },
+      },
+    );
+    if (preflight.compacted) {
+      const messagesBefore = state.messages.length;
+      state.messages = preflight.messages;
+      compactionCount++;
+      tokensAtLastCompaction = state.totalUsage.inputTokens;
+      onEvent?.("context_compacted", {
+        turn: state.turnCount,
+        inputTokens: state.totalUsage.inputTokens,
+        messagesBefore,
+        messagesAfter: state.messages.length,
+        compactionNumber: compactionCount,
+        trigger: "request_size_preflight",
+        degraded: preflight.degraded,
+      });
+    }
 
 
     // Bus event: planner invocation. `tokens_est` is cumulative input
