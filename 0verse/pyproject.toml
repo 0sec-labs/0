@@ -46,7 +46,7 @@ firmware = ["qiling"]
 rizin = ["r2pipe>=1.8"]
 # M5 #29 — MCP bridge. Optional: `python -m zeroverse.mcp` falls back to a built-in
 # JSON-RPC-over-stdio stub when the official SDK is absent.
-mcp = ["mcp>=1.0"]
+mcp = ["mcp>=1.30.0"]
 scout = ["python-can>=4.5"]
 dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11", "jsonschema[format]>=4.23"]
 
