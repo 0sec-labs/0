@@ -1,9 +1,0 @@
-{
-  "binary": "/tmp/re_airportd_arm64e",
-  "triage": "Mach-O arm64 (64-bit little)  kind=EXEC  nx=on pie=on canary=on",
-  "stages_run": [
-    "ingest",
-    "preflight"
-  ],
-  "findings": []
-}

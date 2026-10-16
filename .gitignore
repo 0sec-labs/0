@@ -30,3 +30,4 @@ services/
 # Local scanner configuration and generated baselines
 **/.foxguard/
 **/.foxguard.yml
+research/wireless/
