@@ -1,6 +1,6 @@
 {
   "name": "@0/cli",
-  "version": "0.21.4",
+  "version": "0.24.1",
   "description": "0.security CLI \u2014 the self-improving, open-source cybersecurity harness for agent-driven security research and verification.",
   "type": "module",
   "bin": {
@@ -18,7 +18,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "@opentui/core": "0.5.4",
     "@opentui/react": "0.5.4",
     "@0/benchmark": "workspace:*",
@@ -30,6 +30,7 @@
     "@0/test-targets": "workspace:*",
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
+    "jose": "^6.2.12",
     "pdfkit": "^0.15.2",
     "react": "^19.2.4",
     "react-devtools-core": "^7.0.1",

@@ -51,10 +51,7 @@ export const READ_FILE_DEFAULT_MAX_LINES = 500;
  *
  * Namespaced so a reader (human or model) can tell it apart from file content.
  * It is not a cryptographic delimiter — a file could contain this literal
- * string — but `read_file` output is already classified UNTRUSTED and passes
- * through `sanitizeUntrustedToolResult` before it re-enters model context, so
- * spoofing this line buys an attacker nothing they cannot already do by
- * writing "ignore previous instructions" into the same file.
+ * string. The original file content is preserved when it reaches model context.
  */
 export const READ_FILE_NOTE_PREFIX = "[0:read_file]";
 

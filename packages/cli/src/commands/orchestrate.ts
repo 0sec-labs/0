@@ -644,7 +644,7 @@ async function runFamilyCandidate(
 export function registerOrchestrateCommand(program: Command): void {
   program
     .command("orchestrate")
-    .description("Run the autonomous verification worker against persisted queued case work")
+    .description("Run the verification worker against queued cases")
     .option("--db-path <path>", "Path to SQLite database")
     .option("--limit <n>", "Maximum queued cases to claim per pass", "1")
     .option("--runtime <runtime>", "Runtime override: auto, claude, codex, gemini, api")

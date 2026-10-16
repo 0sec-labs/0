@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "manifestSha256": "936bb91e559fe357b3f6b1337557fb5a13b0e5fc707895beba41c01297f74e48",
+  "xbow": {
+    "blackBox": 38,
+    "whiteBox": 53,
+    "union": 53,
+    "duplicateAttempts": 0,
+    "warnings": [
+      "Complete failed-attempt denominator, source/evaluator revision and supplier charges are unknown.",
+      "Per-model union exceeds black-box union: the model summary includes both modes, not a black-box subset."
+    ]
+  },
+  "ab": {
+    "arms": {
+      "control": {
+        "runs": 3,
+        "passed": 3,
+        "failed": 0,
+        "cost": 0.231438,
+        "durationMs": 193298
+      },
+      "treatment": {
+        "runs": 3,
+        "passed": 3,
+        "failed": 0,
+        "cost": 0.191982,
+        "durationMs": 196423
+      }
+    },
+    "change": -17.048194332823474,
+    "caveats": [
+      "The benchmark target emitted body-parser syntax errors in control-1 and treatment-1; both runs completed successfully. Treat cost and duration as valid recorded outcomes, but do not present these six runs as a clean reliability benchmark.",
+      "The target and model are stochastic. Results are reported as medians and ranges must be re-measured on a larger, version-pinned suite before making product or public claims."
+    ],
+    "warnings": []
+  },
+  "router": {
+    "rows": 1514,
+    "positives": 1410,
+    "negatives": 104,
+    "origins": {
+      "flag_extraction": 613,
+      "package_verdict": 901
+    },
+    "duplicateTexts": 421,
+    "groups": 520,
+    "repeatedGroups": 346,
+    "mixedLabelGroups": 11,
+    "pooledAlwaysPositiveF1": 0.9644322845417237,
+    "recordedRowCvF1": 0.961748916423456,
+    "warnings": [
+      "Outcome-level weak supervision does not establish individual-finding truth.",
+      "Row-wise CV is not a group-held-out generalization result; efficacy claims omitted."
+    ]
+  },
+  "cybergym": {
+    "rows": 54,
+    "uniqueTasks": 54,
+    "passed": 40,
+    "failed": 14,
+    "stablePass": 40,
+    "duplicateTasks": 0,
+    "warnings": [
+      "One retained campaign; no matched self-evolution arm.",
+      "Source revision and supplier charges are unknown."
+    ]
+  },
+  "warnings": [
+    "May 4 input versus May 6 ledger: incompatible cohorts.",
+    "Complete failed-attempt denominator, source/evaluator revision and supplier charges are unknown.",
+    "Per-model union exceeds black-box union: the model summary includes both modes, not a black-box subset.",
+    "Outcome-level weak supervision does not establish individual-finding truth.",
+    "Row-wise CV is not a group-held-out generalization result; efficacy claims omitted.",
+    "One retained campaign; no matched self-evolution arm.",
+    "Source revision and supplier charges are unknown.",
+    "xbow: missing full failed-attempt denominator.",
+    "xbow: missing source revision.",
+    "xbow: missing evaluator revision.",
+    "ledger: missing immutable raw May 6 cohort.",
+    "ab: missing resolved provider/model identity.",
+    "ab: missing source revision.",
+    "ab: missing raw supplier charges.",
+    "cybergym: missing source revision.",
+    "cybergym: missing provider charges.",
+    "cybergym: missing matched comparison arm.",
+    "router: missing per-finding independent labels.",
+    "router: missing group-held-out evaluation.",
+    "routerMeta: missing immutable fitted model/fold receipt.",
+    "routerMeta: missing group-held-out evaluation."
+  ]
+}

@@ -9,7 +9,6 @@ import {
   createHerdrEventSink,
   configureRunContributionsFromEnvironment,
   eventBus,
-  maybeSubscribeCloudEventSink,
   maybeSubscribeOperationalEventSink,
   presentationEventSink,
 } from "@0/core";
@@ -21,6 +20,21 @@ import {
   installProcessPresentationStreamBridge,
 } from "./presentation/process-output.js";
 import { setHerdrSink } from "./herdr-state.js";
+import { launchConfiguredWorkbench } from "./workbench.js";
+import { remoteBackendClientId } from "./backend-client-mode.js";
+import { savedConnectionEnvPatch } from "./connection-env.js";
+
+// Cross the execution boundary before reading host login state, applying updates
+// or starting the console. The guest receives the original argv and terminal.
+try {
+  const workbenchExitCode = await launchConfiguredWorkbench(process.argv.slice(2));
+  if (workbenchExitCode !== undefined) process.exit(workbenchExitCode);
+} catch (error) {
+  process.stderr.write(`[0] ${error instanceof Error ? error.message : String(error)}\n`);
+  process.exit(125);
+}
+const isRemoteBackendClient = Boolean(remoteBackendClientId(process.argv.slice(2)));
+const isWorkbenchManagement = process.argv[2] === "workbench" || process.argv[2] === "config";
 
 
 // Legacy command modules still use console methods. Bridge those bytes into
@@ -32,16 +46,8 @@ installProcessPresentationStreamBridge();
 // resolves to the chatgpt-codex provider (highest priority) instead of falling
 // through to stale AZURE_OPENAI_API_KEY / OPENAI_API_KEY. No-op in the cloud
 // worker (it sets the tokens itself) and when a token is already present.
-maybeLoadCodexAuth();
+if (!isWorkbenchManagement && !isRemoteBackendClient) maybeLoadCodexAuth();
 
-// Subscribe the cloud-event sink before any subcommand runs. Idempotent
-// + env-gated (ZERO_CLOUD_EVENTS=1): the sink writes one
-// `ZERO_EVENT_<TYPE>` line per emitted event to stdout, which the
-// 0-cloud worker-controller's stdout streamer parses and POSTs to
-// the orchestrator's /scans/:id/events endpoint. Without this call,
-// the sink module is dead code and the cloud's live-trace UI stays
-// dark for every scan.
-maybeSubscribeCloudEventSink();
 
 // The settings store initializes the pipeline and preserves explicit environment
 // restrictions. Do not overwrite the tier env or reinitialize from env alone.
@@ -85,12 +91,9 @@ enforceSourceDistFreshness({ entryUrl: import.meta.url });
 
 // Explicit automatic updates finish before command parsing or interactive work.
 // Notification-only checks stay in the background; unset settings remain opt-in.
-await runStartupUpdate(VERSION);
+if (!isWorkbenchManagement && !isRemoteBackendClient) await runStartupUpdate(VERSION);
 
-// The empty-argv path launches straight into the interactive TUI and needs none
-// of the 56 subcommand modules. Importing (and registering) that barrel is the
-// single biggest chunk of cold-start import cost, so defer it behind a dynamic
-// import that only runs when the user actually passes a command/args.
+// Load command implementations only after startup configuration is ready.
 async function buildProgram(): Promise<Command> {
   const c = await import("./commands/index.js");
   const program = new Command();
@@ -99,6 +102,11 @@ async function buildProgram(): Promise<Command> {
     .description("Open-source multi-model security research harness")
     .version(VERSION)
     .enablePositionalOptions();
+  program.hook("preAction", (_command, action) => {
+    if (!isWorkbenchManagement && !isRemoteBackendClient && ["review", "scan"].includes(action.name())) {
+      Object.assign(process.env, savedConnectionEnvPatch(process.env));
+    }
+  });
   c.registerScanCommand(program);
   c.registerResumeCommand(program);
   c.registerReplayCommand(program);
@@ -107,15 +115,15 @@ async function buildProgram(): Promise<Command> {
   c.registerSecureCommand(program);
   c.registerReviewCommand(program);
   c.registerFixCommand(program);
-  c.registerConnectCommand(program);
-  c.registerGuideCommand(program);
   c.registerAuditCommand(program);
   c.registerDoctorCommand(program);
   c.registerDashboardCommand(program);
   c.registerTuiCommand(program);
+  c.registerTeamCommand(program);
   c.registerOrchestrateCommand(program);
   c.registerDbCommand(program);
   c.registerMcpServerCommand(program);
+  c.registerWorkflowCommand(program);
   c.registerTriageCommand(program);
   c.registerEvalCommand(program);
   c.registerBenchCommand(program);
@@ -136,7 +144,6 @@ async function buildProgram(): Promise<Command> {
   c.registerUpgradeCommand(program);
   c.registerDepsCommand(program);
   c.registerH1Command(program);
-  c.registerAuthCommand(program);
   c.registerIntelCommand(program);
   c.registerReconCommand(program);
   c.registerConsoleCommand(program);
@@ -148,6 +155,7 @@ async function buildProgram(): Promise<Command> {
   c.registerCloudCommand(program);
   c.registerXnuFuzzCommand(program);
   c.registerResearchCommand(program);
+  c.registerWorkerCommand(program);
   c.registerRadarCommand(program);
   c.registerTimelineCommand(program);
   c.registerAgentAssureCommand(program);
@@ -155,42 +163,21 @@ async function buildProgram(): Promise<Command> {
   c.registerPluginCommand(program);
   c.registerThemeCommand(program);
   c.registerEvolveCommand(program);
+  c.registerLearningCommand(program);
   c.registerConfigCommand(program);
-  c.registerServiceCommand(program);
-  c.registerProjectSetupCommand(program);
-  c.registerAuditSkillsCommand(program);
+  c.registerWorkbenchCommand(program);
+  c.registerReviewChecksCommand(program);
   c.registerHackstoreCommand(program);
   return program;
 }
 
 
-// ── Interactive menu ──
-//
-// Under Bun, launches the OpenTUI home (`@opentui/react`-based mission
-// control). Under Node, the interactive menu was Ink-based and was
-// removed in v0.9.0 — print install instructions for the standalone
-// binary and exit so the user gets the full TUI experience.
-async function showInteractiveMenu(): Promise<void> {
-  const { isBunRuntime } = await import("./tui/runtime.js");
-  if (isBunRuntime()) {
-    const { showOpenTuiHome } = await import("./tui/run.js");
-    await showOpenTuiHome();
-    return;
-  }
-
-  console.log("");
-  console.log(`  ${chalk.bold("0")} ${chalk.dim(`v${VERSION}`)}`);
-  console.log("");
-  console.log(`  ${chalk.dim("From v0.9.0 onwards, 0 ships as a self-contained binary.")}`);
-  console.log(`  ${chalk.dim("The full TUI (mission control + live scan view) needs Bun's runtime.")}`);
-  console.log("");
-  console.log(`  ${chalk.bold("Install")} (single curl, no Node / Bun required):`);
-  console.log(`    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash`);
-  console.log("");
-  console.log(`  ${chalk.dim("After install, run:")}`);
-  console.log(`    0 scan --target https://example.com`);
-  console.log(`    0 --help`);
-  console.log("");
+// Default to the account-free browser console under both Node and Bun.
+async function showWebConsole(): Promise<void> {
+  const { registerDashboardCommand } = await import("./commands/dashboard.js");
+  const program = new Command();
+  registerDashboardCommand(program);
+  await program.parseAsync(["web"], { from: "user" });
 }
 
 // Debounce timers are unreferenced; flush the final batch of a short-lived
@@ -201,11 +188,11 @@ process.once("beforeExit", () => {
 
 // ── Entry point ──
 const userArgs = process.argv.slice(2);
-const knownCommands = ["scan", "resume", "replay", "history", "findings", "secure", "connect", "guide", "review", "fix", "audit", "deps", "doctor", "dashboard", "tui", "watch", "orchestrate", "db", "mcp-server", "triage", "eval", "bench", "ingest", "kernel", "disclose", "verify", "exploit", "hunt", "recency-hunt", "deep-review", "lens-synth", "memsafety", "assumption-hunt", "specdrift", "protocol-check", "cve", "upgrade", "update", "h1", "auth", "login", "models", "balance", "intel", "recon", "js-recon", "npm-discovery", "identity", "adgraph", "entragraph", "cloud", "service", "project", "skills", "xnu-fuzz", "research", "radar", "timeline", "console", "agent-assure", "binary", "plugin", "theme", "config", "evolve", "hackstore", "hack", "store", "help"];
+const knownCommands = ["scan", "resume", "replay", "history", "findings", "secure", "review", "fix", "audit", "deps", "doctor", "dashboard", "web", "chat", "team", "tui", "watch", "orchestrate", "db", "mcp-server", "workflow", "runs", "sessions", "triage", "eval", "bench", "ingest", "kernel", "disclose", "verify", "exploit", "hunt", "recency-hunt", "deep-review", "lens-synth", "memsafety", "assumption-hunt", "specdrift", "protocol-check", "cve", "upgrade", "update", "h1", "intel", "recon", "js-recon", "npm-discovery", "identity", "adgraph", "entragraph", "cloud", "xnu-fuzz", "research", "worker", "radar", "timeline", "console", "agent-assure", "binary", "plugin", "theme", "config", "workbench", "checks", "evolve", "learning", "hackstore", "hack", "store", "help"];
 
 if (userArgs.length === 0) {
-  // Fast path: straight into the TUI without ever importing the command barrel.
-  showInteractiveMenu().catch((err) => {
+  // Default browser path avoids importing the full command barrel.
+  showWebConsole().catch((err) => {
     console.error(chalk.red(err instanceof Error ? err.message : String(err)));
     process.exit(2);
   });

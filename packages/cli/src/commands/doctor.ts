@@ -7,7 +7,7 @@ export function registerDoctorCommand(program: Command): void {
     .command("doctor")
     .description("Check local runtime prerequisites and suggest the next command")
     .action(async () => {
-      const { isBunRuntime, canUseOpenTui } = await import("../tui/runtime.js");
+      const { isBunRuntime, canUseOpenTui, getRuntimeMetadata } = await import("../tui/runtime.js");
       if (isBunRuntime() && canUseOpenTui()) {
         const { showOpenTuiDoctor } = await import("../tui/run.js");
         await showOpenTuiDoctor();
@@ -15,26 +15,30 @@ export function registerDoctorCommand(program: Command): void {
       }
 
       const { hasApiKey, availableRuntimes, apiRuntime } = await getRuntimeAvailability();
+      const runtime = getRuntimeMetadata();
       const nodeMajor = Number.parseInt(process.versions.node.split(".")[0] ?? "0", 10);
       const hasSupportedNode = nodeMajor >= 24;
 
       console.log("");
       console.log(chalk.red.bold("  ◆ 0") + chalk.gray(" doctor"));
       console.log("");
+      console.log(`  CLI version   v${runtime.cliVersion} [${runtime.releaseChannel}]`);
+      console.log(`  Runtime       ${runtime.engine} ${runtime.engineVersion}`);
+      console.log(`  Platform      ${runtime.platform}  ${runtime.arch}`);
       console.log(`  Node.js       ${hasSupportedNode ? chalk.green("ok") : chalk.red("bad")}  ${process.version}`);
       const apiStatus = hasApiKey
         ? `${chalk.yellow("configured")}  ${apiRuntime.providerLabel}`
         : apiRuntime.configured
           ? `${chalk.red("bad")}  ${apiRuntime.providerLabel}`
           : `${chalk.yellow("missing")}  not configured`;
-      console.log(`  API runtime   ${apiStatus}`);
-      console.log(`  CLI runtimes  ${availableRuntimes.length > 0 ? chalk.yellow("found") : chalk.yellow("missing")}  ${availableRuntimes.join(", ") || "none"}`);
+      console.log(`  API provider  ${apiStatus}`);
+      console.log(`  CLI providers ${availableRuntimes.length > 0 ? chalk.yellow("found") : chalk.yellow("missing")}  ${availableRuntimes.join(", ") || "none"}`);
       console.log("");
 
       if (!hasSupportedNode) {
         console.log(chalk.red("  Upgrade to Node 24+ before running 0."));
       } else if (apiRuntime.configured && !apiRuntime.valid && apiRuntime.error) {
-        console.log(chalk.red("  API runtime is configured but unusable."));
+        console.log(chalk.red("  API provider is configured but unusable."));
         console.log(chalk.gray(`  ${apiRuntime.error.split("\n").join("\n  ")}`));
       } else if (hasApiKey || availableRuntimes.length > 0) {
         console.log(chalk.yellow("  Prerequisites found. The first request verifies credentials."));

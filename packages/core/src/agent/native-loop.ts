@@ -1,3 +1,8 @@
+import { isLocalAdmissionLimit, isLocalAdmissionFailure } from "../runtime/request-admission.js";
+import { verifyOracleByCategory } from "../triage/oracles.js";
+import { assertWorkspaceIdentity, type WorkspaceIdentity } from "./workspace-identity.js";
+import { assertWorkflowNativeRuntime, filterWorkflowAgentTools, workflowPhasePrompt } from "../workflow-execution-policy.js";
+import { createCostBudgetWarnings } from "./cost-budget-warning.js";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs";
 import { setTimeout as delay } from "node:timers/promises";
@@ -52,7 +57,8 @@ import { SECURITY_RULES, selectRules, buildRuleInjection, type EngagementPhase, 
 import { formatJitSkillsInstruction, getSkillById } from "./skills/index.js";
 import { estimateCost } from "./cost.js";
 import type { ScanCostLedger } from "./cost-ledger.js";
-import { eventBus, isCloudEventSinkActive } from "../events/bus.js";
+import { addRuntimeUsage } from "./cost-ledger.js";
+import { eventBus } from "../events/bus.js";
 import { diag } from "../diagnostics/channel.js";
 import {
   reduceCoordinatorState,
@@ -69,11 +75,6 @@ import {
   HuntMemoryStore,
   type HuntSeverity,
 } from "../memory/index.js";
-import {
-  isUntrustedSourceTool,
-  sanitizeUntrustedToolResult,
-} from "../untrusted-sanitizer.js";
-import { DeltaBatcherSet } from "./delta-batcher.js";
 import { toolCallPreview } from "./tool-preview.js";
 import {
   newCorrelationId,
@@ -90,6 +91,8 @@ import {
   type InlineValidationOutcome,
 } from "./inline-validation.js";
 import type { osecDB } from "@0/db";
+import { LearningStore, learningProjectId } from "@0/db";
+import { LearningService } from "../learning-service.js";
 import type { Finding, AttackResult, TargetInfo } from "@0/shared";
 
 // ── External Memory ──
@@ -102,15 +105,15 @@ function externalMemoryPath(scanId?: string): string {
 
 // ── Loot harvesting (0#567) ──
 // Tools whose result text reflects target data worth mining for footholds.
-// `isUntrustedSourceTool` already covers http_request / crawl / read_file /
-// send_prompt / submit_form / browser; bash + run_command are added because
-// they routinely shell out to curl / cat and surface the same kind of
+// Network, file, browser, and MCP tools surface target data; shell tools are
+// included because they routinely shell out to curl / cat and surface the same kind of
 // credentials, tokens, and paths. Our own trusted bookkeeping tools
 // (save_finding / query_findings / use_loot / done) are deliberately excluded
 // — save_finding harvests via its own evidence path in the executor.
 function shouldHarvestLoot(toolName: string): boolean {
   return (
-    isUntrustedSourceTool(toolName) ||
+    ["http_request", "crawl", "read_file", "send_prompt", "submit_form", "browser"].includes(toolName) ||
+    toolName.startsWith("mcp__") ||
     toolName === "bash" ||
     toolName === "run_command" ||
     // js_eval / python_eval shell out to node / python3 (which routinely curl,
@@ -169,27 +172,99 @@ export function summarizeReasoning(thinkingText: string | undefined | null): str
 const EXTERNAL_MEMORY_MAX_CHARS = 2000;
 
 /**
- * Transient provider error classifier. Hosted inference is fail-closed: an
- * admission rejection is replayable only when the gateway explicitly marks
- * it safe. A response/stream/transport failure can hide a billable outcome.
- * Direct providers retain their existing bounded retry behavior.
+ * Classify transient provider overloads, rate limits and transport failures
+ * for the agent loop's bounded same-turn retry. Includes the runtime's own
+ * per-call timeout, which `LlmApiRuntime` reports as
+ * "<provider> API request timed out" rather than a transport code.
  */
-export function isTransientLlmError(errorMsg: string, retrySafe?: boolean): boolean {
-  if (retrySafe === false || /automatic replay is disabled|outcome (?:is|may be) unknown/i.test(errorMsg)) return false;
-  if (/(?:\b0 hosted request\b|\b0\.security Cloud\b)/i.test(errorMsg) && retrySafe !== true) return false;
-  return /\b(429|529|502|503|504)\b|overloaded|rate.?limit|temporarily|too many requests|ETIMEDOUT|ECONNRESET|throttl|stall/i.test(errorMsg);
+export function isTransientLlmError(errorMsg: string): boolean {
+  if (isNonReplayableLlmError(errorMsg)) return false;
+  return /\b(429|529|502|503|504)\b|overloaded|rate.?limit|temporarily|too many requests|ETIMEDOUT|ECONNRESET|throttl|stall|API request timed out/i.test(errorMsg);
+}
+
+function isNonReplayableLlmError(errorMsg: string): boolean {
+  return /automatic replay (?:is )?disabled|outcome.{0,30}unknown|unresolved_inference_charge|recovery_requires_review|settlement_ambiguous|usage_settlement_unconfirmed/i.test(errorMsg);
 }
 
 /**
- * Provider context-window rejection classifier. Hosted 413
- * input_limit_exceeded is a pre-dispatch admission rejection; pruning changes
- * the next request. Rate limits and generic 5xx never prune history.
+ * Provider context-window rejection classifier. Pruning changes the next
+ * request; rate limits and generic 5xx never prune history.
  */
 export function isContextWindowError(errorMsg: string): boolean {
-  if (/\b0\.security Cloud API error 429:/i.test(errorMsg)) return false;
+  if (isLocalAdmissionFailure(errorMsg) || isNonReplayableLlmError(errorMsg)) return false;
+  if (/\bAPI error 429:/i.test(errorMsg)) return false;
   return /context.{0,40}(?:window|length|limit)|(?:maximum|max).{0,20}context|too many tokens|prompt.{0,30}(?:too long|too large)|input.{0,30}(?:too long|too large|limit(?:_exceeded)?)/i.test(
     errorMsg,
   );
+}
+
+/**
+ * Keep the request assembled by the engine below the managed inference
+ * gateway's 256 kB admission ceiling. Provider adapters add framing after
+ * this check, so retain 25% headroom rather than aiming at the hard limit.
+ */
+export const NATIVE_REQUEST_PREFLIGHT_BYTES = 192 * 1024;
+
+export function estimateNativeRequestBytes(
+  systemPrompt: string,
+  messages: NativeMessage[],
+  tools: NativeToolDef[],
+): number {
+  return Buffer.byteLength(JSON.stringify({ system: systemPrompt, messages, tools }), "utf8")
+    + 1024
+    + 64 * (messages.length + tools.length);
+}
+
+/**
+ * Compact before dispatch when a large tool result makes the next request too
+ * large. Token-based compaction runs after a completed turn and cannot prevent
+ * this boundary failure. If summarization is still too large, preserve the
+ * opening task and successively smaller recent tails.
+ */
+export async function compactMessagesForRequestPreflight(
+  messages: NativeMessage[],
+  runtime: NativeRuntime,
+  systemPrompt: string,
+  tools: NativeToolDef[],
+  byteLimit = NATIVE_REQUEST_PREFLIGHT_BYTES,
+  opts: CompactMessagesOptions = {},
+): Promise<{ messages: NativeMessage[]; compacted: boolean; degraded: boolean }> {
+  if (estimateNativeRequestBytes(systemPrompt, messages, tools) <= byteLimit) {
+    return { messages, compacted: false, degraded: false };
+  }
+
+  const summarized = await compactMessagesWithLLM(messages, runtime, systemPrompt, opts);
+  let next = summarized.messages;
+  let degraded = summarized.degraded;
+  if (estimateNativeRequestBytes(systemPrompt, next, tools) <= byteLimit) {
+    return { messages: next, compacted: true, degraded };
+  }
+
+  for (const tailCount of [6, 3, 1]) {
+    const pruned = dropOldestMessages(next, tailCount);
+    if (pruned === next) continue;
+    next = pruned;
+    degraded = true;
+    if (estimateNativeRequestBytes(systemPrompt, next, tools) <= byteLimit) break;
+  }
+  if (estimateNativeRequestBytes(systemPrompt, next, tools) > byteLimit) {
+    throw new Error(
+      `inference request remains above the ${byteLimit}-byte preflight limit after context compaction`,
+    );
+  }
+  return { messages: next, compacted: true, degraded };
+}
+
+/** Total extra output-cap requests permitted in one loop/console turn. */
+export const MAX_OUTPUT_CAP_CONTINUATIONS = 3;
+export const OUTPUT_CAP_CONTINUATION_PROMPT =
+  "[OUTPUT CAP CHECKPOINT] The previous response reached max_output_tokens. Continue from the retained observations and current plan, without restarting the task or repeating completed tools. No function calls from that incomplete response were executed; if still needed, issue them anew as complete calls. Keep the remaining answer concise.";
+
+/** Only the runtime's observation-only checkpoint authorizes a new request. */
+export function isRecoverableOutputCap(result: NativeRuntimeResult): boolean {
+  return result.stopReason === "max_tokens" && result.checkpoint?.reason === "max_output_tokens" &&
+    !result.error && !result.cancelled && !result.providerRaw &&
+    result.content.every(block => block.type === "text");
 }
 
 /**
@@ -242,6 +317,8 @@ export function toolFailureText(toolName: string, result: ToolResult): string {
 // ── Native Agent Loop Config ──
 
 export interface NativeAgentConfig {
+  /** Preserve exact target identity guards when delegating from the console. */
+  consoleSession?: boolean;
   /**
    * Agent-to-agent messaging identity and policy, propagated to the tool
    * context so the child messaging tools know who they are and whom they
@@ -263,6 +340,8 @@ export interface NativeAgentConfig {
   workerTree?: ToolContext["workerTree"];
   workerFindings?: ToolContext["findings"];
   scopePath?: string;
+  /** Inherited parent identity; validated before the child starts analysis. */
+  workspaceIdentity?: WorkspaceIdentity;
   sessionId?: string; // Resume from existing session
   /** Which retry attempt this is (0 = first attempt). Used by early-stop logic. */
   retryCount?: number;
@@ -276,6 +355,7 @@ export interface NativeAgentConfig {
    * omitted.
    */
   identities?: import("@0/shared").NamedIdentity[];
+  accessControlFixtures?: import("@0/shared").AccessControlFixture[];
   /**
    * Pre-built session engine (0#564). Normally left unset — the loop
    * constructs one from `identities`/`authConfig`. Provided only when a caller
@@ -310,6 +390,7 @@ export interface NativeAgentConfig {
    * independently. Omit to keep the legacy per-session accounting.
    */
   costLedger?: ScanCostLedger;
+  requirePricedUsage?: boolean;
   /** Root policy inherited by descendants without accumulating ancestor tasks.
    * Defaults to systemPrompt for a non-delegated root.
    */
@@ -400,6 +481,8 @@ export interface NativeAgentConfig {
   codebaseLearning?: boolean;
   /** Captured canonical workspace root for live-harness trust/enablement decisions. */
   workspaceRoot?: string;
+  skillDiscoveryOptions?: ToolContext["skillDiscoveryOptions"];
+  skillAuthoring?: ToolContext["skillAuthoring"];
   /** Live harness snapshot change callback. Fired on generation transitions, view updates, and errors. */
   onHarnessUpdate?: (snapshot: HarnessSnapshot) => void;
 }
@@ -417,7 +500,7 @@ export interface NativeAgentLoopOptions {
     toolCalls: ToolCall[],
     results: ToolResult[],
     assistantText: string,
-    telemetry?: { usage?: NativeAgentState["totalUsage"]; contextTokens?: number },
+    telemetry?: { usage?: NativeAgentState["totalUsage"]; contextTokens?: number; reasoning_summary?: string },
   ) => void;
   /** Visible tool snapshots before/after execution, without token-level floods. */
   onToolUpdate?: NativeAgentLoopOptions["onTurn"];
@@ -439,6 +522,8 @@ export interface NativeAgentLoopOptions {
    * true. ZERO_DISABLE_HUNT_MEMORY=1/true vetoes either opt-in.
    */
   huntMemoryStore?: HuntMemoryStore;
+  /** Optional tenant-local learning mirror; never enables source-memory access. */
+  learningStore?: LearningStore;
 }
 
 export interface NativeAgentState {
@@ -458,7 +543,7 @@ export interface NativeAgentState {
    * full price — without it, a well-cached run would report roughly 10x its
    * actual input spend.
    */
-  totalUsage: { inputTokens: number; outputTokens: number; cachedInputTokens: number };
+  totalUsage: { inputTokens: number; outputTokens: number; cachedInputTokens: number; cacheWriteTokens?: number };
   /** Set to true when the loop stopped early because no save_finding was called by the halfway point. */
   earlyStopNoProgress: boolean;
   /** Brief description of tools/approaches used before the early stop (for retry context). */
@@ -492,6 +577,8 @@ export interface NativeAgentState {
    * the loop bailed out.
    */
   errorExit?: { error: string; turn: number; source?: "provider" | "harness" };
+  /** Resumable output-cap pause, never a provider failure or completed task. */
+  outputCapExit?: { checkpoint: NonNullable<NativeRuntimeResult["checkpoint"]>; continuations: number; message: string };
   /**
    * Inline-validation outcomes (#554), one per high/critical finding that the
    * onFindingSaved hook validated. Empty when `features.inlineValidation` is
@@ -531,6 +618,8 @@ export interface NativeAgentState {
 export async function runNativeAgentLoop(
   opts: NativeAgentLoopOptions,
 ): Promise<NativeAgentState> {
+  assertWorkflowNativeRuntime(opts.runtime);
+  opts = { ...opts, config: { ...opts.config, systemPrompt: workflowPhasePrompt(opts.config.systemPrompt) } };
   const parent = currentRunContribution();
   const enrollment = opts.contribution ?? parent ?? getConfiguredRunContributionClient();
   const secrets = enrollment ? [
@@ -568,6 +657,7 @@ export async function runNativeAgentLoop(
         : state.killSwitchTriggered ? "timeout"
         : state.costCeilingExceeded ? "run_resource_limit"
         : state.errorExit ? state.errorExit.source === "harness" ? "harness_error" : "provider_error"
+        : state.outputCapExit ? "run_resource_limit"
         : state.earlyStopNoProgress ? "no_progress"
         : state.done ? "plan_exhausted"
         : state.turnCount >= opts.config.maxTurns ? "run_resource_limit" : "unknown";
@@ -599,10 +689,12 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     inlineValidationOracle,
   } = opts;
 
-  // Hosted discovery and failover can change the model during a call.
+  if (config.workspaceIdentity) assertWorkspaceIdentity(config.workspaceIdentity, config.scopePath);
+
+  // Failover can change the model during a call.
   // Price usage against its resolved identity, never the Auto routing choice.
   const pricingModel = () => {
-    const model = runtime.resolvedModel?.() || config.costModel;
+    const model = runtime.resolvedPricingModel?.() || runtime.resolvedModel?.() || config.costModel;
     return model === "auto" ? undefined : model;
   };
 
@@ -704,6 +796,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     target: config.target,
     scanId: config.scanId,
     role: config.role,
+    consoleSession: config.consoleSession,
     diffScopedReview: config.role === "review" && config.singleAgent === true,
     reviewDiffBase: config.reviewDiffBase,
     delegationSystemPrompt: config.delegationSystemPrompt ?? config.systemPrompt,
@@ -713,9 +806,11 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     attackResults: [],
     targetInfo: {},
     scopePath: config.scopePath,
+    workspaceIdentity: config.workspaceIdentity,
     persistFindings: db !== null,
     authConfig: config.authConfig,
     identities,
+    accessControlFixtures: config.accessControlFixtures,
     session,
     scope: config.scope,
     rateLimiter: config.rateLimiter,
@@ -742,8 +837,9 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // the SAME scan-wide ledger and ceiling as this session (closing the
     // off-ledger gap where subagent spend escaped the ceiling entirely).
     costLedger: config.costLedger,
+    requirePricedUsage: config.requirePricedUsage,
     costCeilingUsd: config.costCeilingUsd,
-    get costModel() { return pricingModel(); },
+    get costModel() { return runtime.resolvedModel?.() || config.costModel; },
     // Tool-health aggregator (0#tool-reliability). Shared across the scan so
     // the end-of-run summary sees every tool skip/failure; each NEW distinct
     // event also fans out on the bus as `tool_health`.
@@ -779,6 +875,8 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   }) : undefined;
   toolCtx.liveHarness = harness;
   toolCtx.workspaceRoot = workspaceRoot;
+  toolCtx.skillDiscoveryOptions = config.skillDiscoveryOptions;
+  toolCtx.skillAuthoring = config.skillAuthoring;
   const executionAbort = new AbortController();
   const executionSignal = opts.signal
     ? AbortSignal.any([opts.signal, executionAbort.signal])
@@ -837,14 +935,34 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     (config.codebaseLearning === true ||
       (config.codebaseLearning !== false &&
         (config.role === "attack" || config.role === "discovery")));
+  // Mirror only already-admitted source memory. A null database stays offline
+  // unless the host supplies an explicit learning store; no default home store.
+  let sourceLearning: LearningService | undefined;
+  let ownedLearningStore: LearningStore | undefined;
+  let sourceLearningRoot: string | undefined;
+  const mirrorCodebaseNotes = (memory: HuntMemoryStore): void => {
+    if (!codebaseLearningEnabled || (!db && !opts.learningStore)) return;
+    try {
+      sourceLearningRoot ??= fs.realpathSync.native(config.scopePath!);
+      if (!sourceLearning) {
+        const store = opts.learningStore ?? (ownedLearningStore = new LearningStore(db!.databasePath));
+        sourceLearning = new LearningService(store);
+      }
+      sourceLearning.importCodebaseNotes(learningProjectId(sourceLearningRoot), sourceLearningRoot, memory, 8);
+    } catch {
+      // An auxiliary mirror cannot invalidate an accepted note or fail a scan.
+    }
+  };
   if (codebaseLearningEnabled) {
     const store = getHuntMemory();
     if (store) {
-      toolCtx.rememberCodebase = (note) => ({
-        id: store.rememberCodebase({
+      toolCtx.rememberCodebase = (note) => {
+        const accepted = store.rememberCodebase({
           ...note, root: config.scopePath!, source: `agent:${config.scanId}`,
-        }).id,
-      });
+        });
+        mirrorCodebaseNotes(store);
+        return { id: accepted.id };
+      };
     }
   }
 
@@ -864,7 +982,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     } else {
       t = t.filter((x) => x.name !== "self_extend");
     }
-    return t;
+    return filterWorkflowAgentTools(t);
   })();
   toolCtx.delegationTools = tools;
 
@@ -884,7 +1002,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   const syncExtensionTools = (): void => {
     if (!selfExtensionEnabled) return;
     const extTools = selfExtension.tools().map(toNativeExtensionToolDef);
-    nativeTools = extTools.length > 0 ? [...baseNativeTools, ...extTools] : baseNativeTools;
+    nativeTools = filterWorkflowAgentTools(extTools.length > 0 ? [...baseNativeTools, ...extTools] : baseNativeTools);
   };
 
   // Initialize or restore state
@@ -984,7 +1102,9 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
 
     if (codebaseLearningEnabled) {
       try {
-        const notes = getHuntMemory()?.recallCodebase(config.scopePath!, 6) ?? [];
+        const memory = getHuntMemory();
+        const notes = memory?.recallCodebase(config.scopePath!, 6) ?? [];
+        if (memory) mirrorCodebaseNotes(memory);
         if (notes.length > 0) {
           const context = JSON.stringify(notes.map((note) => ({
             title: note.title, summary: note.summary, files: note.codebase!.files,
@@ -1057,6 +1177,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   let driverResult: NativeRuntimeResult | undefined;
   let driverCalls: ToolCall[] | undefined;
   let driverResults: ToolResult[] | undefined;
+  let outputCapContinuations = 0;
   const harnessInput = (phase: HarnessUiInput["phase"]): HarnessUiInput => ({
     sessionId: state.sessionId, phase, iterations: state.turnCount,
     tokensUsed: state.totalUsage.inputTokens + state.totalUsage.outputTokens, tokenBudget: 0,
@@ -1078,11 +1199,17 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       { onUsage: (usage) => { streamedUsage = usage; } }, signal,
     );
     const usage = result.usage ?? streamedUsage;
+    if (config.requirePricedUsage && !usage) {
+      config.costLedger?.markUnpricedUsage();
+      throw new Error("Executable model response did not report usage; cannot continue a cost-bounded scan.");
+    }
     if (usage) {
       state.totalUsage.inputTokens += usage.inputTokens;
       state.totalUsage.outputTokens += usage.outputTokens;
       state.totalUsage.cachedInputTokens += usage.cachedInputTokens ?? 0;
-      config.costLedger?.add(usage, pricingModel());
+      if (usage.cacheWriteTokens !== undefined) state.totalUsage.cacheWriteTokens = (state.totalUsage.cacheWriteTokens ?? 0) + usage.cacheWriteTokens;
+      if (!result.usage) result.usage = usage;
+      addRuntimeUsage(config.costLedger, result, pricingModel());
       state.estimatedCostUsd = estimateCost(state.totalUsage, pricingModel());
       onEvent?.("usage", {
         turn: state.turnCount, inputTokens: state.totalUsage.inputTokens,
@@ -1150,8 +1277,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       // captured exit code / stdout tail (ToolResultMeta) into the string.
       if (!result.success) result.error = toolFailureText(name, result);
       if (driverCallId) {
-        let content = result.success ? JSON.stringify(result.output) ?? "" : `Error: ${result.error}`;
-        if (result.success && isUntrustedSourceTool(name)) content = sanitizeUntrustedToolResult(content).content;
+        const content = result.success ? JSON.stringify(result.output) ?? "" : `Error: ${result.error}`;
         state.messages.push(
           { role: "assistant", content: [{ type: "tool_use", id: driverCallId, name, input: structuredClone(args) }] },
           { role: "user", content: [{ type: "tool_result", tool_use_id: driverCallId, content, is_error: !result.success }] },
@@ -1229,6 +1355,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   // is needed; a provider rejection is the only trigger for destructive
   // drop-oldest pruning, and the retry cap prevents an endless shrink loop.
   let contextOverflowRecoveries = 0;
+  let localAdmissionRecoveries = 0;
 
   // Dynamic playbook injection. `playbookInjected` now only records that the
   // FIRST injection has happened (for event labelling); the structured
@@ -1292,6 +1419,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   // fires at most once per run. Thresholds are precomputed so the test
   // suite can assert the exact turn numbers.
   const budgetThresholds = computeBudgetWarningTurns(config.maxTurns);
+  const costBudgetWarnings = createCostBudgetWarnings(config.costCeilingUsd);
   const budgetWarningsFired: { soft: boolean; hard: boolean } = {
     soft: false,
     hard: false,
@@ -1320,6 +1448,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
           () => harness?.close(),
           () => executor.cleanup(),
           () => executablePlugins?.close(),
+          () => { try { ownedLearningStore?.close(); } catch { /* Learning remains best-effort. */ } },
         ]) {
           try { await close(); } catch (error) { failures.push(error); }
         }
@@ -1791,7 +1920,10 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         ) {
           const inlineStartedAt = Date.now();
           const outcome = await validateFindingInline(saved, config.target, {
-            oracle: inlineValidationOracle,
+            oracle: inlineValidationOracle ?? ((finding, target) => verifyOracleByCategory(finding, target, {
+              fetch: (url, init) => executor.fetchOracleRequest(url, init),
+              verifyAccessControl: (finding, target) => executor.verifyAccessControlFinding(finding, target),
+            })),
           });
           const contribution = currentRunContribution();
           if (contribution && Object.values(contribution.receipt.capture).every(Boolean) && contribution.client.permission(contribution.receipt)) {
@@ -1841,6 +1973,20 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         }
       }
   }
+  // One gate for planner/continuation/maintenance spend and tool-turn exits.
+  const enforceCostCeiling = (): boolean => {
+    if (config.costCeilingUsd === undefined) return false;
+    const runningCost = config.costLedger?.totalCostUsd() ?? estimateCost(state.totalUsage, pricingModel());
+    if (runningCost < config.costCeilingUsd) return false;
+    state.costCeilingExceeded = true;
+    state.estimatedCostUsd = runningCost;
+    state.summary = `Cost ceiling exceeded at turn ${state.turnCount}: $${runningCost.toFixed(4)} >= $${config.costCeilingUsd.toFixed(4)} ceiling. Aborting with ${toolCtx.findings.length} partial finding(s).`;
+    const payload = { turn: state.turnCount, runningCostUsd: runningCost, ceilingUsd: config.costCeilingUsd, findingCount: toolCtx.findings.length };
+    onEvent?.("cost_ceiling_exceeded", payload);
+    db?.logEvent({ scanId: config.scanId, stage: config.role, eventType: "cost_ceiling_exceeded",
+      agentRole: config.role, payload, timestamp: Date.now() });
+    return true;
+  };
   try {
   await executablePlugins?.ready;
   syncExtensionTools();
@@ -1849,6 +1995,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       state.summary = "Error: Agent execution cancelled.";
       break;
     }
+    if (enforceCostCeiling()) break;
     // ── Coordinator rails: supervise sub-agents BETWEEN iterations ──
     // No-op unless the feature flag is on. Read-only observation + logging.
     runCoordinatorSupervisor();
@@ -1933,6 +2080,11 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     // ── Inject user messages queued from the TUI ──
     injectPendingUserMessages?.();
 
+    for (const warning of costBudgetWarnings(config.costLedger?.totalCostUsd() ?? estimateCost(state.totalUsage, pricingModel()))) {
+      state.messages.push({ role: "user", content: [{ type: "text", text: warning.message }] });
+      onEvent?.("budget_warning", { turn: state.turnCount, stage: warning.stage, basis: "inference_cost_usd", spent_usd: warning.spentUsd, ceiling_usd: warning.limitUsd });
+    }
+
     // ── Two-stage budget warnings (#408, Strix-inspired) ──
     // Fire before the LLM call on the turn the threshold is reached so
     // the model sees the warning in the SAME planner invocation it
@@ -1966,37 +2118,128 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       }
     }
 
+    // ── Context window compaction (BoxPwnr-inspired) ──
+    // Trigger at 60% of context window (~77k tokens for 128k models).
+    // Allow multiple compactions as context regrows — don't re-compact until
+    // tokens have grown by at least 30k since last compaction.
+    //
+    // PROMPT-CACHE INTERACTION: this REWRITES history (middle turns collapse
+    // into a summary message), which changes the cached prefix and therefore
+    // invalidates every message-level cache entry. That is unavoidable — any
+    // rewrite of a prefix-matched cache voids it by definition — and it is
+    // still the right trade: compaction only fires once the transcript is large
+    // enough that carrying it is worse than re-establishing it. Recovery is
+    // automatic and needs no bookkeeping here: `llm-api.ts` re-plans breakpoints
+    // from the CURRENT message array on every request, so the next call writes a
+    // fresh set over the rewritten transcript and the turn after that reads it
+    // back. The system prompt + tool schemas keep hitting throughout — compaction
+    // never touches them, and they carry their own breakpoint.
+    //
+    // The threshold itself is measured against total prompt tokens (cache reads
+    // included), so a high cache hit rate does not silently defer compaction
+    // past the real context limit. See `readCacheUsage` in runtime/prompt-cache.ts.
+    // Env-tunable so an operator can match the model's real context window.
+    const { threshold: COMPACTION_THRESHOLD, regrow: COMPACTION_REGROW } =
+      resolveCompactionThresholds(process.env);
+    if (
+      features.contextCompaction
+      && state.totalUsage.inputTokens > COMPACTION_THRESHOLD
+      && state.totalUsage.inputTokens - tokensAtLastCompaction > COMPACTION_REGROW
+      && state.messages.length > 15
+    ) {
+      const beforeCount = state.messages.length;
+      currentRunContribution()?.record("compaction", { phase: "before", messagesBefore: beforeCount, inputTokens: state.totalUsage.inputTokens, strategy: "llm_with_regex_fallback" });
+
+      // Use LLM-based compaction if we have the runtime, otherwise regex.
+      // Default opts preserve the scan loop's original behavior (tail count 10,
+      // security-testing summarizer instruction).
+      state.messages = (await compactMessagesWithLLM(state.messages, runtime, config.systemPrompt, {
+        signal: executionSignal,
+        onSummaryUsage: usage => {
+          state.totalUsage.inputTokens += usage.inputTokens;
+          state.totalUsage.outputTokens += usage.outputTokens;
+          state.totalUsage.cachedInputTokens += usage.cachedInputTokens ?? 0;
+          config.costLedger?.add(usage, pricingModel());
+          state.estimatedCostUsd = estimateCost(state.totalUsage, pricingModel());
+        },
+      })).messages;
+
+      compactionCount++;
+      tokensAtLastCompaction = state.totalUsage.inputTokens;
+
+      const afterCount = state.messages.length;
+      currentRunContribution()?.record("compaction", { phase: "after", messagesAfter: afterCount, compactionNumber: compactionCount });
+      onEvent?.("context_compacted", {
+        turn: state.turnCount,
+        inputTokens: state.totalUsage.inputTokens,
+        messagesBefore: beforeCount,
+        messagesAfter: afterCount,
+        compactionNumber: compactionCount,
+      });
+      if (db) {
+        db.logEvent({
+          scanId: config.scanId,
+          stage: config.role,
+          eventType: "context_compacted",
+          agentRole: config.role,
+          payload: {
+            turn: state.turnCount,
+            inputTokens: state.totalUsage.inputTokens,
+            messagesBefore: beforeCount,
+            messagesAfter: afterCount,
+            compactionNumber: compactionCount,
+          },
+          timestamp: Date.now(),
+        });
+      }
+    }
+    // Maintenance is a metered model call too. Re-enter the boundary gates
+    // before planning if its usage/cancellation/elapsed time spent the allowance.
+    if (executionSignal.aborted || config.enforcement?.isKillExpired() ||
+        (config.costCeilingUsd !== undefined && config.costCeilingUsd > 0 &&
+          (config.costLedger?.totalCostUsd() ?? state.estimatedCostUsd) >= config.costCeilingUsd)) {
+      state.turnCount--;
+      continue;
+    }
     let streamedThinkingText = "";
     let streamedUsageInputTokens: number | undefined;
     let streamedUsageOutputTokens: number | undefined;
 
-    // ── Token-level delta forwarding (cloud Live Trace) ──
-    // Only wire the per-token callback when a cloud sink is actually
-    // listening. For local CLI invocations `isCloudEventSinkActive()`
-    // returns false and we leave `onDelta` undefined — the runtime then
-    // skips the delta-forwarding branch entirely, so non-cloud runs pay
-    // zero per-token overhead beyond the existing thinking-throttle path.
-    //
-    // `deltaSeq` is keyed by scope so assistant_response and reasoning
-    // each get their own monotonic counter. Resets every turn — the
-    // (turn, scope) tuple is what the dashboard renderer keys on.
-    const cloudActive = isCloudEventSinkActive();
-    const deltaSeq: Record<"assistant_response" | "reasoning", number> = {
-      assistant_response: 0,
-      reasoning: 0,
-    };
-    const deltaBatchers = cloudActive
-      ? new DeltaBatcherSet(({ scope, text }) => {
-          const seq = deltaSeq[scope]++;
-          eventBus.emit("delta", {
-            turn: state.turnCount,
-            role: config.role,
-            scope,
-            text,
-            seq,
-          });
-        })
-      : null;
+    // A large tool result can push the next serialized request over the
+    // managed gateway limit before post-turn token compaction runs.
+    const preflight = await compactMessagesForRequestPreflight(
+      state.messages,
+      runtime,
+      config.systemPrompt,
+      nativeTools,
+      NATIVE_REQUEST_PREFLIGHT_BYTES,
+      {
+        signal: executionSignal,
+        onSummaryUsage: usage => {
+          state.totalUsage.inputTokens += usage.inputTokens;
+          state.totalUsage.outputTokens += usage.outputTokens;
+          state.totalUsage.cachedInputTokens += usage.cachedInputTokens ?? 0;
+          config.costLedger?.add(usage, pricingModel());
+          state.estimatedCostUsd = estimateCost(state.totalUsage, pricingModel());
+        },
+      },
+    );
+    if (preflight.compacted) {
+      const messagesBefore = state.messages.length;
+      state.messages = preflight.messages;
+      compactionCount++;
+      tokensAtLastCompaction = state.totalUsage.inputTokens;
+      onEvent?.("context_compacted", {
+        turn: state.turnCount,
+        inputTokens: state.totalUsage.inputTokens,
+        messagesBefore,
+        messagesAfter: state.messages.length,
+        compactionNumber: compactionCount,
+        trigger: "request_size_preflight",
+        degraded: preflight.degraded,
+      });
+    }
+
 
     // Bus event: planner invocation. `tokens_est` is cumulative input
     // tokens going INTO this call — the actual response usage lands on
@@ -2052,21 +2295,10 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
             estimatedCostUsd: estimateCost(cumulativeUsage, pricingModel()),
           });
         },
-        ...(deltaBatchers
-          ? {
-              onDelta: (scope: "assistant_response" | "reasoning", text: string) => {
-                deltaBatchers.push(scope, text);
-              },
-            }
-          : {}),
       },
       executionSignal,
     );
 
-    // Drain any trailing delta buffer before the turn-completed event so
-    // the cloud sees the full streamed text BEFORE it sees the next
-    // turn's `agent_turn_started` and retires the typing cursor.
-    deltaBatchers?.flushAll();
 
     // `reasoning_summary` is emitted further down once we've also seen the
     // assistant's pre-tool-call text — that lets us fall back to summarising
@@ -2080,11 +2312,12 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       state.totalUsage.inputTokens += result.usage.inputTokens;
       state.totalUsage.outputTokens += result.usage.outputTokens;
       state.totalUsage.cachedInputTokens += result.usage.cachedInputTokens ?? 0;
+      if (result.usage.cacheWriteTokens !== undefined) state.totalUsage.cacheWriteTokens = (state.totalUsage.cacheWriteTokens ?? 0) + result.usage.cacheWriteTokens;
       // Fold this turn into the shared per-scan ledger (when threaded) so
       // sibling agent sessions see this spend in their own ceiling checks.
       // The session's pricing model keys the ledger's per-model buckets,
       // which the scan_completed cost_breakdown is derived from.
-      config.costLedger?.add(result.usage, pricingModel());
+      addRuntimeUsage(config.costLedger, result, pricingModel());
       state.estimatedCostUsd = estimateCost(state.totalUsage, pricingModel());
       if (
         streamedUsageInputTokens !== result.usage.inputTokens
@@ -2114,77 +2347,52 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         turn: state.turnCount,
       });
     }
-
-    // ── Context window compaction (BoxPwnr-inspired) ──
-    // Trigger at 60% of context window (~77k tokens for 128k models).
-    // Allow multiple compactions as context regrows — don't re-compact until
-    // tokens have grown by at least 30k since last compaction.
-    //
-    // PROMPT-CACHE INTERACTION: this REWRITES history (middle turns collapse
-    // into a summary message), which changes the cached prefix and therefore
-    // invalidates every message-level cache entry. That is unavoidable — any
-    // rewrite of a prefix-matched cache voids it by definition — and it is
-    // still the right trade: compaction only fires once the transcript is large
-    // enough that carrying it is worse than re-establishing it. Recovery is
-    // automatic and needs no bookkeeping here: `llm-api.ts` re-plans breakpoints
-    // from the CURRENT message array on every request, so the next call writes a
-    // fresh set over the rewritten transcript and the turn after that reads it
-    // back. The system prompt + tool schemas keep hitting throughout — compaction
-    // never touches them, and they carry their own breakpoint.
-    //
-    // The threshold itself is measured against total prompt tokens (cache reads
-    // included), so a high cache hit rate does not silently defer compaction
-    // past the real context limit. See `readCacheUsage` in runtime/prompt-cache.ts.
-    // Env-tunable so an operator can match the model's real context window.
-    const { threshold: COMPACTION_THRESHOLD, regrow: COMPACTION_REGROW } =
-      resolveCompactionThresholds(process.env);
-    if (
-      features.contextCompaction
-      && state.totalUsage.inputTokens > COMPACTION_THRESHOLD
-      && state.totalUsage.inputTokens - tokensAtLastCompaction > COMPACTION_REGROW
-      && state.messages.length > 15
-    ) {
+    if (!result.error && result.stopReason !== "error") localAdmissionRecoveries = 0;
+    // The transport measured this exact request locally: no provider call or
+    // usage occurred. Compact a new request, never replay an unknown outcome.
+    if (!driven && isLocalAdmissionLimit(result.error) && !executionSignal.aborted && localAdmissionRecoveries < 2) {
+      localAdmissionRecoveries++;
       const beforeCount = state.messages.length;
-      currentRunContribution()?.record("compaction", { phase: "before", messagesBefore: beforeCount, inputTokens: state.totalUsage.inputTokens, strategy: "llm_with_regex_fallback" });
-
-      // Use LLM-based compaction if we have the runtime, otherwise regex.
-      // Default opts preserve the scan loop's original behavior (tail count 10,
-      // security-testing summarizer instruction).
-      state.messages = (await compactMessagesWithLLM(state.messages, runtime, config.systemPrompt)).messages;
-
-      compactionCount++;
-      tokensAtLastCompaction = state.totalUsage.inputTokens;
-
-      const afterCount = state.messages.length;
-      currentRunContribution()?.record("compaction", { phase: "after", messagesAfter: afterCount, compactionNumber: compactionCount });
-      onEvent?.("context_compacted", {
-        turn: state.turnCount,
-        inputTokens: state.totalUsage.inputTokens,
-        messagesBefore: beforeCount,
-        messagesAfter: afterCount,
-        compactionNumber: compactionCount,
-      });
-      if (db) {
-        db.logEvent({
-          scanId: config.scanId,
-          stage: config.role,
-          eventType: "context_compacted",
-          agentRole: config.role,
-          payload: {
-            turn: state.turnCount,
-            inputTokens: state.totalUsage.inputTokens,
-            messagesBefore: beforeCount,
-            messagesAfter: afterCount,
-            compactionNumber: compactionCount,
+      const beforeBytes = Buffer.byteLength(JSON.stringify(state.messages), "utf8");
+      let compacted: CompactMessagesResult;
+      try {
+        compacted = await compactMessagesWithLLM(state.messages, runtime, config.systemPrompt, {
+          preserveTailCount: 2, signal: executionSignal, requireSummaryReceipt: true,
+          onSummaryUsage: usage => {
+            state.totalUsage.inputTokens += usage.inputTokens;
+            state.totalUsage.outputTokens += usage.outputTokens;
+            state.totalUsage.cachedInputTokens += usage.cachedInputTokens ?? 0;
+            config.costLedger?.add(usage, pricingModel());
+            state.estimatedCostUsd = estimateCost(state.totalUsage, pricingModel());
           },
-          timestamp: Date.now(),
         });
+      } catch (error) {
+        if (error instanceof ContextSummaryReceiptError && error.unpriced) config.costLedger?.markUnpricedUsage();
+        state.errorExit = { error: error instanceof Error ? error.message : String(error), turn: state.turnCount };
+        state.summary = `Error: ${state.errorExit.error}`;
+        break;
+      }
+      if (Buffer.byteLength(JSON.stringify(compacted.messages), "utf8") < beforeBytes) {
+        state.messages = compacted.messages;
+        onEvent?.("context_compacted", { reason: "local_request_admission", messagesBefore: beforeCount,
+          messagesAfter: state.messages.length, recovery: localAdmissionRecoveries, degraded: compacted.degraded });
+        if (state.turnCount > 0) state.turnCount--;
+        continue;
       }
     }
+    if (config.requirePricedUsage && !result.usage && !isLocalAdmissionFailure(result.error)) {
+      config.costLedger?.markUnpricedUsage();
+      state.errorExit = { error: result.error ?? "Runtime did not report usage; cannot continue a cost-bounded scan.", turn: state.turnCount };
+      state.summary = `Error: ${state.errorExit.error}`;
+      break;
+    }
+
 
     // Handle error or empty response
-    if (result.stopReason === "error" || result.error || (result.content.length === 0 && (!result.usage || result.usage.outputTokens === 0))) {
-      const errorMsg = result.error || "API returned empty response (0 tokens) — model may be rate-limited or unavailable";
+    if (result.stopReason === "error" || result.error || (result.checkpoint && !isRecoverableOutputCap(result)) ||
+        (result.content.length === 0 && !isRecoverableOutputCap(result) && (!result.usage || result.usage.outputTokens === 0))) {
+      const errorMsg = result.error || (result.checkpoint ? "Invalid output-cap checkpoint; refusing incomplete function calls."
+        : "API returned empty response (0 tokens) — model may be rate-limited or unavailable");
       // Operator cancellation is terminal, even if the runtime supplied an
       // error string that also resembles a rate limit or context rejection.
       if (result.cancelled || executionSignal.aborted) {
@@ -2222,7 +2430,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       // Transient provider overload / rate-limit / 5xx → back off and retry the
       // SAME turn rather than killing the run. Doesn't consume a turn (the LLM
       // call failed before any tool ran), capped by MAX_TRANSIENT_RETRIES.
-      const transient = !driven && isTransientLlmError(errorMsg, result.retrySafe);
+      const transient = !driven && isTransientLlmError(errorMsg);
       if (transient && transientRetries < MAX_TRANSIENT_RETRIES) {
         transientRetries++;
         const backoffMs = Math.min(20_000, 500 * 2 ** transientRetries);
@@ -2279,10 +2487,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       (b): b is Extract<NativeContentBlock, { type: "text" }> => b.type === "text",
     );
     const textContent = textBlocks.map((b) => b.text).join("\n");
-    const turnTelemetry = (onTurn || onToolUpdate) && (result.usage || driven) ? {
-      usage: { ...state.totalUsage },
-      ...(result.usage ? { contextTokens: result.usage.inputTokens + result.usage.outputTokens } : {}),
-    } : undefined;
     if (textContent.trim() && textContent.trim() !== streamedThinkingText.trim()) {
       onEvent?.("thinking", {
         turn: state.turnCount,
@@ -2301,12 +2505,14 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     //      sentence so it reads as a "thinking out loud" snippet.
     // Wrapped in try/catch so a bad summary never kills the scan; emitted
     // at most once per turn and only when the result is non-empty.
+    let reasoningSummary: string | undefined;
     try {
       const reasoningSource = streamedThinkingText.trim()
         ? streamedThinkingText
         : textContent;
       const summary = summarizeReasoning(reasoningSource);
       if (summary) {
+        reasoningSummary = summary;
         eventBus.emit("reasoning_summary", {
           turn: state.turnCount,
           summary,
@@ -2315,6 +2521,11 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     } catch {
       /* heuristic failure must never abort the scan */
     }
+    const turnTelemetry = (onTurn || onToolUpdate) ? {
+      ...((result.usage || driven) ? { usage: { ...state.totalUsage } } : {}),
+      ...(result.usage ? { contextTokens: result.usage.inputTokens + result.usage.outputTokens } : {}),
+      ...(reasoningSummary ? { reasoning_summary: reasoningSummary } : {}),
+    } : undefined;
 
     const toolUseBlocks = result.content.filter(
       (b): b is Extract<NativeContentBlock, { type: "tool_use" }> =>
@@ -2329,6 +2540,31 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     if (toolUseBlocks.length === 0) {
       // Text-only turns used to bypass observers, losing the worker's final answer.
       onTurn?.(state.turnCount, driverCalls ?? [], driverResults ?? [], textContent, turnTelemetry);
+      if (executionSignal.aborted) {
+        state.summary = "Error: Agent execution cancelled.";
+        break;
+      }
+      if (enforceCostCeiling()) break;
+      if (isRecoverableOutputCap(result)) {
+        const checkpoint = result.checkpoint!;
+        const message = "Provider output cap reached repeatedly or the loop allowance is spent. Observations and plan are saved; resume this session with a concise remaining task. No incomplete function calls were executed.";
+        onEvent?.("output_cap_checkpoint", { turn: state.turnCount, checkpoint, continuations: outputCapContinuations });
+        if (config.costCeilingUsd !== undefined && config.costCeilingUsd > 0 && !result.usage) {
+          const message = "Provider output cap reached without token usage. Cannot safely continue within the monetary allowance; observations and plan are saved. Resume with an explicitly budgeted remaining task.";
+          state.outputCapExit = { checkpoint, continuations: outputCapContinuations, message };
+          state.summary = message;
+          break;
+        }
+        if (outputCapContinuations >= MAX_OUTPUT_CAP_CONTINUATIONS || state.turnCount >= config.maxTurns) {
+          state.outputCapExit = { checkpoint, continuations: outputCapContinuations, message };
+          state.summary = message;
+          break;
+        }
+        outputCapContinuations++;
+        state.messages.push({ role: "user", content: [{ type: "text", text: OUTPUT_CAP_CONTINUATION_PROMPT }] });
+        if (db) persistSession(db, state, config, "running");
+        continue;
+      }
       // Only allow early exit if the agent has done meaningful work:
       // - At least 4 turns (read files, ran commands, analyzed code)
       // - OR explicitly called the done tool (handled below in tool execution)
@@ -2544,23 +2780,12 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         state.summary = (toolResult.output as { summary: string }).summary;
       }
 
-      // Build tool_result block.
-      //
-      // Inbound prompt-injection defense (#558): output from untrusted-source
-      // tools (http_request / crawl / read_file / send_prompt / submit_form /
-      // browser / MCP) is attacker-influenced. Before it re-enters model
-      // context — and before it feeds the recentToolResultTexts buffer used by
-      // dynamic playbooks + JIT skills below — we wrap it in DATA-not-
-      // instructions delimiters and NEUTRALIZE (escape + annotate, never drop)
-      // common injection markers. Our own structured outputs (save_finding,
-      // query_findings, done, …) are trusted and pass through untouched.
-      // Deterministic / pattern-based only; no LLM-guards-LLM.
-      let resultContent = toolResult.success
+      // Preserve tool output exactly as returned when serializing model context.
+      const resultContent = toolResult.success
         ? JSON.stringify(toolResult.output)
         : `Error: ${toolResult.error}`;
       // 0#567 — harvest reusable footholds from evidence-bearing tool
-      // results into the loot ledger. Done on the RAW output (before the
-      // injection-marker sanitizer rewrites it) and only for tools whose
+      // results into the loot ledger. Done on the raw output and only for tools whose
       // output reflects target data — never our own trusted bookkeeping
       // results (save_finding / query_findings / use_loot / done). Best-effort:
       // a harvest failure must never abort the agent loop.
@@ -2580,18 +2805,6 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
           }
         } catch {
           /* harvesting is best-effort */
-        }
-      }
-      if (toolResult.success && isUntrustedSourceTool(block.name)) {
-        const sanitized = sanitizeUntrustedToolResult(resultContent);
-        resultContent = sanitized.content;
-        if (sanitized.neutralized) {
-          eventBus.emit("untrusted_input_sanitized", {
-            tool: block.name,
-            turn: state.turnCount,
-            role: config.role,
-            markers: sanitized.markers,
-          });
         }
       }
       toolResultBlocks.push({
@@ -2972,48 +3185,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       currentRunContribution()?.record("checkpoint", { sessionId: state.sessionId, turn: state.turnCount, storage: "session", storedMessages: Math.min(state.messages.length, 40), sideEffectsReplayed: false });
     }
 
-    // ── Cost ceiling check ──
-    // After every tool-call turn, recompute the running cost estimate from
-    // the cumulative token usage. If the user configured a hard ceiling and
-    // we've exceeded it, break out of the loop. Findings collected so far
-    // are preserved on `state.findings`.
-    //
-    // When a shared per-scan ledger is threaded, price the LEDGER's
-    // cross-session cumulative total: a scan running multiple agent sessions
-    // (research + the verify wave) must trip the ceiling on their combined
-    // spend, not grant each session the full ceiling independently.
-    if (config.costCeilingUsd !== undefined && config.costCeilingUsd > 0) {
-      const runningCost = config.costLedger
-        ? config.costLedger.totalCostUsd()
-        : estimateCost(state.totalUsage, pricingModel());
-      if (runningCost >= config.costCeilingUsd) {
-        state.costCeilingExceeded = true;
-        state.estimatedCostUsd = runningCost;
-        state.summary = `Cost ceiling exceeded at turn ${state.turnCount}: $${runningCost.toFixed(4)} >= $${config.costCeilingUsd.toFixed(4)} ceiling. Aborting with ${toolCtx.findings.length} partial finding(s).`;
-        onEvent?.("cost_ceiling_exceeded", {
-          turn: state.turnCount,
-          runningCostUsd: runningCost,
-          ceilingUsd: config.costCeilingUsd,
-          findingCount: toolCtx.findings.length,
-        });
-        if (db) {
-          db.logEvent({
-            scanId: config.scanId,
-            stage: config.role,
-            eventType: "cost_ceiling_exceeded",
-            agentRole: config.role,
-            payload: {
-              turn: state.turnCount,
-              runningCostUsd: runningCost,
-              ceilingUsd: config.costCeilingUsd,
-              findingCount: toolCtx.findings.length,
-            },
-            timestamp: Date.now(),
-          });
-        }
-        break;
-      }
-    }
+    if (enforceCostCeiling()) break;
     if (state.done && state.turnCount < config.maxTurns && injectPendingUserMessages?.()) {
       state.done = false;
     }
@@ -3077,6 +3249,19 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   // turn and cost-ceiling check; dropping the pricing model here reprices Azure
   // runs at the generic fallback after the loop completes.
   state.estimatedCostUsd = estimateCost(state.totalUsage, pricingModel());
+
+  if (sourceLearning && sourceLearningRoot) {
+    try {
+      sourceLearning.store.appendEvent({
+        projectId: learningProjectId(sourceLearningRoot),
+        idempotencyKey: `source-agent:${config.scanId}:${sessionId}:${randomUUID()}`,
+        kind: "source-agent-terminal", runId: config.scanId,
+        outcome: state.errorExit ? "failed" : opts.signal?.aborted ? "cancelled" : state.done ? "completed" : "interrupted",
+        evidenceStrength: "operational",
+        summary: `Source agent stopped after ${state.turnCount} turn(s), retaining ${state.findings.length} finding(s). Execution metadata does not establish vulnerability truth or verified remediation.`,
+      });
+    } catch { /* Auxiliary metadata must never block completion. */ }
+  }
 
   // If none of the break paths set a summary, the loop exited naturally by
   // completing all maxTurns iterations. Only in that case do we stamp the
@@ -3320,7 +3505,12 @@ export const SCAN_SUMMARIZER_INSTRUCTION =
 
 /** Options bag for {@link compactMessagesWithLLM}. All optional; the defaults
  * reproduce the scan loop's original behavior exactly. */
+export class ContextSummaryReceiptError extends Error {
+  constructor(message: string, readonly unpriced: boolean) { super(message); this.name = "ContextSummaryReceiptError"; }
+}
 export interface CompactMessagesOptions {
+  /** Local admission recovery requires a successful metered summary, never a fallback after an unknown outcome. */
+  requireSummaryReceipt?: boolean;
   /** How many trailing messages to preserve verbatim. Default 10. */
   preserveTailCount?: number;
   /**
@@ -3331,7 +3521,9 @@ export interface CompactMessagesOptions {
    */
   summarizerInstruction?: string;
   /** Invoked with the summarizer model call's usage, when the runtime reports it. */
-  onSummaryUsage?: (usage: { inputTokens: number; outputTokens: number }) => void;
+  onSummaryUsage?: (usage: NonNullable<NativeRuntimeResult["usage"]>) => void;
+  /** Shares cancellation with the planner; late summaries never rewrite history. */
+  signal?: AbortSignal;
 }
 
 /** Result of {@link compactMessagesWithLLM}. */
@@ -3369,6 +3561,7 @@ export async function compactMessagesWithLLM(
   opts: CompactMessagesOptions = {},
 ): Promise<CompactMessagesResult> {
   void systemPrompt;
+  if (opts.signal?.aborted) return { messages, summaryText: "", degraded: false };
   const preserveTailCount = opts.preserveTailCount ?? 10;
   const summarizerInstruction = opts.summarizerInstruction ?? SCAN_SUMMARIZER_INSTRUCTION;
   const summarizerSystem = opts.summarizerInstruction === undefined
@@ -3380,7 +3573,13 @@ export async function compactMessagesWithLLM(
   }
 
   const firstMessage = messages[0]!;
-  const tailStart = messages.length - preserveTailCount;
+  let tailStart = messages.length - preserveTailCount;
+  if (opts.requireSummaryReceipt) {
+    // Extra user warnings can follow a tool result. Keep the complete latest
+    // assistant/call + result exchange, not a fixed two-message suffix.
+    while (tailStart > 1 && messages[tailStart]!.role !== "assistant") tailStart--;
+    if (messages[tailStart]?.role !== "assistant") return { messages, summaryText: "", degraded: false };
+  }
   const tail = messages.slice(tailStart);
   const middle = messages.slice(1, tailStart);
 
@@ -3400,6 +3599,7 @@ export async function compactMessagesWithLLM(
   // Try LLM summarization
   let summaryText: string;
   let degraded = false;
+  let summaryUsageObserved = false;
   try {
     const summaryResult = await runtime.executeNative(
       summarizerSystem,
@@ -3413,9 +3613,22 @@ export async function compactMessagesWithLLM(
         },
       ],
       [], // no tools for summary
+      undefined,
+      opts.signal,
     );
 
-    if (summaryResult.usage) opts.onSummaryUsage?.(summaryResult.usage);
+    if (summaryResult.usage) {
+      summaryUsageObserved = true;
+      opts.onSummaryUsage?.(summaryResult.usage);
+    }
+    if (opts.signal?.aborted) {
+      if (opts.requireSummaryReceipt && !summaryUsageObserved && !isLocalAdmissionFailure(summaryResult.error)) {
+        throw new Error(summaryResult.error ?? "Context summary cancelled without a usage receipt");
+      }
+      return { messages, summaryText: "", degraded: false };
+    }
+    if (summaryResult.stopReason !== "end_turn" || summaryResult.error) throw new Error(summaryResult.error ?? "Incomplete context summary");
+    if (opts.requireSummaryReceipt && !summaryResult.usage) throw new Error("Context summary did not report usage; cannot continue admission recovery");
 
     // Extract text from result
     const textBlocks = summaryResult.content.filter(
@@ -3426,7 +3639,12 @@ export async function compactMessagesWithLLM(
     if (!summaryText || summaryText.length < 50) {
       throw new Error("LLM summary too short or empty");
     }
-  } catch {
+  } catch (error) {
+    if (opts.requireSummaryReceipt) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new ContextSummaryReceiptError(message, !summaryUsageObserved && !isLocalAdmissionFailure(message));
+    }
+    if (opts.signal?.aborted) return { messages, summaryText: "", degraded: false };
     // Fallback to regex extraction
     degraded = true;
     summaryText = [

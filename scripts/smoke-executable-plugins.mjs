@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** Real guest lifecycle. Requires built packages and a provisioned toolbox.
- * ZERO_PLUGIN_BACKEND=docker|smolvm; smolvm requires ZERO_SMOLVM_IMAGE_ARCHIVE.
+ * ZERO_PLUGIN_BACKEND=docker|smolvm outside a workbench; admitted workbenches use the sibling broker.
  * Set ZERO_EVOLVE_REAL=1 for real-provider code evolution; missing credentials,
  * failed evaluation, failed activation, and failed rollback are test failures.
  */
@@ -14,12 +14,14 @@ import { ExecutablePluginManager } from "../packages/core/dist/plugins/executabl
 import { BUILTIN_GUARDS } from "../packages/core/dist/plugins/guards.js";
 import { SELF_EXTENSION_RESERVED_TOOL_NAMES } from "../packages/core/dist/agent/tools.js";
 import { parseEvolutionConfig } from "../packages/core/dist/improvement/config.js";
+import { isAdmittedSmolvmWorkbench, resolveWorkbenchBrokerImage } from "../packages/core/dist/runtime/smolvm-broker.js";
 
-const backend = process.env["ZERO_PLUGIN_BACKEND"] ?? "docker";
+const admitted = isAdmittedSmolvmWorkbench();
+const backend = admitted ? "smolvm" : process.env["ZERO_PLUGIN_BACKEND"] ?? "docker";
 assert(["docker", "smolvm"].includes(backend));
 const imageArchive = process.env["ZERO_SMOLVM_IMAGE_ARCHIVE"];
-if (backend === "smolvm") assert(imageArchive, "provide a local toolbox archive");
-const image = process.env["ZERO_PLUGIN_IMAGE"] ?? "0-toolbox:qualification";
+if (backend === "smolvm" && !admitted) assert(imageArchive, "provide a local toolbox archive");
+const image = process.env["ZERO_PLUGIN_IMAGE"] ?? (admitted ? resolveWorkbenchBrokerImage() : "0-toolbox:qualification");
 const root = mkdtempSync(join(tmpdir(), "0-executable-smoke-"));
 const controller = new AbortController();
 const abort = () => controller.abort(new Error("qualification cancelled"));
@@ -31,7 +33,7 @@ const passed = [];
 function newManager(overrides = {}) {
   const registry = new SelfExtensionRegistry({ enabled: true, baseGuards: BUILTIN_GUARDS, reservedToolNames: SELF_EXTENSION_RESERVED_TOOL_NAMES });
   const manager = new ExecutablePluginManager({ registry, root, backend, image,
-    ...(backend === "smolvm" ? { imageArchive } : {}),
+    ...(backend === "smolvm" && !admitted ? { imageArchive } : {}),
     timeoutMs: 90000, memoryMb: 2048, cpus: 2, maxBrokerCalls: 3, ...overrides });
   managers.push(manager);
   return manager;
@@ -141,7 +143,6 @@ try {
     const { maybeLoadCodexAuth } = await import("../packages/cli/dist/codex-auth.js");
     maybeLoadCodexAuth();
     process.env["ZERO_DISABLE_HUNT_MEMORY"] = "1";
-    process.env["ZERO_CLOUD_SINK"] = "";
     await step("Real provider repairs source and activates a measured version", async () => {
       const buggy = output(await manager.submit({ manifest: manifest("smoke.evolve", [tool("smoke_evolve")]), entry: "main.ts", kind: "agent", files: {
         "main.ts": source("if (typeof args.value !== 'number' || !Number.isFinite(args.value)) return {error:'invalid'}; return {result:args.value - 42};"),

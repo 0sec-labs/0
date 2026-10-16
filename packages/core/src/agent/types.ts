@@ -1,5 +1,7 @@
+import type { WorkspaceIdentity } from "./workspace-identity.js";
 import type { Finding, AttackResult, TargetInfo, AuthConfig, NamedIdentity } from "@0/shared";
 import type { ScopePolicy } from "../scope/scope.js";
+import type { ScopeEnforcementState } from "../scope/activation.js";
 import type { RateLimiter } from "../scope/rate-limit.js";
 import type { AttributionConfig } from "../scope/attribution.js";
 import type { EngagementPosture } from "../scope/engagement-profile.js";
@@ -355,8 +357,12 @@ export interface AgentConfig {
    * the turn cap applies.
    */
   costCeilingUsd?: number;
+  /** Shared estimated inference accounting across legacy scan stages. */
+  costLedger?: ScanCostLedger;
   /** Pricing model id for `estimateCost`; defaults to the shared default rates. */
   costModel?: string;
+  signal?: AbortSignal;
+  requirePricedUsage?: boolean;
   target: string;
   scanId: string;
   scopePath?: string;
@@ -371,6 +377,7 @@ export interface AgentConfig {
    * `authConfig` for back-compat with the env-var / fallback paths.
    */
   identities?: NamedIdentity[];
+  accessControlFixtures?: import("@0/shared").AccessControlFixture[];
   /**
    * Stateful per-identity HTTP session engine (0#564). Built once per
    * scan and shared across discovery/attack/verify phases so cookies persist.
@@ -466,6 +473,9 @@ export interface AgentState {
   summary: string;
   /** True when the loop stopped because the cost ceiling was reached (vs `done` or max turns). */
   costCeilingExceeded?: boolean;
+  totalUsage?: { inputTokens: number; outputTokens: number; cachedInputTokens?: number };
+  estimatedCostUsd?: number;
+  errorExit?: { error: string; turn: number };
 }
 
 // ── Tool Execution Context ──
@@ -497,6 +507,8 @@ export interface ToolContext {
   /** Current parent instructions, inherited by delegated agent sessions. */
   delegationSystemPrompt?: string;
   scopePath?: string;
+  /** Immutable parent-observed Git identity for delegated source reviews. */
+  workspaceIdentity?: WorkspaceIdentity;
   /** Session policy registry and durable, isolated executable implementation. */
   selfExtension?: SelfExtensionRegistry;
   executablePlugins?: ExecutablePluginManager;
@@ -515,6 +527,12 @@ export interface ToolContext {
     paths: string[];
     tags?: string[];
   }) => { id: string };
+  /**
+   * True only for the interactive console executor. This explicit marker keeps
+   * console-only source-acquisition identity checks out of native scan callers,
+   * whose acquisition contract is unchanged.
+   */
+  consoleSession?: boolean;
   /**
    * Current console autonomy mode, re-read by the scoped-source-audit gate on
    * every `execute()` so switching mode mid-session takes effect immediately
@@ -586,6 +604,7 @@ export interface ToolContext {
    * to enumerate the principals it can replay requests as.
    */
   identities?: NamedIdentity[];
+  accessControlFixtures?: import("@0/shared").AccessControlFixture[];
   /**
    * Stateful per-identity HTTP session engine (0#564). When present, the
    * HTTP tools (`http_request`/`crawl`/`submit_form`) act as `session.activeLabel`,
@@ -600,6 +619,8 @@ export interface ToolContext {
    * with `ToolResult.error`.
    */
   scope?: ScopePolicy;
+  /** Host-owned approval snapshot; refreshed only at scan/turn/tool boundaries. */
+  scopeEnforcement?: ScopeEnforcementState;
   /** Per-host rate limiter; see AgentConfig.rateLimiter. */
   rateLimiter?: RateLimiter;
   /**
@@ -695,6 +716,10 @@ export interface ToolContext {
    * process.cwd() at session creation time.
    */
   workspaceRoot?: string;
+  /** Explicit Agent Skills roots; homeDir:null keeps shared workspaces isolated. */
+  skillDiscoveryOptions?: import("./skills/agent-skills.js").AgentSkillDiscoveryOptions | (() => import("./skills/agent-skills.js").AgentSkillDiscoveryOptions);
+  /** Server-issued skill editing capability, resolved for the current author. */
+  skillAuthoring?: import("./skills/skill-authoring.js").SkillAuthoringAdapter | (() => import("./skills/skill-authoring.js").SkillAuthoringAdapter | undefined);
   /**
    * Shared per-scan cost ledger (see agent/cost-ledger.ts). Threaded onto the
    * ToolContext so the `spawn_agent` / `spawn_agents` handlers can pass it into
@@ -711,6 +736,7 @@ export interface ToolContext {
    * against the shared {@link costLedger}.
    */
   costCeilingUsd?: number;
+  requirePricedUsage?: boolean;
   /**
    * Model id used to price token usage against the ceiling, mirrored from
    * `NativeAgentConfig.costModel`. Passed through to spawned subagents so

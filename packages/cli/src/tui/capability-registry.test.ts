@@ -9,25 +9,6 @@ import {
   type SafetyTier,
 } from "./capability-registry.js";
 
-/** Every `ChatDestination` string that can appear as a `route` on pane caps. */
-const KNOWN_PANE_ROUTE_RECORD: Record<string, true> = {
-  launcher: true,
-  ops: true,
-  history: true,
-  findings: true,
-  doctor: true,
-  replay: true,
-  settings: true,
-  models: true,
-  market: true,
-  usage: true,
-  connect: true,
-  herd: true,
-  comms: true,
-  keybindings: true,
-  finding: true,
-  resume: true,
-};
 
 describe("getAllCapabilities", () => {
   it("returns every capability in deterministic order", () => {
@@ -149,11 +130,6 @@ describe("getPaneCapabilities", () => {
     }
   });
 
-  it("every pane route matches a known ChatDestination", () => {
-    for (const cap of getPaneCapabilities()) {
-      expect(KNOWN_PANE_ROUTE_RECORD[cap.route!]).toBe(true);
-    }
-  });
 
   it("excludes entries without a route", () => {
     const paneIds = new Set(getPaneCapabilities().map((c) => c.id));

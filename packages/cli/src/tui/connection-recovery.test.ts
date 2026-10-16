@@ -28,6 +28,7 @@ describe("connectionRecoveryForError", () => {
       ["Alibaba Model Studio API error 401: invalid key", "qwen"],
       ["xAI Grok API error 401: invalid key", "xai"],
       ["OpenCode Zen API error 401: invalid key", "opencode"],
+      ["Cline API error 401: invalid key for anthropic/claude-sonnet-4-6", "cline"],
       ["OpenAI API error: invalid key", "openai"],
     ]) {
       expect(connectionRecoveryForError(error)).toMatchObject({ providerId });

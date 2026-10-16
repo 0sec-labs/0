@@ -173,7 +173,9 @@ describe("runCraftScan self-test executor outage", () => {
     }));
 
     const prevKey = process.env.OPENAI_API_KEY;
+    const prevProvider = process.env["ZERO_FORCE_PROVIDER"];
     process.env.OPENAI_API_KEY = "test-key";
+    process.env["ZERO_FORCE_PROVIDER"] = "openai";
     let oracleCalls = 0;
     try {
       const result = await runCraftScan({
@@ -192,13 +194,15 @@ describe("runCraftScan self-test executor outage", () => {
         },
       });
 
-      expect(oracleCalls).toBe(3); // 3 strikes, not the full 24-test budget
+      expect(oracleCalls, result.warnings.join("\n")).toBe(3); // 3 strikes, not the full 24-test budget
       expect(result.passed).toBe(false);
       expect(result.warnings.some((w) => w.includes("ORACLE UNREACHABLE"))).toBe(true);
       expect(result.warnings.some((w) => w.includes("NOT a capability fail"))).toBe(true);
     } finally {
       if (prevKey === undefined) delete process.env.OPENAI_API_KEY;
       else process.env.OPENAI_API_KEY = prevKey;
+      if (prevProvider === undefined) delete process.env["ZERO_FORCE_PROVIDER"];
+      else process.env["ZERO_FORCE_PROVIDER"] = prevProvider;
       vi.unstubAllGlobals();
     }
   });

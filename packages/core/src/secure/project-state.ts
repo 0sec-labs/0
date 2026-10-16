@@ -43,6 +43,7 @@ export interface SecureProjectState {
 
 export interface IdentityFields {
   source: string;
+  sourcePath?: string;
   testCommand: string;
   setupCommand?: string;
   runtime?: string;

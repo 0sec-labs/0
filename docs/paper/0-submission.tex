@@ -44,11 +44,12 @@ benchmark substrate, model/runtime, turn budget, and evidence policy. We
 present 0, an open-source shell-first pentesting framework with layered
 triage and blind verification, and pair it with a methodology-aware reporting
 protocol that separates retained artifact-backed evidence from historical mixed
-publication lines. In the current public ledger snapshot (2026-04-10), 0
-reports a retained artifact-backed XBOW aggregate of 99/104. A 21-run triage
-ablation (2026-04-11) shows mode-dependent behavior: full-moat triage is a
-precision/recall tradeoff in white-box slices, a strict efficiency improvement
-in black-box slices, and weakly additive on npm-bench over default scaffolding.
+publication lines. An offline audit dated 2026-09-30 reconstructs historical success unions
+and a preliminary one-target reasoning A/B from hashed retained inputs.
+It suppresses unsupported single-shot headlines and classifier efficacy
+claims. Outcome-level weak labels and incomplete historical run provenance
+prevent finding-precision and generalization claims. Autonomous evolution
+efficacy remains proposed rather than measured.
 The primary contribution is a combined systems-and-methodology perspective in
 which evidence lineage and protocol disclosure are treated as first-class
 engineering surfaces for non-deterministic security agents.
@@ -74,14 +75,14 @@ changes. We frame 0 as both:
   agents (repeat framing, uncertainty, cost ceilings).
   \item A machine-auditable ledger model separating retained artifact-backed and
   historical mixed publication lines.
-  \item A productionized multi-layer triage stack integrated in a live scanner
+  \item An implemented multi-layer triage stack integrated in a live scanner
   pipeline, with per-layer verdict telemetry.
   \item A mode-dependent ablation narrative reporting both positive and negative
   outcomes, avoiding single-line ``moat works'' claims.
   \item A learned-routing foundation for per-finding policy selection,
   reported here as an offline modeling snapshot rather than a deployment
-  claim: the 99/104 aggregate in Table~\ref{tab:ledger} is produced
-  without the router active.
+  claim. Outcome-level weak labels do not establish finding precision
+  or held-out generalization.
 \end{enumerate}
 
 \section{System Overview}
@@ -109,7 +110,7 @@ We distinguish three reporting regimes:
 
 The benchmark ledger tracks:
 \begin{itemize}
-  \item retained artifact-backed totals (machine-reconstructible),
+  \item retained artifact-backed totals (reconstructible only where raw inputs remain),
   \item historical mixed local+CI publication totals (legacy publication line).
 \end{itemize}
 
@@ -117,7 +118,10 @@ This separation is implemented in
 \texttt{packages/benchmark/results/benchmark-ledger.json} and reflected in the
 docs benchmark surface.
 
-\subsection{Current Ledger Snapshot (2026-04-10)}
+\subsection{Historical reported ledger snapshot (2026-04-10)}
+These original reported counts are preserved as a dated record. Complete raw
+attempts and corresponding source identities are unavailable; they are not a
+qualified current headline or single-shot result.
 
 \begin{table}[ht]
 \centering
@@ -130,7 +134,7 @@ Retained artifact-backed & 74/104 & 79/104 & 99/104 \\
 Historical mixed publication & 90/104 & 5 (white-box-only) & 95/104 \\
 \bottomrule
 \end{tabular}
-\caption{Current ledger surfaces are intentionally separated and should not be merged.}
+\caption{Historical reported surfaces; raw-cohort qualification is incomplete.}
 \label{tab:ledger}
 \end{table}
 
@@ -141,8 +145,8 @@ reachability and oracle checks, PoV/structured verify layers, memory-based
 suppression, and optional debate/tree-search layers. Per-layer telemetry is
 attached to findings, creating supervision data for learned per-finding routing.
 
-Dynamic routing motivation is empirical: no static profile dominates across
-white-box, black-box, and package slices.
+Dynamic routing is a hypothesis motivated by historical slice summaries;
+its held-out benefit has not been established.
 
 \subsection{Ablation Snapshot (2026-04-11)}
 
@@ -188,32 +192,8 @@ default & 0.956 & 1.00 & 0.19 & 22/27 \\
 \label{tab:ablation-npm}
 \end{table}
 
-\section{Empirical Highlights}
-
-Current repository-reported posture includes:
-\begin{itemize}
-  \item retained artifact-backed XBOW aggregate at 99/104,
-  \item separate black-box and white-box lines,
-  \item a 21-run triage ablation matrix with mode-dependent outcomes.
-\end{itemize}
-
-Key methodological outcome: no static profile dominates all slices, so policy
-selection should be context-aware.
-
-\subsection{Dataset and router artifacts}
-
-Current intermediate artifacts include:
-
-\begin{itemize}
-  \item triage dataset v1 stats: 969 samples,
-  \item router v2 metadata: 1514 samples, 55 features, 5-fold CV mean
-  F1\,$\approx$\,0.962.
-\end{itemize}
-
-These are treated as offline modeling artifacts, not final deployment claims.
-The 99/104 retained artifact-backed aggregate reported in Table~\ref{tab:ledger}
-is produced by the static-profile triage stack described above, with the
-router v2 inactive at runtime.
+\section{Qualified historical observations}
+\input{generated/evidence-tables.tex}
 
 \section{Evaluation Details and Interpretation}
 
@@ -222,13 +202,14 @@ settings into one global number.
 
 \subsection{White-box versus black-box behavior}
 
-The ablation in Table~\ref{tab:ablation-xbow} shows that the same triage
+The historical summary in Table~\ref{tab:ablation-xbow} reports that the same triage
 profile can have different utility depending on evidence availability. In
 white-box mode, source access increases the attack agent's direct exploit signal
 and some expensive triage layers can over-prune, producing a precision/recall
 tradeoff. In black-box mode, where candidate findings are noisier, additional
-verification layers provide clearer net benefit on findings efficiency and
-USD/flag.
+verification layers were reported to improve findings efficiency and
+USD/flag. Missing complete raw attempt and cost records prevent a qualified
+causal or generalization claim.
 
 \subsection{Package slice caveat}
 
@@ -304,13 +285,13 @@ are included for rough positioning, not as a leaderboard claim.
 \begin{table}[ht]
 \centering
 \small
-\begin{tabular}{llll}
+\begin{tabular}{p{0.23\linewidth}p{0.18\linewidth}p{0.23\linewidth}p{0.25\linewidth}}
 \toprule
 System & Aggregate & Model / Approach & Notes \\
 \midrule
 BoxPwnr\citep{boxpwnr}             & 97.1\% (101/104) & Best-of-N, 10 configs  & Context compaction, loop detection \\
 Shannon\citep{shannon}              & 96.2\% (100/104) & White-box, multi-agent & Source-to-sink taint \\
-\textbf{0 (this work)}         & \textbf{95.2\% (99/104)} & Shell-first, gpt-5.4   & Retained artifact-backed; see Table~\ref{tab:ledger} \\
+0 (this work) & Not qualified & Shell-first & Historical union; complete raw cohort unavailable \\
 KinoSec\citep{kinosec}              & 92.3\% (96/104)  & Black-box HTTP only    & 50-turn hard cap \\
 Cyber-AutoAgent\citep{cyberautoagent} & 84.6\% (88/104)  & Meta-agent             & Self-rewriting prompts \\
 deadend-cli\citep{deadend}          & 77.6\% ($\sim$76/98) & Single-agent CLI     & ADaPT decomposition \\

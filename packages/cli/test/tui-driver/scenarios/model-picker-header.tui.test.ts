@@ -11,7 +11,7 @@
 
 import { afterEach, expect, test } from "vitest";
 import { launch, type TuiHandle } from "../index.js";
-import { frameLines } from "./_helpers.js";
+import { frameLines, modelsByokLaunch } from "./_helpers.js";
 
 let tui: TuiHandle | undefined;
 afterEach(async () => {
@@ -20,11 +20,11 @@ afterEach(async () => {
 });
 
 test("header block between title and first model option is ≤ 3 lines", async () => {
-  tui = await launch({ route: { type: "models" } });
+  tui = await launch(modelsByokLaunch());
   await tui.waitForText(/per M/, 15_000);
 
   const lines = frameLines(tui.rawFrame());
-  const titleRow = lines.findIndex((l) => /◈ Models · /.test(l));
+  const titleRow = lines.findIndex((l) => /Select model/.test(l));
   // The first model OPTION row carries a price ("$0.19/0.51 per M"); the group
   // header ("DEEPSEEK") and the detail panel do not.
   const firstOption = lines.findIndex(

@@ -14,6 +14,7 @@ import {
   linkSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -327,7 +328,7 @@ describe("rememberCodebase / recallCodebase", () => {
     expect(rec.codebase!.files).toHaveLength(2);
     expect(rec.codebase!.files[0].path).toBe("src/index.ts");
     expect(rec.codebase!.files[0].digest).toMatch(/^sha256:[0-9a-f]{64}$/);
-    expect(rec.codebase!.root).toBe(ws); // canonical = what we passed (no symlink)
+    expect(rec.codebase!.root).toBe(realpathSync(ws));
 
     // Fresh store instance reads the same record from disk.
     const reopened = new HuntMemoryStore({ home });

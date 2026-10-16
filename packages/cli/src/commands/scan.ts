@@ -1,9 +1,10 @@
 import { readFileSync, existsSync } from "node:fs";
 import type { Command } from "commander";
+import { Option } from "commander";
 import chalk from "chalk";
 import { z } from "zod";
-import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig } from "@0/shared";
-import { networkScopeRequiredRefusal, targetRequiresScope } from "@0/core";
+import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig, NamedIdentity, AccessControlFixture } from "@0/shared";
+import { getScopeEnforcementState, networkScopeRequiredRefusal, targetRequiresScope } from "@0/core";
 import { renderReplay } from "../formatters/replay.js";
 import { runUnified } from "./run.js";
 import { reportSummarySchema, formatZodError } from "@0/shared";
@@ -45,6 +46,40 @@ function parseAuthFlag(value: string): AuthConfig {
   }
 
   return obj as unknown as AuthConfig;
+}
+
+const identityAuthSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("bearer"), token: z.string().min(1) }).strict(),
+  z.object({ type: z.literal("cookie"), value: z.string().min(1) }).strict(),
+  z.object({ type: z.literal("basic"), username: z.string().min(1), password: z.string().min(1) }).strict(),
+  z.object({ type: z.literal("header"), name: z.string().regex(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/), value: z.string().min(1) }).strict(),
+]);
+const identitiesSchema = z.array(z.object({
+  label: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+  role: z.string().min(1).max(64).optional(),
+  auth: identityAuthSchema.optional(),
+}).strict()).min(2).max(16).refine(ids => new Set(ids.map(id => id.label)).size === ids.length);
+
+/** File-only input keeps credentials out of command history. Errors never echo credentials. */
+export function parseIdentitiesFile(path: string): NamedIdentity[] {
+  try {
+    const parsed = identitiesSchema.safeParse(JSON.parse(readFileSync(path, "utf8")));
+    if (!parsed.success) throw new Error("invalid schema");
+    return parsed.data;
+  } catch {
+    throw new Error("Invalid --identities file: expected 2–16 identities with unique labels and valid auth credentials");
+  }
+}
+
+const fixtureSchema = z.array(z.object({
+  url: z.string().url().refine(url => /^https?:/.test(url)),
+  ownerIdentity: z.string().min(1),
+  comparisonIdentities: z.array(z.string().min(1)).min(1).max(16),
+  ownershipMarker: z.string().min(16).max(500),
+}).strict()).min(1).max(100);
+export function parseAccessControlFixturesFile(path: string): AccessControlFixture[] {
+  try { return fixtureSchema.parse(JSON.parse(readFileSync(path, "utf8"))); }
+  catch { throw new Error("Invalid --access-control-fixtures file: expected read-only ownership fixtures with URLs, owner/comparison labels and private markers"); }
 }
 
 /**
@@ -159,68 +194,63 @@ export function registerScanCommand(program: Command): void {
     .requiredOption("--target <target>", "Target URL or mcp:// endpoint")
     .option("--depth <depth>", "Scan depth: quick, default, deep", "default")
     .option("--format <format>", "Output format: terminal, json, md, html, sarif, pdf", "terminal")
-    .option("--runtime <runtime>", "Runtime: auto (default), api, claude, codex, gemini", "auto")
-    .option("--mode <mode>", "Scan mode: probe, deep, mcp, web, http_audit. `http_audit` is the worker-driven authed HTTP scan: it reads target config from ZERO_TARGET_* env vars (ZERO_TARGET_BASE_URL, ZERO_TARGET_AUTH_JSON, ZERO_TARGET_ALLOWED_HOSTS, ZERO_TARGET_ALLOWED_PATHS, ZERO_TARGET_RATE_LIMIT_RPS, ZERO_TARGET_KILL_AFTER_SEC), builds an in-memory ScopePolicy + path allowlist + per-host RateLimiter + wall-clock kill switch, runs the web-pentest loop, and emits an enforcement_summary block in the report JSON.")
+    .option("--runtime <runtime>", "Model provider: auto, api, claude, codex, gemini", "auto")
+    .option("--mode <mode>", "Scan mode: probe, deep, mcp, web, http_audit (http_audit reads ZERO_TARGET_* env config)")
     .option("--timeout <ms>", "Request timeout in milliseconds", "30000")
     .option("--db-path <path>", "Path to SQLite database")
     .option("--api-key <key>", "API key for LLM provider")
     .option("-m, --model <model>", "LLM model to use")
-    .option("--repo <path>", "Source code path for white-box scanning (read code before attacking)")
-    .option("--auth <json>", "Auth credentials as JSON string or path to JSON file (types: bearer, cookie, basic, header)")
-    .option("--scope <path>", "Path to a JSON scope file ({in_scope, out_of_scope} arrays of host / *.domain / cidr rules). Out-of-scope URLs return as ToolResult.error at every fetch site. See 0#215.")
-    .option("--allow-scanners", "Disable the generic-scanner suppression gate (0#217). When --scope is set, the agent refuses to spawn sqlmap/wpscan/nikto/gobuster/dirb/wfuzz/ffuf/`nmap -sV`/`nmap -A` by default; pass this flag only when the engagement explicitly permits generic-scanner traffic.", false)
-    .option("--require-scope", "Refuse to start unless an engagement scope is configured (0#133). The bash egress guards (out-of-scope URL refusal, http_audit path allowlist, generic-scanner suppression, auth-header injection) only run when a ScopePolicy is set; without this flag a scan with no --scope warns loudly and records a `scope_guards_inert` event but still runs. Equivalent to ZERO_REQUIRE_SCOPE=1.", false)
+    .option("--repo <path>", "Source code path for white-box scanning")
+    .option("--access-control-fixtures <file>", "JSON file of known private resource ownership fixtures for IDOR verification")
+    .option("--identities <file>", "Restricted JSON file with named test identities for access-control replay")
+    .option("--auth <json>", "Auth credentials: JSON string or path (bearer, cookie, basic, header)")
+    .option("--scope <path>", "Path to a JSON scope policy (enable with `0 plugin enable scope`)")
+    .option("--allow-scanners", "Expose generic scanner tools in scope-enforced scans", false)
+    .option("--require-scope", "Refuse unscoped scans while the scope plugin is enabled", false)
     .option(
       "--attribution-header <name=value>",
-      "Attribution header to attach to in-scope outbound requests (0#216). Repeatable: pass `--attribution-header X-A=1 --attribution-header X-B=2`. Lower precedence than the scope file's `attribution.headers` block and ZERO_ATTRIBUTION_HEADERS env var. NEVER attached to out-of-scope traffic.",
+      "Header to attach to in-scope requests (repeatable); never sent out-of-scope",
       (value: string, prev: string[] = []) => [...prev, value],
     )
     .option(
       "--attribution-ua <token>",
-      "Engagement token to embed in the User-Agent on in-scope traffic (0#216). Resulting UA: `0/<ver> (engagement: <token>)`. Lower precedence than the scope file's `attribution.user_agent_token` and ZERO_ATTRIBUTION_UA_TOKEN env var.",
+      "Engagement token to embed in the User-Agent on in-scope traffic",
     )
-    .option("--api-spec <path>", "Path to OpenAPI 3.x / Swagger 2.0 spec file (JSON or YAML) for pre-loaded endpoint knowledge")
+    .option("--api-spec <path>", "Path to an OpenAPI/Swagger spec for endpoint knowledge")
     .option("--export <target>", "Export findings to issue tracker (e.g. github:owner/repo)")
-    .option("--race", "Enable benchmark/CTF best-of-N strategy racing: run multiple flag-oriented attack strategies in parallel. Do not use for normal live-target audits.", false)
-    .option("--egats", "Enable EGATS (Evidence-Gated Attack Tree Search): beam-search over a hypothesis tree", false)
-    .option("--cost-ceiling <usd>", "Hard per-scan USD cost ceiling. Aborts cleanly with partial findings if exceeded. Overrides ZERO_COST_CEILING_USD.")
+    .addOption(new Option("--race", "Best-of-N strategy racing (benchmark/CTF only)").default(false).hideHelp())
+    .addOption(new Option("--egats", "Evidence-gated attack tree search").default(false).hideHelp())
+    .option("--cost-ceiling <usd>", "Hard per-scan USD cost ceiling; aborts with partial findings if exceeded")
     .option(
       "--rate-limit <spec>",
-      "Per-host requests-per-second cap for outbound scan traffic. Plain number (e.g. '5') sets the default rps; comma-separated form 'api.example.com=5,*.example.com=3:6,2' allows per-host overrides and a fallback default. Default is 5 rps when unset. Each host carries an independent token bucket; 429 responses honour Retry-After (with a conservative 60s floor).",
+      "Per-host requests/sec cap, e.g. '5' or 'host=5,*=3' (default 5)",
     )
     .option(
       "--engagement-profile <name>",
-      "Engagement hardening posture for authorized enterprise work. 'standard' (default) is the existing behaviour. 'conservative' applies ONE quiet posture: no password-reset burst probe, the deterministic web-recon pre-pass routed through the per-host rate limiter, no adaptive WAF-evasion ladder, full jitter on the token bucket, and a reduced default of 1 rps/host. The applied posture is recorded in the report as `engagementPosture` so it can be handed to the client as evidence. Lower precedence than the scope file's `engagement` block and ZERO_ENGAGEMENT_PROFILE.",
+      "Engagement posture: standard (default) or conservative (quieter)",
     )
     .option(
       "--no-waf-evasion",
-      "Disable the adaptive WAF-evasion ladder (default: on). When a response classifies as blocked, the engine normally retries with encoding/casing/whitespace-mutated payload variants, which escalates a routine WAF block into a SOC incident. Detection and reporting of the block are unaffected. Independent of --engagement-profile; env form: ZERO_WAF_EVASION=0.",
+      "Disable adaptive WAF-evasion retries",
     )
-    .option("--tui", "Open the local terminal UI after the scan completes", false)
+    .option("--tui", "Open the terminal UI after the scan completes", false)
     .option(
       "--features <list>",
-      "Comma-separated list of opt-in feature flags to enable for this scan (e.g. 'wp_fingerprint,web_search'). Each flag maps to the corresponding ZERO_FEATURE_<NAME> environment variable. The token 'fp-moat' is a preset that enables the full false-positive moat (reachability, multi-modal, publishability, pov-gate, poc-gen, consensus) for an A/B run; an env var you set yourself always wins over the preset, so 'ZERO_FEATURE_POV_GATE=0 --features fp-moat' is a single-layer ablation.",
+      "Comma-separated feature flags to enable, e.g. 'fp-moat'",
     )
-    .option(
-      "--no-decoy-detection",
-      "Disable the anti-honeypot flag-shape validator (default: on). When enabled, the `done` tool rejects low-confidence flags (e.g. `FLAG{I'm_a_Script_Kiddie}`) once with a hint to keep exploring. See GitHub issue #82.",
-    )
-    .option(
-      "--dispatch <mode>",
-      "Tool-call protocol for the legacy text agent loop (0#232): 'json' (default TOOL_CALL JSON lines), 'xml' (<command>/<flag>/<finding>/<note> tags — survives malformed JSON from cheap OpenRouter / Gemini / DeepSeek models), or 'auto' (xml for cheap providers, json otherwise). No effect on the native API loop. Env override: ZERO_DISPATCH=xml.",
-      "auto",
-    )
+    .addOption(new Option("--no-decoy-detection", "Disable the anti-honeypot flag validator").hideHelp())
+    .addOption(new Option("--dispatch <mode>", "Tool-call protocol: json, xml, auto (legacy loop only)").default("auto").hideHelp())
     .option(
       "--emit <target>",
-      "Emit target. Default unset → existing terminal/json/etc. `pr` → emit each reproduced finding as a GitHub PR with repro + suggested patch (0#377). Unverified findings roll up into `hypotheses.md`.",
+      "Emit mode: 'pr' opens a GitHub PR per reproduced finding",
     )
     .option("--base <branch>", "Base branch for `--emit pr` (default: main)")
-    .option("--dry-run", "For `--emit pr`: print git/gh commands instead of running them. Auto-enabled if `gh auth status` fails.", false)
+    .option("--dry-run", "With `--emit pr`: print git/gh commands instead of running them", false)
     .option("--emit-out-dir <path>", "Directory for `--emit pr` rollup files (default: system temp)")
-    .option("--resume <run-id>", "Resume a previous run from its journal on disk (0#374). Locates the run's journal, rehydrates agent state, and continues from the last entry.")
-    .option("--branch-from <entry-index>", "Branch the journal at the given entry index before resuming (requires --resume). Copies entries 0..N into a new run and resumes from there.")
+    .option("--resume <run-id>", "Resume a previous run from its on-disk journal")
+    .addOption(new Option("--branch-from <entry-index>", "Branch the journal at an entry index before resuming (with --resume)").hideHelp())
     .option("--verbose", "Show detailed output", false)
-    .option("--replay", "Replay the last scan's results", false)
+    .addOption(new Option("--replay", "Replay the last scan's results").default(false).hideHelp())
     .action(async (opts) => {
       // ── Replay last scan (--replay flag) ──
       if (opts.replay) {
@@ -358,15 +388,34 @@ export function registerScanCommand(program: Command): void {
         process.env["ZERO_FEATURE_DECOY_DETECTION"] = "0";
       }
 
-      // --require-scope → fail closed when no engagement scope is configured
-      // (0#133). Same env-var mechanism as above: the core reads
-      // ZERO_REQUIRE_SCOPE at scan boot and at the bash tool, which is also
-      // how the cloud worker (which builds argv from a fixed table) can turn
-      // strictness on without an engine release.
+      // Strictness refines the active plugin; it never activates authorization.
       if (opts.requireScope) {
         process.env["ZERO_REQUIRE_SCOPE"] = "1";
       }
 
+      let identities: NamedIdentity[] | undefined;
+      if (opts.identities) {
+        try {
+          if (opts.auth) throw new Error("Use either --identities or --auth");
+          identities = parseIdentitiesFile(String(opts.identities));
+        } catch (err) {
+          console.error(chalk.red(err instanceof Error ? err.message : String(err)));
+          process.exit(2);
+        }
+      }
+      let accessControlFixtures: AccessControlFixture[] | undefined;
+      if (opts.accessControlFixtures) {
+        try {
+          accessControlFixtures = parseAccessControlFixturesFile(String(opts.accessControlFixtures));
+          const labels = new Set(identities?.map(id => id.label));
+          if (!identities || accessControlFixtures.some(f => !labels.has(f.ownerIdentity) || f.comparisonIdentities.some(label => !labels.has(label) || label === f.ownerIdentity))) {
+            throw new Error("Ownership fixtures require --identities with distinct configured owner/comparison labels");
+          }
+        } catch (err) {
+          console.error(chalk.red(err instanceof Error ? err.message : String(err)));
+          process.exit(2);
+        }
+      }
       // Parse --auth flag if provided
       let authConfig: AuthConfig | undefined;
       if (opts.auth) {
@@ -419,6 +468,8 @@ export function registerScanCommand(program: Command): void {
       // a missing or malformed scope file is exactly the configuration
       // error that should block the scan from starting (see 0#215).
       let scopeFile: string | undefined;
+      const scopeEnforcement = getScopeEnforcementState();
+      console.error(chalk.dim(scopeEnforcement.message));
       if (opts.scope) {
         scopeFile = String(opts.scope);
         if (!existsSync(scopeFile)) {
@@ -432,8 +483,8 @@ export function registerScanCommand(program: Command): void {
         try {
           const { loadScope } = await import("@0/core");
           const policy = loadScope(scopeFile);
-          const verdict = policy.match(String(opts.target));
-          if (!verdict.allowed) {
+          const verdict = scopeEnforcement.enabled ? policy.match(String(opts.target)) : undefined;
+          if (verdict && !verdict.allowed) {
             console.error(
               chalk.red(
                 `--target ${opts.target} is out of scope per ${scopeFile}: ${verdict.reason}`,
@@ -448,7 +499,7 @@ export function registerScanCommand(program: Command): void {
       }
 
       const hasNetworkScope = Boolean(scopeFile) || Boolean(httpAudit?.allowedHosts.length);
-      if (targetRequiresScope(targetStr) && !hasNetworkScope) {
+      if (scopeEnforcement.enabled && targetRequiresScope(targetStr) && !hasNetworkScope) {
         console.error(chalk.red(networkScopeRequiredRefusal(targetStr)));
         process.exit(2);
         return;
@@ -549,6 +600,8 @@ export function registerScanCommand(program: Command): void {
         model: opts.model as string | undefined,
         repoPath: opts.repo as string | undefined,
         auth: authConfig,
+        identities,
+        accessControlFixtures,
         apiSpecPath: opts.apiSpec as string | undefined,
         exportTarget: opts.export as string | undefined,
         race: opts.race as boolean | undefined,

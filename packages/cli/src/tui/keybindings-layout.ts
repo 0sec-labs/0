@@ -28,7 +28,7 @@ import {
 } from "./keybindings.js";
 import { rankDialogItem, type DialogItem } from "./dialog-select-layout.js";
 import { shellChromeRows } from "./settings-layout.js";
-import { SLASH_COMMANDS, type SlashCommand } from "./slash-commands.js";
+import { SLASH_COMMANDS, type SlashCommand } from "@0/shared"
 import { sanitizeTuiText, wrapText } from "./text.js";
 
 export { shellChromeRows };
@@ -291,7 +291,7 @@ export function shortcutsTitle(): string {
 
 /** The footer hint: a read-only palette — search, move, leave. */
 export function shortcutsFooterHint(): string {
-  return ["type to search", "[↑↓] move", "[⌃U] clear", "[esc] back", "[⌃C] exit"].join(" · ");
+  return ["type to search", "[↑↓] move", "[esc] back"].join(" · ");
 }
 
 // ===========================================================================
@@ -390,8 +390,6 @@ export function paletteDetailLines(
     push(binding.category, "keys");
     lines.push({ text: "", tone: "blank" });
     push(binding.description, "description");
-    lines.push({ text: "", tone: "blank" });
-    push("Bound in the chat console.", "blank");
     return lines;
   }
 
@@ -410,10 +408,8 @@ export function paletteDetailLines(
     }
     if (command.tuiOnly) {
       lines.push({ text: "", tone: "blank" });
-      push("Console only: the readline client cannot run this one.", "blank");
+      push("Console only.", "blank");
     }
-    lines.push({ text: "", tone: "blank" });
-    push("Type it in the chat composer to run it.", "blank");
     return lines;
   }
 
@@ -652,15 +648,13 @@ export function rebindableRowIndices(rows: readonly KeybindingEditorRow[]): numb
  */
 export function keybindingsEditorFooterHint(capturing: boolean): string {
   return capturing
-    ? ["press a chord to bind", "[esc] cancel"].join(" · ")
+    ? ["press the new keys", "[esc] cancel"].join(" · ")
     : [
         "type to search",
-        "[↑↓] move",
         "[⏎] rebind",
         "[⌃R] reset",
         "[⌃⇧R] reset all",
         "[esc] back",
-        "[⌃C] exit",
       ].join(" · ");
 }
 

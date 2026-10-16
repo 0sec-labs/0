@@ -34,9 +34,10 @@ export function registerIdentityCommand(program: Command): void {
   program
     .command("identity")
     .description(
-      "Read-only posture assessment of a Microsoft Entra ID (Azure AD) tenant — privileged role assignments, conditional-access coverage, app registrations, service principals, and federated-domain trust. The Graph access token is read from the " +
+      "Read-only security posture check of a Microsoft Entra ID (Azure AD) tenant. " +
+        "Reads the Graph token from " +
         TOKEN_ENV +
-        " environment variable; it is never accepted as an argument.",
+        "; never accepts it as an argument.",
     )
     .requiredOption("--tenant <tenantId>", "Entra tenant id (GUID) the supplied token is expected to belong to")
     .option("--json", "Emit the assessment result as machine-readable JSON")

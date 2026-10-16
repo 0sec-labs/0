@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "claims": [
+    {
+      "claim": "Offline publication pipeline",
+      "status": "implemented",
+      "inputs": [
+        "publicationGenerator"
+      ],
+      "limits": "Source presence is separate from empirical efficacy; no publication code is imported by ordinary scans."
+    },
+    {
+      "claim": "Retained May 4 XBOW successes",
+      "status": "historical observation",
+      "inputs": [
+        "xbow",
+        "consolidator"
+      ],
+      "limits": "Union across runs/modes; complete attempts and failures unavailable; no single-shot/generalization claim."
+    },
+    {
+      "claim": "May 6 93/95 black-box/single-shot headline",
+      "status": "unreconstructible; suppressed",
+      "inputs": [
+        "ledger",
+        "consolidator",
+        "xbow"
+      ],
+      "limits": "The model summary unions both modes; May 4 input is incompatible with the May 6 ledger."
+    },
+    {
+      "claim": "Retained reasoning cost A/B",
+      "status": "preliminary observation",
+      "inputs": [
+        "ab"
+      ],
+      "limits": "One target, three runs per arm, unchanged 3/3 success, parser errors and missing provenance; not a quality/generalization result."
+    },
+    {
+      "claim": "CyberGym task campaign",
+      "status": "historical observation",
+      "inputs": [
+        "cybergym"
+      ],
+      "limits": "Recorded failures retained; no matched evolution arm."
+    },
+    {
+      "claim": "Router finding precision/generalization",
+      "status": "not established; omitted",
+      "inputs": [
+        "router",
+        "routerMeta",
+        "trainer"
+      ],
+      "limits": "Weak supervision, duplicate/group leakage and class imbalance; CV efficacy not claimed."
+    },
+    {
+      "claim": "Autonomous evolution improves unseen security outcomes",
+      "status": "proposed; not measured",
+      "inputs": [
+        "evolution"
+      ],
+      "limits": "Synthetic correctness tests do not establish efficacy; separately budgeted qualification remains #120."
+    }
+  ]
+}

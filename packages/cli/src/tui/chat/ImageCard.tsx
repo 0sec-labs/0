@@ -124,14 +124,14 @@ export function ImageCard({ image, width, theme, marginTop = 0 }: ImageCardProps
   const unavailable = bytes
     ? ""
     : image.url && !image.data
-      ? "Referenced by URL; bytes were not inlined"
+      ? "Linked image (not embedded)"
       : !image.data
-        ? "No image data was retained"
+        ? "Image not kept"
         : !graphics
-          ? "This terminal reports no image protocol"
+          ? "This terminal can't show images"
           : image.byteSize !== undefined && image.byteSize > MAX_INLINE_IMAGE_BYTES
-            ? `Payload too large to display inline (${formatBytes(image.byteSize)})`
-            : "Image payload could not be decoded";
+            ? `Too large to show (${formatBytes(image.byteSize)})`
+            : "Couldn't read image";
 
   // Facts under the picture. Each line appears only if its datum exists.
   const facts: string[] = [];

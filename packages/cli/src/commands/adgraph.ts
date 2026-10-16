@@ -37,7 +37,8 @@ export function registerAdGraphCommand(program: Command): void {
   program
     .command("adgraph")
     .description(
-      "Offline Active Directory attack-path analysis over BloodHound CE / SharpHound JSON already on disk — paths to Domain Admin, kerberoastable principals, unconstrained delegation, DCSync rights, ACL abuse chains, and ADCS escalation. Reads files only: never collects, never authenticates, never touches the network.",
+      "Offline Active Directory attack-path analysis over BloodHound/SharpHound JSON on disk. " +
+        "Reads files only: never collects, authenticates, or touches the network.",
     )
     .requiredOption(
       "--input <path>",

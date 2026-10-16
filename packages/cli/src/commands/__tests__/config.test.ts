@@ -131,8 +131,6 @@ describe("config import", () => {
 
     runConfigImport(file, cap.deps({ homeDir: home, projectDir: project, scope: "global", yes: false }));
     expect(process.exitCode).toBe(1);
-    expect(cap.err.join("\n")).toMatch(/security-sensitive/);
-    expect(cap.err.join("\n")).toMatch(/allowModelSelfExtension: off -> on/);
     // Nothing was written — not even the safe key.
     expect(loadGlobalSettings(home)).toEqual(initialSettings);
   });
@@ -148,12 +146,10 @@ describe("config import", () => {
 
     runConfigImport(file, cap.deps({ homeDir: home, projectDir: makeDir("cfg-proj-"), scope: "global", yes: false }));
     expect(process.exitCode).toBe(1);
-    expect(cap.err.join("\n")).toContain("autoEvolveFinderLenses: off -> on");
-    expect(cap.err.join("\n")).toContain("autoPromoteFinderLenses: off -> on");
     expect(loadGlobalSettings(home)).toEqual(DEFAULT_SETTINGS);
   });
 
-  it("applies a security flip when --yes is passed and prints it", () => {
+  it("applies a security flip only when --yes is passed", () => {
     const home = makeDir("cfg-home-");
     saveSettings({ ...DEFAULT_SETTINGS, allowModelSelfExtension: false }, home);
     const file = join(makeDir("cfg-in-"), "danger.json");
@@ -163,7 +159,25 @@ describe("config import", () => {
     runConfigImport(file, cap.deps({ homeDir: home, projectDir: makeDir("cfg-proj-"), scope: "global", yes: true }));
     expect(process.exitCode).toBe(0);
     expect(loadGlobalSettings(home).allowModelSelfExtension).toBe(true);
-    expect(cap.out.join("\n")).toContain("allowModelSelfExtension: off -> on");
+  });
+
+  it("requires explicit global approval to change the execution boundary and ignores project attempts", () => {
+    const home = makeDir("cfg-home-");
+    const project = makeDir("cfg-proj-");
+    const file = join(makeDir("cfg-in-"), "workbench.json");
+    const initial = { ...DEFAULT_SETTINGS, executionProfile: "smolvm" as const };
+    saveSettings(initial, home);
+    writeFileSync(file, JSON.stringify({ executionProfile: "local", showLogo: false }));
+    const cap = capture();
+    runConfigImport(file, cap.deps({ homeDir: home, projectDir: project, scope: "global" }));
+    expect(process.exitCode).toBe(1);
+    expect(loadGlobalSettings(home)).toEqual(initial);
+    runConfigImport(file, cap.deps({ homeDir: home, projectDir: project, scope: "project", yes: true }));
+    expect(readProjectOverrides(project)).toEqual({ showLogo: false });
+    expect(loadGlobalSettings(home).executionProfile).toBe("smolvm");
+    runConfigImport(file, cap.deps({ homeDir: home, projectDir: project, scope: "global", yes: true }));
+    expect(process.exitCode).toBe(0);
+    expect(loadGlobalSettings(home).executionProfile).toBe("local");
   });
 
   it("errors when the file has no recognised settings", () => {

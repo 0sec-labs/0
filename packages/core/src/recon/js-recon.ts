@@ -24,6 +24,7 @@
 // excerpt from `redactSecret`.
 
 import type { ScopePolicy } from "../scope/scope.js";
+import { getScopeEnforcementState, isScopeEnforcementEnabled, withScopeEnforcement } from "../scope/activation.js";
 import type { ReconAsset } from "./recon.js";
 import { scanBody, type SecretHit, type FetchTextResult } from "./js-artifacts.js";
 import { extractEndpointsFromJs } from "./js-endpoints.js";
@@ -86,7 +87,11 @@ function clampFiles(n: number | undefined): number {
  * Endpoints are emitted in the recon `ReconAsset` shape so a caller can hand
  * them straight to the auth-boundary probe. Secrets are pre-redacted.
  */
-export async function runJsRecon(opts: JsReconOptions): Promise<JsReconResult> {
+export function runJsRecon(opts: JsReconOptions): Promise<JsReconResult> {
+  return withScopeEnforcement(getScopeEnforcementState(), () => runJsReconInternal(opts));
+}
+
+async function runJsReconInternal(opts: JsReconOptions): Promise<JsReconResult> {
   const result: JsReconResult = {
     endpoints: [],
     apiBaseUrls: [],
@@ -101,7 +106,7 @@ export async function runJsRecon(opts: JsReconOptions): Promise<JsReconResult> {
   // Rail 1: an authorized-scope policy is mandatory for a live JS sweep. With
   // none, deny-by-default → fetch nothing.
   const scope = opts.scope;
-  if (!scope) {
+  if (isScopeEnforcementEnabled() && !scope) {
     result.skipped.push(...opts.scriptUrls);
     return result;
   }
@@ -113,7 +118,7 @@ export async function runJsRecon(opts: JsReconOptions): Promise<JsReconResult> {
     const url = typeof raw === "string" ? raw.trim() : "";
     if (!url || seenUrl.has(url)) continue;
     seenUrl.add(url);
-    if (!/^https?:\/\//i.test(url) || !scope.match(url).allowed) {
+    if (!/^https?:\/\//i.test(url) || (scope && !scope.enforce(url).allowed)) {
       result.skipped.push(url);
       continue;
     }

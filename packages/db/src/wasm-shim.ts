@@ -277,27 +277,53 @@ function createWasmEngine(path: string): RawDatabase {
   type WasmDatabase = InstanceType<typeof sqliteWasm.Database>;
   type WasmStatement = InstanceType<typeof sqliteWasm.Statement>;
   const wasm: WasmDatabase = new WasmDatabaseCtor(path);
-  const wrapStatement = (stmt: WasmStatement): RawStatement => ({
-    run: (bind) => stmt.run(bind as any) as unknown as RunResult,
-    get: (bind) => {
-      const row = stmt.get(bind as any);
-      return row == null ? undefined : (row as Record<string, unknown>);
-    },
-    all: (bind) => stmt.all(bind as any) as Array<Record<string, unknown>>,
-    values: (bind) => {
-      // node-sqlite3-wasm has no native `.values()`; reconstruct from `.all()`.
-      // Insertion order on the returned plain objects matches result-column
-      // order, so Object.values() preserves it.
-      const rows = stmt.all(bind as any) as Array<Record<string, unknown>>;
-      return rows.map((r) => Object.values(r));
-    },
-  });
+  // node-sqlite3-wasm's get() stops at SQLITE_ROW without resetting the
+  // cursor. Its close_v2() also defers closing while statements survive.
+  // Finish every execution, then reprepare transparently on reuse so read
+  // locks never outlive synchronous shim calls (including failed calls).
+  const prepared = new Set<WasmStatement>();
+  const wrapStatement = (sql: string): RawStatement => {
+    let initial: WasmStatement | undefined = wasm.prepare(sql);
+    prepared.add(initial);
+    const execute = <T>(operation: (statement: WasmStatement) => T): T => {
+      if (!wasm.isOpen) throw new Error("Database already closed");
+      const statement = initial ?? wasm.prepare(sql);
+      initial = undefined;
+      prepared.add(statement);
+      let succeeded = false;
+      try {
+        const result = operation(statement);
+        succeeded = true;
+        return result;
+      } finally {
+        prepared.delete(statement);
+        try { statement.finalize(); }
+        catch (error) { if (succeeded) throw error; }
+      }
+    };
+    return {
+      run: bind => execute(statement => statement.run(bind as any) as unknown as RunResult),
+      get: bind => execute(statement => {
+        const row = statement.get(bind as any);
+        return row == null ? undefined : (row as Record<string, unknown>);
+      }),
+      all: bind => execute(statement => statement.all(bind as any) as Array<Record<string, unknown>>),
+      values: bind => execute(statement => {
+        const rows = statement.all(bind as any) as Array<Record<string, unknown>>;
+        return rows.map(row => Object.values(row));
+      }),
+    };
+  };
   return {
-    prepare: (sql) => wrapStatement(wasm.prepare(sql)),
+    prepare: sql => wrapStatement(sql),
     exec: (sql) => {
       wasm.exec(sql);
     },
-    close: () => wasm.close(),
+    close: () => {
+      for (const statement of prepared) statement.finalize();
+      prepared.clear();
+      wasm.close();
+    },
     get inTransaction() {
       return wasm.inTransaction;
     },

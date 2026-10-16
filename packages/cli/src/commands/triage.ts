@@ -189,7 +189,7 @@ async function runMarkFp(findingId: string, opts: TriageMarkFpOptions): Promise<
 }
 
 export function registerTriageCommand(program: Command): void {
-  const triage = program.command("triage").description("Triage findings and manage learned FP memories");
+  const triage = program.command("triage").description("Triage findings and manage false-positive memories");
 
   const memory = triage.command("memory").description("Manage Semgrep-style triage memories");
 

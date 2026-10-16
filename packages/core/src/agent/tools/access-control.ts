@@ -19,7 +19,7 @@ export const accessControlToolDefinitions: Record<string, ToolDefinition> = {
       "Test for broken access control (BOLA/IDOR/BFLA, horizontal + vertical privilege escalation) by replaying ONE request across MULTIPLE identities and diffing the responses. " +
       "Fetches the URL as an authorized baseline identity (whoever owns/can access the resource), then replays the SAME method/body/headers as each comparison identity, and reports whether each comparison identity could reach the resource. " +
       "Use this when ≥2 identities are configured and you find an object reference (/api/users/123, /orders/42), an admin-only endpoint, or any resource that should be authorization-scoped. " +
-      "A comparison identity that gets a 2xx with the SAME body as the baseline = the resource leaked across an authorization boundary (broken object-level auth). A lower-privileged identity reaching an admin endpoint = vertical privesc. The tool returns full A-vs-B request/response evidence; call save_finding with it when a break is confirmed.",
+      "Confirmation requires expect_denied=true and a known synthetic private ownership_marker present in both authorized and comparison responses. HTTP success or similar bodies alone are candidates. Use access_control_workflow for state-change evidence.",
     parameters: {
       url: { type: "string", description: "The URL to probe (e.g. https://target/api/users/123)." },
       method: { type: "string", description: "HTTP method (default GET).", enum: ["GET", "POST", "PUT", "DELETE", "PATCH"] },
@@ -30,12 +30,14 @@ export const accessControlToolDefinitions: Record<string, ToolDefinition> = {
         description: "Label of the identity that legitimately owns/can access the resource (the authorized baseline). Defaults to the active identity.",
       },
       compare_identities: {
-        type: "object",
+        type: "array",
+        items: { type: "string" },
         description: "Optional array of identity labels to replay the request as. When omitted, every OTHER configured identity is used.",
       },
+      ownership_marker: { type: "string", description: "Known synthetic PRIVATE owner-specific marker (16–500 characters) created in the authorized test tenant. Do not use public repo names, common fields, or credentials." },
       expect_denied: {
         type: "boolean",
-        description: "Set true when the comparison identities are NOT supposed to access this resource (the common case). When true, any comparison 2xx is flagged as a break even if the body differs from the baseline.",
+        description: "Set true when the comparison identities are NOT supposed to access this resource (the common case). Confirmation also requires a restricted ownership_marker; a 2xx alone is unverified.",
       },
     },
     required: ["url"],

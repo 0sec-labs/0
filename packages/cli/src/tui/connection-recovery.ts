@@ -18,8 +18,7 @@ export function connectionRecoveryForError(error: string): ConnectionRecovery | 
   if (/no provider credential found/i.test(detail)) return null;
 
   // Managed-service auth errors do not belong to any model-provider form.
-  // Cloud inference is no longer offered by this console.
-  if (/0cloud|0[- ]cloud|0 hosted models|RuntimeConfig\.provider\s*=\s*hosted/i.test(detail)) return null;
+  if (/0cloud|0[- ]cloud/i.test(detail)) return null;
 
   // A provider name alone is not an authentication failure. Keep model,
   // balance, rate-limit and transport errors visible in the conversation.
@@ -40,6 +39,9 @@ export function connectionRecoveryForError(error: string): ConnectionRecovery | 
       title: "Azure OpenAI credentials need attention",
       detail,
     };
+  }
+  if (/\bcline(?:pass)?\b|cline_api_key/i.test(detail)) {
+    return { providerId: "cline", title: "Cline credentials need attention", detail };
   }
   if (/anthropic|claude/i.test(detail)) {
     return {

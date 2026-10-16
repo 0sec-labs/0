@@ -1,3 +1,4 @@
+import { getFindingPriority } from "@0/shared";
 import type { Finding, ReachabilityTier, Weaponizability } from "@0/shared";
 import { suggestCwesForCategory, formatCweSection } from "./cwe.js";
 import type { CweEntry } from "./cwe.js";
@@ -160,6 +161,7 @@ export function redactAuthHeaders(text: string): string {
  */
 function reachabilityLabel(tier: ReachabilityTier): string {
   switch (tier) {
+    case "unknown": return "not established by the available evidence";
     case "remote-unauth":
       return "remote, unauthenticated — reachable over the network with no credentials";
     case "remote-auth":
@@ -180,6 +182,7 @@ function reachabilityLabel(tier: ReachabilityTier): string {
 /** Human-readable gloss of what the attacker gains once the bug fires. */
 function weaponizabilityLabel(w: Weaponizability): string {
   switch (w) {
+    case "unknown": return "attacker gains not established by the available evidence";
     case "rce":
       return "remote code execution";
     case "lpe-to-root":
@@ -299,7 +302,7 @@ export function renderAdvisoryMarkdown(finding: Finding, ctx: AdvisoryContext = 
   // real assessment, so an unassessed advisory is byte-identical to before.
   // This is the section a vendor reads to decide "how bad, and who can do it".
   const impactAssessment = finding.impactAssessment;
-  if (impactAssessment) {
+  if (impactAssessment && getFindingPriority(finding).assessed) {
     out.push("# Impact", "");
     out.push(`**Attacker gains:** ${weaponizabilityLabel(impactAssessment.weaponizability)}`, "");
     out.push(`**Attack prerequisites:** ${reachabilityLabel(impactAssessment.reachability_tier)}`, "");
@@ -498,7 +501,7 @@ function buildAffectedLine(finding: Finding, ctx: AdvisoryContext): string {
  */
 function buildImpactNarrative(finding: Finding): string {
   const a = finding.impactAssessment;
-  if (!a) {
+  if (!a || !getFindingPriority(finding).assessed) {
     return (
       `This ${finding.category.replace(/-/g, " ")} issue is rated **${severityHeading(
         finding.severity,
@@ -521,7 +524,7 @@ function buildImpactNarrative(finding: Finding): string {
  */
 function buildAttackScenario(finding: Finding): string {
   const a = finding.impactAssessment;
-  if (!a) return "";
+  if (!a || !getFindingPriority(finding).assessed) return "";
   return (
     `1. Attacker position: ${reachabilityLabel(a.reachability_tier)}.\n` +
     `2. Trigger the ${finding.category.replace(/-/g, " ")} condition described above.\n` +

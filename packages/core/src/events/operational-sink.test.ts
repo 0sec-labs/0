@@ -285,19 +285,6 @@ describe("operational NDJSON sink — privacy boundary", () => {
     expect(lines).toHaveLength(0);
   });
 
-  it("redacts credential-like values inside metadata arrays", () => {
-    eventBus.emit("untrusted_input_sanitized", {
-      tool: "read_file",
-      markers: [
-        "instruction-override",
-        "Authorization: Bearer private-marker-sentinel",
-      ],
-    });
-    const lines = capture.lines();
-    expect(lines).toHaveLength(1);
-    expect(lines[0].markers).toContain("instruction-override");
-    expect(JSON.stringify(lines)).not.toContain("private-marker-sentinel");
-  });
 
   it("requires JSON format and subscribes only once", () => {
     eventBus.clear();

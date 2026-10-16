@@ -1225,3 +1225,23 @@ describe("AimdState — adaptive finder concurrency", () => {
   });
 });
 
+
+describe("managed hunt runtime ownership", () => {
+  it("passes the same native runtime, signal, and ledger through finder and refute passes", async () => {
+    analysisAgentMock.mockReset().mockResolvedValue({ findings: [mkFinding("owned", "Owned finding", "")] });
+    const signal = new AbortController().signal;
+    const nativeRuntime = { type: "api" as const, executeNative: vi.fn(), isAvailable: async () => true };
+    const costLedger = new ScanCostLedger();
+    const verifier = makeMultiLensVerifier([{ id: "refute", challengeHint: "Refute the finding" }], { sourceRoot: "/src", runtime: "api", nativeRuntime, signal, costLedger, crossFamilyRefute: false });
+    await runHuntScan({ sourceRoot: "/src", candidates: [{ path: "/src/owned.c" }], runtime: "api", nativeRuntime, signal, costLedger, verify: verifier });
+    expect(analysisAgentMock).toHaveBeenCalledTimes(2);
+    for (const [options] of analysisAgentMock.mock.calls) expect(options.config).toMatchObject({ nativeRuntime, signal, costLedger });
+  });
+
+  it("does not dispatch finders when the owning workflow is already cancelled", async () => {
+    analysisAgentMock.mockReset();
+    const abort = new AbortController(); abort.abort(new Error("Owned workflow cancelled"));
+    await expect(runHuntScan({ sourceRoot: "/src", candidates: [{ path: "/src/owned.c" }], runtime: "api", signal: abort.signal })).rejects.toThrow("Owned workflow cancelled");
+    expect(analysisAgentMock).not.toHaveBeenCalled();
+  });
+});

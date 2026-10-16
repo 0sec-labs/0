@@ -40,7 +40,7 @@ import { join } from "node:path";
 
 import { homeStateDir } from "@0/shared";
 
-import { defaultOpenBrowser } from "../commands/auth.js";
+import { defaultOpenBrowser } from "../open-browser.js";
 import {
   accountEnvPatch,
   addAccount,
@@ -469,7 +469,10 @@ export function startDeviceAuth(
    */
   const persist = (record: AccountRecord, connectedMessage: string): void => {
     const { store } = addAccount(loadAccountStore(options.homeDir), config.providerId, record);
-    saveAccountStore(store, options.homeDir);
+    if (!saveAccountStore(store, options.homeDir)) {
+      finish("failed", "Sign-in completed, but the private credential account store could not be saved. Try again after restoring access to the local state directory.");
+      return;
+    }
     const patch = accountEnvPatch(store, env);
     for (const [key, value] of Object.entries(patch)) env[key] = value;
     finish("connected", connectedMessage);

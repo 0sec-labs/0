@@ -2,14 +2,17 @@ import { describe, expect, it } from "vitest";
 import { createSessionCloseGate } from "./session-close-gate.js";
 
 describe("createSessionCloseGate", () => {
-  it("resolves a registered waiter exactly once", async () => {
+  it("resolves a registered waiter and cancels active work exactly once", async () => {
     const gate = createSessionCloseGate();
     const waiter = gate.wait();
+    let cancellations = 0;
+    gate.signal.addEventListener("abort", () => { cancellations += 1; });
 
     expect(gate.close()).toBe(true);
     expect(gate.close()).toBe(false);
     await expect(waiter).resolves.toBeUndefined();
     expect(gate.closed).toBe(true);
+    expect(cancellations).toBe(1);
   });
 
   it("resolves a waiter registered after an early close", async () => {

@@ -10,10 +10,7 @@ import {
   computeShortcutsLayout,
   effectiveKeysDisplay,
   filterKeybindingEditorRows,
-  keybindingsEditorFooterHint,
   rebindableRowIndices,
-  shortcutsFooterHint,
-  shortcutsTitle,
   widestKeys,
   type ShortcutsLayout,
   type ShortcutsRow,
@@ -172,13 +169,6 @@ describe("clipShortcutsRows", () => {
   });
 });
 
-describe("static labels", () => {
-  it("names the title and read-only footer keys", () => {
-    expect(shortcutsTitle()).toBe("KEYBOARD SHORTCUTS");
-    expect(shortcutsFooterHint()).toContain("[esc] back");
-    expect(shortcutsFooterHint()).toContain("[⌃C] exit");
-  });
-});
 
 describe("chordDisplay", () => {
   it("renders canonical chords as display labels", () => {
@@ -196,17 +186,13 @@ describe("chordDisplay", () => {
 });
 
 describe("effectiveKeysDisplay", () => {
-  it("shows the default when there is no override", () => {
-    const binding = KEYBINDINGS.find((b) => b.id === "view.left-sidebar")!;
-    expect(effectiveKeysDisplay(binding, {})).toBe("Ctrl+B");
-  });
 
   it("shows the override when one is set", () => {
-    const binding = KEYBINDINGS.find((b) => b.id === "view.left-sidebar")!;
-    expect(effectiveKeysDisplay(binding, { "view.left-sidebar": "ctrl+j" })).toBe("Ctrl+J");
+    const binding = KEYBINDINGS.find((b) => b.id === "view.transcript-detail")!;
+    expect(effectiveKeysDisplay(binding, { "view.transcript-detail": "ctrl+j" })).toBe("Ctrl+J");
   });
 
-  it("joins a multi-chord protected binding's alternates", () => {
+  it("joins a multi-chord binding's alternates", () => {
     const binding = KEYBINDINGS.find((b) => b.id === "nav.scroll-up")!;
     expect(effectiveKeysDisplay(binding, {})).toBe("PageUp / Ctrl+Up");
   });
@@ -228,24 +214,25 @@ describe("buildKeybindingEditorRows", () => {
   });
 
   it("flags an overridden row and shows its effective chord", () => {
-    const rows = buildKeybindingEditorRows({ "view.left-sidebar": "ctrl+j" });
-    const row = rows.find((r) => r.id === "view.left-sidebar")!;
+    const rows = buildKeybindingEditorRows({ "view.transcript-detail": "ctrl+j" });
+    const row = rows.find((r) => r.id === "view.transcript-detail")!;
     expect(row.overridden).toBe(true);
     expect(row.chord).toBe("Ctrl+J");
     // A non-overridden rebindable row is not flagged.
-    const other = rows.find((r) => r.id === "view.right-sidebar")!;
+    const other = rows.find((r) => r.id === "nav.open-comms")!;
     expect(other.overridden).toBe(false);
   });
 
   it("carries the default chord only on an overridden row", () => {
-    const rows = buildKeybindingEditorRows({ "view.left-sidebar": "ctrl+j" });
-    const overridden = rows.find((r) => r.id === "view.left-sidebar")!;
-    expect(overridden.defaultChord).toBe("Ctrl+B");
+    const rows = buildKeybindingEditorRows({ "view.transcript-detail": "ctrl+j" });
+    const overridden = rows.find((r) => r.id === "view.transcript-detail")!;
+    const binding = KEYBINDINGS.find((b) => b.id === overridden.id)!;
+    expect(overridden.defaultChord).toBe(binding.defaultChords.map(chordDisplay).join(" / "));
     // Multi-chord rebindables keep both defaults in the note.
     const rows2 = buildKeybindingEditorRows({ "nav.palette": "ctrl+j" });
     expect(rows2.find((r) => r.id === "nav.palette")!.defaultChord).toBe("Ctrl+P / Ctrl+K");
     // A non-overridden row carries no default note.
-    expect(rows.find((r) => r.id === "view.right-sidebar")!.defaultChord).toBeUndefined();
+    expect(rows.find((r) => r.id === "nav.open-comms")!.defaultChord).toBeUndefined();
   });
 
   it("carries lockReason on locked rows and none on rebindable rows", () => {
@@ -269,12 +256,10 @@ describe("filterKeybindingEditorRows", () => {
   });
 
   it("keeps only matching binding rows and drops emptied headings", () => {
-    const filtered = filterKeybindingEditorRows(rows, "sidebar");
+    const filtered = filterKeybindingEditorRows(rows, "transcript");
     const bindings = filtered.filter((r) => r.kind === "binding");
     expect(bindings.length).toBeGreaterThan(0);
-    for (const row of bindings) {
-      expect(row.description?.toLowerCase()).toContain("sidebar");
-    }
+    expect(bindings.map((row) => row.id)).toContain("view.transcript-detail");
     // No heading survives without a following binding row.
     for (let i = 0; i < filtered.length; i += 1) {
       if (filtered[i]!.kind !== "heading") continue;
@@ -283,9 +268,10 @@ describe("filterKeybindingEditorRows", () => {
   });
 
   it("matches on the chord column too", () => {
-    const filtered = filterKeybindingEditorRows(rows, "ctrl+b");
+    const binding = KEYBINDINGS.find((b) => b.id === "view.transcript-detail")!;
+    const filtered = filterKeybindingEditorRows(rows, binding.defaultChords[0]!);
     const ids = filtered.filter((r) => r.kind === "binding").map((r) => r.id);
-    expect(ids).toContain("view.left-sidebar");
+    expect(ids).toContain("view.transcript-detail");
   });
 
   it("returns no binding rows for a query that matches nothing", () => {
@@ -304,14 +290,3 @@ describe("filterKeybindingEditorRows", () => {
   });
 });
 
-describe("keybindingsEditorFooterHint", () => {
-  it("names the capture keys while capturing and the nav keys otherwise", () => {
-    expect(keybindingsEditorFooterHint(true)).toContain("press a chord");
-    const idle = keybindingsEditorFooterHint(false);
-    expect(idle).toContain("type to search");
-    expect(idle).toContain("[⏎] rebind");
-    expect(idle).toContain("[⌃R] reset");
-    expect(idle).toContain("reset all");
-    expect(idle).toContain("[esc] back");
-  });
-});

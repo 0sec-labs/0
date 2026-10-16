@@ -18,8 +18,6 @@ import {
 } from "../memsafety.js";
 
 const core = vi.hoisted(() => ({
-  getCloudSinkConfig: vi.fn(),
-  postFinding: vi.fn(),
   prepare: vi.fn(),
   runMemSafetyScan: vi.fn(),
 }));
@@ -38,8 +36,6 @@ afterEach(() => {
     rmSync(dir, { recursive: true, force: true });
   }
   vi.restoreAllMocks();
-  core.getCloudSinkConfig.mockReset();
-  core.postFinding.mockReset();
   core.prepare.mockReset();
   core.runMemSafetyScan.mockReset();
   process.exitCode = undefined;
@@ -103,7 +99,6 @@ describe("registerMemsafetyCommand", () => {
       resolvedTarget: sourceRoot,
       cleanup: vi.fn(),
     });
-    core.getCloudSinkConfig.mockReturnValue(null);
     core.runMemSafetyScan.mockResolvedValue({
       findings: [],
       details: [],

@@ -4,6 +4,9 @@
 
 export const OSS_PRICING: Record<string, { input: number; output: number; cachedInput?: number }> = {
   "gpt-6-astra": { input: 10, output: 50, cachedInput: 1 },
+  "gpt-6-sol": { input: 2, output: 10, cachedInput: 0.2 },
+  "gpt-6.1-sol": { input: 2, output: 10, cachedInput: 0.1 },
+  "gpt-6-luna": { input: 0.1, output: 0.5, cachedInput: 0.01 },
   "claude-fable-5-1": { input: 10, output: 50, cachedInput: 0.25 },
   "claude-opus-5": { input: 5, output: 25, cachedInput: 0.5 },
   "claude-sonnet-5": { input: 2, output: 10, cachedInput: 0.2 },
@@ -26,7 +29,6 @@ export const OSS_PRICING: Record<string, { input: number; output: number; cached
   "o4-mini": { input: 1.1, output: 4.4, cachedInput: 0.275 },
   "gemini-2.5-pro": { input: 1.25, output: 10, cachedInput: 0.125 },
   "gemini-2.5-flash": { input: 0.3, output: 2.5, cachedInput: 0.03 },
-  "gemini-2.0-flash": { input: 0.1, output: 0.4, cachedInput: 0.025 },
   "deepseek-chat": { input: 0.28, output: 0.42, cachedInput: 0.028 },
   "deepseek-reasoner": { input: 0.28, output: 0.42, cachedInput: 0.028 },
 };

@@ -24,6 +24,23 @@ describe("immutable evolution evidence", () => {
     expect(readEvolutionArtifact(path)).toEqual({ candidateId: "one", passed: true });
   });
 
+  it("publishes into a fresh multi-level store without reversing missing components", () => {
+    const root = directory();
+    const path = join(root, "store", "snapshots", "receipts", "candidate.json");
+    publishEvolutionArtifact(path, { candidateId: "nested" });
+    expect(readEvolutionArtifact(path)).toEqual({ candidateId: "nested" });
+  });
+
+  it("rejects attacker-controlled ancestor aliases even when their target is private", () => {
+    const root = directory();
+    const outside = join(root, "outside", "receipt.json");
+    publishEvolutionArtifact(outside, { secret: true });
+    symlinkSync(join(root, "outside"), join(root, "alias"));
+    expect(() => readEvolutionArtifact(join(root, "alias", "receipt.json"))).toThrow(/unsafe evolution directory/);
+    expect(() => publishEvolutionArtifact(join(root, "alias", "nested", "receipt.json"), { secret: false })).toThrow(/unsafe evolution directory/);
+    expect(readEvolutionArtifact(outside)).toEqual({ secret: true });
+  });
+
   it("never reads or overwrites artifacts through symbolic links", () => {
     const root = directory();
     const target = join(root, "outside.json");

@@ -3,11 +3,15 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
+import stat
+import sys
 import tempfile
 import time
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -79,6 +83,16 @@ def _publisher_fixture(
     monkeypatch.setattr(f"{module}.PUBLISHER_LABEL_ALLOWED_SIGNERS", closure[4])
     monkeypatch.setattr(f"{module}.PUBLISHER_SPOOL_ROOT", spool)
     monkeypatch.setattr(f"{module}.PUBLISHER_SERVICE_UID", os.geteuid())
+    # CI/toolchain interpreters may belong to root or another account (and may
+    # be hard-linked). Model the service-owned executable, preserving its real
+    # bytes and the production manifest custody validation. Do not mutate the
+    # shared interpreter or replace the verifier with a permissive stub.
+    fixed_python = tmp_path / "fixed-python"
+    shutil.copyfile(Path(sys.executable).resolve(), fixed_python)
+    fixed_python.chmod(0o555)
+    publisher_sys = SimpleNamespace(**vars(sys))
+    publisher_sys.executable = str(fixed_python)
+    monkeypatch.setattr(publisher, "sys", publisher_sys)
     monkeypatch.setattr(f"{module}._require_service_custody", lambda: None)
     monkeypatch.setattr(f"{module}._rank_unprivileged", rank_once)
     monkeypatch.setattr(f"{module}._check_custodied_file", lambda *_args, **_kwargs: None)
@@ -90,6 +104,27 @@ def _publisher_fixture(
 
     monkeypatch.setattr(f"{module}._validate_rank_receipt", validate_with_test_policy)
     return spool, campaign, closure[2], closure[4], policy, result, calls
+
+
+def test_manifest_uses_owned_read_only_real_python_copy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original_python = sys.executable
+    _publisher_fixture(tmp_path, monkeypatch)
+    fixed_python = Path(publisher.sys.executable)
+    metadata = fixed_python.lstat()
+    assert sys.executable == original_python
+    assert stat.S_ISREG(metadata.st_mode)
+    assert metadata.st_uid == os.geteuid()
+    assert metadata.st_nlink == 1
+    assert stat.S_IMODE(metadata.st_mode) == 0o555
+    assert fixed_python.read_bytes() == Path(original_python).resolve().read_bytes()
+    assert publisher._read_custodied_file(
+        fixed_python, 128 * 1024 * 1024, "fixture Python"
+    ) == fixed_python.read_bytes()
+    fixed_python.chmod(0o575)
+    with pytest.raises(PermissionError, match="custody is unsafe"):
+        publisher._read_custodied_file(fixed_python, 128 * 1024 * 1024, "fixture Python")
 
 
 @pytest.mark.parametrize(

@@ -21,7 +21,6 @@ import { skillsDispatch } from "./skills.js";
 import { scannerDispatch } from "./scanner.js";
 import { detectionDispatch } from "./detections.js";
 import { cloudDispatch } from "./cloud.js";
-import { orchestratorDispatch } from "./orchestrator.js";
 import { oastDispatch } from "./oast.js";
 import { pythonDispatch } from "./python.js";
 import { binaryDispatch } from "./binary.js";
@@ -45,7 +44,6 @@ export const TOOL_DISPATCH: Record<string, string> = {
   ...scannerDispatch,
   ...detectionDispatch,
   ...cloudDispatch,
-  ...orchestratorDispatch,
   ...oastDispatch,
   ...pythonDispatch,
   ...binaryDispatch,

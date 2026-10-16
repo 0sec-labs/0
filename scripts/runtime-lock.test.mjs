@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, cpSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -12,6 +12,7 @@ test("the published runtime supports a locked production install", () => {
   try {
     copyFileSync(join(repoRoot, "dist/package.json"), join(directory, "package.json"));
     copyFileSync(join(repoRoot, "scripts/dist-package-lock.json"), join(directory, "package-lock.json"));
+    cpSync(join(repoRoot, "vendor"), join(directory, "vendor"), { recursive: true });
     const result = spawnSync("npm", [
       "ci", "--omit=dev", "--ignore-scripts", "--dry-run", "--no-audit", "--no-fund",
     ], { cwd: directory, encoding: "utf8", timeout: 30_000, shell: process.platform === "win32" });

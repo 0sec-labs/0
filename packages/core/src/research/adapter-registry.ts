@@ -12,6 +12,7 @@ import { MobileStaticResearchAdapter } from "./adapters/mobile-static-adapter.js
 import { ProtocolHttpResearchAdapter } from "./adapters/protocol-http-adapter.js";
 import { UnifiedPipelineResearchAdapter } from "./adapters/unified-pipeline-adapter.js";
 import { UserspaceMemSafetyResearchAdapter } from "./adapters/userspace-memsafety-adapter.js";
+import { UserspaceCounterexampleResearchAdapter } from "./adapters/userspace-counterexample-adapter.js";
 import { XnuIokitResearchAdapter } from "./adapters/xnu-iokit-adapter.js";
 import { WindowsHyperVImportAdapter } from "./adapters/windows-hyperv-adapter.js";
 
@@ -41,6 +42,7 @@ export function createDefaultResearchRegistry(): ResearchAdapterRegistry {
   return new ResearchAdapterRegistry()
     .register("protocol.http-conformance", () => new ProtocolHttpResearchAdapter())
     .register("userspace.memsafety", () => new UserspaceMemSafetyResearchAdapter())
+    .register("userspace.counterexample", () => new UserspaceCounterexampleResearchAdapter())
     .register("hunt.agentic", () => new HuntResearchAdapter())
     .register("live.agentic-scan", () => new LiveAgenticScanResearchAdapter())
     .register("linux.kernel-reproducer", () => new LinuxKernelResearchAdapter())

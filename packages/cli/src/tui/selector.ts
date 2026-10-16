@@ -1,11 +1,9 @@
 /**
  * Pure state model for the interactive selector overlay.
  *
- * `/model` used to answer with a single line of text. The overlay that
- * replaces it is a keyboard-driven list — filter as you type, arrow to
- * navigate, enter to commit — and the same widget has to serve `/agents`,
- * `/targets` and other inline choices without being rewritten each time. So the
- * *behaviour* lives here as a reducer over a plain object and the React /
+ * A keyboard-driven list handles filtering, arrows and confirmation for `/model`,
+ * settings, themes and other inline choices without adding route-specific code.
+ * The behaviour lives here as a reducer over a plain object and the React /
  * OpenTUI component becomes a dumb projection of it.
  *
  * Nothing in this file imports React, OpenTUI, or touches I/O: every rule

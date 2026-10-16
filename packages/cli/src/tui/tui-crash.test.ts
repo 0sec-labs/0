@@ -55,7 +55,8 @@ describe("crashStackLines", () => {
     const lines = crashStackLines(crash.stack, 2);
     expect(lines).toHaveLength(2);
     expect(lines[0]).toBe("TypeError: Cannot read properties of undefined (reading 'x')");
-    expect(lines[1]).toBe("at ChatScreen (/home/op/.0/run.tsx:1200:5)");
+    expect(lines[1]).toContain("run.tsx:1200:5");
+    expect(lines[1]).not.toContain("/home/op");
   });
 
   it("returns nothing for max 0", () => {
@@ -84,6 +85,20 @@ describe("buildCrashFeedbackMessage", () => {
     });
     expect(message).not.toContain("sk-abcdefghijklmnopqrstuvwxyz");
     expect(message).not.toContain("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+  });
+
+  it("scrubs incidental secrets and home identities from the note and captured crash", () => {
+    const message = buildCrashFeedbackMessage(
+      "authorization: Bearer private-access-token from analyst@customer.example",
+      {
+        message: "opening postgres://dbuser:private-password@db.internal/data",
+        stack: "at render (/Users/private-user/app/view.ts:42:1)\n    at run (C:\\Users\\private-user\\view.ts:1:1)",
+      },
+    );
+    for (const privateValue of ["private-access-token", "analyst@customer.example", "private-password", "private-user"]) {
+      expect(message).not.toContain(privateValue);
+    }
+    expect(message).toContain("view.ts:42:1");
   });
 
   it("falls back to a placeholder for an empty message", () => {

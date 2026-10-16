@@ -11,7 +11,7 @@
 
 import { describe, it, expect } from "vitest";
 import type { Finding, ImpactAssessment, ReachabilityTier } from "@0/shared";
-import { suggestCvss } from "./cvss.js";
+import { suggestCvss, suggestCvss4 } from "./cvss.js";
 
 function mkFinding(overrides: Partial<Finding> = {}): Finding {
   return {
@@ -121,4 +121,17 @@ describe("suggestCvss — additive over impactAssessment", () => {
       expect(r.score).toBeLessThanOrEqual(10);
     }
   });
+  it("does not promote fallback or unknown reachability into factual CVSS metrics", () => {
+    const baseline = mkFinding();
+    for (const fallback of [
+      { ...assessment("local-unpriv"), assessment_source: "heuristic" as const },
+      { ...assessment("local-unpriv"), rationale: "Deterministic fallback derived from severity + category" },
+      { ...assessment("unknown"), business_impact: "unassessed" as const },
+      assessment("unknown"),
+    ]) {
+      expect(suggestCvss(mkFinding({ impactAssessment: fallback }))).toEqual(suggestCvss(baseline));
+      expect(suggestCvss4(mkFinding({ impactAssessment: fallback }))).toEqual(suggestCvss4(baseline));
+    }
+  });
+
 });

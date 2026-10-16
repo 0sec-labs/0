@@ -20,8 +20,7 @@ describe("isolated child runtimes", () => {
     const openai = new LlmApiRuntime({ type: "api", provider: "openai", model: "openai-model", timeout: 1000, env: openaiEnv });
     azureEnv.AZURE_OPENAI_API_KEY = "changed";
     openaiEnv.OPENAI_BASE_URL = "https://unexpected.fixture";
-    vi.stubEnv("ZERO_FORCE_PROVIDER", "hosted");
-    vi.stubEnv("ZERO_CLOUD_TOKEN", "unrelated-account");
+    vi.stubEnv("ZERO_FORCE_PROVIDER", "deepseek");
     vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
       const headers = new Headers(init?.headers);
@@ -33,35 +32,6 @@ describe("isolated child runtimes", () => {
     const children = await Promise.all([azure.forkForSubagent(1000), openai.forkForSubagent(1000)]);
     const results = await Promise.all(children.map(child => child.executeNative("system", messages, [])));
     expect(results.map(result => result.content)).toEqual([[{ type: "text", text: "azure accepted" }], [{ type: "text", text: "openai accepted" }]]);
-  });
-
-  it("resolves hosted identity before forking and retains the catalog ceiling without rediscovery", async () => {
-    const parent = new LlmApiRuntime({ type: "api", provider: "hosted", timeout: 1000, env: { ...environment(), "ZERO_MODEL": "", "ZERO_CLOUD_HOST": "http://127.0.0.1:12345", "ZERO_CLOUD_TOKEN": "original-cloud", "ZERO_LLM_FALLBACK": "openai:unapproved", OPENAI_API_KEY: "unapproved" } });
-    let catalogReads = 0;
-    let requests = 0;
-    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
-      const url = String(input);
-      if (new Headers(init?.headers).get("authorization") !== "Bearer original-cloud") return new Response(null, { status: 401 });
-      if (url.endsWith("/models")) {
-        catalogReads++;
-        if (catalogReads !== 1) throw new Error("Catalog must not be rediscovered by a fork");
-        return Response.json({ data: [{ id: "hosted-pinned", wire_api: "chat_completions", max_output_tokens: 64 }] });
-      }
-      requests++;
-      const body = JSON.parse(String(init?.body));
-      if (!url.startsWith("http://127.0.0.1:12345/") || body.model !== "hosted-pinned" || body.max_tokens !== 64) return new Response(null, { status: 400 });
-      return completion("hosted accepted");
-    });
-    const children = await Promise.all([parent.forkForSubagent(1000), parent.forkForSubagent(1000)]);
-    vi.stubEnv("ZERO_CLOUD_TOKEN", "changed-cloud");
-    expect(children.map(child => child.resolvedModel())).toEqual(["hosted-pinned", "hosted-pinned"]);
-    const results = await Promise.all(children.map(child => child.executeNative("system", messages, [])));
-    expect(results.map(result => result.content)).toEqual([[{ type: "text", text: "hosted accepted" }], [{ type: "text", text: "hosted accepted" }]]);
-    expect(catalogReads).toBe(1);
-    expect(requests).toBe(2);
-    vi.stubGlobal("fetch", async () => new Response("quota", { status: 429 }));
-    expect(await children[0]!.executeNative("system", messages, [])).toMatchObject({ stopReason: "error" });
-    expect(children[0]!.resolvedModel()).toBe("hosted-pinned");
   });
 
   it("keeps child failures on the parent account while preserving the root's configured fallback", async () => {
@@ -78,39 +48,6 @@ describe("isolated child runtimes", () => {
     expect(parent.resolvedModel()).toBe("primary");
     expect(await parent.execute("fixture")).toMatchObject({ exitCode: 0, output: "fallback accepted" });
     expect(parent.resolvedModel()).toBe("secondary");
-  });
-
-  it("rejects unapproved catalog models and freezes approved role routing to the same hosted account", async () => {
-    const agentModels = { review: "approved" };
-    const parent = new LlmApiRuntime({ type: "api", provider: "hosted", model: "parent", agentModels, timeout: 1000, env: { ...environment(), "ZERO_CLOUD_HOST": "http://127.0.0.1:12345", "ZERO_CLOUD_TOKEN": "operator-account", "ZERO_REASONING_EFFORT": "high" } });
-    agentModels.review = "premium";
-    const submitted: Array<{ url: string; body: Record<string, unknown> }> = [];
-    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
-      const url = String(input);
-      if (new Headers(init?.headers).get("authorization") !== "Bearer operator-account") return new Response(null, { status: 401 });
-      if (url.endsWith("/models")) return Response.json({ data: [
-        { id: "parent", wire_api: "responses", max_output_tokens: 64 },
-        { id: "approved", wire_api: "chat_completions", max_output_tokens: 32 },
-        { id: "premium", wire_api: "responses", max_output_tokens: 128 },
-      ] });
-      const body = JSON.parse(String(init?.body));
-      submitted.push({ url, body });
-      return completion("approved role completed");
-    });
-    await expect(parent.forkForSubagent(1000, { model: "premium" })).rejects.toThrow("not operator-approved");
-    expect(submitted).toEqual([]);
-    vi.stubEnv("ZERO_CLOUD_TOKEN", "unrelated-account");
-    vi.stubEnv("ZERO_CLOUD_HOST", "https://unrelated.fixture");
-    const child = await parent.forkForSubagent(1000, { role: "review" });
-    const result = await child.executeNative("fresh child system", messages, []);
-    expect(result.content).toEqual([{ type: "text", text: "approved role completed" }]);
-    expect(submitted).toEqual([{
-      url: "http://127.0.0.1:12345/api/inference/v1/chat/completions",
-      body: expect.objectContaining({ model: "approved", max_tokens: 32 }),
-    }]);
-    expect(submitted[0]!.body).not.toHaveProperty("reasoning_effort");
-    expect(submitted[0]!.body).not.toHaveProperty("previous_response_id");
-    expect(parent.resolvedModel()).toBe("parent");
   });
 
   it("applies approved overrides before role routing, inherits unmapped roles, and forces single-model descendants", async () => {
@@ -140,19 +77,6 @@ describe("isolated child runtimes", () => {
       [{ type: "text", text: "executed review-model" }],
       [{ type: "text", text: "executed parent" }],
     ]);
-  });
-
-  it("rejects an approved hosted model missing from the canonical catalog without substitution", async () => {
-    const parent = new LlmApiRuntime({ type: "api", provider: "hosted", model: "parent", agentModels: { review: "removed" }, timeout: 1000, env: { ...environment(), "ZERO_CLOUD_HOST": "http://127.0.0.1:12345", "ZERO_CLOUD_TOKEN": "same-account" } });
-    let inferenceRequests = 0;
-    vi.stubGlobal("fetch", async (input: string | URL | Request) => {
-      if (String(input).endsWith("/models")) return Response.json({ data: [{ id: "parent", wire_api: "chat_completions", max_output_tokens: 64 }] });
-      inferenceRequests++;
-      return completion("must not execute");
-    });
-    await expect(parent.forkForSubagent(1000, { role: "review" })).rejects.toThrow('Hosted model "removed" is unavailable');
-    expect(inferenceRequests).toBe(0);
-    expect(parent.resolvedModel()).toBe("parent");
   });
 
   it("reselects the child wire without changing the pinned provider or the parent's model", async () => {

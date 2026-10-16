@@ -1310,15 +1310,17 @@ export interface HerdSubagentRecord {
   readonly error?: string;
   /**
    * Why a terminal worker stopped, straight off the lifecycle payload's
-   * `completion_reason` ("done"|"turn_limit"|"cost_limit"|"early_stop"|"error").
+   * `completion_reason` ("done"|"turn_limit"|"cost_limit"|"output_limit"|"early_stop"|"error").
    * `undefined` means "not reported", never a synthesised default — a curtailed
-   * run (turn_limit/cost_limit) reads distinctly from a clean `done`.
+   * run (turn_limit/cost_limit/output_limit) reads distinctly from a clean `done`.
    */
   readonly completionReason?: string;
   /** Latest tool the child ran, mirrored onto the roster row's activity. */
   readonly tool?: string;
   /** Latest note the child authored. */
   readonly note?: string;
+  /** Local epoch-ms arrival time when this worker first entered running. */
+  readonly startedAt?: number;
   /** Epoch ms of the last event for this agent — drives age/staleness. */
   readonly lastSeen: number;
   readonly activity: readonly SubagentActivityEntry[];
@@ -1411,6 +1413,9 @@ export function applySubagentLifecycle(
   const ts = Number.isFinite(now) ? now : 0;
   const prev = map[agentId];
   const status = pickStatus(payload["status"]) ?? prev?.status ?? "queued";
+  const startedAt = status === "running"
+    ? prev?.status === "running" ? prev.startedAt ?? ts : ts
+    : status === "queued" ? undefined : prev?.startedAt;
   const task = pickString(payload["task"]) ?? prev?.task ?? "";
   const maxTurns = pickFiniteInt(payload["max_turns"]) ?? prev?.maxTurns ?? 0;
   const turns = pickFiniteInt(payload["turns"]) ?? prev?.turns;
@@ -1442,6 +1447,7 @@ export function applySubagentLifecycle(
     error,
     ...(completionReason ? { completionReason } : {}),
     tool: prev?.tool,
+    ...(startedAt !== undefined ? { startedAt } : {}),
     note: prev?.note,
     lastSeen: ts,
     activity: boundActivity(prev?.activity ?? [], entry, maxLines),
@@ -1470,6 +1476,10 @@ export function applySubagentProgress(
   const maxTurns = pickFiniteInt(payload["max_turns"]) ?? prev?.maxTurns ?? 0;
   const tool = pickString(payload["tool"]);
   const note = pickString(payload["note"]);
+  const status = prev?.status === "completed" || prev?.status === "failed" ? prev.status : "running";
+  const startedAt = status === "running"
+    ? prev?.status === "running" ? prev.startedAt ?? ts : ts
+    : prev?.startedAt;
 
   const entry: SubagentActivityEntry = { kind: "progress", ts, turn, maxTurns, tool, note };
 
@@ -1482,7 +1492,7 @@ export function applySubagentProgress(
     task: prev?.task ?? "",
     // A child still emitting turns is running, unless it already reached a
     // terminal state we recorded (a late progress event never resurrects it).
-    status: prev?.status === "completed" || prev?.status === "failed" ? prev.status : "running",
+    status,
     maxTurns,
     turn: turn ?? prev?.turn,
     turns: prev?.turns,
@@ -1490,6 +1500,7 @@ export function applySubagentProgress(
     summary: prev?.summary,
     error: prev?.error,
     ...(prev?.completionReason ? { completionReason: prev.completionReason } : {}),
+    ...(startedAt !== undefined ? { startedAt } : {}),
     tool: tool ?? prev?.tool,
     note: note ?? prev?.note,
     lastSeen: ts,

@@ -19,16 +19,22 @@
  */
 
 import type { Command } from "commander";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { executeManagedOperation } from "../managed-operation.js";
 import { processPresentationOutput } from "../presentation/process-output.js";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve, posix, sep } from "node:path";
 import {
   executePocSteps,
   runCliPathTraversalReplayFixture,
   runDeterministicReplay,
   LocalShellRunner,
+  SmolvmRunner,
+  isAdmittedSmolvmWorkbench,
+  runWorkbenchBrokerProgram,
+  WORKBENCH_BROKER_WORKSPACE,
+  createSmolvmPocTargetRunner,
   DockerRunner,
   QemuRunner,
   loadScope,
@@ -171,7 +177,7 @@ function engineMetadata(): VerificationResult["engine_metadata"] {
   return {
     os: process.platform,
     arch: process.arch,
-    runner: "local",
+    runner: isAdmittedSmolvmWorkbench() ? "smolvm" : "local",
   };
 }
 
@@ -506,7 +512,7 @@ interface VerifyOpts {
   runner?: string;
   /** 0#193 run directory for the deterministic-replay runner. */
   out?: string;
-  /** Engagement scope required for networked Docker HTTP replay. */
+  /** Engagement scope required for networked HTTP replay. */
   scope?: string;
   /** Docker network; defaults to a fully disconnected container. */
   dockerNetwork?: string;
@@ -622,7 +628,7 @@ export async function runKernelFindingVerify(opts: {
   }
 
   const result = await verifyStaticKernelFinding(finding as unknown as import("@0/shared").Finding, {
-    kernelTree: opts.kernelTree,
+    kernelTree: opts.kernelTree!,
     kernelConfig: opts.kernelConfig,
     attempts: opts.attempts,
     wallClockMs: opts.wallClockMs,
@@ -712,6 +718,8 @@ export async function runVerify(opts: {
   fixtureMode?: string;
   retainArtifacts?: boolean;
   artifactDir?: string;
+  scopeFile?: string;
+  signal?: AbortSignal;
 }): Promise<VerifyOutcome> {
   const startedAt = new Date().toISOString();
   let finding: Finding | null = null;
@@ -734,6 +742,40 @@ export async function runVerify(opts: {
       }
       if (!opts.fixtureCommand || opts.fixtureCommand.length === 0) {
         throw new Error("--fixture-command is required with --fixture");
+      }
+      if (isAdmittedSmolvmWorkbench()) {
+        const runDir = resolve(opts.artifactDir ?? mkdtempSync(join(tmpdir(), "0-smol-fixture-")));
+        mkdirSync(runDir, { recursive: true });
+        const fixtureArgv = opts.fixtureCommand.map((argument) =>
+          argument === runDir ? WORKBENCH_BROKER_WORKSPACE :
+            argument.startsWith(runDir + sep) ? `${WORKBENCH_BROKER_WORKSPACE}/${argument.slice(runDir.length + 1)}` : argument);
+        const execution = await runWorkbenchBrokerProgram({
+          profile: "offline", workspaceRoot: runDir,
+          command: ["0", "verify", "--fixture", "cli-path-traversal", "--fixture-command", JSON.stringify(fixtureArgv),
+            "--fixture-mode", opts.fixtureMode ?? "vulnerable", "--artifact-dir", WORKBENCH_BROKER_WORKSPACE, "--output", `${WORKBENCH_BROKER_WORKSPACE}/result.json`],
+          timeoutMs: 30000, memoryMb: 512, cpus: 1, maxOutputBytes: 1024 * 1024,
+        }, opts.signal);
+        if (execution.error || execution.timedOut || execution.cleanupFailed) {
+          throw new Error(execution.error ?? (execution.timedOut ? "SmolVM fixture replay timed out" : "SmolVM fixture teardown was not confirmed"));
+        }
+        const result = VerificationResultSchema.parse(JSON.parse(readFileSync(join(runDir, "result.json"), "utf8")));
+        if (result.finding_id !== "fixture:cli-path-traversal" || execution.exitCode !== exitCodeForStatus(result.status)) {
+          throw new Error("SmolVM fixture result does not match its process outcome");
+        }
+        for (const artifact of result.evidence_artifacts) {
+          const path = posix.relative(WORKBENCH_BROKER_WORKSPACE, artifact.path);
+          if (!path || path === ".." || path.startsWith("../") || posix.isAbsolute(path)) throw new Error("fixture artifact escaped the replay workspace");
+          const returnedPath = join(runDir, path);
+          const stat = lstatSync(returnedPath);
+          if (!stat.isFile() || stat.size > 4 * 1024 * 1024) throw new Error("invalid returned fixture artifact");
+          const body = readFileSync(returnedPath);
+          if (body.length !== artifact.bytes || createHash("sha256").update(body).digest("hex") !== artifact.sha256) {
+            throw new Error("returned fixture artifact digest mismatch");
+          }
+          artifact.path = returnedPath;
+        }
+        result.engine_metadata = { os: "linux", arch: process.arch, runner: "smolvm" };
+        return { result, exitCode: exitCodeForStatus(result.status) };
       }
       const legacyResult = await runCliPathTraversalReplayFixture({
         commandArgv: opts.fixtureCommand,
@@ -789,6 +831,17 @@ export async function runVerify(opts: {
       return { result, exitCode: exitCodeForStatus(result.status) };
     }
 
+    if (isAdmittedSmolvmWorkbench()) {
+      const runner = createSmolvmPocTargetRunner(target);
+      const { result, runDir } = await runDeterministicReplay(finding, {
+        runner, runDir: target.cwd, stepTimeoutMs: target.timeoutMs, signal: opts.signal,
+        scope: opts.scopeFile ? loadScope(opts.scopeFile) : undefined,
+      });
+      cleanup = undefined;
+      for (const artifact of result.evidence_artifacts) artifact.path = join(runDir, artifact.path);
+      VerificationResultSchema.parse(result);
+      return { result, exitCode: exitCodeForStatus(result.status) };
+    }
     const report = await executePocSteps(finding, target);
     const completedAt = new Date().toISOString();
     const result = buildVerificationResult({
@@ -819,13 +872,13 @@ export async function runVerify(opts: {
 // path emits the same canonical shared-schema `VerificationResult`, so every
 // verify entry point shares one JSON contract.
 
-export type ReplayRunnerKind = "local" | "docker" | "qemu";
+export type ReplayRunnerKind = "local" | "smolvm" | "docker" | "qemu";
 
 export function parseRunnerKind(raw: string | undefined): ReplayRunnerKind {
-  const v = (raw ?? "local").toLowerCase();
-  if (v === "local" || v === "docker" || v === "qemu") return v;
+  const v = (raw ?? (isAdmittedSmolvmWorkbench() ? "smolvm" : "local")).toLowerCase();
+  if (v === "local" || v === "smolvm" || v === "docker" || v === "qemu") return v;
   throw new Error(
-    `unsupported --runner '${raw}', expected one of local|docker|qemu`,
+    `unsupported --runner '${raw}', expected one of local|smolvm|docker|qemu`,
   );
 }
 
@@ -835,14 +888,16 @@ export function parseRunnerKind(raw: string | undefined): ReplayRunnerKind {
  */
 export async function runDeterministicReplayCli(args: {
   findingPath: string;
-  runner: ReplayRunnerKind;
+  runner?: ReplayRunnerKind;
   outDir?: string;
   scopeFile?: string;
   dockerNetwork?: string;
   qemuBinary?: string;
   qemuKernel?: string;
   qemuBusybox?: string;
+  signal?: AbortSignal;
 }): Promise<{ result: SharedVerificationResult; exitCode: number }> {
+  const runnerKind = args.runner ?? parseRunnerKind(undefined);
   const rawFinding = readJson<unknown>(args.findingPath, "finding");
   let finding: Finding;
   try {
@@ -862,31 +917,34 @@ export async function runDeterministicReplayCli(args: {
     mkdirSync(runDir, { recursive: true });
   }
 
-  if (args.dockerNetwork && args.runner !== "docker") {
+  if (args.dockerNetwork && runnerKind !== "docker") {
     throw new Error("--docker-network is only valid with --runner docker");
   }
   if (
     (args.qemuBinary || args.qemuKernel || args.qemuBusybox) &&
-    args.runner !== "qemu"
+    runnerKind !== "qemu"
   ) {
     throw new Error("--qemu-binary / --qemu-kernel / --qemu-busybox require --runner qemu");
   }
   const scope = args.scopeFile ? loadScope(args.scopeFile) : undefined;
   const runner =
-    args.runner === "local"
+    runnerKind === "local"
       ? new LocalShellRunner()
-      : args.runner === "docker"
-        ? new DockerRunner({ network: args.dockerNetwork })
-        : new QemuRunner({
-            qemuBinary: args.qemuBinary,
-            kernelImage: args.qemuKernel,
-            busyboxPath: args.qemuBusybox,
-          });
+      : runnerKind === "smolvm"
+        ? new SmolvmRunner()
+        : runnerKind === "docker"
+          ? new DockerRunner({ network: args.dockerNetwork })
+          : new QemuRunner({
+              qemuBinary: args.qemuBinary,
+              kernelImage: args.qemuKernel,
+              busyboxPath: args.qemuBusybox,
+            });
 
   const { result } = await runDeterministicReplay(finding, {
     runner,
     runDir,
     scope,
+    signal: args.signal,
     engineVersion: VERSION,
   });
 
@@ -984,12 +1042,19 @@ async function verifyAction(opts: VerifyOpts, positionalFinding?: string): Promi
     }
     const wallClockMs = opts.wallClock ? parseDurationMs(opts.wallClock) : undefined;
 
-    const kernelOutcome = await runKernelFindingVerify({
-      findingPath: opts.kernelFinding,
-      kernelTree: opts.kernelTree,
+    const kernelOutcome = await executeManagedOperation<Awaited<ReturnType<typeof runKernelFindingVerify>>>({
+      type: "verify", name: "Kernel finding verification", target: resolve(opts.kernelTree),
+      timeCapMs: wallClockMs ?? 1_800_000,
+      inputs: { findingPath: resolve(opts.kernelFinding), kernelTree: resolve(opts.kernelTree), kernelConfig: opts.kernelConfig ?? "kasan" },
+      output: outcome => outcome.result,
+      status: outcome => outcome.exitCode === 3 ? "failed" : "completed",
+      execute: () => runKernelFindingVerify({
+      findingPath: opts.kernelFinding!,
+      kernelTree: opts.kernelTree!,
       kernelConfig: opts.kernelConfig ?? "kasan",
       attempts,
       wallClockMs,
+      }),
     });
     const kernelJson = JSON.stringify(kernelOutcome.result, null, 2);
     if (opts.output) {
@@ -1003,7 +1068,7 @@ async function verifyAction(opts: VerifyOpts, positionalFinding?: string): Promi
 
   // Deterministic replay path: triggered by a positional finding path or an
   // explicit runner selection.
-  if (!opts.bundle && (positionalFinding || opts.runner)) {
+  if (!opts.bundle && (positionalFinding || opts.runner || (isAdmittedSmolvmWorkbench() && opts.finding && !opts.target))) {
     if (positionalFinding && opts.finding) {
       throw new Error(
         "pass a finding path EITHER as a positional argument OR via --finding, not both",
@@ -1012,11 +1077,16 @@ async function verifyAction(opts: VerifyOpts, positionalFinding?: string): Promi
     const findingPath = positionalFinding ?? opts.finding;
     if (!findingPath) {
       throw new Error(
-        "missing finding path. Usage: 0 verify <finding.json> [--runner local|docker|qemu]",
+        "missing finding path. Usage: 0 verify <finding.json> [--runner local|smolvm|docker|qemu]",
       );
     }
     const runner = parseRunnerKind(opts.runner);
-    const { result, exitCode } = await runDeterministicReplayCli({
+    const { result, exitCode } = await executeManagedOperation<Awaited<ReturnType<typeof runDeterministicReplayCli>>>({
+      type: "verify", name: "Finding replay verification", target: resolve(findingPath), timeCapMs: 3_600_000,
+      inputs: { findingPath: resolve(findingPath), runner },
+      status: outcome => outcome.result.status === "error" ? "failed" : "completed",
+      output: outcome => outcome.result,
+      execute: context => runDeterministicReplayCli({
       findingPath,
       runner,
       outDir: opts.out,
@@ -1024,7 +1094,8 @@ async function verifyAction(opts: VerifyOpts, positionalFinding?: string): Promi
       dockerNetwork: opts.dockerNetwork,
       qemuBinary: opts.qemuBinary,
       qemuKernel: opts.qemuKernel,
-      qemuBusybox: opts.qemuBusybox,
+      qemuBusybox: opts.qemuBusybox, signal: context.signal,
+      }),
     });
     const json = JSON.stringify(result, null, 2);
     if (opts.output) {
@@ -1047,19 +1118,21 @@ async function verifyAction(opts: VerifyOpts, positionalFinding?: string): Promi
         "--bundle cannot be combined with --finding / --fixture / --kernel-finding / <finding> positional",
       );
     }
-    if (opts.runner !== "local" && opts.runner !== "docker") {
-      throw new Error(
-        "--bundle requires --runner local or --runner docker (qemu not supported)",
-      );
+    const bundleRunner = opts.runner ?? (isAdmittedSmolvmWorkbench() ? "smolvm" : undefined);
+    if (bundleRunner !== "local" && bundleRunner !== "smolvm" && bundleRunner !== "docker") {
+      throw new Error("--bundle requires --runner local|smolvm|docker (defaults to smolvm in an admitted workbench; qemu is not supported)");
     }
-    const bundleRunner = opts.runner;
 
-    const bundleResult = await runReproductionBundle({
-      bundleDir: opts.bundle,
+    const bundleResult = await executeManagedOperation<Awaited<ReturnType<typeof runReproductionBundle>>>({
+      type: "verify", name: "Reproduction bundle verification", target: resolve(opts.bundle), timeCapMs: 3_600_000,
+      inputs: { bundleDir: resolve(opts.bundle), runner: bundleRunner },
+      execute: context => runReproductionBundle({
+      bundleDir: opts.bundle!,
       runner: bundleRunner,
       outDir: opts.out,
       scope: opts.scope ? loadScope(opts.scope) : undefined,
-      dockerNetwork: opts.dockerNetwork,
+      dockerNetwork: opts.dockerNetwork, signal: context.signal,
+      }),
     });
 
     const json = JSON.stringify(bundleResult, null, 2);
@@ -1092,7 +1165,13 @@ async function verifyAction(opts: VerifyOpts, positionalFinding?: string): Promi
   }
   const fixtureCommand = parseFixtureCommand(opts.fixtureCommand);
 
-  const outcome = await runVerify({
+  const outcome = await executeManagedOperation<VerifyOutcome>({
+    type: "verify", name: opts.fixture ? "Verification fixture replay" : "Finding replay verification",
+    target: opts.finding ? resolve(opts.finding) : `fixture:${opts.fixture}`, timeCapMs: 3_600_000,
+    inputs: { ...(opts.finding ? { findingPath: resolve(opts.finding) } : { fixture: opts.fixture! }) },
+    status: value => value.result.status === "error" ? "failed" : "completed",
+    output: value => value.result,
+    execute: context => runVerify({
     findingPath: opts.finding,
     targetPath: opts.target,
     fixture: opts.fixture,
@@ -1100,6 +1179,8 @@ async function verifyAction(opts: VerifyOpts, positionalFinding?: string): Promi
     fixtureMode: opts.fixtureMode,
     retainArtifacts: opts.retainArtifacts,
     artifactDir: opts.artifactDir,
+    scopeFile: opts.scope, signal: context.signal,
+    }),
   });
 
   const json = JSON.stringify(outcome.result, null, 2);
@@ -1126,7 +1207,7 @@ export function registerVerifyCommand(program: Command): void {
     )
     .option(
       "--runner <kind>",
-      "Deterministic replay runner: local|docker|qemu (default local).",
+      "Deterministic replay runner: local|smolvm|docker|qemu (default smolvm in an admitted workbench, local outside).",
     )
     .option(
       "--docker-network <name>",
@@ -1134,7 +1215,7 @@ export function registerVerifyCommand(program: Command): void {
     )
     .option(
       "--scope <path>",
-      "Engagement scope JSON required for networked Docker HTTP replay.",
+      "Engagement scope JSON required for HTTP replay; SmolVM also refuses private/loopback destinations.",
     )
     .option("--qemu-binary <path>", "QEMU emulator for --runner qemu.")
     .option("--qemu-kernel <path>", "Guest kernel image for --runner qemu.")
@@ -1149,7 +1230,7 @@ export function registerVerifyCommand(program: Command): void {
     .option("--finding <path>", "Path to a finding.json.")
     .option(
       "--bundle <path>",
-      "Path to a reproduction bundle directory; requires --runner local|docker. " +
+      "Path to a reproduction bundle directory; requires --runner local|smolvm|docker outside an admitted workbench. " +
       "Replays the bundle's vulnerable and patched snapshots through the configured runner " +
       "and emits an aggregate ReproductionBundleResult.",
     )

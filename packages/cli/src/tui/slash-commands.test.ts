@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
-import {
-  findCommand,
-  filterCommands,
-  getCommandByName,
-  SLASH_COMMANDS,
-} from "./slash-commands.js";
+import { findCommand,
+filterCommands,
+getCommandByName,
+SLASH_COMMANDS, } from "@0/shared"
 
 describe("SLASH_COMMANDS", () => {
   it("has unique canonical names", () => {
@@ -28,11 +26,20 @@ describe("SLASH_COMMANDS", () => {
     expect(exit!.aliases).toContain("quit");
   });
 
-  it("registers transcript review as a TUI-only session command", () => {
-    const transcript = getCommandByName("transcript");
-    expect(transcript?.category).toBe("session");
-    expect(transcript?.tuiOnly).toBe(true);
-    expect(getCommandByName("review")?.name).toBe("transcript");
+  it("treats removed slash commands as unknown", () => {
+    for (const input of ["/stop", "/transcript", "/review", "/finding", "/finding-detail", "/replay", "/comms", "/messages", "/impact", "/impact finding-id"]) {
+      expect(getCommandByName(input.slice(1).split(" ", 1)[0])).toBeUndefined();
+      const result = findCommand(input);
+      expect(result.isSlash).toBe(true);
+      expect(result.isKnown).toBe(false);
+      expect(result.isUnknown).toBe(true);
+      expect(result.command).toBeUndefined();
+    }
+  });
+
+  it("only advertises implemented commands to the readline fallback", () => {
+    expect(SLASH_COMMANDS.filter((command) => !command.tuiOnly).map((command) => command.name))
+      .toEqual(["help", "status", "tools", "clear", "exit"]);
   });
 
   it("marks navigation commands as tuiOnly", () => {
@@ -94,6 +101,20 @@ describe("findCommand", () => {
     expect(findCommand("/clear").command).toBe("clear");
   });
 
+  it("uses the session picker command", () => {
+    expect(findCommand("/sessions").command).toBe("sessions");
+    expect(findCommand("/resume").isUnknown).toBe(true);
+    expect(findCommand("/audits").isUnknown).toBe(true);
+  });
+  it("rejects retired harness and provider navigation commands", () => {
+    for (const name of ["harness", "providers"]) {
+      expect(getCommandByName(name)).toBeUndefined();
+      expect(findCommand(`/${name}`).isUnknown).toBe(true);
+    }
+    expect(findCommand("/connect").command).toBe("connect");
+    expect(findCommand("/models").command).toBe("model");
+  });
+
   it("recognises /capabilities by alias caps", () => {
     const result = findCommand("/caps");
     expect(result.isSlash).toBe(true);
@@ -129,11 +150,10 @@ describe("findCommand", () => {
     expect(result.command).toBe("ops");
   });
 
-  it("recognises /herd by alias workers", () => {
-    const result = findCommand("/workers");
-    expect(result.isSlash).toBe(true);
-    expect(result.isKnown).toBe(true);
-    expect(result.command).toBe("herd");
+  it("does not expose separate agent roster windows as slash commands", () => {
+    expect(findCommand("/agents").isUnknown).toBe(true);
+    expect(findCommand("/herd").isUnknown).toBe(true);
+    expect(findCommand("/workers").isUnknown).toBe(true);
   });
 
   // ── whitespace handling ───────────────────────────────────────────────
@@ -244,6 +264,12 @@ describe("filterCommands", () => {
     const results = filterCommands("?");
     const names = results.map((c) => c.name);
     expect(names).toContain("help");
+  });
+
+  it("does not suggest the retired impact or comms workflows", () => {
+    expect(filterCommands("impact")).toEqual([]);
+    expect(filterCommands("comms")).toEqual([]);
+    expect(filterCommands("messages")).toEqual([]);
   });
 });
 

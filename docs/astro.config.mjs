@@ -78,6 +78,10 @@ export default defineConfig({
           items: [
             { label: "Install & first run", slug: "getting-started" },
             { label: "Chat & settings", slug: "console" },
+            { label: "Workflows", slug: "workflow" },
+            { label: "Skills", slug: "skills" },
+            { label: "Findings API", slug: "findings-api" },
+            { label: "Engine connections", slug: "engine-connections" },
             { label: "Scan workflows", slug: "scan-workflows" },
             { label: "Scope & authorization", slug: "scope" },
             { label: "Recipes", slug: "recipes" },
@@ -132,6 +136,7 @@ export default defineConfig({
             { label: "Finding Triage", slug: "triage" },
             { label: "Blind Verification", slug: "blind-verification" },
             { label: "Verification Results", slug: "verification-result" },
+            { label: "Finding Validators", slug: "validators" },
             { label: "Adversarial Evals", slug: "adversarial-evals" },
           ],
         },

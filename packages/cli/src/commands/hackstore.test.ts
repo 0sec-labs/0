@@ -7,19 +7,23 @@
  * uses) so the test exercises the true contract without a barrel round-trip.
  */
 
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 
 import {
   runInit,
   runValidate,
+  readLocalExtension,
+  runPrepareSubmission,
   slugifyId,
   HACKSTORE_SCHEMA_ID,
   type HackstoreCorePort,
 } from "./hackstore.js";
+import { runEnable, runInstall, runRun } from "./plugin.js";
+import type { CorePort, PluginCommandDeps } from "./plugin.js";
 
 // ── Real validator from core source (no barrel dependency) ────────────────────
 
@@ -27,7 +31,11 @@ async function realCorePort(): Promise<HackstoreCorePort> {
   const mod = await import(
     /* @vite-ignore */ new URL("../../../core/src/plugins/manifest.ts", import.meta.url).href
   );
-  return { validatePluginManifest: mod.validatePluginManifest };
+  return {
+    validatePluginManifest: mod.validatePluginManifest,
+    reservedToolNames: ["run_command"],
+    reservedPluginIds: ["scope"],
+  };
 }
 
 const PLUGIN_CAPABILITIES = [
@@ -61,8 +69,8 @@ function goodManifest(): Record<string, unknown> {
 
 let core: HackstoreCorePort;
 let tmp: string;
-let logSpy: ReturnType<typeof vi.spyOn>;
-let errSpy: ReturnType<typeof vi.spyOn>;
+let logSpy: MockInstance<typeof console.log>;
+let errSpy: MockInstance<typeof console.error>;
 
 beforeEach(async () => {
   core = await realCorePort();
@@ -196,11 +204,89 @@ describe("hackstore init", () => {
     expect(existsSync(join(dir, "manifest.json"))).toBe(true);
   });
 
+  it("does not follow a scaffold-file symlink even with --force", () => {
+    runInit("hash-tool", { dir: tmp });
+    const target = join(tmp, "hash-tool");
+    const outside = join(tmp, "outside.txt");
+    writeFileSync(outside, "preserve");
+    rmSync(join(target, "README.md"));
+    symlinkSync(outside, join(target, "README.md"));
+    const manifest = readFileSync(join(target, "manifest.json"), "utf8");
+    runInit("hash-tool", { dir: tmp, force: true });
+    expect(process.exitCode).toBe(1);
+    expect(readFileSync(outside, "utf8")).toBe("preserve");
+    expect(readFileSync(join(target, "manifest.json"), "utf8")).toBe(manifest);
+  });
+
+  it("rejects directory traversal without writing scaffold files", () => {
+    const project = join(tmp, "project");
+    mkdirSync(project);
+    runInit("../escape", { dir: project });
+    expect(process.exitCode).toBe(1);
+    expect(existsSync(join(tmp, "escape"))).toBe(false);
+  });
+
   it("slugifyId always yields a valid plugin id", () => {
     for (const name of ["My Cool Ext!", "123", "  ", "Acme.SQLi-Pack", "___"]) {
       const id = slugifyId(name);
       expect(id).toMatch(/^[a-z][a-z0-9]*([._-][a-z0-9]+)*$/);
     }
+  });
+});
+
+describe("submission boundaries", () => {
+  it("creates reproducible registry source without copying unrelated files or overwriting an artifact", () => {
+    runInit("hash-tool", { dir: tmp });
+    const source = join(tmp, "hash-tool");
+    writeFileSync(join(source, "private.env"), "do not package");
+    const first = join(tmp, "submission-a");
+    const second = join(tmp, "submission-b");
+    runPrepareSubmission(source, { core, out: first });
+    expect(process.exitCode).toBe(0);
+    runPrepareSubmission(source, { core, out: second });
+    expect(process.exitCode).toBe(0);
+    const files = ["manifest.json", "plugin.js", "README.md"];
+    for (const name of files) {
+      expect(readFileSync(join(first, "extensions", "hash-tool", name), "utf8"))
+        .toBe(readFileSync(join(second, "extensions", "hash-tool", name), "utf8"));
+    }
+    expect(readLocalExtension(join(first, "extensions", "hash-tool"), core).ok).toBe(true);
+    expect(existsSync(join(first, "extensions", "hash-tool", "private.env"))).toBe(false);
+    const original = readFileSync(join(first, "extensions", "hash-tool", "plugin.js"), "utf8");
+    writeFileSync(join(source, "plugin.js"), "different source");
+    runPrepareSubmission(source, { core, out: first });
+    expect(process.exitCode).toBe(1);
+    expect(readFileSync(join(first, "extensions", "hash-tool", "plugin.js"), "utf8")).toBe(original);
+  });
+
+  it("refuses a source symlink and creates no submission directory", () => {
+    runInit("hash-tool", { dir: tmp });
+    const source = join(tmp, "hash-tool");
+    const outside = join(tmp, "outside.js");
+    writeFileSync(outside, "private source");
+    rmSync(join(source, "plugin.js"));
+    symlinkSync(outside, join(source, "plugin.js"));
+    const output = join(tmp, "submission");
+    runPrepareSubmission(source, { core, out: output });
+    expect(process.exitCode).toBe(1);
+    expect(existsSync(output)).toBe(false);
+    expect(readFileSync(outside, "utf8")).toBe("private source");
+  });
+
+  it("refuses reserved host identities in scaffolding, validation, and submission", () => {
+    runInit("scope", { dir: tmp, reservedPluginIds: core.reservedPluginIds });
+    expect(process.exitCode).toBe(1);
+    expect(existsSync(join(tmp, "scope"))).toBe(false);
+    const source = join(tmp, "reserved");
+    writeManifest(source, { ...goodManifest(), id: "scope" });
+    writeFileSync(join(source, "plugin.js"), "self-contained source");
+    writeFileSync(join(source, "README.md"), "Usage");
+    runValidate(source, { core });
+    expect(process.exitCode).toBe(1);
+    const output = join(tmp, "submission");
+    runPrepareSubmission(source, { core, out: output });
+    expect(process.exitCode).toBe(1);
+    expect(existsSync(output)).toBe(false);
   });
 });
 
@@ -225,59 +311,67 @@ describe("hackstore-manifest.schema.json", () => {
   });
 });
 
-describe("generated plugin through the real host", () => {
-  async function installGeneratedPlugin(version = "0.1.0") {
-    // A runtime URL keeps the real source loader outside this package's src
-    // rootDir, matching realCorePort above without pulling in the core barrel.
-    const { PluginHost } = await import(
+describe("generated plugin through the real CLI workflow", () => {
+  async function installGeneratedPlugin(version = "0.1.0"): Promise<PluginCommandDeps> {
+    // Runtime URLs keep source modules outside this package's rootDir without booting the core barrel.
+    const en = await import(
+      /* @vite-ignore */ new URL("../../../core/src/plugins/enablement.ts", import.meta.url).href
+    );
+    const ld = await import(
       /* @vite-ignore */ new URL("../../../core/src/plugins/loader.ts", import.meta.url).href
     );
+    const rc = await import(
+      /* @vite-ignore */ new URL("../../../core/src/plugins/registry-client.ts", import.meta.url).href
+    );
+    const builtin = await import(
+      /* @vite-ignore */ new URL("../../../core/src/plugins/builtin.ts", import.meta.url).href
+    );
+    const pluginCore: CorePort = {
+      ...en, ...ld, ...rc, ...builtin,
+      validatePluginManifest: core.validatePluginManifest,
+      TOOL_DEFINITIONS: {},
+    };
     const sourceRoot = join(tmp, "source");
     runInit("hash-tool", { dir: sourceRoot });
     const source = join(sourceRoot, "hash-tool");
-    const pluginsDir = join(tmp, "plugins");
-    const installed = join(pluginsDir, "hash-tool");
-    mkdirSync(installed, { recursive: true });
     const manifest = JSON.parse(readFileSync(join(source, "manifest.json"), "utf8"));
     manifest.version = version;
-    const validated = core.validatePluginManifest(manifest);
-    if (!validated.ok) throw new Error(JSON.stringify(validated.errors));
-    writeFileSync(join(installed, "plugin.json"), JSON.stringify(validated.manifest));
-    writeFileSync(join(installed, "plugin.js"), readFileSync(join(source, "plugin.js")));
-    return new PluginHost({
-      pluginsDir,
-      enabled: ["hash-tool"],
-      reservedToolNames: [],
-      coreVersion: "0.16.3",
-    });
+    writeFileSync(join(source, "manifest.json"), JSON.stringify(manifest));
+    const deps: PluginCommandDeps = {
+      core: pluginCore, homeDir: tmp, projectPath: join(tmp, "project"),
+      coreVersion: "0.21.4", local: true,
+    };
+    await runInstall(source, deps);
+    expect(process.exitCode).toBe(0);
+    return deps;
   }
 
-  it("loads and hashes after an author changes the manifest version", async () => {
-    const host = await installGeneratedPlugin("0.2.0");
-    try {
-      expect((await host.load("hash-tool")).ok).toBe(true);
-      const result = await host.call("sha256", { input: "hello" });
-      expect(result.ok).toBe(true);
-      expect(result.failed).toBe(false);
-      expect(result.content).toContain("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
-    } finally {
-      host.shutdown();
-    }
+  it("requires approval, then runs real source after a version edit with pair-over-JSON precedence", async () => {
+    const deps = await installGeneratedPlugin("0.2.0");
+    await runRun("hash-tool", "sha256", ["input=hello"], deps);
+    expect(process.exitCode).toBe(1);
+    runEnable("hash-tool", deps);
+    expect(process.exitCode).toBe(0);
+    logSpy.mockClear();
+    await runRun("hash-tool", "sha256", ["input=hello"], { ...deps, jsonArgs: '{"input":"wrong"}' });
+    expect(process.exitCode).toBe(0);
+    expect(logSpy.mock.calls.map((call) => String(call[0])).join("\n"))
+      .toContain("2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
   });
 
-  it("rejects invalid arguments without turning them into an empty-string hash", async () => {
-    const host = await installGeneratedPlugin();
-    try {
-      expect((await host.load("hash-tool")).ok).toBe(true);
-      const invalid = await host.call("sha256", { input: 42 });
-      expect(invalid.ok).toBe(true);
-      expect(invalid.failed).toBe(true);
-      const valid = await host.call("sha256", { input: "" });
-      expect(valid.ok).toBe(true);
-      expect(valid.failed).toBe(false);
-      expect(valid.content).toContain("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
-    } finally {
-      host.shutdown();
-    }
+  it("reports invalid arguments as failure instead of a successful empty-input hash", async () => {
+    const deps = await installGeneratedPlugin();
+    runEnable("hash-tool", deps);
+    logSpy.mockClear();
+    await runRun("hash-tool", "sha256", [], { ...deps, jsonArgs: '{"input":42}' });
+    expect(process.exitCode).toBe(1);
+    const failureOutput = logSpy.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(failureOutput).toContain("input must be a string");
+    expect(failureOutput).not.toContain("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+    logSpy.mockClear();
+    await runRun("hash-tool", "sha256", ["input="], deps);
+    expect(process.exitCode).toBe(0);
+    expect(logSpy.mock.calls.map((call) => String(call[0])).join("\n"))
+      .toContain("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
   });
 });

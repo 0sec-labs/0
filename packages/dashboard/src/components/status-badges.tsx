@@ -82,7 +82,7 @@ export function ReviewBadge({
 }: {
   value: FindingReviewGate;
 }) {
-  if (value === "none") return <Badge variant="neutral">no review gate</Badge>;
+  if (value === "none") return null;
 
   return (
     <Badge variant={value === "human_review" ? "warning" : "accent"}>

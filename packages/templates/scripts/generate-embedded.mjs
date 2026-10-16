@@ -13,7 +13,7 @@
 // The loader prefers EMBEDDED_TEMPLATES when it's non-empty; falls back
 // to fs scanning for dev workflows that edit YAMLs without rebuilding.
 
-import { readFileSync, writeFileSync, readdirSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync, mkdirSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
@@ -51,5 +51,7 @@ export const EMBEDDED_TEMPLATES: AttackTemplate[] = ${JSON.stringify(templates, 
 `;
 
 mkdirSync(dirname(outFile), { recursive: true });
-writeFileSync(outFile, banner, "utf-8");
-console.log(`Generated ${outFile} with ${templates.length} templates`);
+const expected = Buffer.from(banner, "utf-8");
+const unchanged = existsSync(outFile) && readFileSync(outFile).equals(expected);
+if (!unchanged) writeFileSync(outFile, expected);
+console.log(`${unchanged ? "Unchanged" : "Generated"} ${outFile} with ${templates.length} templates`);

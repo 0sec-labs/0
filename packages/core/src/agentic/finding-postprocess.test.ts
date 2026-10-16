@@ -1,3 +1,5 @@
+import type { JevEvaluator } from "@0/shared";
+import type { RankedResult } from "../triage/index.js";
 import { describe, it, expect, vi } from "vitest";
 import {
   loadPriorScanAnchors,
@@ -22,6 +24,7 @@ function makeFinding(overrides?: Partial<Finding>): Finding {
     status: overrides?.status ?? "discovered",
     evidence: overrides?.evidence ?? { request: "req", response: "res" },
     timestamp: Date.now(),
+    ...overrides,
   };
 }
 
@@ -205,4 +208,61 @@ describe("applyFindingPostProcess", () => {
     const result = await applyFindingPostProcess([], runtime, { semanticDedupe: true });
     expect(result).toBe(0);
   });
+});
+describe("advisory finding priority", () => {
+  it("applies advisory canonical ordering without changing vulnerability or verification state even if the observer fails", async () => {
+    const low = makeFinding({
+      id: "low", title: "Proposed reproduction", confidence: 0.97, status: "confirmed",
+      evidence: { request: "Plan: send a payload", response: "Expected response, not executed" },
+      semanticDedupe: { canonicalId: "low", isCanonical: true, clusterId: "s:low", reason: "canonical" },
+    });
+    const duplicate = makeFinding({
+      id: "duplicate",
+      semanticDedupe: { canonicalId: "low", isCanonical: false, clusterId: "s:low", reason: "same defect" },
+    });
+    const high = makeFinding({
+      id: "high", title: "Observed reproduction", confidence: 0.33, status: "discovered",
+      evidence: { request: "GET /payload", response: "Observed vulnerable response" },
+      verification_result: {
+        status: "reproduced", mode: "deterministic_replay", finding_id: "high", engine_version: "test",
+        started_at: "2026-01-01T00:00:00Z", completed_at: "2026-01-01T00:00:01Z", duration_ms: 1_000,
+        commands: [], assertions: [{ kind: "http_status", target: "/payload", expected: 200, actual: 200, passed: true }],
+        evidence_artifacts: [], engine_metadata: { os: "linux", arch: "x64", runner: "local" },
+      },
+      semanticDedupe: { canonicalId: "high", isCanonical: true, clusterId: "s:high", reason: "canonical" },
+    });
+    const findings = [low, duplicate, high];
+    const original = new Map(findings.map((finding) => [finding.id, structuredClone(finding)]));
+    const evaluator: JevEvaluator = {
+      evaluate: async (request) => ({
+        model: "jev-rank-test",
+        answers: Object.fromEntries(Object.keys(request.questions).map((id) => {
+          const choice = id.startsWith("f0_") ? "low" : "high";
+          return [id, { type: "choice" as const, choice,
+            probabilities: { low: choice === "low" ? 0.9 : 0.1, medium: 0, high: choice === "high" ? 0.9 : 0.1, insufficient: 0 } }];
+        })),
+        usage: { inputTokens: 1, outputTokens: 1, estimatedCostUsd: 0 },
+        durationMs: 1,
+      }),
+    };
+    let observedOrder: string[] = [];
+    const onRank = vi.fn(async (_updates: readonly RankedResult[]) => {
+      observedOrder = findings.map((finding) => finding.id);
+      throw new Error("observer failed");
+    });
+
+    await applyFindingPostProcess(findings, makeStubRuntime(), { jevRankEvaluator: evaluator, onRank });
+
+    expect(findings.map((finding) => finding.id)).toEqual(["high", "low", "duplicate"]);
+    expect(observedOrder).toEqual(["high", "low", "duplicate"]);
+    expect(high.findingRank).toBe(1);
+    expect(low.findingRank).toBe(2);
+    expect(duplicate.findingRank).toBeUndefined();
+    expect(onRank.mock.calls[0]?.[0][0]?.priority).toMatchObject({ score: 0.9, certainty: 0.9, model: "jev-rank-test" });
+    for (const finding of findings) {
+      const { findingRank: _rank, ...unchanged } = finding;
+      expect(unchanged).toEqual(original.get(finding.id));
+    }
+  });
+
 });

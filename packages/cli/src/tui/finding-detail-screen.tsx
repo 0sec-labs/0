@@ -3,9 +3,9 @@
  * The finding-detail view, as a pop-up dialog.
  *
  * Open one finding, see its title, severity, category, location, description,
- * redacted evidence, remediation, CVSS and references — then investigate or
- * plan a fix in the scoped chat, copy a submission-ready report, or move its
- * status. It is the console's read+act companion to the `/findings` list.
+ * stored impact assessment, redacted evidence, remediation, CVSS and references —
+ * then investigate or request a verified source fix in chat, copy a report, or
+ * move its status. It is the read+act companion to the `/findings` list.
  *
  * Three properties are load-bearing, all inherited from `usage-screen.tsx` and
  * `model-screen.tsx`:
@@ -82,8 +82,8 @@ export interface FindingDetailScreenProps {
   /** Open a safe, evidence-grounded investigation in the persistent chat. */
   onInvestigate?: (finding: Finding) => void;
   /**
-   * Open a proposal-only remediation discussion in the persistent chat. It
-   * never applies a patch; a separate explicit operator action is required.
+   * Request a verified local source-fix candidate in the persistent chat.
+   * Never applies a patch or publishes without separate operator approval.
    */
   onPlanFix?: (finding: Finding) => void;
   /**
@@ -383,19 +383,19 @@ export function FindingDetailScreen({
   const startInvestigation = () => {
     if (!finding || !onInvestigate) return;
     onInvestigate(finding);
-    setNotice(`Investigation opened for ${finding.id}.`);
+    setNotice("Investigating in chat.");
   };
 
   const planFix = () => {
     if (!finding || !onPlanFix) return;
     onPlanFix(finding);
-    setNotice(`Fix planning opened for ${finding.id}.`);
+    setNotice("Fix started — see chat.");
   };
 
   const copyReport = () => {
     if (!finding) return;
     if (!onCopyReport) {
-      setNotice("Copy unavailable — no clipboard handler wired.");
+      setNotice("Copy isn't available here.");
       return;
     }
     let markdown: string;
@@ -407,7 +407,7 @@ export function FindingDetailScreen({
       markdown = `# ${finding.title}\n\n${finding.description ?? ""}`.trim();
     }
     onCopyReport(finding, markdown);
-    setNotice("Report copied to the clipboard.");
+    setNotice("Report copied.");
   };
 
   const setStatus = (status: FindingStatusAction) => {

@@ -16,6 +16,8 @@ import {
   detectVersionRange,
   extractSiblingFix,
   executePocSteps,
+  runSmolvmPocSteps,
+  isAdmittedSmolvmWorkbench,
   EmptyPocError,
   type AdvisoryContext,
   type AdvisoryScreenshot,
@@ -336,7 +338,9 @@ async function disclose(findingId: string | undefined, opts: DiscloseOptions): P
           allowProcessActions: false,
         };
         try {
-          behaviouralReport = await executePocSteps(finding, target);
+          behaviouralReport = isAdmittedSmolvmWorkbench()
+            ? await runSmolvmPocSteps(finding, target)
+            : await executePocSteps(finding, target);
         } catch (err) {
           console.log(chalk.red(`  behavioural reverify failed on ${row.id.slice(0, 8)}: ${err instanceof Error ? err.message : String(err)}`));
         }

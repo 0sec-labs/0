@@ -17,6 +17,7 @@
 
 import { describe, expect, it } from "vitest";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { VerificationResultSchema, type Finding, type PocStep } from "@0/shared";
@@ -524,6 +525,59 @@ fi
     expect(readFileSync(join(runDir, "docker.calls"), "utf8")).toContain("kill");
   });
 
+  it.each(["removing", "absent", "failed", "unknown"])("confirms timeout cleanup when Docker reports %s", async state => {
+    const runDir = mkdtempSync(join(tmpdir(), "0-docker-cleanup-"));
+    const docker = writeFakeExecutable(runDir, "fake-docker", `
+if [ "$1" = "run" ]; then
+  touch "$PWD/container-present"
+  while [ "$#" -gt 0 ]; do
+    if [ "$1" = "--cidfile" ]; then
+      shift
+      if [ "${state}" != "unknown" ]; then
+        printf '%s\\n' 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef > "$1"
+      fi
+      break
+    fi
+    shift
+  done
+  sleep 5
+elif [ "$1" = "rm" ]; then
+  if [ "${state}" = "failed" ]; then
+    echo 'permission denied during container removal' >&2
+    exit 1
+  elif [ "${state}" = "absent" ]; then
+    rm "$PWD/container-present"
+    echo 'Error response from daemon: No such container: fixture' >&2
+    exit 1
+  elif [ ! -e "$PWD/removal-started" ]; then
+    touch "$PWD/removal-started"
+    echo 'Error response from daemon: removal of container fixture is already in progress' >&2
+    exit 1
+  fi
+  rm "$PWD/container-present"
+fi
+`);
+    try {
+      const result = await new DockerRunner({ dockerBinary: docker }).exec({
+        id: "cleanup", kind: "exploit", summary: "timeout cleanup", action: { type: "shell", cmd: "sleep 5" },
+      }, { runDir, stepTimeoutMs: 100 });
+      expect(result.timedOut).toBe(true);
+      const cidPath = result.argv[result.argv.indexOf("--cidfile") + 1];
+      if (state === "unknown") {
+        expect(result.launchError).toMatch(/cleanup could not be confirmed.*container ID was unavailable/);
+        expect(existsSync(join(runDir, "container-present"))).toBe(true);
+      } else if (state === "failed") {
+        expect(result.launchError).toMatch(/cleanup could not be confirmed.*permission denied/);
+        expect(existsSync(join(runDir, "container-present"))).toBe(true);
+        expect(existsSync(cidPath)).toBe(true);
+      } else {
+        expect(result.launchError).toBeUndefined();
+        expect(existsSync(join(runDir, "container-present"))).toBe(false);
+        expect(existsSync(cidPath)).toBe(false);
+      }
+    } finally { rmSync(runDir, { recursive: true, force: true }); }
+  });
+
   it("runs shell PoCs in a configured, offline QEMU guest", async () => {
     const runDir = mkdtempSync(join(tmpdir(), "0-qemu-runner-"));
     const kernelImage = join(runDir, "vmlinuz");
@@ -589,6 +643,25 @@ printf '%s\n' "serial boot evidence"
 });
 
 describe("runDeterministicReplay — end-to-end", () => {
+  it("keeps earlier captured evidence immutable when a later PoC overwrites workspace files", async () => {
+    const runDir = mkdtempSync(join(tmpdir(), "0-replay-evidence-"));
+    try {
+      const finding = makeFinding([
+        { id: "capture", kind: "exploit", summary: "emit proof", action: { type: "shell", cmd: "printf immutable-proof" }, expect: { type: "body-contains", text: "immutable-proof" } },
+        { id: "tamper", kind: "verify", summary: "try to forge evidence", action: { type: "shell", cmd: 'for file in artifacts/*; do [ ! -f "$file" ] || printf forged > "$file"; done; printf marker > marker' }, expect: { type: "file-exists", path: "marker" } },
+      ]);
+      const { result } = await runDeterministicReplay(finding, { runDir });
+      expect(result.status).toBe("reproduced");
+      const artifact = result.evidence_artifacts.find((item) => item.kind === "stdout")!;
+      const body = readFileSync(join(runDir, artifact.path));
+      expect(body.toString("utf8")).toBe("immutable-proof");
+      expect(createHash("sha256").update(body).digest("hex")).toBe(artifact.sha256);
+      expect(body.length).toBe(artifact.bytes);
+    } finally {
+      rmSync(runDir, { recursive: true, force: true });
+    }
+  });
+
   it("produces status='reproduced' for a single-step echo PoC with a passing assertion", async () => {
     const finding = makeFinding([
       {

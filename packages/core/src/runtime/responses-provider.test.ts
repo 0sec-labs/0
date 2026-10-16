@@ -316,7 +316,6 @@ describe("provider Responses selection", () => {
 
   it.each([
     { event: { type: "error", code: "rate_limit_exceeded" }, detail: "rate_limit_exceeded" },
-    { event: { type: "response.incomplete", response: { status: "incomplete", incomplete_details: { reason: "max_output_tokens" } } }, detail: "max_output_tokens" },
     { event: { type: "response.completed", response: { status: "failed", error: { code: "server_error" } } }, detail: "server_error" },
   ])("does not turn Codex $detail into completion or transient EOF", async ({ event, detail }) => {
     process.env["ZERO_LLM_STREAM_MAX_ATTEMPTS"] = "3";
@@ -333,6 +332,94 @@ describe("provider Responses selection", () => {
     expect(result.content.some(block => block.type === "tool_use")).toBe(false);
     expect(result.usage).toBeUndefined();
     expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("retains observation-only output-cap checkpoints without retrying the request or promoting finished/partial calls", async () => {
+    process.env["ZERO_LLM_STREAM_MAX_ATTEMPTS"] = "3";
+    const events = [
+      { type: "response.output_text.delta", delta: "Verified " },
+      { type: "response.output_text.delta", delta: "observation." },
+      { type: "response.output_item.added", item: { type: "function_call", id: "partial", call_id: "partial-call", name: "inspect" } },
+      { type: "response.function_call_arguments.delta", item_id: "partial", delta: '{"path":' },
+      { type: "response.output_item.done", item: { type: "function_call", id: "finished", call_id: "finished-call", name: "inspect", arguments: "{}" } },
+      { type: "response.incomplete", response: {
+        id: "resp-cap", status: "incomplete", incomplete_details: { reason: "max_output_tokens" },
+        output: [{ type: "message", content: [{ type: "output_text", text: "Verified observation. Next step" }] }],
+        usage: { input_tokens: 7, output_tokens: 8192, input_tokens_details: { cached_tokens: 5 } },
+      } },
+      { type: "response.completed", response: { status: "completed", output: [] } },
+    ];
+    fetchMock.mockResolvedValueOnce(new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join("")));
+    const usage: Array<{ inputTokens: number; outputTokens: number }> = [];
+    const deltas: string[] = [];
+    const model = new LlmApiRuntime({ type: "api", timeout: 1000, ...codexConfig });
+    const result = await model.executeNative("Inspect.", structuredClone(messages), [], {
+      onDelta: (_scope, text) => deltas.push(text), onUsage: value => usage.push(value),
+    });
+    expect(result.stopReason).toBe("max_tokens");
+    expect(result.checkpoint).toEqual({ reason: "max_output_tokens", responseId: "resp-cap", discardedToolCalls: 2 });
+    expect(result.error).toBeUndefined();
+    expect(result.content).toEqual([{ type: "text", text: "Verified observation. Next step" }]);
+    expect(result.providerRaw).toBeUndefined();
+    expect(result.usage).toEqual({ inputTokens: 7, outputTokens: 8192, cachedInputTokens: 5 });
+    expect(usage).toEqual([result.usage]);
+    expect(deltas).toEqual(["Verified ", "observation."]);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    { event: "response.incomplete", status: "incomplete", reason: "content_filter", error: undefined },
+    { event: "response.failed", status: "failed", reason: "max_output_tokens", error: undefined },
+    { event: "response.incomplete", status: "completed", reason: "max_output_tokens", error: undefined },
+    { event: "response.incomplete", status: "incomplete", reason: "max_output_tokens", error: { code: "server_error" } },
+    { event: "response.incomplete", status: "incomplete", reason: undefined, error: undefined },
+  ])("keeps $event/$status/$reason terminal rather than inferring recovery", async ({ event, status, reason, error }) => {
+    process.env["ZERO_LLM_STREAM_MAX_ATTEMPTS"] = "3";
+    fetchMock.mockResolvedValueOnce(new Response(`data: ${JSON.stringify({ type: event, response: {
+      status, error, incomplete_details: { reason }, usage: { input_tokens: 7, output_tokens: 3 },
+    } })}\n\n`));
+    const result = await request(codexConfig);
+    expect(result.stopReason).toBe("error");
+    expect(result.checkpoint).toBeUndefined();
+    expect(result.usage).toEqual({ inputTokens: 7, outputTokens: 3 });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    { arguments: '{"path":', status: "completed", name: "inspect" },
+    { arguments: "[]", status: "completed", name: "inspect" },
+    { arguments: "{}", status: "in_progress", name: "inspect" },
+    { arguments: "{}", status: "completed", name: "" },
+  ])("refuses malformed or unfinished completed-response calls: $arguments/$status/$name", async call => {
+    const events = [
+      { type: "response.output_item.done", item: { type: "function_call", call_id: "earlier", name: "inspect", arguments: "{}" } },
+      { type: "response.completed", response: { status: "completed",
+        output: [{ type: "function_call", call_id: "unsafe", ...call }], usage: { input_tokens: 7, output_tokens: 3 } } },
+    ];
+    fetchMock.mockResolvedValueOnce(new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join("")));
+    const result = await request(codexConfig);
+    expect(result.stopReason).toBe("error");
+    expect(result.content.some(block => block.type === "tool_use")).toBe(false);
+    expect(result.checkpoint).toBeUndefined();
+    expect(result.providerRaw).toBeUndefined();
+    expect(result.usage).toEqual({ inputTokens: 7, outputTokens: 3 });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("retains finalized streamed observations when the provider omits message items", async () => {
+    fetchMock.mockResolvedValueOnce(new Response([
+      { type: "response.output_text.delta", delta: "Observation before the tool." },
+      { type: "response.output_item.done", item: { type: "function_call", call_id: "safe", name: "inspect", arguments: "{}" } },
+      { type: "response.completed", response: { status: "completed", output: [], usage: { input_tokens: 7, output_tokens: 3 } } },
+    ].map(event => `data: ${JSON.stringify(event)}\n\n`).join("")));
+    const result = await request(codexConfig);
+    expect(result.stopReason).toBe("tool_use");
+    expect(result.content).toEqual([
+      { type: "text", text: "Observation before the tool." },
+      { type: "tool_use", id: "safe", name: "inspect", input: {} },
+    ]);
+    expect(result.providerRaw).toBeUndefined();
+    expect(result.usage).toEqual({ inputTokens: 7, outputTokens: 3 });
   });
 
   it.each(["\n", "\r\n", "\r"])("preserves Codex output over byte-split %j SSE framing", async separator => {

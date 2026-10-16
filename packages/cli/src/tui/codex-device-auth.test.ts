@@ -70,6 +70,7 @@ describe("startCodexDeviceAuth", () => {
     startCodexDeviceAuth({
       env,
       homeDir: home,
+      probe: () => true,
       openBrowser: (url) => { opened.push(url); },
       spawn: (command, args) => {
         expect(command).toBe("codex");
@@ -91,11 +92,47 @@ describe("startCodexDeviceAuth", () => {
     expect(connected).toBe(1);
   });
 
+  it("reports missing Codex before starting device sign-in", () => {
+    const updates: Array<{ phase: string; message: string }> = [];
+    let launched = false;
+
+    startCodexDeviceAuth({
+      env: { PATH: "/definitely-missing" },
+      spawn: () => {
+        launched = true;
+        return fakeProcess().process;
+      },
+      onUpdate: (update) => updates.push(update),
+      onConnected: () => {},
+    });
+
+    expect(launched).toBe(false);
+    expect(updates.map((update) => update.phase)).toEqual(["unavailable"]);
+  });
+
+  it("turns a launch ENOENT into setup guidance", () => {
+    const updates: Array<{ phase: string; message: string }> = [];
+    startCodexDeviceAuth({
+      env: {},
+      probe: () => true,
+      spawn: () => {
+        const error = new Error("spawn codex ENOENT") as NodeJS.ErrnoException;
+        error.code = "ENOENT";
+        throw error;
+      },
+      onUpdate: (update) => updates.push(update),
+      onConnected: () => {},
+    });
+
+    expect(updates.map((update) => update.phase)).toEqual(["unavailable"]);
+  });
+
   it("opens the browser when Codex emits the device URL without a newline", () => {
     const child = fakeProcess();
     const opened: string[] = [];
     startCodexDeviceAuth({
       env: {},
+      probe: () => true,
       openBrowser: (url) => { opened.push(url); },
       spawn: () => child.process,
       onUpdate: () => {},
@@ -107,11 +144,33 @@ describe("startCodexDeviceAuth", () => {
     expect(opened).toEqual(["https://auth.openai.com/codex/device?user_code=ABCD"]);
   });
 
+  it("keeps a launch error terminal when the child later closes successfully", () => {
+    const child = fakeProcess();
+    const phases: string[] = [];
+    let connected = 0;
+    startCodexDeviceAuth({
+      env: { ZERO_CHATGPT_ACCESS_TOKEN: "stale-access" },
+      probe: () => true,
+      spawn: () => child.process,
+      onUpdate: (update) => phases.push(update.phase),
+      onConnected: () => { connected += 1; },
+    });
+    const error = new Error("spawn codex ENOENT") as NodeJS.ErrnoException;
+    error.code = "ENOENT";
+    child.error(error);
+    child.close(0);
+    child.stdout("late output");
+
+    expect(phases).toEqual(["running", "unavailable"]);
+    expect(connected).toBe(0);
+  });
+
   it("cancels the device flow without treating it as an API-key failure", () => {
     const child = fakeProcess();
     const phases: string[] = [];
     const session = startCodexDeviceAuth({
       env: {},
+      probe: () => true,
       spawn: () => child.process,
       onUpdate: (update) => phases.push(update.phase),
       onConnected: () => {},

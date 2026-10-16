@@ -19,7 +19,7 @@
  * Or:   pnpm --filter @0/core generate-skills
  */
 
-import { readFileSync, writeFileSync, readdirSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
 import { join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -60,5 +60,7 @@ ${entries.join("\n")}
 };
 `;
 
-writeFileSync(OUT, body);
-console.log(`Wrote ${files.length} embedded skills → ${relative(join(__dirname, ".."), OUT)}`);
+const expected = Buffer.from(body, "utf8");
+const unchanged = existsSync(OUT) && readFileSync(OUT).equals(expected);
+if (!unchanged) writeFileSync(OUT, expected);
+console.log(`${unchanged ? "Unchanged" : "Wrote"} ${files.length} embedded skills → ${relative(join(__dirname, ".."), OUT)}`);

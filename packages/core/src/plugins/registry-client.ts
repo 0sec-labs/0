@@ -52,6 +52,7 @@ import {
   type ThemeArtifactManifest,
 } from "./manifest.js";
 import { aggregateCapabilities } from "./enablement.js";
+import { getBuiltinPlugin } from "./builtin.js";
 
 /**
  * Default Hackstore endpoint — the community extension index.
@@ -348,6 +349,9 @@ export function installableFromEntry(
     };
   }
   const manifest = validation.manifest;
+  if (getBuiltinPlugin(manifest.id)) {
+    return { ok: false, dropped: { id: manifest.id, reason: "first-party host plugin IDs cannot be replaced by registry code" } };
+  }
 
   if (id !== undefined && id !== manifest.id) {
     return {

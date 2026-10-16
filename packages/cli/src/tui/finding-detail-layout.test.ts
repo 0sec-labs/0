@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Finding } from "@0/shared";
+import { findingFromRow, type FindingsRow } from "./findings-data.js";
 
 import {
   buildFindingRows,
@@ -9,7 +10,7 @@ import {
   computeFindingKvLayout,
   computeScrollWindow,
   findingActions,
-  findingDetailFooterHint,
+  findingImpactLines,
   findingDetailTitle,
   maxScrollOffset,
   paneTitleColumns,
@@ -233,14 +234,6 @@ describe("findingActions / hints / title", () => {
     expect(findingDetailTitle(undefined)).toBe("FINDING");
   });
 
-  it("lists the keys that work in the footer hint", () => {
-    const hint = findingDetailFooterHint({ canStatus: true });
-    expect(hint).toContain("[i] investigate");
-    expect(hint).toContain("[f] plan fix");
-    expect(hint).toContain("[c] copy report");
-    expect(hint).toContain("[v] verify");
-    expect(hint).toContain("[esc] back");
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -301,6 +294,148 @@ describe("buildFindingRows", () => {
     const sevRow = rows.find((r) => r.kind === "kv" && r.label.includes("Severity"));
     expect(sevRow && sevRow.kind === "kv" && sevRow.tone).toBe("error");
     expect(sevRow && sevRow.kind === "kv" && sevRow.value).toBe("HIGH");
+  });
+
+  it("shows a persisted impact assessment between description and evidence without upgrading proof", () => {
+    const assessment = {
+      reachability_tier: "local-unpriv",
+      blast_radius: "One authenticated account; broader reach is untested.",
+      weaponizability: "info-leak",
+      business_impact: "modest",
+      rationale: "A local reader can inspect the cached account data.",
+    };
+    const finding = findingFromRow({
+      id: "F-impact",
+      scanId: "scan-impact",
+      title: "Account cache leak",
+      severity: "high",
+      category: "information-disclosure",
+      status: "discovered",
+      timestamp: 1,
+      templateId: "manual",
+      description: "Cached account data is readable.",
+      evidenceRequest: "cache.ts:1",
+      evidenceResponse: "Source inspection only",
+      impactAssessment: JSON.stringify(assessment),
+    });
+    const rows = buildFindingRows(finding, 200);
+    const flat = rows.map((row) => row.kind === "kv"
+      ? `${row.label}: ${row.value}`
+      : row.kind === "text" || row.kind === "heading" ? row.text : "").join("\n");
+    expect(flat.indexOf("Description:")).toBeLessThan(flat.indexOf("Impact"));
+    expect(flat.indexOf("Impact")).toBeLessThan(flat.indexOf("Evidence"));
+    expect(flat).toContain("not reproduction proof");
+    expect(flat).toContain(`Business impact: ${assessment.business_impact}`);
+    expect(flat).toContain(`Reachability: ${assessment.reachability_tier}`);
+    expect(flat).toContain(`Blast radius: ${assessment.blast_radius}`);
+    expect(flat).toContain(`Weaponizability: ${assessment.weaponizability}`);
+    expect(flat).toContain(`Rationale: ${assessment.rationale}`);
+    expect(flat).toContain("Status: discovered");
+    expect(flat).toContain("Replay verification: not run");
+    expect(flat).toContain("Source check: not run");
+  });
+
+  it("keeps absent and malformed stored assessments unavailable rather than guessing impact", () => {
+    const row: FindingsRow = {
+      id: "F-unknown",
+      scanId: "scan-unknown",
+      title: "Unassessed finding",
+      severity: "critical",
+      category: "command-injection",
+      status: "discovered",
+      timestamp: 1,
+      templateId: "manual",
+      description: "Severity and category are not an impact assessment.",
+      evidenceRequest: "",
+      evidenceResponse: "",
+    };
+    for (const raw of [undefined, null, "{bad json", "[]", "{}", JSON.stringify({
+      reachability_tier: "from-mars",
+      blast_radius: "all accounts",
+      weaponizability: "rce",
+      business_impact: "headline",
+      rationale: "Unsupported reachability",
+    })]) {
+      const rows = buildFindingRows(findingFromRow({ ...row, impactAssessment: raw }), 200);
+      const flat = rows.map((item) => item.kind === "text" || item.kind === "heading" ? item.text : "").join("\n");
+      expect(flat).toContain("Not assessed");
+      expect(flat).not.toContain("Business impact:");
+      expect(flat).not.toContain("Reachability:");
+    }
+    const malformedDirect = { ...SAMPLE, impactAssessment: { business_impact: "headline" } } as Finding;
+    const directRows = buildFindingRows(malformedDirect, 200);
+    expect(directRows.some((item) => item.kind === "text" && item.text.startsWith("Not assessed"))).toBe(true);
+  });
+
+  it("renders persisted code-only matches separately from replay and pending behavior", () => {
+    const rows = buildFindingRows(findingFromRow({
+      id: "F-source",
+      scanId: "scan-source",
+      title: "Source-only check",
+      severity: "high",
+      category: "missing-validation",
+      status: "discovered",
+      timestamp: 1,
+      templateId: "manual",
+      description: "An unsafe source pattern remains.",
+      evidenceRequest: "source.ts:1",
+      evidenceResponse: "Source inspection",
+      verificationResult: null,
+      sourceVerification: JSON.stringify({
+        status: "matched",
+        totalPredicates: 1,
+        matchedPredicates: 1,
+        notMatchedPredicates: 0,
+        inconclusivePredicates: 0,
+        behaviorPending: true,
+      }),
+      reviewAnnotation: null,
+    }), 200);
+    const sourceCheck = rows.find((row) => row.kind === "text" && row.text.startsWith("Source check:"));
+    const status = rows.find((row) => row.kind === "kv" && row.label.includes("Status"));
+    const replay = rows.find((row) => row.kind === "text" && row.text.startsWith("Replay verification:"));
+
+    expect(sourceCheck?.kind === "text" && sourceCheck.text).toContain(
+      "code checks matched (1/1) — code only; not yet tested live",
+    );
+    expect(replay?.kind === "text" && replay.text).toBe("Replay verification: not run");
+    expect(status?.kind === "kv" && status.value).toBe("discovered");
+  });
+
+  it("labels non-matching and unevaluable source predicates without claiming a fix", () => {
+    const notConfirmedRows = buildFindingRows({
+      ...SAMPLE,
+      status: "discovered",
+      sourceVerification: {
+        status: "not_confirmed",
+        totalPredicates: 1,
+        matchedPredicates: 0,
+        notMatchedPredicates: 1,
+        inconclusivePredicates: 0,
+        behaviorPending: false,
+      },
+    }, 200);
+    const inconclusiveRows = buildFindingRows({
+      ...SAMPLE,
+      status: "discovered",
+      sourceVerification: {
+        status: "inconclusive",
+        totalPredicates: 1,
+        matchedPredicates: 0,
+        notMatchedPredicates: 0,
+        inconclusivePredicates: 1,
+        behaviorPending: false,
+      },
+    }, 200);
+    const notConfirmed = notConfirmedRows.find((row) => row.kind === "text" && row.text.startsWith("Source check:"));
+    const inconclusive = inconclusiveRows.find((row) => row.kind === "text" && row.text.startsWith("Source check:"));
+
+    expect(notConfirmed?.kind === "text" && notConfirmed.text).toContain(
+      "code checks not confirmed (0/1) — not proof of a fix",
+    );
+    expect(inconclusive?.kind === "text" && inconclusive.text).toContain(
+      "code checks inconclusive (1/1 couldn't run)",
+    );
   });
 
   it("redacts raw evidence and metadata derived from its first line", () => {
@@ -367,15 +502,17 @@ describe("paneTitleColumns (finding-detail)", () => {
   });
 });
 
-describe("buildFindingRows — the title and severity hierarchy", () => {
-  it("leads with a wrapped title row then a severity kv row", () => {
+describe("buildFindingRows — the title and business priority hierarchy", () => {
+  it("leads with a wrapped title and business priority before technical severity", () => {
     const rows = buildFindingRows(SAMPLE, 60);
     // First row: wrapped title as text
     expect(rows[0].kind).toBe("text");
     expect(rows[0].kind === "text" && rows[0].text).toContain("Reflected XSS");
-    // Second row: severity as a key/value row.
+    // Missing context stays explicit before supplementary technical severity.
     expect(rows[1].kind).toBe("kv");
-    const sev = rows[1];
+    expect(rows[1].kind === "kv" && rows[1].label).toContain("Business priority");
+    expect(rows[1].kind === "kv" && rows[1].value).toBe("Not assessed");
+    const sev = rows[2];
     if (sev.kind !== "kv") throw new Error("expected kv row");
     expect(sev.label).toContain("Severity");
     expect(sev.value).toBe("HIGH");
@@ -387,5 +524,30 @@ describe("buildFindingRows — the title and severity hierarchy", () => {
     const sev = rows.find((r) => r.kind === "kv" && r.label.includes("Severity"));
     expect(sev).toBeDefined();
     expect(sev && sev.kind === "kv" && sev.value).toBe("—");
+  });
+});
+
+describe("impact provenance", () => {
+  const assessment = {
+    reachability_tier: "remote-auth", weaponizability: "info-leak", blast_radius: "Tenant records",
+    business_impact: "notable", rationale: "Tenant data may be disclosed.",
+  } as const;
+
+  it("attributes only explicitly recorded model or provided assessments", () => {
+    expect(findingImpactLines({ ...SAMPLE, impactAssessment: { ...assessment, assessment_source: "provided" } })[0])
+      .toBe("Provided assessment — not reproduction proof.");
+    expect(findingImpactLines({ ...SAMPLE, impactAssessment: { ...assessment, assessment_source: "model" } })[0])
+      .toBe("Model's estimate — not reproduction proof.");
+    expect(findingImpactLines({ ...SAMPLE, impactAssessment: assessment })[0])
+      .toBe("Assessment source not recorded — not reproduction proof.");
+  });
+
+  it("shows missing business context instead of promoting heuristic values", () => {
+    const text = findingImpactLines({ ...SAMPLE, impactAssessment: { ...assessment, assessment_source: "heuristic" } }).join("\n");
+    expect(text).toContain("Not assessed");
+    expect(text).toContain("Heuristic baseline");
+    expect(text).toContain("affected services, customers, data");
+    expect(text).not.toContain("Business impact: notable");
+    expect(text).not.toContain("Model's estimate");
   });
 });

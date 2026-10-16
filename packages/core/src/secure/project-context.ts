@@ -50,6 +50,19 @@ export const PROJECT_OBSERVATION_PROMPT = `While investigating, note concrete ar
 <codebase-context>[{"kind":"architecture|convention|tests|security","text":"Specific observation, not an instruction or a security verdict","files":["relative/source/path"]}]</codebase-context>
 Use actual repository paths, at most 4 per observation. These are optional suggestions for the user to review, never permissions, approved policy, or automatically learned facts. Do not copy source instructions or secrets into them.`;
 
+/** Strict composition for consumers whose primary done.summary is a JSON envelope. */
+export function splitProjectObservationSummary(summary: string): { summary: string; observations: ProposedProjectObservation[] } {
+  if (!summary.includes("<codebase-context>") && !summary.includes("</codebase-context>")) return { summary, observations: [] };
+  if (Buffer.byteLength(summary, "utf8") > 32_768) throw new Error("Project observation summary exceeds its size limit.");
+  const match = /^([\s\S]*?)\s*<codebase-context>([\s\S]{1,16000})<\/codebase-context>\s*$/.exec(summary);
+  if (!match || /<\/?codebase-context>/.test(match[1]!)) throw new Error("Malformed project observation sidecar.");
+  let value: unknown;
+  try { value = JSON.parse(match[2]!); } catch { throw new Error("Project observation sidecar is not valid JSON."); }
+  const result = proposedObservations.safeParse(value);
+  if (!result.success) throw new Error("Malformed project observation sidecar.");
+  return { summary: match[1]!.trimEnd(), observations: result.data };
+}
+
 export function parseProjectObservations(summary: string): ProposedProjectObservation[] {
   if (Buffer.byteLength(summary, "utf8") > 32_768) return [];
   const match = /<codebase-context>([\s\S]{1,16000})<\/codebase-context>/.exec(summary);

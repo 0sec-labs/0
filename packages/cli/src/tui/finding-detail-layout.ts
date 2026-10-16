@@ -32,6 +32,7 @@
  */
 
 import type { Finding, Severity } from "@0/shared";
+import { getFindingPriority, ImpactAssessmentSchema, isHeuristicImpactAssessment } from "@0/shared";
 
 import { computeKvSplit } from "./pane-layout.js";
 import { shellChromeRows, wrapCells } from "./settings-layout.js";
@@ -194,6 +195,29 @@ function findingCvssLine(finding: Finding, injected: string | undefined): string
   return EM_DASH;
 }
 
+/** Render only an existing assessment, independently of replay/source proof. */
+export function findingImpactLines(finding: Finding): string[] {
+  const parsed = ImpactAssessmentSchema.safeParse(finding.impactAssessment);
+  const priority = getFindingPriority(finding);
+  if (!priority.assessed) return [
+    "Not assessed.",
+    ...(parsed.success && isHeuristicImpactAssessment(parsed.data) ? ["Heuristic baseline; business consequences have not been established."] : []),
+    priority.rationale,
+  ];
+  if (!parsed.success) return ["Not assessed.", priority.rationale];
+  const assessment = parsed.data;
+  return [
+    assessment.assessment_source === "model" ? "Model's estimate — not reproduction proof."
+      : assessment.assessment_source === "provided" ? "Provided assessment — not reproduction proof."
+        : "Assessment source not recorded — not reproduction proof.",
+    `Business impact: ${assessment.business_impact}`,
+    `Reachability: ${assessment.reachability_tier}`,
+    `Blast radius: ${assessment.blast_radius}`,
+    `Weaponizability: ${assessment.weaponizability}`,
+    `Rationale: ${assessment.rationale || "not provided"}`,
+  ];
+}
+
 // ── Row markers ──────────────────────────────────────────────────────────────
 // Glyphs now come from the active symbol preset (symbols.ts): the Unicode
 // default upgrades these thin outlines to heavier forms, the `nerd` preset
@@ -218,11 +242,11 @@ function findingRowIcons(symbols: SymbolTable): Readonly<Record<string, string>>
 /**
  * The finding body as a flat, tone-tagged row list.
  *
- * Information hierarchy: Title (wrapped) → Severity → Status → CVSS →
- * Category → Triage → Confidence → Location → Endpoint+method (from
- * evidence) → Description → Evidence (subsections visibly distinct) →
- * Remediation → References.  Every missing field renders as `—`, and evidence
- * is only ever shown through the injected redactor.
+ * Information hierarchy: Title (wrapped) → Severity → Status → Source check
+ * → Replay verification → CVSS → Category → Triage → Confidence → Location
+ * → Endpoint+method (from evidence) → Description → Evidence → Remediation
+ * → References. Every missing field renders honestly, and evidence is shown
+ * only through the injected redactor.
  */
 export function buildFindingRows(
   finding: Finding | undefined,
@@ -240,10 +264,14 @@ export function buildFindingRows(
   const rows: FindingDetailRow[] = [];
 
 
-  // 1. Title — wrapped so long titles stay readable, severity carried below.
+  // Title — wrapped so long titles stay readable, severity carried below.
   pushWrapped(rows, findingText(finding.title || EM_DASH), width, "title");
 
-  // 2. Severity — explicit kv row (coloured badge tone for critical/high).
+  const priority = getFindingPriority(finding);
+  rows.push({ kind: "kv", label: `${icon.status} Business priority`, value: priority.label,
+    tone: priority.label === "Urgent" || priority.label === "High" ? "error" : priority.label === "Moderate" ? "warn" : "muted" });
+
+  // Severity — explicit kv row (coloured badge tone for critical/high).
   rows.push({
     kind: "kv",
     label: `${icon.status} Severity`,
@@ -251,7 +279,7 @@ export function buildFindingRows(
     tone: severityDetailTone(finding.severity),
   });
 
-  // 3. Status
+  // Finding status remains independent of either verification field.
   rows.push({
     kind: "kv",
     label: `${icon.status} Status`,
@@ -259,10 +287,9 @@ export function buildFindingRows(
     tone: "text",
   });
 
-  // 4. CVSS — near top alongside severity/status.
+  // CVSS is technical severity, independent of the impact assessment.
   pushWrapped(rows, `${icon.cvss} CVSS: ${findingCvssLine(finding, options.cvssLine)}`, width, "text");
 
-  // 5. Category
   rows.push({
     kind: "kv",
     label: `${icon.category} Category`,
@@ -270,12 +297,10 @@ export function buildFindingRows(
     tone: "text",
   });
 
-  // 6. Triage (if present)
   if (finding.triageStatus) {
     rows.push({ kind: "kv", label: `${icon.triage} Triage`, value: findingText(finding.triageStatus), tone: "text" });
   }
 
-  // 7. Confidence
   rows.push({
     kind: "kv",
     label: `${icon.confid} Confidence`,
@@ -286,10 +311,10 @@ export function buildFindingRows(
     tone: "text",
   });
 
-  // 8. Location — compact section label inline with wrapped text.
+  // Location — compact section label inline with wrapped text.
   pushWrapped(rows, `${icon.location} Location: ${findingLocation(finding) ?? EM_DASH}`, width, "text");
 
-  // 9. Endpoint+method — only from actual evidence.request first line.
+  // Endpoint+method — only from actual evidence.request first line.
   const redactedRequest = finding.evidence?.request ? redact(finding.evidence.request) : "";
   if (redactedRequest) {
     const firstReqLine = redactedRequest.split("\n", 1)[0].trim();
@@ -298,10 +323,14 @@ export function buildFindingRows(
     }
   }
 
-  // 10. Description
   pushWrapped(rows, `${icon.desc} Description: ${finding.description || EM_DASH}`, width, "text");
 
-  // 11. Evidence — subsections (Request / Response / Analysis) visibly distinct.
+  rows.push({ kind: "heading", text: "Impact", tone: "heading" });
+  for (const line of findingImpactLines(finding)) {
+    pushWrapped(rows, line, width, "muted");
+  }
+
+  // Evidence subsections (Request / Response / Analysis) visibly distinct.
   const ev = finding.evidence;
   if (ev && (ev.request || ev.response || ev.analysis)) {
     rows.push({ kind: "text", text: `${icon.evidence} Evidence`, tone: "heading" });
@@ -337,8 +366,44 @@ export function buildFindingRows(
   } else {
     pushWrapped(rows, `${icon.evidence} Evidence: ${EM_DASH}`, width, "muted");
   }
+  // Source predicates are a code-only check, never replay or fix evidence.
+  const sourceVerification = finding.sourceVerification;
+  let sourceCheckValue = "not run";
+  if (sourceVerification) {
+    switch (sourceVerification.status) {
+      case "matched":
+        sourceCheckValue =
+          `code checks matched (${sourceVerification.matchedPredicates}/${sourceVerification.totalPredicates}) — code only`;
+        break;
+      case "not_confirmed":
+        sourceCheckValue =
+          `code checks not confirmed (${sourceVerification.matchedPredicates}/${sourceVerification.totalPredicates}) — not proof of a fix`;
+        break;
+      case "inconclusive":
+        sourceCheckValue =
+          `code checks inconclusive (${sourceVerification.inconclusivePredicates}/${sourceVerification.totalPredicates} couldn't run)`;
+        break;
+    }
+    if (sourceVerification.behaviorPending) {
+      sourceCheckValue += "; not yet tested live";
+    }
+  }
+  pushWrapped(
+    rows,
+    `Source check: ${sourceCheckValue}`,
+    width,
+    sourceVerification?.status === "matched" ? "warn" : "muted",
+  );
 
-  // 12. Remediation
+  // Canonical replay result stays separate from the source-only check.
+  pushWrapped(
+    rows,
+    `Replay verification: ${finding.verification_result?.status ?? "not run"}`,
+    width,
+    "text",
+  );
+
+
   const remediation = finding.remediation;
   if (!remediation || (!remediation.summary && (remediation.steps?.length ?? 0) === 0)) {
     pushWrapped(rows, `${icon.fix} Remediation: ${EM_DASH}`, width, "muted");
@@ -349,7 +414,6 @@ export function buildFindingRows(
     }
   }
 
-  // 13. References
   const refs = [...(finding.remediation?.references ?? []), ...(finding.dedupRefs ?? [])];
   if (refs.length === 0) {
     pushWrapped(rows, `${icon.link} References: ${EM_DASH}`, width, "muted");
@@ -430,7 +494,7 @@ export interface FindingAction {
 export interface FindingActionsInput {
   /** Whether the investigate-in-chat action is offered. */
   canInvestigate?: boolean;
-  /** Whether the plan-a-fix-in-chat action is offered. */
+  /** Whether the verified-source-fix action is offered. */
   canPlanFix?: boolean;
   /** Whether the Copy-report action is offered. */
   canCopy?: boolean;
@@ -450,8 +514,8 @@ export function findingActions({
 }: FindingActionsInput = {}): FindingAction[] {
   const actions: FindingAction[] = [];
   if (canInvestigate) actions.push({ key: "i", label: "Investigate" });
-  if (canPlanFix) actions.push({ key: "f", label: "Plan fix" });
-  if (canCopy) actions.push({ key: "c", label: "Copy report" });
+  if (canPlanFix) actions.push({ key: "f", label: "Fix" });
+  if (canCopy) actions.push({ key: "c", label: "Copy" });
   if (canStatus) {
     actions.push({ key: "v", label: "Verify" });
     actions.push({ key: "d", label: "Dismiss" });
@@ -679,9 +743,9 @@ export function findingDetailFooterHint({
 }: FindingFooterHintInput = {}): string {
   const parts: string[] = [];
   if (canInvestigate) parts.push("[i] investigate");
-  if (canPlanFix) parts.push("[f] plan fix");
-  if (canCopy) parts.push("[c] copy report");
+  if (canPlanFix) parts.push("[f] fix");
+  if (canCopy) parts.push("[c] copy");
   if (canStatus) parts.push("[v] verify", "[d] dismiss");
-  parts.push("[↑↓] scroll", "[esc] back", "[⌃C] exit");
+  parts.push("[↑↓] scroll", "[esc] back");
   return parts.join(" · ");
 }

@@ -9,15 +9,15 @@
  * (unit-tested there); this file is the thin SDK glue over it, so `register`
  * takes a transport and is exercised end-to-end against an in-memory server.
  *
- * Security: every tool is namespaced `mcp__<server>__<tool>` (inherits the
- * `isUntrustedSourceTool` fence — an MCP result is untrusted, attacker-influenced
- * data), and the caller gates the tools through the capability/scope maps with
+ * Security: every tool is namespaced `mcp__<server>__<tool>`, and the caller
+ * gates the tools through the capability/scope maps with
  * MCP tools defaulting to network-capable (danger-by-omission). This host does
  * not weaken any gate; it only connects, lists, and forwards.
  */
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 import type { ToolDefinition, ToolResult } from "./types.js";
 import {
@@ -40,9 +40,34 @@ export interface McpStdioServerConfig {
   readonly cwd?: string;
 }
 
+/** A remote MCP server using Streamable HTTP (for example Elastic Agent Builder). */
+export interface McpHttpServerConfig {
+  readonly id: string;
+  readonly url: string;
+  readonly headers?: Record<string, string>;
+}
+
+export type McpServerConfig = McpStdioServerConfig | McpHttpServerConfig;
+
+function httpEndpoint(raw: string): URL {
+  const url = new URL(raw);
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  if ((url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) || url.username || url.password || url.hash) {
+    throw new Error("MCP HTTP endpoint requires HTTPS (HTTP is allowed on loopback only), without URL credentials or a fragment");
+  }
+  return url;
+}
+
+function validHeaders(value: unknown): value is Record<string, string> {
+  return !!value && typeof value === "object" && !Array.isArray(value) &&
+    Object.entries(value).every(([key, val]) => /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(key) &&
+      typeof val === "string" && !/[\r\n]/.test(val));
+}
+
 interface ConnectedServer {
   readonly client: Client;
   readonly defs: ToolDefinition[];
+  readonly redact: (value: string) => string;
 }
 
 /**
@@ -75,25 +100,34 @@ export class McpHost {
    * (and `connectStdio` builds a real one). Fails closed: a discovery error
    * closes the client and rejects rather than leaving a half-registered server.
    */
-  async register(id: string, transport: ClientTransport): Promise<ToolDefinition[]> {
+  async register(id: string, transport: ClientTransport, secrets: readonly string[] = []): Promise<ToolDefinition[]> {
     if (!isSafeMcpServerId(id)) throw new Error(`unsafe MCP server id: ${JSON.stringify(id)}`);
     if (this.servers.has(id)) throw new Error(`MCP server "${id}" is already connected`);
+    const redact = (value: string) => secrets.filter(Boolean).reduce((result, secret) => result.split(secret).join("[redacted]"), value);
     const client = new Client({ name: "0", version: "0.1.0" }, { capabilities: {} });
-    await client.connect(transport);
     let defs: ToolDefinition[];
     try {
+      await client.connect(transport);
       const listed = await client.listTools();
       const specs: McpToolSpec[] = (listed.tools ?? []).map((t) => ({
         name: t.name,
         description: t.description,
         inputSchema: t.inputSchema as McpToolSpec["inputSchema"],
       }));
-      defs = mcpToolsToDefinitions(id, specs);
+      // Schema descriptions/defaults are remote data too; scrub credentials
+      // before tool metadata can be included in a model request.
+      const scrub = (value: unknown): unknown => {
+        if (typeof value === "string") return redact(value);
+        if (Array.isArray(value)) return value.map(scrub);
+        if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [redact(key), scrub(item)]));
+        return value;
+      };
+      defs = mcpToolsToDefinitions(id, specs).map(def => scrub(def) as ToolDefinition);
     } catch (err) {
       await client.close().catch(() => undefined);
       throw err;
     }
-    this.servers.set(id, { client, defs });
+    this.servers.set(id, { client, defs, redact });
     return defs;
   }
 
@@ -106,6 +140,19 @@ export class McpHost {
       ...(config.cwd ? { cwd: config.cwd } : {}),
     });
     return this.register(config.id, transport);
+  }
+
+  /** Connect to a remote server; credentials stay on the configured origin. */
+  async connectHttp(config: McpHttpServerConfig): Promise<ToolDefinition[]> {
+    const url = httpEndpoint(config.url);
+    if (config.headers !== undefined && !validHeaders(config.headers)) {
+      throw new Error("Invalid MCP HTTP headers");
+    }
+    const transport = new StreamableHTTPClientTransport(url, {
+      requestInit: { headers: config.headers, redirect: "error" },
+    });
+    const secrets = Object.entries(config.headers ?? {}).filter(([name]) => /authorization|cookie|token|api[-_]?key|secret/i.test(name)).flatMap(([, value]) => [value, value.replace(/^(Bearer|ApiKey|Basic)\s+/i, "")]);
+    return this.register(config.id, transport, secrets);
   }
 
   /**
@@ -123,11 +170,11 @@ export class McpHost {
         content?: unknown;
         isError?: boolean;
       };
-      const text = mcpResultText(res.content);
+      const text = server.redact(mcpResultText(res.content));
       if (res.isError) return { success: false, output: null, error: text || "MCP tool returned an error" };
       return { success: true, output: { text } };
     } catch (err) {
-      return { success: false, output: null, error: err instanceof Error ? err.message : String(err) };
+      return { success: false, output: null, error: server.redact(err instanceof Error ? err.message : String(err)) };
     }
   }
 
@@ -141,11 +188,11 @@ export class McpHost {
 
 /**
  * Parse an MCP server config blob (e.g. the `ZERO_MCP` env var) — a JSON array of
- * `{id, command, args?, env?, cwd?}` — into validated stdio configs. Total and
+ * `{id, command, args?, env?, cwd?}` — into validated stdio or Streamable HTTP configs. Total and
  * fail-soft: malformed JSON, a non-array, or a bad entry yields fewer (or zero)
  * servers rather than throwing, so a typo never takes a console down.
  */
-export function parseMcpConfig(raw: string | undefined): McpStdioServerConfig[] {
+export function parseMcpConfig(raw: string | undefined): McpServerConfig[] {
   if (!raw || !raw.trim()) return [];
   let parsed: unknown;
   try {
@@ -154,11 +201,18 @@ export function parseMcpConfig(raw: string | undefined): McpStdioServerConfig[] 
     return [];
   }
   if (!Array.isArray(parsed)) return [];
-  const out: McpStdioServerConfig[] = [];
+  const out: McpServerConfig[] = [];
   for (const item of parsed) {
     if (!item || typeof item !== "object") continue;
     const o = item as Record<string, unknown>;
     if (typeof o.id !== "string" || !isSafeMcpServerId(o.id)) continue;
+    if ("url" in o) {
+      if ("command" in o || typeof o.url !== "string") continue;
+      try { httpEndpoint(o.url); } catch { continue; }
+      if (o.headers !== undefined && !validHeaders(o.headers)) continue;
+      out.push({ id: o.id, url: o.url, ...(o.headers ? { headers: o.headers as Record<string, string> } : {}) });
+      continue;
+    }
     if (typeof o.command !== "string" || o.command.trim().length === 0) continue;
     const args = Array.isArray(o.args) ? o.args.filter((a): a is string => typeof a === "string") : undefined;
     const env =
@@ -180,16 +234,17 @@ export function parseMcpConfig(raw: string | undefined): McpStdioServerConfig[] 
 }
 
 /**
- * Build a host and connect the given stdio servers, fail-soft: a server that
+ * Build a host and connect the given MCP servers, fail-soft: a server that
  * fails to spawn/handshake is skipped, not fatal. Returns the host only if at
  * least one server connected (else undefined, so a caller can omit `mcpHost`).
  */
-export async function connectMcpServers(configs: readonly McpStdioServerConfig[]): Promise<McpHost | undefined> {
+export async function connectMcpServers(configs: readonly McpServerConfig[]): Promise<McpHost | undefined> {
   if (configs.length === 0) return undefined;
   const host = new McpHost();
   for (const cfg of configs) {
     try {
-      await host.connectStdio(cfg);
+      if ("url" in cfg) await host.connectHttp(cfg);
+      else await host.connectStdio(cfg);
     } catch {
       // Skip a server that won't connect; the rest still load.
     }

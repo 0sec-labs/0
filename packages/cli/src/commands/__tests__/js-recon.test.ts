@@ -11,6 +11,8 @@ vi.mock("@0/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@0/core")>();
   return {
     ...actual,
+    getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, projectPath: process.cwd(), message: "Scope plugin enabled" }),
+    isScopeEnforcementEnabled: () => true,
     runJsRecon: runJsReconMock,
     fetchScoped: fetchScopedMock,
   };
@@ -70,8 +72,9 @@ describe("0 js-recon", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("deny-by-default: requires --scope (commander rejects without it)", async () => {
-    await expect(runCli(["js-recon", "https://example.com"])).rejects.toBeDefined();
+  it("refuses missing scope while the plugin is activated", async () => {
+    await runCli(["js-recon", "https://example.com"]);
+    expect(process.exitCode).toBe(2);
     expect(runJsReconMock).not.toHaveBeenCalled();
   });
 

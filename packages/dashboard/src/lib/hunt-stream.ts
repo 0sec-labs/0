@@ -1,3 +1,4 @@
+import { accessMilestoneFromArtifact, type AccessMilestone } from "@0/shared/dist/access-milestone.js";
 /**
  * Hunt-lane event types and parsing helpers.
  *
@@ -19,6 +20,7 @@
  */
 
 export type osecHuntEvent =
+  | { schema: "0.events/v1"; kind: "access_milestone"; ts: number; milestone: AccessMilestone; scanId: string }
   | {
       schema: "0.events/v1";
       kind: "tool_use";
@@ -123,7 +125,7 @@ export function parseHuntEvent(raw: string): osecHuntEvent | null {
       const timestamp = Date.parse(obj.at);
       if (Number.isFinite(timestamp)) payload.ts = timestamp / 1_000;
     }
-    return translateRawEvent(obj.eventType, payload);
+    return translateRawEvent(obj.eventType, payload, typeof obj.scanId === "string" ? obj.scanId : "");
   }
 
   // Raw eventBus shape — translate.
@@ -192,8 +194,12 @@ function normaliseV1(obj: Record<string, unknown>): osecHuntEvent | null {
  * mapping `scripts/serve-events.mjs` does for `ZERO_EVENT_*` lines so
  * both transport paths land on the same renderer.
  */
-function translateRawEvent(type: string, payload: Record<string, unknown>): osecHuntEvent | null {
+function translateRawEvent(type: string, payload: Record<string, unknown>, scanId = ""): osecHuntEvent | null {
   const ts = typeof payload.ts === "number" ? payload.ts : Date.now() / 1000;
+
+  const milestone = accessMilestoneFromArtifact(type, payload, scanId, typeof payload.presentationEventId === "string" ? payload.presentationEventId : undefined);
+  if (milestone && (typeof payload.ts !== "number" || !Number.isFinite(payload.ts) || Math.abs(payload.ts) > 8_640_000_000_000)) return null;
+  if (milestone) return { schema: "0.events/v1", kind: "access_milestone", ts, milestone, scanId };
 
   if (type === "tool_call_started" || type === "tool_call_completed") {
     const argsPreview = typeof payload.args_preview === "string" ? payload.args_preview : undefined;

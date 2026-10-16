@@ -16,6 +16,7 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PROVIDERS } from "../../src/tui/provider-status.js";
 
 /** Env keys this harness owns. Restoring these exactly is what keeps the fork clean. */
 const MANAGED_KEYS = [
@@ -25,6 +26,10 @@ const MANAGED_KEYS = [
   "ZERO_NO_TELEMETRY",
   "ZERO_TUI_TEST",
   "ZERO_TUI_REDUCE_MOTION",
+  "TERM",
+  "COLORTERM",
+  "FORCE_COLOR",
+  "NO_COLOR",
   // The console resolves a registry URL from this; an explicit empty value is a
   // deliberate "no store" so the marketplace route never reaches the network.
   "ZERO_REGISTRY_URL",
@@ -32,6 +37,21 @@ const MANAGED_KEYS = [
   "ZERO_MCP",
   // Prevent ambient Cloud credentials from leaking into isolated scenarios.
   "ZERO_CLOUD_TOKEN",
+  ...PROVIDERS.flatMap((provider) => provider.envVars),
+  "ZERO_MODEL",
+  "ZERO_SELECTED_PROVIDER",
+  "ZERO_FORCE_PROVIDER",
+  "ZERO_CHATGPT_AUTH_FILE",
+  "CODEX_HOME",
+  "ZERO_DEV_SOURCE_ROOT",
+  "ZERO_DEV_UI_WATCH",
+  "OPENAI_BASE_URL",
+  "AZURE_OPENAI_BASE_URL",
+  "AZURE_OPENAI_MODEL",
+  "ANTHROPIC_BASE_URL",
+  "DEEPSEEK_BASE_URL",
+  "OPENCODE_BASE_URL",
+  "CLINE_BASE_URL",
 ] as const;
 
 export interface DeterministicEnv {
@@ -77,7 +97,10 @@ export function withDeterministicEnv(
 
   // Snapshot every managed key so restore is exact (undefined → delete).
   const prior = new Map<string, string | undefined>();
-  for (const key of MANAGED_KEYS) prior.set(key, process.env[key]);
+  for (const key of new Set(MANAGED_KEYS)) {
+    prior.set(key, process.env[key]);
+    delete process.env[key];
+  }
 
   process.env["HOME"] = homeDir;
   process.env["ZERO_DB_PATH"] = dbPath;
@@ -85,9 +108,14 @@ export function withDeterministicEnv(
   process.env["ZERO_NO_TELEMETRY"] = "1";
   process.env["ZERO_TUI_TEST"] = "1";
   process.env["ZERO_TUI_REDUCE_MOTION"] = "1";
+  // The headless renderer supports RGB. Theme assertions must not inherit
+  // GitHub's monochrome terminal or the operator's color-disable settings.
+  process.env["TERM"] = "xterm-256color";
+  process.env["COLORTERM"] = "truecolor";
+  process.env["FORCE_COLOR"] = "3";
   process.env["ZERO_REGISTRY_URL"] = "";
   process.env["ZERO_MCP"] = "";
-  delete process.env["ZERO_CLOUD_TOKEN"];
+  process.env["ZERO_CHATGPT_AUTH_FILE"] = join(homeDir, "no-codex-auth.json");
 
   let restored = false;
   const restore = () => {

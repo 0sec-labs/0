@@ -1,5 +1,6 @@
 export interface SessionCloseGate {
   readonly closed: boolean;
+  readonly signal: AbortSignal;
   close(): boolean;
   wait(): Promise<void>;
 }
@@ -10,15 +11,18 @@ export interface SessionCloseGate {
  */
 export function createSessionCloseGate(): SessionCloseGate {
   let closed = false;
+  const controller = new AbortController();
   const resolvers = new Set<() => void>();
 
   return {
     get closed(): boolean {
       return closed;
     },
+    signal: controller.signal,
     close(): boolean {
       if (closed) return false;
       closed = true;
+      controller.abort(new Error("Scan session closed by operator."));
       for (const resolve of resolvers) resolve();
       resolvers.clear();
       return true;

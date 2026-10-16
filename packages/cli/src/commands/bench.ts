@@ -150,7 +150,7 @@ export function parseTournamentSchedule(value: unknown): TournamentSchedule {
 export function registerBenchCommand(program: Command): void {
   const bench = program
     .command("bench")
-    .description("A/B variant tournament + CI regression gate over the labeled corpus (#656)");
+    .description("Benchmark variants and gate regressions over the labeled corpus");
 
   registerBenchImprovementCommand(bench);
   registerBenchCalibrationCommand(bench);

@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "reviewedAt": "2026-09-30",
+  "inputs": [
+    {
+      "id": "xbow",
+      "path": "packages/benchmark/results/xbow-canonical.json",
+      "sha256": "e35bab4723576890cac3d7fd6e904de54e1c6c0d2fa444160910d59e7d73ef09",
+      "protocol": "retained success union across CI runs and modes",
+      "asOf": "2026-05-04",
+      "missingProvenance": [
+        "full failed-attempt denominator",
+        "source revision",
+        "evaluator revision"
+      ]
+    },
+    {
+      "id": "ledger",
+      "path": "packages/benchmark/results/benchmark-ledger.json",
+      "sha256": "d1203af5cc79050c4504bd7c1fb297e3ddd64bbd02a07929c872dad4005aa643",
+      "protocol": "historical ledger summary; incompatible snapshot",
+      "asOf": "2026-05-06",
+      "missingProvenance": [
+        "immutable raw May 6 cohort"
+      ]
+    },
+    {
+      "id": "ab",
+      "path": "packages/benchmark/results/retained-reasoning-multiturn-ab-20260802.json",
+      "sha256": "f3ff4748eaabc3423d939cee77755c578dc6444bfc536841d6b061e58141e956",
+      "protocol": "interleaved 3 control / 3 treatment runs on one target",
+      "asOf": "2026-08-02",
+      "missingProvenance": [
+        "resolved provider/model identity",
+        "source revision",
+        "raw supplier charges"
+      ]
+    },
+    {
+      "id": "cybergym",
+      "path": "packages/benchmark/results/cybergym-hardgate-full54-20260704.jsonl",
+      "sha256": "b3ef2bc827ce5c27eaa97558e7458e0e90beebf326220e5f84dd11c11cbe2db6",
+      "protocol": "single retained task campaign; no evolution comparison",
+      "asOf": "2026-07-04",
+      "missingProvenance": [
+        "source revision",
+        "provider charges",
+        "matched comparison arm"
+      ]
+    },
+    {
+      "id": "router",
+      "path": "packages/benchmark/results/triage-dataset-v2.jsonl",
+      "sha256": "9dec0a6fce39f015a368c5f58e5f922e1393929811120f40b0a428a4ff7677d5",
+      "protocol": "finding rows labelled by challenge/package outcome",
+      "asOf": null,
+      "missingProvenance": [
+        "per-finding independent labels",
+        "group-held-out evaluation"
+      ]
+    },
+    {
+      "id": "routerMeta",
+      "path": "packages/benchmark/results/triage-router-v2-meta.json",
+      "sha256": "29dedf736f6f39b3b6dcc4eba95b5e6de9ebf5aebaaff32a990d7ed008f9b104",
+      "protocol": "historical row-wise cross-validation summary",
+      "asOf": null,
+      "missingProvenance": [
+        "immutable fitted model/fold receipt",
+        "group-held-out evaluation"
+      ]
+    },
+    {
+      "id": "consolidator",
+      "path": "packages/benchmark/src/scripts/consolidate-xbow.ts",
+      "sha256": "7208c641ac84a158cfb5e927ee56dad31a341d9fe47d3fc61f205af3bb1c33b0",
+      "protocol": "implementation source snapshot",
+      "asOf": null,
+      "missingProvenance": []
+    },
+    {
+      "id": "trainer",
+      "path": "packages/benchmark/scripts/train/train_triage_v2.py",
+      "sha256": "098f9ae9664a5b8d1556fa3d2c424b5e5de422e0d857aef59221478c0ed014cb",
+      "protocol": "implementation source snapshot",
+      "asOf": null,
+      "missingProvenance": []
+    },
+    {
+      "id": "evolution",
+      "path": "packages/core/src/improvement/evaluation.ts",
+      "sha256": "fdc410386b956d5c6ccf784cb2a5cb0d3c1618da643f84b6f7878486f7d9afc0",
+      "protocol": "implementation source snapshot; not efficacy evidence",
+      "asOf": null,
+      "missingProvenance": []
+    },
+    {
+      "id": "publicationGenerator",
+      "path": "packages/benchmark/scripts/paper-evidence.mjs",
+      "sha256": "a1ea5587c0760b58f76ffe266a0022869bc42faceddb939a46ca931b57e704ce",
+      "protocol": "offline publication source; no historical execution identity implied",
+      "asOf": "2026-09-30",
+      "missingProvenance": []
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+.console-live-tool { animation: console-tool-arrive 200ms ease-out both; }
+.console-tool-activity .console-tool-row { border: 0; border-radius: 8px; background: transparent; }
+.console-tool-activity .console-tool-trigger { min-height: 36px; padding: 8px; font-size: 12px; }
+.console-tool-activity .console-tool-details { margin: 0 8px; }
+.console-tool-reasoning p + p { margin-top: 8px; }
+.console-tool-reasoning pre { white-space: pre-wrap; }
+.console-live-tool[data-running] .console-live-tool-icon {
+  color: var(--primary);
+  animation: console-live-tool-breathe 1.8s ease-in-out infinite;
+}
+@keyframes console-tool-arrive {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes console-live-tool-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 0%, transparent); }
+  50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .console-live-tool, .console-live-tool[data-running] .console-live-tool-icon { animation: none; }
+}
+[data-reduced-motion="true"] .console-live-tool,
+[data-reduced-motion="true"] .console-live-tool[data-running] .console-live-tool-icon { animation: none; }

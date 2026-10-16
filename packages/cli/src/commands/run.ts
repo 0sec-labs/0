@@ -1,15 +1,15 @@
 import { writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { tmpdir } from "node:os";
+import { tmpdir, homedir } from "node:os";
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
-import { VERSION } from "@0/shared";
-import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig, ScanReport, SeedFinding } from "@0/shared";
-import type { CostBreakdownEntry } from "@0/core";
+import { VERSION, validateScanPlan } from "@0/shared";
+import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig, NamedIdentity, ScanReport, SeedFinding, ScanPlan, ScanAttemptOutcome } from "@0/shared";
+import type { CostBreakdownEntry, ScanCostLedger, NativeRuntime, RuntimeConfig, ScopePolicy } from "@0/core";
 import { formatAuditReport, formatReviewReport, formatReport, generatePdfReport } from "../formatters/index.js";
-import { buildShareUrl, checkRuntimeAvailability, getRuntimeAvailability } from "../utils.js";
+import { buildShareUrl, checkRuntimeAvailability } from "../utils.js";
 import { formatCrossValidatedLeads, type CrossValidatedLeadsSummary } from "./cross-validated-leads.js";
 
 interface ScanCompletedCost {
@@ -57,6 +57,21 @@ export interface RunOptions {
   format: OutputFormat;
   runtime: RuntimeMode;
   mode?: ScanMode;
+  /** Explicit guided setup contract; omitted preserves the legacy single run. */
+  plan?: ScanPlan;
+  agentModels?: Readonly<Record<string, string>>;
+  autoRoute?: boolean;
+  singleModel?: boolean;
+  nativeRuntime?: NativeRuntime;
+  provider?: RuntimeConfig["provider"];
+  signal?: AbortSignal;
+  costLedger?: ScanCostLedger;
+  suppressOutput?: boolean;
+  suppressUi?: boolean;
+  /** Source review execution strategy. The primary control plane uses
+   * `lenses`, which is the validated self-evolving source-review path.
+   */
+  reviewStrategy?: "pipeline" | "lenses";
   timeout: number;
   verbose: boolean;
   dbPath?: string;
@@ -66,6 +81,8 @@ export interface RunOptions {
   reportPath?: string;
   repoPath?: string;
   auth?: AuthConfig;
+  identities?: NamedIdentity[];
+  accessControlFixtures?: import("@0/shared").AccessControlFixture[];
   apiSpecPath?: string;
   exportTarget?: string;
   race?: boolean;
@@ -78,6 +95,8 @@ export interface RunOptions {
   tui?: boolean;
   /** Path to a JSON scope file (0#215). Threaded into ScanConfig.scopeFile. */
   scopeFile?: string;
+  /** Reuse the active console's admitted in-memory policy. */
+  scope?: ScopePolicy;
   /** Opt-out for the scanner-binary suppression gate (0#217). Threaded into ScanConfig.allowScanners. */
   allowScanners?: boolean;
   /** Repeatable `--attribution-header NAME=VALUE` (0#216). */
@@ -195,6 +214,12 @@ export interface RunOptions {
    * the system temp dir when unset.
    */
   emitOutDir?: string;
+  /** In-process frontends receive scanner progress independently of terminal/TTY state. */
+  onEvent?: (event: unknown) => void;
+  onReport?: (report: ScanReport) => void;
+  onOutcome?: (outcome: RunOutcome) => void;
+  /** Never terminate the host process; failures reject and reports retain their exit outcome. */
+  embedded?: boolean;
   sessionUiFactory?: (options: {
     target: string;
     depth: string;
@@ -230,37 +255,14 @@ interface ResultLinePayload {
     info: number;
   };
   error?: string;
+  plannedRuns?: number;
+  completedRuns?: number;
+  attempts?: ScanAttemptOutcome[];
+  workflowRunId?: string;
 }
 
-function toScanReport(report: any): ScanReport {
-  if (report.targetType === "npm-package" || report.targetType === "pypi-package" || report.targetType === "cargo-package" || report.targetType === "oci-image") {
-    return {
-      target: `${report.package}@${report.version}`,
-      scanDepth: "deep",
-      startedAt: report.startedAt,
-      completedAt: report.completedAt,
-      durationMs: report.durationMs,
-      summary: report.summary,
-      findings: report.findings,
-      warnings: [],
-    };
-  }
-
-  if (report.targetType === "source-code") {
-    return {
-      target: report.repo,
-      scanDepth: "deep",
-      startedAt: report.startedAt,
-      completedAt: report.completedAt,
-      durationMs: report.durationMs,
-      summary: report.summary,
-      findings: report.findings,
-      warnings: report.warnings ?? [],
-      executionSuccessful: report.researchFailed ? false : undefined,
-    };
-  }
-
-  return report as ScanReport;
+export interface RunOutcome extends ResultLinePayload {
+  report: ScanReport;
 }
 
 function getEstimatedCost(report: any): number | undefined {
@@ -277,18 +279,11 @@ function getTargetType(report: any, opts: RunOptions): string | undefined {
   return report?.targetType ?? opts.targetType;
 }
 
-function emitResultLine(payload: ResultLinePayload): void {  if (process.env["ZERO_EMIT_RESULT_LINE"] !== "1" && !process.env["ZERO_CLOUD_SINK"]) return;
+function emitResultLine(payload: ResultLinePayload): void {
+  if (process.env["ZERO_EMIT_RESULT_LINE"] !== "1") return;
   console.log(`ZERO_RESULT=${JSON.stringify(payload)}`);
 }
 
-function getCloudFinalSinkConfig(): { sinkUrl: string; scanId: string; token?: string } | null {
-  if (process.env["ZERO_FEATURE_CLOUD_SINK"] === "0") return null;
-  const sinkUrl = process.env["ZERO_CLOUD_SINK"]?.trim();
-  const scanId = process.env["ZERO_CLOUD_SCAN_ID"]?.trim();
-  if (!sinkUrl || !scanId) return null;
-  const token = process.env["ZERO_CLOUD_TOKEN"]?.trim() || undefined;
-  return { sinkUrl, scanId, token };
-}
 
 function isCostBreakdownEntry(value: unknown): value is CostBreakdownEntry {
   if (!value || typeof value !== "object") return false;
@@ -381,38 +376,85 @@ function printCrossValidatedLeads(summary: CrossValidatedLeadsSummary): void {
   }
 }
 
-async function postFinalResultToCloud(report: unknown): Promise<void> {
-  const config = getCloudFinalSinkConfig();
-  if (!config) return;
-  const url = `${config.sinkUrl.replace(/\/+$/, "")}/scans/${encodeURIComponent(config.scanId)}/findings`;
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    "X-0-Scan-Id": config.scanId,
-  };
-  if (config.token) headers.Authorization = `Bearer ${config.token}`;
+type AttachedEngine = NonNullable<Awaited<ReturnType<typeof import("../local-engine.js")["connectLocalEngine"]>>>;
 
+function attachedAssessmentTarget(opts: RunOptions): string {
+  const accepted = new Set(["target", "targetType", "depth", "format", "runtime", "timeout", "verbose", "plan", "signal", "suppressOutput", "suppressUi", "dbPath", "reportPath", "tui", "onEvent", "onReport", "onOutcome", "sessionUiFactory", "costCeilingUsd", "embedded", "mode", "reviewStrategy"]);
+  const inactiveFalse = new Set(["changedOnly", "race", "egats", "allowScanners", "seedOnly", "npmDynamicDiscovery", "emitPrDryRun"]);
+  const unsupported = Object.entries(opts).filter(([key, value]) => value !== undefined && !accepted.has(key) && (value !== false || !inactiveFalse.has(key))).map(([key]) => key);
+  if (opts.runtime !== "api" && opts.runtime !== "auto") unsupported.push("runtime");
+  if (opts.mode !== undefined && opts.mode !== "web") unsupported.push("mode");
+  if (opts.reviewStrategy !== undefined && opts.reviewStrategy !== "lenses") unsupported.push("reviewStrategy");
+  if (unsupported.length) throw new Error(`The running engine cannot represent these assessment overrides: ${[...new Set(unsupported)].join(", ")}. Configure or select an engine that supports them; no separate assessment was started.`);
+  const prefix = ({ "npm-package": "npm:", "pypi-package": "pypi:", "cargo-package": "cargo:", "oci-image": "oci:", "source-code": "source:" } as Record<string, string>)[opts.targetType ?? ""];
+  if (prefix === "source:" || opts.target.startsWith("source:")) {
+    const source = opts.target.startsWith("source:") ? opts.target.slice("source:".length).trim() : opts.target;
+    if (!source) throw new Error("source: requires a local path or git URL.");
+    const local = source === "~" ? homedir() : source.startsWith("~/") ? join(homedir(), source.slice(2)) : source;
+    return `source:${/^[a-z][a-z0-9+.-]*:\/\//i.test(source) || source.startsWith("git@") ? source : resolve(local)}`;
+  }
+  return prefix && !opts.target.startsWith(prefix) ? `${prefix}${opts.target}` : opts.target;
+}
+
+async function executeAttachedAssessment(engine: AttachedEngine, opts: RunOptions, onEvent: (event: unknown) => void): Promise<{ report: ScanReport; rawReport: ScanReport; runId: string }> {
+  let runId: string | undefined;
+  let cancellation: Promise<unknown> | undefined;
+  const cancel = () => { if (runId && !cancellation) cancellation = engine.cancelRun(runId).catch(() => undefined); };
+  opts.signal?.addEventListener("abort", cancel, { once: true });
+  process.once("SIGINT", cancel);
   try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ report, final: true }),
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      process.stderr.write(
-        `[0 cloud-sink] report POST ${url} returned ${res.status}: ${text.slice(0, 200)}\n`,
-      );
+    opts.signal?.throwIfAborted();
+    const plan: ScanPlan = opts.plan ? { ...opts.plan, ...(opts.costCeilingUsd !== undefined ? { costCapUsd: Math.min(opts.plan.costCapUsd, opts.costCeilingUsd) } : {}) } : { goal: opts.targetType?.endsWith("-package") || opts.targetType === "oci-image" ? "known-vulnerabilities" : "unknown-vulnerabilities", depth: opts.depth, runCount: 1, executionMode: "sequential", timeCapMs: opts.timeout, costCapUsd: opts.costCeilingUsd ?? 5 };
+    validateScanPlan(plan);
+    const launched = await engine.startAssessment({ target: attachedAssessmentTarget(opts), plan });
+    runId = launched.id;
+    if (opts.signal?.aborted) cancel();
+    let sequence = 0;
+    let run;
+    do {
+      run = await engine.getRun(runId);
+      if (!run) throw new Error(`Engine assessment ${runId} disappeared before its result was retained.`);
+      for (const event of ((run as unknown as { events?: Array<{ sequence: number }> }).events ?? [])) if (event.sequence > sequence) { sequence = event.sequence; onEvent(event); }
+      if (["queued", "running"].includes(run.status)) await new Promise(resolve => setTimeout(resolve, 100));
+    } while (["queued", "running"].includes(run.status));
+    const findings: ScanReport["findings"] = [];
+    let cursor = 0;
+    let retained: { report?: ScanReport; reports?: Array<Partial<ScanReport>>; costUsd?: number; error?: string } | undefined;
+    while (true) {
+      const page = await engine.getRunResults(runId, { cursor, limit: 100 }) as NonNullable<typeof retained> & { findings?: ScanReport["findings"]; nextCursor?: number | null };
+      retained ??= page;
+      if (!Array.isArray(page.findings)) throw new Error(`Engine assessment ${runId} returned an invalid finding page.`);
+      findings.push(...page.findings);
+      if (page.nextCursor === null || page.nextCursor === undefined) break;
+      if (!Number.isSafeInteger(page.nextCursor) || page.nextCursor <= cursor) throw new Error(`Engine assessment ${runId} returned an invalid result cursor.`);
+      cursor = page.nextCursor;
     }
-
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`[0 cloud-sink] report POST ${url} failed: ${msg}\n`);
+    if (!retained?.report) throw new Error(`Engine assessment ${runId} ${run.status}; retained report unavailable: ${retained?.error ?? run.error ?? "no report"}`);
+    const report: ScanReport = { ...retained.reports?.[0], ...retained.report, target: opts.target, findings,
+      ...(retained.costUsd !== undefined ? { estimatedCostUsd: retained.costUsd } : {}),
+      ...(run.status !== "completed" ? { executionSuccessful: false, error: retained.error ?? run.error, exitReason: run.status === "cancelled" ? "cancelled" : "failed" } : {}) };
+    return { report, rawReport: report, runId };
+  } finally {
+    opts.signal?.removeEventListener("abort", cancel);
+    process.removeListener("SIGINT", cancel);
+    await cancellation;
+    await engine.dispose();
   }
 }
-export async function runUnified(opts: RunOptions): Promise<void> {
-  const { target, depth, format, runtime, timeout } = opts;
-  const core = await loadCoreModule();
 
+export async function runUnified(opts: RunOptions): Promise<void> {
+  if (opts.plan) validateScanPlan(opts.plan);
+  const { target, format, runtime, timeout } = opts;
+  const depth = opts.plan?.depth ?? opts.depth;
+  const attachedEngine = !opts.embedded && !opts.resumeScanId
+    ? await (await import("../local-engine.js")).connectLocalEngine({ dbPath: opts.dbPath, workspace: process.cwd(), model: opts.model, scopePath: opts.scopeFile })
+    : null;
+  if (attachedEngine) {
+    try { opts.signal?.throwIfAborted(); attachedAssessmentTarget(opts); } catch (error) { await attachedEngine.dispose(); throw error; }
+  }
+  let core: CoreModule;
+  try { core = await loadCoreModule(); }
+  catch (error) { await attachedEngine?.dispose(); throw error; }
   // ── Journal-based resume (0#374) ───────────────────────────────
   let effectiveResumeScanId = opts.resumeScanId;
 
@@ -420,6 +462,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
   if (opts.branchFromEntry !== undefined) {
     if (!effectiveResumeScanId) {
       console.error(chalk.red("--branch-from requires --resume <run-id>"));
+      if (opts.embedded) throw new Error("--branch-from requires --resume <run-id>");
       process.exit(2);
     }
     const { branchJournal } = await import("@0/core");
@@ -468,6 +511,8 @@ export async function runUnified(opts: RunOptions): Promise<void> {
   const validRuntimes = ["api", "claude", "codex", "gemini", "ollama", "auto"];
   if (!validRuntimes.includes(runtime)) {
     console.error(chalk.red(`Unknown runtime '${runtime}'. Valid: ${validRuntimes.join(", ")}`));
+    unsubscribeCost();
+    if (opts.embedded) throw new Error(`Unknown runtime '${runtime}'.`);
     process.exit(2);
   }
 
@@ -483,142 +528,129 @@ export async function runUnified(opts: RunOptions): Promise<void> {
     runtime === "codex" &&
     (!!process.env["ZERO_CHATGPT_ACCESS_TOKEN"]?.trim() ||
       !!process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"]?.trim());
-  if (runtime !== "api" && runtime !== "auto" && !directCodexProviderConfigured) {
+  if (!attachedEngine && !opts.nativeRuntime && runtime !== "api" && runtime !== "auto" && !directCodexProviderConfigured) {
     const rt = core.createRuntime({ type: runtime, timeout });
     const available = await rt.isAvailable();
     if (!available) {
       console.error(chalk.red(`Runtime '${runtime}' not available. Is ${runtime} installed?`));
+      unsubscribeCost();
+      if (opts.embedded) throw new Error(`Runtime '${runtime}' not available.`);
       process.exit(2);
     }
   }
 
-  if (format === "terminal") await checkRuntimeAvailability(runtime);
+  if (!attachedEngine && format === "terminal") await checkRuntimeAvailability(runtime);
 
   // Ink TUI for terminal, silent for json/md
   let inkUI: { onEvent: (event: any) => void; setReport: (report: any) => void; waitForExit: () => Promise<void>; getPendingUserMessages?: () => string[] } | null = null;
-  let eventHandler: (event: any) => void = () => {};
+  let eventHandler: (event: unknown) => void = opts.onEvent ?? (() => {});
   let getPendingUserMessages: (() => string[]) | undefined;
 
-  if (format === "terminal" && process.stdout.isTTY && process.stdin.isTTY) {
+  if (format === "terminal" && process.stdout.isTTY && process.stdin.isTTY && !opts.suppressUi) {
     const mode = opts.targetType === "npm-package" || opts.targetType === "pypi-package" || opts.targetType === "cargo-package" || opts.targetType === "oci-image" ? "audit"
       : opts.targetType === "source-code" ? "review"
       : "scan";
     if (opts.sessionUiFactory) {
       inkUI = await opts.sessionUiFactory({ target, depth, mode });
     } else {
-      const { isBunRuntime } = await import("../tui/runtime.js");
-      if (isBunRuntime()) {
-        const { createOpenTuiSession } = await import("../tui/run.js");
-        const availability = await getRuntimeAvailability();
-        inkUI = await createOpenTuiSession({
-          target,
-          depth,
-          mode,
-          runtime,
-          apiProviderLabel: availability.apiRuntime.providerLabel,
-          apiConfigured: availability.apiRuntime.configured,
-          apiConnected: availability.hasApiKey && availability.apiRuntime.valid,
-          localRuntimes: availability.availableRuntimes,
-          model: opts.model,
-        });
-      } else {
-        // Node fallback: plain stdout streaming (one tagged line per scan
-        // event). The full TUI is OpenTUI under the standalone binary, installed
-        // with `curl -fsSL .../install.sh | bash`.
-        const { renderScanStream } = await import("../ui/scan-stream.js");
-        inkUI = renderScanStream({ version: VERSION, target, depth, mode });
-      }
+      // All binary and npm runtimes use the same plain event stream.
+      const { renderScanStream } = await import("../ui/scan-stream.js");
+      inkUI = renderScanStream({ version: VERSION, target, depth, mode });
     }
-    eventHandler = inkUI.onEvent;
+    eventHandler = (event) => {
+      opts.onEvent?.(event);
+      inkUI?.onEvent(event);
+    };
     getPendingUserMessages = inkUI.getPendingUserMessages;
   }
 
+  let workflowRunId: string | undefined;
   try {
-    let report: unknown;
-
-    if (opts.targetType === "url" || opts.targetType === "web-app") {
-      report = await core.agenticScan({
-        config: {
-          target,
-          depth,
-          format,
-          runtime,
-          mode: opts.mode ?? "deep",
-          timeout,
-          verbose: opts.verbose,
-          apiKey: opts.apiKey,
-          model: opts.model,
-          repoPath: opts.repoPath,
-          auth: opts.auth,
-          apiSpecPath: opts.apiSpecPath,
-          race: opts.race,
-          egats: opts.egats,
-          costCeilingUsd: opts.costCeilingUsd,
-          scopeFile: opts.scopeFile,
-          rateLimit: opts.rateLimit,
-          allowScanners: opts.allowScanners,
-          attributionHeaders: opts.attributionHeaders,
-          attributionUaToken: opts.attributionUaToken,
-          engagementProfile: opts.engagementProfile,
-          wafEvasion: opts.wafEvasion,
-          dispatchMode: opts.dispatchMode,
-          httpAuditAllowedHosts: opts.httpAuditAllowedHosts,
-          httpAuditAllowedPaths: opts.httpAuditAllowedPaths,
-          httpAuditRateLimitRps: opts.httpAuditRateLimitRps,
-          httpAuditKillAfterSec: opts.httpAuditKillAfterSec,
+    const {
+      onReport: _onReport, onOutcome: _onOutcome, suppressOutput: _suppressOutput,
+      suppressUi: _suppressUi, sessionUiFactory: _sessionUiFactory, embedded: _embedded,
+      reportPath: _reportPath, exportTarget: _exportTarget, tui: _tui,
+      emit: _emit, emitPrBase: _emitPrBase, emitPrDryRun: _emitPrDryRun,
+      emitOutDir: _emitOutDir, reviewStrategy: _reviewStrategy,
+      ...assessmentOptions
+    } = opts;
+    const retainedStore = opts.embedded || attachedEngine ? undefined : new (await import("@0/db")).SecurityWorkflowStore(opts.dbPath);
+    const scanIds: string[] = [];
+    const dbPaths: string[] = [];
+    let assessment: Awaited<ReturnType<CoreModule["executeAssessmentRun"]>>;
+    try {
+      if (attachedEngine) {
+        const attached = await executeAttachedAssessment(attachedEngine, opts, eventHandler);
+        workflowRunId = attached.runId;
+        assessment = attached;
+      } else assessment = await core.executeAssessmentRun({
+        ...assessmentOptions,
+        // Journal branching above retains the CLI progress message.
+        branchFromEntry: undefined,
+        onEvent: event => {
+          const data = (event as { data?: { persisted?: boolean; scanId?: string; dbPath?: string } }).data;
+          if (data?.persisted === true && typeof data.scanId === "string" && !scanIds.includes(data.scanId)) scanIds.push(data.scanId);
+          if (data?.persisted === true && typeof data.dbPath === "string" && !dbPaths.includes(data.dbPath)) dbPaths.push(data.dbPath);
+          eventHandler(event);
         },
-        dbPath: opts.dbPath,
-        onEvent: eventHandler,
         getPendingUserMessages,
-        resumeScanId: opts.resumeScanId,
-      });
-    } else {
-      report = await core.runPipeline({
-        target,
-        targetType: opts.targetType,
-        resumeScanId: opts.resumeScanId,
-        diffBase: opts.diffBase,
-        changedOnly: opts.changedOnly,
-        priorFindings: opts.priorFindings,
-        depth,
-        format,
-        runtime,
-        onEvent: eventHandler,
-        dbPath: opts.dbPath,
-        apiKey: opts.apiKey,
-        model: opts.model,
-        timeout,
-        packageVersion: opts.packageVersion,
-        costCeilingUsd: opts.costCeilingUsd,
-        reviewProfile: opts.reviewProfile,
-        reviewPackageEcosystem: opts.reviewPackageEcosystem,
-        subsystem: opts.subsystem,
-        hypothesis: opts.hypothesis,
-        conversation: opts.conversation,
-        seedFindings: opts.seedFindings,
-        seedOnly: opts.seedOnly,
-        npmDynamicDiscovery: opts.npmDynamicDiscovery,
-      });
+      }, undefined, retainedStore ? {
+        onStart: snapshot => {
+          const mode = opts.targetType === "source-code" ? "review"
+            : opts.targetType?.endsWith("-package") || opts.targetType === "oci-image" ? "audit" : "scan";
+          const execution = retainedStore.createExecutionFromSnapshot({ ...snapshot, id: `cli-${mode}`, revision: 1, name: mode === "review" ? "Source security review" : mode === "audit" ? "Package security review" : "Web security assessment" }, "cli");
+          workflowRunId = execution.id;
+          retainedStore.updateExecution(execution.id, { status: "running", nodeResults: { start: { status: "completed" }, assessment: { status: "running" } } });
+        },
+        onComplete: result => {
+          if (result.nodeResults.assessment) result.nodeResults.assessment = {
+            ...result.nodeResults.assessment,
+            ...(scanIds.length ? { scanIds } : {}), ...(dbPaths.length ? { dbPaths } : {}),
+          };
+          const nodeResults = Object.fromEntries(Object.entries(result.nodeResults).map(([id, step]) => [id, {
+            status: step.status, ...(step.error ? { error: step.error.slice(0, 16_000) } : {}),
+            ...(id === "assessment" && scanIds.length ? { scanIds } : {}),
+            ...(id === "assessment" && dbPaths.length ? { dbPaths } : {}),
+          }]));
+          try { retainedStore.saveExecutionResults(workflowRunId!, result); }
+          catch (error) {
+            const message = `Run ${result.status}, but result retention failed: ${error instanceof Error ? error.message : String(error)}`;
+            retainedStore.updateExecution(workflowRunId!, { status: result.status, nodeResults, error: message.slice(0, 16_000) });
+            throw new Error(message);
+          }
+          retainedStore.updateExecution(workflowRunId!, { status: result.status, nodeResults,
+            ...(result.error ? { error: result.error.slice(0, 16_000) } : {}) });
+        },
+      } : undefined);
+    } catch (error) {
+      if (retainedStore && workflowRunId) {
+        const current = retainedStore.getExecution(workflowRunId);
+        if (current?.status === "queued" || current?.status === "running") {
+          try { retainedStore.updateExecution(workflowRunId, { status: "failed", error: (error instanceof Error ? error.message : String(error)).slice(0, 16_000) }); }
+          catch (retentionError) { throw new Error(`${error instanceof Error ? error.message : String(error)}; failed to retain the run failure: ${retentionError instanceof Error ? retentionError.message : String(retentionError)}`); }
+        }
+      }
+      throw error;
+    } finally {
+      retainedStore?.close();
     }
-
+    const report = assessment.rawReport;
     const reportAny = report as any;
-    const canonicalReport = toScanReport(report);
+    const canonicalReport = assessment.report;
+    opts.onReport?.(canonicalReport);
 
-    if (opts.targetType !== "url" && opts.targetType !== "web-app") {
-      await postFinalResultToCloud(reportAny);
-    }
 
     if (inkUI) {
-      inkUI.setReport(report as any);
+      inkUI.setReport(canonicalReport);
       await inkUI.waitForExit();
-    } else {
+    } else if (!opts.suppressOutput) {
       if (format === "html" || format === "pdf") {
         const extension = format === "pdf" ? "pdf" : "html";
         const filePath = opts.reportPath
           ? resolve(opts.reportPath)
           : join(tmpdir(), `0-report-${Date.now()}.${extension}`);
         if (format === "pdf") {
-          await generatePdfReport(toScanReport(reportAny), filePath);
+          await generatePdfReport(canonicalReport, filePath);
         } else {
           const output = reportAny.targetType === "npm-package" || reportAny.targetType === "pypi-package" || reportAny.targetType === "cargo-package" || reportAny.targetType === "oci-image"
             ? formatAuditReport(reportAny, format)
@@ -640,23 +672,14 @@ export async function runUnified(opts: RunOptions): Promise<void> {
       }
     }
 
-    if (opts.tui && process.stdout.isTTY && process.stdin.isTTY && !(globalThis as { Bun?: unknown }).Bun) {
-      // The post-scan operator TUI was Ink-based; in v0.9.0 we shipped
-      // binary-only and dropped Ink. Tell the user where to find the
-      // OpenTUI replacement and continue (don't fail the scan).
-      // Gated on `!Bun` because under Bun the OpenTUI replacement is
-      // already available — printing this message there would be wrong.
-      console.log("");
-      console.log(chalk.gray("  --tui post-scan view is no longer bundled in the npm package."));
-      console.log(chalk.gray("  Install the standalone binary for the full OpenTUI experience:"));
-      console.log(chalk.gray("    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash"));
-      console.log("");
+    if (opts.tui) {
+      console.log(chalk.gray("Interactive terminal views are retired. Run 0 web to review this scan in the browser."));
     }
 
-    if (crossValidatedLeads) {
+    if (!opts.suppressOutput && format === "terminal" && crossValidatedLeads) {
       printCrossValidatedLeads(crossValidatedLeads);
     }
-    if (scanCompletedCost) {
+    if (!opts.suppressOutput && format === "terminal" && scanCompletedCost) {
       printCostSummary(scanCompletedCost);
     }
     unsubscribeCost();
@@ -702,6 +725,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
         console.error(
           chalk.red(`Invalid --export format: '${opts.exportTarget}'. Expected: github:owner/repo`),
         );
+        if (opts.embedded) throw new Error(`Invalid export format: '${opts.exportTarget}'. Expected: github:owner/repo`);
         process.exit(2);
       }
       const repo = match[1];
@@ -732,16 +756,18 @@ export async function runUnified(opts: RunOptions): Promise<void> {
     // (CI, schedulers, cloud watchers) can distinguish a clean budget abort
     // from a normal completion or failure.
     if (canonicalReport.costCeilingExceeded && exitCode === 0) {
-      console.error(
-        chalk.yellow(
-          `Scan aborted: cost ceiling exceeded. ${canonicalReport.summary.totalFindings} partial finding(s) preserved.`,
-        ),
-      );
+      if (!opts.suppressOutput) {
+        console.error(
+          chalk.yellow(
+            `Scan aborted: cost ceiling exceeded. ${canonicalReport.summary.totalFindings} partial finding(s) preserved.`,
+          ),
+        );
+      }
       exitCode = 4;
     }
 
-    if (reportAny.researchFailed && exitCode === 0) {
-      console.error(chalk.red("Review completed with partial static results because AI analysis failed."));
+    if ((reportAny.researchFailed || reportAny.executionSuccessful === false) && exitCode === 0) {
+      if (!opts.suppressOutput) console.error(chalk.red("Review completed with partial static results because AI analysis failed."));
       exitCode = 2;
     }
 
@@ -749,17 +775,13 @@ export async function runUnified(opts: RunOptions): Promise<void> {
       exitCode = 1;
     }
 
-    emitResultLine({
+    opts.onOutcome?.({
       ok: exitCode === 0,
       exitCode,
-      exit_reason:
-        exitCode === 4
-          ? "cost_ceiling_exceeded"
-          : exitCode === 2
-            ? "error"
-            : exitCode === 1
-              ? "findings"
-              : "completed",
+      exit_reason: reportAny.exitReason && reportAny.exitReason !== "completed" ? reportAny.exitReason
+        : exitCode === 4 ? "cost_ceiling_exceeded"
+        : exitCode === 2 ? "error"
+        : exitCode === 1 ? "findings" : "completed",
       target,
       targetType: getTargetType(reportAny, opts),
       runtime,
@@ -771,15 +793,44 @@ export async function runUnified(opts: RunOptions): Promise<void> {
       estimatedCostUsd,
       usage,
       summary: canonicalReport.summary,
+      plannedRuns: reportAny.plannedRuns,
+      completedRuns: reportAny.completedRuns,
+      attempts: reportAny.attempts,
+      error: reportAny.error,
+      report: canonicalReport,
+      workflowRunId,
     });
+    if (!opts.suppressOutput) {
+      emitResultLine({
+        ok: exitCode === 0,
+        exitCode,
+        exit_reason: reportAny.exitReason && reportAny.exitReason !== "completed" ? reportAny.exitReason
+          : exitCode === 4 ? "cost_ceiling_exceeded"
+          : exitCode === 2 ? "error"
+          : exitCode === 1 ? "findings" : "completed",
+        target,
+        targetType: getTargetType(reportAny, opts),
+        runtime,
+        format,
+        cost_usd: estimatedCostUsd,
+        token_input: usage?.inputTokens,
+        token_output: usage?.outputTokens,
+        finding_count: canonicalReport.summary.totalFindings,
+        estimatedCostUsd,
+        usage,
+        summary: canonicalReport.summary,
+        plannedRuns: reportAny.plannedRuns, completedRuns: reportAny.completedRuns, attempts: reportAny.attempts, error: reportAny.error, workflowRunId,
+      });
+    }
 
-    if (exitCode !== 0 && !inkUI) process.exit(exitCode);
+    if (exitCode !== 0 && !inkUI && !opts.embedded) process.exit(exitCode);
   } catch (err) {
     // Always release the cost-bus subscription so a long-lived
     // process (test runner, future REPL) doesn't leak sinks across
     // scans.
     unsubscribeCost();
     const message = err instanceof Error ? err.message : String(err);
+    if (opts.embedded) throw err;
     if (inkUI) {
       eventHandler({
         type: "error",
@@ -789,17 +840,20 @@ export async function runUnified(opts: RunOptions): Promise<void> {
       await inkUI.waitForExit();
       return;
     }
-    console.error(chalk.red(message));
-    emitResultLine({
-      ok: false,
-      exitCode: 2,
-      exit_reason: "error",
-      target,
-      targetType: opts.targetType,
-      runtime,
-      format,
-      error: message,
-    });
+    if (!opts.suppressOutput) console.error(chalk.red(message));
+    if (!opts.suppressOutput) {
+      emitResultLine({
+        ok: false,
+        exitCode: 2,
+        exit_reason: "error",
+        target,
+        targetType: opts.targetType,
+        runtime,
+        format,
+        error: message,
+        workflowRunId,
+      });
+    }
     process.exit(2);
   }
 }

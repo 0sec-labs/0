@@ -51,8 +51,8 @@
  *     managed child this process owns.
  *   • /api/control/reset-database — refuses if active workers exist
  *     (409); otherwise calls resetOsecDatabase + reseeds.
- *   • /api/control/launch-run — 400 when target is missing; spawns
- *     scan child when target present.
+ *   • /api/control/launch-run — validates inputs and delegates assessment
+ *     ownership to the same persistent workflow engine without CLI children.
  *   • Unknown /api/* path → 404 fallthrough.
  *   • Non-/api/* request → falls through to static asset serve;
  *     unknown extension returns 404; HTML root injects control token.
@@ -91,6 +91,64 @@ type RequestHandler = (
   res: import("node:http").ServerResponse,
 ) => unknown;
 
+vi.mock("../../local-engine.js", () => ({ assertLocalEngineAvailable: vi.fn(), registerLocalEngine: vi.fn(() => vi.fn()) }));
+
+const setupHttp = vi.hoisted(() => ({ pending: false, directories: [] as string[] }));
+vi.mock("../../web/team-setup.js", async importOriginal => {
+  const original = await importOriginal<typeof import("../../web/team-setup.js")>();
+  const { TeamAuth, TeamAuthError, hashTeamPassword } = await vi.importActual<typeof import("../../web/team-auth.js")>("../../web/team-auth.js");
+  const fs = await vi.importActual<typeof import("node:fs")>("node:fs");
+  const os = await vi.importActual<typeof import("node:os")>("node:os");
+  return { ...original, findTeamConfigPath: () => undefined,
+    TeamSetupService: class {
+      constructor(private options: ConstructorParameters<typeof original.TeamSetupService>[0]) {}
+      status() { return { available: !this.options.currentAuth().enabled, pending: setupHttp.pending }; }
+      async setup(input: { workspaceName: string; displayName: string; userId: string; password: string }) {
+        const config = { workspace: { id: "http-team-workspace", name: input.workspaceName }, users: [{ id: input.userId, name: input.displayName, role: "owner" as const, passwordHash: await hashTeamPassword(input.password) }] };
+        const auth = new TeamAuth({ config, origin: this.options.origin() });
+        const session = await auth.login({ userId: input.userId, password: input.password });
+        const stateDir = fs.mkdtempSync(os.tmpdir() + "/zero-http-team-"); setupHttp.directories.push(stateDir);
+        setupHttp.pending = true;
+        try { await this.options.activate({ auth, stateDir, dbPath: stateDir + "/data.db", configPath: stateDir + "/team.json", workspaceId: config.workspace.id, name: config.workspace.name }); }
+        finally { setupHttp.pending = false; }
+        return { ...session, workspace: config.workspace };
+      }
+      members(req: import("node:http").IncomingMessage) { const auth = this.options.currentAuth(); if (!auth.resolveSession(req)) throw new TeamAuthError("Sign in to this workspace."); return { users: auth.members() }; }
+    },
+  };
+});
+
+const scopedApi = vi.hoisted(() => ({ token: "0_find_" + "A".repeat(43), revoked: false }));
+vi.mock("../../web/findings-access-tokens.js", async importOriginal => {
+  const original = await importOriginal<typeof import("../../web/findings-access-tokens.js")>();
+  return { ...original, FindingsAccessTokenStore: class {
+    readonly workspaceId: string;
+    constructor(options: { workspaceId: string }) { this.workspaceId = options.workspaceId; }
+    list() { return []; }
+    create() { return { credential: { id: "11111111-1111-4111-8111-111111111111", workspaceId: this.workspaceId, name: "Reporting", scopes: ["read:findings"] }, token: scopedApi.token }; }
+    revoke() { scopedApi.revoked = true; return {}; }
+    authenticate(req: import("node:http").IncomingMessage, url: URL) {
+      if (!req.headers.authorization?.startsWith("Bearer 0_find_")) return null;
+      if (req.headers.authorization !== `Bearer ${scopedApi.token}` || scopedApi.revoked) throw new original.FindingsAccessError("Invalid API key.", 401);
+      if (!original.findingsReadPath(req.method ?? "GET", url.pathname)) throw new original.FindingsAccessError("Findings keys are read-only.", 403);
+      return { workspaceId: this.workspaceId };
+    }
+  } };
+});
+vi.mock("../../web/findings-read-api.js", async importOriginal => {
+  const original = await importOriginal<typeof import("../../web/findings-read-api.js")>();
+  return { ...original, FindingsReadApi: class {
+    readonly workspaceId: string;
+    constructor(options: { workspaceId: string }) { this.workspaceId = options.workspaceId; }
+    list() { return { schemaVersion: 1, workspaceId: this.workspaceId, findings: [], page: { limit: 50, nextCursor: null, hasMore: false } }; }
+    detail(id: string) { return { schemaVersion: 1, workspaceId: this.workspaceId, finding: { id } }; }
+    export() { return { coverage: "selected-retained-findings", report: {} }; }
+  } };
+});
+
+const instanceMock = vi.hoisted(() => vi.fn().mockResolvedValue(false));
+vi.mock("../../web/dashboard-instance.js", () => ({ findDashboardInstance: instanceMock }));
+
 const httpState: {
   lastHandler: RequestHandler | null;
   listenCalls: Array<{ port: number; host: string }>;
@@ -109,6 +167,7 @@ vi.mock("node:http", async () => {
           if (cb) cb();
           return this;
         },
+        on() { return this; },
         once() {
           return this;
         },
@@ -241,6 +300,7 @@ const dbState: {
     id: string;
     scanId: string;
     fingerprint?: string | null;
+    [key: string]: unknown;
   }>;
   recentEvents: Array<{
     id: string;
@@ -267,6 +327,26 @@ const dbState: {
 const resetOsecDatabaseMock = vi.fn();
 
 vi.mock("@0/db", () => {
+  // The web workflow service owns a separate definition/history store.
+  // Keep that boundary mocked too, rather than opening SQLite in HTTP tests.
+  class FakeLearningStore {
+    listEvents(): unknown[] { return []; }
+    listKnowledge(): unknown[] { return []; }
+    listCandidates(): unknown[] { return []; }
+    queueStatus() { return { pending: 0, claimed: 0, completed: 0 }; }
+    claimWork(): null { return null; }
+    recordExperience(): void {}
+    close(): void {}
+  }
+  class FakeSecurityWorkflowStore {
+    learningStore() { return new FakeLearningStore(); }
+    interruptActiveExecutions(): number { return 0; }
+    list(): unknown[] { return []; }
+    close(): void {}
+  }
+  class FakeSecurityWorkflowStoreError extends Error {
+    constructor(message: string, readonly statusCode: number) { super(message); }
+  }
   class FakeOsecDB {
     constructor(dbPath?: string) {
       dbState.ctorPaths.push(dbPath);
@@ -276,6 +356,26 @@ vi.mock("@0/db", () => {
     }
     listFindings(): unknown[] {
       return dbState.findings;
+    }
+    listFindingFamiliesByBusinessPriority() {
+      const families = new Map<string, typeof dbState.findings>();
+      for (const finding of dbState.findings) {
+        const key = finding.fingerprint ?? finding.id;
+        const rows = families.get(key) ?? [];
+        rows.push(finding);
+        families.set(key, rows);
+      }
+      return [...families.entries()].map(([key, rows]) => ({
+        key, latest: [...rows].sort((a, b) => Number(b.timestamp) - Number(a.timestamp))[0],
+        count: rows.length, scanCount: new Set(rows.map(row => row.scanId)).size,
+        verdictCounts: { truePositive: 0, falsePositive: 0, unsure: 0, total: 0 }, activeSessions: [],
+      }));
+    }
+    updateFindingImpactAssessment(id: string, impactAssessment: unknown): boolean {
+      const finding = dbState.findings.find(row => row.id === id);
+      if (!finding) return false;
+      finding.impactAssessment = impactAssessment === null ? null : JSON.stringify(impactAssessment);
+      return true;
     }
     listVerdicts(): unknown[] {
       return [];
@@ -328,7 +428,21 @@ vi.mock("@0/db", () => {
     }
   }
   return {
+    findingStatuses: ["discovered", "verified", "confirmed", "scored", "reported", "fixed", "false-positive"],
     osecDB: FakeOsecDB,
+    // Identity persistence is covered by the real registry suite; this fake DB
+    // never creates on-disk state, including adjacent engine identity files.
+    resolveOsecDbPath: () => ":memory:",
+    WorkflowTriggerStore: class {
+      list() { return []; }
+      close() {}
+    },
+    nextWorkflowTriggerFire: () => new Date().toISOString(),
+    SecurityWorkflowStore: FakeSecurityWorkflowStore,
+    SecurityWorkflowStoreError: FakeSecurityWorkflowStoreError,
+    LearningStore: FakeLearningStore,
+    LearningStoreError: FakeSecurityWorkflowStoreError,
+    learningProjectId: (root: string) => root,
     resetOsecDatabase: resetOsecDatabaseMock,
   };
 });
@@ -346,6 +460,31 @@ vi.mock("../db.js", () => ({
   seedVerificationWorkbench: seedVerificationWorkbenchMock,
 }));
 
+const engineInvoke = vi.hoisted(() => vi.fn(async () => ({ ok: true })));
+const engineReady = vi.hoisted(() => vi.fn(async () => {}));
+const engineDispose = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock("../../workflow-engine-service.js", () => ({ WorkflowEngineService: class {
+  ready = engineReady();
+  invoke = engineInvoke;
+  dispose = engineDispose;
+} }));
+const skillsHttp = vi.hoisted(() => ({
+  list: vi.fn(() => ({ skills: [], mounts: [], diagnostics: [] })),
+  create: vi.fn((input: unknown) => ({ id: "mount/workspace/test-review", input })),
+  get: vi.fn((id: string) => ({ id, content: "standard skill" })),
+  export: vi.fn((id: string) => ({ format: "agent-skill", version: 1, name: "test-review", id, files: [] })),
+  import: vi.fn(() => ({ id: "mount/workspace/imported-review" })),
+  copy: vi.fn((id: string, input: unknown) => ({ id: "mount/workspace/copied-review", input })),
+  update: vi.fn((id: string, input: unknown) => ({ id, input })),
+  mount: vi.fn(() => ({ id: "mount-one" })),
+  unmount: vi.fn(),
+}));
+vi.mock("../../web/skills.js", () => ({ SkillsStore: class {
+  discoveryOptions() { return { homeDir: null, mounts: [] }; }
+  list = skillsHttp.list; create = skillsHttp.create; get = skillsHttp.get;
+  export = skillsHttp.export; import = skillsHttp.import; update = skillsHttp.update; copy = skillsHttp.copy;
+  mount = skillsHttp.mount; unmount = skillsHttp.unmount;
+} }));
 const { registerDashboardCommand } = await import("../dashboard.js");
 
 // The action registers SIGINT handlers per invocation; raise the
@@ -381,13 +520,17 @@ function makeRequest(opts: {
   const emitter = new EventEmitter() as unknown as import("node:http").IncomingMessage;
   (emitter as unknown as { method: string }).method = opts.method;
   (emitter as unknown as { url: string }).url = opts.url;
-  (emitter as unknown as { headers: Record<string, string> }).headers = opts.headers ?? {};
+  const binding = httpState.listenCalls.at(-1);
+  const boundHost = binding?.host ?? "127.0.0.1";
+  const authority = `${boundHost.includes(":") ? `[${boundHost}]` : boundHost}:${binding?.port === 0 ? 46123 : binding?.port ?? 48123}`;
+  (emitter as unknown as { headers: Record<string, string> }).headers = { host: authority, ...opts.headers };
   // Emit the body lazily, AFTER the handler's readJson() has registered
   // its "end" listener. We hook into .on so the emission fires exactly
   // when the consumer is ready — eager `queueMicrotask` would emit
   // before the async handler started reading and the consumer would
   // miss the events. (This mirrors how a real http.IncomingMessage
   // would deliver data only once consumers are attached via .on.)
+  emitter.resume = (() => emitter) as import("node:http").IncomingMessage["resume"];
   const originalOn = emitter.on.bind(emitter);
   (emitter as unknown as { on: EventEmitter["on"] }).on = function patchedOn(
     event: string | symbol,
@@ -421,15 +564,19 @@ function makeResponse(): {
   captured: CapturedResponse;
 } {
   const captured: CapturedResponse = { statusCode: 0, headers: {}, body: "" };
+  const events = new EventEmitter();
   const res = {
+    once: events.once.bind(events),
+    setHeader(name: string, value: string) { captured.headers[name] = value; },
     writeHead(code: number, headers: Record<string, string>) {
       captured.statusCode = code;
-      captured.headers = headers;
+      captured.headers = { ...captured.headers, ...headers };
     },
     end(body?: string | Buffer) {
       if (body !== undefined) {
         captured.body = Buffer.isBuffer(body) ? body.toString("utf-8") : body;
       }
+      events.emit("finish");
     },
   } as unknown as import("node:http").ServerResponse;
   return { res, captured };
@@ -465,6 +612,11 @@ let logSpy: ReturnType<typeof vi.spyOn>;
 let errSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
+  Object.values(skillsHttp).forEach(mock => mock.mockClear());
+  instanceMock.mockResolvedValue(false);
+  engineInvoke.mockClear();
+  engineReady.mockReset().mockResolvedValue(undefined);
+  engineDispose.mockReset().mockResolvedValue(undefined);
   // Reset http capture.
   httpState.lastHandler = null;
   httpState.listenCalls.length = 0;
@@ -518,6 +670,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   logSpy.mockRestore();
   errSpy.mockRestore();
   // The action attaches a one-shot SIGINT listener and never detaches
@@ -644,7 +797,7 @@ describe("dashboard — static asset serving", () => {
   });
 
   it("GET / injects the page-bound control token into index.html", async () => {
-    // Electron loads "/" before React routes to /chat. The bootstrap document
+    // The browser loads "/" before React routes to /chat. The bootstrap document
     // therefore needs the same token as a deep-linked SPA route; otherwise the
     // renderer can render chat but every authenticated API request is rejected.
     const captured = await invokeHandler(makeRequest({ method: "GET", url: "/" }));
@@ -693,11 +846,58 @@ describe("dashboard — static asset serving", () => {
   });
 });
 
-// ── Tests: desktop console control surface ──────────────────────────────────
+// ── Tests: web console control surface ──────────────────────────────────
 
-describe("dashboard — desktop console API", () => {
+describe("dashboard — web console API", () => {
   beforeEach(async () => {
     await runCli(["dashboard", "--no-open"]);
+  });
+
+  it("protects chat search and validates bounded pagination before reading history", async () => {
+    const denied = await invokeHandler(makeRequest({ method: "GET", url: "/api/console/search?q=review" }));
+    expect(denied.statusCode).toBe(403);
+    const headers = { "x-0-control-token": await getControlToken() };
+    const invalid = await invokeHandler(makeRequest({ method: "GET", url: "/api/console/search?q=review&limit=101", headers }));
+    expect(invalid.statusCode).toBe(400);
+    expect(JSON.parse(invalid.body).error).toContain("Search limit");
+    const oversized = await invokeHandler(makeRequest({ method: "GET", url: `/api/console/search?q=${"x".repeat(201)}`, headers }));
+    expect(oversized.statusCode).toBe(400);
+  });
+
+  it("requires the page-bound control token before exporting retained reports", async () => {
+    const captured = await invokeHandler(makeRequest({ method: "GET", url: "/api/scans/example/export?format=json" }));
+    expect(captured.statusCode).toBe(403);
+    expect(JSON.parse(captured.body)).toEqual({ error: "Invalid or missing control token" });
+  });
+
+  it("requires the control token for engagement collections, edits and reports", async () => {
+    for (const request of [
+      { method: "GET", url: "/api/engagements" },
+      { method: "POST", url: "/api/engagements", body: { name: "Fixture" } },
+      { method: "PATCH", url: "/api/engagements/fixture", body: { notes: "Fixture" } },
+      { method: "GET", url: "/api/engagements/fixture/report" },
+    ]) {
+      const response = await invokeHandler(makeRequest(request));
+      expect(response.statusCode).toBe(403);
+    }
+  });
+
+  it("rejects unsupported engagement report formats and methods before storage reads", async () => {
+    const headers = { "x-0-control-token": await getControlToken() };
+    const format = await invokeHandler(makeRequest({ method: "GET", url: "/api/engagements/fixture/report?format=html", headers }));
+    expect(format.statusCode).toBe(400);
+    const method = await invokeHandler(makeRequest({ method: "POST", url: "/api/engagements/fixture/report", headers }));
+    expect(method.statusCode).toBe(405);
+  });
+
+  it("rejects unsupported report formats and non-GET exports before reading report data", async () => {
+    const headers = { "x-0-control-token": await getControlToken() };
+    const format = await invokeHandler(makeRequest({ method: "GET", url: "/api/findings/export?format=exe", headers }));
+    expect(format.statusCode).toBe(400);
+    expect(JSON.parse(format.body).error).toContain("Unsupported report export format");
+    const method = await invokeHandler(makeRequest({ method: "POST", url: "/api/scans/example/export?format=json", headers }));
+    expect(method.statusCode).toBe(405);
+    expect(JSON.parse(method.body).error).toContain("Use GET");
   });
 
   it("requires the page-bound control token before creating a console session", async () => {
@@ -709,24 +909,42 @@ describe("dashboard — desktop console API", () => {
     expect(JSON.parse(captured.body)).toEqual({ error: "Invalid or missing control token" });
   });
 
+  it("dispatches explicit connection reload through the control-token gate and rejects body overrides", async () => {
+    const { ConsoleGateway, ConsoleGatewayError } = await import("../../web/console-gateway.js");
+    const token = await getControlToken(); const headers = { "x-0-control-token": token };
+    const created = await invokeHandler(makeRequest({ method: "POST", url: "/api/console/sessions", headers, body: { title: "Reconnect fixture" } }));
+    const session = JSON.parse(created.body).session;
+    const reload = vi.spyOn(ConsoleGateway.prototype, "reloadConnection").mockResolvedValue(session);
+    const url = `/api/console/sessions/${session.id}/connection/reload`;
+    const missingToken = await invokeHandler(makeRequest({ method: "POST", url, body: {} }));
+    expect(missingToken.statusCode).toBe(403); expect(reload).not.toHaveBeenCalled();
+    const response = await invokeHandler(makeRequest({ method: "POST", url, headers, body: {} }));
+    expect(response.statusCode).toBe(200); expect(JSON.parse(response.body)).toEqual({ session }); expect(reload).toHaveBeenCalledWith(session.id);
+    const overrides = await invokeHandler(makeRequest({ method: "POST", url, headers, body: { providerId: "different-provider" } }));
+    expect(overrides.statusCode).toBe(400); expect(reload).toHaveBeenCalledTimes(1);
+    reload.mockRejectedValue(new ConsoleGatewayError("Wait for the current turn and decisions to finish.", 409));
+    const busy = await invokeHandler(makeRequest({ method: "POST", url, headers, body: {} }));
+    expect(busy.statusCode).toBe(409); expect(JSON.parse(busy.body).error).toContain("current turn");
+  });
+
   it("returns Codex device-auth status without exposing credential material", async () => {
     const token = await getControlToken();
     const captured = await invokeHandler(
       makeRequest({
         method: "GET",
-        url: "/api/console/providers/codex",
+        url: "/api/console/providers/chatgpt-codex",
         headers: { "x-0-control-token": token },
       }),
     );
 
     expect(captured.statusCode).toBe(200);
-    expect(JSON.parse(captured.body)).toEqual({
-      status: {
-        phase: "idle",
-        message: "ChatGPT Codex is not connected.",
-        lines: [],
-      },
-    });
+    const payload = JSON.parse(captured.body);
+    expect(payload.status).toMatchObject({ phase: expect.any(String), lines: expect.any(Array) });
+    expect(payload.provider.id).toBe("chatgpt-codex");
+    expect(payload).not.toHaveProperty("credentials");
+    expect(payload.provider).not.toHaveProperty("apiKey");
+    expect(payload.provider.accounts.every((account: Record<string, unknown>) =>
+      !Object.hasOwn(account, "apiKey") && !Object.hasOwn(account, "accessToken") && !Object.hasOwn(account, "refreshToken"))).toBe(true);
   });
 
   it("creates a session and returns its renderer-safe event ledger", async () => {
@@ -784,7 +1002,7 @@ describe("dashboard — read APIs", () => {
       startedAt: new Date().toISOString(),
     });
     const captured = await invokeHandler(
-      makeRequest({ method: "GET", url: "/api/dashboard" }),
+      makeRequest({ method: "GET", url: "/api/dashboard", headers: { "x-0-control-token": await getControlToken() } }),
     );
     expect(captured.statusCode).toBe(200);
     const body = JSON.parse(captured.body);
@@ -799,6 +1017,18 @@ describe("dashboard — read APIs", () => {
     expect(dbState.closes).toBeGreaterThanOrEqual(1);
   });
 
+  it("returns validated business impact objects and keeps absent or malformed assessments unknown", async () => {
+    const impact = { reachability_tier: "remote-auth", blast_radius: "All customer billing records", weaponizability: "info-leak", business_impact: "headline", rationale: "Exposure of regulated customer data", assessment_source: "provided" };
+    const base = { scanId: "scan-impact", title: "Customer data access", description: "Access control failure", severity: "medium", category: "idor", status: "confirmed", timestamp: 1800000000000, evidenceRequest: "GET /billing", evidenceResponse: "record", evidenceAnalysis: "Confirmed" };
+    dbState.findings.push({ ...base, id: "assessed", fingerprint: "assessed", impactAssessment: JSON.stringify(impact) }, { ...base, id: "malformed", fingerprint: "malformed", severity: "critical", impactAssessment: '{"business_impact":"headline"}' }, { ...base, id: "absent", fingerprint: "absent", severity: "critical" });
+    const captured = await invokeHandler(makeRequest({ method: "GET", url: "/api/dashboard", headers: { "x-0-control-token": await getControlToken() } }));
+    expect(captured.statusCode).toBe(200);
+    const groups = JSON.parse(captured.body).groups;
+    expect(groups.find((group: { latest: { id: string } }) => group.latest.id === "assessed").latest.impactAssessment).toEqual(impact);
+    expect(groups.find((group: { latest: { id: string } }) => group.latest.id === "malformed").latest.impactAssessment).toBeNull();
+    expect(groups.find((group: { latest: { id: string } }) => group.latest.id === "absent").latest.impactAssessment).toBeNull();
+  });
+
   it("GET /api/scans returns summarized scans", async () => {
     dbState.scans.push({
       id: "scan-9",
@@ -810,7 +1040,7 @@ describe("dashboard — read APIs", () => {
       startedAt: new Date().toISOString(),
     });
     const captured = await invokeHandler(
-      makeRequest({ method: "GET", url: "/api/scans" }),
+      makeRequest({ method: "GET", url: "/api/scans", headers: { "x-0-control-token": await getControlToken() } }),
     );
     expect(captured.statusCode).toBe(200);
     const body = JSON.parse(captured.body);
@@ -820,7 +1050,7 @@ describe("dashboard — read APIs", () => {
 
   it("GET /api/scans/:id returns 404 when scan is missing", async () => {
     const captured = await invokeHandler(
-      makeRequest({ method: "GET", url: "/api/scans/missing-id" }),
+      makeRequest({ method: "GET", url: "/api/scans/missing-id", headers: { "x-0-control-token": await getControlToken() } }),
     );
     expect(captured.statusCode).toBe(404);
     expect(JSON.parse(captured.body)).toEqual({ error: "Scan not found" });
@@ -837,7 +1067,7 @@ describe("dashboard — read APIs", () => {
       startedAt: new Date().toISOString(),
     });
     const captured = await invokeHandler(
-      makeRequest({ method: "GET", url: "/api/scans/scan-7" }),
+      makeRequest({ method: "GET", url: "/api/scans/scan-7", headers: { "x-0-control-token": await getControlToken() } }),
     );
     expect(captured.statusCode).toBe(200);
     const body = JSON.parse(captured.body);
@@ -856,7 +1086,7 @@ describe("dashboard — read APIs", () => {
     });
 
     const captured = await invokeHandler(
-      makeRequest({ method: "GET", url: "/api/events/recent" }),
+      makeRequest({ method: "GET", url: "/api/events/recent", headers: { "x-0-control-token": await getControlToken() } }),
     );
 
     expect(captured.statusCode).toBe(200);
@@ -880,7 +1110,7 @@ describe("dashboard — read APIs", () => {
 
   it("unknown /api/* path → 404 (handler returns false, top-level falls through)", async () => {
     const captured = await invokeHandler(
-      makeRequest({ method: "GET", url: "/api/does-not-exist" }),
+      makeRequest({ method: "GET", url: "/api/does-not-exist", headers: { "x-0-control-token": await getControlToken() } }),
     );
     expect(captured.statusCode).toBe(404);
     expect(JSON.parse(captured.body)).toEqual({ error: "Not found" });
@@ -929,6 +1159,7 @@ describe("dashboard — control-token gate", () => {
       makeRequest({
         method: "GET",
         url: "/api/control/recover-stale-workers",
+        headers: { "x-0-control-token": await getControlToken() },
       }),
     );
     expect(captured.statusCode).toBe(405);
@@ -948,6 +1179,82 @@ describe("dashboard — control-token gate", () => {
     expect(captured.statusCode).toBe(200);
     expect(JSON.parse(captured.body)).toEqual({ ok: true, recovered: 3 });
     expect(recoverStaleWorkersMock).toHaveBeenCalledWith(undefined, 45_000);
+  });
+});
+
+describe("dashboard — browser request boundaries", () => {
+  beforeEach(async () => {
+    await runCli(["dashboard", "--no-open"]);
+  });
+
+  it.each(["/api/dashboard", "/api/scans", "/api/console/sessions", "/api/console/providers", "/api/console/workflow-triggers", "/api/console/learning"])(
+    "refuses unauthenticated reads of %s before opening the database",
+    async (url) => {
+      const captured = await invokeHandler(makeRequest({ method: "GET", url }));
+      expect(captured.statusCode).toBe(403);
+      expect(JSON.parse(captured.body)).toEqual({ error: "Invalid or missing control token" });
+      expect(dbState.ctorPaths).toHaveLength(0);
+      expect(spawnMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("lists workflow schedules through the authenticated router", async () => {
+    const token = await getControlToken();
+    const captured = await invokeHandler(makeRequest({ method: "GET", url: "/api/console/workflow-triggers", headers: { "x-0-control-token": token } }));
+    expect(captured.statusCode).toBe(200);
+    expect(JSON.parse(captured.body)).toEqual({ triggers: [] });
+  });
+
+  it("lists learning state through the authenticated router", async () => {
+    const token = await getControlToken();
+    const captured = await invokeHandler(makeRequest({ method: "GET", url: "/api/console/learning", headers: { "x-0-control-token": token } }));
+    expect(captured.statusCode).toBe(200);
+    expect(JSON.parse(captured.body)).toMatchObject({ events: [], knowledge: [], improvements: [], worker: { events: 0, knowledge: 0, improvements: 0, queue: { pending: 0, claimed: 0, completed: 0 } } });
+  });
+
+  it.each(["attacker.example:48123", "127.0.0.1:9000", ""])(
+    "refuses to issue a browser token for hostile or missing Host %s",
+    async (host) => {
+      const captured = await invokeHandler(makeRequest({ method: "GET", url: "/", headers: { host } }));
+      expect(captured.statusCode).toBe(403);
+      expect(captured.body).not.toContain("0-control-token");
+    },
+  );
+
+  it("refuses a foreign Origin even when the API token is valid", async () => {
+    const token = await getControlToken();
+    const captured = await invokeHandler(makeRequest({ method: "POST", url: "/api/control/recover-stale-workers",
+      headers: { "x-0-control-token": token, origin: "https://attacker.example" }, body: {} }));
+    expect(captured.statusCode).toBe(403);
+    expect(recoverStaleWorkersMock).not.toHaveBeenCalled();
+    expect(dbState.ctorPaths).toHaveLength(0);
+  });
+
+  it("refuses a cross-site read even when the API token is valid", async () => {
+    const token = await getControlToken();
+    const captured = await invokeHandler(makeRequest({ method: "GET", url: "/api/dashboard",
+      headers: { "x-0-control-token": token, "sec-fetch-site": "cross-site" } }));
+    expect(captured.statusCode).toBe(403);
+    expect(dbState.ctorPaths).toHaveLength(0);
+  });
+
+  it("allows only the top-level OIDC callback to reach its state validator", async () => {
+    const callback = await invokeHandler(makeRequest({ method: "GET", url: "/api/team/auth/callback?state=untrusted&code=untrusted", headers: { "sec-fetch-site": "cross-site" } }));
+    expect(callback.statusCode).toBe(404); // TeamAuth refuses the unconfigured provider.
+    expect(JSON.parse(callback.body).error).toContain("not configured");
+    for (const [method, url] of [["POST", "/api/team/auth/callback"], ["GET", "/api/team/auth/sso"], ["GET", "/api/team/auth/callback/other"]]) {
+      const other = await invokeHandler(makeRequest({ method: method!, url: url!, headers: { "sec-fetch-site": "cross-site" } }));
+      expect(other.statusCode).toBe(403);
+    }
+  });
+
+  it("accepts the browser's matching Origin and token", async () => {
+    const token = await getControlToken();
+    const captured = await invokeHandler(makeRequest({ method: "GET", url: "/api/scans",
+      headers: { "x-0-control-token": token, origin: "http://127.0.0.1:48123", "sec-fetch-site": "same-origin" } }));
+    expect(captured.statusCode).toBe(200);
+    expect(JSON.parse(captured.body)).toEqual({ scans: [] });
+    expect(dbState.closes).toBe(1);
   });
 });
 
@@ -1069,42 +1376,33 @@ describe("dashboard — launch-run control", () => {
       }),
     );
     expect(captured.statusCode).toBe(400);
-    expect(JSON.parse(captured.body)).toEqual({ error: "Target is required." });
+    expect(JSON.parse(captured.body).error).toEqual(expect.any(String));
+    expect(engineInvoke).not.toHaveBeenCalled();
     expect(spawnMock).not.toHaveBeenCalled();
   });
 
-  it("spawns scan child with the target/depth/mode/runtime threaded in", async () => {
-    const token = await getControlToken();
-    const captured = await invokeHandler(
-      makeRequest({
-        method: "POST",
-        url: "/api/control/launch-run",
-        headers: { "x-0-control-token": token },
-        body: {
-          target: "https://example.com",
-          depth: "deep",
-          mode: "web",
-          runtime: "api",
-        },
-      }),
-    );
-    expect(captured.statusCode).toBe(200);
-    const body = JSON.parse(captured.body);
-    expect(body.ok).toBe(true);
-    expect(typeof body.pid).toBe("number");
-
-    expect(spawnMock).toHaveBeenCalledOnce();
-    const childArgs = spawnMock.mock.calls[0]![1] as string[];
-    expect(childArgs).toContain("scan");
-    expect(childArgs).toContain("--target");
-    expect(childArgs).toContain("https://example.com");
-    expect(childArgs).toContain("--depth");
-    expect(childArgs).toContain("deep");
-    expect(childArgs).toContain("--mode");
-    expect(childArgs).toContain("web");
-    expect(childArgs).toContain("--runtime");
-    expect(childArgs).toContain("api");
+  it("delegates session and bounded assessment to the same persistent engine", async () => {
+    engineInvoke.mockResolvedValueOnce({ id: "session-owner" } as never).mockResolvedValueOnce({ id: "assessment-run", jobId: "assessment-job" } as never);
+    const captured = await invokeHandler(makeRequest({ method: "POST", url: "/api/control/launch-run", headers: { "x-0-control-token": await getControlToken() }, body: { target: "https://example.com", depth: "deep" } }));
+    expect(captured.statusCode).toBe(202);
+    expect(JSON.parse(captured.body)).toEqual({ ok: true, engineOwned: true, sessionId: "session-owner", runId: "assessment-run", jobId: "assessment-job" });
+    expect(engineInvoke.mock.calls).toEqual([
+      ["create_session", { config: { target: "https://example.com", title: "Assessment: https://example.com" } }],
+      ["start_assessment", { sessionId: "session-owner", target: "https://example.com", plan: expect.objectContaining({ goal: "unknown-vulnerabilities", depth: "deep", runCount: 1, executionMode: "sequential", timeCapMs: expect.any(Number), costCapUsd: expect.any(Number) }) }],
+    ]);
+    expect(spawnMock).not.toHaveBeenCalled();
   });
+
+  it("rejects unsupported external runtimes and daemon ownership before invoking the engine", async () => {
+    const headers = { "x-0-control-token": await getControlToken() };
+    for (const input of [{ runtime: "claude" }, { runtime: "api" }, { mode: "deep" }, { mode: "web" }, { ensureDaemon: true }]) {
+      const captured = await invokeHandler(makeRequest({ method: "POST", url: "/api/control/launch-run", headers, body: { target: "https://example.com", ...input } }));
+      expect(captured.statusCode).toBe(400);
+    }
+    expect(engineInvoke).not.toHaveBeenCalled();
+    expect(spawnMock).not.toHaveBeenCalled();
+  });
+
 });
 
 // ── Tests: reset-database ───────────────────────────────────────────────────
@@ -1268,5 +1566,178 @@ describe("dashboard — prune-stopped-workers", () => {
     expect(captured.statusCode).toBe(200);
     expect(JSON.parse(captured.body)).toEqual({ ok: true, deleted: 2 });
     expect(dbState.deleteByStatusCalls).toEqual(["stopped"]);
+  });
+});
+
+ it("reopens the existing dashboard without creating another server", async () => {
+   instanceMock.mockResolvedValue(true);
+   expect(await runCli(["web", "--ready-json"])).toBeUndefined();
+   expect(httpState.listenCalls).toHaveLength(0);
+   expect(execFileMock).toHaveBeenCalled();
+   expect(logSpy).toHaveBeenCalledWith('ZERO_DASHBOARD_READY {"url":"http://127.0.0.1:48123"}');
+ });
+
+
+describe("dashboard — persistent engine boundaries", () => {
+  const bearer = "engine-test-secret-" + "x".repeat(32);
+  beforeEach(async () => {
+    vi.stubEnv("ZERO_TEST_ENGINE_TOKEN", bearer);
+    expect(await runCli(["dashboard", "--no-open", "--engine-token-env", "ZERO_TEST_ENGINE_TOKEN", "--ready-json"])).toBeUndefined();
+  });
+  it("accepts the engine bearer for both outer and inner control/triage authorization", async () => {
+    const control = await invokeHandler(makeRequest({ method: "POST", url: "/api/control/recover-stale-workers", headers: { authorization: `Bearer ${bearer}` }, body: { staleAfterMs: 1000 } }));
+    expect(control.statusCode).toBe(200); expect(recoverStaleWorkersMock).toHaveBeenCalled();
+    const triage = await invokeHandler(makeRequest({ method: "POST", url: "/api/finding-family/family-1/triage", headers: { authorization: `Bearer ${bearer}` }, body: { status: "confirmed" } }));
+    expect(triage.statusCode).toBe(200); expect(dbState.triageUpdates).toHaveLength(1);
+  });
+  it("returns a compatible handshake and routes engine calls without leaking its bearer", async () => {
+    const response = await invokeHandler(makeRequest({ method: "GET", url: "/api/backend/handshake", headers: { authorization: `Bearer ${bearer}`, "x-0-request-id": "request-42" } }));
+    expect(response.statusCode).toBe(200); const handshake = JSON.parse(response.body);
+    expect(handshake.protocolVersion).toBe(1); expect(handshake.capabilities).toContain("workflow-engine"); expect(response.headers["X-0-Request-ID"]).toBe("request-42");
+    const call = await invokeHandler(makeRequest({ method: "POST", url: "/api/workflow-engine/call", headers: { authorization: `Bearer ${bearer}`, "x-0-expected-engine-id": handshake.engineId }, body: { name: "list_templates", args: {} } }));
+    expect(call.statusCode).toBe(200); expect(engineInvoke).toHaveBeenCalledWith("list_templates", {});
+    expect(logSpy.mock.calls.flat().join(" ")).not.toContain(bearer); expect(response.body).not.toContain(bearer);
+  });
+  it("rejects another engine identity before mutating or resolving an approval", async () => {
+    const response = await invokeHandler(makeRequest({ method: "POST", url: "/api/control/recover-stale-workers", headers: { authorization: `Bearer ${bearer}`, "x-0-expected-engine-id": "engine-other" }, body: {} }));
+    expect(response.statusCode).toBe(409); expect(recoverStaleWorkersMock).not.toHaveBeenCalled();
+    const approval = await invokeHandler(makeRequest({ method: "POST", url: "/api/console/sessions/same-id/decisions/same-approval", headers: { authorization: `Bearer ${bearer}`, "x-0-expected-engine-id": "engine-other" }, body: { approved: true } }));
+    expect(approval.statusCode).toBe(409);
+  });
+  it("does not reuse an existing dashboard when engine admission is explicitly configured", async () => {
+    instanceMock.mockClear().mockResolvedValue(true); httpState.listenCalls.length = 0;
+    expect(await runCli(["dashboard", "--no-open", "--engine-token-env", "ZERO_TEST_ENGINE_TOKEN"])).toBeUndefined();
+    expect(httpState.listenCalls).toHaveLength(1); expect(instanceMock).not.toHaveBeenCalled();
+  });
+});
+
+
+it("cleans up the persistent engine when startup preflight fails before listening", async () => {
+  vi.stubEnv("ZERO_TEST_ENGINE_TOKEN", "x".repeat(32));
+  engineReady.mockRejectedValueOnce(new Error("Authorized workspace is unavailable."));
+  const result = await runCli(["dashboard", "--no-open", "--engine-token-env", "ZERO_TEST_ENGINE_TOKEN"]);
+  expect(result).toBeInstanceOf(Error);
+  expect(engineDispose).toHaveBeenCalledOnce();
+  expect(httpState.listenCalls).toHaveLength(0);
+});
+
+describe("business impact metadata mutations", () => {
+  const assessment = { reachability_tier: "unknown", blast_radius: "Customer billing records", weaponizability: "info-leak", business_impact: "notable", rationale: "Confirm access controls on the billing service.", assessment_source: "model" };
+  beforeEach(async () => {
+    await runCli(["dashboard", "--no-open", "--db-path", "/tmp/business-impact-engine.db"]);
+    dbState.findings.push({ id: "same-id", scanId: "scan-impact", severity: "critical", cvssScore: 9.8, status: "discovered", verification_result: "original verification", impactAssessment: null });
+  });
+
+  it("authenticates and validates engine-owned metadata before changing stored priority", async () => {
+    const initial = structuredClone(dbState.findings[0]);
+    const denied = await invokeHandler(makeRequest({ method: "POST", url: "/api/findings/same-id/impact-assessment", body: assessment }));
+    expect(denied.statusCode).toBe(403);
+    const headers = { "x-0-control-token": await getControlToken() };
+    const invalid = await invokeHandler(makeRequest({ method: "POST", url: "/api/findings/same-id/impact-assessment", headers, body: { ...assessment, severity: "low", dbPath: "/another/engine.db" } }));
+    expect(invalid.statusCode).toBe(400);
+    expect(dbState.findings[0]).toEqual(initial);
+    const saved = await invokeHandler(makeRequest({ method: "POST", url: "/api/findings/same-id/impact-assessment", headers, body: assessment }));
+    expect(saved.statusCode).toBe(200);
+    expect(JSON.parse(saved.body)).toEqual({ findingId: "same-id", impactAssessment: { ...assessment, assessment_source: "provided" } });
+    expect(dbState.findings[0]).toEqual({ ...initial, impactAssessment: JSON.stringify({ ...assessment, assessment_source: "provided" }) });
+    expect(dbState.ctorPaths).toContain("/tmp/business-impact-engine.db");
+    expect(dbState.ctorPaths).not.toContain("/another/engine.db");
+  });
+
+  it("clears only impact metadata and rejects unsupported methods or a missing finding", async () => {
+    const headers = { "x-0-control-token": await getControlToken() };
+    const missing = await invokeHandler(makeRequest({ method: "POST", url: "/api/findings/foreign-id/impact-assessment", headers, body: assessment }));
+    expect(missing.statusCode).toBe(404);
+    const method = await invokeHandler(makeRequest({ method: "GET", url: "/api/findings/same-id/impact-assessment", headers }));
+    expect(method.statusCode).toBe(405);
+    const cleared = await invokeHandler(makeRequest({ method: "DELETE", url: "/api/findings/same-id/impact-assessment", headers }));
+    expect(cleared.statusCode).toBe(200);
+    expect(JSON.parse(cleared.body)).toEqual({ findingId: "same-id", impactAssessment: null });
+    expect(dbState.findings[0]).toMatchObject({ severity: "critical", cvssScore: 9.8, status: "discovered", verification_result: "original verification" });
+  });
+});
+
+
+describe("dashboard — skills HTTP library", () => {
+  beforeEach(async () => { await runCli(["dashboard", "--no-open"]); });
+  async function call(method: string, url: string, body?: unknown) {
+    return invokeHandler(makeRequest({ method, url, body, headers: { "x-0-control-token": await getControlToken() } }));
+  }
+  it("routes create, detail, revision edit and portable export/import with decoded skill IDs", async () => {
+    expect((await call("POST", "/api/skills", { content: "SKILL.md source" })).statusCode).toBe(201);
+    expect(skillsHttp.create).toHaveBeenCalledWith({ content: "SKILL.md source" });
+    const id = "mount/workspace/test-review";
+    expect((await call("GET", `/api/skills/${encodeURIComponent(id)}`)).statusCode).toBe(200);
+    expect(skillsHttp.get).toHaveBeenCalledWith(id, { allowHostEdits: true, canWrite: true });
+    const edited = { content: "New source", expectedRevision: "a".repeat(64) };
+    expect((await call("PUT", `/api/skills/${encodeURIComponent(id)}`, edited)).statusCode).toBe(200);
+    expect(skillsHttp.update).toHaveBeenCalledWith(id, edited, { allowHostEdits: true, canWrite: true });
+    expect((await call("POST", `/api/skills/${encodeURIComponent(id)}/copy`, edited)).statusCode).toBe(201);
+    expect(skillsHttp.copy).toHaveBeenCalledWith(id, edited, { allowHostEdits: true, canWrite: true });
+    const exported = await call("GET", `/api/skills/${encodeURIComponent(id)}/export`);
+    expect(exported.statusCode).toBe(200); expect(exported.headers["Content-Disposition"]).toContain("test-review.skill.json"); expect(skillsHttp.export).toHaveBeenCalledWith(id);
+    const bundle = JSON.parse(exported.body);
+    expect((await call("POST", "/api/skills/import", { bundle })).statusCode).toBe(201);
+    expect(skillsHttp.import).toHaveBeenCalledWith({ bundle });
+  });
+  it("accepts base64-sized portable imports without expanding unrelated API body limits", async () => {
+    const imported = { bundle: { files: [{ content: "a".repeat(11_200_000) }] } };
+    expect((await call("POST", "/api/skills/import", imported)).statusCode).toBe(201);
+    expect(skillsHttp.import).toHaveBeenCalledOnce();
+    expect((await call("POST", "/api/skills", { content: "a".repeat(1_000_001) })).statusCode).toBe(413);
+    expect(skillsHttp.create).not.toHaveBeenCalled();
+    expect((await call("POST", "/api/skills/import", { bundle: "a".repeat(12 * 1024 * 1024) })).statusCode).toBe(413);
+    expect(skillsHttp.import).toHaveBeenCalledOnce();
+  });
+  it("rejects malformed escaped skill IDs with an actionable client error", async () => {
+    for (const path of ["/api/skills/%ZZ", "/api/skills/%ZZ/export", "/api/skills/mounts/%ZZ"]) {
+      const result = await call(path.includes("mounts") ? "DELETE" : "GET", path);
+      expect(result.statusCode).toBe(400); expect(JSON.parse(result.body).error).toBe("Invalid skill identifier.");
+    }
+    expect(skillsHttp.get).not.toHaveBeenCalled(); expect(skillsHttp.export).not.toHaveBeenCalled(); expect(skillsHttp.unmount).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("same-server workspace setup", () => {
+  afterEach(async () => {
+    const fs = await vi.importActual<typeof import("node:fs")>("node:fs");
+    for (const directory of setupHttp.directories.splice(0)) fs.rmSync(directory, { recursive: true, force: true });
+    setupHttp.pending = false;
+  });
+  it("switches service ownership and accounts without opening another HTTP listener", async () => {
+    await runCli(["web", "--no-open"]);
+    const token = await getControlToken(); const listeners = httpState.listenCalls.length;
+    const reply = await invokeHandler(makeRequest({ method: "POST", url: "/api/team/setup", headers: { "x-0-control-token": token }, body: { workspaceName: "HTTP team", displayName: "Test owner", userId: "test-owner", password: "Disposable test password" } }));
+    expect(reply.statusCode).toBe(201); expect(httpState.listenCalls).toHaveLength(listeners);
+    const cookie = reply.headers["Set-Cookie"].split(";")[0];
+    const status = await invokeHandler(makeRequest({ method: "GET", url: "/api/team/session", headers: { "x-0-control-token": token, cookie } }));
+    expect(JSON.parse(status.body)).toMatchObject({ enabled: true, workspace: { name: "HTTP team" }, user: { userId: "test-owner", role: "owner" } });
+    const anonymous = await invokeHandler(makeRequest({ method: "GET", url: "/api/dashboard", headers: { "x-0-control-token": token } }));
+    expect(anonymous.statusCode).toBe(401);
+    const users = await invokeHandler(makeRequest({ method: "GET", url: "/api/team/users", headers: { "x-0-control-token": token, cookie } }));
+    expect(JSON.parse(users.body).users).toEqual([{ userId: "test-owner", displayName: "Test owner", role: "owner" }]);
+  });
+  it("blocks ordinary API calls while the workspace transition is pending", async () => {
+    await runCli(["web", "--no-open"]); const token = await getControlToken(); setupHttp.pending = true;
+    const response = await invokeHandler(makeRequest({ method: "GET", url: "/api/dashboard", headers: { "x-0-control-token": token } }));
+    expect(response.statusCode).toBe(503);
+  });
+});
+
+
+describe("external read-only findings API", () => {
+  afterEach(() => { scopedApi.revoked = false; });
+  it("accepts a scoped machine key without a browser cookie or control token", async () => {
+    await runCli(["web", "--no-open"]);
+    const missing = await invokeHandler(makeRequest({ method: "GET", url: "/api/v1/findings" })); expect(missing.statusCode).toBe(401);
+    const allowed = await invokeHandler(makeRequest({ method: "GET", url: "/api/v1/findings", headers: { authorization: `Bearer ${scopedApi.token}` } }));
+    expect(allowed.statusCode).toBe(200); expect(JSON.parse(allowed.body)).toMatchObject({ schemaVersion: 1, findings: [] });
+  });
+  it("does not promote findings keys to browser or admin permissions", async () => {
+    await runCli(["web", "--no-open"]); const token = await getControlToken();
+    const denied = await invokeHandler(makeRequest({ method: "POST", url: "/api/control/launch-run", headers: { authorization: `Bearer ${scopedApi.token}`, "x-0-control-token": token }, body: { target: "https://example.test" } })); expect(denied.statusCode).toBe(403);
+    scopedApi.revoked = true;
+    const revoked = await invokeHandler(makeRequest({ method: "GET", url: "/api/v1/findings", headers: { authorization: `Bearer ${scopedApi.token}` } })); expect(revoked.statusCode).toBe(401);
   });
 });

@@ -1,0 +1,217 @@
+{
+  "schema": "0.learning-source-review-paired/v1",
+  "startedAt": "2026-10-02T05:25:25.694Z",
+  "model": "gpt-5.6-sol",
+  "provider": "chatgpt-codex",
+  "fixtureDigest": "fa88300e38ee81100364c11d29ecddd3ee48fdc440c31e2be623b038e83edfee",
+  "evaluatorDigest": "e2a795e1a02b22406257915887bacef6e72e8f9f73715d6e0a87b5275feba738",
+  "evaluationKind": "source-review-with-live-local-oracles",
+  "limits": {
+    "modelCalls": 5,
+    "callTimeoutMs": 45000,
+    "repeats": 2,
+    "tools": 0,
+    "externalTargets": 0
+  },
+  "verdicts": [
+    {
+      "id": "A",
+      "expected": true,
+      "verified": true,
+      "evidence": "boolean_diff: |true|=50 |false|=2 delta=0.96 | sql_error: sqlite3.OperationalError",
+      "reason": "",
+      "requests": 7
+    },
+    {
+      "id": "B",
+      "expected": false,
+      "verified": false,
+      "evidence": "",
+      "reason": "no sqli signals fired",
+      "requests": 7
+    },
+    {
+      "id": "C",
+      "expected": true,
+      "verified": true,
+      "evidence": "payload=../../../../etc/passwd response contained \"root:x:0:0:\"",
+      "reason": "",
+      "requests": 1
+    },
+    {
+      "id": "D",
+      "expected": false,
+      "verified": false,
+      "evidence": "",
+      "reason": "no /etc/passwd signature in any traversal probe response",
+      "requests": 6
+    }
+  ],
+  "cells": [
+    {
+      "repeat": 0,
+      "arm": "baseline",
+      "stopReason": "end_turn",
+      "text": "{\"findings\":[{\"id\":\"A\",\"category\":\"sql-injection\"},{\"id\":\"C\",\"category\":\"path-traversal\"}]}",
+      "usage": {
+        "inputTokens": 278,
+        "outputTokens": 100
+      },
+      "durationMs": 2959,
+      "model": "gpt-5.6-sol",
+      "failed": false,
+      "predictions": [
+        {
+          "id": "A",
+          "category": "sql-injection"
+        },
+        {
+          "id": "C",
+          "category": "path-traversal"
+        }
+      ],
+      "score": {
+        "truePositiveCandidates": 2,
+        "falsePositiveCandidates": 0,
+        "confirmedFindings": 2,
+        "unconfirmedCandidates": 0,
+        "missedVulnerabilities": 0,
+        "recall": 1,
+        "candidatePrecision": 1
+      }
+    },
+    {
+      "repeat": 0,
+      "arm": "learned",
+      "stopReason": "end_turn",
+      "text": "{\"findings\":[{\"id\":\"A\",\"category\":\"sql-injection\"},{\"id\":\"C\",\"category\":\"path-traversal\"}]}",
+      "usage": {
+        "inputTokens": 364,
+        "outputTokens": 75
+      },
+      "durationMs": 2289,
+      "model": "gpt-5.6-sol",
+      "failed": false,
+      "predictions": [
+        {
+          "id": "A",
+          "category": "sql-injection"
+        },
+        {
+          "id": "C",
+          "category": "path-traversal"
+        }
+      ],
+      "score": {
+        "truePositiveCandidates": 2,
+        "falsePositiveCandidates": 0,
+        "confirmedFindings": 2,
+        "unconfirmedCandidates": 0,
+        "missedVulnerabilities": 0,
+        "recall": 1,
+        "candidatePrecision": 1
+      }
+    },
+    {
+      "repeat": 1,
+      "arm": "learned",
+      "stopReason": "end_turn",
+      "text": "{\"findings\":[{\"id\":\"A\",\"category\":\"sql-injection\"},{\"id\":\"C\",\"category\":\"path-traversal\"}]}",
+      "usage": {
+        "inputTokens": 364,
+        "outputTokens": 94
+      },
+      "durationMs": 3329,
+      "model": "gpt-5.6-sol",
+      "failed": false,
+      "predictions": [
+        {
+          "id": "A",
+          "category": "sql-injection"
+        },
+        {
+          "id": "C",
+          "category": "path-traversal"
+        }
+      ],
+      "score": {
+        "truePositiveCandidates": 2,
+        "falsePositiveCandidates": 0,
+        "confirmedFindings": 2,
+        "unconfirmedCandidates": 0,
+        "missedVulnerabilities": 0,
+        "recall": 1,
+        "candidatePrecision": 1
+      }
+    },
+    {
+      "repeat": 1,
+      "arm": "baseline",
+      "stopReason": "end_turn",
+      "text": "{\"findings\":[{\"id\":\"A\",\"category\":\"sql-injection\"},{\"id\":\"C\",\"category\":\"path-traversal\"}]}",
+      "usage": {
+        "inputTokens": 278,
+        "outputTokens": 31
+      },
+      "durationMs": 2233,
+      "model": "gpt-5.6-sol",
+      "failed": false,
+      "predictions": [
+        {
+          "id": "A",
+          "category": "sql-injection"
+        },
+        {
+          "id": "C",
+          "category": "path-traversal"
+        }
+      ],
+      "score": {
+        "truePositiveCandidates": 2,
+        "falsePositiveCandidates": 0,
+        "confirmedFindings": 2,
+        "unconfirmedCandidates": 0,
+        "missedVulnerabilities": 0,
+        "recall": 1,
+        "candidatePrecision": 1
+      }
+    }
+  ],
+  "training": {
+    "stopReason": "end_turn",
+    "text": "The trust boundary is where the caller-supplied `email` enters the database query. Treat it as untrusted input. The security lesson is to keep data separate from SQL syntax: the `?` placeholder with parameter binding prevents the email value from being interpreted as SQL, reducing SQL-injection risk. Still validate input format and length for application correctness and resource limits.",
+    "usage": {
+      "inputTokens": 74,
+      "outputTokens": 78
+    },
+    "durationMs": 2575,
+    "model": "gpt-5.6-sol",
+    "failed": false
+  },
+  "status": "completed",
+  "limitations": [
+    "Four hand-authored cases, two vulnerability classes, same-repository context only.",
+    "Not a full agent scan, workflow execution, automatic proposal test, unseen-project test, or proof of general security improvement.",
+    "Probe requests are frozen and identical for both arms. Labels are held out of model input.",
+    "Learning arm includes one additional context note; observed token usage is reported, not assumed equal.",
+    "The OAuth provider does not support a hard output-token ceiling; calls have identical timeout and instruction budgets."
+  ],
+  "recalledSourceDigest": "sha256:563a431a04052c58e0c8fdf2a4d862a518af7397f3a7d79ebe4bddefa6ca0598",
+  "summary": {
+    "baseline": {
+      "validRuns": 2,
+      "meanRecall": 1,
+      "falsePositiveCandidates": 0,
+      "inputTokens": 556,
+      "outputTokens": 131
+    },
+    "learned": {
+      "validRuns": 2,
+      "meanRecall": 1,
+      "falsePositiveCandidates": 0,
+      "inputTokens": 728,
+      "outputTokens": 169
+    },
+    "recallDelta": 0
+  }
+}

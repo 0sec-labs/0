@@ -1,4 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+vi.mock("../plugins/enablement.js", async (importOriginal) => ({
+  ...await importOriginal<object>(),
+  readEnablement: () => ({ schema: 1, project: process.cwd(), enabled: { scope: { version: "1.0.0", capabilities: [], enabledAt: 1 } } }),
+}));
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,7 +25,11 @@ import { ScopePolicy } from "../scope/scope.js";
 import type { ToolDefinition } from "../agent/types.js";
 import * as repositoryAcquisition from "../agent/repository-acquisition.js";
 import * as http from "../http.js";
+import { LlmApiRuntime } from "../runtime/llm-api.js";
+import { eventBus, type SubagentLifecyclePayload } from "../events/bus.js";
+import { MAX_OUTPUT_CAP_CONTINUATIONS } from "../agent/native-loop.js";
 
+import { DEFAULT_SECURITY_WORKFLOW_PLAN, type SecurityWorkflow, type SecurityWorkflowInput } from "@0/shared";
 import { setWorkspaceHarnessTrust } from "../plugins/harness-trust.js";
 
 /**
@@ -54,8 +62,96 @@ function endTurn(text: string): NativeRuntimeResult {
   return { content: [{ type: "text", text }], stopReason: "end_turn", durationMs: 1 };
 }
 
+describe("YOLO finding verification workflow", () => {
+  it.each([false, true])("continues from a saved source lead without approval (missing runtime: %s)", async (missingRuntime) => {
+    const root = mkdtempSync(join(tmpdir(), "0-yolo-verification-"));
+    const source = join(root, "parser.cjs");
+    writeFileSync(source, "module.exports = input => parseInt(input, 10);\n");
+    const command = missingRuntime
+      ? "0_nonexistent_poc_runtime_147 --version"
+      : `node -e 'const parse = require(${JSON.stringify(source)}); require("node:assert/strict").equal(parse("42admin"), 42); console.log("runtime-reproduced: malformed integer accepted")'`;
+    let round = 0;
+    const runtime: NativeRuntime = {
+      type: "api",
+      async isAvailable() { return true; },
+      async executeNative(_system, messages) {
+        round++;
+        const tool = (name: string, input: Record<string, unknown>): NativeRuntimeResult => ({
+          content: [{ type: "tool_use", id: `verification-${round}`, name, input }],
+          stopReason: "tool_use", durationMs: 1,
+        });
+        if (round === 1) return tool("read_file", { path: source });
+        if (round === 2) return tool("save_finding", {
+          title: "Parser accepts malformed integer", category: "missing-validation", severity: "low",
+          description: "parser.cjs accepts nonnumeric suffixes instead of rejecting invalid input. Runtime impact is unverified.",
+          evidence_request: "parseInt(input, 10)", evidence_response: "Source inspected only; no runtime reproduction yet.",
+          verification_spec: JSON.stringify({ code: [{ kind: "file-contains", file: "parser.cjs", pattern: "parseInt" }] }),
+        });
+        if (round === 3) {
+          const receipt = messages.at(-1)?.content.find((item) => item.type === "tool_result");
+          if (receipt?.type !== "tool_result" || !receipt.content.includes("verification_workflow")) {
+            return endTurn("Should I test this?");
+          }
+          // The planning fixture responds to the host's workflow handoff; the
+          // console must execute the real verification through normal gates.
+          expect(receipt.content).toContain('"source_status":"matched"');
+          expect(receipt.content).toContain('"replay_status":"not_run"');
+          return tool("bash", { command, timeout: 5 });
+        }
+        const receipt = messages.at(-1)?.content.find((item) => item.type === "tool_result");
+        expect(receipt?.type).toBe("tool_result");
+        if (receipt?.type === "tool_result") {
+          expect(receipt.content).toContain(missingRuntime ? "not found" : "runtime-reproduced");
+        }
+        return endTurn(missingRuntime
+          ? "Source-verified only. Runtime verification failed: 0_nonexistent_poc_runtime_147 is unavailable. No runtime reproduction."
+          : "Runtime-reproduced: malformed integer accepted. Local parser PoC executed; caller impact still requires investigation.");
+      },
+    };
+    const approveTool = vi.fn(async () => { throw new Error("Routine YOLO verification must not request approval"); });
+    const askOperator = vi.fn(async () => { throw new Error("Routine YOLO verification must not ask whether to test"); });
+    const session = createConsoleSession({ runtime, autonomyMode: "yolo", approveTool, askOperator,
+      allowModelSelfExtension: false, refineObjective: false });
+    try {
+      const outcome = await session.send(`Investigate and verify the local parser in ${root}`);
+      expect(outcome.stopReason).toBe("end_turn");
+      expect(outcome.toolCalls.map(({ call }) => call.name)).toEqual(["read_file", "save_finding", "bash"]);
+      // bash can successfully return stderr for a nonzero exit. Use the
+      // actual process receipt, not the transport success bit, as evidence.
+      expect(outcome.toolCalls[2].result.meta?.exitCode).toBe(missingRuntime ? 127 : 0);
+      expect(outcome.assistantText).not.toContain("Should I test");
+      expect(approveTool).not.toHaveBeenCalled();
+      expect(askOperator).not.toHaveBeenCalled();
+      expect(session.exportCheckpoint().sessionData.findings[0].status).not.toBe("verified");
+    } finally { await session.cleanup(); rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it.each(["recon", "standard", "copilot"] as const)("does not prescribe automatic PoCs in %s mode", (autonomyMode) => {
+    expect(buildConsoleSystemPrompt({ scanId: "workflow-test", autonomyMode })).not.toContain("YOLO verification workflow");
+  });
+});
+
 
 describe("createConsoleSession", () => {
+  it("generates title metadata inside accounted planner rounds without executing a tool", async () => {
+    const runtime = new ScriptedRuntime([
+      { content: [{ type: "tool_use", id: "title-1", name: "console_set_conversation_title", input: { title: "Tenant isolation review" } }], stopReason: "tool_use", durationMs: 1, usage: { inputTokens: 10, outputTokens: 5 } },
+      { ...endTurn("Here is the review."), usage: { inputTokens: 20, outputTokens: 8 } },
+    ]);
+    const session = createConsoleSession({ runtime, refineObjective: false });
+    const starts = vi.fn(); const usage = vi.fn();
+    const result = await session.send("Review tenant isolation", { onToolStart: starts, onUsage: usage }, { generateTitle: true });
+    expect(result.conversationTitle).toBe("Tenant isolation review");
+    expect(result.usage).toEqual({ inputTokens: 30, outputTokens: 13 });
+    expect(usage).toHaveBeenCalledTimes(2);
+    expect(starts).not.toHaveBeenCalled();
+    expect(result.toolCalls).toEqual([]);
+    expect(runtime.calls[0].tools.some((tool) => tool.name === "console_set_conversation_title")).toBe(true);
+    expect(runtime.calls[1].tools.some((tool) => tool.name === "console_set_conversation_title")).toBe(false);
+    expect(runtime.calls[1].messages.some((message) => message.content.some((block) => block.type === "tool_result" && block.tool_use_id === "title-1"))).toBe(true);
+    await session.cleanup();
+  });
+
   it("exposes the full audit-role tool registry by default", () => {
     const session = createConsoleSession({ runtime: new ScriptedRuntime([]) });
     const names = session.tools.map((t) => t.name);
@@ -214,6 +310,188 @@ describe("createConsoleSession", () => {
     expect(outcome.stopReason).toBe("max_tool_iterations");
     expect(outcome.toolCalls).toHaveLength(3);
     expect(notices).toHaveLength(1);
+  });
+});
+
+describe("Responses output-cap continuation", () => {
+  function stream(events: Record<string, unknown>[]): Response {
+    return new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(""), {
+      headers: { "content-type": "text/event-stream" },
+    });
+  }
+  function cap(text = "Completed observation.", inputTokens = 10): Response {
+    return stream([
+      { type: "response.output_text.delta", delta: text },
+      { type: "response.output_item.done", item: {
+        type: "function_call", status: "completed", call_id: "not-authorized", name: "update_todos",
+        arguments: JSON.stringify({ todos: [{ content: "must never replace the plan" }] }),
+      } },
+      { type: "response.incomplete", response: { id: "resp-cap", status: "incomplete",
+        incomplete_details: { reason: "max_output_tokens" }, usage: { input_tokens: inputTokens, output_tokens: 8192 } } },
+    ]);
+  }
+  function runtime(): LlmApiRuntime {
+    return new LlmApiRuntime({ type: "api", timeout: 5000, provider: "azure", model: "DeepSeek-V4-Flash",
+      env: { AZURE_OPENAI_API_KEY: "synthetic", AZURE_OPENAI_BASE_URL: "https://deepseek.test/openai/v1", AZURE_OPENAI_WIRE_API: "responses",
+        ZERO_SKIP_PROVIDER_BANNER: "1" } });
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("completes one DeepSeek turn after a cap without replaying tools, losing the plan or failing a live worker", async () => {
+    let releaseChild!: (result: NativeRuntimeResult) => void;
+    let childStarted!: () => void;
+    const started = new Promise<void>(resolve => { childStarted = resolve; });
+    let childParked!: () => void;
+    const parked = new Promise<void>(resolve => { childParked = resolve; });
+    let childSignal: AbortSignal | undefined;
+    const child: NativeRuntime = {
+      type: "api", isAvailable: async () => true,
+      executeNative: async (_system, _messages, _tools, _callbacks, signal) => {
+        childSignal = signal;
+        const result = new Promise<NativeRuntimeResult>(resolve => {
+          releaseChild = resolve;
+          signal?.addEventListener("abort", () => resolve({ content: [], stopReason: "error", cancelled: true, durationMs: 0 }), { once: true });
+        });
+        childStarted();
+        return result;
+      },
+    };
+    const lifecycle: SubagentLifecyclePayload[] = [];
+    const unsubscribe = eventBus.subscribe({ emit(type, payload) {
+      if (type === "subagent_lifecycle") {
+        const event = payload as SubagentLifecyclePayload;
+        lifecycle.push(event);
+        if (event.status === "parked") childParked();
+      }
+    } });
+    const plan = { todos: [{ content: "Retain verified observation and finish report", status: "in_progress" }] };
+    const requests: Array<Record<string, unknown>> = [];
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (_url, init) => {
+      requests.push(JSON.parse(String(init?.body)));
+      if (requests.length === 1) return stream([{ type: "response.completed", response: {
+        status: "completed", output: [
+          { type: "function_call", call_id: "plan", name: "update_todos", arguments: JSON.stringify(plan) },
+          { type: "function_call", call_id: "spawn", name: "spawn_persistent_agent", arguments: JSON.stringify({ task: "Retain the observation", name: "observer", max_turns: 2 }) },
+        ], usage: { input_tokens: 12, output_tokens: 3 },
+      } }]);
+      if (requests.length === 2) { await started; return cap(); }
+      expect(childSignal?.aborted).toBe(false);
+      releaseChild({ content: [{ type: "tool_use", id: "child-done", name: "done", input: { summary: "Observation preserved." } }], stopReason: "tool_use", durationMs: 0 });
+      await parked;
+      return stream([
+        { type: "response.output_text.delta", delta: " Final report." },
+        { type: "response.completed", response: { status: "completed",
+          output: [{ type: "message", content: [{ type: "output_text", text: " Final report." }] }],
+          usage: { input_tokens: 15, output_tokens: 4 } } },
+      ]);
+    }));
+    const model = runtime();
+    vi.spyOn(model, "forkForSubagent").mockResolvedValue(child);
+    const session = createConsoleSession({ runtime: model, refineObjective: false, allowModelSelfExtension: false });
+    const deltas: string[] = [];
+    const usage: ConsoleUsageReport[] = [];
+    try {
+      const outcome = await session.send("Produce a report and retain a background observer.", {
+        onAssistantDelta: text => deltas.push(text), onUsage: value => usage.push(value),
+        onToolResult: (_call, result) => expect(result.success).toBe(true),
+      });
+      expect(outcome.stopReason).toBe("end_turn");
+      expect(outcome.assistantText).toBe("Completed observation. Final report.");
+      expect(deltas).toEqual(["Completed observation.", " Final report."]);
+      expect(outcome.toolCalls.map(entry => entry.call.name)).toEqual(["update_todos", "spawn_persistent_agent"]);
+      expect(outcome.usage).toEqual({ inputTokens: 37, outputTokens: 8199 });
+      expect(usage.filter(value => value.kind === "planner").map(value => value.outputTokens)).toEqual([3, 8192, 4]);
+      expect(requests).toHaveLength(3);
+      expect(requests.every(request => request.max_output_tokens === 8192)).toBe(true);
+      const continuation = JSON.stringify(requests[2].input);
+      expect(continuation).toContain("Completed observation.");
+      expect(continuation).toContain(plan.todos[0].content);
+      expect(continuation).toContain("[OUTPUT CAP CHECKPOINT]");
+      expect(continuation).not.toContain("not-authorized");
+      expect(session.messages.filter(message => message.role === "assistant").flatMap(message => message.content)
+        .filter(block => block.type === "tool_use").map(block => block.id)).toEqual(["plan", "spawn"]);
+      expect(lifecycle.some(event => event.status === "failed")).toBe(false);
+      expect(lifecycle.find(event => event.status === "parked")).toMatchObject({ done: true, completion_reason: "done" });
+    } finally {
+      releaseChild?.(endTurn("Released."));
+      await session.cleanup();
+      unsubscribe();
+    }
+  });
+
+  it("bounds repeated caps and resumes only on a new operator action", async () => {
+    const fetchMock = vi.fn(async () => cap("Saved observation."));
+    vi.stubGlobal("fetch", fetchMock);
+    const session = createConsoleSession({ runtime: runtime(), refineObjective: false, allowModelSelfExtension: false });
+    try {
+      const outcome = await session.send("continue");
+      expect(outcome.stopReason).toBe("output_cap");
+      expect(outcome.outputCap?.continuations).toBe(MAX_OUTPUT_CAP_CONTINUATIONS);
+      expect(outcome.outputCap?.message).toMatch(/resume/i);
+      expect(fetchMock).toHaveBeenCalledTimes(MAX_OUTPUT_CAP_CONTINUATIONS + 1);
+      expect(outcome.usage.outputTokens).toBe(8192 * (MAX_OUTPUT_CAP_CONTINUATIONS + 1));
+      expect(session.messages.filter(message => message.role === "assistant").map(message => message.content))
+        .toEqual(Array.from({ length: MAX_OUTPUT_CAP_CONTINUATIONS + 1 }, () => [{ type: "text", text: "Saved observation." }]));
+      fetchMock.mockImplementation(async () => stream([{ type: "response.completed", response: { status: "completed",
+        output: [{ type: "message", content: [{ type: "output_text", text: "Concise finish." }] }] } }]));
+      expect((await session.send("Finish concisely from saved observations.")).assistantText).toBe("Concise finish.");
+    } finally { await session.cleanup(); }
+  });
+
+  it.each(["abort", "budget"])("does not continue past the original %s allowance", async mode => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn(async () => cap("Saved observation.", mode === "budget" ? 30_000 : 10));
+    vi.stubGlobal("fetch", fetchMock);
+    const session = createConsoleSession({ runtime: runtime(), refineObjective: false, allowModelSelfExtension: false,
+      maxTurnTokens: mode === "budget" ? 50_000 : undefined });
+    try {
+      const outcome = await session.send("continue", { onNotice: () => { if (mode === "abort") controller.abort(); } }, { signal: controller.signal });
+      expect(outcome.stopReason).toBe(mode === "abort" ? "cancelled" : "max_turn_tokens");
+      expect(fetchMock).toHaveBeenCalledOnce();
+      expect(outcome.assistantText).toBe("Saved observation.");
+      expect(outcome.usage.outputTokens).toBe(8192);
+      expect(outcome.toolCalls).toEqual([]);
+    } finally { await session.cleanup(); }
+  });
+
+  it("reserves the full output cap for an unmetered response under a finite turn budget", async () => {
+    const fetchMock = vi.fn(async () => stream([
+      { type: "response.output_text.delta", delta: "Saved observation." },
+      { type: "response.incomplete", response: { status: "incomplete", incomplete_details: { reason: "max_output_tokens" } } },
+    ]));
+    vi.stubGlobal("fetch", fetchMock);
+    const session = createConsoleSession({ runtime: runtime(), refineObjective: false, allowModelSelfExtension: false, maxTurnTokens: 100_000 });
+    const samples: ConsoleUsageReport[] = [];
+    try {
+      const outcome = await session.send("continue", { onUsage: sample => samples.push(sample) });
+      const plannerSamples = samples.filter(sample => sample.kind === "planner");
+      expect(plannerSamples.every(sample => sample.outputTokens === 8192)).toBe(true);
+      expect(outcome.usage.outputTokens).toBe(fetchMock.mock.calls.length * 8192);
+      expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(MAX_OUTPUT_CAP_CONTINUATIONS + 1);
+      expect(outcome.stopReason === "max_turn_tokens" || outcome.stopReason === "output_cap").toBe(true);
+    } finally { await session.cleanup(); }
+  });
+
+  it("keeps a subsequent policy failure terminal and charges both responses once", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(cap()).mockResolvedValueOnce(stream([
+      { type: "response.failed", response: { status: "failed", error: { code: "cyber_policy" },
+        usage: { input_tokens: 7, output_tokens: 3 } } },
+      { type: "response.completed", response: { status: "completed", output: [] } },
+    ]));
+    vi.stubGlobal("fetch", fetchMock);
+    const session = createConsoleSession({ runtime: runtime(), refineObjective: false, allowModelSelfExtension: false });
+    try {
+      const outcome = await session.send("continue");
+      expect(outcome.stopReason).toBe("error");
+      expect(outcome.error).toContain("cyber_policy");
+      expect(outcome.assistantText).toBe("Completed observation.");
+      expect(outcome.usage).toEqual({ inputTokens: 17, outputTokens: 8195 });
+      expect(outcome.toolCalls).toEqual([]);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally { await session.cleanup(); }
   });
 });
 
@@ -2511,8 +2789,8 @@ describe("Console source acquisition is not target authorization", () => {
     expect(requestScope).not.toHaveBeenCalled();
   });
 
-  it("also permits source setup through run_command with no preconfigured target", async () => {
-    vi.spyOn(repositoryAcquisition, "runRepositoryAcquisition").mockResolvedValue({ success: true, output: "Checkout completed" });
+  it("refuses source setup through run_command with no exact repository target", async () => {
+    const runCheckout = vi.spyOn(repositoryAcquisition, "runRepositoryAcquisition").mockResolvedValue({ success: true, output: "Checkout completed" });
     const session = createConsoleSession({
       runtime: new ScriptedRuntime([
         checkoutTurn("git clone --depth 1 https://github.com/golang/go.git", "run_command"),
@@ -2521,8 +2799,47 @@ describe("Console source acquisition is not target authorization", () => {
       autonomyMode: "yolo",
     });
     const checkout = await session.send("Get Go source");
-    expect(checkout.toolCalls[0].result.success).toBe(true);
+    expect(checkout.toolCalls[0].result.success).toBe(false);
+    expect(runCheckout).not.toHaveBeenCalled();
     expect(session.scope?.match("https://github.com").allowed ?? false).toBe(false);
+  });
+
+  it("allows an exact operator-supplied repository target, including a clone suffix", async () => {
+    const runCheckout = vi.spyOn(repositoryAcquisition, "runRepositoryAcquisition").mockResolvedValue({ success: true, output: "Checkout completed" });
+    const session = createConsoleSession({
+      runtime: new ScriptedRuntime([
+        checkoutTurn("git clone --depth 1 https://github.com/muse-spark/muse-spark.git", "run_command"),
+        endTurn("Source ready."),
+      ]),
+      autonomyMode: "yolo",
+      target: "https://github.com/muse-spark/muse-spark",
+    });
+    const checkout = await session.send("Review the official Muse Spark source");
+    expect(checkout.toolCalls[0].result.success).toBe(true);
+    expect(runCheckout).toHaveBeenCalledOnce();
+  });
+
+  it("blocks the Muse Spark to legacy MUSE substitution before clone I/O or findings", async () => {
+    const runCheckout = vi.spyOn(repositoryAcquisition, "runRepositoryAcquisition").mockResolvedValue({ success: true, output: "Checkout completed" });
+    const session = createConsoleSession({
+      runtime: new ScriptedRuntime([
+        checkoutTurn("git clone https://github.com/facebookresearch/MUSE.git"),
+        endTurn("Repository identity is unresolved. Provide the exact repository or official product URL."),
+      ]),
+      autonomyMode: "yolo",
+      target: "Muse Spark",
+    });
+    try {
+      const checkout = await session.send("Investigate Muse Spark; a search result suggests facebookresearch/MUSE");
+      expect(checkout.toolCalls[0].result.success).toBe(false);
+      expect(runCheckout).not.toHaveBeenCalled();
+      expect(session.target).toBe("Muse Spark");
+      expect(session.exportCheckpoint().sessionData.findings).toEqual([]);
+      expect(session.systemPrompt).toContain("authoritative product/publisher links");
+      expect(session.systemPrompt).toContain("archived/current status");
+      expect(session.systemPrompt).toContain("unsuccessful search proves neither");
+      expect(checkout.assistantText).toContain("exact repository or official product URL");
+    } finally { await session.cleanup(); }
   });
 
   it("does not exempt appended commands or Git configuration and submodule execution", async () => {
@@ -3195,6 +3512,51 @@ describe("console live driver authority", () => {
   });
 });
 
+describe("console engagement configuration", () => {
+  it("changes the engagement without losing conversation or previously declined host memory", async () => {
+    const runtime = new ScriptedRuntime([
+      { content: [{ type: "tool_use", id: "first", name: "bash", input: { command: "printf https://denied.test/" } }], stopReason: "tool_use", durationMs: 0 },
+      endTurn("Denied."),
+      { content: [{ type: "tool_use", id: "second", name: "bash", input: { command: "printf https://denied.test/" } }], stopReason: "tool_use", durationMs: 0 },
+      endTurn("Still denied."),
+    ]);
+    const requestScope = vi.fn(async () => null);
+    const session = createConsoleSession({ runtime, allowModelSelfExtension: false, refineObjective: false, autonomyMode: "standard", approveTool: async () => true, requestScope });
+    try {
+      const first = await session.send("Inspect the requested endpoint.");
+      expect(first.toolCalls[0]!.result.success).toBe(false);
+      const history = structuredClone(session.messages);
+      session.configureEngagement({ target: "https://next.test/", scope: ScopePolicy.fromJson({ in_scope: ["next.test", "denied.test"] }) });
+      expect(session.messages).toEqual(history);
+      expect(session.target).toBe("https://next.test/");
+      const second = await session.send("Inspect the requested endpoint again.");
+      expect(second.toolCalls[0]!.result.success).toBe(false);
+      expect(requestScope).toHaveBeenCalledTimes(1);
+      session.configureEngagement({ scope: null });
+      expect(session.scope).toBeUndefined();
+      expect(session.target).toBe("https://next.test/");
+    } finally { await session.cleanup(); }
+  });
+
+  it("rejects engagement changes during an active model call rather than changing a tool's authorization mid-turn", async () => {
+    const started = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const runtime = new ScriptedRuntime([]);
+    runtime.executeNative = async () => { started.resolve(); await release.promise; return endTurn("Done."); };
+    const session = createConsoleSession({ runtime, target: "https://original.test/", allowModelSelfExtension: false, refineObjective: false });
+    try {
+      await session.ready;
+      const sending = session.send("Inspect.");
+      await started.promise;
+      expect(() => session.configureEngagement({ target: "https://replacement.test/" })).toThrow();
+      expect(session.target).toBe("https://original.test/");
+      release.resolve(); await sending;
+      session.configureEngagement({ target: "https://replacement.test/" });
+      expect(session.target).toBe("https://replacement.test/");
+    } finally { release.resolve(); await session.cleanup(); }
+  });
+});
+
 describe("buildConsoleSystemPrompt — Voice (register only, never facts)", () => {
   it("carries a bounded pragmatic Voice block", () => {
     const prompt = buildConsoleSystemPrompt({ scanId: "s1", autonomyMode: "standard" });
@@ -3454,5 +3816,150 @@ describe("createConsoleSession — context compaction", () => {
     expect(events).toHaveLength(0);
     expect(hasSummaryMarker(session.messages)).toBe(false);
     expect(session.messages.some((m) => m.content.some((b) => b.type === "text" && b.text.includes("FIRST-ANCHOR")))).toBe(true);
+  });
+});
+
+describe("operator-approved workspace configuration", () => {
+  it("binds shell cwd and checkpoint context to the approved folder while keeping action approval", async () => {
+    const directory = realpathSync(mkdtempSync(join(tmpdir(), "zero-engine-workspace-")));
+    const approveTool = vi.fn(async () => true);
+    const requestLocalScope = vi.fn(async () => null);
+    const runtime = new ScriptedRuntime([
+      { content: [{ type: "tool_use", id: "workspace-pwd", name: "bash", input: { command: "pwd" } }], stopReason: "tool_use", durationMs: 1 },
+      endTurn("Done"),
+    ]);
+    const session = createConsoleSession({ runtime, role: "discovery", autonomyMode: "standard", refineObjective: false, allowModelSelfExtension: false, approveTool, requestLocalScope });
+    try {
+      await session.ready;
+      expect(() => session.configureWorkspace("/")).toThrow("unprotected");
+      expect(session.localScopePath).toBeUndefined();
+      session.configureWorkspace(directory);
+      const result = await session.send("Check your directory");
+      expect(result.toolCalls[0]!.result.success).toBe(true);
+      expect(String(result.toolCalls[0]!.result.output).trim()).toBe(directory);
+      expect(approveTool).toHaveBeenCalled();
+      expect(requestLocalScope).not.toHaveBeenCalled();
+      expect(session.exportCheckpoint()).toMatchObject({ workspaceRoot: directory, localScopePath: directory });
+    } finally { await session.cleanup(); rmSync(directory, { recursive: true, force: true }); }
+  });
+});
+
+
+describe("console workflow draft authoring", () => {
+  const input: SecurityWorkflowInput = {
+    name: "Dependency review", instructions: "Review dependency vulnerabilities and report verified findings.", target: "source:/fixture",
+    nodes: [
+      { id: "start", type: "trigger", label: "Manual start", enabled: true },
+      { id: "audit", type: "audit", label: "Dependency review", enabled: true, plan: DEFAULT_SECURITY_WORKFLOW_PLAN, execution: { instructions: "Inspect manifests without running shell commands.", allowedAgentTools: ["read_file"] } },
+      { id: "report", type: "report", label: "Report", enabled: true },
+    ], edges: [{ source: "start", target: "audit" }, { source: "audit", target: "report" }],
+  };
+  const saved: SecurityWorkflow = { ...input, id: "workflow-fixture", revision: 1, createdAt: "2026-09-30T00:00:00Z", updatedAt: "2026-09-30T00:00:00Z" };
+
+  it("uses real structured tool calls to save a draft without executing or granting permissions", async () => {
+    const save = vi.fn((_input: SecurityWorkflowInput) => saved); const list = vi.fn(() => [saved]); const approval = vi.fn(async () => true);
+    const runtime = new ScriptedRuntime([
+      { content: [{ type: "tool_use", id: "draft-1", name: "console_save_workflow", input: { ...input } }], stopReason: "tool_use", durationMs: 1 },
+      { content: [{ type: "tool_use", id: "list-1", name: "console_list_workflows", input: { id: "workflow-fixture" } }], stopReason: "tool_use", durationMs: 1 },
+      endTurn("Saved the workflow draft for inspection."),
+    ]);
+    const session = createConsoleSession({ runtime, autonomyMode: "standard", approveTool: approval, workflowAuthoring: { list, save } });
+    try {
+      await session.send("Create a dependency review workflow draft.");
+      expect(save).toHaveBeenCalledOnce();
+      expect(list).toHaveBeenCalledOnce();
+      expect(save.mock.calls[0]?.[0]).toEqual(input);
+      const readResult = runtime.calls[2]?.messages.flatMap(message => message.content).find(block => block.type === "tool_result" && block.tool_use_id === "list-1");
+      expect(readResult && "content" in readResult ? readResult.content : "").toContain(input.instructions);
+      expect(readResult && "content" in readResult ? readResult.content : "").toContain('"edges"');
+      expect(readResult && "content" in readResult ? readResult.content : "").toContain('"allowedAgentTools":["read_file"]');
+      expect(runtime.calls[0]?.system).toContain("workflow.instructions only for description notes");
+      const saveTool = runtime.calls[0]?.tools.find(tool => tool.name === "console_save_workflow");
+      expect(JSON.stringify(saveTool?.input_schema)).toContain('"execution"');
+      expect(JSON.stringify(saveTool?.input_schema)).toContain('"allowedAgentTools"');
+      expect(approval).not.toHaveBeenCalled();
+      expect(session.scope).toBeUndefined();
+      expect(session.localScopePath).toBeUndefined();
+      expect(runtime.calls[0]?.tools.map(tool => tool.name)).toEqual(expect.arrayContaining(["console_save_workflow", "console_list_workflows"]));
+      expect(runtime.calls[0]?.system).toContain("Do not claim saving runs or schedules it");
+      const result = runtime.calls[1]?.messages.flatMap(message => message.content).find(block => block.type === "tool_result");
+      expect(result && "content" in result ? result.content : "").toContain('"executed":false');
+      expect(result && "content" in result ? result.content : "").toContain("/workflows?workflow=workflow-fixture");
+    } finally { await session.cleanup(); }
+  });
+
+  it.each([undefined, []] as const)("preserves omitted versus empty agent tool restrictions (%s)", async allowedAgentTools => {
+    const draft: SecurityWorkflowInput = { ...input, nodes: input.nodes.map(node => node.type === "audit" ? { ...node, execution: { instructions: "", ...(allowedAgentTools === undefined ? {} : { allowedAgentTools: [...allowedAgentTools] }) } } : node) };
+    const save = vi.fn((value: SecurityWorkflowInput) => ({ ...saved, nodes: value.nodes }));
+    const runtime = new ScriptedRuntime([
+      { content: [{ type: "tool_use", id: "restricted-draft", name: "console_save_workflow", input: { ...draft } }], stopReason: "tool_use", durationMs: 1 },
+      endTurn("Draft saved."),
+    ]);
+    const session = createConsoleSession({ runtime, workflowAuthoring: { list: () => [], save } });
+    try {
+      await session.send("Save the stage tool restriction as a draft.");
+      expect(save).toHaveBeenCalledOnce();
+      const execution = save.mock.calls[0]?.[0].nodes.find(node => node.type === "audit")?.execution;
+      expect(execution?.allowedAgentTools).toEqual(allowedAgentTools);
+      expect(Object.hasOwn(execution ?? {}, "allowedAgentTools")).toBe(allowedAgentTools !== undefined);
+    } finally { await session.cleanup(); }
+  });
+
+  it("does not advertise authoring tools without a caller-owned draft store", async () => {
+    const runtime = new ScriptedRuntime([endTurn("Ready.")]);
+    const session = createConsoleSession({ runtime });
+    try {
+      await session.send("Hello.");
+      expect(runtime.calls[0]?.tools.some(tool => tool.name.startsWith("console_save_workflow") || tool.name === "console_list_workflows")).toBe(false);
+      expect(runtime.calls[0]?.system).not.toContain("console_save_workflow");
+    } finally { await session.cleanup(); }
+  });
+
+  it("rejects executable or unbounded draft payloads before storage", async () => {
+    const save = vi.fn((_input: SecurityWorkflowInput) => saved);
+    const runtime = new ScriptedRuntime([
+      { content: [{ type: "tool_use", id: "invalid-draft", name: "console_save_workflow", input: { ...input, command: "execute shell", schedule: "every minute" } }], stopReason: "tool_use", durationMs: 1 },
+      { content: [{ type: "tool_use", id: "oversized-draft", name: "console_save_workflow", input: { ...input, instructions: "x".repeat(16_001) } }], stopReason: "tool_use", durationMs: 1 },
+      { content: [{ type: "tool_use", id: "wrong-stage", name: "console_save_workflow", input: { ...input, nodes: input.nodes.map(node => node.type === "trigger" ? { ...node, execution: { instructions: "Execute this trigger" } } : node) } }], stopReason: "tool_use", durationMs: 1 },
+      endTurn("No draft saved."),
+    ]);
+    const session = createConsoleSession({ runtime, workflowAuthoring: { list: () => [], save } });
+    try {
+      await session.send("Draft a workflow.");
+      expect(save).not.toHaveBeenCalled();
+      const result = runtime.calls[1]?.messages.flatMap(message => message.content).find(block => block.type === "tool_result");
+      expect(result && "is_error" in result ? result.is_error : false).toBe(true);
+    } finally { await session.cleanup(); }
+  });
+});
+
+describe("caller-owned workflow lifecycle tools", () => {
+  it("dispatches discovery and queued launch without starting a scan inside the turn", async () => {
+    const invoke = vi.fn(async (name: string) => name === "list_templates" ? [{ id: "repository-review", revision: 1 }] : { requestId: "queued-1", status: "queued" });
+    const runtime = new ScriptedRuntime([
+      { content: [{ type: "tool_use", id: "templates-1", name: "list_templates", input: {} }], stopReason: "tool_use", durationMs: 1 },
+      { content: [{ type: "tool_use", id: "launch-1", name: "start_run", input: { templateId: "repository-review", target: "/fixture" } }], stopReason: "tool_use", durationMs: 1 },
+      endTurn("The workflow is queued for launch approval after this turn."),
+    ]);
+    const session = createConsoleSession({ runtime, refineObjective: false, allowModelSelfExtension: false, workflowLifecycle: { invoke } });
+    try {
+      await session.send("Run the repository review workflow");
+      expect(invoke).toHaveBeenCalledWith("list_templates", {});
+      expect(invoke).toHaveBeenCalledWith("start_run", { templateId: "repository-review", target: "/fixture" });
+      expect(runtime.calls[0]!.tools.map(tool => tool.name)).toEqual(expect.arrayContaining(["list_templates", "start_run", "get_run", "get_run_results", "cancel_run"]));
+      expect(runtime.calls[0]!.system).toContain("queued requestId");
+      const result = runtime.calls[2]!.messages.flatMap(message => message.content).find(block => block.type === "tool_result" && block.tool_use_id === "launch-1");
+      expect(result && "content" in result ? result.content : "").toContain('"status":"queued"');
+    } finally { await session.cleanup(); }
+  });
+  it("rejects launch requests in recon mode before reaching the caller adapter", async () => {
+    const invoke = vi.fn();
+    const runtime = new ScriptedRuntime([
+      { content: [{ type: "tool_use", id: "launch-recon", name: "start_run", input: { templateId: "repository-review", target: "/fixture" } }], stopReason: "tool_use", durationMs: 1 },
+      endTurn("Cannot run assessments in recon mode."),
+    ]);
+    const session = createConsoleSession({ runtime, autonomyMode: "recon", refineObjective: false, allowModelSelfExtension: false, workflowLifecycle: { invoke } });
+    try { await session.send("Run review"); expect(invoke).not.toHaveBeenCalled(); }
+    finally { await session.cleanup(); }
   });
 });

@@ -31,7 +31,7 @@ function pageLimit(value: number | undefined): number {
   return value;
 }
 
-/** Reads the same store as /resume; never exposes provider payloads or tool results. */
+/** Reads the same store as /sessions; never exposes provider payloads or tool results. */
 export function createConversationHistory(options: { cwd?: string; homeDir?: string } = {}): ConsoleConversationHistory {
   const cwd = options.cwd ?? process.cwd();
   return {

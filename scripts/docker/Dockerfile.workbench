@@ -1,0 +1,146 @@
+# syntax=docker/dockerfile:1.7
+# Current CLI, provider CLIs and browser in curated Linux ARM64 workbench profiles.
+# Plan without downloads: node scripts/build-workbench-image.mjs --profile core-web
+# Explicit build/export: add --build --archive /absolute/path/workbench.tar
+# Kali is opt-in and requires a pre-provisioned immutable base (see architecture doc).
+ARG WORKBENCH_BASE=debian-base
+ARG KALI_IMAGE=scratch
+FROM rust:1.93-bookworm@sha256:e469417188261e17b3ec9c14a54c2802beafe400bf9baf9688fdb5294d925c06 AS foxguard-builder
+# The released 0.14.0 binary predates the v2 policy used by this repository.
+# Pin both source identity and archive bytes until that support is released.
+ENV RUSTUP_TOOLCHAIN=1.93.1 CARGO_BUILD_JOBS=2
+WORKDIR /build/foxguard
+RUN curl --fail --location --retry 3 --silent --show-error \
+      https://codeload.github.com/0sec-labs/foxguard/tar.gz/01a77530488f198584deb3ccec7cd2ce2f1c7688 -o /tmp/foxguard-source.tar.gz \
+    && printf '%s  /tmp/foxguard-source.tar.gz\n' c293250bd27704930662c93389300115635948da33109776a864ebeb7cfa9cac | sha256sum -c - \
+    && tar -xzf /tmp/foxguard-source.tar.gz --strip-components=1 \
+    && cargo build --locked --release --bin foxguard \
+    && install -D -m 0755 target/release/foxguard /out/foxguard \
+    && printf '%s\n' '{"revision":"01a77530488f198584deb3ccec7cd2ce2f1c7688","archiveSha256":"c293250bd27704930662c93389300115635948da33109776a864ebeb7cfa9cac","policyVersions":["v1","v2"]}' > /out/foxguard-source.json
+RUN mkdir /tmp/foxguard-policy-smoke \
+    && printf 'pr_security_policy:\n  version: v2\n  scope: diff\n' > /tmp/foxguard-policy-smoke/.foxguard.yml \
+    && printf 'print("ok")\n' > /tmp/foxguard-policy-smoke/fixture.py \
+    && /out/foxguard --format json /tmp/foxguard-policy-smoke/fixture.py > /tmp/foxguard-policy-smoke/report.json
+
+FROM node:24.21.0-bookworm@sha256:64af3819f9275802414d7cdc38c27e9d82bd564dec4d4da87d008255d36c63b4 AS node-runtime
+
+FROM node-runtime AS native-deps
+ENV PNPM_HOME=/root/.local/share/pnpm \
+    PATH=/root/.local/share/pnpm:$PATH \
+    CI=1 \
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+WORKDIR /app
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY scripts ./scripts
+COPY packages ./packages
+COPY assets ./assets
+COPY vendor ./vendor
+COPY LICENSE README.md ./
+RUN pnpm install --frozen-lockfile
+# Linux arm64 has no upstream parser prebuild: installation must compile the real
+# patched C++20 addon. Verify the exact parser/grammar API before bundling.
+RUN node -e 'const Parser=require("tree-sitter"); const parser=new Parser(); parser.setLanguage(require("tree-sitter-c")); const root=parser.parse("int main(void) { return 0; }").rootNode; if(root.hasError || root.namedChild(0)?.type!=="function_definition") process.exit(1); console.log("native C parser:", root.toString());'
+
+FROM native-deps AS builder
+RUN pnpm --filter '@0/cli...' build \
+    && pnpm --filter @0/dashboard build \
+    && pnpm run build:bundle
+WORKDIR /app/dist
+# The published file dependency is included in dist/vendor. Do not skip its
+# install hook: the complete runtime must also work outside the workspace.
+RUN npm ci --omit=dev --no-audit --no-fund \
+    && npm rebuild tree-sitter tree-sitter-c --build-from-source --no-audit --no-fund \
+    && node -e 'const Parser=require("tree-sitter"); const parser=new Parser(); parser.setLanguage(require("tree-sitter-c")); const root=parser.parse("int workbench(void) { return 24; }").rootNode; if(root.hasError || root.namedChild(0)?.type!=="function_definition") process.exit(1); console.log("published native C parser:", root.toString());'
+
+FROM node:24.21.0-bookworm-slim@sha256:24b8bc17702002d2ed0c1da9ad66c3ee507cc279d0856726662ff2b6fc35c149 AS debian-base
+USER root
+ARG DEBIAN_FRONTEND=noninteractive
+ARG TOOLBOX_PROFILE=core-web
+# Freeze OS dependencies to a dated archive. Disabling expiry for a historical
+# Release file does not disable repository signatures or package checksums.
+COPY --from=node-runtime /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY scripts/workbench-profiles.json scripts/workbench-profile.mjs scripts/install-workbench-profile.mjs /opt/0-build/
+RUN rm -f /etc/apt/sources.list.d/debian.sources \
+    && printf '%s\n' \
+      'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260929T000000Z/ bookworm main' \
+      'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20260929T000000Z/ bookworm-security main' > /etc/apt/sources.list \
+    && apt-get update -qq \
+    && node /opt/0-build/install-workbench-profile.mjs "$TOOLBOX_PROFILE" \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# No apt/pip bootstrap here: the supplied pinned Kali image must already have
+# required tools, Python modules and browser libraries; inventory fails if absent.
+FROM ${KALI_IMAGE} AS kali-base
+USER root
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-runtime /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+
+FROM ${WORKBENCH_BASE} AS workbench-base
+COPY --from=foxguard-builder /out/foxguard /usr/local/bin/foxguard
+COPY --from=foxguard-builder /out/foxguard-source.json /usr/local/share/0/foxguard-source.json
+ARG TARGETARCH
+RUN test "$TARGETARCH" = arm64
+# Release digests are vendor-published GitHub asset SHA256s, not downloaded
+# alongside the executable. The Bun version matches the native release compiler.
+RUN set -eux; \
+    case "$TARGETARCH" in \
+        arm64) asset=bun-linux-aarch64; sha=a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b ;; \
+        amd64) asset=bun-linux-x64-baseline; sha=a063908ae08b7852ca10939bbdc6ceed3ddabce8fb9402dce83d65d73b36e6c7 ;; \
+        *) echo "Unsupported workbench architecture: $TARGETARCH" >&2; exit 1 ;; \
+    esac; \
+    curl --fail --location --silent --show-error \
+        "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/${asset}.zip" -o /tmp/bun.zip; \
+    printf '%s  /tmp/bun.zip\n' "$sha" | sha256sum -c -; \
+    unzip /tmp/bun.zip -d /tmp/bun; \
+    install -m 0755 "/tmp/bun/${asset}/bun" /usr/local/bin/bun; \
+    rm -rf /tmp/bun /tmp/bun.zip; \
+    test "$(bun --version)" = 1.3.14
+
+# Native model-agent executables are guest tools too. Keep their independently
+# locked payload separate from the application's npm publication.
+FROM workbench-base AS agent-clis
+WORKDIR /opt/0-agent-clis
+COPY scripts/workbench-agents/package.json scripts/workbench-agents/package-lock.json ./
+RUN --mount=type=cache,id=0-workbench-agent-clis,target=/root/.npm \
+    npm ci --omit=dev --no-audit --no-fund
+
+FROM workbench-base AS workbench
+COPY --from=builder /app/dist /opt/0
+COPY --from=agent-clis /opt/0-agent-clis /opt/0-agent-clis
+ARG TOOLBOX_PROFILE=core-web
+ARG SOURCE_REVISION
+ARG BASE_IMAGE
+ENV ZERO_WORKBENCH_PROFILE=$TOOLBOX_PROFILE \
+    ZERO_WORKBENCH_SOURCE_REVISION=$SOURCE_REVISION \
+    ZERO_WORKBENCH_BASE_IMAGE=$BASE_IMAGE
+COPY scripts/workbench-tools.json scripts/workbench-profiles.json scripts/workbench-profile.mjs scripts/workbench-inventory.mjs /usr/local/share/0/
+ENV NODE_ENV=production \
+    HOME=/home/zero \
+    TERM=xterm-256color \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/playwright \
+    PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin
+WORKDIR /opt/0
+RUN HOME=/root npx --no-install playwright install chromium \
+    && chmod -R a+rX /opt/playwright \
+    && printf '#!/bin/sh\nexec /usr/local/bin/bun /opt/0/0.js "$@"\n' > /usr/local/bin/0 \
+    && chmod 0755 /usr/local/bin/0 \
+    && ln -s /opt/0-agent-clis/node_modules/.bin/claude /usr/local/bin/claude \
+    && ln -s /opt/0-agent-clis/node_modules/.bin/codex /usr/local/bin/codex \
+    && ln -s /opt/0-agent-clis/node_modules/.bin/gemini /usr/local/bin/gemini \
+    && old_user="$(getent passwd 1000 | cut -d: -f1)" \
+    && old_group="$(getent group 1000 | cut -d: -f1)" \
+    && test -n "$old_user" && test -n "$old_group" \
+    && usermod -l zero -d /home/zero -m "$old_user" \
+    && groupmod -n zero "$old_group" \
+    && install -d -o zero -g zero /workspace /work /home/zero/.0 \
+    && install -d -m 0755 /run/0-workbench \
+    && runuser -u zero -- node /usr/local/share/0/workbench-inventory.mjs /tmp/workbench-tool-inventory.json \
+    && install -m 0444 /tmp/workbench-tool-inventory.json /usr/local/share/0/workbench-tool-inventory.json \
+    && rm /tmp/workbench-tool-inventory.json
+USER 1000:1000
+WORKDIR /workspace
+ENTRYPOINT []
+CMD ["/usr/local/bin/0"]

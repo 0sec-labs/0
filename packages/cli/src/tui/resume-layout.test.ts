@@ -14,6 +14,7 @@ import {
   sessionCategory,
   sessionLabel,
   sessionMeta,
+  type LiveSessionSummary,
 } from "./resume-layout.js";
 
 // A fixed clock so every age string is deterministic.
@@ -106,30 +107,47 @@ describe("sessionMeta", () => {
 });
 
 describe("resumeItems", () => {
-  it("groups this project first, then other projects, newest-first within each", () => {
+  it("keeps saved conversations project-first and newest-first within each project", () => {
     const items = resumeItems({ sessions: SESSIONS, currentCwd: "/home/op/project-a", now: NOW });
-    expect(items.map((item) => item.id)).toEqual(["s-here-new", "s-here-old", "s-elsewhere"]);
-    expect(items.map((item) => item.category)).toEqual([CATEGORY_THIS, CATEGORY_THIS, CATEGORY_OTHER]);
+    expect(items.map((item) => item.session.id)).toEqual(["s-here-new", "s-here-old", "s-elsewhere"]);
   });
 
-  it("renders a flat, uncategorised list when no current directory is given", () => {
+  it("preserves saved ordering when no current directory is given", () => {
     const items = resumeItems({ sessions: SESSIONS, now: NOW });
-    expect(items.every((item) => item.category === undefined)).toBe(true);
-    expect(items.map((item) => item.id)).toEqual(SESSIONS.map((s) => s.id));
+    expect(items.map((item) => item.session.id)).toEqual(SESSIONS.map((s) => s.id));
   });
 
   it("marks the current session and no other", () => {
     const items = resumeItems({ sessions: SESSIONS, currentId: "s-here-old", now: NOW });
-    expect(items.filter((item) => item.current).map((item) => item.id)).toEqual(["s-here-old"]);
+    expect(items.filter((item) => item.current).map((item) => item.session.id)).toEqual(["s-here-old"]);
   });
 
   it("filters AND-over-terms across summary and preview only", () => {
     // "ssrf" is only in a summary; "image" only in a preview.
-    expect(resumeItems({ sessions: SESSIONS, now: NOW, filter: "ssrf image" }).map((i) => i.id)).toEqual([
+    expect(resumeItems({ sessions: SESSIONS, now: NOW, filter: "ssrf image" }).map((i) => i.session.id)).toEqual([
       "s-elsewhere",
     ]);
     // A term present nowhere in summary/preview (a model id) matches nothing.
     expect(resumeItems({ sessions: SESSIONS, now: NOW, filter: "gpt-5.5" })).toHaveLength(0);
+  });
+
+  it("deduplicates a linked saved transcript even when only its old preview matches", () => {
+    const live: LiveSessionSummary = {
+      id: "native-1", sessionId: "s-here-new", title: "Investigating OAuth",
+      activity: "Following redirect chains", status: "running", unread: true,
+    };
+    const items = resumeItems({ sessions: SESSIONS, liveSessions: [live], currentLiveId: live.id, now: NOW });
+    expect(items.map((item) => item.session.id)).toEqual(["native-1", "s-here-old", "s-elsewhere"]);
+    expect(items.filter((item) => item.current).map((item) => item.session.id)).toEqual(["native-1"]);
+    expect(resumeItems({ sessions: SESSIONS, liveSessions: [live], filter: "idor", now: NOW })).toEqual([]);
+    expect(resumeItems({ sessions: SESSIONS, liveSessions: [live], filter: "oauth redirect", now: NOW })
+      .map((item) => item.session.id)).toEqual(["native-1"]);
+  });
+
+  it("keeps native and persisted identities distinct when their raw ids overlap", () => {
+    const live: LiveSessionSummary = { id: "same", title: "Current work", status: "idle", unread: false };
+    const items = resumeItems({ sessions: [session({ id: "same" })], liveSessions: [live], now: NOW });
+    expect(items[0]!.id).not.toBe(items[1]!.id);
   });
 });
 

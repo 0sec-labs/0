@@ -127,7 +127,7 @@ export {
   verifyOracleByCategory,
   parseRequest,
 } from "./oracles.js";
-export type { OracleResult } from "./oracles.js";
+export type { OracleResult, OracleContext } from "./oracles.js";
 export {
   generatePov,
   judgePovEvidence,

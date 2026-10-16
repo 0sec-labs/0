@@ -70,7 +70,7 @@ export function registerIntelCommand(program: Command): void {
 
   intel
     .command("dossier")
-    .description("Build a package-level intel dossier with risk summary, prior-vuln playbooks, and variant leads")
+    .description("Build a package risk report with prior vulnerabilities and variant leads")
     .argument("<package>", "Package name")
     .option("--ecosystem <ecosystem>", "Package ecosystem: npm, pypi, cargo, Go, Maven", "npm")
     .option("--package-version <version>", "Resolved package version")

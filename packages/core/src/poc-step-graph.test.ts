@@ -17,7 +17,6 @@ import { randomUUID } from "node:crypto";
 import { describe, it, expect } from "vitest";
 import type { Finding, PocStep, PocStepAction, PocStepExpect } from "@0/shared";
 import { parsePocStepsArg } from "./agent/tools.js";
-import { normalizeFinding } from "./cloud-sink.js";
 
 function makePocSteps(): PocStep[] {
   return [
@@ -270,50 +269,3 @@ describe("parsePocStepsArg (agent tool wire shape, 0#170)", () => {
   });
 });
 
-describe("cloud-sink normalizeFinding pass-through of pocSteps (0#170)", () => {
-  it("passes a structured pocSteps array through unchanged", () => {
-    const steps = makePocSteps();
-    const out = normalizeFinding({
-      id: "f-1",
-      title: "RCE",
-      severity: "critical",
-      evidence: { request: "x", response: "y" },
-      pocSteps: steps,
-    });
-    expect(out.pocSteps).toEqual(steps);
-  });
-
-  it("parses a JSON-encoded poc_steps string (LLM tool-call shape)", () => {
-    const steps = makePocSteps();
-    const out = normalizeFinding({
-      title: "RCE",
-      severity: "high",
-      evidence_request: "x",
-      evidence_response: "y",
-      poc_steps: JSON.stringify(steps),
-    });
-    expect(Array.isArray(out.pocSteps)).toBe(true);
-    expect(out.pocSteps).toHaveLength(steps.length);
-    expect(out.pocSteps).toEqual(steps);
-  });
-
-  it("drops malformed pocSteps without dropping the finding", () => {
-    const out = normalizeFinding({
-      title: "still useful",
-      severity: "high",
-      evidence: { request: "x", response: "y" },
-      pocSteps: "not json [",
-    });
-    expect(out.pocSteps).toBeUndefined();
-    expect(out.title).toBe("still useful");
-  });
-
-  it("omits pocSteps when the input has none (legacy findings)", () => {
-    const out = normalizeFinding({
-      title: "legacy",
-      severity: "low",
-      evidence: { request: "x", response: "y" },
-    });
-    expect(out.pocSteps).toBeUndefined();
-  });
-});

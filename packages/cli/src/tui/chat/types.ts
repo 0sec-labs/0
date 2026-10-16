@@ -1,4 +1,4 @@
-import type { NativeMessage, TodoStatus } from "@0/core";
+import type { TodoStatus } from "@0/core";
 import type { PanelData } from "../panels.js";
 import type { ToolPreview, ToolPreviewImage } from "../tool-format.js";
 import type {
@@ -21,25 +21,6 @@ export type ChatImageAttachment = ToolPreviewImage & {
   /** Name of the tool whose result carried this image, when it is known. */
   origin?: string;
 };
-
-/**
- * A retained record of one context-compaction event, kept by chat-screen so the
- * Ctrl+O review overlay can render a readable pre-compaction recap. Mirrors the
- * load-bearing fields of core's `ConsoleCompactionEvent`; `tokensAfter` is back-
- * filled from the next planner usage sample rather than the local estimate.
- */
-export interface CompactionRecap {
-  /** Planner input tokens that tripped the trigger (pre-compaction occupancy). */
-  tokensBefore: number;
-  /** Post-compaction planner input tokens, patched in from the next sample. */
-  tokensAfter?: number;
-  /** The `[COMPACTED CONVERSATION SUMMARY]` body produced. */
-  summaryText: string;
-  /** Deep copy of the pre-compaction history, for the "expand" recap view. */
-  preCompactionMessages: readonly NativeMessage[];
-  /** True when the summary degraded to regex extraction / hard-trim. */
-  degraded: boolean;
-}
 
 export type ChatEntry = {
   id: string;
@@ -298,6 +279,12 @@ export interface EntryDisplay {
    * appear collapsed and there is at most one for the active turn.)
    */
   activeEntryId?: string;
+  /**
+   * Whether this row may use the rich Markdown renderer. A false value keeps
+   * the bounded preview readable as one plain text buffer when the transcript
+   * has already spent its native rich-text budget on newer rows.
+   */
+  richMarkdown?: boolean;
 }
 
 export interface KeyHint {

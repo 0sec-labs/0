@@ -1,4 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+// Existing authorization regressions exercise the explicitly activated plugin.
+vi.mock("../plugins/enablement.js", async (importOriginal) => ({
+  ...await importOriginal<object>(),
+  readEnablement: () => ({ schema: 1, project: process.cwd(), enabled: { scope: { version: "1.0.0", capabilities: [], enabledAt: 1 } } }),
+}));
 import { ToolExecutor, getToolsForRole, TOOL_DEFINITIONS, SCANNER_TOOL_NAMES, detectHttpEgressSegments, evaluateDoneCoverageGate, containsUnquotedShellChars, sanitizedEnv, toolExecutorCheckpointSchema } from "./tools.js";
 import { parseFindingsFromCliOutput } from "../findings-parser.js";
 import type { ToolContext, ToolCall } from "./types.js";
@@ -8,6 +13,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -21,6 +27,7 @@ import { RateLimiter } from "../scope/rate-limit.js";
 import { WafDetector } from "../scope/waf-detect.js";
 import { resolveEngagementProfile } from "../scope/engagement-profile.js";
 
+import * as repositoryAcquisition from "./repository-acquisition.js";
 const ORIGINAL_JIT_SKILLS_ENV = process.env["ZERO_FEATURE_JIT_SKILLS"];
 const ORIGINAL_LOOT_LEDGER_ENV = process.env["ZERO_FEATURE_LOOT_LEDGER"];
 const ORIGINAL_CLOUD_SURFACE_ENV = process.env["ZERO_FEATURE_CLOUD_SURFACE"];
@@ -105,11 +112,11 @@ describe("getToolsForRole", () => {
     expect(names).toContain("save_finding");
     expect(names).toContain("payload_lookup");
     expect(names).toContain("wp_fingerprint");
-    expect(names).not.toContain("list_skills");
-    expect(names).not.toContain("load_skill");
+    expect(names).toContain("list_skills");
+    expect(names).toContain("load_skill");
   });
 
-  it("adds JIT skill tools only when enabled", () => {
+  it("provides skill tools when automatic JIT methodology is enabled", () => {
     process.env["ZERO_FEATURE_JIT_SKILLS"] = "1";
     const names = getToolsForRole("attack").map((t) => t.name);
     expect(names).toContain("list_skills");
@@ -144,8 +151,7 @@ describe("getToolsForRole", () => {
   it("audit role gets all enabled tools", () => {
     process.env["ZERO_FEATURE_JIT_SKILLS"] = "0";
     // Pin the loot flag ON so the count is deterministic regardless of ambient
-    // env: use_loot (0#567) is then in the enabled set, leaving exactly
-    // the two JIT-skill tools gated out below.
+    // env: use_loot (0#567) is then in the enabled set.
     process.env["ZERO_FEATURE_LOOT_LEDGER"] = "1";
     // Pin the cloud-surface flag ON too (0#925): the cloud tools are then
     // in the enabled set, so they cancel out of both sides of the count below
@@ -153,8 +159,8 @@ describe("getToolsForRole", () => {
     process.env["ZERO_FEATURE_CLOUD_SURFACE"] = "1";
     const tools = getToolsForRole("audit");
     const names = tools.map((t) => t.name);
-    expect(names).not.toContain("list_skills");
-    expect(names).not.toContain("load_skill");
+    expect(names).toContain("list_skills");
+    expect(names).toContain("load_skill");
     expect(names).toContain("use_loot");
     expect(names).toContain("cloud_s3_probe");
     for (const name of names) {
@@ -406,6 +412,167 @@ describe("ToolExecutor", () => {
     expect(ctx.findings[0].severity).toBe("high");
     expect(ctx.findings[0].status).toBe("discovered");
     expect(ctx.findings[0].id).toBeTruthy();
+  });
+
+  it("save_finding evaluates only code predicates in the scoped source workspace", async () => {
+    const root = mkdtempSync(join(tmpdir(), "0-source-check-"));
+    try {
+      writeFileSync(join(root, "source.ts"), "unsafe(input)\n");
+      const scopedContext: ToolContext = {
+        ...ctx,
+        findings: [],
+        scopePath: root,
+      };
+      const scopedExecutor = new ToolExecutor(scopedContext, null);
+      const result = await scopedExecutor.execute({
+        name: "save_finding",
+        arguments: {
+          title: "Unsafe source parser",
+          severity: "high",
+          category: "missing-validation",
+          evidence_request: "source.ts:1",
+          evidence_response: "Source inspection found an unvalidated call.",
+          verification_spec: {
+            code: [{ kind: "file-contains", file: "source.ts", pattern: "unsafe\\(input\\)" }],
+            behavior: {
+              steps: [{ method: "GET", path: "http://127.0.0.1:1/never-run", expect: "success" }],
+            },
+          },
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(scopedContext.findings[0]?.sourceVerification).toEqual({
+        status: "matched",
+        totalPredicates: 1,
+        matchedPredicates: 1,
+        notMatchedPredicates: 0,
+        inconclusivePredicates: 0,
+        behaviorPending: true,
+      });
+      expect(scopedContext.findings[0]?.verification_result).toBeUndefined();
+      expect(scopedContext.findings[0]?.status).toBe("discovered");
+      expect(mockFetchScoped).not.toHaveBeenCalled();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("save_finding reports unmatched code predicates as not confirmed", async () => {
+    const root = mkdtempSync(join(tmpdir(), "0-source-check-not-confirmed-"));
+    try {
+      writeFileSync(join(root, "source.ts"), "safe(input)\n");
+      const scopedContext: ToolContext = {
+        ...ctx,
+        findings: [],
+        scopePath: root,
+      };
+      const scopedExecutor = new ToolExecutor(scopedContext, null);
+      const result = await scopedExecutor.execute({
+        name: "save_finding",
+        arguments: {
+          title: "Source predicate no longer matches",
+          severity: "medium",
+          category: "missing-validation",
+          evidence_request: "source inspection",
+          evidence_response: "The expected unsafe call was absent.",
+          verification_spec: {
+            code: [{ kind: "file-contains", file: "source.ts", pattern: "unsafe\\(input\\)" }],
+          },
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(scopedContext.findings[0]?.sourceVerification).toEqual({
+        status: "not_confirmed",
+        totalPredicates: 1,
+        matchedPredicates: 0,
+        notMatchedPredicates: 1,
+        inconclusivePredicates: 0,
+        behaviorPending: false,
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("save_finding marks unsupported source predicates inconclusive", async () => {
+    const root = mkdtempSync(join(tmpdir(), "0-source-check-inconclusive-"));
+    try {
+      const scopedContext: ToolContext = {
+        ...ctx,
+        findings: [],
+        scopePath: root,
+      };
+      const scopedExecutor = new ToolExecutor(scopedContext, null);
+      const result = await scopedExecutor.execute({
+        name: "save_finding",
+        arguments: {
+          title: "Unsupported source predicate",
+          severity: "medium",
+          category: "missing-validation",
+          evidence_request: "source inspection",
+          evidence_response: "Source predicate cannot yet be evaluated.",
+          verification_spec: {
+            code: [{ kind: "ast-shape", file: "source.ts", query: "(call_expression)" }],
+          },
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(scopedContext.findings[0]?.sourceVerification).toEqual({
+        status: "inconclusive",
+        totalPredicates: 1,
+        matchedPredicates: 0,
+        notMatchedPredicates: 0,
+        inconclusivePredicates: 1,
+        behaviorPending: false,
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("save_finding omits source results when scope or a valid spec is absent", async () => {
+    const noScope = await executor.execute({
+      name: "save_finding",
+      arguments: {
+        title: "Unscoped source finding",
+        severity: "medium",
+        category: "missing-validation",
+        evidence_request: "source inspection",
+        evidence_response: "Source finding saved.",
+        verification_spec: {
+          code: [{ kind: "file-contains", file: "source.ts", pattern: "unsafe" }],
+        },
+      },
+    });
+    expect(noScope.success).toBe(true);
+    expect(ctx.findings[0]?.sourceVerification).toBeUndefined();
+
+    const root = mkdtempSync(join(tmpdir(), "0-source-check-no-spec-"));
+    try {
+      const scopedContext: ToolContext = {
+        ...ctx,
+        findings: [],
+        scopePath: root,
+      };
+      const scopedExecutor = new ToolExecutor(scopedContext, null);
+      const noSpec = await scopedExecutor.execute({
+        name: "save_finding",
+        arguments: {
+          title: "Scoped finding without a spec",
+          severity: "medium",
+          category: "missing-validation",
+          evidence_request: "source inspection",
+          evidence_response: "Source finding saved.",
+        },
+      });
+      expect(noSpec.success).toBe(true);
+      expect(scopedContext.findings[0]?.sourceVerification).toBeUndefined();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("save_finding records a workspace-contained 0review annotation", async () => {
@@ -1058,9 +1225,8 @@ describe("ToolExecutor", () => {
     expect(f.confidence!).toBeGreaterThanOrEqual(0);
     expect(f.confidence!).toBeLessThanOrEqual(1);
     expect(f.confidence!).toBeCloseTo(0.92);
-    // Mirrored back onto the call args so agent-runner's mid-scan
-    // postFinding(call.arguments) and the native-loop's finding_ingested
-    // event both see the computed value.
+    // Mirrored onto the call arguments so the native-loop's local
+    // finding_ingested event sees the computed value.
     expect(args.confidence).toBeCloseTo(0.92);
   });
 
@@ -1247,6 +1413,27 @@ describe("ToolExecutor", () => {
         }),
       },
     });
+    expect(result.success).toBe(false);
+    expect(ctx.findings).toHaveLength(0);
+  });
+
+  it("save_finding preserves explicit missing business context without inventing risk or proof", async () => {
+    const result = await executor.execute({ name: "save_finding", arguments: {
+      title: "Context needed", severity: "critical", category: "xss", evidence_request: "x", evidence_response: "y",
+      impact_assessment: JSON.stringify({ reachability_tier: "unknown", blast_radius: "Deployment and affected customers are not established.", weaponizability: "unknown", business_impact: "unassessed", rationale: "Confirm whether the affected service handles customer data in production.", estimatedLoss: 1_000_000 }),
+    } });
+    expect(result.success).toBe(true);
+    expect(ctx.findings[0].impactAssessment).toMatchObject({ business_impact: "unassessed", reachability_tier: "unknown", weaponizability: "unknown", assessment_source: "provided" });
+    expect(ctx.findings[0].impactAssessment).not.toHaveProperty("estimatedLoss");
+    expect(ctx.findings[0].severity).toBe("critical");
+    expect(ctx.findings[0].status).not.toBe("verified");
+  });
+
+  it("save_finding rejects invalid assessment provenance before recording the finding", async () => {
+    const result = await executor.execute({ name: "save_finding", arguments: {
+      title: "Bad provenance", severity: "high", category: "xss", evidence_request: "x", evidence_response: "y",
+      impact_assessment: JSON.stringify({ reachability_tier: "remote-auth", blast_radius: "Customer records", weaponizability: "info-leak", business_impact: "notable", rationale: "Customer data exposure", assessment_source: "verified" }),
+    } });
     expect(result.success).toBe(false);
     expect(ctx.findings).toHaveLength(0);
   });
@@ -2181,13 +2368,15 @@ describe("ToolExecutor", () => {
       }
     });
 
-    it("rejects disallowed commands", async () => {
-      const result = await scopedExecutor.execute({
-        name: "run_command",
-        arguments: { command: "curl https://evil.com" },
-      });
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("not allowed");
+    it.each(["pwd", "npm --version", "find . -maxdepth 0 -exec echo fixture {} +"])("runs %s without an executable or subcommand allowlist", async command => {
+      const directory = mkdtempSync(join(tmpdir(), "0-command-policy-"));
+      try {
+        const unrestricted = new ToolExecutor({ ...ctx, scopePath: directory }, null);
+        const result = await unrestricted.execute({ name: "run_command", arguments: { command, cwd: "." } });
+        expect(result.success).toBe(true);
+        expect(typeof result.output).toBe("string");
+        if (command === "pwd") expect(String(result.output).trim()).toBe(realpathSync(directory));
+      } finally { rmSync(directory, { recursive: true, force: true }); }
     });
 
     it("rejects absolute paths in scoped commands", async () => {
@@ -2208,23 +2397,6 @@ describe("ToolExecutor", () => {
       expect(result.error).toContain("traversal");
     });
 
-    it("rejects npm with disallowed subcommands", async () => {
-      const result = await scopedExecutor.execute({
-        name: "run_command",
-        arguments: { command: "npm install evil-package" },
-      });
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("not allowed");
-    });
-
-    it("rejects find -exec", async () => {
-      const result = await scopedExecutor.execute({
-        name: "run_command",
-        arguments: { command: "find . -exec rm {} +" },
-      });
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("not allowed");
-    });
   });
 
   // ── http_request URL validation ──
@@ -2417,7 +2589,7 @@ describe("containsUnquotedShellChars", () => {
 
 // ── run_command: YOLO lifts the scoped-audit command policy ─────────
 //
-// The tokenized allow-list (no shell operators, no PM exec, scoped paths) is
+// The tokenized pipeline syntax (no unquoted shell operators, scoped paths) is
 // for the read-only SOURCE-AUDIT modes. In YOLO the operator has opted into
 // full autonomy on their own machine, so run_command runs full shell via the
 // same path as the `bash` tool. These pin that the syntax gate is lifted ONLY
@@ -2854,6 +3026,30 @@ describe("ToolExecutor — scope enforcement (0#215)", () => {
 // authority: scope, when present and covering the host, satisfies the
 // cross-origin check. With no scope, the same-origin rail is unchanged.
 describe("ToolExecutor — explicit console public-network authority", () => {
+  it("refuses a different repository identity even with console YOLO public-network authority", async () => {
+    const acquisition = vi.spyOn(repositoryAcquisition, "runRepositoryAcquisition")
+      .mockResolvedValue({ success: true, output: "checkout completed" });
+    const executor = new ToolExecutor({
+      target: "https://code.example/operator-approved",
+      scanId: "console-repository-identity",
+      findings: [], attackResults: [], targetInfo: {},
+      autonomyMode: "yolo",
+      consoleSession: true,
+      publicNetwork: {},
+    });
+    try {
+      const result = await executor.execute({
+        name: "bash",
+        arguments: { command: "git clone https://code.example/different.git" },
+      });
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/repository acquisition refused/i);
+    } finally {
+      await executor.cleanup();
+      acquisition.mockRestore();
+    }
+  });
+
   it("admits absolute public requests without a target only with explicit host opt-in", async () => {
     const ctx: ToolContext = { target: "", scanId: "public-no-target", findings: [], attackResults: [], targetInfo: {}, autonomyMode: "yolo" };
     const executor = new ToolExecutor(ctx);
@@ -4546,11 +4742,9 @@ describe("sanitizedEnv — child-process credential filtering (0#134)", () => {
     const out = sanitizedEnv({
       "ZERO_FEATURE_JIT_SKILLS": "1",
       "ZERO_BASH_TIMEOUT_MS": "60000",
-      "ZERO_CLOUD_SCAN_ID": "scan-1",
     });
     expect(out["ZERO_FEATURE_JIT_SKILLS"]).toBe("1");
     expect(out["ZERO_BASH_TIMEOUT_MS"]).toBe("60000");
-    expect(out["ZERO_CLOUD_SCAN_ID"]).toBe("scan-1");
   });
 
   it("end-to-end: the bash child cannot read the injected credentials, but CAN read $AUTH_VALUE", async () => {
@@ -4731,5 +4925,50 @@ describe("ToolExecutor engine handoff", () => {
       const { scopedAuditDenials: _denials, ...incomplete } = original.exportCheckpoint();
       expect(() => toolExecutorCheckpointSchema.parse(incomplete)).toThrow();
     } finally { await original.cleanup(); }
+  });
+});
+
+
+describe("approved workspace shell directory", () => {
+  it("drops old workspace escalation grants while preserving explicit denials", () => {
+    const context: ToolContext = { target: "", scanId: "workspace-grants", findings: [], attackResults: [], targetInfo: {} };
+    const seed = new ToolExecutor(context, null).exportCheckpoint();
+    const executor = new ToolExecutor(context, null, undefined, undefined, { ...seed, scopedAuditGrants: ["run_command"], scopedAuditDenials: ["bash"] });
+    executor.configureWorkspace(process.cwd());
+    expect(executor.exportCheckpoint().scopedAuditGrants).toEqual([]);
+    expect(executor.exportCheckpoint().scopedAuditDenials).toEqual(["bash"]);
+  });
+
+  it("runs bash in the selected directory without changing the server cwd", async () => {
+    const directory = realpathSync(mkdtempSync(join(tmpdir(), "zero-shell-workspace-")));
+    const previous = process.cwd();
+    try {
+      const executor = new ToolExecutor({ target: "", scanId: "workspace-cwd", findings: [], attackResults: [], targetInfo: {}, autonomyMode: "yolo" }, null);
+      executor.configureWorkspace(directory);
+      const result = await executor.execute({ name: "bash", arguments: { command: "pwd" } });
+      expect(result.success).toBe(true);
+      expect(String(result.output).trim()).toBe(directory);
+      expect(process.cwd()).toBe(previous);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+});
+
+describe("parsePocStepsArg strictness (0#stored-finding-revalidation)", () => {
+  it("drops a shell step missing cmd instead of persisting a record readers reject", async () => {
+    const { parsePocStepsArg } = await import("./tools.js");
+    const steps = parsePocStepsArg([
+      { id: "s1", kind: "exploit", summary: "trigger", action: { type: "shell" } },
+      { id: "s2", kind: "exploit", summary: "valid", action: { type: "shell", cmd: "true" } },
+    ]);
+    expect(steps?.map(step => step.id)).toEqual(["s2"]);
+  });
+
+  it("keeps malformed expect off the step while retaining the valid action", async () => {
+    const { parsePocStepsArg } = await import("./tools.js");
+    const steps = parsePocStepsArg([
+      { id: "s1", kind: "verify", summary: "check", action: { type: "note", text: "observe" }, expect: { type: "http-status" } },
+    ]);
+    expect(steps?.[0]?.expect).toBeUndefined();
+    expect(steps?.[0]?.action).toEqual({ type: "note", text: "observe" });
   });
 });

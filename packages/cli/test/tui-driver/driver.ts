@@ -77,6 +77,8 @@ const ESCAPE_SETTLE_MS = 40;
 export interface LaunchOptions {
   /** Terminal columns. */
   cols?: number;
+  /** Scenario-owned HTTP transport; restored on close and never used by production. */
+  fetchImpl?: typeof fetch;
   /** Terminal rows. */
   rows?: number;
   /** Initial route; defaults to the persistent chat/home screen. */
@@ -146,6 +148,8 @@ export async function launch(opts: LaunchOptions = {}): Promise<TuiHandle> {
   const rows = opts.rows ?? 34;
 
   const deterministic = withDeterministicEnv(opts.settings);
+  const priorFetch = globalThis.fetch;
+  if (opts.fetchImpl) globalThis.fetch = opts.fetchImpl;
 
   // Extra per-launch env overrides, snapshotted so close() restores them too.
   const envPrior = new Map<string, string | undefined>();
@@ -299,6 +303,13 @@ export async function launch(opts: LaunchOptions = {}): Promise<TuiHandle> {
         else if (isEscape) setup.mockInput.pressEscape(mods);
         else if (lower === "tab") setup.mockInput.pressTab(mods);
         else if (lower === "backspace") setup.mockInput.pressBackspace(mods);
+        else if (lower === "pageup" || lower === "pagedown") {
+          const modifier = 1 + (mods?.shift ? 1 : 0) + (mods?.meta ? 2 : 0) + (mods?.ctrl ? 4 : 0);
+          return setup.mockInput.pressKeys([`\x1b[${lower === "pageup" ? 5 : 6}${modifier > 1 ? `;${modifier}` : ""}~`]);
+        }
+        else if (lower === "home" || lower === "end" || /^f(?:[1-9]|1[0-2])$/.test(lower)) {
+          setup.mockInput.pressKey(lower.toUpperCase(), mods);
+        }
         else setup.mockInput.pressKey(key, mods);
       }, isEscape);
     },
@@ -380,6 +391,7 @@ export async function launch(opts: LaunchOptions = {}): Promise<TuiHandle> {
         if (value === undefined) delete process.env[key];
         else process.env[key] = value;
       }
+      if (opts.fetchImpl) globalThis.fetch = priorFetch;
       deterministic.restore();
       __resetSettingsStoreForTests();
     },

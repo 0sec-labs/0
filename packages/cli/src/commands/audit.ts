@@ -7,7 +7,7 @@ const SUPPORTED_AUDIT_ECOSYSTEMS = new Set(["npm", "pypi", "cargo", "oci"]);
 export function registerAuditCommand(program: Command): void {
   program
     .command("audit")
-    .description("Audit a package for security vulnerabilities")
+    .description("Run a package security workflow (compatibility shortcut)")
     .argument("<package>", "package name (e.g. lodash, express, requests)")
     .option("--ecosystem <ecosystem>", "Package ecosystem: npm, pypi, cargo, oci", "npm")
     // `--package-version` rather than `--version` because Commander reserves

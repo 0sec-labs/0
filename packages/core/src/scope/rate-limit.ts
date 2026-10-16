@@ -31,6 +31,7 @@
  */
 
 import { jitterFor } from "./waf-detect.js";
+import { scanExecutionSignal } from "../scan-plan.js";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -109,14 +110,14 @@ interface Bucket {
 export class TokenBucket {
   private state: Bucket;
   private readonly nowFn: () => number;
-  private readonly sleepFn: (ms: number) => Promise<void>;
+  private readonly sleepFn: (ms: number, signal?: AbortSignal) => Promise<void>;
   private readonly jitter?: JitterConfig;
 
   constructor(
     rps: number,
     capacity: number = rps,
     nowFn: () => number = () => Date.now(),
-    sleepFn: (ms: number) => Promise<void> = defaultSleep,
+    sleepFn: (ms: number, signal?: AbortSignal) => Promise<void> = defaultSleep,
     jitter?: JitterConfig,
   ) {
     if (!Number.isFinite(rps) || rps <= 0) {
@@ -169,7 +170,8 @@ export class TokenBucket {
    * the 429 park deadline first, then refill-and-spin with sleeps
    * sized to the exact next-token-available time.
    */
-  async acquire(n = 1): Promise<void> {
+  async acquire(n = 1, signal = scanExecutionSignal()): Promise<void> {
+    signal?.throwIfAborted();
     if (n > this.state.capacity) {
       // Asking for more than the bucket can ever hold: clamp to capacity.
       // Otherwise the loop below would never terminate.
@@ -179,21 +181,22 @@ export class TokenBucket {
     while (this.nowFn() < this.state.retryUntil) {
       const wait = this.state.retryUntil - this.nowFn();
       // eslint-disable-next-line no-await-in-loop
-      await this.sleepFn(Math.max(1, Math.min(wait, 1000)));
+      await this.sleepFn(Math.max(1, Math.min(wait, 1000)), signal);
     }
     // Refill + consume; sleep precisely to the next token-availability time.
     // eslint-disable-next-line no-constant-condition
     while (true) {
+      signal?.throwIfAborted();
       this.refill();
       if (this.state.tokens >= n) {
         this.state.tokens -= n;
-        await this.pace();
+        await this.pace(signal);
         return;
       }
       const tokensNeeded = n - this.state.tokens;
       const waitMs = Math.max(1, Math.ceil(tokensNeeded / this.state.refillRatePerMs));
       // eslint-disable-next-line no-await-in-loop
-      await this.sleepFn(waitMs);
+      await this.sleepFn(waitMs, signal);
     }
   }
 
@@ -205,10 +208,11 @@ export class TokenBucket {
    * yields full jitter in `[0, baseMs]` — rather than growing a second
    * jitter implementation.
    */
-  async pace(): Promise<void> {
+  async pace(signal = scanExecutionSignal()): Promise<void> {
+    signal?.throwIfAborted();
     if (!this.jitter) return;
     const ms = jitterFor(0, this.jitter.baseMs, this.jitter.rng ?? Math.random);
-    if (ms > 0) await this.sleepFn(ms);
+    if (ms > 0) await this.sleepFn(ms, signal);
   }
 
   /**
@@ -248,7 +252,7 @@ export class RateLimiter {
   private readonly perHost: Record<string, HostRateConfig>;
   private readonly jitter?: JitterConfig;
   private readonly nowFn: () => number;
-  private readonly sleepFn: (ms: number) => Promise<void>;
+  private readonly sleepFn: (ms: number, signal?: AbortSignal) => Promise<void>;
   /**
    * Conservative cool-off floor when a 429 lands without a useful
    * `Retry-After`, or with a tiny one. 60s matches the PoC-runtime
@@ -270,7 +274,7 @@ export class RateLimiter {
     config: RateLimiterConfig,
     opts: {
       nowFn?: () => number;
-      sleepFn?: (ms: number) => Promise<void>;
+      sleepFn?: (ms: number, signal?: AbortSignal) => Promise<void>;
       onThrottle?: () => void;
     } = {},
   ) {
@@ -336,7 +340,8 @@ export class RateLimiter {
    * immediately) — callers should not rely on rate-limiting unknowable
    * hosts. The fetch sites that wire this up always pass full URLs.
    */
-  async acquire(urlOrHost: string, n = 1): Promise<void> {
+  async acquire(urlOrHost: string, n = 1, signal = scanExecutionSignal()): Promise<void> {
+    signal?.throwIfAborted();
     const host = this.hostKey(urlOrHost);
     if (!host) return;
     const bucket = this.getBucket(host);
@@ -351,11 +356,11 @@ export class RateLimiter {
     // signal jitter exists to break. `pace()` is a no-op without jitter, so
     // the default fast path is unchanged.
     if (bucket.tryConsume(n)) {
-      await bucket.pace();
+      await bucket.pace(signal);
       return;
     }
     this.onThrottle?.();
-    await bucket.acquire(n);
+    await bucket.acquire(n, signal);
   }
 
   /**
@@ -399,8 +404,16 @@ export class RateLimiter {
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-function defaultSleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
+function defaultSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  const { promise, resolve, reject } = Promise.withResolvers<void>();
+  const timer = setTimeout(() => { signal?.removeEventListener("abort", abort); resolve(); }, ms);
+  const abort = () => {
+    clearTimeout(timer);
+    reject(signal?.reason ?? new Error("Rate-limit wait cancelled."));
+  };
+  signal?.addEventListener("abort", abort, { once: true });
+  return promise;
 }
 
 function readHeader(

@@ -200,10 +200,7 @@ export function registerProtocolCheckCommand(program: Command): void {
   program
     .command("protocol-check")
     .description(
-      "Tier-1 HTTP spec-vs-implementation conformance differential (issue " +
-        "#972). The unified LLM hypothesizes where an implementation diverges " +
-        "from a spec excerpt; each exercise is SENT at a real target and a " +
-        "deterministic oracle confirms only concrete MUST-level violations.",
+      "Check an HTTP implementation against a spec excerpt for MUST-level violations.",
     )
     .requiredOption(
       "--spec <file>",

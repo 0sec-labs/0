@@ -1,41 +1,20 @@
 /** @jsxImportSource @opentui/react */
 /**
- * The one modal-box primitive every popup projects onto.
+ * Shared window chrome, placement and backdrop handling.
  *
- * Before this component the same "dim the screen, raise a `PANEL` box, guard the
- * click-outside" chrome was hand-rolled four times — `DialogSurface`,
- * `DialogSelect`'s panel, `ContextMenu` and `ShutdownDialog` each grew their own
- * copy. `Popup` is that chrome, made once, so a future change to how a popup
- * dims, positions or dismisses is a one-file change.
- *
- * It owns no domain logic and adds no behaviour of its own: every consumer keeps
- * its own keyboard handler, its own geometry inputs and its own `zIndex`. The
- * three `variant`s are exactly the three placements the console already used —
- *
- *   - `modal`     the centred, upper-third box `DialogSurface` raises; it alone
- *                 provides `SurfaceContext` so the screens mounted inside it lay
- *                 out against the box, not the terminal behind it.
- *   - `centered`  a flex-centred box (`ShutdownDialog`), or — when an `anchor`
- *                 is given — a box placed verbatim at that cell without the
- *                 viewport clamp (`DialogSelect`, whose panel geometry is
- *                 computed upstream by `dialog-select-layout`).
- *   - `anchored`  a box pinned at the cursor and clamped into the viewport with
- *                 `clampMenuPosition` (`ContextMenu`), over a transparent
- *                 click-to-dismiss backdrop.
- *
- * The geometry that is worth testing lives in the pure exports below
- * (`modalPanelGeometry`, `anchoredPosition`, `resolveBackdropColor`,
- * `backdropDismissMode`) so a regression in the size bands, the height clamp or
- * the placement is caught without driving a terminal.
+ * `modal` provides a bounded, centered content surface and real close controls.
+ * Explicit `centered` windows own their content chrome; `anchored` menus retain
+ * cursor placement and their transparent click-to-dismiss backdrop.
  */
 
-import React, { createContext, useContext, useMemo, useRef, type ReactNode } from "react";
+import React, { createContext, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import { RGBA, TextAttributes } from "@opentui/core";
 import { useRenderer, useTerminalDimensions } from "@opentui/react";
 
 import { useTheme } from "./theme-context.js";
 import { Cells } from "./primitives.js";
 import { fitLegend } from "./text.js";
+import { DialogActionButton } from "./dialog-screen-chrome.js";
 import { clampMenuPosition, type MenuBox, type MenuPosition, type Viewport } from "./use-context-menu.js";
 
 // ---------------------------------------------------------------------------
@@ -72,51 +51,59 @@ export function useDialogSurface(): boolean {
 // ---------------------------------------------------------------------------
 
 export type PopupVariant = "modal" | "centered" | "anchored";
-export type PopupSize = "small" | "medium" | "large";
+export type PopupSize = "small" | "medium" | "large" | "xlarge";
 export type PopupBackdrop = "dim" | "transparent" | "none";
 export type PopupTone = "default" | "danger";
 
 /** The verbatim scrim colour every dimmed popup has always used. */
 export const POPUP_BACKDROP_COLOR = RGBA.fromInts(0, 0, 0, 150);
 
-/** Width bands, verbatim from the old DialogSurface (`dialog-surface.tsx:31`). */
+/** Bounded width bands for modal sizes. */
 export function popupBandWidth(size: PopupSize): number {
-  return size === "small" ? 64 : size === "medium" ? 92 : 120;
+  return size === "small" ? 56 : size === "medium" ? 72 : size === "xlarge" ? 120 : 88;
 }
 
 export interface ModalPanelGeometry {
-  /** Outer panel width, borders included. */
+  /** Outer panel width, padding included. */
   panelWidth: number;
-  /** Outer panel height, borders included (clamped to 44). */
+  /** Outer panel height, bounded by the size band and viewport. */
   panelHeight: number;
-  /** Whether the box is large enough to spend a cell of padding on each side. */
-  border: boolean;
-  /** Inner content box the panel provides to `SurfaceContext`. */
+  paddingX: number;
+  paddingY: number;
+  /** The single close control, when a content row remains available. */
+  closeRows: number;
+  /** Child content box, excluding padding and the close control. */
   inner: SurfaceDimensions;
   /** Left offset centring the panel horizontally in the terminal. */
   left: number;
-  /** Top offset anchoring the panel in the upper third. */
+  /** Top offset centring the panel vertically in the terminal. */
   top: number;
 }
 
-/**
- * The centred, upper-third modal box — reproduced verbatim from the old
- * `DialogSurface` (`dialog-surface.tsx:31-37,47-48`). The band width clamps to
- * the terminal, the height clamps to 44, and a box wider/taller than 4 cells
- * spends one cell of padding on each side (which is the inner box the surface
- * hands its children).
- */
-export function modalPanelGeometry(terminal: SurfaceDimensions, size: PopupSize): ModalPanelGeometry {
+/** Keep the window and a usable child surface inside even a tiny viewport. */
+export function modalPanelGeometry(
+  terminal: SurfaceDimensions,
+  size: PopupSize,
+  dismissible = false,
+): ModalPanelGeometry {
   const panelWidth = Math.max(1, Math.min(popupBandWidth(size), terminal.width - (terminal.width > 4 ? 4 : 0)));
-  const panelHeight = Math.max(1, Math.min(44, terminal.height - (terminal.height > 10 ? 4 : 0)));
-  const border = panelWidth > 4 && panelHeight > 4;
+  const heightBand = size === "small" ? 20 : size === "medium" ? 24 : size === "xlarge" ? 52 : 28;
+  const panelHeight = Math.max(1, Math.min(heightBand, terminal.height - (terminal.height > 10 ? 4 : 0)));
+  const padded = panelWidth > 8 && panelHeight > 6;
+  const paddingX = padded ? 2 : 0;
+  const paddingY = padded ? 1 : 0;
+  const innerWidth = Math.max(1, panelWidth - paddingX * 2);
+  const innerHeight = Math.max(1, panelHeight - paddingY * 2);
+  // Never spend the last content row on chrome; keyboard/backdrop cancellation
+  // remains available in a one-row viewport.
+  const closeRows = dismissible && innerHeight >= 2 ? 1 : 0;
   const inner: SurfaceDimensions = {
-    width: Math.max(1, panelWidth - (border ? 2 : 0)),
-    height: Math.max(1, panelHeight - (border ? 2 : 0)),
+    width: innerWidth,
+    height: innerHeight - closeRows,
   };
   const left = Math.max(0, Math.floor((terminal.width - panelWidth) / 2));
-  const top = Math.max(0, Math.floor((terminal.height - panelHeight) / 3));
-  return { panelWidth, panelHeight, border, inner, left, top };
+  const top = Math.max(0, Math.floor((terminal.height - panelHeight) / 2));
+  return { panelWidth, panelHeight, paddingX, paddingY, closeRows, inner, left, top };
 }
 
 /**
@@ -207,6 +194,29 @@ export function PopupFooter({ text, width }: { text: string; width: number }) {
   );
 }
 
+/** Generic modal windows expose one close control, pinned upper-right. */
+function PopupClose({ width, onClose }: { width: number; onClose: () => void }) {
+  const theme = useTheme();
+  const [hovered, setHovered] = useState(false);
+  return (
+    <box width={width} height={1} flexShrink={0} flexDirection="row" justifyContent="flex-end">
+      {width >= 3 ? (
+        <DialogActionButton label={width >= 7 ? "Close" : "×"} onPress={onClose} />
+      ) : (
+        <box width={width} height={1} flexShrink={0}
+          backgroundColor={hovered ? theme.BORDER : theme.PANEL_ALT}
+          onMouseOver={() => setHovered(true)} onMouseOut={() => setHovered(false)}
+          onMouseUp={(event) => {
+            event.stopPropagation();
+            if (event.button === 0) onClose();
+          }}>
+          <Cells width={width} align="right" fg={theme.TEXT}>{"×"}</Cells>
+        </box>
+      )}
+    </box>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Popup
 // ---------------------------------------------------------------------------
@@ -215,12 +225,15 @@ export interface PopupProps {
   children: ReactNode;
   /** Placement + backdrop family. Default `"modal"`. */
   variant?: PopupVariant;
-  /** Width band for `modal` (64 / 92 / 120). Default `"large"`. */
+  /** Bounded width/height band for `modal`. Default `"large"`. */
   size?: PopupSize;
   /** Explicit outer width (cells). Required for `centered`/`anchored`. */
   width?: number;
   /** Explicit outer height, or `"auto"` for a content-sized box. */
   height?: number | "auto";
+  /** Explicit-window padding; modal padding adapts to its viewport. */
+  paddingX?: number;
+  paddingY?: number;
   /** For `anchored` (and explicit `centered`): the cell the box is placed at. */
   anchor?: { x: number; y: number };
   /** Optional title row (left) — see {@link PopupTitle}. */
@@ -251,6 +264,8 @@ export function Popup({
   size = "large",
   width,
   height = "auto",
+  paddingX: explicitPaddingX = 2,
+  paddingY: explicitPaddingY = 1,
   anchor,
   title,
   titleMeta,
@@ -271,27 +286,24 @@ export function Popup({
   const dismissMode = backdropDismissMode(variant, dismissOnBackdrop);
 
   // ── placement + sizing ────────────────────────────────────────────────
-  const modal = variant === "modal" ? modalPanelGeometry(terminal, size) : null;
+  const modal = variant === "modal" ? modalPanelGeometry(terminal, size, onClose != null) : null;
 
   // The box's outer width. Modal derives it from the band; every other variant
   // is handed one explicitly.
   const outerWidth = modal ? modal.panelWidth : Math.max(1, width ?? 1);
-  // Modal is always the clamped 44-band height; others are auto unless given.
+  // Modal is bounded by its size band; others are auto unless given.
   const outerHeight: number | undefined = modal ? modal.panelHeight : typeof height === "number" ? height : undefined;
 
-  // Inner content width available to the title / footer. Modal reserves a cell
-  // of border each side; every other variant uses two cells of horizontal
-  // padding each side (the chrome those popups have always drawn).
-  const innerWidth = modal ? modal.inner.width : Math.max(1, outerWidth - 4);
+  // Explicit windows own their padding and child geometry.
+  const innerWidth = modal ? modal.inner.width : Math.max(1, outerWidth - explicitPaddingX * 2);
   const provideSurface = variant === "modal";
 
   // `centered` with no anchor is flex-centred by the backdrop (ShutdownDialog);
   // every other placement pins the box with an absolute position.
   const flexCenter = variant === "centered" && !anchor;
 
-  // Absolute box position. Modal centres in the upper third; an anchored box is
-  // clamped into the viewport; an explicit anchor on any other variant is placed
-  // verbatim (DialogSelect, whose top/left is computed upstream).
+  // Modal is centered; anchored menus are clamped into the viewport. Explicit
+  // centered anchors are placed verbatim using their caller's geometry.
   let boxLeft: number | undefined;
   let boxTop: number | undefined;
   if (modal) {
@@ -309,29 +321,35 @@ export function Popup({
     }
   }
 
-  const paddingX = modal ? (modal.border ? 1 : 0) : 2;
-  const paddingY = modal ? (modal.border ? 1 : 0) : 1;
+  const paddingX = modal ? modal.paddingX : explicitPaddingX;
+  const paddingY = modal ? modal.paddingY : explicitPaddingY;
 
   // ── content ───────────────────────────────────────────────────────────
-  // Stable while the inner box is unchanged, so consumers of `SurfaceContext`
-  // don't re-render on every parent render (as the old DialogSurface memoized).
+  // Chrome consumes rows outside the child surface. Reserve a content row on
+  // tiny terminals rather than letting optional title/footer push it outside.
+  const showTitle = title != null && (!modal || modal.inner.height > 1);
+  const showFooter = footer != null && (!modal || modal.inner.height - (showTitle ? 1 : 0) > 1);
+  const bodyHeight = modal ? modal.inner.height - (showTitle ? 1 : 0) - (showFooter ? 1 : 0) : 0;
   const surfaceValue = useMemo(
-    () => (modal ? modal.inner : null),
-    [modal?.inner.width, modal?.inner.height],
+    () => (modal ? { width: modal.inner.width, height: bodyHeight } : null),
+    [modal?.inner.width, bodyHeight],
   );
   const body = provideSurface ? (
-    <SurfaceContext.Provider value={surfaceValue}>{children}</SurfaceContext.Provider>
+    <box width={innerWidth} height={bodyHeight} flexShrink={0} flexDirection="column" minWidth={0} minHeight={0} overflow="hidden">
+      <SurfaceContext.Provider value={surfaceValue}>{children}</SurfaceContext.Provider>
+    </box>
   ) : (
     children
   );
 
   const content = (
     <>
-      {title != null ? (
-        <PopupTitle title={title} meta={titleMeta} width={innerWidth} tone={tone} onMeta={onClose} />
+      {modal && modal.closeRows > 0 && onClose ? <PopupClose width={innerWidth} onClose={onClose} /> : null}
+      {showTitle && title != null ? (
+        <PopupTitle title={title} meta={titleMeta} width={innerWidth} tone={tone} onMeta={modal ? undefined : onClose} />
       ) : null}
       {body}
-      {footer != null ? <PopupFooter text={footer} width={innerWidth} /> : null}
+      {showFooter && footer != null ? <PopupFooter text={footer} width={innerWidth} /> : null}
     </>
   );
 

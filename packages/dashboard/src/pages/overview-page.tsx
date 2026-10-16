@@ -1,25 +1,24 @@
-import { useMemo, useState, type ComponentType } from "react";
+import { useId, useMemo, useState, type ComponentType } from "react";
 import { NavLink } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, AlertCircle, Bot, Clock3, Database, Play, Power, RefreshCcw, Siren, Trash2, Workflow } from "lucide-react";
-import { getRecentEvents, launchRun, pruneStoppedWorkers, recoverStaleWorkers, resetDatabase, startDaemon, stopDaemon } from "@/api";
+import { Activity, AlertCircle, Database, Play, Power, RefreshCcw, Siren, Trash2 } from "lucide-react";
+import { useBackendApi } from "@/api";
 import { PageHeader } from "@/components/page-header";
-import { ConsensusBadge, PhaseBadge, ReviewBadge, SeverityBadge, StatusBadge } from "@/components/status-badges";
+import { PhaseBadge, ReviewBadge, SeverityBadge, StatusBadge } from "@/components/status-badges";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardEmpty, CardEyebrow, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardEmpty, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select } from "@/components/ui/select";
 import { formatDuration, formatTime } from "@/lib/format";
 import type { DashboardResponse } from "@/types";
 
 export function OverviewPage({ data }: { data: DashboardResponse }) {
+  const { getRecentEvents, launchRun, pruneStoppedWorkers, recoverStaleWorkers, resetDatabase, startDaemon, stopDaemon } = useBackendApi();
   const queryClient = useQueryClient();
   const [controlMessage, setControlMessage] = useState<string | null>(null);
   const [target, setTarget] = useState("");
-  const [mode, setMode] = useState<"deep" | "web" | "mcp">("deep");
   const [depth, setDepth] = useState<"quick" | "default" | "deep">("default");
-  const [runtime, setRuntime] = useState<"auto" | "api" | "codex" | "claude" | "gemini">("auto");
   const recentEventsQuery = useQuery({
     queryKey: ["recent-events"],
     queryFn: () => getRecentEvents(12),
@@ -28,11 +27,8 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
 
   const reviewQueue = data.groups.filter((group) => group.workflow.reviewGate !== "none");
   const blockedThreads = data.groups.filter((group) => group.workflow.phase === "blocked");
-  const runningThreads = data.groups.filter((group) => group.workflow.phase === "in_progress");
-  const unassignedThreads = data.groups.filter((group) => !group.workflow.assignee);
   const activeScans = data.scans.filter((scan) => scan.status === "running");
   const activeWorkers = data.workers.filter((worker) => worker.isActive && worker.status !== "stopped");
-  const stoppedWorkers = data.workers.filter((worker) => worker.status === "stopped");
   const hasLiveDaemon = activeWorkers.length > 0;
   const isEmptyWorkspace = data.scans.length === 0 && data.groups.length === 0 && data.workers.length === 0;
 
@@ -49,8 +45,8 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
     onSuccess: async (result) => {
       setControlMessage(
         result.recovered > 0
-          ? `Recovered ${result.recovered} stale work item${result.recovered === 1 ? "" : "s"}.`
-          : "No stale worker claims needed recovery.",
+          ? `Restarted ${result.recovered} stuck task${result.recovered === 1 ? "" : "s"}.`
+          : "No stuck tasks.",
       );
       await refreshDashboard();
     },
@@ -64,8 +60,8 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
     onSuccess: async (result) => {
       setControlMessage(
         result.deleted > 0
-          ? `Pruned ${result.deleted} stopped worker row${result.deleted === 1 ? "" : "s"}.`
-          : "No stopped worker rows were left to prune.",
+          ? `Cleared ${result.deleted} stopped worker${result.deleted === 1 ? "" : "s"}.`
+          : "Nothing to clear.",
       );
       await refreshDashboard();
     },
@@ -77,7 +73,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
   const resetMutation = useMutation({
     mutationFn: () => resetDatabase("empty"),
     onSuccess: async (result) => {
-      setControlMessage(`Reset local state at ${result.path}.`);
+      setControlMessage(`All data reset.`);
       await refreshDashboard();
     },
     onError: (error) => {
@@ -88,7 +84,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
   const startDaemonMutation = useMutation({
     mutationFn: () => startDaemon({ label: "control-plane-1", pollIntervalMs: 2000 }),
     onSuccess: async () => {
-      setControlMessage("Started local control-plane daemon.");
+      setControlMessage("Worker started.");
       await refreshDashboard();
     },
     onError: (error) => {
@@ -101,8 +97,8 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
     onSuccess: async (result) => {
       setControlMessage(
         result.stopped > 0
-          ? `Stopped ${result.stopped} local daemon process${result.stopped === 1 ? "" : "es"}.`
-          : "No live local daemon process needed stopping.",
+          ? `Stopped ${result.stopped} worker${result.stopped === 1 ? "" : "s"}.`
+          : "No worker was running.",
       );
       await refreshDashboard();
     },
@@ -115,12 +111,9 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
     mutationFn: () => launchRun({
       target: target.trim(),
       depth,
-      mode,
-      runtime,
-      ensureDaemon: true,
     }),
     onSuccess: async () => {
-      setControlMessage(`Launched ${mode} run for ${target.trim()}.`);
+      setControlMessage(`Run started for ${target.trim()}.`);
       setTarget("");
       await refreshDashboard();
     },
@@ -208,54 +201,46 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Control"
-        title="Operations control"
-        summary="Launch new targets, watch the autonomous queue, and jump to the findings or runs that actually need intervention."
+        title="Dashboard"
+        summary=""
         actions={(
           <>
             <Button asChild variant="outline">
-              <NavLink to="/runs">Open runs</NavLink>
+              <NavLink to="/runs">Activity</NavLink>
             </Button>
             <Button asChild variant="accent">
-              <NavLink to="/findings">Open findings workspace</NavLink>
+              <NavLink to="/findings">Findings</NavLink>
             </Button>
           </>
         )}
       />
 
+            {controlMessage ? (
+              <div className="rounded-md border border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+                {controlMessage}
+                {launchMutation.data && <NavLink to={`/console/${launchMutation.data.sessionId}`} className="ml-2 underline">Open chat</NavLink>}
+              </div>
+            ) : null}
+
       {isEmptyWorkspace ? (
-        <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+        <section className="grid gap-4">
           <Card className="overflow-hidden">
             <CardHeader>
               <div>
-                <CardEyebrow>First run</CardEyebrow>
-                <CardTitle className="mt-2">Launch the first target</CardTitle>
-                <CardDescription>
-                  A finding family is the clustered underlying issue behind repeated observations across runs. Start a target, let the pipeline collect proof, then review only the families that survive automation.
-                </CardDescription>
+                <CardTitle>Start your first run</CardTitle>
               </div>
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="space-y-2">
-                <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Target</div>
+                <div className="text-xs font-medium text-muted-foreground">Target</div>
                 <Input
                   value={target}
                   onChange={(event) => setTarget(event.target.value)}
-                  placeholder={mode === "mcp" ? "mcp://assistant-endpoint" : mode === "web" ? "https://app.example.com" : "https://api.example.com"}
+                  placeholder="Repository path or https://app.example.com"
                 />
               </div>
 
               <div className="grid gap-4 lg:grid-cols-3">
-                <SelectionField
-                  label="Mode"
-                  value={mode}
-                  onValueChange={(value) => setMode(value as typeof mode)}
-                  options={[
-                    { value: "deep", label: "API/URL" },
-                    { value: "web", label: "Web app" },
-                    { value: "mcp", label: "MCP" },
-                  ]}
-                />
                 <SelectionField
                   label="Depth"
                   value={depth}
@@ -264,18 +249,6 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                     { value: "quick", label: "Quick" },
                     { value: "default", label: "Default" },
                     { value: "deep", label: "Deep" },
-                  ]}
-                />
-                <SelectionField
-                  label="Runtime"
-                  value={runtime}
-                  onValueChange={(value) => setRuntime(value as typeof runtime)}
-                  options={[
-                    { value: "auto", label: "Auto" },
-                    { value: "api", label: "API" },
-                    { value: "codex", label: "Codex" },
-                    { value: "claude", label: "Claude" },
-                    { value: "gemini", label: "Gemini" },
                   ]}
                 />
               </div>
@@ -287,7 +260,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                   disabled={!target.trim() || isMutating}
                 >
                   <Play />
-                  Launch target
+                  Run workflow
                 </Button>
                 <Button
                   variant="outline"
@@ -295,7 +268,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                   disabled={hasLiveDaemon || isMutating}
                 >
                   <Power />
-                  Start daemon
+                  Start worker
                 </Button>
                 <Button
                   variant="outline"
@@ -303,34 +276,8 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                   disabled={!hasLiveDaemon || isMutating}
                 >
                   <Power />
-                  Stop daemon
+                  Stop worker
                 </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="overflow-hidden">
-            <CardHeader>
-              <div>
-                <CardEyebrow>Execution model</CardEyebrow>
-                <CardTitle className="mt-2">How the system works</CardTitle>
-                <CardDescription>
-                  This is not meant to be a human-driven kanban first. The control plane should run autonomously until a thread needs review, override, or more access.
-                </CardDescription>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm text-muted-foreground">
-              <div className="rounded-md border border-border bg-background px-4 py-3">
-                A `run` is one pipeline execution against a target.
-              </div>
-              <div className="rounded-md border border-border bg-background px-4 py-3">
-                A `thread` is one underlying issue clustered across repeated hits or follow-up evidence.
-              </div>
-              <div className="rounded-md border border-border bg-background px-4 py-3">
-                A `worker` is a local autonomous daemon claiming runnable stages from persisted state.
-              </div>
-              <div className="rounded-md border border-border bg-background px-4 py-3">
-                Humans should mostly work the review inbox, blocked access, and final disposition.
               </div>
             </CardContent>
           </Card>
@@ -342,33 +289,19 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
         <Card className="overflow-hidden">
           <CardHeader>
               <div>
-                <CardEyebrow>Launch</CardEyebrow>
-                <CardTitle className="mt-2">Control strip</CardTitle>
-                <CardDescription>
-                  Launch a new target, keep the daemon healthy, and clear local state without dropping to the CLI.
-                </CardDescription>
+                <CardTitle>New run</CardTitle>
               </div>
           </CardHeader>
           <CardContent className="space-y-5">
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_repeat(3,minmax(0,0.8fr))]">
-              <label className="space-y-2">
-                <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Target</div>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <label className="min-w-0 space-y-2 sm:col-span-3">
+                <div className="text-xs font-medium text-muted-foreground">Target</div>
                 <Input
                   value={target}
                   onChange={(event) => setTarget(event.target.value)}
-                  placeholder={mode === "mcp" ? "mcp://assistant-endpoint" : mode === "web" ? "https://app.example.com" : "https://api.example.com"}
+                  placeholder="Repository path or https://app.example.com"
                 />
               </label>
-              <SelectionField
-                label="Mode"
-                value={mode}
-                onValueChange={(value) => setMode(value as typeof mode)}
-                options={[
-                  { value: "deep", label: "API/URL" },
-                  { value: "web", label: "Web app" },
-                  { value: "mcp", label: "MCP" },
-                ]}
-              />
               <SelectionField
                 label="Depth"
                 value={depth}
@@ -377,18 +310,6 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                   { value: "quick", label: "Quick" },
                   { value: "default", label: "Default" },
                   { value: "deep", label: "Deep" },
-                ]}
-              />
-              <SelectionField
-                label="Runtime"
-                value={runtime}
-                onValueChange={(value) => setRuntime(value as typeof runtime)}
-                options={[
-                  { value: "auto", label: "Auto" },
-                  { value: "api", label: "API" },
-                  { value: "codex", label: "Codex" },
-                  { value: "claude", label: "Claude" },
-                  { value: "gemini", label: "Gemini" },
                 ]}
               />
             </div>
@@ -400,7 +321,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                 disabled={!target.trim() || isMutating}
               >
                 <Play />
-                Launch target
+                Run workflow
               </Button>
               <Button
                 variant={hasLiveDaemon ? "outline" : "default"}
@@ -408,51 +329,42 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                 disabled={isMutating}
               >
                 <Power />
-                {hasLiveDaemon ? "Stop daemon" : "Start daemon"}
+                {hasLiveDaemon ? "Stop worker" : "Start worker"}
               </Button>
               <Button variant="outline" onClick={() => recoverMutation.mutate()} disabled={isMutating}>
                 <RefreshCcw />
-                Recover stale
+                Retry stuck
               </Button>
               <Button variant="outline" onClick={() => pruneMutation.mutate()} disabled={isMutating}>
                 <Trash2 />
-                Prune stopped
+                Clear stopped
               </Button>
               <Button
                 variant="warning"
                 onClick={() => resetMutation.mutate()}
                 disabled={isMutating || hasLiveDaemon}
+                title={hasLiveDaemon ? "Stop the worker first" : undefined}
               >
                 <Database />
-                Reset local state
+                Reset data
               </Button>
             </div>
 
-            <div className="rounded-md border border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
-              {controlMessage ?? "The daemon can be started from here. Local state reset stays guarded while a live daemon is heartbeating."}
-            </div>
+
           </CardContent>
         </Card>
 
         <Card className="overflow-hidden">
           <CardHeader>
             <div>
-              <CardEyebrow>Situation</CardEyebrow>
-              <CardTitle className="mt-2">Live system state</CardTitle>
-              <CardDescription>
-                Read the queue, worker fleet, and review backlog at a glance before drilling into findings or runs.
-              </CardDescription>
+              <CardTitle>Status</CardTitle>
             </div>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
-            <SituationStat icon={Workflow} label="Runnable now" value={data.queue.runnable} hint="Work items ready to claim." />
-            <SituationStat icon={Activity} label="Workers" value={activeWorkers.length} hint="Live orchestration daemons." />
-            <SituationStat icon={AlertCircle} label="Review" value={reviewQueue.length} hint="Finding families waiting on sign-off." />
-            <SituationStat icon={Siren} label="Blocked" value={blockedThreads.length} hint="Finding families outside the happy path." />
-            <SituationStat icon={Bot} label="Running findings" value={runningThreads.length} hint="Finding families with live worker activity." />
-            <SituationStat icon={Clock3} label="Unassigned" value={unassignedThreads.length} hint="Finding families without an owner." />
-            <SituationStat icon={Play} label="Active runs" value={activeScans.length} hint="Runs still executing." />
-            <SituationStat icon={Trash2} label="Stopped workers" value={stoppedWorkers.length} hint="Rows safe to prune." />
+            <SituationStat icon={AlertCircle} label="To review" value={reviewQueue.length} />
+            <SituationStat icon={Siren} label="Blocked" value={blockedThreads.length} />
+            <SituationStat icon={Play} label="Active runs" value={activeScans.length} />
+            <SituationStat icon={Activity} label="Workers" value={activeWorkers.length} />
           </CardContent>
         </Card>
       </section>
@@ -462,26 +374,21 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
         <Card className="overflow-hidden">
           <CardHeader>
             <div>
-              <CardEyebrow>Findings</CardEyebrow>
-              <CardTitle className="mt-2">Decision queue</CardTitle>
-              <CardDescription>
-                Finding families that most likely need a human decision next: blocked execution, review gates, or ownership gaps.
-              </CardDescription>
+              <CardTitle>Needs your attention</CardTitle>
             </div>
             <Button asChild variant="ghost" size="sm">
-              <NavLink to="/findings">Open findings</NavLink>
+              <NavLink to="/findings">View all</NavLink>
             </Button>
           </CardHeader>
           <CardContent>
             {needsAttention.length === 0 ? (
-              <CardEmpty className="text-left">No findings currently need intervention.</CardEmpty>
+              <CardEmpty className="text-left">Nothing needs you right now.</CardEmpty>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
                     <TableHead>Finding</TableHead>
-                    <TableHead>Ownership</TableHead>
-                    <TableHead>Signal</TableHead>
+                    <TableHead>Severity</TableHead>
                     <TableHead className="w-[14rem]">State</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -493,20 +400,13 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                           {group.latest.title}
                         </NavLink>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {group.workflow.assignee ?? "Unassigned"}
-                      </TableCell>
                       <TableCell>
-                        <div className="flex flex-wrap gap-2">
-                          <SeverityBadge severity={group.latest.severity} />
-                          <ConsensusBadge value={group.workflow.consensus} />
-                        </div>
+                        <SeverityBadge severity={group.latest.severity} />
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-2">
                           <PhaseBadge value={group.workflow.phase} />
                           {group.workflow.reviewGate !== "none" ? <ReviewBadge value={group.workflow.reviewGate} /> : null}
-                          <StatusBadge value={group.latest.triageStatus} />
                         </div>
                       </TableCell>
                     </TableRow>
@@ -520,16 +420,12 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
         <Card className="overflow-hidden">
           <CardHeader>
             <div>
-              <CardEyebrow>Execution</CardEyebrow>
-              <CardTitle className="mt-2">Queue and daemons</CardTitle>
-              <CardDescription>
-                Use this column to understand what automation is doing right now and where the queue is getting stuck.
-              </CardDescription>
+              <CardTitle>Activity</CardTitle>
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
             {activeThreads.length === 0 ? (
-              <CardEmpty className="text-left">No live worker activity right now.</CardEmpty>
+              <CardEmpty className="text-left">Nothing running right now.</CardEmpty>
             ) : (
               <div className="space-y-3">
                 {activeThreads.map((group) => (
@@ -542,7 +438,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                         <div className="mt-1 text-xs text-muted-foreground">
                           {group.workflow.activeAgentRoles.length > 0
                             ? group.workflow.activeAgentRoles.join(", ")
-                            : "Waiting for worker activity"}
+                            : "Waiting"}
                         </div>
                       </div>
                       <PhaseBadge value={group.workflow.phase} />
@@ -554,29 +450,10 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
 
             <div className="space-y-3">
               <div>
-                <CardEyebrow>Autonomous queue</CardEyebrow>
-                <CardTitle className="mt-2">Worker-ready state</CardTitle>
-                <CardDescription>
-                  Real queue health from persisted work items, not inferred status labels.
-                </CardDescription>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <QueueStat label="Runnable now" value={data.queue.runnable} hint="Dependencies satisfied and no sibling claim is active." />
-                <QueueStat label="Active claims" value={data.queue.active} hint="Currently held by a running case worker." />
-                <QueueStat label="Blocked by deps" value={data.queue.blockedByDependency} hint="Waiting on an earlier stage to complete first." />
-                <QueueStat label="Manual review" value={data.queue.manualReview} hint="Queued for operator sign-off, not autonomous execution." />
-                <QueueStat label="Recovered claims" value={data.queue.recoveredClaims} hint="Requeued after a stale worker heartbeat expired." />
-                <QueueStat label="Stale workers" value={data.queue.staleWorkers} hint="Workers marked errored after heartbeat expiry." />
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <CardEyebrow>Autonomous workers</CardEyebrow>
-                <CardTitle className="mt-2">Daemon state</CardTitle>
+                <CardTitle>Workers</CardTitle>
               </div>
               {activeWorkers.length === 0 ? (
-                <CardEmpty className="text-left">No orchestration daemons are heartbeating right now.</CardEmpty>
+                <CardEmpty className="text-left">No workers running.</CardEmpty>
               ) : (
                 <div className="space-y-3">
                   {activeWorkers.slice(0, 4).map((worker) => (
@@ -587,7 +464,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                           <div className="mt-1 text-xs text-muted-foreground">
                             {worker.currentWorkItemTitle ?? worker.currentWorkItemId ?? "Idle"}
                             {worker.currentCaseTarget ? ` · ${worker.currentCaseTarget}` : ""}
-                            {` · heartbeat ${formatTime(worker.heartbeatAt)}`}
+                            {` · last seen ${formatTime(worker.heartbeatAt)}`}
                           </div>
                           {worker.lastError ? <div className="mt-1 text-xs text-destructive">{worker.lastError}</div> : null}
                         </div>
@@ -606,26 +483,21 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
         <Card className="overflow-hidden">
           <CardHeader>
             <div>
-              <CardEyebrow>Runs</CardEyebrow>
-              <CardTitle className="mt-2">Recent execution</CardTitle>
-              <CardDescription>
-                Recent and still-running runs. Use this to jump into provenance without leaving operations.
-              </CardDescription>
+              <CardTitle>Recent runs</CardTitle>
             </div>
             <Button asChild variant="ghost" size="sm">
-              <NavLink to="/runs">Open runs</NavLink>
+              <NavLink to="/runs">View all</NavLink>
             </Button>
           </CardHeader>
           <CardContent>
             {recentRuns.length === 0 ? (
-              <CardEmpty className="text-left">No runs recorded yet.</CardEmpty>
+              <CardEmpty className="text-left">No runs yet.</CardEmpty>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
                     <TableHead>Target</TableHead>
                     <TableHead>Started</TableHead>
-                    <TableHead>Profile</TableHead>
                     <TableHead className="w-[12rem]">State</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -638,9 +510,6 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                         </NavLink>
                       </TableCell>
                       <TableCell className="text-muted-foreground">{formatTime(scan.startedAt)}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {scan.runtime} · {scan.mode} · {scan.depth}
-                      </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-2">
                           <StatusBadge value={scan.status} />
@@ -660,27 +529,22 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
         <Card className="overflow-hidden">
           <CardHeader>
             <div>
-              <CardEyebrow>Findings</CardEyebrow>
-              <CardTitle className="mt-2">Latest movement</CardTitle>
-              <CardDescription>
-                Most recent finding-family changes across automation, triage, and review.
-              </CardDescription>
+              <CardTitle>Recent findings</CardTitle>
             </div>
             <Button asChild variant="ghost" size="sm">
-              <NavLink to="/findings">Open findings</NavLink>
+              <NavLink to="/findings">View all</NavLink>
             </Button>
           </CardHeader>
           <CardContent>
             {latestThreads.length === 0 ? (
-              <CardEmpty className="text-left">No findings recorded yet.</CardEmpty>
+              <CardEmpty className="text-left">No findings yet.</CardEmpty>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
                     <TableHead>Finding</TableHead>
                     <TableHead>Updated</TableHead>
-                    <TableHead>Coverage</TableHead>
-                    <TableHead className="w-[16rem]">State</TableHead>
+                    <TableHead className="w-[12rem]">State</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -694,15 +558,10 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                       <TableCell className="text-muted-foreground">
                         {formatTime(group.workflow.updatedAt ?? group.latest.timestamp)}
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {group.count} hits · {group.scanCount} scans
-                      </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-2">
-                          <PhaseBadge value={group.workflow.phase} />
-                          {group.workflow.reviewGate !== "none" ? <ReviewBadge value={group.workflow.reviewGate} /> : null}
                           <SeverityBadge severity={group.latest.severity} />
-                          <ConsensusBadge value={group.workflow.consensus} />
+                          <PhaseBadge value={group.workflow.phase} />
                         </div>
                       </TableCell>
                     </TableRow>
@@ -718,11 +577,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
         <Card className="overflow-hidden border-destructive/20">
           <CardHeader>
             <div>
-              <CardEyebrow>Incidents</CardEyebrow>
-              <CardTitle className="mt-2">Runtime incidents</CardTitle>
-              <CardDescription>
-                Provider failures, worker crashes, and stalled agent executions that need operator attention.
-              </CardDescription>
+              <CardTitle>Errors</CardTitle>
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -734,12 +589,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                       {incident.scanTarget}
                     </NavLink>
                     <div className="mt-1 text-sm leading-6 text-muted-foreground">{incident.headline}</div>
-                    <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                      <SeverityBadge severity="high" />
-                      <span>{incident.stage}</span>
-                      {incident.actor ? <span>{incident.actor}</span> : null}
-                      <span>{formatTime(incident.timestamp)}</span>
-                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">{formatTime(incident.timestamp)}</div>
                   </div>
                   <AlertCircle className="mt-0.5 size-5 shrink-0 text-destructive" />
                 </div>
@@ -752,29 +602,22 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
       <Card className="overflow-hidden">
         <CardHeader>
           <div>
-            <CardEyebrow>Events</CardEyebrow>
-            <CardTitle className="mt-2">Recent pipeline activity</CardTitle>
-            <CardDescription>
-              Live audit events across runs, useful for seeing where the system is actually spending time.
-            </CardDescription>
+            <CardTitle>Recent activity</CardTitle>
           </div>
         </CardHeader>
         <CardContent>
           {recentEventsQuery.isLoading ? (
-            <CardEmpty>Loading recent events...</CardEmpty>
+            <CardEmpty>Loading…</CardEmpty>
           ) : recentEventsQuery.error ? (
-            <CardEmpty>{recentEventsQuery.error instanceof Error ? recentEventsQuery.error.message : "Failed to load recent events."}</CardEmpty>
+            <CardEmpty>{recentEventsQuery.error instanceof Error ? recentEventsQuery.error.message : "Couldn't load activity."}</CardEmpty>
           ) : (recentEventsQuery.data?.events.length ?? 0) === 0 ? (
-            <CardEmpty>No pipeline events recorded yet.</CardEmpty>
+            <CardEmpty>No activity yet.</CardEmpty>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead>Target</TableHead>
                   <TableHead>Summary</TableHead>
-                  <TableHead>Stage</TableHead>
-                  <TableHead>Event</TableHead>
-                  <TableHead>Actor</TableHead>
                   <TableHead className="w-[12rem]">Time</TableHead>
                 </TableRow>
               </TableHeader>
@@ -796,9 +639,6 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                       </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{event.summary}</TableCell>
-                    <TableCell className="text-muted-foreground">{event.stage}</TableCell>
-                    <TableCell className="text-muted-foreground">{event.eventType}</TableCell>
-                    <TableCell className="text-muted-foreground">{event.agentRole ?? "system"}</TableCell>
                     <TableCell className="text-muted-foreground">{formatTime(event.timestamp)}</TableCell>
                   </TableRow>
                 ))}
@@ -815,39 +655,18 @@ function SituationStat({
   icon: Icon,
   label,
   value,
-  hint,
 }: {
   icon: ComponentType<{ className?: string }>;
   label: string;
   value: number;
-  hint: string;
 }) {
   return (
     <div className="rounded-lg border border-border bg-background px-4 py-3">
-      <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-widest text-muted-foreground/70">
+      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
         <Icon className="size-3.5" />
         {label}
       </div>
       <div className="mt-2 text-2xl font-semibold text-foreground">{value}</div>
-      <div className="mt-1 text-xs leading-5 text-muted-foreground">{hint}</div>
-    </div>
-  );
-}
-
-function QueueStat({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: number;
-  hint: string;
-}) {
-  return (
-    <div className="rounded-lg border border-border bg-background px-4 py-3">
-      <div className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground/70">{label}</div>
-      <div className="mt-2 text-2xl font-semibold text-foreground">{value}</div>
-      <div className="mt-1 text-xs leading-5 text-muted-foreground">{hint}</div>
     </div>
   );
 }
@@ -863,18 +682,11 @@ function SelectionField({
   onValueChange: (value: string) => void;
   options: Array<{ value: string; label: string }>;
 }) {
+  const id = useId();
   return (
-    <div className="space-y-2">
-      <div className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{label}</div>
-      <Tabs value={value} onValueChange={onValueChange}>
-        <TabsList className="w-full flex-wrap justify-start">
-          {options.map((option) => (
-            <TabsTrigger key={option.value} value={option.value} className="flex-1">
-              {option.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+    <div className="min-w-0 space-y-2">
+      <label htmlFor={id} className="text-xs font-medium text-muted-foreground">{label}</label>
+      <Select id={id} aria-label={label} value={value} onValueChange={onValueChange} options={options} />
     </div>
   );
 }

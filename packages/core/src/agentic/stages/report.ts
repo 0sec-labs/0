@@ -4,7 +4,6 @@ import type { AgentOutput } from "../../agentic-scanner.js";
 import { features } from "../../agent/features.js";
 import { appendRoutingTraceRecord, type RoutingDecision } from "../../triage/index.js";
 import { resolveJournalPaths } from "../../agent/journal/writer.js";
-import { postFinalReport } from "../../cloud-sink.js";
 
 /**
  * Inputs the report stage reads from the scan closure. Everything here is
@@ -69,9 +68,7 @@ export interface ReportStageCtx {
 /**
  * Stage 4: Report. Assembles the final `ScanReport` from the accumulated
  * findings and per-stage agent output, persists scan completion, emits the
- * routing-trace dataset, streams the report to the opt-in webhook sink, and
- * fires the terminal `scan_completed` event. Behaviour-preserving extraction
- * of the inline Stage 4 block from `agenticScan`.
+ * routing-trace dataset, and fires the terminal `scan_completed` event.
  */
 export async function runReportStage(
   state: ReportStageState,
@@ -95,7 +92,14 @@ export async function runReportStage(
     info: allFindings.filter((f) => f.severity === "info").length,
   };
 
-  db.completeScan(scanId, summary);
+  const planError = attackState?.errorExit ?? discoveryState?.errorExit ??
+    (attackState.executionSuccessful === false || discoveryState.executionSuccessful === false
+      ? { error: "A planned investigation stage exhausted its turn budget before completion.", turn: attackState.turnCount }
+      : undefined);
+  const costExceeded = attackState.costCeilingExceeded || discoveryState.costCeilingExceeded ||
+    (config.costCeilingUsd !== undefined && (config.costLedger?.totalCostUsd() ?? 0) >= config.costCeilingUsd);
+  if (planError) db.failScan(scanId, planError.error);
+  else db.completeScan(scanId, summary);
 
   // ── Routing trace emission (0#113 dataset) ──
   // When dynamic triage routing was enabled, dump one record per
@@ -134,6 +138,11 @@ export async function runReportStage(
     summary,
     findings: allFindings.filter((f) => f.status !== "false-positive"),
     warnings: [],
+    ...(planError || costExceeded || config.signal?.aborted ? { executionSuccessful: false } : {}),
+    ...(planError ? { exitReason: "failed" as const } : {}),
+    ...(planError ? { error: planError.error } : {}),
+    ...(costExceeded ? { costCeilingExceeded: true, exitReason: "cost_ceiling_exceeded" as const } : {}),
+    ...(config.signal?.aborted && !costExceeded ? { exitReason: "cancelled" as const } : {}),
     benchmarkMeta: {
       attackTurns: attackState.turnCount,
       estimatedCostUsd: attackState.estimatedCostUsd,
@@ -181,8 +190,6 @@ export async function runReportStage(
     message: `Report: ${summary.totalFindings} findings (${confirmed} confirmed)`,
   });
 
-  // Stream final report to the opt-in webhook sink (no-op when unset).
-  await postFinalReport(report);
 
   // If either stage's agent loop bailed because the planner LLM
   // returned an error (e.g. transient Azure OpenAI 5xx), the loop
@@ -208,8 +215,12 @@ export async function runReportStage(
       : []),
   ];
 
-  const planError = attackState?.errorExit ?? discoveryState?.errorExit;
-  if (planError) {
+  if (costExceeded || config.signal?.aborted) {
+    emitScanCompleted(costExceeded ? "cost_exceeded" : "failed", report.findings.length, {
+      summary: costExceeded ? "Shared scan cost ceiling exceeded; findings are partial." : "Scan cancelled; findings are partial.",
+      findingsForFlagCount: report.findings,
+    });
+  } else if (planError) {
     emitScanCompleted("failed", report.findings.length, {
       turnsUsed:
         (discoveryState?.turnCount ?? 0) + (attackState?.turnCount ?? 0),

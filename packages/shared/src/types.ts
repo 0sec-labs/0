@@ -1,5 +1,6 @@
 import type { VerificationResult } from "./verification.js";
 import type { ResearchEvidenceEnvelope } from "./research-evidence.js";
+import type { TokenUsageForPricing } from "./pricing.js";
 
 // ── Scan Configuration ──
 
@@ -8,6 +9,89 @@ export type OutputFormat = "terminal" | "json" | "markdown" | "html" | "sarif" |
 export type RuntimeMode = "api" | "claude" | "codex" | "gemini" | "ollama" | "auto";
 export type ScanMode = "probe" | "deep" | "mcp" | "web" | "http_audit" | "llm-ipi";
 export type PackageEcosystem = "npm" | "pypi" | "cargo" | "oci";
+
+/** The operator-visible objective used to derive a bounded scan plan. */
+export type ScanGoal =
+  | "known-vulnerabilities"
+  | "unknown-vulnerabilities"
+  | "misconfigurations";
+
+/** Whether multiple planned runs share one sequential or concurrent lane. */
+export type ScanExecutionMode = "sequential" | "parallel";
+
+/**
+ * The complete pre-launch contract. Limits cover the whole plan, including
+ * every selected run and its subagents; they are not multiplied per run.
+ */
+export interface ScanPlan {
+  goal: ScanGoal;
+  depth: ScanDepth;
+  runCount: number;
+  executionMode: ScanExecutionMode;
+  timeCapMs: number;
+  costCapUsd: number;
+}
+/**
+ * Structural seam for sharing one scan-wide cost ledger across planned runs.
+ * The concrete implementation lives in @0/core; shared types must not
+ * import the core package.
+ */
+export interface ScanCostLedgerLike {
+  add(
+    usage: TokenUsageForPricing,
+    model?: string,
+  ): void;
+  totalCostUsd(): number;
+  markUnpricedUsage(): void;
+  hasUnpricedUsage(): boolean;
+}
+
+export type ScanAttemptStatus = "completed" | "failed" | "rejected" | "cancelled" | "time_cap_exceeded" | "cost_ceiling_exceeded";
+
+export interface ScanAttemptOutcome {
+  runIndex: number;
+  status: ScanAttemptStatus;
+  durationMs: number;
+  costUsd?: number;
+  error?: string;
+}
+
+export interface ScanPlanExecution {
+  plan?: ScanPlan;
+  plannedRuns?: number;
+  completedRuns?: number;
+  attempts?: ScanAttemptOutcome[];
+  estimatedCostUsd?: number;
+  executionSuccessful?: boolean;
+  error?: string;
+  usage?: TokenUsageForPricing;
+}
+
+export function validateScanPlan(plan: ScanPlan): void {
+  if (!Number.isInteger(plan.runCount) || plan.runCount < 1) {
+    throw new Error("Scan plan runCount must be a positive integer");
+  }
+  if (plan.depth !== "quick" && plan.depth !== "default" && plan.depth !== "deep") {
+    throw new Error(`Unknown scan depth "${String(plan.depth)}"`);
+  }
+  if (!Number.isFinite(plan.timeCapMs) || plan.timeCapMs <= 0) {
+    throw new Error("Scan plan timeCapMs must be a positive finite number");
+  }
+  if (!Number.isFinite(plan.costCapUsd) || plan.costCapUsd <= 0) {
+    throw new Error("Scan plan costCapUsd must be a positive finite number");
+  }
+  if (plan.executionMode !== "sequential" && plan.executionMode !== "parallel") {
+    throw new Error(`Unknown scan execution mode "${String(plan.executionMode)}"`);
+  }
+  if (
+    plan.goal !== "known-vulnerabilities" &&
+    plan.goal !== "unknown-vulnerabilities" &&
+    plan.goal !== "misconfigurations"
+  ) {
+    throw new Error(`Unknown scan goal "${String(plan.goal)}"`);
+  }
+}
+
 
 // ── Authentication ──
 
@@ -73,12 +157,31 @@ export interface NamedIdentity {
   auth?: AuthConfig;
 }
 
+/** Operator-provided ownership contract for deterministic, read-only BOLA replay. */
+export interface AccessControlFixture {
+  url: string;
+  ownerIdentity: string;
+  comparisonIdentities: string[];
+  ownershipMarker: string;
+}
+
 export interface ScanConfig {
+  accessControlFixtures?: AccessControlFixture[];
   target: string;
   depth: ScanDepth;
   format: OutputFormat;
   runtime?: RuntimeMode;
   mode?: ScanMode;
+  /** Explicit pre-launch limits and execution intent. Omitted keeps legacy one-run behavior. */
+  plan?: ScanPlan;
+  /** Shared ledger for a multi-run plan; omitted creates one for this run. */
+  costLedger?: ScanCostLedgerLike;
+  /** Operator-approved role selections; the selected runtime enforces reachability. */
+  agentModels?: Readonly<Record<string, string>>;
+  autoRoute?: boolean;
+  singleModel?: boolean;
+  /** Plan-wide cancellation inherited by every phase and descendant. */
+  signal?: AbortSignal;
   repoPath?: string;
   /**
    * Package ecosystem of the target (npm / pypi / cargo / …). Optional; when
@@ -455,7 +558,8 @@ export type ReachabilityTier =
   | "local-unpriv"
   | "local-priv"
   | "needs-hardware"
-  | "needs-host-migration";
+  | "needs-host-migration"
+  | "unknown";
 
 /**
  * What the attacker gets once they trigger the bug. Ordered least→most severe.
@@ -472,7 +576,8 @@ export type Weaponizability =
   | "info-leak"
   | "integrity-tampering"
   | "lpe-to-root"
-  | "rce";
+  | "rce"
+  | "unknown";
 
 /**
  * Deployment context of a finding's exploit path — where the vulnerable code
@@ -490,10 +595,11 @@ export type Weaponizability =
 export type DeploymentContext = "prod_reachable" | "dev_only" | "test_only" | "build_only";
 
 /**
- * The coarse, ranking-facing tier. This is the single knob the engine sorts on:
- * `noise` gets deprioritized, `headline` gets escalated. Ordered.
+ * Business-consequence tier, separate from technical severity and CVSS.
+ * `unassessed` means missing context, never negligible impact. Its queue position
+ * remains visible between assessed high and moderate priorities.
  */
-export type BusinessImpact = "headline" | "notable" | "modest" | "noise";
+export type BusinessImpact = "headline" | "notable" | "modest" | "noise" | "unassessed";
 
 /**
  * Structured impact assessment attached to a {@link Finding} by the
@@ -510,6 +616,8 @@ export interface ImpactAssessment {
   business_impact: BusinessImpact;
   /** Short human-readable justification, stable for the same input. */
   rationale: string;
+  /** Assessment provenance; a heuristic is never an assessed business consequence. */
+  assessment_source?: "model" | "provided" | "heuristic";
 }
 
 export type LayerVerdictKind =
@@ -560,6 +668,25 @@ export interface SupplyChainAttribution {
   dependencyPath?: string[];
 }
 
+/**
+ * Safe summary of code-only VerificationSpec evaluation against the scoped
+ * source workspace. This is not a behavioral replay result and must never be
+ * used as canonical reproduction evidence.
+ */
+export interface SourceVerificationSummary {
+  status: "matched" | "not_confirmed" | "inconclusive";
+  /** Number of source predicates in the spec. */
+  totalPredicates: number;
+  /** Number of predicates that matched. */
+  matchedPredicates: number;
+  /** Number evaluated but not matched. */
+  notMatchedPredicates: number;
+  /** Number the bounded evaluator could not evaluate. */
+  inconclusivePredicates: number;
+  /** True when a behavioral spec remains pending; behavior is never run here. */
+  behaviorPending: boolean;
+}
+
 export interface Finding {
   id: string;
   templateId: string;
@@ -586,7 +713,8 @@ export interface Finding {
    */
   workflowUpdatedAt?: string | null;
   /**
-   * CVSS-like 0–100 score, populated during the "scored" stage (0#414).
+   * Legacy technical ranking score (0–100), populated during the "scored" stage.
+   * This is neither a CVSS score nor an assessed business priority.
    * Optional and additive. The shared `Finding` keeps it loosely typed
    * (numeric only) so it can be threaded through the persistence round-trip
    * without coupling shared to the scoring engine.
@@ -630,6 +758,12 @@ export interface Finding {
    * a fresh checkout of the target repo. See {@link VerificationSpec}.
    */
   verificationSpec?: VerificationSpec;
+  /**
+   * Result of the safe, code-only source-predicate check performed at save
+   * time when a VerificationSpec and scoped workspace are available. Distinct
+   * from `verification_result`, which is produced by canonical replay.
+   */
+  sourceVerification?: SourceVerificationSummary;
   /**
    * Prior PoC execution report (0#171 / 0#414). Optional and
    * additive. Typed as `unknown` here because the concrete
@@ -1264,9 +1398,18 @@ export interface ScanWarning {
  * (`ZERO_COST_CEILING_USD` / `--cost-ceiling`) was hit and the scan
  * aborted with partial findings preserved.
  */
-export type ScanExitReason = "completed" | "cost_ceiling_exceeded";
+export type ScanExitReason = "completed" | "cost_ceiling_exceeded" | "time_cap_exceeded" | "cancelled" | "failed" | "partial";
 
-export interface ScanReport {
+/** Advisory local review criteria, independent of vulnerability severity and exit policy. */
+export interface ReviewCheckResult {
+  id: string;
+  name: string;
+  status: "pass" | "issue" | "unknown";
+  reason: string;
+  fix: string;
+}
+
+export interface ScanReport extends ScanPlanExecution {
   target: string;
   scanDepth: ScanDepth;
   startedAt: string;
@@ -1275,6 +1418,7 @@ export interface ScanReport {
   summary: ReportSummary;
   findings: Finding[];
   warnings: ScanWarning[];
+  reviewChecks?: ReviewCheckResult[];
   benchmarkMeta?: {
     attackTurns?: number;
     estimatedCostUsd?: number;
@@ -1726,6 +1870,7 @@ export interface ReviewReport {
   semgrepFindings: number;
   summary: ReportSummary;
   findings: Finding[];
+  reviewChecks?: ReviewCheckResult[];
   /** Non-fatal stage failures retained alongside any partial findings. */
   warnings?: Array<{ stage: string; message: string }>;
   /** True when the primary review agent failed; partial static results may remain. */

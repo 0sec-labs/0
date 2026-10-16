@@ -313,13 +313,13 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
   // so neither competes for this row.
   const statusText = notice
     ? notice.text
-    : `${items.length} setting${items.length === 1 ? "" : "s"} · ${modifiedCount} changed · changes save automatically`;
+    : `${modifiedCount} changed · saved automatically`;
   const statusTone = notice?.tone === "error" ? theme.ERROR : theme.MUTED;
 
   // Inside a dialog the surface IS the panel's inner box — the shell renders
   // with `dialogContent`, so it has no header and no padding — and the only
   // rows the host still spends are its one footer and the route's clickable
-  // harness line. Outside a dialog the legacy shell chrome still applies.
+  // keybindings link. Outside a dialog the legacy shell chrome still applies.
   const layout = computeSettingsLayout(width, height, totalRows, inDialog
     ? { chromeRows: SETTINGS_DIALOG_HOST_ROWS, chromeColumns: 0 }
     : { chromeRows: shellChromeRows(width) });
@@ -341,7 +341,7 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
     }
     setNotice({
       tone: "error",
-      text: "Changed for this session only - the settings file could not be written.",
+      text: "Couldn't write the settings file. This change lasts for this session only.",
     });
   };
 
@@ -654,10 +654,10 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
             cursor={cursor}
             panel={panel}
             query={filter}
-            placeholder="type to search every setting"
+            placeholder="Search settings"
             isCurrent={(item) => item.current === true}
             renderDetail={renderDetail}
-            emptyText="No matching settings · [⌃U] clears search"
+            emptyText="No matches"
             onActivateRow={(itemIndex) => highlight(itemIndex)}
             onHoverRow={(itemIndex) => highlight(itemIndex)}
             onScroll={move}

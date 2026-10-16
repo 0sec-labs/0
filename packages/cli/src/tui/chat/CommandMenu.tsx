@@ -4,7 +4,7 @@ import { fitHint, fitTuiText } from "../text.js";
 import { operatorIcon } from "../operator-icons.js";
 import { textCells } from "../primitives.js";
 import type { CommandMenuLayout } from "../chat-layout.js";
-import type { SlashCommand } from "../slash-commands.js";
+import type { SlashCommand } from "@0/shared"
 import type { Theme } from "../theme-context.js";
 import { useSymbols } from "../symbol-context.js";
 import { DialogSelectBody } from "../dialog-select.js";
@@ -40,7 +40,6 @@ export function CommandMenu({
   selectedIndex,
   query,
   visibleRows,
-  hasAgentRoster,
   theme,
   onActivateRow,
   onHoverRow,
@@ -53,7 +52,6 @@ export function CommandMenu({
   selectedIndex: number;
   visibleRows: number;
   query: string;
-  hasAgentRoster: boolean;
   theme: Theme;
   onActivateRow: (index: number) => void;
   onHoverRow: (index: number) => void;
@@ -135,7 +133,7 @@ export function CommandMenu({
       )}
       <box width={innerWidth} flexShrink={0} minWidth={0}>
         <text fg={MUTED}>{fitHint(Math.max(1, innerWidth), commands.length === 1 ? [
-          `${hasAgentRoster ? "[↓] agents" : "[↓] close"} · [⏎] ${commands[0]?.name === "model" ? "open picker" : "run"} · [←] edit`,
+          `[↓] close · [⏎] ${commands[0]?.name === "model" ? "open picker" : "run"} · [←] edit`,
         ] : [
           "[↑↓] select · [⇥] complete · [⏎] run · [←] edit · [esc] close",
           "[↑↓] select · [⏎] run · [←] edit",

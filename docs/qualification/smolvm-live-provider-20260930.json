@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "timestamp": "2026-10-01T01:08:59.973Z",
+  "commit": "fdd1b7778f451ba1943f760605f3e476294008ce",
+  "provider": "chatgpt-codex",
+  "model": "gpt-6-astra",
+  "imageDigest": "sha256:735d43b03363c4ad39031c054c4628669bb981a04071f62509d03bafba6acfd9",
+  "liveAccountCatalogVerified": true,
+  "hostCredentialsForwarded": false,
+  "providerCalls": 3,
+  "httpStatuses": [
+    200,
+    200,
+    200
+  ],
+  "sourceUnchanged": true,
+  "guestOutputAbsentOnHostSource": true,
+  "exportedOutputMatches": true,
+  "outcome": "passed",
+  "command": "console --model gpt-6-astra --mode yolo --max-tool-calls 6 --print <synthetic read-and-patch prompt>",
+  "tools": [
+    "read_file",
+    "apply_patch"
+  ],
+  "network": false,
+  "result": {
+    "exitCode": 0,
+    "timedOut": false,
+    "cleanupFailed": false
+  },
+  "guestDatabaseExported": true,
+  "limits": {
+    "providerRequests": 8,
+    "providerConcurrency": 1,
+    "requestTimeoutMs": 90000,
+    "maxRequestBytes": 1048576,
+    "maxResponseBytes": 1048576,
+    "maxTotalResponseBytes": 4194304,
+    "vmLifetimeMs": 240000
+  },
+  "limitations": [
+    "One selected account and model, one synthetic task; no comparative quality claim.",
+    "Existing approved Kali archive; not a newly built immutable profile receipt.",
+    "No general hosted workflow or every optional Kali-tool qualification."
+  ]
+}

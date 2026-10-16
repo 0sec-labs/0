@@ -1,37 +1,11 @@
 /**
- * Coverage seed for `@0/cli`'s `disclose` command. This is the H1
- * disclosure pipeline — the place where 0 drafts advisories from
- * findings, runs the filing-state gate (decideFilingState), and writes
- * the bundle (INDEX.md + advisories + _dropped/). The CLI side had zero
- * tests prior to this seed; a bug here ships bad advisories to external
- * programs.
+ * CLI disclosure selection, argument validation, filing routes, and database
+ * lifetime. Commander parses the operator's argv; database and rendering
+ * boundaries stay hermetic. Rejections must surface to the caller rather than
+ * being inferred from an unused execution mock.
  *
- * Strategy: mock the `@0/core` boundary (renderers, canary, poc-runtime,
- * bundle helpers) AND the `@0/db` boundary (so we never open SQLite),
- * register the command on a fresh Commander program, and `parseAsync` the
- * argv the operator would type. We assert on:
- *
- *   • The H1-readiness gate: `discovered` and `false-positive` rows MUST
- *     be filtered out in batch mode (AGENTS.md "/disclose pipeline").
- *   • The `--severity-floor` filter (drops below-floor rows).
- *   • Validation paths: `--target-timeout-ms`, `--reverify-rps`,
- *     `--reverify` without `--target-url`, malformed `--target-env`.
- *   • The `--keep-unrun` override threaded through to `decideFilingState`.
- *   • `--scope-allowlist` parsing (comma-split, trim, drop empty).
- *   • Single-finding mode bypasses the status filter (operator-confirmed
- *     workflow — load-bearing for "I want to draft this `discovered` one
- *     by hand" use case).
- *
- * Out of scope (refactor required — noted in PR body):
- *   • The internal `rowToFinding` / `parseTargetEnv` / `resolveOutputDir`
- *     helpers are not exported. We exercise them through observable
- *     side-effects (the call payload threaded into mocked core helpers).
- *   • The actual filesystem writes (advisory MD, INDEX, _dropped/) are
- *     covered by `packages/core/src/disclose/bundle.test.ts` —
- *     here we use `--dry-run` so the test stays hermetic.
- *   • Behavioural-reverify (executePocSteps) and canary (verifyAgainstRef)
- *     have their own core-side tests; here we just stub them out and
- *     check the CLI threads inputs through.
+ * Runtime authorization and isolated PoC execution remain core concerns.
+ * This suite does not re-pin legacy executor wiring.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -96,7 +70,6 @@ const isFreezeAvailableMock = vi.fn();
 const verifyAgainstRefMock = vi.fn();
 const detectVersionRangeMock = vi.fn();
 const extractSiblingFixMock = vi.fn();
-const executePocStepsMock = vi.fn();
 const decideFilingStateMock = vi.fn();
 const assembleBundleIndexMock = vi.fn();
 const formatDroppedReasonMock = vi.fn();
@@ -116,7 +89,6 @@ vi.mock("@0/core", () => ({
   verifyAgainstRef: verifyAgainstRefMock,
   detectVersionRange: detectVersionRangeMock,
   extractSiblingFix: extractSiblingFixMock,
-  executePocSteps: executePocStepsMock,
   EmptyPocError: FakeEmptyPocError,
   decideFilingState: decideFilingStateMock,
   assembleBundleIndex: assembleBundleIndexMock,
@@ -160,13 +132,7 @@ async function runCli(argv: string[]): Promise<void> {
     writeErr: () => undefined,
   });
   registerDiscloseCommand(program);
-  try {
-    await program.parseAsync(["node", "@0/cli", ...argv]);
-  } catch {
-    // Commander throws on usage error; the action throws on validation
-    // failures (which then surfaces as an unhandled rejection in
-    // parseAsync). Either way: we want to inspect stdout/stderr after.
-  }
+  await program.parseAsync(["node", "@0/cli", ...argv]);
 }
 
 let logSpy: ReturnType<typeof vi.spyOn>;
@@ -189,7 +155,6 @@ beforeEach(() => {
   verifyAgainstRefMock.mockReset();
   detectVersionRangeMock.mockReset();
   extractSiblingFixMock.mockReset().mockReturnValue(null);
-  executePocStepsMock.mockReset();
   decideFilingStateMock.mockReset().mockReturnValue({ filingState: "keep" });
   assembleBundleIndexMock.mockReset().mockReturnValue("# INDEX\n");
   formatDroppedReasonMock.mockReset().mockReturnValue("# dropped\n");
@@ -304,15 +269,13 @@ describe("disclose — single-finding lookup", () => {
       makeRow({ id: "abc12345aaaa" }),
       makeRow({ id: "abc12345bbbb" }),
     ];
-    await runCli(["disclose", "abc1234", "--dry-run"]);
+    await expect(runCli(["disclose", "abc1234", "--dry-run"])).rejects.toThrow(/ambiguous/i);
     expect(renderAdvisoryMarkdownMock).not.toHaveBeenCalled();
-    // Commander surfaces the throw via .parseAsync — we don't assert
-    // exit code (exitOverride throws), only that we never advanced.
   });
 
   it("unknown ID throws (and does not call the renderer)", async () => {
     dbState.rows = [makeRow({ id: "abc12345aaaa" })];
-    await runCli(["disclose", "deadbeef", "--dry-run"]);
+    await expect(runCli(["disclose", "deadbeef", "--dry-run"])).rejects.toThrow(/not found/i);
     expect(renderAdvisoryMarkdownMock).not.toHaveBeenCalled();
   });
 });
@@ -323,15 +286,12 @@ describe("disclose — argument validation", () => {
   });
 
   it("rejects --reverify without --target-url", async () => {
-    await runCli(["disclose", "--reverify", "--dry-run"]);
-    // The renderer should never be reached.
+    await expect(runCli(["disclose", "--reverify", "--dry-run"])).rejects.toThrow(/--target-url/);
     expect(renderAdvisoryMarkdownMock).not.toHaveBeenCalled();
-    // executePocSteps should never be reached either.
-    expect(executePocStepsMock).not.toHaveBeenCalled();
   });
 
   it("rejects malformed --target-env (missing '=')", async () => {
-    await runCli([
+    await expect(runCli([
       "disclose",
       "--reverify",
       "--target-url",
@@ -339,12 +299,12 @@ describe("disclose — argument validation", () => {
       "--target-env",
       "JUSTAKEY",
       "--dry-run",
-    ]);
-    expect(executePocStepsMock).not.toHaveBeenCalled();
+    ])).rejects.toThrow(/--target-env/);
+    expect(renderAdvisoryMarkdownMock).not.toHaveBeenCalled();
   });
 
   it("rejects --target-timeout-ms when non-positive", async () => {
-    await runCli([
+    await expect(runCli([
       "disclose",
       "--reverify",
       "--target-url",
@@ -352,12 +312,12 @@ describe("disclose — argument validation", () => {
       "--target-timeout-ms",
       "0",
       "--dry-run",
-    ]);
-    expect(executePocStepsMock).not.toHaveBeenCalled();
+    ])).rejects.toThrow(/--target-timeout-ms/);
+    expect(renderAdvisoryMarkdownMock).not.toHaveBeenCalled();
   });
 
   it("rejects --reverify-rps when non-positive", async () => {
-    await runCli([
+    await expect(runCli([
       "disclose",
       "--reverify",
       "--target-url",
@@ -365,12 +325,12 @@ describe("disclose — argument validation", () => {
       "--reverify-rps",
       "-1",
       "--dry-run",
-    ]);
-    expect(executePocStepsMock).not.toHaveBeenCalled();
+    ])).rejects.toThrow(/--reverify-rps/);
+    expect(renderAdvisoryMarkdownMock).not.toHaveBeenCalled();
   });
 
   it("rejects --reverify-rps when non-numeric", async () => {
-    await runCli([
+    await expect(runCli([
       "disclose",
       "--reverify",
       "--target-url",
@@ -378,36 +338,12 @@ describe("disclose — argument validation", () => {
       "--reverify-rps",
       "fast",
       "--dry-run",
-    ]);
-    expect(executePocStepsMock).not.toHaveBeenCalled();
+    ])).rejects.toThrow(/--reverify-rps/);
+    expect(renderAdvisoryMarkdownMock).not.toHaveBeenCalled();
   });
 });
 
-describe("disclose — filing-state gate threading", () => {
-  it("threads --keep-unrun=true through to decideFilingState", async () => {
-    dbState.rows = [makeRow()];
-    await runCli(["disclose", "--keep-unrun", "--dry-run"]);
-    expect(decideFilingStateMock).toHaveBeenCalled();
-    const inputs = decideFilingStateMock.mock.calls[0]![0];
-    expect(inputs.keepUnrun).toBe(true);
-  });
-
-  it("threads --drop-fixed=true through to decideFilingState", async () => {
-    dbState.rows = [makeRow()];
-    await runCli(["disclose", "--drop-fixed", "--dry-run"]);
-    expect(decideFilingStateMock).toHaveBeenCalled();
-    const inputs = decideFilingStateMock.mock.calls[0]![0];
-    expect(inputs.dropFixed).toBe(true);
-  });
-
-  it("defaults --keep-unrun and --drop-fixed to false", async () => {
-    dbState.rows = [makeRow()];
-    await runCli(["disclose", "--dry-run"]);
-    const inputs = decideFilingStateMock.mock.calls[0]![0];
-    expect(inputs.keepUnrun).toBe(false);
-    expect(inputs.dropFixed).toBe(false);
-  });
-
+describe("disclose — filing routes", () => {
   it("filingState='drop' routes through dropped path, skipping the renderer", async () => {
     dbState.rows = [makeRow()];
     decideFilingStateMock.mockReturnValueOnce({
@@ -420,23 +356,20 @@ describe("disclose — filing-state gate threading", () => {
     expect(renderAdvisoryMarkdownMock).not.toHaveBeenCalled();
   });
 
-  it("EmptyPocError from renderer routes the finding to dropped with emptyPoc=true", async () => {
+  it("drops an advisory rejected by the renderer for an empty PoC", async () => {
     dbState.rows = [makeRow()];
     decideFilingStateMock.mockReturnValue({ filingState: "keep" });
     renderAdvisoryMarkdownMock.mockImplementationOnce(() => {
       throw new FakeEmptyPocError("no PoC content");
     });
     await runCli(["disclose", "--dry-run"]);
-    // decideFilingState is called twice for an empty-PoC row: once for the
-    // initial keep/drop decision, then again with emptyPoc=true from the
-    // catch block — that second call drives the routeDroppedFinding shape.
-    expect(decideFilingStateMock).toHaveBeenCalledTimes(2);
-    const secondCall = decideFilingStateMock.mock.calls[1]![0];
-    expect(secondCall.emptyPoc).toBe(true);
+    const out = logSpy.mock.calls.map((call: unknown[]) => String(call[0])).join("\n");
+    expect(out).toMatch(/\bdrop\b/);
+    expect(out).not.toMatch(/\bwrote\b/);
   });
 });
 
-describe("disclose — wiring sanity", () => {
+describe("disclose — database lifetime", () => {
   it("closes the database in the finally block (no leaked handle)", async () => {
     dbState.rows = [makeRow()];
     await runCli(["disclose", "--dry-run"]);
@@ -448,148 +381,6 @@ describe("disclose — wiring sanity", () => {
     await runCli(["disclose", "--dry-run"]);
     expect(dbState.closed).toBe(true);
   });
-
-  it("passes --scope-allowlist as a host array to executePocSteps", async () => {
-    dbState.rows = [
-      makeRow({
-        pocSteps: JSON.stringify([
-          {
-            id: "s1",
-            kind: "exploit",
-            summary: "fetch",
-            action: { type: "http", method: "GET", url: "/" },
-          },
-        ]),
-      }),
-    ];
-    executePocStepsMock.mockResolvedValueOnce({
-      findingId: "x",
-      startedAt: "2026-05-13T00:00:00.000Z",
-      endedAt: "2026-05-13T00:00:00.001Z",
-      steps: [],
-      overallVerdict: "exploit_still_works",
-    });
-    await runCli([
-      "disclose",
-      "--reverify",
-      "--target-url",
-      "http://localhost:3108",
-      "--scope-allowlist",
-      "example.com, *.example.org , ",
-      "--dry-run",
-    ]);
-    expect(executePocStepsMock).toHaveBeenCalledOnce();
-    const target = executePocStepsMock.mock.calls[0]![1];
-    expect(target.scopeAllowlist).toEqual(["example.com", "*.example.org"]);
-    expect(target.baseUrl).toBe("http://localhost:3108");
-    expect(target.allowProcessActions).toBe(false);
-  });
-
-  it("passes --reverify-rps through as rpsPerHost on the PocExecutionTarget", async () => {
-    dbState.rows = [
-      makeRow({
-        pocSteps: JSON.stringify([
-          {
-            id: "s1",
-            kind: "exploit",
-            summary: "fetch",
-            action: { type: "http", method: "GET", url: "/" },
-          },
-        ]),
-      }),
-    ];
-    executePocStepsMock.mockResolvedValueOnce({
-      findingId: "x",
-      startedAt: "2026-05-13T00:00:00.000Z",
-      endedAt: "2026-05-13T00:00:00.001Z",
-      steps: [],
-      overallVerdict: "exploit_still_works",
-    });
-    await runCli([
-      "disclose",
-      "--reverify",
-      "--target-url",
-      "http://localhost:3108",
-      "--reverify-rps",
-      "3",
-      "--dry-run",
-    ]);
-    expect(executePocStepsMock).toHaveBeenCalledOnce();
-    const target = executePocStepsMock.mock.calls[0]![1];
-    expect(target.rpsPerHost).toBe(3);
-  });
-
-  it("passes repeated --target-env KEY=VAL into the PocExecutionTarget env map", async () => {
-    dbState.rows = [
-      makeRow({
-        pocSteps: JSON.stringify([
-          {
-            id: "s1",
-            kind: "exploit",
-            summary: "shell",
-            action: { type: "shell", cmd: "env" },
-          },
-        ]),
-      }),
-    ];
-    executePocStepsMock.mockResolvedValueOnce({
-      findingId: "x",
-      startedAt: "2026-05-13T00:00:00.000Z",
-      endedAt: "2026-05-13T00:00:00.001Z",
-      steps: [],
-      overallVerdict: "exploit_still_works",
-    });
-    await runCli([
-      "disclose",
-      "--reverify",
-      "--target-url",
-      "http://localhost:3108",
-      "--target-env",
-      "TOKEN=abc",
-      "--target-env",
-      "ROLE=admin",
-      "--dry-run",
-    ]);
-    expect(executePocStepsMock).toHaveBeenCalledOnce();
-    const target = executePocStepsMock.mock.calls[0]![1];
-    expect(target.env).toEqual({ TOKEN: "abc", ROLE: "admin" });
-  });
-
-  it("rejects --target-env where value contains '=' (preserves the suffix)", async () => {
-    // KEY=foo=bar should map to KEY → "foo=bar" (split on FIRST '='),
-    // not throw. This protects callers passing base64-ish secrets.
-    dbState.rows = [
-      makeRow({
-        pocSteps: JSON.stringify([
-          {
-            id: "s1",
-            kind: "exploit",
-            summary: "shell",
-            action: { type: "shell", cmd: "env" },
-          },
-        ]),
-      }),
-    ];
-    executePocStepsMock.mockResolvedValueOnce({
-      findingId: "x",
-      startedAt: "2026-05-13T00:00:00.000Z",
-      endedAt: "2026-05-13T00:00:00.001Z",
-      steps: [],
-      overallVerdict: "exploit_still_works",
-    });
-    await runCli([
-      "disclose",
-      "--reverify",
-      "--target-url",
-      "http://localhost:3108",
-      "--target-env",
-      "TOKEN=ab=cd==",
-      "--dry-run",
-    ]);
-    expect(executePocStepsMock).toHaveBeenCalledOnce();
-    const target = executePocStepsMock.mock.calls[0]![1];
-    expect(target.env).toEqual({ TOKEN: "ab=cd==" });
-  });
 });
 
 describe("disclose — multi-scan guardrail", () => {
@@ -598,7 +389,7 @@ describe("disclose — multi-scan guardrail", () => {
       makeRow({ id: "row1aaaa", scanId: "scan-A" }),
       makeRow({ id: "row2bbbb", scanId: "scan-B" }),
     ];
-    await runCli(["disclose", "--dry-run"]);
+    await expect(runCli(["disclose", "--dry-run"])).rejects.toThrow(/span .* scans/i);
     // The throw happens before the renderer is reached.
     expect(renderAdvisoryMarkdownMock).not.toHaveBeenCalled();
   });

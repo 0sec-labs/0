@@ -162,6 +162,15 @@ export function runConfigImport(
   // Drop unknown/invalid keys up front — never blindly overwrite. What survives
   // is a sparse, validated patch of known settings.
   const patch = sanitizeOverrides(bag);
+  // Project patches cannot carry operator authority. The global import surface
+  // may select this execution boundary only through the security gate below.
+  const profile = typeof bag === "object" && bag !== null
+    ? (bag as Record<string, unknown>)["executionProfile"]
+    : undefined;
+  const profileChoices = SETTING_DEFS.find((def) => def.key === "executionProfile")?.choices;
+  if (scope === "global" && typeof profile === "string" && profileChoices?.includes(profile)) {
+    patch.executionProfile = profile as TuiSettings["executionProfile"];
+  }
   const patchKeys = Object.keys(patch) as (keyof TuiSettings)[];
   const skipped =
     typeof bag === "object" && bag !== null && !Array.isArray(bag)
@@ -221,7 +230,7 @@ export function runConfigImport(
 export function registerConfigCommand(program: Command): void {
   const config = program
     .command("config")
-    .description("Inspect, export, and import the two-level console configuration");
+    .description("Inspect, export, and import console configuration (global and project layers)");
 
   config
     .command("show")

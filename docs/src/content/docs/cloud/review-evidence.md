@@ -15,27 +15,18 @@ vulnerabilities exist.
 
 ## Locate the scan and delivery
 
-Keep the `scan_id` returned by `0 connect`, or the `id` returned by
-`0 service start --json`. Inspect the record without starting another run:
-
-```bash
-0 service status SCAN_ID --json
-0 service wait SCAN_ID --interval 5 --json
-```
-
-The record includes `status`, `target_id`, timing and cost fields, and may
-include `final_report`. `wait` ends on `complete`, `failed`, `cancelled` or
-`cost_exceeded`; its exit status alone does not distinguish those outcomes.
-For a managed `secure` run, inspect the structured final result as well as the
-outer scan status. In the reviewed service, a blocked secure result maps to
-outer `failed` with `truncated_reason: "secure_blocked"`, rather than becoming
-a clean result.
+Keep the scan ID and delivery link provided by the operator. Use the
+organization-scoped dashboard or an operator-approved service integration to
+inspect the scan record; the local CLI no longer exposes managed scan status
+or wait commands. The record can include `status`, `target_id`, timing and
+cost fields, and `final_report`. Inspect both the outer status and structured
+final result: in the reviewed service, a blocked `secure` result maps to outer
+`failed` with `truncated_reason: "secure_blocked"`, not a clean result.
 
 The dashboard's organization-scoped scan detail page links to an **Evidence
 bundle**, with a print-friendly view at
-`/<orgSlug>/scans/<scanId>/artifact-bundle`. Use the actual organization route
-from the dashboard; the CLI's printed `/cloud/scans/<id>` link is not a
-substitute for resolving your organization's route.
+`/<orgSlug>/scans/<scanId>/artifact-bundle`. Use the actual organization
+route from the dashboard.
 
 ### Reports and stored artifacts are different
 
@@ -60,7 +51,7 @@ worker-local file was uploaded. Stored-artifact delivery requires a configured
 object store and a successful upload/receipt. A missing receipt, unavailable
 store or failed download must be reported as a delivery gap. Do not convert
 paths in `final_report` into guessed download URLs, and do not assume that
-status/wait downloads files: these CLI commands return scan records only.
+the record or dashboard view includes every worker-local file.
 
 The endpoints above are source-backed integration capabilities, not a claim
 that every deployment has artifact storage configured. Agree on recipients,
@@ -116,8 +107,8 @@ prevents the test, the outcome is not proof of remediation. Record the blocker
 and rerun when valid conditions are restored.
 
 For local reproduction and verification tooling, see [Commands](/commands/)
-and [Verification Results](/verification-result/). A CLI artifact path is not a
-public download URL; use the delivery mechanism agreed for the engagement.
+and [Verification Results](/verification-result/). A local artifact path is not
+a public download URL; use the delivery mechanism agreed for the engagement.
 
 ## Resolve incomplete evidence
 

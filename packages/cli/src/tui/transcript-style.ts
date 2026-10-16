@@ -315,17 +315,16 @@ function clampWidth(n: number): number {
  * it. `age` is a pre-formatted relative age ("12s"); an empty string omits the
  * separator entirely rather than leaving a dangling ` · `.
  *
- * `full` and `short` show You / 0 with the optional age; `glyph` keeps the
- * bare name and `off` suppresses it. Placement belongs to the renderer: bubble
- * cards use a top-border title rather than a separate heading row.
+ * Operator labels follow the chosen style. Assistant answers have no repeated
+ * speaker heading; model and timing information belong in opt-in metadata.
  */
 export function roleLabelText(
   kind: "user" | "assistant",
   style: RoleLabelStyle,
   age = "",
 ): string | null {
-  if (style === "off") return null;
-  const name = kind === "user" ? "You" : "0";
+  if (style === "off" || kind === "assistant") return null;
+  const name = "You";
   const suffix = age ? ` · ${age}` : "";
   if (style === "glyph") return name;
   if (style === "short") return `${name}${suffix}`;

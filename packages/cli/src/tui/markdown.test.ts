@@ -6,6 +6,7 @@ import {
   QUOTE_GUTTER_WIDTH,
   TABLE_COLUMN_GAP,
   TABLE_FRAME_WIDTH,
+  clearMarkdownCache,
   listItemGutterWidth,
   parseInline,
   parseMarkdownBlocks,
@@ -809,5 +810,42 @@ describe("renderMarkdown cache", () => {
     expect(renderMarkdown(src + " more", 40)).not.toBe(a); // text change misses
     // Content is still correct after a cache hit.
     expect(a.length).toBeGreaterThan(0);
+  });
+});
+
+
+describe("Markdown retention limits", () => {
+  it("does not retain streaming prefixes or disturb stable cached entries", () => {
+    const source = "stable **answer** with `code`";
+    const cached = renderMarkdown(source, 80);
+    const transient = renderMarkdown(source, 80, { cache: false });
+    expect(transient).toEqual(cached);
+    expect(transient).not.toBe(cached);
+    expect(renderMarkdown(source, 80, { cache: false })).not.toBe(transient);
+    expect(renderMarkdown(source, 80)).toBe(cached);
+  });
+
+  it("evicts large parsed graphs before reaching the entry-count limit", () => {
+    const source = "**bold** normal `code` ".repeat(400);
+    const first = renderMarkdown(source, 80);
+    for (let i = 0; i < 200; i++) renderMarkdown(`${source} ${i}`, 80);
+    const reparsed = renderMarkdown(source, 80);
+    expect(reparsed).not.toBe(first);
+    expect(reparsed).toEqual(first);
+  });
+
+  it("renders oversized entries without caching them", () => {
+    const source = "x".repeat(4 * 1024 * 1024);
+    const first = renderMarkdown(source, source.length);
+    const second = renderMarkdown(source, source.length);
+    expect(second).not.toBe(first);
+    expect(second).toEqual(first);
+  });
+
+  it("releases cached transcript text on clear", () => {
+    const source = "conversation that the operator explicitly cleared";
+    const cached = renderMarkdown(source, 80);
+    clearMarkdownCache();
+    expect(renderMarkdown(source, 80)).not.toBe(cached);
   });
 });

@@ -96,5 +96,19 @@
       "solved": 10,
       "tested": 10
     }
+  },
+  "publicationQualification": {
+    "reviewedAt": "2026-09-30",
+    "status": "historical summaries; not current headline qualification",
+    "xbowModelProtocol": "per-model consolidator unions successes across retained runs and both modes; not black-box-only or single-shot",
+    "missingEvidence": [
+      "May 6 immutable raw cohort cannot be reconstructed from retained May 4 canonical snapshot",
+      "complete failed-run denominators and source/evaluator identity are unavailable"
+    ],
+    "supersedesInterpretation": [
+      "load-bearing black-box claim",
+      "per-model single-shot solve rate"
+    ],
+    "audit": "docs/paper/generated/evidence-tables.md"
   }
 }

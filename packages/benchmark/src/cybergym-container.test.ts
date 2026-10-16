@@ -66,6 +66,10 @@ printf '%s\n' "$@" > "${chownCapture}"
       encoding: "utf8",
       env: {
         ...process.env,
+        // The fixture declares exactly which credentials may be forwarded.
+        // Ambient operator keys must not change the generated docker argv.
+        OPENAI_API_KEY: "",
+        ANTHROPIC_API_KEY: "",
         PATH: `${bin}:${process.env.PATH ?? ""}`,
         CYBERGYM_ROOT: harness,
         CYBERGYM_NETWORK: "cybergym-internal",

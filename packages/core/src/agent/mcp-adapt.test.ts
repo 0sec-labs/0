@@ -29,7 +29,7 @@ describe("namespacing", () => {
     expect(parseMcpToolName("mcp__bad server__t")).toBeNull();
   });
 
-  it("uses the same prefix isUntrustedSourceTool matches", () => {
+  it("uses the standard MCP namespace prefix", () => {
     expect(mcpToolName("x", "y").startsWith(MCP_TOOL_PREFIX)).toBe(true);
   });
 

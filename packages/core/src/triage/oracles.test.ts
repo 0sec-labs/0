@@ -253,7 +253,7 @@ describe("verifyIdor", () => {
     vi.unstubAllGlobals();
   });
 
-  it("flags distinct 200 responses on id mutation", async () => {
+  it("keeps distinct public resource responses as candidates without ownership proof", async () => {
     vi.stubGlobal(
       "fetch",
       makeFakeFetch((url) => {
@@ -270,7 +270,9 @@ describe("verifyIdor", () => {
       },
     });
     const result = await verifyIdor(finding, "http://example.com");
-    expect(result.verified).toBe(true);
+    expect(result.verified).toBe(false);
+    expect(result.evidence).toContain("distinct responses on id mutation");
+    expect(result.reason).toContain("identity and resource ownership");
     expect(result.confidence).toBeLessThan(1);
   });
 

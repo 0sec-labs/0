@@ -11,8 +11,9 @@ import { acquireEvolutionController } from "../improvement/controller-lock.js";
 import { canonicalEvolutionJson, parseEvolutionConfig } from "../improvement/config.js";
 import { runEvolution } from "../improvement/loop.js";
 import { evolutionDigest, loadEvolutionRegistry, snapshotEvolutionSource, verifyEvolutionReceipt, verifyEvolutionSnapshot } from "../improvement/registry.js";
-import { executeSandboxSnapshot, resolveEvolutionImage, type SandboxProgramConfig } from "../improvement/sandbox.js";
+import { executeSandboxSnapshot, resolveEvolutionConfigImage, resolveEvolutionImage, type SandboxProgramConfig } from "../improvement/sandbox.js";
 import { resolveSmolvmImage } from "../runtime/smolvm.js";
+import { isAdmittedSmolvmWorkbench, resolveWorkbenchBrokerImage } from "../runtime/smolvm-broker.js";
 import type { EvolutionConfig, EvolutionDependencies } from "../improvement/types.js";
 import { validatePluginManifest, type PluginCapability, type PluginManifest } from "./manifest.js";
 import { FrameReader, decodePluginMessage, MAX_RESULT_CHARS, type PluginMessage, type PluginToolResultMessage } from "./protocol.js";
@@ -47,7 +48,7 @@ const versionSchema = z.object({
     || (!measured && (version.receiptDigest !== undefined || version.evolutionVersionId !== undefined))) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: "Measured executable evidence requires its evolution version and receipt digest" });
   }
-  if (version.backend === "smolvm" && !version.imageArchive) {
+  if (version.backend === "smolvm" && !version.imageArchive && !isAdmittedSmolvmWorkbench()) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: "smolvm executable requires its image archive" });
   }
 });
@@ -146,6 +147,7 @@ export class ExecutablePluginManager {
   private readonly maxBrokerCalls: number;
 
   constructor(private readonly options: ExecutablePluginOptions) {
+    if (isAdmittedSmolvmWorkbench() && options.backend !== "smolvm") throw new Error("Admitted workbench executable plugins require sibling SmolVM");
     this.root = resolve(options.root);
     this.limits = { timeoutMs: options.timeoutMs ?? 30000, memoryMb: options.memoryMb ?? 512,
       cpus: options.cpus ?? 1, maxOutputBytes: options.maxOutputBytes ?? 1024 * 1024 };
@@ -153,7 +155,7 @@ export class ExecutablePluginManager {
     for (const [key, value] of Object.entries({ ...this.limits, maxBrokerCalls: this.maxBrokerCalls })) {
       if (!Number.isFinite(value) || value <= 0 || (key !== "cpus" && !Number.isSafeInteger(value))) throw new Error(`Invalid executable limit: ${key}`);
     }
-    if (options.backend === "smolvm" && !options.imageArchive) throw new Error("smolvm requires imageArchive");
+    if (options.backend === "smolvm" && !options.imageArchive && !isAdmittedSmolvmWorkbench()) throw new Error("smolvm requires imageArchive");
     this.ready = Promise.resolve().then(() => {
       if (this.shutdown.signal.aborted) return;
       ensureEvolutionDirectory(this.root);
@@ -214,8 +216,9 @@ export class ExecutablePluginManager {
   }
 
   private image(): Promise<string> {
-    return this.imagePromise ??= (this.options.backend === "smolvm"
-      ? resolveSmolvmImage(this.options.imageArchive!) : resolveEvolutionImage(this.options.image))
+    return this.imagePromise ??= (isAdmittedSmolvmWorkbench()
+      ? Promise.resolve(resolveWorkbenchBrokerImage(this.options.image))
+      : this.options.backend === "smolvm" ? resolveSmolvmImage(this.options.imageArchive!) : resolveEvolutionImage(this.options.image))
       .catch(error => { this.imagePromise = undefined; throw error; });
   }
 
@@ -533,11 +536,11 @@ export class ExecutablePluginManager {
         const record = this.readRegistry().plugins[pluginId];
         const previous = record?.versions.find(v => v.versionId === record.activeVersionId);
         if (!record || !previous) throw new Error("Active executable plugin not found");
-        if (profile.kind !== "source" || (profile.backend ?? "docker") !== previous.backend) throw new Error("Executable evolution requires a source profile for the configured backend");
+        if (profile.kind !== "source" || (isAdmittedSmolvmWorkbench() ? "smolvm" : profile.backend ?? "docker") !== previous.backend) throw new Error("Executable evolution requires a source profile for the configured backend");
         const profileId = evolutionDigest(profile).slice(7);
         const config = parseEvolutionConfig({ ...profile, sourceRoot: previous.snapshot.root,
           storePath: join(this.root, "evolution", pluginId, record.evolutionEpoch, profileId) });
-        const expectedImage = config.backend === "smolvm" ? await resolveSmolvmImage(config.imageArchive!) : await resolveEvolutionImage(config.image);
+        const expectedImage = await resolveEvolutionConfigImage(config);
         if (expectedImage !== previous.image) throw new Error("Evolution and active executable must use the same immutable image");
         const signal = AbortSignal.any([this.shutdown.signal, ...(context.signal ? [context.signal] : []), ...(deps.signal ? [deps.signal] : [])]);
         const campaign = loadEvolutionRegistry(config.storePath);

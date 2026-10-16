@@ -412,16 +412,6 @@ function composerBlocks(value: string, width: number): PreviewBlock[] {
   return [line("composer-plain", width, `› ${sample}`, (t) => t.MUTED)];
 }
 
-/** The density sample: two entries with the blank-line spacing density implies. */
-function densityBlocks(value: string, width: number): PreviewBlock[] {
-  const comfortable = value !== "compact";
-  const blocks: PreviewBlock[] = [
-    line("density-a", width, "✓ run_command · complete", (t) => t.SUCCESS),
-  ];
-  if (comfortable) blocks.push(line("density-gap", width, "", (t) => t.MUTED));
-  blocks.push(line("density-b", width, "▌ 0  Finding confirmed", (t) => t.PRIMARY));
-  return blocks;
-}
 
 /**
  * The model-display sample: a one-line mock of WHERE the model name lands for
@@ -480,19 +470,19 @@ function modelDisplayBlocks(value: string, width: number): PreviewBlock[] {
  */
 function logoAnimationBlocks(value: string, width: number): PreviewBlock[] {
   const DESCRIPTIONS: Record<string, string> = {
-    glitch: "glitch — a neon-flecked scramble that resolves (default)",
-    rainbow: "rainbow — a looping hue sweep cycling across the mark",
-    matrix: "matrix — a green matrix-rain cascade reveals the mark",
-    wave: "wave — a rippling cyan wavefront wipes the mark in",
-    neon: "neon — a neon-sign warm-up flicker, then it settles",
-    shimmer: "shimmer — a bright comet with a gradient tail sweeps",
-    pulse: "pulse — the orange slash breathes",
-    strike: "strike — the orange slash strikes through the 0",
-    draw: "draw — the letters draw in behind a bright pen tip",
-    fade: "fade — the mark blooms in from the centre",
-    typein: "typein — cells reveal one by one, purple leading glow",
-    sweep: "sweep — a bright bar wipes L→R revealing the mark",
-    off: "off — the mark is drawn static, no intro",
+    glitch: "glitch — scramble that resolves (default)",
+    rainbow: "rainbow — looping hue sweep",
+    matrix: "matrix — green rain reveals the logo",
+    wave: "wave — cyan ripple wipes in",
+    neon: "neon — sign flicker, then settles",
+    shimmer: "shimmer — bright comet sweeps across",
+    pulse: "pulse — orange slash breathes",
+    strike: "strike — slash strikes through the 0",
+    draw: "draw — letters draw in",
+    fade: "fade — blooms in from the centre",
+    typein: "typein — types in cell by cell",
+    sweep: "sweep — bar wipes left to right",
+    off: "off — no animation",
   };
   const choices = [
     "glitch",
@@ -560,154 +550,31 @@ function contextMeterBlocks(value: boolean, width: number): PreviewBlock[] {
   ];
 }
 
-/** The theme sample: a swatch strip of the palette's key colours + a live line. */
-function themeBlocks(width: number): PreviewBlock[] {
-  // Ordered so the tokens an operator judges a palette by come first, and the
-  // strip is trimmed to the chips that actually fit the pane.
-  const order: readonly string[] = [
-    "TEXT",
-    "MUTED",
-    "PRIMARY",
-    "ACCENT",
-    "SUCCESS",
-    "WARNING",
-    "ERROR",
-    "INFO",
-    "BORDER",
-    "PANEL",
-  ];
-  const CHIP = 2;
-  const maxChips = Math.max(0, Math.floor((width + 1) / (CHIP + 1)));
-
-  const swatch: PreviewBlock = {
-    key: "theme-swatch",
-    rows: 1,
-    render: (theme) => {
-      const chips = order
-        .map((name) => ({ name, color: token(theme, name, theme.TEXT) }))
-        .slice(0, maxChips);
-      return (
-        <box flexDirection="row" width={width} flexShrink={0} minWidth={0} gap={1}>
-          {chips.map((chip) => (
-            <box key={chip.name} width={CHIP} height={1} flexShrink={0} backgroundColor={chip.color} />
-          ))}
-        </box>
-      );
-    },
-  };
-
-  const sample: PreviewBlock = {
-    key: "theme-sample",
-    rows: 1,
+/** A miniature console uses the same palette layers and density as the chat. */
+function consoleBlocks(width: number, density: TuiSettings["density"]): PreviewBlock[] {
+  const comfortable = density !== "compact";
+  const inner = Math.max(1, width - 4);
+  return [{
+    key: "console",
+    rows: comfortable ? 9 : 8,
     render: (theme) => (
-      <Columns
-        available={width}
-        gap={1}
-        columns={[
-          { content: "0", fg: theme.PRIMARY, key: "primary" },
-          { content: "operator", fg: theme.ACCENT, key: "accent" },
-          { content: "warn", fg: theme.WARNING, key: "warn" },
-          { content: "error", fg: theme.ERROR, key: "error" },
-        ]}
-      />
+      <box width={width} height={comfortable ? 9 : 8} flexDirection="column"
+        flexShrink={0} minWidth={0} border borderStyle="rounded" borderColor={theme.BORDER}
+        paddingX={1} backgroundColor={theme.CANVAS}>
+        <box width={inner} height={1} backgroundColor={theme.PANEL_ALT} flexShrink={0}>
+          <Cells width={inner} fg={theme.PRIMARY}>{"0.security  /  local"}</Cells>
+        </box>
+        <Cells width={inner} fg={theme.ACCENT}>{"> inspect the target"}</Cells>
+        {comfortable ? <Cells width={inner}>{""}</Cells> : null}
+        <Cells width={inner} fg={theme.TEXT}>{"0  Findings verified."}</Cells>
+        <Cells width={inner} fg={theme.SUCCESS}>{"✓ run_command · complete"}</Cells>
+        <box width={inner} height={1} backgroundColor={theme.PANEL_ALT} flexShrink={0}>
+          <Cells width={inner} fg={theme.MUTED}>{"› Ask or /command"}</Cells>
+        </box>
+        <Cells width={inner} fg={theme.MUTED}>{"ready · scope checked"}</Cells>
+      </box>
     ),
-  };
-
-  return [swatch, sample];
-}
-
-/**
- * The agent-rail sample: an on/off chip when OFF; a faithful mini-sidebar when
- * ON so the operator sees the sidebar they are enabling — a dim AGENTS heading
- * over a couple of agent rows (status glyph, short label, turns), the same
- * shape the chat rail paints. Red is reserved for a failure glyph, exactly as
- * the live rail reserves it.
- */
-function rightSidebarBlocks(value: boolean, width: number): PreviewBlock[] {
-  if (!value) return [];
-  return [
-    line("rail-title", width, "AGENTS 2", (t) => t.MUTED),
-    {
-      key: "rail-a",
-      rows: 1,
-      render: (theme) => (
-        <Columns
-          available={width}
-          gap={1}
-          columns={[
-            { content: "◉", fg: theme.ACCENT, key: "glyph" },
-            { flex: 1, min: 1, text: "recon web tier", fg: theme.TEXT, key: "task" },
-            { content: "3/8", fg: theme.MUTED, key: "turns" },
-          ]}
-        />
-      ),
-    },
-    {
-      key: "rail-b",
-      rows: 1,
-      render: (theme) => (
-        <Columns
-          available={width}
-          gap={1}
-          columns={[
-            { content: "✓", fg: theme.SUCCESS, key: "glyph" },
-            { flex: 1, min: 1, text: "auth fuzzing", fg: theme.MUTED, key: "task" },
-            { content: "5/5", fg: theme.MUTED, key: "turns" },
-          ]}
-        />
-      ),
-    },
-    line("rail-findings-title", width, "FINDINGS 2", (t) => t.MUTED),
-    {
-      key: "rail-finding",
-      rows: 1,
-      render: (theme) => (
-        <Columns
-          available={width}
-          gap={1}
-          columns={[
-            { flex: 1, min: 1, text: "Auth bypass on /reset", fg: theme.TEXT, key: "title" },
-            { content: "high", fg: theme.ERROR, key: "sev" },
-          ]}
-        />
-      ),
-    },
-  ];
-}
-
-function leftSidebarBlocks(value: boolean, width: number): PreviewBlock[] {
-  if (!value) return [];
-  return [
-    line("left-sessions-title", width, "SESSIONS", (t) => t.MUTED),
-    {
-      key: "left-session",
-      rows: 1,
-      render: (theme) => (
-        <Columns
-          available={width}
-          gap={1}
-          columns={[
-            { content: "•", fg: theme.ACCENT, key: "glyph" },
-            { flex: 1, min: 1, text: "Audit the login flow", fg: theme.TEXT, key: "preview" },
-          ]}
-        />
-      ),
-    },
-    {
-      key: "left-session-2",
-      rows: 1,
-      render: (theme) => (
-        <Columns
-          available={width}
-          gap={1}
-          columns={[
-            { content: "•", fg: theme.MUTED, key: "glyph" },
-            { flex: 1, min: 1, text: "Deep pass for RCE", fg: theme.MUTED, key: "preview" },
-          ]}
-        />
-      ),
-    },
-  ];
+  }];
 }
 
 
@@ -751,7 +618,7 @@ export function previewBlocks({ def, value, width, settings }: PreviewInput): Pr
       body = composerBlocks(String(value), w);
       break;
     case "density":
-      body = densityBlocks(String(value), w);
+      body = consoleBlocks(w, value === "compact" ? "compact" : "comfortable");
       break;
     case "modelDisplay":
       body = modelDisplayBlocks(String(value), w);
@@ -762,14 +629,8 @@ export function previewBlocks({ def, value, width, settings }: PreviewInput): Pr
     case "showContextMeter":
       body = contextMeterBlocks(value === true, w);
       break;
-    case "showRightSidebar":
-      body = rightSidebarBlocks(value === true, w);
-      break;
-    case "showLeftSidebar":
-      body = leftSidebarBlocks(value === true, w);
-      break;
     case "theme":
-      body = themeBlocks(w);
+      body = consoleBlocks(w, settings.density);
       break;
     default:
       return [];

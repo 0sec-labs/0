@@ -272,27 +272,6 @@ export interface SkillListedPayload {
   role?: string;
 }
 
-// ── Inbound prompt-injection defense (#558) ───────────────────────────────
-
-/**
- * Fired when `sanitizeUntrustedToolResult` neutralizes one or more injection
- * markers in untrusted tool output (HTTP body, crawled HTML, file content,
- * MCP result) BEFORE that content re-enters model context. This is the
- * self-defense analogue of the `mcp-indirect-prompt-injection` probe: the
- * probe records a finding when the *target* is vulnerable; this event records
- * that OUR harness defanged an attempted indirect injection against itself.
- */
-export interface UntrustedInputSanitizedPayload {
-  /** The untrusted-source tool whose result was sanitized. */
-  tool: string;
-  /** Agent turn the sanitization happened on. */
-  turn?: number;
-  role?: string;
-  /** Distinct marker labels neutralized (e.g. "instruction-override"). */
-  markers: string[];
-  [k: string]: unknown;
-}
-
 /**
  * Inline validation / validate-on-save verdict (#554). Emitted by the native
  * attack loop's onFindingSaved hook when a high/critical finding's PoC is
@@ -327,7 +306,7 @@ export interface InlineValidationPayload {
  * bus lets `cloudEventSink` serialize it (→ worker → orchestrator
  * `scan_events`), so the dashboard can join it to the finding by `findingId`
  * and render the "deterministically verified vs heuristic" badge that is the
- * core low-false-positive story. Mirrors `untrusted_input_sanitized` (#558).
+ * core low-false-positive story.
  */
 export interface PovOraclePayload {
   /** Id of the finding the oracle adjudicated. */
@@ -466,6 +445,8 @@ interface SubagentTelemetry {
   contextTokens?: number;
   durationMs?: number;
   model?: string;
+  /** Runtime provider discriminator, never inferred from a model prefix. */
+  provider?: string;
 }
 
 /**
@@ -481,10 +462,9 @@ export interface SubagentLifecyclePayload extends SubagentTelemetry {
   /** Opaque instance id for this sub-agent, unique within the parent scan. */
   agent_id: string;
   /**
-   * Human-friendly `AdjectiveNoun` name for this agent (e.g. `SilentScout`),
-   * stable for the life of the agent and unique within the fleet. Display only —
-   * addressing still uses `agent_id`. Absent on older emitters; the UI falls back
-   * to a shortened `agent_id`.
+   * Task-derived name for this agent, stable for its lifetime and unique within
+   * the fleet. Display only — addressing still uses the opaque `agent_id`.
+   * Absent on older emitters; consumers can derive a label from `task`.
    */
   name?: string;
   /** Scan id of the parent that called spawn_agent. */
@@ -509,7 +489,7 @@ export interface SubagentLifecyclePayload extends SubagentTelemetry {
   error?: string;
   /** Whether the task finished, rather than merely exhausting its run. */
   done?: boolean;
-  completion_reason?: "done" | "turn_limit" | "cost_limit" | "early_stop" | "error";
+  completion_reason?: "done" | "turn_limit" | "cost_limit" | "output_limit" | "early_stop" | "error";
   /** Scope rules inherited from the parent — only when scope is active. */
   scope_rules?: string[];
   [k: string]: unknown;
@@ -578,6 +558,8 @@ export interface SubagentProgressPayload {
  * bounded at emit time (see agent/tools.ts) so a many-child fleet's retained
  * transcripts stay light. */
 export interface SubagentToolMessage {
+  /** Original zero-based call position, stable even when meta tools are hidden. */
+  callIndex: number;
   call: ToolCall;
   result: ToolResult;
   /** A live tool snapshot with no result yet. */
@@ -592,7 +574,8 @@ export interface SubagentToolMessage {
  * Published at tool start/end and at completed turns. Partial snapshots and
  * final turns share stable agent/turn/tool ordering; consumers upsert rather
  * than append duplicate rows. Visible assistant prose is included, never the
- * provider's private reasoning. Content uses the shared tool-output bounds.
+ * provider's private reasoning. Only its existing distilled intent is exposed.
+ * Content uses the shared tool-output bounds.
  */
 export interface SubagentMessagePayload extends SubagentTelemetry {
   /** Same opaque id as this child's `subagent_lifecycle`/`subagent_progress`. */
@@ -605,6 +588,8 @@ export interface SubagentMessagePayload extends SubagentTelemetry {
   ts: number;
   /** The child's assistant prose this turn, bounded. Absent when empty. */
   assistant?: string;
+  /** Existing bounded reasoning summary, never raw provider reasoning. */
+  reasoning_summary?: string;
   /** Tools the child ran this turn (bounded results). Absent when none. */
   tools?: SubagentToolMessage[];
   /** Tool progress snapshot; false/absent denotes a completed turn. */
@@ -764,7 +749,6 @@ export type osecEvent =
   | { type: "delta"; payload: DeltaPayload }
   | { type: "skill_loaded"; payload: SkillLoadedPayload }
   | { type: "skill_listed"; payload: SkillListedPayload }
-  | { type: "untrusted_input_sanitized"; payload: UntrustedInputSanitizedPayload }
   | { type: "inline_validation"; payload: InlineValidationPayload }
   | { type: "pov_oracle"; payload: PovOraclePayload }
   | { type: "oast_confirmed"; payload: OastConfirmedPayload }
@@ -970,66 +954,3 @@ function mapToScanEvent(
   }
 }
 
-// ── CloudEventSink ──────────────────────────────────────────────────────────
-
-/**
- * Emits one line per event to stdout in the format the cloud
- * worker-controller expects:
- *
- *     ZERO_EVENT_<TYPE_UPPER> {"…json payload…"}
- *
- * Default OFF. Opt-in by setting `ZERO_CLOUD_EVENTS=1` (or, equivalently,
- * by calling `subscribeCloudEventSink()` explicitly from the CLI entry
- * point when worker mode is selected). Local interactive runs keep a clean
- * stdout.
- */
-export const cloudEventSink: EventSink = {
-  emit(type, payload) {
-    const prefix = `ZERO_EVENT_${type.toUpperCase()}`;
-    let line: string;
-    try {
-      line = `${prefix} ${JSON.stringify(payload)}`;
-    } catch {
-      // Unserializable payload — degrade gracefully rather than throwing.
-      line = `${prefix} {"_unserializable":true}`;
-    }
-    // Use process.stdout.write directly so we bypass any console.log
-    // formatting / buffering surprises. One ZERO_EVENT_ line per call.
-    process.stdout.write(line + "\n");
-  },
-};
-
-/**
- * Idempotent helper for the CLI entry point: subscribe the cloud sink iff
- * the opt-in env var is truthy AND we haven't already subscribed. Safe to
- * call multiple times.
- */
-let cloudSinkSubscribed = false;
-export function maybeSubscribeCloudEventSink(): void {
-  if (cloudSinkSubscribed) return;
-  const flag = process.env["ZERO_CLOUD_EVENTS"];
-  if (flag && flag !== "0" && flag.toLowerCase() !== "false") {
-    eventBus.subscribe(cloudEventSink);
-    cloudSinkSubscribed = true;
-  }
-}
-
-/**
- * Returns `true` iff the cloud relay sink is currently subscribed. Used by
- * hot-path callers (token-delta forwarding in the agent loop) to skip
- * non-trivial work entirely when nobody's listening — keeps local CLI
- * runs free of per-token overhead.
- *
- * Note: this is a *liveness* probe, not a feature flag — `ZERO_CLOUD_EVENTS`
- * still gates whether the sink subscribes at all, but once subscribed the
- * agent loop consults this predicate so adding/removing sinks at runtime
- * (tests, future SDK consumers) Just Works without touching the env var.
- */
-export function isCloudEventSinkActive(): boolean {
-  return cloudSinkSubscribed;
-}
-
-/** Test-only: reset the idempotency flag. */
-export function _resetCloudSinkSubscriptionForTests(): void {
-  cloudSinkSubscribed = false;
-}

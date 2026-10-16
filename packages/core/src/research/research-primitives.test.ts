@@ -52,6 +52,7 @@ describe("research control-plane primitives", () => {
       "mobile.static-intake",
       "pipeline.unified",
       "protocol.http-conformance",
+      "userspace.counterexample",
       "userspace.memsafety",
       "windows.hyperv-prover-import",
       "xnu.iokit-fuzz",

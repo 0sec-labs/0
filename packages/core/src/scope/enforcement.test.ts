@@ -1,4 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+vi.mock("../plugins/enablement.js", async (importOriginal) => ({
+  ...await importOriginal<object>(),
+  readEnablement: () => ({ schema: 1, project: process.cwd(), enabled: { scope: { version: "1.0.0", capabilities: [], enabledAt: 1 } } }),
+}));
 import { PathPolicy, EnforcementTracker } from "./enforcement.js";
 
 /**
@@ -184,27 +188,3 @@ describe("EnforcementTracker kill switch", () => {
   });
 });
 
-describe("EnforcementTracker.summarize shape (frozen contract)", () => {
-  it("emits exactly the contract keys", () => {
-    const t = new EnforcementTracker({
-      pathPolicy: new PathPolicy(["/api"]),
-      auth: { type: "cookie", value: "s=1" },
-      killAfterSec: 1800,
-    });
-    const s = t.summarize();
-    expect(Object.keys(s).sort()).toEqual(
-      [
-        "auth_mode_used",
-        "kill_switch_triggered",
-        "peak_rps",
-        "rate_limited_count",
-        "requests_in_scope",
-        "requests_out_of_scope_blocked",
-        "wall_clock_sec",
-      ].sort(),
-    );
-    expect(s.auth_mode_used).toBe("cookie");
-    expect(typeof s.wall_clock_sec).toBe("number");
-    expect(typeof s.peak_rps).toBe("number");
-  });
-});

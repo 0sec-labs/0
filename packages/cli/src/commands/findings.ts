@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 import chalk from "chalk";
+import { getFindingPriority, compareFindingsByBusinessPriority } from "@0/shared";
 import type { Finding, FindingTriageStatus, LayerVerdict } from "@0/shared";
 import { writePresentationLine, writePresentationErrorLine } from "../presentation/process-output.js";
 import {
@@ -33,6 +34,9 @@ type FindingRow = {
   triageNote?: string | null;
   timestamp: number;
   score?: number | null;
+  cvssScore?: number | null;
+  cvssVector?: string | null;
+  impactAssessment?: string | null;
   templateId: string;
   description: string;
   evidenceRequest: string;
@@ -149,31 +153,20 @@ function statusColor(status: string) {
     : chalk.white;
 }
 
-function groupFindings(rows: FindingRow[]): Array<{
-  fingerprint: string;
-  latest: FindingRow;
-  count: number;
-  scans: number;
-}> {
-  const groups = new Map<string, FindingRow[]>();
-  for (const row of rows) {
-    const key = row.fingerprint ?? row.id;
-    const list = groups.get(key) ?? [];
-    list.push(row);
-    groups.set(key, list);
-  }
-
-  return [...groups.entries()]
-    .map(([fingerprint, items]) => {
-      const sorted = items.sort((a, b) => b.timestamp - a.timestamp);
-      return {
-        fingerprint,
-        latest: sorted[0],
-        count: sorted.length,
-        scans: new Set(sorted.map((item) => item.scanId)).size,
-      };
-    })
-    .sort((a, b) => b.latest.timestamp - a.latest.timestamp);
+type PriorityRow = Pick<FindingRow, "id" | "severity" | "cvssScore" | "impactAssessment" | "timestamp">;
+function priorityFinding(row: PriorityRow) {
+  let impactAssessment: unknown;
+  try { impactAssessment = row.impactAssessment ? JSON.parse(row.impactAssessment) : undefined; } catch { /* Legacy malformed JSON remains unassessed. */ }
+  return { severity: row.severity, cvssScore: row.cvssScore, impactAssessment };
+}
+function compareRows(a: PriorityRow, b: PriorityRow): number {
+  return compareFindingsByBusinessPriority(priorityFinding(a), priorityFinding(b)) || b.timestamp - a.timestamp || b.id.localeCompare(a.id);
+}
+function renderPriority(row: FindingRow): void {
+  const priority = getFindingPriority(priorityFinding(row));
+  console.log(`  ${chalk.white.bold(`Business priority: ${priority.label}`)} ${chalk.white(row.title)}`);
+  console.log(`  ${chalk.gray("Business impact rationale:")} ${priority.rationale}`);
+  console.log(`  ${chalk.gray("Technical severity:")} ${severityColor(row.severity)(row.severity)}${row.cvssScore != null ? `  CVSS: ${row.cvssScore}` : ""}${row.cvssVector ? `  CVSS vector: ${row.cvssVector}` : ""}  ${statusColor(row.status)(row.status)}  ${triageColor(row.triageStatus)(String(row.triageStatus ?? "new"))}`);
 }
 
 async function renderFindingsList(opts: FindingsListOptions): Promise<void> {
@@ -186,57 +179,72 @@ async function renderFindingsList(opts: FindingsListOptions): Promise<void> {
     dbPaths.push(legacyDbPath);
   }
 
-  const rows = dbPaths
-    .flatMap((dbPath) => {
+  const limit = Number(opts.limit ?? "50");
+  if (!Number.isSafeInteger(limit) || limit < 0 || limit > 5000) throw new Error("Finding limit must be an integer between 0 and 5000.");
+  const filters = { scanId: opts.scan, severity: opts.severity, category: opts.category, status: opts.status, triageStatus: opts.triage };
+  const rows: FindingRow[] = [];
+  const groups: Array<{ fingerprint: string; latest: FindingRow; count: number; scans: number }> = [];
+  if (!opts.all && dbPaths.length > 1) {
+    const databases: osecDB[] = [];
+    try {
+      for (const path of dbPaths) databases.push(new osecDB(path));
+      type Metadata = PriorityRow & Pick<FindingRow, "category" | "status" | "triageStatus"> & { familyKey: string };
+      const latestFamilies = new Map<string, { latest: Metadata; database: osecDB }>();
+      // Merge every lightweight latest-family record before filters or limits.
+      // A newer assessment in another DB must replace an old urgent occurrence.
+      for (const database of databases) {
+        for (const latest of database.iterateLatestFindingMetadata({ scanId: opts.scan })) {
+          const current = latestFamilies.get(latest.familyKey);
+          if (!current || latest.timestamp > current.latest.timestamp || (latest.timestamp === current.latest.timestamp && latest.id > current.latest.id)) latestFamilies.set(latest.familyKey, { latest: latest as Metadata, database });
+        }
+      }
+      const selected = [...latestFamilies.values()].filter(({ latest }) =>
+        (!opts.severity || latest.severity === opts.severity) && (!opts.category || latest.category === opts.category)
+        && (!opts.status || latest.status === opts.status) && (!opts.triage || latest.triageStatus === opts.triage))
+        .sort((a, b) => compareRows(a.latest, b.latest)).slice(0, limit);
+      for (const { latest, database } of selected) {
+        const finding = database.getFinding(latest.id) as FindingRow | undefined;
+        if (!finding) throw new Error(`Finding '${latest.id}' changed while its priority was being read.`);
+        let count = 0; const scanIds = new Set<string>();
+        for (const candidate of databases) {
+          const family = candidate.getFindingFamilyMetadata(latest.familyKey, { scanId: opts.scan });
+          count += family.count;
+          for (const scanId of family.scanIds) scanIds.add(scanId);
+        }
+        groups.push({ fingerprint: latest.familyKey, latest: finding, count, scans: scanIds.size });
+      }
+    } finally { for (const database of databases) database.close(); }
+  } else {
+    for (const dbPath of dbPaths) {
       const db = new osecDB(dbPath);
       try {
-        return db.listFindings({
-          scanId: opts.scan,
-          severity: opts.severity,
-          category: opts.category,
-          status: opts.status,
-          triageStatus: opts.triage,
-          limit: opts.all ? parseInt(opts.limit ?? "50", 10) : 1000,
-        }) as FindingRow[];
-      } finally {
-        db.close();
-      }
-    })
-    .sort((a, b) => b.timestamp - a.timestamp);
-
-  if (rows.length === 0) {
+        if (opts.all) rows.push(...db.listFindingsByBusinessPriority({ ...filters, limit }) as FindingRow[]);
+        else for (const family of db.listFindingFamiliesByBusinessPriority({ ...filters, limit })) groups.push({ fingerprint: family.key, latest: family.latest as FindingRow, count: family.count, scans: family.scanCount });
+      } finally { db.close(); }
+    }
+  }
+  rows.sort(compareRows);
+  groups.sort((a, b) => compareRows(a.latest, b.latest));
+  if (!(opts.all ? rows.length : groups.length)) {
     console.log(chalk.gray("No findings found."));
     return;
   }
-
   console.log("");
-  console.log(chalk.red.bold("  \u25C6 0") + chalk.gray(opts.all ? ` findings (${rows.length})` : ` finding groups (${groupFindings(rows).length})`));
+  console.log(chalk.red.bold("  \u25C6 0") + chalk.gray(opts.all ? ` findings (${Math.min(rows.length, limit)})` : ` finding groups (${Math.min(groups.length, limit)})`));
   console.log("");
-
   if (opts.all) {
-    for (const f of rows.slice(0, parseInt(opts.limit ?? "50", 10))) {
-      console.log(
-        `  ${severityColor(f.severity)(f.severity.padEnd(8))} ${statusColor(f.status)(f.status.padEnd(14))} ${triageColor(f.triageStatus)(String(f.triageStatus ?? "new").padEnd(10))} ${chalk.white(f.title)}`
-      );
-      console.log(
-        `  ${chalk.gray(f.id.slice(0, 8))}  ${chalk.gray(f.category)}  ${chalk.gray(`scan:${f.scanId.slice(0, 8)}`)}  ${chalk.gray(`fp:${(f.fingerprint ?? f.id).slice(0, 10)}`)}`
-      );
+    for (const f of rows.slice(0, limit)) {
+      renderPriority(f);
+      console.log(`  ${chalk.gray(f.id.slice(0, 8))}  ${chalk.gray(f.category)}  ${chalk.gray(`scan:${f.scanId.slice(0, 8)}`)}  ${chalk.gray(`fp:${(f.fingerprint ?? f.id).slice(0, 10)}`)}`);
       console.log("");
     }
     return;
   }
-
-  for (const group of groupFindings(rows).slice(0, parseInt(opts.limit ?? "50", 10))) {
+  for (const group of groups.slice(0, limit)) {
     const f = group.latest;
-    console.log(
-      `  ${severityColor(f.severity)(f.severity.padEnd(8))} ${statusColor(f.status)(f.status.padEnd(14))} ${triageColor(f.triageStatus)(String(f.triageStatus ?? "new").padEnd(10))} ${chalk.white(f.title)}`
-    );
-    console.log(
-      `  ${chalk.gray(`fp:${group.fingerprint.slice(0, 10)}`)}  ${chalk.gray(f.category)}  ${chalk.gray(`${group.count} hits / ${group.scans} scans`)}  ${chalk.gray(`latest:${f.scanId.slice(0, 8)}`)}`
-    );
-    if (f.triageNote) {
-      console.log(`  ${chalk.gray("note:")} ${chalk.dim(f.triageNote)}`);
-    }
+    renderPriority(f);
+    console.log(`  ${chalk.gray(`fp:${group.fingerprint.slice(0, 10)}`)}  ${chalk.gray(f.category)}  ${chalk.gray(`${group.count} hits / ${group.scans} scans`)}  ${chalk.gray(`latest:${f.scanId.slice(0, 8)}`)}`);
+    if (f.triageNote) console.log(`  ${chalk.gray("note:")} ${chalk.dim(f.triageNote)}`);
     console.log("");
   }
 }
@@ -348,8 +356,8 @@ export function registerFindingsCommand(program: Command): void {
         console.log(chalk.red.bold("  \u25C6 0") + chalk.gray(" finding detail"));
         console.log("");
 
-        console.log(`  ${chalk.white.bold(finding.title)}`);
-        console.log(`  ${severityColor(finding.severity)(finding.severity.toUpperCase())} ${chalk.gray("\u2502")} ${chalk.white(finding.status)} ${chalk.gray("\u2502")} ${triageColor(finding.triageStatus)(String(finding.triageStatus ?? "new"))} ${chalk.gray("\u2502")} ${chalk.gray(finding.category)}`);
+        renderPriority(finding);
+        console.log(`  ${chalk.gray("Category:")} ${finding.category}`);
         if (finding.score != null) {
           console.log(`  ${chalk.gray("Score:")} ${chalk.cyan(String(finding.score) + "/100")}`);
         }

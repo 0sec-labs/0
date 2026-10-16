@@ -16,12 +16,10 @@
  *                   verify: makeMultiLensVerifier(<p>VerifyLenses) })
  *                          │  confirmed leads
  *                          ▼
- *     leadToCandidateFinding ─▶ CloudSink (same 'discovered' candidate path as hunt)
+ *                  local report + findings
  *
  * A deep-review finding is a LEAD, not a confirmed bug: the multi-lens quorum
- * filters (each lens re-reads and refutes) but does not PROVE. In cloud mode the
- * leads flow to the orchestrator as `discovered` candidates and enter the
- * cloud's own adversarial verify gate, exactly like `hunt`.
+ * filters (each lens re-reads and refutes) but does not PROVE.
  *
  * Exit codes:
  *   0 → the sweep RAN to completion — a VALID outcome whether or not any lead
@@ -37,14 +35,14 @@
 import type { Command } from "commander";
 import { readFileSync, realpathSync, statSync } from "node:fs";
 import { resolve, join, sep, relative } from "node:path";
-import type { Finding, RuntimeMode, ScanReport } from "@0/shared";
-import type { EvolutionConfig, FinderLens, ThreatLane, VerifyLens } from "@0/core";
+import type { Finding, RuntimeMode, ScanReport, ScanPlan } from "@0/shared";
+import type { EvolutionConfig, FinderLens, ThreatLane, VerifyLens, NativeRuntime, RuntimeResult, Runtime } from "@0/core";
 // The loader is called once for each review invocation, before target
 // preparation. That creates a stable lens snapshot for the engagement while
 // allowing the next review in a long-lived CLI process to observe a completed
 // durable-registry promotion.
 import { eventBus, loadAppsecFinderLenses, ScanCostLedger, captureObservation, createEvolvedFinder } from "@0/core";
-import { leadToCandidateFinding, type HuntOutcome } from "./hunt.js";
+import type { HuntOutcome } from "./hunt.js";
 import { loadEvolutionConfigFile } from "@0/core";
 import { resolveOsecRunStorage, writeOsecRunReport } from "@0/db";
 import { createHash, randomUUID } from "node:crypto";
@@ -525,6 +523,10 @@ export function enumerateDeepReviewCandidates(
 }
 
 export interface RunDeepReviewOptions {
+  signal?: AbortSignal;
+  nativeRuntime?: NativeRuntime;
+  costLedger?: ScanCostLedger;
+  plan?: ScanPlan;
   /** Source tree to review — a local path or a git URL (resolved via prepare). */
   target: string;
   /** Review profile picking the lens set (evm/solana/cardano-onchain; else default). */
@@ -571,8 +573,6 @@ export async function runDeepReview(
     prepare,
     collectScopeFiles,
     countScopeFilesUpTo,
-    getCloudSinkConfig,
-    postFinding,
     evmFinderLenses,
     evmVerifyLenses,
     solanaFinderLenses,
@@ -584,7 +584,8 @@ export async function runDeepReview(
     moveFinderLenses,
     moveVerifyLenses,
   } = await import("@0/core");
-  const costLedger = new ScanCostLedger();
+  opts.signal?.throwIfAborted();
+  const costLedger = opts.costLedger ?? new ScanCostLedger();
   const scanStartedAt = Date.now();
   const log = opts.log ?? (() => {});
   const runtime: RuntimeMode = opts.runtime ?? "api";
@@ -625,13 +626,6 @@ export async function runDeepReview(
     }
   }
 
-  // Capture the cloud-sink config BEFORE suppressing the env (same reasoning as
-  // hunt.ts #1051): the inner finder/skeptic passes would otherwise auto-POST
-  // their RAW pre-gate findings as 'confirmed'. We disable that inner auto-post
-  // and post ONLY the gated leads ourselves as honest 'discovered' candidates.
-  const sinkCfg = getCloudSinkConfig();
-  const savedCloudSink = process.env["ZERO_CLOUD_SINK"];
-  if (sinkCfg) delete process.env["ZERO_CLOUD_SINK"];
 
   try {
     // EVM-scoped candidate filtering: for the evm-onchain profile, keep the
@@ -665,12 +659,32 @@ export async function runDeepReview(
       allocateAcrossLanes = threatModule.allocateCandidatesAcrossLanes;
       // Map RuntimeMode to RuntimeType, defaulting to "api" for "auto".
       const rtType = (runtime !== "auto" ? runtime : "api") as "api" | "claude" | "codex" | "gemini" | "ollama";
-      const plannerRuntime = threatModule.createRuntime({
+      const plannerRuntime: Runtime = opts.nativeRuntime ? {
+        type: opts.nativeRuntime.type,
+        isAvailable: () => opts.nativeRuntime!.isAvailable(),
+        execute: async (prompt: string, context?: { systemPrompt?: string }) => {
+          const budgeted = threatModule.budgetNativeRuntime(opts.nativeRuntime!, costLedger, opts.signal, opts.costCeilingUsd, opts.plan);
+          const started = Date.now();
+          const result = await budgeted.executeNative(context?.systemPrompt ?? "", [{ role: "user", content: [{ type: "text", text: prompt }] }], [], undefined, opts.signal);
+          return { output: result.content.filter(block => block.type === "text").map(block => block.type === "text" ? block.text : "").join("\n"), exitCode: result.stopReason === "error" ? 1 : 0, timedOut: false, durationMs: Date.now() - started };
+        },
+      } : threatModule.createRuntime({
         type: rtType,
         timeout: opts.timeoutMs ?? 600_000,
         model: models?.[0],
       });
-      lanes = await threatModule.runThreatModelPlanner(sourceRoot, plannerRuntime, log);
+      const trackedPlanner = !opts.nativeRuntime && opts.plan ? {
+        ...plannerRuntime, type: plannerRuntime.type, isAvailable: () => plannerRuntime.isAvailable(),
+        execute: async (prompt: string, context?: { systemPrompt?: string }) => {
+          opts.signal?.throwIfAborted();
+          const result: RuntimeResult = await plannerRuntime.execute(prompt, { ...context, signal: opts.signal });
+          if (result.usageByModel?.length) for (const bucket of result.usageByModel) costLedger.add(bucket.usage, bucket.model);
+          else if (result.usage) costLedger.add(result.usage, models?.[0]);
+          else costLedger.markUnpricedUsage();
+          return result;
+        },
+      } : plannerRuntime;
+      lanes = await threatModule.runThreatModelPlanner(sourceRoot, trackedPlanner, log);
       if (!lanes || lanes.length === 0) {
         log("[threat-model] no lanes produced — continuing with default selection");
       } else {
@@ -797,29 +811,14 @@ export async function runDeepReview(
       // including "it could not", which is the case worth knowing about.
       ...(opts.costCeilingUsd !== undefined ? { costCeilingUsd: opts.costCeilingUsd } : {}),
       costLedger,
+      ...(opts.plan ? { plan: opts.plan } : {}),
+      ...(opts.signal ? { signal: opts.signal } : {}),
+      ...(opts.nativeRuntime ? { nativeRuntime: opts.nativeRuntime, crossFamilyRefute: false } : {}),
       ...(!evolvedFinder && models && models.length > 0 ? { finderModels: models } : {}),
       ...(opts.quorum ? { quorum: opts.quorum } : {}),
       log,
     });
 
-    // Post each gated lead to the cloud-sink as a CANDIDATE finding (same path
-    // hunt uses): leadToCandidateFinding forces status 'discovered' so leads
-    // enter the cloud's adversarial verify gate, never as confirmed/sendable.
-    // We post INCREMENTALLY — via runHuntScan's onConfirmed hook, as each lead
-    // clears the multi-lens quorum — NOT in one burst after the whole sweep.
-    // A long fan-out can outrun the sandbox/agent deadline; posting as-we-go
-    // means a mid-sweep kill still lands the leads found so far, so the worker
-    // sees findings_count > 0 and marks the scan complete-truncated instead of
-    // failed-with-zero-findings. No-op when not in cloud mode (sinkCfg null).
-    const postedIds = new Set<string>();
-    let ingested = 0;
-    const provenance = `deep_review (${matchedProfile} lenses)`;
-    const postLead = async (lead: Finding): Promise<void> => {
-      if (!sinkCfg || postedIds.has(lead.id)) return;
-      postedIds.add(lead.id);
-      await postFinding(leadToCandidateFinding(lead, `deep-review:${matchedProfile}`, provenance), sinkCfg);
-      ingested++;
-    };
 
     const res = await runHuntScan({
       sourceRoot,
@@ -830,10 +829,12 @@ export async function runDeepReview(
       concurrency: opts.concurrency ?? DEFAULT_CONCURRENCY,
       ...(opts.costCeilingUsd !== undefined ? { costCeilingUsd: opts.costCeilingUsd } : {}),
       costLedger,
+      ...(opts.plan ? { plan: opts.plan } : {}),
+      ...(opts.signal ? { signal: opts.signal } : {}),
+      ...(opts.nativeRuntime ? { nativeRuntime: opts.nativeRuntime } : {}),
       attemptsPerCandidate,
       ...(models ? { models } : {}),
       verify,
-      ...(sinkCfg ? { onConfirmed: postLead } : {}),
       log,
     });
 
@@ -874,15 +875,6 @@ export async function runDeepReview(
       }
     }
 
-    // Safety net: post any confirmed lead the incremental hook didn't already
-    // stream (deduped by id via postLead). In the normal path onConfirmed has
-    // already posted every confirmed lead, so this is a no-op — it only covers
-    // a confirmed-but-not-streamed edge (e.g. a future gate that confirms
-    // outside the verify pool).
-    if (sinkCfg) {
-      for (const lead of leads) await postLead(lead);
-      log(`[deep-review] posted ${ingested} lead(s) to the cloud-sink as candidate findings (incremental)`);
-    }
 
     // Terminal status. A sweep that RAN is a SUCCESS whether or not any lead
     // survived the quorum — a clean 0-lead hunt is a valid outcome, not a
@@ -996,7 +988,6 @@ export async function runDeepReview(
           dropReason: d.dropReason,
           detail: d.detail,
         })),
-        ingested: sinkCfg ? ingested : null,
         warnings: res.warnings.slice(0, 10),
         note: "LEADS, not confirmed bugs. Each survived the multi-lens refute quorum; verify the real sink + impact before disclosure.",
       },
@@ -1013,7 +1004,6 @@ export async function runDeepReview(
     });
     throw error;
   } finally {
-    if (savedCloudSink !== undefined) process.env["ZERO_CLOUD_SINK"] = savedCloudSink;
     prepared.cleanup();
   }
 }
@@ -1055,9 +1045,13 @@ async function deepReviewAction(target: string, opts: DeepReviewOpts): Promise<v
   }
 
   const { writeFileSync } = await import("node:fs");
-  const outcome = await runDeepReview({
+  const { executeManagedOperation } = await import("../managed-operation.js");
+  const timeoutMs = parsePositive("--timeout", opts.timeout, 600_000);
+  const outcome = await executeManagedOperation<DeepReviewOutcome>({ type: "deep-review", name: "Deep source review", target, timeCapMs: timeoutMs, costCapUsd: costCeilingUsd,
+    execute: context => runDeepReview({
     target,
-    ...(costCeilingUsd !== undefined ? { costCeilingUsd } : {}),
+    signal: context.signal, costLedger: context.costLedger, plan: context.plan,
+    costCeilingUsd: context.plan.costCapUsd,
     ...(opts.profile ? { profile: opts.profile } : {}),
     ...(opts.subsystem ? { subsystem: opts.subsystem } : {}),
     // Flag > env > single provider-default model. Only pass `models` when the
@@ -1070,8 +1064,9 @@ async function deepReviewAction(target: string, opts: DeepReviewOpts): Promise<v
     ...(opts.threatModel ? { useThreatModel: true } : {}),
     ...(opts.runtime ? { runtime: opts.runtime as RuntimeMode } : {}),
     ...(opts.evolutionConfig ? { evolutionConfig: loadEvolutionConfigFile(opts.evolutionConfig) } : {}),
-    timeoutMs: parsePositive("--timeout", opts.timeout, 600_000),
+    timeoutMs: Math.max(1, context.deadline - Date.now()),
     log: (m) => process.stderr.write(m + "\n"),
+  }), status: outcome => outcome.exitCode === 0 ? "completed" : "failed", reports: outcome => outcome.report ? [outcome.report] : [],
   });
   if (outcome.report) {
     const storage = resolveOsecRunStorage();
@@ -1088,11 +1083,8 @@ export function registerDeepReviewCommand(program: Command): void {
   program
     .command("deep-review")
     .description(
-      "Seedless DEPTH review of a source tree: enumerate candidate files, re-hunt " +
-        "each through the profile's specialized finder lenses, and gate survivors " +
-        "through the multi-lens verify quorum. Emits LEADS to verify (not confirmed " +
-        "bugs). Exit 0=sweep completed (with or without leads), 2=skipped (no files / " +
-        "over the review cap), 3=error (bad flags / unreadable target / all finders failed).",
+      "Seedless deep security review of a source tree. " +
+        "Emits leads to verify, not confirmed bugs.",
     )
     .argument("<target>", "Source tree to review (a local path or a git URL)")
     .option("--profile <p>", "Lens profile: evm-onchain | solana-onchain | cardano-onchain | cairo-onchain | move-onchain (else a generic default lens set)")

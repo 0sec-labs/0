@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-01",
+  "outcome": "blocked",
+  "reason": "Another native workbench holds the resource reservation",
+  "provider": "host SSE fixture",
+  "providerRequests": 0,
+  "network": false,
+  "hostCredentialsForwarded": false,
+  "note": "Existing native workbench reservation was preserved. No authenticated provider or registered tool execution was qualified by this attempt."
+}

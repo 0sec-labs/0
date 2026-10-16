@@ -13,7 +13,16 @@
 // stage uses a mocked fetch — it never touches real AWS. No external host is
 // ever contacted.
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+vi.mock("../../plugins/enablement.js", async (importOriginal) => ({
+  ...await importOriginal<object>(),
+  readEnablement: () => ({
+    schema: 1,
+    project: process.cwd(),
+    enabled: { scope: { version: "1.0.0", capabilities: [], enabledAt: 1 } },
+  }),
+}));
 
 import { ScopePolicy } from "../../scope/scope.js";
 import { runJsRecon } from "../../recon/js-recon.js";
@@ -222,7 +231,7 @@ describe("CodeWall chain — local fixture self-test", () => {
     writeFileSync(join(outDir, "sample-evidence-pack.md"), stable + "\n", "utf-8");
   });
 
-  it("js_recon stays deny-by-default (no scope → no fetch, even against localhost)", async () => {
+  it("enabled scope enforcement denies js_recon without a policy, even against localhost", async () => {
     let touched = false;
     const res = await runJsRecon({
       scriptUrls: [`${fixture.origin}/static/app.js`],

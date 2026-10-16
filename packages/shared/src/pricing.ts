@@ -5,15 +5,24 @@ export interface ModelRates {
   output: number;
   /** Cached-input rate ($/1M). Falls back to `input` if absent. */
   cachedInput?: number;
+  /** Cache-write rate ($/1M); default is the five-minute Anthropic 1.25x input rate. */
+  cacheWrite?: number;
 }
 
 export interface TokenUsageForPricing {
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens?: number;
+  /** Cache-creation tokens included in inputTokens, not additional prompt tokens. */
+  cacheWriteTokens?: number;
+}
+/** Observed per-model usage from a runtime that performs several requests internally. */
+export interface ModelTokenUsage {
+  model: string;
+  usage: TokenUsageForPricing;
 }
 
-export const PRICING_SNAPSHOT_DATE = "2026-09-11";
+export const PRICING_SNAPSHOT_DATE = "2026-09-29";
 
 /**
  * The IRREDUCIBLE manual residue: models no public pricing feed (LiteLLM, and by
@@ -30,6 +39,8 @@ export const MANUAL_PRICING: Record<string, ModelRates> = {
   "claude-haiku-4-5": { input: 0.80, output: 4.00, cachedInput: 0.08 },
   // OpenAI codex alias — mirrors gpt-5.5 (OSS feed has only the bare key)
   "gpt-5.5-codex": { input: 5.00, output: 30.00 },
+  // LiteLLM no longer carries this exact key; retain its last published rate.
+  "gemini-2.0-flash": { input: 0.10, output: 0.40, cachedInput: 0.025 },
   // Meta (hosted) — not in the OSS feed
   "llama-4-maverick": { input: 0.50, output: 0.77 },
   "llama-4-scout": { input: 0.20, output: 0.35 },
@@ -67,6 +78,22 @@ export const MANUAL_PRICING: Record<string, ModelRates> = {
   "qwen3.7-plus": { input: 0.50, output: 3.00, cachedInput: 0.05 },
   "qwen3.6-plus": { input: 0.50, output: 3.00, cachedInput: 0.05 },
   "qwen3.6-flash": { input: 0.1875, output: 1.125 },
+  // ClinePass reference quota rates, not incremental subscription charges.
+  // https://github.com/cline/cline/blob/main/docs/getting-started/clinepass.mdx
+  // checked 2026-10-05; DeepSeek uses peak rates; Qwen Plus <=256K only.
+  "cline-pass/glm-5.3": { input: 1.40, output: 4.40, cachedInput: 0.26 },
+  "cline-pass/glm-5.2": { input: 1.40, output: 4.40, cachedInput: 0.26 },
+  "cline-pass/kimi-k3": { input: 3.00, output: 15.00, cachedInput: 0.30 },
+  "cline-pass/kimi-k2.7-code": { input: 0.95, output: 4.00, cachedInput: 0.19 },
+  "cline-pass/kimi-k2.6": { input: 0.95, output: 4.00, cachedInput: 0.16 },
+  "cline-pass/deepseek-v4-pro": { input: 1.32, output: 3.96, cachedInput: 0.044 },
+  "cline-pass/deepseek-v4-flash": { input: 0.44, output: 1.32, cachedInput: 0.014 },
+  "cline-pass/mimo-v2.5": { input: 0.14, output: 0.28, cachedInput: 0.0028 },
+  "cline-pass/mimo-v2.5-pro": { input: 1.74, output: 3.48, cachedInput: 0.0145 },
+  "cline-pass/minimax-m3": { input: 0.30, output: 1.20, cachedInput: 0.06 },
+  "cline-pass/qwen3.8-max": { input: 2.00, output: 6.00, cachedInput: 0.25, cacheWrite: 2.50 },
+  "cline-pass/qwen3.7-max": { input: 2.50, output: 7.50, cachedInput: 0.50, cacheWrite: 3.125 },
+  "cline-pass/qwen3.7-plus": { input: 0.40, output: 1.60, cachedInput: 0.04, cacheWrite: 0.50 },
   // OpenCode Zen free tier (https://opencode.ai/docs/zen/) — zero-rate gateway
   // models; actual spend is $0 while the free period lasts.
   "muse-spark-1.3-contributor-free": { input: 0, output: 0 },
@@ -131,6 +158,27 @@ export const MODEL_PRICING: Record<string, ModelRates> = {
   ...OSS_PRICING,
 };
 
+const DISCOVERED_PRICING = new Map<string, Readonly<ModelRates>>();
+
+/** Add validated catalog estimates for new IDs without replacing bundled tariffs. */
+export function registerModelPricing(model: string, rates: ModelRates): boolean {
+  if (!model || model !== model.trim() || /[\s\x00-\x1f\x7f]/.test(model) ||
+    Object.hasOwn(MODEL_PRICING, model) ||
+    !Number.isFinite(rates.input) || rates.input < 0 ||
+    !Number.isFinite(rates.output) || rates.output < 0 ||
+    (rates.cachedInput !== undefined && (!Number.isFinite(rates.cachedInput) || rates.cachedInput < 0)) ||
+    (rates.cacheWrite !== undefined && (!Number.isFinite(rates.cacheWrite) || rates.cacheWrite < 0))) {
+    return false;
+  }
+  DISCOVERED_PRICING.set(model, Object.freeze({
+    input: rates.input,
+    output: rates.output,
+    ...(rates.cachedInput !== undefined ? { cachedInput: rates.cachedInput } : {}),
+    ...(rates.cacheWrite !== undefined ? { cacheWrite: rates.cacheWrite } : {}),
+  }));
+  return true;
+}
+
 // Azure's runtime model id is the operator deployment name. Accept casing
 // differences and Azure's version suffixes while keeping all other pricing
 // keys exact, so a deployment such as `DeepSeek-V4-Pro-2026-04-23` cannot
@@ -157,31 +205,34 @@ function azureDeploymentPriceKey(model: string): string | null {
 }
 
 /** Known vendor prefixes to strip (e.g. "openai/gpt-4o" -> "gpt-4o"). */
+const MODEL_VENDOR_PREFIXES = [
+  "openai/", "azure/", "anthropic/", "google/", "deepseek/", "meta/", "mistral/",
+  "z-ai/", "zai/", "kimi/", "moonshot/", "qwen/", "openrouter/", "opencode/",
+  "xai/", "x-ai/", "cline/", "cline-pass/",
+];
+
 function normalizeModel(model: string): string {
-  const prefixes = [
-    "openai/",
-    "anthropic/",
-    "google/",
-    "deepseek/",
-    "meta/",
-    "mistral/",
-    "z-ai/",
-    "zai/",
-    "kimi/",
-    "moonshot/",
-    "openrouter/",
-    "opencode/",
-  ];
-  for (const prefix of prefixes) {
-    if (model.startsWith(prefix)) return model.slice(prefix.length);
+  let key = model;
+  for (;;) {
+    let stripped = false;
+    for (const prefix of MODEL_VENDOR_PREFIXES) {
+      if (!key.startsWith(prefix)) continue;
+      key = key.slice(prefix.length);
+      stripped = true;
+      break;
+    }
+    if (!stripped) return key;
   }
-  return model;
 }
 
 export function getRates(model?: string): ModelRates {
   const key = model ? normalizeModel(model) : "";
   const aliasKey = azureDeploymentPriceKey(key);
-  const rates = MODEL_PRICING[key] ?? (aliasKey ? MODEL_PRICING[aliasKey] : undefined);
+  const rates = (model && Object.hasOwn(MODEL_PRICING, model) ? MODEL_PRICING[model] : undefined) ??
+    (model ? DISCOVERED_PRICING.get(model) : undefined) ??
+    (model?.startsWith("cline/") && Object.hasOwn(MODEL_PRICING, model.slice(6)) ? MODEL_PRICING[model.slice(6)] : undefined) ??
+    (Object.hasOwn(MODEL_PRICING, key) ? MODEL_PRICING[key] : undefined) ??
+    (aliasKey ? MODEL_PRICING[aliasKey] : undefined) ?? DISCOVERED_PRICING.get(key);
   if (!rates) {
     if (model) console.warn(`[0] Unknown model for cost estimation: ${model}`);
     return MODEL_PRICING.default;
@@ -193,10 +244,12 @@ export function estimateCost(usage: TokenUsageForPricing, model?: string): numbe
   const rates = getRates(model);
   const cachedInputRate = rates.cachedInput ?? rates.input;
   const cached = usage.cachedInputTokens ?? 0;
-  const uncachedInput = Math.max(0, usage.inputTokens - cached);
+  const writes = usage.cacheWriteTokens ?? 0;
+  const uncachedInput = Math.max(0, usage.inputTokens - cached - writes);
   return (
     (uncachedInput / 1_000_000) * rates.input +
     (cached / 1_000_000) * cachedInputRate +
+    (writes / 1_000_000) * (rates.cacheWrite ?? rates.input * 1.25) +
     (usage.outputTokens / 1_000_000) * rates.output
   );
 }
@@ -208,7 +261,9 @@ export function priceRun(usage: TokenUsageForPricing, model?: string): number {
 export function modelProvider(model?: string): string {
   if (!model) return "unknown";
   const lowered = model.toLowerCase();
+  if (lowered.startsWith("cline/") || lowered.startsWith("cline-pass/")) return "cline";
   if (lowered.startsWith("openai/")) return "openai";
+  if (lowered.startsWith("azure/")) return "azure";
   if (lowered.startsWith("anthropic/")) return "anthropic";
   if (lowered.startsWith("google/")) return "google";
   if (lowered.startsWith("deepseek/")) return "deepseek";
@@ -246,9 +301,10 @@ export function splitCost(usage: TokenUsageForPricing, model?: string): CostSpli
   const rates = getRates(model);
   const cachedInputRate = rates.cachedInput ?? rates.input;
   const cached = usage.cachedInputTokens ?? 0;
-  const uncachedInput = Math.max(0, usage.inputTokens - cached);
+  const writes = usage.cacheWriteTokens ?? 0;
+  const uncachedInput = Math.max(0, usage.inputTokens - cached - writes);
   const split: CostSplit = {
-    cost_in: (uncachedInput / 1_000_000) * rates.input,
+    cost_in: (uncachedInput / 1_000_000) * rates.input + (writes / 1_000_000) * (rates.cacheWrite ?? rates.input * 1.25),
     cost_out: (usage.outputTokens / 1_000_000) * rates.output,
   };
   if (usage.cachedInputTokens !== undefined) {

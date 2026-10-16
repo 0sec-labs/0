@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "timestamp": "2026-10-02T19:14:13.511Z",
+  "provider": "chatgpt-codex",
+  "model": "gpt-5.6-sol",
+  "imageDigest": "sha256:a2986e852a463d33243ae0adf23e9853eb8eb776d3d0045a02c00ac0ea0b1495",
+  "selectedImageDigest": "sha256:37ff93702b3182deb9781cb6b5fba1c7f33def98f8339ada6535fceaac255f7b",
+  "liveAccountCatalogVerified": true,
+  "hostCredentialsForwarded": false,
+  "providerCalls": 3,
+  "httpStatuses": [
+    200,
+    200,
+    200
+  ],
+  "sourceUnchanged": true,
+  "guestOutputAbsentOnHostSource": true,
+  "exportedOutputMatches": true,
+  "outcome": "passed",
+  "network": false,
+  "result": {
+    "exitCode": 0,
+    "timedOut": false,
+    "cleanupFailed": false
+  },
+  "tools": [
+    "read_file",
+    "apply_patch"
+  ],
+  "limits": {
+    "providerRequests": 8,
+    "providerConcurrency": 1,
+    "requestTimeoutMs": 90000,
+    "vmLifetimeMs": 240000
+  },
+  "limitations": [
+    "One selected account/model and one synthetic task; no comparative quality claim.",
+    "Small approved Node fixture image with explicit Linux dependencies; selected toolbox and global settings unchanged.",
+    "Latest semantic source-memory handoff was not built or qualified by this run."
+  ],
+  "headAtTest": "3c2bc3a5f378b23912d088907d5e04ffc54b00bf",
+  "buildIdentity": {
+    "entryDigest": "sha256:037dea313cae4f43017f1af206476de71f0635bc825e09577650640406845e01",
+    "treeDigest": "sha256:97b17091ef3f2da137d13a863d23ddd9038014958c2f041f30ce702ceeac61cd",
+    "manifestAlgorithm": "sha256 of JSON array sorted by relative POSIX path, each row {path,bytes,digest}; UTF-8 compact JSON",
+    "fileCount": 305,
+    "hostControllerModuleDigest": "sha256:8e0fc022b8538ddc4c13bb55fe8b7b6d193c8b4dfbb1e834d8830c23aaf04e38",
+    "buildCommitVerified": false,
+    "provenance": "Existing dist built before HEAD-at-test commit; hashes captured after runs while parent confirmed no dist rebuild. This receipt does not qualify all source at HEAD."
+  }
+}

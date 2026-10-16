@@ -1,4 +1,4 @@
-import type { AuthConfig } from "@0/shared";
+import type { AuthConfig, TokenUsageForPricing, ModelTokenUsage } from "@0/shared";
 
 export type RuntimeType = "api" | "claude" | "codex" | "gemini" | "ollama";
 
@@ -32,7 +32,7 @@ export interface RuntimeConfig {
   /** Force children to use the resolved parent model regardless of selection. */
   singleModel?: boolean;
   /** Explicit provider for this new runtime; conflicting FORCE pins fail closed. */
-  provider?: "openrouter" | "anthropic" | "openai" | "azure" | "deepseek" | "chatgpt-codex" | "z-ai" | "kimi" | "qwen" | "xai" | "opencode" | "copilot" | "google" | "hosted";
+  provider?: "openrouter" | "anthropic" | "openai" | "azure" | "deepseek" | "chatgpt-codex" | "z-ai" | "kimi" | "qwen" | "xai" | "opencode" | "cline" | "copilot" | "google";
   apiKey?: string;
   /** Called when the subprocess executes a tool (read file, run command, etc.) */
   onToolCall?: (name: string, detail: string) => void;
@@ -58,7 +58,8 @@ export interface RuntimeResult {
   exitCode: number | null;
   timedOut: boolean;
   durationMs: number;
-  usage?: { inputTokens: number; outputTokens: number };
+  usage?: TokenUsageForPricing;
+  usageByModel?: ModelTokenUsage[];
   error?: string;
 }
 
@@ -88,6 +89,7 @@ export interface Runtime {
     provider?: string;
     agentModels?: Record<string, string>;
     singleModel?: boolean;
+    autoRoute?: boolean;
     env?: NodeJS.ProcessEnv;
   }): void;
 }
@@ -98,6 +100,7 @@ export interface RuntimeContext {
   templateId?: string;
   systemPrompt?: string;
   scanId?: string;
+  signal?: AbortSignal;
   mcp?: {
     enableTargetTools?: boolean;
     dbPath?: string;
@@ -164,6 +167,17 @@ export interface NativeToolDef {
   };
 }
 
+/**
+ * A provider-confirmed output-token boundary, not a failed response. Content
+ * contains observations only: no function calls or opaque incomplete items may
+ * be dispatched or replayed. Consumers may continue with a NEW bounded request.
+ */
+export interface NativeOutputCapCheckpoint {
+  reason: "max_output_tokens";
+  responseId?: string;
+  discardedToolCalls: number;
+}
+
 export interface NativeRuntimeResult {
   content: NativeContentBlock[];
   stopReason: "end_turn" | "tool_use" | "max_tokens" | "error";
@@ -185,6 +199,7 @@ export interface NativeRuntimeResult {
     /** Prompt tokens written to cache this request (~1.25x input price). */
     cacheWriteTokens?: number;
   };
+  usageByModel?: ModelTokenUsage[];
   durationMs: number;
   error?: string;
   /**
@@ -198,13 +213,8 @@ export interface NativeRuntimeResult {
    * A runtime that cannot abort an in-flight request simply never sets it.
    */
   cancelled?: boolean;
-  /**
-   * Whether the gateway proved a failed hosted request can safely be
-   * replayed unchanged (currently x-0-retry-safe on 429). Hosted failures
-   * without this proof must not enter transient same-request retries; a
-   * pre-dispatch 413 can instead trigger bounded history pruning.
-   */
-  retrySafe?: boolean;
+  /** Present only for a safely recoverable Responses max_output_tokens boundary. */
+  checkpoint?: NativeOutputCapCheckpoint;
   /**
    * The provider's raw response items for this turn, when the wire format has
    * items worth replaying (Responses API). Callers that maintain a message
@@ -216,7 +226,7 @@ export interface NativeRuntimeResult {
 
 export interface NativeStreamCallbacks {
   onThinking?: (text: string) => void;
-  onUsage?: (usage: { inputTokens: number; outputTokens: number }) => void;
+  onUsage?: (usage: TokenUsageForPricing) => void;
   /**
    * Token-level streaming hook. Fired for every SSE delta event while the
    * runtime is still streaming the response. `text` is just the incremental
@@ -279,8 +289,15 @@ export interface NativeRuntime {
     provider?: string;
     agentModels?: Record<string, string>;
     singleModel?: boolean;
+    autoRoute?: boolean;
     env?: NodeJS.ProcessEnv;
   }): void;
   /** Current model identifier; not a per-request billing identity or rate receipt. */
   resolvedModel?(): string;
+  /** Provider selected by the runtime, never inferred from a requested model. */
+  resolvedProvider?(): string;
+  /** Provider-qualified catalog estimate key, not a billing receipt. */
+  resolvedPricingModel?(): string;
+  /** Public operator model-routing policy; deliberately excludes credential configuration. */
+  modelSelection?(): { agentModels: Record<string, string>; singleModel: boolean; autoRoute: boolean };
 }

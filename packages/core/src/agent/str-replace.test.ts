@@ -1,4 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+vi.mock("../plugins/enablement.js", async (importOriginal) => ({
+  ...await importOriginal<object>(),
+  readEnablement: () => ({ schema: 1, project: process.cwd(), enabled: { scope: { version: "1.0.0", capabilities: [], enabledAt: 1 } } }),
+}));
 import { ToolExecutor, getToolsForRole } from "./tools.js";
 import type { ToolContext, ToolResultMeta } from "./types.js";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";

@@ -8,14 +8,12 @@ Choose the integration direction first:
 | Goal | Interface | What runs where |
 |---|---|---|
 | Let a coding agent run a complete review or scan | [Direct CLI](#coding-agent-workflows) | The agent launches the local CLI with your configured model runtime |
-| Give an external agent selected live-target tools | [MCP server](#mcp-server) | The client owns reasoning; a local stdio process executes the exposed tools |
-| Give 0 tools from another MCP server | [MCP client configuration](#connect-external-mcp-tools-to-0) | 0 launches operator-configured stdio servers |
+| Let an external agent launch workflows or call selected target tools | [MCP server](#mcp-server) | The client chooses operations; workflow assessments use the selected engine's provider |
+| Give 0 tools from another MCP server | [MCP client configuration](#connect-external-mcp-tools-to-0) | 0 connects operator-configured local or remote servers |
 | Install a third-party tool | [Hackstore plugins](#cli-managed-operator-plugins) | Enabled JavaScript runs as a local child process, not in a sandbox |
 | Let the model author executable tools | [Self-extension](#model-authored-executable-plugins-self-extension) | Generated TypeScript runs in disposable Docker or smolvm guests |
-| Connect organization credentials | [Cloud auth](#cloud-auth) | Authentication and hosted model transport are separate from managed execution |
 
-Local tools and BYOK workflows do not require a cloud account. Selecting hosted
-models does not move your tool execution to a managed worker. The
+Local tools and BYOK workflows do not require a cloud account. The
 [website](https://0.security/harness/) describes the product organization;
 the command and runtime sources linked below define these integration contracts.
 
@@ -38,20 +36,163 @@ Findings can be leads or unconfirmed results: use the reported evidence and
 CLI invocation as proof of exploitability. Keep fix application a separate,
 operator-reviewed step; see [Scan Workflows](/scan-workflows/).
 
-For CI, use [GitHub CI](/ci/github-action/). For fine-grained interaction with a
-live target rather than a complete pipeline, use the MCP server below. It is
-not a remote API for arbitrary CLI commands, source review, or automatic
-find/verify/fix orchestration.
+For CI, use [GitHub CI](/ci/github-action/). For template discovery and managed
+workflow execution from an external agent, use the MCP workflow tools below.
+Individual target tools remain available for direct interaction.
 
 ## MCP Server
 
-The MCP server (`0 mcp-server`) exposes a fixed subset of 0's live-target tools
-through the [Model Context Protocol](https://modelcontextprotocol.io) over stdio.
-Use an MCP client that supports launching local stdio servers. Client-specific
-configuration formats differ; the example below uses the common `mcpServers`
-shape, not a claim of qualification for every named client.
+The MCP server (`0 mcp-server`) exposes selected tools through the
+[Model Context Protocol](https://modelcontextprotocol.io) over stdio.
+`--workflows` selects template discovery, workflow authoring, and run lifecycle
+operations. Without it, the default remains the existing live-target tools.
+An explicit `--tools` list selects exactly those tools, including a mixture of
+workflow and live tools.
 
-**Source:** [`mcp-server.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/mcp-server.ts)
+Use an MCP client that can launch local stdio servers. Client configuration
+formats differ; the examples use the common `mcpServers` shape.
+
+**Sources:** [`mcp-server.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/mcp-server.ts),
+[`workflow-runtime.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/workflow-runtime.ts).
+
+Local-target MCP stdio requires an explicitly selected **host-local** execution
+profile. The SmolVM CLI bridge supports batch commands but cannot forward the
+bidirectional stdio MCP transport; startup fails before booting a VM or reading
+provider credentials. The configured execution profile remains unchanged.
+Use `0 workflow` commands for isolated execution. If the operator intends host
+execution, they can explicitly choose `0 workbench disable`; this changes the
+sandbox boundary and must not be performed automatically by a connecting agent.
+Model provider configuration remains a separate prerequisite for assessments.
+
+To connect to a registered remote engine, use
+`0 mcp-server --workflows --backend production --backends-config /absolute/path/to/backends.json`.
+This host runs only the network transport; the engine supplies its workspace,
+scope, execution profile and model connection. Do not pass local `--workspace`,
+`--scope` or `--db-path` flags. The engine must advertise `workflow-engine` support.
+Remote clients detach on disconnect; engine runs persist until completion or
+explicit cancellation. `list_runs` lists the web engine's retained runs. Foreground
+`0 workflow run ... --backend production` explicitly cancels on SIGINT.
+Cancellation responses include `cancellationAcknowledged: true` when the
+controller accepts the request. The run remains active until executor cleanup
+finishes; only then does its status become `cancelled`.
+
+### Workflow tools
+
+```bash
+# Authorized local source root
+0 mcp-server --workflows --workspace /absolute/path/to/repo
+
+# Authorized live targets; run from the project where scope is enabled
+0 plugin enable scope
+0 mcp-server --workflows --scope /absolute/path/to/scope.json \
+  --target https://target.example.com
+```
+
+`--workspace` authorizes local source targets inside that root, including
+canonical path checks. Live workflow targets require an explicit scope file
+and the project's enabled scope plugin. `--target` optionally fixes the only
+accepted target. Supplying live-tool flags does not authorize arbitrary local
+source access; source workflows need `--workspace`.
+
+| Tool | Purpose |
+| --- | --- |
+| `list_templates` / `get_template` | Read versioned templates and compatible target types |
+| `list_workflows` / `get_workflow` | Read saved definitions and their revisions |
+| `list_runs` | Read retained runs on the selected engine |
+| `save_workflow` | Validate and save a definition with optional `expectedRevision` |
+| `start_run` | Start one template or saved workflow with target inputs; return the run ID |
+| `get_run` | Read the owned run's status, step outcomes, and retained events |
+| `get_run_results` | Page through findings and retained assessment results |
+| `cancel_run` | Request cancellation of an execution on the selected engine |
+
+For example, call `start_run` with:
+
+```json
+{
+  "templateId": "repository-review",
+  "revision": 1,
+  "target": "/absolute/path/to/repo",
+  "idempotencyKey": "review-request-1"
+}
+```
+
+Select exactly one `templateId` or `workflowId`; saved workflow launches require
+`revision`. Optional `timeCapMs` and `costCapUsd` narrow run limits.
+`get_run_results` accepts `runId`, a numeric `cursor`, and `limit` from 1 to 100.
+A retry with the same owner-scoped idempotency key and request returns the same
+run. Changing that request while reusing the key is rejected.
+
+The external agent chooses what to run using its own model. Assessments inside
+0 require 0's separately configured [model provider](/api-keys/). Discovery and
+individual target tools do not create an internal assessment model session.
+Workflows execute sequential typed steps through the shared runner. Templates
+select supported assessment, verification, fix, research, or deep review
+operations. Missing executor prerequisites fail before launch; a template label
+does not imply a specialized backend is available.
+
+`start_run.inputs` is a JSON object, bounded to 32 KiB, containing the selected
+operation's evidence references and options. Finding operations accept an
+existing `findingId`, `findingPath`, or structured `finding`; fix workflows
+require an explicit `testCommand`, and verification selects a supported
+`runner` such as `local`, `smolvm`, `docker`, or `qemu`. Backend-specific options
+must match the executor contract. Input data and saved definitions never grant
+filesystem access, runner availability, credentials, or apply permission.
+
+Apply steps require both the operator-configured host flag `--allow-apply`
+and an explicit `start_run.allowApply: true`. The host must also have an
+authorized source workspace. Fix proposal remains separate from application;
+publication is not implied by either permission.
+
+An embedded stdio host runs the same engine services as the browser. Closing
+that host ends its execution lifetime. To use an already running web engine,
+attach the MCP transport and optionally select an existing browser session:
+
+```bash
+0 mcp-server --workflows \
+  --engine-url http://127.0.0.1:3000 --engine-token-env ENGINE_TOKEN \
+  --session SESSION_ID
+```
+
+`ENGINE_TOKEN` holds the engine's configured bearer credential; its value never
+appears in CLI arguments or client reports. Direct connections use HTTPS, or
+HTTP on loopback for a local engine or SSH tunnel. `--backend production` uses
+a trusted registered connection instead. Engine attachment requires no local
+workspace, scope, model, or target executor setup.
+
+CLI and MCP workflow clients also discover a running local web engine that owns
+the selected control database and workspace. Private metadata holds its identity
+and transport credential; these are not copied to browser descriptors or tool
+reports. Failed authentication or a changed live engine fails attachment rather
+than launching a replacement. Run from the engine's workspace and omit local
+scope, model, and apply-grant overrides when attaching automatically.
+
+`start_run.sessionId` binds the run to an existing session, overriding the
+connection's optional `--session` default. Missing sessions fail attachment;
+no session or approval is silently recreated. Sessionless launches create an
+engine session under its current admission grants. Run status, results, and
+cancellation resolve the same web-owned executions. Disconnecting an attached
+MCP client detaches its transport while the engine continues running.
+
+`start_assessment` accepts `target`, optional `sessionId`, and a complete `plan`
+with `goal`, `depth`, `runCount`, `executionMode`, `timeCapMs`, and `costCapUsd`.
+The selected engine authorizes the target and executes the structured plan.
+
+Session tools include `list_sessions`, `create_session`, `attach_session`,
+`get_session`, `get_session_events`, `send_message`, `continue_session`,
+`cancel_session`, `resolve_decision`, `list_saved_sessions`, and `resume_session`.
+Use an explicit `--tools` allowlist to expose only the desired operations.
+Saved-session resume creates a new session under current admission grants.
+`get_capabilities` reports supported operations. `resume_scan` accepts
+`sessionId`, `scanId`, optional nonnegative `branchFromEntry`, and optional
+`timeCapMs`/`costCapUsd`; it resumes persisted scan work when the engine supports
+that operation. It does not resume an interrupted workflow graph.
+
+Browser chat offers the same template and run lifecycle operations using its
+selected runtime. A chat `start_run` returns a queued `requestId`; execution
+waits until that turn ends, the owner configuration remains stable, and the
+operator approves the launch and target. Read `get_run` with that request ID
+to obtain its status and actual `runId`. A queued request is not an active run;
+changing the chat's configuration invalidates the request.
 
 ### Usage
 
@@ -63,21 +204,29 @@ shape, not a claim of qualification for every named client.
   --tools http_request,crawl,query_findings
 ```
 
-### Required options
+### Live-tool requirements
 
 | Option | Description |
 |--------|-------------|
-| `--target <url>` | Target URL for this MCP session (required) |
-| `--scan-id <id>` | Scan ID to associate findings and target updates with (required) |
+| `--target <url>` | Target URL (required whenever live tools are selected) |
+| `--scan-id <id>` | Scan ID for live tool findings and target updates (required whenever live tools are selected) |
 
 ### Options
 
 | Option | Default | Description |
 |--------|---------|-------------|
+| `--workflows` | `false` | Expose workflow, session, and scan resume lifecycle tools instead of the default live tools |
+| `--backend <id>` | — | Attach to a trusted registered engine |
+| `--backends-config <path>` | — | Trusted backend registry configuration |
+| `--engine-url <url>` | — | Attach directly to a running engine |
+| `--engine-token-env <name>` | — | Environment variable holding the direct engine credential |
+| `--session <id>` | — | Default existing engine session for workflow starts |
+| `--workspace <path>` | — | Absolute authorized local root for source workflows |
+| `--allow-apply` | `false` | Permit explicit apply requests inside the authorized workflow workspace |
 | `--db-path <path>` | — | Path to SQLite database for persistence |
 | `--timeout <ms>` | `30000` | Per-tool timeout in milliseconds (minimum 1000) |
-| `--scope <path>` | — | Path to a 0 scope JSON file. Out-of-scope URLs are refused by target tools; the initial target is checked before opening storage |
-| `--tools <names>` | all tools | Comma-separated subset of MCP tools to expose |
+| `--scope <path>` | — | Path to a 0 scope JSON file. Live workflows require active scope enforcement; atomic target tools enforce the file when the scope plugin is enabled |
+| `--tools <names>` | live tools, or workflow tools with `--workflows` | Exact comma-separated tool selection |
 | `--rate-limit <spec>` | `5` rps | Per-host request rate limit. An active `--engagement-profile` caps this |
 | `--allow-scanners` | `false` | Disable generic-scanner suppression for scoped engagements |
 | `--engagement-profile <name>` | `standard` | Hardening posture: `standard` (default behaviour) or `conservative` (1 rps/host ceiling, full jitter, no WAF evasion) |
@@ -104,7 +253,7 @@ Use `--tools` to select from these live-attack tools:
 
 ### Auth configuration
 
-Target authentication is provided via the `ZERO_MCP_AUTH_JSON` environment
+For individual live tools, target authentication is provided via the `ZERO_MCP_AUTH_JSON` environment
 variable. Set it to a JSON object with one of these shapes:
 
 ```json
@@ -126,7 +275,7 @@ See [Configuration](/configuration/) for the full `--auth` flag details used by
 
 ### Rate limiting and engagement posture
 
-The MCP server supports the same engagement hardening as the scan path. When
+Individual live tools support the same engagement hardening as the scan path. When
 `--engagement-profile conservative` is active:
 
 - WAF-evasion ladder is disabled (regardless of `--no-waf-evasion`)
@@ -144,7 +293,7 @@ create a complete scan pipeline or run an independent verifier.
 
 ### Attribution headers
 
-MCP supports attribution headers for authorized engagements:
+Individual live tools support attribution headers for authorized engagements:
 
 - `ZERO_MCP_ATTRIBUTION_HEADERS_JSON` — JSON array of `"Header-Name: value"`
   strings
@@ -173,13 +322,17 @@ For a client accepting `mcpServers` (for example Claude Desktop), add:
 ```
 
 Use an absolute path for `command` if a GUI-launched client cannot find `0` on
-its `PATH`. This server does not need an `ANTHROPIC_API_KEY` to expose tools:
-the MCP client supplies the reasoning model. If the target needs authentication,
+its `PATH`. For a source workflow client, replace the example `args` with
+`["mcp-server", "--workflows", "--workspace", "/absolute/path/to/repo"]`.
+Individual live tools use the MCP client's reasoning model; assessment workflows
+require 0's configured provider. If individual live tools need authentication,
 provide `ZERO_MCP_AUTH_JSON` through that client's secret/environment mechanism.
 `send_prompt` sends a prompt to the **target under test**, not a provider model.
 
 The MCP transport is stdio-only; stdout is reserved for protocol frames and
-diagnostics go to stderr. The client manages the process lifetime. Limit the
+diagnostics go to stderr. The client manages the process lifetime, including cancellation of owned active
+workflow runs on disconnect. Enable `scope` in the intended project before
+relying on atomic tool scope enforcement. Limit the
 tool list and provide scope explicitly; there is no interactive console
 approval callback in this server. Enabling a tool is not authorization to test
 systems you do not own or have permission to assess.
@@ -187,7 +340,7 @@ systems you do not own or have permission to assess.
 ## Connect external MCP tools to 0
 
 This is the reverse direction: `0 console` and the OpenTUI connect external
-stdio servers from the **JSON array** in `ZERO_MCP`. It is not a
+stdio or Streamable HTTP servers from the **JSON array** in `ZERO_MCP`. It is not a
 `{"mcpServers": ...}` object or a config-file path:
 
 ```bash
@@ -196,7 +349,7 @@ env 'ZERO_MCP=[{"id":"workspace","command":"node","args":["/absolute/path/to/mcp
 ```
 
 Replace the command with an installed MCP server you trust; the same environment
-works with `0 tui`. Each entry accepts `id`, `command`, and optional `args`,
+works with `0 tui`. Local entries accept `id`, `command`, and optional `args`,
 `env` (string values), and `cwd`. For a Python stdio server, use `command:
 "python3"` and its script path in `args`; no Python-specific 0 plugin API is
 required. Provision server dependencies yourself.
@@ -210,13 +363,82 @@ access its workflow needs.
 Malformed entries and failed connections are skipped rather than preventing
 console startup. If no tools appear, check the JSON array, executable path,
 server arguments and stdio handshake; do not assume an empty roster means the
-server connected successfully. The CLI configuration here supports stdio,
-not an HTTP/SSE URL. An SDK caller can supply its own transport to
-`McpHost.register`; that does not create a remote-transport CLI option.
+server connected successfully. Remote entries accept `id`, `url`, and optional
+`headers` (string values). Use Streamable HTTP, not a legacy SSE endpoint.
+HTTPS is required except on loopback; redirects are rejected so authentication
+headers are never forwarded to a different endpoint. HTTP and stdio entries can
+share the same array. External MCP tools currently attach to **local execution**
+sessions; they are not forwarded into the smolvm workbench.
+
+### Elastic
+
+Connect to Elastic Agent Builder using its Kibana MCP endpoint and an API key
+with Agent Builder application privileges. Use the encoded API key returned by
+Elastic. A custom Kibana Space uses `/s/<space>/api/agent_builder/mcp` instead.
+
+Set `KIBANA_URL` and `ELASTIC_API_KEY` through your environment or secret manager,
+then create the server configuration without putting the key in a command argument:
+
+```bash
+export ZERO_MCP="$(node --input-type=module -e '
+  const { KIBANA_URL, ELASTIC_API_KEY } = process.env;
+  if (!KIBANA_URL || !ELASTIC_API_KEY) throw new Error("Set KIBANA_URL and ELASTIC_API_KEY");
+  console.log(JSON.stringify([{
+    id: "elastic",
+    url: new URL("api/agent_builder/mcp", KIBANA_URL.replace(/\/$/, "") + "/").href,
+    headers: { Authorization: "ApiKey " + ELASTIC_API_KEY }
+  }]));
+')"
+0 console
+```
+
+The tools are discovered from your Elastic deployment; Zero does not hardcode a
+catalog or install Tracecat. API key privileges determine which data and actions
+Elastic permits. See [Elastic MCP authentication](https://www.elastic.co/docs/explore-analyze/ai-features/agent-builder/mcp-server-api-keys)
+for account setup. You can also connect Elastic from **Plugins** in the web UI.
 
 **Sources:** [`mcp-host.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/agent/mcp-host.ts),
 [`console.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/console.ts),
 [`tui/run.tsx`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/run.tsx).
+
+## Service plugins
+
+Open **Plugins** to connect GitHub, Elastic, Semgrep, Snyk, Linear, Jira,
+Cloudflare, Slack or Microsoft Teams. Each connection is tested before it is
+saved. Connected plugins have an on/off switch; changes apply to new chats.
+Manage a connection to update its account or inspect its tools. Leaving a saved
+secret field blank preserves that secret.
+
+| Plugin | Tools |
+|---|---|
+| GitHub | Repositories, code scanning and Dependabot alerts, issues and pull requests |
+| Elastic | Tools discovered from the deployment's Agent Builder MCP endpoint |
+| Semgrep | Projects and existing findings in a selected deployment |
+| Snyk | Projects and existing issues in a selected organization |
+| Linear | Teams, issues and creating remediation issues |
+| Jira | Projects, JQL search and creating remediation issues |
+| Cloudflare | Zones, DNS records and rulesets |
+| Slack | Channels, recent messages and posting summaries |
+| Microsoft Teams | Joined teams, channels and posting channel messages |
+
+Setup uses vendor API tokens. Jira Cloud also needs an account email and site
+URL. Elastic needs its Kibana URL, Semgrep a deployment ID, and Snyk an
+organization ID. Teams requires a delegated Microsoft Graph token with the
+permissions for the selected actions; reconnect when it expires. Browser OAuth
+and automatic token refresh are not implemented. Semgrep and Snyk read their
+platform findings rather than starting a local scan.
+
+Credentials are operator-global in `~/.0/service-plugins.json` (`0600`, directory
+`0700`), not embedded in portable workflow definitions. The API returns only
+non-secret settings and tool metadata. Service tools use the `mcp__` namespace,
+the existing MCP permission gates and untrusted-result handling. Connecting a
+plugin does not grant a token additional vendor permissions.
+
+Local chats connect the enabled accounts directly. SmolVM chats receive only
+explicitly configured, enabled service credentials through private stdin and
+connect from inside the guest. The existing workbench network grant is required;
+Plugins does not enable networking. The current CLI bundle must be rebuilt so
+the guest receives the updated adapters. Existing chats keep their original tools.
 
 ## Native workers and multiple models
 
@@ -240,9 +462,9 @@ This is not a stock CLI `--auto-route` flag. Crucially, forked children still
 inherit the parent's **provider, endpoint and account**, with no cross-account
 fallback chain. Use model IDs that account or gateway actually serves; the
 presence of another provider's ambient credentials does not reroute a fork to
-it. Hosted children must pass the hosted model catalog check. Model selection
-does not change tool permissions or establish that a model is better at
-verification. Ordinary worker consensus is not independent reproduction.
+it. Model selection does not change tool permissions or establish that a
+model is better at verification. Ordinary worker consensus is not independent
+reproduction.
 
 **Sources:** [`tools.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/agent/tools.ts),
 [`runtime/types.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/runtime/types.ts),
@@ -310,52 +532,6 @@ an exported scope. Scope enumeration is not permission to automate testing.
 This integration does not submit HackerOne reports, rank program fit, or ingest
 hacktivity; disclosure drafts below are a separate local workflow.
 
-## Cloud auth
-
-`0 auth` manages scoped managed-service credentials. For access and setup, see
-[Managed work](/getting-started/#managed-work-and-onboarding). Local API-key
-and subscription use require no 0cloud account.
-
-**Source:** `packages/cli/src/commands/auth.ts`
-
-### Subcommands
-
-| Subcommand | Description |
-|------------|-------------|
-| `0 auth login` | Open browser at the cloud host's `/cli-auth` page, poll for a scoped token |
-| `0 auth login --token <value>` | Manual credential path — persist a token directly |
-| `0 auth login --host <url>` | Point at a self-hosted cloud host |
-| `0 auth logout` | Delete `~/.0/cloud.env` and `~/.0cloud/credentials.json` |
-| `0 auth status` | Verify cloud credentials against the authenticated managed scan-list endpoint |
-
-### Credential storage
-
-Credentials persist to `~/.0/cloud.env` (mode `0600`) with the format:
-
-```text
-# DO NOT commit this file or share its contents.
-ZERO_CLOUD_HOST=https://cloud.0.security
-ZERO_CLOUD_TOKEN=scoped-token-here
-```
-
-Normal login also best-effort writes compatible credentials to
-`~/.0cloud/credentials.json`; normal logout removes both files. Development-state
-login/logout keeps production-compatible credentials separate. Cloud auth uses
-Bearer tokens. Successful login or status verifies credentials, not local model
-access or permission to run a managed engagement.
-
-### Manual token path
-
-For self-hosted or recovery use, pass a token directly:
-
-```bash
-0 auth login --token "your-token" --host "https://your-host.example.com"
-```
-
-This skips the browser flow entirely and persists the token immediately.
-Run `0 auth status` afterward to verify it; manual persistence does not validate
-the token with the server. Avoid putting real tokens in shared shell history.
-
 ## Report formats
 
 `scan`, `review`, and `audit` accept `--format` and default to terminal output. Supported formats and aliases vary by command.
@@ -410,7 +586,7 @@ ghcr.io/0sec-labs/0:<sha>
 ghcr.io/0sec-labs/0:main
 ```
 
-**Sources:** [`Dockerfile`](https://github.com/0sec-labs/0/blob/main/Dockerfile),
+**Sources:** [`Dockerfile`](https://github.com/0sec-labs/0/blob/main/scripts/docker/Dockerfile),
 [`docker-publish.yml`](https://github.com/0sec-labs/0/blob/main/.github/workflows/docker-publish.yml).
 Use a digest or the published short-SHA tag when repeatability matters;
 `latest` follows eligible main builds, not a promise of a stable release.
@@ -464,8 +640,8 @@ at `/work` if you need the container to read source code or write reports.
 ### Build your own
 
 ```bash
-docker build -t 0:local .
-docker build --build-arg INSTALL_SECLISTS=1 -t 0:full .
+docker build -f scripts/docker/Dockerfile -t 0:local .
+docker build -f scripts/docker/Dockerfile --build-arg INSTALL_SECLISTS=1 -t 0:full .
 ```
 
 ## Plugin system
@@ -552,7 +728,7 @@ evolution requires the improvement loop.
 To provision the default guest and start a session:
 
 ```bash
-docker build --target toolbox -t 0-toolbox:local .
+docker build -f scripts/docker/Dockerfile --target toolbox -t 0-toolbox:local .
 env ZERO_PLUGIN_BACKEND=docker ZERO_PLUGIN_IMAGE=0-toolbox:local 0 tui
 ```
 
@@ -630,28 +806,33 @@ or `--registry` on browse, search, and install. An explicit empty setting disabl
 fetching. Entries use the unconfigured signature verifier and are marked
 `unverified`.
 
-The [author guide](/hackstore/)
-covers executable scaffolding, the manifest, and a local two-file installation
-in an isolated home. The installer writes `plugin.js` and `plugin.json` only.
-Use 0 0.17.0 or newer for direct plugin calls. The 0.16.3 binary has a
-tool-registry bug in `plugin run`.
+The [author guide](/hackstore/) covers scaffolding, shared manifest validation,
+offline installation with `0 plugin install ./extension --local`, approval, real
+tool calls, and `0 hackstore prepare-submission ./extension`. Submission preparation
+produces a reproducible source bundle for a reviewed Hackstore pull request; it
+does not upload or publish. The installer writes `plugin.js` and `plugin.json`
+only. Check command-specific `--help` and update 0 if these commands are missing.
 
 #### Subcommands
 
 | Subcommand | Description |
 |------------|-------------|
-| `0 plugin list` | List installed plugins |
+| `0 plugin list` | List installed code and built-in authorization plugins with project activation state |
 | `0 plugin browse` | List the configured registry |
 | `0 plugin search <query>` | Search the configured registry |
-| `0 plugin install <id>` | Write plugin files to disk (does not execute) |
-| `0 plugin enable <id>` | Record operator decision to permit the plugin |
-| `0 plugin disable <id>` | Revoke enablement |
-| `0 plugin info <id>` | Show plugin manifest and capabilities |
+| `0 plugin install <id>` | Fetch, validate, and write registry code without executing it |
+| `0 plugin install <path> --local` | Validate and install offline source; never execute it or approve a new installation |
+| `0 plugin enable <id>` | Approve installed code or activate built-in `scope` enforcement for this project |
+| `0 plugin disable <id>` | Revoke project approval or disable built-in scope enforcement |
+| `0 plugin info <id>` | Inspect the manifest/capabilities or built-in authorization state |
 | `0 plugin run <id> <tool> [pairs...]` | Invoke a tool; name it explicitly before `key=value` arguments. Effectful calls require `--yes`. |
+| `0 hackstore init <name>` | Scaffold a working example tool and author instructions |
+| `0 hackstore validate <path>` | Validate the shared manifest contract without executing code |
+| `0 hackstore prepare-submission <path> --out <directory>` | Prepare reviewed source under `extensions/<id>/`; no publication side effects |
 
 #### Security model
 
-CLI-managed plugins have three distinct states:
+External CLI-managed plugins have three distinct states:
 
 | State | Description |
 |-------|-------------|
@@ -664,6 +845,11 @@ Declared capabilities are `compute`, `model-call`, `network`, `filesystem-read`,
 approval decisions; they do not enforce operating-system restrictions. A plugin
 runs under the operator's account. Review code before enabling it. Omitting
 `--yes` for an effectful call prevents the call, not the preceding plugin load.
+
+The first-party `scope` plugin is a host authorization feature, not external
+code: it has no installed entry point or child process. It is disabled until
+`0 plugin enable scope` explicitly activates it for the project. Read
+[Scope](/scope/) for the boundaries it controls.
 
 Use `0 plugin enable <id>` from the intended project, then launch `0 tui`
 there for agent access. The OpenTUI pins the approved plugin host for each chat;

@@ -172,6 +172,12 @@ export const findings = sqliteTable(
      */
     verificationResult: text("verificationResult"),
     /**
+     * JSON-stringified safe code-only source-verification summary. NULL when
+     * no scoped source workspace/spec was available or data is unusable; it
+     * never carries canonical replay status.
+     */
+    sourceVerification: text("sourceVerification"),
+    /**
      * JSON-stringified Finding["reviewAnnotation"] — the scoped source
      * reference (`path` + line range, optional suggestion / knownMarker)
      * the agent cited at save_finding time. NULL when the finding carries

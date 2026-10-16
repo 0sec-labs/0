@@ -30,8 +30,7 @@ taxonomy describes missions, not a single scan that covers every layer.
 Choose the command and its evidence contract: identity/graph analysis does not
 exploit a network service; a source-review lead does not establish a live exploit;
 kernel/VM execution needs separately provisioned artifacts. These CLI workflows
-run in your environment. Hosted model transport does not provision a managed
-execution worker.
+run in your environment. Managed-service access is a separate workflow.
 
 ## Authorization and scope
 
@@ -58,7 +57,8 @@ The conservative posture changes request behavior, rate defaults, and WAF-evasio
 
 ## Authentication and runtime
 
-Provider credentials pay for model calls. Target credentials authenticate to the assessed application. Cloud login is a separate credential flow.
+Provider credentials pay for model calls. Target credentials authenticate to
+the assessed application. Managed-service tokens do not configure a model provider.
 
 ```bash
 0 scan --target https://staging.example.com --scope ./scope.json \
@@ -85,6 +85,15 @@ Provider credentials pay for model calls. Target credentials authenticate to the
 
 Keep credential files out of version control and prefer a file over secrets in shell history. [API Keys](/api-keys/) covers provider authentication; [White-Box Mode](/white-box-mode/) covers adding `--repo` source context to a live assessment.
 
+### Multi-identity ownership verification
+
+For tenant isolation, use `--identities ./identities.json` instead of `--auth`.
+The file contains an array of `{ "label", "role", "auth" }` entries; `auth` uses
+the same shapes above. Add `--access-control-fixtures ./fixtures.json` for exact
+known-owner GET resources. See [Finding Validators](/validators/#authenticated-idor-fixtures)
+for the fixture contract and evidence limits. Similar response bodies alone do
+not confirm restricted ownership. Mutation workflows require a state observation.
+
 ## Depth and cost controls
 
 `--depth quick`, `default`, and `deep` select different investigation budgets. They are not guaranteed wall-clock deadlines, and a clean result does not prove the absence of vulnerabilities.
@@ -110,10 +119,13 @@ Inspect per-finding triage provenance. A skipped layer and an unrecorded layer a
 
 Jev assistance is separately opt-in through `ZERO_JEV_FEATURES`, not enabled by
 possessing a provider key. In this workflow it can assist browser navigation,
-memory ranking, or semantic deduplication. It does not grant scope, confirm a
-vulnerability, or turn a duplicate match into verification. Browser assistance
-also requires explicit scope and operator-approved read-only URLs; ambiguous
-steps, forms, writes, and authentication return to the main model.
+memory ranking, semantic deduplication, or final finding prioritization (`rank`).
+Native EGATS branches (`--egats`) can also use `specialist` for methodology
+selection. These decisions do not grant scope, confirm a vulnerability, or turn
+a duplicate match into verification. Ranking changes report order, not which
+findings undergo verification. Browser assistance also requires explicit scope
+and operator-approved read-only URLs; ambiguous steps, forms, writes, and
+authentication return to the main model.
 Review data egress and the separate Jev request/cost limits in
 [Configuration](/configuration/) before enabling it.
 
@@ -301,8 +313,8 @@ status can coexist with explicitly blocked findings or retained errors; exit
 `0` is not an all-findings-fixed certificate. CLI exits are `0` completed,
 `2` blocked, `3` failed, and `130` cancelled.
 
-`costUsd` reports available metered model usage, not a hosted-service price or
-proof of completion. Investigation completion now supplies metered cost, but
+`costUsd` reports available metered model usage, not proof of completion.
+Investigation completion now supplies metered cost, but
 the current repair loop replaces that total with its own ledger; totals across
 phases/resumes can therefore be incomplete. Repair ceiling checks occur between
 findings and do not include all investigation/prior-run spend. Missing usage is
@@ -353,6 +365,35 @@ Use the ecosystem and version actually covered by your authorization. `--changed
 
 `deep-review` remains an explicit research command for evaluated finder lenses and evolved source finders. It is not the implementation of `review --depth deep`, and does not share all of `review`'s options.
 
+### Private project review checks
+
+Local checks are operator-approved criteria, not repository-controlled
+instructions or a cloud enrollment. Save a draft, inspect it, then explicitly
+enable its revision:
+
+```bash
+0 checks propose --project ./my-app --name "Tenant boundary" \
+  --prompt "Tenant-owned queries must use the authenticated organization."
+0 checks list --project ./my-app
+0 checks enable <check-id> --project ./my-app --yes
+0 review ./my-app --diff-base HEAD~ --changed-only --format json
+```
+
+Prompts remain literal, including Markdown rules or YAML-looking text. Each
+project can enable eight checks with at most 2,000 code units per prompt.
+Private state lives under `~/.0/review-checks`, keyed by the real project root;
+remote clones and package downloads do not inherit local approvals.
+
+`checks set` creates a revision when the prompt changes. Updating an enabled
+check requires `--yes`; `--expected-revision` rejects a stale edit or approval.
+Disable retains the draft/history, while remove deletes it.
+
+Enabled checks run in the same investigation as the selected security profile.
+Results are advisory `pass`, `issue`, or `unknown`, with reasons and suggested
+fixes in terminal, Markdown, HTML, PDF, SARIF, and JSON. They do not become
+vulnerability severities or silently change exit policy. Missing or malformed
+check results make research incomplete rather than reporting clean coverage.
+
 ## Export and disclosure
 
 GitHub export and PR emission are external writes and require repository authorization and credentials:
@@ -370,7 +411,7 @@ GitHub export and PR emission are external writes and require repository authori
 
 - **Scope refusal:** supply a valid engagement scope; do not remove the target protocol to bypass authorization checks.
 - **Missing findings or scan:** check the run ID, state root, and selected `--db-path`.
-- **Provider error:** use [API Keys](/api-keys/) and [Configuration](/configuration/); cloud login does not automatically configure a model provider.
+- **Provider error:** use [API Keys](/api-keys/) and [Configuration](/configuration/); managed-service tokens do not configure a model provider.
 - **Interrupted or budget-limited run:** inspect completion/error state and retained artifacts before deciding whether resume is supported. Zero findings from an incomplete run is not a clean pass.
 - **Verification cannot execute:** inspect the mode's prerequisites and errors. Changing a finding's human triage state will not repair an executable verification contract.
 - **Fix refuses:** check the clean Git worktree, source finding, verification evidence, and explicit regression command. Do not bypass preconditions by relabeling a finding.

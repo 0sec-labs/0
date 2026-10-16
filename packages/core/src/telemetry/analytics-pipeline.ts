@@ -39,6 +39,8 @@ import { join } from "node:path";
 import { eventBus, type EventSink, type EventType } from "../events/bus.js";
 import { loadCloudCredentials } from "../cloud/credentials.js";
 import {
+  ANALYTICS_LEVEL_ENV,
+  analyticsOptedOut,
   levelAtLeast,
   resolveAnalyticsLevel,
   type AnalyticsLevel,
@@ -362,7 +364,9 @@ class AnalyticsPipeline {
    * at every call, so a late-set `ZERO_OFFLINE` still takes effect.
    */
   private effectiveLevel(): AnalyticsLevel {
-    const envLevel = resolveAnalyticsLevel();
+    const envLevel = process.env[ANALYTICS_LEVEL_ENV] === undefined && !analyticsOptedOut()
+      ? this.level
+      : resolveAnalyticsLevel();
     const level = levelAtLeast(this.level, envLevel) ? envLevel : this.level;
     if (!levelAtLeast(level, this.observedLevel)) {
       this.batch = this.batch.filter((entry) => levelAtLeast(level, entry.requiredTier));
@@ -800,8 +804,8 @@ class AnalyticsPipeline {
 export const analyticsPipeline = new AnalyticsPipeline();
 
 /**
- * Mirror of `maybeSubscribeCloudEventSink`: resolve the effective analytics
- * tier from the environment, cache it via {@link AnalyticsPipeline.setLevel},
+ * Resolve the effective analytics tier from the environment, cache it via
+ * {@link AnalyticsPipeline.setLevel},
  * and subscribe the usage sink to the event bus when non-off. The env is
  * re-read at transmit time so a late env change (e.g. `ZERO_ANALYTICS_LEVEL`
  * set before spawning a child) is still honoured. Idempotent and env-gated;

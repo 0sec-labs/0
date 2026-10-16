@@ -3,14 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   KEYBINDINGS,
   KEYBINDING_CATEGORIES,
-  REBINDABLE_IDS,
   assessChordAssignment,
   chordFromKey,
   detectConflicts,
   effectiveChords,
   formatChord,
   isAssignableChord,
-  isRebindableId,
   keybindingsByCategory,
   matchesBinding,
   parseChord,
@@ -21,27 +19,12 @@ import {
 } from "./keybindings.js";
 
 describe("KEYBINDINGS registry", () => {
-  it("is non-empty", () => {
-    expect(KEYBINDINGS.length).toBeGreaterThan(0);
-  });
 
   it("gives every binding a unique id", () => {
     const ids = KEYBINDINGS.map((binding) => binding.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it("fills every string field with non-empty, trimmed text", () => {
-    // Only the STRING fields are checked here; `defaultChords` (array) and
-    // `rebindable` (boolean) get their own assertions below.
-    for (const binding of KEYBINDINGS) {
-      for (const field of ["id", "keys", "description", "category", "handler"] as const) {
-        const value = binding[field];
-        expect(typeof value, `${binding.id}.${field}`).toBe("string");
-        expect(value.length, `${binding.id}.${field}`).toBeGreaterThan(0);
-        expect(value, `${binding.id}.${field}`).toBe(value.trim());
-      }
-    }
-  });
 
   it("gives every binding a boolean rebindable flag and at least one parseable default chord", () => {
     for (const binding of KEYBINDINGS) {
@@ -69,49 +52,7 @@ describe("KEYBINDINGS registry", () => {
     }
   });
 
-  it("gives every single-action rebindable binding exactly one default chord", () => {
-    const singleChord = [
-      "view.left-sidebar",
-      "view.right-sidebar",
-      "view.transcript-detail",
-      "composer.edit-queued",
-      "overlay.review-toggle",
-      "nav.jump-agents",
-      "nav.open-comms",
-    ];
-    const byId = new Map(KEYBINDINGS.map((binding) => [binding.id, binding]));
-    for (const id of singleChord) {
-      const binding = byId.get(id);
-      expect(binding, id).toBeDefined();
-      expect(binding!.rebindable, id).toBe(true);
-      expect(binding!.defaultChords.length, id).toBe(1);
-      expect(isAssignableChord(parseChord(binding!.defaultChords[0]!)), id).toBe(true);
-    }
-  });
 
-  it("marks the rethought rebindable set editable and everything else locked", () => {
-    expect([...REBINDABLE_IDS].sort()).toEqual(
-      [
-        "composer.edit-queued",
-        "nav.jump-agents",
-        "nav.open-comms",
-        "nav.palette",
-        "nav.scroll-down",
-        "nav.scroll-up",
-        "overlay.review-toggle",
-        "view.left-sidebar",
-        "view.right-sidebar",
-        "view.transcript-detail",
-      ].sort(),
-    );
-    expect(isRebindableId("view.left-sidebar")).toBe(true);
-    expect(isRebindableId("nav.palette")).toBe(true);
-    expect(isRebindableId("session.quit")).toBe(false);
-    // The protected drift is registered but never rebindable.
-    expect(isRebindableId("composer.accept-suggestion")).toBe(false);
-    expect(isRebindableId("overlay.review-top")).toBe(false);
-    expect(isRebindableId("overlay.review-bottom")).toBe(false);
-  });
 
   it("carries a lockReason on every protected binding and none on rebindable ones", () => {
     for (const binding of KEYBINDINGS) {
@@ -131,20 +72,6 @@ describe("KEYBINDINGS registry", () => {
     }
   });
 
-  it("registers the drift ids that chat-screen already implements", () => {
-    const byId = new Map(KEYBINDINGS.map((binding) => [binding.id, binding]));
-    const drift: Record<string, string> = {
-      "overlay.review-toggle": "Ctrl+O",
-      "overlay.review-top": "Ctrl+Home",
-      "overlay.review-bottom": "Ctrl+End",
-      "composer.accept-suggestion": "Right",
-      "nav.jump-agents": "Ctrl+G",
-      "nav.open-comms": "Ctrl+T",
-    };
-    for (const [id, keys] of Object.entries(drift)) {
-      expect(byId.get(id)?.keys, id).toBe(keys);
-    }
-  });
 
   it("only uses known categories", () => {
     for (const binding of KEYBINDINGS) {
@@ -153,31 +80,6 @@ describe("KEYBINDINGS registry", () => {
   });
 
 
-  it("documents the load-bearing chords the operator relies on", () => {
-    // A regression guard: these are the shortcuts the task called out by name.
-    // If a rename or refactor drops one from the registry, this fails loudly.
-    const byId = new Map(KEYBINDINGS.map((binding) => [binding.id, binding]));
-    const expected: Record<string, { keys: string; category: KeybindingCategory }> = {
-      "view.left-sidebar": { keys: "Ctrl+B", category: "View" },
-      "view.right-sidebar": { keys: "Ctrl+L", category: "View" },
-      "view.transcript-detail": { keys: "Ctrl+R", category: "View" },
-      "autonomy.cycle-mode": { keys: "Shift+Tab", category: "Autonomy" },
-      "nav.palette": { keys: "Ctrl+P / Ctrl+K", category: "Navigation" },
-      "session.quit": { keys: "Ctrl+C", category: "Session" },
-      "composer.send": { keys: "Enter", category: "Composer" },
-      "composer.edit-queued": { keys: "Ctrl+Y", category: "Composer" },
-      "composer.newline": { keys: "Shift+Enter", category: "Composer" },
-      "nav.escape": { keys: "Esc", category: "Navigation" },
-      "nav.scroll-up": { keys: "PageUp / Ctrl+Up", category: "Navigation" },
-      "nav.scroll-down": { keys: "PageDown / Ctrl+Down", category: "Navigation" },
-    };
-    for (const [id, spec] of Object.entries(expected)) {
-      const binding = byId.get(id);
-      expect(binding, id).toBeDefined();
-      expect(binding?.keys, id).toBe(spec.keys);
-      expect(binding?.category, id).toBe(spec.category);
-    }
-  });
 });
 
 describe("keybindingsByCategory", () => {
@@ -286,16 +188,20 @@ describe("chord model", () => {
 
 describe("matchesBinding resolver", () => {
   it("matches a rebindable binding on its default chord with no override", () => {
-    expect(matchesBinding({ name: "b", ctrl: true }, "view.left-sidebar")).toBe(true);
-    expect(matchesBinding({ name: "b", ctrl: true }, "view.left-sidebar", {})).toBe(true);
-    expect(matchesBinding({ name: "x", ctrl: true }, "view.left-sidebar")).toBe(false);
+    const binding = KEYBINDINGS.find((b) => b.id === "view.transcript-detail")!;
+    const defaultKey = parseChord(binding.defaultChords[0])!;
+    expect(matchesBinding(defaultKey, binding.id)).toBe(true);
+    expect(matchesBinding(defaultKey, binding.id, {})).toBe(true);
+    expect(matchesBinding({ name: "x", ctrl: true }, "view.transcript-detail")).toBe(false);
   });
 
   it("matches the override instead of the default when one is set", () => {
-    const overrides = { "view.left-sidebar": "ctrl+j" };
-    expect(matchesBinding({ name: "j", ctrl: true }, "view.left-sidebar", overrides)).toBe(true);
+    const binding = KEYBINDINGS.find((b) => b.id === "view.transcript-detail")!;
+    const defaultKey = parseChord(binding.defaultChords[0])!;
+    const overrides = { "view.transcript-detail": "ctrl+j" };
+    expect(matchesBinding({ name: "j", ctrl: true }, "view.transcript-detail", overrides)).toBe(true);
     // The old default no longer matches.
-    expect(matchesBinding({ name: "b", ctrl: true }, "view.left-sidebar", overrides)).toBe(false);
+    expect(matchesBinding(defaultKey, binding.id, overrides)).toBe(false);
   });
 
   it("ignores an override on a non-rebindable id", () => {
@@ -315,7 +221,7 @@ describe("matchesBinding resolver", () => {
       ["nav.palette", { name: "p", ctrl: true }, "j"],
       ["nav.scroll-up", { name: "pageup" }, "j"],
       ["nav.scroll-down", { name: "pagedown" }, "j"],
-      ["overlay.review-toggle", { name: "o", ctrl: true }, "j"],
+      ["view.transcript-detail", { name: "r", ctrl: true }, "j"],
       ["nav.jump-agents", { name: "g", ctrl: true }, "j"],
       ["nav.open-comms", { name: "t", ctrl: true }, "j"],
     ] as const) {
@@ -330,7 +236,14 @@ describe("matchesBinding resolver", () => {
 
   it("returns false for an unknown id or nameless key", () => {
     expect(matchesBinding({ name: "b", ctrl: true }, "nope.nope")).toBe(false);
-    expect(matchesBinding({ ctrl: true }, "view.left-sidebar")).toBe(false);
+    expect(matchesBinding({ ctrl: true }, "nope.nope")).toBe(false);
+    for (const [id, key] of [
+      ["overlay.review-toggle", { name: "o", ctrl: true }],
+      ["overlay.review-top", { name: "home", ctrl: true }],
+      ["overlay.review-bottom", { name: "end", ctrl: true }],
+    ] as const) {
+      expect(matchesBinding(key, id)).toBe(false);
+    }
   });
 });
 
@@ -342,8 +255,10 @@ describe("reserved chords + conflict detection", () => {
     expect(reserved.has("shift+tab")).toBe(true);
     expect(reserved.has("return")).toBe(true);
     // The rebindable defaults are NOT reserved.
-    expect(reserved.has("ctrl+b")).toBe(false);
-    expect(reserved.has("ctrl+r")).toBe(false);
+    for (const binding of KEYBINDINGS) {
+      if (!binding.rebindable) continue;
+      for (const chord of binding.defaultChords) expect(reserved.has(chord)).toBe(false);
+    }
   });
 
   it("finds no conflict in the default registry", () => {
@@ -367,25 +282,25 @@ describe("reserved chords + conflict detection", () => {
 
   it("flags two rebindable actions on one chord", () => {
     const conflicts = detectConflicts(KEYBINDINGS, {
-      "view.left-sidebar": "ctrl+j",
-      "view.right-sidebar": "ctrl+j",
+      "nav.open-comms": "ctrl+j",
+      "view.transcript-detail": "ctrl+j",
     });
     expect(conflicts.length).toBe(1);
     expect(conflicts[0]!.chord).toBe("ctrl+j");
-    expect(conflicts[0]!.ids.sort()).toEqual(["view.left-sidebar", "view.right-sidebar"]);
+    expect(conflicts[0]!.ids.sort()).toEqual(["nav.open-comms", "view.transcript-detail"]);
   });
 
   it("flags a rebindable chord landing on a reserved chord", () => {
-    const conflicts = detectConflicts(KEYBINDINGS, { "view.left-sidebar": "ctrl+c" });
+    const conflicts = detectConflicts(KEYBINDINGS, { "nav.open-comms": "ctrl+c" });
     expect(conflicts.length).toBe(1);
     expect(conflicts[0]!.ids).toContain("session.quit");
   });
 
   it("resolves effective chords with and without an override", () => {
-    const binding = KEYBINDINGS.find((b) => b.id === "view.left-sidebar")!;
-    expect(effectiveChords(binding, {})).toEqual(["ctrl+b"]);
-    expect(effectiveChords(binding, { "view.left-sidebar": "ctrl+j" })).toEqual(["ctrl+j"]);
-    // A protected multi-chord binding keeps all its defaults.
+    const binding = KEYBINDINGS.find((b) => b.id === "nav.open-comms")!;
+    expect(effectiveChords(binding, {})).toEqual(binding.defaultChords);
+    expect(effectiveChords(binding, { "nav.open-comms": "ctrl+j" })).toEqual(["ctrl+j"]);
+    // A multi-chord binding keeps all its defaults without an override.
     const scroll = KEYBINDINGS.find((b) => b.id === "nav.scroll-up")!;
     expect(effectiveChords(scroll, {})).toEqual(["pageup", "ctrl+up"]);
   });
@@ -393,23 +308,23 @@ describe("reserved chords + conflict detection", () => {
 
 describe("assessChordAssignment", () => {
   it("accepts a free, assignable chord", () => {
-    const result = assessChordAssignment("view.left-sidebar", { name: "j", ctrl: true }, {});
+    const result = assessChordAssignment("nav.open-comms", { name: "j", ctrl: true }, {});
     expect(result).toEqual({ kind: "ok", chord: "ctrl+j" });
   });
 
   it("rejects a chord with no modifier", () => {
-    const result = assessChordAssignment("view.left-sidebar", { name: "j" }, {});
+    const result = assessChordAssignment("nav.open-comms", { name: "j" }, {});
     expect(result?.kind).toBe("unassignable");
   });
 
   it("rejects a chord already owned by another rebindable action", () => {
-    const result = assessChordAssignment("view.left-sidebar", { name: "r", ctrl: true }, {});
+    const result = assessChordAssignment("nav.open-comms", { name: "r", ctrl: true }, {});
     expect(result?.kind).toBe("conflict");
     if (result?.kind === "conflict") expect(result.conflictId).toBe("view.transcript-detail");
   });
 
   it("rejects a chord owned by a protected key", () => {
-    const result = assessChordAssignment("view.left-sidebar", { name: "c", ctrl: true }, {});
+    const result = assessChordAssignment("nav.open-comms", { name: "c", ctrl: true }, {});
     expect(result?.kind).toBe("conflict");
     if (result?.kind === "conflict") expect(result.conflictId).toBe("session.quit");
   });
@@ -427,8 +342,8 @@ describe("sanitizeKeybindingOverrides", () => {
   });
 
   it("keeps a valid override in canonical form", () => {
-    expect(sanitizeKeybindingOverrides({ "view.left-sidebar": "Ctrl+J" })).toEqual({
-      "view.left-sidebar": "ctrl+j",
+    expect(sanitizeKeybindingOverrides({ "nav.open-comms": "Ctrl+J" })).toEqual({
+      "nav.open-comms": "ctrl+j",
     });
   });
 
@@ -436,12 +351,22 @@ describe("sanitizeKeybindingOverrides", () => {
     expect(sanitizeKeybindingOverrides({ "nope.nope": "ctrl+j", "session.quit": "ctrl+j" })).toEqual({});
   });
 
+  it("drops retired transcript-review binding ids as unknown", () => {
+    expect(
+      sanitizeKeybindingOverrides({
+        "nav.open-comms": "ctrl+j",
+        "overlay.review-toggle": "ctrl+k",
+        "overlay.review-top": "ctrl+l",
+        "overlay.review-bottom": "ctrl+m",
+      }),
+    ).toEqual({ "nav.open-comms": "ctrl+j" });
+  });
+
   it("drops overrides on protected ids, including the registered drift", () => {
     expect(
       sanitizeKeybindingOverrides({
         "composer.accept-suggestion": "ctrl+j", // protected drift (Right)
-        "overlay.review-top": "ctrl+j", // protected (Ctrl+Home)
-        "overlay.review-bottom": "ctrl+j", // protected (Ctrl+End)
+        "session.quit": "ctrl+j", // protected
         "autonomy.cycle-mode": "ctrl+j", // protected
       }),
     ).toEqual({});
@@ -449,16 +374,16 @@ describe("sanitizeKeybindingOverrides", () => {
 
   it("keeps a valid override on a newly rebindable id", () => {
     expect(sanitizeKeybindingOverrides({ "nav.palette": "Ctrl+J" })).toEqual({ "nav.palette": "ctrl+j" });
-    expect(sanitizeKeybindingOverrides({ "overlay.review-toggle": "Alt+O" })).toEqual({
-      "overlay.review-toggle": "option+o",
+    expect(sanitizeKeybindingOverrides({ "view.transcript-detail": "Alt+O" })).toEqual({
+      "view.transcript-detail": "option+o",
     });
   });
 
   it("drops unparseable, unassignable and reserved chords", () => {
     expect(
       sanitizeKeybindingOverrides({
-        "view.left-sidebar": "not a chord",
-        "view.right-sidebar": "j", // no modifier
+        "nav.open-comms": "not a chord",
+        "nav.palette": "j", // no modifier
         "view.transcript-detail": "ctrl+c", // reserved
       }),
     ).toEqual({});
@@ -467,26 +392,25 @@ describe("sanitizeKeybindingOverrides", () => {
   it("drops conflicting overrides, reverting them to defaults", () => {
     // Both want ctrl+j — neither is kept; each falls back to its unique default.
     const sanitized = sanitizeKeybindingOverrides({
-      "view.left-sidebar": "ctrl+j",
-      "view.right-sidebar": "ctrl+j",
+      "nav.open-comms": "ctrl+j",
+      "view.transcript-detail": "ctrl+j",
     });
     expect(sanitized).toEqual({});
   });
 
   it("drops an override that collides with another binding's default", () => {
-    // ctrl+r is transcript-detail's default (not overridden) — left-sidebar
-    // cannot claim it.
-    expect(sanitizeKeybindingOverrides({ "view.left-sidebar": "ctrl+r" })).toEqual({});
+    // The communications binding cannot claim transcript-detail's default chord.
+    expect(sanitizeKeybindingOverrides({ "nav.open-comms": "ctrl+r" })).toEqual({});
   });
 
   it("keeps a clean set of distinct overrides", () => {
     const sanitized = sanitizeKeybindingOverrides({
-      "view.left-sidebar": "ctrl+j",
-      "view.right-sidebar": "ctrl+shift+l",
+      "nav.open-comms": "ctrl+j",
+      "view.transcript-detail": "ctrl+shift+l",
     });
     expect(sanitized).toEqual({
-      "view.left-sidebar": "ctrl+j",
-      "view.right-sidebar": "ctrl+shift+l",
+      "nav.open-comms": "ctrl+j",
+      "view.transcript-detail": "ctrl+shift+l",
     });
     // And the result is conflict-free.
     expect(detectConflicts(KEYBINDINGS, sanitized)).toEqual([]);

@@ -12,9 +12,7 @@
  *
  * Two invariants it enforces:
  *   - NAMESPACING: every MCP tool is exposed as `mcp__<server>__<tool>`. This is
- *     the exact prefix `isUntrustedSourceTool` already matches, so an MCP tool's
- *     result inherits the untrusted-input fence for free, and two servers can't
- *     collide on a tool name.
+ *     namespaced so two servers cannot collide on a tool name.
  *   - CAPABILITY FLOOR: an MCP tool is treated as at least `network`-capable
  *     (danger-by-omission hazard, see mcp-client paper) so it can never slip
  *     through the gates as if it were read-only.
@@ -22,7 +20,7 @@
 
 import type { ToolDefinition } from "./types.js";
 
-/** The namespace prefix every MCP tool carries. Matches `isUntrustedSourceTool`. */
+/** The namespace prefix every MCP tool carries. */
 export const MCP_TOOL_PREFIX = "mcp__";
 
 /** A server id must be a single safe segment so a name can't smuggle a `__` split. */

@@ -8,7 +8,14 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 // imports and import.meta.url-based runtime assets retain their normal layout.
 const [sourceArgument, outputArgument] = process.argv.slice(2);
 if (!sourceArgument || !outputArgument) throw new Error("Expected core source and generation output directories");
-const source = resolve(sourceArgument);
+const sourcePath = resolve(sourceArgument);
+const source = await realpath(sourcePath);
+// macOS exposes system-owned /var, /tmp and /etc aliases. Normalize only
+// those spellings; a checkout-controlled directory alias is not a source root.
+const sourceSpelling = process.platform === "darwin" && /^\/(?:var|tmp|etc)(?:\/|$)/.test(sourcePath)
+  ? join("/private", sourcePath)
+  : sourcePath;
+if (source !== sourceSpelling) throw new Error("Core source root must not traverse checkout-controlled directory links");
 const output = resolve(outputArgument);
 const inputs = [];
 const hash = createHash("sha256");

@@ -1,0 +1,125 @@
+import { existsSync, realpathSync } from "node:fs";
+import { createWorkbenchProviderBroker, isAdmittedSmolvmWorkbench, HuntMemoryStore, LearningService } from "@0/core";
+import type { ConsoleSession, ConsoleSessionConfig, LlmApiRuntime } from "@0/core";
+import { findingSchema, type ConsoleExecutionSnapshot, type Finding } from "@0/shared";
+import { osecDB, LearningStore, learningProjectId, learningArtifactDigest } from "@0/db";
+import { relative, resolve, sep } from "node:path";
+import { validateWorkbenchSourceLesson } from "./workbench-console-protocol.js";
+import { randomUUID } from "node:crypto";
+import { currentWorkbenchAssets } from "./workbench-assets.js";
+import { loadGlobalSettings } from "./tui/settings.js";
+import { loadWorkbenchConfig, workbenchConfigPath, workbenchNetworkEnabled, resolveWorkbenchGuestSettings } from "./workbench.js";
+import { createWorkbenchConsoleSession } from "./workbench-console-session.js";
+
+export interface ConsoleExecutionOptions {
+  homeDir?: string;
+  dbPath?: string;
+  workspaceRoot?: string;
+  /** Trusted host/test asset selection; never read from browser or guest input. */
+  assets?: { cliDist: string; dependencies?: string };
+  onExecution?: (execution: ConsoleExecutionSnapshot) => void;
+}
+
+/** Host UI selection is independent of model/provider selection and guest admission. */
+export function consoleExecutionProfile(homeDir?: string): "local" | "smolvm" {
+  if (process.platform === "linux" && isAdmittedSmolvmWorkbench()) return "local";
+  return loadGlobalSettings(homeDir, { requireExecutionProfile: existsSync(workbenchConfigPath(homeDir)) }).executionProfile;
+}
+
+/** All interactive frontends cross the same execution boundary before opening host tool resources. */
+export function createIsolatedConsoleSession(
+  config: Omit<ConsoleSessionConfig, "db">,
+  options: ConsoleExecutionOptions = {},
+): ConsoleSession | undefined {
+  if (consoleExecutionProfile(options.homeDir) !== "smolvm") return undefined;
+  const workbench = loadWorkbenchConfig(options.homeDir);
+  if (!workbench) throw new Error("SmolVM is selected but no workbench is configured. Run 0 workbench setup --image <approved archive>. Host fallback is refused.");
+  const requestedWorkspace = options.workspaceRoot ?? config.workspaceRoot;
+  if (workbench.workspaceRoot && requestedWorkspace && realpathSync(workbench.workspaceRoot) !== realpathSync(requestedWorkspace)) throw new Error("This chat folder differs from the configured SmolVM workspace grant. Start a chat in the granted folder or explicitly reconfigure the workbench before execution.");
+  if (config.pluginHost || config.mcpHost) throw new Error("Host plugin and MCP resources cannot be forwarded into SmolVM. Configure tools inside the approved guest image.");
+  const runtime = config.runtime as Partial<LlmApiRuntime>;
+  const provider = runtime.resolvedProvider?.();
+  const model = runtime.resolvedModel?.() ?? config.costModel;
+  if (provider !== "chatgpt-codex" || !model) throw new Error("The isolated console currently requires the brokered chatgpt-codex provider and an explicit resolved model. Host fallback is refused.");
+  if (!workbench.providers.includes(provider)) throw new Error("The selected provider is not granted to this workbench. Configure an explicit chatgpt-codex provider grant.");
+  const routing = runtime.modelSelection?.();
+  const models = [...new Set([model, ...Object.values(routing?.agentModels ?? {}).filter(value => value !== "auto")])];
+  if (!runtime.workbenchCredentialResolver) throw new Error("The selected runtime cannot bind its account to the host provider broker.");
+  const broker = createWorkbenchProviderBroker({ provider, models, resolveCredentials: runtime.workbenchCredentialResolver() });
+  const { runtime: _runtime, learningStore: hostLearningStore, huntMemoryStore: hostMemoryStore, sourceLessonHints: _hostHints, ...guestConfig } = config;
+  const learningEnabled = config.codebaseLearning === true && config.role !== "verify";
+  if (/^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "")) guestConfig.codebaseLearning = false;
+  let memory: HuntMemoryStore | undefined = hostMemoryStore;
+  const hostMemory = () => memory ??= new HuntMemoryStore({ home: options.homeDir });
+  const withLearning = <T>(use: (service: LearningService) => T): T => {
+    const store = hostLearningStore ?? new LearningStore(options.dbPath);
+    try { return use(new LearningService(store)); } finally { if (!hostLearningStore) store.close(); }
+  };
+  const approvedWorkspace = realpathSync(workbench.workspaceRoot ?? options.workspaceRoot ?? config.workspaceRoot ?? process.cwd());
+  const scanId = config.scanId ?? `console-${randomUUID()}`;
+  try {
+    return createWorkbenchConsoleSession({
+      config: { ...guestConfig, scanId, workspaceRoot: approvedWorkspace },
+      workbench,
+      selection: { provider, model, contextWindowTokens: config.contextWindowTokens, ...routing },
+      provider: { ...broker.grant, request: broker.request, close: broker.close },
+      pluginHomeDir: options.homeDir, assets: options.assets ?? currentWorkbenchAssets(), guestSettings: resolveWorkbenchGuestSettings(loadGlobalSettings(options.homeDir)),
+      network: workbenchNetworkEnabled(),
+      onExecution: options.onExecution,
+      onSourceLesson: (artifact, context) => {
+        if (!learningEnabled || /^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "")) return;
+        if (realpathSync(context.workspaceRoot) !== approvedWorkspace) throw new Error("Source lesson workspace differs from host grant");
+        const lesson = validateWorkbenchSourceLesson(artifact, approvedWorkspace, context.scopePath);
+        const memory = hostMemory();
+        const paths = lesson.sourceLinks.map(link => relative(context.scopePath, resolve(context.workspaceRoot, link.path)).split(sep).join("/"));
+        // Identical source lessons reuse the admitted record so repeated exports cannot resurrect disabled knowledge.
+        const prior = memory.all().find(note => note.codebase?.root === realpathSync(context.scopePath) && note.title === lesson.title && note.summary === lesson.summary &&
+          JSON.stringify(note.codebase?.files.map(file => ({ path: file.path, hash: file.digest }))) === JSON.stringify(lesson.sourceLinks.map((link, index) => ({ path: paths[index], hash: link.hash }))));
+        if (!prior) memory.rememberCodebase({ root: context.scopePath, paths, title: lesson.title, summary: lesson.summary, source: `smolvm:${context.scanId}` });
+        withLearning(service => service.importCodebaseNotes(learningProjectId(context.scopePath), context.scopePath, memory, 8));
+      },
+      readSourceLessons: context => {
+        if (!learningEnabled || /^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "")) return [];
+        if (realpathSync(context.workspaceRoot) !== approvedWorkspace) return [];
+        const memory = hostMemory();
+        return withLearning(service => {
+          const entries = service.importCodebaseNotes(learningProjectId(context.scopePath), context.scopePath, memory, 8);
+          return memory.recallCodebase(context.scopePath, 6).flatMap(note => {
+            const sourceLinks = note.codebase!.files.map(file => ({ path: file.path, hash: file.digest }));
+            if (!entries.some(entry => entry.status === "current" && entry.summary === note.summary && JSON.stringify(entry.sourceLinks) === JSON.stringify(sourceLinks))) return [];
+            const lesson = { title: note.title, summary: note.summary, sourceLinks: sourceLinks.map(link => ({ ...link, path: relative(context.workspaceRoot, resolve(context.scopePath, link.path)).split(sep).join("/") })) };
+            try { return [validateWorkbenchSourceLesson(lesson, context.workspaceRoot, context.scopePath)]; } catch { return []; }
+          });
+        });
+      },
+      onSourceContext: (artifact, context) => {
+        if (!learningEnabled || /^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "")) return;
+        const store = new LearningStore(options.dbPath);
+        try {
+          const digest = learningArtifactDigest(JSON.stringify(artifact.sourceLinks));
+          store.recordExperience({
+            idempotencyKey: `vm-source:${learningArtifactDigest(context.runId + digest)}`,
+            projectId: learningProjectId(context.workspaceRoot),
+            kind: "source-context", outcome: "current", evidenceStrength: "hypothesis",
+            summary: "Source references retained from an isolated workspace.",
+            runId: context.runId, sourceLinks: artifact.sourceLinks, evidenceDigests: [digest],
+          });
+        } finally { store.close(); }
+      },
+      onFindings: (findings, completion) => {
+        // No host store is opened until the VM has stopped and native teardown is proven.
+        const validated = findings.map(finding => findingSchema.parse(finding) as Finding);
+        const db = new osecDB(options.dbPath);
+        try {
+          if (!db.getScan(scanId)) db.createScan({ target: config.target ?? "", depth: "default", format: "terminal", runtime: "api" }, scanId);
+          for (const finding of validated) db.saveFinding(scanId, finding);
+          if (!completion?.outcome || completion.outcome.stopReason === "error") db.failScan(scanId, completion?.outcome?.error ?? "Guest turn ended before a complete outcome was saved");
+          else db.completeScan(scanId, { source: "console", execution: "smolvm", stopReason: completion.outcome.stopReason });
+        } finally { db.close(); }
+      },
+    });
+  } catch (error) {
+    void broker.close();
+    throw error;
+  }
+}

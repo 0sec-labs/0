@@ -76,7 +76,7 @@ export function OpsScreen({ dbPath, refreshMs, onExit, shell }: { dbPath?: strin
       id: "back-ops",
       title: "Go back",
       category: "Navigate",
-      description: "Return to the previous console screen",
+      description: "Previous screen",
       keybind: "esc",
       suggested: true,
       action: () => leaveCurrentScreen(shell, onExit),
@@ -126,7 +126,7 @@ export function OpsScreen({ dbPath, refreshMs, onExit, shell }: { dbPath?: strin
   const opsItems = useMemo<DialogItem[]>(() => {
     const rows: DialogItem[] = [];
     if (snapshot.scans.length === 0) {
-      rows.push({ id: "run:none", label: "No local scans yet.", category: "Runs", disabled: true });
+      rows.push({ id: "run:none", label: "No scans yet.", category: "Runs", disabled: true });
     } else {
       for (const scan of snapshot.scans) {
         rows.push({
@@ -139,7 +139,7 @@ export function OpsScreen({ dbPath, refreshMs, onExit, shell }: { dbPath?: strin
       }
     }
     if (snapshot.findings.length === 0) {
-      rows.push({ id: "finding:none", label: "No findings recorded.", category: "Findings", disabled: true });
+      rows.push({ id: "finding:none", label: "No findings yet.", category: "Findings", disabled: true });
     } else {
       for (const finding of snapshot.findings) {
         rows.push({
@@ -153,15 +153,15 @@ export function OpsScreen({ dbPath, refreshMs, onExit, shell }: { dbPath?: strin
       }
     }
     if (snapshot.incidents.length === 0) {
-      rows.push({ id: "incident:none", label: "No recent runtime incidents.", category: "Incidents", disabled: true });
+      rows.push({ id: "incident:none", label: "No errors.", category: "Errors", disabled: true });
     } else {
       snapshot.incidents.forEach((incident, index) => {
         rows.push({
           id: `incident:${incident.scanId}:${index}`,
           label: incident.target,
           description: incident.stage,
-          meta: "incident",
-          category: "Incidents",
+          meta: "error",
+          category: "Errors",
           tone: theme.ERROR,
         });
       });
@@ -271,12 +271,11 @@ export function OpsScreen({ dbPath, refreshMs, onExit, shell }: { dbPath?: strin
         lines.push({ text: "RUN", fg: theme.PRIMARY });
         lines.push(...wrapDialogLines(scan.target, inner, theme.TEXT));
         lines.push({ text: "" });
-        lines.push(...wrapDialogLines(`id ${scan.id}`, inner, theme.MUTED));
         lines.push(...wrapDialogLines(`mode ${scan.mode}/${scan.depth}`, inner, theme.MUTED));
         lines.push(...wrapDialogLines(`runtime ${scan.runtime}`, inner, theme.MUTED));
         lines.push(...wrapDialogLines(`status ${scan.status}`, inner, theme.MUTED));
         const total = parseSummary(scan.summary).totalFindings;
-        lines.push(...wrapDialogLines(`findings ${total ?? "unknown"}`, inner, theme.MUTED));
+        lines.push(...wrapDialogLines(`findings ${total ?? "—"}`, inner, theme.MUTED));
         lines.push(...wrapDialogLines(`duration ${formatDuration(scan.durationMs)}`, inner, theme.MUTED));
       }
     } else if (kind === "finding" && key !== "none") {
@@ -287,19 +286,17 @@ export function OpsScreen({ dbPath, refreshMs, onExit, shell }: { dbPath?: strin
         lines.push({ text: "" });
         lines.push(...wrapDialogLines(`severity ${finding.severity}`, inner, theme.MUTED));
         lines.push(...wrapDialogLines(`category ${finding.category}`, inner, theme.MUTED));
-        lines.push(...wrapDialogLines(`scan ${finding.scanId}`, inner, theme.MUTED));
       }
     } else if (kind === "incident" && key !== "none") {
       const index = Number.parseInt(key.slice(key.lastIndexOf(":") + 1), 10);
       const incident = snapshot.incidents[index];
       if (incident) {
-        lines.push({ text: "INCIDENT", fg: theme.ERROR });
+        lines.push({ text: "ERROR", fg: theme.ERROR });
         lines.push(...wrapDialogLines(incident.target, inner, theme.TEXT));
         lines.push({ text: "" });
         lines.push(...wrapDialogLines(incident.headline, inner, theme.ERROR));
         lines.push({ text: "" });
         lines.push(...wrapDialogLines(`stage ${incident.stage}`, inner, theme.MUTED));
-        lines.push(...wrapDialogLines(`scan ${incident.scanId}`, inner, theme.MUTED));
       }
     } else {
       lines.push(...wrapDialogLines(item.label, inner, theme.MUTED));
@@ -307,12 +304,12 @@ export function OpsScreen({ dbPath, refreshMs, onExit, shell }: { dbPath?: strin
     return <DialogDetailColumn lines={lines} pane={pane} />;
   };
 
-  const opsCounts = `runs ${snapshot.scans.length} · findings ${snapshot.findings.length} · incidents ${snapshot.incidents.length}`;
+  const opsCounts = `${snapshot.scans.length} scans · ${snapshot.findings.length} findings${snapshot.incidents.length > 0 ? ` · ${snapshot.incidents.length} errors` : ""}`;
   const opsRefresh = refreshMs >= 1000 ? `refresh ${Math.round(refreshMs / 1000)}s` : `refresh ${refreshMs}ms`;
 
   return (
     <ShellFrame view="mission control" dialogContent>
-      {palette.paletteOpen ? <PaletteOverlay title="Mission control commands" query={palette.paletteQuery} selected={palette.paletteSelected} commands={palette.filteredPalette} /> : null}
+      {palette.paletteOpen ? <PaletteOverlay title="Operations" query={palette.paletteQuery} selected={palette.paletteSelected} commands={palette.filteredPalette} /> : null}
       <box flexDirection="column" width="100%" height="100%" minWidth={0}>
         <DialogTitleRow screenKey="ops" width={width} meta={opsRefresh} />
         <DialogSelectBody
@@ -320,14 +317,14 @@ export function OpsScreen({ dbPath, refreshMs, onExit, shell }: { dbPath?: strin
           cursor={opsCursor}
           panel={opsPanel}
           query={opsFilter}
-          placeholder={opsFiltering ? "type to filter" : "/ to filter runs, findings and incidents"}
-          emptyText="Nothing matches this filter."
+          placeholder={opsFiltering ? "type to filter" : "/ to filter"}
+          emptyText="No matches."
           renderDetail={renderOpsDetail}
         />
         <Cells width={width} fg={error ? theme.ERROR : snapshot.incidents.length > 0 ? theme.ERROR : theme.MUTED}>
           {error ?? opsCounts}
         </Cells>
-        <FooterBar hint={opsFiltering ? "type to filter · [⏎] keep · [esc] clear" : "[↑↓] move · [/] filter · [esc] back · [⌃P] commands · [⌃C] exit"} />
+        <FooterBar hint={opsFiltering ? "type to filter · [⏎] keep · [esc] clear" : "[↑↓] move · [/] filter · [⌃P] commands · [esc] back"} />
       </box>
     </ShellFrame>
   );

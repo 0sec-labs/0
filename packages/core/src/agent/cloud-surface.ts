@@ -55,6 +55,7 @@
  */
 
 import { createHmac, createHash } from "node:crypto";
+import { isScopeEnforcementEnabled } from "../scope/activation.js";
 
 // ── Injectable fetch (mirrors auth-boundary-prober.FetchLike) ──
 
@@ -189,6 +190,7 @@ export function bucketInScope(
   scope: CloudScopeMatcher | undefined,
   region?: string,
 ): { allowed: boolean; reason: string } {
+  if (!isScopeEnforcementEnabled()) return { allowed: true, reason: "scope plugin disabled; cloud authorization not enforced" };
   if (!scope) {
     return { allowed: false, reason: "denied: no engagement scope configured (cloud probing is deny-by-default)" };
   }

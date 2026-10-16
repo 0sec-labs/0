@@ -35,8 +35,8 @@ function readFixtureFile(path: string): Buffer {
 
 function inspectFixture(path: string): FixtureInspection {
   const root = resolve(path);
-  if (realpathSync(root) !== root) throw new Error(`fixture aliases are not allowed: ${path}`);
   const stat = lstatSync(root);
+  if (stat.isSymbolicLink()) throw new Error(`fixture aliases are not allowed: ${path}`);
   if (!stat.isFile() && !stat.isDirectory()) throw new Error(`fixture is not a regular file or directory: ${path}`);
   const files: FixtureFile[] = [];
   let bytes = 0;

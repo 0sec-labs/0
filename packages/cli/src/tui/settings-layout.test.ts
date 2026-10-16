@@ -559,7 +559,7 @@ describe("the settings dialog layout", () => {
   it("spends the host chrome the caller declares, not the console shell's", () => {
     // Inside a dialog the surface is already the panel's inner box, so only the
     // host frame's own rows come off it — the body keeps the rest.
-    // The settings host spends two rows: its footer and the harness line.
+    // The settings host spends two rows: its footer and the Keybindings link.
     const dialog = computeSettingsLayout(92, 40, 100, { chromeRows: 2, chromeColumns: 0 });
     expect(dialog.contentWidth).toBe(92);
     expect(dialog.availableRows).toBe(38);

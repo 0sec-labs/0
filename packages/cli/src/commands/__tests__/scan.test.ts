@@ -38,6 +38,7 @@ const extractEngagementFromScopeJsonMock = vi.fn();
 const targetRequiresScopeMock = vi.fn((target: string) => /^https?:\/\//.test(target));
 const networkScopeRequiredRefusalMock = vi.fn((target: string) => `scope required for ${target}`);
 vi.mock("@0/core", () => ({
+  getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, projectPath: process.cwd(), message: "Scope plugin enabled" }),
   loadScope: loadScopeMock,
   parseRateLimitFlag: parseRateLimitFlagMock,
   resolveAttribution: resolveAttributionMock,
@@ -623,3 +624,32 @@ describe("scan — http_audit env bridge (FROZEN CONTRACT)", () => {
 // Silence "unused" warnings for the imported ScanReport type (kept for
 // readers who want to extend these tests with report-shape assertions).
 void ({} as ScanReport | undefined);
+
+describe("multi-identity ownership fixture inputs", () => {
+  it("threads file-backed identities and ownership contracts into the assessment", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "zero-replay-inputs-"));
+    try {
+      const identitiesPath = join(directory, "identities.json");
+      const fixturesPath = join(directory, "fixtures.json");
+      const identities = [
+        { label: "owner", role: "admin", auth: { type: "bearer", token: "synthetic-owner" } },
+        { label: "other", role: "user", auth: { type: "cookie", value: "sid=synthetic-other" } },
+      ];
+      const fixtures = [{ url: "https://example.com/api/artifacts/uuid", ownerIdentity: "owner", comparisonIdentities: ["other"], ownershipMarker: "PRIVATE_SYNTHETIC_CANARY_123" }];
+      writeFileSync(identitiesPath, JSON.stringify(identities));
+      writeFileSync(fixturesPath, JSON.stringify(fixtures));
+      await runCli(["scan", "--target", "https://example.com", "--identities", identitiesPath, "--access-control-fixtures", fixturesPath]);
+      expect(runUnifiedMock).toHaveBeenCalledWith(expect.objectContaining({ identities, accessControlFixtures: fixtures }));
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+  it("rejects malformed identity credentials without echoing secrets", async () => {
+    const { parseIdentitiesFile } = await import("../scan.js");
+    const directory = mkdtempSync(join(tmpdir(), "zero-replay-invalid-"));
+    try {
+      const file = join(directory, "bad.json");
+      writeFileSync(file, JSON.stringify([{ label: "owner", auth: { type: "bearer", token: "DO_NOT_ECHO_THIS", unknown: true } }, { label: "owner" }]));
+      expect(() => parseIdentitiesFile(file)).toThrow("Invalid --identities file");
+      try { parseIdentitiesFile(file); } catch (error) { expect(String(error)).not.toContain("DO_NOT_ECHO_THIS"); }
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+});

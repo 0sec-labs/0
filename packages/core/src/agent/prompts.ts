@@ -48,7 +48,7 @@ export function buildAuthHeaders(auth?: AuthConfig): Record<string, string> {
  * access_control_probe tool (0#564). Returns "" unless ≥2 identities are
  * configured, so single-credential scans are unaffected.
  */
-export function buildAccessControlPromptBlock(identities?: NamedIdentity[]): string {
+export function buildAccessControlPromptBlock(identities?: NamedIdentity[], fixtures?: import("@0/shared").AccessControlFixture[]): string {
   if (!identities || identities.length < 2) return "";
   const roster = identities
     .map((idn) => `- \`${idn.label}\`${idn.role ? ` (role: ${idn.role})` : ""}${idn.auth ? "" : " — unauthenticated"}`)
@@ -64,17 +64,19 @@ cookies automatically (no manual curl jars needed).
 
 Configured identities:
 ${roster}
+${fixtures?.length ? "\nOperator-provided private resource fixtures (GET only):\n" + fixtures.map(f => `- ${f.url}: owner=${f.ownerIdentity}; compare=${f.comparisonIdentities.join(", ")}`).join("\n") + "\nPrioritize these exact URLs. Save read-disclosure candidates as information-disclosure; the deterministic oracle checks the operator ownership contract. Credentials and private markers remain in the tool context.\n" : ""}
 
 Use the **access_control_probe** tool to test authorization boundaries:
 1. Find an object reference owned by one identity (/api/users/{id}, /orders/{id},
    ?id=…) or an admin-only endpoint.
 2. Call \`access_control_probe\` with that URL, \`baseline_identity\` = the
    identity that legitimately owns/can access it, \`compare_identities\` = the
-   others, and \`expect_denied: true\`.
+   others, and \`expect_denied: true\`. Include \`ownership_marker\`: a known
+   synthetic private marker you seeded in that owner's test resource.
 3. The tool replays the same request as each identity and diffs status + body.
-   A comparison identity that gets the SAME resource = confirmed broken access
-   control; a lower-privileged identity reaching an admin endpoint = vertical
-   privilege escalation. Save a finding with the returned A-vs-B evidence.
+   Confirmation requires the private owner marker in both successful responses.
+   Similar bodies or HTTP success without ownership evidence remain candidates.
+   Save a finding with the returned A-vs-B evidence when confirmed.
 
 For write endpoints or multi-step workflows, use \`access_control_workflow\`
 on disposable, in-scope resources with explicit \`allow_mutation: true\`.
@@ -145,15 +147,24 @@ supply an \`impact_assessment\` JSON object with your \`save_finding\` call:
 - \`blast_radius\`: Brief sentence naming who/what is affected
 - \`weaponizability\`: What the attacker gains — \`rce\` > \`lpe-to-root\` >
   \`integrity-tampering\` > \`info-leak\` > \`dos-crash\`
-- \`business_impact\`: The coarse ranking tier — \`headline\` | \`notable\` |
-  \`modest\` | \`noise\`
+- \`business_impact\`: The business-priority tier — \`headline\` | \`notable\` |
+  \`modest\` | \`noise\` | \`unassessed\`. Assess consequences for the actual
+  affected business: customer or tenant data exposure, fraud or unauthorized
+  transactions, revenue-critical services, service disruption, and safety where
+  supported. Reachability, affected users/assets, and existing controls qualify
+  that consequence. CVSS and technical severity are separate context, not a
+  substitute for business priority.
 - \`rationale\`: 1-2 sentence justification
 
 Only supply this when the evidence genuinely supports it. When you lack
 concrete reachability, blast-radius, or weaponizability facts, leave
 \`impact_assessment\` unset — downstream consumers (CVSS generators, advisory
 templates) handle an absent assessment independently. Do NOT fabricate or
-default values. Supply the full object or omit it entirely.`;
+default values. Missing business context is \`unassessed\`; use \`unknown\` for
+reachability or weaponizability you cannot establish. Explain the missing facts
+and next question in the rationale. Do not invent revenue, financial loss,
+affected customer counts, regulatory obligations, or successful exploitation.
+Supply the full object or omit it entirely.`;
 
 // Typed TODO ledger guidance. Appended to the attack-oriented system prompts,
 // flag-gated, mirroring LOOT_LEDGER_INSTRUCTION above. The ledger itself is

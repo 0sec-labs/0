@@ -20,7 +20,6 @@ import { estimateCost, getRates, MODEL_PRICING } from "../packages/shared/dist/i
 
 maybeLoadCodexAuth();
 process.env["ZERO_DISABLE_HUNT_MEMORY"] = "1";
-process.env["ZERO_CLOUD_SINK"] = "";
 const root = mkdtempSync(join(tmpdir(), "0-lens-e2e-"));
 const registry = join(root, "lenses.json");
 const queue = { storePath: join(root, "observations.json") };

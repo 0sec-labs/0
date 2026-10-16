@@ -1,0 +1,116 @@
+theory LocalCaches
+
+begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, pair/2, snd/1
+equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+rule (modulo E) Issue:
+   [ Fr( ~ticket ) ]
+  --[ Init( ) ]->
+   [ Unused( 'a', ~ticket ), Unused( 'b', ~ticket ), Out( ~ticket ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Accept:
+   [ Unused( node, ticket ), In( ticket ) ]
+  --[ Accept( node, ticket ) ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+restriction OneIssue:
+  "∀ #i #j. ((Init( ) @ #i) ∧ (Init( ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ #i #j. ((Init( ) @ #i) ∧ (Init( ) @ #j)) ⇒ (#i = #j)"
+  */
+
+lemma distributed_replay_exists:
+  exists-trace
+  "∃ ticket #i #j.
+    ((Accept( 'a', ticket ) @ #i) ∧ (Accept( 'b', ticket ) @ #j)) ∧
+    (¬(#i = #j))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ ticket #i #j.
+  (Accept( 'a', ticket ) @ #i) ∧ (Accept( 'b', ticket ) @ #j) ∧ ¬(#i = #j)"
+*/
+simplify
+solve( (#i < #j)  ∥ (#j < #i) )
+  case case_1
+  solve( Unused( 'a', ticket ) ▶₀ #i )
+    case Issue
+    solve( Unused( 'b', ~ticket ) ▶₀ #j )
+      case Issue
+      solve( !KU( ~ticket ) @ #vk )
+        case Issue
+        SOLVED // trace found
+      qed
+    qed
+  qed
+qed
+
+lemma at_most_once:
+  all-traces
+  "∀ a b ticket #i #j.
+    ((Accept( a, ticket ) @ #i) ∧ (Accept( b, ticket ) @ #j)) ⇒ (#i = #j)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ a b ticket #i #j.
+  (Accept( a, ticket ) @ #i) ∧ (Accept( b, ticket ) @ #j) ∧ ¬(#i = #j)"
+*/
+simplify
+solve( (#i < #j)  ∥ (#j < #i) )
+  case case_1
+  solve( Unused( a, ticket ) ▶₀ #i )
+    case Issue_case_1
+    solve( Unused( b, ~ticket ) ▶₀ #j )
+      case Issue_case_2
+      solve( !KU( ~ticket ) @ #vk )
+        case Issue
+        SOLVED // trace found
+      qed
+    qed
+  qed
+qed
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: UNKNOWN, branch: UNKNOWN
+Compiled at: 2026-03-08 09:49:47.765662 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: /Users/peak/coding/0sec-labs/0/research/tamarin-tls/local-caches.spthy
+
+  processing time: 0.08s
+  
+  distributed_replay_exists (exists-trace): verified (6 steps)
+  at_most_once (all-traces): falsified - found trace (6 steps)
+
+==============================================================================
+
+STDERR
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory LocalCaches] Theory loaded
+[Theory LocalCaches] Theory translated
+[Theory LocalCaches] Derivation checks started
+[Theory LocalCaches] Derivation checks ended
+[Theory LocalCaches] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done

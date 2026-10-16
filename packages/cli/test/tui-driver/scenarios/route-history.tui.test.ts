@@ -33,6 +33,20 @@ test("a command popup owns input before route-history shortcuts", async () => {
   expect(tui.captureFrame()).not.toMatch(/Reset all settings/);
 });
 
+test("settings and its command palette no longer expose host controls", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 503 }));
+  tui = await launch({ route: { type: "settings" }, settings: { onboardingCompleted: true } });
+  await tui.waitForText(/Settings/);
+  await tui.sendKey("g", { ctrl: true });
+  await tui.settle();
+  expect(tui.captureFrame()).toContain("Settings");
+  expect(tui.captureFrame()).not.toContain("Live harness");
+  await tui.sendKey("p", { ctrl: true });
+  await tui.waitForText(/Commands/);
+  expect(tui.captureFrame()).not.toContain("Live harness");
+});
+
+
 test("Shift+Tab returns launcher focus to the previous field", async () => {
   vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 503 }));
   tui = await launch({ route: { type: "launcher" }, settings: { onboardingCompleted: true } });
@@ -51,9 +65,9 @@ test("a launcher-local palette blocks history until it closes", async () => {
   tui = await launch({ route: { type: "launcher" }, settings: { onboardingCompleted: true } });
   await tui.sendKeys("fixture-target");
   await tui.sendKey("p", { ctrl: true });
-  await tui.waitForText(/Control plane/);
+  await tui.waitForText(/Commands/);
   await tui.sendKey("left", { meta: true });
-  expect(tui.captureFrame()).toContain("Control plane");
+  expect(tui.captureFrame()).toContain("Commands");
   await tui.sendKey("escape");
   expect(tui.captureFrame()).toContain("fixture-target");
   await tui.sendKey("left", { meta: true });

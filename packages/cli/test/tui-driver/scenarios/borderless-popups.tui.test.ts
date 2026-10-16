@@ -25,8 +25,8 @@ test("slash command menu has no box borders", async () => {
   await tui.waitForText(/all commands|\/help/, 8_000);
 
   // The popup owns the rows from its header ("… all commands") down to its
-  // key-hint footer ("… esc close"); the composer rule sits below that.
-  const popup = regionBetween(tui.rawFrame(), /all commands/, /\[esc\] close/);
+  // key-hint footer; the composer rule sits below that.
+  const popup = regionBetween(tui.rawFrame(), /all commands/, /\[↑↓\] select/);
   const offenders = popup.filter((line) => BORDER_GLYPHS.test(line));
   expect(offenders, `border glyphs in slash popup:\n${offenders.join("\n")}`).toEqual([]);
 });
@@ -35,9 +35,8 @@ test("model picker has no box borders", async () => {
   tui = await launch({ route: { type: "models" } });
   await tui.waitForText(/Find a model|per M/, 15_000);
 
-  // The picker owns the rows from its title ("◈ Models …") down to its
-  // navigation hint ("↑↓ model …").
-  const picker = regionBetween(tui.rawFrame(), /Models · /, /\[↑↓\] model/);
+  // The picker owns the rows from its title down to its navigation hint.
+  const picker = regionBetween(tui.rawFrame(), /Select model/, /\[esc\] back/);
   const offenders = picker.filter((line) => BORDER_GLYPHS.test(line));
   expect(offenders, `border glyphs in model picker:\n${offenders.join("\n")}`).toEqual([]);
 });

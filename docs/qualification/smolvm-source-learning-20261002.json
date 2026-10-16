@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "startedAt": "2026-10-02T20:48:31.416Z",
+  "headAtTest": "3c2bc3a5f378b23912d088907d5e04ffc54b00bf",
+  "buildIdentity": {
+    "entryDigest": "sha256:95b50bd840a7b0259a7e4d1d2329bca89dd8fbb075e1680320e51d6a30348307",
+    "treeDigest": "sha256:72974c318a5997e9fcfd8c5572872507aa753e02ceda1d92ff92e7341fafac78",
+    "fileCount": 306,
+    "hostAdapterDigest": "sha256:e0d11e482e6ef1402ed4df161da0a936f181171d8a54e1f1de3cd308f21c616d",
+    "buildCommitVerified": false
+  },
+  "imageDigest": "sha256:a2986e852a463d33243ae0adf23e9853eb8eb776d3d0045a02c00ac0ea0b1495",
+  "provider": "deterministic host SSE fixture",
+  "liveAccountUsed": false,
+  "network": false,
+  "hostCredentialsForwarded": false,
+  "outcome": "passed",
+  "checks": {
+    "hostLessonsRetained": true,
+    "explicitYoloChildScope": true,
+    "freshVmRecall": true,
+    "historyDoesNotContainHints": true,
+    "disabledLessonExcluded": true,
+    "changedSourceExcluded": true,
+    "threeFreshVms": true,
+    "nativeTeardownConfirmed": true
+  },
+  "buildUnchanged": true,
+  "selectedConfigUnchanged": true,
+  "finishedAt": "2026-10-02T20:49:17.093Z",
+  "providerRequests": 10,
+  "tools": [
+    {
+      "phase": "save",
+      "name": "read_file",
+      "success": true
+    },
+    {
+      "phase": "save",
+      "name": "read_file",
+      "success": true
+    },
+    {
+      "phase": "save",
+      "name": "remember_codebase",
+      "success": true
+    },
+    {
+      "phase": "save",
+      "name": "remember_codebase",
+      "success": true
+    },
+    {
+      "phase": "recall",
+      "name": "read_file",
+      "success": true
+    },
+    {
+      "phase": "changed",
+      "name": "read_file",
+      "success": true
+    }
+  ],
+  "executionSnapshots": [
+    {
+      "phase": "save",
+      "status": "pending",
+      "runId": "c340a00d-8be8-4516-826c-88697d4d1883"
+    },
+    {
+      "phase": "save",
+      "status": "ready",
+      "runId": "c340a00d-8be8-4516-826c-88697d4d1883"
+    },
+    {
+      "phase": "save",
+      "status": "running",
+      "runId": "c340a00d-8be8-4516-826c-88697d4d1883"
+    },
+    {
+      "phase": "save",
+      "status": "ready",
+      "runId": "c340a00d-8be8-4516-826c-88697d4d1883"
+    },
+    {
+      "phase": "save",
+      "status": "stopped",
+      "runId": "c340a00d-8be8-4516-826c-88697d4d1883"
+    },
+    {
+      "phase": "recall",
+      "status": "pending",
+      "runId": "a9711ee9-cb4b-4589-8f72-76b8c2436f62"
+    },
+    {
+      "phase": "recall",
+      "status": "ready",
+      "runId": "a9711ee9-cb4b-4589-8f72-76b8c2436f62"
+    },
+    {
+      "phase": "recall",
+      "status": "running",
+      "runId": "a9711ee9-cb4b-4589-8f72-76b8c2436f62"
+    },
+    {
+      "phase": "recall",
+      "status": "ready",
+      "runId": "a9711ee9-cb4b-4589-8f72-76b8c2436f62"
+    },
+    {
+      "phase": "disabled",
+      "status": "running",
+      "runId": "a9711ee9-cb4b-4589-8f72-76b8c2436f62"
+    },
+    {
+      "phase": "disabled",
+      "status": "ready",
+      "runId": "a9711ee9-cb4b-4589-8f72-76b8c2436f62"
+    },
+    {
+      "phase": "disabled",
+      "status": "stopped",
+      "runId": "a9711ee9-cb4b-4589-8f72-76b8c2436f62"
+    },
+    {
+      "phase": "changed",
+      "status": "pending",
+      "runId": "e854d78c-527d-49f4-9417-39988a0ddf3c"
+    },
+    {
+      "phase": "changed",
+      "status": "ready",
+      "runId": "e854d78c-527d-49f4-9417-39988a0ddf3c"
+    },
+    {
+      "phase": "changed",
+      "status": "running",
+      "runId": "e854d78c-527d-49f4-9417-39988a0ddf3c"
+    },
+    {
+      "phase": "changed",
+      "status": "ready",
+      "runId": "e854d78c-527d-49f4-9417-39988a0ddf3c"
+    },
+    {
+      "phase": "changed",
+      "status": "stopped",
+      "runId": "e854d78c-527d-49f4-9417-39988a0ddf3c"
+    }
+  ],
+  "resources": {
+    "cpus": 2,
+    "memoryMb": 2048,
+    "storageGb": 4,
+    "vmDeadlineMs": 240000,
+    "maxTurnTokens": 64000,
+    "maxToolIterations": 8,
+    "allowedTools": [
+      "read_file",
+      "remember_codebase"
+    ]
+  },
+  "limitations": [
+    "Deterministic provider fixtures prove transport, storage and filtering behavior; they do not measure security discovery quality.",
+    "Small approved Node fixture image and explicit Linux dependencies; not the complete selected toolbox.",
+    "An earlier fixture with the full tool catalog and a 32K budget stopped at max_turn_tokens after one successful save. It was preserved privately; the retry used two specific tools and a 64K token bound."
+  ]
+}

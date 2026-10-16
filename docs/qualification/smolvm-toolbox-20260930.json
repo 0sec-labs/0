@@ -1,0 +1,634 @@
+{
+  "schemaVersion": 1,
+  "imageDigest": "sha256:735d43b03363c4ad39031c054c4628669bb981a04071f62509d03bafba6acfd9",
+  "network": false,
+  "downloadBytes": 0,
+  "execution": {
+    "exitCode": 0,
+    "timedOut": false,
+    "cleanupFailed": false,
+    "durationMs": 106697.700333
+  },
+  "guest": {
+    "platform": "linux",
+    "arch": "arm64",
+    "uid": 501,
+    "gid": 20,
+    "hostCredentialPathsMounted": false
+  },
+  "functional": {
+    "files": {
+      "passed": true
+    },
+    "nativeParser": {
+      "passed": true
+    },
+    "nmap": {
+      "passed": true
+    },
+    "ffuf": {
+      "passed": true
+    },
+    "gobuster": {
+      "passed": true
+    },
+    "browser": {
+      "passed": true,
+      "version": "148.0.7778.0"
+    }
+  },
+  "requiredStartupProbes": {
+    "core-web": {
+      "passed": 24,
+      "total": 25,
+      "probes": [
+        {
+          "name": "0",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "0.21.4"
+        },
+        {
+          "name": "node",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "v24.21.0"
+        },
+        {
+          "name": "npm",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "11.19.0"
+        },
+        {
+          "name": "bun",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "1.3.14"
+        },
+        {
+          "name": "claude",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "2.1.285 (Claude Code)"
+        },
+        {
+          "name": "codex",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "codex-cli 0.159.2\nWARNING: proceeding, even though we could not create PATH aliases: Refusing to create helper binaries under temporary dir \"/tmp\" (codex_home: AbsolutePathBuf(\"/tmp/qualification-home/.codex\"))"
+        },
+        {
+          "name": "gemini",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "0.62.0"
+        },
+        {
+          "name": "bash",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "GNU bash, version 5.3.9(1)-release (aarch64-unknown-linux-gnu)\nCopyright (C) 2025 Free Software Foundation, Inc.\nLicense GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>\n\nThis is free software; you are free to change and redistribute it.\nThere is NO WARRANTY, to the extent permitted by law."
+        },
+        {
+          "name": "python3",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "Python 3.14.7"
+        },
+        {
+          "name": "git",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "git version 2.53.0"
+        },
+        {
+          "name": "gh",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "gh version 2.101.0 (2026-09-15)\nhttps://github.com/cli/cli/releases/tag/v2.101.0"
+        },
+        {
+          "name": "jq",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "jq-1.8.2"
+        },
+        {
+          "name": "rg",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "ripgrep 15.2.0\n\nfeatures:+pcre2\nsimd(compile):+NEON\nsimd(runtime):+NEON\n\nPCRE2 10.43 is available (JIT is available)"
+        },
+        {
+          "name": "curl",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "curl 8.21.0 (aarch64-unknown-linux-gnu) libcurl/8.21.0 OpenSSL/3.6.4 zlib/1.3.2 brotli/1.2.0 zstd/1.5.7 libidn2/2.3.8 libpsl/0.23.3 libssh2/1.11.1 nghttp2/1.70.0 ngtcp2/1.24.0 nghttp3/1.17.0 mit-krb5/1.22.1 OpenLDAP/2.6.14\nRelease-Date: 2026-06-24, security patched: 8.21.0-2\nProtocols: dict file ftp ftps gopher gophers http https imap imaps ipfs ipns ldap ldaps mqtt mqtts pop3 pop3s rtsp scp sftp "
+        },
+        {
+          "name": "wget",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "GNU Wget 1.25.0 built on linux-gnu.\n\n-cares +digest -gpgme +https +ipv6 +iri +large-file -metalink +nls \n+ntlm +opie +psl +ssl/gnutls \n\nWgetrc: \n    /etc/wgetrc (system)\nLocale: \n    /usr/share/locale \nCompile: \n    aarch64-linux-gnu-gcc -DHAVE_CONFIG_H -DSYSTEM_WGETRC=\"/etc/wgetrc\" \n    -DLOCALEDIR=\"/usr/share/locale\" -I. -I../../src -I../lib \n    -I../../lib -Wdate-time -D_FORTIFY_SOURCE=2 \n    "
+        },
+        {
+          "name": "nmap",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "Nmap version 7.99 ( https://nmap.org )\nPlatform: aarch64-unknown-linux-gnu\nCompiled with: liblua-5.4.8 openssl-3.6.4 libssh2-1.11.1 libz-1.3.1 libpcre2-10.48 libpcap-1.10.7 nmap-libdnet-1.18.0 ipv6\nCompiled without:\nAvailable nsock engines: epoll poll select"
+        },
+        {
+          "name": "sqlmap",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "1.10.9#stable"
+        },
+        {
+          "name": "ffuf",
+          "args": [
+            "-V"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "ffuf version: 2.1.0-dev"
+        },
+        {
+          "name": "gobuster",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": true,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "gobuster version 3.8.2\nBuild info:\ngo\tgo1.24.9\npath\tgithub.com/OJ/gobuster\nbuild\t-buildmode=exe\nbuild\t-compiler=gc\nbuild\t-trimpath=true\nbuild\tDefaultGODEBUG=asynctimerchan=1,gotestjsonbuildtext=1,gotypesalias=0,httpcookiemaxnum=0,httplaxcontentlength=1,httpmuxgo121=1,httpservecontentkeepheaders=1,multipathtcp=0,netedns0=0,panicnil=1,randseednop=0,rsa1024min=0,tls10server=1,tls3des=1,tlsmlkem=0,tls"
+        },
+        {
+          "name": "foxguard",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "foxguard 0.14.0"
+        },
+        {
+          "name": "npx",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "11.19.0"
+        },
+        {
+          "name": "file",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "file-5.47\nmagic file from /etc/magic:/usr/share/misc/magic"
+        },
+        {
+          "name": "nc",
+          "args": [
+            "-h"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "OpenBSD netcat (Debian patchlevel 1.238-1)\nusage: nc [-46CDdFhklNnrStUuvZz] [-I length] [-i interval] [-M ttl]\n\t  [-m minttl] [-O length] [-P proxy_username] [-p source_port]\n\t  [-q seconds] [-s sourceaddr] [-T keyword] [-V rtable] [-W recvlimit]\n\t  [-w timeout] [-X proxy_protocol] [-x proxy_address[:port]]\n\t  [destination] [port]\n\tCommand Summary:\n\t\t-4\t\tUse IPv4\n\t\t-6\t\tUse IPv6\n\t\t-b\t\tAllow broadca"
+        },
+        {
+          "name": "socat",
+          "args": [
+            "-V"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "socat by Gerhard Rieger and contributors - see www.dest-unreach.org\nsocat version 1.8.1.3 on 28 Jun 2026 14:56:45\n   running on Linux version #1 SMP Mon Jun  1 16:28:39 CEST 2026, release 6.12.95, machine aarch64\nfeatures:\n  #define WITH_HELP 1\n  #define WITH_STATS 1\n  #define WITH_STDIO 1\n  #define WITH_FDNUM 1\n  #define WITH_FILE 1\n  #define WITH_CREAT 1\n  #define WITH_GOPEN 1\n  #define WITH_TER"
+        },
+        {
+          "name": "ssh",
+          "args": [
+            "-V"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": null,
+          "passed": false,
+          "versionOutput": "",
+          "error": "ENOENT"
+        }
+      ]
+    },
+    "kali": {
+      "passed": 31,
+      "total": 32,
+      "probes": [
+        {
+          "name": "0",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "0.21.4"
+        },
+        {
+          "name": "node",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "v24.21.0"
+        },
+        {
+          "name": "npm",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "11.19.0"
+        },
+        {
+          "name": "bun",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "1.3.14"
+        },
+        {
+          "name": "claude",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "2.1.285 (Claude Code)"
+        },
+        {
+          "name": "codex",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "codex-cli 0.159.2\nWARNING: proceeding, even though we could not create PATH aliases: Refusing to create helper binaries under temporary dir \"/tmp\" (codex_home: AbsolutePathBuf(\"/tmp/qualification-home/.codex\"))"
+        },
+        {
+          "name": "gemini",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "0.62.0"
+        },
+        {
+          "name": "bash",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "GNU bash, version 5.3.9(1)-release (aarch64-unknown-linux-gnu)\nCopyright (C) 2025 Free Software Foundation, Inc.\nLicense GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>\n\nThis is free software; you are free to change and redistribute it.\nThere is NO WARRANTY, to the extent permitted by law."
+        },
+        {
+          "name": "python3",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "Python 3.14.7"
+        },
+        {
+          "name": "git",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "git version 2.53.0"
+        },
+        {
+          "name": "gh",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "gh version 2.101.0 (2026-09-15)\nhttps://github.com/cli/cli/releases/tag/v2.101.0"
+        },
+        {
+          "name": "jq",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "jq-1.8.2"
+        },
+        {
+          "name": "rg",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "ripgrep 15.2.0\n\nfeatures:+pcre2\nsimd(compile):+NEON\nsimd(runtime):+NEON\n\nPCRE2 10.43 is available (JIT is available)"
+        },
+        {
+          "name": "curl",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "curl 8.21.0 (aarch64-unknown-linux-gnu) libcurl/8.21.0 OpenSSL/3.6.4 zlib/1.3.2 brotli/1.2.0 zstd/1.5.7 libidn2/2.3.8 libpsl/0.23.3 libssh2/1.11.1 nghttp2/1.70.0 ngtcp2/1.24.0 nghttp3/1.17.0 mit-krb5/1.22.1 OpenLDAP/2.6.14\nRelease-Date: 2026-06-24, security patched: 8.21.0-2\nProtocols: dict file ftp ftps gopher gophers http https imap imaps ipfs ipns ldap ldaps mqtt mqtts pop3 pop3s rtsp scp sftp "
+        },
+        {
+          "name": "wget",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "GNU Wget 1.25.0 built on linux-gnu.\n\n-cares +digest -gpgme +https +ipv6 +iri +large-file -metalink +nls \n+ntlm +opie +psl +ssl/gnutls \n\nWgetrc: \n    /etc/wgetrc (system)\nLocale: \n    /usr/share/locale \nCompile: \n    aarch64-linux-gnu-gcc -DHAVE_CONFIG_H -DSYSTEM_WGETRC=\"/etc/wgetrc\" \n    -DLOCALEDIR=\"/usr/share/locale\" -I. -I../../src -I../lib \n    -I../../lib -Wdate-time -D_FORTIFY_SOURCE=2 \n    "
+        },
+        {
+          "name": "nmap",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "Nmap version 7.99 ( https://nmap.org )\nPlatform: aarch64-unknown-linux-gnu\nCompiled with: liblua-5.4.8 openssl-3.6.4 libssh2-1.11.1 libz-1.3.1 libpcre2-10.48 libpcap-1.10.7 nmap-libdnet-1.18.0 ipv6\nCompiled without:\nAvailable nsock engines: epoll poll select"
+        },
+        {
+          "name": "sqlmap",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "1.10.9#stable"
+        },
+        {
+          "name": "ffuf",
+          "args": [
+            "-V"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "ffuf version: 2.1.0-dev"
+        },
+        {
+          "name": "gobuster",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": true,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "gobuster version 3.8.2\nBuild info:\ngo\tgo1.24.9\npath\tgithub.com/OJ/gobuster\nbuild\t-buildmode=exe\nbuild\t-compiler=gc\nbuild\t-trimpath=true\nbuild\tDefaultGODEBUG=asynctimerchan=1,gotestjsonbuildtext=1,gotypesalias=0,httpcookiemaxnum=0,httplaxcontentlength=1,httpmuxgo121=1,httpservecontentkeepheaders=1,multipathtcp=0,netedns0=0,panicnil=1,randseednop=0,rsa1024min=0,tls10server=1,tls3des=1,tlsmlkem=0,tls"
+        },
+        {
+          "name": "foxguard",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "foxguard 0.14.0"
+        },
+        {
+          "name": "nikto",
+          "args": [
+            "-Version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "Nikto 2.6.1 (LW 2.5)"
+        },
+        {
+          "name": "wpscan",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "_______________________________________________________________\n         __          _______   _____\n         \\ \\        / /  __ \\ / ____|\n          \\ \\  /\\  / /| |__) | (___   ___  __ _ _ __ ®\n           \\ \\/  \\/ / |  ___/ \\___ \\ / __|/ _` | '_ \\\n            \\  /\\  /  | |     ____) | (__| (_| | | | |\n             \\/  \\/   |_|    |_____/ \\___|\\__,_|_| |_|\n\n                  WordPress Security Scan"
+        },
+        {
+          "name": "hydra",
+          "args": [
+            "-h"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 255,
+          "passed": true,
+          "versionOutput": "Hydra v9.7 (c) 2023 by van Hauser/THC & David Maciejak - Please do not use in military or secret service organizations, or for illegal purposes (this is non-binding, these *** ignore laws and ethics anyway).\n\nSyntax: hydra [[[-l LOGIN|-L FILE] [-p PASS|-P FILE]] | [-C FILE]] [-e nsr] [-o FILE] [-t TASKS] [-M FILE [-T TASKS]] [-w TIME] [-W TIME] [-f] [-s PORT] [-x MIN:MAX:CHARSET] [-c TIME] [-ISOuv"
+        },
+        {
+          "name": "john",
+          "args": [],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "John the Ripper 1.9.0-jumbo-1+bleeding-aec1328d6c 2021-11-02 10:45:52 +0100 OMP [linux-gnu 64-bit aarch64 ASIMD AC]\nCopyright (c) 1996-2021 by Solar Designer and others\nHomepage: https://www.openwall.com/john/\n\nUsage: john [OPTIONS] [PASSWORD-FILES]\n\nUse --help to list all available options.\nCreated directory: /tmp/qualification-home/.john"
+        },
+        {
+          "name": "wfuzz",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "default\ndefault\n3.1.0\n /usr/lib/python3/dist-packages/wfuzz/__init__.py:34: UserWarning:Pycurl is not compiled against Openssl. Wfuzz might not work correctly when fuzzing SSL sites. Check Wfuzz's documentation for more information."
+        },
+        {
+          "name": "whatweb",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "WhatWeb version 0.6.4 ( https://morningstarsecurity.com/research/whatweb/ )"
+        },
+        {
+          "name": "r2",
+          "args": [
+            "-v"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "radare2 6.0.5 0 @ linux-arm-64\nbirth: git.6.0.5 2025-09-29__06:39:34\noptions: gpl release -O1 cs:5 cl:2 meson"
+        },
+        {
+          "name": "npx",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "11.19.0"
+        },
+        {
+          "name": "file",
+          "args": [
+            "--version"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "file-5.47\nmagic file from /etc/magic:/usr/share/misc/magic"
+        },
+        {
+          "name": "nc",
+          "args": [
+            "-h"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "OpenBSD netcat (Debian patchlevel 1.238-1)\nusage: nc [-46CDdFhklNnrStUuvZz] [-I length] [-i interval] [-M ttl]\n\t  [-m minttl] [-O length] [-P proxy_username] [-p source_port]\n\t  [-q seconds] [-s sourceaddr] [-T keyword] [-V rtable] [-W recvlimit]\n\t  [-w timeout] [-X proxy_protocol] [-x proxy_address[:port]]\n\t  [destination] [port]\n\tCommand Summary:\n\t\t-4\t\tUse IPv4\n\t\t-6\t\tUse IPv6\n\t\t-b\t\tAllow broadca"
+        },
+        {
+          "name": "socat",
+          "args": [
+            "-V"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": 0,
+          "passed": true,
+          "versionOutput": "socat by Gerhard Rieger and contributors - see www.dest-unreach.org\nsocat version 1.8.1.3 on 28 Jun 2026 14:56:45\n   running on Linux version #1 SMP Mon Jun  1 16:28:39 CEST 2026, release 6.12.95, machine aarch64\nfeatures:\n  #define WITH_HELP 1\n  #define WITH_STATS 1\n  #define WITH_STDIO 1\n  #define WITH_FDNUM 1\n  #define WITH_FILE 1\n  #define WITH_CREAT 1\n  #define WITH_GOPEN 1\n  #define WITH_TER"
+        },
+        {
+          "name": "ssh",
+          "args": [
+            "-V"
+          ],
+          "compatibilityRetry": false,
+          "exitCode": null,
+          "passed": false,
+          "versionOutput": "",
+          "error": "ENOENT"
+        }
+      ]
+    }
+  },
+  "completeToolboxQualified": false,
+  "missingRequiredTools": [
+    "ssh"
+  ],
+  "limitations": [
+    "Existing archive contains old CLI 0.21.4 and no new immutable profile build receipt; current CLI was mounted for the separate live provider test.",
+    "Wfuzz HTTPS is unqualified due to Pycurl OpenSSL warning.",
+    "Optional AD tools are absent.",
+    "Only listed functions were exercised; startup probes do not qualify every security workflow."
+  ]
+}

@@ -5,12 +5,12 @@ import { join } from "node:path";
  * Per-user engine state directory (`~/.0`): scan DB, journals, kernel and
  * intel caches, cloud credentials.
  */
-export function homeStateDir(home: string = homedir()): string {
+export function homeStateDir(home: string = process.env.HOME || homedir()): string {
   return join(home, ".0");
 }
 
 /** Keep development Cloud credentials separate without changing other user state. */
-export function cloudStateDir(home: string = homedir(), env: NodeJS.ProcessEnv = process.env): string {
+export function cloudStateDir(home: string = process.env.HOME || homedir(), env: NodeJS.ProcessEnv = process.env): string {
   const state = homeStateDir(home);
   return env["ZERO_DEV_SOURCE_ROOT"]?.trim() ? join(state, "dev") : state;
 }

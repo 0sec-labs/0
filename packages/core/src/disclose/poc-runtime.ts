@@ -178,7 +178,7 @@ function refill(bucket: HostBucket): void {
  * Block until 1 token is available for `host`, then consume it. Honours
  * `retryUntil` (set on 429) by sleeping until the deadline first.
  */
-async function acquireHostToken(host: string, rps: number): Promise<void> {
+export async function acquireHostToken(host: string, rps: number): Promise<void> {
   const bucket = getOrInitBucket(host, rps);
   // 429-induced cool-off: hard sleep until retryUntil before doing anything.
   while (Date.now() < bucket.retryUntil) {
@@ -205,7 +205,7 @@ async function acquireHostToken(host: string, rps: number): Promise<void> {
  * Mark a host as 429-rate-limited until the given deadline. Subsequent
  * `acquireHostToken(host)` calls will block until `retryUntil`.
  */
-function markHostRateLimited(host: string, retryAfterHeader: string | null): void {
+export function markHostRateLimited(host: string, retryAfterHeader: string | null): void {
   const bucket = hostBuckets.get(host);
   if (!bucket) return;
   const parsed = retryAfterHeader ? parseInt(retryAfterHeader, 10) : NaN;
@@ -697,7 +697,7 @@ async function runHttpStep(
   };
 }
 
-function resolveUrl(stepUrl: string, baseUrl: string | undefined): string | null {
+export function resolveUrl(stepUrl: string, baseUrl: string | undefined): string | null {
   // Absolute URL passes through unchanged.
   try {
     new URL(stepUrl);
@@ -713,7 +713,7 @@ function resolveUrl(stepUrl: string, baseUrl: string | undefined): string | null
   }
 }
 
-function mergePersonaHeaders(
+export function mergePersonaHeaders(
   stepHeaders: Record<string, string>,
   target: PocExecutionTarget,
 ): Record<string, string> {
@@ -944,7 +944,7 @@ interface VerdictResult {
   error?: string;
 }
 
-function evaluateExpect(
+export function evaluateExpect(
   expect: PocStepExpect | undefined,
   obs: Observation,
 ): VerdictResult {
@@ -1017,7 +1017,7 @@ function evaluateExpect(
 
 // ── Aggregate verdict ───────────────────────────────────────────────────────
 
-function aggregateVerdict(
+export function aggregateVerdict(
   graph: PocStep[],
   steps: PocStepResult[],
 ): PocOverallVerdict {

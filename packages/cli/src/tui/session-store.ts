@@ -57,11 +57,15 @@
 
 import { chmodSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { z } from "zod";
+import type { ConsoleJsonValue } from "@0/shared";
 
 import { homeStateDir } from "@0/shared";
 
 /** Listing entry: everything needed to describe a session without loading it. */
 export interface StoredSessionMeta {
+  /** Hidden from the main chat list, retained for restore/export. */
+  archived?: boolean;
   /** Stable session id — the `ConsoleSession.scanId`, and the filename stem. */
   id: string;
   /**
@@ -105,6 +109,8 @@ export interface StoredSession extends StoredSessionMeta {
    * The caller casts on the way back into `initialMessages`.
    */
   messages: unknown[];
+  /** Bounded display state only. Never passed to an engine checkpoint/configuration. */
+  consoleState?: StoredConsoleState;
 }
 
 /** Subdirectory of the 0 state dir holding one JSON file per session. */
@@ -245,8 +251,89 @@ function toMeta(id: string, raw: unknown, messageCount: number): StoredSessionMe
     cwd: typeof cwd === "string" ? cwd : "",
     messageCount,
     preview: sanitizePreview(rawValue(raw, "preview")),
+    ...(rawValue(raw, "archived") === true ? { archived: true } : {}),
     ...(summary !== undefined ? { summary } : {}),
   };
+}
+
+const finite = z.number().finite().nonnegative();
+const boundedString = z.string().max(1_000_000);
+const jsonValueSchema: z.ZodType<ConsoleJsonValue> = z.lazy(() => z.union([
+  z.null(), z.boolean(), z.number().finite(), boundedString,
+  z.array(jsonValueSchema).max(10_000), z.record(jsonValueSchema),
+]));
+const toolCallSchema = z.object({ id: z.string().max(256).optional(), name: z.string().max(256), arguments: jsonValueSchema }).strict();
+const workerTurnSchema = z.object({
+  turn: finite, ts: finite, assistant: boundedString.optional(), reasoning_summary: boundedString.optional(), partial: z.boolean().optional(),
+  tools: z.array(z.object({ callIndex: finite, call: toolCallSchema, result: jsonValueSchema, running: z.boolean().optional() }).strict()).max(1_000).optional(),
+}).strict();
+const messageAuthorSchema = z.object({ userId: z.string().min(1).max(256), displayName: z.string().min(1).max(256), proposalId: z.string().min(1).max(256).optional() }).strict();
+const workerSchema = z.object({
+  id: z.string().max(256), parentId: z.string().max(256), name: z.string().max(200),
+  status: z.enum(["queued", "running", "parked", "completed", "failed", "stopped"]), task: boundedString,
+  transcript: z.array(workerTurnSchema).max(10_000), telemetry: z.record(jsonValueSchema).optional(),
+  operatorMessages: z.array(z.object({ id: z.string().max(256), text: boundedString, createdAt: z.string().max(64), author: messageAuthorSchema.optional() }).strict()).max(10_000).optional(),
+  summary: boundedString.optional(), error: boundedString.optional(), model: z.string().max(256).optional(), role: z.string().max(64).optional(),
+}).strict();
+const consoleStateSchema = z.object({
+  configuration: z.object({
+    target: z.string().max(8_000), role: z.enum(["discovery", "attack", "verify", "report", "audit", "review"]),
+    runtime: z.object({
+      providerId: z.string().max(256).optional(), model: z.string().max(256).optional(),
+      reasoningEffort: z.enum(["none", "low", "medium", "high", "xhigh", "max"]).optional(),
+      agentModels: z.record(z.string().max(256)).optional(), singleModel: z.boolean().optional(), autoRoute: z.boolean().optional(),
+    }).strict(),
+  }).strict().optional(),
+  version: z.literal(1), title: z.string().max(200), objective: z.string().max(8_000),
+  usage: z.object({
+    inputTokens: finite, outputTokens: finite, costUsd: finite.optional(),
+    costKind: z.enum(["estimated", "reported"]).optional(), costUnavailable: z.boolean().optional(),
+  }).strict(),
+  contextInputTokens: finite.optional(),
+  lastOutcome: z.object({
+    assistantText: boundedString, stopReason: z.enum(["end_turn", "max_tool_iterations", "max_turn_tokens", "output_cap", "cancelled", "error"]),
+    budget: z.object({ tokensUsed: finite, tokenBudget: finite.nullable(), iterations: finite, maxToolIterations: finite }).strict(),
+    error: boundedString.optional(), usage: z.object({ inputTokens: finite, outputTokens: finite }).strict().optional(),
+    contextInputTokens: finite.optional(),
+    outputCap: z.object({ checkpoint: jsonValueSchema, continuations: finite, message: boundedString }).strict().optional(),
+  }).strict().nullable(),
+  todos: z.object({
+    todos: z.array(z.object({ id: z.string().max(256), content: z.string().max(8_000), status: z.string().max(64), group: z.string().max(200).optional() }).strict()).max(1_000),
+    done: finite, total: finite, line: z.string().max(8_000), revision: finite,
+  }).strict().nullable(),
+  workers: z.array(workerSchema).max(1_000),
+  compaction: jsonValueSchema.nullable(),
+  queuedMessages: z.array(z.object({ id: z.string().max(256), text: boundedString, createdAt: z.string().max(64), author: messageAuthorSchema.optional() }).strict()).max(20),
+  userAttributions: z.array(z.object({ text: boundedString, author: messageAuthorSchema.optional() }).strict()).max(10000).optional(),
+  focusedFindingId: z.string().max(256).optional(),
+  stagedPrompt: boundedString.optional(),
+}).strict();
+export type StoredConsoleState = z.infer<typeof consoleStateSchema>;
+
+/** Refuse cycles, custom serialization hooks, deep trees and non-finite numbers
+ * before the recursive schema sees them. The 4 MiB bound applies to display
+ * metadata only: the faithful native transcript has its existing independent lifetime. */
+function parseConsoleState(value: unknown): StoredConsoleState | undefined {
+  let nodes = 0;
+  const ancestors = new Set<object>();
+  const boundedJson = (entry: unknown, depth: number): boolean => {
+    if (++nodes > 100_000 || depth > 24) return false;
+    if (entry === null || typeof entry === "boolean") return true;
+    if (typeof entry === "string") return entry.length <= 1_000_000;
+    if (typeof entry === "number") return Number.isFinite(entry);
+    if (typeof entry !== "object" || ancestors.has(entry)) return false;
+    if (!Array.isArray(entry) && Object.getPrototypeOf(entry) !== Object.prototype && Object.getPrototypeOf(entry) !== null) return false;
+    ancestors.add(entry);
+    const valid = (Array.isArray(entry) ? entry : Object.values(entry)).every((item) => boundedJson(item, depth + 1));
+    ancestors.delete(entry);
+    return valid;
+  };
+  if (!boundedJson(value, 0)) return undefined;
+  try {
+    if (JSON.stringify(value).length > 4 * 1024 * 1024) return undefined;
+    const parsed = consoleStateSchema.safeParse(value);
+    return parsed.success ? parsed.data : undefined;
+  } catch { return undefined; }
 }
 
 /**
@@ -269,7 +356,8 @@ function parseSession(id: string, text: string): StoredSession | null {
   }
   const messages = rawValue(raw, "messages");
   if (!Array.isArray(messages)) return null;
-  return { ...toMeta(id, raw, messages.length), messages };
+  const consoleState = parseConsoleState(rawValue(raw, "consoleState"));
+  return { ...toMeta(id, raw, messages.length), messages, ...(consoleState ? { consoleState } : {}) };
 }
 
 /**
@@ -296,6 +384,8 @@ export function saveSession(session: StoredSession, homeDir?: string): boolean {
     if (!Array.isArray(session?.messages)) return false;
     const path = sessionFilePath(session.id, homeDir);
     if (path === null) return false;
+    const consoleState = session.consoleState === undefined ? undefined : parseConsoleState(session.consoleState);
+    if (session.consoleState !== undefined && !consoleState) return false;
 
     const dir = sessionsDir(homeDir);
     mkdirSync(dir, { recursive: true, mode: DIR_MODE });
@@ -304,6 +394,7 @@ export function saveSession(session: StoredSession, homeDir?: string): boolean {
     const payload: StoredSession = {
       ...toMeta(session.id, session, session.messages.length),
       messages: session.messages,
+      ...(consoleState ? { consoleState } : {}),
     };
     // Not pretty-printed, unlike the settings file next door: this one is not
     // meant to be read by hand, and a transcript's indentation is pure bulk.
@@ -495,4 +586,10 @@ export function pruneSessions(homeDir?: string, opts?: { keep?: number; protecte
     if (deleteSession(meta.id, homeDir, opts)) removed += 1;
   }
   return removed;
+}
+
+/** Archive changes presentation only; transcript and authorization stay intact. */
+export function setSessionArchived(id: string, archived: boolean, homeDir?: string): boolean {
+  const session = loadSession(id, homeDir);
+  return session !== null && saveSession({ ...session, archived }, homeDir);
 }

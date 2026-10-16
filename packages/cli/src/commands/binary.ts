@@ -166,7 +166,7 @@ export function registerBinaryCommand(program: Command): void {
   program
     .command("binary")
     .description(
-      "Analyze a compiled binary by delegating to the in-repo 0verse engine (uv run --frozen 0verse)",
+      "Analyze a compiled binary (delegates to the 0verse engine)",
     )
     .argument("<target>", "Path to the target artifact (e.g. an ELF) to analyze")
     .argument("[passthrough...]", "Extra positional args forwarded verbatim to 0verse")

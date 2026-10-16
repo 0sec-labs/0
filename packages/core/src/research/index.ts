@@ -83,6 +83,15 @@ export type {
   UserspaceHarnessPlan,
   UserspaceExecution,
 } from "./adapters/userspace-memsafety-adapter.js";
+export { UserspaceCounterexampleResearchAdapter } from "./adapters/userspace-counterexample-adapter.js";
+export type {
+  CounterexampleTarget,
+  CounterexampleTargetConfig,
+  CounterexampleCandidate,
+  CounterexampleMitigation,
+  CounterexampleHarnessPlan,
+  CounterexampleExecution,
+} from "./adapters/userspace-counterexample-adapter.js";
 export { HuntResearchAdapter } from "./adapters/hunt-adapter.js";
 export type {
   HuntResearchTarget,
@@ -162,6 +171,11 @@ export type {
   UnifiedPipelineCandidate,
 } from "./adapters/unified-pipeline-adapter.js";
 export { LiveAgenticScanResearchAdapter } from "./adapters/live-agentic-scan-adapter.js";
+export { runFormalResearchCampaign } from "./formal-campaign.js";
+export type {
+  FormalResearchTask, FormalGenerationContext, FormalResearchAttempt,
+  FormalResearchTaskResult, FormalResearchCampaignOptions, FormalResearchCampaignResult,
+} from "./formal-campaign.js";
 export type {
   LiveAgenticScanTarget,
   LiveAgenticScanTargetConfig,

@@ -265,13 +265,11 @@ export function ComposerInput({
  */
 export function ComposerFrame({
   style,
-  active,
   theme,
   padY = 0,
   children,
 }: {
   style: TuiSettings["composerStyle"];
-  active: boolean;
   theme: Theme;
   /**
    * Extra rows of vertical padding inside the frame. Used ONLY by the centered
@@ -282,10 +280,10 @@ export function ComposerFrame({
   padY?: number;
   children: React.ReactNode;
 }) {
-  const { PRIMARY, BORDER, PANEL_ALT } = theme;
+  const { BORDER, PANEL_ALT } = theme;
   if (style === "border") {
     return (
-      <box flexDirection="column" flexGrow={1} minWidth={0} flexShrink={0} border borderColor={active ? PRIMARY : BORDER} backgroundColor={PANEL_ALT} paddingX={1} paddingTop={padY} paddingBottom={padY}>
+      <box flexDirection="column" flexGrow={1} minWidth={0} flexShrink={0} border borderStyle="single" borderColor={BORDER} backgroundColor={PANEL_ALT} paddingX={1} paddingTop={padY} paddingBottom={padY}>
         {children}
       </box>
     );
@@ -300,7 +298,8 @@ export function ComposerFrame({
         minWidth={0}
         flexShrink={0}
         border={RAIL_SIDES}
-        borderColor={active ? PRIMARY : BORDER}
+        borderStyle="single"
+        borderColor={BORDER}
         backgroundColor={theme.CANVAS}
         paddingLeft={2}
         paddingRight={0}

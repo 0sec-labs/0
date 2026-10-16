@@ -12,16 +12,14 @@ import type {
   NativeContentBlock,
 } from "./types.js";
 
-import { randomUUID } from "node:crypto";
+import { assertRequestAdmission, isLocalAdmissionFailure, LOCAL_ADMISSION_UNAVAILABLE, parseRequestAdmission, type RequestAdmission } from "./request-admission.js";
+import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { VERSION, homeStateDir } from "@0/shared";
 import { features } from "../agent/features.js";
 import { diag } from "../diagnostics/channel.js";
-import { loadCloudCredentials, CloudAuthMissingError, DEFAULT_CLOUD_HOST } from "../cloud/credentials.js";
-import { CloudClient, CloudError } from "../cloud/client.js";
-import { acquireHostedRequestSlot } from "./hosted-request-queue.js";
 import {
   MESSAGE_CACHE_BREAKPOINTS,
   planMessageBreakpoints,
@@ -30,6 +28,8 @@ import {
   withCacheControl,
   type WireBlock,
 } from "./prompt-cache.js";
+import type { CodexCatalogModel } from "./codex-models.js";
+import { resolveWorkbenchProviderProxy } from "./workbench-provider-proxy.js";
 
 
 /**
@@ -51,6 +51,27 @@ function readResponsesCachedTokens(usage: Record<string, unknown>): { cachedInpu
   const cached = Number(details?.cached_tokens ?? 0);
   return Number.isFinite(cached) && cached > 0 ? { cachedInputTokens: cached } : {};
 }
+function readChatUsage(raw: unknown): RuntimeResult["usage"] {
+  if (!raw || typeof raw !== "object") return undefined;
+  const usage = raw as Record<string, unknown>;
+  if (usage.prompt_tokens === undefined && usage.completion_tokens === undefined) return undefined;
+  return {
+    inputTokens: Number(usage.prompt_tokens ?? 0), outputTokens: Number(usage.completion_tokens ?? 0),
+    ...readResponsesCachedTokens({ input_tokens_details: usage.prompt_tokens_details }),
+  };
+}
+
+function readGoogleUsage(raw: unknown): RuntimeResult["usage"] {
+  if (!raw || typeof raw !== "object") return undefined;
+  const usage = raw as Record<string, unknown>;
+  if (usage.promptTokenCount === undefined && usage.candidatesTokenCount === undefined) return undefined;
+  const cached = Number(usage.cachedContentTokenCount ?? 0);
+  return {
+    inputTokens: Number(usage.promptTokenCount ?? 0),
+    outputTokens: Number(usage.candidatesTokenCount ?? 0) + Number(usage.thoughtsTokenCount ?? 0),
+    ...(cached > 0 ? { cachedInputTokens: cached } : {}),
+  };
+}
 
 /** Safely parse JSON tool arguments; returns empty object on malformed input. */
 function safeParseJson(raw: string | null | undefined): Record<string, unknown> {
@@ -59,6 +80,21 @@ function safeParseJson(raw: string | null | undefined): Record<string, unknown> 
     return JSON.parse(raw);
   } catch {
     return { _raw: raw };
+  }
+}
+
+/** A completed Responses envelope is necessary, but malformed calls still fail closed. */
+function parseResponsesFunctionCall(item: Record<string, unknown>): Extract<NativeContentBlock, { type: "tool_use" }> | undefined {
+  if ((item.status !== undefined && item.status !== "completed") ||
+      typeof item.call_id !== "string" || !item.call_id.trim() ||
+      typeof item.name !== "string" || !item.name.trim() ||
+      typeof item.arguments !== "string") return undefined;
+  try {
+    const input: unknown = JSON.parse(item.arguments);
+    if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+    return { type: "tool_use", id: item.call_id, name: item.name, input: input as Record<string, unknown> };
+  } catch {
+    return undefined;
   }
 }
 
@@ -246,9 +282,9 @@ export function isRetryableHttpStatus(status: number): boolean {
 // retains the existing bounded retry for that missing-final-response result;
 // EOF alone does not establish why the stream ended.
 //
-// Explicit `error`, `response.failed`, and `response.incomplete` events are
-// terminal failures, not transient empty streams. The Responses consumer keeps
-// their bounded protocol identifiers and returns a distinct non-retryable error.
+// Explicit failures are not transient empty streams. Only a provider-confirmed
+// max_output_tokens incompletion can return an observation-only checkpoint;
+// its continuation belongs to the loop, never this same-request retry.
 // "response stream failed" remains below for historical runtime results only.
 // Auth/validation errors, timeouts, operator cancellations, and outcomes that
 // already produced tool calls are not retried here.
@@ -813,6 +849,29 @@ const QWEN_TOKEN_PLAN_DEEPSEEK_MODEL = "deepseek-v4-flash-0731";
 const XAI_DEFAULT_BASE_URL = "https://api.x.ai/v1";
 const XAI_DEFAULT_MODEL = "grok-4.6";
 
+// Cline API keys support both usage billing and ClinePass model slugs. Never
+// reuse extension account tokens or infer a Pass subscription from key presence.
+const CLINE_DEFAULT_BASE_URL = "https://api.cline.bot/api/v1";
+const CLINE_DEFAULT_MODEL = "anthropic/claude-sonnet-4-6";
+function clineModelId(model: string): string { return model.replace(/^cline\//i, ""); }
+
+/** Cline non-streaming Chat may wrap the OpenAI response in success/data. */
+function clineChatResponse(value: unknown): Record<string, unknown> {
+  const record = (input: unknown): input is Record<string, unknown> =>
+    input !== null && typeof input === "object" && !Array.isArray(input);
+  if (!record(value)) throw new Error("Cline returned an invalid chat response.");
+  let response = value;
+  if (Object.hasOwn(value, "success")) {
+    if (value.success !== true || !record(value.data)) throw new Error("Cline returned an unsuccessful or invalid chat response.");
+    response = value.data;
+  }
+  if (!Array.isArray(response.choices) || response.choices.length === 0 ||
+    !record(response.choices[0]) || !record(response.choices[0].message)) {
+    throw new Error("Cline returned an invalid chat response.");
+  }
+  return response;
+}
+
 // ── OpenCode Zen (API-key gateway, https://opencode.ai/zen/v1) ─────────────
 //
 // Zen proxies several native APIs. Route each documented model family to its
@@ -970,8 +1029,8 @@ export function parseLlmFallbackChain(env: Readonly<NodeJS.ProcessEnv> = process
   const entries: FallbackEntry[] = [];
   const VALID_PROVIDERS: Record<string, true> = {
     openrouter: true, anthropic: true, openai: true, azure: true, deepseek: true,
-    "chatgpt-codex": true, "z-ai": true, kimi: true, qwen: true, xai: true, opencode: true,
-    copilot: true, google: true, hosted: true,
+    "chatgpt-codex": true, "z-ai": true, kimi: true, qwen: true, xai: true, opencode: true, cline: true,
+    copilot: true, google: true,
   };
   for (const part of raw.split(",")) {
     const trimmed = part.trim();
@@ -1039,9 +1098,10 @@ export function resolveFailoverProvider(
     case "azure": {
       const key = apiKey ?? env.AZURE_OPENAI_API_KEY;
       if (!key) return undefined;
-      const url = env.AZURE_OPENAI_BASE_URL ?? env.OPENAI_BASE_URL;
+      const azureConfig = parseCodexAzureConfig(env);
+      const url = env.AZURE_OPENAI_BASE_URL ?? env.OPENAI_BASE_URL ?? azureConfig.baseUrl;
       if (!url) return undefined;
-      return { apiKey: key, baseUrl: url, wireApi: openAICompatibleWireApi(env, "AZURE_OPENAI_WIRE_API") };
+      return { apiKey: key, baseUrl: url, wireApi: openAICompatibleWireApi(env, "AZURE_OPENAI_WIRE_API", azureConfig.wireApi) };
     }
     case "openai": {
       const key = apiKey ?? env.OPENAI_API_KEY;
@@ -1078,6 +1138,11 @@ export function resolveFailoverProvider(
       if (!key) return undefined;
       return { apiKey: key, baseUrl: env.XAI_BASE_URL ?? XAI_DEFAULT_BASE_URL, wireApi: openAICompatibleWireApi(env, "XAI_WIRE_API") };
     }
+    case "cline": {
+      const key = apiKey ?? env.CLINE_API_KEY;
+      if (!key?.trim()) return undefined;
+      return { apiKey: key, baseUrl: env.CLINE_BASE_URL ?? CLINE_DEFAULT_BASE_URL, wireApi: "chat_completions" };
+    }
     case "opencode": {
       const key = apiKey ?? env.OPENCODE_API_KEY;
       if (!key) return undefined;
@@ -1096,23 +1161,6 @@ export function resolveFailoverProvider(
       // demand by the runtime's geminiAuthState (mirrors chatgpt-codex).
       if (!env["ZERO_GEMINI_ACCESS_TOKEN"] && !env["ZERO_GEMINI_OAUTH_REFRESH_TOKEN"]) return undefined;
       return { apiKey: "", baseUrl: CODE_ASSIST_ENDPOINT, wireApi: "google_generate_content" };
-    }
-    case "hosted": {
-      // Hosted inference uses cloud credentials from env or cloud.env.
-      try {
-        const creds = loadCloudCredentials({
-          env: env,
-          warn: () => { /* silent — failover entries don't print warnings */ },
-        });
-        return {
-          apiKey: creds.token,
-          baseUrl: `${creds.host}/api/inference/v1`,
-          wireApi: "chat_completions",
-        };
-      } catch (err) {
-        if (err instanceof CloudAuthMissingError) return undefined;
-        throw err;
-      }
     }
   }
 }
@@ -1197,6 +1245,15 @@ const QWEN_DEFAULT_MODEL = "qwen3.8-max";
 // set to `0` so server-side observability can distinguish our
 // traffic from raw Codex CLI traffic.
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses";
+
+// Match OMP's Codex wire protocol: older versions hide new models on both
+// catalog discovery and Responses inference, even with valid subscription auth.
+export const CODEX_CLIENT_VERSION = "0.153.0";
+export const CODEX_PROTOCOL_HEADERS = {
+  "OpenAI-Beta": "responses=experimental",
+  originator: "0",
+  version: CODEX_CLIENT_VERSION,
+} as const;
 const CODEX_OAUTH_ISSUER = "https://auth.openai.com";
 const CODEX_OAUTH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 const CODEX_DEFAULT_MODEL = "gpt-5.5";
@@ -1934,6 +1991,7 @@ function providerForModel(model: string | undefined, env: Readonly<NodeJS.Proces
   if (m === QWEN_TOKEN_PLAN_DEEPSEEK_MODEL) {
     return env.QWEN_API_KEY ? "qwen" : undefined;
   }
+  if (m.startsWith("cline/") || m.startsWith("cline-pass/")) return env.CLINE_API_KEY?.trim() ? "cline" : undefined;
   if (m.startsWith("openrouter/")) return env.OPENROUTER_API_KEY ? "openrouter" : undefined;
   // GLM / Z.ai.
   if (m.startsWith("glm-") || m.startsWith("z-ai/") || m.includes("glm")) {
@@ -1968,9 +2026,9 @@ function providerForModel(model: string | undefined, env: Readonly<NodeJS.Proces
   if (m.startsWith("gemini") || m.startsWith("google/")) {
     return env["ZERO_GEMINI_ACCESS_TOKEN"] || env["ZERO_GEMINI_OAUTH_REFRESH_TOKEN"] ? "google" : undefined;
   }
-  // OpenAI GPT-5 / o-series → ChatGPT-Codex subscription if present, else OpenAI.
+  // OpenAI GPT / o-series → this client's signed-in Codex account, else OpenAI.
   if (/^gpt-|^o[1-4](?:[-_]|$)/.test(m)) {
-    if (env["ZERO_CHATGPT_ACCESS_TOKEN"] || env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"]) return "chatgpt-codex";
+    if (readChatGptCodexEnv(env) || readChatGptCodexAuthFile(env)) return "chatgpt-codex";
     if (env.OPENAI_API_KEY) return "openai";
     return undefined;
   }
@@ -1988,8 +2046,8 @@ const DEFAULT_PROVIDER_MODELS: Record<ApiProvider, string | undefined> = {
   openai: DEFAULT_OPENAI_MODEL, azure: undefined, deepseek: DEEPSEEK_DEFAULT_MODEL,
   "chatgpt-codex": CODEX_DEFAULT_MODEL, "z-ai": ZAI_DEFAULT_MODEL,
   kimi: KIMI_DEFAULT_MODEL, qwen: QWEN_DEFAULT_MODEL, xai: XAI_DEFAULT_MODEL,
-  opencode: OPENCODE_DEFAULT_MODEL, copilot: COPILOT_DEFAULT_MODEL,
-  google: GEMINI_DEFAULT_MODEL, hosted: "",
+  cline: CLINE_DEFAULT_MODEL, opencode: OPENCODE_DEFAULT_MODEL, copilot: COPILOT_DEFAULT_MODEL,
+  google: GEMINI_DEFAULT_MODEL,
 };
 
 /**
@@ -2003,8 +2061,7 @@ const AUTO_MODEL_SENTINEL = "auto";
 
 /**
  * Explicit provider, API key, and reachable model choices win. Otherwise prefer
- * subscription credentials, then ambient BYOK keys. Cloud credentials alone
- * never authorize an implicit hosted inference route.
+ * subscription credentials, then ambient BYOK keys.
  */
 function detectProvider(configApiKey: string | undefined, preferredModel: string | undefined, env: Readonly<NodeJS.ProcessEnv>, configProvider?: ApiProvider): {
   provider: ApiProvider;
@@ -2014,6 +2071,13 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
   wireApi: WireApi;
   reasoningEffort?: string;
 } {
+  const proxy = resolveWorkbenchProviderProxy(env);
+  if (proxy) {
+    if ([configProvider, env.ZERO_SELECTED_PROVIDER, env.ZERO_FORCE_PROVIDER].some(provider => provider && provider !== "chatgpt-codex")) {
+      throw new Error("Workbench provider broker supports chatgpt-codex only; no fallback is permitted");
+    }
+    return { provider: "chatgpt-codex", apiKey: "", baseUrl: proxy.url, defaultModel: proxy.model, wireApi: "responses" };
+  }
   if (configProvider !== undefined && !Object.hasOwn(DEFAULT_PROVIDER_MODELS, configProvider)) {
     throw new Error(`RuntimeConfig.provider is unsupported: ${configProvider}`);
   }
@@ -2043,6 +2107,17 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
   const pinnedProviderRaw =
     forcedProviderRaw ??
     (selectedProviderApplies ? selectedProviderRaw : undefined);
+  if (preferredModel && /^(?:cline\/|cline-pass\/)/i.test(preferredModel)) {
+    if (pinnedProviderRaw && pinnedProviderRaw !== "cline") {
+      throw new Error("Cline model IDs require the Cline provider; choose the Cline connection.");
+    }
+    if (configApiKey && !pinnedProviderRaw) {
+      throw new Error("Cline model IDs with RuntimeConfig.apiKey require an explicit Cline provider.");
+    }
+    if (!configApiKey && !env.CLINE_API_KEY?.trim()) {
+      throw new Error("Cline model requires CLINE_API_KEY credentials. Connect Cline in Connections.");
+    }
+  }
   if (pinnedProviderRaw) {
     const source = pinnedProviderRaw === forcedProviderRaw
       ? "ZERO_FORCE_PROVIDER"
@@ -2052,11 +2127,13 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
     }
     const provider = pinnedProviderRaw as ApiProvider;
     const model = preferredModel ?? env["ZERO_MODEL"] ??
-      (configProvider !== undefined || provider === "hosted" ? DEFAULT_PROVIDER_MODELS[provider] : undefined);
-    if (model === undefined || (model === "" && provider !== "hosted")) {
+      (provider === "azure" ? env.AZURE_OPENAI_MODEL ?? parseCodexAzureConfig(env).model : undefined) ??
+      (configProvider !== undefined ? DEFAULT_PROVIDER_MODELS[provider] : undefined);
+    if (model === undefined || model === "") {
+      if (provider === "azure") throw new Error("Choose an Azure deployment model in Connections to finish setup.");
       throw new Error(`${source} requires an explicit model`);
     }
-    if (configApiKey && (provider === "hosted" || provider === "chatgpt-codex")) {
+    if (configApiKey && provider === "chatgpt-codex") {
       throw new Error(`${source}=${provider} requires its own authentication, not RuntimeConfig.apiKey`);
     }
     const resolved = resolveFailoverProvider(provider, model, env, configApiKey);
@@ -2140,6 +2217,9 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
     case "xai":
       return { provider: "xai", apiKey: env.XAI_API_KEY as string,
         baseUrl: env.XAI_BASE_URL ?? XAI_DEFAULT_BASE_URL, defaultModel: XAI_DEFAULT_MODEL, wireApi: openAICompatibleWireApi(env, "XAI_WIRE_API") };
+    case "cline":
+      return { provider: "cline", apiKey: env.CLINE_API_KEY as string,
+        baseUrl: env.CLINE_BASE_URL ?? CLINE_DEFAULT_BASE_URL, defaultModel: CLINE_DEFAULT_MODEL, wireApi: "chat_completions" };
     case "opencode":
       return { provider: "opencode", apiKey: env.OPENCODE_API_KEY as string,
         baseUrl: env.OPENCODE_BASE_URL ?? OPENCODE_DEFAULT_BASE_URL, defaultModel: OPENCODE_DEFAULT_MODEL, wireApi: opencodeWireApiForModel(preferredModel) };
@@ -2330,6 +2410,12 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
     };
   }
 
+  if (env.CLINE_API_KEY?.trim()) {
+    return { provider: "cline", apiKey: env.CLINE_API_KEY,
+      baseUrl: env.CLINE_BASE_URL ?? CLINE_DEFAULT_BASE_URL,
+      defaultModel: CLINE_DEFAULT_MODEL, wireApi: "chat_completions" };
+  }
+
   const copilotToken = env["ZERO_COPILOT_GITHUB_TOKEN"];
   if (copilotToken) {
     return {
@@ -2385,8 +2471,6 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
  * - Anthropic (ANTHROPIC_API_KEY) — direct Claude API access
  * - OpenAI (OPENAI_API_KEY) — direct OpenAI API access
  *
- * Without an explicit choice, signed-in 0cloud is preferred over ambient keys.
- *
  * Model can be overridden with ZERO_MODEL env var or --model flag.
  *
  * Supports two modes:
@@ -2401,12 +2485,18 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   private config!: RuntimeConfig;
   // Not readonly: a live provider switch re-freezes env from the new account.
   private env!: Readonly<NodeJS.ProcessEnv>;
+  private requestAdmission?: Promise<RequestAdmission>;
+  private requestAdmissionIdentity?: string;
   private codexAuthState?: ChatGptCodexAuthState;
+  private workbenchProviderProxy?: { url: string; model: string };
   private geminiAuthState?: GeminiCodeAssistAuthState;
   private provider!: ApiProvider;
   private apiKey!: string;
   private baseUrl!: string;
   private model!: string;
+  private pricingModelSource = "";
+  private pricingProviderSource?: ApiProvider;
+  private pricingModelKey = "";
   private wireApi!: WireApi;
   private reasoningEffort?: string;
   private azureConfig!: ReturnType<typeof parseCodexAzureConfig>;
@@ -2415,10 +2505,6 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   private fallbackChain!: Array<FallbackEntry & { credentials?: ApiProviderConnection }>;
   /** Index into fallbackChain — which entry to try next. */
   private fallbackIndex!: number;
-  /** Resolve and validate the hosted model and wire protocol once per runtime. */
-  private hostedCatalogPromise: Promise<void> | null = null;
-  /** Catalog ceiling, resolved before hosted inference is submitted. */
-  private hostedMaxOutputTokens: number | undefined;
 
   constructor(config: RuntimeConfig, inherited?: LlmApiRuntime) {
     // Fork construction must never rediscover an account or endpoint.
@@ -2427,9 +2513,6 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       const timeout = config.timeout ?? inherited.config.timeout ?? 120_000;
       if (!Number.isFinite(timeout) || timeout <= 0) {
         throw new Error("Subagent timeout must be a positive finite number");
-      }
-      if (inherited.provider === "hosted" && inherited.hostedMaxOutputTokens === undefined) {
-        throw new Error("Hosted model catalog must resolve before creating a subagent");
       }
       const model = config.model ?? inherited.model;
       const modelChanged = model !== inherited.model;
@@ -2441,6 +2524,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         timeout: Math.min(timeout, inherited.config.timeout || 120_000),
       };
       this.env = inherited.env;
+      this.workbenchProviderProxy = inherited.workbenchProviderProxy;
       this.provider = inherited.provider;
       this.apiKey = inherited.apiKey;
       this.baseUrl = inherited.baseUrl;
@@ -2460,10 +2544,6 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       // Model selection never grants a child cross-account fallback authority.
       this.fallbackChain = [];
       this.fallbackIndex = 0;
-      if (!modelChanged) {
-        this.hostedMaxOutputTokens = inherited.hostedMaxOutputTokens;
-        this.hostedCatalogPromise = inherited.hostedCatalogPromise;
-      }
       return;
     }
     this.applyConfiguration(config);
@@ -2481,8 +2561,11 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       ...(config.agentModels ? { agentModels: Object.freeze({ ...config.agentModels }) } : {}),
     };
     this.env = Object.freeze({ ...process.env, ...config.env });
+    this.requestAdmission = undefined;
+    this.requestAdmissionIdentity = undefined;
+    this.workbenchProviderProxy = resolveWorkbenchProviderProxy(this.env);
     this.azureConfig = parseCodexAzureConfig(this.env);
-    this.fallbackChain = getFallbackChain(this.env).map(entry => ({
+    this.fallbackChain = (this.workbenchProviderProxy ? [] : getFallbackChain(this.env)).map(entry => ({
       ...entry, credentials: resolveFailoverProvider(entry.provider, entry.model, this.env),
     }));
     this.fallbackIndex = 0;
@@ -2496,7 +2579,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     // Clear any prior codex auth so a switch away from ChatGPT Codex cannot
     // carry a stale OAuth state; re-resolve only when the new route needs it.
     this.codexAuthState = undefined;
-    if (this.provider === "chatgpt-codex" || this.fallbackChain.some(entry => entry.provider === "chatgpt-codex")) {
+    if (!this.workbenchProviderProxy && (this.provider === "chatgpt-codex" || this.fallbackChain.some(entry => entry.provider === "chatgpt-codex"))) {
       if (readChatGptCodexEnv(this.env) || readChatGptCodexAuthFile(this.env)) {
         this.codexAuthState = resolveChatGptCodexAuthState(this.env);
       }
@@ -2534,6 +2617,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       this.model = copilotModelId(this.model);
     }
 
+    // Strip only our routing prefix; cline-pass/ is part of the upstream ID.
+    if (this.provider === "cline") this.model = clineModelId(this.model);
+
     // These deployments reject function tools plus reasoning_effort on
     // /chat/completions. The Responses endpoint supports the agent loop, so
     // upgrade only the exact provider/model pairs rather than changing every
@@ -2560,89 +2646,115 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     }
   }
 
+  /** Non-secret identity for preferences scoped to the captured connection. */
+  connectionIdentity(): string | undefined {
+    let identity: readonly string[];
+    if (this.provider === "chatgpt-codex") {
+      const state = this.codexAuthState;
+      if (!state) return undefined;
+      if (state.accountId) {
+        identity = [this.provider, "account", state.accountId];
+      } else {
+        const credential = state.refreshToken || state.accessToken;
+        if (!credential) return undefined;
+        identity = [this.provider, "credential", credential];
+      }
+    } else if (this.provider === "google") {
+      const credential = this.geminiAuthState?.refreshToken || this.geminiAuthState?.accessToken;
+      if (!credential) return undefined;
+      identity = [this.provider, this.baseUrl, credential, firstNonEmptyEnv(this.env, "GOOGLE_CLOUD_PROJECT", "ZERO_GEMINI_PROJECT") ?? ""];
+    } else {
+      if (!this.apiKey) return undefined;
+      identity = [this.provider, this.baseUrl, this.apiKey];
+    }
+    return createHash("sha256").update(JSON.stringify(identity)).digest("hex");
+  }
+
+  /** Documented effort controls only on routes which send Responses reasoning. */
+  reasoningConfiguration(): { effort: string; options: string[] } | null {
+    if (this.wireApi !== "responses" || !["openai", "azure", "chatgpt-codex"].includes(this.provider)) return null;
+    // https://developers.openai.com/api/docs/guides/latest-model
+    const model = this.model.replace(/^openai\//, "");
+    let options: string[];
+    if (/^gpt-(?:6-astra|6\.1-sol)(?:-20\d\d-\d\d-\d\d)?$/.test(model)) options = ["low", "medium", "high", "xhigh", "max"];
+    else if (/^gpt-(?:6-sol|6-luna|5\.6(?:-sol|-terra|-luna)?)(?:-20\d\d-\d\d-\d\d)?$/.test(model)) options = ["none", "low", "medium", "high", "xhigh", "max"];
+    else return null;
+    const effort = this.reasoningEffort ?? defaultReasoningEffort(this.model) ?? "medium";
+    // Do not disguise an existing unsupported custom configuration as a choice.
+    return options.includes(effort) ? { effort, options } : null;
+  }
+
+  /** Apply an effort for subsequent requests and same-model worker forks. */
+  setReasoningEffort(effort: string): void {
+    const configuration = this.reasoningConfiguration();
+    if (!configuration || !configuration.options.includes(effort)) throw new Error("This reasoning effort is not supported by the selected model and connection.");
+    this.reasoningEffort = effort;
+  }
+
   /** Discover models using this runtime's captured account, including after a separate login changes. */
-  async codexModelCatalog(signal?: AbortSignal): Promise<import("./codex-models.js").CodexCatalogModel[]> {
+  async codexModelCatalog(signal?: AbortSignal): Promise<CodexCatalogModel[]> {
+    if (this.workbenchProviderProxy) {
+      signal?.throwIfAborted();
+      return [{ id: this.workbenchProviderProxy.model }];
+    }
     const state = this.codexAuthState;
     if (this.provider !== "chatgpt-codex" || !state) throw new Error("No active Codex subscription");
     const { loadCodexModelCatalog } = await import("./codex-models.js");
     return loadCodexModelCatalog({ signal, resolveCredentials: () => refreshChatGptCodexAuthState(state) });
   }
 
-  /** Check account admission and resolve the service model without inference.
-   * Each explicit check refreshes admission; failed discovery is never cached.
-   */
-  async prepare(): Promise<void> {
-    while (this.provider === "hosted") {
-      const config = this.config;
-      const client = new CloudClient({
-        host: this.baseUrl.replace(/\/api\/inference\/v1$/, ""),
-        token: this.apiKey,
-      });
-      try {
-        const account = await client.getInferenceAccount();
-        if (this.config !== config) continue;
-        if (!account) {
-          throw new CloudError(
-            "0cloud account availability could not be read. Check again or review your account in /connect.",
-            undefined, "/api/inference/account", "unsupported_account_data",
-          );
-        }
-        if (!account.admission.eligible) {
-          const reason = account.admission.reason ?? account.reason ?? "account_restricted";
-          throw new CloudError(
-            account.state === "unavailable"
-              ? `0cloud account availability could not be checked (${reason}). Check again or review your account in /connect.`
-              : `0cloud account access is restricted (${reason}). Review your account in /connect or contact your organization owner.`,
-            undefined, "/api/inference/account", reason,
-          );
-        }
-        await this.ensureHostedModel();
-        if (this.config === config) return;
-      } catch (error) {
-        if (this.config !== config) continue;
-        throw error;
-      }
-    }
+  /** Discover endpoint inventory; Cline explicitly marks its public catalog provenance. */
+  async availableModelCatalog(signal?: AbortSignal): Promise<Array<{ id: string; contextTokens?: number; source?: "catalog" }>> {
+    if (this.provider === "chatgpt-codex") return this.codexModelCatalog(signal);
+    const { discoverProviderModels } = await import("./provider-model-discovery.js");
+    // Discovery uses the same resolved endpoint and credential snapshot as inference.
+    return discoverProviderModels({ provider: this.provider, baseUrl: this.baseUrl,
+      headers: this.provider === "google" ? {} : await this.ensureFreshHeaders(), signal });
   }
+
+  /** Host-only inference grant bound to this captured account, including after
+   * later logins or runtime reconfiguration. Never serialize the closure or
+   * its result into guest admission, workspace files or environment. */
+  workbenchCredentialResolver(): () => Promise<{ accessToken: string; accountId?: string }> {
+    const state = this.codexAuthState;
+    if (this.workbenchProviderProxy || this.provider !== "chatgpt-codex" || !state) {
+      throw new Error("Host workbench credential broker requires a captured chatgpt-codex account");
+    }
+    return () => refreshChatGptCodexAuthState(state);
+  }
+
 
   /**
    * Mutate the live selection in place so the NEXT turn (the engine reads
    * `config.runtime` per turn) and the NEXT `forkForSubagent` pick up the new
-   * model / provider / role map with zero session teardown. No-op-safe:
-   * undefined fields leave the corresponding state unchanged.
+   * model / provider / role map with zero session teardown. Undefined fields
+   * preserve the current state, except a provider change resets an omitted model.
    */
   reconfigure(sel: {
     model?: string;
     provider?: string;
     agentModels?: Record<string, string>;
     singleModel?: boolean;
+    autoRoute?: boolean;
     env?: NodeJS.ProcessEnv;
   }): void {
     const providerChanged = sel.provider !== undefined && sel.provider !== this.provider;
 
-    if (providerChanged || (this.provider === "hosted" && (sel.env !== undefined || sel.provider === "hosted"))) {
+    if (providerChanged) {
       // Full re-detection against the (optionally new) account, reusing the
-      // exact constructor path. Preserve the existing selection knobs unless
-      // this call overrides them; drop any explicit apiKey so credentials come
-      // from the (possibly refreshed) environment.
-      //
-      // Switching TO hosted without an explicit model must NOT carry over the
-      // old provider's model — the catalog auto-selects the service default.
-      // An empty model also explicitly requests the service default.
+      // exact constructor path. Preserve the role-selection knobs, but never
+      // carry the previous provider's model or explicit apiKey to a new connection.
+      // Credentials come from the (possibly refreshed) environment.
       const merged: RuntimeConfig = {
         ...this.config,
-        ...(providerChanged && sel.provider === "hosted" && sel.model === undefined ? { model: "" } : {}),
         apiKey: undefined,
         provider: (sel.provider ?? this.provider) as RuntimeConfig["provider"],
-        ...(sel.model !== undefined ? { model: sel.model } : {}),
+        model: sel.model,
         ...(sel.agentModels !== undefined ? { agentModels: sel.agentModels } : {}),
         ...(sel.singleModel !== undefined ? { singleModel: sel.singleModel } : {}),
+        ...(sel.autoRoute !== undefined ? { autoRoute: sel.autoRoute } : {}),
         ...(sel.env !== undefined ? { env: sel.env as Record<string, string> } : {}),
       };
-      // A new account must re-resolve the hosted catalog; drop the memo so
-      // ensureHostedModel re-queries rather than trusting the old ceiling/id.
-      this.hostedCatalogPromise = null;
-      this.hostedMaxOutputTokens = undefined;
       this.applyConfiguration(merged);
       return;
     }
@@ -2656,6 +2768,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     if (sel.singleModel !== undefined) {
       this.config = { ...this.config, singleModel: sel.singleModel };
     }
+    if (sel.autoRoute !== undefined) {
+      this.config = { ...this.config, autoRoute: sel.autoRoute };
+    }
 
     // Same-provider model change: re-run model/wire-api resolution exactly like
     // the fork `modelChanged` branch.
@@ -2664,7 +2779,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         ? opencodeModelId(sel.model)
         : this.provider === "copilot"
           ? copilotModelId(sel.model)
-          : sel.model;
+          : this.provider === "cline" ? clineModelId(sel.model) : sel.model;
       if (model !== this.model) {
         this.model = model;
         this.config = { ...this.config, model };
@@ -2673,21 +2788,27 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         if (this.provider === "azure") this.wireApi = openAICompatibleWireApi(this.env, "AZURE_OPENAI_WIRE_API", this.azureConfig.wireApi);
         this.applyModelWireApi();
         this.reasoningEffort = undefined;
-        // A new model on the same hosted account must re-resolve the catalog
-        // against the new model ID. Clear the memo so ensureHostedModel
-        // re-queries rather than trusting the old ceiling/id.
-        this.hostedCatalogPromise = null;
-        this.hostedMaxOutputTokens = undefined;
       }
     }
   }
 
-  /** Exact deployments requiring Responses for tools, shared by roots and forks. */
+  /** Explicit idle-boundary reconnect; ordinary model picks retain captured credentials. */
+  refreshConnection(env: NodeJS.ProcessEnv): void {
+    const effort = this.reasoningEffort;
+    this.applyConfiguration({ ...this.config, apiKey: undefined,
+      provider: this.provider as RuntimeConfig["provider"], model: this.model,
+      env: Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined)),
+    });
+    this.reasoningEffort = effort;
+  }
+
+  /** Modern OpenAI tool calls use Responses, shared by roots and forks. */
   private applyModelWireApi(): void {
     const normalizedModel = this.model.toLowerCase();
     if (this.wireApi === "chat_completions" &&
       ((this.provider === "azure" && normalizedModel === "gpt-5.6-sol") ||
-       (this.provider === "openai" && normalizedModel === "gpt-5.6-luna"))) {
+       (this.provider === "openai" &&
+         (normalizedModel === "gpt-5.6-luna" || /^gpt-(?:[6-9]|\d{2,})(?:[-.]|$)/.test(normalizedModel))))) {
       this.wireApi = "responses";
     }
   }
@@ -2697,19 +2818,14 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
    * Providers whose credentials are present in THIS runtime's environment
    * (`this.env`, never process-global). A provider counts as accessible iff
    * `resolveFailoverProvider` — the same auth-presence check the cross-provider
-   * failover chain uses — can build a connection for it, so auth-only providers
-   * (chatgpt-codex OAuth) and cloud-hosted are covered by the identical rule.
+   * failover chain uses — including auth-only providers (chatgpt-codex OAuth).
    */
   accessibleProviders(): ApiProvider[] {
+    if (this.workbenchProviderProxy) return ["chatgpt-codex"];
     const out: ApiProvider[] = [];
     for (const provider of Object.keys(DEFAULT_PROVIDER_MODELS) as ApiProvider[]) {
       const probeModel = DEFAULT_PROVIDER_MODELS[provider] || "probe";
-      try {
-        if (resolveFailoverProvider(provider, probeModel, this.env)) out.push(provider);
-      } catch {
-        // resolveFailoverProvider only throws on unexpected cloud-credential
-        // errors; treat a throwing provider as inaccessible, never abort.
-      }
+      if (resolveFailoverProvider(provider, probeModel, this.env)) out.push(provider);
     }
     return out;
   }
@@ -2722,6 +2838,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
    * provider has creds, so this is a helpful starting set, not the whole bound.
    */
   accessibleModels(): string[] {
+    if (this.workbenchProviderProxy) return [this.workbenchProviderProxy.model];
     const models = new Set<string>();
     if (this.model) models.add(this.model);
     for (const provider of this.accessibleProviders()) {
@@ -2738,6 +2855,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
    * accessible defaults as a fallback for ids the router does not pattern-match.
    */
   private isModelAccessible(model: string): boolean {
+    if (this.workbenchProviderProxy) return this.accessibleModels().includes(model);
     if (providerForModel(model, this.env) !== undefined) return true;
     return this.accessibleModels().includes(model);
   }
@@ -2746,7 +2864,6 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
       throw new Error("Subagent timeout must be a positive finite number");
     }
-    await this.ensureHostedModel();
     const roleModel = selection?.role !== undefined && this.config.agentModels &&
       Object.hasOwn(this.config.agentModels, selection.role)
       ? this.config.agentModels[selection.role]
@@ -2769,7 +2886,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         ? opencodeModelId(id)
         : this.provider === "copilot"
           ? copilotModelId(id)
-          : id;
+          : this.provider === "cline" ? clineModelId(id) : id;
     const model = stripProviderPrefix(selectedModel);
     // Operator-approved allowlist: the parent's own model, or any FIXED pin in
     // agentModels (the "auto" sentinel is not a real pin, so it is excluded).
@@ -2788,60 +2905,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       );
     }
     const child = new LlmApiRuntime({ type: "api", timeout: timeoutMs, model }, this);
-    await child.ensureHostedModel();
     return child;
   }
 
-  /** The server catalog is authoritative even when a model was selected explicitly. */
-  private async ensureHostedModel(): Promise<void> {
-    while (this.provider === "hosted") {
-      let pending = this.hostedCatalogPromise;
-      if (!pending) {
-        const requestedModel = this.model;
-        const client = new CloudClient({
-          host: this.baseUrl.replace(/\/api\/inference\/v1$/, ""),
-          token: this.apiKey,
-        });
-        const request: Promise<void> = client.getInferenceModels().then((catalog) => {
-          // Reconfiguration invalidates ownership of this result.
-          if (this.hostedCatalogPromise !== request) return;
-          const selected = requestedModel
-            ? catalog.data.find((model) => model.id === requestedModel)
-            : catalog.data[0];
-          if (!selected) {
-            throw new Error(requestedModel
-              ? `Hosted model "${requestedModel}" is unavailable. Run \`0 models\` for available models.`
-              : "No hosted models are available. Run `0 models` to check service availability.");
-          }
-          this.model = selected.id;
-          this.wireApi = selected.wire_api;
-          this.hostedMaxOutputTokens = selected.max_output_tokens;
-        });
-        this.hostedCatalogPromise = pending = request;
-      }
-      try {
-        await pending;
-      } catch (error) {
-        if (this.hostedCatalogPromise !== pending) continue;
-        this.hostedCatalogPromise = null;
-        throw error;
-      }
-      if (this.hostedCatalogPromise === pending) return;
-      // Only a changed selection can loop; a discovery failure always rejects.
-    }
-  }
-
-  /** All audits and nested workers on this hosted credential share admission. */
-  private async acquireHostedSlot(signal?: AbortSignal): Promise<(() => void) | undefined> {
-    while (this.provider === "hosted") {
-      const config = this.config;
-      const release = await acquireHostedRequestSlot(this.baseUrl, this.apiKey, signal);
-      if (this.config === config) return release;
-      release();
-      await this.ensureHostedModel();
-    }
-    return undefined;
-  }
 
   /**
    * A hard dollar ceiling needs a provider-enforced bound on the next response.
@@ -2849,15 +2915,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
    * contract; callers must fail closed before making a metered comparison call.
    */
   get outputTokenLimit(): number | undefined {
-    return this.provider === "chatgpt-codex" ? undefined : this.effectiveOutputTokens;
-  }
-
-  /** Hosted requests honor both the catalog ceiling and the local hard cap. */
-  private get effectiveOutputTokens(): number {
-    if (this.provider === "hosted" && this.hostedMaxOutputTokens !== undefined) {
-      return Math.min(NATIVE_COMPLETION_TOKEN_LIMIT, this.hostedMaxOutputTokens);
-    }
-    return NATIVE_COMPLETION_TOKEN_LIMIT;
+    return this.provider === "chatgpt-codex" ? undefined : NATIVE_COMPLETION_TOKEN_LIMIT;
   }
 
   /**
@@ -2878,7 +2936,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       this.provider === "qwen" ||
       this.provider === "xai" ||
       this.provider === "copilot" ||
-      this.provider === "hosted" ||
+      this.provider === "cline" ||
       (this.provider === "opencode" &&
         (this.wireApi === "chat_completions" || this.wireApi === "responses")) ||
       // chatgpt-codex always speaks Responses API; treat it as
@@ -2938,6 +2996,30 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     return this.model;
   }
 
+  /** JSON-safe routing policy, not the runtime's private environment or configuration. */
+  modelSelection(): { agentModels: Record<string, string>; singleModel: boolean; autoRoute: boolean } {
+    return {
+      agentModels: { ...this.config.agentModels },
+      singleModel: this.config.singleModel === true,
+      autoRoute: this.config.autoRoute === true,
+    };
+  }
+
+  resolvedProvider(): string {
+    return this.provider;
+  }
+
+  /** Price discovered IDs on their actual route without changing the wire model. */
+  resolvedPricingModel(): string {
+    if (this.provider === "chatgpt-codex" || this.provider === "copilot" || this.provider === "google") return this.model;
+    if (this.pricingModelSource !== this.model || this.pricingProviderSource !== this.provider) {
+      this.pricingModelSource = this.model;
+      this.pricingProviderSource = this.provider;
+      this.pricingModelKey = `${this.provider}/${this.model}`;
+    }
+    return this.pricingModelKey;
+  }
+
   /** Build the appropriate headers for the configured provider. */
   private buildHeaders(): Record<string, string> {
     if (this.provider === "chatgpt-codex") {
@@ -2946,15 +3028,11 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       // the actual access_token is injected pre-flight. Setting an
       // empty Authorization here would override the populated one, so
       // intentionally OMIT it — the pre-flight method writes it.
-      //
-      // `originator` + `User-Agent` mirror opencode's chat.headers hook
-      // (codex.ts:610-614): originator identifies the client to
-      // OpenAI's server-side analytics (Codex CLI uses `codex_cli_rs`,
-      // we ship `0`), and User-Agent gives them a way to
-      // distinguish our version + platform in their access logs.
+      // Keep our client identity separate from the shared backend protocol version.
       return {
         "Content-Type": "application/json",
-        originator: "0",
+        ...CODEX_PROTOCOL_HEADERS,
+        "x-codex-routing-hint": `model=${this.model}`,
         "User-Agent": `0/${VERSION}`,
       };
     }
@@ -2993,7 +3071,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       } else {
         headers["Authorization"] = `Bearer ${this.apiKey}`;
       }
-      if (this.provider === "openrouter") {
+      if (this.provider === "openrouter" || this.provider === "cline") {
         headers["HTTP-Referer"] = "https://0.security";
         headers["X-Title"] = "0 Security Scanner";
       }
@@ -3251,9 +3329,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       case "qwen": return "Qwen (Alibaba Model Studio)";
       case "xai": return "xAI (Grok)";
       case "opencode": return "OpenCode Zen";
+      case "cline": return "Cline";
       case "copilot": return "GitHub Copilot";
       case "google": return "Google Gemini (Code Assist)";
-      case "hosted": return "0.security Cloud";
     }
   }
 
@@ -3270,6 +3348,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       "  export KIMI_API_KEY=...                (Moonshot Kimi K3 — flat-rate coding, Anthropic-compatible)\n" +
       "  export QWEN_API_KEY=...                (Alibaba Qwen — Token Plan sub, OpenAI-compatible)\n" +
       "  export XAI_API_KEY=...                 (xAI Grok — OpenAI-compatible)\n" +
+      "  export CLINE_API_KEY=...               (Cline — API key; cline-pass/* needs ClinePass)\n" +
       "  export OPENCODE_API_KEY=...            (OpenCode Zen — multi-wire gateway)\n" +
       "  export ZERO_COPILOT_GITHUB_TOKEN=...   (GitHub Copilot — device-code OAuth token)"
     );
@@ -3391,11 +3470,10 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         ? opencodeModelId(entry.model)
         : entry.provider === "copilot"
           ? copilotModelId(entry.model)
-          : entry.model;
+          : entry.provider === "cline" ? clineModelId(entry.model) : entry.model;
       this.apiKey = cfg.apiKey;
       this.baseUrl = cfg.baseUrl;
       this.wireApi = cfg.wireApi;
-      this.hostedCatalogPromise = null;
       diag.warn(
         "failover_engaged",
         `${reason} — failover to ${entry.provider} (${entry.model})`,
@@ -3414,14 +3492,46 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
    * hammering the limit in lockstep).
    *
    * The body factory is valid only for the current provider and wire protocol.
-   * A null result signals failover: the caller resolves the hosted catalog and
-   * rebuilds the complete request under its existing timeout/cancellation signal.
-   *
+   * A null result signals failover so the caller rebuilds the complete request
+   * under its existing timeout/cancellation signal.
    * Retry + failover caps documented on `retryBackoffMs` / `llm429MaxRetries`.
    *
    * Headers are re-resolved per attempt (via ensureFreshHeaders → OAuth
    * refresh) so a token that rotated during the wait is picked up.
    */
+  private async gatewayRequestAdmission(signal: AbortSignal): Promise<RequestAdmission> {
+    if (this.workbenchProviderProxy) throw new Error(`${LOCAL_ADMISSION_UNAVAILABLE} gateway admission cannot use a workbench proxy; no inference request sent`);
+    const model = this.model;
+    const baseUrl = this.baseUrl;
+    const identity = JSON.stringify([this.provider, baseUrl, model, this.wireApi]);
+    if (!this.requestAdmission || this.requestAdmissionIdentity !== identity) {
+      this.requestAdmissionIdentity = identity;
+      const pending = (async () => {
+        try {
+          // Same configured provider origin and credentials; redirects cannot move the capability.
+          // foxguard: ignore[js/no-ssrf]
+          const response = await fetch(`${baseUrl.replace(/\/+$/, "")}/models`, {
+            headers: await this.ensureFreshHeaders(), signal, redirect: "error",
+          });
+          if (!response.ok) throw new Error(`${LOCAL_ADMISSION_UNAVAILABLE} catalog HTTP ${response.status}; no inference request sent`);
+          return parseRequestAdmission(await response.json(), model);
+        } catch (error) {
+          if (error instanceof Error && error.message.startsWith(LOCAL_ADMISSION_UNAVAILABLE)) throw error;
+          throw new Error(`${LOCAL_ADMISSION_UNAVAILABLE} catalog unavailable or invalid; no inference request sent`);
+        }
+      })();
+      this.requestAdmission = pending;
+      void pending.catch(() => {
+        // An older failed GET must not erase a newer route's successful cache.
+        if (this.requestAdmission === pending && this.requestAdmissionIdentity === identity) {
+          this.requestAdmission = undefined;
+          this.requestAdmissionIdentity = undefined;
+        }
+      });
+    }
+    return this.requestAdmission;
+  }
+
   private async postWithRetry(
     bodyFactory: () => string,
     signal: AbortSignal,
@@ -3435,16 +3545,23 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       // refresh never gets a request issued for it. `abort` is undefined for
       // every caller that passes no operator signal, making this a no-op.
       abort?.throwIfCancelled();
+      const body = bodyFactory();
+      if (this.env["ZERO_REQUIRE_REQUEST_ADMISSION"] === "1") {
+        assertRequestAdmission(body, await this.gatewayRequestAdmission(signal));
+      }
       let res: Response;
       try {
         // buildUrl() is the configured LLM provider endpoint (operator-set via
         // provider config / ZERO_* env), never user/attacker input; same
         // trusted endpoint the client already POSTed to, now wrapped in retry.
         // foxguard: ignore[js/no-ssrf]
-        res = await fetch(this.buildUrl(), {
+        res = this.workbenchProviderProxy ? await fetch(this.workbenchProviderProxy.url, {
+          method: "POST", redirect: "error", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ provider: this.provider, model: this.model, body }), signal,
+        }) : await fetch(this.buildUrl(), {
           method: "POST",
           headers: await this.ensureFreshHeaders(),
-          body: bodyFactory(),
+          body,
           signal,
         });
       } catch (error) {
@@ -3453,11 +3570,8 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         // it FIRST so it can never be treated as a retryable transport fault
         // or wrapped as a "transport failure".
         abort?.throwIfCancelled();
-        if (this.provider === "hosted") {
-          throw new Error(
-            "0 hosted request outcome is unknown. Automatic replay is disabled; check your inference usage before retrying.",
-            { cause: error },
-          );
+        if (this.env["ZERO_REQUIRE_RETRY_SAFE_RECEIPT"] === "1") {
+          throw new Error(`${this.providerLabel} request outcome may be unknown. Automatic replay is disabled`, { cause: error });
         }
         const cause = error instanceof Error ? error.cause : undefined;
         const causeCode =
@@ -3496,19 +3610,12 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           cause: error,
         });
       }
+      if (!res.ok && this.env["ZERO_REQUIRE_RETRY_SAFE_RECEIPT"] === "1" && res.headers.get("x-0-retry-safe") !== "1") {
+        await res.body?.cancel();
+        throw new Error(`${this.providerLabel} gateway HTTP ${res.status}; request outcome may be unknown. Automatic replay is disabled`);
+      }
       if (res.ok || !isRetryableHttpStatus(res.status)) {
         return res;
-      }
-      // Provider 429s and unresolved charges can follow billable work. Retry only
-      // when the gateway explicitly proves it rejected pre-dispatch admission.
-      if (this.provider === "hosted" && res.status === 429 && res.headers.get("x-0-retry-safe") !== "1") {
-        return res;
-      }
-      if (this.provider === "hosted" && res.status >= 500) {
-        await res.body?.cancel();
-        throw new Error(
-          `0 hosted request returned HTTP ${res.status}; its outcome may be unknown. Automatic replay is disabled; check your inference usage before retrying.`,
-        );
       }
 
       // Past this point every branch either retries or fails over to another
@@ -3644,8 +3751,20 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     prompt: string,
     context?: RuntimeContext,
   ): Promise<RuntimeResult> {
-    await this.ensureHostedModel();
     const start = Date.now();
+    if (context?.signal?.aborted) {
+      return { output: "", exitCode: null, timedOut: false, durationMs: 0, error: "API execution cancelled." };
+    }
+    if (this.workbenchProviderProxy) {
+      const result = await this.executeNative(context?.systemPrompt ?? "", [
+        { role: "user", content: [{ type: "text", text: prompt }] },
+      ], [], undefined, context?.signal);
+      return {
+        output: result.content.filter((block): block is Extract<NativeContentBlock, { type: "text" }> => block.type === "text").map(block => block.text).join("\n"),
+        exitCode: result.cancelled ? null : result.stopReason === "error" ? 1 : 0,
+        timedOut: false, durationMs: Date.now() - start, usage: result.usage, error: result.error,
+      };
+    }
 
     // chatgpt-codex and google (Code Assist) authenticate via an OAuth bearer
     // refreshed on demand, not a Platform API key field — skip the missing-key
@@ -3661,20 +3780,18 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     }
 
     const systemPrompt = context?.systemPrompt ?? "";
-    let releaseHostedSlot = this.provider === "hosted" ? await this.acquireHostedSlot() : undefined;
 
     const controller = new AbortController();
     const timer = setTimeout(
       () => controller.abort(),
       this.config.timeout || 120_000,
     );
+    const abort = composeCallAbort(controller.signal, context?.signal);
 
     try {
       let res: Response | null;
       do {
-        if (this.provider === "hosted" && !releaseHostedSlot) {
-          releaseHostedSlot = await this.acquireHostedSlot(controller.signal);
-        }
+        abort.throwIfCancelled();
 
         if (this.isOpenAICompat && this.wireApi === "chat_completions") {
           // OpenRouter / OpenAI / Azure chat completions format
@@ -3687,14 +3804,15 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           res = await this.postWithRetry(
             () => JSON.stringify({
               model: this.model,
-              [this.maxTokensParamKey]: this.effectiveOutputTokens,
+              ...(this.provider === "cline" ? { stream: false } : {}),
+              [this.maxTokensParamKey]: NATIVE_COMPLETION_TOKEN_LIMIT,
               messages,
               // See executeNative: explicit reasoning_effort passthrough only.
               ...(this.reasoningEffort
                 ? { reasoning_effort: this.reasoningEffort }
                 : {}),
             }),
-            controller.signal,
+            abort.signal, abort,
           );
         } else if (this.isOpenAICompat && this.wireApi === "responses") {
           // Azure Responses API format
@@ -3715,9 +3833,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
             () => JSON.stringify({
               model: this.model,
               input,
-              ...(isCodex ? { store: false } : { max_output_tokens: this.effectiveOutputTokens }),
+              ...(isCodex ? { store: false } : { max_output_tokens: NATIVE_COMPLETION_TOKEN_LIMIT }),
             }),
-            controller.signal,
+            abort.signal, abort,
           );
         } else if (this.isGeminiCodeAssist) {
           // Same inner request as the Google generateContent wire, wrapped in
@@ -3728,7 +3846,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
             generationConfig: { maxOutputTokens: NATIVE_COMPLETION_TOKEN_LIMIT },
           };
           const geminiBody = await this.wrapGeminiCodeAssistBody(request);
-          res = await this.postWithRetry(() => JSON.stringify(geminiBody), controller.signal);
+          res = await this.postWithRetry(() => JSON.stringify(geminiBody), abort.signal, abort);
         } else if (this.isGoogleWire) {
           res = await this.postWithRetry(
             () => JSON.stringify({
@@ -3738,7 +3856,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
               contents: [{ role: "user", parts: [{ text: prompt }] }],
               generationConfig: { maxOutputTokens: NATIVE_COMPLETION_TOKEN_LIMIT },
             }),
-            controller.signal,
+            abort.signal, abort,
           );
         } else if (this.isAnthropicWire) {
           // Anthropic Messages API format (also serves the z-ai/GLM and
@@ -3751,15 +3869,13 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
               ...(systemPrompt ? { system: systemPrompt } : {}),
               messages: [{ role: "user", content: prompt }],
             }),
-            controller.signal,
+            abort.signal, abort,
           );
         } else {
           throw new Error(`execute: provider ${this.provider} is not mapped to a wire`);
         }
-        if (!res) await this.ensureHostedModel();
       } while (!res);
 
-      clearTimeout(timer);
 
       const body = await res.text();
 
@@ -3782,7 +3898,8 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       const parsedBody = JSON.parse(body);
       // Code Assist wraps the whole generateContent response in `{ response }`;
       // unwrap it so the shared Google parser (below) sees the native shape.
-      const json = this.isGeminiCodeAssist ? (parsedBody.response ?? parsedBody) : parsedBody;
+      const json = this.provider === "cline" ? clineChatResponse(parsedBody)
+        : this.isGeminiCodeAssist ? (parsedBody.response ?? parsedBody) : parsedBody;
 
       // Extract text from response (different formats)
       let text: string;
@@ -3820,14 +3937,11 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       if (this.isAnthropicWire) {
         usage = readCacheUsage(json.usage);
       } else if ((this.isGoogleWire || this.isGeminiCodeAssist) && json.usageMetadata) {
-        usage = {
-          inputTokens: json.usageMetadata.promptTokenCount ?? 0,
-          outputTokens: json.usageMetadata.candidatesTokenCount ?? 0,
-        };
+        usage = readGoogleUsage(json.usageMetadata);
       } else if (this.isOpenAICompat && json.usage) {
         usage = this.wireApi === "chat_completions"
-          ? { inputTokens: json.usage.prompt_tokens ?? 0, outputTokens: json.usage.completion_tokens ?? 0 }
-          : { inputTokens: json.usage.input_tokens ?? 0, outputTokens: json.usage.output_tokens ?? 0 };
+          ? readChatUsage(json.usage)
+          : { inputTokens: json.usage.input_tokens ?? 0, outputTokens: json.usage.output_tokens ?? 0, ...readResponsesCachedTokens(json.usage) };
       }
 
       return {
@@ -3839,6 +3953,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       };
     } catch (err) {
       clearTimeout(timer);
+      if (abort.operatorAborted()) {
+        return { output: "", exitCode: null, timedOut: false, durationMs: Date.now() - start, error: "API execution cancelled." };
+      }
       if (err instanceof QuotaExhaustedError) {
         // Plan-quota exhaustion: fail fast with the distinct, greppable
         // message (carries usage_limit_reached + resets_at) — never retried.
@@ -3861,8 +3978,10 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           ? `${this.providerLabel} API request timed out`
           : `${this.providerLabel} API error: ${msg}`,
       };
-    } finally {
-      releaseHostedSlot?.();
+    }
+    finally {
+      clearTimeout(timer);
+      abort.dispose();
     }
   }
 
@@ -3879,11 +3998,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     };
   }
 
-  /**
-   * Public entry point. Retries a transient empty stream for direct providers
-   * only. A hosted stream may have completed billable work before its terminal
-   * event disappeared, so it must not be replayed even on this path.
-   */
+  /** Public entry point. Retries a transient empty stream with bounded backoff. */
   async executeNative(
     system: string,
     messages: NativeMessage[],
@@ -3896,9 +4011,11 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     let attempt = 0;
     for (attempt = 1; attempt <= maxAttempts; attempt++) {
       result = await this.executeNativeAttempt(system, messages, tools, callbacks, signal);
-      // A hosted stream can hide completed billable work. Never re-issue it,
-      // including when a direct provider failed over to hosted on this attempt.
-      if (attempt >= maxAttempts || this.provider === "hosted" || !shouldRetryNativeStream(result) || signal?.aborted) break;
+      if (isLocalAdmissionFailure(result.error)) return result;
+      if (this.env["ZERO_REQUIRE_RETRY_SAFE_RECEIPT"] === "1" && (result.stopReason === "error" || result.error)) {
+        return { ...result, error: `${result.error ?? "Incomplete gateway response"}. Request outcome may be unknown. Automatic replay is disabled` };
+      }
+      if (attempt >= maxAttempts || !shouldRetryNativeStream(result) || signal?.aborted) break;
 
       const backoff = streamRetryBackoffMs(attempt);
       diag.warn(
@@ -3927,7 +4044,6 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     callbacks?: NativeStreamCallbacks,
     signal?: AbortSignal,
   ): Promise<NativeRuntimeResult> {
-    await this.ensureHostedModel();
     const start = Date.now();
 
     // chatgpt-codex and google (Code Assist) authenticate via an OAuth bearer
@@ -3947,15 +4063,6 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     // rounds, so this is the common shape of "Esc pressed during a tool run".
     if (signal?.aborted) return this.cancelledResult(start);
 
-    let releaseHostedSlot: (() => void) | undefined;
-    if (this.provider === "hosted") {
-      try {
-        releaseHostedSlot = await this.acquireHostedSlot(signal);
-      } catch (error) {
-        if (signal?.aborted) return this.cancelledResult(start);
-        throw error;
-      }
-    }
 
     const controller = new AbortController();
     const timer = setTimeout(
@@ -3969,9 +4076,6 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     try {
       let res: Response | null;
       do {
-        if (this.provider === "hosted" && !releaseHostedSlot) {
-          releaseHostedSlot = await this.acquireHostedSlot(call.signal);
-        }
 
         if (this.isOpenAICompat && this.wireApi === "chat_completions") {
           // Convert to OpenAI chat completions format
@@ -4034,7 +4138,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
 
           const body: Record<string, unknown> = {
             model: this.model,
-            [this.maxTokensParamKey]: this.effectiveOutputTokens,
+            // Cline defaults to SSE; this path consumes a complete JSON response.
+            ...(this.provider === "cline" ? { stream: false } : {}),
+            [this.maxTokensParamKey]: NATIVE_COMPLETION_TOKEN_LIMIT,
             messages: chatMessages,
           };
 
@@ -4182,7 +4288,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
             input,
             ...(isCodex
               ? { store: false, instructions: system }
-              : { max_output_tokens: this.effectiveOutputTokens }),
+              : { max_output_tokens: NATIVE_COMPLETION_TOKEN_LIMIT }),
             ...(reasoningEffort
               ? {
                 reasoning: {
@@ -4257,12 +4363,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
             call.signal,
             call,
           );
-          if (!res) {
-            await this.ensureHostedModel();
-            continue;
-          }
-
-
+          if (!res) continue;
           if (!res.ok) {
             const responseText = await res.text();
             clearTimeout(timer);
@@ -4271,7 +4372,6 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
               stopReason: "error",
               durationMs: Date.now() - start,
               error: `${this.providerLabel} API error ${res.status}: ${responseText.slice(0, 500)}`,
-              ...(this.provider === "hosted" ? { retrySafe: res.status === 429 && res.headers.get("x-0-retry-safe") === "1" } : {}),
             };
           }
 
@@ -4431,7 +4531,6 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         } else {
           throw new Error(`executeNative: provider ${this.provider} is not mapped to a wire`);
         }
-        if (!res) await this.ensureHostedModel();
       } while (!res);
 
       // Keep the abort timer ARMED through the body read. `fetch()` resolves as
@@ -4453,14 +4552,14 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           stopReason: "error",
           durationMs: Date.now() - start,
           error: `${this.providerLabel} API error ${res.status}: ${responseText.slice(0, 500)}`,
-          ...(this.provider === "hosted" ? { retrySafe: res.status === 429 && res.headers.get("x-0-retry-safe") === "1" } : {}),
         };
       }
 
       const parsedResponse = JSON.parse(responseText);
       // Code Assist wraps the generateContent response in `{ response }`; unwrap
       // it so the shared Google parser (below) sees the native candidates shape.
-      const json = this.isGeminiCodeAssist ? (parsedResponse.response ?? parsedResponse) : parsedResponse;
+      const json = this.provider === "cline" ? clineChatResponse(parsedResponse)
+        : this.isGeminiCodeAssist ? (parsedResponse.response ?? parsedResponse) : parsedResponse;
       appendNativeTrace({
         kind: "native-response",
         provider: this.providerLabel,
@@ -4515,85 +4614,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
               : "end_turn";
 
         if (json.usage) {
-          usage = {
-            inputTokens: json.usage.prompt_tokens ?? 0,
-            outputTokens: json.usage.completion_tokens ?? 0,
-          };
-        }
-      } else if (this.isOpenAICompat && this.wireApi === "responses") {
-        content = [];
-        // Reasoning summaries are surfaced to the UI and then DROPPED from
-        // `content` — see the reasoning branch below.
-        const reasoningSummaries: string[] = [];
-        // Keep a non-empty raw item array so the next turn can replay the
-        // reasoning items verbatim — see ProviderRawOutput. Avoid persisting an
-        // empty sidecar on reasoning-free end_turn responses.
-        const rawOutput = (json.output ?? []) as unknown[];
-        if (rawOutput.length > 0) {
-          providerRaw = {
-            provider: this.provider,
-            model: this.model,
-            wireApi: this.wireApi,
-            output: rawOutput,
-          };
-        }
-        for (const item of json.output ?? []) {
-          if (item.type === "function_call") {
-            content.push({
-              type: "tool_use",
-              id: item.call_id as string,
-              name: item.name as string,
-              input: safeParseJson(item.arguments as string),
-            });
-            continue;
-          }
-
-          if (item.type === "reasoning") {
-            // The summary is a lossy PARAPHRASE of reasoning we now return
-            // properly: the raw item (with its `encrypted_content`) rides back
-            // on `providerRaw` and is spliced verbatim into the next request.
-            // Pushing the paraphrase into `content` too made it a permanent
-            // assistant text block that the agent loop replays as `output_text`
-            // on every later turn — S·T(T−1)/2 tokens over a T-turn run, at
-            // full input price because the Responses path has no prompt
-            // caching. So: surface it to the UI, never to `content`.
-            const summaryParts = Array.isArray(item.summary)
-              ? item.summary
-                  .map((block: Record<string, unknown>) => typeof block.text === "string" ? block.text : "")
-                  .filter((text: string) => text.trim().length > 0)
-              : [];
-            const reasoningText = summaryParts.join("\n").trim();
-            if (reasoningText) reasoningSummaries.push(reasoningText);
-            continue;
-          }
-
-          for (const block of item.content ?? []) {
-            if (block.type === "output_text") {
-              content.push({ type: "text", text: block.text as string });
-            } else if (block.type === "summary_text" || block.type === "reasoning_text") {
-              const text = typeof block.text === "string" ? block.text : "";
-              if (text.trim()) reasoningSummaries.push(text);
-            }
-          }
-        }
-
-        // Non-streaming has no `response.reasoning_summary_text.*` events, so
-        // this is the only place the dashboard's thinking channel gets fed on
-        // this path. Once per response, matching the Anthropic branch below.
-        if (callbacks?.onThinking && reasoningSummaries.length > 0) {
-          callbacks.onThinking(reasoningSummaries.join("\n"));
-        }
-
-        stopReason = content.some((block) => block.type === "tool_use") ? "tool_use" : "end_turn";
-
-        if (json.usage) {
-          usage = {
-            inputTokens: json.usage.input_tokens ?? 0,
-            outputTokens: json.usage.output_tokens ?? 0,
-            // Responses `input_tokens` already includes the cached span, so
-            // this is instrumentation only — see the streaming path.
-            ...readResponsesCachedTokens(json.usage as Record<string, unknown>),
-          };
+          usage = readChatUsage(json.usage);
         }
       } else if (this.isGoogleWire || this.isGeminiCodeAssist) {
         const candidate = json.candidates?.[0];
@@ -4637,10 +4658,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
             ? "max_tokens"
             : "end_turn";
         if (json.usageMetadata) {
-          usage = {
-            inputTokens: json.usageMetadata.promptTokenCount ?? 0,
-            outputTokens: json.usageMetadata.candidatesTokenCount ?? 0,
-          };
+          usage = readGoogleUsage(json.usageMetadata);
         }
       } else {
         // Anthropic format (also serves the z-ai/GLM and kimi/Moonshot
@@ -4724,6 +4742,12 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       };
     } catch (err) {
       clearTimeout(timer);
+      // Local admission failures prove no inference POST even if cancellation
+      // arrived during the catalog read; preserve that accounting authority.
+      if (err instanceof Error && isLocalAdmissionFailure(err.message)) return {
+        content: [], stopReason: "error", durationMs: Date.now() - start, error: err.message,
+        ...(call.operatorAborted() ? { cancelled: true } : {}),
+      };
       // Operator cancellation, checked BEFORE the timeout classification
       // below: an aborted `fetch` and an aborted stream read both reject with
       // an anonymous AbortError whose message contains "abort", so without
@@ -4753,10 +4777,8 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         error: timedOut
           ? `${this.providerLabel} API request timed out`
           : `${this.providerLabel} API error: ${msg}`,
-        ...(this.provider === "hosted" ? { retrySafe: false } : {}),
       };
     } finally {
-      releaseHostedSlot?.();
       // Drop the listeners this call installed on the caller's (session-long)
       // operator signal. A no-op when no operator signal was passed.
       call.dispose();
@@ -4863,6 +4885,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     const identifier = (value: unknown): string | null =>
       typeof value === "string" && /^[A-Za-z0-9_.:-]{1,96}$/.test(value) ? value : null;
     let completedResponse: Record<string, unknown> | null = null;
+    let outputCapResponse: Record<string, unknown> | undefined;
+    let assistantText = "";
+    const pendingFunctionCalls = new Set<string>();
     let streamFailure: Record<string, string | null> | undefined;
     let responseUsage: NativeRuntimeResult["usage"];
     // The ChatGPT Codex backend's `response.completed` payload has NO
@@ -5001,10 +5026,16 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
             };
             callbacks?.onUsage?.(responseUsage);
           }
+          const incomplete = response?.incomplete_details as Record<string, unknown> | undefined;
+          if (type === "response.incomplete" && response?.status === "incomplete" &&
+              incomplete?.reason === "max_output_tokens" && response.error == null &&
+              event.error == null && event.code == null && !completedResponse && malformedEvents === 0) {
+            outputCapResponse = response;
+            break responses;
+          }
           if (!terminal || !response || response.error != null ||
               ((type === "response.done" || response.status !== undefined) && response.status !== "completed")) {
             const error = (response?.error ?? event.error) as Record<string, unknown> | undefined;
-            const incomplete = response?.incomplete_details as Record<string, unknown> | undefined;
             streamFailure = {
               event: type,
               status: identifier(response?.status),
@@ -5023,11 +5054,11 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           type === "response.output_text.delta" ||
           (this.provider === "openrouter" && type === "response.content_part.delta")
         ) {
-          // Visible assistant text streaming. We don't accumulate locally —
-          // the agent loop's batcher is responsible for coalescing fragments
-          // before they hit the event bus. Just forward the raw fragment.
+          // Retain visible observations even when the output cap prevents an
+          // output_item.done/final output array. The callback is still a delta.
           const delta = typeof event.delta === "string" ? event.delta : "";
           if (delta) {
+            assistantText += delta;
             callbacks?.onDelta?.("assistant_response", delta);
           }
           continue;
@@ -5059,6 +5090,14 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           continue;
         }
 
+        if (type === "response.output_item.added") {
+          const item = event.item as Record<string, unknown> | undefined;
+          if (item?.type === "function_call") {
+            pendingFunctionCalls.add(String(item.id ?? item.call_id ?? event.output_index ?? pendingFunctionCalls.size));
+          }
+          continue;
+        }
+
         if (type === "response.output_item.done") {
           // Codex backend (and recent public Responses API streams) emit
           // each output item — including function_call items — through
@@ -5069,6 +5108,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           // chatgpt.com/backend-api/codex/responses with gpt-5.5.
           const item = event.item as Record<string, unknown> | undefined;
           if (item && typeof item.type === "string") {
+            if (item.type === "function_call") pendingFunctionCalls.add(String(item.id ?? item.call_id ?? event.output_index ?? pendingFunctionCalls.size));
             streamedOutputItems.push(item);
           }
           continue;
@@ -5078,6 +5118,38 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     }
 
     emitThinking(true);
+
+    if (outputCapResponse) {
+      // Never replay opaque reasoning or dispatch ANY call from an incomplete
+      // response, even when an individual item claimed to be done.
+      void reader.cancel().catch(() => { /* best-effort */ });
+      const finalOutput = Array.isArray(outputCapResponse.output)
+        ? outputCapResponse.output as Array<Record<string, unknown>> : [];
+      const output = finalOutput.length > 0 ? finalOutput : streamedOutputItems;
+      let finalText = "";
+      for (const item of output) {
+        if (item.type === "function_call") pendingFunctionCalls.add(String(item.id ?? item.call_id ?? pendingFunctionCalls.size));
+        if (!Array.isArray(item.content)) continue;
+        for (const block of item.content as Array<Record<string, unknown>>) {
+          if (block.type === "output_text" && typeof block.text === "string") finalText += block.text;
+        }
+      }
+      // Deltas are the observations already shown to the operator. Prefer the
+      // final snapshot only when it extends them; don't duplicate either copy.
+      const text = finalText.startsWith(assistantText) ? finalText : assistantText || finalText;
+      if (operatorSignal?.aborted) {
+        return { ...this.cancelledResult(start), content: [{ type: "text", text }], usage: responseUsage };
+      }
+      const checkpoint = {
+        reason: "max_output_tokens" as const,
+        ...(identifier(outputCapResponse.id) ? { responseId: String(outputCapResponse.id) } : {}),
+        discardedToolCalls: pendingFunctionCalls.size,
+      };
+      appendNativeTrace({ kind: "native-response-checkpoint", provider: this.providerLabel,
+        wireApi: this.wireApi, checkpoint, usage: responseUsage ?? null });
+      return { content: [{ type: "text", text }], stopReason: "max_tokens", checkpoint,
+        usage: responseUsage, durationMs: Date.now() - start };
+    }
 
     if (!completedResponse || streamFailure) {
       if (streamFailure) {
@@ -5137,26 +5209,28 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     // not absent) because items are already delivered via streamed
     // `response.output_item.done` events. The `??` operator wouldn't fall
     // through on `[]` — we'd keep the empty array and silently drop every
-    // streamed function_call. Prefer the streamed list whenever it has any
-    // items; only fall back to `completedResponse.output` when nothing was
-    // streamed in-band (Azure / public OpenAI fill it; Codex doesn't).
-    const completedOutput =
-      (completedResponse.output as Array<Record<string, unknown>> | undefined) ??
-      [];
-    const outputItems =
-      streamedOutputItems.length > 0 ? streamedOutputItems : completedOutput;
+    // streamed function_call. Use the authoritative final array when populated;
+    // only Codex's absent/empty array falls back to output_item.done items.
+    const completedOutput = Array.isArray(completedResponse.output)
+      ? completedResponse.output as Array<Record<string, unknown>> : [];
+    const outputItems = completedOutput.length > 0 ? completedOutput : streamedOutputItems;
     const content: NativeContentBlock[] = [];
     // Reasoning summaries are surfaced to the UI and then DROPPED — never
     // pushed into `content`. See the reasoning branch below.
     const reasoningSummaries: string[] = [];
+    const callIds = new Set<string>();
     for (const item of outputItems) {
       if (item.type === "function_call") {
-        content.push({
-          type: "tool_use",
-          id: String(item.call_id),
-          name: String(item.name),
-          input: safeParseJson(String(item.arguments ?? "{}")),
-        });
+        const call = parseResponsesFunctionCall(item);
+        if (!call || callIds.has(call.id) || malformedEvents > 0) {
+          return {
+            content: [{ type: "text", text: assistantText }],
+            stopReason: "error", usage: responseUsage, durationMs: Date.now() - start,
+            error: `${this.providerLabel} API error: Responses completed with an incomplete or malformed function call`,
+          };
+        }
+        callIds.add(call.id);
+        content.push(call);
         continue;
       }
       if (item.type === "reasoning") {
@@ -5183,6 +5257,11 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       }
     }
 
+    // Some Responses backends omit message items after streaming their text.
+    // Keep those observed bytes in canonical history, never as hidden reasoning.
+    const observedTextFallback = !!assistantText && !content.some(block => block.type === "text");
+    if (observedTextFallback) content.unshift({ type: "text", text: assistantText });
+
     // The summary normally reached the UI live through
     // `response.reasoning_summary_text.delta`, in which case `lastThinkingEmit`
     // is already set and emitting here would show the same text twice. This is
@@ -5202,7 +5281,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       // reasoning items with their `encrypted_content` still attached, each
       // immediately followed by the item it produced. Handing it back lets the
       // next turn replay it verbatim instead of re-deriving the reasoning.
-      ...(outputItems.length > 0
+      ...(!observedTextFallback && outputItems.length > 0
         ? {
             providerRaw: {
               provider: this.provider,
@@ -5216,6 +5295,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   }
 
   async isAvailable(): Promise<boolean> {
+    if (this.workbenchProviderProxy) return true;
     // Credential presence only; this does not promise provider readiness or funds.
     if (this.provider === "chatgpt-codex") {
       return this.codexAuthState !== undefined;

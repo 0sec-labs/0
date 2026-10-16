@@ -158,4 +158,28 @@ INSTALL`);
       "https://github.com/0sec-labs/0/releases/download/v999.1.2", destination, "",
     ]);
   });
+
+  it("clears interactive progress and preserves the actual installer error", async () => {
+    fakeCurl(`cat <<'INSTALL'
+printf 'Downloading binary...\\n' >&2
+printf '0 installer: checksum mismatch\\n' >&2
+exit 7
+INSTALL`);
+    vi.stubEnv("TERM", "xterm");
+    const descriptor = Object.getOwnPropertyDescriptor(process.stderr, "isTTY");
+    Object.defineProperty(process.stderr, "isTTY", { configurable: true, value: true });
+    const output: string[] = [];
+    const write = vi.spyOn(process.stderr, "write").mockImplementation(chunk => { output.push(String(chunk)); return true; });
+    try {
+      const result = await performAutoUpdate({ version: "v999.0.0" });
+      expect(result.exitCode).toBe(7);
+      expect(output.join("")).toContain("Updating 0 to v999.0.0");
+      expect(output.join("")).toContain("Update failed.\n");
+      expect(output.at(-1)).toContain("0 installer: checksum mismatch");
+    } finally {
+      write.mockRestore();
+      if (descriptor) Object.defineProperty(process.stderr, "isTTY", descriptor);
+      else Reflect.deleteProperty(process.stderr, "isTTY");
+    }
+  });
 });

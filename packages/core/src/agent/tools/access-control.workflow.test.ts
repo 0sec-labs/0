@@ -1,3 +1,5 @@
+import { accessMilestoneFromArtifact } from "@0/shared";
+import { osecDB } from "@0/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ToolExecutor } from "../tools.js";
 import { SessionEngine } from "../session.js";
@@ -15,13 +17,13 @@ const request = {
   observation_url: `${target}/resource`, observation_json_pointer: "/marker", expected_state: "unique-marker",
   steps: [{ method: "POST", url: `${target}/resource`, body: '{"marker":"unique-marker"}' }],
 };
-function executor() {
+function executor(db: osecDB | null = null) {
   const session = new SessionEngine([
     { label: "owner", role: "admin", auth: { type: "bearer", token: "owner-secret" } },
     { label: "actor", role: "user", auth: { type: "bearer", token: "actor-secret" } },
   ]);
   const context: ToolContext = { target, scanId: "workflow", findings: [], attackResults: [], targetInfo: {}, session };
-  return new ToolExecutor(context, null);
+  return new ToolExecutor(context, db);
 }
 const response = (marker: unknown, status = 200) => new Response(JSON.stringify({ marker }), { status });
 afterEach(() => vi.mocked(fetchScoped).mockReset());
@@ -40,6 +42,25 @@ describe("access_control_workflow", () => {
     expect(identities).toEqual(["Bearer owner-secret", "Bearer actor-secret", "Bearer owner-secret"]);
     expect(JSON.stringify(result)).not.toContain("owner-secret");
     expect(JSON.stringify(result)).not.toContain("actor-secret");
+  });
+
+  it("retains host-observed conditional milestone evidence without inferring authorization or cleanup", async () => {
+    const db = new osecDB(":memory:");
+    db.createScan({ target, mode: "web", depth: "default", format: "json", timeout: 5000, runtime: "api" }, "workflow");
+    let marker: string | null = null;
+    vi.mocked(fetchScoped).mockImplementation(async (_url: unknown, init: RequestInit) => {
+      if (init.method === "POST") marker = "unique-marker";
+      return response(marker);
+    });
+    try {
+      await executor(db).execute({ name: "access_control_workflow", arguments: request });
+      const artifact = db.getEvents("workflow", { eventType: "tool_artifact" })[0];
+      expect(artifact).toBeDefined();
+      const milestone = accessMilestoneFromArtifact(artifact.eventType, JSON.parse(artifact.payload), artifact.scanId);
+      expect(milestone).toMatchObject({ status: "conditional", cleanup: "unknown", asset: target });
+      expect(artifact.payload).not.toContain("owner-secret");
+      expect(artifact.payload).not.toContain("actor-secret");
+    } finally { db.close(); }
   });
 
   it("does not treat successful HTTP status alone as an authorization break", async () => {

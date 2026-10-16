@@ -208,7 +208,7 @@ export class OllamaRuntime implements Runtime, NativeRuntime {
   }
 
   /** Legacy text-in/text-out path. Used by stages that haven't migrated to NativeRuntime. */
-  async execute(prompt: string, _context?: RuntimeContext): Promise<RuntimeResult> {
+  async execute(prompt: string, context?: RuntimeContext): Promise<RuntimeResult> {
     const start = Date.now();
     try {
       const body = {
@@ -217,7 +217,7 @@ export class OllamaRuntime implements Runtime, NativeRuntime {
         stream: false,
         options: { temperature: this.temperature },
       };
-      const res = await this.postChat(body);
+      const res = await this.postChat(body, context?.signal);
       const usage = readUsage(res);
       return {
         output: res.message.content,
@@ -243,6 +243,7 @@ export class OllamaRuntime implements Runtime, NativeRuntime {
     messages: NativeMessage[],
     tools: NativeToolDef[],
     callbacks?: NativeStreamCallbacks,
+    signal?: AbortSignal,
   ): Promise<NativeRuntimeResult> {
     const start = Date.now();
     const useStream = this.stream;
@@ -256,8 +257,8 @@ export class OllamaRuntime implements Runtime, NativeRuntime {
       };
 
       const aggregate = useStream
-        ? await this.streamChat(body, callbacks)
-        : await this.postChat(body);
+        ? await this.streamChat(body, callbacks, signal)
+        : await this.postChat(body, signal);
       const usage = readUsage(aggregate);
       if (callbacks?.onUsage && usage) callbacks.onUsage(usage);
 
@@ -291,19 +292,21 @@ export class OllamaRuntime implements Runtime, NativeRuntime {
         stopReason: "error",
         durationMs: Date.now() - start,
         error: msg,
+        ...(signal?.aborted ? { cancelled: true } : {}),
       };
     }
   }
 
-  private async postChat(body: unknown): Promise<OllamaChatResponse> {
+  private async postChat(body: unknown, signal?: AbortSignal): Promise<OllamaChatResponse> {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), this.timeout);
     try {
+      signal?.throwIfAborted();
       const res = await this.fetchImpl(`${this.host}/api/chat`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
-        signal: ctl.signal,
+        signal: signal ? AbortSignal.any([ctl.signal, signal]) : ctl.signal,
       });
       if (!res.ok) {
         const text = await res.text().catch(() => "");
@@ -334,15 +337,17 @@ export class OllamaRuntime implements Runtime, NativeRuntime {
   private async streamChat(
     body: unknown,
     callbacks?: NativeStreamCallbacks,
+    signal?: AbortSignal,
   ): Promise<OllamaChatResponse> {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), this.timeout);
     try {
+      signal?.throwIfAborted();
       const res = await this.fetchImpl(`${this.host}/api/chat`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
-        signal: ctl.signal,
+        signal: signal ? AbortSignal.any([ctl.signal, signal]) : ctl.signal,
       });
       if (!res.ok) {
         const text = await res.text().catch(() => "");

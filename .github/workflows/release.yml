@@ -4,7 +4,7 @@ name: "0: Release"
 # four (+ checksums) to the GitHub Release. Native builds avoid `bun --compile`
 # cross-compilation, which cannot resolve @opentui/core's per-platform native
 # packages from a single host. Each binary is smoke-tested on its own runner
-# before it ships.
+# before it ships. Desktop is development-only alpha and is never a release asset.
 #
 # Trigger: pushing a `v*` tag, or manually via workflow_dispatch with the tag.
 
@@ -14,10 +14,14 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to build + release (e.g. v0.15.0)"
+        description: "Git tag or commit to build (e.g. v0.22.4)"
         required: true
       npm_only:
         description: "Publish only npm from the existing tag; leave native assets unchanged"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build and smoke every native binary without publishing"
         type: boolean
         default: false
 
@@ -44,16 +48,16 @@ jobs:
     timeout-minutes: 30
     env:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      ZERO_BUILD_RELEASE_CHANNEL: ${{ inputs.dry_run && 'dev' || 'beta' }}
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
       - uses: actions/setup-node@v5
         with:
-          # Node 22, not 24: tree-sitter@0.21.1's native addon fails to compile
-          # against Node 24's V8 (missing cppgc header) on linux-arm64, which has
-          # no prebuilt. Node 22 compiles it from source cleanly.
-          node-version: 22
+          # The vendored native parser preserves its grammar ABI while building
+          # with the C++20 standard required by our supported Node 24 runtime.
+          node-version: 24
           # Hosted runners do not expose pnpm until the next `corepack enable`
           # step. Disable setup-node's pre-Corepack cache probe.
           package-manager-cache: false
@@ -88,6 +92,10 @@ jobs:
           mv node_modules node_modules.release-build
           trap 'mv node_modules.release-build node_modules; rm -rf "$smoke_dir"' EXIT
           cp "dist-bin/${{ matrix.asset }}" "$smoke_dir/0"
+          # A release binary can be launched from inside any source checkout.
+          # Its embedded UI must win over an unrelated stale workspace build.
+          mkdir -p "$smoke_dir/packages/dashboard/dist"
+          printf '<html><body>stale checkout dashboard</body></html>' > "$smoke_dir/packages/dashboard/dist/index.html"
           (
             cd "$smoke_dir"
             ./0 --version
@@ -122,15 +130,19 @@ jobs:
           )
       - name: Smoke standalone plugin execution
         run: node scripts/smoke-plugin-runtime.mjs "dist-bin/${{ matrix.asset }}"
+      - name: Smoke standalone web setup and persistence
+        run: node scripts/smoke-web-setup.mjs "dist-bin/${{ matrix.asset }}"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset }}
           path: dist-bin/${{ matrix.asset }}
           if-no-files-found: error
+          retention-days: 1
 
   release:
     name: publish release
     needs: build
+    if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -139,39 +151,58 @@ jobs:
         with:
           path: dist-bin
           merge-multiple: true
-      - name: Generate checksums
+      # Keep an explicit CLI allowlist so unrelated workflow artifacts
+      # cannot enter the release.
+      - name: Generate CLI checksums
         run: |
           cd dist-bin
-          sha256sum * > checksums.txt
+          sha256sum 0-darwin-arm64 0-linux-x64 0-linux-arm64 0-windows-x64.exe > checksums.txt
           cat checksums.txt
       - name: Create / update the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
+          assets=(
+            dist-bin/0-darwin-arm64
+            dist-bin/0-linux-x64
+            dist-bin/0-linux-arm64
+            dist-bin/0-windows-x64.exe
+            dist-bin/checksums.txt
+          )
           if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist-bin/* --repo "${{ github.repository }}" --clobber
+            gh release upload "$TAG" "${assets[@]}" --repo "${{ github.repository }}" --clobber
           else
-            gh release create "$TAG" dist-bin/* \
+            gh release create "$TAG" "${assets[@]}" \
               --repo "${{ github.repository }}" \
               --title "0 $TAG" \
-              --notes "Automated multi-platform release. See CHANGELOG.md for changes." \
+              --notes "Automated multi-platform release. See docs/CHANGELOG.md for changes." \
               --verify-tag
           fi
 
   publish-npm:
     name: publish npm
     needs: release
-    if: ${{ !cancelled() && (needs.release.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.npm_only)) }}
+    if: ${{ !cancelled() && !inputs.dry_run && (needs.release.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.npm_only)) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      ZERO_BUILD_RELEASE_CHANNEL: "beta"
       RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v6
         with:
           ref: refs/tags/${{ github.event.inputs.tag || github.ref_name }}
+      # Keep the artifact pinned to its immutable tag while allowing a manual
+      # recovery to use corrected release checks from the workflow revision.
+      - name: Check out the release smoke harness
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          path: release-checks
+          sparse-checkout: scripts
+          persist-credentials: false
       - uses: actions/setup-node@v5
         with:
           node-version: 24
@@ -197,10 +228,11 @@ jobs:
       # rewrite. Scoped packages require --access public on publish.
       - name: Install runtime dependencies and smoke the bundle
         run: |
-          npm --prefix dist install --omit=dev --no-audit --no-fund
+          npm --prefix dist ci --omit=dev --no-audit --no-fund
           node dist/0.js --version
-          bash scripts/smoke-cli.sh "node dist/0.js"
+          bash release-checks/scripts/smoke-cli.sh "node $PWD/dist/0.js"
           node scripts/smoke-plugin-runtime.mjs dist/0.js
+          node scripts/smoke-web-setup.mjs dist/0.js
       - name: Smoke an installed package
         run: |
           mkdir -p "$RUNNER_TEMP/npm-pack" "$RUNNER_TEMP/npm-smoke"

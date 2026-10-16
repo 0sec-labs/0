@@ -9,6 +9,7 @@ export type {
   NativeContentBlock,
   NativeToolDef,
   NativeRuntimeResult,
+  NativeOutputCapCheckpoint,
 } from "./types.js";
 export { LlmApiRuntime, QuotaExhaustedError, OperatorAbortError, parseUsageLimitReached } from "./llm-api.js";
 export type { UsageLimitDetails } from "./llm-api.js";

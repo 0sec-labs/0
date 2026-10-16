@@ -1,6 +1,6 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createHash } from "node:crypto";
@@ -15,7 +15,7 @@ import {
   type LoopbackServer,
   type PkceLoopbackProviderConfig,
 } from "./device-auth.js";
-import { getActiveAccount, loadAccountStore } from "./credential-store.js";
+import { credentialsFilePath, getActiveAccount, loadAccountStore } from "./credential-store.js";
 import { providerSupportsMethod } from "./provider-status.js";
 
 const directories: string[] = [];
@@ -79,6 +79,26 @@ const noopBrowser = () => {};
 const fixedNow = () => 1_000;
 
 describe("startDeviceAuth", () => {
+  it("does not advertise a connected account when private credential persistence fails", async () => {
+    const home = temporaryHome();
+    writeFileSync(dirname(credentialsFilePath(home)), "not a directory");
+    const env: NodeJS.ProcessEnv = {};
+    const { fetchImpl } = makeFetch([jsonResponse(200, { access_token: "unsaved-access-token" })]);
+    const updates: DeviceAuthUpdate[] = [];
+    let connected = false;
+    startDeviceAuth(CONFIG, {
+      env, homeDir: home, fetch: fetchImpl, now: fixedNow,
+      sleep: () => Promise.resolve(), openBrowser: noopBrowser,
+      onUpdate: (update) => updates.push(update),
+      onConnected: () => { connected = true; },
+    });
+    await flush();
+    expect(updates.at(-1)?.phase).toBe("failed");
+    expect(connected).toBe(false);
+    expect(env.XAI_API_KEY).toBeUndefined();
+    expect(getActiveAccount(loadAccountStore(home), "xai")).toBeUndefined();
+  });
+
   it("polls pending -> success, builds the account record and applies the env patch", async () => {
     const home = temporaryHome();
     const env: NodeJS.ProcessEnv = {};

@@ -49,6 +49,8 @@ export interface RepairGuidance {
 
 export interface BehavioralRepairOptions {
   repoRoot: string;
+  /** Repository-relative investigation and repair boundary. Commands run at repoRoot. */
+  sourcePath?: string;
   finding: Finding;
   artifactDir: string;
   runtime: NativeRuntime;
@@ -77,6 +79,7 @@ export interface BehavioralRepairOptions {
 
 export interface SecureProjectOptions {
   repoRoot: string;
+  sourcePath?: string;
   stateDir: string;
   testCommand: string;
   setupCommand?: string;
@@ -102,6 +105,7 @@ export interface SecureProjectOptions {
 
 export interface SecureProjectResult {
   version: 1;
+  sourcePath?: string;
   runId: string;
   status: "completed" | "blocked" | "failed" | "cancelled";
   phase: SecurePhase;

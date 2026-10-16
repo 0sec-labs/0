@@ -123,3 +123,20 @@ test("header bar bleeds to BOTH terminal edges (column 0 and the last column)", 
   expect(`${firstBg[0]},${firstBg[1]},${firstBg[2]}`, "column 0 is not PRIMARY").toBe(primaryKey);
   expect(`${lastBg[0]},${lastBg[1]},${lastBg[2]}`, "the last column is not PRIMARY").toBe(primaryKey);
 });
+
+test("Git-aware home suggestions draft a read-only repository review", async () => {
+  tui = await launch({
+    cols: 100,
+    rows: 34,
+    settings: { theme: "0", mouseSupport: true, onboardingCompleted: true },
+  });
+  await tui.waitForText(HOME_READY, 15_000);
+  await tui.waitForText(/Deep vulnerability review/, 10_000);
+  await tui.waitForText(/Git repository detected · review for security issues/);
+
+  const rows = tui.rawFrame().replace(/਀/g, " ").split("\n");
+  const y = rows.findIndex((line) => line.includes("Deep vulnerability review"));
+  expect(y).toBeGreaterThanOrEqual(0);
+  await tui.click(rows[y]!.indexOf("Deep vulnerability review"), y);
+  expect(tui.captureFrame()).toContain("Deeply review this Git repository");
+});

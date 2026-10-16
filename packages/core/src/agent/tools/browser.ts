@@ -6,6 +6,7 @@
 import { z } from "zod";
 import type { JevEvaluator } from "@0/shared";
 import type { ScopePolicy } from "../../scope/scope.js";
+import type { ScopeEnforcementState } from "../../scope/activation.js";
 import type { ToolDefinition, ToolResult } from "../types.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -71,6 +72,7 @@ export const browserToolDefinitions: Record<string, ToolDefinition> = {
           "--remote-debugging-port. New tabs open in the browser's already-authenticated context so " +
           "cookies/MFA/SSO carry over. Only ever supply an endpoint the operator explicitly provides.",
       },
+      caption: { type: "string", description: "screenshot: short description of the test step this image supports (up to 200 characters)" },
       tab: {
         type: "string",
         description: `Named tab to act on (default "${DEFAULT_TAB}"). For close, omit and set all:true to release every tab.`,
@@ -480,6 +482,7 @@ export class PlaywrightDriver implements BrowserDriver {
 export interface BrowserToolContext {
   target: string;
   scope?: ScopePolicy;
+  scopeEnforcement?: ScopeEnforcementState;
   publicNetwork?: { readonly scope?: ScopePolicy };
 }
 
@@ -543,7 +546,7 @@ function effectiveScope(ctx: BrowserToolContext): ScopePolicy | undefined {
 function gateUrl(ctx: BrowserToolContext, url: string): { ok: true } | { ok: false; reason: string } {
   const scope = effectiveScope(ctx);
   if (!scope) return { ok: true }; // unscoped scans keep today's behaviour
-  const verdict = scope.match(url);
+  const verdict = scope.enforce(url, ctx.scopeEnforcement);
   if (!verdict.allowed) return { ok: false, reason: verdict.reason };
   return { ok: true };
 }
@@ -739,6 +742,7 @@ export async function executeBrowser(
 ): Promise<ToolResult> {
   const action = args.action as string | undefined;
   if (!action) return fail("action is required");
+  if (args.caption !== undefined && (typeof args.caption !== "string" || args.caption.length > 200 || !args.caption.trim())) return fail("Screenshot caption must be 1 to 200 characters");
   if (!(BROWSER_ACTIONS as readonly string[]).includes(action)) {
     return fail(`Unknown browser action: ${action}. Valid: ${BROWSER_ACTIONS.join(", ")}`);
   }
@@ -950,6 +954,7 @@ export async function executeBrowser(
             tab: tabName,
             url,
             screenshot_base64: fullBase64.slice(0, 50_000),
+            screenshot_caption: typeof args.caption === "string" ? args.caption.trim() : "Browser observation",
             dialogs: page.drainDialogs(),
           },
           meta: {

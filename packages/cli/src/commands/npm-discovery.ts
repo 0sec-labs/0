@@ -38,7 +38,7 @@ export function registerNpmDiscoveryCommand(program: Command): void {
   const cmd = program
     .command("npm-discovery")
     .description(
-      "npm-ecosystem dynamic bug discovery via the pluggable detector registry (SSPP fuzz / validation read-stability TOCTOU / SSRF parser-diff). Confirmed only on observed runtime consequence.",
+      "Dynamic bug discovery for npm packages; confirmed only on observed runtime impact.",
     );
 
   cmd

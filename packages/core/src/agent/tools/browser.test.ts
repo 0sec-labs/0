@@ -8,8 +8,13 @@
  * A fake driver stands in for playwright so the multi-tab routing + scope-gating
  * can be exercised deterministically without launching Chromium.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+vi.mock("../../plugins/enablement.js", async (importOriginal) => ({
+  ...await importOriginal<object>(),
+  readEnablement: () => ({ schema: 1, project: process.cwd(), enabled: { scope: { version: "1.0.0", capabilities: [], enabledAt: 1 } } }),
+}));
 import type { JevEvaluator } from "@0/shared";
+import { ScopePolicy } from "../../scope/scope.js";
 import {
   BROWSER_ACTIONS,
   browserToolDefinitions,
@@ -84,15 +89,11 @@ const missingBackendFactory: BrowserDriverFactory = async () => ({
 
 const unscopedCtx: BrowserToolContext = { target: "https://target.test" };
 
-// A scope stub matching only *.target.test — enough for gateUrl.
 function scopedCtx(): BrowserToolContext {
-  const scope = {
-    match(url: string) {
-      const allowed = /^https?:\/\/([a-z0-9-]+\.)?target\.test(\/|$)/.test(url);
-      return { allowed, reason: allowed ? "in scope" : "host not in scope", raw: url };
-    },
-  } as unknown as NonNullable<BrowserToolContext["scope"]>;
-  return { target: "https://target.test", scope };
+  return {
+    target: "https://target.test",
+    scope: ScopePolicy.fromJson({ in_scope: ["target.test", "*.target.test"] }),
+  };
 }
 
 // ── Definition / dispatch shape ───────────────────────────────────────────────

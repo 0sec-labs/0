@@ -1,4 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+vi.mock("../plugins/enablement.js", async (importOriginal) => ({
+  ...await importOriginal<object>(),
+  readEnablement: () => ({ schema: 1, project: process.cwd(), enabled: { scope: { version: "1.0.0", capabilities: [], enabledAt: 1 } } }),
+}));
 import { scannerEngagementGate } from "./scanner-profile.js";
 import { ScopePolicy } from "../scope/scope.js";
 import { EnforcementTracker, PathPolicy } from "../scope/enforcement.js";

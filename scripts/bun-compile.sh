@@ -38,6 +38,8 @@ mkdir -p "$(dirname "$OUTFILE")"
 if [ -n "$TARGET" ]; then
   TARGET_ARG="--target=$TARGET"
   NATIVE_TARGET="${TARGET#bun-}"
+  NATIVE_TARGET="${NATIVE_TARGET%-baseline}"
+  NATIVE_TARGET="${NATIVE_TARGET/windows-/win32-}"
   # Append target suffix to default outfile if caller didn't override
   if [ "$OUTFILE" = "dist-bin/0" ]; then
     OUTFILE="dist-bin/0-${TARGET#bun-}"
@@ -55,6 +57,15 @@ else
   esac
 fi
 
+# Ship Linux x64's baseline variant so older CPUs and x64 container emulation
+# can start the CLI. Keep Windows native: the pinned compiler cannot extract
+# its Windows baseline runtime when compiling on a Windows runner.
+if [ -z "$TARGET" ]; then
+  case "$NATIVE_TARGET" in
+    linux-x64) TARGET_ARG="--target=bun-linux-x64-baseline" ;;
+  esac
+fi
+
 case "$NATIVE_TARGET" in
   linux-x64|linux-arm64|darwin-arm64|darwin-x64|win32-x64|win32-arm64) ;;
   *) echo "Unsupported compiled target: $NATIVE_TARGET" >&2; exit 2 ;;
@@ -65,6 +76,9 @@ esac
 # fallback ("0.0.0-dev") — the fallback reads a package.json path that
 # isn't in the /$bunfs virtual tree.
 PKG_VERSION="$(node -p "require('./package.json').version")"
+BUILD_COMMIT="$(git rev-parse HEAD 2>/dev/null || printf '%s' "${GITHUB_SHA:-}")"
+RELEASE_CHANNEL="dev"
+if [ "${ZERO_BUILD_RELEASE_CHANNEL:-}" = "beta" ]; then RELEASE_CHANNEL="beta"; fi
 
 # `node-gyp-build` hides native addon paths behind a runtime lookup. Stage the
 # selected pair at fixed relative paths so c-dataflow's direct requires make Bun
@@ -95,6 +109,8 @@ bun build src/index.ts \
   ${TARGET_ARG} \
   --outfile "../../$OUTFILE" \
   --define "__ZERO_VERSION__=\"$PKG_VERSION\"" \
+  --define "__ZERO_RELEASE_CHANNEL__=\"$RELEASE_CHANNEL\"" \
+  --define "__ZERO_BUILD_COMMIT__=\"$BUILD_COMMIT\"" \
   --define "__ZERO_COMPILED_TARGET__=\"$NATIVE_TARGET\"" \
   --external playwright \
   --external playwright-core \

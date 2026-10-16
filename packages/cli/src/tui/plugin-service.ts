@@ -179,9 +179,9 @@ export interface PluginHostLike {
  * The slice of the shell-level {@link SessionPluginHostManager} this bridge
  * drives when one is injected. Structural on purpose: it breaks the import
  * cycle (the manager imports this module's core/host types) and lets a test
- * inject a trivial fake. When present, ENABLE triggers a turn-boundary-safe
- * {@link refresh} and RUN loads through {@link runPlugin} — both operating on
- * the ONE host the live console session also reads.
+ * inject a trivial fake. RUN loads through {@link runPlugin}, using the host
+ * lineage the console sessions lease. ENABLE only records capability approval;
+ * it never starts plugin code.
  */
 export interface PluginHostManagerLike {
   /**
@@ -278,12 +278,10 @@ export interface PluginServiceDeps {
     coreVersion?: string;
   }) => PluginHostLike;
   /**
-   * The shell-level session plugin-host manager. When provided, ENABLE and RUN
-   * operate through the ONE host the live console session reads, instead of this
-   * bridge's own overlay-scoped host: `enable` writes the record then asks the
-   * manager to refresh, and `run`/`flushDeferred` load through
-   * {@link PluginHostManagerLike.runPlugin}. Absent (the standalone market
-   * overlay), the bridge keeps its own `hostFactory` host exactly as before.
+   * The shell-level session plugin-host manager. RUN and `flushDeferred` load
+   * through {@link PluginHostManagerLike.runPlugin}, preserving the host lineage
+   * sessions lease. ENABLE records approval only. Absent (the standalone market
+   * overlay), the bridge keeps its own `hostFactory` host.
    */
   pluginHostManager?: PluginHostManagerLike;
 }
@@ -547,17 +545,6 @@ export function createPluginService(deps: PluginServiceDeps = {}): PluginService
           message: `Could not persist the enablement approval for ${item.id}.`,
           capabilities: [],
         };
-      }
-      // The record on disk is the source of truth; ask the session manager to
-      // reconcile it into the live host. Reconstruction is only safe at a turn
-      // boundary, so we skip it while a turn is in flight — the shell's own
-      // boundary refresh (which reads the same disk record) will pick it up.
-      if (manager && !isTurnActive()) {
-        try {
-          await manager.refresh();
-        } catch {
-          // Fail-soft: a refresh failure never blocks recording the approval.
-        }
       }
       const capText = capabilities.length > 0 ? capabilities.join(", ") : "no capabilities";
       return {

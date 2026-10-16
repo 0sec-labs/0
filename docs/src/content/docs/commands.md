@@ -7,7 +7,7 @@ tableOfContents:
 ---
 
 Find the command, arguments, and options for your task. This reference covers
-**62 top-level commands** and their registered subcommands.
+**63 top-level commands** and their registered subcommands.
 
 For a worked example, start with [Scan Workflows](/scan-workflows/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
@@ -23,7 +23,7 @@ For a worked example, start with [Scan Workflows](/scan-workflows/),
   <section class="docs-task-card">
     <h3>Work interactively</h3>
     <p>Open the console, configure your environment, and diagnose setup.</p>
-    <p><a href="#console">console</a> · <a href="#config">config</a> · <a href="#doctor">doctor</a></p>
+    <p><a href="#console">console</a> · <a href="#workbench">workbench</a> · <a href="#config">config</a> · <a href="#doctor">doctor</a></p>
   </section>
   <section class="docs-task-card">
     <h3>Review the evidence</h3>
@@ -42,8 +42,8 @@ For a worked example, start with [Scan Workflows](/scan-workflows/),
   </section>
   <section class="docs-task-card">
     <h3>Connect and automate</h3>
-    <p>Configure integrations, queued work, and cloud authentication.</p>
-    <p><a href="#mcp-server">mcp-server</a> · <a href="#orchestrate">orchestrate</a> · <a href="#auth">auth</a></p>
+    <p>Configure integrations and queued local work.</p>
+    <p><a href="#workflow">workflow</a> · <a href="#runs">runs</a> · <a href="#mcp-server">mcp-server</a> · <a href="#orchestrate">orchestrate</a></p>
   </section>
 </div>
 
@@ -57,11 +57,12 @@ a handler may resolve configuration or require an explicit value. Inverse
 `--no-*` options show the underlying positive boolean default. See
 [Configuration](/configuration/) for environment and runtime resolution.
 
-- With no arguments, Bun opens the interactive interface and Node prints installation guidance. See [Console](/console/).
-- `0 -r [id]` / `0 --resume [id]` resume a console session; `0 -c` / `0 --continue` reopen the newest conversation; `0 -p` / `0 --print` run one console prompt. Scan sessions use `0 resume`.
+- With no arguments, `0` opens the account-free browser console under Node or the standalone binary. See [Console](/console/).
+- `0 -p` / `0 --print` run one headless chat prompt. Combine `--resume <id>` or `--continue` with a prompt to continue a saved conversation. Scan sessions use `0 resume`.
 - Use explicit commands in automation. Recognizable bare targets are routed automatically; ambiguous input is refused.
 - Commands register `--help`; root routing can prevent reaching a registration. See the [triage routing limitation](/troubleshooting/#triage-command-reports-an-ambiguous-target).
 - Scope, provider authentication, target authentication, filesystem access, and execution isolation have independent controls. See [Scope & Authorization](/scope/).
+- The operator-global SmolVM profile runs the entire CLI inside an online Kali guest, preserving original arguments and terminal streams. `workbench` and `config` remain host management commands. No Colima/Docker daemon is needed at runtime; failures never choose host execution implicitly.
 - Check the workflow's outcome and verification status after a command completes. Verification exit codes vary by path.
 - Before exporting reports, invoking plugins, preparing disclosures, or running queued work, check the inputs and permissions. These actions can write externally or execute code.
 
@@ -75,35 +76,38 @@ Run chat with the full tool registry: recon, web, source-scan, variant-hunt, ver
 0 console [options]
 ```
 
-Full TUI use requires Bun and a usable TTY. Headless/readline approval limitations are documented in [Console](/console/). Model credentials, target scope, and managed-service credentials are separate.
+Interactive chat uses `0 web`. `0 console --print` and `0 chat --prompt` run headlessly; without a prompt they point to the browser. Model credentials, target scope, and managed-service credentials are separate.
 
 Guide: [Read the workflow](/console/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--target <url>` | — | Engagement target the tools operate against (optional; can be named in-chat) |
-| `--scope <file>` | — | Initial authorization scope. Non-TUI YOLO requires at least one in_scope entry; a scope file is not an OS-isolation boundary. |
+| `--scope <file>` | — | Initial authorization scope. Headless YOLO requires at least one in_scope entry when scope enforcement is active; scope is not OS isolation. |
 | `--finding <id>` | — | Focus the chat on one persisted finding |
 | `--finding-intent <intent>` | — | Finding workflow: investigate, verify, draft_fix, or impact. These instructions do not independently enforce tool permissions. |
 | `--db-path <path>` | — | Persistent findings database (defaults to ZERO_DB_PATH or the local store) |
-| `-m, --model <id>` | — | Model selection for the console. Saved-session precedence differs across TUI, readline, and print paths; see Console. |
+| `-m, --model <id>` | — | Model selection for headless chat; saved-session model takes precedence when resuming. |
 | `--role <role>` | — | Tool set to expose: audit, review, discovery, attack, verify, or report. Defaults to audit; role selection is not authorization or OS isolation. |
 | `--mode <mode>` | — | Autonomy mode: standard, recon, copilot, yolo. YOLO accepts absolute public-network targets without a launch target; explicit restrictions and exclusions still apply. |
 | `--yolo` | — | Shortcut for --mode yolo. Omits per-action approval prompts; explicit restrictions and exclusions still apply. |
 | `--autonomy <mode>` | — | Alias of --mode (standard\|copilot\|yolo\|recon); --mode/--yolo take precedence. |
-| `--max-tool-calls <n>` | `100` | Safety cap on tool-call rounds per operator message |
+| `--max-tool-calls <n>` | `100` | Safety cap on tool-call rounds per message |
 | `--allow-scanners` | — | Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off |
-| `--resume [id]` | — | Reopen a saved console session by id (or unique prefix); with no id, opens a session picker. Also reachable as `0 -r [id]`. |
-| `--continue` | — | Reopen the most recent console session, no picker. Also reachable as `0 -c`. |
+| `--resume [id]` | — | With a headless prompt, reopen a saved session by id or unique prefix; use browser history for a picker. |
+| `--continue` | — | With a headless prompt, continue the most recent saved console session. |
 | `-p, --print [prompt]` | — | Non-interactive: run ONE prompt through the engine, print the result, and exit (no TUI). Reads the prompt from the argument or piped stdin. Combine with --continue/--resume to query a saved session. Also reachable as `0 -p &lt;prompt&gt;`. |
+| `--prompt <text>` | — | Run one headless prompt (alias for --print) |
+
+Aliases: `chat`.
 
 #### Slash commands
 
-See [Console](/console/) for slash commands and readline support.
+Interactive controls are in the browser console. The readline REPL is retired.
 
 #### Keybindings
 
-See [Console keyboard shortcuts](/console/#keyboard-shortcuts).
+Terminal keybindings are retired; use keyboard-accessible browser controls.
 
 #### Autonomy modes
 
@@ -123,7 +127,8 @@ The canonical settings reference is [Configuration](/configuration/).
 
 ### tui
 
-Open the interactive engagement interface (Bun-only).
+Retired terminal UI compatibility entrypoint. Prints instructions to run `0 web`;
+it does not launch terminal rendering. Alias: `watch`.
 
 ```text
 0 tui
@@ -131,11 +136,9 @@ Open the interactive engagement interface (Bun-only).
 
 Aliases: `watch`.
 
-Guide: [Read the workflow](/console/).
-
 ### dashboard
 
-Open a local dashboard for scans and findings.
+Open the local browser workspace for chats, scans and findings.
 
 ```text
 0 dashboard [options]
@@ -149,8 +152,20 @@ Guide: [Read the workflow](/architecture/#presentation-contract).
 | `--port <port>` | `48123` | Port to bind; 0 chooses a free loopback port |
 | `--host <host>` | `127.0.0.1` | Loopback host to bind (127.0.0.0/8 or ::1) |
 | `--asset-dir <path>` | — | Path to built dashboard assets |
+| `--dev-url <url>` | — | Loopback Vite server for authenticated frontend hot reload |
+| `--backends-config <path>` | — | Trusted backend connection registry JSON (default ~/.0/backends.json) |
+| `--team-config <path>` | — | Enable workspace accounts, roles, and shared conversation controls |
+| `--engine-token-env <name>` | — | Environment variable holding the engine bearer credential (32–4096 characters) |
+| `--engine-workspace <path>` | — | Engine-owned authorized workspace for persistent workflow calls |
+| `--engine-scope <path>` | — | Engine-owned scope JSON for persistent live-target workflows |
+| `--engine-target <target>` | — | Restrict persistent workflow calls to this target |
+| `--engine-allow-apply` | — | Admit explicitly approved patch application in persistent workflow calls |
+| `--engine-time-cap <ms>` | — | Server workflow deadline ceiling (default 600000 ms) |
+| `--engine-cost-cap <usd>` | — | Server workflow estimated cost ceiling (default $5) |
 | `--ready-json` | — | Emit the bound dashboard URL as machine-readable JSON |
 | `--no-open` | — | Do not auto-open a browser |
+
+Aliases: `web`.
 
 ### doctor
 
@@ -215,6 +230,119 @@ Merge a shared config into the global (default) or --project layer
 | `--project` | — | Import into the per-project override instead of the global config |
 | `--global` | — | Import into the global config (default) |
 | `--yes` | — | Accept changes to security-sensitive settings (required to flip them) |
+
+### workbench
+
+Set up and inspect the whole-harness online SmolVM security workbench on
+Apple Silicon macOS. The local Linux guest contains 0, the security tools and
+the browser; Docker is not required to run the workbench.
+
+```text
+0 workbench
+```
+
+Guide: [Execution profile and grants](/configuration/#whole-harness-execution-profile).
+
+Subcommands: [run-agent](#workbench-run-agent) · [console-agent](#workbench-console-agent) · [setup](#workbench-setup) · [status](#workbench-status) · [providers](#workbench-providers) · [configure](#workbench-configure) · [disable](#workbench-disable).
+
+#### workbench run-agent
+
+Internal, hidden entrypoint for the host-controlled CLI engine inside an admitted
+Linux SmolVM workbench. It exchanges framed controller messages over standard
+input/output; it is not an interactive command or a host-side launch shortcut.
+Normal CLI commands select this entrypoint automatically when the workbench
+profile is enabled. Direct invocation outside an admitted guest is refused.
+
+```text
+0 workbench run-agent
+```
+
+#### workbench console-agent
+
+Internal, hidden entrypoint for the host-controlled chat engine inside an
+admitted Linux SmolVM workbench. The host owns the terminal/browser UI and
+forwards requests, events and approvals over the framed controller transport.
+Use `0 console` or `0 web` to start a chat; do not invoke this transport endpoint
+manually. Direct invocation outside an admitted guest is refused.
+
+```text
+0 workbench console-agent
+```
+
+#### workbench setup
+
+Verify/provision the signed native runtime, approve a local archive by digest,
+and persist the operator-global SmolVM profile.
+
+```text
+0 workbench setup [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--image <archive>` | — | Local OCI/Docker archive to digest-pin and approve; never a mutable registry tag |
+| `--state <directory>` | — | Private VM state directory (defaults to ~/.0/workbench) |
+| `--workspace <directory>` | — | Explicit workspace mount; otherwise each invocation mounts its current directory |
+| `--provider <id>` | — | Grant chatgpt-codex requests through the host provider broker; credentials stay on the host |
+| `--github` | — | Unsupported: GitHub credential forwarding is refused |
+| `--no-github` | — | Revoke the GitHub token grant |
+| `--cpus <count>` | — | Guest virtual CPUs |
+| `--memory <MiB>` | — | Guest RAM in MiB |
+| `--storage <GiB>` | — | Guest private writable storage in GiB |
+| `--sandbox-image <reference=archive>` | — | Approve an immutable image reference for brokered isolated container actions; repeat for multiple images |
+
+The supported provider grant is `chatgpt-codex`: model requests go through the
+host broker, and credentials stay on the host. GitHub credential forwarding is
+refused. The host HOME, SSH configuration and Docker socket are not mounted
+into the guest.
+
+#### workbench status
+
+Read configuration, native runtime readiness, image approval, effective privacy,
+network mode, broker resource ceilings and retained guest admission. Does not
+download or launch a VM or reveal credential values.
+
+```text
+0 workbench status [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Print machine-readable status (no credential values) |
+
+#### workbench providers
+
+List the exact identifiers accepted by `--provider`; this does not expose credentials.
+
+```text
+0 workbench providers
+```
+
+#### workbench configure
+
+Replace integration grants or operator-approved sibling image references.
+
+```text
+0 workbench configure [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--provider <ids>` | — | Replace provider grants with comma-separated IDs, or none |
+| `--github` | — | Enable the explicit GitHub credential grant |
+| `--no-github` | — | Revoke the GitHub credential grant |
+| `--current-workspace` | — | Mount each invocation's current directory instead of a fixed saved workspace |
+| `--sandbox-image <reference=archive>` | — | Add or replace an operator-approved immutable sandbox image reference; repeat for multiple images |
+| `--clear-sandbox-images` | — | Revoke all explicit sandbox image-reference grants |
+
+#### workbench disable
+
+Explicitly switch to host-local execution. Approved image and guest state remain.
+
+```text
+0 workbench disable
+```
+
 
 ### theme
 
@@ -306,7 +434,7 @@ Guide: [Read the workflow](/integrations/).
 
 Aliases: `hack`, `store`.
 
-Subcommands: [init](#hackstore-init) · [validate](#hackstore-validate).
+Subcommands: [init](#hackstore-init) · [validate](#hackstore-validate) · [prepare-submission](#hackstore-prepare-submission).
 
 #### hackstore init
 
@@ -340,6 +468,23 @@ Validate an extension manifest against the Hackstore schema
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--json` | — | Emit machine-readable JSON |
+
+#### hackstore prepare-submission
+
+Create a reviewed source bundle for a Hackstore pull request. This does not
+publish or submit the extension.
+
+```text
+0 hackstore prepare-submission [options] <path>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `path` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--out <directory>` | — | New output directory (default: &lt;id&gt;-submission) |
 
 ### upgrade
 
@@ -417,37 +562,39 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--target <target>` **required** | — | Target URL or mcp:// endpoint |
 | `--depth <depth>` | `default` | Scan depth: quick, default, deep |
 | `--format <format>` | `terminal` | Output format: terminal, json, md, html, sarif, pdf |
-| `--runtime <runtime>` | `auto` | Runtime: auto (default), api, claude, codex, gemini |
-| `--mode <mode>` | — | Scan mode: probe, deep, mcp, web, http_audit. `http_audit` is the worker-driven authed HTTP scan: it reads target config from ZERO_TARGET_* env vars (ZERO_TARGET_BASE_URL, ZERO_TARGET_AUTH_JSON, ZERO_TARGET_ALLOWED_HOSTS, ZERO_TARGET_ALLOWED_PATHS, ZERO_TARGET_RATE_LIMIT_RPS, ZERO_TARGET_KILL_AFTER_SEC), builds an in-memory ScopePolicy + path allowlist + per-host RateLimiter + wall-clock kill switch, runs the web-pentest loop, and emits an enforcement_summary block in the report JSON. |
+| `--runtime <runtime>` | `auto` | Model provider: auto, api, claude, codex, gemini |
+| `--mode <mode>` | — | Scan mode: probe, deep, mcp, web, http_audit (http_audit reads ZERO_TARGET_* env config) |
 | `--timeout <ms>` | `30000` | Request timeout in milliseconds |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
-| `--repo <path>` | — | Source code path for white-box scanning (read code before attacking) |
-| `--auth <json>` | — | Auth credentials as JSON string or path to JSON file (types: bearer, cookie, basic, header) |
-| `--scope <path>` | — | Path to a JSON scope file ({in_scope, out_of_scope} arrays of host / *.domain / cidr rules). Out-of-scope URLs return as ToolResult.error at every fetch site. See 0#215. |
-| `--allow-scanners` | `false` | Disable the generic-scanner suppression gate (0#217). When --scope is set, the agent refuses to spawn sqlmap/wpscan/nikto/gobuster/dirb/wfuzz/ffuf/`nmap -sV`/`nmap -A` by default; pass this flag only when the engagement explicitly permits generic-scanner traffic. |
+| `--repo <path>` | — | Source code path for white-box scanning |
+| `--access-control-fixtures <file>` | — | JSON file of known private resource ownership fixtures for IDOR verification |
+| `--identities <file>` | — | Restricted JSON file with named test identities for access-control replay |
+| `--auth <json>` | — | Auth credentials: JSON string or path (bearer, cookie, basic, header) |
+| `--scope <path>` | — | Path to a JSON scope policy (enable with `0 plugin enable scope`) |
+| `--allow-scanners` | `false` | Expose generic scanner tools in scope-enforced scans |
 | `--require-scope` | `false` | Set ZERO_REQUIRE_SCOPE for scope-aware execution paths. Ordinary live-target scan already refuses missing scope, independently of this flag. |
-| `--attribution-header <name=value>` | — | Attribution header to attach to in-scope outbound requests (0#216). Repeatable: pass `--attribution-header X-A=1 --attribution-header X-B=2`. Lower precedence than the scope file's `attribution.headers` block and ZERO_ATTRIBUTION_HEADERS env var. NEVER attached to out-of-scope traffic. |
-| `--attribution-ua <token>` | — | Engagement token to embed in the User-Agent on in-scope traffic (0#216). Resulting UA: `0/&lt;ver&gt; (engagement: &lt;token&gt;)`. Lower precedence than the scope file's `attribution.user_agent_token` and ZERO_ATTRIBUTION_UA_TOKEN env var. |
-| `--api-spec <path>` | — | Path to OpenAPI 3.x / Swagger 2.0 spec file (JSON or YAML) for pre-loaded endpoint knowledge |
+| `--attribution-header <name=value>` | — | Header to attach to in-scope requests (repeatable); never sent out-of-scope |
+| `--attribution-ua <token>` | — | Engagement token to embed in the User-Agent on in-scope traffic |
+| `--api-spec <path>` | — | Path to an OpenAPI/Swagger spec for endpoint knowledge |
 | `--export <target>` | — | Export findings to issue tracker (e.g. github:owner/repo) |
-| `--race` | `false` | Enable benchmark/CTF best-of-N strategy racing: run multiple flag-oriented attack strategies in parallel. Do not use for normal live-target audits. |
-| `--egats` | `false` | Enable EGATS (Evidence-Gated Attack Tree Search): beam-search over a hypothesis tree |
+| `--race` | `false` | Best-of-N strategy racing (benchmark/CTF only) |
+| `--egats` | `false` | Evidence-gated attack tree search |
 | `--cost-ceiling <usd>` | — | Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD. |
-| `--rate-limit <spec>` | — | Per-host requests-per-second cap for outbound scan traffic. Plain number (e.g. '5') sets the default rps; comma-separated form 'api.example.com=5,*.example.com=3:6,2' allows per-host overrides and a fallback default. Default is 5 rps when unset. Each host carries an independent token bucket; 429 responses honour Retry-After (with a conservative 60s floor). |
-| `--engagement-profile <name>` | — | Engagement hardening posture for authorized enterprise work. 'standard' (default) is the existing behaviour. 'conservative' applies ONE quiet posture: no password-reset burst probe, the deterministic web-recon pre-pass routed through the per-host rate limiter, no adaptive WAF-evasion ladder, full jitter on the token bucket, and a reduced default of 1 rps/host. The applied posture is recorded in the report as `engagementPosture` so it can be handed to the client as evidence. Lower precedence than the scope file's `engagement` block and ZERO_ENGAGEMENT_PROFILE. |
-| `--no-waf-evasion` | — | Disable the adaptive WAF-evasion ladder (default: on). When a response classifies as blocked, the engine normally retries with encoding/casing/whitespace-mutated payload variants, which escalates a routine WAF block into a SOC incident. Detection and reporting of the block are unaffected. Independent of --engagement-profile; env form: ZERO_WAF_EVASION=0. |
-| `--tui` | `false` | Open the local terminal UI after the scan completes |
-| `--features <list>` | — | Comma-separated list of opt-in feature flags to enable for this scan (e.g. 'wp_fingerprint,web_search'). Each flag maps to the corresponding ZERO_FEATURE_&lt;NAME&gt; environment variable. The token 'fp-moat' is a preset that enables the full false-positive moat (reachability, multi-modal, publishability, pov-gate, poc-gen, consensus) for an A/B run; an env var you set yourself always wins over the preset, so 'ZERO_FEATURE_POV_GATE=0 --features fp-moat' is a single-layer ablation. |
-| `--no-decoy-detection` | — | Disable the anti-honeypot flag-shape validator (default: on). When enabled, the `done` tool rejects low-confidence flags (e.g. `FLAG{I'm_a_Script_Kiddie}`) once with a hint to keep exploring. See GitHub issue #82. |
-| `--dispatch <mode>` | `auto` | Tool-call protocol for the legacy text agent loop (0#232): 'json' (default TOOL_CALL JSON lines), 'xml' (&lt;command&gt;/&lt;flag&gt;/&lt;finding&gt;/&lt;note&gt; tags — survives malformed JSON from cheap OpenRouter / Gemini / DeepSeek models), or 'auto' (xml for cheap providers, json otherwise). No effect on the native API loop. Env override: ZERO_DISPATCH=xml. |
-| `--emit <target>` | — | Emit target. Default unset → existing terminal/json/etc. `pr` → emit each reproduced finding as a GitHub PR with repro + suggested patch (0#377). Unverified findings roll up into `hypotheses.md`. |
+| `--rate-limit <spec>` | — | Per-host requests/sec cap, e.g. '5' or 'host=5,*=3' (default 5) |
+| `--engagement-profile <name>` | — | Engagement posture: standard (default) or conservative (quieter) |
+| `--no-waf-evasion` | — | Disable adaptive WAF-evasion retries |
+| `--tui` | `false` | Retired terminal view flag; scan still completes and points to 0 web. |
+| `--features <list>` | — | Comma-separated feature flags to enable, e.g. 'fp-moat' |
+| `--no-decoy-detection` | — | Disable the anti-honeypot flag validator |
+| `--dispatch <mode>` | `auto` | Tool-call protocol: json, xml, auto (legacy loop only) |
+| `--emit <target>` | — | Emit mode: 'pr' opens a GitHub PR per reproduced finding |
 | `--base <branch>` | — | Base branch for `--emit pr` (default: main) |
 | `--dry-run` | `false` | For --emit pr only: print proposed git/gh emission commands. The scan itself still executes. |
 | `--emit-out-dir <path>` | — | Directory for `--emit pr` rollup files (default: system temp) |
-| `--resume <run-id>` | — | Resume a previous run from its journal on disk (0#374). Locates the run's journal, rehydrates agent state, and continues from the last entry. |
-| `--branch-from <entry-index>` | — | Branch the journal at the given entry index before resuming (requires --resume). Copies entries 0..N into a new run and resumes from there. |
+| `--resume <run-id>` | — | Resume a previous run from its on-disk journal |
+| `--branch-from <entry-index>` | — | Branch the journal at an entry index before resuming (with --resume) |
 | `--verbose` | `false` | Show detailed output |
 | `--replay` | `false` | Replay the last scan's results |
 
@@ -517,7 +664,7 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
 | `--cost-ceiling <usd>` | — | Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD. |
-| `--tui` | `false` | Open the local terminal UI after the audit completes |
+| `--tui` | `false` | Retired terminal view flag; audit still completes and points to 0 web. |
 | `--resume <run-id>` | — | Resume a previous run from its journal on disk (0#374) |
 | `--branch-from <entry-index>` | — | Branch the journal at the given entry index before resuming (requires --resume). |
 | `--verbose` | `false` | Show detailed output |
@@ -548,7 +695,7 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
 | `--cost-ceiling <usd>` | — | Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD. |
-| `--tui` | `false` | Open the local terminal UI after the review completes |
+| `--tui` | `false` | Retired terminal view flag; review still completes and points to 0 web. |
 | `--diff-base <ref>` | — | Git base ref to review against (for diff-aware review) |
 | `--changed-only` | `false` | Restrict static scanner leads + prioritization to changed files |
 | `--profile <profile>` | `default` | Review profile: default (web/JS/TS/Python), c-library (C/C++ memory safety, tier-1/2/3 harness), linux-kernel (kernel-aware static review), cardano-onchain (Aiken/Plutus validator logic), solana-onchain (Anchor/native Rust account-model authorization), evm-onchain (Solidity/Foundry/Hardhat DeFi/bridge — reentrancy, oracle manipulation, cross-chain replay), cairo-onchain (Cairo/Starknet DeFi — caller-auth gaps, share-rounding, L1↔L2 messages), move-onchain (Sui/Aptos Move — object/capability binding, shared-math overflow, reward-index accounting), cardano-haskell (first-party Cardano Haskell node stack — ledger/plutus/ouroboros/cardano-base), xnu-kernel (Apple XNU macOS/iOS source review), or xnu-re (decompiled Apple kext pseudo-C) |
@@ -623,6 +770,7 @@ Guide: [Scope & Authorization](/scope/).
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--test-command <command>` **required** | — | Operator-approved regression command; must pass before and after repair |
+| `--source-path <path>` | — | Repository-relative folder to investigate and repair; setup and tests run at the repository root |
 | `--setup-command <command>` | — | Operator-approved setup/build command run in each disposable checkout |
 | `--state-dir <path>` | — | Persistent run directory; defaults to a stable per-repository path so learnings accumulate |
 | `--runtime <runtime>` | `api` | Native repair runtime: auto or api |
@@ -1000,15 +1148,15 @@ Guide: [Read the workflow](/verification-result/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--runner <kind>` | — | Deterministic replay runner: local\|docker\|qemu (default local). |
+| `--runner <kind>` | — | Deterministic replay runner: local\|smolvm\|docker\|qemu (default smolvm in an admitted workbench, local outside). |
 | `--docker-network <name>` | — | Docker network for --runner docker. Defaults to none; bridge/custom networks require --scope and only permit HTTP steps. |
-| `--scope <path>` | — | Engagement scope JSON required for networked Docker HTTP replay. |
+| `--scope <path>` | — | Engagement scope JSON required for HTTP replay; SmolVM also refuses private/loopback destinations. |
 | `--qemu-binary <path>` | — | QEMU emulator for --runner qemu. |
 | `--qemu-kernel <path>` | — | Guest kernel image for --runner qemu. |
 | `--qemu-busybox <path>` | — | Static BusyBox binary used to build the offline QEMU guest. |
 | `--out <dir>` | — | 0#193 run directory (artifacts go under &lt;out&gt;/artifacts/). Defaults to a fresh tmpdir. |
 | `--finding <path>` | — | Path to a finding.json. |
-| `--bundle <path>` | — | Path to a reproduction bundle directory; requires --runner local\|docker. Replays the bundle's vulnerable and patched snapshots through the configured runner and emits an aggregate ReproductionBundleResult. |
+| `--bundle <path>` | — | Path to a reproduction bundle directory; requires --runner local\|smolvm\|docker outside an admitted workbench. Replays the bundle's vulnerable and patched snapshots through the configured runner and emits an aggregate ReproductionBundleResult. |
 | `--create-bundle <plan.json>` | — | Path to a BundlePlan JSON. Creates a reproduction bundle without executing any PoC steps. Requires --out &lt;bundle-dir&gt;. |
 | `--target <path>` | — | Path to a target.json (PocExecutionTarget: baseUrl, env, cwd, timeoutMs, personas). |
 | `--fixture <name>` | — | Run a built-in deterministic replay fixture. Supported: cli-path-traversal. |
@@ -1212,7 +1360,7 @@ Run target-specific engines through the shared evidence research plane
 
 Guide: [Read the workflow](/research-workflows/).
 
-Subcommands: [pipeline](#research-pipeline) · [mobile](#research-mobile) · [linux-matrix](#research-linux-matrix) · [linux](#research-linux).
+Subcommands: [pipeline](#research-pipeline) · [counterexample](#research-counterexample) · [mobile](#research-mobile) · [linux-matrix](#research-linux-matrix) · [linux](#research-linux).
 
 #### research pipeline
 
@@ -1274,6 +1422,35 @@ Run a supplied Linux kernel reproducer through the shared N-boot evidence gate
 | `--expected-signature <literal>` **required** | — | Literal crash signature that every counted boot must contain |
 | `--boots <n>` | `3` | Fresh boots |
 | `--min-hits <n>` | `2` | Required reproducing boots |
+| `--artifact-root <path>` | `.0-research` | Research artifact root |
+
+#### research counterexample
+
+Build a sanitizer-backed harness for a suspect C/C++ function, search for failing
+inputs, and retain evidence under the artifact root. Supply the source tree,
+header, function name and C declaration. Optional witness inputs replay proposed
+failures; mitigation sources let the same inputs be replayed against a reference
+fix. Review the recorded build, replay and sanitizer results before treating a
+candidate as a confirmed finding.
+
+```text
+0 research counterexample [options]
+```
+
+Guide: [Read the workflow](/research-workflows/).
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--source <dir>` **required** | — | C/C++ source tree root |
+| `--fn <name>` **required** | — | Suspect function name |
+| `--header <path>` **required** | — | Header declaring the suspect function |
+| `--declaration <decl>` **required** | — | C declaration of the suspect function |
+| `--input-shape <shape>` | `bytesAndLen` | bytesAndLen, bytesPtr, or bytesAndLenOut |
+| `--build-system <system>` | `auto` | auto, autotools, cmake, or meson |
+| `--timeout <sec>` | — | Fuzz wall-clock budget in seconds |
+| `--mitigation-source <files...>` | — | Reference-mitigation source file(s) for replay |
+| `--mitigation-include <dirs...>` | — | Extra include directories for the mitigation build |
+| `--witness <files...>` | — | Finding-proposed witness input file(s) to replay through the sanitizer build |
 | `--artifact-root <path>` | `.0-research` | Research artifact root |
 
 ### hunt
@@ -1785,7 +1962,7 @@ Guide: [Read the workflow](/research-workflows/).
 | `--mcp-endpoint <url>` **required** | — | Authorized MCP tools/list endpoint |
 | `--oracle-endpoint <url>` **required** | — | Customer-owned state-observer endpoint |
 | `--scenario <path>` **required** | — | Scenario JSON: id, title, injection_vector, benign_task, payload, prohibited_action |
-| `--scope <path>` **required** | — | Engagement scope JSON; all three endpoints must be in scope |
+| `--scope <path>` | — | Engagement scope JSON; required only while the scope plugin is enabled |
 | `--target-version <version>` **required** | — | Version or build digest of the tested agent deployment |
 | `--policy-version <version>` **required** | — | Version or digest of the agent prompt and authorization policy |
 | `--model-version <version>` **required** | — | Model deployment/version identifier |
@@ -2012,7 +2189,7 @@ Autonomous self-improvement: source-candidate proposal, lens evaluation, and aut
 
 Guide: [Read the workflow](/improvement-plane/).
 
-Subcommands: [run](#evolve-run) · [status](#evolve-status) · [promote](#evolve-promote) · [rollback](#evolve-rollback) · [exec](#evolve-exec) · [feedback](#evolve-feedback).
+Subcommands: [run](#evolve-run) · [status](#evolve-status) · [reconcile](#evolve-reconcile) · [promote](#evolve-promote) · [rollback](#evolve-rollback) · [exec](#evolve-exec) · [feedback](#evolve-feedback).
 
 #### evolve run
 
@@ -2045,6 +2222,25 @@ Show active and canary versions, snapshot identities, and registry events
 | --- | --- | --- |
 | `--store <path>` | — | Required path to evolution store directory |
 | `--json` | — | Output structured JSON |
+
+#### evolve reconcile
+
+Record an observed charge for an interrupted durable dispatch. Supply the
+reservation ID and immutable cost-receipt digest shown by the campaign status.
+This resolves cost uncertainty once; it does not bypass provenance or promotion.
+See [durable campaign accounting](/improvement-plane/#feedback-across-evolution-passes).
+
+```text
+0 evolve reconcile [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--store <path>` **required** | — | Path to evolution store directory |
+| `--dispatch <id>` **required** | — | Unresolved dispatch reservation ID |
+| `--cost-usd <amount>` **required** | — | Actual provider/execution charge |
+| `--receipt-digest <sha256>` **required** | — | Immutable observed cost receipt digest |
+| `--json` | — | Output structured campaign ledger |
 
 #### evolve promote
 
@@ -2175,8 +2371,8 @@ Guide: [Read the workflow](/research-workflows/).
 | --- | --- | --- |
 | `--json` | — | Emit the asset inventory as machine-readable JSON |
 | `--timeout <ms>` | `10000` | Per-request probe timeout in milliseconds |
-| `--active` | — | Enable active subdomain enumeration (DNS brute-force). Touches the target's DNS, so it is deny-by-default: REQUIRES --scope &lt;file&gt; authorizing the targets. |
-| `--scope <file>` | — | Path to a JSON scope file ({in_scope, out_of_scope}). Required for --active; every candidate host is checked against it before any DNS query. |
+| `--active` | — | Enable active DNS subdomain brute-force; the optional scope plugin enforces candidate authorization. |
+| `--scope <file>` | — | JSON engagement policy; required for --active only while the scope plugin is enabled. |
 
 ### js-recon
 
@@ -2194,7 +2390,7 @@ Guide: [Read the workflow](/research-workflows/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--scope <file>` **required** | — | Path to a JSON scope file ({in_scope, out_of_scope}). REQUIRED — every JS URL is checked against it before any fetch. No scope = nothing fetched. |
+| `--scope <file>` | — | JSON engagement policy; required only while the scope plugin is enabled. |
 | `--timeout <ms>` | `10000` | Per-request fetch timeout in milliseconds |
 | `--max-files <n>` | — | Maximum JS files to fetch (clamped to [0,100]) |
 | `--json` | — | Emit the result as machine-readable JSON |
@@ -2302,8 +2498,9 @@ Probe S3 public access and takeover risks, or validate AWS credentials. Read-onl
 0 cloud
 ```
 
-These commands inspect authorized cloud infrastructure. Managed testing uses
-separate [0cloud access](/roadmap/#0cloud); see [managed onboarding](/getting-started/#managed-work-and-onboarding).
+These commands inspect authorized cloud infrastructure. For managed testing,
+contact the service operator; `0 cloud` is local AWS/S3 reconnaissance, not
+managed-service account setup.
 
 Guide: [Read the workflow](/research-workflows/).
 
@@ -2323,7 +2520,7 @@ Probe S3 buckets anonymously for public listing and orphaned-bucket takeover. Re
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--scope <file>` **required** | — | Path to a JSON scope file ({in_scope, out_of_scope}). REQUIRED — each bucket's S3 endpoint must be in scope or it is refused. |
+| `--scope <file>` | — | JSON engagement policy; required only while the scope plugin is enabled. |
 | `--region <region>` | — | Bucket home region (default us-east-1 / global endpoint) |
 | `--max-keys <n>` | — | Max object keys to sample from a public listing (1-100, default 10) |
 | `--json` | — | Emit results as machine-readable JSON |
@@ -2338,7 +2535,7 @@ Validate an AWS credential with `sts:GetCallerIdentity` and read-only over-privi
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--scope <file>` **required** | — | Path to a JSON scope file ({in_scope, out_of_scope}). REQUIRED — validating a credential is recon against the target org, deny-by-default. |
+| `--scope <file>` | — | JSON engagement policy; required only while the scope plugin is enabled. |
 | `--access-key-id <id>` | — | AWS access key id (defaults to $AWS_ACCESS_KEY_ID) |
 | `--secret-access-key <key>` | — | AWS secret access key (defaults to $AWS_SECRET_ACCESS_KEY) |
 | `--session-token <token>` | — | AWS session token (defaults to $AWS_SESSION_TOKEN) |
@@ -2521,26 +2718,101 @@ Adapt a public PoC for <cve-id> until it reproduces on the target kernel.
 
 ## Automation & integration
 
+### worker
+
+Deploy and manage remote Zero engine workers. A worker is a remote engine that
+runs chats and workflows on its host; select its registered backend in the
+browser's computer menu to work there.
+
+```text
+0 worker
+```
+
+Subcommands: [deploy](#worker-deploy) · [stop](#worker-stop) · [hosts](#worker-hosts).
+
+#### worker deploy
+
+Deploy the built CLI engine onto a running Linux Lima instance or an SSH host and
+register its connection locally. Run `pnpm build` in a source checkout first.
+Use `--ssh` for an SSH host alias or `user@host`; otherwise the command uses the
+`zero-worker` Lima instance. SSH deployment uses noninteractive key authentication.
+
+```text
+0 worker deploy [options]
+```
+
+Use `--target-git` to clone your repository into the remote workspace. Forwarding
+`OPENAI_API_KEY` is explicit through `--forward-provider-key`; use it only for a
+host you own. Deployment installs runtime dependencies and starts the engine on
+the remote machine. Inspect the returned backend ID and connection details, then
+select that computer in the browser before starting remote work.
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--ssh <user@host>` | — | SSH target host (BatchMode; key auth from ssh config/agent) |
+| `--lima <name>` | `zero-worker` | Lima instance name |
+| `--target-git <url>` | — | Repository the worker clones into the engine workspace instead of the bundled demo target |
+| `--backends-config <path>` | — | Backend registry path |
+| `--ssh-config <path>` | — | OpenSSH config file for the SSH target (e.g. a Lima instance's ssh.config) |
+| `--engine-port <port>` | — | Engine port on the worker (default: stable port derived from host) |
+| `--forward-provider-key` | `false` | Forward this machine's OPENAI_API_KEY to the worker engine (user-owned hosts only) |
+
+#### worker stop
+
+Stop a worker engine that Zero deployed and disconnect its owned local tunnel.
+The command verifies the saved deployment metadata, remote working directory,
+PID and process command before sending a termination signal. It retains the
+remote workspace and the saved backend registration so the worker can be
+redeployed later.
+
+```text
+0 worker stop <backend-id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `backend-id` | Yes |  |
+
+#### worker hosts
+
+List SSH host aliases discovered from `~/.ssh/config`, with their resolved host
+and user when present. This lists configuration entries rather than checking
+connectivity or whether each host supports a Linux engine.
+
+```text
+0 worker hosts
+```
+
 ### mcp-server
 
-Run the MCP stdio server for live target interaction tools.
+Expose selected target tools or managed workflows over MCP stdio.
 
 ```text
 0 mcp-server [options]
 ```
 
-Set an explicit scope and narrow `--tools` allowlist. The external MCP client selects the model; configure OS isolation separately.
+Use `--workflows --workspace /absolute/path/to/repo` for template discovery and source workflow execution. Live workflow targets require `--scope` and the enabled scope plugin. Workflow assessments use 0's configured provider; individual target tools use the external agent's reasoning model. Disconnect cancels this host's active runs.
+
+Local-target MCP stdio requires operator-selected host-local execution. The SmolVM batch CLI bridge cannot forward this transport and refuses startup without changing the configured sandbox profile. Use `0 workflow` commands for isolated execution. Explicit `--workflows --backend <id>` runs a network client for a registered remote engine; the backend owns execution and remote runs survive client disconnect.
 
 Guide: [Read the workflow](/integrations/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--target <target>` **required** | — | Target URL for this MCP session |
-| `--scan-id <scanId>` **required** | — | Scan ID to associate persisted findings and target updates with |
+| `--target <target>` | — | Target URL for this MCP session |
+| `--scan-id <scanId>` | — | Scan ID to associate persisted findings and target updates with |
+| `--backend <id>` | — | Use a registered remote workflow engine; no local execution fallback |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--session <id>` | — | Attach workflow runs to an existing session on the selected engine |
+| `--workflows` | `false` | Expose workflow discovery and run lifecycle tools instead of live tools |
+| `--allow-apply` | `false` | Permit explicit workflow apply requests inside the authorized workspace |
+| `--workspace <path>` | — | Absolute authorized local root for workflow source assessments |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--timeout <ms>` | `30000` | Default tool timeout in milliseconds |
 | `--scope <path>` | — | Path to a 0 scope JSON file. Out-of-scope URLs are refused by every target tool. |
-| `--tools <names>` | — | Comma-separated live 0 MCP tools to expose (default: all). |
+| `--tools <names>` | — | Comma-separated 0 MCP tools to expose (default: live tools, or workflow tools with --workflows). |
 | `--rate-limit <spec>` | — | Per-host request rate-limit spec. Defaults to 5 rps when unset. An active --engagement-profile caps this: the effective rate is the minimum of the two, so the profile can only lower it. |
 | `--allow-scanners` | `false` | Disable generic-scanner suppression for scoped engagements. |
 | `--engagement-profile <name>` | — | Engagement hardening posture for authorized enterprise work. 'standard' (default) is the existing behaviour. 'conservative' applies the quiet posture to this MCP session: no adaptive WAF-evasion ladder, full jitter on the per-host token bucket, and a 1 rps/host ceiling. The profile can only ever make the session quieter — the effective rate is the minimum of the profile and --rate-limit. The applied posture is recorded as an `engagement_posture_applied` event on the scan so it can be handed to the client as evidence. Lower precedence than the scope file's `engagement` block and ZERO_ENGAGEMENT_PROFILE. |
@@ -2601,16 +2873,17 @@ List everything in the configured registry
 Download, validate, and write plugin files. Installation leaves the plugin disabled and executes no code.
 
 ```text
-0 plugin install [options] <id>
+0 plugin install [options] <id-or-path>
 ```
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `id` | Yes |  |
+| `id-or-path` | Yes |  |
 
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--registry <url>` | — | Hackstore index URL (https) |
+| `--local` | — | Install a local directory containing manifest.json and plugin.js (no network) |
 
 #### plugin enable
 
@@ -2776,616 +3049,75 @@ Write a program's structured_scopes to ~/.0/scopes/<handle>.json
 | --- | --- | --- |
 | `--out <path>` | — | Override the output path |
 
-### login
+## Private local review checks
 
-Sign in to 0cloud for separately authorized managed-service commands. Local
-model providers are connected in the terminal UI with `/connect`.
+These commands store operator-approved criteria for a real local project root,
+not cloud enrollment or repository-controlled configuration. See the
+[review-check workflow](/scan-workflows/#private-project-review-checks).
+
+### checks
+
+Manage private project checks and explicit revision approvals.
 
 ```text
-0 login [options]
+0 checks
 ```
 
-Signing in authenticates managed-service CLI operations; it does not configure
-a model for local inference. `0dev` no longer injects Cloud settings.
+Subcommands: [propose](#checks-propose) · [add](#checks-add) · [list](#checks-list) · [enable](#checks-enable) · [disable](#checks-disable) · [set](#checks-set) · [remove](#checks-remove).
 
-Guide: [Managed-service authentication](/integrations/#cloud-auth).
+#### checks propose
 
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--host <url>` | — | Cloud host (defaults to ZERO_CLOUD_HOST or production) |
-| `--token <value>` | — | Skip the browser flow and persist this token directly |
-
-### service
-
-Managed scan lifecycle commands. These are implemented client entry points,
-not evidence that a managed service or self-serve onboarding is available.
-Use only an environment approved by the team, with Cloud credentials, repository
-access, testing authorization and agreed scope, spend and delivery terms.
+Save a literal draft without enabling it. Creating a draft grants no authority
+to execute it in future reviews.
 
 ```text
-0 service
-```
-
-These commands use the configured Cloud host's `/api/scans` and
-`/api/scan-schedules` APIs. `start`, `cancel` and `disconnect` make remote changes.
-They are separate from local `scan` and `secure` workflows.
-
-:::caution[Confirm managed API compatibility before changing schedules]
-The audited client trusts the server to filter schedules by repository. The
-reviewed server source returns organization-wide schedules instead: `connect`
-can select another repository's schedule and `service disconnect` can delete
-all returned schedules. Do not use these as repository-selective operations
-until the deployed contract is confirmed. See the
-[compatibility findings and source revisions](/ci/github-action/#managed-lifecycle-compatibility).
-:::
-
-Guide: [Managed work and onboarding](/getting-started/#managed-work-and-onboarding).
-For repository enrollment and recurring schedules, see [connect](#connect).
-
-Subcommands: [start](#service-start) · [status](#service-status) · [wait](#service-wait) · [cancel](#service-cancel) · [disconnect](#service-disconnect).
-
-#### service start
-
-Submit a repository and test command to enqueue a managed `secure` scan.
-An optional setup command runs before testing in the managed workflow.
-Do not send unreviewed commands, embed secrets in repository URLs, or interpret
-an accepted request as proof of completed testing or a verified repair.
-
-```text
-0 service start [options]
-```
-
-`--json` returns the created scan ID and target ID. The current client sends
-`--cost-ceiling` as `secure_config.cost_ceiling`, while the reviewed server
-expects `secure_config.cost_ceiling_usd`. Do not rely on this flag to enforce
-a remote budget. Confirm the deployed request contract, enforcement, and
-cancellation behavior before starting work; the CLI is not a local hard stop.
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--repo <url>` **required** | — | Repository URL to scan (e.g. https://github.com/org/repo) |
-| `--test-command <cmd>` **required** | — | Test command to verify repairs (e.g. "npm test") |
-| `--setup-command <cmd>` | — | Setup command to run before the test command (e.g. "npm ci") |
-| `--model <model>` | — | Model to use for the scan (default: service-configured) |
-| `--cost-ceiling <usd>` | — | Sends secure_config.cost_ceiling, but the reviewed server expects cost_ceiling_usd. Do not rely on this flag for managed budget enforcement without confirming deployed compatibility. |
-| `--json` | — | Emit result as machine-readable JSON |
-
-#### service status
-
-Fetch the service's scan record. `--json` returns the response; the text view
-summarizes state and reported usage. Missing usage is not zero.
-
-```text
-0 service status [options] <scan-id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `scan-id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit result as machine-readable JSON |
-
-#### service wait
-
-Poll until the service reports `complete`, `failed`, `cancelled` or
-`cost_exceeded`. The default interval is five seconds.
-
-```text
-0 service wait [options] <scan-id>
-```
-
-Inspect the returned `status`: reaching a terminal state can exit successfully
-even when the scan failed or was cancelled. A “finished” message is not a
-verified finding, a verified fix or a successful security assessment.
-Interrupting this local polling command does not request remote cancellation.
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `scan-id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--interval <seconds>` | `5` | Polling interval in seconds (default 5) |
-| `--json` | — | Emit result as machine-readable JSON |
-
-#### service cancel
-
-Request cancellation of a pending or running scan.
-
-```text
-0 service cancel [options] <scan-id>
-```
-
-Check the returned state and poll status afterward. A cancellation request
-does not prove execution has stopped or that previous consumption is refunded.
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `scan-id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit result as machine-readable JSON |
-
-#### service disconnect
-
-Request schedules using a repository URL or the current checkout's `origin`
-remote, then delete every returned schedule after confirmation. The client
-does not verify each schedule's repository. **An unfiltered server response
-can therefore delete schedules for other repositories.** Confirm compatibility
-before use; do not bypass that check with `--yes`.
-
-In JSON mode, a nonempty returned list requires `--yes` rather than an
-interactive answer. An empty returned list is a no-op.
-
-```text
-0 service disconnect [options] [repo]
-```
-
-This deletes schedules, not Cloud credentials or the repository's GitHub App
-grant, and does not cancel existing scans. Deletions can partially succeed:
-inspect per-schedule errors and compare `deleted_count` with `total` in JSON
-output rather than trusting the final state label or process exit code alone.
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `repo` | No |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `-y, --yes` | — | Skip interactive confirmation |
-| `--json` | — | Emit result as machine-readable JSON |
-
-### auth
-
-Authenticate with a configured control plane.
-
-```text
-0 auth
-```
-
-These credentials authorize managed-service operations where granted. They do
-not supply model inference to the local console; configure a provider key or
-subscription separately. See [managed boundaries](/roadmap/#0cloud).
-
-Guide: [Managed-service authentication](/integrations/#cloud-auth).
-
-Subcommands: [login](#auth-login) · [logout](#auth-logout) · [status](#auth-status).
-
-#### auth login
-
-Log in through the browser, or supply a credential with `--token`.
-
-```text
-0 auth login [options]
+0 checks propose [options]
 ```
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--host <url>` | — | Cloud host (defaults to ZERO_CLOUD_HOST or production) |
-| `--token <value>` | — | Skip the browser flow and persist this token directly |
+| `--name <name>` **required** | — | Short check name (1–120 characters) |
+| `--prompt <text>` **required** | — | Literal review criterion (1–2000 characters) |
+| `--project <path>` | — | Local project directory (defaults to this checkout's root) |
+| `--json` | — | Machine-readable result |
 
-#### auth logout
+#### checks add
 
-Delete saved credentials for the current Cloud profile. Development credentials remain separate from the normal profile; logout does not revoke repository access or delete managed schedules.
-
-```text
-0 auth logout
-```
-
-#### auth status
-
-Check credentials against the authenticated managed scan-list endpoint, not
-`/health`. Success establishes scan-read access, not dispatch authorization.
+Create and enable an explicitly approved literal check. At most eight checks
+can be active in one local project.
 
 ```text
-0 auth status
-```
-
-### guide
-
-Discover the installed CLI's capabilities, execution boundaries and command
-contracts. Local model access and managed security execution are separate
-paths. Check `0 --help` against your installed build.
-
-```text
-0 guide [options] [topic]
-```
-
-```bash
-0 guide
-0 guide commands --json
-0 guide "auth login" --json
-```
-
-The command catalogue is generated from the registered Commander tree, including
-nested commands, arguments, options and aliases. Capability prose explains when
-to use a workflow. Refresh the guide after updating the CLI; do not infer command
-availability from a separate copied onboarding prompt.
-
-JSON output distinguishes installed capabilities, service health and account
-state. A successful health probe means only that the endpoint answered. Account
-identity, repository access, product entitlement and funding remain unknown
-until checked by their service endpoints. `guide` does not authorize or start a
-run. Unknown topics fail before probing the service.
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `topic` | No | capability id, command path, 'commands', 'architecture', or 'limits' |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--format <format>` | `human` | Output format: human or json |
-| `--json` | `false` | Shorthand for --format json |
-
-### connect
-
-Verify repository access without starting work. A managed scan requires `--run`;
-a scan with recurrence requires `--schedule`. Readiness and, for dispatch,
-schedule lookups must succeed. Unavailable APIs block dispatch.
-
-The current client takes the first returned schedule without independently
-checking its repository. Against the reviewed organization-wide list endpoint,
-`no-open` can refer to a different repository. Confirm deployed filtering
-before using this flow, and read the
-[managed compatibility warning](#service). A successful lookup is not proof
-that repository matching is correct.
-
-```text
-0 connect [options] [repo]
-```
-
-After confirming service compatibility and account access, authenticate and review the connection:
-
-```bash
-0 auth login
-0 connect https://github.com/org/repo --test-command "npm test"
-```
-
-With no repository argument, the CLI reads the current checkout's `origin`
-remote. SSH-style Git remotes are normalized to HTTPS. You must own the target
-or be authorized to assess it. When `--test-command` is omitted, the detector
-can use a temporary shallow clone to inspect Node package scripts, a Makefile,
-Python project files, Cargo or Go. Prefer an explicit regression command when
-automatic detection is unsuitable. `--setup-command` specifies setup/build work.
-
-For a noninteractive agent, request JSON and inspect any required action first:
-
-```bash
-0 connect --format json --test-command "npm test"
-# Only after confirming API compatibility and reviewing scope, cadence, budget and publication:
-0 connect --format json --test-command "npm test" --run --yes
-```
-
-For `--run` or `--schedule`, JSON mode without `--yes` returns `action-required`
-with `reason: "confirmation_required"` before starting new work. Without either
-dispatch flag, `ready` means access was checked and no scan or schedule was created.
-An existing schedule may return `no-open`. Missing GitHub App access returns an
-installation URL where available; it does not implement browser-poll enrollment.
-
-`--schedule` defaults to daily at 03:00 UTC; `--cron` changes that frequency and
-requires `--schedule`. Use `--run` for an approved one-shot request. The per-run
-`--cost-ceiling` is not a monthly subscription allowance.
-
-| JSON state | Meaning |
-| --- | --- |
-| `ready` | Access was verified without dispatch, or requested work was created. Check `scan_id` and `schedule`; readiness alone does not mean a scan exists. |
-| `no-open` | A returned schedule was selected; no new work was created. Repository identity is not independently verified by the client. |
-| `action-required` | Enrollment, authorization, approval or an operation failed; inspect `reason` and `message`. |
-
-Readiness and schedule-lookup failures exit with status 2 and create no work.
-If a scan was created but scheduling failed or no target ID was returned,
-the command exits 1 with `action-required`, `reason: "schedule-creation-failed"`
-and the existing `scan_id`. Inspect that scan before retrying; it is not rolled
-back and blindly retrying can duplicate work. Terminal mode also reports this
-partial outcome without a connected-success banner.
-
-`--publication-policy off|manual|auto` requests the service's repair-publication
-policy. Service support, access and independently verified repair evidence are
-separate requirements; the flag is not proof of a working publication path.
-This command does not directly publish a PR or automatically merge one.
-
-Guide: [Cloud authentication](/api-keys/).
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `repo` | No | HTTPS git URL of the repository (default: current directory's git remote origin) |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--test-command <command>` | — | Regression command; auto-detected from the repo when omitted |
-| `--setup-command <command>` | — | Setup/build command run before tests (e.g. pnpm install) |
-| `-m, --model <model>` | — | Model for the managed runs; defaults to the cloud routing default |
-| `--cost-ceiling <usd>` | — | Per-run model cost ceiling in USD |
-| `--setup-only` | `false` | Verify access without creating a scan or schedule |
-| `--run` | `false` | Request one managed scan after verifying repository access |
-| `--schedule` | `false` | Request a managed scan and a recurring schedule |
-| `--cron <expression>` | `0 3 * * *` | Schedule frequency in UTC; requires --schedule |
-| `--format <fmt>` | `terminal` | Output format: terminal \| json |
-| `--publication-policy <policy>` | `off` | Publication policy: off \| manual \| auto. Default: off |
-| `--yes` | — | Skip interactive confirmation before scheduling |
-
-## Codebase configuration and methodology
-
-These commands use the same authenticated cloud APIs as the dashboard. They
-require a matching deployed service and current organization access. Enroll with
-`project enroll` or the dashboard's Add action before running `project setup`.
-Saving configuration and binding a methodology do not start a scan or grant
-credits. New runs capture immutable revisions; edits do not change queued work.
-
-### project
-
-Read and edit a codebase's context, operating plan, revision history and optional
-Slack notification settings. Mutations require server-authorized access.
-
-```text
-0 project
-```
-
-Subcommands: [list](#project-list) · [show](#project-show) · [setup](#project-setup) · [enroll](#project-enroll) · [discover](#project-discover) · [save](#project-save) · [history](#project-history) · [suggestions](#project-suggestions) · [restore](#project-restore) · [start](#project-start) · [slack](#project-slack).
-
-### project list
-
-List the enrolled codebases visible to the authenticated organization.
-
-```text
-0 project list [options]
+0 checks add [options]
 ```
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--json` | — | Emit machine-readable JSON |
+| `--name <name>` **required** | — | Short check name (1–120 characters) |
+| `--prompt <text>` **required** | — | Literal review criterion (1–2000 characters) |
+| `--yes` **required** | — | Approve this prompt for future local reviews |
+| `--project <path>` | — | Local project directory (defaults to this checkout's root) |
+| `--json` | — | Machine-readable result |
 
-### project show
+#### checks list
 
-Read the saved configuration. Select an enrolled UUID, GitHub repository URL,
-or omit the argument to resolve the current checkout's origin.
-
-```text
-0 project show [options] [project]
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `project` | No |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit machine-readable JSON |
-
-### project setup
-
-Prepare a source-backed proposal. Interactive mode asks before saving and asks
-separately before starting a credit-funded scan. `--json` and noninteractive
-mode return the proposal without saving or starting work.
+List current prompts, revisions, and enabled or inactive status for the project.
 
 ```text
-0 project setup [options] [project]
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `project` | No |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Return an editable proposal without saving or starting |
-
-### project enroll
-
-Enroll a GitHub repository through the connected GitHub App. Pass its URL or omit
-the argument to use the current checkout's origin. Enrollment does not start a
-scan or grant credits. If App access is missing, `--open` opens the installation
-link; complete that step and retry before running `project setup`.
-
-```text
-0 project enroll [options] [repository]
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `repository` | No |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--open` | — | Open the GitHub App installation link when access is missing |
-| `--json` | — | Emit machine-readable JSON |
-
-### project discover
-
-Read repository metadata at an immutable source commit. This does not execute
-repository code, persist a plan, or start a scan.
-
-```text
-0 project discover [options] [project]
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `project` | No |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit machine-readable JSON |
-
-### project save
-
-Save a reviewed JSON plan with its expected configuration revision and source
-commit. A stale revision is rejected rather than overwriting another editor.
-Saving does not authorize or start execution.
-
-```text
-0 project save [options] <project>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `project` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--file <path>` **required** | — | Operating-plan JSON file |
-| `--revision <number>` **required** | — | Expected current revision, including 0 for first save |
-| `--source <sha>` **required** | — | Reviewed immutable source commit |
-| `--json` | — | Emit machine-readable JSON |
-| `--enable-schedule` | — | Explicitly approve recurring checks at the saved daily/weekly cadence and per-run credit limit |
-
-### project history
-
-Read saved revisions, or select one historical revision for inspection.
-
-```text
-0 project history [options] <project> [revision]
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `project` | Yes |  |
-| `revision` | No |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit machine-readable JSON |
-
-### project suggestions
-
-Read observations proposed by completed scans. Suggestions are not automatically
-accepted as configuration, permissions, or verified security facts.
-
-```text
-0 project suggestions [options] <project>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `project` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit machine-readable JSON |
-
-### project restore
-
-Restore a historical plan using the expected current revision. This changes
-future configuration, not the immutable snapshots of existing runs.
-
-```text
-0 project restore [options] <project> <revision>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `project` | Yes |  |
-| `revision` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--expected-revision <number>` **required** | — | Current revision to replace |
-| `--json` | — | Emit machine-readable JSON |
-
-### project start
-
-Explicitly request execution of an approved saved revision. Review scope and
-budget first. Supply a UUID idempotency key and reuse it when recovering a lost
-response. The service checks authorization and credit funding before enqueue.
-
-```text
-0 project start [options] <project>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `project` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--revision <number>` **required** | — | Approved configuration revision |
-| `--idempotency-key <uuid>` **required** | — | Reuse this key when recovering a lost response |
-| `--json` | — | Emit machine-readable JSON |
-
-### project slack
-
-Manage optional workspace notifications through an existing Slack connection.
-This command does not install Slack or change scan authorization.
-
-```text
-0 project slack
-```
-
-Subcommands: [channels](#project-slack-channels) · [channel](#project-slack-channel) · [clear](#project-slack-clear).
-
-### project slack channels
-
-List channels available through the workspace's current Slack integration.
-
-```text
-0 project slack channels [options]
+0 checks list [options]
 ```
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--json` | — | Emit machine-readable JSON |
+| `--project <path>` | — | Local project directory (defaults to this checkout's root) |
+| `--json` | — | Machine-readable result |
 
-### project slack channel
+#### checks enable
 
-Select the workspace notification channel by its Slack channel ID.
-
-```text
-0 project slack channel [options] <channel-id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `channel-id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit machine-readable JSON |
-
-### project slack clear
-
-Clear the selected notification channel without disconnecting Slack.
+Approve the current revision. Use an expected revision when approval must refer
+to the exact draft inspected by the operator.
 
 ```text
-0 project slack clear [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit machine-readable JSON |
-
-### skills
-
-Manage versioned audit-methodology bundles. Cloud credentials are required;
-the service restricts mutations to authorized owners and administrators.
-Methodology content never grants additional targets, budget, or tool access.
-
-```text
-0 skills
-```
-
-Subcommands: [list](#skills-list) · [show](#skills-show) · [new](#skills-new) · [import](#skills-import) · [edit](#skills-edit) · [sync](#skills-sync) · [use](#skills-use) · [unuse](#skills-unuse) · [project](#skills-project) · [archive](#skills-archive).
-
-### skills list
-
-List the organization's available audit skills and codebases.
-
-```text
-0 skills list [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit result as machine-readable JSON |
-
-### skills show
-
-Read a skill's revisions and codebase assignments.
-
-```text
-0 skills show [options] <id>
+0 checks enable [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -3394,51 +3126,17 @@ Read a skill's revisions and codebase assignments.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--json` | — | Emit result as machine-readable JSON |
+| `--yes` **required** | — | Confirm developer approval |
+| `--expected-revision <n>` | — | Refuse if the inspected revision changed |
+| `--project <path>` | — | Local project directory (defaults to this checkout's root) |
+| `--json` | — | Machine-readable result |
 
-### skills new
+#### checks disable
 
-Create a Markdown bundle from relative local file paths, with `SKILL.md` first.
-Review all included files before uploading them to the workspace.
-
-```text
-0 skills new [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--name <name>` **required** | — | Skill name |
-| `--description <desc>` | — | Optional description |
-| `--file <paths...>` **required** | — | Markdown file(s) to include (SKILL.md must be first) |
-| `--json` | — | Emit result as machine-readable JSON |
-
-### skills import
-
-Import a methodology from a GitHub repository accessible to the workspace's
-current GitHub App. The service resolves the selected ref to a source commit.
+Stop future evaluation without deleting prompt history.
 
 ```text
-0 skills import [options] <owner/repo>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `owner/repo` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--ref <ref>` | — | Branch, tag, or commit SHA (default: HEAD) |
-| `--path <path>` | — | Path within the repo to the bundle folder or .md file |
-| `--name <name>` | — | Override skill name |
-| `--json` | — | Emit result as machine-readable JSON |
-
-### skills edit
-
-Create a revision from reviewed local files. Supply `--expected-revision` when
-editing a previously read version to reject stale updates.
-
-```text
-0 skills edit [options] <id>
+0 checks disable [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -3447,18 +3145,16 @@ editing a previously read version to reject stale updates.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--file <paths...>` **required** | — | Markdown file(s) to include |
-| `--expected-revision <n>` | — | Expected current revision number (prevents stale overwrite) |
-| `--name <name>` | — | Update skill name |
-| `--description <desc>` | — | Update description |
-| `--json` | — | Emit result as machine-readable JSON |
+| `--project <path>` | — | Local project directory (defaults to this checkout's root) |
+| `--json` | — | Machine-readable result |
 
-### skills sync
+#### checks set
 
-Refresh a GitHub-imported skill using its expected current revision.
+Revise the literal prompt. Changing an enabled check requires fresh explicit
+approval; stale expected revisions leave the previous state unchanged.
 
 ```text
-0 skills sync [options] <id>
+0 checks set [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -3467,16 +3163,18 @@ Refresh a GitHub-imported skill using its expected current revision.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--expected-revision <n>` **required** | — | Expected current revision number (CAS — 409 on mismatch) |
-| `--json` | — | Emit result as machine-readable JSON |
+| `--prompt <text>` **required** | — | Replacement literal prompt (1–2000 characters) |
+| `--yes` | — | Approve the new revision if the check is enabled |
+| `--expected-revision <n>` | — | Refuse if the inspected revision changed |
+| `--project <path>` | — | Local project directory (defaults to this checkout's root) |
+| `--json` | — | Machine-readable result |
 
-### skills use
+#### checks remove
 
-Pin a revision to an authorized enrolled codebase. An omitted revision selects
-the latest available revision at assignment time; it is not a floating binding.
+Delete a local check and its revisions from the selected project.
 
 ```text
-0 skills use [options] <id>
+0 checks remove [options] <id>
 ```
 
 | Argument | Required | Description |
@@ -3485,65 +3183,553 @@ the latest available revision at assignment time; it is not a floating binding.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--project <owner/repo>` **required** | — | Project to assign the skill to (owner/name or UUID) |
-| `--revision <id>` | — | Revision UUID to pin (default: latest) |
-| `--json` | — | Emit result as machine-readable JSON |
-
-### skills unuse
-
-Remove a codebase assignment without deleting the skill's revision history.
-
-```text
-0 skills unuse [options] <id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--project <owner/repo>` **required** | — | Project to remove the skill from (owner/name or UUID) |
-| `--json` | — | Emit result as machine-readable JSON |
-
-### skills project
-
-Read the codebase's pinned methodology revisions and available skills.
-
-```text
-0 skills project [options] <owner/repo>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `owner/repo` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit result as machine-readable JSON |
-
-### skills archive
-
-Archive a skill for future use while preserving its revision history.
-
-```text
-0 skills archive [options] <id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit result as machine-readable JSON |
+| `--project <path>` | — | Local project directory (defaults to this checkout's root) |
+| `--json` | — | Machine-readable result |
 
 ## XBOW benchmark runner
 
 The XBOW runner lives in the benchmark workspace. See [Benchmarks](/benchmark/) and [Methodology](/methodology/) for current commands, prerequisites, and measured-result interpretation. **The specialized runner does not implement a help-only `--help` path; passing it can start benchmark execution.** Inspect the documented arguments or `packages/benchmark/src/xbow-runner.ts` instead. Execution requires dedicated target environments and a benchmark budget.
+
+## Workflow execution
+
+See [Workflow CLI](/workflow/) for templates, foreground execution, scope, and host lifetime.
+
+### workflow
+
+Discover reusable definitions and execute them through the shared workflow runtime.
+
+```text
+0 workflow
+```
+
+Subcommands: [list](#workflow-list) · [show](#workflow-show) · [run](#workflow-run).
+
+#### workflow list
+
+List saved workflows and templates without starting an assessment.
+
+```text
+0 workflow list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--templates` | — | List only templates |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### workflow show
+
+Inspect one saved workflow or select a template with `--template`.
+
+```text
+0 workflow show [options] [id]
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--template <id>` | — | Show a template definition |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### workflow run
+
+Execute one saved revision or template in the foreground. Ctrl-C cancels the run.
+Completed execution can contain findings; consumers must inspect the results.
+
+```text
+0 workflow run [options] [id]
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--session <id>` | — | Attach the run to an existing session on the selected engine |
+| `--template <id>` | — | Execute a template without saving a copy |
+| `--revision <revision>` | — | Require this workflow or template revision |
+| `--target <target>` | — | Bind the authorized target |
+| `--workspace <path>` | — | Workspace for local execution |
+| `--scope <path>` | — | Scope JSON file |
+| `--model <model>` | — | Configured 0 assessment model |
+| `--inputs <path>` | — | Workflow artifact inputs as a JSON object (32 KiB values; 256 KiB file read limit) |
+| `--allow-apply` | — | Explicitly authorize supported patch application steps for this host and run |
+| `--time-cap <ms>` | — | Workflow-wide time cap in milliseconds |
+| `--cost-cap <usd>` | — | Workflow-wide cost ceiling in USD |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+### runs
+
+Inspect retained workflow execution history.
+
+```text
+0 runs
+```
+
+Subcommands: [resume](#runs-resume) · [list](#runs-list) · [show](#runs-show) · [cancel](#runs-cancel).
+
+#### runs list
+
+List retained runs in the selected control database.
+
+```text
+0 runs list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### runs show
+
+Read one run and its retained results.
+
+```text
+0 runs show [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### runs cancel
+
+Request cancellation from the selected or discovered owning engine. This controls
+the same run visible in the browser. Ctrl-C also requests cancellation for a
+foreground workflow run; disconnecting an attached transport leaves the engine
+running. Stored history alone does not restart or stop execution.
+
+```text
+0 runs cancel [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### runs resume
+
+Resume a persisted assessment scan in an existing engine session. The selected engine supplies the stored target, model, and current scope; optional branch and budget limits narrow the request. This resumes scan work rather than restarting a workflow graph.
+
+```text
+0 runs resume [options] <scan-id>
+```
+
+```bash
+0 runs resume SCAN_ID --session SESSION_ID --backend production
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `scan-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--session <id>` **required** | — | Existing engine session |
+| `--branch-from-entry <index>` | — | Nonnegative retained history entry index |
+| `--time-cap <ms>` | — | Resume time ceiling in milliseconds |
+| `--cost-cap <usd>` | — | Resume cost ceiling in USD |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+### sessions
+
+Inspect and control the same live sessions used by the browser. Attach with --backend or --engine-url/--engine-token-env, or use the discovered local engine. Session operations preserve current engine admission grants.
+
+```text
+0 sessions
+```
+
+```bash
+0 sessions list --backend production
+```
+
+Subcommands: [list](#sessions-list) · [show](#sessions-show) · [create](#sessions-create) · [send](#sessions-send) · [continue](#sessions-continue) · [cancel](#sessions-cancel) · [events](#sessions-events) · [resume](#sessions-resume) · [decide](#sessions-decide).
+
+#### sessions list
+
+List live sessions, or retained snapshots with --saved. Listing does not resume work.
+
+```text
+0 sessions list [options]
+```
+
+```bash
+0 sessions list --saved --backend production
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--saved` | — | List retained session snapshots |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### sessions show
+
+Read an existing live session without recreating it or restoring approvals.
+
+```text
+0 sessions show [options] <id>
+```
+
+```bash
+0 sessions show SESSION_ID --backend production
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### sessions create
+
+Create a session within the engine's authorized workspace, scope, and model configuration. --config reads a bounded JSON object; it cannot expand engine grants.
+
+```text
+0 sessions create [options]
+```
+
+```bash
+0 sessions create --config session.json --backend production
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--config <path>` | — | Session configuration JSON object |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### sessions send
+
+Send text to a live engine session. The engine runs the turn using its configured provider and tools.
+
+```text
+0 sessions send [options] <id> <text>
+```
+
+```bash
+0 sessions send SESSION_ID "Review the current findings" --backend production
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `text` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### sessions continue
+
+Continue the selected live session with optional text. This preserves the existing engine context.
+
+```text
+0 sessions continue [options] <id> [text]
+```
+
+```bash
+0 sessions continue SESSION_ID --backend production
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `text` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### sessions cancel
+
+Explicitly cancel the session's active work. Transport disconnect alone does not request cancellation from an attached engine.
+
+```text
+0 sessions cancel [options] <id>
+```
+
+```bash
+0 sessions cancel SESSION_ID --backend production
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### sessions events
+
+Read engine session events after an optional nonnegative cursor. Cursors belong to that engine and session.
+
+```text
+0 sessions events [options] <id>
+```
+
+```bash
+0 sessions events SESSION_ID --after 0 --backend production
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--after <cursor>` | — | Nonnegative engine event cursor |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### sessions resume
+
+Restore a retained snapshot as a new session under current engine grants. Stored transcripts do not restore approval or filesystem grants.
+
+```text
+0 sessions resume [options] <saved-id>
+```
+
+```bash
+0 sessions resume SAVED_ID --backend production
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `saved-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+#### sessions decide
+
+Respond to an existing session decision using a JSON response file. The engine checks the decision belongs to that live session.
+
+```text
+0 sessions decide [options] <id> <decision-id>
+```
+
+```bash
+0 sessions decide SESSION_ID DECISION_ID --response response.json --backend production
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+| `decision-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--response <path>` **required** | — | Decision response JSON object |
+| `--engine-url <url>` | — | Attach directly to a running trusted engine |
+| `--engine-token-env <name>` | — | Environment variable holding the attached engine token |
+| `--backend <id>` | — | Use a registered remote engine; targets and inputs are interpreted there |
+| `--backends-config <path>` | — | Operator backend connection registry JSON file |
+| `--db-path <path>` | — | Control database with saved workflows and run history |
+| `--format <format>` | `json` | Output format: json or text |
+
+### learning
+
+```text
+0 learning
+```
+
+Inspect tenant-local learning activity and evaluation provenance. See [Learning](/learning/) for trust boundaries and workflow version restoration.
+
+Subcommands: [status](#learning-status) · [process](#learning-process) · [evolve](#learning-evolve).
+
+#### learning status
+
+```text
+0 learning status [options]
+```
+
+Read recorded activity, retained knowledge, improvement states and queue status. Project filters accept a local source path or project identity. This command makes no model calls.
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--project <id>` | — | Filter by project |
+| `--json` | — | Output structured JSON |
+
+#### learning process
+
+```text
+0 learning process [options]
+```
+
+Process bounded queued observations. For an explicitly selected local source project, import existing current opted-in source notes. The default worker does not invent lessons from completion metadata or call a model.
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--project <id>` | — | Filter by project |
+| `--limit <number>` | — | Maximum observations to process |
+| `--json` | — | Output structured JSON |
+
+#### learning evolve
+
+```text
+0 learning evolve [options]
+```
+
+Run the existing evolution controller with an explicit configuration and retain integrity-checked registry receipts. This can invoke configured models and incur their costs. Its output-fixture evaluation is not proof of improved security discovery. Promotion authority remains with the evolution registry and its configured gates.
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--config <path>` **required** | — | Evolution config JSON file |
+| `--project <id>` **required** | — | Project associated with the evolution artifacts |
+| `--json` | — | Output structured JSON |
 
 ## Reference sources
 
 Registration entry point: `packages/cli/src/index.ts`. Command implementations
 are exported through `packages/cli/src/commands/index.ts`. Workflow guides explain
 handler behavior and prerequisites beyond the registered flags.
+
+## Team workspace setup
+
+### team
+
+```text
+0 team
+```
+
+Provision opt-in accounts for a customer-controlled team engine. Account-free local
+use remains the default. Creating a config does not activate it on a running host.
+See [Team workspaces](/team-workspaces/) for roles and deployment boundaries.
+
+Subcommands: [init](#team-init) · [add-user](#team-add-user) · [list](#team-list).
+
+### team init
+
+Create a private configuration with the first owner account. The password is read
+from protected terminal input or stdin; it is stored as a salted password hash.
+No email invitation is sent. Then start `0 web --team-config <path>`.
+
+```text
+0 team init [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--config <path>` **required** | — | Configuration file to create |
+| `--name <name>` **required** | — | Workspace name |
+| `--owner <id>` **required** | — | Owner account ID |
+| `--display-name <name>` **required** | — | Owner display name |
+
+### team add-user
+
+Add an explicit account to a private configuration. Assign `owner`, `editor` or
+`viewer`; viewer access does not grant agent control. Restart the team engine to
+load configuration changes. Password input is not a command-line argument.
+
+```text
+0 team add-user [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--config <path>` **required** | — | Team configuration |
+| `--user <id>` **required** | — | Account ID |
+| `--display-name <name>` **required** | — | Display name |
+| `--role <role>` **required** | — | owner, editor or viewer |
+
+### team list
+
+List configured account IDs, display names and roles without password hashes.
+The configuration must remain a private regular file.
+
+```text
+0 team list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--config <path>` **required** | — | Team configuration |

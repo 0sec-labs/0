@@ -5,6 +5,10 @@
  * Explicitly local modes retain the existing opt-in global strictness switch.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+vi.mock("./plugins/enablement.js", async (importOriginal) => ({
+  ...await importOriginal<object>(),
+  readEnablement: () => ({ schema: 1, project: process.cwd(), enabled: { scope: { version: "1.0.0", capabilities: [], enabledAt: 1 } } }),
+}));
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -14,6 +18,7 @@ import { agenticScan } from "./agentic-scanner.js";
 import { LlmApiRuntime } from "./runtime/llm-api.js";
 import type { ScanConfig } from "@0/shared";
 import type { ScanEvent } from "./scanner.js";
+import { ScopePolicy } from "./scope/scope.js";
 
 function tmpDbPath(): string {
   return path.join(
@@ -91,6 +96,33 @@ describe("agenticScan — scope-guard visibility (0#133)", () => {
     }
   });
 
+  it("uses the active in-memory scope to admit or refuse target classification", async () => {
+    let requests = 0;
+    const server = createServer((_request, response) => {
+      requests++;
+      response.writeHead(200, { connection: "close" });
+      response.end("<html>synthetic scope fixture</html>");
+    });
+    try {
+      await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+      const target = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
+      // The diagnostic stub stops the admitted scan after its real target probe.
+      await expect(agenticScan({
+        config: baseConfig({ target }), dbPath,
+        scope: ScopePolicy.fromJson({ in_scope: ["127.0.0.1"] }),
+      })).rejects.toThrow();
+      expect(requests).toBe(1);
+      await expect(agenticScan({
+        config: baseConfig({ target }), dbPath,
+        scope: ScopePolicy.fromJson({ in_scope: ["127.0.0.2"] }),
+      })).rejects.toThrow();
+      expect(requests).toBe(1);
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
+  });
+
   it("does not follow redirects from an admitted auto-detect target", async () => {
     let targetRequests = 0;
     let redirectedRequests = 0;
@@ -157,17 +189,4 @@ describe("agenticScan — scope-guard visibility (0#133)", () => {
     ).rejects.toThrow(/ZERO_REQUIRE_SCOPE is set but no engagement scope is configured/);
   });
 
-  it("stays silent when http_audit synthesises a host policy (guards active)", async () => {
-    // http_audit is the one cloud mode that DOES get a ScopePolicy — built
-    // in-memory from httpAuditAllowedHosts rather than from a --scope file.
-    // It must not be warned at.
-    await runUnscopedScan(
-      baseConfig({
-        mode: "http_audit",
-        httpAuditAllowedHosts: ["target.example.invalid"],
-      } as Partial<ScanConfig>),
-    );
-
-    expect(events.find((e) => /No engagement scope is configured/.test(e.message))).toBeUndefined();
-  });
 });

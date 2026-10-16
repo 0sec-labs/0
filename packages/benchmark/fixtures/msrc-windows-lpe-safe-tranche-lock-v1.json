@@ -35,5 +35,5 @@
   ],
   "counts": { "tranches": 2, "sourceDocuments": 3, "stagedCandidateCves": 20, "distinctPatchBoundaries": 2 },
   "policy": { "stagingOnly": true, "benchmarkEligible": false, "bountyClaimEligible": false, "weaponization": false, "promotable": false, "containsExploitMaterial": false },
-  "lockId": "sha256:6b23e6b330e8c733a93b1643c1e0b0b3939634c3b4f9f5bb44f2a93a69fc2ad2"
+  "lockId": "sha256:4b1f8e094df81e9ca9bb351d6ef5c0decefa1c348016805fbaf5e85fd13221d9"
 }

@@ -1,12 +1,12 @@
 ---
 title: Budget Management
-description: Workflow-specific turn limits, shared cost ceilings, model-price estimates, monthly hosted usage, and separate Jev budgets.
+description: Workflow-specific turn limits, shared cost ceilings, model-price estimates, and separate Jev budgets.
 ---
 
-0 has several independent limits: agent turns, request timeouts, estimated model
-cost, and (for hosted access) service-side usage admission. None is a substitute
-for the others. The open-source harness has no software charge; provider,
-subscription and execution-infrastructure costs still apply.
+0 has several independent limits: agent turns, request timeouts and estimated
+model cost. None is a substitute for the others. The open-source harness has no
+software charge; provider, subscription and execution-infrastructure costs still
+apply.
 
 ## Turn budgets
 
@@ -47,7 +47,7 @@ env ZERO_MAX_TURNS_REVIEW=30 ZERO_MAX_TURNS_VERIFY=12 \
   0 review ./authorized-repo --runtime api --depth default --cost-ceiling 5
 ```
 
-The console separately exposes `--max-tool-calls` (default `20`) for tool-call
+The console separately exposes `--max-tool-calls` (default `100`) for tool-call
 rounds per operator message. It does not configure the scan depth presets.
 
 <span id="why-40-turns"></span>
@@ -117,6 +117,14 @@ research, per-file sessions and concurrent verification instead of allocating
 the full ceiling to each session. In-flight requests can still finish and
 overshoot the ceiling, including one outstanding turn per active session.
 
+Guided launcher plans share one priced ledger across every planned run and phase.
+Goals and depth enter the investigator's execution policy; sequential or
+parallel attempts retain independent outcomes and run-local cost attribution.
+The wall-clock limit includes preparation, investigation, verification, reporting,
+and descendants. Failed, cancelled, skipped, or budget-stopped attempts remain
+visible; one successful attempt cannot turn an incomplete plan into clean
+coverage. Native and supported CLI routes retain the operator's model selections.
+
 On a reported ceiling breach, these CLI commands retain partial results, exit
 with code `4`, and use `exit_reason: "cost_ceiling_exceeded"` in the optional
 machine-readable result line (`ZERO_EMIT_RESULT_LINE=1`). A cost stop is not a
@@ -136,10 +144,11 @@ Other commands have different stop boundaries:
 
 ## Interpreting cost estimates
 
-The estimator prices reported input, output and cached-input tokens using the
-bundled rate table. Cached tokens are subtracted from ordinary input and priced
-at the cached-input rate when known. Unknown models warn and fall back to
-$3 input / $15 output per million tokens; **that fallback is not a quote**.
+The estimator prices reported input, output, cached-input, and cache-write tokens
+using the bundled rate table. Cache reads and writes are separated from ordinary
+input; writes use a known write tariff or the five-minute creation rate of
+1.25 times input pricing. Unknown models warn and fall back to $3 input / $15
+output per million tokens; **that fallback is not a quote**.
 The model picker's unknown price is likewise not zero.
 
 Important boundaries:
@@ -158,13 +167,12 @@ Important boundaries:
 - Failed or cancelled requests can consume provider work without complete usage
   reaching the CLI. Reconcile with the provider invoice or service ledger.
 
-
 ## Jev advisory budgets
 
 Opt-in Jev evaluations have a separate budget per evaluator/workflow instance:
 `ZERO_JEV_MAX_REQUESTS=100`, `ZERO_JEV_MAX_COST_USD=0.10`, and
-`ZERO_JEV_TIMEOUT_MS=10000` by default. These are not a process-wide or hosted
-account ceiling. The estimator uses $0.042 per million input tokens and reserves
+`ZERO_JEV_TIMEOUT_MS=10000` by default. These are not process-wide limits.
+The estimator uses $0.042 per million input tokens and reserves
 the full 65,536-token input allowance before dispatch, including concurrent
 calls. Known usage settles that reservation; unknown failed-request usage keeps
 it reserved. There are no implicit retries or fallback to the chat model.
@@ -194,4 +202,3 @@ A run with no findings does not prove a target secure.
 
 Provider timeout/retry settings are documented under
 [runtime resilience](/configuration/#runtime-resilience-and-retries).
-Hosted requests with an unknown outcome are not automatically replayed.

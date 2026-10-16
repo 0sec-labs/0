@@ -260,7 +260,23 @@ function defaultWait(milliseconds: number): Promise<void> {
   return promise;
 }
 
-function createTargetMetadata(config: AgentActionTargetConfig): AgentActionTargetMetadata {
+function redactedEndpoint(value: string, redactedFields: Set<string>): string {
+  const endpoint = new URL(value);
+  for (const key of new Set(endpoint.searchParams.keys())) {
+    if (SENSITIVE_KEY.test(key)) {
+      endpoint.searchParams.set(key, "[REDACTED]");
+      redactedFields.add(`endpoint_query.${key.toLowerCase()}`);
+    }
+  }
+  // Fragments are not sent to the service and can contain client-side tokens.
+  if (endpoint.hash) {
+    endpoint.hash = "";
+    redactedFields.add("endpoint_fragment");
+  }
+  return endpoint.toString();
+}
+
+function createTargetMetadata(config: AgentActionTargetConfig, redactedFields: Set<string>): AgentActionTargetMetadata {
   const metadata = {
     scope_sha256: config.scopeSha256,
     environment: config.environment,
@@ -274,6 +290,10 @@ function createTargetMetadata(config: AgentActionTargetConfig): AgentActionTarge
   };
   return AgentActionTargetMetadataSchema.parse({
     ...metadata,
+    agent_endpoint: redactedEndpoint(metadata.agent_endpoint, redactedFields),
+    mcp_endpoint: redactedEndpoint(metadata.mcp_endpoint, redactedFields),
+    oracle_endpoint: redactedEndpoint(metadata.oracle_endpoint, redactedFields),
+    // Bind retests to the actual configuration without exporting credentials.
     configuration_sha256: hashValue(metadata),
   });
 }
@@ -457,7 +477,8 @@ export function httpActionOracle(options: HttpActionOracleOptions): AgentActionO
  */
 export async function runAgentActionAssurance(options: AgentActionRunOptions): Promise<AgentActionRun> {
   const scenario = AgentActionScenarioSchema.parse(options.scenario);
-  const target = createTargetMetadata(options.targetConfig);
+  const manifestRedactedFields = new Set<string>();
+  const target = createTargetMetadata(options.targetConfig, manifestRedactedFields);
   const runId = options.runId ?? randomUUID();
   const canaryToken = options.canaryToken ?? randomBytes(24).toString("base64url");
   const invocation: AgentActionInvocation = { runId, canaryToken, scenario };
@@ -512,8 +533,6 @@ export async function runAgentActionAssurance(options: AgentActionRunOptions): P
         configuration_changed: options.retestOf.previousConfigurationSha256 !== target.configuration_sha256,
       }
     : undefined;
-
-  const manifestRedactedFields = new Set<string>();
 
   const manifest = AgentActionEvidenceManifestSchema.parse({
     schema_version: AGENT_ACTION_ASSURANCE_SCHEMA_VERSION,
@@ -575,6 +594,7 @@ export function agentActionConfigurationChanges(
     if (baseline.target.agent_endpoint !== target.agent_endpoint) changes.push("agent_endpoint");
     if (baseline.target.mcp_endpoint !== target.mcp_endpoint) changes.push("mcp_endpoint");
     if (baseline.target.oracle_endpoint !== target.oracle_endpoint) changes.push("oracle_endpoint");
+    if (changes.length === 0) changes.push("configuration");
   }
   return changes;
 }

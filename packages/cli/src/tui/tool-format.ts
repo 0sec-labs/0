@@ -68,7 +68,7 @@ const VALUE_BUDGET = 48;
  * so an ordinary command still shows in full, and reveal the full retained body
  * on expand. This is a HEAD window — the first `cap` lines — matching OMP.
  */
-export const COLLAPSED_OUTPUT_LINES = 14;
+export const COLLAPSED_OUTPUT_LINES = 20;
 
 /** The head window drawn for a (possibly long) output body. */
 export interface OutputWindow {

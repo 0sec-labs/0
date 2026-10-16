@@ -10,8 +10,6 @@ import {
   computeConnectTitleLayout,
   connectConnectedCounts,
   connectDetailLines,
-  connectDetailTitleLabel,
-  connectDetailTitleMeta,
   connectDialogItems,
   connectDisplayRowCount,
   connectInputMask,
@@ -49,7 +47,7 @@ describe("computeConnectLayout — the dialog sweep", () => {
     for (const width of sweepAxis(0, 200, 3)) {
       for (const height of sweepAxis(0, 80, 2)) {
         // In a dialog the host spends one row on its footer and nothing else.
-        for (const options of [undefined, { chromeRows: 1, chromeColumns: 0 }]) {
+        for (const options of [undefined, { chromeRows: 1, chromeColumns: 0 }, { chromeRows: 0, chromeColumns: 0, embedded: true }]) {
           const layout = computeConnectLayout(width, height, 40, options);
           const at = `${width}x${height} ${options ? "in a dialog" : "on a terminal"}`;
           for (const [name, value] of Object.entries(layout)) {
@@ -59,7 +57,7 @@ describe("computeConnectLayout — the dialog sweep", () => {
           expect(layout.contentWidth, `content wider than the surface at ${at}`)
             .toBeLessThanOrEqual(Math.max(0, width));
           expect(
-            layout.titleRows + layout.bodyRows + layout.statusRows,
+            layout.navigationRows + layout.titleRows + layout.bodyRows + layout.statusRows,
             `rows did not sum to the budget at ${at}`,
           ).toBe(layout.availableRows);
           expect(layout.availableRows, `body taller than the surface at ${at}`)
@@ -146,34 +144,16 @@ describe("computeConnectTitleLayout — the header sweep", () => {
   });
 });
 
-describe("pane header labels and meta", () => {
-  const rows = buildConnectRows({ states: LIT });
-
-
-  it("summarises the highlighted provider's connection state for the detail header", () => {
-    expect(connectDetailTitleLabel()).toBe("PROVIDER");
-    const connected = rows.find(
-      (r) => r.kind === "provider" && r.provider.id === LIT_PROVIDER?.id,
-    );
-    expect(connectDetailTitleMeta(connected)).toBe("connected");
-    const dark = rows.find((r) => r.kind === "provider" && !r.provider.connected);
-    expect(connectDetailTitleMeta(dark)).toBe("not connected");
-    // No provider highlighted -> no meta.
-    expect(connectDetailTitleMeta(rows.find((r) => r.kind === "heading"))).toBe("");
-    expect(connectDetailTitleMeta(undefined)).toBe("");
-  });
-});
 
 describe("buildConnectRows", () => {
-  it("groups BYOK providers and subscription sign-in independently", () => {
+  it("groups API-key providers independently from genuine account sign-in", () => {
     const rows = buildConnectRows({ states: EMPTY });
     const providers = rows.filter((row) => row.kind === "provider");
     expect(providers[0]?.provider.auth).toBe("api-key");
     expect(new Set(providers.map((row) => row.provider.id))).toEqual(new Set(PROVIDERS.map((provider) => provider.id)));
     expect(providers.length).toBe(PROVIDERS.length);
     const subscription = providers.filter((row) => row.group.id === "subscription");
-    // Every OAuth-preferred provider lands in the subscription group, in the
-    // PROVIDERS table order: chatgpt-codex, openrouter, kimi, xai, copilot, google.
+    // Account sign-in comes only from the provider table's supported methods.
     expect(subscription.map((row) => row.provider.id)).toEqual(["chatgpt-codex", "openrouter", "kimi", "xai", "copilot", "google"]);
     expect(providers.filter((row) => row.group.id !== "subscription").every((row) => row.provider.auth === "api-key")).toBe(true);
     expect(providers.every((row) => !row.provider.connected)).toBe(true);
@@ -192,17 +172,6 @@ describe("buildConnectRows", () => {
     expect([...popular, ...all].filter((id) => subscription.some((row) => row.provider.id === id))).toEqual([]);
   });
 
-  it("emits a subtitle row under recommended providers that have one", () => {
-    const rows = buildConnectRows({ states: EMPTY });
-    const at = rows.findIndex(
-      (row) => row.kind === "provider" && row.provider.id === RECOMMENDED_IDS[0],
-    );
-    expect(rows[at + 1]?.kind).toBe("subtitle");
-    // Subtitles never appear in the All group.
-    for (const row of rows) {
-      if (row.kind === "subtitle") expect(row.group.id).toBe("popular");
-    }
-  });
 
   it("marks a provider connected when the environment holds a credential", () => {
     const rows = buildConnectRows({ states: LIT });
@@ -269,20 +238,17 @@ describe("connectDialogItems — the projection onto the shared picker", () => {
       expect(item?.category).toBe(row.group.label);
       expect(item?.label).toBe(row.provider.label);
     }
-    // A subtitle row becomes the item's description, not a row of its own.
-    const recommended = items.find((item) => item.id === RECOMMENDED_IDS[0]);
-    expect(recommended?.description).toBeTruthy();
   });
 
-  it("marks an item connected only when a credential was actually found", () => {
+  it("reports credential presence without claiming successful authentication", () => {
     const items = connectDialogItems({ rows: buildConnectRows({ states: LIT }) });
     const lit = items.find((item) => item.id === LIT_PROVIDER?.id);
     expect(lit?.current).toBe(true);
-    expect(lit?.meta).toBe("connected");
+    expect(lit?.meta).toBe("configured");
     for (const item of items) {
       if (item.id === LIT_PROVIDER?.id) continue;
       expect(item.current, `${item.id} claimed a connection it does not have`).toBe(false);
-      expect(item.meta).not.toBe("connected");
+      expect(item.meta).not.toBe("configured");
     }
   });
 
@@ -295,26 +261,6 @@ describe("connectDialogItems — the projection onto the shared picker", () => {
   });
 
 
-  it("carries the two lifecycle colours the list used to draw, and only those", () => {
-    const rows = buildConnectRows({ states: LIT });
-    const items = connectDialogItems({
-      rows,
-      tones: { connected: "#green", recovering: "#red" },
-    });
-    expect(items.find((item) => item.id === LIT_PROVIDER?.id)?.tone).toBe("#green");
-    for (const item of items) {
-      if (item.current) continue;
-      expect(item.tone, `${item.id} was coloured without a state to justify it`).toBeUndefined();
-    }
-    const repairing = connectDialogItems({
-      rows,
-      tones: { connected: "#green", recovering: "#red" },
-      recoveryProviderId: LIT_PROVIDER?.id,
-    });
-    expect(repairing.find((item) => item.id === LIT_PROVIDER?.id)?.tone).toBe("#red");
-    // No palette supplied -> no colour invented.
-    expect(connectDialogItems({ rows }).every((item) => item.tone === undefined)).toBe(true);
-  });
 
   it("carries no secret onto an item", () => {
     const items = connectDialogItems({ rows: buildConnectRows({ states: LIT }) });
@@ -345,27 +291,29 @@ describe("the detail pane", () => {
   const rows = buildConnectRows({ states: LIT });
   const textOf = (lines: { text: string }[]): string => lines.map((line) => line.text).join("\n");
 
-  it("describes a connected provider with its live source", () => {
+  it("shows credential presence and its source without claiming API validity", () => {
     const row = rows.find((r) => r.kind === "provider" && r.provider.id === LIT_PROVIDER?.id);
-    const text = textOf(connectDetailLines({ row }, 60));
-    expect(text).toContain(LIT_PROVIDER?.label ?? "");
-    expect(text).toContain("Connected:");
+    const text = textOf(connectDetailLines({ row }, 80));
     expect(text).toContain(LIT_PROVIDER?.envVars[0] ?? "");
+    expect(text).toMatch(/access.*not.*checked/i);
   });
 
-  it("gives the exact setup hint for a provider with no credentials", () => {
-    const dark = PROVIDERS.find((info) => info.id !== LIT_PROVIDER?.id);
-    const row = rows.find((r) => r.kind === "provider" && r.provider.id === dark?.id);
-    const text = textOf(connectDetailLines({ row }, 80));
-    expect(text).toContain("Not connected");
-    for (const word of (dark?.hint ?? "").split(" ").slice(0, 3)) expect(text).toContain(word);
-    expect(text).toContain(dark?.envVars[0] ?? "");
+  it("offers API keys rather than OAuth or subscription sign-in for key-only providers", () => {
+    for (const id of ["anthropic", "openai"]) {
+      const row = buildConnectRows({ states: EMPTY }).find((r) => r.kind === "provider" && r.provider.id === id);
+      const text = textOf(connectDetailLines({ row }, 80));
+      expect(text).toMatch(/API key/);
+      expect(text).not.toMatch(/OAuth|subscription|device sign-in/);
+    }
   });
 
-  it("names the device OAuth path for ChatGPT Codex", () => {
-    const row = rows.find((r) => r.kind === "provider" && r.provider.auth === "oauth");
-    const text = textOf(connectDetailLines({ row }, 80));
-    expect(text.toLowerCase()).toContain("oauth");
+  it("distinguishes Codex device sign-in from OpenRouter browser sign-in", () => {
+    const providerText = (id: string) => textOf(connectDetailLines({
+      row: rows.find((r) => r.kind === "provider" && r.provider.id === id),
+    }, 100));
+    expect(providerText("chatgpt-codex")).toMatch(/OAuth.*device sign-in/);
+    expect(providerText("openrouter")).toMatch(/OAuth.*browser sign-in/);
+    expect(providerText("openrouter")).not.toMatch(/device sign-in/);
   });
 
   it("keeps every detail line inside the pane it was measured for", () => {

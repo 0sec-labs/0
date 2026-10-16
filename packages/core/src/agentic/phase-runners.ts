@@ -32,9 +32,10 @@ import {
   buildAttributionForConfig,
 } from "./scan-config.js";
 import { verify } from "../triage/structured-verify.js";
-import { getCloudSinkConfig, postFinding } from "../cloud-sink.js";
 import { splitCost } from "../agent/cost.js";
 import { EnforcementTracker } from "../scope/enforcement.js";
+import type { ScanCostLedger } from "../agent/cost-ledger.js";
+import { scanGoalPrompt } from "../scan-plan.js";
 
 // ── Shared state type for agent outputs ──
 
@@ -59,6 +60,7 @@ export interface AgentOutput {
   };
   /** True when this stage terminated because the cost ceiling was hit. */
   costCeilingExceeded?: boolean;
+  executionSuccessful?: boolean;
   /**
    * Set when the agent loop bailed because the planner LLM returned an
    * error (or empty response). Propagated up from `NativeAgentState.errorExit`
@@ -82,6 +84,7 @@ export async function runNativeDiscovery(
   emit: ScanListener,
   apiSpecPromptText?: string,
   getPendingUserMessages?: () => string[],
+  costLedger?: ScanCostLedger,
 ): Promise<AgentOutput> {
   // http_audit reuses the web-pentest prompts + tools wholesale; the only
   // additions are the env-driven scope/path/rate/kill enforcement layered on
@@ -91,8 +94,8 @@ export async function runNativeDiscovery(
   // `auth` with `identities` and surface the access_control_probe guidance.
   const identities = resolveIdentities(config);
   const basePrompt = isWeb
-    ? webPentestDiscoveryPrompt(config.target, config.auth) + buildAccessControlPromptBlock(identities)
-    : discoveryPrompt(config.target, config.auth) + buildAccessControlPromptBlock(identities);
+    ? webPentestDiscoveryPrompt(config.target, config.auth) + buildAccessControlPromptBlock(identities, config.accessControlFixtures)
+    : discoveryPrompt(config.target, config.auth) + buildAccessControlPromptBlock(identities, config.accessControlFixtures);
   let systemPrompt = apiSpecPromptText
     ? basePrompt + "\n\n" + apiSpecPromptText
     : basePrompt;
@@ -109,11 +112,12 @@ export async function runNativeDiscovery(
       role: "discovery",
       systemPrompt,
       tools,
-      maxTurns: isWeb ? 12 : 8,
+      maxTurns: config.depth === "quick" ? 4 : config.depth === "deep" ? 12 : isWeb ? 8 : 6,
       target: config.target,
       scanId,
       sessionId: db.getSession(scanId, "discovery")?.id,
       authConfig: config.auth,
+      accessControlFixtures: config.accessControlFixtures,
       identities,
       scope: resolveScopeForConfig(config),
       rateLimiter: getOrCreateRateLimiter(config),
@@ -123,8 +127,10 @@ export async function runNativeDiscovery(
       engagement: resolveEngagementForConfig(config),
       costCeilingUsd: config.costCeilingUsd,
       costModel: config.model,
+      costLedger,
     },
     runtime,
+    signal: config.signal,
     db,
     getPendingUserMessages,
     onEvent: (eventType, payload) => {
@@ -159,7 +165,9 @@ export async function runNativeDiscovery(
     turnCount: state.turnCount,
     estimatedCostUsd: state.estimatedCostUsd,
     totalUsage: state.totalUsage,
+    costCeilingExceeded: state.costCeilingExceeded,
     errorExit: state.errorExit,
+    executionSuccessful: config.plan ? state.done && !state.errorExit : undefined,
     messages: state.messages,
   };
 }
@@ -176,6 +184,7 @@ export async function runNativeAttack(
   challengeHint?: string,
   apiSpecPromptText?: string,
   getPendingUserMessages?: () => string[],
+  costLedger?: ScanCostLedger,
 ): Promise<AgentOutput> {
   // http_audit reuses the web-pentest prompts + tools wholesale; the only
   // additions are the env-driven scope/path/rate/kill enforcement layered on
@@ -191,10 +200,20 @@ export async function runNativeAttack(
   // White-box mode: add read_file + run_command when source code path is provided
   const hasSource = !!config.repoPath;
   const identities = resolveIdentities(config);
+  // Authenticated web scans take the STRUCTURED path instead (parity with
+  // runLegacyAttack): webPentestAttackPrompt + the full attack-role network
+  // toolset (http_request / crawl / submit_form / access_control_probe …).
+  // The shell-first path hands the agent bash/curl only, which bypasses the
+  // SessionEngine — configured cookies/auth headers, scope checks,
+  // attribution and rate limits never reach the wire, and the agent ends up
+  // firing unauthenticated curls into a login wall.
+  const authenticatedWeb = isWeb && identities.length > 0;
   let basePrompt = isWeb
-    ? shellPentestPrompt(config.target, config.repoPath, { hasBrowser, auth: config.auth })
+    ? authenticatedWeb
+      ? webPentestAttackPrompt(config.target, formatWebDiscoveryInfo(targetInfo), config.auth)
+      : shellPentestPrompt(config.target, config.repoPath, { hasBrowser, auth: config.auth })
     : attackPrompt(config.target, targetInfo, categories, config.auth);
-  basePrompt += buildAccessControlPromptBlock(identities);
+  basePrompt += buildAccessControlPromptBlock(identities, config.accessControlFixtures);
   // Inject API spec knowledge if available
   if (apiSpecPromptText) basePrompt += "\n\n" + apiSpecPromptText;
 
@@ -311,12 +330,15 @@ export async function runNativeAttack(
   // (send_prompt, http_request). On repos with no such surface the finder burned
   // its turns probing for prompt-injection / SSO-federation instead of auditing
   // code, then found nothing. Scoping the toolset removes that drift.
-  const tools = (isWeb || hasSource) ? shellTools : getToolsForRole("attack", { hasBrowser, allowScanners: config.allowScanners });
+  const tools = authenticatedWeb
+    ? getToolsForRole("attack", { webMode: true, hasBrowser, allowScanners: config.allowScanners })
+    : (isWeb || hasSource)
+      ? shellTools
+      : getToolsForRole("attack", { hasBrowser, allowScanners: config.allowScanners });
 
   const effectiveMaxTurns =
     isWeb && config.maxAttackTurns === undefined ? Math.max(maxTurns, 15) : maxTurns;
 
-  const cloudSinkCfg = getCloudSinkConfig();
   const onTurnHandler = (turn: number, toolCalls: ToolCall[]) => {
     // One sub-action per tool call with a full preview (tool + first-order
     // argument) so the verbose TUI can show what the attack agent is
@@ -349,6 +371,7 @@ export async function runNativeAttack(
       sessionId: db.getSession(scanId, "attack")?.id,
       retryCount: 0,
       authConfig: config.auth,
+      accessControlFixtures: config.accessControlFixtures,
       identities,
       scope: resolveScopeForConfig(config),
       rateLimiter: getOrCreateRateLimiter(config),
@@ -358,8 +381,10 @@ export async function runNativeAttack(
       engagement: resolveEngagementForConfig(config),
       costCeilingUsd: config.costCeilingUsd,
       costModel: config.model,
+      costLedger,
     },
     runtime,
+    signal: config.signal,
     db,
     getPendingUserMessages,
     onEvent: (eventType, payload) => {
@@ -373,13 +398,12 @@ export async function runNativeAttack(
         message: `[${finding.severity}] ${finding.title}`,
         data: finding,
       });
-      void postFinding(finding, cloudSinkCfg);
     },
     onTurn: onTurnHandler,
   });
 
   // ── Early-stop retry: if no findings by halfway, retry with a different strategy ──
-  if (features.earlyStopRetry && state.earlyStopNoProgress) {
+  if (features.earlyStopRetry && state.earlyStopNoProgress && !config.signal?.aborted && !state.costCeilingExceeded) {
     const remainingBudget = effectiveMaxTurns - state.turnCount;
 
     emit({
@@ -426,17 +450,20 @@ export async function runNativeAttack(
         scopePath: config.repoPath,
         retryCount: 1,
         authConfig: config.auth,
+        accessControlFixtures: config.accessControlFixtures,
         identities,
         scope: resolveScopeForConfig(config),
         rateLimiter: getOrCreateRateLimiter(config),
         enforcement: resolveEnforcementForConfig(config),
-      allowScanners: config.allowScanners,
-      attribution: buildAttributionForConfig(config),
-      engagement: resolveEngagementForConfig(config),
+        allowScanners: config.allowScanners,
+        attribution: buildAttributionForConfig(config),
+        engagement: resolveEngagementForConfig(config),
         costCeilingUsd: config.costCeilingUsd,
         costModel: config.model,
+        costLedger,
       },
       runtime,
+      signal: config.signal,
       db,
       getPendingUserMessages,
       onEvent: (eventType, payload) => {
@@ -473,6 +500,7 @@ export async function runNativeAttack(
           (retryState.totalUsage?.outputTokens ?? 0),
       },
       costCeilingExceeded: state.costCeilingExceeded || retryState.costCeilingExceeded,
+      executionSuccessful: config.plan ? retryState.done && !retryState.errorExit : undefined,
       // If either attempt bailed on a planner error, surface the latest
       // one (retry takes precedence — it ran most recently).
       errorExit: retryState.errorExit ?? state.errorExit,
@@ -491,6 +519,7 @@ export async function runNativeAttack(
     totalUsage: state.totalUsage,
     costCeilingExceeded: state.costCeilingExceeded,
     errorExit: state.errorExit,
+    executionSuccessful: config.plan ? state.done && !state.errorExit : undefined,
     messages: state.messages,
   };
 }
@@ -660,28 +689,32 @@ export async function runNativeVerify(
   scanId: string,
   findings: Finding[],
   emit: ScanListener,
-): Promise<void> {
+  costLedger?: ScanCostLedger,
+): Promise<number> {
   // Per-finding verify loop (#285). One agent session per finding so each
   // gets its own turn budget — N findings → N runtime calls, never a shared
   // pool the model can starve from.
   const memoryStore = db ? createScanMemoryStore(db) : undefined;
+  let turns = 0;
   for (const finding of findings) {
+    config.signal?.throwIfAborted();
     let memoryContext = "";
     if (memoryStore) {
       try {
         memoryContext = await memoryStore.formatForPrompt(await memoryStore.getRelevantMemories(finding, config.target));
       } catch { /* Historical context never replaces independent verification. */ }
     }
-    await runNativeAgentLoop({
+    const state = await runNativeAgentLoop({
       config: {
         role: "verify",
         systemPrompt: verifyPromptSingleFinding(config.target, finding, config.auth) + "\n\n" + memoryContext,
         tools: getToolsForRole("verify", { hasScope: !!config.repoPath, allowScanners: config.allowScanners }),
-        maxTurns: VERIFY_TURNS_PER_FINDING,
+        maxTurns: config.depth === "quick" ? 3 : config.depth === "deep" ? 8 : VERIFY_TURNS_PER_FINDING,
         target: config.target,
         scanId,
         sessionId: db?.getSession?.(scanId, "verify")?.id,
         authConfig: config.auth,
+        accessControlFixtures: config.accessControlFixtures,
         identities: resolveIdentities(config),
         scope: resolveScopeForConfig(config),
         rateLimiter: getOrCreateRateLimiter(config),
@@ -691,8 +724,10 @@ export async function runNativeVerify(
         engagement: resolveEngagementForConfig(config),
         costCeilingUsd: config.costCeilingUsd,
         costModel: config.model,
+        costLedger,
       },
       runtime,
+      signal: config.signal,
       db,
       onTurn: (turn, toolCalls) => {
         // One sub-action per tool call with a full preview, matching the
@@ -715,7 +750,13 @@ export async function runNativeVerify(
         }
       },
     });
+    turns += state.turnCount;
+    if (state.errorExit) throw new Error(state.errorExit.error);
+    if (config.plan && !state.done && !state.costCeilingExceeded && !config.signal?.aborted) {
+      throw new Error("Verification exhausted its turn budget before resolving the finding.");
+    }
   }
+  return turns;
 }
 
 // ── Legacy (text-based) stage runners ──
@@ -737,7 +778,7 @@ export async function runLegacyDiscovery(
   const basePrompt =
     (isWeb
       ? webPentestDiscoveryPrompt(config.target, config.auth)
-      : discoveryPrompt(config.target, config.auth)) + buildAccessControlPromptBlock(identities);
+      : discoveryPrompt(config.target, config.auth)) + buildAccessControlPromptBlock(identities, config.accessControlFixtures);
   const systemPrompt = apiSpecPromptText
     ? basePrompt + "\n\n" + apiSpecPromptText
     : basePrompt;
@@ -748,15 +789,16 @@ export async function runLegacyDiscovery(
   const state = await runAgentLoop({
     config: {
       role: "discovery",
-      systemPrompt,
+      systemPrompt: systemPrompt + scanGoalPrompt(config.plan),
       tools,
-      maxTurns: isWeb ? 12 : 8,
+      maxTurns: config.depth === "quick" ? 4 : config.depth === "deep" ? 12 : isWeb ? 8 : 6,
       target: config.target,
       scanId,
       sessionId: db?.getSession(scanId, "discovery")?.id,
       attachTargetToolsMcp: true,
       dbPath,
       authConfig: config.auth,
+      accessControlFixtures: config.accessControlFixtures,
       identities,
       scope: resolveScopeForConfig(config),
       rateLimiter: getOrCreateRateLimiter(config),
@@ -766,6 +808,8 @@ export async function runLegacyDiscovery(
       engagement: resolveEngagementForConfig(config),
       dispatchMode: config.dispatchMode,
       modelHint: config.model,
+      costLedger: config.costLedger as ScanCostLedger | undefined, costCeilingUsd: config.costCeilingUsd, costModel: config.model, signal: config.signal,
+      requirePricedUsage: Boolean(config.plan),
     },
     runtime,
     db,
@@ -785,7 +829,9 @@ export async function runLegacyDiscovery(
     targetInfo: state.targetInfo,
     summary: state.summary,
     turnCount: state.turnCount,
-    estimatedCostUsd: 0, // Legacy runtime does not track token usage
+    estimatedCostUsd: state.estimatedCostUsd ?? 0,
+    totalUsage: state.totalUsage, costCeilingExceeded: state.costCeilingExceeded, errorExit: state.errorExit,
+    executionSuccessful: config.plan ? state.done && !state.errorExit : undefined,
   };
 }
 
@@ -815,20 +861,19 @@ export async function runLegacyAttack(
   let baseAttackPrompt = isWeb
     ? webPentestAttackPrompt(config.target, formatWebDiscoveryInfo(targetInfo), config.auth)
     : attackPrompt(config.target, targetInfo, categories, config.auth);
-  baseAttackPrompt += buildAccessControlPromptBlock(identities);
+  baseAttackPrompt += buildAccessControlPromptBlock(identities, config.accessControlFixtures);
   if (apiSpecPromptText) baseAttackPrompt += "\n\n" + apiSpecPromptText;
   const systemPrompt = baseAttackPrompt;
   const tools = isWeb
     ? getToolsForRole("attack", { webMode: true, hasBrowser, allowScanners: config.allowScanners })
     : getToolsForRole("attack", { hasBrowser, allowScanners: config.allowScanners });
 
-  const cloudSinkCfg = getCloudSinkConfig();
   const effectiveMaxTurns =
     isWeb && config.maxAttackTurns === undefined ? Math.max(maxTurns, 25) : maxTurns;
   const state = await runAgentLoop({
     config: {
       role: "attack",
-      systemPrompt,
+      systemPrompt: systemPrompt + scanGoalPrompt(config.plan),
       tools,
       maxTurns: effectiveMaxTurns,
       target: config.target,
@@ -838,6 +883,7 @@ export async function runLegacyAttack(
       dbPath,
       identities,
       authConfig: config.auth,
+      accessControlFixtures: config.accessControlFixtures,
       scope: resolveScopeForConfig(config),
       rateLimiter: getOrCreateRateLimiter(config),
       enforcement: resolveEnforcementForConfig(config),
@@ -846,6 +892,8 @@ export async function runLegacyAttack(
       engagement: resolveEngagementForConfig(config),
       dispatchMode: config.dispatchMode,
       modelHint: config.model,
+      costLedger: config.costLedger as ScanCostLedger | undefined, costCeilingUsd: config.costCeilingUsd, costModel: config.model, signal: config.signal,
+      requirePricedUsage: Boolean(config.plan),
     },
     runtime,
     db,
@@ -873,7 +921,6 @@ export async function runLegacyAttack(
         message: `[${finding.severity}] ${finding.title}`,
         data: finding,
       });
-      void postFinding(finding, cloudSinkCfg);
     },
   });
   return {
@@ -881,7 +928,9 @@ export async function runLegacyAttack(
     targetInfo: state.targetInfo,
     summary: state.summary,
     turnCount: state.turnCount,
-    estimatedCostUsd: 0, // Legacy runtime does not track token usage
+    estimatedCostUsd: state.estimatedCostUsd ?? 0,
+    totalUsage: state.totalUsage, costCeilingExceeded: state.costCeilingExceeded, errorExit: state.errorExit,
+    executionSuccessful: config.plan ? state.done && !state.errorExit : undefined,
   };
 }
 
@@ -893,11 +942,11 @@ export async function runLegacyVerify(
   findings: Finding[],
   _emit: ScanListener,
   dbPath?: string,
-): Promise<void> {
-  await runAgentLoop({
+): Promise<number> {
+  const state = await runAgentLoop({
     config: {
       role: "verify",
-      systemPrompt: verifyPrompt(config.target, findings, config.auth),
+      systemPrompt: verifyPrompt(config.target, findings, config.auth) + scanGoalPrompt(config.plan),
       tools: getToolsForRole("verify", { hasScope: !!config.repoPath, allowScanners: config.allowScanners }),
       maxTurns: Math.min(findings.length * 3, 15),
       target: config.target,
@@ -906,6 +955,7 @@ export async function runLegacyVerify(
       attachTargetToolsMcp: true,
       dbPath,
       authConfig: config.auth,
+      accessControlFixtures: config.accessControlFixtures,
       identities: resolveIdentities(config),
       scope: resolveScopeForConfig(config),
       rateLimiter: getOrCreateRateLimiter(config),
@@ -915,10 +965,17 @@ export async function runLegacyVerify(
       engagement: resolveEngagementForConfig(config),
       dispatchMode: config.dispatchMode,
       modelHint: config.model,
+      costLedger: config.costLedger as ScanCostLedger | undefined, costCeilingUsd: config.costCeilingUsd, costModel: config.model, signal: config.signal,
+      requirePricedUsage: Boolean(config.plan),
     },
     runtime,
     db,
   });
+  if (state.errorExit) throw new Error(state.errorExit.error);
+  if (config.plan && !state.done && !state.costCeilingExceeded && !config.signal?.aborted) {
+    throw new Error("Verification exhausted its turn budget before resolving findings.");
+  }
+  return state.turnCount;
 }
 
 // ── Helper: convert DB finding row to Finding type ──

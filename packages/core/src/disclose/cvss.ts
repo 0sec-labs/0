@@ -1,3 +1,4 @@
+import { getFindingPriority } from "@0/shared";
 import type { AttackCategory, Finding, ReachabilityTier, Severity } from "@0/shared";
 
 export interface CvssSuggestion {
@@ -121,8 +122,9 @@ function prForSeverity(severity: Severity): "N" | "L" | "H" {
  */
 function metricsForReachability(
   tier: ReachabilityTier,
-): { av: keyof typeof W.AV; pr: "N" | "L" | "H"; ui: "N" | "R" } {
+): { av: keyof typeof W.AV; pr: "N" | "L" | "H"; ui: "N" | "R" } | undefined {
   switch (tier) {
+    case "unknown": return undefined;
     case "remote-unauth":
       return { av: "N", pr: "N", ui: "N" };
     case "remote-auth":
@@ -153,7 +155,7 @@ export function suggestCvss(finding: Finding): CvssSuggestion {
   // assessment departs from the historic default. A finding without one
   // produces the exact same vector it always did (AV:N / UI:N / PR-from-
   // severity), so every caller and pinned test is unaffected.
-  const assessed = finding.impactAssessment
+  const assessed = finding.impactAssessment && getFindingPriority(finding).assessed
     ? metricsForReachability(finding.impactAssessment.reachability_tier)
     : undefined;
   const av = assessed?.av ?? ("N" as const);
@@ -705,8 +707,9 @@ export function scoreCvss4Vector(vector: string): Cvss4Score {
 // scope-changing category still scores subsequent effects under 4.0's model.
 function cvss4MetricsForReachability(
   tier: ReachabilityTier,
-): { AV: string; AT: string; PR: string; UI: string } {
+): { AV: string; AT: string; PR: string; UI: string } | undefined {
   switch (tier) {
+    case "unknown": return undefined;
     case "remote-unauth":
       return { AV: "N", AT: "N", PR: "N", UI: "N" };
     case "remote-auth":
@@ -733,7 +736,7 @@ function cvss4MetricsForReachability(
  */
 export function suggestCvss4(finding: Finding): { vector: string; score: number; severity: Cvss4Score["severity"]; source: CvssSuggestion["source"] } {
   const impact = IMPACT_BY_CATEGORY[finding.category] ?? { C: "L", I: "L", A: "L", scope: "U" as const };
-  const assessed = finding.impactAssessment
+  const assessed = finding.impactAssessment && getFindingPriority(finding).assessed
     ? cvss4MetricsForReachability(finding.impactAssessment.reachability_tier)
     : undefined;
 

@@ -1,4 +1,4 @@
-import type { PresentationEvent } from "@0/shared";
+import type { ImpactAssessment, PresentationEvent } from "@0/shared";
 
 export type ScanSummary = {
   totalFindings: number;
@@ -62,9 +62,12 @@ export type FindingRecord = {
   timestamp: number;
   score?: number | null;
   confidence?: number | null;
+  cvssScore?: number | null;
+  cvssVector?: string | null;
   evidenceRequest: string;
   evidenceResponse: string;
   evidenceAnalysis?: string | null;
+  impactAssessment?: ImpactAssessment | null;
 };
 
 export type FindingWorkflowSummary = {

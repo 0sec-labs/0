@@ -5,6 +5,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { SemgrepFinding } from "@0/shared";
 import type { RuntimeType } from "./runtime/index.js";
 import type { ScanListener } from "./scanner.js";
+import { scanExecutionTimeout } from "./scan-plan.js";
 
 /**
  * Release used by the npm launcher when Foxguard is not provisioned locally.
@@ -88,7 +89,7 @@ export function runSemgrepScan(
   let rawOutput: string;
   try {
     rawOutput = execFileSync("semgrep", args, {
-      timeout: 300_000,
+      timeout: scanExecutionTimeout(300_000),
       stdio: "pipe",
       encoding: "utf-8",
       env: { ...process.env, SEMGREP_SEND_METRICS: "off" },
@@ -252,7 +253,7 @@ export function runFoxguardScan(
             useNpm ? ["--yes", `foxguard@${foxguardTag}`, ...args] : args,
             {
               cwd,
-              timeout: 300_000,
+              timeout: scanExecutionTimeout(300_000),
               maxBuffer: 64 * 1024 * 1024,
               stdio: "pipe",
               encoding: "utf-8",

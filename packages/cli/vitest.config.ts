@@ -10,7 +10,7 @@ import { defineConfig } from "vitest/config";
 // vitest's 5s default even though it passes in ~4s alone.
 export default defineConfig({
   test: {
-    include: ["src/**/*.test.{ts,tsx}"],
+    include: ["src/**/*.test.{ts,tsx}", "test/web/**/*.test.ts"],
     testTimeout: 20_000,
   },
 });

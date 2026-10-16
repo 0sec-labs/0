@@ -23,7 +23,6 @@ import type {
   VerificationSpec,
 } from "@0/shared";
 import { parseVerificationSpecArg } from "./agent/tools.js";
-import { normalizeFinding } from "./cloud-sink.js";
 
 function makeSpec(): VerificationSpec {
   return {
@@ -257,49 +256,3 @@ describe("parseVerificationSpecArg (agent tool wire shape, 0#193)", () => {
   });
 });
 
-describe("cloud-sink normalizeFinding pass-through of verificationSpec (0#193)", () => {
-  it("passes a structured verificationSpec through unchanged", () => {
-    const spec = makeSpec();
-    const out = normalizeFinding({
-      id: "f-1",
-      title: "SQLi",
-      severity: "critical",
-      evidence: { request: "x", response: "y" },
-      verificationSpec: spec,
-    });
-    expect(out.verificationSpec).toEqual(spec);
-  });
-
-  it("parses a JSON-encoded verification_spec string (LLM tool-call shape)", () => {
-    const spec = makeSpec();
-    const out = normalizeFinding({
-      title: "SQLi",
-      severity: "high",
-      evidence_request: "x",
-      evidence_response: "y",
-      verification_spec: JSON.stringify(spec),
-    });
-    expect(out.verificationSpec).toBeDefined();
-    expect(out.verificationSpec).toEqual(spec);
-  });
-
-  it("drops a malformed verificationSpec without dropping the finding", () => {
-    const out = normalizeFinding({
-      title: "still useful",
-      severity: "high",
-      evidence: { request: "x", response: "y" },
-      verificationSpec: "not json [",
-    });
-    expect(out.verificationSpec).toBeUndefined();
-    expect(out.title).toBe("still useful");
-  });
-
-  it("omits verificationSpec when the input has none (legacy findings)", () => {
-    const out = normalizeFinding({
-      title: "legacy",
-      severity: "low",
-      evidence: { request: "x", response: "y" },
-    });
-    expect(out.verificationSpec).toBeUndefined();
-  });
-});

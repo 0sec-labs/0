@@ -23,10 +23,16 @@ function client(fetchImpl: typeof fetch, maxCostUsd = 0.10) {
 }
 
 describe("Jev evaluation trust boundaries", () => {
-  it("requires explicit data-egress opt-in even when provider credentials exist", () => {
-    expect(jevConfigFromEnvironment("memory", { AI_GATEWAY_API_KEY: "test-only-key" })).toBeUndefined();
-    expect(() => jevConfigFromEnvironment("memory", { "ZERO_JEV_FEATURES": "memory" }))
-      .toThrow("AI_GATEWAY_API_KEY is required");
+  it("requires workflow-specific data-egress opt-in even when provider credentials exist", () => {
+    for (const feature of ["memory", "rank", "specialist"] as const) {
+      expect(jevConfigFromEnvironment(feature, { AI_GATEWAY_API_KEY: "test-only-key" })).toBeUndefined();
+      expect(jevConfigFromEnvironment(feature, {
+        ZERO_JEV_FEATURES: "dedupe", AI_GATEWAY_API_KEY: "test-only-key",
+      })).toBeUndefined();
+      expect(() => jevConfigFromEnvironment(feature, {
+        ZERO_JEV_FEATURES: feature, ZERO_JEV_PROVIDER: "vercel",
+      })).toThrow("AI_GATEWAY_API_KEY is required");
+    }
   });
 
   it("rejects invented options rather than executing a provider-supplied action", async () => {

@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://0.security/">
-    <img src="assets/readme-cover.png" alt="Software already builds software. Now it can secure itself, too." width="100%">
+    <img src="assets/readme-cover.png" alt="0security landscape with Zero and the security research mission" width="100%">
   </a>
 </p>
 
@@ -12,106 +12,137 @@
 </p>
 
 <p align="center">
-  <strong>The open-source, self-evolving, multi-model harness for security research.</strong><br/>
-  <sub>The Swiss Applied AI &amp; Cybersecurity Research Lab</sub><br/>
+  <strong>Open-source security workflows in your browser or coding agent.</strong><br/>
+  <sub>Backed by Y Combinator · The Swiss Applied AI &amp; Cybersecurity Research Lab</sub><br/>
   <a href="https://0.security/">0.security</a> ·
   <a href="https://docs.0.security/">Documentation</a> ·
   <a href="https://github.com/0sec-labs/foxguard">FoxGuard</a>
 </p>
 
-
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-1A1815?style=flat-square&labelColor=1A1815" alt="License: MIT OR Apache-2.0"></a>
-  <a href="https://github.com/0sec-labs/0/releases/latest"><img src="https://img.shields.io/github/v/release/0sec-labs/0?style=flat-square&labelColor=1A1815&color=1A1815" alt="Latest release"></a>
-  <a href="#status"><img src="https://img.shields.io/badge/status-research%20preview-FD802E?style=flat-square&labelColor=1A1815" alt="Status: research preview"></a>
+  <a href="https://github.com/0sec-labs/0/releases/latest">Latest release</a>
+  <a href="#status-and-safety"><img src="https://img.shields.io/badge/status-research%20preview-FD802E?style=flat-square&labelColor=1A1815" alt="Status: research preview"></a>
 </p>
 
 <p align="center">
-  <img src="assets/security-cycle-diagram.webp" alt="Zero studies, finds, fixes, reports, and improves." width="100%">
+  <img src="assets/zero-manifesto-movement.webp" alt="Zero manifesto movement" width="100%">
 </p>
-
-
-## The harness behind our research breakthroughs.
-
-Find novel vulnerabilities in the deepest layers of software. Explore our
-[public disclosures and upstream fixes](https://0.security/research/#disclosures),
-including research in the Linux kernel.
 
 ## Get started
 
-### Docs for your agent
-
-Copy this prompt into your coding agent:
-
-> Set up the 0.security harness using https://0.security/harness/setup.md and read https://0.security/llms.txt for the documentation index. Confirm my targets and scope before testing, and ask before changing files.
-
-### Quick install
+Install on Apple Silicon macOS or x64/ARM64 Linux:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash
-0
+export PATH="$HOME/.0/bin:$PATH"
+0 web
 ```
 
-Bring your model access and configure connections in the terminal. Run locally
-or through the CLI in CI/CD, inspect findings and verification results, and
-export reports as JSON, Markdown or SARIF.
+**Command Center (browser):** `0 web` · **Terminal:** `0`
 
-[Setup guide](https://0.security/harness/setup.md) ·
-[Research workflows](https://docs.0.security/research-workflows/) ·
-[Documentation](https://docs.0.security/)
+Configure a [model provider](https://docs.0.security/api-keys/) before running AI workflows.
 
-## Built for security research
+## Workflows
 
-- **Open research.** Benchmark-led agent design and A/B-tested attack strategies,
-  with public findings that others can inspect.
-- **Extensible tools.** Use the in-house security linter, connect your own tools,
-  and let agents write and run tools for the investigation.
-- **Adaptive agents.** Delegate focused investigations to subagents with fresh
-  context and bounded budgets, then collect their findings. See the
-  [agent loop](https://docs.0.security/agent-loop/) and
-  [worker monitoring](https://docs.0.security/console/#monitoring-subagents).
-- **Multi-model harness.** Bring the models you prefer into one security workflow.
-  Combine deterministic steps with adaptive investigations.
-- **Evaluated self-improvement.** Propose changes, evaluate them, and select better
-  versions for future runs. Learn more about the
-  [improvement plane](https://docs.0.security/improvement-plane/).
+Browser, CLI, and MCP share one workflow runner with retained results.
 
-### Available on 0.security
+Findings are prioritized by business impact: affected customers and data, fraud,
+critical services, and disruption. Each priority includes a rationale; missing
+context stays **Not assessed**. CVSS remains available as technical severity.
 
-**Optimized Model Routing: The best LLM for each step**
+| Work | Built-in templates |
+| --- | --- |
+| Assess | Repositories, dependencies, APIs, web configuration, scoped penetration tests, package behavior, smart contracts, native code |
+| Verify | Findings with replay evidence |
+| Fix | Candidates with regression tests |
+| Research | Security research, deep source investigation |
 
-The managed service adds model routing, non-public frontier cyber models,
-a purpose-built attack runtime and a curated offensive toolchain. These hosted
-capabilities are separate from running the open-source harness with your own
-model access. [Explore 0.security](https://0.security/).
+Start from 12 templates, customize steps, and run manually or with browser triggers and schedules.
+**Template:** starting point · **Workflow:** reusable steps · **Run:** one execution.
 
-## Make software secure itself.
+**Learning** retains local run activity, source-grounded notes and evaluated
+improvement history. Saved workflows keep immutable revisions and support restore.
+Use `0 learning status` or open Learning in the browser.
+[Learning documentation](https://docs.0.security/learning/).
 
-The world's best security should belong to everyone. Software already writes
-itself; we believe it should secure itself, too. Our goal is security that
-finds and fixes vulnerabilities as software changes, so people can focus on
-what they want to create.
+```bash
+0 workflow list --templates
+0 workflow run --template security-research \
+  --target /absolute/path/to/repo --workspace /absolute/path/to/repo \
+  --format json > run.json
+0 runs list
+```
 
-Research comes first. Public disclosures, upstream fixes and reproducible
-results let people check our work. Open tools let them question it, extend it
-and build something better. Self-securing software is the future we're working
-toward.
+[Workflow guide: inputs, limits, and results](https://docs.0.security/workflow/).
 
-[Read our manifesto](https://0.security/about/) ·
-[Explore our research](https://0.security/research/)
+## See Zero at work
 
-## Status
+A source review of the included [demo API](assets/examples/demo-api/), with code locations and suggested fixes.
 
-This is a research preview. Coverage and verification depth vary by workflow;
-inspect the evidence and review generated fixes before applying them.
-Tool making and evaluated self-improvement are developing research workflows.
-Only test systems you own or are authorized to assess.
+![Demo API source review in Zero](assets/screenshots/web-chat.jpg)
 
-## Contributing
+Start a workflow from a template and edit its steps.
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) to build and extend the harness.
-Report security issues through [SECURITY.md](SECURITY.md).
+![Workflow editor in Zero](assets/screenshots/web-workflow.jpg)
 
-## License
+## Use 0 from another agent
 
-[MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE).
+Use the CLI commands above, or **MCP** to discover templates, create workflows, and manage runs:
+
+```bash
+0 mcp-server --workflows --workspace /absolute/path/to/repo
+```
+
+Local MCP requires an explicitly selected host-local execution profile.
+For a registered remote engine, use `0 mcp-server --workflows --backend production`.
+0's model provider is separate from the connecting agent's session.
+
+Browser chat's **Connect an external agent** copies a setup prompt.
+CLI and MCP workflow clients automatically attach to a running local web engine
+for the same workspace and control database. To attach explicitly to the sessions
+and runs already open in an engine:
+
+```bash
+0 mcp-server --workflows --engine-url http://127.0.0.1:3000 \
+  --engine-token-env ENGINE_TOKEN --session SESSION_ID
+0 sessions list --engine-url http://127.0.0.1:3000 --engine-token-env ENGINE_TOKEN
+```
+
+Set `ENGINE_TOKEN` to the engine's configured bearer credential. Attached clients
+share the browser's session and run lifecycle; disconnecting leaves the engine
+running. Omit `--session` to create a session under the engine's admission grants.
+
+See [MCP setup and individual tools](https://docs.0.security/integrations/) or
+[local and remote engines](https://docs.0.security/engine-connections/).
+
+## Plugins
+
+Connect GitHub, Elastic, Semgrep, Snyk, Linear, Jira, Cloudflare, Slack, and Teams
+through [plugins and MCP](https://docs.0.security/integrations/).
+
+More guides: [installation](https://docs.0.security/getting-started/) ·
+[GitHub Actions](https://docs.0.security/ci/github-action/) ·
+[plugin development](https://docs.0.security/hackstore/) ·
+[troubleshooting](https://docs.0.security/troubleshooting/).
+
+## Development
+
+Install dependencies, run `npm run dev`, and open the printed browser address.
+See [CONTRIBUTING.md](https://github.com/0sec-labs/0/blob/main/.github/CONTRIBUTING.md).
+
+## Status and safety
+
+**Research preview.** Assess authorized systems and review findings and fixes.
+Run `0` or `0 web` to open the browser console without an account.
+The interactive terminal UI is retired; headless CLI, automation, MCP and binary commands remain available.
+Use `0 chat --prompt "your request"` for one-shot automation; set `--mode standard` for explicit scope checks.
+The optional [scope plugin](https://docs.0.security/scope/) enforces target boundaries.
+
+Report vulnerabilities through [SECURITY.md](https://github.com/0sec-labs/0/blob/main/.github/SECURITY.md).
+Licensed under [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE).
+
+[Public disclosures and upstream fixes](https://0.security/research/#disclosures).
+Thanks to [OpenTUI](https://github.com/anomalyco/opentui), [Bun](https://bun.sh/),
+[React](https://react.dev/), [Models.dev](https://models.dev/),
+[LiteLLM](https://github.com/BerriAI/litellm), and our contributors.

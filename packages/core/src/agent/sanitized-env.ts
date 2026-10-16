@@ -125,7 +125,6 @@ const CHILD_ENV_ALLOWLIST = [
   // Existing child-runtime configuration contract; each name is non-secret.
   "ZERO_FEATURE_JIT_SKILLS",
   "ZERO_BASH_TIMEOUT_MS",
-  "ZERO_CLOUD_SCAN_ID",
 ] as const;
 
 /**

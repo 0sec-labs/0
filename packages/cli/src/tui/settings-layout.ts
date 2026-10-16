@@ -141,7 +141,7 @@ export const DIALOG_HOST_FOOTER_ROWS = 1;
 
 /**
  * Rows the settings route's host spends inside a dialog: the footer, plus the
- * one clickable "Live harness · ctrl+g" line the route renders above the body.
+ * clickable "Keybindings · ctrl+k" link above the body.
  */
 export const SETTINGS_DIALOG_HOST_ROWS = DIALOG_HOST_FOOTER_ROWS + 1;
 
@@ -617,21 +617,17 @@ export type SettingsMode = "browse" | "filter" | "confirm-reset" | "confirm-rese
 export function settingsFooterHint(mode: SettingsMode, hasFilter = false): string {
   switch (mode) {
     case "filter":
-      return "type/paste search · [↑↓] move · [←→]/[⏎] change · [⌃U] clear · [esc] browse";
+      return "[↑↓] move · [⏎] change · [⌃U] clear · [esc] done";
     case "confirm-reset":
     case "confirm-reset-all":
       return "[y] confirm · [n]/[esc] cancel";
     default:
       return [
         "[↑↓] move",
-        "[←→] change",
-        "[⇥] next group",
         "[⏎] change",
         "[/] search",
         "[r] reset",
-        "[⇧R] reset all",
-        hasFilter ? "[esc] clear filter" : "[esc] back",
-        "[⌃C] exit",
+        hasFilter ? "[esc] clear" : "[esc] back",
       ].join(" · ");
   }
 }

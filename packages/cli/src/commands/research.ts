@@ -1,7 +1,38 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Command } from "commander";
-import type { Finding } from "@0/shared";
+import type { Finding, ScanReport } from "@0/shared";
+import type { ResearchTarget, ResearchCandidate, TargetResearchAdapter, ResearchRunResult, RunResearchOptions, UnifiedPipelineTargetConfig } from "@0/core";
+
+async function managedResearch<T extends ResearchTarget, C extends ResearchCandidate, H, X>(adapter: TargetResearchAdapter<T, C, H, X>, target: T, options: RunResearchOptions<T>, engine: typeof import("@0/core").runResearch): Promise<ResearchRunResult<C>> {
+  const { executeManagedOperation } = await import("../managed-operation.js");
+  const started = Date.now();
+  return executeManagedOperation<ResearchRunResult<C>>({ type: "research", name: `Research: ${adapter.kind}`, target: target.location, timeCapMs: 600_000, costCapUsd: 5,
+    execute: async context => {
+      const bound = target.kind === "pipeline.unified" ? { ...target, config: { ...target.config as object, options: { ...(target.config as UnifiedPipelineTargetConfig).options,
+        signal: context.signal, costLedger: context.costLedger, costCeilingUsd: context.plan.costCapUsd, timeout: Math.max(1, context.deadline - Date.now()) } } } as T : target;
+      const result = await engine(adapter, bound, { ...options, signal: context.signal });
+      // Runtime controls (signal, cost ledger) are bound for the adapter only.
+      // The returned result must stay portable: executeWorkflow snapshots
+      // results with structuredClone, and a bound ledger's listener functions
+      // are not cloneable.
+      return { ...result, target };
+    },
+    status: result => result.completed === false ? "failed" : "completed",
+    reports: result => {
+      const findings = result.findings.map(item => item.finding);
+      const scanDepth = target.kind === "pipeline.unified" ? (target.config as UnifiedPipelineTargetConfig).options.depth : "default";
+      const report: ScanReport = {
+        target: target.location, scanDepth, startedAt: new Date(started).toISOString(), completedAt: new Date().toISOString(), durationMs: Date.now() - started,
+        findings, warnings: result.warnings.map(message => ({ stage: "source-analysis", message })), executionSuccessful: result.completed,
+        summary: { totalAttacks: 0, totalFindings: findings.length, critical: findings.filter(f => f.severity === "critical").length, high: findings.filter(f => f.severity === "high").length,
+          medium: findings.filter(f => f.severity === "medium").length, low: findings.filter(f => f.severity === "low").length, info: findings.filter(f => f.severity === "info").length },
+      };
+      return [report];
+    },
+  });
+}
+
 
 function print(value: unknown): void {
   process.stdout.write(JSON.stringify(value, null, 2) + "\n");
@@ -10,7 +41,7 @@ function print(value: unknown): void {
 export function registerResearchCommand(program: Command): void {
   const research = program
     .command("research")
-    .description("Run target-specific engines through the shared evidence research plane");
+    .description("Run target-specific research engines");
 
   research
     .command("pipeline")
@@ -22,10 +53,10 @@ export function registerResearchCommand(program: Command): void {
     .option("--runtime <runtime>", "auto, api, claude, codex, gemini, or ollama", "auto")
     .option("--artifact-root <path>", "Research artifact root", ".0-research")
     .action(async (opts: { target: string; targetType?: string; profile?: string; depth: string; runtime: string; artifactRoot: string }) => {
-      const { UnifiedPipelineResearchAdapter, postFinding, runResearch } = await import("@0/core");
+      const { UnifiedPipelineResearchAdapter, runResearch } = await import("@0/core");
       const allowedTypes = new Set(["url", "web-app", "source-code", "npm-package", "pypi-package", "cargo-package", "oci-image"]);
       if (opts.targetType && !allowedTypes.has(opts.targetType)) throw new Error(`unsupported --target-type ${opts.targetType}`);
-      print(await runResearch(
+      print(await managedResearch(
         new UnifiedPipelineResearchAdapter(),
         {
           kind: "pipeline.unified",
@@ -41,22 +72,68 @@ export function registerResearchCommand(program: Command): void {
             },
           },
         },
-        { artifactRoot: resolve(opts.artifactRoot), emitFinding: postFinding, log: (message) => process.stderr.write(message + "\n") },
+        { artifactRoot: resolve(opts.artifactRoot), log: (message) => process.stderr.write(message + "\n") }, runResearch,
       ));
     });
 
+
+  research
+    .command("counterexample")
+    .description("Search a C/C++ source target for sanitizer-confirmed counterexample inputs; optional mitigation replay")
+    .requiredOption("--source <dir>", "C/C++ source tree root")
+    .requiredOption("--fn <name>", "Suspect function name")
+    .requiredOption("--header <path>", "Header declaring the suspect function")
+    .requiredOption("--declaration <decl>", "C declaration of the suspect function")
+    .option("--input-shape <shape>", "bytesAndLen, bytesPtr, or bytesAndLenOut", "bytesAndLen")
+    .option("--build-system <system>", "auto, autotools, cmake, or meson", "auto")
+    .option("--timeout <sec>", "Fuzz wall-clock budget in seconds")
+    .option("--mitigation-source <files...>", "Reference-mitigation source file(s) for replay")
+    .option("--mitigation-include <dirs...>", "Extra include directories for the mitigation build")
+    .option("--witness <files...>", "Finding-proposed witness input file(s) to replay through the sanitizer build")
+    .option("--artifact-root <path>", "Research artifact root", ".0-research")
+    .action(async (opts: { source: string; fn: string; header: string; declaration: string; inputShape: string; buildSystem: string; timeout?: string; mitigationSource?: string[]; mitigationInclude?: string[]; witness?: string[]; artifactRoot: string }) => {
+      // Deferred like the sibling actions above: statically importing @0/core
+      // would load the full engine into every `0` invocation, including --help.
+      const { UserspaceCounterexampleResearchAdapter, runResearch } = await import("@0/core");
+      const SHAPES: Record<string, true> = { bytesAndLen: true, bytesPtr: true, bytesAndLenOut: true };
+      if (!SHAPES[opts.inputShape]) throw new Error(`unsupported --input-shape ${opts.inputShape}`);
+      const SYSTEMS: Record<string, true> = { auto: true, autotools: true, cmake: true, meson: true };
+      if (!SYSTEMS[opts.buildSystem]) throw new Error(`unsupported --build-system ${opts.buildSystem}`);
+      print(await managedResearch(
+        new UserspaceCounterexampleResearchAdapter(),
+        {
+          kind: "userspace.counterexample",
+          id: `counterexample:${opts.source}:${opts.fn}`,
+          location: resolve(opts.source),
+          config: {
+            sourceRoot: resolve(opts.source),
+            buildSystem: opts.buildSystem as "auto" | "autotools" | "cmake" | "meson",
+            suspectFunction: {
+              header: opts.header,
+              functionName: opts.fn,
+              declaration: opts.declaration,
+              inputShape: opts.inputShape as "bytesAndLen" | "bytesPtr" | "bytesAndLenOut",
+            },
+            ...(opts.witness?.length ? { witnessInputs: opts.witness.map(path => resolve(path)) } : {}),
+            ...(opts.timeout ? { timeoutSec: Number.parseInt(opts.timeout, 10) } : {}),
+            ...(opts.mitigationSource?.length ? { mitigation: { sourceFiles: opts.mitigationSource, ...(opts.mitigationInclude?.length ? { includeDirs: opts.mitigationInclude } : {}) } } : {}),
+          },
+        },
+        { artifactRoot: resolve(opts.artifactRoot), log: (message) => process.stderr.write(message + "\n") }, runResearch,
+      ));
+    });
   research
     .command("mobile")
     .description("Run passive mobile intake; indicators remain hypotheses and only scoped adapters may hand off targets")
     .requiredOption("--target <path>", "Extracted APK/IPA directory or metadata file")
     .option("--artifact-root <path>", "Research artifact root", ".0-research")
     .action(async (opts: { target: string; artifactRoot: string }) => {
-      const { MobileStaticResearchAdapter, postFinding, runResearch } = await import("@0/core");
+      const { MobileStaticResearchAdapter, runResearch } = await import("@0/core");
       const targetPath = resolve(opts.target);
-      print(await runResearch(
+      print(await managedResearch(
         new MobileStaticResearchAdapter(),
         { kind: "mobile.static-intake", id: `mobile:${targetPath}`, location: targetPath, config: {} },
-        { artifactRoot: resolve(opts.artifactRoot), emitFinding: postFinding, log: (message) => process.stderr.write(message + "\n") },
+        { artifactRoot: resolve(opts.artifactRoot), log: (message) => process.stderr.write(message + "\n") }, runResearch,
       ));
     });
 
@@ -67,13 +144,13 @@ export function registerResearchCommand(program: Command): void {
     .requiredOption("--finding <path>", "Existing Finding JSON to bind the proof to")
     .option("--artifact-root <path>", "Research artifact root", ".0-research")
     .action(async (opts: { matrix: string; finding: string; artifactRoot: string }) => {
-      const { LinuxBootMatrixImportAdapter, postFinding, runResearch } = await import("@0/core");
+      const { LinuxBootMatrixImportAdapter, runResearch } = await import("@0/core");
       const matrix = resolve(opts.matrix);
       const finding = JSON.parse(readFileSync(resolve(opts.finding), "utf8")) as Finding;
-      const result = await runResearch(
+      const result = await managedResearch(
         new LinuxBootMatrixImportAdapter(),
         { kind: "linux.kernel-boot-matrix-import", id: `linux-matrix:${finding.id}`, location: matrix, config: { finding } },
-        { artifactRoot: resolve(opts.artifactRoot), emitFinding: postFinding, log: (message) => process.stderr.write(message + "\n") },
+        { artifactRoot: resolve(opts.artifactRoot), log: (message) => process.stderr.write(message + "\n") }, runResearch,
       );
       if (result.candidates.length === 0) throw new Error("external boot-matrix manifest failed validation");
       print(result);
@@ -90,7 +167,7 @@ export function registerResearchCommand(program: Command): void {
     .option("--min-hits <n>", "Required reproducing boots", "2")
     .option("--artifact-root <path>", "Research artifact root", ".0-research")
     .action(async (opts: { kernelTree: string; reproducer: string; finding: string; expectedSignature: string; boots: string; minHits: string; artifactRoot: string }) => {
-      const { LinuxKernelResearchAdapter, postFinding, runResearch } = await import("@0/core");
+      const { LinuxKernelResearchAdapter, runResearch } = await import("@0/core");
       const kernelTree = resolve(opts.kernelTree);
       const reproducer = resolve(opts.reproducer);
       const finding = JSON.parse(readFileSync(resolve(opts.finding), "utf8")) as Finding;
@@ -103,7 +180,7 @@ export function registerResearchCommand(program: Command): void {
       const verify = reproducer.endsWith(".syz")
         ? { syzProgramPath: reproducer, boots, minHits, expectedSignature: opts.expectedSignature }
         : { reproducerPath: reproducer, boots, minHits, expectedSignature: opts.expectedSignature };
-      const result = await runResearch(
+      const result = await managedResearch(
         new LinuxKernelResearchAdapter(),
         {
           kind: "linux.kernel-reproducer",
@@ -111,7 +188,7 @@ export function registerResearchCommand(program: Command): void {
           location: kernelTree,
           config: { finding, verify },
         },
-        { artifactRoot: resolve(opts.artifactRoot), emitFinding: postFinding, log: (message) => process.stderr.write(message + "\n") },
+        { artifactRoot: resolve(opts.artifactRoot), log: (message) => process.stderr.write(message + "\n") }, runResearch,
       );
       if (result.findings.length === 0) {
         throw new Error("kernel N-boot verification did not reproduce the expected signature");

@@ -31,13 +31,10 @@ revision context, and the integration posts review status/results back to
 GitHub. Do not infer that every GitHub event causes a scan or that a successful
 review means every finding has a reproduced exploit.
 
-Hosted-model access is a separate account capability: an inference-only
-organization cannot enqueue managed reviews. The existence of the public
-[Cloud login](https://cloud.0.security/login) is not proof of your organization's
-App enrollment, worker readiness or plan entitlement. Use
-[Contact](https://0.security/contact/?intent=contact) to confirm current access;
-[pricing](https://0.security/pricing/) distinguishes hosted models from managed
-execution.
+Managed review access requires an approved organization, compatible service
+deployment, and repository policy. Contact the
+[team](https://0.security/contact/?intent=contact) to confirm current access;
+the local CLI does not enroll repositories in the managed GitHub App.
 
 ## Container-based workflow
 
@@ -214,8 +211,8 @@ multiple credentials are present so CI does not depend on accidental fallback.
 
 See [API Keys](/api-keys/) for provider requirements, account restrictions and
 fallback order. Subscription authentication is not a promise that unattended
-CI is permitted by that provider. Hosted model access requires separate Cloud
-account compatibility; it still does not move local tools off the runner.
+CI is permitted by that provider. Managed App reviews have separate service
+access; local CI tools continue running on your runner.
 
 ## Example: full diff-aware PR review
 
@@ -311,37 +308,13 @@ GitHub App's deployed repository policy.
 
 - The composite action `0sec-labs/0/.github/actions/0-scan` is not shipped.
   Proposed action inputs are not a supported public contract.
-- Managed App enrollment and service execution depend on the account and
-  deployed backend, not merely a successful browser login.
+- Managed App enrollment and service execution depend on account access and
+  the deployed backend, not merely a provider credential.
 - Live target scans need runner-side reachability and authorized scope.
 - `claude`, `codex` and `gemini` runtimes need their CLI subprocesses and
   authentication on the runner. `api` is the straightforward unattended path.
 - A finding, a SARIF upload and a successful job are not interchangeable with
   verified exploitability or complete security coverage.
-
-### Managed lifecycle compatibility
-
-The `connect` / `service` commands are separate from App-triggered reviews.
-Before using them for CI-managed recurrence, confirm the deployed API contract:
-
-- The reviewed Cloud schedule-list handler returns the whole organization's
-  schedules and does not filter the CLI's `?target=` query. `connect` can
-  mistake another repository's schedule for the requested one, while
-  `service disconnect` deletes every returned schedule. Do not use that
-  disconnect path as a repository-selective operation until compatibility is
-  confirmed.
-- `service start --cost-ceiling` currently sends `secure_config.cost_ceiling`,
-  while the reviewed server accepts `secure_config.cost_ceiling_usd`. Do not
-  assume the one-shot flag enforces a managed-service budget.
-- `service wait` returns terminal scan records, including failures, without
-  making a failed scan itself a nonzero CLI exit. Check the returned `status`
-  and `final_report`.
-
-These findings compare public CLI `708f0117` with Cloud integration source
-`61e68bad` (`website-integration-20260918`), not an authenticated production
-acceptance test. The older Cloud root checkout `d2cb1a38` lacks some newer
-managed integration contracts; neither checkout identifies the deployed
-revision. Confirm account access and deployment with the team before dispatch.
 
 ## See also
 
@@ -351,4 +324,4 @@ revision. Confirm account access and deployment with the team before dispatch.
 - [API Keys](/api-keys/) — authentication and provider choice
 - [Budget Management](/budget-management/) — cost controls and interrupted runs
 - [Scope & Authorization](/scope/) — explicit target policy
-- [Commands](/commands/) — CLI reference and managed-service compatibility
+- [Commands](/commands/) — local CLI reference

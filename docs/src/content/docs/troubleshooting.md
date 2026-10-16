@@ -220,26 +220,6 @@ The target URL does not match any `in_scope` entry in the scope JSON file, or
 matches an `out_of_scope` deny rule (deny takes precedence). See
 [Scope & Authorization](/scope/) for scope syntax.
 
-### Cloud auth failure
-
-```bash
-0 auth status
-# FAIL (HTTP 401)
-```
-
-| Exit | Meaning |
-|------|---------|
-| `2` | Auth failure (401/403 or missing credentials) |
-| `3` | Network error (host unreachable, DNS failure) |
-| `1` | Other error |
-
-For an operator-provided managed-service host, retry `0 auth login` or use
-the manual token path below. This does not configure a local model.
-
-```bash
-0 auth login --host https://control-plane.example.com --token "your-token"
-```
-
 ## Provider issues
 
 ### Multiple providers configured — which one is used?
@@ -463,37 +443,28 @@ enough. Keep the original database and its sibling run artifacts, then pass both
 
 The scan ID is printed at the start of the original run.
 `0 console --resume` is separate: it loads a saved chat transcript, not a scan
-checkpoint. See [console resume](/console/#resume) for its scope and model
+checkpoint. See [console resume](/console/#saved-sessions) for its scope and model
 limitations.
 
-## TUI / Console
+## Browser console
 
 ### Console doesn't start
 
-The full UI needs the standalone Bun-compiled release, or Bun plus an installed
-source checkout, and both stdin and stdout must be TTYs. Node and redirected
-stdio do not select the TUI.
+Run `0` or `0 web` for interactive conversations. Both Node and the standalone
+binary open the browser interface; terminal rendering and the readline REPL
+are retired. In a source checkout, install dependencies and build before
+starting the web app.
 
 ```bash
-# Verify prerequisites
 0 doctor
+0 web
 ```
 
-For a source checkout, install the repository dependencies and run
-`bun packages/cli/dist/index.js` after building. Running the same entry point
-with Node selects readline, which requires `--scope`; default YOLO also requires
-a nonempty `in_scope` list. The Docker image similarly uses Node.
+For automation, use `0 chat --prompt` or `0 console --print`. See
+[headless approval limitations](/console/#non-interactive-approval-limitations)
+when the task requires a human decision.
 
-See [launch and approval limitations](/console/#launch) before substituting
-readline or `--print`: Standard without an approval callback is not fail-closed,
-and Co-pilot does not prompt for each effectful call.
-
-### `/providers` command shows no options
-
-`/providers` now opens the same connection pane as `/connect`; it is not a
-read-only credential-status listing. The pane offers connections before keys
-are configured. If a provider is disconnected, choose its supported method and
-finish sign-in or key entry, then select the model again in `/model`.
+### Saved provider credential appears missing
 
 If a saved credential appears missing, check which home directory the process
 uses and whether its `~/.0/credentials.json` is readable. An explicit
@@ -525,14 +496,13 @@ chat-session ID is not a finding ID.
 | **Marketplace availability** | The TUI and plugin execution exist; catalog availability depends on the configured registry. Installation and enablement are separate. See [Hackstore](/hackstore/) |
 | **Windows upgrade** | `0 upgrade` does not support Windows. Download release assets manually |
 | **MCP transport** | The MCP server uses stdio transport only. SSE/WebSocket transport is not implemented |
-| **Cloud access** | Device/browser login and authenticated account/model endpoints require a compatible service. A manual token does not bypass service authorization or hosted request admission |
+| **Managed-service access** | The local CLI does not provide managed-service login or scan lifecycle commands. Arrange service authorization and deployment compatibility with the operator |
 
 ## Diagnostic quick reference
 
 | Command | What it checks |
 |---------|----------------|
 | `0 doctor` | Node version, API runtime, CLI runtimes |
-| `0 auth status` | Cloud credential validity and managed scan-read access |
 | `0 h1 auth` | HackerOne API credential validity |
 | `0 --version` | CLI version |
 | `0 config show` | Effective layered configuration (global + project) |

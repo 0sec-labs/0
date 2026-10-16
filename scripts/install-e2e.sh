@@ -28,8 +28,12 @@ check_binary_install() {
     rm -rf /var/lib/apt/lists/*
 
     export HOME=/tmp/0-home
+    export SHELL=/bin/bash
     curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash
-    export PATH="$HOME/.0/bin:$PATH"
+    # Use the saved shell configuration, rather than hiding PATH regressions
+    # behind a test-only export.
+    . "$HOME/.profile"
+    0 --version
     0 --help >/dev/null
     foxguard --version
     ! command -v node

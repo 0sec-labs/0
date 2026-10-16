@@ -21,6 +21,11 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ScanReport } from "@0/shared";
+import * as formatters from "../../formatters/index.js";
+
+const { connectLocalEngineMock } = vi.hoisted(() => ({ connectLocalEngineMock: vi.fn() }));
+vi.mock("../../local-engine.js", () => ({ connectLocalEngine: connectLocalEngineMock }));
+beforeEach(() => { connectLocalEngineMock.mockReset().mockResolvedValue(null); });
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
 //
@@ -39,6 +44,11 @@ import type { ScanReport } from "@0/shared";
 const agenticScanMock = vi.fn();
 const runPipelineMock = vi.fn();
 const createRuntimeMock = vi.fn();
+const ScanCostLedgerMock = class {
+  totalCostUsd() {
+    return 0;
+  }
+};
 const loadAppsecFinderLensesMock = vi.fn(() => []);
 let eventBusListener:
   | { emit: (type: string, payload: unknown) => void }
@@ -52,14 +62,29 @@ const eventBusMock = {
   },
 };
 
-vi.mock("@0/core", () => ({
+vi.mock("@0/core", async () => {
+  const assessmentModuleUrl = new URL("../../../../core/src/assessment.ts", import.meta.url).href;
+  const { executeAssessmentRun } = await import(assessmentModuleUrl);
+  return ({
+  executeAssessmentRun: (options: any, _dependencies: unknown, lifecycle: unknown) => executeAssessmentRun(options, {
+    agenticScan: agenticScanMock, runPipeline: runPipelineMock, branchJournal: vi.fn(),
+  }, lifecycle),
   agenticScan: agenticScanMock,
   runPipeline: runPipelineMock,
   createRuntime: createRuntimeMock,
+  ScanCostLedger: ScanCostLedgerMock,
   eventBus: eventBusMock,
   loadAppsecFinderLenses: loadAppsecFinderLensesMock,
-}));
+});
+});
 
+
+const workflowStoreMock = {
+  createExecutionFromSnapshot: vi.fn(() => ({ id: "cli-run" })),
+  updateExecution: vi.fn(), saveExecutionResults: vi.fn(),
+  getExecution: vi.fn(() => ({ status: "running" })), close: vi.fn(),
+};
+vi.mock("@0/db", () => ({ SecurityWorkflowStore: class { constructor() { return workflowStoreMock; } } }));
 
 // `runUnified` calls `checkRuntimeAvailability` for terminal format. We
 // stub it to a no-op so tests don't probe the user's environment.
@@ -153,7 +178,8 @@ describe("runUnified — runtime gating", () => {
   let logSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    agenticScanMock.mockReset();
+    for (const mock of Object.values(workflowStoreMock)) mock.mockClear();
+  agenticScanMock.mockReset();
     runPipelineMock.mockReset();
     createRuntimeMock.mockReset();
     eventBusListener = null;
@@ -242,7 +268,7 @@ describe("runUnified — runtime gating", () => {
     };
     try {
       agenticScanMock.mockResolvedValueOnce(cleanReport({
-        summary: { ...emptySummary(), high: 1, totalFindings: 1 },
+        summary: { ...emptySummary(), high: 1, low: 1, totalFindings: 2 },
       }));
       await runUnified({
         target: "https://example.com",
@@ -369,7 +395,8 @@ describe("runUnified — dispatch routing on targetType", () => {
   let logSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    agenticScanMock.mockReset();
+    for (const mock of Object.values(workflowStoreMock)) mock.mockClear();
+  agenticScanMock.mockReset();
     runPipelineMock.mockReset();
     createRuntimeMock.mockReset();
     eventBusListener = null;
@@ -481,7 +508,8 @@ describe("runUnified — exit codes", () => {
   let logSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    agenticScanMock.mockReset();
+    for (const mock of Object.values(workflowStoreMock)) mock.mockClear();
+  agenticScanMock.mockReset();
     runPipelineMock.mockReset();
     createRuntimeMock.mockReset();
     eventBusListener = null;
@@ -571,7 +599,8 @@ describe("runUnified — emitResultLine env gate", () => {
   const envSnapshot: Record<string, string | undefined> = {};
 
   beforeEach(() => {
-    agenticScanMock.mockReset();
+    for (const mock of Object.values(workflowStoreMock)) mock.mockClear();
+  agenticScanMock.mockReset();
     runPipelineMock.mockReset();
     createRuntimeMock.mockReset();
     eventBusListener = null;
@@ -580,9 +609,7 @@ describe("runUnified — emitResultLine env gate", () => {
     errSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
     envSnapshot["ZERO_EMIT_RESULT_LINE"] = process.env["ZERO_EMIT_RESULT_LINE"];
-    envSnapshot["ZERO_CLOUD_SINK"] = process.env["ZERO_CLOUD_SINK"];
     delete process.env["ZERO_EMIT_RESULT_LINE"];
-    delete process.env["ZERO_CLOUD_SINK"];
   });
 
   afterEach(() => {
@@ -595,7 +622,7 @@ describe("runUnified — emitResultLine env gate", () => {
     }
   });
 
-  it("does NOT emit ZERO_RESULT line when neither env var is set", async () => {
+  it("does NOT emit ZERO_RESULT line without explicit opt-in", async () => {
     agenticScanMock.mockResolvedValueOnce(cleanReport());
     await runUnified({
       target: "https://example.com",
@@ -666,190 +693,33 @@ describe("runUnified — emitResultLine env gate", () => {
   });
 });
 
-describe("runUnified — cost summary (0#231)", () => {
-  let exitSpy: { mockRestore: () => void };
-  let logSpy: ReturnType<typeof vi.spyOn>;
-  let errSpy: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    agenticScanMock.mockReset();
-    runPipelineMock.mockReset();
-    createRuntimeMock.mockReset();
+describe("runUnified — machine-readable output", () => {
+  it("emits one parseable JSON report when cost and cross-validation diagnostics arrive", async () => {
+    for (const mock of Object.values(workflowStoreMock)) mock.mockClear();
+  agenticScanMock.mockReset();
     eventBusListener = null;
-    tracker = {};
-    exitSpy = makeExitMock(tracker);
-    errSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  });
-
-  afterEach(() => {
-    exitSpy.mockRestore();
-    errSpy.mockRestore();
-    logSpy.mockRestore();
-  });
-
-  it("prints cost-summary line when scan_completed payload carries cost_usd", async () => {
-    // Tap the event bus mid-flight: agenticScan emits scan_completed via
-    // the bus before resolving. We simulate that by firing into the bus
-    // from the mocked agenticScan.
+    // Load the actual formatter behind the module mock to check consumer JSON bytes.
+    const actual = await vi.importActual<typeof formatters>("../../formatters/index.js");
+    vi.mocked(formatters.formatReport).mockImplementationOnce(actual.formatReport);
     agenticScanMock.mockImplementationOnce(async () => {
-      eventBusListener?.emit("scan_completed", {
-        cost_usd: 0.42,
-        cost_per_flag: 0.42,
-        cost_breakdown: [
-          { provider: "anthropic", model: "claude", cost_in: 0.18, cost_out: 0.2, cost_cache_read: 0.04 },
-        ],
-      });
-      return cleanReport();
-    });
-    await runUnified({
-      target: "https://example.com",
-      targetType: "url",
-      depth: "default",
-      format: "json",
-      runtime: "auto",
-      timeout: 30000,
-      verbose: false,
-    });
-    const all = logSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
-    // chalk.gray wraps with ANSI; strip for matching.
-    // eslint-disable-next-line no-control-regex
-    const plain = all.replace(/\x1b\[\d+m/g, "");
-    expect(plain).toMatch(/cost: \$0\.42/);
-    expect(plain).toMatch(/in: \$0\.18/);
-    expect(plain).toMatch(/out: \$0\.20/);
-    expect(plain).toMatch(/cache: \$0\.04/);
-    expect(plain).toMatch(/\$0\.42\/flag/);
-  });
-
-  it("omits cache and /flag suffix when the runtime didn't report them", async () => {
-    agenticScanMock.mockImplementationOnce(async () => {
-      eventBusListener?.emit("scan_completed", {
-        cost_usd: 0.1,
-        cost_breakdown: [
-          { provider: "openai", model: "gpt-4o", cost_in: 0.05, cost_out: 0.05 },
-        ],
-        // no cost_per_flag → no /flag suffix
-      });
-      return cleanReport();
-    });
-    await runUnified({
-      target: "https://example.com",
-      targetType: "url",
-      depth: "default",
-      format: "json",
-      runtime: "auto",
-      timeout: 30000,
-      verbose: false,
-    });
-    const all = logSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
-    // eslint-disable-next-line no-control-regex
-    const plain = all.replace(/\x1b\[\d+m/g, "");
-    expect(plain).toMatch(/cost: \$0\.10/);
-    expect(plain).not.toMatch(/cache:/);
-    expect(plain).not.toMatch(/\/flag/);
-  });
-
-  it("does not print the cost line when no scan_completed cost arrives", async () => {
-    agenticScanMock.mockResolvedValueOnce(cleanReport());
-    await runUnified({
-      target: "https://example.com",
-      targetType: "url",
-      depth: "default",
-      format: "json",
-      runtime: "auto",
-      timeout: 30000,
-      verbose: false,
-    });
-    const all = logSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
-    // eslint-disable-next-line no-control-regex
-    const plain = all.replace(/\x1b\[\d+m/g, "");
-    expect(plain).not.toMatch(/cost: \$/);
-  });
-});
-
-describe("runUnified — cross-validated leads (FoxGuard Phase 4)", () => {
-  let exitSpy: { mockRestore: () => void };
-  let logSpy: ReturnType<typeof vi.spyOn>;
-  let errSpy: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    agenticScanMock.mockReset();
-    runPipelineMock.mockReset();
-    createRuntimeMock.mockReset();
-    eventBusListener = null;
-    tracker = {};
-    exitSpy = makeExitMock(tracker);
-    errSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  });
-
-  afterEach(() => {
-    exitSpy.mockRestore();
-    errSpy.mockRestore();
-    logSpy.mockRestore();
-  });
-
-  function plainLog(): string {
-    // eslint-disable-next-line no-control-regex
-    return logSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n").replace(/\x1b\[\d+m/g, "");
-  }
-
-  it("prints the cross-validated-leads block when the bus event fires", async () => {
-    agenticScanMock.mockImplementationOnce(async () => {
+      eventBusListener?.emit("scan_completed", { cost_usd: 0.42 });
       eventBusListener?.emit("cross_validated_leads", {
-        count: 2,
-        leads: [
-          { findingId: "f-1", title: "SQLi in login", severity: "high", confidence: 0.82, foxguardMatches: 3 },
-          { findingId: "f-2", title: "XSS in search", severity: "medium", confidence: 0.5, foxguardMatches: 1 },
-        ],
+        count: 1, leads: [{ findingId: "lead", title: "Investigate tenant isolation", severity: "high", confidence: 0.8, foxguardMatches: 2 }],
       });
-      return cleanReport();
+      return cleanReport({ estimatedCostUsd: 0.42 });
     });
-    await runUnified({
-      target: "https://example.com",
-      targetType: "url",
-      depth: "default",
-      format: "json",
-      runtime: "auto",
-      timeout: 30000,
-      verbose: false,
-    });
-    const plain = plainLog();
-    expect(plain).toMatch(/Cross-validated leads — 2 findings both scanners agree on \(investigate first\)/);
-    expect(plain).toMatch(/\[HIGH\] SQLi in login · 3 foxguard matches · 82% confidence/);
-    expect(plain).toMatch(/\[MEDIUM\] XSS in search · 1 foxguard match · 50% confidence/);
-  });
-
-  it("prints nothing new when no cross-validated-leads event fires", async () => {
-    agenticScanMock.mockResolvedValueOnce(cleanReport());
-    await runUnified({
-      target: "https://example.com",
-      targetType: "url",
-      depth: "default",
-      format: "json",
-      runtime: "auto",
-      timeout: 30000,
-      verbose: false,
-    });
-    expect(plainLog()).not.toMatch(/Cross-validated leads/);
-  });
-
-  it("does not crash the scan on a malformed cross-validated-leads payload", async () => {
-    agenticScanMock.mockImplementationOnce(async () => {
-      eventBusListener?.emit("cross_validated_leads", { count: 1, leads: "not-an-array" });
-      return cleanReport();
-    });
-    await runUnified({
-      target: "https://example.com",
-      targetType: "url",
-      depth: "default",
-      format: "json",
-      runtime: "auto",
-      timeout: 30000,
-      verbose: false,
-    });
-    expect(plainLog()).not.toMatch(/Cross-validated leads/);
+    const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      await runUnified({
+        target: "https://example.com", targetType: "url", depth: "default",
+        format: "json", runtime: "auto", timeout: 30_000, verbose: false,
+      });
+      const report = JSON.parse(output.mock.calls.map(call => String(call[0])).join("\n"));
+      expect(report.target).toBe("https://example.com");
+      expect(report.estimatedCostUsd).toBe(0.42);
+    } finally {
+      output.mockRestore();
+    }
   });
 });
 
@@ -859,7 +729,8 @@ describe("runUnified — resume / branch (0#374)", () => {
   let logSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    agenticScanMock.mockReset();
+    for (const mock of Object.values(workflowStoreMock)) mock.mockClear();
+  agenticScanMock.mockReset();
     runPipelineMock.mockReset();
     createRuntimeMock.mockReset();
     eventBusListener = null;
@@ -911,4 +782,135 @@ describe("runUnified — resume / branch (0#374)", () => {
     expect(runPipelineMock.mock.calls[0]![0].resumeScanId).toBe("scan-def-456");
   });
 
+});
+
+
+describe("runUnified — retained shortcut runs", () => {
+  const options = { target: "https://example.com", targetType: "url" as const, depth: "default" as const,
+    format: "json" as const, runtime: "api" as const, timeout: 30_000, verbose: false, suppressOutput: true };
+  beforeEach(() => {
+    for (const mock of Object.values(workflowStoreMock)) mock.mockClear();
+    agenticScanMock.mockReset();
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("retains the snapshot before dispatch and stores successful execution independently of high findings", async () => {
+    const tracker: ExitTracker = {};
+    makeExitMock(tracker);
+    const onOutcome = vi.fn();
+    agenticScanMock.mockImplementationOnce(async scannerOptions => {
+      scannerOptions.onEvent({ type: "scan_started", message: "started", data: { persisted: true, scanId: "scan-one", dbPath: "/tmp/scan.db" } });
+      expect(workflowStoreMock.createExecutionFromSnapshot).toHaveBeenCalledWith(expect.objectContaining({ target: options.target, id: "cli-scan" }), "cli");
+      return cleanReport({ summary: { ...emptySummary(), high: 1, low: 1, totalFindings: 2 } });
+    });
+    await runUnified({ ...options, onOutcome }).catch(() => {});
+    expect(onOutcome).toHaveBeenCalledWith(expect.objectContaining({ workflowRunId: "cli-run" }));
+    expect(workflowStoreMock.saveExecutionResults).toHaveBeenCalledWith("cli-run", expect.objectContaining({
+      status: "completed", nodeResults: expect.objectContaining({ assessment: expect.objectContaining({ scanIds: ["scan-one"], dbPaths: ["/tmp/scan.db"] }) }),
+    }));
+    expect(workflowStoreMock.updateExecution).toHaveBeenCalledWith("cli-run", expect.objectContaining({ status: "completed" }));
+    expect(workflowStoreMock.close).toHaveBeenCalledOnce();
+    expect(tracker.firstCode).toBe(1);
+  });
+
+  it("retains scanner failures before the CLI error exit", async () => {
+    const tracker: ExitTracker = {};
+    makeExitMock(tracker);
+    agenticScanMock.mockRejectedValueOnce(new Error("provider failed"));
+    await runUnified(options).catch(() => {});
+    expect(workflowStoreMock.saveExecutionResults).toHaveBeenCalledWith("cli-run", expect.objectContaining({ status: "failed", error: "provider failed" }));
+    expect(workflowStoreMock.updateExecution).toHaveBeenCalledWith("cli-run", expect.objectContaining({ status: "failed" }));
+    expect(tracker.firstCode).toBe(2);
+  });
+
+  it("lets embedded browser runs own their retention", async () => {
+    agenticScanMock.mockResolvedValueOnce(cleanReport());
+    await runUnified({ ...options, embedded: true });
+    expect(workflowStoreMock.createExecutionFromSnapshot).not.toHaveBeenCalled();
+    expect(workflowStoreMock.saveExecutionResults).not.toHaveBeenCalled();
+  });
+
+  it("reports result-retention failure as a CLI failure", async () => {
+    const tracker: ExitTracker = {};
+    makeExitMock(tracker);
+    agenticScanMock.mockResolvedValueOnce(cleanReport());
+    workflowStoreMock.saveExecutionResults.mockImplementationOnce(() => { throw new Error("disk full"); });
+    workflowStoreMock.getExecution.mockReturnValueOnce({ status: "completed" });
+    await runUnified(options).catch(() => {});
+    expect(workflowStoreMock.updateExecution).toHaveBeenCalledWith("cli-run", expect.objectContaining({ status: "completed", error: "Run completed, but result retention failed: disk full" }));
+    expect(tracker.firstCode).toBe(2);
+  });
+});
+
+describe("runUnified attaches assessments to a running local engine", () => {
+  afterEach(() => vi.restoreAllMocks());
+  it("resolves client-relative source paths before crossing the engine boundary", async () => {
+    const engine = { startAssessment: vi.fn(async () => ({ id: "source-run" })), getRun: vi.fn(async () => ({ id: "source-run", status: "completed" })), getRunResults: vi.fn(async () => ({ report: cleanReport(), findings: [], nextCursor: null })), cancelRun: vi.fn(), dispose: vi.fn() };
+    connectLocalEngineMock.mockResolvedValue(engine);
+    vi.spyOn(console, "log").mockImplementation(() => undefined); vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const exit = makeExitMock({});
+    await runUnified({ target: "./client-repo", targetType: "source-code", depth: "quick", format: "json", runtime: "api", timeout: 1000, verbose: false }).catch(() => undefined);
+    expect(engine.startAssessment).toHaveBeenCalledWith(expect.objectContaining({ target: `source:${process.cwd()}/client-repo` }));
+    expect(engine.dispose).toHaveBeenCalledOnce(); exit.mockRestore();
+  });
+  it("does not allocate an assessment when the caller was already cancelled", async () => {
+    const engine = { startAssessment: vi.fn(), dispose: vi.fn() }; connectLocalEngineMock.mockResolvedValue(engine);
+    const controller = new AbortController(); controller.abort(new Error("Already stopped"));
+    await expect(runUnified({ target: "./repo", targetType: "source-code", depth: "quick", format: "json", runtime: "api", timeout: 1000, verbose: false, signal: controller.signal })).rejects.toThrow("Already stopped");
+    expect(engine.startAssessment).not.toHaveBeenCalled(); expect(engine.dispose).toHaveBeenCalledOnce();
+  });
+  it("launches and paginates an engine assessment while retaining normal output and outcome", async () => {
+    const findings = [{ id: "engine-finding", severity: "high", status: "hypothesis", title: "Untrusted evidence" }, { id: "engine-second", severity: "low", status: "discovered", title: "Other evidence" }];
+    const resultReport = cleanReport({ findings: findings as unknown as ScanReport["findings"], summary: { ...emptySummary(), high: 1, low: 1, totalFindings: 2 } });
+    const engine = {
+      startAssessment: vi.fn(async () => ({ id: "engine-run" })),
+      getRun: vi.fn(async () => ({ id: "engine-run", status: "completed", events: [{ sequence: 1, type: "node_completed" }] })),
+      getRunResults: vi.fn(async (_id: string, page: { cursor: number }) => ({ report: { ...resultReport, findings: findings.slice(page.cursor, page.cursor + 1) }, findings: findings.slice(page.cursor, page.cursor + 1), nextCursor: page.cursor === 0 ? 1 : null, costUsd: 0.5 })),
+      cancelRun: vi.fn(), dispose: vi.fn(),
+    };
+    connectLocalEngineMock.mockResolvedValue(engine);
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const exit = makeExitMock({}); const onReport = vi.fn(); const onOutcome = vi.fn(); const onEvent = vi.fn();
+    const oldCalls = agenticScanMock.mock.calls.length;
+    const retainedCalls = workflowStoreMock.createExecutionFromSnapshot.mock.calls.length;
+    await runUnified({ target: "https://example.com", targetType: "url", depth: "quick", format: "json", runtime: "auto", timeout: 1000, verbose: false, onReport, onOutcome, onEvent }).catch(() => undefined);
+    expect(engine.startAssessment).toHaveBeenCalledWith({ target: "https://example.com", plan: expect.objectContaining({ depth: "quick", runCount: 1, timeCapMs: 1000 }) });
+    expect(onReport).toHaveBeenCalledWith(expect.objectContaining({ findings, estimatedCostUsd: 0.5 }));
+    expect(onOutcome).toHaveBeenCalledWith(expect.objectContaining({ workflowRunId: "engine-run", exitCode: 1, finding_count: 2 }));
+    expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ sequence: 1 }));
+    expect(agenticScanMock.mock.calls.length).toBe(oldCalls);
+    expect(workflowStoreMock.createExecutionFromSnapshot.mock.calls.length).toBe(retainedCalls);
+    expect(log).toHaveBeenCalledWith("FORMATTED_REPORT");
+    expect(engine.dispose).toHaveBeenCalled(); exit.mockRestore();
+  });
+  it("forwards cancellation that arrives while the engine is allocating the run", async () => {
+    const controller = new AbortController();
+    const engine = {
+      startAssessment: vi.fn(async () => { controller.abort(new Error("Operator stop")); return { id: "cancelled-engine-run" }; }),
+      getRun: vi.fn(async () => ({ id: "cancelled-engine-run", status: "cancelled" })),
+      getRunResults: vi.fn(async () => ({ report: cleanReport(), findings: [], nextCursor: null })),
+      cancelRun: vi.fn(async () => undefined), dispose: vi.fn(),
+    };
+    connectLocalEngineMock.mockResolvedValue(engine);
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const exit = makeExitMock({}); const onOutcome = vi.fn();
+    await runUnified({ target: "https://example.com", depth: "quick", format: "json", runtime: "api", timeout: 1000, verbose: false, signal: controller.signal, onOutcome }).catch(() => undefined);
+    expect(engine.cancelRun).toHaveBeenCalledOnce();
+    expect(engine.cancelRun).toHaveBeenCalledWith("cancelled-engine-run");
+    expect(onOutcome).toHaveBeenCalledWith(expect.objectContaining({ exitCode: 2, exit_reason: "cancelled", workflowRunId: "cancelled-engine-run" }));
+    expect(engine.dispose).toHaveBeenCalled(); exit.mockRestore();
+  });
+  it("rejects unsupported execution overrides without starting a separate scan", async () => {
+    const engine = { startAssessment: vi.fn(), dispose: vi.fn() };
+    connectLocalEngineMock.mockResolvedValue(engine);
+    await expect(runUnified({ target: "/fixture", targetType: "source-code", depth: "default", format: "json", runtime: "api", timeout: 1000, verbose: false, reviewProfile: "linux-kernel" })).rejects.toThrow("cannot represent");
+    expect(engine.startAssessment).not.toHaveBeenCalled();
+    expect(engine.dispose).toHaveBeenCalled();
+    await expect(runUnified({ target: "https://example.com", depth: "default", format: "json", runtime: "api", timeout: 1000, verbose: false, wafEvasion: false })).rejects.toThrow("wafEvasion");
+    expect(engine.startAssessment).not.toHaveBeenCalled();
+  });
 });

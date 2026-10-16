@@ -107,6 +107,9 @@ export type {
 export {
   runDeterministicReplay,
   LocalShellRunner,
+  SmolvmRunner,
+  createSmolvmPocTargetRunner,
+  runSmolvmPocSteps,
   DockerRunner,
   QemuRunner,
   argvForStep,
@@ -122,9 +125,14 @@ export type {
   AssertionInput,
   DeterministicReplayOutcome,
   DockerRunnerOptions,
+  SmolvmRunnerOptions,
   QemuRunnerOptions,
   ReplayRunner,
   ReplayRunnerContext,
   RunDeterministicReplayOpts,
   StepResult,
 } from "./replay-runner.js";
+
+// Scoped formal-model verification; trusted checker infrastructure is injected.
+export { verifyFormalArtifact, formalArtifactDigest, formalChallengeDigest } from "./formal-artifact.js";
+export type { FormalChallenge, FormalProofCandidate, FormalCheckerReceipt, FormalCheckerRequest, FormalArtifactChecker, FormalArtifactOptions, FormalArtifactResult } from "./formal-artifact.js";

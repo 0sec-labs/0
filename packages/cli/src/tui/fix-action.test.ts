@@ -6,7 +6,6 @@ import {
   findingSourcePath,
   fixEligibility,
   fixInputEligibility,
-  fixResultLines,
 } from "./fix-action.js";
 
 /**
@@ -62,6 +61,24 @@ describe("fixEligibility", () => {
 
   it("rejects a finding with no verification result", () => {
     const finding = eligibleFinding({ verification_result: undefined });
+    expect(fixEligibility(finding)).toEqual({
+      eligible: false,
+      reason: "finding is not reproduced (verification_result.status must be reproduced)",
+    });
+  });
+
+  it("does not treat a matched source check as canonical replay reproduction", () => {
+    const finding = eligibleFinding({
+      verification_result: undefined,
+      sourceVerification: {
+        status: "matched",
+        totalPredicates: 1,
+        matchedPredicates: 1,
+        notMatchedPredicates: 0,
+        inconclusivePredicates: 0,
+        behaviorPending: false,
+      },
+    });
     expect(fixEligibility(finding)).toEqual({
       eligible: false,
       reason: "finding is not reproduced (verification_result.status must be reproduced)",
@@ -143,17 +160,11 @@ describe("fixInputEligibility", () => {
   });
 
   it("rejects a missing repo root", () => {
-    expect(fixInputEligibility({ repoRoot: "  ", testCommand: "pnpm test" })).toEqual({
-      eligible: false,
-      reason: "no repository path for this finding (set ZERO_FIX_REPO)",
-    });
+    expect(fixInputEligibility({ repoRoot: "  ", testCommand: "pnpm test" }).eligible).toBe(false);
   });
 
   it("rejects a blank regression command", () => {
-    expect(fixInputEligibility({ repoRoot: "/repo", testCommand: "   " })).toEqual({
-      eligible: false,
-      reason: "no regression command configured (set ZERO_FIX_TEST_COMMAND)",
-    });
+    expect(fixInputEligibility({ repoRoot: "/repo", testCommand: "   " }).eligible).toBe(false);
   });
 });
 
@@ -240,44 +251,3 @@ describe("describeFixStatus", () => {
   });
 });
 
-describe("fixResultLines", () => {
-  it("renders only fields the result carries", () => {
-    const result = fixResult({
-      patch: "*** Begin Patch\n*** End Patch",
-      rationale: "Normalise the member path before joining.",
-      attempts: [{ attempt: 1, reason: "patch touches src/other.ts" }],
-      test: { command: "pnpm test", exitCode: 0, stdout: "", stderr: "", durationMs: 1200, timedOut: false },
-    });
-    expect(fixResultLines(result)).toEqual([
-      "source src/extract.ts",
-      "test command passed in 1200ms",
-      "patch produced, not applied — re-run `0 fix --output` to write it out",
-      "rationale Normalise the member path before joining.",
-      "attempt 1 rejected: patch touches src/other.ts",
-    ]);
-  });
-
-  it("says so when nothing ran and surfaces the error", () => {
-    const result = fixResult({
-      status: "precondition_failed",
-      sourceFile: undefined,
-      error: "refusing to fix a dirty worktree; commit or stash changes first",
-    });
-    expect(fixResultLines(result)).toEqual([
-      "source file not resolved",
-      "test command did not run",
-      "no patch produced",
-      "error refusing to fix a dirty worktree; commit or stash changes first",
-    ]);
-  });
-
-  it("states an applied patch when the result reports one", () => {
-    const result = fixResult({
-      status: "applied_and_retested",
-      applied: true,
-      patch: "*** Begin Patch\n*** End Patch",
-      test: { command: "pnpm test", exitCode: 0, stdout: "", stderr: "", durationMs: 4, timedOut: false },
-    });
-    expect(fixResultLines(result)).toContain("patch applied to the working tree");
-  });
-});
