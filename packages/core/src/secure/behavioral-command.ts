@@ -45,14 +45,15 @@ export async function runSecureCommand(
     signal.addEventListener("abort", stop, { once: true });
     if (signal.aborted) stop();
     child.stdout.on("data", (chunk: Buffer) => {
+      // Truncate the captured tail rather than killing the process: a
+      // verbose-but-successful baseline test must not fail the repair
+      // lifecycle. The deadline signal remains the only interruption path.
       if (bytes < maxBytes) stdout.push(chunk.subarray(0, maxBytes - bytes));
       bytes += chunk.length;
-      if (bytes > maxBytes) stop();
     });
     child.stderr.on("data", (chunk: Buffer) => {
       if (bytes < maxBytes) stderr.push(chunk.subarray(0, maxBytes - bytes));
       bytes += chunk.length;
-      if (bytes > maxBytes) stop();
     });
     child.once("error", (error) => {
       signal.removeEventListener("abort", stop);
