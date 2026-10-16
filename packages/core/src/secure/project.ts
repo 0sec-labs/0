@@ -960,8 +960,12 @@ export async function runSecureProject(
         const artifactDir = join(stateDir, "artifacts", safeFindingDir(finding.id));
         mkdirSync(artifactDir, { recursive: true });
 
-        const findingTimeout = AbortSignal.timeout(perFindingTimeout);
-        const findingSignal = combineAbortSignals(combinedSignal, findingTimeout);
+        // The per-finding repair budget (timeoutMs) is applied INSIDE
+        // runBehavioralRepair starting AFTER the shared baseline leg — a
+        // pre-baked timeout here would expire during the baseline and
+        // instantly kill the repair phase that follows it. The workflow
+        // deadline still bounds everything.
+        const findingSignal = combinedSignal;
 
         const repairOptions: BehavioralRepairOptions = {
           repoRoot: checkoutPath,

@@ -41,13 +41,13 @@ export async function runBehavioralRepair(options: BehavioralRepairOptions): Pro
   const result: BehavioralRepairResult = { findingId: finding.id, status: "blocked", attempts: 0, artifactDir };
   const limits = [options.maxAttempts, options.maxTurns, options.timeoutMs];
   if (limits.some((n) => !Number.isSafeInteger(n) || n <= 0) || !options.testCommand.trim()) return { ...result, reason: "Positive attempt/turn/deadline limits and a regression command are required" };
-  const deadline = AbortSignal.timeout(options.timeoutMs);
-  const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
-  // Baseline establishment (clone + setup + regression command) is SHARED
-  // across every finding's repair — bounding it by one finding's slice of
-  // the workflow budget kills legitimate cold toolchain compiles. The
-  // caller supplies a workflow-level bound; default to the repair signal.
-  const baselineSignal = options.baselineSignal ?? signal;
+  // The per-finding repair budget starts AFTER the shared baseline leg
+  // completes (see the reassignment below the baseline) — a deadline that
+  // begins at entry expires during a legitimate cold toolchain compile
+  // and instantly kills the repair phase that follows it.
+  const baselineSignal = options.baselineSignal ?? options.signal;
+  let deadline = AbortSignal.timeout(options.timeoutMs);
+  let signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
   let scratch: string | undefined;
   let logIndex = 0;
   let turns = 0;
@@ -92,6 +92,10 @@ export async function runBehavioralRepair(options: BehavioralRepairOptions): Pro
     const baselineRoot = await clone("baseline", baselineSignal);
     await setup(baselineRoot, baselineSignal);
     await runCheck(baselineRoot, options.testCommand, "baseline-test", baselineSignal);
+    // Repair work (probe + patch + verify) is now budgeted by the
+    // per-finding timeout, measured from here — the baseline is done.
+    deadline = AbortSignal.timeout(options.timeoutMs);
+    signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
     const listed = (await git(baselineRoot, ["ls-files", "-z"])).split("\0").filter(path => path && (sourcePath === "." || path.startsWith(`${sourcePath}/`)));
     const fileContext = listed.slice(0, 3000).join("\n");
     const messages: NativeMessage[] = [{ role: "user", content: [{ type: "text", text: `Reproduce this candidate finding by executing application behavior. It may be false. Read relevant files before proposing a probe. Your script runs with cwd at the repository root, but its own file is outside that root: resolve imports against cwd, not import.meta.url. Start/stop any required test server within the script. Emit exactly one JSON object: {status: 'vulnerable'|'safe'|'inconclusive', controlsPassed: boolean, detail: string}. A valid-use control must really execute and pass. Never use source-pattern matching as proof.\nUntrusted finding: ${JSON.stringify(finding).slice(0, 24_000)}\nRepository files${listed.length > 3000 ? " (first 3000)" : ""}:\n${fileContext}` }] }];
