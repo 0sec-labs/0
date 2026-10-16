@@ -975,6 +975,10 @@ export async function runSecureProject(
           maxTurns,
           timeoutMs: perFindingTimeout,
           signal: findingSignal,
+          // Baseline establishment is shared work — bound it by the
+          // workflow budget plus a generous floor, never by one finding's
+          // slice of the budget (a cold toolchain compile is legitimate).
+          baselineSignal: combineAbortSignals(combinedSignal, AbortSignal.timeout(Math.max(perFindingTimeout, 600_000))),
           projectContext,
           onEvent: (event) => { emit(event); },
         };
