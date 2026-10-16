@@ -29,6 +29,18 @@ export interface BehavioralRepairResult {
   verification?: BehavioralProbeResult;
   changedFiles?: string[];
   artifactDir: string;
+  /**
+   * Compact tail of the failed leg's own command log, so the delivered
+   * result is self-diagnosing without a sandbox artifact bundle. Text
+   * only, capped — the full files stay in the sandbox artifactDir.
+   */
+  evidence?: {
+    label: string;
+    exitCode: number | null;
+    interrupted: boolean;
+    stdoutTail: string;
+    stderrTail: string;
+  };
 }
 
 

@@ -240,7 +240,17 @@ export async function runBehavioralRepair(options: BehavioralRepairOptions): Pro
     }
     return { ...result, status: "not_fixed", baseline, reason: "No candidate passed regression checks and behavioral replay" };
   } catch (error) {
-    return { ...result, status: signal.aborted ? "blocked" : "error", reason: error instanceof Error ? error.message : String(error) };
+    // Self-diagnosing result: attach the tail of the FIRST command log
+    // (typically baseline-test — the leg that historically failed here)
+    // so the delivered verdict carries its own evidence in the DB.
+    let evidence: BehavioralRepairResult["evidence"];
+    try {
+      const firstLog = join(artifactDir, "1-baseline-test.json");
+      const log = JSON.parse((await readFile(firstLog, "utf8"))) as { exitCode: number | null; interrupted: boolean; stdout: string; stderr: string };
+      evidence = { label: "baseline-test", exitCode: log.exitCode, interrupted: log.interrupted,
+        stdoutTail: log.stdout.slice(-4096), stderrTail: log.stderr.slice(-4096) };
+    } catch { /* no command log — the failure preceded any command */ }
+    return { ...result, status: signal.aborted ? "blocked" : "error", reason: error instanceof Error ? error.message : String(error), evidence };
   } finally {
     if (scratch) await rm(scratch, { recursive: true, force: true });
     try { await writeFile(join(artifactDir, "attempts.json"), JSON.stringify({ attempts, turns }), { mode: 0o600 }); } catch { /* preserve the original failure */ }
