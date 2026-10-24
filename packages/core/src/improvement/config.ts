@@ -75,6 +75,8 @@ const schema = z.object({
     profileId: z.string().min(1).max(128),
     version: z.number().int().min(1),
     criticalCaseIds: z.array(z.string().min(1).max(128)).min(1).max(128),
+    previousProfileDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(),
+    rotationApprovalRef: z.string().min(1).max(512).optional(),
   }).strict().optional(),
 }).strict();
 

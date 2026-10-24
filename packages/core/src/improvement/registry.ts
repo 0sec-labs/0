@@ -23,6 +23,7 @@ import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep 
 
 import { canonicalEvolutionJson, parseEvolutionConfig } from "./config.js";
 import { acquireEvolutionController, EvolutionControllerBusyError } from "./controller-lock.js";
+import { assertEvolutionRetentionContinuity } from "./retention.js";
 import { evolutionComparisonIdentity } from "./evaluation.js";
 import { assertEvolutionCampaignMode, campaignPromotionAllowed, compareEvolutionIdentities } from "./safety.js";
 import {
@@ -716,6 +717,19 @@ function acquireEvolutionPromotionGate(storePath: string, receipt: EvolutionEval
   if (evolutionDigest(stored) !== receipt.configDigest) throw new Error("promotion configuration digest mismatch");
   const config = parseEvolutionConfig(stored);
   assertEvolutionCampaignMode(config);
+  const registry = loadRegistryRaw(storePath);
+  const previousVersion = registry.versions.find(version => version.id === registry.activeId);
+  if (previousVersion) {
+    const priorConfigRaw = readEvolutionArtifact(join(configsDir(storePath), `${configHexDigest(previousVersion.configDigest)}.json`));
+    if (evolutionDigest(priorConfigRaw) !== previousVersion.configDigest) throw new Error("prior retention configuration digest mismatch");
+    const previousConfig = parseEvolutionConfig(priorConfigRaw);
+    const previousReceipt = previousVersion.receiptDigest ? loadEvolutionReceipt(storePath, previousVersion.id) : null;
+    if (previousVersion.receiptDigest && previousReceipt?.receiptDigest !== previousVersion.receiptDigest) throw new Error("prior retention receipt identity mismatch");
+    if (previousVersion.receiptDigest && previousConfig.retentionPolicy && !previousReceipt?.retention?.profileDigest) {
+      throw new Error("prior retention evidence is unavailable; explicit cohort requalification required");
+    }
+    assertEvolutionRetentionContinuity(previousConfig.retentionPolicy, previousReceipt?.retention, config.retentionPolicy, receipt.retention);
+  }
   if (!config.safety?.enabled) return undefined;
   const provenance = receipt.result.provenance;
   if (!provenance || provenance.compatibilityStatus !== "compatible" || !provenance.provider || !provenance.resolvedModel) {

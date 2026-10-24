@@ -63,7 +63,13 @@ export function evolutionComparisonIdentity(config: EvolutionConfig, observed?: 
     evaluatorSemantics: evolutionDigest({
       protocol: "0-evolution-exact-json-v1",
       kind: config.kind, repeats: config.repeats, promotionPolicy: config.promotionPolicy,
-      retentionPolicy: config.retentionPolicy ?? null,
+      retentionPolicy: config.retentionPolicy ? {
+        protocol: "exact-json-critical-panel-v1",
+        contents: config.retentionPolicy.criticalCaseIds.map(id => {
+          const fixture = config.cases.find(entry => entry.id === id)!;
+          return evolutionDigest({ lane: fixture.lane, input: fixture.input, expected: fixture.expected });
+        }).sort(),
+      } : null,
     }),
     sourceRevision: evolutionSourceRevision(config),
     toolRevision: evolutionToolImplementationDigest(),
@@ -234,7 +240,10 @@ export async function evaluateEvolutionCandidate(
   const baselineBehaviorRetained = attempts.baseline.every((entry, index) =>
     !entry.matched || attempts.candidate[index]?.matched === true,
   );
-  const retention = evaluateEvolutionRetention(config, attempts.candidate);
+  const retention = evaluateEvolutionRetention(config, attempts.candidate, {
+    evaluatorDigest: provenance.evaluatorDigest,
+    comparisonDigest: evolutionDigest({ evaluatorSemantics: provenance.evaluatorSemantics, worker: provenance.evaluatedWorker }),
+  });
   const result: EvolutionEvaluation["result"] = {
     schemaVersion: 1,
     candidateId: candidate.id,
