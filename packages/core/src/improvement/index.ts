@@ -68,3 +68,5 @@ export type { PairedRetentionPlan, PairedRetentionObservation } from "./paired-r
 
 export { pairedRetentionComparisonDigest, pairedRetentionObservationsFromReceipt } from "./paired-retention-receipt.js";
 export type { PairedRetentionPanelCase, PairedRetentionChargeEvidence } from "./paired-retention-receipt.js";
+
+export { declaredEvolutionRetentionProfileDigest } from "./retention.js";

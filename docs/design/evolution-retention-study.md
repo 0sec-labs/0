@@ -15,7 +15,9 @@ Changed panel/cohort/evaluator identity requires a higher profile version,
 `previousProfileDigest` matching the actual prior profile, and a nonempty
 operator-reviewed `rotationApprovalRef`. Incomplete prior evidence is not a pass.
 The initial baseline has no evaluated profile yet; its configured panel still
-cannot be disabled on the first candidate.
+cannot be disabled or replaced on the first candidate. An approved initial
+rotation references `declaredEvolutionRetentionProfileDigest(previousConfig)`;
+there is no need to pretend that initial declarations are evaluated receipts.
 
 This makes a multi-generation failure visible: a candidate can improve new-case
 accuracy while failing an old critical capability that the immediate baseline

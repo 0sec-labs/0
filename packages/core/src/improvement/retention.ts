@@ -48,3 +48,8 @@ export function assertEvolutionRetentionContinuity(
     throw new Error("retention profile/cohort/evaluator changed without an approved versioned rotation");
   }
 }
+
+/** Fingerprint an initial declared panel before any evaluation evidence exists. */
+export function declaredEvolutionRetentionProfileDigest(config: EvolutionConfig): string {
+  return evaluateEvolutionRetention(config, []).profileDigest;
+}
