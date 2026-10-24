@@ -29,7 +29,7 @@ export function evolutionToolImplementationDigest(moduleUrl: URL = new URL(impor
   const directory = new URL("./", moduleUrl);
   // Composed engineering controllers may add authority helpers. Include their
   // sidecar bytes when shipped; standalone older distributions remain valid.
-  for (const name of ["campaign-validation-budget", "paired-retention", "paired-retention-receipt", "paired-search-study", "archive-study-runner", "search-study-model-adapter", "proposal-diversity-campaign"]) {
+  for (const name of ["campaign-validation-budget", "paired-retention", "paired-retention-receipt", "paired-search-study", "archive-study-runner", "search-study-model-adapter", "proposal-diversity-campaign", "../bench/task-routing", "../bench/local-ollama-routing", "../bench/security-evolution-pilot", "../bench/execution-evidence", "../bench/improvement-promotion", "../bench/improvement", "../bench/oracle", "../bench/runner", "../bench/scorecard"]) {
     if (existsSync(new URL(`./${name}.js`, directory)) || existsSync(new URL(`./${name}.ts`, directory))) modules.push(name);
   }
   const sourceFiles = modules.map(name => {

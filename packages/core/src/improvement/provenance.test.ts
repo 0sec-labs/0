@@ -68,15 +68,16 @@ describe("observed evolution provenance", () => {
       expect(() => evolutionToolImplementationDigest(pathToFileURL(module))).toThrow(/restart before evaluation/);
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
-  it("includes a composed authority helper and invalidates its changed bytes", () => {
+  it.each(["campaign-validation-budget", "../bench/task-routing"])("includes composed authority helper %s and invalidates its changed bytes", changed => {
     const root = mkdtempSync(join(tmpdir(), "0-composed-controller-identity-"));
     try {
-      for (const name of ["sandbox", "controller-lock", "config", "registry", "evaluation", "safety", "curation-lineage", "retention", "provenance", "rewrite", "loop", "campaign-validation-budget"]) {
-        writeFileSync(join(root, `${name}.ts`), "export const fixtureRevision = 1;\n");
+      const modules = join(root, "improvement"); mkdirSync(modules); mkdirSync(join(root, "bench"));
+      for (const name of ["sandbox", "controller-lock", "config", "registry", "evaluation", "safety", "curation-lineage", "retention", "provenance", "rewrite", "loop", "campaign-validation-budget", "../bench/task-routing"]) {
+        writeFileSync(join(modules, `${name}.ts`), "export const fixtureRevision = 1;\n");
       }
-      const module = pathToFileURL(join(root, "provenance.ts"));
+      const module = pathToFileURL(join(modules, "provenance.ts"));
       expect(evolutionToolImplementationDigest(module)).toMatch(/^sha256:[a-f0-9]{64}$/);
-      writeFileSync(join(root, "campaign-validation-budget.ts"), "export const fixtureRevision = 2;\n");
+      writeFileSync(join(modules, `${changed}.ts`), "export const fixtureRevision = 2;\n");
       expect(() => evolutionToolImplementationDigest(module)).toThrow(/restart before evaluation/);
     } finally { rmSync(root, { recursive: true, force: true }); }
   });

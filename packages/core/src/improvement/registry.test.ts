@@ -72,6 +72,24 @@ function reseal(evaluation: EvolutionEvaluation): EvolutionEvaluation {
 }
 
 describe("evolution snapshot boundaries", () => {
+  it("protects trusted engine benchmark entries without banning unrelated app benches", async () => {
+    const engine = join(config.sourceRoot, "packages/core"), app = join(config.sourceRoot, "app");
+    mkdirSync(engine, { recursive: true }); mkdirSync(app);
+    writeFileSync(join(engine, "package.json"), JSON.stringify({ name: "@0/core" }));
+    writeFileSync(join(app, "package.json"), JSON.stringify({ name: "unrelated-application" }));
+    const selected = parseEvolutionConfig({ ...config, sourcePaths: ["src", "packages", "app"], editablePaths: ["src", "packages", "app"] });
+    const baseline = await snapshotEvolutionSource(selected);
+    for (const name of ["task-routing", "local-ollama-routing", "security-evolution-pilot", "execution-evidence"]) {
+      for (const path of [`packages/core/src/bench/${name}.ts`, `packages/core/dist/bench/${name}.js`]) {
+        await expect(createEvolutionCandidate(baseline, { rationale: "test engine authority", modelCostUsd: 0,
+          edits: [{ path, beforeDigest: null, content: "export const fixture = true;\n" }] }, selected)).rejects.toThrow(/protected code area/);
+      }
+    }
+    const candidate = await createEvolutionCandidate(baseline, { rationale: "ordinary app benchmark", modelCostUsd: 0,
+      edits: [{ path: "app/src/bench/task-routing.ts", beforeDigest: null, content: "export const fixture = true;\n" }] }, selected);
+    expect(candidate.files.some(file => file.path === "app/src/bench/task-routing.ts")).toBe(true);
+  });
+
   it("protects composed source/dist controller helpers while permitting unrelated app helpers", async () => {
     mkdirSync(join(config.sourceRoot, "dist"));
     const selected = parseEvolutionConfig({ ...config, sourcePaths: ["src", "dist"], editablePaths: ["src", "dist"] });

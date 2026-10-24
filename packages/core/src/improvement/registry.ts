@@ -20,6 +20,7 @@ import {
 } from "node:fs";
 import { open, readFile, writeFile, mkdir, readdir, readlink, stat, unlink, rmdir, copyFile, chmod } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { canonicalEvolutionJson, parseEvolutionConfig } from "./config.js";
 import { acquireEvolutionController, EvolutionControllerBusyError } from "./controller-lock.js";
@@ -184,6 +185,24 @@ function validateSnapshotPath(absPath: string, sourceRoot: string, storePath: st
   }
 }
 
+/** Scope new benchmark authority protection to this engine package, including
+ * separately checked out @0/core sources; ordinary application benches remain editable. */
+function isTrustedEngineBenchAuthority(path: string): boolean {
+  const match = /^(.*)[/\\](?:src|dist)[/\\]bench[/\\](?:task-routing|local-ollama-routing|security-evolution-pilot|execution-evidence|improvement-promotion|improvement|oracle|runner|scorecard)\.[cm]?[jt]s$/i.exec(path);
+  if (!match) return false;
+  const packageRoot = resolve(match[1]!);
+  if (packageRoot === resolve(dirname(fileURLToPath(import.meta.url)), "../..")) return true;
+  let fd: number | undefined;
+  try {
+    fd = openSync(join(packageRoot, "package.json"), fsConst.O_RDONLY | fsConst.O_NOFOLLOW | fsConst.O_NONBLOCK);
+    const stat = fstatSync(fd);
+    if (!stat.isFile() || stat.size > 64 * 1024) return false;
+    const manifest = JSON.parse(readFileSync(fd, "utf8")) as { name?: unknown };
+    return manifest?.name === "@0/core";
+  } catch { return false; }
+  finally { if (fd !== undefined) closeSync(fd); }
+}
+
 function validateEditPath(editPath: string, config: EvolutionConfig): void {
   if (isAbsolute(editPath) || editPath.includes("..") || editPath.includes("\0")) {
     throw new Error(`edit path is absolute, has traversal or null byte: ${editPath}`);
@@ -207,6 +226,10 @@ function validateEditPath(editPath: string, config: EvolutionConfig): void {
     if (basename(normalized) === "package.json") {
       throw new Error(`non-source kind "${config.kind}" cannot edit package.json (potential executable change): ${editPath}`);
     }
+  }
+
+  if (isTrustedEngineBenchAuthority(resolve(config.sourceRoot, normalized))) {
+    throw new Error(`edit path targets protected code area in trusted engine benchmark authority: ${editPath}`);
   }
 
   // Protected code paths
