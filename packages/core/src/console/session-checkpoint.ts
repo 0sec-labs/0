@@ -14,7 +14,7 @@ const scopeSchema: z.ZodType<ScopeJson> = z.object({
   in_scope: z.array(z.string()).optional(),
   out_of_scope: z.array(z.string()).optional(),
   attribution: z.object({
-    headers: z.record(z.string()).optional(),
+    headers: z.record(z.string(), z.string()).optional(),
     user_agent_token: z.string().optional(),
   }).passthrough().optional(),
 }).passthrough();
@@ -22,7 +22,7 @@ const messageSchema: z.ZodType<NativeMessage> = z.object({
   role: z.enum(["user", "assistant"]),
   content: z.array(z.discriminatedUnion("type", [
     z.object({ type: z.literal("text"), text: z.string() }).strict(),
-    z.object({ type: z.literal("tool_use"), id: z.string(), name: z.string(), input: z.record(z.unknown()) }).strict(),
+    z.object({ type: z.literal("tool_use"), id: z.string(), name: z.string(), input: z.record(z.string(), z.unknown()) }).strict(),
     z.object({ type: z.literal("tool_result"), tool_use_id: z.string(), content: z.string(), is_error: z.boolean().optional() }).strict(),
   ])),
   providerRaw: z.custom<NativeMessage["providerRaw"]>().optional(),

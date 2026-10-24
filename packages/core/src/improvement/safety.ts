@@ -23,6 +23,8 @@ export interface EvolutionComparisonIdentity {
   harnessRevision: string;
   toolRevision: string;
   sourceRevision: string;
+  /** Actual evaluated worker contract, separate from the proposal generator. */
+  evaluatedWorker?: { kind: "deterministic" } | { kind: "model"; provider: string; model: string };
   compatibilityStatus: EvolutionCompatibilityStatus;
 }
 export interface EvolutionCompatibility { status: EvolutionCompatibilityStatus; reasons: string[] }
@@ -51,7 +53,10 @@ export function createEvolutionComparisonIdentity(
     resolvedModel: options.resolvedModel ?? null, provider: options.provider ?? null,
     harnessRevision: options.harnessRevision ?? digest({ command: config.command, buildCommand: config.buildCommand ?? null, backend: config.backend ?? "docker", image: config.image, timeoutMs: config.timeoutMs, memoryMb: config.memoryMb, cpus: config.cpus, maxOutputBytes: config.maxOutputBytes }),
     toolRevision: options.toolRevision ?? digest(canonicalEvolutionJson.toString()),
-    sourceRevision: options.sourceRevision ?? evaluatorDigest,
+    sourceRevision: options.sourceRevision ?? "unresolved",
+    evaluatedWorker: config.safety?.workerModel
+      ? { kind: "model", provider: config.safety.workerModel.provider, model: config.safety.workerModel.model }
+      : { kind: "deterministic" },
     compatibilityStatus: "unknown",
   };
 }
@@ -67,7 +72,11 @@ export function compareEvolutionIdentities(left: EvolutionComparisonIdentity, ri
   ] as const) {
     if (left[key] !== null && right[key] !== null && left[key] !== right[key]) reasons.push(`${label} differs`);
   }
+  if (canonicalEvolutionJson(left.evaluatedWorker ?? null) !== canonicalEvolutionJson(right.evaluatedWorker ?? null)) reasons.push("evaluated worker differs");
   if (reasons.length > 0) return { status: "incompatible", reasons };
+  if (left.sourceRevision === "unresolved" || right.sourceRevision === "unresolved") {
+    return { status: "unknown", reasons: ["source byte identity is unresolved"] };
+  }
   if (!left.resolvedModel || !right.resolvedModel || !left.provider || !right.provider) {
     return { status: "unknown", reasons: ["model/provider identity is unresolved"] };
   }
@@ -91,11 +100,13 @@ export interface EvolutionCampaignLedger {
   reservations: CampaignDispatchReservation[]; exposures: HoldoutExposureRecord[];
   unknownCost: boolean; resumeReason: string; updatedAt: string;
 }
+const MAX_CAMPAIGN_RECORDS = 10_000;
 const ledgerPath = (root: string): string => join(root, "campaign-ledger.json");
 const campaignKey = (identity: EvolutionComparisonIdentity): string => digest({
   development: identity.development.digest, heldOut: identity.heldOut.digest, negativeControl: identity.negativeControl.digest,
   evaluatorDigest: identity.evaluatorDigest, evaluatorSemantics: identity.evaluatorSemantics,
   harnessRevision: identity.harnessRevision, toolRevision: identity.toolRevision, sourceRevision: identity.sourceRevision,
+  evaluatedWorker: identity.evaluatedWorker ?? null,
 });
 function writeLedger(root: string, ledger: EvolutionCampaignLedger): void {
   const path = ledgerPath(root);
@@ -180,6 +191,21 @@ export function loadEvolutionCampaign(root: string): EvolutionCampaignLedger {
     || ledger.exposures.some((entry) => !entry || !Number.isSafeInteger(entry.limit) || entry.limit <= 0
       || !Number.isSafeInteger(entry.consumed) || entry.consumed < 0 || entry.consumed > entry.limit
       || !Array.isArray(entry.reservationIds))) throw new Error("invalid durable campaign ledger");
+  const ids = ledger.reservations.map((entry) => entry.id);
+  const exposureIds = ledger.exposures.map((entry) => entry.identity);
+  const modelTotal = ledger.reservations.filter((entry) => entry.kind === "model" && entry.state === "completed")
+    .reduce((sum, entry) => sum + entry.actualCostUsd!, 0);
+  const evaluationTotal = ledger.reservations.filter((entry) => entry.kind === "evaluation" && entry.state === "completed")
+    .reduce((sum, entry) => sum + entry.actualCostUsd!, 0);
+  if (ids.length > MAX_CAMPAIGN_RECORDS || new Set(ids).size !== ids.length
+    || new Set(exposureIds).size !== exposureIds.length
+    || ledger.exposures.some((entry) => entry.reservationIds.length > MAX_CAMPAIGN_RECORDS
+      || new Set(entry.reservationIds).size !== entry.reservationIds.length)
+    || Math.abs(modelTotal - ledger.cumulativeModelCostUsd) > 1e-9 * Math.max(1, modelTotal)
+    || Math.abs(evaluationTotal - ledger.cumulativeEvaluationCostUsd) > 1e-9 * Math.max(1, evaluationTotal)
+    || ledger.unknownCost !== ledger.reservations.some((entry) => entry.state === "unknown")) {
+    throw new Error("inconsistent durable campaign accounting");
+  }
   return ledger;
 }
 
@@ -198,6 +224,10 @@ export function reserveCampaignDispatch(root: string, kind: "model" | "evaluatio
   return mutateLedger(root, (ledger) => {
     if (ledger.unknownCost || ledger.status === "blocked") throw new Error("campaign is blocked pending unknown-cost reconciliation");
     if (ledger.status === "exhausted") throw new Error("campaign budget is exhausted");
+    if (ledger.reservations.length >= MAX_CAMPAIGN_RECORDS) {
+      ledger.status = "exhausted"; ledger.resumeReason = "campaign dispatch record limit reached; operator archival required";
+      throw new Error(ledger.resumeReason);
+    }
     const spent = kind === "model" ? ledger.cumulativeModelCostUsd : ledger.cumulativeEvaluationCostUsd;
     const limit = kind === "model" ? ledger.maxModelCostUsd : ledger.maxEvaluationCostUsd;
     const pending = ledger.reservations.filter((entry) => entry.kind === kind && entry.state === "reserved").reduce((sum, entry) => sum + entry.reservedCostUsd, 0);
@@ -253,6 +283,9 @@ export function reconcileCampaignDispatch(root: string, reservationId: string, a
 export function reserveHoldoutExposure(root: string, identity: EvolutionComparisonIdentity, queries: number, limit: number): HoldoutExposureRecord {
   if (!Number.isSafeInteger(queries) || queries <= 0 || !Number.isSafeInteger(limit) || limit <= 0) throw new Error("holdout exposure values must be positive integers");
   return mutateLedger(root, (ledger) => {
+    if (ledger.unknownCost || ledger.status === "blocked" || ledger.status === "exhausted") {
+      throw new Error(`holdout campaign ${ledger.status}: ${ledger.resumeReason}`);
+    }
     const compatibility = compareEvolutionIdentities(ledger.comparisonIdentity, identity);
     if (compatibility.status !== "compatible") throw new Error(`holdout provenance ${compatibility.status}`);
     const key = holdoutExposureIdentity(identity);
@@ -260,6 +293,10 @@ export function reserveHoldoutExposure(root: string, identity: EvolutionComparis
     const record = current ?? { identity: key, limit, consumed: 0, reservationIds: [] };
     if (current && record.limit !== limit) throw new Error("holdout exposure limit cannot change without a fresh corpus/evaluator identity");
     if (record.consumed + queries > record.limit) { ledger.status = "exhausted"; ledger.resumeReason = "holdout exposure exhausted; operator must provide a fresh curated holdout"; throw new Error("holdout exposure exhausted"); }
+    if (record.reservationIds.length >= MAX_CAMPAIGN_RECORDS) {
+      ledger.status = "exhausted"; ledger.resumeReason = "holdout record limit reached; operator archival required";
+      throw new Error(ledger.resumeReason);
+    }
     record.consumed += queries; record.reservationIds.push(randomUUID());
     if (!current) ledger.exposures.push(record); return record;
   });

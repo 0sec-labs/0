@@ -57,7 +57,11 @@ export interface EvolutionConfig {
   safety?: {
     enabled: boolean;
     holdoutExposureLimit: number;
+    /** Explicit offline model-worker contract; omitted for networkless deterministic workers. */
+    workerModel?: { provider: string; model: string; maxCostUsdPerExecution: number };
   };
+  /** Controller-owned critical capability panel, referencing sealed evaluation cases. */
+  retentionPolicy?: { profileId: string; version: number; criticalCaseIds: string[] };
   /** Optional bounded exploration of alternative parent versions (0 or omitted disables; 1+ enables). */
   maxAlternativeParents?: number;
 }
@@ -101,6 +105,8 @@ export interface EvolutionExecution {
   /** True when guest teardown could not be confirmed.  The guest may still be
    * running or consuming resources; do not count its capacity as freed. */
   cleanupFailed?: boolean;
+  /** Host-observed billing evidence. Never parse this from candidate stdout. */
+  workerModelUsage?: { provider: string; model: string; costUsd: number; receiptDigest: string };
 }
 
 export interface EvolutionSandboxRequest {
@@ -143,6 +149,7 @@ export interface EvolutionEvaluation {
   result: ResearchImprovementResult;
   decision: ImprovementPromotionDecision;
   receiptDigest: string;
+  retention?: { profileDigest: string; passed: boolean; checkedCases: number; reasons: string[] };
 }
 
 export interface EvolutionVersion {

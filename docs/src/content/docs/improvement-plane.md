@@ -189,6 +189,59 @@ unresolved provider/model/evaluator identity block canary and promotion. Renamin
 or reordering content-equivalent cases does not reset exposure. Once a store has
 a campaign ledger, omitting or disabling safety cannot bypass those gates.
 
+The accounting domain is the authoritative **store**, not a machine-wide corpus
+registry. Renaming a campaign or cases inside that store preserves exposure;
+creating an unrelated fresh store for an already exposed corpus can reset it.
+Keep the same store/ledger for every arm, restart and rename in one study, and
+retain it with the study artifacts. Copying only corpus/config files to a new
+store is not a fresh holdout. Cross-store reset prevention is not implemented,
+and #40 remains open for that policy and independent null-campaign qualification.
+
+The comparison records the selected source **bytes**, using the same bounded,
+symlink-rejecting file index as snapshots. An evaluator-code digest cannot stand
+in for a source revision. Source identity is observed at explicit offline
+comparison boundaries; ordinary scans do not perform this work. A changed source
+revision blocks reuse of the existing campaign instead of claiming a comparable
+harness improvement.
+
+The bundled disposable, networkless workers are deterministic programs. A trusted
+controller adapter that evaluates a model-backed worker must additionally declare
+its independent provider/model and per-execution charge ceiling:
+
+```json
+"safety": {
+  "enabled": true,
+  "holdoutExposureLimit": 100,
+  "workerModel": {
+    "provider": "your-provider",
+    "model": "your-pinned-worker-model",
+    "maxCostUsdPerExecution": 0.02
+  }
+}
+```
+
+A `workerModel` declaration requires `safety.enabled: true`; unexpected model
+billing from any undeclared worker rejects evaluation even on legacy paths.
+The controller reserves model budget before each worker execution and requires
+host-observed billing evidence (`workerModelUsage` with provider, model, charge,
+and immutable receipt digest). Candidate stdout cannot supply this evidence.
+Missing charges block the campaign; observed failover charges settle before a
+provider/model mismatch blocks promotion. Worker model charges and deterministic
+compute charges appear separately in the ledger, and both enter evaluation cost.
+This contract does not grant network access or implement a provider adapter.
+Provider/model identity currently records the provider-reported name, with no
+automatically resolved immutable version. `compatible` means the recorded
+comparison fields match; it does not certify a pinned provider model.
+Provider-reported aliases still need independently pinned version evidence for a
+qualification study; recording a model name is not proof of an immutable version.
+
+Dispatch and holdout reservation histories are bounded to 10,000 records per
+campaign/holdout identity. Reaching the storage limit stops dispatch and requires
+operator archival; it never drops accounting to resume spending. Ledger reload
+also rejects duplicate reservation identities or totals inconsistent with settled
+charges. These are deterministic accounting controls, not a completed paid
+qualification or a statistical guarantee against adaptive overfitting.
+
 An interrupted dispatch requires observed cost evidence, not an assumed zero:
 
 ```bash

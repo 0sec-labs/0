@@ -84,6 +84,30 @@ tiers cost more.
 at peak rates ($0.30 input / $1.20 output per million tokens); off-peak is half
 price. Gateway prices and subscription billing can differ from direct API rates.
 
+## Custom AI providers (including 9Router)
+
+Choose **OpenAI / Custom AI Provider** in Connections. Enter the provider's API
+base URL, including its version path (for example `http://localhost:20128/v1`),
+its exact **Custom model ID**, and its **API key**. HTTP and HTTPS endpoints are
+supported. The model ID does not need to appear in the catalog. Save the settings,
+connect the key, then choose this connection and model in Models.
+
+Custom providers use the existing OpenAI-compatible Chat Completions transport
+and OpenAI credential slot. In a shell, configure the same connection with:
+
+```bash
+export OPENAI_API_KEY="your-provider-key"
+export OPENAI_BASE_URL="http://localhost:20128/v1"
+export OPENAI_MODEL="your-provider/model-id"
+export ZERO_SELECTED_PROVIDER="openai"
+0
+```
+
+Explicit model selections override `OPENAI_MODEL`; explicit exported endpoint and
+model values override saved connection settings. Use the complete API base path:
+0 appends `/chat/completions`. Providers requiring Responses can set
+`OPENAI_WIRE_API=responses`.
+
 ## Cline and ClinePass
 
 Create a programmatic API key at **app.cline.bot → Settings → API Keys**, then

@@ -1,3 +1,4 @@
+import { withQualificationDirectories } from './qualification-directories.mjs';
 // Real qualification against a built CLI. Never modifies selected image/configuration.
 // Usage: node docs/qualification/run-smolvm-live-provider.mjs IMAGE.tar LINUX_NODE_MODULES REPORT.json
 import { dirname, resolve } from 'node:path';
@@ -26,8 +27,7 @@ async function buildIdentity() {
 }
 const buildAtStart=await buildIdentity();
 
-import { mkdtemp,writeFile,readFile,rm } from 'node:fs/promises';
-import { realpathSync } from 'node:fs';
+import { writeFile,readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -37,11 +37,13 @@ const {runWorkbenchCli}=await import(source+'/packages/cli/dist/workbench-consol
 const {loadWorkbenchConfig}=await import(source+'/packages/cli/dist/workbench.js');
 // Scratch lives beside the checkout, not os.tmpdir(): workbench refuses workspaces under /var (macOS tmpdir is /private/var/folders).
 const scratchRoot=process.env.ZERO_QUALIFICATION_TMPDIR?resolve(process.env.ZERO_QUALIFICATION_TMPDIR):dirname(source);
-const workspace=realpathSync(await mkdtemp(join(scratchRoot,'0-live-provider-check-')));
-let artifacts,passed=false;
-try{
+let passed=false;
+await withQualificationDirectories(scratchRoot, async directories => {
+const workspace=await directories.scratch('0-live-provider-check-');
+let artifacts;
+
  const nonce=randomUUID(); await writeFile(join(workspace,'qualification.txt'),nonce+'\n');
- artifacts=realpathSync(await mkdtemp(join(scratchRoot,'0-live-provider-artifacts-')));
+ artifacts=await directories.artifacts('0-live-provider-artifacts-');
  const {createWebConsoleRuntime}=await import(source+'/packages/cli/dist/web/operator-services.js');
  const {runtime}=await createWebConsoleRuntime({providerId:'chatgpt-codex',singleModel:true,autoRoute:false}); const model=runtime.resolvedModel();
  if(runtime.resolvedProvider()!=='chatgpt-codex')throw new Error('Selected provider is not chatgpt-codex');
@@ -66,9 +68,6 @@ try{
  report.buildIdentity=buildAtStart; report.buildUnchanged=JSON.stringify(buildAtStart)===JSON.stringify(await buildIdentity()); if(!report.buildUnchanged) report.outcome='failed';
  await writeFile(reportPath,JSON.stringify(report,null,2),{mode:0o600});
  console.log(JSON.stringify({outcome:report.outcome,error:report.error,model:report.model,providerCalls:report.providerCalls,statuses:report.httpStatuses,result:report.result}));passed=report.outcome==='passed';
-}finally{
- // The report already records exported output checks; keep artifacts only for failed runs or ZERO_QUALIFICATION_KEEP_ARTIFACTS=1.
- await rm(workspace,{recursive:true,force:true});
- if(artifacts&&passed&&process.env.ZERO_QUALIFICATION_KEEP_ARTIFACTS!=='1') await rm(artifacts,{recursive:true,force:true});
-}
+if(passed) directories.passed();
+});
 process.exit(passed?0:1);

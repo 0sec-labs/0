@@ -10,7 +10,7 @@ const observation = z.object({ id: z.string().min(1).max(100), kind: z.enum(["ar
   .refine(value => value.origin === "user" || value.evidence.length > 0);
 const contextSchema = z.object({ summary: z.string().max(4000).default(""), instructions: z.string().max(8000).default(""), observations: z.array(observation).max(32).default([]) }).strict()
   .refine(value => Buffer.byteLength(JSON.stringify(value), "utf8") <= 24_576);
-const snapshotSchema = z.object({ schema: z.literal("0-project-context-v1"), repositoryId: z.string().uuid(),
+const snapshotSchema = z.object({ schema: z.literal("0-project-context-v1"), repositoryId: z.guid(),
   revision: z.number().int().positive(), sourceRevision: sha, context: contextSchema }).strict();
 
 export interface PreparedProjectContext {

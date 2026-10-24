@@ -17,12 +17,12 @@ const request = {
   observation_url: `${target}/resource`, observation_json_pointer: "/marker", expected_state: "unique-marker",
   steps: [{ method: "POST", url: `${target}/resource`, body: '{"marker":"unique-marker"}' }],
 };
-function executor(db: osecDB | null = null) {
+function executor(db: osecDB | null = null, fixtures?: ToolContext["accessControlFixtures"]) {
   const session = new SessionEngine([
     { label: "owner", role: "admin", auth: { type: "bearer", token: "owner-secret" } },
     { label: "actor", role: "user", auth: { type: "bearer", token: "actor-secret" } },
   ]);
-  const context: ToolContext = { target, scanId: "workflow", findings: [], attackResults: [], targetInfo: {}, session };
+  const context: ToolContext = { target, scanId: "workflow", findings: [], attackResults: [], targetInfo: {}, session, accessControlFixtures: fixtures };
   return new ToolExecutor(context, db);
 }
 const response = (marker: unknown, status = 200) => new Response(JSON.stringify({ marker }), { status });
@@ -125,5 +125,43 @@ describe("access_control_workflow", () => {
     const result = await executor().execute({ name: "access_control_workflow", arguments: request });
     expect(result.output).toMatchObject({ verdict: "no_change" });
     expect(fetchScoped).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("operator-owned read milestone receipts", () => {
+  const marker = "PRIVATE_OWNER_CANARY_12345";
+  const fixture = { url: `${target}/resource`, ownerIdentity: "owner", comparisonIdentities: ["actor"], ownershipMarker: marker };
+  const probe = { url: fixture.url, baseline_identity: "owner", compare_identities: ["actor"], ownership_marker: marker, expect_denied: true };
+  it.each([true, false])("retains confirmed or blocked read proof only with a configured fixture (allowed=%s)", async allowed => {
+    const db = new osecDB(":memory:");
+    db.createScan({ target, mode: "web", depth: "default", format: "json", timeout: 5000, runtime: "api" }, "workflow");
+    vi.mocked(fetchScoped).mockResolvedValueOnce(response(marker)).mockResolvedValueOnce(allowed ? response(marker) : response(null, 403));
+    try {
+      await executor(db, [fixture]).execute({ name: "access_control_probe", arguments: probe });
+      const artifact = db.getEvents("workflow", { eventType: "tool_artifact" })[0];
+      const milestone = accessMilestoneFromArtifact(artifact.eventType, JSON.parse(artifact.payload), artifact.scanId);
+      expect(milestone).toMatchObject({ status: allowed ? "confirmed" : "blocked", cleanup: "not-required", asset: target });
+      expect(artifact.payload).not.toContain(marker); expect(artifact.payload).not.toContain("owner-secret");
+    } finally { db.close(); }
+  });
+  it.each(["truncated", "partial-coverage"])("does not overstate %s evidence", async kind => {
+    const db = new osecDB(":memory:");
+    db.createScan({ target, mode: "web", depth: "default", format: "json", timeout: 5000, runtime: "api" }, "workflow");
+    vi.mocked(fetchScoped).mockResolvedValueOnce(response(marker)).mockResolvedValueOnce(kind === "truncated" ? response(marker + "x".repeat(11000)) : response(null, 403));
+    try {
+      await executor(db, [{ ...fixture, comparisonIdentities: kind === "partial-coverage" ? ["actor", "untested"] : ["actor"] }]).execute({ name: "access_control_probe", arguments: probe });
+      const artifact = db.getEvents("workflow", { eventType: "tool_artifact" })[0];
+      expect(accessMilestoneFromArtifact(artifact.eventType, JSON.parse(artifact.payload), artifact.scanId)).toBeNull();
+    } finally { db.close(); }
+  });
+  it("does not elevate a model-supplied ownership assertion into a milestone", async () => {
+    const db = new osecDB(":memory:");
+    db.createScan({ target, mode: "web", depth: "default", format: "json", timeout: 5000, runtime: "api" }, "workflow");
+    vi.mocked(fetchScoped).mockImplementation(async () => response(marker));
+    try {
+      await executor(db).execute({ name: "access_control_probe", arguments: probe });
+      const artifact = db.getEvents("workflow", { eventType: "tool_artifact" })[0];
+      expect(accessMilestoneFromArtifact(artifact.eventType, JSON.parse(artifact.payload), artifact.scanId)).toBeNull();
+    } finally { db.close(); }
   });
 });

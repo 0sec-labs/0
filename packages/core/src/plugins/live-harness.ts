@@ -18,8 +18,8 @@ const MAX_JSON_BYTES = 256 * 1024;
 const idSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,95}$/);
 const pathSchema = z.string().max(512).refine(value => /^[a-zA-Z0-9_./-]+$/.test(value) && value.split("/").every(part => part !== "" && part !== "." && part !== ".."));
 const sourceSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("sandboxed"), pluginId: idSchema, versionId: z.string().uuid(), toolName: idSchema }).strict(),
-  z.object({ kind: z.literal("trusted"), entry: pathSchema, files: z.record(z.string().max(256 * 1024)), ui: z.object({ tui: pathSchema.optional(), web: pathSchema.optional() }).strict().optional() }).strict(),
+  z.object({ kind: z.literal("sandboxed"), pluginId: idSchema, versionId: z.guid(), toolName: idSchema }).strict(),
+  z.object({ kind: z.literal("trusted"), entry: pathSchema, files: z.record(z.string(), z.string().max(256 * 1024)), ui: z.object({ tui: pathSchema.optional(), web: pathSchema.optional() }).strict().optional() }).strict(),
 ]);
 const specSchema = z.object({ label: z.string().min(1).max(160), providers: z.array(z.object({
   id: idSchema, requires: z.array(idSchema).max(32).optional(), services: z.array(z.enum(["agent.driver", "ui.view"])).min(1).max(2), source: sourceSchema,
@@ -84,7 +84,7 @@ const viewSchema = z.object({ title: z.string().max(200), blocks: z.array(z.disc
 ])).max(64), commands: z.array(commandSchema).max(32).optional(), settings: z.array(settingSchema).max(32).optional(), requestedPrompt: text.optional() }).strict();
 const resultSchema = z.object({ content: z.array(z.discriminatedUnion("type", [
   z.object({ type: z.literal("text"), text }).strict(),
-  z.object({ type: z.literal("tool_use"), id: idSchema, name: idSchema, input: z.record(z.unknown()) }).strict(),
+  z.object({ type: z.literal("tool_use"), id: idSchema, name: idSchema, input: z.record(z.string(), z.unknown()) }).strict(),
 ])).max(128), stopReason: z.enum(["end_turn", "tool_use", "max_tokens", "error"]), durationMs: z.number().finite().nonnegative(), error: text.optional(), cancelled: z.boolean().optional() });
 function copyJson<T>(value: T): T {
   const encoded = canonicalEvolutionJson(value === undefined ? null : value);
@@ -134,7 +134,7 @@ interface Generation {
 }
 /** Serializable snapshot of live harness state for handoff between host instances. */
 export const liveHarnessCheckpointSchema = z.object({
-  activeId: z.string().uuid().nullable(),
+  activeId: z.guid().nullable(),
   previousId: z.string().nullable(),
   pending: z.string().nullable().optional(),
   providerStates: z.record(z.string(), z.unknown()),
@@ -181,7 +181,7 @@ export class LiveHarnessHost {
       if (!/^[a-f0-9-]{36}\.json$/.test(name)) continue;
       if (this.retained.size >= MAX_GENERATIONS) throw new Error("Harness generation retention limit reached");
       const raw = readEvolutionArtifact(join(directory, name)) as RetainedGeneration;
-      const id = z.string().uuid().parse(raw.id);
+      const id = z.guid().parse(raw.id);
       if (`${id}.json` !== name) throw new Error("Harness generation identity mismatch");
       const spec = parseHarnessGenerationSpec(raw.spec);
       const sources: Record<string, SourceSnapshot> = {};

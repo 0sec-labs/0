@@ -1,5 +1,5 @@
 import { parseRequest, type OracleResult } from "../triage/oracles.js";
-import { assertWorkspaceIdentity, captureWorkspaceIdentity, type WorkspaceIdentity } from "./workspace-identity.js";
+import { assertExpectedWorkspace, assertWorkspaceIdentity, captureWorkspaceIdentity, type ExpectedWorkspace, type WorkspaceIdentity } from "./workspace-identity.js";
 import { filterWorkflowAgentTools, isWorkflowAgentToolAllowed } from "../workflow-execution-policy.js";
 import { retainBrowserScreenshot } from "../browser-evidence.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -285,8 +285,8 @@ const rememberCodebaseArgsSchema = z.object({
 const selfExtendArgsSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("submit"),
-    manifest: z.record(z.unknown()),
-    files: z.record(z.string()).refine((files) => Object.keys(files).length > 0, "files must not be empty"),
+    manifest: z.record(z.string(), z.unknown()),
+    files: z.record(z.string(), z.string()).refine((files) => Object.keys(files).length > 0, "files must not be empty"),
     entry: z.string().min(1).max(1024),
     kind: z.enum(["tool", "skill", "agent"]).optional(),
   }).strip(),
@@ -2423,6 +2423,13 @@ const PERSIST_IDLE_TTL_MS = 300_000;
 /** Hard cap on how many times a persistent agent may be revived. */
 const PERSIST_MAX_REVIVES = 25;
 
+const expectedWorkspaceSchema = z.object({
+  path: z.string().min(1).max(4096).refine(isAbsolute, "expected_workspace.path must be absolute"),
+  head: z.string().regex(/^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$/, "expected_workspace.head must be a full Git commit hash"),
+  origin: z.string().min(1).max(4096).optional(),
+}).strict();
+const subagentWorkspaceSchema = z.object({ expected_workspace: expectedWorkspaceSchema.optional() });
+
 const subagentModelSelectionSchema = z.object({
   role: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
@@ -2437,10 +2444,10 @@ const subagentModelSelectionSchema = z.object({
 const spawnPersistentAgentArgsSchema = subagentModelSelectionSchema
   .extend({
     task: z
-      .string({ required_error: "task is required", invalid_type_error: "task must be a string" })
+      .string({ error: issue => issue.input === undefined ? "task is required" : "task must be a string" })
       .min(1, "task must not be empty"),
     name: z.string().min(1).max(48).optional(),
-    max_turns: z.number({ invalid_type_error: "max_turns must be a number" }).int().positive().optional(),
+    max_turns: z.number({ error: "max_turns must be a number" }).int().positive().optional(),
   })
   .strip();
 
@@ -2473,8 +2480,7 @@ const MONITOR_POLL_MS = 300;
 const monitorArgsSchema = z
   .object({
     op: z.enum(["start", "logs", "wait", "stop", "ps", "send"], {
-      required_error: "op is required",
-      invalid_type_error: "op must be one of start|logs|wait|stop|ps|send",
+      error: issue => issue.input === undefined ? "op is required" : "op must be one of start|logs|wait|stop|ps|send",
     }),
     name: z.string().min(1).max(64).optional(),
     command: z.string().min(1).optional(),
@@ -4481,7 +4487,7 @@ export class ToolExecutor {
   private static readonly accessProbeSchema = z.object({
     url: z.string().min(1),
     method: z.enum(["GET", "POST", "PUT", "DELETE", "PATCH"]).optional(),
-    body: z.string().optional(), headers: z.record(z.string()).optional(),
+    body: z.string().optional(), headers: z.record(z.string(), z.string()).optional(),
     baseline_identity: z.string().min(1).optional(),
     compare_identities: z.array(z.string().min(1)).min(1).max(16).optional(),
     expect_denied: z.boolean().optional(),
@@ -4573,6 +4579,9 @@ export class ToolExecutor {
         identity: label,
         role: principal.role,
         status: resp.status,
+        truncated: resp.truncated ?? false,
+        response_digest: "sha256:" + createHash("sha256").update(resp.body).digest("hex"),
+        owner_marker_observed: typeof ownershipMarker === "string" && resp.body.includes(ownershipMarker),
         ...diff,
         evidence: probeEvidence(resp),
       });
@@ -4602,12 +4611,35 @@ export class ToolExecutor {
           : `No access-control break reproduced at ${baselineResp.url}.`,
     };
 
+    // Only the operator-owned fixture can establish restricted ownership for
+    // a public milestone. Model-supplied expect_denied/markers are insufficient.
+    const fixture = method === "GET" && body === undefined && Object.keys(extraHeaders).length === 0
+      ? this.ctx.accessControlFixtures?.find(f => {
+        try { return new URL(f.url).href === baselineResp.url && f.ownerIdentity === baseline.label
+          && f.ownershipMarker === ownershipMarker && expectDenied; } catch { return false; }
+      }) : undefined;
+    const qualified = fixture ? comparisons.filter(c => fixture.comparisonIdentities.includes(String(c.identity))) : [];
+    const markerObserved = typeof ownershipMarker === "string" && baselineResp.body.includes(ownershipMarker);
+    const confirmedRead = !baselineResp.truncated && markerObserved && qualified.some(c => c.broken === true && c.truncated === false);
+    const blockedRead = !baselineResp.truncated && is2xx(baselineResp.status) && markerObserved
+      && qualified.length > 0 && fixture!.comparisonIdentities.every(identity => qualified.some(c => c.identity === identity))
+      && qualified.every(c => c.verdict === "properly_denied" && c.truncated === false);
     this.persistToolArtifact("access_control_probe", {
       url: baselineResp.url,
       method,
       baseline: baseline.label,
       compared: compareLabels,
       broken_count: broken.length,
+      ...(confirmedRead || blockedRead ? { access_proof: {
+        schema: "0.access-proof/v1", authority: "operator-fixture", access_class: "unauthorized-read",
+        status: confirmedRead ? "confirmed" : "blocked", baseline_status: baselineResp.status,
+        owner_marker_observed: true, comparison_marker_observed: confirmedRead,
+        cleanup: "not-required",
+        baseline_observation: { status: baselineResp.status, truncated: baselineResp.truncated ?? false,
+          response_digest: "sha256:" + createHash("sha256").update(baselineResp.body).digest("hex"), marker_observed: true },
+        comparison_observations: (confirmedRead ? qualified.filter(c => c.broken === true && c.truncated === false) : qualified).map(c => ({ identity: c.identity, status: c.status,
+          truncated: c.truncated, response_digest: c.response_digest, marker_observed: c.owner_marker_observed })),
+      } } : {}),
     });
 
     return { success: true, output };
@@ -4624,7 +4656,7 @@ export class ToolExecutor {
       method: z.enum(["GET", "POST", "PUT", "DELETE", "PATCH"]),
       url: z.string().min(1),
       body: z.string().optional(),
-      headers: z.record(z.string()).optional(),
+      headers: z.record(z.string(), z.string()).optional(),
     }).strict()).min(1).max(10),
   }).strict();
 
@@ -6121,6 +6153,7 @@ export class ToolExecutor {
     selection?: SubagentModelSelection,
     admittedLease?: ReturnType<AuditWorkerTree["acquire"]>,
     sharedContext?: string,
+    expectedWorkspace?: ExpectedWorkspace,
   ): Promise<SubagentOutcome> {
     const startedAt = Date.now();
     let lease = admittedLease;
@@ -6129,6 +6162,7 @@ export class ToolExecutor {
       const callerSignal = this._executionContext.getStore()?.signal;
       const signal = callerSignal ? AbortSignal.any([callerSignal, lease.signal]) : lease.signal;
       signal.throwIfAborted();
+      if (expectedWorkspace) assertExpectedWorkspace(expectedWorkspace, this.ctx.scopePath);
       if (!this._childRuntimeFactory) throw new Error("Parent runtime does not support subagent inference");
       // Single-child path resolves deps here (inside the try, so an import
       // failure still emits `failed`); the concurrent batch pre-resolves once
@@ -6212,6 +6246,7 @@ export class ToolExecutor {
       const delegationSystemPrompt = this.ctx.delegationSystemPrompt ?? `You are a focused ${this.ctx.role ?? "attack"} agent.`;
       this._workspaceIdentity ??= captureWorkspaceIdentity(this.ctx.scopePath);
       if (this._workspaceIdentity) assertWorkspaceIdentity(this._workspaceIdentity, this.ctx.scopePath);
+      if (expectedWorkspace) assertExpectedWorkspace(expectedWorkspace, this.ctx.scopePath);
       const state = await runNativeAgentLoop({
         config: {
           role: this.ctx.role ?? "attack",
@@ -6677,6 +6712,11 @@ export class ToolExecutor {
     if (!task) return { success: false, output: null, error: "Task description is required" };
     const selection = subagentModelSelectionSchema.safeParse(args);
     if (!selection.success) return { success: false, output: null, error: selection.error.issues[0]?.message ?? "Invalid model selection" };
+    const workspace = subagentWorkspaceSchema.safeParse(args);
+    if (!workspace.success) return { success: false, output: null, error: workspace.error.issues[0]?.message ?? "Invalid expected workspace" };
+    try { if (workspace.data.expected_workspace) assertExpectedWorkspace(workspace.data.expected_workspace, this.ctx.scopePath); }
+    catch (error) { return { success: false, output: null, error: (error as Error).message }; }
+
 
     const maxTurns = Math.min((args.max_turns as number) ?? 40, 120);
     const base = this.buildSubagentLifecycleBase(task, maxTurns);
@@ -6686,7 +6726,7 @@ export class ToolExecutor {
     // queued — before any async setup
     eventBus.emit("subagent_lifecycle", { ...base, status: "queued" as const });
 
-    const outcome = await this.runOneSubagent(task, maxTurns, base, undefined, undefined, selection.data, lease);
+    const outcome = await this.runOneSubagent(task, maxTurns, base, undefined, undefined, selection.data, lease, undefined, workspace.data.expected_workspace);
     // Preserve accepted findings even if a later model request failed.
     this.mergeSubagentFindings(outcome.findings ?? []);
     if (!outcome.ok) {
@@ -6743,7 +6783,7 @@ export class ToolExecutor {
     const batchContext = typeof args.context === "string" && args.context.trim() ? args.context : undefined;
 
     // Normalize + validate each task entry before any side effect.
-    const specs: Array<{ task: string; maxTurns: number; base: SubagentLifecycleBase; selection: SubagentModelSelection; lease?: ReturnType<AuditWorkerTree["acquire"]> }> = [];
+    const specs: Array<{ task: string; maxTurns: number; base: SubagentLifecycleBase; selection: SubagentModelSelection; expectedWorkspace?: ExpectedWorkspace; lease?: ReturnType<AuditWorkerTree["acquire"]> }> = [];
     for (let i = 0; i < rawTasks.length; i++) {
       const entry = rawTasks[i] as Record<string, unknown> | undefined;
       const task = entry?.task;
@@ -6756,8 +6796,12 @@ export class ToolExecutor {
       }
       const selection = subagentModelSelectionSchema.safeParse(entry);
       if (!selection.success) return { success: false, output: null, error: `tasks[${i}]: ${selection.error.issues[0]?.message ?? "Invalid model selection"}` };
+      const workspace = subagentWorkspaceSchema.safeParse(entry);
+      if (!workspace.success) return { success: false, output: null, error: `tasks[${i}]: ${workspace.error.issues[0]?.message ?? "Invalid expected workspace"}` };
+      try { if (workspace.data.expected_workspace) assertExpectedWorkspace(workspace.data.expected_workspace, this.ctx.scopePath); }
+      catch (error) { return { success: false, output: null, error: `tasks[${i}]: ${(error as Error).message}` }; }
       const maxTurns = Math.min((entry?.max_turns as number) ?? 40, 120);
-      specs.push({ task, maxTurns, base: this.buildSubagentLifecycleBase(task, maxTurns), selection: selection.data });
+      specs.push({ task, maxTurns, base: this.buildSubagentLifecycleBase(task, maxTurns), selection: selection.data, expectedWorkspace: workspace.data.expected_workspace });
     }
 
     // Reserve queued work too, so stop-all cannot miss later concurrency waves.
@@ -6821,6 +6865,7 @@ export class ToolExecutor {
           spec.selection,
           spec.lease,
           batchContext,
+          spec.expectedWorkspace,
         ),
     );
 

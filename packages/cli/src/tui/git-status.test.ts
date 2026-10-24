@@ -1,4 +1,5 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -170,6 +171,33 @@ describe("readGitStatus", () => {
     expect(status.untracked).toBe(0);
     expect(status.ahead).toBeNull();
     expect(status.behind).toBeNull();
+  });
+
+  it("polls real Git without refreshing tracked metadata in the index", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "git-status-read-only-"));
+    tempDirs.push(dir);
+    const git = (...args: string[]) => execFileSync("git", args, { cwd: dir, env: { ...process.env, GIT_OPTIONAL_LOCKS: "1" } });
+    git("init", "--quiet", "--initial-branch=main");
+    const tracked = join(dir, "tracked.txt");
+    writeFileSync(tracked, "unchanged contents\n");
+    git("add", "tracked.txt");
+    git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+      "-c", "commit.gpgSign=false", "-c", `core.hooksPath=${join(dir, ".git", "unused-hooks")}`,
+      "commit", "--quiet", "--message=Fixture");
+    // Invalidate Git's cached stat data without changing the tracked bytes.
+    // An ordinary status call refreshes the index even though the tree is clean.
+    utimesSync(tracked, new Date("2000-01-01T00:00:00Z"), new Date("2000-01-01T00:00:00Z"));
+    const index = join(dir, ".git", "index");
+    const before = readFileSync(index);
+    const beforeStat = statSync(index, { bigint: true });
+    expect(await readGitStatus(dir)).toMatchObject({ isRepo: true, branch: "main", modified: 0 });
+    const afterStat = statSync(index, { bigint: true });
+    expect(readFileSync(index)).toEqual(before);
+    expect({ mtime: afterStat.mtimeNs, ctime: afterStat.ctimeNs, inode: afterStat.ino })
+      .toEqual({ mtime: beforeStat.mtimeNs, ctime: beforeStat.ctimeNs, inode: beforeStat.ino });
+    // Positive control: the fixture really exercises optional refresh writes.
+    git("status", "--porcelain=v2", "--branch");
+    expect(readFileSync(index)).not.toEqual(before);
   });
 
   it("never rejects even when pointed at a nonexistent directory", async () => {

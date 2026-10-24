@@ -23,7 +23,7 @@ const fileEntrySchema = z.object({
   size: z.number().int().nonnegative().max(MAX_SNAPSHOT_BYTES),
   mode: z.number().int().min(0).max(0o777),
 }).strict();
-const filesSchema = z.record(fileEntrySchema).refine((files) => Object.keys(files).length > 0, "file allowlist is empty");
+const filesSchema = z.record(z.string(), fileEntrySchema).refine((files) => Object.keys(files).length > 0, "file allowlist is empty");
 const sideSchema = z.object({ cwd: z.string(), files: filesSchema }).strict();
 const compatibilitySchema = z.object({
   runner: z.enum(["local", "smolvm", "docker"]),
@@ -36,7 +36,7 @@ const compatibilitySchema = z.object({
   smolvm_http_image_digest: smolvmImageReference.optional(),
   smolvm_shell_archive_digest: archiveDigest.optional(),
   smolvm_http_archive_digest: archiveDigest.optional(),
-  smolvm_container_archive_digests: z.record(archiveDigest).optional(),
+  smolvm_container_archive_digests: z.record(z.string(), archiveDigest).optional(),
 }).strict();
 const planSchema = z.object({
   version: z.literal(1),

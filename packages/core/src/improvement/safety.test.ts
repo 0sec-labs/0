@@ -1,4 +1,4 @@
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, afterEach, vi } from "vitest";
@@ -42,6 +42,30 @@ afterEach(() => {
 });
 
 describe("evolution safety contract", () => {
+  it("does not substitute evaluator implementation identity for source bytes", () => {
+    const identity = createEvolutionComparisonIdentity(config(cases), "sha256:" + "1".repeat(64), {
+      resolvedModel: "model-a", provider: "provider-a",
+    });
+    expect(identity.sourceRevision).toBe("unresolved");
+    expect(compareEvolutionIdentities(identity, identity).status).toBe("unknown");
+  });
+
+  it("rejects inconsistent persisted spending instead of granting budget", () => {
+    const root = freshRoot();
+    const identity = createEvolutionComparisonIdentity(config(cases), "sha256:" + "2".repeat(64), {
+      resolvedModel: "model-a", provider: "provider-a", sourceRevision: "sha256:" + "f".repeat(64),
+    });
+    createOrLoadEvolutionCampaign(root, identity, "test", config(cases));
+    const reservation = reserveCampaignDispatch(root, "model", 1);
+    settleCampaignDispatch(root, reservation.id, 0.5);
+    const path = join(root, "campaign-ledger.json");
+    const ledger = JSON.parse(readFileSync(path, "utf8"));
+    ledger.cumulativeModelCostUsd = 0;
+    chmodSync(path, 0o600);
+    writeFileSync(path, JSON.stringify(ledger));
+    expect(() => reserveCampaignDispatch(root, "model", 1)).toThrow(/inconsistent/);
+  });
+
   it("keeps corpus identity when only case IDs are renamed", () => {
     const original = evolutionCorpusIdentity(cases);
     const renamed = evolutionCorpusIdentity(cases.map((entry) => ({ ...entry, id: `renamed-${entry.id}` })));
@@ -49,8 +73,8 @@ describe("evolution safety contract", () => {
   });
 
   it("marks changed evaluator/model provenance incomparable", () => {
-    const first = createEvolutionComparisonIdentity(config(cases), "sha256:" + "1".repeat(64), { resolvedModel: "model-a", provider: "provider-a" });
-    const second = createEvolutionComparisonIdentity(config(cases), "sha256:" + "2".repeat(64), { resolvedModel: "model-b", provider: "provider-b" });
+    const first = createEvolutionComparisonIdentity(config(cases), "sha256:" + "1".repeat(64), { resolvedModel: "model-a", provider: "provider-a", sourceRevision: "sha256:" + "f".repeat(64) });
+    const second = createEvolutionComparisonIdentity(config(cases), "sha256:" + "2".repeat(64), { resolvedModel: "model-b", provider: "provider-b", sourceRevision: "sha256:" + "f".repeat(64) });
     const comparison = compareEvolutionIdentities(first, second);
     expect(comparison.status).toBe("incompatible");
     expect(comparison.reasons).toEqual(expect.arrayContaining(["evaluator implementation differs", "resolved model differs"]));
@@ -58,7 +82,7 @@ describe("evolution safety contract", () => {
 
   it("persists unknown-cost blocking across a reload", () => {
     const root = freshRoot();
-    const identity = createEvolutionComparisonIdentity({ ...config(cases), storePath: root }, "sha256:" + "3".repeat(64), { resolvedModel: "model-a", provider: "provider-a" });
+    const identity = createEvolutionComparisonIdentity({ ...config(cases), storePath: root }, "sha256:" + "3".repeat(64), { resolvedModel: "model-a", provider: "provider-a", sourceRevision: "sha256:" + "f".repeat(64) });
     createOrLoadEvolutionCampaign(root, identity, "renamed-campaign", config(cases));
     const reservation = reserveCampaignDispatch(root, "model", 1);
     settleCampaignDispatch(root, reservation.id, null);
@@ -68,7 +92,7 @@ describe("evolution safety contract", () => {
 
   it("consumes holdout exposure and rejects exhaustion without a reset", () => {
     const root = freshRoot();
-    const identity = createEvolutionComparisonIdentity({ ...config(cases), storePath: root }, "sha256:" + "4".repeat(64), { resolvedModel: "model-a", provider: "provider-a" });
+    const identity = createEvolutionComparisonIdentity({ ...config(cases), storePath: root }, "sha256:" + "4".repeat(64), { resolvedModel: "model-a", provider: "provider-a", sourceRevision: "sha256:" + "f".repeat(64) });
     createOrLoadEvolutionCampaign(root, identity, "evolution", config(cases));
     reserveHoldoutExposure(root, identity, 2, 3);
     expect(() => reserveHoldoutExposure(root, identity, 2, 3)).toThrow(/exhausted/);
@@ -84,7 +108,7 @@ describe("evolution safety contract", () => {
 
   it("blocks promotion during dispatch and counts reconciled spend exactly once", () => {
     const root = freshRoot();
-    const identity = createEvolutionComparisonIdentity(config(cases), "sha256:" + "6".repeat(64), { resolvedModel: "model-a", provider: "provider-a" });
+    const identity = createEvolutionComparisonIdentity(config(cases), "sha256:" + "6".repeat(64), { resolvedModel: "model-a", provider: "provider-a", sourceRevision: "sha256:" + "f".repeat(64) });
     createOrLoadEvolutionCampaign(root, identity, "bounded", { maxModelCostUsd: 1, maxEvaluationCostUsd: 1 });
     const first = reserveCampaignDispatch(root, "model", 0.8);
     expect(campaignPromotionAllowed(root).allowed).toBe(false);
@@ -99,7 +123,7 @@ describe("evolution safety contract", () => {
 
   it("recovers an interrupted controller without treating a pending dispatch as free", () => {
     const root = freshRoot();
-    const identity = createEvolutionComparisonIdentity(config(cases), "sha256:" + "8".repeat(64), { resolvedModel: "model-a", provider: "provider-a" });
+    const identity = createEvolutionComparisonIdentity(config(cases), "sha256:" + "8".repeat(64), { resolvedModel: "model-a", provider: "provider-a", sourceRevision: "sha256:" + "f".repeat(64) });
     createOrLoadEvolutionCampaign(root, identity, "evolution", config(cases));
     const dispatch = reserveCampaignDispatch(root, "evaluation", 1);
     const probe = vi.spyOn(process, "kill").mockImplementation(() => {
@@ -116,7 +140,7 @@ describe("evolution safety contract", () => {
 
   it("keeps exposure across reordered and relabeled content-equivalent campaigns", () => {
     const root = freshRoot();
-    const observed = { resolvedModel: "model-a", provider: "provider-a" };
+    const observed = { resolvedModel: "model-a", provider: "provider-a", sourceRevision: "sha256:" + "f".repeat(64) };
     const original = createEvolutionComparisonIdentity(config(cases), "sha256:" + "7".repeat(64), observed);
     createOrLoadEvolutionCampaign(root, original, "evolution", config(cases));
     reserveHoldoutExposure(root, original, 1, 1);

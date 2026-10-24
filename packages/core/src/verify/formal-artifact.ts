@@ -21,7 +21,7 @@ const challengeSchema = z.object({
 }).strict();
 const candidateSchema = z.object({ proof: source }).strict();
 const receiptSchema = z.object({
-  invocationNonce: z.string().uuid(),
+  invocationNonce: z.guid(),
   challengeDigest: digest,
   proofDigest: digest,
   claimId: name,

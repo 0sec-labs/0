@@ -10,7 +10,19 @@
  * `TOOL_DEFINITIONS` registry; the matching runtime handlers live on the
  * `ToolExecutor` class in agent/tools.ts.
  */
-import type { ToolDefinition } from "../types.js";
+import type { ToolDefinition, ToolParam } from "../types.js";
+
+const expectedWorkspaceParameter: ToolParam = {
+  type: "object",
+  description: "Machine-checked source identity. Supply for an explicit absolute source path or pinned commit; task prose is not a path/revision contract. Path must match the parent's configured source checkout (select another workspace first); this never grants access or falls back to the default workspace.",
+  properties: {
+    path: { type: "string", description: "Absolute path to the intended source checkout." },
+    head: { type: "string", description: "Full 40- or 64-character Git commit hash expected at HEAD." },
+    origin: { type: "string", description: "Optional exact origin URL expected for this checkout." },
+  },
+  required: ["path", "head"],
+  additionalProperties: false,
+};
 
 export const systemToolDefinitions: Record<string, ToolDefinition> = {
   read_file: {
@@ -144,6 +156,7 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
       "Delegate a focused task to an agent with fresh context and the parent's role, scope, tools and shared budget. Use for source investigation or an independent security lead. Children may delegate within the shared worker/depth bounds. Returns findings and a summary.",
     parameters: {
       task: { type: "string", description: "Self-contained task: target files or URL, objective, constraints and evidence required." },
+      expected_workspace: expectedWorkspaceParameter,
       max_turns: { type: "number", description: "Turn budget for the sub-agent (default 40, max 120)" },
       role: { type: "string", description: "Optional operator-configured worker model role." },
       model: { type: "string", description: "Optional model id for this sub-agent. Under an operator-configured auto-routing role you may name any model the session can reach (a provider whose credentials are present); otherwise it must be one of the parent's operator-approved pins." },
@@ -168,6 +181,7 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
         items: {
           type: "object",
           properties: {
+            expected_workspace: expectedWorkspaceParameter,
             task: {
               type: "string",
               description:

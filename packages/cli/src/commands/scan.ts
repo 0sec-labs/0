@@ -7,6 +7,7 @@ import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig, NamedI
 import { getScopeEnforcementState, networkScopeRequiredRefusal, targetRequiresScope } from "@0/core";
 import { renderReplay } from "../formatters/replay.js";
 import { runUnified } from "./run.js";
+import { guidedScanPlan, parseScanModelAssignments } from "../guided-scan.js";
 import { reportSummarySchema, formatZodError } from "@0/shared";
 
 /**
@@ -200,6 +201,9 @@ export function registerScanCommand(program: Command): void {
     .option("--db-path <path>", "Path to SQLite database")
     .option("--api-key <key>", "API key for LLM provider")
     .option("-m, --model <model>", "LLM model to use")
+    .option("--task-model <role=model>", "Explicit task model: discovery, attack, verify, report (repeatable)", (value: string, previous: string[] = []) => [...previous, value])
+    .option("--single-model", "Use the selected model for every task, ignoring task assignments")
+    .option("--no-guided", "Skip interactive scan planning and use explicit command options")
     .option("--repo <path>", "Source code path for white-box scanning")
     .option("--access-control-fixtures <file>", "JSON file of known private resource ownership fixtures for IDOR verification")
     .option("--identities <file>", "Restricted JSON file with named test identities for access-control replay")
@@ -220,7 +224,7 @@ export function registerScanCommand(program: Command): void {
     .option("--export <target>", "Export findings to issue tracker (e.g. github:owner/repo)")
     .addOption(new Option("--race", "Best-of-N strategy racing (benchmark/CTF only)").default(false).hideHelp())
     .addOption(new Option("--egats", "Evidence-gated attack tree search").default(false).hideHelp())
-    .option("--cost-ceiling <usd>", "Hard per-scan USD cost ceiling; aborts with partial findings if exceeded")
+    .option("--cost-ceiling <usd>", "Estimated USD stopping threshold; in-flight usage may overshoot, partial findings retained")
     .option(
       "--rate-limit <spec>",
       "Per-host requests/sec cap, e.g. '5' or 'host=5,*=3' (default 5)",
@@ -251,7 +255,7 @@ export function registerScanCommand(program: Command): void {
     .addOption(new Option("--branch-from <entry-index>", "Branch the journal at an entry index before resuming (with --resume)").hideHelp())
     .option("--verbose", "Show detailed output", false)
     .addOption(new Option("--replay", "Replay the last scan's results").default(false).hideHelp())
-    .action(async (opts) => {
+    .action(async (opts, command: Command) => {
       // ── Replay last scan (--replay flag) ──
       if (opts.replay) {
         try {
@@ -583,6 +587,13 @@ export function registerScanCommand(program: Command): void {
         }
       }
 
+      const agentModels = parseScanModelAssignments((opts.taskModel as string[] | undefined) ?? []);
+      const hasAssignments = Object.keys(agentModels).length > 0;
+      const interactivePlanning = opts.guided !== false && opts.format === "terminal" && process.stdin.isTTY && process.stdout.isTTY && !opts.resume;
+      const plan = interactivePlanning
+        ? await guidedScanPlan({ target: opts.target, depth: command.getOptionValueSource("depth") === "cli" ? opts.depth as ScanDepth : undefined, costCapUsd: costCeilingUsd, model: opts.model, agentModels, singleModel: opts.singleModel })
+        : undefined;
+      if (interactivePlanning && !plan) return;
       const branchFrom = opts.branchFrom as string | undefined;
       await runUnified({
         target: opts.target,
@@ -590,7 +601,10 @@ export function registerScanCommand(program: Command): void {
         resumeScanId: opts.resume as string | undefined,
         branchFromEntry: branchFrom !== undefined ? parseInt(branchFrom, 10) : undefined,
         mode,
-        depth: opts.depth as ScanDepth,
+        depth: plan?.depth ?? opts.depth as ScanDepth,
+        plan,
+        ...(hasAssignments ? { agentModels } : {}),
+        ...(opts.singleModel !== undefined ? { singleModel: opts.singleModel as boolean } : {}),
         format: (opts.format === "md" ? "markdown" : opts.format) as OutputFormat,
         runtime: (opts.runtime as RuntimeMode) ?? "auto",
         timeout: parseInt(opts.timeout, 10),
@@ -606,7 +620,7 @@ export function registerScanCommand(program: Command): void {
         exportTarget: opts.export as string | undefined,
         race: opts.race as boolean | undefined,
         egats: opts.egats as boolean | undefined,
-        costCeilingUsd,
+        costCeilingUsd: plan?.costCapUsd ?? costCeilingUsd,
         rateLimit,
         tui: opts.tui as boolean,
         scopeFile,

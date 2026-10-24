@@ -52,14 +52,14 @@ export class EngineService {
     if (name === "get_capabilities") { empty.parse(raw); return this.options.capabilities?.() ?? createEngineCapabilityManifest({ operations: [...ENGINE_OPERATIONS, ...(this.options.startAssessment ? ["start_assessment" as const] : []), ...(this.options.resumeScan ? ["resume_scan" as const] : [])] }); }
     if (name === "list_sessions") { empty.parse(raw); return sessions.list(); }
     if (name === "create_session") {
-      const { config } = z.object({ config: z.record(z.unknown()).optional() }).strict().parse(raw);
+      const { config } = z.object({ config: z.record(z.string(), z.unknown()).optional() }).strict().parse(raw);
       return this.options.createSession ? this.options.createSession(config ?? {}) : sessions.create(config);
     }
     if (name === "get_session" || name === "attach_session") return sessions.get(session.parse(raw).sessionId);
     if (name === "send_message") { const request = z.object({ sessionId: id, text: z.string().min(1).max(2_000_000) }).strict().parse(raw); return sessions.send(request.sessionId, { text: request.text }); }
     if (name === "continue_session") { const request = z.object({ sessionId: id, text: z.string().min(1).max(2_000_000).optional() }).strict().parse(raw); return sessions.continue(request.sessionId, { text: request.text }); }
     if (name === "cancel_session") return sessions.cancel(session.parse(raw).sessionId);
-    if (name === "resolve_decision") { const request = z.object({ sessionId: id, decisionId: id, response: z.record(z.unknown()) }).strict().parse(raw); return sessions.resolveDecision(request.sessionId, request.decisionId, request.response); }
+    if (name === "resolve_decision") { const request = z.object({ sessionId: id, decisionId: id, response: z.record(z.string(), z.unknown()) }).strict().parse(raw); return sessions.resolveDecision(request.sessionId, request.decisionId, request.response); }
     if (name === "list_saved_sessions") { empty.parse(raw); return sessions.listSaved(); }
     if (name === "resume_session") return sessions.resume(z.object({ savedSessionId: id }).strict().parse(raw).savedSessionId);
     if (name === "get_session_events") { const request = session.extend({ after: z.number().int().nonnegative().optional() }).parse(raw); return sessions.eventsAfter(request.sessionId, request.after); }

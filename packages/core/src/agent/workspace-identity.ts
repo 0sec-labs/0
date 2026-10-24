@@ -49,3 +49,21 @@ export function assertWorkspaceIdentity(expected: WorkspaceIdentity, scopePath?:
     throw new Error(`workspace_mismatch: delegated source path, repository root, origin or HEAD differs from parent (expected ${describe(expected)}, observed ${describe(observed)})`);
   }
 }
+
+/** Explicit task contract; never inferred from free-form task prose or used to grant a new path. */
+export interface ExpectedWorkspace {
+  readonly path: string;
+  readonly head: string;
+  readonly origin?: string;
+}
+
+export function assertExpectedWorkspace(expected: ExpectedWorkspace, scopePath?: string): void {
+  const observed = captureWorkspaceIdentity(scopePath);
+  let requestedPath: string | undefined;
+  try { requestedPath = realpathSync(expected.path); } catch { /* reject unavailable target */ }
+  if (!observed || observed.scopePath !== requestedPath || observed.head !== expected.head.toLowerCase() ||
+      (expected.origin !== undefined && observed.origin !== expected.origin)) {
+    // Do not disclose origins, which may contain credentials.
+    throw new Error("workspace_mismatch: expected_workspace path, pinned HEAD or origin does not match the configured source checkout; explicitly select the intended source workspace before delegation");
+  }
+}

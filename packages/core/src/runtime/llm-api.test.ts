@@ -41,6 +41,7 @@ describe("LlmApiRuntime provider detection", () => {
     delete process.env.AZURE_OPENAI_API_KEY;
     delete process.env.OPENAI_API_KEY;
     delete process.env.OPENAI_BASE_URL;
+    delete process.env.OPENAI_MODEL;
     delete process.env.AZURE_OPENAI_BASE_URL;
     delete process.env.AZURE_OPENAI_MODEL;
     delete process.env.AZURE_OPENAI_WIRE_API;
@@ -226,6 +227,19 @@ describe("LlmApiRuntime provider detection", () => {
       fetchMock.mockRestore();
     }
   });
+  it.each([undefined, "openai"])("uses the custom provider model without catalog validation (pin %s)", provider => {
+    process.env.OPENAI_API_KEY = "custom-fixture-key";
+    process.env.OPENAI_BASE_URL = "http://192.0.2.10:20128/v1";
+    process.env.OPENAI_MODEL = "9router/vendor/unlisted-model:latest";
+    const rt = new LlmApiRuntime({ type: "api", provider: provider as "openai" | undefined });
+    expect((rt as any).provider).toBe("openai");
+    expect((rt as any).baseUrl).toBe("http://192.0.2.10:20128/v1");
+    expect((rt as any).model).toBe("9router/vendor/unlisted-model:latest");
+    expect((rt as any).wireApi).toBe("chat_completions");
+    const explicit = new LlmApiRuntime({ type: "api", provider: "openai", model: "explicit-model" });
+    expect((explicit as any).model).toBe("explicit-model");
+  });
+
   it("selects direct DeepSeek Flash 0731 before Azure for its exact API model", async () => {
     process.env.DEEPSEEK_API_KEY = "deepseek-key-123";
     process.env.AZURE_OPENAI_API_KEY = "azure-key-should-not-win";

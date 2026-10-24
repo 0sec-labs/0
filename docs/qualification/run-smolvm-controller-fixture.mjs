@@ -1,3 +1,4 @@
+import { withQualificationDirectories } from './qualification-directories.mjs';
 // Real qualification against a built CLI. Never modifies selected image/configuration.
 // Usage: node docs/qualification/run-smolvm-controller-fixture.mjs IMAGE.tar LINUX_NODE_MODULES REPORT.json
 import { dirname, resolve } from 'node:path';
@@ -26,16 +27,17 @@ async function buildIdentity() {
 }
 const buildAtStart=await buildIdentity();
 
-import { mkdtemp,writeFile,readFile,readdir,rm } from 'node:fs/promises';
-import { realpathSync,existsSync } from 'node:fs';
+import { writeFile,readFile,readdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 const root=repository;
 const { createWorkbenchConsoleSession,runWorkbenchCli }=await import(root+'/packages/cli/dist/workbench-console-session.js');
 // Scratch lives beside the checkout, not os.tmpdir(): workbench refuses workspaces under /var (macOS tmpdir is /private/var/folders).
 const scratchRoot=process.env.ZERO_QUALIFICATION_TMPDIR?resolve(process.env.ZERO_QUALIFICATION_TMPDIR):dirname(root);
-const workspace=realpathSync(await mkdtemp(join(scratchRoot,'0-controller-fixture-')));
+await withQualificationDirectories(scratchRoot, async directories => {
+const workspace=await directories.scratch('0-controller-fixture-');
 let artifact;
-try{
+
  await writeFile(join(workspace,'fixture.txt'),'host source fixture\n',{mode:0o600});
  const model='gpt-6.1'; const providerRequests=[]; const events=[]; const executions=[]; let calls=0; let cancel=false;
  const sse=(response)=>new Response(`data: ${JSON.stringify({type:'response.completed',response:{status:'completed',output:response,usage:{input_tokens:20,output_tokens:8}}})}\n\n`,{headers:{'Content-Type':'text/event-stream'}});
@@ -48,7 +50,7 @@ try{
   return sse([{type:'message',role:'assistant',content:[{type:'output_text',text:'Guest harness read the fixture and saved the output.'}]}]);
  }};
  const workbench={schemaVersion:1,image:qualificationImage,imageDigest:qualificationDigest,stateRoot:(await import(root+'/packages/cli/dist/workbench.js')).loadWorkbenchConfig().stateRoot,workspaceRoot:workspace,providers:['chatgpt-codex'],github:false,cpus:2,memoryMb:2048,storageGb:4};
- artifact=realpathSync(await mkdtemp(join(scratchRoot,'0-controller-artifacts-')));
+ artifact=await directories.artifacts('0-controller-artifacts-');
  const session=createWorkbenchConsoleSession({config:{target:'source:'+workspace,workspaceRoot:workspace,autonomyMode:'copilot',maxToolIterations:6,maxTurnTokens:32000,refineObjective:false,allowModelSelfExtension:false,requestLocalScope:async()=>({scopePath:workspace})},workbench,selection:{model,provider:'chatgpt-codex',singleModel:true},provider,network:false,lifetimeMs:90000,idleMs:90000,assets:{cliDist:root+'/dist',dependencies},artifactDirectory:artifact,onExecution:snapshot=>executions.push(snapshot)});
  const report={schemaVersion:1,workspace,artifact,downloadBytes:0,hostCredentialsForwarded:false,network:false,provider:'host SSE fixture (no live account)',outcome:'pending'};
  try{
@@ -66,8 +68,6 @@ try{
  await writeFile(reportPath,JSON.stringify(report,null,2),{mode:0o600});
  console.log(JSON.stringify({outcome:report.outcome,error:report.error,sourceUnmodified:report.sourceUnmodified,providerRequests:providerRequests.length,execution:report.execution,artifact}));
  process.exitCode=report.outcome==='passed'?0:1;
-}finally{
- // The report already captures guest output and saved state; keep artifacts only for failed runs or ZERO_QUALIFICATION_KEEP_ARTIFACTS=1.
- await rm(workspace,{recursive:true,force:true});
- if(artifact&&process.exitCode===0&&process.env.ZERO_QUALIFICATION_KEEP_ARTIFACTS!=='1') await rm(artifact,{recursive:true,force:true});
-}
+if(process.exitCode===0) directories.passed();
+
+});

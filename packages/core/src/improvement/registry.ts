@@ -469,6 +469,13 @@ function indexSourceFiles(sourceRoot: string, sourcePaths: string[], storePath: 
   return { sourceAbsPaths: absPaths, files };
 }
 
+/** Bounded controller observation of selected source bytes at evaluation boundaries. */
+export function evolutionSourceRevision(config: Pick<EvolutionConfig, "sourceRoot" | "sourcePaths" | "storePath" | "maxSourceBytes">): string {
+  const sourceRoot = realpathSync(config.sourceRoot);
+  const { files } = indexSourceFiles(sourceRoot, config.sourcePaths, resolve(config.storePath), config.maxSourceBytes);
+  return evolutionDigest(files.sort((left, right) => left.path.localeCompare(right.path)));
+}
+
 function computeSnapshotDigest(files: EvolutionFile[]): string {
   return evolutionDigest(files);
 }
