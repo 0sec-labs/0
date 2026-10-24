@@ -37,7 +37,10 @@ Source/package builds attest the bounded authority module files. The esbuild CLI
 attests the bounded packaged code chunks and entry loader when source sidecars
 are absent (at most 512 files and 64 MiB). Changed bytes after an observation
 require a controller restart; new disk bytes cannot impersonate already-loaded
-code. A distribution that cannot expose its loaded implementation bytes fails
+code. This is distribution-byte observation at the first explicit boundary, not
+cryptographic attestation of what the loader executed earlier. Startup must use
+an immutable trusted distribution; mutation before the first observation cannot
+be reconstructed by this cache. A distribution that cannot expose its implementation bytes fails
 closed rather than substituting a requested version string.
 
 Historical receipts stay readable. Missing worker identity in an old comparison
