@@ -90,7 +90,7 @@ describe("web model connection inspection", () => {
   it("reports configured OpenAI credentials without requiring a chosen model", async () => {
     const result = await new WebOperatorServices().handle("/api/console/providers", "GET", undefined, new URLSearchParams());
     const data = result?.data as { providers: Array<{ id: string; configured: boolean; diagnostics: { valid: boolean; message: string | null } }> };
-    expect(data.providers.find((provider) => provider.id === "openai")).toMatchObject({ configured: true, diagnostics: { valid: true, message: null } });
+    expect(data.providers.find((provider) => provider.id === "openai")).toMatchObject({ label: "OpenAI / Custom AI Provider", configured: true, diagnostics: { valid: true, message: null } });
   });
 
   it("keeps a configured custom model selectable when gateway discovery fails", async () => {

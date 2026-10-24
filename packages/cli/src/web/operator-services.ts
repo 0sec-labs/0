@@ -333,7 +333,7 @@ export class WebOperatorServices {
         }
       }
       return {
-        id: info.id, label: info.label, methods: info.methods, configured,
+        id: info.id, label: info.id === "openai" ? "OpenAI / Custom AI Provider" : info.label, methods: info.methods, configured,
         source: configured ? environment ? "environment" : store.providers[info.id] ? "account-store" : "codex-file" : null,
         diagnostics, accounts, configuration: configs[info.id] ?? {}, auth: this.#authStatus(info.id, configured),
       };

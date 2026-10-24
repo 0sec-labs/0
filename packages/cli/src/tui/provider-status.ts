@@ -119,7 +119,7 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
   },
   {
     id: "openai",
-    label: "OpenAI / Custom AI Provider",
+    label: "OpenAI",
     methods: ["api-key"],
     envVars: ["OPENAI_API_KEY"],
     hint: "set OPENAI_API_KEY; custom providers: set OPENAI_BASE_URL and OPENAI_MODEL, or configure Connections",
