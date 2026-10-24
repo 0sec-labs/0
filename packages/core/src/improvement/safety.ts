@@ -173,7 +173,7 @@ export function createOrLoadEvolutionCampaign(
       if (existing.exposures.length) {
         const authorityRoot = ensureEvolutionDirectory(evolutionHoldoutAuthorityRoot());
         if (existing.holdoutAuthorityRoot && existing.holdoutAuthorityRoot !== authorityRoot) throw new Error("holdout authority changed; operator reconciliation required");
-        for (const exposure of existing.exposures) reserveSharedHoldoutExposure(exposure.identity, 0, exposure.limit, exposure.consumed);
+        for (const exposure of existing.exposures) reserveSharedHoldoutExposure(exposure.identity, 0, exposure.limit, exposure.consumed, exposure.reservationIds);
         existing.holdoutAuthorityRoot = authorityRoot;
       }
       existing.updatedAt = new Date().toISOString(); writeLedger(root, existing);
@@ -297,7 +297,7 @@ export function evolutionHoldoutAuthorityRoot(): string {
   if (!isAbsolute(root)) throw new Error("holdout authority must be an absolute controller-owned directory");
   return root;
 }
-function reserveSharedHoldoutExposure(identity: string, queries: number, limit: number, minimumConsumed: number): HoldoutExposureRecord {
+function reserveSharedHoldoutExposure(identity: string, queries: number, limit: number, minimumConsumed: number, localIds: readonly string[]): HoldoutExposureRecord {
   const root = join(evolutionHoldoutAuthorityRoot(), identity.replace("sha256:", ""));
   ensureEvolutionDirectory(root);
   const release = acquireEvolutionController(root);
@@ -315,8 +315,18 @@ function reserveSharedHoldoutExposure(identity: string, queries: number, limit: 
       throw new Error("invalid shared holdout authority record; operator reconciliation required");
     }
     if (record.limit !== limit) throw new Error("shared holdout exposure limit cannot change for the same corpus/evaluator identity");
-    if (queries === 0 && record.consumed >= minimumConsumed) return record;
-    record.consumed = Math.max(record.consumed, minimumConsumed);
+    const unseen = localIds.filter(id => !record.reservationIds.includes(id));
+    if (minimumConsumed > 0 && localIds.length === 0) throw new Error("legacy holdout consumption lacks reservation identities; operator reconciliation required");
+    if (unseen.length || record.consumed < minimumConsumed) {
+      // Legacy IDs let copied stores deduplicate. Distinct/partly overlapping
+      // histories debit the entire local total conservatively: old ledgers did
+      // not retain per-ID query counts, so exact union costs are unknowable.
+      record.consumed = Math.min(limit, Math.max(record.consumed, minimumConsumed) + (record.reservationIds.length && unseen.length ? minimumConsumed : 0));
+      if (record.reservationIds.length + unseen.length <= MAX_CAMPAIGN_RECORDS) record.reservationIds.push(...unseen);
+      else record.consumed = limit;
+      writePrivateLedger(root, "holdout-exposure.json", record);
+    }
+    if (queries === 0) return record;
     if (record.consumed + queries > record.limit) throw new Error("holdout exposure exhausted; operator must supply a fresh curated holdout");
     if (record.reservationIds.length >= MAX_CAMPAIGN_RECORDS) throw new Error("holdout exposure record limit reached; operator archival required");
     record.consumed += queries;
@@ -352,7 +362,7 @@ export function reserveHoldoutExposure(root: string, identity: EvolutionComparis
     // Debit the shared authority first. A crash before the local mirror is
     // persisted may overcount, never refund or replay a sealed query for free.
     let shared: HoldoutExposureRecord;
-    try { shared = reserveSharedHoldoutExposure(key, queries, limit, record.consumed); }
+    try { shared = reserveSharedHoldoutExposure(key, queries, limit, record.consumed, record.reservationIds); }
     catch (error) {
       if (error instanceof EvolutionControllerBusyError) throw error;
       ledger.status = /exhausted|record limit/.test((error as Error).message) ? "exhausted" : "blocked";

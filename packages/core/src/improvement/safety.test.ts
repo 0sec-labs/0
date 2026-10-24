@@ -8,6 +8,7 @@ import {
   createOrLoadEvolutionCampaign,
   createEvolutionComparisonIdentity,
   evolutionCorpusIdentity,
+  holdoutExposureIdentity,
   loadEvolutionCampaign,
   reserveCampaignDispatch,
   reconcileCampaignDispatch,
@@ -138,6 +139,23 @@ describe("evolution safety contract", () => {
     createOrLoadEvolutionCampaign(other, identity, "new-store", config(cases));
     expect(() => reserveHoldoutExposure(other, identity, 1, 2)).toThrow(/exhausted/);
     expect(campaignPromotionAllowed(other).allowed).toBe(false);
+  });
+
+  it("conservatively combines distinct legacy histories while deduplicating copied IDs", () => {
+    const identity = createEvolutionComparisonIdentity(config(cases), "sha256:" + "e".repeat(64), {
+      resolvedModel: "model-a", provider: "provider-a", sourceRevision: "sha256:" + "f".repeat(64),
+    });
+    const a = freshRoot(), b = freshRoot();
+    for (const [root, id] of [[a, "legacy-a"], [b, "legacy-b"]]) {
+      createOrLoadEvolutionCampaign(root!, identity, "legacy", config(cases));
+      const path = join(root!, "campaign-ledger.json");
+      const ledger = JSON.parse(readFileSync(path, "utf8"));
+      ledger.exposures = [{ identity: holdoutExposureIdentity(identity), consumed: 2, limit: 4, reservationIds: [id] }];
+      chmodSync(path, 0o600); writeFileSync(path, JSON.stringify(ledger));
+      createOrLoadEvolutionCampaign(root!, identity, "imported", config(cases));
+    }
+    expect(campaignPromotionAllowed(a).allowed).toBe(false);
+    expect(() => reserveHoldoutExposure(a, identity, 1, 4)).toThrow(/exhausted/);
   });
 
   it("measures bounded authority reservation I/O without model or scan calls", () => {

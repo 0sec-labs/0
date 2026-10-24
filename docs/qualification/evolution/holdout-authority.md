@@ -24,9 +24,13 @@ from deleting records or intentionally configuring an unrelated trust domain.
 
 Authority debits fsync before the local campaign mirror. A crash between these
 writes can conservatively consume an unused query; it cannot make a dispatched
-query free. Historical local consumption seeds a lower bound when first binding
-an authority. There is no distributed transaction or exactly-once claim. Each
+query free. Historical local consumption seeds a conservative floor when first binding
+an authority. Legacy reservation IDs deduplicate exact store copies; distinct or
+partly overlapping histories conservatively debit their full local totals because
+legacy records do not retain per-reservation query counts. This may exhaust
+capacity early; it must never undercount independent legacy histories. There is no distributed transaction or exactly-once claim. Each normal
 query performs two bounded atomic record writes, under existing controller locks,
+with one extra authority write when importing previously unseen legacy history,
 and no archive scan. Records stop at 10,000 reservations per identity; accounting
 is not automatically discarded or reset. Exhaustion stops further evaluations
 and promotion even from a new empty store. Since exact exhaustion blocks
