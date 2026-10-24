@@ -69,8 +69,8 @@ export function confirmedStateProof(fixture: AccessControlFixture, input: {
     || input.before!.json_pointer_value === input.expected || input.after!.json_pointer_value !== input.expected
     || !input.steps.length || input.steps.length > 10
     || !input.steps.some(step => ["POST", "PUT", "PATCH"].includes(String(step.method)) && step.request_marker_sent === true)
-    || input.steps.some(step => step.error !== undefined || step.truncated !== false || typeof step.status !== "number"
-      || step.status < 200 || step.status >= 300 || !["GET", "POST", "PUT", "PATCH"].includes(String(step.method))
+    || input.steps.some(step => step.error !== undefined || typeof step.status !== "number" || !Number.isInteger(step.status)
+      || step.status < 100 || step.status > 599 || !["GET", "POST", "PUT", "PATCH"].includes(String(step.method))
       || !fixture.stateChange!.stepUrls.some(url => { try { return new URL(url).href === new URL(String(step.url)).href; } catch { return false; } }))) return null;
   const after = stateDigest(input.after!.json_pointer_value);
   if (input.prior && input.prior.cleanup !== "completed" && after === input.prior.baseline_digest) {
