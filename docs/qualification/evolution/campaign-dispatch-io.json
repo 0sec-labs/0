@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "platform": "darwin",
+  "node": "v24.14.0",
+  "dispatches": 100,
+  "reservation": {
+    "p50Ms": 42.953207999999904,
+    "p95Ms": 54.37958299999991,
+    "maxMs": 68.84595900000022
+  },
+  "settlement": {
+    "p50Ms": 42.37629099999958,
+    "p95Ms": 55.79095799999959,
+    "maxMs": 80.1744579999995
+  },
+  "ledgerBytes": 37627,
+  "ordinaryScanModelCalls": 0,
+  "externalProviderCalls": 0
+}

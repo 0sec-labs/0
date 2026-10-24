@@ -107,6 +107,7 @@ export interface CampaignDispatchReservation {
   state: "reserved" | "completed" | "unknown"; actualCostUsd: number | null;
   receiptDigest: string | null; createdAt: string; completedAt: string | null;
   ownerPid: number;
+  ownerLeaseId?: string;
 }
 export interface HoldoutExposureRecord { identity: string; limit: number; consumed: number; reservationIds: string[] }
 export interface EvolutionCampaignLedger {
@@ -141,8 +142,19 @@ function writePrivateLedger(root: string, name: string, ledger: unknown): void {
   const directoryFd = openSync(directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
   try { fsyncSync(directoryFd); } finally { closeSync(directoryFd); }
 }
+/** Match the pass lease as well as PID: a later pass/PID reuse is not the old dispatcher. */
+function campaignControllerLease(root: string): string | undefined {
+  let owner: { pid?: unknown; startedAt?: unknown; leaseId?: unknown };
+  try { owner = readEvolutionArtifact(join(root, "controller.lock")) as typeof owner; }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error; }
+  if (owner.pid !== process.pid) throw new EvolutionControllerBusyError("campaign belongs to another controller; acquire the pass lease before mutation");
+  const token = owner.leaseId ?? owner.startedAt;
+  if (typeof token !== "string" || !token) throw new Error("invalid campaign controller lease identity");
+  return token;
+}
 function mutateLedger<T>(root: string, mutate: (ledger: EvolutionCampaignLedger) => T): T {
   ensureEvolutionDirectory(root);
+  campaignControllerLease(root);
   // The pass owns root/controller.lock. Ledger transactions have their own lease
   // so the durable reservation does not deadlock inside the owning pass.
   const release = acquireEvolutionController(join(root, "campaign"));
@@ -161,6 +173,7 @@ export function createOrLoadEvolutionCampaign(
     throw new Error("campaign budget bounds must be finite and positive");
   }
   ensureEvolutionDirectory(root);
+  const controllerLease = campaignControllerLease(root);
   const release = acquireEvolutionController(join(root, "campaign"));
   try {
     let existing: EvolutionCampaignLedger | undefined;
@@ -174,6 +187,11 @@ export function createOrLoadEvolutionCampaign(
       if (!Number.isFinite(existing.maxModelCostUsd) || !Number.isFinite(existing.maxEvaluationCostUsd)) throw new Error("campaign lacks durable budget bounds; operator reconciliation required");
       for (const reservation of existing.reservations) {
         if (reservation.state !== "reserved") continue;
+        if (reservation.ownerLeaseId !== controllerLease) {
+          reservation.state = "unknown"; existing.unknownCost = true; existing.status = "blocked";
+          existing.resumeReason = "dispatch pass lease changed; operator reconciliation required";
+          continue;
+        }
         if (!Number.isSafeInteger(reservation.ownerPid) || reservation.ownerPid <= 0) {
           reservation.state = "unknown"; existing.unknownCost = true; existing.status = "blocked";
           existing.resumeReason = "dispatch owner is unknown; operator reconciliation required";
@@ -229,6 +247,7 @@ export function loadEvolutionCampaign(root: string): EvolutionCampaignLedger {
     || ledger.reservations.some((entry) => !entry || typeof entry.id !== "string"
       || !["model", "evaluation"].includes(entry.kind) || !["reserved", "completed", "unknown"].includes(entry.state)
       || !Number.isFinite(entry.reservedCostUsd) || entry.reservedCostUsd <= 0
+      || (entry.ownerLeaseId !== undefined && typeof entry.ownerLeaseId !== "string")
       || (entry.state === "completed" && (entry.actualCostUsd === null || !Number.isFinite(entry.actualCostUsd) || entry.actualCostUsd < 0)))
     || ledger.exposures.some((entry) => !entry || !Number.isSafeInteger(entry.limit) || entry.limit <= 0
       || !Number.isSafeInteger(entry.consumed) || entry.consumed < 0 || entry.consumed > entry.limit
@@ -274,7 +293,8 @@ export function reserveCampaignDispatch(root: string, kind: "model" | "evaluatio
     const limit = kind === "model" ? ledger.maxModelCostUsd : ledger.maxEvaluationCostUsd;
     const pending = ledger.reservations.filter((entry) => entry.kind === kind && entry.state === "reserved").reduce((sum, entry) => sum + entry.reservedCostUsd, 0);
     if (spent + pending + reservedCostUsd > limit) throw new Error("campaign budget cannot cover the next bounded dispatch");
-    const reservation: CampaignDispatchReservation = { id: randomUUID(), kind, reservedCostUsd, state: "reserved", actualCostUsd: null, receiptDigest: null, createdAt: new Date().toISOString(), completedAt: null, ownerPid: process.pid };
+    const ownerLeaseId = campaignControllerLease(root);
+    const reservation: CampaignDispatchReservation = { id: randomUUID(), kind, reservedCostUsd, state: "reserved", actualCostUsd: null, receiptDigest: null, createdAt: new Date().toISOString(), completedAt: null, ownerPid: process.pid, ...(ownerLeaseId ? { ownerLeaseId } : {}) };
     ledger.reservations.push(reservation); ledger.status = "running"; return reservation;
   });
 }
@@ -301,6 +321,9 @@ export function settleCampaignDispatch(root: string, reservationId: string, actu
     const reservation = ledger.reservations.find((entry) => entry.id === reservationId);
     if (!reservation) throw new Error("unknown campaign dispatch reservation");
     if (reservation.state !== "reserved") return ledger;
+    if (reservation.ownerPid !== process.pid || reservation.ownerLeaseId !== campaignControllerLease(root)) {
+      throw new Error("dispatch owner changed; reconcile with an authoritative receipt instead of ordinary settlement");
+    }
     settleReservation(ledger, reservation, actualCostUsd, receiptDigest); return ledger;
   });
 }

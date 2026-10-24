@@ -388,9 +388,21 @@ describe("independent evolution oracle", () => {
     expect(charged).toBe(0.002);
   });
 
+  it("does not call a proposal model when complete configured validation cannot fit", async () => {
+    const { config, baseline } = await setup();
+    let calls = 0;
+    await expect(proposeEvolutionEdits(baseline, { ...config, model: "gpt-4o", maxEvaluationCostUsd: 0.01,
+      allowModelSourceAccess: true, safety: { enabled: true, holdoutExposureLimit: 100 } }, "development only", {
+      modelIdentity: () => ({ provider: "openai", model: "gpt-4o" }),
+      model: async () => { calls++; throw new Error("must not dispatch"); },
+    })).rejects.toThrow(/complete independent validation/);
+    expect(calls).toBe(0);
+    expect(loadEvolutionCampaign(config.storePath).reservations).toEqual([]);
+  });
+
   it("reserves real generation before dispatch and retains failed-call unknown cost", async () => {
     const { config, baseline } = await setup();
-    const safe = { ...config, model: "anthropic/claude-sonnet-4-6", allowModelSourceAccess: true, safety: { enabled: true, holdoutExposureLimit: 100 } };
+    const safe = { ...config, maxEvaluationCostUsd: 10, model: "anthropic/claude-sonnet-4-6", allowModelSourceAccess: true, safety: { enabled: true, holdoutExposureLimit: 100 } };
     const modelIdentity = () => ({ provider: "anthropic", model: "claude-sonnet-4-6", pricingModel: "anthropic/claude-sonnet-4-6" });
     const usage = { inputTokens: 1000, outputTokens: 100, cacheWriteTokens: 1000 };
     const proposal = await proposeEvolutionEdits(baseline, safe, "development only", {
@@ -427,7 +439,7 @@ describe("independent evolution oracle", () => {
     let resolvedModel = "gpt-4o";
     const usage = { inputTokens: 100, outputTokens: 10 };
     await expect(proposeEvolutionEdits(baseline, {
-      ...config, model: "gpt-4o", allowModelSourceAccess: true, safety: { enabled: true, holdoutExposureLimit: 100 },
+      ...config, maxEvaluationCostUsd: 10, model: "gpt-4o", allowModelSourceAccess: true, safety: { enabled: true, holdoutExposureLimit: 100 },
     }, "development only", {
       workerModelIdentity: () => pinnedWorker,
       modelIdentity: () => ({ provider: "openai", model: resolvedModel, pricingModel: `openai/${resolvedModel}` }),
