@@ -1,3 +1,4 @@
+import { campaignValidationBudget } from "./campaign-validation-budget.js";
 import { createHash } from "node:crypto";
 import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -142,7 +143,7 @@ export async function proposeEvolutionEdits(
       let reservationId: string | undefined;
       if (config.safety?.enabled) {
         const campaign = loadEvolutionCampaign(config.storePath);
-        const remaining = Math.min(config.maxModelCostUsd - modelCostUsd, campaign.maxModelCostUsd - campaign.cumulativeModelCostUsd);
+        const remaining = Math.min(config.maxModelCostUsd - modelCostUsd, campaign.maxModelCostUsd - campaign.cumulativeModelCostUsd, campaignValidationBudget(config).proposalUsd);
         reservationId = reserveCampaignDispatch(config.storePath, "model", remaining).id;
       }
       meteringIncomplete = true;
