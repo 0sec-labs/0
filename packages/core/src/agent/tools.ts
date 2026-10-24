@@ -4790,8 +4790,8 @@ export class ToolExecutor {
         const response = await this.fetchAs(actor, step.url, step.method, step.body, step.headers ?? {});
         evidence.push({ step_index: index, method: step.method, url: step.url, status: response.status,
           body_length: response.body.length, truncated: response.truncated ?? false,
-          request_body_digest: step.body === undefined ? null : stateDigest(step.body), request_body_bytes: step.body === undefined ? 0 : Buffer.byteLength(step.body, "utf8"),
-          retained_response_digest: stateDigest(response.body), response_redacted: response.redacted ?? false, request_marker_sent: typeof step.body === "string" && step.body.includes(args.expected_state) });
+          request_body_digest: step.body === undefined ? null : "sha256:" + createHash("sha256").update(step.body).digest("hex"), request_body_bytes: step.body === undefined ? 0 : Buffer.byteLength(step.body, "utf8"),
+          retained_response_digest: "sha256:" + createHash("sha256").update(response.body).digest("hex"), response_redacted: response.redacted ?? false, request_marker_sent: typeof step.body === "string" && step.body.includes(args.expected_state) });
         // An HTTP denial is observable evidence; a transport error is not.
       } catch (error) {
         evidence.push({ step_index: index, method: step.method, url: step.url, error: safe(error instanceof Error ? error.message : String(error)) });
