@@ -2015,6 +2015,9 @@ calls. A model-api plan additionally requires `--allow-provider-calls`; every
 candidate shares the declared call, wall-clock and estimated-spend limits.
 Reports retain positive/negative controls, tool roundtrips, scope/evidence state,
 usage and inconclusive outcomes. Catalog estimates are not actual invoices.
+A `local-model` plan uses only an already-installed pinned loopback Ollama model
+and reserves context/output tokens before dispatch. It downloads nothing; zero
+external API fee does not imply free compute or a passing task-quality result.
 
 ```text
 0 routing-qualify [options]

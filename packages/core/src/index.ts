@@ -2564,3 +2564,6 @@ export type { FormalChallenge, FormalProofCandidate, FormalCheckerReceipt, Forma
 
 export { qualifyTaskRouting, preflightTaskRouting, parseRoutingQualificationPlan, taskRoutingFixtureRuntime, recommendQualifiedRouting, TASK_ROUTING_SUITE_DIGEST, TASK_ROUTING_EVALUATOR_DIGEST, ROUTING_ROLES } from "./bench/task-routing.js";
 export type { RoutingQualificationPlan, RoutingQualificationReport, RoutingTrial, RoutingRole } from "./bench/task-routing.js";
+
+export { createLocalOllamaRoutingRuntime } from "./bench/local-ollama-routing.js";
+export type { LocalRoutingObservation, LocalRoutingRuntime } from "./bench/local-ollama-routing.js";
