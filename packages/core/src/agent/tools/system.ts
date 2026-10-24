@@ -10,9 +10,9 @@
  * `TOOL_DEFINITIONS` registry; the matching runtime handlers live on the
  * `ToolExecutor` class in agent/tools.ts.
  */
-import type { ToolDefinition } from "../types.js";
+import type { ToolDefinition, ToolParam } from "../types.js";
 
-const expectedWorkspaceParameter = {
+const expectedWorkspaceParameter: ToolParam = {
   type: "object",
   description: "Machine-checked source identity. Supply for an explicit absolute source path or pinned commit; task prose is not a path/revision contract. Path must match the parent's configured source checkout (select another workspace first); this never grants access or falls back to the default workspace.",
   properties: {
