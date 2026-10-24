@@ -207,6 +207,19 @@ describe("fixture-backed state milestones and read-only cleanup", () => {
       expect(receipt.payload).not.toContain("owner-secret");
     } finally { db.close(); }
   });
+  it("uses the observed state effect rather than treating an HTTP denial as proof of blocking", async () => {
+    const db = database(); let marker = "before";
+    vi.mocked(fetchScoped).mockImplementation(async (_url: unknown, init: RequestInit) => {
+      if (init.method === "POST") { marker = JSON.parse(String(init.body)).marker; return response(null, 403); }
+      return response(marker);
+    });
+    try {
+      const result = await executor(db, [fixture]).execute({ name: "access_control_workflow", arguments: writeRequest });
+      expect((result.output as any).state_access_proof).toMatchObject({ status: "confirmed", cleanup: "required", challenge_bound: true });
+      const event = db.getEvents("workflow", { eventType: "tool_artifact" })[0];
+      expect(accessMilestoneFromArtifact(event.eventType, JSON.parse(event.payload), event.scanId, event.id)?.status).toBe("confirmed");
+    } finally { db.close(); }
+  });
   it.each(["unconfigured", "wrong-pointer", "wrong-step", "redacted", "long-baseline", "numeric-baseline"])("does not elevate %s observations", async kind => {
     const db = database();
     const configured = kind === "unconfigured" ? undefined : [{ ...fixture, stateChange: { ...fixture.stateChange,

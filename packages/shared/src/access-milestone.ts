@@ -54,7 +54,7 @@ export function accessMilestoneFromArtifact(eventType: string, value: unknown, s
         || before.json_pointer_value === after.json_pointer_value || after.json_pointer_value !== item.expected_state
         || !Array.isArray(steps) || !steps.length || steps.length > 10
         || !steps.some(value => { const step = record(value); return step?.request_marker_sent === true && ["POST", "PUT", "PATCH"].includes(String(step.method)); })
-        || steps.some(value => { const step = record(value); return !step || typeof step.status !== "number" || step.status < 200 || step.status >= 300 || step.truncated !== false || step.error !== undefined; })) return null;
+        || steps.some(value => { const step = record(value); return !step || typeof step.status !== "number" || !Number.isInteger(step.status) || step.status < 100 || step.status > 599 || step.error !== undefined; })) return null;
     }
     if (item.tool === "access_control_cleanup") {
       const observation = record(item.observation);
