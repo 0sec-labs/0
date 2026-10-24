@@ -26,11 +26,16 @@ const schema = z.object({
   kind: z.enum(["source", "skill", "router", "lens"]).default("source"),
   command: argv,
   buildCommand: argv.optional(),
+  observationStorePath: z.string().min(1).max(4096).optional(),
   cases: z.array(z.object({
     id: z.string().min(1).max(128),
     lane: z.enum(["development", "held-out", "negative-control"]),
     input: z.unknown(),
     expected: z.unknown(),
+    curation: z.object({ observationId: z.string().regex(/^[a-f0-9]{64}$/),
+      approvalDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+      fixtureDigest: z.string().regex(/^(?:sha256:)?[a-f0-9]{64}$/),
+    }).strict().optional(),
   }).strict()).min(3).max(1000),
   repeats: z.number().int().min(2).max(20).default(3),
   maxIterations: z.number().int().min(1).max(100).default(3),
@@ -89,6 +94,8 @@ export function parseEvolutionConfig(raw: unknown, baseDir = process.cwd()): Evo
   if (parsed.safety?.workerModel && !parsed.safety.enabled) {
     throw new Error("model-backed evolution workers require enabled durable safety accounting");
   }
+  if (parsed.cases.some(entry => entry.curation) && !parsed.observationStorePath) throw new Error("curated fixtures require an authoritative observation store");
+  if (parsed.observationStorePath) parsed.observationStorePath = resolve(baseDir, parsed.observationStorePath);
   const admitted = isAdmittedSmolvmWorkbench();
   if (admitted) {
     if (parsed.imageArchive) throw new Error("Admitted workbench images must use the host-approved catalog, not guest archive paths");

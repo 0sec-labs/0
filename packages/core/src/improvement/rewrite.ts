@@ -1,3 +1,4 @@
+import { observedEvolutionModelRevision } from "./provenance.js";
 import { createHash } from "node:crypto";
 import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -101,7 +102,7 @@ export async function proposeEvolutionEdits(
     ? { provider: runtime.resolvedProvider(), model: runtime.resolvedModel(), pricingModel: runtime.resolvedPricingModel() }
     : deps.modelIdentity?.();
   let modelIdentity = observedIdentity();
-  const provenance = evolutionComparisonIdentity(config, modelIdentity);
+  const provenance = evolutionComparisonIdentity(config, modelIdentity, deps.workerModelIdentity?.());
   if (config.safety?.enabled) createOrLoadEvolutionCampaign(config.storePath, provenance, "evolution", config);
   const modelId = (): string => {
     const observed = observedIdentity();
@@ -156,7 +157,7 @@ export async function proposeEvolutionEdits(
         const resolved = observedIdentity();
         actualIdentity = result.providerRaw
           ? { provider: result.providerRaw.provider, model: result.providerRaw.model,
-            ...(resolved?.provider === result.providerRaw.provider && resolved.model === result.providerRaw.model && resolved.pricingModel ? { pricingModel: resolved.pricingModel } : {}) }
+            ...(resolved?.provider === result.providerRaw.provider && resolved.model === result.providerRaw.model ? resolved : {}) }
           : resolved;
         const actualModel = actualIdentity?.pricingModel ?? (actualIdentity ? `${actualIdentity.provider}/${actualIdentity.model}` : modelId());
         const rates = getRates(actualModel);
@@ -173,6 +174,7 @@ export async function proposeEvolutionEdits(
       if (config.safety?.enabled) {
         const comparison = compareEvolutionIdentities(provenance, {
           ...provenance, resolvedModel: actualIdentity?.model ?? null, provider: actualIdentity?.provider ?? null,
+          proposalModelRevision: observedEvolutionModelRevision(actualIdentity),
         });
         if (comparison.status !== "compatible") {
           blockEvolutionCampaign(config.storePath, `generator provenance ${comparison.status}: ${comparison.reasons.join("; ")}`);

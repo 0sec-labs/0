@@ -7,6 +7,8 @@ import {
   assertEvolutionCampaignMode, blockEvolutionCampaign, campaignPromotionAllowed, compareEvolutionIdentities, createEvolutionComparisonIdentity, createOrLoadEvolutionCampaign,
   loadEvolutionCampaign, reserveCampaignDispatch, reserveHoldoutExposure, settleCampaignDispatch,
 } from "./safety.js";
+import { evolutionCurationLineage } from "./curation-lineage.js";
+import { evolutionToolImplementationDigest, observedEvolutionModelRevision } from "./provenance.js";
 import { evaluateEvolutionRetention } from "./retention.js";
 import { createEvolutionSandbox, resolveEvolutionConfigImage } from "./sandbox.js";
 import type {
@@ -51,21 +53,24 @@ export function evolutionEvaluatorDigest(): string {
       canonicalEvolutionJson.toString(), evaluateImprovementPromotion.toString(),
       evolutionComparisonIdentity.toString(), createEvolutionComparisonIdentity.toString(),
       compareEvolutionIdentities.toString(), evaluateEvolutionRetention.toString(),
+      observedEvolutionModelRevision.toString(), evolutionToolImplementationDigest.toString(),
     ],
   });
 }
 
-export function evolutionComparisonIdentity(config: EvolutionConfig, observed?: EvolutionModelIdentity) {
-  return createEvolutionComparisonIdentity(config, evolutionEvaluatorDigest(), {
+export function evolutionComparisonIdentity(config: EvolutionConfig, observed?: EvolutionModelIdentity, workerIdentity?: EvolutionModelIdentity, curationLineage?: ReturnType<typeof evolutionCurationLineage>) {
+  return { ...createEvolutionComparisonIdentity(config, evolutionEvaluatorDigest(), {
     evaluatorSemantics: evolutionDigest({
       protocol: "0-evolution-exact-json-v1",
       kind: config.kind, repeats: config.repeats, promotionPolicy: config.promotionPolicy,
       retentionPolicy: config.retentionPolicy ?? null,
     }),
     sourceRevision: evolutionSourceRevision(config),
+    toolRevision: evolutionToolImplementationDigest(),
+    generatorIdentity: observed, workerIdentity,
     resolvedModel: observed?.model ?? null,
     provider: observed?.provider ?? null,
-  });
+  }), curationLineageDigest: evolutionDigest(curationLineage ?? evolutionCurationLineage(config)) };
 }
 
 /** Host-owned exact JSON oracle. Candidate output is data, never an evaluator receipt. */
@@ -93,12 +98,21 @@ export async function evaluateEvolutionCandidate(
     // campaign, not a guessed identity reconstructed from config.model.
     try {
       const identity = loadEvolutionCampaign(config.storePath).comparisonIdentity;
-      if (identity.provider && identity.resolvedModel) observed = { provider: identity.provider, model: identity.resolvedModel };
+      if (identity.provider && identity.resolvedModel) observed = { provider: identity.provider, model: identity.resolvedModel,
+        modelVersionStatus: identity.proposalModelRevision?.status,
+        ...(identity.proposalModelRevision?.revision ? { modelRevision: identity.proposalModelRevision.revision } : {}),
+        ...(identity.proposalModelRevision?.decodingDigest ? { decodingDigest: identity.proposalModelRevision.decodingDigest } : {}),
+      };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
   }
-  const provenance = evolutionComparisonIdentity(config, observed);
+  const workerIdentity = deps.workerModelIdentity?.();
+  const curationLineage = evolutionCurationLineage(config);
+  const provenance = evolutionComparisonIdentity(config, observed, workerIdentity, curationLineage);
+  if (config.safety?.workerModel && (workerIdentity?.provider !== config.safety.workerModel.provider || workerIdentity?.model !== config.safety.workerModel.model)) {
+    throw new Error("actual evaluated worker provider/model observation is unavailable or differs from contract");
+  }
   if (config.safety?.enabled) {
     const campaign = createOrLoadEvolutionCampaign(config.storePath, provenance, "evolution", config);
     const comparison = compareEvolutionIdentities(campaign.comparisonIdentity, provenance);
@@ -159,7 +173,8 @@ export async function evaluateEvolutionCandidate(
         if (computeCost === null || (workerModel && knownWorkerCost === null)) {
           throw new Error("evaluation cost is unknown; execution reconciliation required");
         }
-        if (workerModel && (usage?.provider !== workerModel.provider || usage.model !== workerModel.model)) {
+        if (workerModel && (usage?.provider !== workerModel.provider || usage.model !== workerModel.model
+          || canonicalEvolutionJson(observedEvolutionModelRevision(usage)) !== canonicalEvolutionJson(observedEvolutionModelRevision(workerIdentity)))) {
           blockEvolutionCampaign(config.storePath, "evaluated worker provider/model differs from the declared contract");
           throw new Error("evaluated worker provenance differs from the declared contract");
         }
@@ -258,6 +273,8 @@ export async function evaluateEvolutionCandidate(
     candidateDigest: candidate.digest,
     configDigest,
     attempts,
+    comparisonIdentity: provenance,
+    curationLineage,
     ...(config.retentionPolicy ? { retention } : {}),
     result,
     decision,

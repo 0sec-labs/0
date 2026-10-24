@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "kind": "offline-provenance-microbenchmark",
+  "node": "v24.14.0",
+  "platform": "darwin",
+  "arch": "arm64",
+  "sourceFiles": 32,
+  "iterations": 31,
+  "p50Ms": 2.7719590000001517,
+  "p95Ms": 7.13675000000012,
+  "identityBytes": 1124,
+  "modelCalls": 0,
+  "workerExecutions": 0,
+  "scope": "explicit offline identity observation; not production scan latency or paid qualification"
+}

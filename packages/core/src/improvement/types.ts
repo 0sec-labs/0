@@ -12,6 +12,7 @@ export interface EvolutionCase {
   lane: EvolutionLane;
   input: unknown;
   expected: unknown;
+  curation?: { observationId: string; approvalDigest: string; fixtureDigest: string };
 }
 
 /** Outside an admitted workbench omission retains Docker; admission forces sibling SmolVM. */
@@ -33,6 +34,8 @@ export interface EvolutionConfig {
   command: string[];
   buildCommand?: string[];
   cases: EvolutionCase[];
+  /** Reuse the existing operator-approved observation queue; never candidate-controlled. */
+  observationStorePath?: string;
   repeats: number;
   maxIterations: number;
   maxModelTurns: number;
@@ -106,7 +109,7 @@ export interface EvolutionExecution {
    * running or consuming resources; do not count its capacity as freed. */
   cleanupFailed?: boolean;
   /** Host-observed billing evidence. Never parse this from candidate stdout. */
-  workerModelUsage?: { provider: string; model: string; costUsd: number; receiptDigest: string };
+  workerModelUsage?: EvolutionModelIdentity & { costUsd: number; receiptDigest: string };
 }
 
 export interface EvolutionSandboxRequest {
@@ -149,6 +152,8 @@ export interface EvolutionEvaluation {
   result: ResearchImprovementResult;
   decision: ImprovementPromotionDecision;
   receiptDigest: string;
+  comparisonIdentity?: import("./safety.js").EvolutionComparisonIdentity;
+  curationLineage?: ReturnType<typeof import("./curation-lineage.js").evolutionCurationLineage>;
   retention?: { profileDigest: string; passed: boolean; checkedCases: number; reasons: string[] };
 }
 
@@ -205,12 +210,18 @@ export interface EvolutionModelIdentity {
   provider: string;
   model: string;
   pricingModel?: string;
+  /** Trusted runtime observation; aliases never imply a pinned version. */
+  modelVersionStatus?: "pinned" | "floating" | "unavailable";
+  modelRevision?: string;
+  decodingDigest?: string;
 }
 
 export interface EvolutionDependencies {
   model?: EvolutionModel;
   /** Controller observation for injected model implementations. */
   modelIdentity?: () => EvolutionModelIdentity;
+  /** Actual evaluated worker observation, separate from the proposal generator. */
+  workerModelIdentity?: () => EvolutionModelIdentity;
   sandbox?: EvolutionSandbox;
   /** Shared pass/canary budget. Known execution cost settles before charge can reject. */
   evaluationBudget?: {

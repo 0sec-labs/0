@@ -14,6 +14,8 @@ import {
 import { promoteEvolutionVersion, recordEvolutionVersion, startEvolutionCanary } from "./registry.js";
 import type { EvolutionConfig, EvolutionSandbox, EvolutionSnapshot } from "./types.js";
 
+const pinnedWorker = { provider: "openai", model: "gpt-4o-mini", modelVersionStatus: "pinned" as const,
+  modelRevision: "provider-release-2026-10-23", decodingDigest: "sha256:" + "d".repeat(64) };
 const directories: string[] = [];
 afterEach(() => {
   const unlock = (directory: string): void => {
@@ -154,11 +156,12 @@ describe("independent evolution oracle", () => {
       const sandbox = probe(candidate.id, "correct");
       let dispatched = 0;
       await expect(evaluateEvolutionCandidate(baseline, candidate, { ...config, ...(safety ? { safety } : {}) }, {
-        modelIdentity: () => ({ provider: "openai", model: "proposal-model" }),
+        workerModelIdentity: () => pinnedWorker,
+      modelIdentity: () => ({ provider: "openai", model: "proposal-model" }),
         sandbox: async (request) => {
           dispatched++;
           return { ...await sandbox(request), workerModelUsage: {
-            provider: "openai", model: "gpt-4o-mini", costUsd: 100, receiptDigest: "sha256:" + "c".repeat(64),
+            ...pinnedWorker, provider: "openai", model: "gpt-4o-mini", costUsd: 100, receiptDigest: "sha256:" + "c".repeat(64),
           } };
         },
       })).rejects.toThrow(/undeclared worker model charge/);
@@ -167,18 +170,31 @@ describe("independent evolution oracle", () => {
     },
   );
 
+  it.each(["floating", "unavailable"] as const)("does not dispatch a model worker with %s version evidence", async modelVersionStatus => {
+    const { config, baseline, candidate } = await setup(); let calls = 0;
+    await expect(evaluateEvolutionCandidate(baseline, candidate, {
+      ...config, safety: { enabled: true, holdoutExposureLimit: 100,
+        workerModel: { provider: pinnedWorker.provider, model: pinnedWorker.model, maxCostUsdPerExecution: 0.01 } },
+    }, { modelIdentity: () => ({ provider: "proposal-provider", model: "alias" }),
+      workerModelIdentity: () => ({ ...pinnedWorker, modelVersionStatus }),
+      sandbox: async () => { calls++; throw new Error("must not dispatch"); },
+    })).rejects.toThrow(/floating or unavailable/);
+    expect(calls).toBe(0);
+  });
+
   it("reserves and settles evaluated worker model charges separately from compute", async () => {
     const { config, baseline, candidate } = await setup();
     const safe = { ...config, safety: { enabled: true, holdoutExposureLimit: 100,
       workerModel: { provider: "openai", model: "gpt-4o-mini", maxCostUsdPerExecution: 0.01 } } };
     const base = probe(candidate.id, "correct");
     const evaluated = await evaluateEvolutionCandidate(baseline, candidate, safe, {
+      workerModelIdentity: () => pinnedWorker,
       modelIdentity: () => ({ provider: "anthropic", model: "proposal-model" }),
       sandbox: async (request) => {
         const ledger = loadEvolutionCampaign(config.storePath);
         expect(ledger.reservations.filter((entry) => entry.state === "reserved").map((entry) => entry.kind)).toEqual(["evaluation", "model"]);
         return { ...await base(request), workerModelUsage: {
-          provider: "openai", model: "gpt-4o-mini", costUsd: 0.001, receiptDigest: "sha256:" + "a".repeat(64),
+          ...pinnedWorker, provider: "openai", model: "gpt-4o-mini", costUsd: 0.001, receiptDigest: "sha256:" + "a".repeat(64),
         } };
       },
     });
@@ -186,7 +202,8 @@ describe("independent evolution oracle", () => {
     expect(ledger.cumulativeModelCostUsd).toBeCloseTo(0.036);
     expect(ledger.cumulativeEvaluationCostUsd).toBeCloseTo(0.00036);
     expect(evaluated.result.provenance?.resolvedModel).toBe("proposal-model");
-    expect(evaluated.result.provenance?.evaluatedWorker).toEqual({ kind: "model", provider: "openai", model: "gpt-4o-mini" });
+    expect(evaluated.result.provenance?.evaluatedWorker).toEqual({ kind: "model", provider: "openai", model: "gpt-4o-mini",
+      revision: { status: "pinned", revision: pinnedWorker.modelRevision, decodingDigest: pinnedWorker.decodingDigest } });
     expect(evaluated.attempts.candidate[0]?.costUsd).toBeCloseTo(0.00101);
   });
 
@@ -197,6 +214,7 @@ describe("independent evolution oracle", () => {
     let dispatches = 0;
     const sandbox = probe(candidate.id, "correct");
     await expect(evaluateEvolutionCandidate(baseline, candidate, safe, {
+      workerModelIdentity: () => pinnedWorker,
       modelIdentity: () => ({ provider: "openai", model: "proposal-model" }),
       sandbox: async (request) => { dispatches++; return sandbox(request); },
     })).rejects.toThrow(/cost is unknown/);
@@ -213,9 +231,10 @@ describe("independent evolution oracle", () => {
       workerModel: { provider: "openai", model: "gpt-4o-mini", maxCostUsdPerExecution: 0.01 } } };
     const sandbox = probe(candidate.id, "correct");
     await expect(evaluateEvolutionCandidate(baseline, candidate, safe, {
+      workerModelIdentity: () => pinnedWorker,
       modelIdentity: () => ({ provider: "openai", model: "proposal-model" }),
       sandbox: async (request) => ({ ...await sandbox(request), workerModelUsage: {
-        provider: "other", model: "unapproved", costUsd: 0.002, receiptDigest: "sha256:" + "b".repeat(64),
+        ...pinnedWorker, provider: "other", model: "unapproved", costUsd: 0.002, receiptDigest: "sha256:" + "b".repeat(64),
       } }),
     })).rejects.toThrow(/worker provenance differs/);
     expect(loadEvolutionCampaign(config.storePath).cumulativeModelCostUsd).toBe(0.002);
@@ -302,6 +321,7 @@ describe("independent evolution oracle", () => {
     await expect(evaluateEvolutionCandidate(baseline, candidate, {
       ...config, timeoutMs: 1000, safety: { enabled: true, holdoutExposureLimit: 100 },
     }, {
+      workerModelIdentity: () => pinnedWorker,
       modelIdentity: () => ({ provider: "openai", model: "gpt-4o" }),
       sandbox: async () => ({ exitCode: 0, stdout: "{}", stderr: "", durationMs: 2000, timedOut: false }),
       evaluationBudget: {
@@ -359,6 +379,7 @@ describe("independent evolution oracle", () => {
     await expect(proposeEvolutionEdits(baseline, {
       ...config, model: "gpt-4o", allowModelSourceAccess: true, safety: { enabled: true, holdoutExposureLimit: 100 },
     }, "development only", {
+      workerModelIdentity: () => pinnedWorker,
       modelIdentity: () => ({ provider: "openai", model: resolvedModel, pricingModel: `openai/${resolvedModel}` }),
       model: async () => {
         resolvedModel = "gpt-4o-mini";
