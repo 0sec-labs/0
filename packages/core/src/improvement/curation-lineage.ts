@@ -1,9 +1,9 @@
-import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
+import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync } from "node:fs";
 import { basename } from "node:path";
 import type { ValidationFixture } from "../stages/lens-synthesis/types.js";
 import { createHash } from "node:crypto";
 import { canonicalEvolutionJson } from "./config.js";
-import { getObservation, type LearningObservation } from "../stages/lens-synthesis/feedback.js";
+import { listObservations, type LearningObservation } from "../stages/lens-synthesis/feedback.js";
 import { prepareValidationCorpus } from "../stages/lens-synthesis/validate.js";
 import type { EvolutionCase, EvolutionConfig } from "./types.js";
 const hash = (value: unknown): string => `sha256:${createHash("sha256").update(canonicalEvolutionJson(value)).digest("hex")}`;
@@ -44,13 +44,21 @@ export function evolutionCurationLineage(config: EvolutionConfig) {
   if (!config.observationStorePath) throw new Error("curated fixtures require an authoritative observation store");
   const ids = [...new Set(selected.map(entry => entry.curation!.observationId))];
   if (ids.length > 64) throw new Error("curation contract exceeds 64 independent observations");
+  const queue = new Map(listObservations({}, { storePath: config.observationStorePath }).map(entry => [entry.id, entry]));
+  let curatedBytes = 0;
   const observations = new Map(ids.map(id => {
-    const observation = getObservation(id, { storePath: config.observationStorePath });
+    const observation = queue.get(id);
     if (!observation) throw new Error("curated observation is unavailable");
     evolutionObservationApprovalIdentity(observation);
     // Reuse the authoritative symlink/content/clean-control validation, including
     // stored fixture-content stamps. Changed/deleted fixture files are stale.
     const shape = observation.approvedShape!;
+    for (const fixture of [...shape.positives, ...shape.heldOut, ...shape.negativeControls]) {
+      const stat = lstatSync(fixture.path);
+      if (!stat.isFile() || stat.nlink !== 1 || (curatedBytes += stat.size) > 64 * 1024 * 1024) {
+        throw new Error("canonical curated contract requires regular files totaling at most 64 MiB");
+      }
+    }
     const corpus = prepareValidationCorpus(shape);
     return [id, { observation, corpus }] as const;
   }));

@@ -60,7 +60,8 @@ shape, excluding operational claim/processing timestamps.
 At the explicit evaluation boundary the controller checks consent and approved or
 processed status and reuses `prepareValidationCorpus()` to verify immutable
 fixture stamps, clean-control provenance, symlink/overlap restrictions, and changed
-or missing source. It validates at most 64 distinct observations per contract. Private observation
+or missing source. It reads the existing queue once and validates at most 64 distinct observations
+and 64 MiB of complete curated fixture data per contract. Private observation
 queues are rejected if they overlap model-readable selected source paths, including
 physical aliases and paths that have not been created yet. Source revision references
 must themselves be immutable content digests.

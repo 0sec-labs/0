@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, truncateSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -48,6 +48,13 @@ describe("approved observation to evaluation fixture lineage", () => {
     expect(() => evolutionCurationLineage({ ...config, cases: [{ ...fixture, expected: { findings: [] }, curation }] })).toThrow(/canonical fixture conversion/);
     expect(() => evolutionCurationLineage({ ...config, cases: [{ ...fixture, input: { source: "arbitrary unapproved source" }, curation }] })).toThrow(/canonical fixture conversion/);
     expect(() => evolutionCurationLineage({ ...config, cases: [{ ...fixture, curation: { ...curation, fixtureDigest: approved.approvedShape!.negativeControls[0]!.contentDigest! } }] })).toThrow(/lineage differs/);
+  });
+  it("preflights a bounded complete curated corpus before reading fixture payloads", () => {
+    const { storePath, approve, paths } = setup(); const approved = approve();
+    const fixture = evolutionSourceFixtureCase("private-holdout", "held-out", approved.approvedShape!.heldOut[0]!);
+    const curation = { observationId: approved.id, approvalDigest: evolutionObservationApprovalIdentity(approved), fixtureDigest: approved.approvedShape!.heldOut[0]!.contentDigest! };
+    truncateSync(paths[1]!, 65 * 1024 * 1024);
+    expect(() => evolutionCurationLineage({ observationStorePath: storePath, cases: [{ ...fixture, curation }] } as EvolutionConfig)).toThrow(/totaling at most 64 MiB/);
   });
   it("rejects substituted approval evidence and unknown fixture content", () => {
     const { storePath, approve, fixture } = setup(); const approved = approve();
