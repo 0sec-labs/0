@@ -10,6 +10,7 @@ import {
   openSync,
   readdirSync,
   readFileSync,
+  readSync,
   realpathSync,
   renameSync,
   rmdirSync,
@@ -191,13 +192,16 @@ function isTrustedEngineBenchAuthority(path: string): boolean {
   const match = /^(.*)[/\\](?:src|dist)[/\\]bench[/\\](?:task-routing|local-ollama-routing|security-evolution-pilot|execution-evidence|improvement-promotion|improvement|oracle|runner|scorecard)\.[cm]?[jt]s$/i.exec(path);
   if (!match) return false;
   const packageRoot = resolve(match[1]!);
-  if (packageRoot === resolve(dirname(fileURLToPath(import.meta.url)), "../..")) return true;
+  if (import.meta.url.startsWith("file:") && packageRoot === resolve(dirname(fileURLToPath(import.meta.url)), "../..")) return true;
   let fd: number | undefined;
   try {
     fd = openSync(join(packageRoot, "package.json"), fsConst.O_RDONLY | fsConst.O_NOFOLLOW | fsConst.O_NONBLOCK);
     const stat = fstatSync(fd);
     if (!stat.isFile() || stat.size > 64 * 1024) return false;
-    const manifest = JSON.parse(readFileSync(fd, "utf8")) as { name?: unknown };
+    const bytes = Buffer.alloc(64 * 1024 + 1);
+    const length = readSync(fd, bytes, 0, bytes.length, 0);
+    if (length !== stat.size || length > 64 * 1024) return false;
+    const manifest = JSON.parse(bytes.subarray(0, length).toString("utf8")) as { name?: unknown };
     return manifest?.name === "@0/core";
   } catch { return false; }
   finally { if (fd !== undefined) closeSync(fd); }
