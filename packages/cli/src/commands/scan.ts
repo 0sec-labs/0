@@ -607,7 +607,7 @@ export function registerScanCommand(program: Command): void {
         ...(opts.singleModel !== undefined ? { singleModel: opts.singleModel as boolean } : {}),
         format: (opts.format === "md" ? "markdown" : opts.format) as OutputFormat,
         runtime: (opts.runtime as RuntimeMode) ?? "auto",
-        timeout: plan?.timeCapMs ?? parseInt(opts.timeout, 10),
+        timeout: parseInt(opts.timeout, 10),
         verbose: opts.verbose as boolean,
         dbPath: opts.dbPath as string | undefined,
         apiKey: opts.apiKey as string | undefined,

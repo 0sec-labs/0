@@ -27,6 +27,13 @@ describe("interactive scan planning", () => {
     expect(await collectGuidedScanPlan({ target: "https://target.test" }, io)).toBeUndefined();
   });
 
+  it("reprompts above the portable workflow's 16-run limit before confirming", async () => {
+    const { io, output } = scripted(["", "", "17", "16", "sequential", "1", "1", "yes"]);
+    const plan = await collectGuidedScanPlan({ target: "https://target.test" }, io);
+    expect(plan?.runCount).toBe(16);
+    expect(output.join("")).toContain("integer no greater than 16");
+  });
+
   it("retries invalid controls without increasing the operator's chosen limits", async () => {
     const { io } = scripted(["misconfigurations", "deep", "-2", "2", "parallel", "0", "0.5", "NaN", "0.25", "y"]);
     const plan = await collectGuidedScanPlan({ target: "https://target.test" }, io);

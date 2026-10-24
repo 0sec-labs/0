@@ -60,7 +60,7 @@ export async function collectGuidedScanPlan(options: {
   io.write(`${scanDepthExplanation(goal)} Unknown vulnerabilities are an objective, not a promised result.\n`);
   const depth = await choose<ScanDepth>("Depth", ["quick", "default", "deep"], options.depth ?? recommendedScanDepth(goal));
   io.write(`${SCAN_RUNS_HELP}\n`);
-  const runCount = await positive("Separate runs", 1, true);
+  const runCount = await positive("Separate runs", 1, true, 16);
   io.write(`${SCAN_MODE_HELP}\n`);
   const executionMode = await choose("Execution", ["sequential", "parallel"] as const, "sequential");
   // These are the portable assessment-step limits, not provider cost guarantees.

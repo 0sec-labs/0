@@ -668,7 +668,7 @@ describe("explicit task model options", () => {
 });
 
 describe("automatic guided terminal setup", () => {
-  it("passes the confirmed shared plan and honors the selected total deadline", async () => {
+  it.each([undefined, "1250"])("keeps request timeout %s separate from the confirmed plan deadline", async (timeout) => {
     const planner = await import("../../guided-scan.js");
     const plan = { goal: "misconfigurations" as const, depth: "quick" as const, runCount: 2, executionMode: "parallel" as const, timeCapMs: 90_000, costCapUsd: 0.75 };
     const guided = vi.spyOn(planner, "guidedScanPlan").mockResolvedValue(plan);
@@ -677,9 +677,9 @@ describe("automatic guided terminal setup", () => {
     try {
       Object.defineProperty(process.stdin, "isTTY", { value: true, configurable: true });
       Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
-      await runCli(["scan", "--target", "https://example.com", "--depth", "quick"]);
+      await runCli(["scan", "--target", "https://example.com", "--depth", "quick", ...(timeout ? ["--timeout", timeout] : [])]);
       expect(guided).toHaveBeenCalledWith(expect.objectContaining({ target: "https://example.com", depth: "quick" }));
-      expect(runUnifiedMock).toHaveBeenCalledWith(expect.objectContaining({ plan, timeout: 90_000, costCeilingUsd: 0.75 }));
+      expect(runUnifiedMock).toHaveBeenCalledWith(expect.objectContaining({ plan, timeout: timeout ? Number(timeout) : 30_000, costCeilingUsd: 0.75 }));
       guided.mockResolvedValue(undefined);
       runUnifiedMock.mockClear();
       await runCli(["scan", "--target", "https://example.com"]);
