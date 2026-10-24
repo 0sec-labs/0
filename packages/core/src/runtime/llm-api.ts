@@ -4806,6 +4806,16 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       };
     }
 
+    let cancellationRequested = false;
+    const cancelReader = () => {
+      if (cancellationRequested) return;
+      cancellationRequested = true;
+      // A proxy may never acknowledge teardown. It must not delay a known
+      // terminal outcome, operator cancellation, or the idle bound.
+      try { void reader.cancel().catch(() => { /* best-effort */ }); }
+      catch { /* best-effort */ }
+    };
+
     // Idle watchdog on EVERY read — see llmStreamIdleTimeoutMs for why. The
     // overall request timer stays armed through this stream; the watchdog adds
     // a tighter bound for a silent stream between otherwise-valid SSE events.
@@ -4859,13 +4869,16 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           ...(operatorSignal && detach
             ? [
                 new Promise<never>((_resolve, reject) => {
+                  const abortError = () => opts?.abort?.operatorAborted()
+                    ? new OperatorAbortError()
+                    : new DOMException("Request deadline aborted the stream", "AbortError");
                   if (operatorSignal.aborted) {
-                    reject(new OperatorAbortError());
+                    reject(abortError());
                     return;
                   }
                   operatorSignal.addEventListener(
                     "abort",
-                    () => reject(new OperatorAbortError()),
+                    () => reject(abortError()),
                     { once: true, signal: detach.signal },
                   );
                 }),
@@ -4931,22 +4944,14 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           // Release the socket, then let executeNative's catch turn this into
           // the cancelled result. NOT a stall and NOT a timeout: no watchdog
           // diagnostic, no transient-class error the agent loop would retry.
-          try {
-            await reader.cancel();
-          } catch {
-            /* best-effort — the stream is already broken */
-          }
+          cancelReader();
           throw err instanceof OperatorAbortError ? err : new OperatorAbortError();
         }
         if (stalled) {
           // Release the held socket best-effort, then surface the stall as a
           // transient-class error (the agent loop's bounded retry applies; a
           // persistent server hold fails loudly via errorExit, never hangs).
-          try {
-            await reader.cancel();
-          } catch {
-            /* best-effort — the stream is already broken */
-          }
+          cancelReader();
           const secs = Math.round(stallIdleMs / 1000);
           diag.warn(
             "stream_stalled",
@@ -4964,6 +4969,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
             error: `${this.providerLabel} stream stalled — no SSE events for ${secs}s (server accepted but held the stream; transient)`,
           };
         }
+        cancelReader();
         throw err;
       }
       const { done, value } = chunk;
@@ -5015,6 +5021,16 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         if (eventTypes.size < 32) eventTypes.add(identifier(type) ?? "unrecognized");
         const terminal = type === "response.completed" ||
           (this.provider === "openrouter" && type === "response.done");
+        if (completedResponse && (
+          type === "response.output_text.delta" || type === "response.content_part.delta" ||
+          type === "response.output_item.added" || type === "response.output_item.done" ||
+          type === "response.reasoning_summary_text.delta" || type === "response.reasoning_summary_text.done"
+        )) {
+          // Validate already-buffered contradictions, but never assemble new
+          // output or invoke callbacks after the response's terminal boundary.
+          streamFailure = { event: type, status: null, code: "output_after_completion", errorType: null, reason: null };
+          break responses;
+        }
         if (terminal || type === "response.failed" || type === "response.incomplete" || type === "error") {
           const response = event.response && typeof event.response === "object" && !Array.isArray(event.response)
             ? event.response as Record<string, unknown> : undefined;
@@ -5120,14 +5136,26 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         }
 
       }
+      // Drain complete frames already in this read so rejection/malformed
+      // guards still apply. Completion never requires another read or HTTP EOF.
+      if (completedResponse) break;
     }
 
+    if (completedResponse || outputCapResponse || streamFailure) cancelReader();
     emitThinking(true);
+    if (!outputCapResponse && opts?.abort?.operatorAborted()) {
+      cancelReader();
+      return { ...this.cancelledResult(start), ...(responseUsage ? { usage: responseUsage } : {}) };
+    }
+    if (opts?.abort?.signal.aborted && !opts.abort.operatorAborted()) {
+      cancelReader();
+      throw new DOMException("Request deadline aborted the stream", "AbortError");
+    }
 
     if (outputCapResponse) {
       // Never replay opaque reasoning or dispatch ANY call from an incomplete
       // response, even when an individual item claimed to be done.
-      void reader.cancel().catch(() => { /* best-effort */ });
+      cancelReader();
       const finalOutput = Array.isArray(outputCapResponse.output)
         ? outputCapResponse.output as Array<Record<string, unknown>> : [];
       const output = finalOutput.length > 0 ? finalOutput : streamedOutputItems;
@@ -5159,7 +5187,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     if (!completedResponse || streamFailure) {
       if (streamFailure) {
         // Teardown must not delay an already-known terminal rejection.
-        void reader.cancel().catch(() => { /* best-effort */ });
+        cancelReader();
       }
       appendNativeTrace({
         kind: "native-response-stream-error",
@@ -5275,6 +5303,16 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     if (lastThinkingEmit === 0 && reasoningSummaries.length > 0) {
       thinkingText = reasoningSummaries.join("\n");
       emitThinking(true);
+    }
+
+    // A reasoning-summary fallback can call onThinking after the earlier
+    // stream guard. Operator cancellation still wins before publishing tools
+    // or providerRaw, without losing usage already observed on the wire.
+    if (opts?.abort?.operatorAborted()) {
+      return { ...this.cancelledResult(start), ...(responseUsage ? { usage: responseUsage } : {}) };
+    }
+    if (opts?.abort?.signal.aborted) {
+      throw new DOMException("Request deadline aborted the stream", "AbortError");
     }
 
     return {
