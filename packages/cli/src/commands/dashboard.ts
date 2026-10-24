@@ -2074,7 +2074,7 @@ export function registerDashboardCommand(program: Command): void {
               if (requestUrl.pathname === "/api/workflow-engine/call") {
                 if (!engine) throw new WebRequestError("This engine does not admit persistent workflow calls.", 403);
                 if (req.method !== "POST") throw new WebRequestError("Method not allowed.", 405);
-                const input = z.object({ name: z.string().min(1).max(128), args: z.record(z.unknown()) }).strict().parse(await readJson(req));
+                const input = z.object({ name: z.string().min(1).max(128), args: z.record(z.string(), z.unknown()) }).strict().parse(await readJson(req));
                 if (!engineRequest && typeof input.args.sessionId === "string") assertTeamConsoleMutation(req, input.args.sessionId, teamAuth, collaboration, consoleGateway);
                 json(res, 200, await engine.invoke(input.name, input.args));
                 return;

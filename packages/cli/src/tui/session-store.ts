@@ -260,7 +260,7 @@ const finite = z.number().finite().nonnegative();
 const boundedString = z.string().max(1_000_000);
 const jsonValueSchema: z.ZodType<ConsoleJsonValue> = z.lazy(() => z.union([
   z.null(), z.boolean(), z.number().finite(), boundedString,
-  z.array(jsonValueSchema).max(10_000), z.record(jsonValueSchema),
+  z.array(jsonValueSchema).max(10_000), z.record(z.string(), jsonValueSchema),
 ]));
 const toolCallSchema = z.object({ id: z.string().max(256).optional(), name: z.string().max(256), arguments: jsonValueSchema }).strict();
 const workerTurnSchema = z.object({
@@ -271,7 +271,7 @@ const messageAuthorSchema = z.object({ userId: z.string().min(1).max(256), displ
 const workerSchema = z.object({
   id: z.string().max(256), parentId: z.string().max(256), name: z.string().max(200),
   status: z.enum(["queued", "running", "parked", "completed", "failed", "stopped"]), task: boundedString,
-  transcript: z.array(workerTurnSchema).max(10_000), telemetry: z.record(jsonValueSchema).optional(),
+  transcript: z.array(workerTurnSchema).max(10_000), telemetry: z.record(z.string(), jsonValueSchema).optional(),
   operatorMessages: z.array(z.object({ id: z.string().max(256), text: boundedString, createdAt: z.string().max(64), author: messageAuthorSchema.optional() }).strict()).max(10_000).optional(),
   summary: boundedString.optional(), error: boundedString.optional(), model: z.string().max(256).optional(), role: z.string().max(64).optional(),
 }).strict();
@@ -281,7 +281,7 @@ const consoleStateSchema = z.object({
     runtime: z.object({
       providerId: z.string().max(256).optional(), model: z.string().max(256).optional(),
       reasoningEffort: z.enum(["none", "low", "medium", "high", "xhigh", "max"]).optional(),
-      agentModels: z.record(z.string().max(256)).optional(), singleModel: z.boolean().optional(), autoRoute: z.boolean().optional(),
+      agentModels: z.record(z.string(), z.string().max(256)).optional(), singleModel: z.boolean().optional(), autoRoute: z.boolean().optional(),
     }).strict(),
   }).strict().optional(),
   version: z.literal(1), title: z.string().max(200), objective: z.string().max(8_000),
