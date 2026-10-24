@@ -129,6 +129,11 @@ describe("independent evolution oracle", () => {
     });
   });
 
+  it("keeps private observation queues outside candidate/model-readable source snapshots", async () => {
+    const { config } = await setup();
+    expect(() => parseEvolutionConfig({ ...config, observationStorePath: join(config.sourceRoot, "src", "observations.json") })).toThrow(/private observation queue cannot overlap/);
+  });
+
   it("observes selected source bytes and rejects stale provenance after a source edit", async () => {
     const { config } = await setup();
     const identity = { provider: "openai", model: "gpt-4o" };

@@ -9,6 +9,7 @@ export function evolutionCaseContentIdentity(fixture: EvolutionCase): string {
 }
 /** Stable approval semantics, excluding operational claim/processing timestamps. */
 export function evolutionObservationApprovalIdentity(observation: LearningObservation): string {
+  if (!/^(?:sha256:)?[a-f0-9]{64}$/.test(observation.sourceRevisionDigest)) throw new Error("approved observation source byte identity is unavailable");
   if (!observation.consent || !["approved", "processed"].includes(observation.status) || !observation.approvedShape) {
     throw new Error("evolution fixture requires an independently approved observation");
   }

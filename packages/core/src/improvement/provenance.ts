@@ -22,9 +22,10 @@ export function observedEvolutionModelRevision(identity?: EvolutionModelIdentity
 
 const cache = new Map<string, { stamp: string; digest: string }>();
 /** Hash actual bounded controller module bytes, not a function name or objective.
- * Cache invalidates on size/mtime/ctime/inode changes; no workspace walk or lookup. */
+ * Changed size/mtime/ctime/inode invalidates the loaded controller observation
+ * and requires restart; disk bytes must not impersonate already-loaded code. */
 export function evolutionToolImplementationDigest(): string {
-  const modules = ["sandbox", "sandbox-process", "controller-lock"];
+  const modules = ["sandbox", "controller-lock", "config", "registry", "evaluation", "safety", "curation-lineage", "retention", "provenance", "rewrite", "loop"];
   const identities = modules.flatMap(name => {
     const compiled = new URL(`./${name}.js`, import.meta.url);
     const source = new URL(`./${name}.ts`, import.meta.url);
@@ -35,10 +36,11 @@ export function evolutionToolImplementationDigest(): string {
     const stamp = [stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(":");
     const key = file.href;
     let entry = cache.get(key);
-    if (!entry || entry.stamp !== stamp) { entry = { stamp, digest: sha256(readFileSync(file)) }; cache.set(key, entry); }
+    if (entry && entry.stamp !== stamp) throw new Error("evolution controller implementation changed after observation; restart before evaluation");
+    if (!entry) { entry = { stamp, digest: sha256(readFileSync(file)) }; cache.set(key, entry); }
     return [{ name, digest: entry.digest }];
   });
-  if (identities.length < 2) throw new Error("evolution tool implementation identity unavailable");
+  if (identities.length !== modules.length) throw new Error("evolution tool implementation identity unavailable");
   return sha256(canonicalEvolutionJson(identities));
 }
 

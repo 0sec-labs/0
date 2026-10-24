@@ -10,7 +10,7 @@ observation queue.
 | --- | --- | --- |
 | Content-addressed baseline/candidate snapshots | Source bytes remain distinct from evaluator implementation | A changed/deleted selected source invalidates recovered development feedback |
 | Corpus digests excluding case labels | Explicit content-addition/retirement audit helper | Renaming cases preserves identity; changed contents are incomparable |
-| Evaluator implementation and policy digest | Actual bounded sandbox/controller module bytes with invalidating cache | Changed tool/evaluator bytes block reuse/promotion |
+| Evaluator implementation and policy digest | Actual bounded sandbox/controller module bytes with invalidating cache | Changed tool/evaluator bytes block reuse/promotion and require restart after an in-process observation |
 | Requested model and observed generator provider/name | Generator revision is explicitly pinned, floating, or unavailable | A requested alias never becomes immutable version evidence |
 | Declared model-worker charge ceiling | Separate actual host-observed worker revision and decoding digest | Missing/floating/unavailable worker versions block dispatch and promotion |
 | Approved observation queue and stamped fixture contents | Optional case→approval→fixture lineage in the evaluation receipt | Pending/rejected observations, altered approvals, and changed/deleted fixtures fail closed |
@@ -50,7 +50,10 @@ shape, excluding operational claim/processing timestamps.
 At the explicit evaluation boundary the controller checks consent and approved or
 processed status and reuses `prepareValidationCorpus()` to verify immutable
 fixture stamps, clean-control provenance, symlink/overlap restrictions, and changed
-or missing source. It validates at most 64 distinct observations per contract.
+or missing source. It validates at most 64 distinct observations per contract. Private observation
+queues are rejected if they overlap model-readable selected source paths, including
+physical aliases and paths that have not been created yet. Source revision references
+must themselves be immutable content digests.
 The receipt contains only content digests and observation references. Expected
 outputs, private case names, source, credentials, and queue notes do not enter the
 lineage record or model-visible development feedback. Existing manually curated

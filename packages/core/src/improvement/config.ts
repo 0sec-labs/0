@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, resolve, sep } from "node:path";
 import { z } from "zod";
 import { DEFAULT_IMPROVEMENT_PROMOTION_POLICY } from "../bench/improvement-promotion.js";
 import type { EvolutionConfig } from "./types.js";
@@ -89,6 +89,16 @@ export function canonicalEvolutionJson(value: unknown): string {
   throw new Error("evolution cases must contain finite JSON values only");
 }
 
+function physicalProspectivePath(path: string): string {
+  let cursor = path; const suffix: string[] = [];
+  while (!existsSync(cursor)) {
+    const parent = dirname(cursor);
+    if (parent === cursor) throw new Error("cannot resolve evolution path authority");
+    suffix.unshift(basename(cursor)); cursor = parent;
+  }
+  return resolve(realpathSync(cursor), ...suffix);
+}
+
 export function parseEvolutionConfig(raw: unknown, baseDir = process.cwd()): EvolutionConfig {
   const parsed = schema.parse(raw);
   if (parsed.safety?.workerModel && !parsed.safety.enabled) {
@@ -146,6 +156,11 @@ export function parseEvolutionConfig(raw: unknown, baseDir = process.cwd()): Evo
   if (sourceRoot === storePath) throw new Error("evolution store cannot be the source workspace");
   for (const selected of parsed.sourcePaths) {
     const source = resolve(sourceRoot, selected);
+    const observationStore = parsed.observationStorePath && physicalProspectivePath(parsed.observationStorePath);
+    const physicalSource = observationStore ? physicalProspectivePath(source) : source;
+    if (observationStore && (observationStore === physicalSource || observationStore.startsWith(`${physicalSource}${sep}`))) {
+      throw new Error("private observation queue cannot overlap selected model-readable source paths");
+    }
     if (storePath === source || storePath.startsWith(`${source}/`) || source.startsWith(`${storePath}/`)) {
       throw new Error("evolution store and selected source paths must not overlap");
     }

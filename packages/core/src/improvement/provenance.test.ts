@@ -37,6 +37,12 @@ describe("observed evolution provenance", () => {
     const legacy = { ...identity() }; delete legacy.evaluatedWorker;
     expect(compareEvolutionIdentities(legacy, legacy).status).toBe("unknown");
   });
+  it("rejects malformed or missing source/tool/evaluator byte identities", () => {
+    for (const key of ["sourceRevision", "toolRevision", "evaluatorDigest", "harnessRevision"] as const) {
+      const malformed = { ...identity(), [key]: "requested-path-not-observed-bytes" };
+      expect(compareEvolutionIdentities(malformed, malformed).status).toBe("unknown");
+    }
+  });
   it("records bounded actual tool module bytes and reuses the same content identity", () => {
     const observed = evolutionToolImplementationDigest();
     expect(observed).toMatch(/^sha256:[a-f0-9]{64}$/);

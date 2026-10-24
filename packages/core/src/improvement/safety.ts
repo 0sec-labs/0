@@ -88,7 +88,7 @@ export function compareEvolutionIdentities(left: EvolutionComparisonIdentity, ri
     }
   }
   if (reasons.length > 0) return { status: "incompatible", reasons };
-  if (left.sourceRevision === "unresolved" || right.sourceRevision === "unresolved") {
+  if (![left.sourceRevision, right.sourceRevision, left.evaluatorDigest, right.evaluatorDigest, left.harnessRevision, right.harnessRevision, left.toolRevision, right.toolRevision].every(value => typeof value === "string" && /^sha256:[a-f0-9]{64}$/.test(value))) {
     return { status: "unknown", reasons: ["source byte identity is unresolved"] };
   }
   if (!left.resolvedModel || !right.resolvedModel || !left.provider || !right.provider) {
