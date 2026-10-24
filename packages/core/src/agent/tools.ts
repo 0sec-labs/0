@@ -1,3 +1,4 @@
+import { confirmedStateProof, latestStateProof, observedState, stateContract, stateDigest } from "./access-milestone-proof.js";
 import { parseRequest, type OracleResult } from "../triage/oracles.js";
 import { assertExpectedWorkspace, assertWorkspaceIdentity, captureWorkspaceIdentity, type ExpectedWorkspace, type WorkspaceIdentity } from "./workspace-identity.js";
 import { filterWorkflowAgentTools, isWorkflowAgentToolAllowed } from "../workflow-execution-policy.js";
@@ -12,6 +13,7 @@ import type {
   Finding,
   SourceVerificationSummary,
   AttackResult,
+  AccessControlFixture,
   PocStep,
   TargetInfo,
   VerificationSpec,
@@ -1894,6 +1896,7 @@ export interface ProbeResponse {
   body: string;
   /** Set when the response body exceeds the 10k capture ceiling. */
   truncated?: boolean;
+  redacted?: boolean;
 }
 
 /** Normalize a response body for similarity comparison. */
@@ -4469,6 +4472,7 @@ export class ToolExecutor {
       if (this.ctx.rateLimiter) this.ctx.rateLimiter.noteResponse(url, res);
       principal.capture(res);
       const text = await res.text();
+      const safeText = redactAuthValues(text, allHeaders.flatMap(([name, value]) => [value, value.replace(/^(?:Bearer|Basic)\s+/i, ""), ...(name.toLowerCase() === "cookie" ? value.split(";").map(pair => pair.slice(pair.indexOf("=") + 1).trim()) : [])]));
       return {
         identity: principal.label,
         role: principal.role,
@@ -4476,7 +4480,8 @@ export class ToolExecutor {
         method,
         status: res.status,
         contentType: res.headers.get("content-type") ?? "",
-        body: redactAuthValues(text, allHeaders.flatMap(([name, value]) => [value, value.replace(/^(?:Bearer|Basic)\s+/i, ""), ...(name.toLowerCase() === "cookie" ? value.split(";").map(pair => pair.slice(pair.indexOf("=") + 1).trim()) : [])])).slice(0, 10_000),
+        body: safeText.slice(0, 10_000),
+        redacted: safeText !== text,
         ...(text.length > 10_000 ? { truncated: true } : {}),
       };
     } finally {
@@ -4671,6 +4676,17 @@ export class ToolExecutor {
     if (!owner || !actor || owner.label === actor.label) {
       return { success: false, output: null, error: "Configure distinct owner_identity and actor_identity principals" };
     }
+    // The model supplies the operator placeholder, never the proof challenge.
+    // Issue a fresh host-only nonce and bind it to the actor request body before
+    // dispatch; it is disclosed only after the final owner observation.
+    const stateFixture = stateContract(this.ctx.accessControlFixtures, args.observation_url, owner.label, actor.label, args.observation_json_pointer);
+    const challengeIssued = !!stateFixture && args.expected_state === stateFixture.ownershipMarker
+      && args.steps.some(step => typeof step.body === "string" && step.body.includes(stateFixture.ownershipMarker));
+    if (challengeIssued) {
+      const challenge = "zero-state-" + randomUUID();
+      args.steps = args.steps.map(step => ({ ...step, ...(step.body ? { body: step.body.split(stateFixture!.ownershipMarker).join(challenge) } : {}) }));
+      args.expected_state = challenge;
+    }
     const ownerHeaders = owner.headers();
     const actorHeaders = actor.headers();
     const canonicalHeaders = (headers: Record<string, string>) =>
@@ -4721,7 +4737,13 @@ export class ToolExecutor {
         if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, sanitize(item)]));
         return value;
       };
+      const contract = stateContract(this.ctx.accessControlFixtures, args.observation_url, owner.label, actor.label, args.observation_json_pointer);
+      const prior = contract ? this.retainedStateAccessProof(contract) : undefined;
+      const proof = verdict === "confirmed" && contract ? confirmedStateProof(contract, {
+        before, after, steps: evidence, expected: args.expected_state, prior, now: Date.now(), challengeIssued,
+      }) : null;
       const output = {
+        ...(proof ? { state_access_proof: proof } : {}),
         workflow: "access_control_workflow", owner_identity: safe(owner.label), actor_identity: safe(actor.label),
         observation_url: safe(args.observation_url), observation_json_pointer: safe(args.observation_json_pointer),
         expected_state: safe(args.expected_state), observation_before: sanitize(before), steps: sanitize(evidence),
@@ -4733,7 +4755,7 @@ export class ToolExecutor {
     const observe = async (): Promise<{ evidence: Record<string, unknown>; value?: unknown; error?: string }> => {
       try {
         const response = await this.fetchAs(owner, args.observation_url, "GET", undefined, {});
-        const observation: Record<string, unknown> = { status: response.status, truncated: response.truncated ?? false };
+        const observation: Record<string, unknown> = { status: response.status, truncated: response.truncated ?? false, redacted: response.redacted ?? false };
         if (response.status < 200 || response.status >= 300 || response.truncated) {
           return { evidence: observation, error: "Owner observation was unsuccessful or truncated" };
         }
@@ -4750,6 +4772,8 @@ export class ToolExecutor {
           value = (value as Record<string, unknown>)[key];
         }
         observation.field_present = true;
+        observation.value_type = value === null ? "null" : typeof value;
+        observation.value_truncated = typeof value === "string" && value.length > 500;
         observation.json_pointer_value = typeof value === "string" ? value.slice(0, 500) : value === null ? null : typeof value;
         return { evidence: observation, value };
       } catch (error) {
@@ -4765,7 +4789,9 @@ export class ToolExecutor {
       try {
         const response = await this.fetchAs(actor, step.url, step.method, step.body, step.headers ?? {});
         evidence.push({ step_index: index, method: step.method, url: step.url, status: response.status,
-          body_length: response.body.length, truncated: response.truncated ?? false });
+          body_length: response.body.length, truncated: response.truncated ?? false,
+          request_body_digest: step.body === undefined ? null : stateDigest(step.body), request_body_bytes: step.body === undefined ? 0 : Buffer.byteLength(step.body, "utf8"),
+          retained_response_digest: stateDigest(response.body), response_redacted: response.redacted ?? false, request_marker_sent: typeof step.body === "string" && step.body.includes(args.expected_state) });
         // An HTTP denial is observable evidence; a transport error is not.
       } catch (error) {
         evidence.push({ step_index: index, method: step.method, url: step.url, error: safe(error instanceof Error ? error.message : String(error)) });
@@ -4779,6 +4805,36 @@ export class ToolExecutor {
     if (observation.value === args.expected_state) return finish("confirmed", "Owner observed the unique expected marker only after the distinct actor workflow");
     if (Object.is(observation.value, baseline.value)) return finish("no_change", "Actor requests did not change the observed state");
     return finish("inconclusive", "State changed, but not to the declared marker; attribution is uncertain");
+  }
+
+  private retainedStateAccessProof(fixture: AccessControlFixture) {
+    try { return this.db ? latestStateProof(this.db.getRecentScanEvents(this.ctx.scanId, "tool_artifact", 500, ["access_control_workflow", "access_control_cleanup"]), fixture) : undefined; }
+    catch { return undefined; }
+  }
+
+  /** Read-only cleanup verification: never performs compensating mutations. */
+  private async accessControlCleanup(raw: Record<string, unknown>): Promise<ToolResult> {
+    const parsed = z.object({ observation_url: z.string().min(1).max(8192), owner_identity: z.string().min(1).max(64) }).strict().safeParse(raw);
+    if (!parsed.success) return { success: false, output: null, error: "Provide observation_url and owner_identity only" };
+    const { observation_url, owner_identity } = parsed.data;
+    const contract = stateContract(this.ctx.accessControlFixtures, observation_url, owner_identity);
+    const owner = this.resolveProbeIdentities().find(identity => identity.label === owner_identity);
+    if (!contract?.stateChange || !owner || !this.db) return { success: false, output: null, error: "A retained operator-owned state-change proof and owner identity are required" };
+    const prior = this.retainedStateAccessProof(contract);
+    if (!prior) return { success: false, output: null, error: "No matching retained state-change proof is available; cleanup remains unverified" };
+    try {
+      const response = await this.fetchAs(owner, observation_url, "GET", undefined, {});
+      if (!is2xx(response.status) || response.truncated || response.redacted) throw new Error("Owner cleanup observation was unsuccessful or incomplete");
+      const digest = stateDigest(observedState(response.body, contract.stateChange.jsonPointer));
+      const proof = { ...prior, cleanup: digest === prior.baseline_digest ? "completed" as const : "failed" as const, cleanup_at: Date.now(), cleanup_revision: prior.cleanup_revision + 1 };
+      const output = { workflow: "access_control_cleanup", observation_url: contract.url, state_access_proof: proof,
+        observation: { status: response.status, truncated: false, value_digest: digest } };
+      this.persistToolArtifact("access_control_cleanup", output);
+      return { success: true, output };
+    } catch {
+      // Do not expose private response data or infer cleanup from an error.
+      return { success: false, output: null, error: "Cleanup observation was unavailable; the retained cleanup status is unchanged" };
+    }
   }
 
   /**
@@ -9456,6 +9512,7 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     "submit_form",
     "access_control_probe",
     "access_control_workflow",
+    "access_control_cleanup",
     "bash",
     // js_eval / python_eval are thin, effectful wrappers over the same guarded
     // shellExec path as bash — advertised to the network roles alongside it,

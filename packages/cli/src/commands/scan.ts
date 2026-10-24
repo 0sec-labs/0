@@ -73,14 +73,22 @@ export function parseIdentitiesFile(path: string): NamedIdentity[] {
 }
 
 const fixtureSchema = z.array(z.object({
-  url: z.string().url().refine(url => /^https?:/.test(url)),
+  url: z.string().url().max(8192).refine(url => { const parsed = new URL(url); return /^https?:/.test(url) && !parsed.username && !parsed.password; }),
   ownerIdentity: z.string().min(1),
   comparisonIdentities: z.array(z.string().min(1)).min(1).max(16),
   ownershipMarker: z.string().min(16).max(500),
-}).strict()).min(1).max(100);
+  stateChange: z.object({
+    disposable: z.literal(true),
+    jsonPointer: z.string().regex(/^(?:\/(?:[^~]|~[01])*)?$/),
+    stepUrls: z.array(z.string().url().max(8192).refine(url => /^https?:/.test(url))).min(1).max(10),
+  }).strict().optional(),
+}).strict().refine(fixture => !fixture.stateChange || fixture.stateChange.stepUrls.every(url => {
+  const step = new URL(url), observation = new URL(fixture.url);
+  return step.origin === observation.origin && !step.username && !step.password;
+}))).min(1).max(100);
 export function parseAccessControlFixturesFile(path: string): AccessControlFixture[] {
   try { return fixtureSchema.parse(JSON.parse(readFileSync(path, "utf8"))); }
-  catch { throw new Error("Invalid --access-control-fixtures file: expected read-only ownership fixtures with URLs, owner/comparison labels and private markers"); }
+  catch { throw new Error("Invalid --access-control-fixtures file: expected ownership fixtures with URLs, owner/comparison labels, private markers and valid optional disposable-state contracts"); }
 }
 
 /**
