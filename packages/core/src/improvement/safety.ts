@@ -1,9 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import { closeSync, constants, fchmodSync, fsyncSync, openSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
+import { homedir } from "node:os";
 import { canonicalEvolutionJson } from "./config.js";
 import { ensureEvolutionDirectory, readEvolutionArtifact } from "./artifacts.js";
-import { acquireEvolutionController } from "./controller-lock.js";
+import { acquireEvolutionController, EvolutionControllerBusyError } from "./controller-lock.js";
 import type { EvolutionCase, EvolutionConfig } from "./types.js";
 
 export type EvolutionCompatibilityStatus = "compatible" | "incompatible" | "unknown";
@@ -98,6 +99,7 @@ export interface EvolutionCampaignLedger {
   cumulativeModelCostUsd: number; cumulativeEvaluationCostUsd: number;
   maxModelCostUsd: number; maxEvaluationCostUsd: number;
   reservations: CampaignDispatchReservation[]; exposures: HoldoutExposureRecord[];
+  holdoutAuthorityRoot?: string;
   unknownCost: boolean; resumeReason: string; updatedAt: string;
 }
 const MAX_CAMPAIGN_RECORDS = 10_000;
@@ -109,7 +111,10 @@ const campaignKey = (identity: EvolutionComparisonIdentity): string => digest({
   evaluatedWorker: identity.evaluatedWorker ?? null,
 });
 function writeLedger(root: string, ledger: EvolutionCampaignLedger): void {
-  const path = ledgerPath(root);
+  writePrivateLedger(root, "campaign-ledger.json", ledger);
+}
+function writePrivateLedger(root: string, name: string, ledger: unknown): void {
+  const path = join(root, name);
   const directory = ensureEvolutionDirectory(dirname(path));
   const temporary = join(directory, `.campaign-${randomUUID()}.tmp`);
   const fd = openSync(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
@@ -164,6 +169,12 @@ export function createOrLoadEvolutionCampaign(
           existing.unknownCost = true; existing.status = "blocked";
           existing.resumeReason = "interrupted dispatch has unknown cost; operator reconciliation required";
         }
+      }
+      if (existing.exposures.length) {
+        const authorityRoot = ensureEvolutionDirectory(evolutionHoldoutAuthorityRoot());
+        if (existing.holdoutAuthorityRoot && existing.holdoutAuthorityRoot !== authorityRoot) throw new Error("holdout authority changed; operator reconciliation required");
+        for (const exposure of existing.exposures) reserveSharedHoldoutExposure(exposure.identity, 0, exposure.limit, exposure.consumed);
+        existing.holdoutAuthorityRoot = authorityRoot;
       }
       existing.updatedAt = new Date().toISOString(); writeLedger(root, existing);
       return existing;
@@ -280,6 +291,41 @@ export function reconcileCampaignDispatch(root: string, reservationId: string, a
     });
   } finally { release(); }
 }
+/** Stable operator authority, independent of candidate config, campaign names and store locations. */
+export function evolutionHoldoutAuthorityRoot(): string {
+  const root = process.env.ZERO_EVOLUTION_AUTHORITY_ROOT ?? join(homedir(), ".0", "evolution-authority", "holdouts");
+  if (!isAbsolute(root)) throw new Error("holdout authority must be an absolute controller-owned directory");
+  return root;
+}
+function reserveSharedHoldoutExposure(identity: string, queries: number, limit: number, minimumConsumed: number): HoldoutExposureRecord {
+  const root = join(evolutionHoldoutAuthorityRoot(), identity.replace("sha256:", ""));
+  ensureEvolutionDirectory(root);
+  const release = acquireEvolutionController(root);
+  try {
+    let record: HoldoutExposureRecord;
+    try { record = readEvolutionArtifact(join(root, "holdout-exposure.json")) as HoldoutExposureRecord; }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      record = { identity, consumed: 0, limit, reservationIds: [] };
+    }
+    if (record.identity !== identity || !Number.isSafeInteger(record.consumed) || record.consumed < 0
+      || !Number.isSafeInteger(record.limit) || record.limit <= 0 || record.consumed > record.limit
+      || !Array.isArray(record.reservationIds) || record.reservationIds.length > MAX_CAMPAIGN_RECORDS
+      || record.reservationIds.some(id => typeof id !== "string") || new Set(record.reservationIds).size !== record.reservationIds.length) {
+      throw new Error("invalid shared holdout authority record; operator reconciliation required");
+    }
+    if (record.limit !== limit) throw new Error("shared holdout exposure limit cannot change for the same corpus/evaluator identity");
+    if (queries === 0 && record.consumed >= minimumConsumed) return record;
+    record.consumed = Math.max(record.consumed, minimumConsumed);
+    if (record.consumed + queries > record.limit) throw new Error("holdout exposure exhausted; operator must supply a fresh curated holdout");
+    if (record.reservationIds.length >= MAX_CAMPAIGN_RECORDS) throw new Error("holdout exposure record limit reached; operator archival required");
+    record.consumed += queries;
+    record.reservationIds.push(randomUUID());
+    writePrivateLedger(root, "holdout-exposure.json", record);
+    return record;
+  } finally { release(); }
+}
+
 export function reserveHoldoutExposure(root: string, identity: EvolutionComparisonIdentity, queries: number, limit: number): HoldoutExposureRecord {
   if (!Number.isSafeInteger(queries) || queries <= 0 || !Number.isSafeInteger(limit) || limit <= 0) throw new Error("holdout exposure values must be positive integers");
   return mutateLedger(root, (ledger) => {
@@ -288,6 +334,12 @@ export function reserveHoldoutExposure(root: string, identity: EvolutionComparis
     }
     const compatibility = compareEvolutionIdentities(ledger.comparisonIdentity, identity);
     if (compatibility.status !== "compatible") throw new Error(`holdout provenance ${compatibility.status}`);
+    const authorityRoot = ensureEvolutionDirectory(evolutionHoldoutAuthorityRoot());
+    if (ledger.holdoutAuthorityRoot && ledger.holdoutAuthorityRoot !== authorityRoot) {
+      ledger.status = "blocked"; ledger.resumeReason = "holdout authority changed; operator reconciliation required";
+      throw new Error(ledger.resumeReason);
+    }
+    ledger.holdoutAuthorityRoot = authorityRoot;
     const key = holdoutExposureIdentity(identity);
     const current = ledger.exposures.find((entry) => entry.identity === key);
     const record = current ?? { identity: key, limit, consumed: 0, reservationIds: [] };
@@ -297,7 +349,18 @@ export function reserveHoldoutExposure(root: string, identity: EvolutionComparis
       ledger.status = "exhausted"; ledger.resumeReason = "holdout record limit reached; operator archival required";
       throw new Error(ledger.resumeReason);
     }
-    record.consumed += queries; record.reservationIds.push(randomUUID());
+    // Debit the shared authority first. A crash before the local mirror is
+    // persisted may overcount, never refund or replay a sealed query for free.
+    let shared: HoldoutExposureRecord;
+    try { shared = reserveSharedHoldoutExposure(key, queries, limit, record.consumed); }
+    catch (error) {
+      if (error instanceof EvolutionControllerBusyError) throw error;
+      ledger.status = /exhausted|record limit/.test((error as Error).message) ? "exhausted" : "blocked";
+      ledger.resumeReason = (error as Error).message;
+      throw error;
+    }
+    record.consumed = Math.max(record.consumed + queries, shared.consumed);
+    record.reservationIds.push(shared.reservationIds.at(-1)!);
     if (!current) ledger.exposures.push(record); return record;
   });
 }
@@ -306,6 +369,19 @@ export function campaignPromotionAllowed(root: string, identity?: EvolutionCompa
   if (ledger.unknownCost || ledger.status === "blocked") return { allowed: false, reason: ledger.unknownCost ? "campaign is blocked pending unknown-cost reconciliation" : ledger.resumeReason };
   if (ledger.reservations.some((entry) => entry.state !== "completed")) return { allowed: false, reason: "campaign has pending or unknown-cost dispatches" };
   if (ledger.status === "exhausted") return { allowed: false, reason: ledger.resumeReason };
+  const authorityRoot = ensureEvolutionDirectory(evolutionHoldoutAuthorityRoot());
+  if (ledger.holdoutAuthorityRoot && ledger.holdoutAuthorityRoot !== authorityRoot) return { allowed: false, reason: "holdout authority changed; operator reconciliation required" };
+  try {
+    const key = holdoutExposureIdentity(identity ?? ledger.comparisonIdentity);
+    const exposure = readEvolutionArtifact(join(authorityRoot, key.replace("sha256:", ""), "holdout-exposure.json")) as HoldoutExposureRecord;
+    if (exposure.identity !== key || !Number.isSafeInteger(exposure.limit) || exposure.limit <= 0
+      || !Number.isSafeInteger(exposure.consumed) || exposure.consumed < 0 || exposure.consumed >= exposure.limit) {
+      return { allowed: false, reason: "shared holdout exposure exhausted or invalid; independently curated fresh holdout required" };
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    if (ledger.exposures.length) return { allowed: false, reason: "shared holdout authority missing; operator reconciliation required" };
+  }
   const comparison = compareEvolutionIdentities(ledger.comparisonIdentity, identity ?? ledger.comparisonIdentity);
   if (comparison.status !== "compatible" || identity?.compatibilityStatus === "unknown" || identity?.compatibilityStatus === "incompatible") return { allowed: false, reason: `campaign provenance ${comparison.status}: ${comparison.reasons.join("; ")}` };
   return { allowed: true };

@@ -1,7 +1,7 @@
-import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it, afterEach, vi } from "vitest";
+import { describe, expect, it, afterEach, beforeEach, vi } from "vitest";
 import {
   campaignPromotionAllowed,
   compareEvolutionIdentities,
@@ -37,7 +37,10 @@ function freshRoot(): string {
   return root;
 }
 
+beforeEach(() => { vi.stubEnv("ZERO_EVOLUTION_AUTHORITY_ROOT", freshRoot()); });
+
 afterEach(() => {
+  vi.unstubAllEnvs();
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
@@ -97,6 +100,67 @@ describe("evolution safety contract", () => {
     reserveHoldoutExposure(root, identity, 2, 3);
     expect(() => reserveHoldoutExposure(root, identity, 2, 3)).toThrow(/exhausted/);
     expect(loadEvolutionCampaign(root).exposures[0]?.consumed).toBe(2);
+  });
+
+  it("shares exposure across new stores, copied stores and renamed campaigns", () => {
+    const observed = { resolvedModel: "model-a", provider: "provider-a", sourceRevision: "sha256:" + "f".repeat(64) };
+    const identity = createEvolutionComparisonIdentity(config(cases), "sha256:" + "b".repeat(64), observed);
+    const a = freshRoot(), b = freshRoot(), copied = freshRoot();
+    createOrLoadEvolutionCampaign(a, identity, "original", config(cases));
+    reserveHoldoutExposure(a, identity, 1, 2);
+    cpSync(a, copied, { recursive: true });
+    chmodSync(join(copied, "campaign"), 0o700);
+    const renamed = createEvolutionComparisonIdentity(config(cases.map(entry => ({ ...entry, id: `renamed-${entry.id}` }))), identity.evaluatorDigest, observed);
+    createOrLoadEvolutionCampaign(b, renamed, "new-store", config(cases));
+    expect(reserveHoldoutExposure(b, renamed, 1, 2).consumed).toBe(2);
+    const d = freshRoot(); createOrLoadEvolutionCampaign(d, identity, "new-empty-store", config(cases));
+    expect(campaignPromotionAllowed(d).allowed).toBe(false);
+    expect(() => reserveHoldoutExposure(a, identity, 1, 2)).toThrow(/exhausted/);
+    expect(() => reserveHoldoutExposure(copied, renamed, 1, 2)).toThrow(/exhausted/);
+    const fresh = createEvolutionComparisonIdentity(config(cases.map(entry => entry.lane === "held-out" ? { ...entry, input: { n: 99 } } : entry)), identity.evaluatorDigest, observed);
+    const c = freshRoot(); createOrLoadEvolutionCampaign(c, fresh, "operator-rotated", config(cases));
+    expect(reserveHoldoutExposure(c, fresh, 1, 2).consumed).toBe(1);
+  });
+
+  it("imports a legacy local consumption floor before another store can reuse it", () => {
+    const root = freshRoot(), other = freshRoot();
+    const identity = createEvolutionComparisonIdentity(config(cases), "sha256:" + "d".repeat(64), {
+      resolvedModel: "model-a", provider: "provider-a", sourceRevision: "sha256:" + "f".repeat(64),
+    });
+    createOrLoadEvolutionCampaign(root, identity, "legacy", config(cases));
+    reserveHoldoutExposure(root, identity, 2, 2);
+    const path = join(root, "campaign-ledger.json");
+    const ledger = JSON.parse(readFileSync(path, "utf8"));
+    delete ledger.holdoutAuthorityRoot;
+    chmodSync(path, 0o600); writeFileSync(path, JSON.stringify(ledger));
+    rmSync(process.env.ZERO_EVOLUTION_AUTHORITY_ROOT!, { recursive: true, force: true });
+    createOrLoadEvolutionCampaign(root, identity, "restarted", config(cases));
+    createOrLoadEvolutionCampaign(other, identity, "new-store", config(cases));
+    expect(() => reserveHoldoutExposure(other, identity, 1, 2)).toThrow(/exhausted/);
+    expect(campaignPromotionAllowed(other).allowed).toBe(false);
+  });
+
+  it("measures bounded authority reservation I/O without model or scan calls", () => {
+    const root = freshRoot();
+    const identity = createEvolutionComparisonIdentity(config(cases), "sha256:" + "c".repeat(64), {
+      resolvedModel: "model-a", provider: "provider-a", sourceRevision: "sha256:" + "f".repeat(64),
+    });
+    createOrLoadEvolutionCampaign(root, identity, "io-measurement", config(cases));
+    const samples: number[] = [];
+    for (let i = 0; i < 100; i++) {
+      const start = performance.now(); reserveHoldoutExposure(root, identity, 1, 100);
+      samples.push(performance.now() - start);
+    }
+    samples.sort((a, b) => a - b);
+    const key = loadEvolutionCampaign(root).exposures[0]!.identity.replace("sha256:", "");
+    const authority = join(process.env.ZERO_EVOLUTION_AUTHORITY_ROOT!, key, "holdout-exposure.json");
+    const report = { schemaVersion: 1, platform: process.platform, node: process.version, reservations: samples.length,
+      p50Ms: samples[49], p95Ms: samples[94], maxMs: samples.at(-1),
+      campaignBytes: readFileSync(join(root, "campaign-ledger.json")).length,
+      authorityBytes: readFileSync(authority).length,
+      writesPerReservation: 2, fullArchiveScansPerReservation: 0, modelCalls: 0 };
+    expect(loadEvolutionCampaign(root).exposures[0]!.consumed).toBe(100);
+    if (process.env.HOLDOUT_IO_REPORT) writeFileSync(process.env.HOLDOUT_IO_REPORT, JSON.stringify(report, null, 2) + "\n");
   });
 
   it("does not treat requested model text as observed provider/model evidence", () => {

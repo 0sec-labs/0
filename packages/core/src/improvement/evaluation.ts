@@ -132,7 +132,7 @@ export async function evaluateEvolutionCandidate(
           throw error;
         }
         let execution: EvolutionExecution;
-        if (config.safety?.enabled && fixture.lane === "held-out") {
+        if (config.safety?.enabled && fixture.lane !== "development") {
           try { reserveHoldoutExposure(config.storePath, provenance, 1, config.safety.holdoutExposureLimit); }
           catch (error) {
             if (reservation) settleCampaignDispatch(config.storePath, reservation.id, 0);

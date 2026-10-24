@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "platform": "darwin",
+  "node": "v24.14.0",
+  "reservations": 100,
+  "p50Ms": 62.359833999999864,
+  "p95Ms": 73.09299999999985,
+  "maxMs": 83.64679100000012,
+  "campaignBytes": 5455,
+  "authorityBytes": 4032,
+  "writesPerReservation": 2,
+  "fullArchiveScansPerReservation": 0,
+  "modelCalls": 0
+}
