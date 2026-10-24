@@ -59,8 +59,18 @@ const schema = z.object({
   safety: z.object({
     enabled: z.boolean().default(false),
     holdoutExposureLimit: z.number().int().min(1).max(1_000_000),
+    workerModel: z.object({
+      provider: z.string().min(1).max(128),
+      model: z.string().min(1).max(256),
+      maxCostUsdPerExecution: finitePositive.max(1000),
+    }).strict().optional(),
   }).strict().optional(),
   maxAlternativeParents: z.number().int().min(0).max(10).optional(),
+  retentionPolicy: z.object({
+    profileId: z.string().min(1).max(128),
+    version: z.number().int().min(1),
+    criticalCaseIds: z.array(z.string().min(1).max(128)).min(1).max(128),
+  }).strict().optional(),
 }).strict();
 
 /** Stable JSON comparison also refuses non-JSON input at programmatic call sites. */
@@ -104,6 +114,16 @@ export function parseEvolutionConfig(raw: unknown, baseDir = process.cwd()): Evo
   for (const lane of ["development", "held-out", "negative-control"] as const) {
     if (parsed.cases.filter((entry) => entry.lane === lane).length < parsed.promotionPolicy.minimumCases) {
       throw new Error(`${lane} requires at least ${parsed.promotionPolicy.minimumCases} distinct cases`);
+    }
+  }
+  if (parsed.retentionPolicy) {
+    const ids = parsed.retentionPolicy.criticalCaseIds;
+    if (new Set(ids).size !== ids.length) throw new Error("retention panel contains duplicate cases");
+    for (const id of ids) {
+      const fixture = parsed.cases.find((entry) => entry.id === id);
+      if (!fixture || fixture.lane === "development") {
+        throw new Error("retention panel must reference existing sealed held-out or negative-control cases");
+      }
     }
   }
   for (const edit of parsed.editablePaths) {
