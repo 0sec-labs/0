@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { collectGuidedScanPlan, parseScanModelAssignments, scanRoutingSummary } from "./guided-scan.js";
 
 function scripted(answers: string[]) {
@@ -54,4 +54,14 @@ describe("explicit scan task routing", () => {
   it("rejects conflicting repeated task pins", () => {
     expect(() => parseScanModelAssignments(["verify=first", "verify=second"])).toThrow(/Duplicate/);
   });
+});
+
+it("shows reviewed per-task recommendations after scope/goal/depth choices and before confirmation", async () => {
+  const { io, output } = scripted(["unknown-vulnerabilities", "quick", "1", "sequential", "2", "1", "y"]);
+  const recommendRouting = vi.fn(() => ({ assignments: { discovery: "approved-recon", attack: "approved-analysis", verify: "approved-verifier", report: "approved-report" }, reasons: { discovery: "paired recon controls", attack: "paired analysis controls", verify: "paired verification controls", report: "paired report controls" } }));
+  await collectGuidedScanPlan({ target: "https://target.test/allowed", recommendRouting }, io);
+  expect(recommendRouting).toHaveBeenCalledWith(expect.objectContaining({ goal: "unknown-vulnerabilities", depth: "quick", timeCapMs: 120_000, costCapUsd: 1 }));
+  const text = output.join("");
+  expect(text).toContain("verify: paired verification controls");
+  expect(text.indexOf("verify: approved-verifier")).toBeLessThan(text.indexOf("Start this plan?"));
 });

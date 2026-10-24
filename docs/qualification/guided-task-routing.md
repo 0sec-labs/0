@@ -47,9 +47,15 @@ recorded route is discovery `gpt-4o-mini` → verification `gpt-4o` → reportin
 evidence reference and unverified state. All three calls charge one ledger,
 with 300 input and 30 output fixture tokens.
 
-This fixture validates protocol and accounting behavior. It is not a paid
-provider qualification or a security-capability comparison. Issue #54's
-representative security-task evaluation and live CLI qualification remain
-required before claiming task-specific model superiority or enabling an
-automatic recommendation policy. Provider availability, authorization, latency,
-actual charges and security quality must be recorded in that study.
+The explicit offline `routing-qualify` command now evaluates a finite synthetic
+four-task panel with positive/negative controls and complete shared accounting.
+A reviewed provider-backed report can supply opt-in recommendations through
+`scan --routing-report`, with exact workflow/provider eligibility and explicit
+model approvals. See [the qualification contract](task-routing/README.md) and
+[committed fixture-only CLI receipt](task-routing/fixture-report.json).
+
+Fixtures validate protocol, evidence state and accounting behavior. They are not
+paid provider qualification or broad security-capability evidence. Live model
+quality, immutable model version, actual charges and independent efficacy remain
+separate requirements before claiming task-specific superiority or enabling a
+routing default. Historical model research supplies candidate ideas only.

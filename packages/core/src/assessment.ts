@@ -126,7 +126,8 @@ export async function executeAssessmentRun(
   if (opts.plan) validateScanPlan(opts.plan);
   const caps = [opts.costCeilingUsd, opts.plan?.costCapUsd].filter((cap): cap is number => cap !== undefined);
   const costCapUsd = caps.length ? Math.min(...caps) : Number.MAX_VALUE;
-  const timeCapMs = Math.min(opts.timeout, opts.plan?.timeCapMs ?? opts.timeout);
+  // A request timeout bounds individual calls; the confirmed plan owns the workflow deadline.
+  const timeCapMs = opts.plan?.timeCapMs ?? opts.timeout;
   // The portable definition bounds a step to 24 hours and $1,000. Root limits
   // retain the caller's actual allowance; the original plan stays on the executor.
   const stepPlan = {
