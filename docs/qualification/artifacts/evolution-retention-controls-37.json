@@ -32,8 +32,8 @@
     1
   ],
   "qualifiedStudies": 15,
-  "analysisP50Ms": 25.17841700000008,
-  "analysisP95Ms": 36.52345800000012,
+  "analysisP50Ms": 23.324499999999944,
+  "analysisP95Ms": 26.674959000000058,
   "modelCalls": 0,
   "actualProviderSpendUsd": 0,
   "limitation": "32 synthetic seeded studies test policy behavior and uncertainty; they do not establish security effect sizes or adaptive-holdout validity"
