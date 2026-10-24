@@ -1,0 +1,149 @@
+{
+  "schemaVersion": 1,
+  "protocolDigest": "sha256:fa14a7c943eb188776c0a755f3d41b144434533f0c410f5949cac7dc979c1219",
+  "corpusDigest": "sha256:5ad3cc21819f1be13cef68322463007a28c93c58e88c5a72e09e093e2f79c10c",
+  "mode": "controls",
+  "conclusion": "inconclusive",
+  "broaderEnablement": false,
+  "automaticPromotion": false,
+  "pairedAnalysis": {
+    "independentFamilies": 3,
+    "meanGain": 0,
+    "interval95": [
+      -1,
+      1
+    ],
+    "assumption": "bounded independent-family Hoeffding interval; no IID claim beyond declared family assumption",
+    "retentionRegressions": 0,
+    "aaDisagreements": 0,
+    "regressionDetected": true
+  },
+  "arms": {
+    "frozen-baseline": {
+      "attempts": 10,
+      "verifiedCorrect": 4,
+      "positiveRecall": 0,
+      "falseAlarmRate": 0.3333333333333333,
+      "inconclusive": 0,
+      "p50Ms": 5.114166999999952,
+      "p95Ms": null
+    },
+    "sequential": {
+      "attempts": 10,
+      "verifiedCorrect": 4,
+      "positiveRecall": 0,
+      "falseAlarmRate": 0.3333333333333333,
+      "inconclusive": 0,
+      "p50Ms": 5.148874999999862,
+      "p95Ms": null
+    },
+    "baseline-extra-attempts": {
+      "attempts": 21,
+      "verifiedCorrect": 8,
+      "positiveRecall": 0,
+      "falseAlarmRate": 0.3333333333333333,
+      "inconclusive": 0,
+      "p50Ms": 5.109959000000117,
+      "p95Ms": null
+    },
+    "aa": {
+      "attempts": 10,
+      "verifiedCorrect": 4,
+      "positiveRecall": 0,
+      "falseAlarmRate": 0.3333333333333333,
+      "inconclusive": 0,
+      "p50Ms": 4.360458000000108,
+      "p95Ms": null
+    },
+    "regression": {
+      "attempts": 10,
+      "verifiedCorrect": 6,
+      "positiveRecall": 0,
+      "falseAlarmRate": 0,
+      "inconclusive": 0,
+      "p50Ms": 5.077583000000004,
+      "p95Ms": null
+    }
+  },
+  "cost": {
+    "meteredTariffUsd": 0,
+    "billedUsd": 0,
+    "unknownUsage": false,
+    "byArm": {
+      "frozen-baseline": {
+        "meteredTariffUsd": 0,
+        "calls": 30
+      },
+      "sequential": {
+        "meteredTariffUsd": 0,
+        "calls": 31
+      },
+      "baseline-extra-attempts": {
+        "meteredTariffUsd": 0,
+        "calls": 31
+      },
+      "aa": {
+        "meteredTariffUsd": 0,
+        "calls": 20
+      },
+      "regression": {
+        "meteredTariffUsd": 0,
+        "calls": 20
+      }
+    },
+    "dispatchedCalls": 132,
+    "reservedMaximumUsd": 13.200000000000001,
+    "modelUsageBasis": "provider token usage x frozen tariff; invoice remains separate",
+    "localComputeUsd": null
+  },
+  "elapsedMs": 2079.2005,
+  "cpuMs": 69.947,
+  "reasons": [
+    "public historical source may occur in model training data",
+    "tiny convenience sample does not establish security generalization",
+    "local compute monetary cost unpriced; wall/CPU measured separately",
+    "ordinary provider token usage is metered tariff cost, not reconciled invoice cost",
+    "provider-default decoding temperature and seed not pinned by existing runtime",
+    "deterministic controls only; no model-backed security efficacy evidence",
+    "insufficient independent final families for preregistered qualification",
+    "paired quality gain not established"
+  ],
+  "executed": "2026-10-24 UTC",
+  "scope": "Executed deterministic controls on downloaded advisory-labelled source; no paid model dispatch.",
+  "unknownUsageStop": {
+    "conclusion": "inconclusive",
+    "cost": {
+      "meteredTariffUsd": 0,
+      "billedUsd": null,
+      "unknownUsage": true,
+      "byArm": {
+        "frozen-baseline": {
+          "meteredTariffUsd": 0,
+          "calls": 1
+        },
+        "sequential": {
+          "meteredTariffUsd": 0,
+          "calls": 0
+        },
+        "baseline-extra-attempts": {
+          "meteredTariffUsd": 0,
+          "calls": 0
+        },
+        "aa": {
+          "meteredTariffUsd": 0,
+          "calls": 0
+        },
+        "regression": {
+          "meteredTariffUsd": 0,
+          "calls": 0
+        }
+      },
+      "dispatchedCalls": 1,
+      "reservedMaximumUsd": 0.1,
+      "modelUsageBasis": "provider token usage x frozen tariff; invoice remains separate",
+      "localComputeUsd": null
+    },
+    "elapsedMs": 19.847583,
+    "cpuMs": 1.036
+  }
+}
