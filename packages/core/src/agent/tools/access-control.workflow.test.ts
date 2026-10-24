@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { accessMilestoneFromArtifact } from "@0/shared";
 import { osecDB } from "@0/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -186,7 +187,10 @@ describe("fixture-backed state milestones and read-only cleanup", () => {
     try {
       const result = await executor(db, [fixture]).execute({ name: "access_control_workflow", arguments: writeRequest });
       const proof = (result.output as any).state_access_proof;
-      expect(vi.mocked(fetchScoped).mock.calls[1][1]?.body).not.toContain(writeMarker);
+      const sentBody = String(vi.mocked(fetchScoped).mock.calls[1][1]?.body);
+      expect(sentBody).not.toContain(writeMarker);
+      expect((result.output as any).steps[0].request_body_digest).toBe("sha256:" + createHash("sha256").update(sentBody).digest("hex"));
+      expect((result.output as any).steps[0].request_body_bytes).toBe(Buffer.byteLength(sentBody));
       expect(proof).toMatchObject({ challenge_bound: true, access_class: "unauthorized-write", status: "confirmed", cleanup: "required", generation: 1 });
       const original = db.getEvents("workflow", { eventType: "tool_artifact" })[0];
       expect(accessMilestoneFromArtifact(original.eventType, JSON.parse(original.payload), original.scanId, original.id)).toMatchObject({ status: "confirmed", severity: "unassessed", cleanup: "required", accessLevel: "Resource write" });
