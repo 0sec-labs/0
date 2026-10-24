@@ -2561,3 +2561,6 @@ export { verifyFormalArtifact, formalArtifactDigest, formalChallengeDigest } fro
 export { runFormalResearchCampaign } from "./research/formal-campaign.js";
 export type { FormalResearchTask, FormalGenerationContext, FormalResearchAttempt, FormalResearchTaskResult, FormalResearchCampaignOptions, FormalResearchCampaignResult } from "./research/formal-campaign.js";
 export type { FormalChallenge, FormalProofCandidate, FormalCheckerReceipt, FormalCheckerRequest, FormalArtifactChecker, FormalArtifactOptions, FormalArtifactResult } from "./verify/formal-artifact.js";
+
+export { qualifyTaskRouting, preflightTaskRouting, parseRoutingQualificationPlan, taskRoutingFixtureRuntime, recommendQualifiedRouting, TASK_ROUTING_SUITE_DIGEST, TASK_ROUTING_EVALUATOR_DIGEST, ROUTING_ROLES } from "./bench/task-routing.js";
+export type { RoutingQualificationPlan, RoutingQualificationReport, RoutingTrial, RoutingRole } from "./bench/task-routing.js";

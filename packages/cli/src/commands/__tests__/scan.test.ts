@@ -29,6 +29,7 @@ vi.mock("../run.js", () => ({
   runUnified: runUnifiedMock,
 }));
 
+const recommendQualifiedRoutingMock = vi.fn();
 const loadScopeMock = vi.fn();
 const parseRateLimitFlagMock = vi.fn();
 const resolveAttributionMock = vi.fn();
@@ -38,6 +39,8 @@ const extractEngagementFromScopeJsonMock = vi.fn();
 const targetRequiresScopeMock = vi.fn((target: string) => /^https?:\/\//.test(target));
 const networkScopeRequiredRefusalMock = vi.fn((target: string) => `scope required for ${target}`);
 vi.mock("@0/core", () => ({
+  recommendQualifiedRouting: recommendQualifiedRoutingMock,
+  LlmApiRuntime: class { resolvedProvider() { return "openai"; } },
   getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, projectPath: process.cwd(), message: "Scope plugin enabled" }),
   loadScope: loadScopeMock,
   parseRateLimitFlag: parseRateLimitFlagMock,
@@ -688,5 +691,23 @@ describe("automatic guided terminal setup", () => {
       if (input) Object.defineProperty(process.stdin, "isTTY", input); else delete (process.stdin as { isTTY?: boolean }).isTTY;
       if (output) Object.defineProperty(process.stdout, "isTTY", output); else delete (process.stdout as { isTTY?: boolean }).isTTY;
     }
+  });
+});
+
+
+describe("reviewed task routing command integration", () => {
+  it("requires explicit approvals and shared caps, applies manual overrides and preserves the plan", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "routing-scan-"));
+    try {
+      const path = join(directory, "report.json"); writeFileSync(path, "{}");
+      recommendQualifiedRoutingMock.mockReturnValue({ assignments: { discovery: "qualified-cheap", attack: "qualified-analysis", verify: "qualified-verify", report: "qualified-cheap" }, reasons: { discovery: "recon controls", attack: "analysis controls", verify: "verify controls", report: "report controls" } });
+      await runCli(["scan", "--target", "https://example.com", "--runtime", "api", "--format", "json", "--routing-report", path, "--routing-model", "qualified-cheap", "--routing-model", "qualified-analysis", "--routing-review-ref", "review-ref", "--goal", "unknown-vulnerabilities", "--depth", "quick", "--plan-time-cap", "120000", "--cost-ceiling", "1", "--task-model", "verify=operator-pin"]);
+      expect(recommendQualifiedRoutingMock).toHaveBeenCalledWith({}, expect.objectContaining({ approvedModels: ["qualified-cheap", "qualified-analysis"], provider: "openai", reviewRef: "review-ref", workflow: { targetKind: "web", goal: "unknown-vulnerabilities", depth: "quick" } }));
+      expect(runUnifiedMock).toHaveBeenCalledWith(expect.objectContaining({ agentModels: { discovery: "qualified-cheap", attack: "qualified-analysis", verify: "operator-pin", report: "qualified-cheap" }, timeout: 30000, plan: expect.objectContaining({ costCapUsd: 1, timeCapMs: 120000 }) }));
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+  it("does not load routing evidence when a single-model run is explicitly selected", async () => {
+    await runCli(["scan", "--target", "https://example.com", "--runtime", "api", "--format", "json", "--routing-report", "/does/not/exist", "--single-model"]);
+    expect(runUnifiedMock).toHaveBeenCalledWith(expect.objectContaining({ singleModel: true }));
   });
 });
