@@ -1,7 +1,7 @@
 import { chmodSync, mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { pairedRetentionObservationsFromReceipt } from "./paired-retention-receipt.js";
 import { estimateCost } from "@0/shared";
 import { parseEvolutionConfig } from "./config.js";
@@ -18,7 +18,13 @@ import type { EvolutionConfig, EvolutionSandbox, EvolutionSnapshot } from "./typ
 const pinnedWorker = { provider: "openai", model: "gpt-4o-mini", modelVersionStatus: "pinned" as const,
   modelRevision: "provider-release-2026-10-23", decodingDigest: "sha256:" + "d".repeat(64) };
 const directories: string[] = [];
+beforeEach(() => {
+  const root = mkdtempSync(join(tmpdir(), "0-evaluation-authority-"));
+  directories.push(root);
+  vi.stubEnv("ZERO_EVOLUTION_AUTHORITY_ROOT", root);
+});
 afterEach(() => {
+  vi.unstubAllEnvs();
   const unlock = (directory: string): void => {
     chmodSync(directory, 0o700);
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -442,13 +448,13 @@ describe("independent evolution oracle", () => {
 
   it("cannot reset the evaluator or holdout exposure by relabeling and reordering fixtures", async () => {
     const { config, baseline, candidate } = await setup();
-    const safe = { ...config, safety: { enabled: true, holdoutExposureLimit: 12 } };
+    const safe = { ...config, safety: { enabled: true, holdoutExposureLimit: 24 } };
     const deps = { sandbox: probe(candidate.id, "correct"), modelIdentity: () => ({ provider: "openai", model: "gpt-4o" }) };
     await evaluateEvolutionCandidate(baseline, candidate, safe, deps);
     await expect(evaluateEvolutionCandidate(baseline, candidate, {
       ...safe, cases: [...safe.cases].reverse().map((entry) => ({ ...entry, id: `renamed-${entry.id}` })),
     }, deps)).rejects.toThrow(/holdout exposure exhausted/);
-    expect(loadEvolutionCampaign(config.storePath).exposures[0]?.consumed).toBe(12);
+    expect(loadEvolutionCampaign(config.storePath).exposures[0]?.consumed).toBe(24);
   });
 
   it("enforces pending and unknown-cost gates inside canary and promotion CAS transitions", async () => {
