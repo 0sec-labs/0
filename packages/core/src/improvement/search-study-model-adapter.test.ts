@@ -54,7 +54,7 @@ it("connects the study to existing metered proposal/snapshot/evaluation APIs wit
   expect(f.calls()).toBe(0);
   const report = await runPairedSearchStudy({ adapter,
     plan: { schemaVersion: 1, protocolRef: "mock-integration-control", seeds: ["one", "two"], armBudgetUsd: .5, maxWorkerExecutions: 60,
-      maxProposals: 2, maxRetainedBytes: 65536, finalReserveUsd: .01, finalReserveExecutions: 36,
+      maxProposals: 2, maxRetainedBytes: 262144, finalReserveUsd: .01, finalReserveExecutions: 36,
       ceilings: { proposal: .1, build: .01, development: .01, final: .01 }, developmentExecutions: 6, finalExecutions: 36 },
     arms: ["current", "aa"].map(id => ({ id, parentId: () => f.baseline.id, width: 1, feedback: "Development-only parser miss" })),
   });
@@ -76,7 +76,7 @@ it("does not relabel a token-rate estimate as an actual paid invoice", async () 
   const f = await fixture();
   const adapter = createModelSearchStudyAdapter({ ...f, observeBilling: async () => ({ actualUsd: null, receiptDigest: null }), parents: new Map([[f.baseline.id, f.baseline]]) });
   const result = await adapter.propose({ seed: "invoice-control", arm: "current", ordinal: 0, ceilingUsd: .1,
-    maxWorkerExecutions: 0, maxRetainedBytes: 65536, parentId: f.baseline.id, feedback: "development-only" });
+    maxWorkerExecutions: 0, maxRetainedBytes: 262144, parentId: f.baseline.id, feedback: "development-only" });
   expect(result.status).toBe("inconclusive");
   expect(result.charges[0]!.actualUsd).toBeNull();
   expect(f.calls()).toBe(1);

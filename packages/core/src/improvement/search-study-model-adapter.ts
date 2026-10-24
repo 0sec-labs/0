@@ -87,16 +87,19 @@ export function createModelSearchStudyAdapter(options: {
       const billing = await options.observeBilling(request, "proposal", proposal.modelCostUsd);
       const billingValid = billing.actualUsd !== null && Number.isFinite(billing.actualUsd) && billing.actualUsd >= 0
         && /^sha256:[a-f0-9]{64}$/.test(billing.receiptDigest ?? "");
-      publishEvolutionArtifact(join(config.storePath, "receipts", `${operationId(request, "billing").replace(/[^a-zA-Z0-9-]/g, "-")}.json`), { estimatedUsd: proposal.modelCostUsd, ...billing });
+      const proposalBilling = { estimatedUsd: proposal.modelCostUsd, ...billing };
+      const proposalBillingBytes = Buffer.byteLength(canonicalEvolutionJson(proposalBilling));
+      publishEvolutionArtifact(join(config.storePath, "receipts", `${operationId(request, "billing").replace(/[^a-zA-Z0-9-]/g, "-")}.json`), proposalBilling);
       if (!billingValid || Math.abs(billing.actualUsd! - proposal.modelCostUsd) > 1e-9) {
         blockEvolutionCampaign(config.storePath, "proposal invoice unavailable or differs from settled rate estimate; reconcile ledger");
-        return { value: null, charges: [receipt(request, "proposal", billingValid ? billing.actualUsd : null, "proposal")], workerExecutions: 0, retainedBytes: 0, status: "inconclusive", reason: "proposal actual billing requires reconciliation" };
+        return { value: null, charges: [receipt(request, "proposal", billingValid ? billing.actualUsd : null, "proposal")], workerExecutions: 0, retainedBytes: proposalBillingBytes, status: "inconclusive", reason: "proposal actual billing requires reconciliation" };
       }
-      if (!proposal.edits.length) return { value: null, charges: [receipt(request, "proposal", proposal.modelCostUsd, "proposal")], status: "rejected", reason: "no changed artifact", workerExecutions: 0, retainedBytes: 0 };
+      if (!proposal.edits.length) return { value: null, charges: [receipt(request, "proposal", proposal.modelCostUsd, "proposal")], status: "rejected", reason: "no changed artifact", workerExecutions: 0, retainedBytes: proposalBillingBytes };
       ensureEvolutionDirectory(join(config.storePath, "snapshots"));
       const candidate = await createEvolutionCandidate(parent, proposal, config);
       publishEvolutionArtifact(join(config.storePath, "receipts", `${candidate.id}.proposal.json`), proposal);
-      const retainedBytes = candidate.files.reduce((sum, file) => sum + file.bytes, 0);
+      const retainedBytes = candidate.files.reduce((sum, file) => sum + file.bytes, 0)
+        + Buffer.byteLength(canonicalEvolutionJson(proposal)) + proposalBillingBytes;
       candidates.set(candidate.id, candidate);
       return { value: { id: candidate.id, digest: candidate.digest, hypothesis: proposal.rationale.slice(0, 2048) || "Bounded generated edit",
         observedFailure: request.feedback.slice(0, 2048) || "Operator-declared development failure",
@@ -124,6 +127,7 @@ export function createModelSearchStudyAdapter(options: {
       const charges: PilotCharge[] = [];
       let matched = 0;
       let dispatched = 0;
+      let retainedBytes = 0;
       for (let repeat = 0; repeat < config.repeats; repeat++) for (const fixture of fixtures) {
         const computeReservation = reserveCampaignDispatch(config.storePath, "evaluation", maximumCompute);
         let modelReservation: ReturnType<typeof reserveCampaignDispatch> | undefined;
@@ -135,7 +139,20 @@ export function createModelSearchStudyAdapter(options: {
           const billing = estimatedCompute === null ? null : await options.observeBilling(request, "development-compute", estimatedCompute);
           const computeUsd = billing && billing.actualUsd !== null && Number.isFinite(billing.actualUsd) && billing.actualUsd >= 0
             && /^sha256:[a-f0-9]{64}$/.test(billing.receiptDigest ?? "") ? billing.actualUsd : null;
-          settleCampaignDispatch(config.storePath, computeReservation.id, computeUsd, evolutionDigest(result));
+          const billingRecord = { executionDigest: evolutionDigest(result), estimatedCompute, billing };
+          const billingBytes = Buffer.byteLength(canonicalEvolutionJson(billingRecord));
+          if (retainedBytes + billingBytes > request.maxRetainedBytes) {
+            settleCampaignDispatch(config.storePath, computeReservation.id, computeUsd, billing?.receiptDigest ?? null);
+            if (modelReservation) {
+              settleCampaignDispatch(config.storePath, modelReservation.id, null);
+              charges.push(receipt(request, `storage-stop-model-${dispatched}`, null, "worker-model"));
+            }
+            charges.push(receipt(request, `storage-stop-${dispatched}`, computeUsd, "compute"));
+            return { value: null, charges, workerExecutions: dispatched, retainedBytes, status: "inconclusive", reason: "development invoice retention ceiling exhausted; reconcile model usage" };
+          }
+          publishEvolutionArtifact(join(config.storePath, "receipts", `${operationId(request, `development-billing-${dispatched}`).replace(/[^a-zA-Z0-9-]/g, "-")}.json`), billingRecord);
+          retainedBytes += billingBytes;
+          settleCampaignDispatch(config.storePath, computeReservation.id, computeUsd, billing?.receiptDigest ?? evolutionDigest(result));
           charges.push(receipt(request, `compute-${dispatched}`, computeUsd, "compute"));
           if (worker) {
             const usage = result.workerModelUsage;
@@ -144,30 +161,30 @@ export function createModelSearchStudyAdapter(options: {
             charges.push(receipt(request, `model-${dispatched}`, cost, "worker-model"));
             if (!usage || usage.provider !== worker.provider || usage.model !== worker.model || cost === null || cost > worker.maxCostUsdPerExecution) {
               blockEvolutionCampaign(config.storePath, "unknown or incompatible development worker usage");
-              return { value: null, charges, workerExecutions: dispatched, retainedBytes: 0, status: "inconclusive", reason: "development worker provenance/cost requires reconciliation" };
+              return { value: null, charges, workerExecutions: dispatched, retainedBytes, status: "inconclusive", reason: "development worker provenance/cost requires reconciliation" };
             }
           } else if (result.workerModelUsage) {
             const usage = result.workerModelUsage;
             const cost = Number.isFinite(usage.costUsd) && usage.costUsd >= 0 && /^sha256:[a-f0-9]{64}$/.test(usage.receiptDigest) ? usage.costUsd : null;
             charges.push(receipt(request, `undeclared-model-${dispatched}`, cost, "worker-model"));
             blockEvolutionCampaign(config.storePath, "undeclared development model charge");
-            return { value: null, charges, workerExecutions: dispatched, retainedBytes: 0, status: "inconclusive", reason: "undeclared model charge requires reconciliation" };
+            return { value: null, charges, workerExecutions: dispatched, retainedBytes, status: "inconclusive", reason: "undeclared model charge requires reconciliation" };
           }
           if (computeUsd !== null && computeUsd > maximumCompute) {
             blockEvolutionCampaign(config.storePath, "development compute exceeded dispatch reservation");
-            return { value: null, charges, workerExecutions: dispatched, retainedBytes: 0, status: "inconclusive", reason: "development compute ceiling exceeded" };
+            return { value: null, charges, workerExecutions: dispatched, retainedBytes, status: "inconclusive", reason: "development compute ceiling exceeded" };
           }
-          if (computeUsd === null || result.exitCode !== 0 || result.timedOut || result.error) return { value: null, charges, workerExecutions: dispatched, retainedBytes: 0, status: "inconclusive", reason: "development execution did not complete" };
+          if (computeUsd === null || result.exitCode !== 0 || result.timedOut || result.error) return { value: null, charges, workerExecutions: dispatched, retainedBytes, status: "inconclusive", reason: "development execution did not complete" };
           try { if (canonicalEvolutionJson(JSON.parse(result.stdout)) === canonicalEvolutionJson(fixture.expected)) matched++; } catch { /* malformed output remains a failed development example */ }
         } catch (error) {
           settleCampaignDispatch(config.storePath, computeReservation.id, null);
           if (modelReservation) settleCampaignDispatch(config.storePath, modelReservation.id, null);
           charges.push(receipt(request, `unknown-execution-${dispatched}`, null, "compute"));
-          return { value: null, charges, workerExecutions: dispatched, retainedBytes: 0, status: "inconclusive", reason: `development execution requires reconciliation: ${error instanceof Error ? error.message.slice(0, 512) : "unknown"}` };
+          return { value: null, charges, workerExecutions: dispatched, retainedBytes, status: "inconclusive", reason: `development execution requires reconciliation: ${error instanceof Error ? error.message.slice(0, 512) : "unknown"}` };
         }
       }
       const score = matched / executions;
-      return { value: { score, feedback: canonicalEvolutionJson({ protocol: "development-match-summary-v1", matched, executions }) }, charges, workerExecutions: dispatched, retainedBytes: 0, status: "ok" };
+      return { value: { score, feedback: canonicalEvolutionJson({ protocol: "development-match-summary-v1", matched, executions }) }, charges, workerExecutions: dispatched, retainedBytes, status: "ok" };
     },
     async final(request) {
       // All seeds/arms share one authoritative final ledger. Repeated final
@@ -178,20 +195,28 @@ export function createModelSearchStudyAdapter(options: {
       const executions = config.cases.length * config.repeats * 2;
       const perExecution = config.timeoutMs / 1000 * config.computeUsdPerSecond + (config.safety?.workerModel?.maxCostUsdPerExecution ?? 0);
       if (executions !== request.maxWorkerExecutions || executions * perExecution > request.ceilingUsd) throw new Error("final reserve cannot cover complete independent evaluation");
+      const maximumStreams = config.cases.length * config.repeats * 4 * config.maxOutputBytes;
+      if (maximumStreams + executions * 2048 > request.maxRetainedBytes) throw new Error("retained-byte reserve cannot cover complete final receipts");
       // Final has a distinct corpus/ledger so no development call discloses or
       // consumes the independent panel. It never returns to proposal feedback.
       const evaluation = await evaluateEvolutionCandidate(options.baseline, candidate, { ...config, maxEvaluationCostUsd: request.ceilingUsd }, options.dependencies);
+      const evaluationBytes = Buffer.byteLength(canonicalEvolutionJson(evaluation));
+      if (evaluationBytes > request.maxRetainedBytes) throw new Error("final receipt exceeds retained-byte reserve");
       publishEvolutionArtifact(join(config.storePath, "receipts", `${candidate.id}.final.json`), evaluation);
       const attempts = [...evaluation.attempts.baseline, ...evaluation.attempts.candidate];
       const estimatedCompute = attempts.reduce((sum, attempt) => sum + attempt.costUsd - (attempt.execution.workerModelUsage?.costUsd ?? 0), 0);
       const billing = await options.observeBilling(request, "final-compute", estimatedCompute);
+      const billingRecord = { estimatedCompute, ...billing };
+      const billingBytes = Buffer.byteLength(canonicalEvolutionJson(billingRecord));
+      if (evaluationBytes + billingBytes > request.maxRetainedBytes) throw new Error("final invoice exceeds retained-byte reserve");
+      publishEvolutionArtifact(join(config.storePath, "receipts", `${candidate.id}.final-billing.json`), billingRecord);
       const billingValid = billing.actualUsd !== null && Number.isFinite(billing.actualUsd) && billing.actualUsd >= 0
         && /^sha256:[a-f0-9]{64}$/.test(billing.receiptDigest ?? "");
       if (!billingValid || Math.abs(billing.actualUsd! - estimatedCompute) > 1e-9) {
         blockEvolutionCampaign(config.storePath, "final compute invoice unavailable or differs from settled rate estimate; reconcile ledger");
         return { value: null, charges: [receipt(request, "final-compute", billingValid ? billing.actualUsd : null, "compute"),
           ...attempts.flatMap((attempt, index) => attempt.execution.workerModelUsage ? [receipt(request, `final-model-${index}`, attempt.execution.workerModelUsage.costUsd, "worker-model")] : [])],
-          workerExecutions: attempts.length, retainedBytes: 0, status: "inconclusive", reason: "final actual compute billing requires reconciliation" };
+          workerExecutions: attempts.length, retainedBytes: evaluationBytes + billingBytes, status: "inconclusive", reason: "final actual compute billing requires reconciliation" };
       }
       const charges = attempts.flatMap((attempt, index) => {
         const model = attempt.execution.workerModelUsage?.costUsd ?? 0;
@@ -208,7 +233,7 @@ export function createModelSearchStudyAdapter(options: {
         retentionPassed: evaluation.retention?.passed ?? evaluation.result.ciPassed,
         evidenceValid: attempts.every(a => !a.inconclusive),
         identity: { ...options.identity, harnessDigest: candidate.digest } },
-        charges, workerExecutions: attempts.length, retainedBytes: 0, status: "ok" };
+        charges, workerExecutions: attempts.length, retainedBytes: evaluationBytes + billingBytes, status: "ok" };
     },
   };
 }

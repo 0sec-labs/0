@@ -123,3 +123,9 @@ paid result retains the simpler current policy. A proposed default change needs
 separate review of the predeclared primary objective, complete independent final
 validation, false alarms, retention, all costs and uncertainty. These controller
 controls do not satisfy that empirical success condition.
+
+Native retained-byte accounting includes snapshots, proposal JSON, actual-billing
+receipts and final evaluation JSON. The native final adapter conservatively
+preflights bounded output streams plus receipt overhead before dispatch, and
+persists invoice digests alongside the evaluator evidence. Generic study reports
+also charge their retained cost-receipt bytes against the artifact cap.
