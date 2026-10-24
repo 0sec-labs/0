@@ -98,9 +98,12 @@ export async function proposeEvolutionEdits(
   assertEvolutionCampaignMode(config);
   verifyEvolutionSnapshot(snapshot);
   const runtime = deps.model ? undefined : new LlmApiRuntime({ type: "api", timeout: 300000, ...(config.model ? { model: config.model } : {}) });
-  const observedIdentity = (): EvolutionModelIdentity | undefined => runtime
-    ? { provider: runtime.resolvedProvider(), model: runtime.resolvedModel(), pricingModel: runtime.resolvedPricingModel() }
-    : deps.modelIdentity?.();
+  const observedIdentity = (): EvolutionModelIdentity | undefined => {
+    const identity = runtime
+      ? { provider: runtime.resolvedProvider(), model: runtime.resolvedModel(), pricingModel: runtime.resolvedPricingModel() }
+      : deps.modelIdentity?.();
+    return identity ? structuredClone(identity) : undefined;
+  };
   let modelIdentity = observedIdentity();
   const provenance = evolutionComparisonIdentity(config, modelIdentity, deps.workerModelIdentity?.());
   if (config.safety?.enabled) createOrLoadEvolutionCampaign(config.storePath, provenance, "evolution", config);
