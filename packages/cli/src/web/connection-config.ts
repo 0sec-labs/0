@@ -17,13 +17,13 @@ export function validateConnectionConfig(providerId: string, value: ConnectionCo
     if (!BASE_URL_VARS[providerId]) throw new Error("This provider does not support a custom API endpoint.");
     const url = new URL(value.baseUrl);
     if (url.username || url.password || url.search || url.hash ||
-      (url.protocol !== "https:" && !(url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)))) {
-      throw new Error("API endpoint must be credential-free HTTPS, or loopback HTTP, without a query or fragment.");
+      (url.protocol !== "https:" && !(url.protocol === "http:" && (providerId === "openai" || ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))))) {
+      throw new Error("API endpoint must be credential-free HTTPS (or HTTP for custom OpenAI-compatible endpoints and loopback), without a query or fragment.");
     }
     result.baseUrl = url.href.replace(/\/$/, "");
   }
   if (value.model !== undefined) {
-    if (providerId !== "azure") throw new Error("Deployment model configuration is only supported for Azure; select other models through runtime selection.");
+    if (providerId !== "azure" && providerId !== "openai") throw new Error("Connection model configuration is supported for Azure and custom OpenAI-compatible providers.");
     if (!value.model.trim() || value.model.length > 256 || /[\s\x00-\x1f\x7f]/.test(value.model)) throw new Error("Invalid deployment model.");
     result.model = value.model;
   }
@@ -75,6 +75,7 @@ export function connectionConfigEnvPatch(env: NodeJS.ProcessEnv, homeDir?: strin
     const variable = BASE_URL_VARS[id];
     if (variable && config.baseUrl && !env[variable]) patch[variable] = config.baseUrl;
     if (id === "azure" && config.model && !env.AZURE_OPENAI_MODEL) patch.AZURE_OPENAI_MODEL = config.model;
+    if (id === "openai" && config.model && !env.OPENAI_MODEL) patch.OPENAI_MODEL = config.model;
     if (id === "google" && config.projectId && !env.GOOGLE_CLOUD_PROJECT && !env.ZERO_GEMINI_PROJECT) patch.ZERO_GEMINI_PROJECT = config.projectId;
   }
   return patch;
