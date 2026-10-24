@@ -38,7 +38,7 @@ export function createLocalOllamaRoutingRuntime(plan: RoutingQualificationPlan, 
     if (!response.ok) throw new Error(`local Ollama ${path} returned HTTP ${response.status}`);
     const text = await response.text();
     if (text.length > 2_000_000) throw new Error("local Ollama response exceeds 2 MB");
-    return JSON.parse(text);
+    try { return JSON.parse(text); } catch { throw new Error("local Ollama returned malformed JSON metadata"); }
   };
   const verify = async (signal?: AbortSignal) => {
     metadataRequests++;

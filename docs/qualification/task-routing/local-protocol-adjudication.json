@@ -60,7 +60,8 @@
       743,
       869
     ],
-    "conclusion": "matched transport profile still exposed no required structured tool call; task quality not evaluated"
+    "conclusion": "matched transport profile still exposed no required structured tool call; task quality not evaluated",
+    "asRunDecoderCommit": "b1ee4f63"
   },
   "pinnedTokenizerTemplate": {
     "sha256": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",

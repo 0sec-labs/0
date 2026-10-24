@@ -131,7 +131,9 @@ export async function qualifyTaskRouting(options: {
         messages.push({ role: "user", content: [{ type: "tool_result", tool_use_id: calls[0]!.id, content: JSON.stringify({ scope, evidenceIds, input: test.input }) }] });
         const result = await execute();
         if (result.stopReason !== "end_turn" || result.content.some(block => block.type !== "text")) throw new Error("final answer protocol mismatch");
-        const parsed = answer.parse(JSON.parse(result.content.map(block => block.type === "text" ? block.text : "").join("")));
+        let parsed: z.infer<typeof answer>;
+        try { parsed = answer.parse(JSON.parse(result.content.map(block => block.type === "text" ? block.text : "").join(""))); }
+        catch { throw new Error("final answer JSON schema mismatch"); }
         trial.authorityPreserved = canonical(parsed.scope) === canonical(scope);
         trial.evidencePreserved = canonical(parsed.evidenceIds) === canonical(evidenceIds);
         trial.validationPreserved = parsed.validation === test.expected.validation;
