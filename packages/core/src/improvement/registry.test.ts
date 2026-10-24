@@ -142,6 +142,21 @@ describe("evolution snapshot boundaries", () => {
 });
 
 describe("evolution promotion and replay", () => {
+  it("blocks replacement of the initial declared critical cohort before its first promotion", async () => {
+    config = { ...config, retentionPolicy: { profileId: "critical-authority", version: 1, criticalCaseIds: ["held-out-0", "negative-control-0"] } };
+    const first = await staged(false);
+    const replacement = { ...config, retentionPolicy: { ...config.retentionPolicy!, criticalCaseIds: ["held-out-1", "negative-control-0"] } };
+    const evaluation = await evaluateEvolutionCandidate(first.baseline.snapshot, first.version.snapshot, replacement, { sandbox: async ({ snapshot, input }) => {
+      const value = input as { index: number; unsafe: boolean };
+      return { exitCode: 0, stdout: JSON.stringify({ unsafe: value.unsafe && (snapshot.id === first.version.id || value.index % 3 !== 2) }), stderr: "", durationMs: 1, timedOut: false };
+    } });
+    expect(evaluation.decision.status).toBe("requires_human_approval");
+    const version = { ...first.version, configDigest: evaluation.configDigest, receiptDigest: evaluation.receiptDigest };
+    await recordEvolutionVersion(config.storePath, version, replacement, evaluation);
+    await expect(startEvolutionCanary(config.storePath, version.id, first.baseline.id)).rejects.toThrow(/approved versioned rotation/);
+    expect(loadEvolutionRegistry(config.storePath).activeId).toBe(first.baseline.id);
+  });
+
   it("blocks silent retirement of a previously promoted critical capability across generations", async () => {
     config = { ...config, retentionPolicy: { profileId: "critical-authority", version: 1, criticalCaseIds: ["held-out-0", "negative-control-0"] } };
     const first = await staged();

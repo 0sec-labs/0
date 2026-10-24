@@ -70,6 +70,14 @@ describe("fixed-protocol paired longitudinal retention study", () => {
     if (process.env.ZERO_RETENTION_NULL_REPORT) { mkdirSync(dirname(process.env.ZERO_RETENTION_NULL_REPORT), { recursive: true }); writeFileSync(process.env.ZERO_RETENTION_NULL_REPORT, JSON.stringify(report, null, 2) + "\n"); }
   });
 
+  it("never qualifies explicit unexecuted observations regardless claimed success and zero charges", () => {
+    const rows = fixture().map(row => ({ ...row, baseline: { ...row.baseline, executed: false, costUsd: 0 }, candidate: { ...row.candidate, executed: false, costUsd: 0 } }));
+    const report = analyzePairedRetention(plan, rows);
+    expect(report.decision).toBe("not-qualified");
+    expect(report.groups.every(group => group.status === "inconclusive")).toBe(true);
+    expect(report.accounting.workerExecutions).toBe(0);
+  });
+
   it("does not turn correlated repeats into independent evidence", () => {
     const rows = fixture().map(row => ({ ...row, familyDigest: hash("one-correlated-family") }));
     const report = analyzePairedRetention(plan, rows);

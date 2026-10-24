@@ -36,13 +36,15 @@ export function evaluateEvolutionRetention(config: EvolutionConfig, attempts: Ev
 export function assertEvolutionRetentionContinuity(
   previousPolicy: EvolutionConfig["retentionPolicy"], previous: ReturnType<typeof evaluateEvolutionRetention> | undefined,
   currentPolicy: EvolutionConfig["retentionPolicy"], current: ReturnType<typeof evaluateEvolutionRetention> | undefined,
+  initialDeclared?: { previous: string; current: string },
 ): void {
   if (!previousPolicy) return;
   if (!currentPolicy || !current?.passed) throw new Error("existing critical retention policy cannot be disabled or left incomplete");
-  if (!previous?.profileDigest) return; // Initial baseline has no evaluated profile yet.
-  if (previous.profileDigest === current.profileDigest) return;
+  const priorDigest = previous?.profileDigest ?? initialDeclared?.previous;
+  if (!priorDigest) throw new Error("prior declared retention cohort identity is unavailable");
+  if (previous?.profileDigest ? previous.profileDigest === current.profileDigest : initialDeclared?.previous === initialDeclared?.current) return;
   if (currentPolicy.profileId !== previousPolicy.profileId || currentPolicy.version <= previousPolicy.version
-    || currentPolicy.previousProfileDigest !== previous.profileDigest || !currentPolicy.rotationApprovalRef?.trim()) {
+    || currentPolicy.previousProfileDigest !== priorDigest || !currentPolicy.rotationApprovalRef?.trim()) {
     throw new Error("retention profile/cohort/evaluator changed without an approved versioned rotation");
   }
 }

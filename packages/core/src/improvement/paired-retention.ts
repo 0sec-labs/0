@@ -61,7 +61,7 @@ export function analyzePairedRetention(rawPlan: PairedRetentionPlan, observation
     let incomplete = selected.length === 0;
     let invariantFailure = false;
     for (const entry of selected) {
-      incomplete ||= entry.inconclusive || entry.comparisonDigest !== plan.comparisonDigest
+      incomplete ||= entry.baseline.executed === false || entry.candidate.executed === false || entry.inconclusive || entry.comparisonDigest !== plan.comparisonDigest
         || typeof entry.inconclusive !== "boolean" || typeof entry.authorityPreserved !== "boolean" || typeof entry.evidenceCorrect !== "boolean";
       invariantFailure ||= !entry.authorityPreserved || !entry.evidenceCorrect;
       const value = capability.role === "false-positive"

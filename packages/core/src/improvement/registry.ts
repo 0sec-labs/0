@@ -23,7 +23,7 @@ import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep 
 
 import { canonicalEvolutionJson, parseEvolutionConfig } from "./config.js";
 import { acquireEvolutionController, EvolutionControllerBusyError } from "./controller-lock.js";
-import { assertEvolutionRetentionContinuity } from "./retention.js";
+import { assertEvolutionRetentionContinuity, evaluateEvolutionRetention } from "./retention.js";
 import { evolutionComparisonIdentity } from "./evaluation.js";
 import { assertEvolutionCampaignMode, campaignPromotionAllowed, compareEvolutionIdentities } from "./safety.js";
 import {
@@ -728,7 +728,9 @@ function acquireEvolutionPromotionGate(storePath: string, receipt: EvolutionEval
     if (previousVersion.receiptDigest && previousConfig.retentionPolicy && !previousReceipt?.retention?.profileDigest) {
       throw new Error("prior retention evidence is unavailable; explicit cohort requalification required");
     }
-    assertEvolutionRetentionContinuity(previousConfig.retentionPolicy, previousReceipt?.retention, config.retentionPolicy, receipt.retention);
+    assertEvolutionRetentionContinuity(previousConfig.retentionPolicy, previousReceipt?.retention, config.retentionPolicy, receipt.retention, {
+      previous: evaluateEvolutionRetention(previousConfig, []).profileDigest, current: evaluateEvolutionRetention(config, []).profileDigest,
+    });
   }
   if (!config.safety?.enabled) return undefined;
   const provenance = receipt.result.provenance;
