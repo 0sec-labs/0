@@ -45,7 +45,8 @@ request. Covered boundaries are:
 - after reservation but before the external observation: unknown charge blocks;
 - after external observation and before settlement: unknown charge blocks, marker
   count stays unchanged across restart (no replay);
-- an evaluation-kind dispatch in flight: unknown execution charge blocks;
+- the actual `evaluateEvolutionCandidate` loop inside its first sandbox dispatch:
+  unknown execution charge blocks;
 - after completed settlement and before a subsequent promotion step: known spend
   persists exactly once;
 - a live competing process: it cannot acquire or mutate the same campaign;
@@ -64,11 +65,13 @@ Multi-day approved-feedback wakeups remain phase two after the finite pilot.
 
 `campaign-dispatch-io.json` reports 100 actual reserve/settle pairs with file and
 directory fsync under the pass lease on macOS / Node24. The observed reservation
-p50/p95 were approximately 52/82ms; settlement 54/76ms; final ledger size was
+p50/p95 were approximately 43/54ms; settlement 42/56ms; final ledger size was
 37,627 bytes. These host-contention-sensitive numbers describe explicit offline
 controller accounting, not selected-artifact scan latency. The report contains
 no paid calls or extrapolated provider cost. Storage and dispatch count remain
-bounded by the existing 10,000-record campaign cap. Transactions occur at
+bounded by the existing 10,000-record campaign cap. Each transaction rewrites the
+bounded ledger, so I/O grows with retained dispatches; the 100-entry measurements
+are not worst-case latency at the cap. Transactions occur at
 external-dispatch/state boundaries, never per token or ordinary tool event.
 
 Reproduce the process tests and overhead artifact:

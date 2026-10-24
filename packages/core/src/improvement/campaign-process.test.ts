@@ -1,7 +1,7 @@
 import { buildSync } from "esbuild";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -20,7 +20,10 @@ beforeAll(() => {
  executable = join(directory, "probe.mjs");
  buildSync({ entryPoints: [join(import.meta.dirname, "__fixtures__/campaign-process.ts")], alias: { "@0/shared": join(import.meta.dirname, "../../../shared/src/index.ts") }, bundle: true, platform: "node", format: "esm", outfile: executable, logLevel: "silent" });
 });
-afterAll(() => rmSync(directory, { recursive: true, force: true }));
+afterAll(() => {
+ const unlock = (path: string) => { chmodSync(path, 0o700); for (const entry of readdirSync(path, { withFileTypes: true })) if (entry.isDirectory()) unlock(join(path, entry.name)); };
+ unlock(directory); rmSync(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 20 });
+});
 function fresh(): string {
  const root = mkdtempSync(join(directory, "campaign-"));
  writeFileSync(join(root, "identity.json"), JSON.stringify(identity), { mode: 0o600 });
