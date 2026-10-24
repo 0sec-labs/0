@@ -653,3 +653,40 @@ describe("multi-identity ownership fixture inputs", () => {
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 });
+
+
+describe("explicit task model options", () => {
+  it("threads operator-approved assignments into one scan without enabling implicit routing", async () => {
+    await runCli(["scan", "--target", "https://example.com", "--format", "json", "--task-model", "discovery=gpt-4o", "--task-model", "verify=claude-sonnet-4-20250514"]);
+    expect(runUnifiedMock).toHaveBeenCalledWith(expect.objectContaining({ agentModels: { discovery: "gpt-4o", verify: "claude-sonnet-4-20250514" } }));
+    expect(runUnifiedMock.mock.calls[0]![0].autoRoute).toBeUndefined();
+  });
+  it("supports an explicit single-model override", async () => {
+    await runCli(["scan", "--target", "https://example.com", "--format", "json", "--model", "gpt-4o", "--single-model", "--task-model", "verify=other"]);
+    expect(runUnifiedMock).toHaveBeenCalledWith(expect.objectContaining({ model: "gpt-4o", singleModel: true }));
+  });
+});
+
+describe("automatic guided terminal setup", () => {
+  it("passes the confirmed shared plan and honors the selected total deadline", async () => {
+    const planner = await import("../../guided-scan.js");
+    const plan = { goal: "misconfigurations" as const, depth: "quick" as const, runCount: 2, executionMode: "parallel" as const, timeCapMs: 90_000, costCapUsd: 0.75 };
+    const guided = vi.spyOn(planner, "guidedScanPlan").mockResolvedValue(plan);
+    const input = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
+    const output = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
+    try {
+      Object.defineProperty(process.stdin, "isTTY", { value: true, configurable: true });
+      Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
+      await runCli(["scan", "--target", "https://example.com", "--depth", "quick"]);
+      expect(guided).toHaveBeenCalledWith(expect.objectContaining({ target: "https://example.com", depth: "quick" }));
+      expect(runUnifiedMock).toHaveBeenCalledWith(expect.objectContaining({ plan, timeout: 90_000, costCeilingUsd: 0.75 }));
+      guided.mockResolvedValue(undefined);
+      runUnifiedMock.mockClear();
+      await runCli(["scan", "--target", "https://example.com"]);
+      expect(runUnifiedMock).not.toHaveBeenCalled();
+    } finally {
+      if (input) Object.defineProperty(process.stdin, "isTTY", input); else delete (process.stdin as { isTTY?: boolean }).isTTY;
+      if (output) Object.defineProperty(process.stdout, "isTTY", output); else delete (process.stdout as { isTTY?: boolean }).isTTY;
+    }
+  });
+});

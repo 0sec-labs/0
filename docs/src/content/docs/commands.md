@@ -568,6 +568,9 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--db-path <path>` | — | Path to SQLite database |
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
+| `--task-model <role=model>` | — | Explicit task model: discovery, attack, verify, report (repeatable) |
+| `--single-model` | — | Use the selected model for every task, ignoring task assignments |
+| `--no-guided` | — | Skip interactive scan planning and use explicit command options |
 | `--repo <path>` | — | Source code path for white-box scanning |
 | `--access-control-fixtures <file>` | — | JSON file of known private resource ownership fixtures for IDOR verification |
 | `--identities <file>` | — | Restricted JSON file with named test identities for access-control replay |

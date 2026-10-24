@@ -54,6 +54,7 @@ export function budgetNativeRuntime(runtime: NativeRuntime, ledger: ScanCostLedg
     resolvedProvider: runtime.resolvedProvider?.bind(runtime),
     resolvedPricingModel: runtime.resolvedPricingModel?.bind(runtime),
     accessibleModels: runtime.accessibleModels?.bind(runtime),
+    modelSelection: runtime.modelSelection?.bind(runtime),
     reconfigure: runtime.reconfigure?.bind(runtime),
     forkForSubagent: runtime.forkForSubagent
       ? async (timeout, selection) => budgetNativeRuntime(await runtime.forkForSubagent!(timeout, selection), ledger, signal, ceiling, plan)
