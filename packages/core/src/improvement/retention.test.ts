@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateEvolutionRetention } from "./retention.js";
+import { evaluateEvolutionRetention, assertEvolutionRetentionContinuity } from "./retention.js";
 import type { EvolutionAttempt, EvolutionConfig } from "./types.js";
 import { parseEvolutionConfig } from "./config.js";
 
@@ -62,6 +62,18 @@ describe("versioned deterministic retention panel", () => {
     revised.retentionPolicy!.version++;
     expect(evaluateEvolutionRetention(revised, []).profileDigest).not.toBe(original.profileDigest);
   });
+  it("binds cohorts to evaluator/worker provenance and requires explicit approved longitudinal rotation", () => {
+    const context = { evaluatorDigest: "sha256:" + "a".repeat(64), comparisonDigest: "sha256:" + "b".repeat(64) };
+    const first = evaluateEvolutionRetention(config, attempts(), context);
+    const next = structuredClone(config); next.retentionPolicy!.criticalCaseIds.pop();
+    const nextReceipt = evaluateEvolutionRetention(next, attempts(), context);
+    expect(() => assertEvolutionRetentionContinuity(config.retentionPolicy, first, next.retentionPolicy, nextReceipt)).toThrow(/approved versioned rotation/);
+    expect(() => assertEvolutionRetentionContinuity(config.retentionPolicy, first, undefined, undefined)).toThrow(/cannot be disabled/);
+    expect(evaluateEvolutionRetention(config, attempts(), { ...context, evaluatorDigest: "sha256:" + "c".repeat(64) }).profileDigest).not.toBe(first.profileDigest);
+    next.retentionPolicy!.version = 2; next.retentionPolicy!.previousProfileDigest = first.profileDigest; next.retentionPolicy!.rotationApprovalRef = "operator-reviewed-cohort-rotation";
+    expect(() => assertEvolutionRetentionContinuity(config.retentionPolicy, first, next.retentionPolicy, evaluateEvolutionRetention(next, attempts(), context))).not.toThrow();
+  });
+
   it("adds no evidence requirement when the optional panel is disabled", () => {
     expect(evaluateEvolutionRetention({ ...config, retentionPolicy: undefined }, []).passed).toBe(true);
   });

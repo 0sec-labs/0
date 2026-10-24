@@ -64,7 +64,7 @@ export interface EvolutionConfig {
     workerModel?: { provider: string; model: string; maxCostUsdPerExecution: number };
   };
   /** Controller-owned critical capability panel, referencing sealed evaluation cases. */
-  retentionPolicy?: { profileId: string; version: number; criticalCaseIds: string[] };
+  retentionPolicy?: { profileId: string; version: number; criticalCaseIds: string[]; previousProfileDigest?: string; rotationApprovalRef?: string };
   /** Optional bounded exploration of alternative parent versions (0 or omitted disables; 1+ enables). */
   maxAlternativeParents?: number;
 }
@@ -154,7 +154,7 @@ export interface EvolutionEvaluation {
   receiptDigest: string;
   comparisonIdentity?: import("./safety.js").EvolutionComparisonIdentity;
   curationLineage?: ReturnType<typeof import("./curation-lineage.js").evolutionCurationLineage>;
-  retention?: { profileDigest: string; passed: boolean; checkedCases: number; reasons: string[] };
+  retention?: ReturnType<typeof import("./retention.js").evaluateEvolutionRetention>;
 }
 
 export interface EvolutionVersion {

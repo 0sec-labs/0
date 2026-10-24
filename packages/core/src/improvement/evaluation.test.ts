@@ -2,6 +2,7 @@ import { chmodSync, mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync }
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { pairedRetentionObservationsFromReceipt } from "./paired-retention-receipt.js";
 import { estimateCost } from "@0/shared";
 import { parseEvolutionConfig } from "./config.js";
 import { evaluateEvolutionCandidate, evolutionComparisonIdentity } from "./evaluation.js";
@@ -132,6 +133,28 @@ describe("independent evolution oracle", () => {
   it("keeps private observation queues outside candidate/model-readable source snapshots", async () => {
     const { config } = await setup();
     expect(() => parseEvolutionConfig({ ...config, observationStorePath: join(config.sourceRoot, "src", "observations.json") })).toThrow(/private observation queue cannot overlap/);
+  });
+
+  it("adapts immutable sealed execution receipts into paired observations without model summaries", async () => {
+    const { config, baseline, candidate } = await setup();
+    const evaluation = await evaluateEvolutionCandidate(baseline, candidate, config, { sandbox: probe(candidate.id, "correct") });
+    const panel = [{ caseId: "held-out-0", capabilityId: "old-critical", familyDigest: "sha256:" + "f".repeat(64) }];
+    const rows = pairedRetentionObservationsFromReceipt(evaluation, "generation-2", panel, { authorityPreserved: true, evidenceCorrect: true });
+    expect(rows).toHaveLength(config.repeats);
+    expect(rows.every(row => row.candidate.succeeded && row.baseline.executed && row.candidate.executed)).toBe(true);
+    expect(rows[0]!.candidate.costUsd).toBeNull();
+    expect(rows[0]!.candidate.estimatedCostUsd).toBe(evaluation.attempts.candidate.find(a => a.caseId === panel[0]!.caseId)!.costUsd);
+    const reconciled = pairedRetentionObservationsFromReceipt(evaluation, "generation-2", panel, { authorityPreserved: true, evidenceCorrect: true }, {
+      baseline: [{ caseId: panel[0]!.caseId, repeat: 0, actualCostUsd: 0.002, receiptDigest: "sha256:" + "c".repeat(64) }],
+      candidate: [{ caseId: panel[0]!.caseId, repeat: 0, actualCostUsd: 0.003, receiptDigest: "sha256:" + "d".repeat(64) }],
+    });
+    expect(reconciled[0]!.candidate.costUsd).toBe(0.003);
+    expect(new Set(rows.map(row => row.familyDigest)).size).toBe(1);
+    expect(JSON.stringify(rows)).not.toContain("held-out-0");
+    expect(() => pairedRetentionObservationsFromReceipt({ ...evaluation, receiptDigest: "sha256:" + "0".repeat(64) }, "generation-2", panel, { authorityPreserved: true, evidenceCorrect: true })).toThrow(/integrity/);
+    expect(() => pairedRetentionObservationsFromReceipt(evaluation, "generation-2", [{ ...panel[0]!, caseId: "development-0" }], { authorityPreserved: true, evidenceCorrect: true })).toThrow(/sealed lanes/);
+    const missing = pairedRetentionObservationsFromReceipt(evaluation, "generation-2", [{ ...panel[0]!, caseId: "missing" }], { authorityPreserved: true, evidenceCorrect: true });
+    expect(missing[0]).toMatchObject({ inconclusive: true, baseline: { costUsd: null, executed: false }, candidate: { costUsd: null, executed: false } });
   });
 
   it("observes selected source bytes and rejects stale provenance after a source edit", async () => {

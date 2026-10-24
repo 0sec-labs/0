@@ -62,3 +62,11 @@ export type {
 export { evolutionCaseContentIdentity, evolutionObservationApprovalIdentity, evolutionSourceFixtureCase } from "./curation-lineage.js";
 export { auditEvolutionCorpusRotation, observedEvolutionModelRevision } from "./provenance.js";
 export type { EvolutionModelRevision } from "./provenance.js";
+
+export { analyzePairedRetention } from "./paired-retention.js";
+export type { PairedRetentionPlan, PairedRetentionObservation } from "./paired-retention.js";
+
+export { pairedRetentionComparisonDigest, pairedRetentionObservationsFromReceipt } from "./paired-retention-receipt.js";
+export type { PairedRetentionPanelCase, PairedRetentionChargeEvidence } from "./paired-retention-receipt.js";
+
+export { declaredEvolutionRetentionProfileDigest } from "./retention.js";
