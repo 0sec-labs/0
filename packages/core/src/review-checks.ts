@@ -13,7 +13,7 @@ const MAX_STORE_BYTES = 1024 * 1024;
 const promptSchema = z.string().min(1).max(2000).refine(value => value.trim().length > 0);
 const revisionSchema = z.object({ revision: z.number().int().positive(), prompt: promptSchema }).strict();
 const checkSchema = z.object({
-  id: z.string().uuid(), name: z.string().trim().min(1).max(120),
+  id: z.guid(), name: z.string().trim().min(1).max(120),
   revisions: z.array(revisionSchema).min(1),
   approvedRevision: z.number().int().positive().nullable(),
 }).strict().refine(check => check.revisions.every((revision, i) => revision.revision === i + 1)

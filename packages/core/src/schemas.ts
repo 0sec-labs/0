@@ -42,7 +42,7 @@ export const mcpRpcEnvelopeSchema = z
   .object({
     jsonrpc: z.string().optional(),
     id: z.union([z.string(), z.number()]).optional(),
-    result: z.record(z.unknown()).optional(),
+    result: z.record(z.string(), z.unknown()).optional(),
     error: z
       .object({
         code: z.number().optional(),

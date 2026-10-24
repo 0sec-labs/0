@@ -105,6 +105,28 @@ describe("independent evolution oracle", () => {
     expect(rejected.retention?.profileDigest).toBe(passing.retention?.profileDigest);
   });
 
+  it("rejects oversized fixture collections before inspecting attacker-controlled entries", async () => {
+    const { config } = await setup();
+    let inspected = 0;
+    const oversized = Array.from({ length: 1001 }, () => new Proxy({}, {
+      get: () => { inspected++; throw new Error("oversized collection entries must not be parsed"); },
+    }));
+    expect(() => parseEvolutionConfig({ ...config, cases: oversized })).toThrow(/too_big/);
+    expect(inspected).toBe(0);
+  });
+
+  it("retains every nested promotion-policy default when the object is omitted", async () => {
+    const { config } = await setup();
+    const { promotionPolicy: _policy, ...withoutPolicy } = config;
+    const cases = (["development", "held-out", "negative-control"] as const).flatMap((lane) =>
+      Array.from({ length: 10 }, (_, index) => ({ id: `${lane}-${index}`, lane, input: { lane, index }, expected: true })),
+    );
+    expect(parseEvolutionConfig({ ...withoutPolicy, cases }).promotionPolicy).toEqual({
+      minimumCases: 10, minimumDevelopmentLift: 0.05, minimumHeldOutLift: 0.03,
+      maximumNegativeControlFpDelta: 0, maximumCostMultiplier: 1.5,
+    });
+  });
+
   it("observes selected source bytes and rejects stale provenance after a source edit", async () => {
     const { config } = await setup();
     const identity = { provider: "openai", model: "gpt-4o" };
