@@ -152,10 +152,10 @@ export async function evaluateEvolutionCandidate(
         const usage = execution.workerModelUsage;
         const knownWorkerCost = usage && Number.isFinite(usage.costUsd) && usage.costUsd >= 0
           && /^sha256:[a-f0-9]{64}$/.test(usage.receiptDigest) ? usage.costUsd : null;
-        const undeclaredWorker = Boolean(config.safety?.enabled && usage && !workerModel);
+        const undeclaredWorker = Boolean(usage && !workerModel);
         if (reservation) settleCampaignDispatch(config.storePath, reservation.id, undeclaredWorker ? null : computeCost, evolutionDigest(execution));
         if (workerReservation) settleCampaignDispatch(config.storePath, workerReservation.id, knownWorkerCost, usage?.receiptDigest ?? null);
-        if (undeclaredWorker) throw new Error("undeclared worker model charge; campaign reconciliation required");
+        if (undeclaredWorker) throw new Error("undeclared worker model charge; enabled bounded worker accounting and cost reconciliation required");
         if (computeCost === null || (workerModel && knownWorkerCost === null)) {
           throw new Error("evaluation cost is unknown; execution reconciliation required");
         }

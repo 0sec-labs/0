@@ -116,6 +116,35 @@ describe("independent evolution oracle", () => {
     expect(before.sourceRevision).not.toBe(before.evaluatorDigest);
   });
 
+  it("rejects a declared model worker before dispatch when durable safety is disabled", async () => {
+    const { config, baseline, candidate } = await setup();
+    let dispatched = false;
+    await expect(evaluateEvolutionCandidate(baseline, candidate, {
+      ...config, safety: { enabled: false, holdoutExposureLimit: 100,
+        workerModel: { provider: "openai", model: "gpt-4o-mini", maxCostUsdPerExecution: 0.01 } },
+    }, { sandbox: async () => { dispatched = true; throw new Error("must not dispatch"); } })).rejects.toThrow(/require enabled durable safety/);
+    expect(dispatched).toBe(false);
+  });
+
+  it.each([undefined, { enabled: false, holdoutExposureLimit: 100 }, { enabled: true, holdoutExposureLimit: 100 }])(
+    "rejects undeclared model billing instead of reporting compute-only evaluation cost (safety %j)", async (safety) => {
+      const { config, baseline, candidate } = await setup();
+      const sandbox = probe(candidate.id, "correct");
+      let dispatched = 0;
+      await expect(evaluateEvolutionCandidate(baseline, candidate, { ...config, ...(safety ? { safety } : {}) }, {
+        modelIdentity: () => ({ provider: "openai", model: "proposal-model" }),
+        sandbox: async (request) => {
+          dispatched++;
+          return { ...await sandbox(request), workerModelUsage: {
+            provider: "openai", model: "gpt-4o-mini", costUsd: 100, receiptDigest: "sha256:" + "c".repeat(64),
+          } };
+        },
+      })).rejects.toThrow(/undeclared worker model charge/);
+      expect(dispatched).toBe(1);
+      if (safety?.enabled) expect(loadEvolutionCampaign(config.storePath).unknownCost).toBe(true);
+    },
+  );
+
   it("reserves and settles evaluated worker model charges separately from compute", async () => {
     const { config, baseline, candidate } = await setup();
     const safe = { ...config, safety: { enabled: true, holdoutExposureLimit: 100,

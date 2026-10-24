@@ -86,6 +86,9 @@ export function canonicalEvolutionJson(value: unknown): string {
 
 export function parseEvolutionConfig(raw: unknown, baseDir = process.cwd()): EvolutionConfig {
   const parsed = schema.parse(raw);
+  if (parsed.safety?.workerModel && !parsed.safety.enabled) {
+    throw new Error("model-backed evolution workers require enabled durable safety accounting");
+  }
   const admitted = isAdmittedSmolvmWorkbench();
   if (admitted) {
     if (parsed.imageArchive) throw new Error("Admitted workbench images must use the host-approved catalog, not guest archive paths");
