@@ -101,3 +101,30 @@ it("withdraws the zero-external-fee assertion if a server unexpectedly reports a
   expect(await runtime.executeNative("local-only", [], [])).toMatchObject({ stopReason: "error", usage: { inputTokens: 20, outputTokens: 2 } });
   expect((await runtime.observation()).externalApiFeeUsd).toBeNull();
 });
+
+it("rejects the observed XML-renderer/JSON-parser mismatch before inference", async () => {
+  const fetchImpl = vi.fn(async (url: string | URL | Request) => String(url).endsWith("/tags")
+    ? Response.json({ models: [{ name: model, digest }] })
+    : Response.json({ details: { format: "safetensors", runner: "mlx" }, model_info: { "general.architecture": "qwen3" }, modelfile: "RENDERER qwen3-coder\nPARSER qwen3\n" }));
+  const runtime = createLocalOllamaRoutingRuntime(plan, fetchImpl as typeof fetch);
+  await expect(runtime.executeNative("local-only", [], [])).rejects.toThrow(/incompatible.*renderer\/parser/);
+  expect(fetchImpl.mock.calls.every(([url]) => !String(url).endsWith("/chat"))).toBe(true);
+});
+
+it("maps native Ollama tool-call metadata without an OpenAI transport shim", async () => {
+  const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+    const path = String(url);
+    if (path.endsWith("/tags")) return Response.json({ models: [{ name: model, digest }] });
+    if (path.endsWith("/show")) return Response.json({ details: { format: "safetensors", runner: "mlx" }, model_info: { "general.architecture": "qwen3" }, modelfile: "RENDERER qwen3-coder\nPARSER qwen3-coder\n" });
+    if (path.endsWith("/version")) return Response.json({ version: "test" });
+    if (path.endsWith("/ps")) return Response.json({ models: [] });
+    const body = JSON.parse(String(init?.body));
+    expect(body.messages).toEqual([{ role: "system", content: "scope" }, { role: "user", content: "Read fixture." }]);
+    expect(body.tools[0]).toEqual({ type: "function", function: { name: "read_fixture", description: "Read fixture", parameters: { type: "object", properties: { id: { type: "string" } }, required: ["id"] } } });
+    return Response.json({ model, message: { content: "", tool_calls: [{ function: { name: "read_fixture", arguments: { id: "d-01" } } }] }, done: true, done_reason: "stop", prompt_eval_count: 20, eval_count: 12 });
+  });
+  const runtime = createLocalOllamaRoutingRuntime({ ...plan, local: { ...plan.local!, protocol: { renderer: "qwen3-coder", parser: "qwen3-coder" } } }, fetchImpl as typeof fetch);
+  const result = await runtime.executeNative("scope", [{ role: "user", content: [{ type: "text", text: "Read fixture." }] }], [{ name: "read_fixture", description: "Read fixture", input_schema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] } }]);
+  expect(result).toMatchObject({ stopReason: "tool_use", content: [{ type: "tool_use", name: "read_fixture", input: { id: "d-01" } }] });
+  expect((await runtime.observation()).measurements[0]).toMatchObject({ finishReason: "stop", toolCallNames: ["read_fixture"], toolArgumentShapes: [{ type: "object", keys: ["id"] }], assistantTextCharacters: 0, outputAtCap: false });
+});

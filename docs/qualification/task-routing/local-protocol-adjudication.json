@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "scope": "benign synthetic routing protocol only; no task-quality adjudication",
+  "originalProfile": {
+    "manifestDigest": "sha256:94f66e7628259ecc39cb2fc0eb6b81a51fc2ebe5d586c7d01f52f5dc94df9346",
+    "activeRenderer": "qwen3-coder",
+    "activeParser": "qwen3",
+    "rendererToolFormat": "XML function/parameter blocks",
+    "parserToolFormat": "JSON name/arguments object",
+    "source": "retained server template-selection metadata and exact Ollama v0.40.6 source",
+    "finishReasonsRetained": false,
+    "toolCallShapesRetained": false,
+    "outputTokenRange": [
+      128,
+      193
+    ],
+    "outputTokenCap": 256,
+    "inputTokensPerCall": 359,
+    "inputTokenCap": 4096,
+    "outputCapReached": false,
+    "conclusion": "concrete renderer/parser mismatch; original gate cause cannot be attributed to model capability"
+  },
+  "correctedProfile": {
+    "manifestDigest": "sha256:d9de54718cc8ca5e35f7011807537a9b85bc41e426e2754ac8617e4b8627dd4b",
+    "activeRenderer": "qwen3-coder",
+    "activeParser": "qwen3-coder",
+    "profile": "explicitly matched XML protocol; distinct from native Qwen3 JSON training template",
+    "inferenceRequests": 8,
+    "finishReasons": [
+      "stop"
+    ],
+    "outputCapReached": false,
+    "structuredToolCallCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "toolArgumentShapes": [
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      []
+    ],
+    "assistantTextCharacterCounts": [
+      603,
+      613,
+      624,
+      622,
+      790,
+      556,
+      743,
+      869
+    ],
+    "conclusion": "matched transport profile still exposed no required structured tool call; task quality not evaluated"
+  },
+  "pinnedTokenizerTemplate": {
+    "sha256": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+    "toolFormat": "JSON name/arguments object",
+    "containsXmlFunctionTags": false
+  },
+  "sources": [
+    {
+      "url": "https://github.com/ollama/ollama/blob/v0.40.6/model/renderers/qwen3coder.go",
+      "sha256": "b7d32cf400b56d26e30463a3da75fdf2199ae8d044583ddce88e2fae97a5a6e2"
+    },
+    {
+      "url": "https://github.com/ollama/ollama/blob/v0.40.6/model/parsers/qwen3.go",
+      "sha256": "595783922295eaed47350ed41fcd9c73e07004e3b037b934b9728cd8917e3f90"
+    }
+  ],
+  "totalGenuineInferenceRequests": 24,
+  "totalInputTokens": 8616,
+  "totalOutputTokens": 3684,
+  "externalApiFeeUsd": 0,
+  "computeCostUsd": null,
+  "rawReasoningRetained": false,
+  "routeQualified": false,
+  "modelIncapabilityClaim": false,
+  "furtherInferencePlanned": false
+}
