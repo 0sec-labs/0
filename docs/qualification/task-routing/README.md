@@ -133,7 +133,7 @@ limit. Machine, energy and opportunity costs remain unknown.
 
 ```sh
 node packages/cli/dist/index.js routing-qualify \
-  --plan docs/qualification/task-routing/local-plan.json \
+  --plan docs/qualification/task-routing/local-xml-v2-plan.json \
   --out /tmp/local-task-routing.json
 ```
 
@@ -176,3 +176,50 @@ failure, and stops further dispatch on exceptions with unknown usage. Those
 paths were not exercised by the two retained local observations; no extra model
 inferences were run solely to refresh a code hash. Fixture receipts are refreshed
 against the final implementation, and historical local hashes remain unchanged.
+
+## Protocol-gate adjudication and one corrected replay
+
+`local-protocol-adjudication.json` separates transport/profile evidence from model
+quality. The original server metadata selected `renderer=qwen3-coder` and
+`parser=qwen3`. Exact Ollama v0.40.6 source shows that the
+[renderer](https://github.com/ollama/ollama/blob/v0.40.6/model/renderers/qwen3coder.go)
+instructs XML function/parameter blocks while that
+[parser](https://github.com/ollama/ollama/blob/v0.40.6/model/parsers/qwen3.go)
+expects a JSON name/arguments object. The cached Qwen3 tokenizer template also
+specifies JSON. Thus the original observations contained a concrete
+renderer/parser incompatibility and cannot establish model incapability.
+Their output counts, 128–193 tokens, were below the 256-token cap; input was
+359 tokens against a 4,096-token context. Original receipts did not retain finish
+reasons or tool-call shapes, so those details cannot be reconstructed afterward.
+
+Only this concrete mismatch justified one additional bounded replay. A separate
+alias reuses the same cached weights, preserves the original alias, and sets
+`PARSER qwen3-coder` to match the active XML renderer. Its pinned manifest is
+`sha256:d9de54718cc8ca5e35f7011807537a9b85bc41e426e2754ac8617e4b8627dd4b`.
+`local-xml-v2-plan.json` retains the same finite call/token/deadline bounds and
+requires that exact renderer/parser profile before inference. This XML profile
+is distinct from the native Qwen3 JSON training template; it is not a canonical
+Qwen3-capability benchmark. The adapter now rejects the original incompatible
+pair before inference and tests native Ollama tool mapping without an OpenAI
+transport shim.
+
+`local-xml-v2-report.json` records 8 genuine local requests in 10.076 seconds,
+2,872 input / 1,228 output tokens, with 1.085 seconds median inference time.
+Every response ended with `finishReason=stop`, not a length stop; none reached
+the token cap. Every response exposed zero structured tool-call names and zero
+argument shapes, with nonempty assistant text. No required tool roundtrip
+completed. The gate is therefore not explained by exhausted output budget, but
+the tested profile remains inconclusive for task quality; no general model
+incapability claim follows. No further inference is planned.
+
+All three observations are retained: 24 genuine local requests, 8,616 input and
+3,684 output tokens in total. API fees were zero; compute and energy costs remain
+unknown. Diagnostics retain only finish reason, counts, names and argument-key
+shapes, never raw reasoning or argument values. Parser errors are normalized so
+that generated text cannot enter error receipts. Evaluator/adapter hashes and
+protocol revisions remain separate rather than relabeling old attempts.
+
+Commit `b1ee4f63` preserves the matched-profile replay's as-run decoder and
+metadata contract. The following decoder-only hardening normalizes JSON errors
+without repeating inference. Historical numeric measurements, metadata and
+reason strings are not rewritten to look like results from the newer code.

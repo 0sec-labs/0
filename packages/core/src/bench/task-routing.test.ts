@@ -152,3 +152,19 @@ it("stops after a runtime exception with unknown usage rather than letting anoth
   expect(report.estimatedUsd).toBeNull();
   expect(report.stopReason).toContain("unknown usage");
 });
+
+it("keeps generated reasoning text out of parser-error diagnostics", async () => {
+  const root = taskRoutingFixtureRuntime(plan.models);
+  const fork = root.forkForSubagent!.bind(root);
+  root.forkForSubagent = async (...args) => {
+    const child = await fork(...args); const execute = child.executeNative.bind(child);
+    child.executeNative = async (...params) => {
+      const result = await execute(...params);
+      return result.stopReason === "end_turn" ? { ...result, content: [{ type: "text", text: "<think>PRIVATE_REASONING_NOT_PERSISTED</think>" }] } : result;
+    };
+    return child;
+  };
+  const report = await run({}, root);
+  expect(report.trials.every(trial => trial.reason === "final answer JSON schema mismatch")).toBe(true);
+  expect(JSON.stringify(report)).not.toContain("PRIVATE_REASONING_NOT_PERSISTED");
+});

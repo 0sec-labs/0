@@ -37,7 +37,7 @@ export interface RoutingQualificationPlan {
   /** A reviewed scope/goal/depth context; not evidence of generality beyond it. */
   workflow: { targetKind: "web" | "source"; goal: "known-vulnerabilities" | "unknown-vulnerabilities" | "misconfigurations"; depth: "quick" | "default" | "deep" };
   authorizationRef: string;
-  local?: { manifestDigest: string; sourcePin: string; weightsDigest: string; maxInputTokens: number; maxOutputTokens: number; totalTokenCap: number };
+  local?: { manifestDigest: string; sourcePin: string; weightsDigest: string; maxInputTokens: number; maxOutputTokens: number; totalTokenCap: number; protocol?: { renderer: string; parser: string } };
 }
 export interface RoutingTrial {
   model: string; provider: string | null; role: RoutingRole; caseId: string; control: "positive" | "negative"; repeat: number;
@@ -120,13 +120,20 @@ export async function qualifyTaskRouting(options: {
         };
         const first = await execute();
         const calls = first.content.filter(block => block.type === "tool_use");
-        if (first.stopReason !== "tool_use" || calls.length !== 1 || calls[0]!.name !== "read_fixture" || toolArgs.parse(calls[0]!.input).id !== test.id) throw new Error("curated tool protocol mismatch");
+        if (first.stopReason !== "tool_use") throw new Error("curated tool response missing");
+        if (calls.length !== 1) throw new Error("curated tool cardinality mismatch");
+        if (calls[0]!.name !== "read_fixture") throw new Error("curated tool name mismatch");
+        const requested = toolArgs.safeParse(calls[0]!.input);
+        if (!requested.success) throw new Error("curated tool argument shape mismatch");
+        if (requested.data.id !== test.id) throw new Error("curated tool fixture identity mismatch");
         trial.toolRoundTrip = true;
         messages.push({ role: "assistant", content: first.content, ...(first.providerRaw ? { providerRaw: first.providerRaw } : {}) });
         messages.push({ role: "user", content: [{ type: "tool_result", tool_use_id: calls[0]!.id, content: JSON.stringify({ scope, evidenceIds, input: test.input }) }] });
         const result = await execute();
         if (result.stopReason !== "end_turn" || result.content.some(block => block.type !== "text")) throw new Error("final answer protocol mismatch");
-        const parsed = answer.parse(JSON.parse(result.content.map(block => block.type === "text" ? block.text : "").join("")));
+        let parsed: z.infer<typeof answer>;
+        try { parsed = answer.parse(JSON.parse(result.content.map(block => block.type === "text" ? block.text : "").join(""))); }
+        catch { throw new Error("final answer JSON schema mismatch"); }
         trial.authorityPreserved = canonical(parsed.scope) === canonical(scope);
         trial.evidencePreserved = canonical(parsed.evidenceIds) === canonical(evidenceIds);
         trial.validationPreserved = parsed.validation === test.expected.validation;
@@ -166,7 +173,7 @@ export function taskRoutingFixtureRuntime(models: readonly string[], regressMode
 const planSchema = z.object({
   mode: z.enum(["fixture", "model-api", "local-model"]), models: z.array(z.string().min(1).max(160)).min(1).max(8), repeats: z.number().int().min(1).max(20), maxCalls: z.number().int().min(1).max(2560), costCapUsd: z.number().nonnegative().finite(), timeCapMs: z.number().positive().max(86_400_000),
   workflow: z.object({ targetKind: z.enum(["web", "source"]), goal: z.enum(["known-vulnerabilities", "unknown-vulnerabilities", "misconfigurations"]), depth: z.enum(["quick", "default", "deep"]) }).strict(), authorizationRef: z.string().min(1).max(160),
-  local: z.object({ manifestDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/), sourcePin: z.string().min(1).max(160), weightsDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/), maxInputTokens: z.number().int().min(1).max(4096), maxOutputTokens: z.number().int().min(1).max(512), totalTokenCap: z.number().int().min(1).max(200000) }).strict().optional(),
+  local: z.object({ manifestDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/), sourcePin: z.string().min(1).max(160), weightsDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/), maxInputTokens: z.number().int().min(1).max(4096), maxOutputTokens: z.number().int().min(1).max(512), totalTokenCap: z.number().int().min(1).max(200000), protocol: z.object({ renderer: z.literal("qwen3-coder"), parser: z.literal("qwen3-coder") }).strict().optional() }).strict().optional(),
 }).strict();
 export const TASK_ROUTING_EVALUATOR_DIGEST = digest({ implementation: qualifyTaskRouting.toString(), preflight: preflightTaskRouting.toString(), planSchema: z.toJSONSchema(planSchema), answerSchema: z.toJSONSchema(answer), tool });
 
