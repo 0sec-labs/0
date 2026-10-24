@@ -4580,6 +4580,9 @@ export class ToolExecutor {
         identity: label,
         role: principal.role,
         status: resp.status,
+        truncated: resp.truncated ?? false,
+        response_digest: "sha256:" + createHash("sha256").update(resp.body).digest("hex"),
+        owner_marker_observed: typeof ownershipMarker === "string" && resp.body.includes(ownershipMarker),
         ...diff,
         evidence: probeEvidence(resp),
       });
@@ -4609,12 +4612,35 @@ export class ToolExecutor {
           : `No access-control break reproduced at ${baselineResp.url}.`,
     };
 
+    // Only the operator-owned fixture can establish restricted ownership for
+    // a public milestone. Model-supplied expect_denied/markers are insufficient.
+    const fixture = method === "GET" && body === undefined && Object.keys(extraHeaders).length === 0
+      ? this.ctx.accessControlFixtures?.find(f => {
+        try { return new URL(f.url).href === baselineResp.url && f.ownerIdentity === baseline.label
+          && f.ownershipMarker === ownershipMarker && expectDenied; } catch { return false; }
+      }) : undefined;
+    const qualified = fixture ? comparisons.filter(c => fixture.comparisonIdentities.includes(String(c.identity))) : [];
+    const markerObserved = typeof ownershipMarker === "string" && baselineResp.body.includes(ownershipMarker);
+    const confirmedRead = !baselineResp.truncated && markerObserved && qualified.some(c => c.broken === true && c.truncated === false);
+    const blockedRead = !baselineResp.truncated && is2xx(baselineResp.status) && markerObserved
+      && qualified.length > 0 && fixture!.comparisonIdentities.every(identity => qualified.some(c => c.identity === identity))
+      && qualified.every(c => c.verdict === "properly_denied" && c.truncated === false);
     this.persistToolArtifact("access_control_probe", {
       url: baselineResp.url,
       method,
       baseline: baseline.label,
       compared: compareLabels,
       broken_count: broken.length,
+      ...(confirmedRead || blockedRead ? { access_proof: {
+        schema: "0.access-proof/v1", authority: "operator-fixture", access_class: "unauthorized-read",
+        status: confirmedRead ? "confirmed" : "blocked", baseline_status: baselineResp.status,
+        owner_marker_observed: true, comparison_marker_observed: confirmedRead,
+        cleanup: "not-required",
+        baseline_observation: { status: baselineResp.status, truncated: baselineResp.truncated ?? false,
+          response_digest: "sha256:" + createHash("sha256").update(baselineResp.body).digest("hex"), marker_observed: true },
+        comparison_observations: (confirmedRead ? qualified.filter(c => c.broken === true && c.truncated === false) : qualified).map(c => ({ identity: c.identity, status: c.status,
+          truncated: c.truncated, response_digest: c.response_digest, marker_observed: c.owner_marker_observed })),
+      } } : {}),
     });
 
     return { success: true, output };

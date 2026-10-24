@@ -316,7 +316,7 @@ export function LivePage() {
       citedLeadId,
     };
     setHuntCards((prev) => {
-      if (event.kind === "access_milestone" && prev.some(existing => existing.event.kind === "access_milestone" && existing.event.milestone.key === event.milestone.key)) return prev;
+      if (event.kind === "access_milestone" && prev.some(existing => existing.event.kind === "access_milestone" && existing.event.milestone.key === event.milestone.key && existing.event.milestone.status === event.milestone.status)) return prev;
       return [card, ...prev].slice(0, MAX_HUNT_ROWS);
     });
   }, [mkId]);
