@@ -33,8 +33,6 @@
 </p>
 
 <p align="center">
-  <a href="assets/readme-ui-demo.mp4">Watch the UI walkthrough</a><br/>
-  <sub>A source review of the demo API, with idle time shortened.</sub><br/>
   <sub>Backed by Y Combinator · The Swiss Applied AI &amp; Cybersecurity Research Lab</sub>
 </p>
 
@@ -56,11 +54,33 @@ Configure a [model provider](https://docs.0.security/api-keys/) to run AI workfl
 See [installation](https://docs.0.security/getting-started/) and
 [troubleshooting](https://docs.0.security/troubleshooting/).
 
+## Findings
+
+Review source evidence and organize findings in a queue or on the board.
+
+<p align="center">
+  <a href="assets/readme-findings.mp4">
+    <picture>
+      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme-findings.jpg">
+      <img src="assets/readme-findings.gif" alt="0 findings: review the queue, organize the board, and inspect source evidence" width="100%">
+    </picture>
+  </a>
+</p>
+
 ## Security workflows
 
 Chat with 0 in the web UI, investigate findings, and use built-in templates for
 assessment, verification, fixes, and research. Runs retain results; Learning
 keeps local activity and source-grounded notes.
+
+<p align="center">
+  <a href="assets/readme-workflows.mp4">
+    <picture>
+      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme-workflows.jpg">
+      <img src="assets/readme-workflows.gif" alt="0 workflows: choose a template, inspect the workflow graph, and edit a review step" width="100%">
+    </picture>
+  </a>
+</p>
 
 For automation and coding agents, the CLI exposes the same workflow runner:
 
@@ -75,6 +95,33 @@ For automation and coding agents, the CLI exposes the same workflow runner:
 [Workflow guide](https://docs.0.security/workflow/) ·
 [Learning](https://docs.0.security/learning/) ·
 [GitHub Actions](https://docs.0.security/ci/github-action/)
+
+## Hosts and plugins
+
+Choose a host for your work. Connect service integrations and manage extensions.
+Use ⌘K / Ctrl+K to jump between tools.
+
+<p align="center">
+  <a href="assets/readme-tools.mp4">
+    <picture>
+      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme-tools.jpg">
+      <img src="assets/readme-tools.gif" alt="0 hosts and plugins: jump with keyboard search, choose a host, and browse integrations and extensions" width="100%">
+    </picture>
+  </a>
+</p>
+
+## Skills and memory
+
+Reuse security instructions and retain lessons linked to the source.
+
+<p align="center">
+  <a href="assets/readme-memory.mp4">
+    <picture>
+      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme-memory.jpg">
+      <img src="assets/readme-memory.gif" alt="0 skills and memory: browse built-in skills and inspect saved lessons with source references" width="100%">
+    </picture>
+  </a>
+</p>
 
 ## 0cloud
 
