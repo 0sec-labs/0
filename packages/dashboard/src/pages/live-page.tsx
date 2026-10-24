@@ -1,4 +1,4 @@
-import { appendAccessMilestone } from "@0/shared/dist/access-milestone.js";
+import { appendAccessMilestone, visibleAccessMilestones } from "@0/shared/dist/access-milestone.js";
 import { AccessMilestoneBanner } from "@/components/access-milestone";
 import { useBackendApi } from "@/api";
 import { eventStream } from "@/lib/event-stream";
@@ -316,7 +316,15 @@ export function LivePage() {
       citedLeadId,
     };
     setHuntCards((prev) => {
-      if (event.kind === "access_milestone" && prev.some(existing => existing.event.kind === "access_milestone" && existing.event.milestone.key === event.milestone.key && existing.event.milestone.status === event.milestone.status)) return prev;
+      if (event.kind === "access_milestone") {
+        const index = prev.findIndex(existing => existing.event.kind === "access_milestone" && existing.event.milestone.key === event.milestone.key);
+        if (index >= 0) {
+          const existing = prev[index].event as Extract<osecHuntEvent, { kind: "access_milestone" }>;
+          const merged = appendAccessMilestone([{ milestone: existing.milestone }], { milestone: event.milestone });
+          if (merged[0].milestone === existing.milestone) return prev;
+          const next = [...prev]; next[index] = card; return next;
+        }
+      }
       return [card, ...prev].slice(0, MAX_HUNT_ROWS);
     });
   }, [mkId]);
@@ -518,7 +526,7 @@ export function LivePage() {
         )}
       />
 
-      {accessMilestones.slice(-3).map(item => <AccessMilestoneBanner key={item.milestone.key} milestone={item.milestone} scanId={item.scanId} at={item.ts * 1000} />)}
+      {visibleAccessMilestones(accessMilestones).map(item => <AccessMilestoneBanner key={item.milestone.key} milestone={item.milestone} scanId={item.scanId} at={item.ts * 1000} />)}
 
       <Card className="overflow-hidden">
         <CardHeader>

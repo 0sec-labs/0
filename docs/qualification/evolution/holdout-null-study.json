@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "protocol": "independent-seed-null-v1",
+  "campaigns": 2000,
+  "panelSize": 64,
+  "threshold": 40,
+  "nullTruth": "All candidates have true success probability 0.5; no capability gain exists.",
+  "limits": "Synthetic simulation, not production-gate calibration or an adaptive-validity guarantee. Correlated real tasks and stochastic workers require the separate paid qualification protocol.",
+  "arms": [
+    {
+      "selectionQueryBudget": 4,
+      "falseSelection": {
+        "count": 242,
+        "total": 2000,
+        "rate": 0.121,
+        "interval95": [
+          0.10742889948295903,
+          0.13602422235623068
+        ]
+      },
+      "independentFinalFalsePromotion": {
+        "count": 5,
+        "total": 2000,
+        "rate": 0.0025,
+        "interval95": [
+          0.0010683087284139143,
+          0.005839153316432755
+        ]
+      },
+      "finalQueries": 242
+    },
+    {
+      "selectionQueryBudget": 32,
+      "falseSelection": {
+        "count": 1240,
+        "total": 2000,
+        "rate": 0.62,
+        "interval95": [
+          0.5985165014191288,
+          0.6410234072333704
+        ]
+      },
+      "independentFinalFalsePromotion": {
+        "count": 32,
+        "total": 2000,
+        "rate": 0.016,
+        "interval95": [
+          0.011356235350080627,
+          0.02249946641817221
+        ]
+      },
+      "finalQueries": 1240
+    }
+  ]
+}

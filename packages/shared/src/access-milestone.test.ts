@@ -72,3 +72,55 @@ describe("operator-owned read milestones", () => {
     expect(rows[0].milestone.status).toBe("confirmed"); expect(rows[0].at).toBe(2);
   });
 });
+
+const stateArtifact = () => ({ ...artifact(), observation_url: "https://target.test/private?secret=hidden",
+  observation_before: { ...artifact().observation_before, redacted: false, value_type: "string" },
+  observation_after: { ...artifact().observation_after, redacted: false, value_type: "string" },
+  steps: artifact().steps.map(step => ({ ...step, truncated: false, request_marker_sent: true })),
+  state_access_proof: { schema: "0.state-access-proof/v1", authority: "operator-fixture", access_class: "unauthorized-write", status: "confirmed", challenge_bound: true,
+    proof_id: "00000000-0000-4000-8000-000000000001", fixture_digest: "sha256:" + "a".repeat(64), baseline_digest: "sha256:" + "b".repeat(64), observed_digest: "sha256:" + "c".repeat(64),
+    cleanup: "required", verified_at: 1000, generation: 1, cleanup_revision: 0 } });
+describe("retained state proof presentation", () => {
+  it("shows separate confidence, severity, access and precise cleanup without private values", () => {
+    const milestone = accessMilestoneFromArtifact("tool_artifact", stateArtifact(), "scan", "original")!;
+    expect(milestone).toMatchObject({ status: "confirmed", accessClass: "unauthorized-write", severity: "unassessed", confidence: 1, cleanup: "required", verifiedAt: 1000 });
+    expect(milestone.summary).not.toContain("private-marker");
+    expect(milestone.asset).toBe("https://target.test");
+    expect(milestone.limitations?.join(" ")).toContain("other side effects");
+  });
+  it("rejects invalid/unsupported proof claims and contradictory cleanup observations", () => {
+    const original = stateArtifact();
+    for (const changed of [{ authority: "model" }, { access_class: "shell" }, { fixture_digest: "fake" }, { cleanup: "completed" }, { cleanup_revision: -1 }, { generation: 0 }]) {
+      expect(accessMilestoneFromArtifact("tool_artifact", { ...original, state_access_proof: { ...original.state_access_proof, ...changed } }, "scan")).toBeNull();
+    }
+    expect(accessMilestoneFromArtifact("tool_call_completed", original, "scan")).toBeNull();
+    expect(accessMilestoneFromArtifact("tool_artifact", { tool: "access_control_cleanup", observation_url: original.observation_url,
+      state_access_proof: { ...original.state_access_proof, cleanup: "completed", cleanup_at: 2000, cleanup_revision: 1 },
+      observation: { status: 200, truncated: false, value_digest: original.state_access_proof.observed_digest } }, "scan")).toBeNull();
+  });
+  it("keeps cleanup revisions monotonic during reconnect and allows a new proof generation", () => {
+    const original = stateArtifact();
+    const required = accessMilestoneFromArtifact("tool_artifact", original, "scan", "original")!;
+    const restored = accessMilestoneFromArtifact("tool_artifact", { tool: "access_control_cleanup", observation_url: original.observation_url,
+      state_access_proof: { ...original.state_access_proof, cleanup: "completed", cleanup_at: 1000, cleanup_revision: 2, evidence_event_id: "original" },
+      observation: { status: 200, truncated: false, value_digest: original.state_access_proof.baseline_digest } }, "scan", "cleanup")!;
+    expect(restored).toMatchObject({ evidenceEventId: "original", cleanupEvidenceEventId: "cleanup" });
+    let rows = appendAccessMilestone([{ milestone: required }], { milestone: restored });
+    rows = appendAccessMilestone(rows, { milestone: required });
+    expect(rows).toHaveLength(1); expect(rows[0].milestone.cleanup).toBe("completed");
+    const newProof = accessMilestoneFromArtifact("tool_artifact", { ...original,
+      state_access_proof: { ...original.state_access_proof, proof_id: "00000000-0000-4000-8000-000000000002", generation: 2 } }, "scan", "new")!;
+    rows = appendAccessMilestone(rows, { milestone: newProof });
+    expect(rows[0].milestone.cleanup).toBe("required");
+    expect(rows[0].milestone.evidenceEventId).toBe("new");
+  });
+  it("retains the strongest proof through lower-impact traffic instead of evicting it", async () => {
+    const { visibleAccessMilestones } = await import("./access-milestone.js");
+    const confirmed = accessMilestoneFromArtifact("tool_artifact", stateArtifact(), "scan")!;
+    const conditional = accessMilestoneFromArtifact("tool_artifact", artifact(), "scan")!;
+    let rows = [{ milestone: confirmed }];
+    for (let i = 0; i < 100; i++) rows = appendAccessMilestone(rows, { milestone: { ...conditional, key: String(i) } });
+    expect(rows).toHaveLength(80);
+    expect(visibleAccessMilestones(rows)[0].milestone).toBe(confirmed);
+  });
+});

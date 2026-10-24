@@ -12,7 +12,7 @@ import {
   rollbackEvolutionVersion, snapshotEvolutionSource,
   startEvolutionCanary, verifyEvolutionSnapshot,
 } from "./registry.js";
-import { selectEvolutionAlternativeParent } from "./loop.js";
+import { archiveSurfaceCompatible, selectEvolutionAlternativeParent } from "./loop.js";
 import type { EvolutionConfig, EvolutionEvaluation, EvolutionSandbox, EvolutionVersion } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -538,4 +538,38 @@ describe("alternative-parent rollback", () => {
     expect(loadEvolutionRegistry(config.storePath).activeId).toBe(baseline.id);
   });
 
+});
+
+
+it("archive admission cannot resurrect deleted files or alter noneditable source bytes", async () => {
+  const baseline = await createBaseline(config);
+  const { version } = await createAndRecordCandidate(config, baseline, improved, makeImprovingSandbox);
+  expect(archiveSurfaceCompatible(config, version.snapshot, baseline.snapshot)).toBe(true);
+  const lockedConfig = { ...config, editablePaths: ["src/other.cjs"] };
+  expect(archiveSurfaceCompatible(lockedConfig, version.snapshot, baseline.snapshot)).toBe(false);
+  const extra = { ...version.snapshot, files: [...version.snapshot.files, { path: "src/retired-authority.cjs", bytes: 1, digest: evolutionDigest("retired authority") }] };
+  expect(archiveSurfaceCompatible(config, extra, baseline.snapshot)).toBe(false);
+  expect(archiveSurfaceCompatible(config, baseline.snapshot, extra)).toBe(false);
+});
+
+it("runs registered paired archive arms only after shared admission and observed history billing", async () => {
+  const { runRegisteredArchiveSearchStudy } = await import("./archive-study-runner.js");
+  const { CONTROL_SEARCH_PLAN, createDeterministicSearchStudyAdapter } = await import("./search-study-controls.js");
+  const baseline = await createBaseline(config);
+  const { version } = await createAndRecordCandidate(config, baseline, improved, makeImprovingSandbox);
+  const result = await runRegisteredArchiveSearchStudy({ config, currentEvidenceVersionId: version.id,
+    initialArchiveBilling: { actualUsd: .1, receiptDigest: evolutionDigest("mock-initial-archive-bill") },
+    plan: CONTROL_SEARCH_PLAN, feedback: "Fixed development feedback", createAdapter: parents => {
+      expect([...parents.keys()]).toEqual([baseline.id, version.id]);
+      for (const snapshot of parents.values()) verifyEvolutionSnapshot(snapshot);
+      return createDeterministicSearchStudyAdapter();
+    },
+  });
+  expect(result.report.trials).toHaveLength(12);
+  expect(result.report.trials.filter(trial => trial.arm === "current").every(trial => trial.parentId === version.id)).toBe(true);
+  expect(result.initialArchive.activeBaselineId).toBe(baseline.id);
+  expect(result.initialArchive.productionParentId).toBe(version.id);
+  expect(result.initialArchive.observedBilling.actualUsd).toBe(.1);
+  expect(result.initialArchive.historicalRecordedProposalCostUsd).toBe(.01);
+  expect(result.initialArchive.historicalRecordedEvaluationCostUsd).toBeGreaterThan(0);
 });

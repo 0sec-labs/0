@@ -101,3 +101,27 @@ describe("executeAssessment", () => {
   });
 
 });
+
+
+it("keeps a confirmed multi-task plan alive beyond one request timeout while bounding each request", async () => {
+  vi.useFakeTimers();
+  try {
+    const deps = dependencies();
+    let dispatched: Parameters<AssessmentDependencies["runPipeline"]>[0] | undefined;
+    vi.mocked(deps.runPipeline).mockImplementation(async input => {
+      dispatched = input;
+      await new Promise(resolve => setTimeout(resolve, 40));
+      input.signal?.throwIfAborted();
+      return { ...report, targetType: "source-code", repo: "/repo" };
+    });
+    const plan = { goal: "unknown-vulnerabilities" as const, depth: "quick" as const, runCount: 1, executionMode: "sequential" as const, timeCapMs: 100, costCapUsd: 1 };
+    const pending = executeAssessmentRun({ ...options, timeout: 10, plan }, deps);
+    void pending.catch(() => {});
+    await vi.advanceTimersByTimeAsync(20);
+    expect(dispatched).toBeDefined();
+    expect(dispatched!.timeout).toBeLessThanOrEqual(10);
+    expect(dispatched!.signal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(30);
+    expect((await pending).report.executionSuccessful).not.toBe(false);
+  } finally { vi.useRealTimers(); }
+});

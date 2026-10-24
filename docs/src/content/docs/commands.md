@@ -7,7 +7,7 @@ tableOfContents:
 ---
 
 Find the command, arguments, and options for your task. This reference covers
-**63 top-level commands** and their registered subcommands.
+**64 top-level commands** and their registered subcommands.
 
 For a worked example, start with [Scan Workflows](/scan-workflows/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
@@ -569,6 +569,11 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
 | `--task-model <role=model>` | — | Explicit task model: discovery, attack, verify, report (repeatable) |
+| `--routing-report <file>` | — | Reviewed model-api task qualification report; opt-in recommendations only |
+| `--routing-model <model>` | — | Approve a model candidate for the reviewed routing plan (repeatable) |
+| `--routing-review-ref <ref>` | — | Review reference confirming provider/workflow authorization and model evidence limitations |
+| `--goal <goal>` | — | Noninteractive routing goal: known-vulnerabilities, unknown-vulnerabilities, misconfigurations |
+| `--plan-time-cap <ms>` | — | Overall wall-clock cap required for a noninteractive routing plan |
 | `--single-model` | — | Use the selected model for every task, ignoring task assignments |
 | `--no-guided` | — | Skip interactive scan planning and use explicit command options |
 | `--repo <path>` | — | Source code path for white-box scanning |
@@ -2001,6 +2006,34 @@ Guide: [Read the workflow](/research-workflows/).
 | `--categories <list>` | — | Comma-separated category IDs to run (default: all). Use --list-categories to see available. |
 | `--list-categories` | `false` | List available eval categories and exit |
 | `--verbose` | `false` | Show detailed output |
+
+### routing-qualify
+
+Run a finite offline panel for discovery, source analysis, verification and
+reporting. Fixture mode uses deterministic local responses and makes no provider
+calls. A model-api plan additionally requires `--allow-provider-calls`; every
+candidate shares the declared call, wall-clock and estimated-spend limits.
+Reports retain positive/negative controls, tool roundtrips, scope/evidence state,
+usage and inconclusive outcomes. Catalog estimates are not actual invoices.
+A `local-model` plan uses only an already-installed pinned loopback Ollama model
+and reserves context/output tokens before dispatch. It downloads nothing; zero
+external API fee does not imply free compute or a passing task-quality result.
+
+```text
+0 routing-qualify [options]
+```
+
+A synthetic panel does not establish broad model superiority. Review provider
+workload authorization, floating model identity and report limitations before
+opting into `scan --routing-report`. Fixture reports cannot enable recommendations;
+manual task pins and `--single-model` remain available.
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--plan <file>` **required** | — | Reviewed qualification plan JSON with models and shared limits |
+| `--out <file>` **required** | — | Report JSON destination |
+| `--allow-provider-calls` | `false` | Authorize API calls only for a model-api plan and its declared limits |
+| `--regress-model <model>` | — | Fixture-only negative control: corrupt this model's validation state |
 
 ### bench
 
