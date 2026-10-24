@@ -72,6 +72,21 @@ function reseal(evaluation: EvolutionEvaluation): EvolutionEvaluation {
 }
 
 describe("evolution snapshot boundaries", () => {
+  it("protects composed source/dist controller helpers while permitting unrelated app helpers", async () => {
+    mkdirSync(join(config.sourceRoot, "dist"));
+    const selected = parseEvolutionConfig({ ...config, sourcePaths: ["src", "dist"], editablePaths: ["src", "dist"] });
+    const baseline = await snapshotEvolutionSource(selected);
+    for (const name of ["artifacts", "controller-lock", "safety", "retention", "provenance", "curation-lineage", "sandbox", "rewrite", "campaign-validation-budget", "paired-retention", "paired-retention-receipt", "paired-search-study", "archive-study-runner", "search-study-model-adapter", "proposal-diversity-campaign"]) {
+      for (const path of [`src/improvement/${name}.ts`, `dist/improvement/${name}.js`]) {
+        await expect(createEvolutionCandidate(baseline, { rationale: "test controller boundary", modelCostUsd: 0,
+          edits: [{ path, beforeDigest: null, content: "export const fixture = true;\n" }] }, selected)).rejects.toThrow(/protected code area/);
+      }
+    }
+    const app = await createEvolutionCandidate(baseline, { rationale: "ordinary application helper", modelCostUsd: 0,
+      edits: [{ path: "src/safety.ts", beforeDigest: null, content: "export const fixture = true;\n" }] }, selected);
+    expect(app.files.some(file => file.path === "src/safety.ts")).toBe(true);
+  });
+
   it("rejects source aliases rather than uploading files outside the selected tree", async () => {
     const path = join(config.sourceRoot, "src/alias.cjs");
     symlinkSync(join(config.sourceRoot, "src/worker.cjs"), path);

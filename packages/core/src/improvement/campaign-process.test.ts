@@ -1,24 +1,37 @@
-import { buildSync } from "esbuild";
+import { createHash } from "node:crypto";
+import { build } from "esbuild";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { acquireEvolutionController } from "./controller-lock.js";
 import { createOrLoadEvolutionCampaign, loadEvolutionCampaign, reconcileCampaignDispatch, reserveCampaignDispatch, settleCampaignDispatch, type EvolutionComparisonIdentity } from "./safety.js";
 
+const digest = (label: string) => "sha256:" + createHash("sha256").update(label).digest("hex");
 const identity: EvolutionComparisonIdentity = {
- schemaVersion: 1, development: { digest: "dev", cases: 1 }, heldOut: { digest: "held", cases: 1 }, negativeControl: { digest: "negative", cases: 1 },
- evaluatorDigest: "evaluator", evaluatorSemantics: "v1", requestedModel: "fixture", resolvedModel: "fixture", provider: "deterministic-fixture",
- harnessRevision: "harness", toolRevision: "tool", sourceRevision: "sha256:" + "f".repeat(64), evaluatedWorker: { kind: "deterministic" }, compatibilityStatus: "compatible",
+ schemaVersion: 1, development: { digest: digest("development-fixture"), cases: 1 }, heldOut: { digest: digest("heldout-fixture"), cases: 1 }, negativeControl: { digest: digest("negative-fixture"), cases: 1 },
+ evaluatorDigest: digest("synthetic-evaluator"), evaluatorSemantics: digest("synthetic-semantics"), requestedModel: "fixture", resolvedModel: "fixture", provider: "deterministic-fixture",
+ harnessRevision: digest("synthetic-harness"), toolRevision: digest("synthetic-tool"), sourceRevision: "sha256:" + "f".repeat(64), evaluatedWorker: { kind: "deterministic" }, compatibilityStatus: "compatible",
 };
 const budgets = { maxModelCostUsd: 10, maxEvaluationCostUsd: 10 };
 let directory: string, executable: string;
-beforeAll(() => {
+beforeAll(async () => {
  directory = mkdtempSync(join(tmpdir(), "0-campaign-process-"));
- executable = join(directory, "probe.mjs");
- buildSync({ entryPoints: [join(import.meta.dirname, "__fixtures__/campaign-process.ts")], alias: { "@0/shared": join(import.meta.dirname, "../../../shared/src/index.ts") }, bundle: true, platform: "node", format: "esm", outfile: executable, logLevel: "silent" });
+ executable = join(directory, "probe.js");
+ writeFileSync(join(directory, "package.json"), JSON.stringify({ type: "module" }));
+ symlinkSync(new URL("../../node_modules", import.meta.url), join(directory, "node_modules"), "dir");
+ await build({ entryPoints: [join(import.meta.dirname, "__fixtures__/campaign-process.ts")], alias: { "@0/shared": join(import.meta.dirname, "../../../shared/src/index.ts") }, bundle: true, packages: "external",
+  // Curation's pure fixture validation shares a module with optional scanner
+  // entry points. Disable those unused capabilities explicitly in this ledger
+  // process fixture; any accidental scanner call must throw, never dispatch.
+  plugins: [{ name: "ledger-fixture-no-scanners", setup(builder) {
+   builder.onResolve({ filter: /(?:hunt-scan|appsec-catalog|bench\/index)\.js$/ }, args =>
+    args.importer.endsWith("/stages/lens-synthesis/validate.ts") ? { path: "disabled-scanners", namespace: "ledger-fixture" } : undefined);
+   builder.onLoad({ filter: /.*/, namespace: "ledger-fixture" }, () => ({ contents: 'export function runHuntScan(){throw new Error("scanner disabled in ledger process fixture")}; export const loadAppsecFinderLenses=runHuntScan; export const aggregateScorecard=runHuntScan; export const pickChampion=runHuntScan;', loader: "js" }));
+  } }], define: { __ZERO_COMPILED_TARGET__: "undefined" },
+  banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" }, platform: "node", format: "esm", outfile: executable, logLevel: "silent" });
 });
 afterAll(() => {
  const unlock = (path: string) => { chmodSync(path, 0o700); for (const entry of readdirSync(path, { withFileTypes: true })) if (entry.isDirectory()) unlock(join(path, entry.name)); };

@@ -27,6 +27,11 @@ const cache = new Map<string, { stamp: string; digest: string }>();
 export function evolutionToolImplementationDigest(moduleUrl: URL = new URL(import.meta.url)): string {
   const modules = ["sandbox", "controller-lock", "config", "registry", "evaluation", "safety", "curation-lineage", "retention", "provenance", "rewrite", "loop"];
   const directory = new URL("./", moduleUrl);
+  // Composed engineering controllers may add authority helpers. Include their
+  // sidecar bytes when shipped; standalone older distributions remain valid.
+  for (const name of ["campaign-validation-budget", "paired-retention", "paired-retention-receipt", "paired-search-study", "archive-study-runner", "search-study-model-adapter", "proposal-diversity-campaign"]) {
+    if (existsSync(new URL(`./${name}.js`, directory)) || existsSync(new URL(`./${name}.ts`, directory))) modules.push(name);
+  }
   const sourceFiles = modules.map(name => {
     const compiled = new URL(`./${name}.js`, directory);
     return existsSync(compiled) ? compiled : new URL(`./${name}.ts`, directory);

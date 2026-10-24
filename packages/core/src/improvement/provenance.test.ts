@@ -68,6 +68,18 @@ describe("observed evolution provenance", () => {
       expect(() => evolutionToolImplementationDigest(pathToFileURL(module))).toThrow(/restart before evaluation/);
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
+  it("includes a composed authority helper and invalidates its changed bytes", () => {
+    const root = mkdtempSync(join(tmpdir(), "0-composed-controller-identity-"));
+    try {
+      for (const name of ["sandbox", "controller-lock", "config", "registry", "evaluation", "safety", "curation-lineage", "retention", "provenance", "rewrite", "loop", "campaign-validation-budget"]) {
+        writeFileSync(join(root, `${name}.ts`), "export const fixtureRevision = 1;\n");
+      }
+      const module = pathToFileURL(join(root, "provenance.ts"));
+      expect(evolutionToolImplementationDigest(module)).toMatch(/^sha256:[a-f0-9]{64}$/);
+      writeFileSync(join(root, "campaign-validation-budget.ts"), "export const fixtureRevision = 2;\n");
+      expect(() => evolutionToolImplementationDigest(module)).toThrow(/restart before evaluation/);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
   it("observes a real esbuild-bundled controller without source sidecars", async () => {
     const root = mkdtempSync(join(tmpdir(), "0-real-bundle-identity-"));
     try {

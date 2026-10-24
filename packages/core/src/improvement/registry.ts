@@ -212,6 +212,9 @@ function validateEditPath(editPath: string, config: EvolutionConfig): void {
   // Protected code paths
   const lower = `/${normalized.toLowerCase()}`;
   const protectedPatterns = [
+    // The composed controller anchor includes budget, provenance, lineage and
+    // study authority helpers, in both source and compiled distributions.
+    /[/\\]improvement[/\\](?:artifacts|controller-lock|safety|retention|provenance|curation-lineage|sandbox|rewrite|campaign-validation-budget|paired-retention(?:-receipt)?|paired-search-study|archive-study-runner|search-study-model-adapter|proposal-diversity-campaign)\./,
     /[/\\]improvement[/\\]evaluation\./,
     /[/\\]improvement[/\\]registry\./,
     /[/\\]improvement[/\\]loop\./,

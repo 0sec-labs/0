@@ -1,7 +1,7 @@
 import { chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { parseEvolutionConfig } from "./config.js";
 import { evolutionDigest, evolutionSourceRevision, snapshotEvolutionSource } from "./registry.js";
 import { evolutionEvaluatorDigest } from "./evaluation.js";
@@ -11,11 +11,13 @@ import { runPairedSearchStudy } from "./paired-search-study.js";
 import type { EvolutionDependencies } from "./types.js";
 const roots: string[] = [];
 afterEach(() => {
+  vi.unstubAllEnvs();
   const unlock = (path: string) => { chmodSync(path, 0o700); for (const item of readdirSync(path, { withFileTypes: true })) if (item.isDirectory()) unlock(join(path, item.name)); };
   for (const root of roots.splice(0)) { unlock(root); rmSync(root, { recursive: true, force: true }); }
 });
 async function fixture() {
   const root = mkdtempSync(join(tmpdir(), "search-study-adapter-")); roots.push(root);
+  vi.stubEnv("ZERO_EVOLUTION_AUTHORITY_ROOT", join(root, "authority"));
   const sourceRoot = join(root, "source"); mkdirSync(join(sourceRoot, "src"), { recursive: true });
   writeFileSync(join(sourceRoot, "src/parser.cjs"), "module.exports = 1;\n");
   const config = (scope: string) => parseEvolutionConfig({ schemaVersion: 1, sourceRoot, storePath: join(root, scope),
@@ -63,7 +65,7 @@ it("connects the study to existing metered proposal/snapshot/evaluation APIs wit
   expect(report.trials.every(trial => trial.duplicates === 1 && trial.knownSpendUsd > .009)).toBe(true);
   expect(report.trials.every(trial => trial.unknownCharges === 0 && trial.workerExecutions === 42)).toBe(true);
   expect(f.calls()).toBe(8);
-  expect(loadEvolutionCampaign(f.finalConfig.storePath).exposures[0]?.consumed).toBe(48);
+  expect(loadEvolutionCampaign(f.finalConfig.storePath).exposures[0]?.consumed).toBe(96);
 });
 it("refuses overlapping final inputs before any provider dispatch", async () => {
   const f = await fixture();

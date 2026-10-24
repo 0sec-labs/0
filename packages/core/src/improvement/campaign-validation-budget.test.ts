@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,8 +10,9 @@ const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 function fixture(modelBudget = 10, evaluationBudget = 10) {
  const root = mkdtempSync(join(tmpdir(), "0-validation-budget-")); roots.push(root);
- const corpus = { digest: "fixture", cases: 1 };
- const identity: EvolutionComparisonIdentity = { schemaVersion: 1, development: corpus, heldOut: corpus, negativeControl: corpus, evaluatorDigest: "fixture", evaluatorSemantics: "v1", requestedModel: "fixture", resolvedModel: "fixture", provider: "fixture", harnessRevision: "fixture", toolRevision: "fixture", sourceRevision: "fixture", evaluatedWorker: { kind: "deterministic" }, compatibilityStatus: "compatible" };
+ const digest = "sha256:" + createHash("sha256").update("synthetic-budget-controller-fixture").digest("hex");
+ const corpus = { digest, cases: 1 };
+ const identity: EvolutionComparisonIdentity = { schemaVersion: 1, development: corpus, heldOut: corpus, negativeControl: corpus, evaluatorDigest: digest, evaluatorSemantics: digest, requestedModel: "fixture", resolvedModel: "fixture", provider: "fixture", harnessRevision: digest, toolRevision: digest, sourceRevision: digest, evaluatedWorker: { kind: "deterministic" }, compatibilityStatus: "compatible" };
  createOrLoadEvolutionCampaign(root, identity, "bounded", { maxModelCostUsd: modelBudget, maxEvaluationCostUsd: evaluationBudget });
  return { storePath: root, maxModelCostUsd: modelBudget, maxModelTurns: 2, cases: [{}, {}, {}], repeats: 2, canaryTrials: 1, timeoutMs: 1000, computeUsdPerSecond: 0.1, safety: { enabled: true, holdoutExposureLimit: 100, workerModel: { provider: "fixture", model: "fixture", maxCostUsdPerExecution: 0.1 } } } as EvolutionConfig;
 }
