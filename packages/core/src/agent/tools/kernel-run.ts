@@ -96,23 +96,20 @@ export const kernelRunArgsSchema = z
   .object({
     program: z
       .string({
-        required_error: "kernel_run: 'program' must be a non-empty string",
-        invalid_type_error: "kernel_run: 'program' must be a non-empty string",
+        error: "kernel_run: 'program' must be a non-empty string",
       })
       .min(1, "kernel_run: 'program' must be a non-empty string")
-      .refine(
-        (p) => Buffer.byteLength(p, "utf8") <= KERNEL_RUN_PROGRAM_MAX_BYTES,
-        (p) => ({
-          message: `kernel_run: 'program' exceeds ${KERNEL_RUN_PROGRAM_MAX_BYTES} bytes (got ${Buffer.byteLength(p, "utf8")})`,
-        }),
-      ),
-    program_lang: z.enum(["syz", "c"], {
-      errorMap: () => ({
-        message: "kernel_run: 'program_lang' must be exactly 'syz' or 'c'",
+      .superRefine((program, context) => {
+        const bytes = Buffer.byteLength(program, "utf8");
+        if (bytes > KERNEL_RUN_PROGRAM_MAX_BYTES) context.addIssue({
+          code: "custom", message: `kernel_run: 'program' exceeds ${KERNEL_RUN_PROGRAM_MAX_BYTES} bytes (got ${bytes})`,
+        });
       }),
+    program_lang: z.enum(["syz", "c"], {
+      error: "kernel_run: 'program_lang' must be exactly 'syz' or 'c'",
     }),
     expected_signature: z
-      .string({ invalid_type_error: "kernel_run: 'expected_signature' must be a string when provided" })
+      .string({ error: "kernel_run: 'expected_signature' must be a string when provided" })
       .nullish()
       .transform((s) => {
         const trimmed = s?.trim();

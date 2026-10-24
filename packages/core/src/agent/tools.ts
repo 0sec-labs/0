@@ -285,8 +285,8 @@ const rememberCodebaseArgsSchema = z.object({
 const selfExtendArgsSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("submit"),
-    manifest: z.record(z.unknown()),
-    files: z.record(z.string()).refine((files) => Object.keys(files).length > 0, "files must not be empty"),
+    manifest: z.record(z.string(), z.unknown()),
+    files: z.record(z.string(), z.string()).refine((files) => Object.keys(files).length > 0, "files must not be empty"),
     entry: z.string().min(1).max(1024),
     kind: z.enum(["tool", "skill", "agent"]).optional(),
   }).strip(),
@@ -2444,10 +2444,10 @@ const subagentModelSelectionSchema = z.object({
 const spawnPersistentAgentArgsSchema = subagentModelSelectionSchema
   .extend({
     task: z
-      .string({ required_error: "task is required", invalid_type_error: "task must be a string" })
+      .string({ error: issue => issue.input === undefined ? "task is required" : "task must be a string" })
       .min(1, "task must not be empty"),
     name: z.string().min(1).max(48).optional(),
-    max_turns: z.number({ invalid_type_error: "max_turns must be a number" }).int().positive().optional(),
+    max_turns: z.number({ error: "max_turns must be a number" }).int().positive().optional(),
   })
   .strip();
 
@@ -2480,8 +2480,7 @@ const MONITOR_POLL_MS = 300;
 const monitorArgsSchema = z
   .object({
     op: z.enum(["start", "logs", "wait", "stop", "ps", "send"], {
-      required_error: "op is required",
-      invalid_type_error: "op must be one of start|logs|wait|stop|ps|send",
+      error: issue => issue.input === undefined ? "op is required" : "op must be one of start|logs|wait|stop|ps|send",
     }),
     name: z.string().min(1).max(64).optional(),
     command: z.string().min(1).optional(),
@@ -4488,7 +4487,7 @@ export class ToolExecutor {
   private static readonly accessProbeSchema = z.object({
     url: z.string().min(1),
     method: z.enum(["GET", "POST", "PUT", "DELETE", "PATCH"]).optional(),
-    body: z.string().optional(), headers: z.record(z.string()).optional(),
+    body: z.string().optional(), headers: z.record(z.string(), z.string()).optional(),
     baseline_identity: z.string().min(1).optional(),
     compare_identities: z.array(z.string().min(1)).min(1).max(16).optional(),
     expect_denied: z.boolean().optional(),
@@ -4657,7 +4656,7 @@ export class ToolExecutor {
       method: z.enum(["GET", "POST", "PUT", "DELETE", "PATCH"]),
       url: z.string().min(1),
       body: z.string().optional(),
-      headers: z.record(z.string()).optional(),
+      headers: z.record(z.string(), z.string()).optional(),
     }).strict()).min(1).max(10),
   }).strict();
 
