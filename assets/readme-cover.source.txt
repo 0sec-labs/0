@@ -1,24 +1,38 @@
-README artwork refreshed from the current 0.security website in ../0cloud/0-www.
+README artwork — 2026-10-23
 
-Source checkout revision: 0sec-labs/0cloud@01f662807e669435a0680fe06286b1fbf0a64c83
-Static artwork is copied byte-for-byte from the local website checkout. The animated hero is encoded from the existing website video. No generated or mascot artwork is used.
-
-readme-cover.webp
-  Source: public/cloudlight/soft-hero.webp
-  Used by: HomeProductExplanation.astro and PricingTransparency.astro.
-  Orange sunset and dark cloudscape.
+Website source: ../0cloud/0-www, checkout revision
+01f662807e669435a0680fe06286b1fbf0a64c83.
+Existing website footage and art, with code-authored typography and diagrams.
+No mascot artwork is displayed.
 
 readme-infrastructure.webp
-  Source: public/cloudlight/dependency-security-20261020.webp
-  Used by: HomeDependencySecurity.astro.
-  Floating infrastructure in orange and violet clouds.
+  Byte-for-byte copy of public/cloudlight/dependency-security-20261020.webp,
+  also used by HomeDependencySecurity.astro. Linked to the 0cloud waitlist.
 
-The product screenshot in README.md is retained. Older mascot exports remain on disk for historical references but are not displayed in the README.
+readme-security-hero.gif / readme-security-hero.png
+  Existing public/hero/hero-logo-clear-20261020.mp4 footage, composited with
+  code-authored typography from readme-hero-overlay.html. No generated imagery.
+  Overlay exported with Chromium at 1440x800, transparent background.
+  Font: the website's Geist variable font (see public/fonts/geist-LICENSE.txt).
+  Video: scale to fill/crop 1440x800, overlay at 0,0; GIF at 960px wide,
+  6 fps, 256-color palette, Sierra dithering. Full original animation, silent loop.
+  PNG is the static alternative for prefers-reduced-motion.
 
-readme-hero.gif
-  Source: public/hero/hero-logo-clear-20261020.mp4
-  Full 14-second website animation, encoded as a looping GIF for inline GitHub README playback.
-  FFmpeg filter: fps=6,scale=720:-1:flags=lanczos; palettegen=max_colors=80:stats_mode=diff; paletteuse=dither=sierra2_4a.
-  No audio. The README links the animation to https://0.security/.
+readme-setup.svg / readme-setup-mobile.svg
+  Native SVG diagrams, including all typography and illustrations. Desktop
+  cards become stacked mobile cards via a picture source at 600px.
 
-The README now uses the animated hero instead of readme-cover.webp.
+readme-nav-*-light.svg / readme-nav-*-dark.svg
+  Native SVG navigation labels. Each is wrapped in its own real README link.
+  0cloud is the orange CTA. The source variants follow the reader's theme.
+
+readme-cli-demo.mp4 / readme-cli-demo.gif / readme-cli-demo.png
+  Edited terminal playback of actual 0 CLI output, captured on 2026-10-23.
+  Source transcript: readme-cli-demo.transcript.json; native playback layout:
+  readme-cli-demo.html. Commands: 0 --help; workflow list --templates;
+  workflow show --template repository-review; mcp-server --help.
+  jq extracts template IDs and step labels in the commands shown on screen.
+  All four commands exited successfully. No model invocation or scan is shown.
+  Rendered at 1200x760, 8 fps. Four six-second chapters, with command typing,
+  real output, chapter headings, and a subtle camera zoom. GIF loops silently.
+  PNG is the reduced-motion alternative. No browser-dashboard footage is used.
