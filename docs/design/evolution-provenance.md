@@ -33,6 +33,13 @@ in the receipt. Model-backed workers require pinned version and decoding
 observations from an adapter; this change neither creates a provider adapter nor
 grants network access.
 
+Source/package builds attest the bounded authority module files. The esbuild CLI
+attests the bounded packaged code chunks and entry loader when source sidecars
+are absent (at most 512 files and 64 MiB). Changed bytes after an observation
+require a controller restart; new disk bytes cannot impersonate already-loaded
+code. A distribution that cannot expose its loaded implementation bytes fails
+closed rather than substituting a requested version string.
+
 Historical receipts stay readable. Missing worker identity in an old comparison
 cannot certify compatibility. Existing ledger costs/exposure must not be deleted
 to work around an incompatible evaluator or unknown revision. Requalification

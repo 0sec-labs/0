@@ -22,6 +22,7 @@ it("measures bounded offline provenance overhead without dispatching workers or 
     }
     durations.sort((a, b) => a - b);
     const report = { schemaVersion: 1, kind: "offline-provenance-microbenchmark", node: process.version, platform: process.platform, arch: process.arch,
+      toolDigest: JSON.parse(encoded).toolRevision, evaluatorDigest: JSON.parse(encoded).evaluatorDigest, sourceDigest: JSON.parse(encoded).sourceRevision,
       sourceFiles: 32, iterations: 31, p50Ms: durations[15], p95Ms: durations[29], identityBytes: Buffer.byteLength(encoded), modelCalls: 0, workerExecutions: 0,
       scope: "explicit offline identity observation; not production scan latency or paid qualification" };
     expect(report.identityBytes).toBeLessThan(8192);

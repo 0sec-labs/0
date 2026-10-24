@@ -1,3 +1,9 @@
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { execFileSync } from "node:child_process";
+import { build } from "esbuild";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { auditEvolutionCorpusRotation, evolutionToolImplementationDigest, observedEvolutionModelRevision } from "./provenance.js";
 import { compareEvolutionIdentities, createEvolutionComparisonIdentity } from "./safety.js";
@@ -47,6 +53,33 @@ describe("observed evolution provenance", () => {
     const observed = evolutionToolImplementationDigest();
     expect(observed).toMatch(/^sha256:[a-f0-9]{64}$/);
     expect(evolutionToolImplementationDigest()).toBe(observed);
+  });
+  it("attests bounded bundled chunks and refuses to relabel changed disk bytes as loaded code", () => {
+    const root = mkdtempSync(join(tmpdir(), "0-bundled-identity-"));
+    try {
+      const chunks = join(root, "chunks"); mkdirSync(chunks);
+      const module = join(chunks, "chunk-controller.js"), dependency = join(chunks, "chunk-sandbox.js");
+      writeFileSync(module, "export const controller = 1;\n"); writeFileSync(dependency, "export const sandbox = 1;\n");
+      writeFileSync(join(root, "0.js"), "import './chunks/chunk-controller.js';\n");
+      const observed = evolutionToolImplementationDigest(pathToFileURL(module));
+      expect(observed).toMatch(/^sha256:[a-f0-9]{64}$/);
+      expect(evolutionToolImplementationDigest(pathToFileURL(module))).toBe(observed);
+      writeFileSync(dependency, "export const sandbox = 2;\n");
+      expect(() => evolutionToolImplementationDigest(pathToFileURL(module))).toThrow(/restart before evaluation/);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+  it("observes a real esbuild-bundled controller without source sidecars", async () => {
+    const root = mkdtempSync(join(tmpdir(), "0-real-bundle-identity-"));
+    try {
+      symlinkSync(new URL("../../node_modules", import.meta.url), join(root, "node_modules"), "dir");
+      writeFileSync(join(root, "package.json"), JSON.stringify({ type: "module" }));
+      const output = join(root, "controller.js");
+      await build({ entryPoints: [new URL("./provenance.ts", import.meta.url).pathname], outfile: output, bundle: true,
+        format: "esm", platform: "node", target: "node24", packages: "external", logLevel: "silent" });
+      const script = `const m = await import(${JSON.stringify(pathToFileURL(output).href)}); process.stdout.write(m.evolutionToolImplementationDigest());`;
+      const observed = execFileSync(process.execPath, ["--input-type=module", "-e", script], { encoding: "utf8", timeout: 15_000 });
+      expect(observed).toMatch(/^sha256:[a-f0-9]{64}$/);
+    } finally { rmSync(root, { recursive: true, force: true }); }
   });
   it("audits content additions and retirements without age-based correctness claims", () => {
     expect(auditEvolutionCorpusRotation([digest("a"), digest("b")], [digest("b"), digest("c")])).toEqual({
