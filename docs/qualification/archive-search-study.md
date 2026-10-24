@@ -23,7 +23,8 @@ current development evidence against active source bytes, and admits at most
 nine older versions. It exposes only development projections and opaque parent
 IDs to `runArchiveSearchStudy`. The descriptor is the set of development cases
 solved on every repeat; novelty means solving a case the current parent fails.
-The three paired arms are `current`, seeded `uniform`, and
+The three paired arms are `current` (the existing production selector's result,
+falling back to the active baseline), seeded `uniform`, and
 `development-diversity` (novel cases, then development fitness). Uniform selection
 uses seeded hash ordering, so caller array ordering cannot select the winner.
 

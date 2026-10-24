@@ -37,7 +37,7 @@ export async function runRegisteredArchiveSearchStudy(options: {
   /** Called only after all archived parents and current evidence are admitted. */
   createAdapter: (parents: ReadonlyMap<string, import("./types.js").EvolutionSnapshot>) => SearchStudyAdapter;
 }) {
-  const [{ loadEvolutionRegistry, loadEvolutionReceipt, evolutionDigest, verifyEvolutionSnapshot, receiptsDir }, { admitEvolutionAlternativeParents }, { evolutionEvaluatorDigest }, { readEvolutionArtifact }, { join }] = await Promise.all([
+  const [{ loadEvolutionRegistry, loadEvolutionReceipt, evolutionDigest, verifyEvolutionSnapshot, receiptsDir }, { admitEvolutionAlternativeParents, selectEvolutionAlternativeParent }, { evolutionEvaluatorDigest }, { readEvolutionArtifact }, { join }] = await Promise.all([
     import("./registry.js"), import("./loop.js"), import("./evaluation.js"), import("./artifacts.js"), import("node:path"),
   ]);
   if (!Number.isFinite(options.initialArchiveBilling?.actualUsd) || options.initialArchiveBilling.actualUsd < 0
@@ -47,7 +47,11 @@ export async function runRegisteredArchiveSearchStudy(options: {
   const active = registry.versions.find(version => version.id === registry.activeId);
   if (!active) throw new Error("archive study has no deployment baseline");
   verifyEvolutionSnapshot(active.snapshot);
-  const admitted = admitEvolutionAlternativeParents({ ...options.config, maxAlternativeParents: Math.min(9, options.config.maxAlternativeParents) }, registry);
+  const studyConfig = { ...options.config, maxAlternativeParents: Math.min(9, options.config.maxAlternativeParents) };
+  const admitted = admitEvolutionAlternativeParents(studyConfig, registry);
+  // The comparator is the existing production parent-selection policy, not an
+  // artificially frozen active parent when configured archive search is enabled.
+  const productionParent = selectEvolutionAlternativeParent(studyConfig, registry) ?? active;
   if (!admitted.length) throw new Error("no compatible older archive parent remains after admission");
   const currentEvidence = loadEvolutionReceipt(options.config.storePath, options.currentEvidenceVersionId);
   if (!currentEvidence || currentEvidence.configDigest !== evolutionDigest(options.config)
@@ -77,8 +81,8 @@ export async function runRegisteredArchiveSearchStudy(options: {
     historicalRecordedEvaluationCostUsd += [...currentEvidence.attempts.baseline, ...currentEvidence.attempts.candidate].reduce((sum, attempt) => sum + attempt.costUsd, 0);
     archiveReceiptDigests.add(currentEvidence.receiptDigest);
   }
-  const report = await runArchiveSearchStudy({ plan: options.plan, currentId: active.id, observations, repeats: options.config.repeats,
+  const report = await runArchiveSearchStudy({ plan: options.plan, currentId: productionParent.id, observations, repeats: options.config.repeats,
     feedback: options.feedback, adapter: options.createAdapter(parents) });
-  return { initialArchive: { observedBilling: options.initialArchiveBilling, archiveReceiptDigests: [...archiveReceiptDigests], historicalRecordedProposalCostUsd, historicalRecordedEvaluationCostUsd,
+  return { initialArchive: { activeBaselineId: active.id, productionParentId: productionParent.id, observedBilling: options.initialArchiveBilling, archiveReceiptDigests: [...archiveReceiptDigests], historicalRecordedProposalCostUsd, historicalRecordedEvaluationCostUsd,
     accountingScope: "fixed initial archive receipts; earlier ancestors and unsuccessful unrecorded campaigns require separate campaign-ledger accounting" }, report };
 }

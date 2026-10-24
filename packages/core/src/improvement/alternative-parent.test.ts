@@ -566,6 +566,9 @@ it("runs registered paired archive arms only after shared admission and observed
     },
   });
   expect(result.report.trials).toHaveLength(12);
+  expect(result.report.trials.filter(trial => trial.arm === "current").every(trial => trial.parentId === version.id)).toBe(true);
+  expect(result.initialArchive.activeBaselineId).toBe(baseline.id);
+  expect(result.initialArchive.productionParentId).toBe(version.id);
   expect(result.initialArchive.observedBilling.actualUsd).toBe(.1);
   expect(result.initialArchive.historicalRecordedProposalCostUsd).toBe(.01);
   expect(result.initialArchive.historicalRecordedEvaluationCostUsd).toBeGreaterThan(0);
