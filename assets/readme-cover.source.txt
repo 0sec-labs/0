@@ -8,8 +8,16 @@ readme-ui-demo.mp4 / readme-ui-demo.gif / readme-ui-demo.jpg
   Idle waits are shortened; the result is a 21-second silent loop at 8 fps.
   Camera crops enlarge the actual UI. No UI state, finding, or code was fabricated.
   The local workspace path is masked. Raw traces are not published.
-  GIF: 960x600, 128-color palette. MP4: 1440x900, H.264.
-  JPG: static source-finding view for reduced-motion readers.
+  GIF: 960px wide, 256-color palette with Sierra dithering.
+  MP4: 1440x1040, H.264.
+  JPG: framed source-finding view for reduced-motion readers.
+  Framing source: readme-demo-frame.html. The actual UI is placed inside a
+  rounded window on the homepage cloud artwork, with a border and shadow.
+  readme-ui-demo.source.mp4 retains the unframed, privacy-reviewed recording.
+
+readme-cover.webp
+  Byte-for-byte copy of public/cloudlight/soft-hero.webp from the website
+  checkout below. Used as the static background behind the video window.
 
 readme-infrastructure.webp
   Byte-for-byte copy of ../0cloud/0-www/public/cloudlight/dependency-security-20261020.webp.
