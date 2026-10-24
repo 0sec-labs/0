@@ -59,6 +59,6 @@ export type {
   SkippedCase,
 } from "./miss-harvest.js";
 
-export { evolutionCaseContentIdentity, evolutionObservationApprovalIdentity } from "./curation-lineage.js";
+export { evolutionCaseContentIdentity, evolutionObservationApprovalIdentity, evolutionSourceFixtureCase } from "./curation-lineage.js";
 export { auditEvolutionCorpusRotation, observedEvolutionModelRevision } from "./provenance.js";
 export type { EvolutionModelRevision } from "./provenance.js";

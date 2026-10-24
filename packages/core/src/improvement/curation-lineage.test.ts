@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { captureObservation, approveObservation } from "../stages/lens-synthesis/feedback.js";
-import { evolutionCaseContentIdentity, evolutionCurationLineage, evolutionObservationApprovalIdentity } from "./curation-lineage.js";
+import { evolutionCaseContentIdentity, evolutionCurationLineage, evolutionObservationApprovalIdentity, evolutionSourceFixtureCase } from "./curation-lineage.js";
 import type { EvolutionConfig } from "./types.js";
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -28,16 +28,26 @@ describe("approved observation to evaluation fixture lineage", () => {
     expect(() => evolutionObservationApprovalIdentity(observation)).toThrow(/independently approved/);
   });
   it("traces approval and immutable fixture bytes without putting sealed answers in receipts", () => {
-    const { storePath, approve, fixture, paths } = setup(); const approved = approve();
+    const { storePath, approve, paths } = setup(); const approved = approve();
+    const fixture = evolutionSourceFixtureCase("private-holdout", "held-out", approved.approvedShape!.heldOut[0]!);
     const curation = { observationId: approved.id, approvalDigest: evolutionObservationApprovalIdentity(approved), fixtureDigest: approved.approvedShape!.heldOut[0]!.contentDigest! };
     const config = { observationStorePath: storePath, cases: [{ ...fixture, curation }] } as EvolutionConfig;
     const lineage = evolutionCurationLineage(config);
     expect(lineage).toEqual([{ caseDigest: evolutionCaseContentIdentity(fixture), ...curation, sourceRevisionDigest: approved.sourceRevisionDigest }]);
     const encoded = JSON.stringify(lineage);
-    expect(encoded).not.toContain(fixture.id); expect(encoded).not.toContain("independent-curated-input"); expect(encoded).not.toContain("detected");
+    expect(encoded).not.toContain(fixture.id); expect(encoded).not.toContain("distinct curator fixture"); expect(encoded).not.toContain("CWE-79");
     expect(evolutionCurationLineage({ ...config, cases: [{ ...fixture, id: "renamed", curation }] })).toEqual(lineage);
     writeFileSync(paths[1]!, "changed or deleted original source is stale\n");
     expect(() => evolutionCurationLineage(config)).toThrow(/digest mismatch/);
+  });
+  it("rejects modified case bytes, expected answers and cross-lane approval laundering", () => {
+    const { storePath, approve } = setup(); const approved = approve();
+    const fixture = evolutionSourceFixtureCase("private-holdout", "held-out", approved.approvedShape!.heldOut[0]!);
+    const curation = { observationId: approved.id, approvalDigest: evolutionObservationApprovalIdentity(approved), fixtureDigest: approved.approvedShape!.heldOut[0]!.contentDigest! };
+    const config = { observationStorePath: storePath, cases: [{ ...fixture, curation }] } as EvolutionConfig;
+    expect(() => evolutionCurationLineage({ ...config, cases: [{ ...fixture, expected: { findings: [] }, curation }] })).toThrow(/canonical fixture conversion/);
+    expect(() => evolutionCurationLineage({ ...config, cases: [{ ...fixture, input: { source: "arbitrary unapproved source" }, curation }] })).toThrow(/canonical fixture conversion/);
+    expect(() => evolutionCurationLineage({ ...config, cases: [{ ...fixture, curation: { ...curation, fixtureDigest: approved.approvedShape!.negativeControls[0]!.contentDigest! } }] })).toThrow(/lineage differs/);
   });
   it("rejects substituted approval evidence and unknown fixture content", () => {
     const { storePath, approve, fixture } = setup(); const approved = approve();

@@ -230,6 +230,22 @@ describe("independent evolution oracle", () => {
     expect(ledger.cumulativeEvaluationCostUsd).toBeCloseTo(0.00001);
   });
 
+  it("rejects in-place mutation of adapter revision/decoder observations after dispatch", async () => {
+    const { config, baseline, candidate } = await setup();
+    const mutableWorker = { ...pinnedWorker }; const delegate = probe(candidate.id, "correct");
+    await expect(evaluateEvolutionCandidate(baseline, candidate, {
+      ...config, safety: { enabled: true, holdoutExposureLimit: 100,
+        workerModel: { provider: pinnedWorker.provider, model: pinnedWorker.model, maxCostUsdPerExecution: 0.01 } },
+    }, { modelIdentity: () => ({ provider: "proposal", model: "alias" }), workerModelIdentity: () => mutableWorker,
+      sandbox: async request => {
+        mutableWorker.modelRevision = "changed-in-place-release"; mutableWorker.decodingDigest = "sha256:" + "e".repeat(64);
+        return { ...await delegate(request), workerModelUsage: { ...mutableWorker, costUsd: 0.002, receiptDigest: "sha256:" + "a".repeat(64) } };
+      },
+    })).rejects.toThrow(/worker provenance differs/);
+    expect(loadEvolutionCampaign(config.storePath).cumulativeModelCostUsd).toBe(0.002);
+    expect(campaignPromotionAllowed(config.storePath).allowed).toBe(false);
+  });
+
   it("settles an observed worker failover charge before blocking provenance", async () => {
     const { config, baseline, candidate } = await setup();
     const safe = { ...config, safety: { enabled: true, holdoutExposureLimit: 100,

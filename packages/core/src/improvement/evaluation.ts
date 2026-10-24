@@ -107,7 +107,8 @@ export async function evaluateEvolutionCandidate(
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
   }
-  const workerIdentity = deps.workerModelIdentity?.();
+  const workerObservation = deps.workerModelIdentity?.();
+  const workerIdentity = workerObservation ? structuredClone(workerObservation) : undefined;
   const curationLineage = evolutionCurationLineage(config);
   const provenance = evolutionComparisonIdentity(config, observed, workerIdentity, curationLineage);
   if (config.safety?.workerModel && (workerIdentity?.provider !== config.safety.workerModel.provider || workerIdentity?.model !== config.safety.workerModel.model)) {
@@ -174,7 +175,7 @@ export async function evaluateEvolutionCandidate(
           throw new Error("evaluation cost is unknown; execution reconciliation required");
         }
         if (workerModel && (usage?.provider !== workerModel.provider || usage.model !== workerModel.model
-          || canonicalEvolutionJson(observedEvolutionModelRevision(usage)) !== canonicalEvolutionJson(observedEvolutionModelRevision(workerIdentity)))) {
+          || canonicalEvolutionJson(observedEvolutionModelRevision(usage)) !== canonicalEvolutionJson(provenance.evaluatedWorker?.kind === "model" ? provenance.evaluatedWorker.revision : null))) {
           blockEvolutionCampaign(config.storePath, "evaluated worker provider/model differs from the declared contract");
           throw new Error("evaluated worker provenance differs from the declared contract");
         }

@@ -1,3 +1,6 @@
+import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
+import { basename } from "node:path";
+import type { ValidationFixture } from "../stages/lens-synthesis/types.js";
 import { createHash } from "node:crypto";
 import { canonicalEvolutionJson } from "./config.js";
 import { getObservation, type LearningObservation } from "../stages/lens-synthesis/feedback.js";
@@ -15,6 +18,25 @@ export function evolutionObservationApprovalIdentity(observation: LearningObserv
   }
   return hash({ id: observation.id, sourceRevisionDigest: observation.sourceRevisionDigest, approvedShape: observation.approvedShape });
 }
+/** One explicit conversion contract. No arbitrary unapproved expected-answer mapping. */
+export function evolutionSourceFixtureCase(id: string, lane: EvolutionCase["lane"], fixture: ValidationFixture): EvolutionCase {
+  const fd = openSync(fixture.path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  let source: string;
+  try {
+    const stat = fstatSync(fd);
+    if (!stat.isFile() || stat.nlink !== 1 || stat.size > 64 * 1024 * 1024) throw new Error("canonical source-fixture conversion requires one bounded regular file");
+    const bytes = readFileSync(fd);
+    const digest = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+    if (bytes.length !== stat.size || digest !== fixture.contentDigest) throw new Error("approved fixture bytes changed during conversion");
+    source = bytes.toString("utf8");
+    if (!Buffer.from(source, "utf8").equals(bytes)) throw new Error("canonical source-fixture conversion requires UTF-8 source");
+  } finally { closeSync(fd); }
+  if (lane !== "negative-control" && (!fixture.expectedCwe || !fixture.expectedFile || (!fixture.expectedLine && !fixture.expectedRange))) throw new Error("approved positive fixture expected identity is incomplete");
+  return { id, lane, input: { format: "source-fixture-v1", file: basename(fixture.path), source },
+    expected: { findings: lane === "negative-control" ? [] : [{ cwe: fixture.expectedCwe!, file: fixture.expectedFile!,
+      ...(fixture.expectedLine === undefined ? {} : { line: fixture.expectedLine }), ...(fixture.expectedRange === undefined ? {} : { range: fixture.expectedRange }) }] } };
+}
+
 /** Validated once per explicit contract. No raw observations/expected outputs enter receipts. */
 export function evolutionCurationLineage(config: EvolutionConfig) {
   const selected = config.cases.filter(entry => entry.curation);
@@ -30,14 +52,20 @@ export function evolutionCurationLineage(config: EvolutionConfig) {
     // stored fixture-content stamps. Changed/deleted fixture files are stale.
     const shape = observation.approvedShape!;
     const corpus = prepareValidationCorpus(shape);
-    return [id, { observation, fixtures: [...corpus.positives, ...corpus.heldOut, ...corpus.negativeControls] }] as const;
+    return [id, { observation, corpus }] as const;
   }));
   return selected.map(fixture => {
     const reference = fixture.curation!;
-    const { observation, fixtures } = observations.get(reference.observationId)!;
+    const { observation, corpus } = observations.get(reference.observationId)!;
+    const cohort = fixture.lane === "development" ? corpus.positives : fixture.lane === "held-out" ? corpus.heldOut : corpus.negativeControls;
+    const approvedFixture = cohort.find(entry => entry.contentDigest === reference.fixtureDigest);
     if (evolutionObservationApprovalIdentity(observation) !== reference.approvalDigest
-      || !fixtures.some(entry => entry.contentDigest === reference.fixtureDigest)) {
+      || !approvedFixture) {
       throw new Error("curated fixture approval or content lineage differs");
+    }
+    const canonicalCase = evolutionSourceFixtureCase(fixture.id, fixture.lane, approvedFixture!);
+    if (evolutionCaseContentIdentity(canonicalCase) !== evolutionCaseContentIdentity(fixture)) {
+      throw new Error("case input/expected outputs differ from independently approved canonical fixture conversion");
     }
     return { caseDigest: evolutionCaseContentIdentity(fixture), observationId: observation.id,
       approvalDigest: reference.approvalDigest, fixtureDigest: reference.fixtureDigest,

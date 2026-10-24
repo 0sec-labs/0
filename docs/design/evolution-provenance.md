@@ -61,6 +61,13 @@ or missing source. It validates at most 64 distinct observations per contract. P
 queues are rejected if they overlap model-readable selected source paths, including
 physical aliases and paths that have not been created yet. Source revision references
 must themselves be immutable content digests.
+Each case must use the explicit `source-fixture-v1` conversion produced by
+`evolutionSourceFixtureCase()`: UTF-8 single-file source bytes and filename are the
+input, and findings with the independently approved CWE/file/line/range are the
+expected output (an empty finding list for approved negative controls). The lane
+must match the observation's approved positive/held-out/negative cohort. Arbitrary
+case inputs, expected answers, cross-lane references and unsupported directory
+conversions are rejected, even when an approval and fixture digest are genuine.
 The receipt contains only content digests and observation references. Expected
 outputs, private case names, source, credentials, and queue notes do not enter the
 lineage record or model-visible development feedback. Existing manually curated
