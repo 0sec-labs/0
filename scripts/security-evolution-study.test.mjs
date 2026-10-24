@@ -79,3 +79,16 @@ test('ledger fsyncs reservations and refuses blind restart', async () => {
     await assert.rejects(runPreregisteredStudy({ corpus, protocol, mode: 'controls', provider: deterministicControlProvider(), ledgerPath }), /reconcile prior/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('width-one provider proposer reuses production schema and preserves consumed usage', async () => {
+  const { proposeCurrentWidthOne } = await import('./security-evolution-study/propose.mjs');
+  const protocol = preregister(fixture()); let calls = 0;
+  const result = await proposeCurrentWidthOne({ protocol, prompt: JSON.stringify({ currentSkill: BASELINE_SKILL, developmentFeedback: [] }), nativeCall: async (system, messages, tools) => {
+    calls++; assert(!system.includes('selection:')); assert(tools.some(t => t.name === 'propose_edits'));
+    return { content: [{ type: 'tool_use', id: 'proposal', name: 'propose_edits', input: { rationale: 'Fixture skill change', edits: [{ path: 'skill.txt', beforeDigest: digest(BASELINE_SKILL), content: `${BASELINE_SKILL} Preserve source evidence.` }] } }], stopReason: 'tool_use', usage: { inputTokens: 100, outputTokens: 50 }, durationMs: 1 };
+  } });
+  assert.equal(calls, 1); assert.equal(result.completed, true); assert.equal(result.usage.inputTokens, 100);
+  assert(JSON.parse(result.text).skill.includes('Preserve source evidence'));
+  const rejected = await proposeCurrentWidthOne({ protocol, prompt: '{}', nativeCall: async () => ({ content: [], stopReason: 'end_turn', usage: { inputTokens: 100, outputTokens: 50 }, durationMs: 1 }) });
+  assert.equal(rejected.completed, false); assert.equal(rejected.usage.outputTokens, 50);
+});

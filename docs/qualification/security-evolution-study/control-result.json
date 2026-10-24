@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "protocolDigest": "sha256:fa14a7c943eb188776c0a755f3d41b144434533f0c410f5949cac7dc979c1219",
+  "protocolDigest": "sha256:106f93d748d02f3771c5f0c03c220b2d111a267ae1e156ca6260a7c9d76a3abb",
   "corpusDigest": "sha256:5ad3cc21819f1be13cef68322463007a28c93c58e88c5a72e09e093e2f79c10c",
   "mode": "controls",
   "conclusion": "inconclusive",
@@ -25,7 +25,7 @@
       "positiveRecall": 0,
       "falseAlarmRate": 0.3333333333333333,
       "inconclusive": 0,
-      "p50Ms": 5.114166999999952,
+      "p50Ms": 9.194916999999805,
       "p95Ms": null
     },
     "sequential": {
@@ -34,7 +34,7 @@
       "positiveRecall": 0,
       "falseAlarmRate": 0.3333333333333333,
       "inconclusive": 0,
-      "p50Ms": 5.148874999999862,
+      "p50Ms": 9.53079200000002,
       "p95Ms": null
     },
     "baseline-extra-attempts": {
@@ -43,7 +43,7 @@
       "positiveRecall": 0,
       "falseAlarmRate": 0.3333333333333333,
       "inconclusive": 0,
-      "p50Ms": 5.109959000000117,
+      "p50Ms": 6.1542090000002645,
       "p95Ms": null
     },
     "aa": {
@@ -52,7 +52,7 @@
       "positiveRecall": 0,
       "falseAlarmRate": 0.3333333333333333,
       "inconclusive": 0,
-      "p50Ms": 4.360458000000108,
+      "p50Ms": 10.181708999999955,
       "p95Ms": null
     },
     "regression": {
@@ -61,7 +61,7 @@
       "positiveRecall": 0,
       "falseAlarmRate": 0,
       "inconclusive": 0,
-      "p50Ms": 5.077583000000004,
+      "p50Ms": 9.955707999999959,
       "p95Ms": null
     }
   },
@@ -96,8 +96,8 @@
     "modelUsageBasis": "provider token usage x frozen tariff; invoice remains separate",
     "localComputeUsd": null
   },
-  "elapsedMs": 2079.2005,
-  "cpuMs": 69.947,
+  "elapsedMs": 3619.5480420000004,
+  "cpuMs": 79.322,
   "reasons": [
     "public historical source may occur in model training data",
     "tiny convenience sample does not establish security generalization",
@@ -143,7 +143,7 @@
       "modelUsageBasis": "provider token usage x frozen tariff; invoice remains separate",
       "localComputeUsd": null
     },
-    "elapsedMs": 19.847583,
-    "cpuMs": 1.036
+    "elapsedMs": 35.23420900000001,
+    "cpuMs": 0.898
   }
 }

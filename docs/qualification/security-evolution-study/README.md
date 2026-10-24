@@ -3,7 +3,7 @@
 This is a runnable, preregistered measurement pilot for one narrow workflow:
 JavaScript prototype-pollution source review. It uses the existing trusted
 `LlmApiRuntime` provider route and `ObjectiveOracle` finding-match evaluator.
-Candidate changes are bounded skill text, never executable code, and receive no
+The width-one proposal uses production `proposeEvolutionEdits`, with its strict edit schema and immutable snapshot, restricted to a single skill file and one charged model turn. Candidate changes are bounded skill text, never executable code, and receive no
 tools, credentials or filesystem access. No production optimizer is enabled.
 
 The curated source corpus excludes all embargo and pending-disclosure entries in
@@ -27,6 +27,8 @@ controls exercise JSON.parse, Object.fromEntries and null-prototype destinations
 These are language-semantics controls, not claims that an arbitrary package is
 free of every vulnerability. Fixed labels concern the selected advisory only.
 Family and identical-source leakage across splits are rejected.
+
+The protocol hashes the loaded study scripts, runtime, production proposer and evaluator bytes. Changing them invalidates preregistration before dispatch.
 
 The final set is public historical material and may appear in model training data.
 It is sealed from the *study proposer*, not secret from the Internet. Only
