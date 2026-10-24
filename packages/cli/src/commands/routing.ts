@@ -25,7 +25,7 @@ export function registerRoutingCommand(program: Command): void {
       process.once("SIGINT", cancel);
       try {
         const report = await qualifyTaskRouting({ plan, runtime, signal: controller.signal });
-        if (localRuntime) report.localRuntime = await localRuntime.observation();
+        if (localRuntime) { const observation = await localRuntime.observation(); report.localRuntime = observation; report.externalApiFeeUsd = observation.externalApiFeeUsd; }
         writeFileSync(opts.out, JSON.stringify(report, null, 2) + "\n", { mode: 0o600 });
         console.log(`${report.mode}: ${report.status}; ${report.totalCalls} calls; estimated USD ${report.estimatedUsd ?? "unknown"}; external API fee ${report.externalApiFeeUsd ?? "unknown"}; compute cost unknown; actual provider charge unknown; report ${opts.out}`);
         if (report.status !== "completed-for-review") process.exitCode = 1;

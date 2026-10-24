@@ -18,7 +18,7 @@ export interface LocalRoutingObservation {
   measurements: Array<{ inputTokens: number; outputTokens: number; wallMs: number; serverTotalNs: number | null; serverLoadNs: number | null; serverPromptNs: number | null; serverGenerationNs: number | null }>;
   clientCpuMicros: { user: number; system: number }; clientMaxRssKiB: number; clientWallMs: number;
   runtimeReportedResidentModelBytes: number | null; runtimeReportedVramBytes: number | null;
-  externalApiFeeUsd: 0; computeCostUsd: null; energyJoules: null;
+  externalApiFeeUsd: 0 | null; computeCostUsd: null; energyJoules: null;
 }
 export interface LocalRoutingRuntime extends NativeRuntime { observation(): Promise<LocalRoutingObservation> }
 
@@ -30,6 +30,7 @@ export function createLocalOllamaRoutingRuntime(plan: RoutingQualificationPlan, 
   const cpu = process.cpuUsage();
   let metadataRequests = 0;
   let inferenceRequests = 0;
+  let unexpectedRemoteRoute = false;
   const measurements: LocalRoutingObservation["measurements"] = [];
   const json = async (path: string, init: RequestInit = {}, signal?: AbortSignal): Promise<unknown> => {
     const response = await fetchImpl(endpoint + path, { ...init, redirect: "error", signal });
@@ -40,9 +41,12 @@ export function createLocalOllamaRoutingRuntime(plan: RoutingQualificationPlan, 
   };
   const verify = async (signal?: AbortSignal) => {
     metadataRequests++;
-    const tags = z.object({ models: z.array(z.object({ name: z.string(), digest: z.string() })).max(1000) }).parse(await json("/api/tags", {}, signal));
+    const tags = z.object({ models: z.array(z.object({ name: z.string(), digest: z.string(), remote_host: z.string().optional(), remote_model: z.string().optional() })).max(1000) }).parse(await json("/api/tags", {}, signal));
     const selected = tags.models.find(row => row.name === model);
-    if (!selected || `sha256:${selected.digest}` !== bounds.manifestDigest) throw new Error("pinned local Ollama manifest unavailable or changed; no pull or fallback");
+    if (!selected || selected.remote_host || selected.remote_model || `sha256:${selected.digest}` !== bounds.manifestDigest) throw new Error("pinned local Ollama manifest unavailable or changed; no pull or fallback");
+    metadataRequests++;
+    const info = z.object({ remote_host: z.string().optional(), remote_model: z.string().optional(), details: z.object({ format: z.enum(["gguf", "safetensors"]), runner: z.string().optional() }), model_info: z.record(z.string(), z.unknown()) }).parse(await json("/api/show", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ model }) }, signal));
+    if (info.remote_host || info.remote_model || !info.model_info["general.architecture"] || (info.details.format === "safetensors" && info.details.runner !== "mlx")) throw new Error("remote or unverified model route refused before local inference");
   };
   const convert = (system: string, messages: NativeMessage[]) => [
     { role: "system", content: system },
@@ -64,19 +68,23 @@ export function createLocalOllamaRoutingRuntime(plan: RoutingQualificationPlan, 
       await verify(signal);
       const began = Date.now();
       inferenceRequests++;
-      const result = responseSchema.parse(await json("/api/chat", {
+      const raw = await json("/api/chat", {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ model, messages: convert(system, messages), tools: tools.map(tool => ({ type: "function", function: { name: tool.name, description: tool.description, parameters: tool.input_schema } })), stream: false, think: false, keep_alive: "1m", options: { temperature: 0, seed: 0, num_ctx: bounds.maxInputTokens, num_predict: bounds.maxOutputTokens } }),
-      }, signal));
+      }, signal);
+      if (raw && typeof raw === "object" && ((raw as Record<string, unknown>).remote_host || (raw as Record<string, unknown>).remote_model)) unexpectedRemoteRoute = true;
+      const result = responseSchema.parse(raw);
       const durationMs = Date.now() - began;
       measurements.push({ inputTokens: result.prompt_eval_count, outputTokens: result.eval_count, wallMs: durationMs, serverTotalNs: result.total_duration ?? null, serverLoadNs: result.load_duration ?? null, serverPromptNs: result.prompt_eval_duration ?? null, serverGenerationNs: result.eval_duration ?? null });
       const usage = { inputTokens: result.prompt_eval_count, outputTokens: result.eval_count };
-      if (!result.done || result.model !== model || result.prompt_eval_count > bounds.maxInputTokens || result.eval_count > bounds.maxOutputTokens) return { content: [], stopReason: "error", error: "local model identity or token bound mismatch", durationMs, usage };
+      if (unexpectedRemoteRoute || !result.done || result.model !== model || result.prompt_eval_count > bounds.maxInputTokens || result.eval_count > bounds.maxOutputTokens) return { content: [], stopReason: "error", error: "local model identity or token bound mismatch", durationMs, usage };
       try { await verify(signal); } catch { return { content: [], stopReason: "error", error: "local manifest changed during inference", durationMs, usage }; }
       const content: NativeContentBlock[] = result.message.content ? [{ type: "text", text: result.message.content }] : [];
       for (const [index, call] of (result.message.tool_calls ?? []).entries()) {
-        const input = typeof call.function.arguments === "string" ? JSON.parse(call.function.arguments) : call.function.arguments;
-        content.push({ type: "tool_use", id: `local-tool-${index}`, name: call.function.name, input });
+        try {
+          const input = typeof call.function.arguments === "string" ? JSON.parse(call.function.arguments) : call.function.arguments;
+          content.push({ type: "tool_use", id: `local-tool-${index}`, name: call.function.name, input });
+        } catch { return { content: [], stopReason: "error", error: "invalid local tool arguments", durationMs, usage }; }
       }
       return { content, stopReason: result.done_reason === "length" ? "max_tokens" : result.message.tool_calls?.length ? "tool_use" : "end_turn", durationMs, usage };
     },
@@ -94,7 +102,7 @@ export function createLocalOllamaRoutingRuntime(plan: RoutingQualificationPlan, 
         resident = loaded?.size ?? null; vram = loaded?.size_vram ?? null;
       } catch { /* no memory estimate is manufactured */ }
       }
-      return { adapterDigest: `sha256:${createHash("sha256").update(createLocalOllamaRoutingRuntime.toString()).digest("hex")}`, endpoint, model, manifestDigest: bounds.manifestDigest, sourcePin: bounds.sourcePin, weightsDigest: bounds.weightsDigest, runtimeVersion, inferenceRequests, metadataRequests, measurements, clientCpuMicros: process.cpuUsage(cpu), clientMaxRssKiB: process.resourceUsage().maxRSS, clientWallMs: Date.now() - start, runtimeReportedResidentModelBytes: resident, runtimeReportedVramBytes: vram, externalApiFeeUsd: 0, computeCostUsd: null, energyJoules: null };
+      return { adapterDigest: `sha256:${createHash("sha256").update(createLocalOllamaRoutingRuntime.toString()).digest("hex")}`, endpoint, model, manifestDigest: bounds.manifestDigest, sourcePin: bounds.sourcePin, weightsDigest: bounds.weightsDigest, runtimeVersion, inferenceRequests, metadataRequests, measurements, clientCpuMicros: process.cpuUsage(cpu), clientMaxRssKiB: process.resourceUsage().maxRSS, clientWallMs: Date.now() - start, runtimeReportedResidentModelBytes: resident, runtimeReportedVramBytes: vram, externalApiFeeUsd: unexpectedRemoteRoute ? null : 0, computeCostUsd: null, energyJoules: null };
     },
   };
   return runtime;

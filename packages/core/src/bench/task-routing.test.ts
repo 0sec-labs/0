@@ -142,3 +142,13 @@ it("rejects a changed evaluator or pricing snapshot instead of comparing incompa
   expect(() => recommendQualifiedRouting({ ...report, evaluatorDigest: "sha256:other-evaluator" }, selection)).toThrow(/stale/);
   expect(() => recommendQualifiedRouting({ ...report, pricingSnapshotDate: "old" }, selection)).toThrow(/stale/);
 });
+
+it("stops after a runtime exception with unknown usage rather than letting another model spend", async () => {
+  const root = taskRoutingFixtureRuntime(plan.models);
+  root.forkForSubagent = async (_timeout, selection) => ({ ...root, resolvedModel: () => selection!.model!, executeNative: async () => { throw new Error("transport interrupted after dispatch"); } });
+  const report = await run({}, root);
+  expect(report.totalCalls).toBe(1);
+  expect(report.unknownUsage).toBe(true);
+  expect(report.estimatedUsd).toBeNull();
+  expect(report.stopReason).toContain("unknown usage");
+});

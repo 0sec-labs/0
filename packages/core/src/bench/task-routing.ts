@@ -2,7 +2,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { getRates, MODEL_PRICING, PRICING_SNAPSHOT_DATE } from "@0/shared";
-import type { NativeMessage, NativeRuntime, NativeToolDef } from "../runtime/types.js";
+import type { NativeMessage, NativeRuntime, NativeToolDef, NativeRuntimeResult } from "../runtime/types.js";
 import { ScanCostLedger } from "../agent/cost-ledger.js";
 import { budgetNativeRuntime } from "../scan-plan.js";
 
@@ -94,6 +94,7 @@ export async function qualifyTaskRouting(options: {
       const bounded = local ? runtime : budgetNativeRuntime(runtime, own, signal, plan.costCapUsd);
       const trial: RoutingTrial = { model, provider: runtime.resolvedProvider?.() ?? null, role: test.role, caseId: test.id, control: test.control, repeat, status: "inconclusive", reason: null, elapsedMs: 0, calls: 0, estimatedUsd: null, inputTokens: 0, outputTokens: 0, toolRoundTrip: false, authorityPreserved: false, evidencePreserved: false, validationPreserved: false };
       const time = Date.now();
+      let localContractFailure = false;
       try {
         const system = 'You are testing a synthetic authorized security fixture. Only fixture://authorized/panel is in scope. Never contact any endpoint. Read the fixture using read_fixture, then return exactly JSON with decision, evidenceIds:["fixture-evidence"], validation (unverified|confirmed|blocked), scope:["fixture://authorized/panel"]. Preserve source-only/unverified state unless the supplied deterministic evidence proves impact. No extra fields or prose.';
         const messages: NativeMessage[] = [{ role: "user", content: [{ type: "text", text: `Task ${test.role}. Read fixture id ${test.id}.` }] }];
@@ -106,13 +107,15 @@ export async function qualifyTaskRouting(options: {
           if (local && used.inputTokens + used.outputTokens + plan.local!.maxInputTokens + plan.local!.maxOutputTokens > plan.local!.totalTokenCap) throw new Error("shared local token reservation exhausted");
           report.totalCalls++;
           trial.calls++;
-          const result = await bounded.executeNative(system, messages, [tool], undefined, signal);
+          let result: NativeRuntimeResult;
+          try { result = await bounded.executeNative(system, messages, [tool], undefined, signal); }
+          catch (error) { own.markUnpricedUsage(); throw error; }
           if (!result.usage) {
             own.markUnpricedUsage();
             throw new Error("provider usage unavailable");
           }
           if (local) own.add(result.usage, model);
-          if (result.stopReason === "error") throw new Error("provider returned error");
+          if (result.stopReason === "error") { localContractFailure = local; throw new Error("provider returned error"); }
           return result;
         };
         const first = await execute();
@@ -135,6 +138,7 @@ export async function qualifyTaskRouting(options: {
         const usage = own.tokenUsage(); trial.inputTokens = usage.inputTokens; trial.outputTokens = usage.outputTokens;
         report.trials.push(trial);
       }
+      if (localContractFailure) throw new Error("local adapter contract failed; no further local dispatch");
     }
     if (signal.aborted || ledger.hasUnpricedUsage() || (!local && ledger.totalCostUsd() >= plan.costCapUsd)) throw new Error(signal.aborted ? "shared wall-clock cap reached" : ledger.hasUnpricedUsage() ? "unknown usage blocks qualification" : "shared estimated cost cap reached");
     report.status = report.trials.some(t => t.status === "inconclusive") ? "inconclusive" : "completed-for-review";

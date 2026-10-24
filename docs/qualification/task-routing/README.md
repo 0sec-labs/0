@@ -112,7 +112,10 @@ request allowances.
 
 A separate `local-model` adapter runs only against
 `http://127.0.0.1:11434`, rejects redirects and checks the exact installed manifest
-before and after every inference. It never calls a model-pull endpoint, accepts
+before and after every inference. It also refuses model metadata advertising
+an upstream cloud route; loopback alone does not prove local inference. An
+unexpected upstream marker withdraws the zero-external-fee assertion. It never
+calls a model-pull endpoint, accepts
 credentials or selects another model. Existing Safetensors were imported using
 [Ollama's documented local import](https://github.com/ollama/ollama/blob/main/docs/import.mdx).
 No weights, Python model code or new inference stack were downloaded.
@@ -165,3 +168,11 @@ measurements and client CPU time are retained in the reports. Metadata resource
 sampling shares the remaining wall-clock allowance. External API fees were zero;
 compute dollars and energy are unknown, not free. Local observations remain
 ineligible for the provider-backed production selector.
+
+The final local receipt corresponds to commit `e758103e`'s evaluator/adapter
+contract. Subsequent accounting hardening retains known usage when local tool
+argument parsing fails, stops the whole panel on a local identity/token contract
+failure, and stops further dispatch on exceptions with unknown usage. Those
+paths were not exercised by the two retained local observations; no extra model
+inferences were run solely to refresh a code hash. Fixture receipts are refreshed
+against the final implementation, and historical local hashes remain unchanged.
