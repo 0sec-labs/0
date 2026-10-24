@@ -1,4 +1,6 @@
-import { chmodSync, cpSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { canonicalEvolutionJson } from "./config.js";
+import { chmodSync, cpSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, afterEach, beforeEach, vi } from "vitest";
@@ -156,6 +158,42 @@ describe("evolution safety contract", () => {
     }
     expect(campaignPromotionAllowed(a).allowed).toBe(false);
     expect(() => reserveHoldoutExposure(a, identity, 1, 4)).toThrow(/exhausted/);
+  });
+
+  it("cannot buy exposure by changing selection thresholds or semantics labels", () => {
+    const observed = { resolvedModel: "model-a", provider: "provider-a", sourceRevision: "sha256:" + "f".repeat(64) };
+    const identity = createEvolutionComparisonIdentity(config(cases), "sha256:" + "9".repeat(64), observed);
+    const changed = { ...identity, evaluatorSemantics: "new-profile-name-and-thresholds" };
+    expect(holdoutExposureIdentity(changed)).toBe(holdoutExposureIdentity(identity));
+    const a = freshRoot(), b = freshRoot();
+    createOrLoadEvolutionCampaign(a, identity, "first-policy", config(cases)); reserveHoldoutExposure(a, identity, 1, 1);
+    createOrLoadEvolutionCampaign(b, changed, "different-policy", config(cases));
+    expect(campaignPromotionAllowed(b).allowed).toBe(false);
+    expect(() => reserveHoldoutExposure(b, changed, 1, 1)).toThrow(/exhausted/);
+  });
+
+  it("imports an old semantics-keyed shared authority even from a stale store mirror", () => {
+    const identity = createEvolutionComparisonIdentity(config(cases), "sha256:" + "0".repeat(64), {
+      resolvedModel: "model-a", provider: "provider-a", sourceRevision: "sha256:" + "f".repeat(64),
+    });
+    const root = freshRoot(), other = freshRoot();
+    createOrLoadEvolutionCampaign(root, identity, "legacy-policy", config(cases));
+    reserveHoldoutExposure(root, identity, 2, 2);
+    const key = holdoutExposureIdentity(identity);
+    const legacyKey = "sha256:" + createHash("sha256").update(canonicalEvolutionJson({ heldOutCorpus: identity.heldOut.digest,
+      evaluator: identity.evaluatorDigest, semantics: identity.evaluatorSemantics })).digest("hex");
+    const authority = process.env.ZERO_EVOLUTION_AUTHORITY_ROOT!;
+    renameSync(join(authority, key.slice(7)), join(authority, legacyKey.slice(7)));
+    const path = join(authority, legacyKey.slice(7), "holdout-exposure.json");
+    const record = JSON.parse(readFileSync(path, "utf8")); record.identity = legacyKey;
+    chmodSync(path, 0o600); writeFileSync(path, JSON.stringify(record));
+    const ledgerPath = join(root, "campaign-ledger.json");
+    const ledger = JSON.parse(readFileSync(ledgerPath, "utf8"));
+    ledger.exposures[0].identity = legacyKey; ledger.exposures[0].consumed = 1;
+    chmodSync(ledgerPath, 0o600); writeFileSync(ledgerPath, JSON.stringify(ledger));
+    createOrLoadEvolutionCampaign(root, identity, "imported-policy", config(cases));
+    createOrLoadEvolutionCampaign(other, { ...identity, evaluatorSemantics: "renamed-policy" }, "new-policy-store", config(cases));
+    expect(campaignPromotionAllowed(other).allowed).toBe(false);
   });
 
   it("measures bounded authority reservation I/O without model or scan calls", () => {

@@ -1,7 +1,9 @@
 # Finite shared holdout authority (#40)
 
 Exposure is keyed by the existing content-based held-out corpus/evaluator
-identity. Case labels/order, campaign names, store paths and copied campaign
+identity using actual sealed content plus the executable evaluator digest; selection
+thresholds, profile labels and semantics metadata do not create a new budget.
+Case labels/order, campaign names, store paths and copied campaign
 ledgers cannot create a new query budget. Every held-out **and negative-control**
 execution consumes one slot before dispatch, for both baseline and candidate,
 including repeats, failed executions, retention checks and canary evaluations.
@@ -16,7 +18,8 @@ must use the same durable private directory, including after migration to anothe
 machine. A campaign binds its first authority directory and rejects a later
 change. Do not place this authority in candidate snapshots or disposable stores.
 Before upgrading a deployment with legacy store-local ledgers, reopen every
-existing campaign under the new controller to import its conservative exposure
+existing campaign under the new controller to import its legacy semantics-keyed
+shared record and conservative local exposure
 floor before creating new stores; unseen historical stores cannot be discovered
 without an operator-provided inventory. Deleting this trusted authority is an operator accounting loss requiring recovery,
 not supported rotation. The software cannot prevent a filesystem administrator

@@ -84,7 +84,9 @@ export function compareEvolutionIdentities(left: EvolutionComparisonIdentity, ri
   return { status: "compatible", reasons: [] };
 }
 export function holdoutExposureIdentity(identity: EvolutionComparisonIdentity): string {
-  return digest({ heldOutCorpus: identity.heldOut.digest, evaluator: identity.evaluatorDigest, semantics: identity.evaluatorSemantics });
+  // Selection thresholds, profile labels and semantics metadata cannot buy
+  // another query against unchanged data and unchanged executable oracle.
+  return digest({ heldOutCorpus: identity.heldOut.digest, evaluator: identity.evaluatorDigest });
 }
 export interface CampaignDispatchReservation {
   id: string; kind: "model" | "evaluation"; reservedCostUsd: number;
@@ -173,7 +175,21 @@ export function createOrLoadEvolutionCampaign(
       if (existing.exposures.length) {
         const authorityRoot = ensureEvolutionDirectory(evolutionHoldoutAuthorityRoot());
         if (existing.holdoutAuthorityRoot && existing.holdoutAuthorityRoot !== authorityRoot) throw new Error("holdout authority changed; operator reconciliation required");
-        for (const exposure of existing.exposures) reserveSharedHoldoutExposure(exposure.identity, 0, exposure.limit, exposure.consumed, exposure.reservationIds);
+        const key = holdoutExposureIdentity(existing.comparisonIdentity);
+        const legacyKey = digest({ heldOutCorpus: existing.comparisonIdentity.heldOut.digest, evaluator: existing.comparisonIdentity.evaluatorDigest, semantics: existing.comparisonIdentity.evaluatorSemantics });
+        // Import the old shared authority, not only this store's possibly stale
+        // mirror. Controller upgrades must inventory every legacy policy key.
+        try {
+          const legacy = readEvolutionArtifact(join(authorityRoot, legacyKey.replace("sha256:", ""), "holdout-exposure.json")) as HoldoutExposureRecord;
+          if (legacy.identity !== legacyKey || !Number.isSafeInteger(legacy.consumed) || legacy.consumed < 0
+            || !Number.isSafeInteger(legacy.limit) || legacy.limit <= 0 || !Array.isArray(legacy.reservationIds)) throw new Error("invalid legacy holdout authority");
+          reserveSharedHoldoutExposure(key, 0, legacy.limit, legacy.consumed, legacy.reservationIds);
+        } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+        for (const exposure of existing.exposures) {
+          if (exposure.identity === legacyKey) exposure.identity = key;
+          if (exposure.identity !== key) throw new Error("unrecognized historical holdout identity; operator reconciliation required");
+          reserveSharedHoldoutExposure(key, 0, exposure.limit, exposure.consumed, exposure.reservationIds);
+        }
         existing.holdoutAuthorityRoot = authorityRoot;
       }
       existing.updatedAt = new Date().toISOString(); writeLedger(root, existing);
@@ -298,6 +314,9 @@ export function evolutionHoldoutAuthorityRoot(): string {
   return root;
 }
 function reserveSharedHoldoutExposure(identity: string, queries: number, limit: number, minimumConsumed: number, localIds: readonly string[]): HoldoutExposureRecord {
+  if (!Number.isSafeInteger(minimumConsumed) || minimumConsumed < 0 || minimumConsumed > limit
+    || localIds.length > MAX_CAMPAIGN_RECORDS || localIds.some(id => typeof id !== "string")
+    || new Set(localIds).size !== localIds.length) throw new Error("invalid legacy holdout consumption; operator reconciliation required");
   const root = join(evolutionHoldoutAuthorityRoot(), identity.replace("sha256:", ""));
   ensureEvolutionDirectory(root);
   const release = acquireEvolutionController(root);
