@@ -191,6 +191,7 @@ describe("evolution safety contract", () => {
     const ledger = JSON.parse(readFileSync(ledgerPath, "utf8"));
     ledger.exposures[0].identity = legacyKey; ledger.exposures[0].consumed = 1;
     chmodSync(ledgerPath, 0o600); writeFileSync(ledgerPath, JSON.stringify(ledger));
+    expect(() => reserveHoldoutExposure(root, identity, 1, 2)).toThrow(/migration/);
     createOrLoadEvolutionCampaign(root, identity, "imported-policy", config(cases));
     createOrLoadEvolutionCampaign(other, { ...identity, evaluatorSemantics: "renamed-policy" }, "new-policy-store", config(cases));
     expect(campaignPromotionAllowed(other).allowed).toBe(false);

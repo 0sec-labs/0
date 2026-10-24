@@ -370,6 +370,9 @@ export function reserveHoldoutExposure(root: string, identity: EvolutionComparis
     }
     ledger.holdoutAuthorityRoot = authorityRoot;
     const key = holdoutExposureIdentity(identity);
+    if (ledger.exposures.some(entry => entry.identity !== key)) {
+      throw new Error("legacy holdout authority migration requires reopening the campaign before dispatch");
+    }
     const current = ledger.exposures.find((entry) => entry.identity === key);
     const record = current ?? { identity: key, limit, consumed: 0, reservationIds: [] };
     if (current && record.limit !== limit) throw new Error("holdout exposure limit cannot change without a fresh corpus/evaluator identity");
