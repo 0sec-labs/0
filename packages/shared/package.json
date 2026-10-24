@@ -18,7 +18,7 @@
   "dependencies": {
     "@ai-sdk/gateway": "4.0.87",
     "ai": "7.0.107",
-    "zod": "^3.25.76"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "typescript": "^5.7.2",
