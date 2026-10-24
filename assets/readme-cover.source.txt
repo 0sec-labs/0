@@ -14,7 +14,7 @@ readme-security-hero.gif / readme-security-hero.png
   code-authored typography from readme-hero-overlay.html. No generated imagery.
   Overlay exported with Chromium at 1440x800, transparent background.
   Font: the website's Geist variable font (see public/fonts/geist-LICENSE.txt).
-  Video: scale to fill/crop 1440x800, overlay at 0,0; GIF at 960px wide,
+  Video: scale to fill/crop 1440x800, overlay at 0,0; GIF at 800px wide,
   6 fps, 256-color palette, Sierra dithering. Full original animation, silent loop.
   PNG is the static alternative for prefers-reduced-motion.
 
