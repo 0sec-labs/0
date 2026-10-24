@@ -107,3 +107,61 @@ of `--timeout`, which continues to bound individual requests. The legacy timeout
 remains the whole-workflow fallback when no plan is supplied. A regression keeps
 a multi-task plan alive beyond one request timeout without increasing individual
 request allowances.
+
+## Genuine local-model protocol observation
+
+A separate `local-model` adapter runs only against
+`http://127.0.0.1:11434`, rejects redirects and checks the exact installed manifest
+before and after every inference. It never calls a model-pull endpoint, accepts
+credentials or selects another model. Existing Safetensors were imported using
+[Ollama's documented local import](https://github.com/ollama/ollama/blob/main/docs/import.mdx).
+No weights, Python model code or new inference stack were downloaded.
+
+The measured source is `Qwen/Qwen3-0.6B` at revision
+`c1899de289a04d12100db370d81485cdf75e47ca`; the 1,503,300,328-byte weights hash is
+`sha256:f47f71177f32bcd101b7573ec9171e6a57f4f4d31148d38e382306f42996874b`.
+The installed Ollama 0.40.6 MLX manifest is
+`sha256:94f66e7628259ecc39cb2fc0eb6b81a51fc2ebe5d586c7d01f52f5dc94df9346`.
+`local-plan.json` reserves at most 16 inference calls, 70,000 total tokens and
+120 seconds, with a 4,096-token context and 256-token output bound per call.
+Each next call reserves its worst-case context/output allowance before dispatch.
+The local plan's USD cap is zero external API fee; it is not a compute-dollar
+limit. Machine, energy and opportunity costs remain unknown.
+
+```sh
+node packages/cli/dist/index.js routing-qualify \
+  --plan docs/qualification/task-routing/local-plan.json \
+  --out /tmp/local-task-routing.json
+```
+
+The model must already exist with the pinned manifest; missing or changed models
+stop without downloads or fallback. The command exits nonzero for an inconclusive
+panel while retaining its report. This observation uses only synthetic
+protocol/task-state controls: no public-vulnerability workloads, exploitation,
+#120 study or #121 experiment were run.
+
+Two genuine local observations are retained, including the earlier rejected
+attempt rather than discarding it:
+
+| Receipt | Inference calls | Input/output tokens | Panel wall time | Median inference time | Result |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `local-report-attempt-1.json` | 8 | 2,872 / 1,228 | 10.475 s | 1.107 s | 8 inconclusive tool-protocol gates |
+| `local-report.json` | 8 | 2,872 / 1,228 | 9.423 s | 1.031 s | 8 inconclusive tool-protocol gates |
+
+All 16 local inferences are accounted for. No required `read_fixture` roundtrip
+completed, so downstream task quality was not evaluated. These results do not
+separate imported-template compatibility from small-model behavior and do not
+establish general model incapability. They do establish that this tested
+model/runtime route is not qualified for the required tool protocol. No route
+recommendation or passing security-efficacy claim follows from these results.
+The first receipt retains an earlier required USD placeholder of 1; it was never
+a measured charge or a local-compute cap. The final local schema explicitly
+requires zero external API budget.
+
+The runtime reported 1,412,882,448 resident model/VRAM bytes for both observations.
+Client peak RSS was 302,544 KiB and 301,632 KiB respectively; those values describe
+the CLI process, not server RSS. Per-call server durations, load/prefill/generation
+measurements and client CPU time are retained in the reports. Metadata resource
+sampling shares the remaining wall-clock allowance. External API fees were zero;
+compute dollars and energy are unknown, not free. Local observations remain
+ineligible for the provider-backed production selector.

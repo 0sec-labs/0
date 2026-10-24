@@ -28,7 +28,7 @@ const canonical = (v: unknown): string => Array.isArray(v) ? `[${v.map(canonical
 const digest = (v: unknown) => `sha256:${createHash("sha256").update(canonical(v)).digest("hex")}`;
 export const TASK_ROUTING_SUITE_DIGEST = digest(CASES);
 export interface RoutingQualificationPlan {
-  mode: "fixture" | "model-api";
+  mode: "fixture" | "model-api" | "local-model";
   models: string[];
   repeats: number;
   maxCalls: number;
@@ -37,6 +37,7 @@ export interface RoutingQualificationPlan {
   /** A reviewed scope/goal/depth context; not evidence of generality beyond it. */
   workflow: { targetKind: "web" | "source"; goal: "known-vulnerabilities" | "unknown-vulnerabilities" | "misconfigurations"; depth: "quick" | "default" | "deep" };
   authorizationRef: string;
+  local?: { manifestDigest: string; sourcePin: string; weightsDigest: string; maxInputTokens: number; maxOutputTokens: number; totalTokenCap: number };
 }
 export interface RoutingTrial {
   model: string; provider: string | null; role: RoutingRole; caseId: string; control: "positive" | "negative"; repeat: number;
@@ -45,20 +46,22 @@ export interface RoutingTrial {
   toolRoundTrip: boolean; authorityPreserved: boolean; evidencePreserved: boolean; validationPreserved: boolean;
 }
 export interface RoutingQualificationReport {
-  schemaVersion: 1; mode: "fixture" | "model-api"; suiteDigest: string; evaluatorDigest: string; plan: RoutingQualificationPlan;
+  schemaVersion: 1; mode: "fixture" | "model-api" | "local-model"; suiteDigest: string; evaluatorDigest: string; plan: RoutingQualificationPlan;
   trials: RoutingTrial[]; status: "completed-for-review" | "inconclusive"; stopReason: string | null;
   totalCalls: number; estimatedUsd: number | null; unknownUsage: boolean; elapsedMs: number;
   /** No actual bill/quality ranking is implied by token catalog estimates. */
-  actualProviderChargeUsd: null; pricingSnapshotDate: string; modelVersionStatus: "unavailable"; automaticEnablement: false;
+  actualProviderChargeUsd: null; externalApiFeeUsd: number | null; localRuntime?: unknown; pricingSnapshotDate: string; modelVersionStatus: "unavailable" | "pinned-local-manifest"; automaticEnablement: false;
 }
 
 export function preflightTaskRouting(plan: RoutingQualificationPlan): number {
   if (!planSchema.safeParse(plan).success) throw new Error("invalid bounded routing qualification plan");
   if (plan.models.length < 1 || plan.models.length > 8 || new Set(plan.models).size !== plan.models.length || plan.models.some(m => !m.trim() || m.length > 160 || m === "auto")) throw new Error("one to eight distinct explicit models required");
   if (!Number.isSafeInteger(plan.repeats) || plan.repeats < 1 || plan.repeats > 20) throw new Error("repeats must be 1–20");
+  if (plan.mode === "local-model" && (!plan.local || plan.models.length !== 1)) throw new Error("local-model requires one pinned model and explicit token bounds");
+  if (plan.mode !== "local-model" && plan.local) throw new Error("local bounds cannot be relabeled as provider-backed qualification");
   const calls = CASES.length * plan.models.length * plan.repeats * 2;
   if (!Number.isSafeInteger(plan.maxCalls) || plan.maxCalls < calls || plan.maxCalls > 2560) throw new Error(`complete panel requires ${calls} reserved calls`);
-  if (![plan.costCapUsd, plan.timeCapMs].every(n => Number.isFinite(n) && n > 0) || plan.timeCapMs > 86_400_000 || !plan.authorizationRef.trim()) throw new Error("positive shared limits and authorization reference required");
+  if (!Number.isFinite(plan.costCapUsd) || (plan.mode === "local-model" ? plan.costCapUsd !== 0 : plan.costCapUsd <= 0) || !Number.isFinite(plan.timeCapMs) || plan.timeCapMs <= 0 || plan.timeCapMs > 86_400_000 || !plan.authorizationRef.trim()) throw new Error("positive shared limits and authorization reference required");
   return calls;
 }
 
@@ -69,24 +72,26 @@ export async function qualifyTaskRouting(options: {
 }): Promise<RoutingQualificationReport> {
   const { plan } = options;
   preflightTaskRouting(plan);
+  const local = plan.mode === "local-model";
   const started = Date.now();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(new Error("shared wall-clock cap reached")), plan.timeCapMs);
   const signal = options.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal;
   const ledger = new ScanCostLedger();
-  const report: RoutingQualificationReport = { schemaVersion: 1, mode: plan.mode, suiteDigest: TASK_ROUTING_SUITE_DIGEST, evaluatorDigest: TASK_ROUTING_EVALUATOR_DIGEST, plan, trials: [], status: "inconclusive", stopReason: null, totalCalls: 0, estimatedUsd: null, unknownUsage: false, elapsedMs: 0, actualProviderChargeUsd: null, pricingSnapshotDate: PRICING_SNAPSHOT_DATE, modelVersionStatus: "unavailable", automaticEnablement: false };
-  const settle = () => { report.unknownUsage = ledger.hasUnpricedUsage(); report.estimatedUsd = report.unknownUsage ? null : ledger.totalCostUsd(); report.elapsedMs = Date.now() - started; };
+  const report: RoutingQualificationReport = { schemaVersion: 1, mode: plan.mode, suiteDigest: TASK_ROUTING_SUITE_DIGEST, evaluatorDigest: TASK_ROUTING_EVALUATOR_DIGEST, plan, trials: [], status: "inconclusive", stopReason: null, totalCalls: 0, estimatedUsd: null, unknownUsage: false, elapsedMs: 0, actualProviderChargeUsd: null, externalApiFeeUsd: local ? 0 : null, pricingSnapshotDate: PRICING_SNAPSHOT_DATE, modelVersionStatus: local ? "pinned-local-manifest" : "unavailable", automaticEnablement: false };
+  const settle = () => { report.unknownUsage = ledger.hasUnpricedUsage(); report.estimatedUsd = local || report.unknownUsage ? null : ledger.totalCostUsd(); report.elapsedMs = Date.now() - started; };
   try {
     for (let repeat = 1; repeat <= plan.repeats; repeat++) for (const test of CASES) for (const model of plan.models) {
       signal.throwIfAborted();
       if (ledger.hasUnpricedUsage()) throw new Error("unknown usage blocks further dispatch");
-      if (ledger.totalCostUsd() >= plan.costCapUsd) throw new Error("shared estimated cost cap reached");
+      if (!local && ledger.totalCostUsd() >= plan.costCapUsd) throw new Error("shared estimated cost cap reached");
       const own = ledger.fork();
       const runtime = options.runtime.forkForSubagent ? await options.runtime.forkForSubagent(Math.min(plan.timeCapMs, Math.max(1, plan.timeCapMs - (Date.now() - started))), { role: test.role, model }) : undefined;
       if (!runtime || runtime.resolvedModel?.() !== model) throw new Error(`approved model ${model} unavailable; no substitution allowed`);
       const pricingModel = runtime.resolvedPricingModel?.() ?? runtime.resolvedModel?.();
-      if (getRates(pricingModel) === MODEL_PRICING.default) throw new Error("model tariff unavailable; no budgeted provider dispatch");
-      const bounded = budgetNativeRuntime(runtime, own, signal, plan.costCapUsd);
+      if (!local && getRates(pricingModel) === MODEL_PRICING.default) throw new Error("model tariff unavailable; no budgeted provider dispatch");
+      if (local && runtime.resolvedProvider?.() !== "ollama-local") throw new Error("local-model qualification requires the pinned loopback-only adapter");
+      const bounded = local ? runtime : budgetNativeRuntime(runtime, own, signal, plan.costCapUsd);
       const trial: RoutingTrial = { model, provider: runtime.resolvedProvider?.() ?? null, role: test.role, caseId: test.id, control: test.control, repeat, status: "inconclusive", reason: null, elapsedMs: 0, calls: 0, estimatedUsd: null, inputTokens: 0, outputTokens: 0, toolRoundTrip: false, authorityPreserved: false, evidencePreserved: false, validationPreserved: false };
       const time = Date.now();
       try {
@@ -95,8 +100,10 @@ export async function qualifyTaskRouting(options: {
         const execute = async () => {
           signal.throwIfAborted();
           if (own.hasUnpricedUsage()) throw new Error("unknown usage blocks further dispatch");
-          if (own.totalCostUsd() >= plan.costCapUsd) throw new Error("shared estimated cost cap reached");
+          if (!local && own.totalCostUsd() >= plan.costCapUsd) throw new Error("shared estimated cost cap reached");
           if (report.totalCalls >= plan.maxCalls) throw new Error("shared call cap reached");
+          const used = ledger.tokenUsage();
+          if (local && used.inputTokens + used.outputTokens + plan.local!.maxInputTokens + plan.local!.maxOutputTokens > plan.local!.totalTokenCap) throw new Error("shared local token reservation exhausted");
           report.totalCalls++;
           trial.calls++;
           const result = await bounded.executeNative(system, messages, [tool], undefined, signal);
@@ -104,6 +111,7 @@ export async function qualifyTaskRouting(options: {
             own.markUnpricedUsage();
             throw new Error("provider usage unavailable");
           }
+          if (local) own.add(result.usage, model);
           if (result.stopReason === "error") throw new Error("provider returned error");
           return result;
         };
@@ -123,19 +131,18 @@ export async function qualifyTaskRouting(options: {
         trial.reason = trial.status === "failed" ? "decision or authority/evidence/validation invariant mismatch" : null;
       } catch (error) { trial.reason = error instanceof Error ? error.message.slice(0, 160) : "qualification failed"; }
       finally {
-        trial.elapsedMs = Date.now() - time; trial.estimatedUsd = own.hasUnpricedUsage() ? null : own.runCostUsd();
+        trial.elapsedMs = Date.now() - time; trial.estimatedUsd = local || own.hasUnpricedUsage() ? null : own.runCostUsd();
         const usage = own.tokenUsage(); trial.inputTokens = usage.inputTokens; trial.outputTokens = usage.outputTokens;
         report.trials.push(trial);
       }
     }
-    if (signal.aborted || ledger.hasUnpricedUsage() || ledger.totalCostUsd() >= plan.costCapUsd) throw new Error(signal.aborted ? "shared wall-clock cap reached" : ledger.hasUnpricedUsage() ? "unknown usage blocks qualification" : "shared estimated cost cap reached");
+    if (signal.aborted || ledger.hasUnpricedUsage() || (!local && ledger.totalCostUsd() >= plan.costCapUsd)) throw new Error(signal.aborted ? "shared wall-clock cap reached" : ledger.hasUnpricedUsage() ? "unknown usage blocks qualification" : "shared estimated cost cap reached");
     report.status = report.trials.some(t => t.status === "inconclusive") ? "inconclusive" : "completed-for-review";
   } catch (error) { report.stopReason = error instanceof Error ? error.message.slice(0, 160) : "qualification stopped"; }
   finally { clearTimeout(timer); settle(); }
   return report;
 }
 
-export const TASK_ROUTING_EVALUATOR_DIGEST = digest({ implementation: qualifyTaskRouting.toString(), answerSchema: z.toJSONSchema(answer), tool });
 
 /** Deterministic controller adapter for protocol/negative controls; never production evidence. */
 export function taskRoutingFixtureRuntime(models: readonly string[], regressModel?: string): NativeRuntime {
@@ -153,15 +160,18 @@ export function taskRoutingFixtureRuntime(models: readonly string[], regressMode
 }
 
 const planSchema = z.object({
-  mode: z.enum(["fixture", "model-api"]), models: z.array(z.string().min(1).max(160)).min(1).max(8), repeats: z.number().int().min(1).max(20), maxCalls: z.number().int().min(1).max(2560), costCapUsd: z.number().positive().finite(), timeCapMs: z.number().positive().max(86_400_000),
+  mode: z.enum(["fixture", "model-api", "local-model"]), models: z.array(z.string().min(1).max(160)).min(1).max(8), repeats: z.number().int().min(1).max(20), maxCalls: z.number().int().min(1).max(2560), costCapUsd: z.number().nonnegative().finite(), timeCapMs: z.number().positive().max(86_400_000),
   workflow: z.object({ targetKind: z.enum(["web", "source"]), goal: z.enum(["known-vulnerabilities", "unknown-vulnerabilities", "misconfigurations"]), depth: z.enum(["quick", "default", "deep"]) }).strict(), authorizationRef: z.string().min(1).max(160),
+  local: z.object({ manifestDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/), sourcePin: z.string().min(1).max(160), weightsDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/), maxInputTokens: z.number().int().min(1).max(4096), maxOutputTokens: z.number().int().min(1).max(512), totalTokenCap: z.number().int().min(1).max(200000) }).strict().optional(),
 }).strict();
+export const TASK_ROUTING_EVALUATOR_DIGEST = digest({ implementation: qualifyTaskRouting.toString(), preflight: preflightTaskRouting.toString(), planSchema: z.toJSONSchema(planSchema), answerSchema: z.toJSONSchema(answer), tool });
+
 export function parseRoutingQualificationPlan(raw: unknown): RoutingQualificationPlan { const plan = planSchema.parse(raw); preflightTaskRouting(plan); return plan; }
 const reportSchema = z.object({
-  schemaVersion: z.literal(1), mode: z.enum(["fixture", "model-api"]),
+  schemaVersion: z.literal(1), mode: z.enum(["fixture", "model-api", "local-model"]),
   suiteDigest: z.string(), evaluatorDigest: z.string(), pricingSnapshotDate: z.string(),
   plan: z.object({
-    mode: z.enum(["fixture", "model-api"]),
+    mode: z.enum(["fixture", "model-api", "local-model"]),
     models: z.array(z.string().max(160)).max(8), repeats: z.number().int().min(1).max(20),
     workflow: z.object({ targetKind: z.enum(["web", "source"]), goal: z.enum(["known-vulnerabilities", "unknown-vulnerabilities", "misconfigurations"]), depth: z.enum(["quick", "default", "deep"]) }),
   }),
