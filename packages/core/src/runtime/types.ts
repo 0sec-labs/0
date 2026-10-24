@@ -202,6 +202,8 @@ export interface NativeRuntimeResult {
   usageByModel?: ModelTokenUsage[];
   durationMs: number;
   error?: string;
+  /** Timeout classification for adapters; operator cancellation never sets this. */
+  timedOut?: boolean;
   /**
    * Set only when the call ended because the caller's `signal` (see
    * {@link NativeRuntime.executeNative}) fired — an OPERATOR cancellation, not
