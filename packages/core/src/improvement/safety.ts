@@ -4,6 +4,8 @@ import { dirname, join } from "node:path";
 import { canonicalEvolutionJson } from "./config.js";
 import { ensureEvolutionDirectory, readEvolutionArtifact } from "./artifacts.js";
 import { acquireEvolutionController } from "./controller-lock.js";
+import { observedEvolutionModelRevision, type EvolutionModelRevision } from "./provenance.js";
+import type { EvolutionModelIdentity } from "./types.js";
 import type { EvolutionCase, EvolutionConfig } from "./types.js";
 
 export type EvolutionCompatibilityStatus = "compatible" | "incompatible" | "unknown";
@@ -24,7 +26,9 @@ export interface EvolutionComparisonIdentity {
   toolRevision: string;
   sourceRevision: string;
   /** Actual evaluated worker contract, separate from the proposal generator. */
-  evaluatedWorker?: { kind: "deterministic" } | { kind: "model"; provider: string; model: string };
+  proposalModelRevision?: EvolutionModelRevision;
+  curationLineageDigest?: string;
+  evaluatedWorker?: { kind: "deterministic" } | { kind: "model"; provider: string | null; model: string | null; revision: EvolutionModelRevision };
   compatibilityStatus: EvolutionCompatibilityStatus;
 }
 export interface EvolutionCompatibility { status: EvolutionCompatibilityStatus; reasons: string[] }
@@ -44,7 +48,7 @@ export function evolutionCorpusIdentity(cases: readonly EvolutionCase[]): {
 }
 export function createEvolutionComparisonIdentity(
   config: EvolutionConfig, evaluatorDigest: string,
-  options: { evaluatorSemantics?: string; resolvedModel?: string | null; provider?: string | null; harnessRevision?: string; toolRevision?: string; sourceRevision?: string } = {},
+  options: { evaluatorSemantics?: string; resolvedModel?: string | null; provider?: string | null; harnessRevision?: string; toolRevision?: string; sourceRevision?: string; generatorIdentity?: EvolutionModelIdentity; workerIdentity?: EvolutionModelIdentity } = {},
 ): EvolutionComparisonIdentity {
   return {
     schemaVersion: 1, ...evolutionCorpusIdentity(config.cases), evaluatorDigest,
@@ -54,14 +58,16 @@ export function createEvolutionComparisonIdentity(
     harnessRevision: options.harnessRevision ?? digest({ command: config.command, buildCommand: config.buildCommand ?? null, backend: config.backend ?? "docker", image: config.image, timeoutMs: config.timeoutMs, memoryMb: config.memoryMb, cpus: config.cpus, maxOutputBytes: config.maxOutputBytes }),
     toolRevision: options.toolRevision ?? digest(canonicalEvolutionJson.toString()),
     sourceRevision: options.sourceRevision ?? "unresolved",
+    proposalModelRevision: observedEvolutionModelRevision(options.generatorIdentity),
     evaluatedWorker: config.safety?.workerModel
-      ? { kind: "model", provider: config.safety.workerModel.provider, model: config.safety.workerModel.model }
+      ? { kind: "model", provider: options.workerIdentity?.provider ?? null, model: options.workerIdentity?.model ?? null, revision: observedEvolutionModelRevision(options.workerIdentity) }
       : { kind: "deterministic" },
     compatibilityStatus: "unknown",
   };
 }
 export function compareEvolutionIdentities(left: EvolutionComparisonIdentity, right: EvolutionComparisonIdentity): EvolutionCompatibility {
   const reasons: string[] = [];
+  if (!left.evaluatedWorker || !right.evaluatedWorker) return { status: "unknown", reasons: ["evaluated worker identity is unavailable"] };
   for (const key of ["development", "heldOut", "negativeControl"] as const) {
     if (left[key].digest !== right[key].digest) reasons.push(`${key} corpus differs`);
   }
@@ -72,9 +78,17 @@ export function compareEvolutionIdentities(left: EvolutionComparisonIdentity, ri
   ] as const) {
     if (left[key] !== null && right[key] !== null && left[key] !== right[key]) reasons.push(`${label} differs`);
   }
+  if (left.curationLineageDigest !== right.curationLineageDigest) reasons.push("curated observation lineage differs");
+  if (canonicalEvolutionJson(left.proposalModelRevision ?? null) !== canonicalEvolutionJson(right.proposalModelRevision ?? null)) reasons.push("proposal model revision differs");
   if (canonicalEvolutionJson(left.evaluatedWorker ?? null) !== canonicalEvolutionJson(right.evaluatedWorker ?? null)) reasons.push("evaluated worker differs");
+  for (const worker of [left.evaluatedWorker, right.evaluatedWorker]) {
+    if (worker?.kind === "model" && (!worker.provider || !worker.model || worker.revision?.status !== "pinned"
+      || !worker.revision.revision || !worker.revision.decodingDigest)) {
+      return { status: "unknown", reasons: ["evaluated worker revision/decoding identity is floating or unavailable"] };
+    }
+  }
   if (reasons.length > 0) return { status: "incompatible", reasons };
-  if (left.sourceRevision === "unresolved" || right.sourceRevision === "unresolved") {
+  if (![left.sourceRevision, right.sourceRevision, left.evaluatorDigest, right.evaluatorDigest, left.harnessRevision, right.harnessRevision, left.toolRevision, right.toolRevision].every(value => typeof value === "string" && /^sha256:[a-f0-9]{64}$/.test(value))) {
     return { status: "unknown", reasons: ["source byte identity is unresolved"] };
   }
   if (!left.resolvedModel || !right.resolvedModel || !left.provider || !right.provider) {
@@ -107,6 +121,7 @@ const campaignKey = (identity: EvolutionComparisonIdentity): string => digest({
   evaluatorDigest: identity.evaluatorDigest, evaluatorSemantics: identity.evaluatorSemantics,
   harnessRevision: identity.harnessRevision, toolRevision: identity.toolRevision, sourceRevision: identity.sourceRevision,
   evaluatedWorker: identity.evaluatedWorker ?? null,
+  curationLineageDigest: identity.curationLineageDigest ?? null,
 });
 function writeLedger(root: string, ledger: EvolutionCampaignLedger): void {
   const path = ledgerPath(root);

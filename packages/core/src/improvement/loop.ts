@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
 import { canonicalEvolutionJson, parseEvolutionConfig } from "./config.js";
 import { publishEvolutionArtifact, readEvolutionArtifact } from "./artifacts.js";
-import { evaluateEvolutionCandidate } from "./evaluation.js";
+import { evaluateEvolutionCandidate, evolutionComparisonIdentity } from "./evaluation.js";
 import {
   configsDir, createEvolutionCandidate, evolutionDigest, loadEvolutionRegistry,
   loadEvolutionReceipt, pinEvolutionVersion, promoteEvolutionVersion, receiptsDir,
@@ -53,6 +53,10 @@ function feedbackContractDigest(config: EvolutionConfig): string {
     maxOutputBytes: config.maxOutputBytes,
     maxSourceBytes: config.maxSourceBytes,
     repeats: config.repeats,
+    curation: config.cases.map(entry => entry.curation ?? null),
+    observationStorePath: config.observationStorePath ?? null,
+    workerModel: config.safety?.workerModel ?? null,
+    retentionPolicy: config.retentionPolicy ?? null,
   });
 }
 
@@ -79,6 +83,9 @@ export function tryRecoverPreviousFeedback(
   addLineage(active.id);
 
   const currentContractDigest = feedbackContractDigest(config);
+  let currentIdentity: ReturnType<typeof evolutionComparisonIdentity>;
+  try { currentIdentity = evolutionComparisonIdentity(config); }
+  catch { return null; } // Deleted or unreadable selected source is stale, never authority.
 
   // Iterate backwards (most recent first) through registry versions
   for (let i = registry.versions.length - 1; i >= 0; i--) {
@@ -110,6 +117,13 @@ export function tryRecoverPreviousFeedback(
     } catch {
       continue; // Tampered or missing receipt
     }
+
+    const identity = receipt.comparisonIdentity ?? receipt.result.provenance;
+    if (!identity || identity.curationLineageDigest !== currentIdentity.curationLineageDigest || identity.sourceRevision !== currentIdentity.sourceRevision
+      || identity.toolRevision !== currentIdentity.toolRevision
+      || identity.evaluatorDigest !== currentIdentity.evaluatorDigest
+      || identity.evaluatorSemantics !== currentIdentity.evaluatorSemantics
+      || identity.evaluatedWorker?.kind !== "deterministic") continue;
 
     // Verify candidate snapshot integrity
     try {

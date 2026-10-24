@@ -6,7 +6,7 @@ export type {
   EvolutionSnapshot, EvolutionVersion,
 } from "./types.js";
 export { canonicalEvolutionJson, loadEvolutionConfigFile, parseEvolutionConfig } from "./config.js";
-export { evaluateEvolutionCandidate } from "./evaluation.js";
+export { evaluateEvolutionCandidate, evolutionComparisonIdentity } from "./evaluation.js";
 export {
   approveEvolutionCandidate, executeEvolutionVersion,
   runEvolution, selectEvolutionAlternativeParent, tryRecoverPreviousFeedback,
@@ -58,3 +58,7 @@ export type {
   MissSkipReason,
   SkippedCase,
 } from "./miss-harvest.js";
+
+export { evolutionCaseContentIdentity, evolutionObservationApprovalIdentity, evolutionSourceFixtureCase } from "./curation-lineage.js";
+export { auditEvolutionCorpusRotation, observedEvolutionModelRevision } from "./provenance.js";
+export type { EvolutionModelRevision } from "./provenance.js";

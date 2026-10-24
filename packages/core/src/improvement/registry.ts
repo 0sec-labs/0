@@ -721,7 +721,17 @@ function acquireEvolutionPromotionGate(storePath: string, receipt: EvolutionEval
   if (!provenance || provenance.compatibilityStatus !== "compatible" || !provenance.provider || !provenance.resolvedModel) {
     throw new Error("promotion requires observed compatible generator/evaluator provenance");
   }
-  const expected = evolutionComparisonIdentity(config, { provider: provenance.provider, model: provenance.resolvedModel });
+  const worker = provenance.evaluatedWorker;
+  const expected = evolutionComparisonIdentity(config, { provider: provenance.provider, model: provenance.resolvedModel,
+    modelVersionStatus: provenance.proposalModelRevision?.status,
+    ...(provenance.proposalModelRevision?.revision ? { modelRevision: provenance.proposalModelRevision.revision } : {}),
+    ...(provenance.proposalModelRevision?.decodingDigest ? { decodingDigest: provenance.proposalModelRevision.decodingDigest } : {}),
+  },
+    worker?.kind === "model" && worker.provider && worker.model ? {
+      provider: worker.provider, model: worker.model, modelVersionStatus: worker.revision.status,
+      ...(worker.revision.revision ? { modelRevision: worker.revision.revision } : {}),
+      ...(worker.revision.decodingDigest ? { decodingDigest: worker.revision.decodingDigest } : {}),
+    } : undefined);
   const comparison = compareEvolutionIdentities(expected, provenance);
   expected.compatibilityStatus = comparison.status;
   if (comparison.status !== "compatible"
