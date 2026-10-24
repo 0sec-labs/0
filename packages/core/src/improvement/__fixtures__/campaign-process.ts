@@ -7,6 +7,8 @@ import { acquireEvolutionController } from "../controller-lock.js";
 import { campaignPromotionAllowed, createOrLoadEvolutionCampaign, loadEvolutionCampaign, reserveCampaignDispatch, settleCampaignDispatch, type EvolutionComparisonIdentity } from "../safety.js";
 
 const [root, mode] = process.argv.slice(2) as [string, string];
+// Keep this fixture isolated when composed with the shared holdout-authority PR.
+process.env.ZERO_EVOLUTION_AUTHORITY_ROOT = join(root, "test-holdout-authority");
 const identity = mode === "resume" ? loadEvolutionCampaign(root).comparisonIdentity
  : JSON.parse(readFileSync(join(root, "identity.json"), "utf8")) as EvolutionComparisonIdentity;
 const budgets = { maxModelCostUsd: 10, maxEvaluationCostUsd: 10 };
