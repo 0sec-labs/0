@@ -31,36 +31,43 @@ import { realpathSync,existsSync } from 'node:fs';
 import { join } from 'node:path';
 const root=repository;
 const { createWorkbenchConsoleSession,runWorkbenchCli }=await import(root+'/packages/cli/dist/workbench-console-session.js');
-const assets=dirname(root);
-const workspace=realpathSync(await mkdtemp(join(dirname(root),'0-controller-fixture-')));
-await writeFile(join(workspace,'fixture.txt'),'host source fixture\n',{mode:0o600});
-const model='gpt-6.1'; const providerRequests=[]; const events=[]; const executions=[]; let calls=0; let cancel=false;
-const sse=(response)=>new Response(`data: ${JSON.stringify({type:'response.completed',response:{status:'completed',output:response,usage:{input_tokens:20,output_tokens:8}}})}\n\n`,{headers:{'Content-Type':'text/event-stream'}});
-const provider={provider:'chatgpt-codex',models:[model],async request(envelope,signal){
- providerRequests.push({provider:envelope.provider,model:envelope.model,bodyBytes:Buffer.byteLength(envelope.body)});
- if(cancel) return new Response(new ReadableStream({start(controller){signal?.addEventListener('abort',()=>controller.error(new Error('qualification cancelled')),{once:true});}}),{headers:{'Content-Type':'text/event-stream'}});
- calls++;
- if(calls===1)return sse([{type:'function_call',id:'fc_read',call_id:'read_1',name:'read_file',arguments:JSON.stringify({path:'/workspace/fixture.txt'})}]);
- if(calls===2)return sse([{type:'function_call',id:'fc_patch',call_id:'patch_1',name:'apply_patch',arguments:JSON.stringify({patch:'*** Begin Patch\n*** Add File: guest-result.txt\n+guest execution wrote this\n*** End Patch'})}]);
- return sse([{type:'message',role:'assistant',content:[{type:'output_text',text:'Guest harness read the fixture and saved the output.'}]}]);
-}};
-const workbench={schemaVersion:1,image:qualificationImage,imageDigest:qualificationDigest,stateRoot:(await import(root+'/packages/cli/dist/workbench.js')).loadWorkbenchConfig().stateRoot,workspaceRoot:workspace,providers:['chatgpt-codex'],github:false,cpus:2,memoryMb:2048,storageGb:4};
-const artifact=realpathSync(await mkdtemp(join(assets,'artifacts-')));
-const session=createWorkbenchConsoleSession({config:{target:'source:'+workspace,workspaceRoot:workspace,autonomyMode:'copilot',maxToolIterations:6,maxTurnTokens:32000,refineObjective:false,allowModelSelfExtension:false,requestLocalScope:async()=>({scopePath:workspace})},workbench,selection:{model,provider:'chatgpt-codex',singleModel:true},provider,network:false,lifetimeMs:90000,idleMs:90000,assets:{cliDist:root+'/dist',dependencies},artifactDirectory:artifact,onExecution:snapshot=>executions.push(snapshot)});
-const report={schemaVersion:1,workspace,artifact,downloadBytes:0,hostCredentialsForwarded:false,network:false,provider:'host SSE fixture (no live account)',outcome:'pending'};
+// Scratch lives beside the checkout, not os.tmpdir(): workbench refuses workspaces under /var (macOS tmpdir is /private/var/folders).
+const scratchRoot=process.env.ZERO_QUALIFICATION_TMPDIR?resolve(process.env.ZERO_QUALIFICATION_TMPDIR):dirname(root);
+const workspace=realpathSync(await mkdtemp(join(scratchRoot,'0-controller-fixture-')));
+let artifact;
 try{
- const outcome=await session.send('Read fixture.txt and create guest-result.txt in this disposable workspace.',{onToolStart:(...args)=>events.push({type:'tool-start',args}),onToolResult:(...args)=>events.push({type:'tool-result',args}),onAssistantDelta:(...args)=>events.push({type:'assistant',args})});
- report.turn=outcome; report.sourceUnmodified=!existsSync(join(workspace,'guest-result.txt')); report.checkpoint=session.exportCheckpoint();
- cancel=true; const abort=new AbortController(); const timer=setTimeout(()=>abort.abort(),700);
- try{report.cancelledTurn=await session.send('Wait for the next response.',{}, {signal:abort.signal});}finally{clearTimeout(timer);}
- await session.cleanup(); report.execution=session.execution;
- report.artifactFiles=await readdir(join(artifact,'artifacts/workspace')); report.guestOutput=await readFile(join(artifact,'artifacts/workspace/guest-result.txt'),'utf8');
- report.savedState=JSON.parse(await readFile(join(artifact,'artifacts/state/controller/session.json'),'utf8'));
- report.outcome=report.sourceUnmodified&&report.turn.stopReason==='end_turn'&&report.cancelledTurn.stopReason==='cancelled'&&report.guestOutput==='guest execution wrote this'&&['read_file','apply_patch'].every(name=>events.some(event=>event.type==='tool-result'&&event.args[0]?.name===name&&event.args[1]?.success===true))&&report.execution.status==='stopped'?'passed':'failed';
-}catch(error){report.error=error.message;report.outcome='failed';try{await session.cleanup();}catch(cleanup){report.cleanupError=cleanup.message;}}
-report.providerRequests=providerRequests;report.events=events;report.executionSnapshots=executions;
-report.buildIdentity=buildAtStart; report.buildUnchanged=JSON.stringify(buildAtStart)===JSON.stringify(await buildIdentity()); if(!report.buildUnchanged) report.outcome='failed';
-await writeFile(reportPath,JSON.stringify(report,null,2),{mode:0o600});
-console.log(JSON.stringify({outcome:report.outcome,error:report.error,sourceUnmodified:report.sourceUnmodified,providerRequests:providerRequests.length,execution:report.execution,artifact}));
-
-process.exitCode=report.outcome==='passed'?0:1;
+ await writeFile(join(workspace,'fixture.txt'),'host source fixture\n',{mode:0o600});
+ const model='gpt-6.1'; const providerRequests=[]; const events=[]; const executions=[]; let calls=0; let cancel=false;
+ const sse=(response)=>new Response(`data: ${JSON.stringify({type:'response.completed',response:{status:'completed',output:response,usage:{input_tokens:20,output_tokens:8}}})}\n\n`,{headers:{'Content-Type':'text/event-stream'}});
+ const provider={provider:'chatgpt-codex',models:[model],async request(envelope,signal){
+  providerRequests.push({provider:envelope.provider,model:envelope.model,bodyBytes:Buffer.byteLength(envelope.body)});
+  if(cancel) return new Response(new ReadableStream({start(controller){signal?.addEventListener('abort',()=>controller.error(new Error('qualification cancelled')),{once:true});}}),{headers:{'Content-Type':'text/event-stream'}});
+  calls++;
+  if(calls===1)return sse([{type:'function_call',id:'fc_read',call_id:'read_1',name:'read_file',arguments:JSON.stringify({path:'/workspace/fixture.txt'})}]);
+  if(calls===2)return sse([{type:'function_call',id:'fc_patch',call_id:'patch_1',name:'apply_patch',arguments:JSON.stringify({patch:'*** Begin Patch\n*** Add File: guest-result.txt\n+guest execution wrote this\n*** End Patch'})}]);
+  return sse([{type:'message',role:'assistant',content:[{type:'output_text',text:'Guest harness read the fixture and saved the output.'}]}]);
+ }};
+ const workbench={schemaVersion:1,image:qualificationImage,imageDigest:qualificationDigest,stateRoot:(await import(root+'/packages/cli/dist/workbench.js')).loadWorkbenchConfig().stateRoot,workspaceRoot:workspace,providers:['chatgpt-codex'],github:false,cpus:2,memoryMb:2048,storageGb:4};
+ artifact=realpathSync(await mkdtemp(join(scratchRoot,'0-controller-artifacts-')));
+ const session=createWorkbenchConsoleSession({config:{target:'source:'+workspace,workspaceRoot:workspace,autonomyMode:'copilot',maxToolIterations:6,maxTurnTokens:32000,refineObjective:false,allowModelSelfExtension:false,requestLocalScope:async()=>({scopePath:workspace})},workbench,selection:{model,provider:'chatgpt-codex',singleModel:true},provider,network:false,lifetimeMs:90000,idleMs:90000,assets:{cliDist:root+'/dist',dependencies},artifactDirectory:artifact,onExecution:snapshot=>executions.push(snapshot)});
+ const report={schemaVersion:1,workspace,artifact,downloadBytes:0,hostCredentialsForwarded:false,network:false,provider:'host SSE fixture (no live account)',outcome:'pending'};
+ try{
+  const outcome=await session.send('Read fixture.txt and create guest-result.txt in this disposable workspace.',{onToolStart:(...args)=>events.push({type:'tool-start',args}),onToolResult:(...args)=>events.push({type:'tool-result',args}),onAssistantDelta:(...args)=>events.push({type:'assistant',args})});
+  report.turn=outcome; report.sourceUnmodified=!existsSync(join(workspace,'guest-result.txt')); report.checkpoint=session.exportCheckpoint();
+  cancel=true; const abort=new AbortController(); const timer=setTimeout(()=>abort.abort(),700);
+  try{report.cancelledTurn=await session.send('Wait for the next response.',{}, {signal:abort.signal});}finally{clearTimeout(timer);}
+  await session.cleanup(); report.execution=session.execution;
+  report.artifactFiles=await readdir(join(artifact,'artifacts/workspace')); report.guestOutput=await readFile(join(artifact,'artifacts/workspace/guest-result.txt'),'utf8');
+  report.savedState=JSON.parse(await readFile(join(artifact,'artifacts/state/controller/session.json'),'utf8'));
+  report.outcome=report.sourceUnmodified&&report.turn.stopReason==='end_turn'&&report.cancelledTurn.stopReason==='cancelled'&&report.guestOutput==='guest execution wrote this'&&['read_file','apply_patch'].every(name=>events.some(event=>event.type==='tool-result'&&event.args[0]?.name===name&&event.args[1]?.success===true))&&report.execution.status==='stopped'?'passed':'failed';
+ }catch(error){report.error=error.message;report.outcome='failed';try{await session.cleanup();}catch(cleanup){report.cleanupError=cleanup.message;}}
+ report.providerRequests=providerRequests;report.events=events;report.executionSnapshots=executions;
+ report.buildIdentity=buildAtStart; report.buildUnchanged=JSON.stringify(buildAtStart)===JSON.stringify(await buildIdentity()); if(!report.buildUnchanged) report.outcome='failed';
+ await writeFile(reportPath,JSON.stringify(report,null,2),{mode:0o600});
+ console.log(JSON.stringify({outcome:report.outcome,error:report.error,sourceUnmodified:report.sourceUnmodified,providerRequests:providerRequests.length,execution:report.execution,artifact}));
+ process.exitCode=report.outcome==='passed'?0:1;
+}finally{
+ // The report already captures guest output and saved state; keep artifacts only for failed runs or ZERO_QUALIFICATION_KEEP_ARTIFACTS=1.
+ await rm(workspace,{recursive:true,force:true});
+ if(artifact&&process.exitCode===0&&process.env.ZERO_QUALIFICATION_KEEP_ARTIFACTS!=='1') await rm(artifact,{recursive:true,force:true});
+}
