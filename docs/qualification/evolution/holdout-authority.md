@@ -34,7 +34,10 @@ legacy records do not retain per-reservation query counts. This may exhaust
 capacity early; it must never undercount independent legacy histories. There is no distributed transaction or exactly-once claim. Each normal
 query performs two bounded atomic record writes, under existing controller locks,
 with one extra authority write when importing previously unseen legacy history,
-and no archive scan. Records stop at 10,000 reservations per identity; accounting
+and no archive scan. Two lock-owner records are also written/fsynced; normal
+reservations perform six fsync calls including ledger directory durability.
+The bounded per-identity records are fully rewritten (linear in retained entries,
+not constant-size I/O). Records stop at 10,000 reservations per identity; accounting
 is not automatically discarded or reset. Exhaustion stops further evaluations
 and promotion even from a new empty store. Since exact exhaustion blocks
 promotion, preregister enough selection capacity for the full qualification and

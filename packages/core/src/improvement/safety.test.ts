@@ -214,7 +214,8 @@ describe("evolution safety contract", () => {
       p50Ms: samples[49], p95Ms: samples[94], maxMs: samples.at(-1),
       campaignBytes: readFileSync(join(root, "campaign-ledger.json")).length,
       authorityBytes: readFileSync(authority).length,
-      writesPerReservation: 2, fullArchiveScansPerReservation: 0, modelCalls: 0 };
+      atomicLedgerWritesPerReservation: 2, controllerLockOwnerWritesPerReservation: 2,
+      fsyncCallsPerNormalReservation: 6, fullArchiveScansPerReservation: 0, modelCalls: 0 };
     expect(loadEvolutionCampaign(root).exposures[0]!.consumed).toBe(100);
     if (process.env.HOLDOUT_IO_REPORT) writeFileSync(process.env.HOLDOUT_IO_REPORT, JSON.stringify(report, null, 2) + "\n");
   });
