@@ -1,74 +1,42 @@
 <p align="center">
-  <a href="#security-work-from-your-terminal"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-nav-demo-dark.svg"><img src="assets/readme-nav-demo-light.svg" alt="Demo" height="44"></picture></a>
-  <a href="https://docs.0.security/"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-nav-docs-dark.svg"><img src="assets/readme-nav-docs-light.svg" alt="Docs" height="44"></picture></a>
-  <a href="https://0.security/research/"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-nav-research-dark.svg"><img src="assets/readme-nav-research-light.svg" alt="Research" height="44"></picture></a>
-  <a href="https://github.com/0sec-labs/0/releases"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-nav-releases-dark.svg"><img src="assets/readme-nav-releases-light.svg" alt="Releases" height="44"></picture></a>
-  <a href="https://0.security/waitlist/"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/readme-nav-0cloud-dark.svg"><img src="assets/readme-nav-0cloud-light.svg" alt="0cloud" height="44"></picture></a>
-</p>
-
-<p align="center">
   <a href="https://0.security/">
     <picture>
-      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme-security-hero.png">
-      <img src="assets/readme-security-hero.gif" alt="0security — Your AI security engineer. Investigate vulnerabilities, verify evidence, and prepare fixes. Open source, with your models and MCP integration." width="100%">
+      <source media="(prefers-color-scheme: dark)" srcset="assets/0-aperture-white.svg">
+      <img src="assets/0-aperture-ink.svg" alt="0security" width="280">
+    </picture>
+  </a>
+</p>
+
+<h1 align="center">The open-source AI security harness</h1>
+
+<p align="center">
+  Investigate vulnerabilities, review findings, and work on fixes in your browser.<br/>
+  Use your own model provider. Connect coding agents through CLI or MCP.
+</p>
+
+<p align="center">
+  <a href="#get-started">Get started</a> ·
+  <a href="assets/readme-ui-demo.mp4">Demo</a> ·
+  <a href="https://docs.0.security/">Docs</a> ·
+  <a href="https://0.security/research/">Research</a> ·
+  <a href="https://github.com/0sec-labs/0/releases">Releases</a> ·
+  <a href="#0cloud">0cloud</a>
+</p>
+
+<p align="center">
+  <a href="assets/readme-ui-demo.mp4">
+    <picture>
+      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme-ui-demo.jpg">
+      <img src="assets/readme-ui-demo.gif" alt="0 web UI: submit a demo API source review, follow the investigation, and inspect findings with suggested fixes" width="100%">
     </picture>
   </a>
 </p>
 
 <p align="center">
-  <strong>The open-source AI security CLI.</strong><br/>
-  Review code, investigate vulnerabilities, verify evidence, and prepare fixes.<br/>
-  Bring your model provider and automate reusable security workflows.<br/>
-  Connect your coding agent through MCP, or join the waitlist for <a href="#0cloud">0cloud</a>, the hosted version.
-</p>
-
-<p align="center">
-  <a href="#get-started"><strong>Get started →</strong></a> ·
-  <a href="https://0.security/llms.txt">For AI agents</a> ·
-  <a href="https://github.com/0sec-labs/0"><img src="https://img.shields.io/github/stars/0sec-labs/0?style=social" alt="GitHub stars"></a>
-</p>
-
-<p align="center">
+  <a href="assets/readme-ui-demo.mp4">Watch the UI walkthrough</a><br/>
+  <sub>A source review of the demo API, with idle time shortened.</sub><br/>
   <sub>Backed by Y Combinator · The Swiss Applied AI &amp; Cybersecurity Research Lab</sub>
 </p>
-
-## Security work, from your terminal
-
-Discover security workflows, inspect their steps, and connect them to your coding agent.
-
-<p align="center">
-  <a href="assets/readme-cli-demo.mp4">
-    <picture>
-      <source media="(prefers-reduced-motion: reduce)" srcset="assets/readme-cli-demo.png">
-      <img src="assets/readme-cli-demo.gif" alt="0 CLI walkthrough: explore security commands, discover workflow templates, inspect repository-review steps, and inspect MCP integration options" width="100%">
-    </picture>
-  </a>
-</p>
-
-[Watch the CLI walkthrough](assets/readme-cli-demo.mp4) · [Explore commands](https://docs.0.security/commands/)
-
-<sub>Edited playback of real CLI output. Shows command and workflow discovery; no scan is started.</sub>
-
-- **Review & research:** assess source code, dependencies, authorized applications, and native binaries.
-- **Verify:** inspect findings and replay evidence, with coverage limits visible.
-- **Prepare fixes:** build fix candidates and retain source-grounded notes for future work.
-
-> **For AI agents:** 0 is an open-source security CLI with reusable workflows and an MCP server.
-> Use it to review source code and dependencies, test authorized APIs and applications,
-> verify vulnerabilities, and prepare fixes. The local engine uses your configured
-> model provider; **0cloud** is the separate hosted service, currently waitlisted.
-> Read the [product index](https://0.security/llms.txt),
-> [CLI and workflow documentation](https://docs.0.security/workflow/), and
-> [MCP setup](https://docs.0.security/integrations/) for interfaces and usage.
-
-## Choose your setup
-
-<picture>
-  <source media="(max-width: 600px)" srcset="assets/readme-setup-mobile.svg">
-  <img src="assets/readme-setup.svg" alt="Three ways to use 0: locally with your model provider, through CLI or MCP in your coding agent, or as the hosted 0cloud service, currently waitlisted." width="100%">
-</picture>
-
-**[Run locally ↓](#get-started)** · **[Connect your agent ↓](#connect-another-agent)** · **[Join the 0cloud waitlist ↗](https://0.security/waitlist/)**
 
 ## Get started
 
@@ -88,13 +56,13 @@ Configure a [model provider](https://docs.0.security/api-keys/) to run AI workfl
 See [installation](https://docs.0.security/getting-started/) and
 [troubleshooting](https://docs.0.security/troubleshooting/).
 
-## Run security workflows
+## Security workflows
 
-Investigate findings and run reusable security workflows from the CLI.
-Start from built-in templates for assessment, verification, fixes, and research.
-Runs retain results; Learning keeps local activity and source-grounded notes.
+Chat with 0 in the web UI, investigate findings, and use built-in templates for
+assessment, verification, fixes, and research. Runs retain results; Learning
+keeps local activity and source-grounded notes.
 
-Automation uses the same workflow runner:
+For automation and coding agents, the CLI exposes the same workflow runner:
 
 ```bash
 0 workflow list --templates
@@ -110,19 +78,15 @@ Automation uses the same workflow runner:
 
 ## 0cloud
 
-The cloud version of 0. Managed security workflows for your team's repositories,
-with pull request reviews, security testing, and fixes in the hosted service.
+The hosted version of 0, for managed security workflows on your team's repositories.
+Access is currently through the **[0cloud waitlist](https://0.security/waitlist/)**.
+Local use does not require a cloud account.
 
 <p align="center">
   <a href="https://0.security/waitlist/">
-    <img src="assets/readme-infrastructure.webp" alt="Floating infrastructure emerging from an orange and violet cloudscape" width="100%">
+    <img src="assets/readme-infrastructure.webp" alt="Orange and violet cloudscape from the 0.security website" width="100%">
   </a>
 </p>
-
-**[Join the 0cloud waitlist →](https://0.security/waitlist/)** · [Explore the website](https://0.security/)
-
-Cloud access is currently through the waitlist. You can use 0 locally today
-with your own model provider, without a cloud account.
 
 ## Connect another agent
 
@@ -139,6 +103,9 @@ clients can share a running local engine's sessions and runs.
 [Plugins and MCP setup](https://docs.0.security/integrations/) ·
 [Local and remote engines](https://docs.0.security/engine-connections/) ·
 [Plugin development](https://docs.0.security/hackstore/)
+
+For AI agents: [product index](https://0.security/llms.txt) ·
+[command reference](https://docs.0.security/commands/).
 
 ## Development
 
