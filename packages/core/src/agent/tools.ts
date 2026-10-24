@@ -1,5 +1,5 @@
 import { parseRequest, type OracleResult } from "../triage/oracles.js";
-import { assertWorkspaceIdentity, captureWorkspaceIdentity, type WorkspaceIdentity } from "./workspace-identity.js";
+import { assertExpectedWorkspace, assertWorkspaceIdentity, captureWorkspaceIdentity, type ExpectedWorkspace, type WorkspaceIdentity } from "./workspace-identity.js";
 import { filterWorkflowAgentTools, isWorkflowAgentToolAllowed } from "../workflow-execution-policy.js";
 import { retainBrowserScreenshot } from "../browser-evidence.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -2422,6 +2422,13 @@ const PERSIST_POLL_MS = 1_000;
 const PERSIST_IDLE_TTL_MS = 300_000;
 /** Hard cap on how many times a persistent agent may be revived. */
 const PERSIST_MAX_REVIVES = 25;
+
+const expectedWorkspaceSchema = z.object({
+  path: z.string().min(1).max(4096).refine(isAbsolute, "expected_workspace.path must be absolute"),
+  head: z.string().regex(/^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$/, "expected_workspace.head must be a full Git commit hash"),
+  origin: z.string().min(1).max(4096).optional(),
+}).strict();
+const subagentWorkspaceSchema = z.object({ expected_workspace: expectedWorkspaceSchema.optional() });
 
 const subagentModelSelectionSchema = z.object({
   role: z.string().min(1).optional(),
@@ -6121,6 +6128,7 @@ export class ToolExecutor {
     selection?: SubagentModelSelection,
     admittedLease?: ReturnType<AuditWorkerTree["acquire"]>,
     sharedContext?: string,
+    expectedWorkspace?: ExpectedWorkspace,
   ): Promise<SubagentOutcome> {
     const startedAt = Date.now();
     let lease = admittedLease;
@@ -6129,6 +6137,7 @@ export class ToolExecutor {
       const callerSignal = this._executionContext.getStore()?.signal;
       const signal = callerSignal ? AbortSignal.any([callerSignal, lease.signal]) : lease.signal;
       signal.throwIfAborted();
+      if (expectedWorkspace) assertExpectedWorkspace(expectedWorkspace, this.ctx.scopePath);
       if (!this._childRuntimeFactory) throw new Error("Parent runtime does not support subagent inference");
       // Single-child path resolves deps here (inside the try, so an import
       // failure still emits `failed`); the concurrent batch pre-resolves once
@@ -6212,6 +6221,7 @@ export class ToolExecutor {
       const delegationSystemPrompt = this.ctx.delegationSystemPrompt ?? `You are a focused ${this.ctx.role ?? "attack"} agent.`;
       this._workspaceIdentity ??= captureWorkspaceIdentity(this.ctx.scopePath);
       if (this._workspaceIdentity) assertWorkspaceIdentity(this._workspaceIdentity, this.ctx.scopePath);
+      if (expectedWorkspace) assertExpectedWorkspace(expectedWorkspace, this.ctx.scopePath);
       const state = await runNativeAgentLoop({
         config: {
           role: this.ctx.role ?? "attack",
@@ -6677,6 +6687,11 @@ export class ToolExecutor {
     if (!task) return { success: false, output: null, error: "Task description is required" };
     const selection = subagentModelSelectionSchema.safeParse(args);
     if (!selection.success) return { success: false, output: null, error: selection.error.issues[0]?.message ?? "Invalid model selection" };
+    const workspace = subagentWorkspaceSchema.safeParse(args);
+    if (!workspace.success) return { success: false, output: null, error: workspace.error.issues[0]?.message ?? "Invalid expected workspace" };
+    try { if (workspace.data.expected_workspace) assertExpectedWorkspace(workspace.data.expected_workspace, this.ctx.scopePath); }
+    catch (error) { return { success: false, output: null, error: (error as Error).message }; }
+
 
     const maxTurns = Math.min((args.max_turns as number) ?? 40, 120);
     const base = this.buildSubagentLifecycleBase(task, maxTurns);
@@ -6686,7 +6701,7 @@ export class ToolExecutor {
     // queued — before any async setup
     eventBus.emit("subagent_lifecycle", { ...base, status: "queued" as const });
 
-    const outcome = await this.runOneSubagent(task, maxTurns, base, undefined, undefined, selection.data, lease);
+    const outcome = await this.runOneSubagent(task, maxTurns, base, undefined, undefined, selection.data, lease, undefined, workspace.data.expected_workspace);
     // Preserve accepted findings even if a later model request failed.
     this.mergeSubagentFindings(outcome.findings ?? []);
     if (!outcome.ok) {
@@ -6743,7 +6758,7 @@ export class ToolExecutor {
     const batchContext = typeof args.context === "string" && args.context.trim() ? args.context : undefined;
 
     // Normalize + validate each task entry before any side effect.
-    const specs: Array<{ task: string; maxTurns: number; base: SubagentLifecycleBase; selection: SubagentModelSelection; lease?: ReturnType<AuditWorkerTree["acquire"]> }> = [];
+    const specs: Array<{ task: string; maxTurns: number; base: SubagentLifecycleBase; selection: SubagentModelSelection; expectedWorkspace?: ExpectedWorkspace; lease?: ReturnType<AuditWorkerTree["acquire"]> }> = [];
     for (let i = 0; i < rawTasks.length; i++) {
       const entry = rawTasks[i] as Record<string, unknown> | undefined;
       const task = entry?.task;
@@ -6756,8 +6771,12 @@ export class ToolExecutor {
       }
       const selection = subagentModelSelectionSchema.safeParse(entry);
       if (!selection.success) return { success: false, output: null, error: `tasks[${i}]: ${selection.error.issues[0]?.message ?? "Invalid model selection"}` };
+      const workspace = subagentWorkspaceSchema.safeParse(entry);
+      if (!workspace.success) return { success: false, output: null, error: `tasks[${i}]: ${workspace.error.issues[0]?.message ?? "Invalid expected workspace"}` };
+      try { if (workspace.data.expected_workspace) assertExpectedWorkspace(workspace.data.expected_workspace, this.ctx.scopePath); }
+      catch (error) { return { success: false, output: null, error: `tasks[${i}]: ${(error as Error).message}` }; }
       const maxTurns = Math.min((entry?.max_turns as number) ?? 40, 120);
-      specs.push({ task, maxTurns, base: this.buildSubagentLifecycleBase(task, maxTurns), selection: selection.data });
+      specs.push({ task, maxTurns, base: this.buildSubagentLifecycleBase(task, maxTurns), selection: selection.data, expectedWorkspace: workspace.data.expected_workspace });
     }
 
     // Reserve queued work too, so stop-all cannot miss later concurrency waves.
@@ -6821,6 +6840,7 @@ export class ToolExecutor {
           spec.selection,
           spec.lease,
           batchContext,
+          spec.expectedWorkspace,
         ),
     );
 

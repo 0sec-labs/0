@@ -7,7 +7,38 @@ const receipt = { protocol: "0.presentation/v1", kind: "event", source: "core", 
     observation_before: { status: 200, truncated: false, field_present: true, json_pointer_value: "old" },
     observation_after: { status: 200, truncated: false, field_present: true, json_pointer_value: "secret-marker" },
     steps: [{ step_index: 0, method: "POST", url: "https://target.test/private", status: 200 }] } };
+const readReceipt = (status: "blocked" | "confirmed") => ({ ...receipt, payload: {
+  presentationEventId: `read-${status}`, tool: "access_control_probe", method: "GET",
+  url: "https://target.test/restricted?token=private-query",
+  access_proof: { schema: "0.access-proof/v1", authority: "operator-fixture", access_class: "unauthorized-read", status,
+    baseline_status: 200, owner_marker_observed: true, comparison_marker_observed: status === "confirmed", cleanup: "not-required",
+    baseline_observation: { status: 200, truncated: false, marker_observed: true, response_digest: `sha256:${"a".repeat(64)}` },
+    comparison_observations: [{ identity: "actor", status: status === "confirmed" ? 200 : 403,
+      truncated: false, marker_observed: status === "confirmed", response_digest: `sha256:${"b".repeat(64)}` }],
+  },
+} });
 describe("live access milestone transport", () => {
+  it("transports confirmed read receipts without exposing resource query strings", () => {
+    const parsed = parseHuntEvent(JSON.stringify(readReceipt("confirmed")));
+    expect(parsed?.kind).toBe("access_milestone");
+    if (parsed?.kind !== "access_milestone") throw new Error("missing read milestone");
+    expect(parsed.milestone).toMatchObject({ status: "confirmed", accessClass: "unauthorized-read", asset: "https://target.test", evidenceEventId: "read-confirmed", cleanup: "not-required" });
+    expect(parsed.milestone.summary).not.toContain("private-query");
+    const partial = readReceipt("confirmed");
+    partial.payload.access_proof.comparison_observations[0].truncated = true;
+    expect(parseHuntEvent(JSON.stringify(partial))?.kind).not.toBe("access_milestone");
+  });
+  it("escalates blocked to confirmed once across transport replay without downgrading", () => {
+    const blocked = parseHuntEvent(JSON.stringify(readReceipt("blocked")));
+    const confirmed = parseHuntEvent(JSON.stringify({ ...readReceipt("confirmed"), at: "2026-10-05T11:00:00Z" }));
+    if (blocked?.kind !== "access_milestone" || confirmed?.kind !== "access_milestone") throw new Error("missing read milestones");
+    let rows = appendAccessMilestone([], { milestone: blocked.milestone, ts: blocked.ts });
+    rows = appendAccessMilestone(rows, { milestone: confirmed.milestone, ts: confirmed.ts });
+    rows = appendAccessMilestone(rows, { milestone: blocked.milestone, ts: blocked.ts });
+    rows = appendAccessMilestone(rows, { milestone: confirmed.milestone, ts: confirmed.ts + 1 });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ ts: confirmed.ts, milestone: { status: "confirmed", evidenceEventId: "read-confirmed" } });
+  });
   it("projects retained canonical artifacts with evidence scope and timestamp", () => {
     const parsed = parseHuntEvent(JSON.stringify(receipt));
     expect(parsed?.kind).toBe("access_milestone");
