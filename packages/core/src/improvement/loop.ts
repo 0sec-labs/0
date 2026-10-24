@@ -154,20 +154,34 @@ export function tryRecoverPreviousFeedback(
 }
 
 
-/** Rank bounded, compatible archived programs using development observations only.
- * Rejected candidates may be useful proposal parents, but never become active
- * without being re-evaluated against the current deployment baseline. */
-export function selectEvolutionAlternativeParent(
+/** Older parents may vary editable bytes, never source inventory or protected
+ * bytes. This prevents implicit resurrection/deletion outside the proposal. */
+export function archiveSurfaceCompatible(config: EvolutionConfig, archived: EvolutionVersion["snapshot"], active: EvolutionVersion["snapshot"]): boolean {
+  if (archived.files.length !== active.files.length) return false;
+  const current = new Map(active.files.map(file => [file.path, file]));
+  return archived.files.every(file => {
+    const currentFile = current.get(file.path);
+    if (!currentFile) return false;
+    const editable = config.editablePaths.some(path => file.path === path || file.path.startsWith(`${path}/`));
+    return editable || file.digest === currentFile.digest;
+  });
+}
+
+/** Admit a bounded archive through the same snapshot/contract/receipt checks used
+ * by production. Return only development observations alongside opaque versions;
+ * callers must never serialize snapshots or sealed receipts to a proposer. */
+export function admitEvolutionAlternativeParents(
   config: EvolutionConfig,
   registry: EvolutionRegistry,
-  log?: (message: string) => void,
-): EvolutionVersion | null {
+): Array<{ version: EvolutionVersion; attempts: EvolutionAttempt[] }> {
   const limit = config.maxAlternativeParents ?? 0;
-  if (limit <= 0) return null;
+  if (limit <= 0) return [];
+  const active = registry.versions.find(version => version.id === registry.activeId);
+  if (!active) return [];
+  verifyEvolutionSnapshot(active.snapshot);
   const contract = feedbackContractDigest(config);
   let inspected = 0;
-  let selected: EvolutionVersion | null = null;
-  let bestFraction = -1;
+  const admitted: Array<{ version: EvolutionVersion; attempts: EvolutionAttempt[] }> = [];
   for (let index = registry.versions.length - 1; index >= 0 && inspected < limit; index--) {
     const version = registry.versions[index]!;
     if (version.id === registry.activeId || version.id === registry.canaryId
@@ -176,6 +190,7 @@ export function selectEvolutionAlternativeParent(
     let receipt: EvolutionEvaluation | null;
     try {
       verifyEvolutionSnapshot(version.snapshot);
+      if (!archiveSurfaceCompatible(config, version.snapshot, active.snapshot)) continue;
       const stored = readEvolutionArtifact(join(configsDir(config.storePath), `${version.configDigest.replace(/^sha256:/, "")}.json`));
       if (evolutionDigest(stored) !== version.configDigest) continue;
       if (feedbackContractDigest(parseEvolutionConfig(stored)) !== contract) continue;
@@ -187,8 +202,22 @@ export function selectEvolutionAlternativeParent(
       || receipt.configDigest !== version.configDigest || receipt.baselineDigest !== parent?.snapshot.digest) continue;
     const attempts = receipt.attempts.candidate.filter(attempt => attempt.lane === "development");
     if (attempts.length === 0) continue;
+    admitted.push({ version, attempts });
+  }
+  return admitted;
+}
+
+/** Rank bounded, compatible archived programs using development observations only.
+ * Rejected candidates remain proposal parents, never approval to activate. */
+export function selectEvolutionAlternativeParent(
+  config: EvolutionConfig,
+  registry: EvolutionRegistry,
+  log?: (message: string) => void,
+): EvolutionVersion | null {
+  let selected: EvolutionVersion | null = null;
+  let bestFraction = -1;
+  for (const { version, attempts } of admitEvolutionAlternativeParents(config, registry)) {
     const fraction = attempts.filter(attempt => attempt.matched && !attempt.inconclusive).length / attempts.length;
-    // Newest-first traversal makes equal scores deterministic without sorting.
     if (fraction > bestFraction) { selected = version; bestFraction = fraction; }
   }
   if (selected) log?.(`[evolve] selected alternative parent ${selected.id} (development match fraction ${bestFraction})`);
