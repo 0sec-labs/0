@@ -163,6 +163,9 @@ export interface AccessControlFixture {
   ownerIdentity: string;
   comparisonIdentities: string[];
   ownershipMarker: string;
+  /** Operator-owned restriction for a disposable resource's observed state.
+   * Only these exact URLs can contribute to a confirmed write milestone. */
+  stateChange?: { disposable: true; jsonPointer: string; stepUrls: string[] };
 }
 
 export interface ScanConfig {
