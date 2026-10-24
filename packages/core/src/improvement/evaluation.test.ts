@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { estimateCost } from "@0/shared";
 import { parseEvolutionConfig } from "./config.js";
-import { evaluateEvolutionCandidate } from "./evaluation.js";
+import { evaluateEvolutionCandidate, evolutionComparisonIdentity } from "./evaluation.js";
 import { createEvolutionCandidate, snapshotEvolutionSource } from "./registry.js";
 import { proposeEvolutionEdits } from "./rewrite.js";
 import {
@@ -84,6 +84,93 @@ function probe(candidateId: string, mode: "correct" | "unrelated" | "negative-er
 }
 
 describe("independent evolution oracle", () => {
+  it("records a sealed critical panel and rejects losses even when the baseline also fails it", async () => {
+    const { config, baseline, candidate } = await setup();
+    config.retentionPolicy = { profileId: "older-parser-capability", version: 1, criticalCaseIds: ["held-out-2"] };
+    const passing = await evaluateEvolutionCandidate(baseline, candidate, config, { sandbox: probe(candidate.id, "correct") });
+    expect(passing.retention).toMatchObject({ passed: true, checkedCases: 1 });
+    expect(passing.decision.status).toBe("requires_human_approval");
+    const delegate = probe(candidate.id, "correct");
+    const failing: EvolutionSandbox = async request => {
+      const execution = await delegate(request);
+      // Both baseline and candidate lose a capability from an older profile.
+      // This loss is invisible to immediate-baseline retention alone.
+      if ((request.input as { key: number }).key === 5) execution.stdout = JSON.stringify({ findings: [] });
+      return execution;
+    };
+    const rejected = await evaluateEvolutionCandidate(baseline, candidate, config, { sandbox: failing });
+    expect(rejected.retention?.passed).toBe(false);
+    expect(rejected.result.ciPassed).toBe(false);
+    expect(rejected.decision.status).toBe("rejected");
+    expect(rejected.retention?.profileDigest).toBe(passing.retention?.profileDigest);
+  });
+
+  it("observes selected source bytes and rejects stale provenance after a source edit", async () => {
+    const { config } = await setup();
+    const identity = { provider: "openai", model: "gpt-4o" };
+    const before = evolutionComparisonIdentity(config, identity);
+    writeFileSync(join(config.sourceRoot, "src/detector.js"), "export const revision = 99;\n");
+    const after = evolutionComparisonIdentity(config, identity);
+    expect(after.sourceRevision).not.toBe(before.sourceRevision);
+    expect(after.evaluatorDigest).toBe(before.evaluatorDigest);
+    expect(before.sourceRevision).not.toBe(before.evaluatorDigest);
+  });
+
+  it("reserves and settles evaluated worker model charges separately from compute", async () => {
+    const { config, baseline, candidate } = await setup();
+    const safe = { ...config, safety: { enabled: true, holdoutExposureLimit: 100,
+      workerModel: { provider: "openai", model: "gpt-4o-mini", maxCostUsdPerExecution: 0.01 } } };
+    const base = probe(candidate.id, "correct");
+    const evaluated = await evaluateEvolutionCandidate(baseline, candidate, safe, {
+      modelIdentity: () => ({ provider: "anthropic", model: "proposal-model" }),
+      sandbox: async (request) => {
+        const ledger = loadEvolutionCampaign(config.storePath);
+        expect(ledger.reservations.filter((entry) => entry.state === "reserved").map((entry) => entry.kind)).toEqual(["evaluation", "model"]);
+        return { ...await base(request), workerModelUsage: {
+          provider: "openai", model: "gpt-4o-mini", costUsd: 0.001, receiptDigest: "sha256:" + "a".repeat(64),
+        } };
+      },
+    });
+    const ledger = loadEvolutionCampaign(config.storePath);
+    expect(ledger.cumulativeModelCostUsd).toBeCloseTo(0.036);
+    expect(ledger.cumulativeEvaluationCostUsd).toBeCloseTo(0.00036);
+    expect(evaluated.result.provenance?.resolvedModel).toBe("proposal-model");
+    expect(evaluated.result.provenance?.evaluatedWorker).toEqual({ kind: "model", provider: "openai", model: "gpt-4o-mini" });
+    expect(evaluated.attempts.candidate[0]?.costUsd).toBeCloseTo(0.00101);
+  });
+
+  it("blocks model evaluation when host billing evidence is missing", async () => {
+    const { config, baseline, candidate } = await setup();
+    const safe = { ...config, safety: { enabled: true, holdoutExposureLimit: 100,
+      workerModel: { provider: "openai", model: "gpt-4o-mini", maxCostUsdPerExecution: 0.01 } } };
+    let dispatches = 0;
+    const sandbox = probe(candidate.id, "correct");
+    await expect(evaluateEvolutionCandidate(baseline, candidate, safe, {
+      modelIdentity: () => ({ provider: "openai", model: "proposal-model" }),
+      sandbox: async (request) => { dispatches++; return sandbox(request); },
+    })).rejects.toThrow(/cost is unknown/);
+    expect(dispatches).toBe(1);
+    const ledger = loadEvolutionCampaign(config.storePath);
+    expect(ledger.unknownCost).toBe(true);
+    expect(ledger.reservations.find((entry) => entry.kind === "model")?.state).toBe("unknown");
+    expect(ledger.cumulativeEvaluationCostUsd).toBeCloseTo(0.00001);
+  });
+
+  it("settles an observed worker failover charge before blocking provenance", async () => {
+    const { config, baseline, candidate } = await setup();
+    const safe = { ...config, safety: { enabled: true, holdoutExposureLimit: 100,
+      workerModel: { provider: "openai", model: "gpt-4o-mini", maxCostUsdPerExecution: 0.01 } } };
+    const sandbox = probe(candidate.id, "correct");
+    await expect(evaluateEvolutionCandidate(baseline, candidate, safe, {
+      modelIdentity: () => ({ provider: "openai", model: "proposal-model" }),
+      sandbox: async (request) => ({ ...await sandbox(request), workerModelUsage: {
+        provider: "other", model: "unapproved", costUsd: 0.002, receiptDigest: "sha256:" + "b".repeat(64),
+      } }),
+    })).rejects.toThrow(/worker provenance differs/);
+    expect(loadEvolutionCampaign(config.storePath).cumulativeModelCostUsd).toBe(0.002);
+    expect(campaignPromotionAllowed(config.storePath).allowed).toBe(false);
+  });
+
   it("requires the intended output, not any finding produced by the candidate", async () => {
     const { config, baseline, candidate } = await setup();
     const correct = await evaluateEvolutionCandidate(baseline, candidate, config, { sandbox: probe(candidate.id, "correct") });
