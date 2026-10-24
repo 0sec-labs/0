@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { createServer, type Server } from "node:http";
+import type { NativeToolDef } from "@0/core";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -68,7 +69,7 @@ it("restores a saved custom gateway and unlisted model, then completes a native 
   const { runtime } = await createWebConsoleRuntime({ providerId: "openai", singleModel: true, autoRoute: false });
   expect(runtime.resolvedModel()).toBe(model);
   const messages = [{ role: "user" as const, content: [{ type: "text" as const, text: "Read the local fixture" }] }];
-  const tools = [{ name: "read_fixture", description: "Read a test fixture", input_schema: { type: "object", properties: { path: { type: "string" } }, required: ["path"] } }];
+  const tools: NativeToolDef[] = [{ name: "read_fixture", description: "Read a test fixture", input_schema: { type: "object", properties: { path: { type: "string" } }, required: ["path"] } }];
   const first = await runtime.executeNative("Use the fixture tool.", messages, tools);
   expect(first).toMatchObject({ stopReason: "tool_use", content: [{ type: "tool_use", id: "call-local", name: "read_fixture", input: { path: "fixture.txt" } }] });
   const final = await runtime.executeNative("Use the fixture tool.", [...messages, { role: "assistant", content: first.content },
