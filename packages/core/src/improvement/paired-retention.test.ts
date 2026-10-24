@@ -76,6 +76,8 @@ describe("fixed-protocol paired longitudinal retention study", () => {
     expect(report.decision).toBe("not-qualified");
     expect(report.groups.every(group => group.status === "inconclusive")).toBe(true);
     expect(report.accounting.workerExecutions).toBe(0);
+    expect(report.accounting.latencySamples).toBe(0);
+    expect(report.accounting.latencyP95Ms).toBeNull();
   });
 
   it("does not turn correlated repeats into independent evidence", () => {

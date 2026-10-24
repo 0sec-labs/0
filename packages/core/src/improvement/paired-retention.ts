@@ -106,7 +106,7 @@ export function analyzePairedRetention(rawPlan: PairedRetentionPlan, observation
   });
   const aaControlPassed = generations.filter(g => g.arm === "aa").every(g => g.status === "qualified");
   const regressingControlDetected = generations.filter(g => g.arm === "regression-control").every(g => g.status === "rejected");
-  const latencies = observations.flatMap(o => [o.baseline.latencyMs, o.candidate.latencyMs]).filter((v): v is number => v !== null);
+  const latencies = observations.flatMap(o => [o.baseline, o.candidate].filter(side => side.executed !== false).map(side => side.latencyMs)).filter((v): v is number => v !== null);
   return { schemaVersion: 1 as const, contractDigest, evidenceDigest: evolutionDigest(observations), profileId: plan.profileId, profileVersion: plan.profileVersion,
     protocolDigest: plan.protocolDigest, comparisonDigest: plan.comparisonDigest, groups, generations,
     controls: { aaControlPassed, regressingControlDetected,
