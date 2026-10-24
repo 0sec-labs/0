@@ -3762,7 +3762,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       return {
         output: result.content.filter((block): block is Extract<NativeContentBlock, { type: "text" }> => block.type === "text").map(block => block.text).join("\n"),
         exitCode: result.cancelled ? null : result.stopReason === "error" ? 1 : 0,
-        timedOut: false, durationMs: Date.now() - start, usage: result.usage, error: result.error,
+        timedOut: result.timedOut === true, durationMs: Date.now() - start, usage: result.usage, error: result.error,
       };
     }
 
@@ -3968,7 +3968,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         };
       }
       const msg = err instanceof Error ? err.message : String(err);
-      const timedOut = msg.includes("abort") || msg.includes("timeout");
+      // A transport may sanitize AbortError into a generic cancellation message.
+      // Operator-first cancellation was handled above; our timer remains authoritative.
+      const timedOut = controller.signal.aborted || msg.includes("abort") || msg.includes("timeout");
       return {
         output: "",
         exitCode: 1,
@@ -4769,11 +4771,14 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         };
       }
       const msg = err instanceof Error ? err.message : String(err);
-      const timedOut = msg.includes("abort") || msg.includes("timeout");
+      // A transport may sanitize AbortError into a generic cancellation message.
+      // Operator-first cancellation was handled above; our timer remains authoritative.
+      const timedOut = controller.signal.aborted || msg.includes("abort") || msg.includes("timeout");
       return {
         content: [{ type: "text", text: "" }],
         stopReason: "error",
         durationMs: Date.now() - start,
+        ...(timedOut ? { timedOut: true } : {}),
         error: timedOut
           ? `${this.providerLabel} API request timed out`
           : `${this.providerLabel} API error: ${msg}`,
