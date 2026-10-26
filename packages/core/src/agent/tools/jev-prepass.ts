@@ -138,10 +138,11 @@ async function getRecentCommits(
   repoPath: string,
   count: number,
 ): Promise<Array<{ sha: string; subject: string; author: string; date: string }> | { error: string }> {
-  const { execSync } = await import("node:child_process");
+  const { execFileSync } = await import("node:child_process");
   try {
-    const log = execSync(
-      `git -C ${JSON.stringify(repoPath)} log --oneline --max-count=${count} --format="%H|%s|%an|%ai"`,
+    const log = execFileSync(
+      "git",
+      ["-C", repoPath, "log", "--oneline", `--max-count=${count}`, "--format=%H|%s|%an|%ai"],
       { encoding: "utf8", maxBuffer: 256_000, timeout: 15_000 },
     );
     return log.trim().split("\n").filter(Boolean).map((line: string) => {
@@ -612,14 +613,15 @@ async function executeCommitPrepass(
   }
 
   // Get diff stats for each commit
-  const { execSync } = await import("node:child_process");
+  const { execFileSync } = await import("node:child_process");
   const candidates = commits.map((c) => {
     let filesChanged = 0;
     let insertions = 0;
     let deletions = 0;
     try {
-      const stat = execSync(
-        `git -C ${JSON.stringify(targetPath)} diff --shortstat ${c.sha}~1..${c.sha}`,
+      const stat = execFileSync(
+        "git",
+        ["-C", targetPath, "diff", "--shortstat", `${c.sha}~1..${c.sha}`],
         { encoding: "utf8", maxBuffer: 16_000, timeout: 5_000 },
       );
       const match = stat.match(/(\d+) files? changed/);
