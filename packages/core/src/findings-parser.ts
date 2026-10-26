@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import type { Finding, Severity } from "@0/shared";
 import { derivePocStepsFromEvidence } from "./poc-steps.js";
 import { parseSanitizerLog, renderSanitizerVerdict } from "./review/sanitizer-log.js";
@@ -55,8 +55,23 @@ export interface FileRefProbe {
  * discarding every finding from the output with it. Any stat/read failure
  * yields the conservative `{ exists: true }` with no lineCount, matching
  * validateFileRef's documented "can't prove it's fake → valid" posture.
+ * When a source root is supplied, resolve both paths through symlinks first;
+ * an in-root symlink must not make an out-of-root file a valid citation.
  */
-export function probeFileRefTarget(absPath: string): FileRefProbe {
+export function probeFileRefTarget(absPath: string, scopeRoot?: string): FileRefProbe {
+  if (scopeRoot !== undefined) {
+    try {
+      const realRoot = realpathSync(scopeRoot);
+      absPath = realpathSync(absPath);
+      const rel = relative(realRoot, absPath);
+      if (rel !== "" && (isAbsolute(rel) || rel === ".." || rel.startsWith(`..${sep}`))) {
+        return { exists: false };
+      }
+    } catch {
+      // A missing target/root or dangling symlink cannot be a valid source citation.
+      return { exists: false };
+    }
+  }
   if (!existsSync(absPath)) return { exists: false };
   try {
     const stat = statSync(absPath);
@@ -156,7 +171,7 @@ export function validateFileRef(
   if (abs !== scopeAbs && !abs.startsWith(scopeAbs + "/")) {
     return { valid: false, reason: `fabricated path: ${path}` };
   }
-  const probe = probeFileRefTarget(abs);
+  const probe = probeFileRefTarget(abs, scopeAbs);
   if (!probe.exists) {
     return { valid: false, reason: `fabricated path: ${path}` };
   }
