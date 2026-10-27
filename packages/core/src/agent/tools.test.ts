@@ -756,6 +756,32 @@ describe("ToolExecutor", () => {
     }
   });
 
+  it("save_finding rejects an external symlink citation and accepts an in-scope symlink", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "0-finding-symlink-"));
+    try {
+      const root = join(parent, "scope");
+      mkdirSync(root);
+      writeFileSync(join(parent, "private.ts"), "private source\n");
+      writeFileSync(join(root, "real.ts"), "real source\n");
+      symlinkSync(join(parent, "private.ts"), join(root, "external.ts"));
+      symlinkSync(join(root, "real.ts"), join(root, "internal.ts"));
+      ctx.scopePath = root;
+      const claim = {
+        title: "Source citation", severity: "medium", category: "missing-validation",
+        description: "test", evidence_request: "test", evidence_response: "test", source_start_line: 1,
+      };
+      const rejected = await executor.execute({ name: "save_finding", arguments: { ...claim, source_path: "external.ts" } });
+      expect(rejected.success).toBe(false);
+      expect(rejected.output?.kind).toBe("validation_failed");
+      expect(ctx.findings).toHaveLength(0);
+      const accepted = await executor.execute({ name: "save_finding", arguments: { ...claim, source_path: "internal.ts" } });
+      expect(accepted.success).toBe(true);
+      expect(ctx.findings).toHaveLength(1);
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
   it("save_finding rejects a non-existent source_path (interactive path — repairable error)", async () => {
     const root = mkdtempSync(join(tmpdir(), "0-0review-"));
     try {
