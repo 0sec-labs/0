@@ -6609,7 +6609,7 @@ export class ToolExecutor {
         agent_id: base.agent_id,
         name: displayName,
         task,
-        note: `Persistent agent "${displayName}" is running; it will PARK when its task is done. Message it with send_message to revive it for follow-up work.`,
+        note: `Persistent agent "${displayName}" is running; it will PARK when its task is done. ${childMessaging ? "Follow-up work requires an enabled messaging route, such as operator agent controls." : "This session has no messaging route for this worker; use spawn_agent for a one-shot task."}`,
       },
     };
   }
