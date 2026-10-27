@@ -46,12 +46,12 @@ function WorkflowOwner({ state }: { state: WorkflowOwnerState }) {
 }
 
 function DataDisclosure({ title, value }: { title: string; value: unknown }) {
-  return <ControlDisclosure className="rounded-md border border-border" title={<>{title}</>}><pre className="max-h-[32rem] overflow-auto border-t border-border bg-muted/20 p-4 text-xs">{typeof value === "string" ? value : JSON.stringify(value, null, 2)}</pre></ControlDisclosure>;
+  return <ControlDisclosure className="rounded-[var(--radius-menu,12px)] border border-border" title={<>{title}</>}><pre className="max-h-[32rem] overflow-auto border-t border-border bg-muted/20 p-4 text-xs">{typeof value === "string" ? value : JSON.stringify(value, null, 2)}</pre></ControlDisclosure>;
 }
 
 function WorkflowView({ workflow, cancel, cancelling }: { workflow: Workflow; cancel: () => void; cancelling: boolean }) {
   const cost = workflow.outcome?.estimatedCostUsd ?? workflow.outcome?.cost_usd;
-  return <article className="space-y-4 rounded-lg border border-border p-4 sm:p-5">
+  return <article className="space-y-4 rounded-[var(--radius-panel,16px)] border border-border p-4 sm:p-5">
     <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-sm font-medium">{workflow.request.target ?? workflow.kind}</h3><p className="mt-1 text-xs text-muted-foreground">{workflow.kind} · {new Date(workflow.createdAt).toLocaleString()}</p></div><Badge variant={workflow.status === "failed" ? "destructive" : "outline"}>{workflow.status}</Badge></div>
     <Facts entries={[
       ["Result", workflow.outcome?.exit_reason ?? (activeStatuses[workflow.status] ? "Running" : workflow.status)],
@@ -60,7 +60,7 @@ function WorkflowView({ workflow, cancel, cancelling }: { workflow: Workflow; ca
     ]} />
     {workflow.error && <Feedback error={workflow.error} />}
     {workflow.outcome?.ok === false && <Feedback error={workflow.outcome.error ?? "The scan failed. Results may be incomplete."} />}
-    <ControlDisclosure className="rounded-md border border-border" title={<>Details</>}><div className="space-y-4 border-t border-border p-4">
+    <ControlDisclosure className="rounded-[var(--radius-menu,12px)] border border-border" title={<>Details</>}><div className="space-y-4 border-t border-border p-4">
     <Facts entries={[
       ["Target type", workflow.request.resolved?.kind ?? (workflow.kind === "run" ? "—" : "Source fix")],
       ["Ecosystem", workflow.request.resolved?.ecosystem ?? "—"],
@@ -70,7 +70,7 @@ function WorkflowView({ workflow, cancel, cancelling }: { workflow: Workflow; ca
       ["Exit code", workflow.outcome?.exitCode === undefined ? "—" : String(workflow.outcome.exitCode)],
       ["Runs done", workflow.outcome?.completedRuns === undefined ? "—" : `${workflow.outcome.completedRuns} / ${workflow.outcome.plannedRuns ?? "?"}`],
     ]} />
-    {workflow.outcome?.attempts?.length ? <section className="space-y-2"><h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Runs</h4>{workflow.outcome.attempts.map((attempt, index) => <div key={`${attempt.runIndex}:${index}`} className="rounded-md border border-border p-3 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><span>Run {attempt.runIndex}</span><Badge variant={attempt.status === "completed" ? "secondary" : "outline"}>{attempt.status}</Badge></div><p className="mt-2 text-xs text-muted-foreground">{(attempt.durationMs / 1000).toFixed(1)}s · {attempt.costUsd === undefined ? "Cost unknown" : `$${attempt.costUsd.toFixed(4)}`}</p>{attempt.error && <p className="mt-2 text-sm text-destructive">{attempt.error}</p>}</div>)}</section> : null}
+    {workflow.outcome?.attempts?.length ? <section className="space-y-2"><h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Runs</h4>{workflow.outcome.attempts.map((attempt, index) => <div key={`${attempt.runIndex}:${index}`} className="rounded-[var(--radius-menu,12px)] border border-border p-3 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><span>Run {attempt.runIndex}</span><Badge variant={attempt.status === "completed" ? "secondary" : "outline"}>{attempt.status}</Badge></div><p className="mt-2 text-xs text-muted-foreground">{(attempt.durationMs / 1000).toFixed(1)}s · {attempt.costUsd === undefined ? "Cost unknown" : `$${attempt.costUsd.toFixed(4)}`}</p>{attempt.error && <p className="mt-2 text-sm text-destructive">{attempt.error}</p>}</div>)}</section> : null}
     {workflow.outcome?.usage && <Facts entries={[["Input tokens", workflow.outcome.usage.inputTokens.toLocaleString()], ["Output tokens", workflow.outcome.usage.outputTokens.toLocaleString()]]} />}
     <DataDisclosure title="Scan plan" value={workflow.request} />
     </div></ControlDisclosure>
@@ -79,7 +79,7 @@ function WorkflowView({ workflow, cancel, cancelling }: { workflow: Workflow; ca
       <Button size="sm" variant="outline" onClick={() => { const blob = new Blob([JSON.stringify(workflow.report, null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = `0-report-${workflow.id}.json`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }}><Download className="size-4" />Download report</Button>
     </>}
     {!workflow.reportRetained && workflow.kind === "run" && !activeStatuses[workflow.status] && <p className="text-xs text-muted-foreground">{workflow.reportRetentionReason ?? "No report was saved for this run. Check the result and findings above."}</p>}
-    {workflow.events.length > 0 && <ControlDisclosure className="rounded-md border border-border" title={<>Activity ({workflow.events.length} events)</>}>{workflow.eventsTruncated && <p className="px-3 text-xs text-muted-foreground">Older events were dropped. Showing from #{workflow.oldestSequence}.</p>}<ol className="max-h-[32rem] space-y-3 overflow-auto border-t border-border p-3">{workflow.events.map(event => <li key={event.sequence} className="space-y-2 rounded-md border border-border p-3"><p className="text-xs text-muted-foreground">#{event.sequence} · {event.type} · {new Date(event.timestamp).toLocaleTimeString()}</p><pre className="text-xs">{JSON.stringify(event.data, null, 2)}</pre></li>)}</ol></ControlDisclosure>}
+    {workflow.events.length > 0 && <ControlDisclosure className="rounded-[var(--radius-menu,12px)] border border-border" title={<>Activity ({workflow.events.length} events)</>}>{workflow.eventsTruncated && <p className="px-3 text-xs text-muted-foreground">Older events were dropped. Showing from #{workflow.oldestSequence}.</p>}<ol className="max-h-[32rem] space-y-3 overflow-auto border-t border-border p-3">{workflow.events.map(event => <li key={event.sequence} className="space-y-2 rounded-[var(--radius-menu,12px)] border border-border p-3"><p className="text-xs text-muted-foreground">#{event.sequence} · {event.type} · {new Date(event.timestamp).toLocaleTimeString()}</p><pre className="text-xs">{JSON.stringify(event.data, null, 2)}</pre></li>)}</ol></ControlDisclosure>}
     {activeStatuses[workflow.status] && <div className="space-y-2"><SubmitButton pending={cancelling} variant="outline" disabled={workflow.status === "cancelling"} onClick={cancel}>{workflow.status === "cancelling" ? "Stopping…" : "Stop"}</SubmitButton><p className="text-xs text-muted-foreground">Stopping doesn't undo actions already taken.</p></div>}
     <div className="flex flex-wrap gap-4 text-xs"><Link to="/runs" className="underline">Run reports</Link><Link to="/findings" className="underline">Findings</Link></div>
   </article>;
@@ -147,8 +147,8 @@ export function FixControl({ sessionId }: { sessionId?: string }) {
   let publicationUrl: string | null = null;
   if (fix?.published?.prUrl) { try { const url = new URL(fix.published.prUrl); if (url.protocol === "https:" && !url.username && !url.password) publicationUrl = url.href; } catch { /* Untrusted malformed URLs are not opened. */ } }
   return <div className="space-y-5"><WorkflowOwner state={state} /><ControlCard title="Finding"><form className="space-y-4" onSubmit={event => { event.preventDefault(); prepare.mutate(); }}><TextField label="Finding ID" value={findingId} onChange={event => { setFindingId(event.target.value); invalidate(); }} required disabled={busy || prepare.isPending} /><TextField label="Test command" value={testCommand} onChange={event => { setTestCommand(event.target.value); invalidate(); }} disabled={busy || prepare.isPending} placeholder="npm test" /><ControlDisclosure title={<>Advanced</>}><div className="mt-3"><TextField label="Project folder" value={repoRoot} onChange={event => { setRepoRoot(event.target.value); invalidate(); }} disabled={busy || prepare.isPending} placeholder="/path/to/project" hint="Defaults to the session's folder." /></div></ControlDisclosure><SubmitButton type="submit" pending={prepare.isPending} disabled={!state.owner || !findingId.trim() || busy}>Load finding</SubmitButton></form><Feedback error={prepare.error} />{recent.length > 0 && <ControlDisclosure title={<>Resume a previous fix</>}><div className="mt-3 space-y-2">{recent.map(workflow => <Button key={workflow.id} variant="outline" className="h-auto justify-start whitespace-normal text-left" disabled={busy} onClick={() => { setFix(workflow.result!.fix!); setJobId(workflow.id); setApprovals({}); }}>Finding {workflow.result!.fix!.finding.id} · {workflow.kind} · {workflow.status}</Button>)}</div></ControlDisclosure>}</ControlCard>
-    {intent === "publish" && <div role="status" className="rounded-md border border-primary/20 bg-primary/5 p-4 text-sm">To open a pull request, load the finding, review the plan, then approve it below. Nothing has been published yet.</div>}
-    {intent === "cancel" && <div role="status" className="rounded-md border border-primary/20 bg-primary/5 p-4 text-sm">Pick the running fix below and press Stop. Nothing has been stopped yet.</div>}
+    {intent === "publish" && <div role="status" className="rounded-[var(--radius-menu,12px)] border border-primary/20 bg-primary/5 p-4 text-sm">To open a pull request, load the finding, review the plan, then approve it below. Nothing has been published yet.</div>}
+    {intent === "cancel" && <div role="status" className="rounded-[var(--radius-menu,12px)] border border-primary/20 bg-primary/5 p-4 text-sm">Pick the running fix below and press Stop. Nothing has been stopped yet.</div>}
     {!fix?.publication && !github.data?.connected && <GitHubPublicationControl />}
     {fix && <>
       <ControlCard title={fix.finding.title}>
@@ -161,7 +161,7 @@ export function FixControl({ sessionId }: { sessionId?: string }) {
       {fix.result && <FixResultView result={fix.result} title="Proposed fix" />}
       {fix.verification && <FixResultView result={fix.verification} title="Re-test" />}
       {fix.application && <FixResultView result={fix.application} title="Applied to project" />}
-      {fix.applied && <p role="status" className="rounded-md border border-border p-4 text-sm">Fix applied and tested. Load the finding again before doing anything else.</p>}
+      {fix.applied && <p role="status" className="rounded-[var(--radius-menu,12px)] border border-border p-4 text-sm">Fix applied and tested. Load the finding again before doing anything else.</p>}
       {fix.candidateId && !fix.applied && <ControlCard title="Next steps">
         <div className="space-y-3"><Check checked={approvals.verify ?? false} onChange={value => setApprovals(current => ({ ...current, verify: value }))} disabled={busy || action.isPending}>Run the test command again on this fix.</Check><SubmitButton pending={action.isPending && action.variables === "verify"} disabled={!approvals.verify || busy || action.isPending} onClick={() => action.mutate("verify")}>Re-test</SubmitButton></div>
         <div className="space-y-3 border-t border-border pt-4"><Check checked={approvals.apply ?? false} onChange={value => setApprovals(current => ({ ...current, apply: value }))} disabled={busy || action.isPending}>I reviewed the diff and test results. Apply this fix to my project.</Check><SubmitButton pending={action.isPending && action.variables === "apply"} disabled={!approvals.apply || busy || action.isPending} onClick={() => action.mutate("apply")}>Apply fix</SubmitButton></div>

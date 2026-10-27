@@ -924,7 +924,7 @@ def _run_pipeline(
         result.terminal_state = "cancelled"
         result.status_reason = "wall-clock budget exhausted before decompilation"
         return result
-    backend_timeout = min(120, int(remaining))
+    backend_timeout = min(int(os.environ.get("ZEROVERSE_BACKEND_TIMEOUT", "120")), int(remaining))
     receipt_store = ReceiptStore(out_dir / ".receipts")
     receipt_identity = _decompile_receipt_identity(
         path,

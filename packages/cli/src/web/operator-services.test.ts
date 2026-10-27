@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pluginsRootDir, readEnablement, LlmApiRuntime } from "@0/core";
@@ -217,5 +218,30 @@ describe("explicit captured connection refresh", () => {
     vi.spyOn(LlmApiRuntime.prototype, "codexModelCatalog").mockRejectedValue(new Error("Codex model discovery failed (HTTP 401)"));
     await expect(reloadWebConsoleRuntimeConnection(runtime)).rejects.toThrow("expired");
     expect(runtime.connectionIdentity()).toBe(prior); expect(runtime.resolvedModel()).toBe("gpt-6.1-sol");
+  });
+});
+
+
+describe("read-only selected workspace metadata", () => {
+  it.skipIf(process.platform === "win32")("does not execute a repository fsmonitor hook when reading project metadata", async () => {
+    const project = join(testHome, "selected-workspace");
+    const marker = join(testHome, "fsmonitor-was-executed");
+    const hook = join(testHome, "fsmonitor-hook.sh");
+    mkdirSync(project);
+    const git = (...args: string[]) => execFileSync("git", args, { stdio: "ignore", timeout: 5000 });
+    git("init", "--quiet", project);
+    writeFileSync(join(project, "README.md"), "Selected workspace fixture\n");
+    git("-C", project, "add", "README.md");
+    const quotedMarker = "'" + marker.replaceAll("'", "'\\''") + "'";
+    writeFileSync(hook, `#!/bin/sh\nprintf observed > ${quotedMarker}\nprintf 'fixture-token\\0'\n`, { mode: 0o700 });
+    git("-C", project, "config", "core.fsmonitor", hook);
+    // Prove that this repository really invokes the hook without the protection.
+    git("-C", project, "status", "--porcelain");
+    expect(existsSync(marker)).toBe(true);
+    unlinkSync(marker);
+
+    const response = await new WebOperatorServices().handle("/api/console/project", "GET", undefined, new URLSearchParams({ path: project }));
+    expect(response?.data).toMatchObject({ path: project, name: "selected-workspace", git: { root: project, dirty: true, error: null } });
+    expect(existsSync(marker)).toBe(false);
   });
 });

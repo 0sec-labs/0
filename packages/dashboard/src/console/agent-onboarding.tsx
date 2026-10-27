@@ -1,8 +1,8 @@
-import { useState } from "react";
-import { Check, Copy, ChevronDown } from "lucide-react";
+import { Disclosure } from "@/components/ui/disclosure";
+import { useEffect, useState } from "react";
+import { Check, ChevronDown } from "lucide-react";
 import { ProviderIcon } from "@/components/provider-icon";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 export const setupPrompt = `Help me connect this coding agent to 0.security's local stdio MCP server.
 First check that the 0 CLI is installed and that this client supports local stdio MCP servers. Inspect the client's configuration and preserve existing integrations.
@@ -19,21 +19,18 @@ Use an absolute executable path if the client cannot resolve 0. Apply this clien
 Verify the selected tools are exposed. Connecting does not start a run or attach this client to a browser conversation. Local runs live while this stdio host lives; disconnecting cancels its active runs. Remote engine runs persist when this client disconnects; cancel_run explicitly cancels an owned remote run.`;
 
 export function AgentOnboarding() {
-  const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
+  useEffect(() => { if (!copied) return; const timer = setTimeout(() => setCopied(false), 5000); return () => clearTimeout(timer); }, [copied]);
   const copyPrompt = () => {
     void navigator.clipboard.writeText(setupPrompt).then(() => { setCopied(true); setError(""); }).catch(() => { setCopied(false); setError("Couldn't copy. Open the setup prompt below and copy it manually."); });
   };
   const agents = [{ id: "claude", label: "Claude", color: "text-[#D97757]" }, { id: "codex", label: "Codex", color: "" }, { id: "cursor", label: "Cursor", color: "" }, { id: "opencode", label: "OpenCode", color: "" }];
-  return <Dialog open={open} onOpenChange={value => { setOpen(value); setCopied(false); setError(""); }}>
-    <DialogTrigger asChild><Button variant="secondary" size="sm" className="inline-flex gap-4 px-4"><span>Connect an external agent</span><span className="flex gap-1.5" aria-hidden="true">{agents.map(agent => <ProviderIcon key={agent.id} providerId={agent.id} className={`size-4 ${agent.color}`} />)}</span></Button></DialogTrigger>
-    <DialogContent aria-describedby={undefined} className="gap-5 sm:max-w-sm">
-      <DialogHeader><DialogTitle>Connect an external agent</DialogTitle></DialogHeader>
-      <div className="flex flex-wrap gap-x-5 gap-y-3">{agents.map(agent => <span key={agent.id} className="inline-flex items-center gap-2 text-xs text-muted-foreground"><ProviderIcon providerId={agent.id} className={`size-4 ${agent.color}`} />{agent.label}</span>)}</div>
-      <Button onClick={copyPrompt} className="w-full" aria-live="polite">{copied ? <Check className="size-4" /> : <Copy className="size-4" />}{copied ? "Copied" : "Copy setup prompt"}</Button>
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      <details className="group"><summary className="flex cursor-pointer list-none items-center gap-2 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden"><ChevronDown className="size-3.5 transition-transform group-open:rotate-180 motion-reduce:transition-none" />View prompt</summary><pre tabIndex={0} aria-label="Setup prompt" className="mt-3 max-h-52 overflow-y-auto whitespace-pre-wrap break-words rounded-xl bg-muted/35 p-3 font-sans text-xs leading-6 focus-visible:outline-1 focus-visible:outline-foreground/40">{setupPrompt}</pre></details>
-    </DialogContent>
-  </Dialog>;
+  return <div className="inline-flex max-w-full flex-col items-center gap-2">
+    <Button variant="secondary" size="sm" onClick={copyPrompt} className="inline-flex max-w-full gap-3 px-4" aria-label={copied ? "Copied prompt. Paste into your agent." : "Connect an external agent: copy setup prompt"}>
+      <span className="grid min-w-0 text-left"><span className={`col-start-1 row-start-1 inline-flex items-center gap-3 transition-[opacity,transform] duration-[var(--ui-duration-standard)] motion-reduce:transition-none ${copied ? "translate-y-1 opacity-0" : "translate-y-0 opacity-100"}`} aria-hidden={copied}><span>Connect an external agent</span><span className="flex gap-1.5" aria-hidden="true">{agents.map(agent => <ProviderIcon key={agent.id} providerId={agent.id} className={`size-4 ${agent.color}`} />)}</span></span><span className={`col-start-1 row-start-1 inline-flex items-center gap-2 transition-[opacity,transform] duration-[var(--ui-duration-standard)] motion-reduce:transition-none ${copied ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0"}`} aria-hidden={!copied}><Check aria-hidden="true" className="size-4 shrink-0" /><span>Copied prompt · Paste into your agent</span></span></span>
+    </Button>
+    <span role="status" className="sr-only">{copied ? "Copied prompt. Paste into your agent." : ""}</span>
+    {error && <div className="max-w-sm space-y-2 text-left"><p role="alert" className="text-xs text-destructive">{error}</p><Disclosure summary={<><ChevronDown className="size-3.5" />Copy prompt manually</>} triggerClassName="inline-flex items-center gap-1 text-xs text-muted-foreground"><pre tabIndex={0} aria-label="Setup prompt" className="mt-2 max-h-52 overflow-y-auto whitespace-pre-wrap break-words rounded-[var(--radius-panel)] bg-muted p-3 text-xs">{setupPrompt}</pre></Disclosure></div>}
+  </div>;
 }

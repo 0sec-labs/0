@@ -12,12 +12,13 @@ export function BrandMark({
   if (compact) {
     return (
       <svg
+        data-brand-mark="compact"
         role="img"
         aria-label="0.security"
         viewBox="-2 -2 24 24"
         className={cn("size-9 text-[#403D39] dark:text-[#FCFAF6]", className)}
       >
-        <path fill="#FD802E" d="M12.5 2 H17.5 L7.5 18 H2.5 Z" />
+        <path fill="var(--brand-orange, #FD802E)" d="M12.5 2 H17.5 L7.5 18 H2.5 Z" />
         <path
           fill="currentColor"
           fillRule="evenodd"
@@ -31,6 +32,7 @@ export function BrandMark({
     <div className={cn("flex flex-col items-center gap-2", className)}>
       <img
         alt="0.security"
+        data-brand-variant="ink"
         src={wordmarkInkUrl}
         width={240}
         height={24}
@@ -38,6 +40,7 @@ export function BrandMark({
       />
       <img
         alt="0.security"
+        data-brand-variant="white"
         src={wordmarkWhiteUrl}
         width={240}
         height={24}

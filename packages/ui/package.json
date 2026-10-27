@@ -1,0 +1,72 @@
+{
+  "name": "@0/ui",
+  "version": "0.1.0",
+  "description": "Shared public UI primitives for 0security applications.",
+  "type": "module",
+  "license": "MIT OR Apache-2.0",
+  "sideEffects": [
+    "*.css"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./components/*": {
+      "types": "./dist/components/*.d.ts",
+      "import": "./dist/components/*.js"
+    },
+    "./lib/utils": {
+      "types": "./dist/lib/utils.d.ts",
+      "import": "./dist/lib/utils.js"
+    },
+    "./motion": {
+      "types": "./dist/motion.d.ts",
+      "import": "./dist/motion.js"
+    },
+    "./styles/motion.css": "./src/styles/motion.css",
+    "./styles/tokens.css": "./src/styles/tokens.css",
+    "./styles/controls.css": "./src/styles/controls.css",
+    "./styles/primitives.css": "./src/styles/primitives.css",
+    "./styles/loader.css": "./src/styles/loader.css",
+    "./styles/skeleton.css": "./src/styles/skeleton.css"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@radix-ui/react-slot": "^1.2.4",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.5.0",
+    "@cloudflare/kumo": "^2.14.0",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-tabs": "^1.1.13",
+    "@radix-ui/react-separator": "^1.1.8",
+    "@radix-ui/react-scroll-area": "^1.2.10",
+    "cmdk": "^1.1.1",
+    "lucide-react": "^1.7.0",
+    "@radix-ui/react-select": "2.2.6",
+    "@radix-ui/react-tooltip": "1.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "typescript": "^5.9.3"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}

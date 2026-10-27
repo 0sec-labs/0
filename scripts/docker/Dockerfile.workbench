@@ -44,7 +44,7 @@ RUN node -e 'const Parser=require("tree-sitter"); const parser=new Parser(); par
 
 FROM native-deps AS builder
 RUN pnpm --filter '@0/cli...' build \
-    && pnpm --filter @0/dashboard build \
+    && pnpm --filter '@0/dashboard...' build \
     && pnpm run build:bundle
 WORKDIR /app/dist
 # The published file dependency is included in dist/vendor. Do not skip its

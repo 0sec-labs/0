@@ -198,6 +198,8 @@ export interface OverseScanFinding {
 
 export interface OverseScanMeta {
   contract_version: string;
+  terminal_state?: string;
+  status_reason?: string;
   tool?: unknown;
   binary?: string;
   format?: string;
@@ -295,6 +297,8 @@ export function parseOverseNdjson(raw: string): OverseParsedResult {
         typeof m.contract_version === "string" ? (m.contract_version as string) : "";
       meta = {
         contract_version: contractVersion,
+        terminal_state: typeof m.terminal_state === "string" ? m.terminal_state : undefined,
+        status_reason: typeof m.status_reason === "string" ? m.status_reason : undefined,
         tool: m.tool,
         binary: typeof m.binary === "string" ? m.binary : undefined,
         format: typeof m.format === "string" ? m.format : undefined,
@@ -439,6 +443,8 @@ export interface OverseInvocation {
 /** The structured payload placed on `ToolResult.output`. */
 export interface OverseToolOutput {
   contract_version: string;
+  terminal_state?: string;
+  status_reason?: string;
   /** confirmed==true reproducing PoVs (verified). */
   confirmed: OverseScanFinding[];
   /** confirmed==false ranked leads (never promoted). */
@@ -519,6 +525,8 @@ export async function executeOverseScan(
 
   const output: OverseToolOutput = {
     contract_version: parsed.contractVersion,
+    terminal_state: parsed.meta?.terminal_state,
+    status_reason: parsed.meta?.status_reason,
     confirmed: parsed.confirmed,
     hypotheses: parsed.hypotheses,
     note: notes.join(" "),
@@ -531,6 +539,13 @@ export async function executeOverseScan(
     return { success: false, output, error: output.note };
   }
 
+  const state = parsed.meta?.terminal_state;
+  if (state && state !== "confirmed" && state !== "no-findings") {
+    return { success: false, output, error: `0verse ${state}: ${parsed.meta?.status_reason || parsed.note || "analysis did not complete"}` };
+  }
+  if (exitCode !== null && exitCode !== 0) {
+    return { success: false, output, error: `0verse exited with code ${exitCode}. ${output.note}` };
+  }
   return { success: true, output };
 }
 

@@ -1,7 +1,8 @@
 import { ChevronDown, Hand, Search, ShieldCheck, Zap } from "lucide-react";
-import { DropdownMenu } from "@cloudflare/kumo/components/dropdown";
+import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import type { DesktopConsoleAutonomyMode } from "@0/shared";
 import { useBackendApi } from "@/api";
+import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { ConsoleWorkspace } from "./use-console-workspace";
 
@@ -20,10 +21,10 @@ export function ModePicker({ workspace, sessionId, mode, disabled, deferred = fa
     await configureConsoleSession(sessionId, { autonomyMode: next });
   });
   return <>
-    <DropdownMenu><Tooltip content="Autonomy mode" side="top"><DropdownMenu.Trigger aria-label={`Mode: ${current.label}`} disabled={disabled} className="flex items-center gap-1 rounded-full px-2 py-2 text-xs text-muted-foreground hover:bg-muted disabled:opacity-50"><button type="button"><Icon className={`size-3.5 ${mode === "yolo" ? "fill-primary text-primary" : ""}`} /><span className="hidden sm:inline">{current.label}</span><ChevronDown className="hidden size-3 sm:block" /></button></DropdownMenu.Trigger></Tooltip>
-      <DropdownMenu.Content side="top" align="end" sideOffset={10} collisionPadding={12} className="w-64 rounded-lg p-2 font-sans">
-        {(["standard", "recon", "copilot", "yolo"] as const).map(value => { const option = MODES[value]; const OptionIcon = option.icon; return <DropdownMenu.Item key={value} icon={<OptionIcon className={`size-4 ${value === "yolo" ? "fill-primary text-primary" : ""}`} />} selected={mode === value} className="gap-3 rounded-xl px-3 py-2 text-sm focus-visible:ring-0 data-highlighted:bg-muted" onClick={() => { if (value !== mode) apply(value); }}><span className="flex min-w-0 flex-1 flex-col gap-0.5"><span>{option.label}</span><span className="text-xs text-muted-foreground">{option.description}</span></span></DropdownMenu.Item>; })}
-        <p className="px-3 pt-2 text-xs leading-5 text-muted-foreground">{deferred ? "Changes apply after the current VM turn." : "Changes apply to upcoming tools. Pending approvals still need your response."}</p>
+    <DropdownMenu><Tooltip content="Autonomy mode" side="top"><DropdownMenu.Trigger aria-label={`Mode: ${current.label}`} disabled={disabled} className="text-xs text-muted-foreground"><Button type="button" variant="ghost" size="sm" className="gap-1 px-2 text-xs"><Icon className="size-4" /><span className="hidden sm:inline">{current.label}</span><ChevronDown className="hidden size-3 sm:block" /></Button></DropdownMenu.Trigger></Tooltip>
+      <DropdownMenu.Content side="top" align="end" sideOffset={10} collisionPadding={12} className="ui-menu-surface w-80 font-sans">
+        {(["standard", "recon", "copilot", "yolo"] as const).map(value => { const option = MODES[value]; const OptionIcon = option.icon; return <Tooltip key={value} content={option.description} side="right"><DropdownMenu.Item icon={<OptionIcon className="size-4" />} selected={mode === value} className="ui-menu-item ui-menu-item--detail focus-visible:ring-0 data-highlighted:bg-muted" onClick={() => { if (value !== mode) apply(value); }}><span className="flex min-w-0 flex-1 flex-col"><span>{option.label}</span><span className="ui-menu-secondary truncate">{option.description}</span></span></DropdownMenu.Item></Tooltip>; })}
+        <p className="ui-menu-section">{deferred ? "Changes apply after the current VM turn." : "Changes apply to upcoming tools. Pending approvals still need your response."}</p>
       </DropdownMenu.Content>
     </DropdownMenu>
   </>;

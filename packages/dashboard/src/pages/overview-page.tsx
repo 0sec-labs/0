@@ -1,9 +1,10 @@
+import { LoadingState } from "@/components/state-panel";
 import { useId, useMemo, useState, type ComponentType } from "react";
 import { NavLink } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, AlertCircle, Database, Play, Power, RefreshCcw, Siren, Trash2 } from "lucide-react";
 import { useBackendApi } from "@/api";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader, PageContent } from "@/components/page-header";
 import { PhaseBadge, ReviewBadge, SeverityBadge, StatusBadge } from "@/components/status-badges";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardEmpty, CardHeader, CardTitle } from "@/components/ui/card";
@@ -199,7 +200,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
     .slice(0, 8);
 
   return (
-    <div className="space-y-6">
+    <PageContent width="wide">
       <PageHeader
         title="Dashboard"
         summary=""
@@ -216,7 +217,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
       />
 
             {controlMessage ? (
-              <div className="rounded-md border border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+              <div className="rounded-[var(--radius-panel,16px)] border border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
                 {controlMessage}
                 {launchMutation.data && <NavLink to={`/console/${launchMutation.data.sessionId}`} className="ml-2 underline">Open chat</NavLink>}
               </div>
@@ -429,7 +430,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
             ) : (
               <div className="space-y-3">
                 {activeThreads.map((group) => (
-                  <div key={group.fingerprint} className="rounded-lg border border-border bg-background px-4 py-3">
+                  <div key={group.fingerprint} className="rounded-[var(--radius-panel,16px)] border border-border bg-background px-4 py-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <NavLink to={`/findings/${group.fingerprint}`} className="text-sm font-medium text-foreground hover:text-primary-text">
@@ -457,7 +458,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
               ) : (
                 <div className="space-y-3">
                   {activeWorkers.slice(0, 4).map((worker) => (
-                    <div key={worker.id} className="rounded-lg border border-border bg-background px-4 py-3">
+                    <div key={worker.id} className="rounded-[var(--radius-panel,16px)] border border-border bg-background px-4 py-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="text-sm font-medium text-foreground">{worker.label}</div>
@@ -582,7 +583,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
           </CardHeader>
           <CardContent className="space-y-3">
             {recentIncidents.map((incident) => (
-              <div key={`${incident.scanId}:${incident.timestamp}`} className="rounded-md border border-destructive/20 bg-destructive/5 px-4 py-3">
+              <div key={`${incident.scanId}:${incident.timestamp}`} className="rounded-[var(--radius-panel,16px)] border border-destructive/20 bg-destructive/5 px-4 py-3">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <NavLink to={`/runs/${incident.scanId}`} className="text-sm font-medium text-foreground hover:text-primary-text">
@@ -607,7 +608,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
         </CardHeader>
         <CardContent>
           {recentEventsQuery.isLoading ? (
-            <CardEmpty>Loading…</CardEmpty>
+            <LoadingState label="Loading activity…" rows={3} />
           ) : recentEventsQuery.error ? (
             <CardEmpty>{recentEventsQuery.error instanceof Error ? recentEventsQuery.error.message : "Couldn't load activity."}</CardEmpty>
           ) : (recentEventsQuery.data?.events.length ?? 0) === 0 ? (
@@ -647,7 +648,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
           )}
         </CardContent>
       </Card>
-    </div>
+    </PageContent>
   );
 }
 
@@ -661,7 +662,7 @@ function SituationStat({
   value: number;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-background px-4 py-3">
+    <div className="rounded-[var(--radius-panel,16px)] border border-border bg-background px-4 py-3">
       <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
         <Icon className="size-3.5" />
         {label}

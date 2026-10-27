@@ -1,6 +1,6 @@
 import { randomUUID, createHash } from "node:crypto";
 import { SecurityWorkflowStore, workflowRestorePolicy, learningProjectId, LearningStore, type LearningEvaluationInput, type ImprovementCandidate, type LearningEvent, type KnowledgeEntry, type KnowledgeInput } from "@0/db";
-import type { HuntMemoryStore } from "./memory/hunt-memory.js";
+import type { HuntMemoryStore, HuntRecord } from "./memory/hunt-memory.js";
 import { evolutionDigest, loadEvolutionRegistry, loadEvolutionReceipt, verifyEvolutionSnapshot, receiptsDir } from "./improvement/registry.js";
 import { readEvolutionArtifact } from "./improvement/artifacts.js";
 import type { EvolutionConfig, EvolutionRunResult } from "./improvement/types.js";
@@ -118,17 +118,31 @@ export class LearningService {
       baseVersion: String(current.revision), proposal, evidenceEventIds: evidence.slice(0, 64).map(item => item.id)}));
   }
 
-  /** Existing source memory owns bounded file hashing, scope checks, and redaction. */
+  /** Mirror source-grounded notes into the durable evidence ledger. */
   importCodebaseNotes(projectId: string, root: string, memory: HuntMemoryStore, limit = 8): KnowledgeEntry[] {
+    return this.codebaseNotes(projectId, root, memory, limit).map(({ entry }) => entry);
+  }
+
+  /** Fresh, operator-enabled source lessons ready for a bounded model request. */
+  recallCodebaseNotes(projectId: string, root: string, memory: HuntMemoryStore, limit = 6): HuntRecord[] {
+    return this.codebaseNotes(projectId, root, memory, limit)
+      .filter(({ entry }) => entry.status === "current").map(({ note }) => note);
+  }
+
+  // Keep the admitted note beside its ledger entry. Callers need neither a
+  // second file-hashing pass nor their own summary/source-link matching logic.
+  private codebaseNotes(projectId: string, root: string, memory: HuntMemoryStore, limit: number): Array<{ note: HuntRecord; entry: KnowledgeEntry }> {
     this.refreshCodebaseNotes(projectId, root, memory);
-    const entries: KnowledgeEntry[] = [];
-    for (const note of memory.recallCodebase(root, Math.min(16, Math.max(1, limit)))) {
+    const entries: Array<{ note: HuntRecord; entry: KnowledgeEntry }> = [];
+    for (const note of memory.recallCodebase(root, Math.min(16, Math.max(1, limit)), note =>
+      !this.store.findDisabledSourceKnowledge(projectId, note.summary,
+        note.codebase!.files.map(file => ({ path: file.path, hash: file.digest }))))) {
       if (!note.codebase) continue;
       const sourceLinks = note.codebase.files.map(file => ({ path: file.path, hash: file.digest }));
       const event = this.store.appendEvent({ projectId, idempotencyKey: `codebase-note:${projectId}:${note.id}:${evolutionDigest(sourceLinks)}`,
         kind: "source-context", outcome: "current-source", summary: note.summary, evidenceStrength: "hypothesis", sourceLinks,
         evidenceRefs: [note.id] });
-      entries.push(this.store.putKnowledge({ projectId, summary: note.summary, evidenceEventIds: [event.id], sourceLinks }));
+      entries.push({ note, entry: this.store.putKnowledge({ projectId, summary: note.summary, evidenceEventIds: [event.id], sourceLinks }) });
     }
     return entries;
   }

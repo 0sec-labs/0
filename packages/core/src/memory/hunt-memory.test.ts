@@ -672,6 +672,37 @@ describe("rememberCodebase / recallCodebase", () => {
     rmSync(ws, { recursive: true, force: true });
   });
 
+  it("limits by creation time rather than append order, including after reopening", () => {
+    const root = join(home, "repo");
+    mkdirSync(root);
+    writeFileSync(join(root, "app.ts"), "export const app = true;\n");
+    let timestamp = 300;
+    const store = new HuntMemoryStore({ home, idFactory: seqIds(), now: () => timestamp });
+    const note = (title: string) => store.rememberCodebase({
+      root, paths: ["app.ts"], title, summary: title, source: "test",
+    });
+    note("Newest first insertion");
+    timestamp = 100;
+    note("Old imported note");
+    timestamp = 200;
+    note("Middle note");
+    timestamp = 300;
+    note("Newest last insertion");
+    const reopened = new HuntMemoryStore({ home });
+    expect(reopened.recallCodebase(root, 2).map(record => record.title)).toEqual([
+      "Newest last insertion", "Newest first insertion",
+    ]);
+  });
+
+  it.each([0, -1, Number.NaN])("returns no source notes for a nonpositive or invalid limit %s", limit => {
+    const root = join(home, "repo");
+    mkdirSync(root);
+    writeFileSync(join(root, "app.ts"), "export const app = true;\n");
+    const store = new HuntMemoryStore({ home });
+    store.rememberCodebase({ root, paths: ["app.ts"], title: "App", summary: "App routing", source: "test" });
+    expect(store.recallCodebase(root, limit)).toEqual([]);
+  });
+
   it("normal memory queries remain unaffected by codebase records", () => {
     const ws = mkdtempSync(join(tmpdir(), "cb-unaffected-"));
     writeFileSync(join(ws, "app.ts"), "export const a = 1;\n");

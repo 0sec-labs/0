@@ -14,10 +14,6 @@
 #   - playwright / playwright-core / electron / chromium-bidi  — loaded via
 #     try/catch dynamic import in racing.ts / oracles.ts / egats.ts. Safe to
 #     skip at compile time; runtime gracefully degrades when absent.
-#   - bun:ffi                                                  — only resolved
-#     on Bun at runtime anyway; no compile-time resolver exists.
-#   - sharp                                                    — optional peer
-#     of opentui's @opentui/core; not exercised by 0 code paths.
 #   - node-sqlite3-wasm                                        — belt-and-
 #     suspenders pairing with the lazy `createRequire` in wasm-shim.ts. The
 #     Bun runtime always uses bun:sqlite via createBunEngine; the WASM
@@ -116,8 +112,6 @@ bun build src/index.ts \
   --external playwright-core \
   --external electron \
   --external chromium-bidi \
-  --external bun:ffi \
-  --external sharp \
   --external node-sqlite3-wasm \
   --external pdfkit
 

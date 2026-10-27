@@ -1,6 +1,7 @@
 import type {
   ConsoleSessionSnapshot,
   ConsoleMessageAuthor,
+  ConsoleMessageInput,
   ConsoleTurnOutcome,
   DesktopConsoleDecision,
   DesktopConsoleEvent,
@@ -24,7 +25,9 @@ export interface DecisionState extends DesktopConsoleDecision {
 
 export interface ReducedTurn {
   id: string;
-  user: { text: string; sequence: number; author?: ConsoleMessageAuthor };
+  startedAt?: string;
+  endedAt?: string;
+  user: { text: string; sequence: number; author?: ConsoleMessageAuthor; attachments?: ConsoleMessageInput["attachments"] };
   assistantText: string;
   reasoningText: string;
   toolCalls: ToolCallState[];
@@ -140,6 +143,8 @@ export function reduceTurns(
       case "user": {
         if (current && !current.isComplete) completeTurn(current);
         current = createTurn(`turn-${event.sequence}`, event.text, event.sequence);
+        current.startedAt = event.occurredAt;
+        current.user.attachments = event.attachments;
         if (event.author) current.user.author = event.author;
         turns.push(current);
         break;
@@ -227,6 +232,7 @@ export function reduceTurns(
         break;
       }
       case "turn-complete": {
+        ensureTurn(event.sequence).endedAt = event.occurredAt;
         applyOutcome(ensureTurn(event.sequence), event);
         break;
       }
@@ -286,10 +292,11 @@ export function reduceConversation(snapshot: ConsoleSessionSnapshot): ReducedTur
       }
     }
     // Tool results are carried in user-role messages, but are not user input.
-    if (message.role === "user" && hasText) {
+    if (message.role === "user" && (hasText || message.content.some(block => block.type === "image"))) {
       if (current) completeTurn(current);
       current = createTurn(`message-${index}`, text, index);
       if (message.author) current.user.author = message.author;
+      current.user.attachments = message.content.flatMap(block => block.type === "image" ? [{ kind: "image" as const, value: `data:${block.mediaType};base64,${block.data}`, name: block.name }] : []);
       turns.push(current);
     } else if (message.role === "assistant" && hasText) {
       ensureTurn(index).assistantText += text;
@@ -381,7 +388,10 @@ export function reduceConversation(snapshot: ConsoleSessionSnapshot): ReducedTur
         turn.id = entry.id;
         turn.user.sequence = entry.user.sequence;
         if (entry.user.author) turn.user.author = entry.user.author;
+        if (entry.user.attachments) turn.user.attachments = entry.user.attachments;
       }
+      turn.startedAt = entry.startedAt ?? turn.startedAt;
+      turn.endedAt = entry.endedAt ?? turn.endedAt;
       turn.reasoningText += entry.reasoningText;
       turn.notices.push(...entry.notices);
       if (entry.usage) turn.usage = entry.usage;

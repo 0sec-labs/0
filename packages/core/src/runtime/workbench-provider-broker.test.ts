@@ -64,6 +64,20 @@ describe("host provider credential broker", () => {
     await failed.broker.close();
   });
 
+  it("keeps pulling when a chunk contains only a withheld secret prefix", async () => {
+    const encoder = new TextEncoder(); let index = 0;
+    const chunks = ["data: first\n\n", token.slice(0, 5), token.slice(5) + "\n\n", "data: complete\n\n"];
+    const { broker } = fixture({ fetchImpl: async () => new Response(new ReadableStream({ async pull(stream) {
+      await new Promise(resolve => setTimeout(resolve, 5));
+      if (index < chunks.length) stream.enqueue(encoder.encode(chunks[index++])); else stream.close();
+    } })) });
+    try {
+      const response = await broker.request(request());
+      const result = response.text();
+      expect(await Promise.race([result, new Promise(resolve => setTimeout(() => resolve("stalled"), 250))])).toBe("data: first\n\n[redacted]\n\ndata: complete\n\n");
+    } finally { await broker.close(); }
+  });
+
   it("counts a streaming response against concurrency until consumed, then enforces the request budget", async () => {
     const { broker } = fixture({ limits: { maxConcurrent: 1, maxRequests: 2 } });
     const first = await broker.request(request());

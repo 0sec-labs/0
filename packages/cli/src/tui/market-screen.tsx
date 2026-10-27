@@ -42,7 +42,7 @@ import { useTheme, type Theme } from "./theme-context.js";
 import { useSymbols } from "./symbol-context.js";
 import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
 import { operatorIcon, operatorTitle } from "./operator-icons.js";
-import { useSettings } from "./settings-store.js";
+import { useSettings } from "./use-settings.js";
 import { Cells } from "./primitives.js";
 import { DialogSelectBody, type DialogItem } from "./dialog-select.js";
 import { computeDialogPanel } from "./dialog-select-layout.js";

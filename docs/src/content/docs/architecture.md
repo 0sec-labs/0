@@ -338,14 +338,13 @@ provider settings and per-evaluator budgets.
 Executable plugins provide versioned guest execution, composition, next-call
 activation, source evolution and rollback. The **wired research-preview**
 live-harness path adds `agent.driver` and `ui.view` replacement during a task,
-with console/tool and TUI host integration. Its
+with shared console/tool integration. Its
 [local measurements](/improvement-plane/#local-candidate-measurements) cover
 specific lifecycle paths, not universal security improvement or hosted
 end-to-end qualification.
 
 A generation graph declares providers and dependencies. The runtime owns
-preparation, migration, activation, and resource disposal. Browser, TUI, and
-desktop consume its shared catalog.
+preparation, migration, activation, and resource disposal. Browser and command interfaces consume its shared catalog.
 
 - **Sandboxed:** each activate, driver, view, or dispose phase invokes the
   pinned executable source in a fresh guest through the authorized broker.
@@ -377,25 +376,22 @@ sessions use typed transcript entries and live producers emit ordered semantic
 events with a local source, sequence, timestamp, type, payload, and optional scan
 or session correlation.
 
-The native OpenTUI console, plain terminal output, report formatters, and the
-browser dashboard are adapters over that contract. The dashboard exposes its
+Plain command output, report formatters, and the browser dashboard are adapters
+over that contract. The dashboard exposes its
 same-origin live feed at `GET /api/v1/presentation/events` as Server-Sent
 Events; `Last-Event-ID` resumes only persisted events after the supplied
 timestamp/ID cursor. A producer's `sequence` is monotonic only within that
 producer, so consumers must not infer global ordering or exactly-once delivery
 across processes.
 
-The terminal remains authoritative for an interactive console. While OpenTUI
-owns stdout, direct process writes are captured as semantic records instead of
-being allowed to corrupt the renderer frame; the original stream is restored
-when the console exits.
+Interactive conversations use the browser. Command output remains ordinary
+text or structured reports; no terminal renderer owns stdout.
 
 ### Desktop control plane
 
 Desktop is a **development-only alpha, excluded from CLI releases.** The native
 application shell uses the same local control plane — see [Roadmap](/roadmap/#desktop) for
-current status. Use the CLI [Console](/console/) for the released terminal
-interface.
+current status. Use the browser [Console](/console/) or headless CLI commands.
 
 ## Scan modes
 

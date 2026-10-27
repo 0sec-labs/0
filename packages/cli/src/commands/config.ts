@@ -40,6 +40,19 @@ import {
 const EXIT_OK = 0;
 const EXIT_USER_ERROR = 1;
 
+/** Public engine controls with consumers in command/browser sessions. Renderer
+ * preferences remain loadable for old files, but are not a CLI configuration API. */
+export const CLI_CONFIG_KEYS = [
+  "busyInputMode", "autoCompaction", "compactionThreshold", "allowSubagentPeerMessaging",
+  "allowSubagentOperatorMessaging", "allowModelSelfExtension", "allowDevSourceUpdates",
+  "executionProfile", "analyticsLevel", "diagnosticReporting", "updatePolicy",
+] as const satisfies readonly (keyof TuiSettings)[];
+const PUBLIC_CONFIG_KEYS = new Set<keyof TuiSettings>(CLI_CONFIG_KEYS);
+const INTERNAL_CONFIG_KEYS = new Set<keyof TuiSettings>(["onboardingCompleted", "diagnosticReportingPrompted", "modelPreference"]);
+function publicConfig(settings: TuiSettings): Partial<TuiSettings> {
+  return Object.fromEntries(CLI_CONFIG_KEYS.map(key => [key, settings[key]]));
+}
+
 /** The security-sensitive keys, derived from the settings table's Security group
  *  so a new gated setting is covered automatically. */
 const SECURITY_KEYS: readonly (keyof TuiSettings)[] = SETTING_DEFS.filter(
@@ -77,11 +90,11 @@ export function runConfigShow(deps: ConfigCommandDeps = {}): void {
     projectDir: deps.projectDir,
   });
 
-  out(chalk.bold("Effective console configuration"));
+  out(chalk.bold("Effective engine configuration"));
   out(chalk.dim(`  global:  ${settingsFilePath(deps.homeDir)}`));
   out(chalk.dim(`  project: ${projectSettingsFilePath(deps.projectDir)}`));
   out("");
-  const keys = Object.keys(settings) as (keyof TuiSettings)[];
+  const keys: readonly (keyof TuiSettings)[] = CLI_CONFIG_KEYS;
   const width = Math.max(...keys.map((k) => k.length));
   for (const key of keys) {
     const layer = sources[key];
@@ -108,7 +121,7 @@ export function runConfigExport(
     ? loadGlobalSettings(deps.homeDir)
     : loadLayeredSettings({ homeDir: deps.homeDir, projectDir: deps.projectDir }).settings;
 
-  const json = `${JSON.stringify(settings, null, 2)}\n`;
+  const json = `${JSON.stringify(publicConfig(settings), null, 2)}\n`;
   if (!file) {
     out(json.trimEnd());
     process.exitCode = EXIT_OK;
@@ -159,6 +172,15 @@ export function runConfigImport(
   }
 
   const bag = extractConfigBag(parsed);
+  const legacyKeys = typeof bag === "object" && bag !== null && !Array.isArray(bag)
+    ? Object.keys(bag).filter(key => Object.hasOwn(DEFAULT_SETTINGS, key) && !PUBLIC_CONFIG_KEYS.has(key as keyof TuiSettings) && !INTERNAL_CONFIG_KEYS.has(key as keyof TuiSettings))
+    : [];
+  if (legacyKeys.length) {
+    err(chalk.red(`Retired terminal settings cannot be imported: ${legacyKeys.join(", ")}. Nothing was written.`));
+    err("Use 0 web → Settings for browser appearance. Remove retired keys to import engine settings.");
+    process.exitCode = EXIT_USER_ERROR;
+    return;
+  }
   // Drop unknown/invalid keys up front — never blindly overwrite. What survives
   // is a sparse, validated patch of known settings.
   const patch = sanitizeOverrides(bag);
@@ -171,6 +193,7 @@ export function runConfigImport(
   if (scope === "global" && typeof profile === "string" && profileChoices?.includes(profile)) {
     patch.executionProfile = profile as TuiSettings["executionProfile"];
   }
+  for (const key of Object.keys(patch) as (keyof TuiSettings)[]) if (!PUBLIC_CONFIG_KEYS.has(key)) delete patch[key];
   const patchKeys = Object.keys(patch) as (keyof TuiSettings)[];
   const skipped =
     typeof bag === "object" && bag !== null && !Array.isArray(bag)
@@ -230,7 +253,7 @@ export function runConfigImport(
 export function registerConfigCommand(program: Command): void {
   const config = program
     .command("config")
-    .description("Inspect, export, and import console configuration (global and project layers)");
+    .description("Inspect, export, and import engine configuration (global and project layers)");
 
   config
     .command("show")
