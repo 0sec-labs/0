@@ -344,46 +344,10 @@ export function runThemeRemove(id: string, deps: ThemeCommandDeps = {}): void {
 // ── commander wiring ───────────────────────────────────────────────────────────
 
 export function registerThemeCommand(program: Command): void {
-  const theme = program
-    .command("theme")
-    .description("List, install, apply, export, and remove console colour themes");
-
-  theme
-    .command("list")
-    .description("List built-in and installed themes (marks the active + default)")
+  program.command("theme", { hidden: true }).argument("[legacy...]").allowUnknownOption(true)
+    .description("Retired terminal theme command; use browser Settings")
     .action(() => {
-      runThemeList();
-    });
-
-  theme
-    .command("install <id>")
-    .description("Fetch + validate + write a theme from the configured registry (installs data; runs no code)")
-    .option("--registry <url>", "Theme registry index URL (https)")
-    .action(async (id: string, opts: { registry?: string }) => {
-      await runThemeInstall(id, { registryUrl: opts.registry });
-    });
-
-  theme
-    .command("apply <id>")
-    .description("Set the console theme (a built-in name or an installed id)")
-    .option("--project", "Write the choice to the per-project override instead of the global config")
-    .option("--global", "Write the choice to the global config")
-    .action((id: string, opts: { project?: boolean; global?: boolean }) => {
-      const scope = opts.project ? "project" : opts.global ? "global" : undefined;
-      runThemeApply(id, scope ? { scope } : {});
-    });
-
-  theme
-    .command("export <id> [file]")
-    .description("Emit a built-in or installed theme as a shareable theme manifest JSON (stdout if no file)")
-    .action((id: string, file: string | undefined) => {
-      runThemeExport(id, file);
-    });
-
-  theme
-    .command("remove <id>")
-    .description("Delete an installed theme (built-ins cannot be removed)")
-    .action((id: string) => {
-      runThemeRemove(id);
+      console.error("Terminal themes are no longer used. Run 0 web and open Settings → Appearance. Existing theme files have not been changed.");
+      process.exitCode = EXIT_USER_ERROR;
     });
 }

@@ -1,5 +1,5 @@
 import { Check, ChevronDown, CirclePause, Clock3, CornerDownLeft, MessageSquare, Users, X } from "lucide-react";
-import { DropdownMenu } from "@cloudflare/kumo/components/dropdown";
+import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import type { ConsoleSessionSnapshot, ConsoleWorker } from "@0/shared";
 import { Button } from "@/components/ui/button";
 import { LoadingDots } from "./loading-state";
@@ -55,13 +55,13 @@ export function AgentActivity({ snapshot, workerId, onSelect, active, sendBehavi
 
   return <DropdownMenu>
     <Tooltip content={activity}><DropdownMenu.Trigger aria-label={selectedWorker ? `Agent: ${selectedWorker.name}` : count ? `View ${count} ${count === 1 ? "agent" : "agents"}` : "Conversation activity"}>
-      <Button type="button" variant="ghost" size="sm" className="max-w-48 gap-2 rounded-full px-3 text-xs text-muted-foreground hover:text-foreground">
+      <Button type="button" variant="ghost" size="sm" className="max-w-48 gap-2 rounded-[var(--radius-control)] px-3 text-xs text-muted-foreground hover:text-foreground">
         {active || workingCount > 0 ? <LoadingDots className="text-primary" /> : <Users aria-hidden="true" className="size-3.5" />}
         <span className="truncate">{label}</span>
         <ChevronDown aria-hidden="true" className="size-3" />
       </Button>
     </DropdownMenu.Trigger></Tooltip>
-    <DropdownMenu.Content align="end" sideOffset={8} collisionPadding={12} className="w-80 max-w-[calc(100vw-24px)] rounded-2xl p-1.5 font-sans">
+    <DropdownMenu.Content align="end" sideOffset={8} collisionPadding={12} className="w-80 max-w-[calc(100vw-24px)] rounded-[var(--radius-menu)] p-1.5 font-sans">
       <DropdownMenu.Item icon={<MessageSquare className="size-4" />} selected={!selectedWorker} onClick={() => onSelect(null)}>
         <span className="flex min-w-0 flex-1 items-center justify-between gap-3"><span>Main conversation</span><span className="text-xs text-muted-foreground">{active ? "Working" : "Ready"}</span></span>
       </DropdownMenu.Item>

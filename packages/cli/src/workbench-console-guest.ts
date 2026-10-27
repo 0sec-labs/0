@@ -72,7 +72,8 @@ async function runGuest(cli: boolean): Promise<number> {
       autonomyMode: session.autonomyMode, target: session.target, scope: session.scope?.raw, localScopePath: session.localScopePath, checkpoint };
     await mkdir("/home/zero/.0/controller", { recursive: true, mode: 0o700 });
     await writeFile("/home/zero/.0/controller/session.json", JSON.stringify(scrub(snapshot)), { mode: 0o600 });
-    emit({ type: "state", snapshot: checkpoint?.harnessRoot ? { ...snapshot, checkpoint: undefined } : snapshot });
+    // Memory provenance is live UI state, never part of persisted session artifacts.
+    emit({ type: "state", snapshot: { ...snapshot, ...(checkpoint?.harnessRoot ? { checkpoint: undefined } : {}), sourceContext: session.sourceContext } });
     const db = new osecDB("/home/zero/.0/controller.sqlite");
     try { const rows = db.getFindings(session.scanId); if (rows.length > 1000) throw new Error("Finding export limit reached"); emit({ type: "findings", findings: rows.map(findingFromRow) }); } finally { db.close(); }
     // Only bounded source-backed notes cross the seam. Never export transcripts or the full memory log.
@@ -159,6 +160,23 @@ async function runGuest(cli: boolean): Promise<number> {
             if (!Array.isArray(value) || value.length > 6) return [];
             return value.flatMap(note => { try { return [validateWorkbenchSourceLesson(note, "/workspace", root)]; } catch { return []; } });
           };
+          if ((frame.callbacks as string[]).includes("skillRead")) callbacks.skillAuthoring = {
+            read: (id: string) => callback("skillRead", [id]),
+            create: (content: string) => callback("skillCreate", [content]),
+            update: (id: string, input: unknown) => callback("skillSave", [id, input]),
+            copy: (id: string, input: unknown) => callback("skillCopy", [id, input]),
+          };
+          if ((frame.callbacks as string[]).includes("skillEditorRead")) callbacks.skillEditor = { read: () => callback("skillEditorRead", []) };
+          if ((frame.callbacks as string[]).includes("workflowList")) callbacks.workflowAuthoring = {
+            list: () => callback("workflowList", []),
+            save: (input: unknown) => callback("workflowSave", [input]),
+            ...((frame.callbacks as string[]).includes("workflowEditorRead") && typeof frame.workflowEditorId === "string" ? {
+              editor: { id: frame.workflowEditorId, read: () => callback("workflowEditorRead", []) },
+            } : {}),
+          };
+          if ((frame.callbacks as string[]).includes("workflowInvoke")) callbacks.workflowLifecycle = {
+            invoke: (name: string, args: Record<string, unknown>) => callback("workflowInvoke", [name, args]),
+          };
           if ((frame.callbacks as string[]).includes("historyList")) callbacks.conversationHistory = { list: (...args: unknown[]) => callback("historyList", args), read: (...args: unknown[]) => callback("historyRead", args) };
           pluginManager = await createSessionPluginHostManager({ projectPath: "/workspace", reservedToolNames: Object.values(TOOL_DEFINITIONS).map(tool => tool.name), coreVersion: VERSION });
           const unavailable = pluginManager.current().status().filter(entry => entry.state !== "ready");
@@ -176,7 +194,7 @@ async function runGuest(cli: boolean): Promise<number> {
           case "send": {
             if (typeof frame.text !== "string") throw new Error("Invalid operator message"); turn = new AbortController();
             const callbacks = Object.fromEntries(EVENTS.map(name => [name, (...args: unknown[]) => emit({ type: "event", name, args })]));
-            const result = withScopeEnforcement(policy, () => session!.send(frame.text as string, callbacks, { signal: turn!.signal, generateTitle: frame.generateTitle === true })); await state(); value = await result; turn = undefined; break;
+            const result = withScopeEnforcement(policy, () => session!.send(frame.text as string, callbacks, { signal: turn!.signal, generateTitle: frame.generateTitle === true, images: frame.images as NonNullable<Parameters<ConsoleSession["send"]>[2]>["images"] })); await state(); value = await result; turn = undefined; break;
           }
           case "autonomy": session.setAutonomyMode(frame.value as Parameters<ConsoleSession["setAutonomyMode"]>[0]); break;
           case "configure": { const value = frame.value as { target?: string; scope?: ConstructorParameters<typeof ScopePolicy>[0] | null }; session.configureEngagement({ target: value.target, ...(value.scope === undefined ? {} : { scope: value.scope ? new ScopePolicy(value.scope) : null }) }); break; }

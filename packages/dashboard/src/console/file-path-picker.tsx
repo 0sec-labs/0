@@ -2,8 +2,10 @@ import { useId, useState } from "react";
 import { Popover } from "@cloudflare/kumo/components/popover";
 import { ChevronDown, Folder } from "lucide-react";
 import { useBackendApi } from "@/api";
+import { Tooltip } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import type { ConsoleWorkspace } from "./use-console-workspace";
 
 export interface FilePathPickerProps {
@@ -27,17 +29,17 @@ export function FilePathPicker({ workspace, sessionId, cwd, workspaceDisabled, d
     setOpen(next);
     setPath(cwd ?? "");
   }}>
-    <Popover.Trigger render={<Button type="button" variant="ghost" size="sm" />}
-      className={className} disabled={disabled || workspaceDisabled} aria-label="Change workspace" title={cwd ? `Change workspace: ${cwd}` : "Change workspace"}>
-      <Folder className="size-3.5" />
-      <span className="max-w-56 truncate">{cwd?.split(/[\\/]/).filter(Boolean).at(-1) || "Choose folder"}</span>
+    <Tooltip content={cwd ? `Workspace: ${cwd}` : "Choose workspace folder"}><Popover.Trigger render={<Button type="button" variant="ghost" size="sm" />}
+      className={cn("min-w-0 shrink", className)} disabled={disabled || workspaceDisabled} aria-label={cwd ? `Change workspace: ${cwd}` : "Change workspace"}>
+      <Folder className="size-4" />
+      <span className="min-w-0 max-w-[min(24rem,55vw)] truncate text-left" dir="ltr">{cwd || "Choose folder"}</span>
       <ChevronDown className="size-3 text-muted-foreground" />
-    </Popover.Trigger>
+    </Popover.Trigger></Tooltip>
     <Popover.Content side="top" align="start" sideOffset={12} positionMethod="fixed"
-      className="w-80 max-w-[calc(100vw-24px)] rounded-2xl bg-popover p-4 text-popover-foreground shadow-lg outline-border motion-reduce:transition-none [&>[data-side]]:hidden [[data-reduced-motion=true]_&]:transition-none">
+      className="ui-menu-surface ui-menu-form w-80">
       <Popover.Title className="text-sm font-medium">Change workspace</Popover.Title>
-      <Popover.Description id={descriptionId} className="mt-2 text-xs leading-5 text-muted-foreground">Choose the folder where Zero works.</Popover.Description>
-      <form className="mt-3 space-y-3" onSubmit={event => {
+      <Popover.Description id={descriptionId} className="ui-menu-secondary mt-1">Choose the folder where Zero works.</Popover.Description>
+      <form className="mt-3 space-y-2" onSubmit={event => {
         event.preventDefault();
         const value = path.trim();
         if (!value || disabled || workspaceDisabled || workspace.busy) return;

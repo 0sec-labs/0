@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type SetStateAction } from "react
 import { useKeyboard } from "@opentui/react";
 import type { FindingTriageStatus } from "@0/shared";
 import { useTheme } from "./theme-context.js";
-import { useSettings } from "./settings-store.js";
+import { useSettings } from "./use-settings.js";
 import { severityToneFor } from "./themes.js";
 import { ContextMenu } from "./context-menu.js";
 import { useContextMenu, type ContextMenuItem } from "./use-context-menu.js";

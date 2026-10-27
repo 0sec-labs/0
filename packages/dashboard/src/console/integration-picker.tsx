@@ -2,6 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Plug } from "lucide-react";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useBackendApi } from "@/api";
 import type { PluginItem, PluginsResponse } from "@/components/console-control/contracts";
 
@@ -87,21 +88,21 @@ export function ComposerPickerSurface({ open, children, className = "", label }:
     return () => animation.cancel();
   }, [open, mounted]);
   if (!mounted) return null;
-  return <div ref={surface} aria-label={label} aria-hidden={!open} inert={!open || undefined} className={`absolute bottom-full left-0 z-30 mb-2 rounded-2xl bg-popover p-2 font-sans shadow-lg ${!open ? "pointer-events-none" : ""} ${className}`}>{children}</div>;
+  return <div ref={surface} aria-label={label} aria-hidden={!open} inert={!open || undefined} className={`absolute bottom-full left-0 z-30 mb-2 ui-menu-surface font-sans ${!open ? "pointer-events-none" : ""} ${className}`}>{children}</div>;
 }
 
 export function IntegrationPicker({ picker }: { picker: ReturnType<typeof useIntegrationPicker> }) {
   useEffect(() => { if (picker.open) document.getElementById(`${picker.id}-${picker.index}`)?.scrollIntoView({ block: "nearest" }); }, [picker.id, picker.index, picker.open]);
-  return <ComposerPickerSurface open={picker.open} label="Plugins" className="w-full max-w-sm">
+  return <ComposerPickerSurface open={picker.open} label="Plugins" className="w-80 max-w-full">
     <div id={picker.id} role="listbox" aria-label="Available plugins" className="max-h-[280px] overflow-y-auto overscroll-contain">
-      {picker.items.map((plugin, index) => <button key={plugin.id} id={`${picker.id}-${index}`} type="button" role="option" aria-selected={index === picker.index}
+      {picker.items.map((plugin, index) => <Tooltip key={plugin.id} content={plugin.description || plugin.name} shortcut={index === picker.index ? "Enter / Tab" : undefined} side="right"><button id={`${picker.id}-${index}`} type="button" role="option" aria-selected={index === picker.index}
         onMouseDown={event => event.preventDefault()} onClick={() => picker.select(plugin)}
-        className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors duration-100 motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-primary ${index === picker.index ? "bg-muted" : "hover:bg-muted/60"}`}>
+        className={`ui-menu-item ui-menu-item--detail flex w-full items-center text-left focus-visible:outline-2 focus-visible:outline-ring ${index === picker.index ? "bg-muted" : "hover:bg-muted/60"}`}>
         <Plug className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <span className="min-w-0"><span className="block truncate font-medium">{plugin.name}</span>{plugin.description && <span className="block truncate text-xs text-muted-foreground">{plugin.description}</span>}</span>
-      </button>)}
+        <span className="min-w-0"><span className="block truncate font-medium">{plugin.name}</span>{plugin.description && <span className="ui-menu-secondary block truncate">{plugin.description}</span>}</span>
+      </button></Tooltip>)}
     </div>
     {picker.items.length === 0 && <p role="status" className="px-3 py-3 text-sm text-muted-foreground">{picker.loading ? "Loading plugins…" : picker.error ? "Couldn't load plugins." : "No matching plugins."}</p>}
-    <Link to="/plugins" className="mt-1 block rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground">Manage plugins</Link>
+    <Link to="/plugins" className="ui-menu-item mt-1 block text-muted-foreground hover:bg-muted hover:text-foreground">Manage plugins</Link>
   </ComposerPickerSurface>;
 }

@@ -1,3 +1,5 @@
+import { subagentWorkerLimit } from "./subagent-limits.js";
+
 interface WorkerNode {
   readonly id: string;
   readonly parentId?: string;
@@ -31,7 +33,7 @@ export class AuditWorkerTree {
 
   constructor(
     readonly rootId: string,
-    private readonly maxWorkers = 32,
+    private readonly maxWorkers = subagentWorkerLimit(),
     private readonly maxDepth = 8,
   ) {
     if (!Number.isSafeInteger(maxWorkers) || maxWorkers < 1 ||
@@ -39,6 +41,16 @@ export class AuditWorkerTree {
       throw new RangeError("Worker capacity and depth must be positive integers");
     }
     this.nodes.set(rootId, workerNode(rootId, 0));
+  }
+
+  /** Discover only live siblings under the same coordinator. */
+  peers(parentId: string): string[] {
+    const parent = this.nodes.get(parentId);
+    if (this.closed || !parent || parent.stopping || parent.controller.signal.aborted) return [];
+    return [...parent.children].filter(id => {
+      const node = this.nodes.get(id);
+      return node?.active && !node.stopping && !node.controller.signal.aborted;
+    });
   }
 
   acquire(id: string, parentId: string): { signal: AbortSignal; release: () => void } {

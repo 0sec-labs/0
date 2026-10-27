@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createConversationHistory } from "./conversation-history.js";
 import { saveSession } from "./tui/session-store.js";
+import { searchSavedChats } from "./web/chat-search.js";
 
 const homes: string[] = [];
 function fixture() {
@@ -20,6 +21,26 @@ afterEach(() => {
 });
 
 describe("saved conversation access", () => {
+  it("shares body and metadata matching with browser history search", async () => {
+    const { home, save, history } = fixture();
+    save("tenant-chat", "/project-a", [
+      { role: "user", content: "Review the customer API" },
+      { role: "assistant", content: "Check tenant isolation on export" },
+    ], "Customer API");
+    save("other-chat", "/project-a", [{ role: "user", content: "Review billing" }], "Billing");
+    const model = await history.list({ query: "API isolation" }) as { conversations: Array<{ id: string; preview: string }>; truncated: boolean };
+    const browser = await searchSavedChats(home, "API isolation", new Set());
+    expect(model.conversations.map(item => item.id)).toEqual(browser.results.map(item => item.id));
+    expect(model.conversations[0]?.preview).toContain("tenant isolation");
+    expect(model.truncated).toBe(false);
+  });
+
+  it("retains tool-only records in unfiltered model listings", async () => {
+    const { save, history } = fixture();
+    save("tool-only", "/project-a", [{ role: "user", content: [{ type: "tool_result", content: "private tool output" }] }]);
+    expect(await history.list({})).toMatchObject({ conversations: [{ id: "tool-only" }], total: 1 });
+    expect(await history.list({ query: "private tool output" })).toMatchObject({ conversations: [], total: 0 });
+  });
   it("keeps discovery project-local unless explicitly widened and supports search", async () => {
     const { save, history } = fixture();
     save("project-a-chat", "/project-a", [{ role: "user", content: "Review authentication" }], "Review authentication");

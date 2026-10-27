@@ -5,7 +5,7 @@ import { useKeyboard } from "@opentui/react";
 import { useTheme, type Theme } from "./theme-context.js";
 import { compareFindingsByBusinessPriority, getFindingPriority } from "@0/shared";
 import { fitTuiText, fitTuiUrl } from "./text.js";
-import { useSettings } from "./settings-store.js";
+import { useSettings } from "./use-settings.js";
 import { frameAt } from "./animation.js";
 import { SHIMMER_TEXT_INTERVAL_MS } from "./animations.js";
 import { ShimmerText } from "./chat/shimmer.js";

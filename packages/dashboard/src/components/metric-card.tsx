@@ -24,7 +24,7 @@ export function MetricCard({
           </div>
           <div
             className={cn(
-              "inline-flex size-9 items-center justify-center rounded-md border border-border bg-muted text-muted-foreground",
+              "inline-flex size-9 items-center justify-center rounded-[var(--radius-control,8px)] border border-border bg-muted text-muted-foreground",
               tone === "danger" && "border-destructive/20 bg-destructive/10 text-destructive",
               tone === "warning" && "border-amber-500/20 bg-amber-500/10 text-amber-300",
               tone === "success" && "border-emerald-500/20 bg-emerald-500/10 text-emerald-300",

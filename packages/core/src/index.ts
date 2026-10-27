@@ -2371,6 +2371,8 @@ export {
 export type {
   ConsoleConversationHistory,
   ConsoleSession,
+  ConsoleSourceContext,
+  ConsoleSourceLesson,
   ConsoleEngagementSelection,
   ConsoleSessionCheckpoint,
   ConsoleSessionConfig,
@@ -2567,3 +2569,7 @@ export type { RoutingQualificationPlan, RoutingQualificationReport, RoutingTrial
 
 export { createLocalOllamaRoutingRuntime } from "./bench/local-ollama-routing.js";
 export type { LocalRoutingObservation, LocalRoutingRuntime } from "./bench/local-ollama-routing.js";
+export { listBrowserViews, subscribeBrowserView } from "./agent/browser-live.js";
+export type { BrowserViewDescriptor, BrowserViewFrame } from "./agent/browser-live.js";
+
+export { sanitizedEnv } from "./agent/sanitized-env.js";

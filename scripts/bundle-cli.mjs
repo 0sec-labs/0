@@ -14,7 +14,6 @@ mkdirSync(outdir, { recursive: true });
 // constants.ts can pick it up without a runtime fs read. See
 // packages/shared/src/constants.ts for the matching loader.
 const rootPkg = JSON.parse(readFileSync("package.json", "utf8"));
-const cliPkg = JSON.parse(readFileSync("packages/cli/package.json", "utf8"));
 const PKG_VERSION = rootPkg.version;
 
 function readBuildCommit() {
@@ -30,23 +29,6 @@ function readBuildCommit() {
 
 const BUILD_COMMIT = readBuildCommit();
 
-// Stub out optional dev-only dependencies that Ink tries to import
-const stubPlugin = {
-  name: "stub-optional",
-  setup(build) {
-    const stubModules = ["react-devtools-core", "yoga-wasm-web"];
-    const filter = new RegExp(`^(${stubModules.join("|")})$`);
-    build.onResolve({ filter }, (args) => ({
-      path: args.path,
-      namespace: "stub",
-    }));
-    build.onLoad({ filter: /.*/, namespace: "stub" }, () => ({
-      contents: "export default {}; export const activate = () => {};",
-      loader: "js",
-    }));
-  },
-};
-
 // The staged parser wrapper is real only while `bun-compile.sh` is building a
 // standalone executable. The JavaScript/npm bundle takes the source-mode branch,
 // so retain those unreachable requires without trying to resolve generated files.
@@ -60,7 +42,8 @@ const releaseOnlyAddonPlugin = {
   },
 };
 
-await build({
+const buildResult = await build({
+  metafile: true,
   entryPoints: ["packages/cli/src/index.ts"],
   outdir,
   outExtension: { ".js": ".js" },
@@ -70,9 +53,7 @@ await build({
   format: "esm",
   platform: "node",
   target: "node18",
-  // Split dynamic imports (await import(...)) into separate chunks so
-  // the opentui-based TUI loader stays unloaded on Node runtimes that
-  // never call it.
+  // Split command and browser-server modules into lazy chunks.
   splitting: true,
   banner: {
     js: '#!/usr/bin/env node\nimport { createRequire as __0CreateRequire } from "node:module";\nconst require = __0CreateRequire(import.meta.url);',
@@ -93,18 +74,6 @@ await build({
     // Keep both packages intact and declare them in the published tarball.
     "tree-sitter",
     "tree-sitter-c",
-    // OpenTUI's reconciler and the TUI chunks must resolve the same React
-    // instance. Bundling React here while OpenTUI loads it from node_modules
-    // produces the invalid-hook-call crash in the distributed Bun TUI.
-    "react",
-    "react/*",
-    // opentui ships .wasm / tree-sitter query asset imports using the
-    // `with { type: "file" }` attribute and conditionally imports `bun:ffi`.
-    // esbuild can't inline either, so keep them external and ship them as
-    // real runtime dependencies of the published tarball.
-    "@opentui/core",
-    "@opentui/react",
-    "bun:ffi",
     // Direct native-addon requires exist only for Bun's standalone compiler.
     // The JavaScript bundle defines that path off and leaves all `.node` imports
     // external so esbuild never expects staged release-only assets.
@@ -122,8 +91,12 @@ await build({
     __ZERO_COMPILED_TARGET__: "undefined",
     __ZERO_BUILD_COMMIT__: JSON.stringify(BUILD_COMMIT),
   },
-  plugins: [stubPlugin, releaseOnlyAddonPlugin],
+  plugins: [releaseOnlyAddonPlugin],
 });
+
+// Keep renderer code outside the shipped command/browser-server graph.
+const rendererInputs = Object.keys(buildResult.metafile.inputs).filter(path => /node_modules\/(?:@opentui\/|react(?:-dom|-reconciler)?\/)|(?:^|\/)tui\/run\.tsx$|(?:^|\/)dev-ui-reload\.ts$/.test(path));
+if (rendererInputs.length) throw new Error(`Terminal renderer code entered the production CLI: ${rendererInputs.join(", ")}`);
 
 cpSync("packages/templates/attacks", `${outdir}/attacks`, { recursive: true });
 cpSync("packages/dashboard/dist", `${outdir}/dashboard`, { recursive: true });
@@ -229,9 +202,6 @@ const publishPkg = {
     "playwright": rootPkg.dependencies.playwright,
     "tree-sitter": rootPkg.dependencies["tree-sitter"],
     "tree-sitter-c": rootPkg.dependencies["tree-sitter-c"],
-    "@opentui/core": cliPkg.dependencies["@opentui/core"],
-    "@opentui/react": cliPkg.dependencies["@opentui/react"],
-    "react": cliPkg.dependencies.react,
   },
 };
 writeFileSync(`${outdir}/package.json`, JSON.stringify(publishPkg, null, 2) + "\n");

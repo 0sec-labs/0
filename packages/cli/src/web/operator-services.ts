@@ -585,9 +585,9 @@ export class WebOperatorServices {
         if (!statSync(projectPath).isDirectory()) throw new OperatorError(400, "invalid_project", "Project path must name a local directory.");
         const git: { root: string | null; branch: string | null; dirty: boolean; error: string | null } = { root: null, branch: null, dirty: false, error: null };
         try {
-          git.root = execFileSync("git", ["-C", projectPath, "rev-parse", "--show-toplevel"], { encoding: "utf8", timeout: 5_000, stdio: ["ignore", "pipe", "ignore"] }).trim();
-          git.branch = execFileSync("git", ["-C", projectPath, "branch", "--show-current"], { encoding: "utf8", timeout: 5_000, stdio: ["ignore", "pipe", "ignore"] }).trim() || null;
-          git.dirty = Boolean(execFileSync("git", ["-C", projectPath, "status", "--porcelain"], { encoding: "utf8", timeout: 5_000, stdio: ["ignore", "pipe", "ignore"], maxBuffer: 1_048_576 }).trim());
+          git.root = execFileSync("git", ["--no-optional-locks", "-c", "core.fsmonitor=false", "-C", projectPath, "rev-parse", "--show-toplevel"], { encoding: "utf8", timeout: 5_000, stdio: ["ignore", "pipe", "ignore"] }).trim();
+          git.branch = execFileSync("git", ["--no-optional-locks", "-c", "core.fsmonitor=false", "-C", projectPath, "branch", "--show-current"], { encoding: "utf8", timeout: 5_000, stdio: ["ignore", "pipe", "ignore"] }).trim() || null;
+          git.dirty = Boolean(execFileSync("git", ["--no-optional-locks", "-c", "core.fsmonitor=false", "-C", projectPath, "status", "--porcelain"], { encoding: "utf8", timeout: 5_000, stdio: ["ignore", "pipe", "ignore"], maxBuffer: 1_048_576 }).trim());
         } catch { git.error = "Git metadata is unavailable for this directory."; }
         data = { path: projectPath, name: basename(projectPath), git };
       } else if (path === "checks" && method === "GET") data = listProjectReviewChecks(query.get("path") ?? process.cwd());

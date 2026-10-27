@@ -21,6 +21,17 @@ describe("tenant-local durable learning", () => {
     expect(store.listKnowledge()).toHaveLength(1);
     expect(store.putKnowledge({ ...input, sourceLinks: [{ path: "a.ts", hash: "fresh-source" }], evidenceEventIds: [next.id] }).status).toBe("current");
   });
+  it("finds disabled source knowledge by canonical links without crossing projects", () => {
+    const store = open();
+    const source = store.appendEvent(event());
+    const links = [{ path: "b.ts", hash: "b" }, { path: "a.ts", hash: "a" }];
+    const lesson = store.putKnowledge({ projectId: "project-a", summary: "Tenant ownership", sourceLinks: links, evidenceEventIds: [source.id] });
+    expect(store.findDisabledSourceKnowledge("project-a", lesson.summary, links)).toBeNull();
+    store.setKnowledgeStatus(lesson.id, "disabled");
+    expect(store.findDisabledSourceKnowledge("project-a", lesson.summary, [...links].reverse())?.id).toBe(lesson.id);
+    expect(store.findDisabledSourceKnowledge("other-project", lesson.summary, links)).toBeNull();
+    expect(store.findDisabledSourceKnowledge("project-a", lesson.summary, [{ path: "a.ts", hash: "fresh" }])).toBeNull();
+  });
   it("keeps experiences and outbox after reopen; retries are idempotent and conflicts fail", () => {
     const dir = mkdtempSync(join(tmpdir(), "learning-")); directories.push(dir); const path = join(dir, "control.db");
     const first = open(path); const saved = first.recordExperience(event()); first.close(); stores.pop();

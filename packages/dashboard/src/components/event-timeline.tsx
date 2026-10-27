@@ -1,3 +1,4 @@
+import { Disclosure } from "@/components/ui/disclosure";
 import { accessMilestoneFromArtifact, appendAccessMilestone, type AccessMilestone } from "@0/shared/dist/access-milestone.js";
 import { AccessMilestoneBanner } from "./access-milestone";
 import {
@@ -53,7 +54,7 @@ export function EventTimeline({
                   <TableRow key={event.id} id={`evidence-${encodeURIComponent(event.id)}`}>
                     <TableCell>
                       <div className="flex items-start gap-3">
-                        <div className="mt-0.5 inline-flex size-8 items-center justify-center rounded-md border border-border bg-muted text-primary-text">
+                        <div className="mt-0.5 inline-flex size-8 items-center justify-center rounded-[var(--radius-menu,12px)] border border-border bg-muted text-primary-text">
                           <Icon className="size-4" />
                         </div>
                         <div className="font-medium text-foreground">
@@ -69,12 +70,12 @@ export function EventTimeline({
                     </TableCell>
                     <TableCell>
                       {event.payload ? (
-                        <details className="rounded-md border border-border bg-muted/50 p-2 text-sm text-muted-foreground">
-                          <summary className="cursor-pointer list-none font-medium text-foreground">Show</summary>
+                        <Disclosure className="rounded-[var(--radius-menu,12px)] border border-border bg-muted/50 p-2 text-sm text-muted-foreground" summary={<> Show </>} triggerClassName="cursor-pointer list-none font-medium text-foreground">
+
                           <pre className="mt-3 text-xs text-muted-foreground">
                             {JSON.stringify(event.payload, null, 2)}
                           </pre>
-                        </details>
+                        </Disclosure>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}

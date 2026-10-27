@@ -6,18 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { analyticsPipeline, eventBus } from "@0/core";
 
 import { DEFAULT_SETTINGS, loadSettings, settingsFilePath, type TuiSettings } from "./settings.js";
-import {
-  __resetSettingsStoreForTests,
-  configureSettingsStore,
-  getAnalyticsSetupDraft,
-  getSettings,
-  previewSetting,
-  reloadSettings,
-  setSettings,
-  subscribeSettings,
-  updateSetting,
-  useSettings,
-} from "./settings-store.js";
+import { __resetSettingsStoreForTests, configureSettingsStore, getAnalyticsSetupDraft, getSettings, previewSetting, reloadSettings, setSettings, subscribeSettings, updateSetting } from "./settings-store.js";
+import { useSettings } from "./use-settings.js";
 
 /** Temp homes created by a test, torn down after it regardless of outcome. */
 const tempHomes: string[] = [];
@@ -536,17 +526,20 @@ describe("analytics environment restrictions", () => {
     expect(loadGlobalSettings(home).analyticsLevel).toBe("off");
   });
 
-  it("keeps new setup drafts local until confirmation and respects a later shell refusal", async () => {
+  it("enables new-install usage metrics and respects a later saved or shell refusal", async () => {
     const home = makeHome();
     configureSettingsStore({ homeDir: home });
     expect(getAnalyticsSetupDraft()).toBe("usage");
     await collect();
-    expect(sent).toEqual([]);
-    expect(loadGlobalSettings(home).analyticsLevel).toBe("off");
+    expect(sent).toEqual([
+      expect.objectContaining({ kind: "usage", featureCounts: { "bridge-counter": 1 } }),
+    ]);
+    expect(loadGlobalSettings(home).analyticsLevel).toBe("usage");
+    sent.length = 0;
     updateSetting("analyticsLevel", getAnalyticsSetupDraft());
     await collect();
     expect(sent).toEqual([
-      expect.objectContaining({ kind: "usage", featureCounts: { "bridge-counter": 1 } }),
+      expect.objectContaining({ kind: "usage", featureCounts: { "bridge-counter": 2 } }),
     ]);
     sent.length = 0;
     updateSetting("analyticsLevel", "off");

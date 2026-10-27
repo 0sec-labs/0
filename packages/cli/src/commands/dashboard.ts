@@ -31,6 +31,9 @@ import { WorkflowTriggerService } from "../web/workflow-triggers.js";
 import { GitHubPublicationAuth } from "../web/github-auth.js";
 import { DASHBOARD_ASSETS, type EmbeddedDashboardAsset } from "../dashboard-assets.generated.js";
 import { findDashboardInstance } from "../web/dashboard-instance.js";
+import { startManagedHostReconnect } from "../web/managed-host-reconnect.js";
+import { LocalProviderSessions, LocalProviderSessionError } from "../web/local-provider-sessions.js";
+import { handleRemoteProviderRelayRequest } from "../web/remote-provider-relay.js";
 import { BackendConnectionRegistry, backendBearerFromEnv, createBackendHandshake, handleBackendConnectionRequest } from "../web/backend-connections.js";
 import { WorkflowEngineService } from "../workflow-engine-service.js";
 import { retainedScanSnapshot, retainedFindingSnapshot } from "../web/report-artifacts.js";
@@ -45,6 +48,7 @@ import { findTeamConfigPath, handleTeamSetupRequest, TeamSetupService } from "..
 import { TeamAuth, TeamAuthError, getSessionId } from "../web/team-auth.js";
 import { CollaborationService } from "../web/collaboration.js";
 import { authorizeTeamApi, handleTeamRequest, assertTeamConsoleMutation } from "../web/team-web.js";
+import { handleBrowserLiveRequest } from "../web/browser-live-routes.js";
 import { handleTeamPresenceStream } from "../web/team-presence-stream.js";
 import { homeStateDir } from "@0/shared";
 import { assertLocalEngineAvailable, registerLocalEngine } from "../local-engine.js";
@@ -1270,6 +1274,18 @@ async function handleWebConsoleApiRequest(
     if (parts[0] !== "sessions" || !parts[1]) return false;
     const id = parts[1];
     const action = parts[2];
+    if (action === "browser" && parts[3] === "views" && (parts.length === 4 || (parts.length === 6 && parts[5] === "stream"))) {
+      gateway.get(id);
+      if (team?.auth.enabled) {
+        const sessionId = getSessionId(req);
+        if (!sessionId || !team.collaboration) throw new WebRequestError("Sign in to this workspace.", 403);
+        // Match the existing conversation ownership/membership checks before exposing pixels.
+        if (!team.collaboration.hasConversation(id)) team.collaboration.register(id, sessionId);
+        team.collaboration.snapshot(id, sessionId);
+      }
+      await handleBrowserLiveRequest(req, res, requestUrl, id, parts[4]);
+      return true;
+    }
     if (!action && method === "GET") json(res, 200, { snapshot: gateway.get(id) });
     else if (!action && method === "DELETE") {
       workflows.cancelSession(id);
@@ -1279,7 +1295,8 @@ async function handleWebConsoleApiRequest(
       json(res, 200, gateway.eventsAfter(id, consoleEventsAfter(requestUrl.searchParams.get("after"))));
     } else if (action === "messages" && method === "POST") {
       const message = author && input && typeof input === "object" && !("workerId" in input) && (!("mode" in input) || input.mode === "send") ? { ...input, mode: "queue" } : input;
-      json(res, 202, { session: await gateway.send(id, message, author) });
+      const { queuedMessageId, ...session } = await gateway.send(id, message, author);
+      json(res, 202, { session, ...(queuedMessageId ? { queuedMessageId } : {}) });
     }
     else if (action === "cancel" && method === "POST") json(res, 200, { session: await gateway.cancel(id) });
     else if (action === "connection" && parts[3] === "reload" && parts.length === 4 && method === "POST") {
@@ -1299,6 +1316,10 @@ async function handleWebConsoleApiRequest(
       workflows.cancelSession(id);
       json(res, 200, await gateway.delete(id));
     } else if (action === "export" && method === "GET") json(res, 200, gateway.export(id));
+    else if (action === "queue" && parts[3] && parts[4] === "send" && parts.length === 5 && method === "POST") {
+      z.object({}).strict().parse(input ?? {});
+      json(res, 202, { session: gateway.sendQueuedNow(id, parts[3]) });
+    }
     else if (action === "queue" && method === "DELETE") json(res, 200, { session: gateway.removeQueued(id, parts[3]) });
     else if (action === "decisions" && parts[3] && method === "POST") json(res, 200, { session: gateway.resolveDecision(id, parts[3], input) });
     else if (action === "workers") {
@@ -1859,9 +1880,32 @@ export function registerDashboardCommand(program: Command): void {
       let collaboration = teamAuth.enabled ? new CollaborationService({ workspaceId: teamAuth.workspaceId!, stateDir: join(teamDirectory!, "collaboration"), resolveSession: sessionId => teamAuth.resolveSessionId(sessionId) }) : undefined;
       // Never recover another live host's database while opening a second UI.
       assertLocalEngineAvailable(opts.dbPath);
-      const capabilities = ["sessions", "workflows", "schedules", "approvals", "events", "workspaces", "artifacts", "model-connections", "operator-services", "process-controls", "learning", "workflow-engine"];
+      const capabilities = ["sessions", "workflows", "schedules", "approvals", "events", "workspaces", "artifacts", "model-connections", "provider-relay", "operator-services", "process-controls", "learning", "workflow-engine"];
       let localHandshake = createBackendHandshake(opts.dbPath, capabilities);
       let backends = new BackendConnectionRegistry({ configPath: opts.backendsConfig, localHandshake });
+      // Keep model frames independent of long-lived browser event subscriptions.
+      let modelBackends = new BackendConnectionRegistry({ configPath: opts.backendsConfig, localHandshake });
+      const modelRegistry = {
+        handshake: (id: string) => { modelBackends.reload(); return modelBackends.handshake(id); },
+        request: (...args: Parameters<BackendConnectionRegistry["request"]>) => { modelBackends.reload(); return modelBackends.request(...args); },
+      };
+      let localProviderSessions = new LocalProviderSessions({ registry: modelRegistry });
+      const hostRepairs = new Map<string, Promise<unknown>>();
+      const hostRepairAbort = new AbortController();
+      const repairManagedHost = (backendId: string, signal?: AbortSignal): Promise<unknown> => {
+        const pending = hostRepairs.get(backendId); if (pending) return pending;
+        const compiled = import.meta.url.startsWith("file:///$bunfs/") || import.meta.url.startsWith("/$bunfs/");
+        const args = [...(compiled ? [] : [resolveCliEntrypoint()]), "worker", "repair", backendId];
+        const task = new Promise<unknown>((resolveRepair, reject) => {
+          execFile(process.execPath, args, { timeout: 75_000, maxBuffer: 65_536, signal: signal ? AbortSignal.any([signal, hostRepairAbort.signal]) : hostRepairAbort.signal }, (error, stdout) => {
+            if (error) { reject(new WebRequestError("This host could not reconnect. Check its SSH connection and managed engine installation.", 409)); return; }
+            try { resolveRepair(JSON.parse(stdout)); } catch { reject(new WebRequestError("Host reconnect returned an invalid result.", 502)); }
+          });
+        }).finally(() => { hostRepairs.delete(backendId); });
+        hostRepairs.set(backendId, task); return task;
+      };
+      let stopHostReconnect: (() => void) | undefined;
+      const watchManagedHosts = () => startManagedHostReconnect({ getRegistry: () => backends, repair: repairManagedHost, onRecovered: async id => { backends.reload(); await backends.handshake(id); } });
       let engine: WorkflowEngineService | undefined;
       let startupGateway: ConsoleGateway | undefined;
       let startupOperator: WebOperatorServices | undefined;
@@ -1872,8 +1916,9 @@ export function registerDashboardCommand(program: Command): void {
       try {
         const { path: assetDir, cleanup: cleanupAssetDir } = resolveDashboardAssetDir(opts.assetDir);
         startupAssetCleanup = cleanupAssetDir;
-        const buildServices = (auth: TeamAuth, dbPath = opts.dbPath, stateDir = teamDirectory) => createWorkspaceServices({ auth, dbPath, stateDir, workspace: opts.engineWorkspace, scopePath: opts.engineScope, target: opts.engineTarget, allowApply: opts.engineAllowApply, controlToken, engineBearer, timeCapMs, costCapUsd });
+        const buildServices = (auth: TeamAuth, dbPath = opts.dbPath, stateDir = teamDirectory, relayEpoch = localHandshake.serverInstanceId) => createWorkspaceServices({ relayEpoch, auth, dbPath, stateDir, workspace: opts.engineWorkspace, scopePath: opts.engineScope, target: opts.engineTarget, allowApply: opts.engineAllowApply, controlToken, engineBearer, timeCapMs, costCapUsd });
         let services = await buildServices(teamAuth);
+        stopHostReconnect = watchManagedHosts();
         let { skills, gateway: consoleGateway, engagements, operator, workflows, triggers, github } = services;
         engine = services.engine;
         startupGateway = consoleGateway; startupOperator = operator; startupWorkflows = workflows; startupTriggers = triggers; startupGitHub = github;
@@ -1884,11 +1929,11 @@ export function registerDashboardCommand(program: Command): void {
         const setup = new TeamSetupService({ workspacePath: opts.engineWorkspace ?? process.cwd(), configPath: teamConfigPath, origin: () => origin, currentAuth: () => teamAuth,
           activate: async prepared => {
             if (consoleGateway.hasActiveTurns() || workflows.hasActiveWork()) throw new TeamAuthError("Finish active work before creating a team workspace.", 409);
-            const next = await buildServices(prepared.auth, prepared.dbPath, prepared.stateDir);
+            const nextHandshake = createBackendHandshake(prepared.dbPath, capabilities);
+            const next = await buildServices(prepared.auth, prepared.dbPath, prepared.stateDir, nextHandshake.serverInstanceId);
             let nextBackends: BackendConnectionRegistry | undefined;
             let nextUnregister: (() => void) | undefined;
             try {
-              const nextHandshake = createBackendHandshake(prepared.dbPath, capabilities);
               nextBackends = new BackendConnectionRegistry({ configPath: opts.backendsConfig, localHandshake: nextHandshake });
               const nextAccess = new FindingsAccessTokenStore({ workspaceId: prepared.workspaceId, stateDir: join(prepared.stateDir, "findings-api-access") });
               const nextRead = new FindingsReadApi({ workspaceId: prepared.workspaceId, dbPath: prepared.dbPath });
@@ -1897,10 +1942,13 @@ export function registerDashboardCommand(program: Command): void {
               if (consoleGateway.hasActiveTurns() || workflows.hasActiveWork()) throw new TeamAuthError("Finish active work before creating a team workspace.", 409);
               await services.dispose();
               for (const response of activeResponses) if (response !== setupResponse) response.end();
-              backends.dispose(); unregisterLocalEngine?.();
-              services = next; teamAuth = prepared.auth; teamDirectory = prepared.stateDir; opts.dbPath = prepared.dbPath; collaboration = nextCollaboration; localHandshake = nextHandshake; backends = nextBackends; unregisterLocalEngine = nextUnregister;
+              stopHostReconnect?.();
+              await localProviderSessions.dispose();
+              modelBackends.dispose(); backends.dispose(); unregisterLocalEngine?.();
+              services = next; teamAuth = prepared.auth; teamDirectory = prepared.stateDir; opts.dbPath = prepared.dbPath; collaboration = nextCollaboration; localHandshake = nextHandshake; backends = nextBackends; modelBackends = new BackendConnectionRegistry({ configPath: opts.backendsConfig, localHandshake: nextHandshake }); localProviderSessions = new LocalProviderSessions({ registry: modelRegistry }); unregisterLocalEngine = nextUnregister;
               ({ skills, gateway: consoleGateway, engagements, operator, workflows, triggers, github } = next); engine = next.engine; findingsAccess = nextAccess; findingsRead = nextRead;
               startupGateway = consoleGateway; startupOperator = operator; startupWorkflows = workflows; startupTriggers = triggers; startupGitHub = github;
+              stopHostReconnect = watchManagedHosts();
             } catch (cause) { nextBackends?.dispose(); nextUnregister?.(); await next.dispose().catch(() => {}); throw cause; }
           },
         });
@@ -1956,8 +2004,32 @@ export function registerDashboardCommand(program: Command): void {
               if (expectedEngineId !== undefined && expectedEngineId !== localHandshake.engineId) throw new WebRequestError("Request belongs to a different engine identity.", 409);
               const findingsAccessReply = await handleFindingsAccessTokenRequest(req, requestUrl, teamAuth, findingsAccess, () => readJson(req));
               if (findingsAccessReply) { json(res, findingsAccessReply.status, findingsAccessReply.data); return; }
-              const backendRoute = await handleBackendConnectionRequest(req, res, requestUrl, backends);
-              if (backendRoute.handled) return;
+              const remoteSessionRoute = /^\/api\/console\/remote-sessions(?:\/([^/]+)\/(configuration|status))?$/.exec(requestUrl.pathname);
+              if (remoteSessionRoute) {
+                const ownerId = engineRequest ? "engine" : teamAuth.resolveSession(req)?.userId ?? "local";
+                try {
+                  if (remoteSessionRoute[1] && remoteSessionRoute[2] === "status" && req.method === "GET") {
+                    const backendId = BackendDescriptorSchema.shape.id.parse(requestUrl.searchParams.get("backendId"));
+                    json(res, 200, await localProviderSessions.status(backendId, decodeURIComponent(remoteSessionRoute[1]), ownerId));
+                  } else if (!remoteSessionRoute[1] && req.method === "POST") {
+                    const body = z.object({ backendId: z.string().min(1).max(128), configuration: z.unknown() }).strict().parse(await readJson(req));
+                    json(res, 201, await localProviderSessions.create(body.backendId, body.configuration, ownerId));
+                  } else if (remoteSessionRoute[1] && remoteSessionRoute[2] === "configuration" && req.method === "PATCH") {
+                    const body = z.object({ backendId: z.string().min(1).max(128), runtime: z.unknown() }).strict().parse(await readJson(req));
+                    json(res, 200, await localProviderSessions.configure(body.backendId, decodeURIComponent(remoteSessionRoute[1]), body.runtime, ownerId));
+                  } else throw new WebRequestError("Method not allowed.", 405);
+                } catch (error) {
+                  if (error instanceof LocalProviderSessionError) { json(res, error.statusCode, { error: error.message }); return; }
+                  throw error;
+                }
+                return;
+              }
+              if (requestUrl.pathname === "/api/console/provider-relays" || requestUrl.pathname.startsWith("/api/console/provider-relays/")) {
+                if (!engineRequest) throw new WebRequestError("Provider relay transport requires an authenticated engine connection.", 403);
+                if (await handleRemoteProviderRelayRequest(req, res, requestUrl, services.remoteProviderRelays, () => readJson(req))) return;
+              }
+              const backendRoute = await handleBackendConnectionRequest(req, res, requestUrl, backends, (backendId, sessionId) => localProviderSessions.release(backendId, sessionId, engineRequest ? "engine" : teamAuth.resolveSession(req)?.userId ?? "local"));
+              if (backendRoute.handled) { modelBackends.reload(); return; }
               if (backendRoute.localPath) requestUrl = new URL(backendRoute.localPath, origin);
               const skillsRoute = requestUrl.pathname.match(/^\/api\/skills(?:\/(.*))?$/);
               if (skillsRoute) {
@@ -2019,6 +2091,13 @@ export function registerDashboardCommand(program: Command): void {
                   try { loadManagedWorker(backend.id); return [{ backendId: backend.id }]; } catch { return []; }
                 });
                 json(res, 200, { workers });
+                return;
+              }
+              if (requestUrl.pathname === "/api/control/repair-worker") {
+                if (req.method !== "POST") throw new WebRequestError("Use POST to reconnect a host.", 405);
+                const body = z.object({ backendId: BackendDescriptorSchema.shape.id }).strict().parse(await readJson(req));
+                const repaired = await repairManagedHost(body.backendId);
+                backends.reload(); json(res, 200, repaired);
                 return;
               }
               const workerStop = requestUrl.pathname.match(/^\/api\/workers\/([^/]+)\/stop$/);
@@ -2191,20 +2270,25 @@ export function registerDashboardCommand(program: Command): void {
         const shutdown = () => {
           if (shuttingDown) return;
           shuttingDown = true;
-          backends.dispose();
-          void Promise.resolve(engine?.dispose()).then(() => triggers.dispose()).then(() => consoleGateway.closeAll()).then(() => workflows.dispose()).finally(() => {
+          stopHostReconnect?.(); hostRepairAbort.abort();
+          services.remoteProviderRelays.dispose();
+          void localProviderSessions.dispose().then(() => { modelBackends.dispose(); backends.dispose(); return engine?.dispose(); }).then(() => triggers.dispose()).then(() => consoleGateway.closeAll()).then(() => workflows.dispose()).finally(() => {
             operator.dispose();
             github.dispose();
+            for (const response of activeResponses) response.end();
             server.close(() => {
               cleanupDashboardAssets();
               process.exit(0);
             });
+            server.closeAllConnections();
           });
         };
         process.once("SIGINT", shutdown);
         process.once("SIGTERM", shutdown);
       } catch (error) {
-        backends.dispose();
+        stopHostReconnect?.(); hostRepairAbort.abort();
+        await localProviderSessions.dispose();
+        modelBackends.dispose(); backends.dispose();
         await startupTriggers?.dispose().catch(() => {});
         await startupGateway?.closeAll().catch(() => {});
         await startupWorkflows?.dispose().catch(() => {});

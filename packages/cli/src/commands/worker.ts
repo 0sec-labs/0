@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { deployWorker, stopWorker, validateWorkerOptions } from "../worker-deploy.js";
+import { deployWorker, repairWorker, stopWorker, validateWorkerOptions } from "../worker-deploy.js";
 import { discoverSshHosts } from "../worker-hosts.js";
 
 export function registerWorkerCommand(program: Command): void {
@@ -30,6 +30,13 @@ export function registerWorkerCommand(program: Command): void {
         forwardProviderKey: opts.forwardProviderKey,
       });
       process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    });
+
+  worker
+    .command("repair <backend-id>")
+    .description("Reconnect a managed worker tunnel and start its retained engine when needed")
+    .action(async (backendId: string) => {
+      process.stdout.write(JSON.stringify(await repairWorker(backendId)) + "\n");
     });
 
   worker

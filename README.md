@@ -156,8 +156,24 @@ For AI agents: [product index](https://0.security/llms.txt) ·
 
 ## Development
 
-Install dependencies, run `npm run dev`, and open the printed browser address.
-See [CONTRIBUTING.md](https://github.com/0sec-labs/0/blob/main/.github/CONTRIBUTING.md).
+Install dependencies with `pnpm install`, run `npm run dev`, and open the printed
+browser address. The dashboard updates with hot reload.
+See [CONTRIBUTING.md](.github/CONTRIBUTING.md).
+
+For local binary analysis, run `npm run setup:0verse` once. It discovers a local
+Ghidra and Java installation, installs the Python analysis/MCP dependencies
+without removing existing engines, and verifies the decompiler. In this source
+checkout, web and terminal chats automatically connect the local 0verse MCP
+server. Nine tools cover scanning, triage, preflight, bug classes, findings,
+PoVs, reports, memory recall, and capability discovery. The capability catalog
+also lists research CLI commands with their MCP-supported or CLI-only status.
+Each chat has its own scan state. `0 binary ./target --mode scan --format ndjson` uses the same runtime.
+
+This does not install every platform executor or fuzzing environment. Inspect
+0verse's capability report before requesting confirmation; unavailable analysis
+is not a clean scan. An explicit `ZERO_MCP` configuration takes precedence, and
+`ZERO_0VERSE_MCP=0` disables automatic connection.
+
 
 ## Status and safety
 

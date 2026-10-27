@@ -36,7 +36,8 @@ import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
 import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import { Cells } from "./primitives.js";
 import { paneTitleColumns } from "./pane-layout.js";
-import { useSettings, updateSetting } from "./settings-store.js";
+import { updateSetting } from "./settings-store.js";
+import { useSettings } from "./use-settings.js";
 import { assessChordAssignment, type KeyLike } from "./keybindings.js";
 import {
   buildKeybindingEditorRows,

@@ -167,7 +167,7 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
   spawn_agents: {
     name: "spawn_agents",
     description:
-      "Delegate independent tasks CONCURRENTLY (bounded), with fresh context and separate turn budgets but the same role, scope, tools and scan-wide cost budget. Use for source subsystems or independent security leads. Returns each agent's findings and summary. Max 8 tasks per call; descendants share the audit's worker/depth bounds.",
+      "Delegate independent tasks CONCURRENTLY (bounded), with fresh context and separate turn budgets but the same role, scope, tools and scan-wide cost budget. Use for source subsystems or independent security leads. Returns each agent's findings and summary. Default maximum 1024 tasks per call (configurable with ZERO_SUBAGENT_MAX_FANOUT); queued tasks execute in parallel pools; descendants share the audit's worker/depth bounds.",
     parameters: {
       context: {
         type: "string",
@@ -177,7 +177,7 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
       tasks: {
         type: "array",
         description:
-          "The sub-agent tasks to run concurrently (1-8). Each item is an object { task, max_turns? }.",
+          "The sub-agent tasks to run in a bounded concurrent pool (default maximum 1024, configurable). Each item is an object { task, max_turns? }.",
         items: {
           type: "object",
           properties: {

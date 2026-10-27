@@ -4,6 +4,8 @@
 // source content digests; stale or tampered notes simply do not recall.
 
 import { HuntMemoryStore } from "../memory/hunt-memory.js";
+import { LearningStore, learningProjectId } from "@0/db";
+import { LearningService } from "../learning-service.js";
 import type { Finding } from "@0/shared";
 import type { BehavioralRepairResult, SecureEvent } from "./types.js";
 
@@ -23,12 +25,14 @@ export interface RepairLearning {
  * treated as evidence of a vulnerability or its absence.
  */
 export function recallRepairLearnings(repoRoot: string): string[] {
-  if (process.env["ZERO_DISABLE_HUNT_MEMORY"] === "1") return [];
+  if (/^(1|true)$/i.test(process.env["ZERO_DISABLE_HUNT_MEMORY"] ?? "")) return [];
   try {
-    const store = new HuntMemoryStore();
-    return store
-      .recallCodebase(repoRoot, 6)
-      .map((r) => `[prior learning, untrusted] ${r.title}: ${r.summary}`);
+    const memory = new HuntMemoryStore();
+    const learning = new LearningStore();
+    try {
+      return new LearningService(learning).recallCodebaseNotes(learningProjectId(repoRoot), repoRoot, memory, 6)
+        .map((r) => `[prior learning, untrusted] ${r.title}: ${r.summary}`);
+    } finally { learning.close(); }
   } catch {
     return []; // Memory is an optimization, never a failure mode.
   }
@@ -46,7 +50,7 @@ export function recordRepairLearning(
   finding: Finding,
   repair: BehavioralRepairResult,
 ): void {
-  if (process.env["ZERO_DISABLE_HUNT_MEMORY"] === "1") return;
+  if (/^(1|true)$/i.test(process.env["ZERO_DISABLE_HUNT_MEMORY"] ?? "")) return;
   const paths = (repair.changedFiles ?? []).slice(0, 8);
   if (paths.length === 0) return;
   try {

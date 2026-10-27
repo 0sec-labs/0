@@ -474,7 +474,7 @@ export interface SubagentLifecyclePayload extends SubagentTelemetry {
    * addressable, ready to be revived by a message (see `hub/park.ts`); it is not
    * terminal like `completed`/`failed`.
    */
-  status: "queued" | "running" | "completed" | "failed" | "parked";
+  status: "queued" | "running" | "completed" | "failed" | "parked" | "stopped";
   /** The task description passed to spawn_agent. */
   task: string;
   /** Effective max turns for the sub-agent (clamped to ≤25). */

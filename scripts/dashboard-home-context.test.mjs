@@ -1,0 +1,40 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {mkdtemp,rm} from "node:fs/promises";
+import {resolve} from "node:path";
+import {fileURLToPath,pathToFileURL} from "node:url";
+import {build} from "esbuild";
+const root=fileURLToPath(new URL("../",import.meta.url));
+test("home suggestions describe only the selected workspace's observed context",async()=>{
+  const directory=await mkdtemp("/tmp/0-home-context-");
+  try{
+    const output=resolve(directory,"fixture.mjs");
+    await build({entryPoints:[resolve(root,"packages/dashboard/src/console/home-context.ts")],outfile:output,bundle:true,platform:"node",format:"esm",logLevel:"silent"});
+    const {homeSuggestions,selectedWorkspacePath}=await import(pathToFileURL(output).href);
+    const snapshot={workspacePath:"/selected/project",session:{target:""},scopeEnforcement:{projectPath:"/wrong-global-cwd"},todos:null};
+    const project={path:"/selected/project",name:"project",git:{root:"/selected/project",branch:"main",dirty:true,error:null}};
+    const observed=homeSuggestions(snapshot,{requestedPath:"/selected/project",project});
+    assert.deepEqual(observed.map(item=>item.label),["Whitebox pentest","Review uncommitted changes","Plan a focused review"]);
+    assert.match(observed[0].hint,/project · main/);
+    assert.match(observed[0].prompt,/selected workspace "\/selected\/project"/);
+    assert.match(observed[1].prompt,/preserve the working tree/);
+    assert.doesNotMatch(JSON.stringify(observed),/wrong-global-cwd/);
+    const wrong=homeSuggestions(snapshot,{requestedPath:"/another/project",project});
+    assert.equal(wrong[0].label,"Explore this workspace","another folder's Git metadata cannot be reused");
+    const child={...snapshot,workspacePath:"/selected/project/subdirectory"};
+    const nested=homeSuggestions(child,{requestedPath:child.workspacePath,project:{...project,path:child.workspacePath}});
+    assert.equal(nested[0].label,"Whitebox pentest");
+    assert.ok(!nested.some(item=>item.label==="Review uncommitted changes"),"whole-repository dirtiness does not prove selected subdirectory changes");
+    const clean=homeSuggestions(snapshot,{requestedPath:snapshot.workspacePath,project:{...project,git:{...project.git,dirty:false}}});
+    assert.equal(clean[1].label,"Explain this project");
+    assert.match(clean[1].prompt,/where present/,"documentation and manifest existence are not invented");
+    const pending=homeSuggestions({...snapshot,todos:{todos:[{content:"Inspect parser boundaries",status:"in_progress"}]}},{requestedPath:snapshot.workspacePath,project});
+    assert.equal(pending[2].label,"Continue the pending task");
+    assert.match(pending[2].prompt,/Inspect parser boundaries/);
+    const finding=homeSuggestions({...snapshot,focusedFinding:{title:"Observed issue"}});
+    assert.equal(finding[0].label,"Review this finding");
+    assert.equal(selectedWorkspacePath({session:{target:""},scopeEnforcement:{projectPath:"/wrong-global-cwd"}}),undefined);
+    assert.equal(homeSuggestions({session:{target:""}})[0].label,"Whitebox pentest");
+    assert.equal(homeSuggestions({session:{target:"https://example.test"}})[0].label,"Review this target");
+  }finally{await rm(directory,{recursive:true,force:true});}
+});

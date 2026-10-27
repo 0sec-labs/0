@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import { realpathSync, statSync } from "node:fs";
 import { mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { join, sep } from "node:path";
@@ -11,6 +12,15 @@ import { prepareWorkbenchPlugins, GUEST_PLUGIN_ASSETS } from "./workbench-plugin
 import { encodeWorkbenchFrame, WorkbenchFrameReader, WORKBENCH_MAX_PENDING, guestWorkspacePath, hostWorkspacePath, mapWorkbenchTarget, mapWorkbenchCheckpoint, serializeWorkbenchConfig, validateWorkbenchSourceContext, validateWorkbenchSourceLesson } from "./workbench-console-protocol.js";
 import type { WorkbenchFrame, WorkbenchSourceContextArtifact, WorkbenchSourceLesson } from "./workbench-console-protocol.js";
 import { servicePluginSecretRedactor, validateGuestServicePluginConnections } from "./workbench-service-plugins.js";
+
+const sourceContextSchema = z.object({
+  status: z.enum(["not_requested", "supplied", "none"]),
+  lessons: z.array(z.object({
+    title: z.string().max(12000), summary: z.string().max(12000),
+    sourceLinks: z.array(z.object({ path: z.string().max(4096), hash: z.string().regex(/^sha256:[a-f0-9]{64}$/i) }).strict()).max(16),
+  }).strict()).max(12),
+}).strict().refine(value => JSON.stringify(value.lessons).length <= 12000 &&
+  (value.status === "supplied" ? value.lessons.length > 0 : value.lessons.length === 0));
 
 export interface WorkbenchExecutionSnapshot {
   backend: "smolvm"; status: "pending" | "ready" | "running" | "stopped" | "failed";
@@ -43,7 +53,7 @@ export interface WorkbenchConsoleSessionOptions extends WorkbenchControllerOptio
   readSourceLessons?: (context: { workspaceRoot: string; scopePath: string }) => WorkbenchSourceLesson[] | Promise<WorkbenchSourceLesson[]>;
 }
 const EVENTS = new Set(["onHarnessUpdate", "onAssistantDelta", "onReasoningDelta", "onToolStart", "onToolResult", "onUsage", "onNotice", "onCompaction"]);
-const DECISIONS = new Set(["requestScope", "requestLocalScope", "approveTool", "escalateScopedAudit", "askOperator", "historyList", "historyRead", "sourceLessons"]);
+const DECISIONS = new Set(["requestScope", "requestLocalScope", "approveTool", "escalateScopedAudit", "askOperator", "historyList", "historyRead", "sourceLessons", "workflowList", "workflowSave", "workflowEditorRead", "workflowInvoke", "skillRead", "skillCreate", "skillSave", "skillCopy", "skillEditorRead"]);
 function validateOptions(options: WorkbenchControllerOptions): void {
   if (options.provider.provider !== "chatgpt-codex" || (options.selection.provider && options.selection.provider !== "chatgpt-codex") || !options.provider.models.includes(options.selection.model)) throw new Error("Workbench requires an explicit host provider/model grant");
   for (const model of Object.values(options.selection.agentModels ?? {})) if (model !== "auto" && !options.provider.models.includes(model)) throw new Error("Workbench worker model is outside the host provider grant");
@@ -188,10 +198,15 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
   const config = { ...options.config, scanId: options.config.scanId ?? `console-${randomUUID()}` };
   const serial = serializeWorkbenchConfig(config, workspace);
   const callbacks = [...DECISIONS].filter(name => name === "historyList" || name === "historyRead" ? !!config.conversationHistory : typeof (config as unknown as Record<string, unknown>)[name] === "function");
+  if (config.workflowAuthoring) callbacks.push("workflowList", "workflowSave");
+  if (config.workflowAuthoring?.editor) callbacks.push("workflowEditorRead");
+  if (config.workflowLifecycle) callbacks.push("workflowInvoke");
+  if (config.skillAuthoring) callbacks.push("skillRead", "skillCreate", "skillSave", "skillCopy");
+  if (config.skillEditor) callbacks.push("skillEditorRead");
   const sourceLearningEnabled = config.codebaseLearning === true && config.role !== "verify" && !/^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "");
   if (sourceLearningEnabled && options.readSourceLessons) callbacks.push("sourceLessons");
   const scopeEnforcement = getScopeEnforcementState(workspace, options.pluginHomeDir);
-  const controller = new Controller({ ...options, workbench: { ...options.workbench, workspaceRoot: workspace } }, { config: serial, callbacks, scopeEnforcement }, false);
+  const controller = new Controller({ ...options, workbench: { ...options.workbench, workspaceRoot: workspace } }, { config: serial, callbacks, scopeEnforcement, workflowEditorId: config.workflowAuthoring?.editor?.id }, false);
   let messages = structuredClone(config.initialMessages ?? config.initialCheckpoint?.messages ?? []);
   let checkpoint = config.initialCheckpoint;
   let target = config.target ?? ""; let scope = config.scope; let localScopePath = config.initialCheckpoint?.localScopePath ?? undefined;
@@ -214,10 +229,33 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
   const flushSourceContext = async () => { try { await sourcePersistence; } catch { throw new Error("Workbench source context persistence failed"); } };
   let autonomyMode = config.autonomyMode ?? "standard";
   let systemPrompt = config.systemPrompt ?? ""; let tools = config.tools ?? [];
+  let sourceContext: ConsoleSession["sourceContext"];
   let render: ConsoleRenderCallbacks | undefined; let active = false; let findings: Finding[] = []; let engineWorkStarted = false; let lastOutcome: ConsoleTurnOutcome | undefined; let cleanupPromise: Promise<void> | undefined;
   const deferred: Promise<unknown>[] = [];
   const queue = (op: string, value?: unknown) => { if (!controller.done) { serial[op === "autonomy" ? "autonomyMode" : op] = value; return; } const pending = controller.request(op, { value }); deferred.push(pending); void pending.catch(() => {}); };
   controller.decision = async (name, args) => {
+    if (!callbacks.includes(name)) throw new Error("Host callback is not granted");
+    if (name === "skillEditorRead") return config.skillEditor!.read();
+    if (["skillRead", "skillCreate", "skillSave", "skillCopy"].includes(name)) {
+      const adapter = typeof config.skillAuthoring === "function" ? config.skillAuthoring() : config.skillAuthoring;
+      if (!adapter || typeof args[0] !== "string") throw new Error("Invalid skill callback");
+      if (name === "skillRead" && args.length === 1) return adapter.read(args[0]);
+      if (name === "skillCreate" && args.length === 1) return adapter.create(args[0]);
+      if ((name === "skillSave" || name === "skillCopy") && args.length === 2 && args[1] && typeof args[1] === "object" && !Array.isArray(args[1])) {
+        return adapter[name === "skillSave" ? "update" : "copy"](args[0], args[1] as { content: string; expectedRevision: string });
+      }
+      throw new Error("Invalid skill callback");
+    }
+    if (name === "workflowList") return config.workflowAuthoring!.list();
+    if (name === "workflowEditorRead") return config.workflowAuthoring!.editor!.read();
+    if (name === "workflowSave") {
+      if (args.length !== 1) throw new Error("Invalid workflow save callback");
+      return config.workflowAuthoring!.save(args[0] as Parameters<NonNullable<ConsoleSessionConfig["workflowAuthoring"]>["save"]>[0]);
+    }
+    if (name === "workflowInvoke") {
+      if (args.length !== 2 || typeof args[0] !== "string" || !args[1] || typeof args[1] !== "object" || Array.isArray(args[1])) throw new Error("Invalid workflow lifecycle callback");
+      return config.workflowLifecycle!.invoke(args[0], args[1] as Record<string, unknown>);
+    }
     if (name === "sourceLessons") {
       if (!sourceLearningEnabled || !sourceScopePath || !options.readSourceLessons || /^(1|true)$/i.test(process.env.ZERO_DISABLE_HUNT_MEMORY ?? "") || args.length !== 1 || typeof args[0] !== "string") return [];
       const requested = authorizedSourceRoot(args[0]);
@@ -271,6 +309,8 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
     } else if (frame.type === "state") {
       const state = frame.snapshot as Record<string, unknown>;
       if (!state || state.scanId !== config.scanId || !Array.isArray(state.messages) || state.messages.length > 10000 || !Array.isArray(state.tools)) throw new Error("Invalid guest session state");
+      const parsedSourceContext = sourceContextSchema.safeParse(state.sourceContext);
+      sourceContext = parsedSourceContext.success ? parsedSourceContext.data : undefined;
       messages = state.messages as typeof messages; systemPrompt = String(state.systemPrompt ?? ""); tools = state.tools as typeof tools;
       target = mapWorkbenchTarget(String(state.target ?? ""), workspace, true);
       scope = state.scope ? new ScopePolicy(state.scope as ConstructorParameters<typeof ScopePolicy>[0]) : undefined;
@@ -286,7 +326,7 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
     } else throw new Error("Unsupported guest controller event");
   };
   return {
-    scanId: config.scanId, ready: Promise.resolve(), get execution() { return controller.execution; }, get systemPrompt() { return systemPrompt; }, get tools() { return tools; }, get messages() { return messages; },
+    scanId: config.scanId, ready: Promise.resolve(), get execution() { return controller.execution; }, get systemPrompt() { return systemPrompt; }, get tools() { return tools; }, get messages() { return messages; }, get sourceContext() { return sourceContext ? structuredClone(sourceContext) : undefined; },
     get target() { return target; }, get scope() { return scope; }, get localScopePath() { return localScopePath; }, get autonomyMode() { return autonomyMode; }, scopeEnforcement,
     setAutonomyMode(mode) {
       autonomyMode = mode;
@@ -299,7 +339,7 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
     configureWorkspace(path) { if (realpathSync(path) !== workspace) throw new Error("The SmolVM workspace grant is fixed for this chat; start a new chat to change it"); },
     reconfigureRuntime(selection) { if (selection.env !== undefined || (selection.provider && selection.provider !== "chatgpt-codex") || (selection.model && !options.provider.models.includes(selection.model)) || Object.values(selection.agentModels ?? {}).some(model => model !== "auto" && !options.provider.models.includes(model))) throw new Error("Runtime selection is outside workbench provider grant");
       Object.assign(options.selection, selection); if (controller.done) queue("reconfigure", selection); },
-    clearConversation() { messages = []; checkpoint = undefined; if (!controller.done) { serial.initialMessages = []; delete serial.initialCheckpoint; } else queue("clear"); },
+    clearConversation() { messages = []; checkpoint = undefined; sourceContext = undefined; if (!controller.done) { serial.initialMessages = []; delete serial.initialCheckpoint; } else queue("clear"); },
     async send(text, callbacks, sendOptions) {
       if (active) throw new Error("Workbench turn already active"); active = true;
       let partialText = "";
@@ -316,7 +356,7 @@ export function createWorkbenchConsoleSession(options: WorkbenchConsoleSessionOp
       const cancel = () => { if (controller.execution.status === "pending") { controller.abort.abort(new Error("Operator cancelled workbench startup")); return; } try { controller.write({ type: "cancel" }); } catch { /* VM may be stopping. */ } cancelTimer ??= setTimeout(() => controller.abort.abort(new Error("Operator cancelled workbench turn")), 2000); };
       sendOptions?.signal?.addEventListener("abort", cancel, { once: true });
       try { if (sendOptions?.signal?.aborted) cancel(); await Promise.all(deferred.splice(0)); await controller.start(); sendOptions?.signal?.throwIfAborted(); controller.status("running"); engineWorkStarted = true;
-        lastOutcome = await controller.request("send", { text, generateTitle: sendOptions?.generateTitle }) as Awaited<ReturnType<ConsoleSession["send"]>>; await flushSourceContext(); return lastOutcome;
+        lastOutcome = await controller.request("send", { text, generateTitle: sendOptions?.generateTitle, images: sendOptions?.images }) as Awaited<ReturnType<ConsoleSession["send"]>>; await flushSourceContext(); return lastOutcome;
       } catch (error) {
         if (sendOptions?.signal?.aborted) {
           const result = await controller.done;
