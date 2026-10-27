@@ -1,8 +1,9 @@
 # Issue 121: experimental development-summary ablation controller
 
-This is experimental, opt-in controller infrastructure. It does not qualify a
-model-backed ablation or close issue #121. Committed artifacts use only
-deterministic controls and remain inconclusive. The earlier artifact based on
+This is experimental, opt-in controller infrastructure. #121 is deferred/not
+planned as an active experiment and consolidated as a conditional hypothesis in
+#120. Committed deterministic controls do not qualify a model-backed ablation and
+remain inconclusive. The earlier artifact based on
 conflicting lodash source labels is superseded by the corrected #120 corpus.
 
 This focused controller depends on the #120 study infrastructure. It executes the
@@ -76,6 +77,8 @@ proposal tokens and end-to-end latency. Provider-metered tariff estimates remain
 separate from invoice charges and unpriced local compute. Final case-level
 results remain in the controller output, never proposer feedback or archives.
 Do not call the deterministic null result a measured absence of model benefit.
-The research efficacy acceptance remains open until the qualified finite paid
-ablation resolves benefit or records an adequately supported negative/inconclusive
-result under the declared protocol.
+No model-backed efficacy acceptance has been met. Reopen this optional experiment
+only after #120 establishes a useful baseline, an observed feedback bottleneck
+makes the hypothesis relevant, and a separate finite comparison is prioritized.
+The current null controls do not prove that model-backed summaries are useful or
+useless. Retain current feedback when a later capped result is negative or inconclusive.

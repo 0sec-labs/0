@@ -1,8 +1,9 @@
 # Bounded security evolution studies
 
 Status: implementation and deterministic fixture qualification only. No paid
-security pilot has been run by this change. Issues #120, #121 and #122 require
-measured security outcomes; none is evidence of an optimizer benefit today.
+security pilot has been run by this change. #120 tracks one finite product
+go/no-go pilot. #121 and #122 are deferred hypotheses, with their bounded
+controllers retained for possible later evaluation; no optimizer benefit is established.
 Production promotion rules, scan prompts, proposal width and scan call counts
 remain unchanged. These modules have no imports from ordinary scan paths.
 
@@ -55,7 +56,7 @@ is justified only after a positive, adequately supported per-scan saving.
 for three complete candidates. These are execution counts, not measured dollars.
 No paid provider is invoked by the deterministic unit tests.
 
-## Development feedback ablation (#121)
+## Deferred development feedback ablation (#121)
 
 `packages/core/src/improvement/development-summary.ts` supplies an explicit offline
 `DevelopmentSummaryCache`. It accepts existing `EvolutionAttempt` observations;
@@ -82,7 +83,7 @@ quality, false alarms, retention, proposal tokens, all search costs and deployed
 artifact latency. The summary is not wired into production prompts. A negative or
 unresolved outcome keeps existing feedback.
 
-## Proposal diversity ablation (#122)
+## Deferred proposal diversity ablation (#122)
 
 Execution remains gated on the qualified basic pilot. The standalone
 `proposal-diversity-study.ts` implements deterministic development shortlisting
@@ -113,4 +114,7 @@ Remaining evidence: actual labelled corpus and immutable runtime identities,
 provider-enforced billing caps and reconciled charges, preregistered stochastic
 protocol, finite supervised paid runs, retention/exposure accounting, untouched
 independent final validation, instrumentation overhead and deployed latency. Until
-that evidence exists, the research issues remain open and all ablations disabled.
+that evidence exists, #120 remains the active qualification decision and all
+ablations stay disabled. A finite negative or inconclusive decision can close the
+pilot while retaining the baseline. Reopen optional ablations only after a useful
+baseline and an observed bottleneck justify a separately approved comparison.
