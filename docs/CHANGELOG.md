@@ -12,6 +12,33 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-10-27
+
+### Added
+
+- Shared UI primitives, motion, skeleton loaders, and consistent composer controls.
+- Side-by-side chat docking with drag previews and browser previews.
+- Reviewed import and export of source-grounded codebase memories.
+- Improved local and remote provider relay recovery and browser evidence support.
+
+### Changed
+
+- Make the browser console the default interface; retain headless CLI and MCP workflows.
+- Switch chats immediately in the current pane, keep history order stable, and show loading skeletons.
+- Combine model and reasoning controls, show context usage as a ring, and simplify chat details.
+- Present tool activity with compact summaries, category icons, and source chips.
+
+### Fixed
+
+- Clear drag overlays and promote the surviving chat when closing a split pane.
+- Suppress routine cancellation notices and preserve the interface during reconnects.
+- Include cached token usage in estimated API costs.
+- Preserve validated Responses terminal events and timeout authority across provider transports.
+- Harden evidence receipts, local model routing, and evolution study authority boundaries.
+- Update vulnerable dependency families to patched releases.
+- Separate host names from connection status in the host picker.
+
+
 ## [0.24.1] - 2026-10-13
 
 ### Fixed

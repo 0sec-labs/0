@@ -1,0 +1,19 @@
+@property --overflow-leading-fade { syntax:"<length>"; inherits:false; initial-value:0px; }
+@keyframes overflow-text-edges { 0%,100% { --overflow-leading-fade:0px; } 8%,92% { --overflow-leading-fade:6px; } }
+.ui-overflow-text { display:block; min-width:0; overflow:hidden; white-space:nowrap; }
+.ui-overflow-text-content { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+@keyframes overflow-text-pan {
+  0% { transform:translateX(0); }
+  45%,55% { transform:translateX(var(--overflow-distance)); }
+  100% { transform:translateX(0); }
+}
+@media (hover:hover) and (prefers-reduced-motion:no-preference) {
+  .group:hover .ui-overflow-text[data-overflowing] { mask-image:linear-gradient(to right,transparent,#000 var(--overflow-leading-fade,0px),#000 calc(100% - 10px),transparent); animation:overflow-text-edges var(--overflow-duration) linear 350ms infinite; }
+  .group:hover .ui-overflow-text[data-overflowing] .ui-overflow-text-content { width:max-content; overflow:visible; text-overflow:clip; animation:overflow-text-pan var(--overflow-duration) linear 350ms infinite; }
+}
+@media (prefers-reduced-motion:no-preference) {
+  .group:has(:focus-visible) .ui-overflow-text[data-overflowing] { mask-image:linear-gradient(to right,transparent,#000 var(--overflow-leading-fade,0px),#000 calc(100% - 10px),transparent); animation:overflow-text-edges var(--overflow-duration) linear 350ms infinite; }
+  .group:has(:focus-visible) .ui-overflow-text[data-overflowing] .ui-overflow-text-content { width:max-content; overflow:visible; text-overflow:clip; animation:overflow-text-pan var(--overflow-duration) linear 350ms infinite; }
+}
+[data-reduced-motion="true"] .ui-overflow-text[data-overflowing] { mask-image:none; animation:none; }
+[data-reduced-motion="true"] .ui-overflow-text[data-overflowing] .ui-overflow-text-content { width:auto; overflow:hidden; text-overflow:ellipsis; animation:none; }

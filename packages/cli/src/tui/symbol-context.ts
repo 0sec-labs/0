@@ -19,7 +19,7 @@
 
 import { getSymbols, type SymbolPreset, type SymbolTable } from "./symbols.js";
 import type { TuiSettings } from "./settings.js";
-import { useSettings } from "./settings-store.js";
+import { useSettings } from "./use-settings.js";
 
 export type { SymbolTable, SymbolKey, SymbolPreset } from "./symbols.js";
 

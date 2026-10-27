@@ -339,17 +339,17 @@ systems you do not own or have permission to assess.
 
 ## Connect external MCP tools to 0
 
-This is the reverse direction: `0 console` and the OpenTUI connect external
+This is the reverse direction: The browser console and headless chat commands connect external
 stdio or Streamable HTTP servers from the **JSON array** in `ZERO_MCP`. It is not a
 `{"mcpServers": ...}` object or a config-file path:
 
 ```bash
 env 'ZERO_MCP=[{"id":"workspace","command":"node","args":["/absolute/path/to/mcp-server.js"],"cwd":"/absolute/path/to/workspace"}]' \
-  0 console
+  0 web
 ```
 
 Replace the command with an installed MCP server you trust; the same environment
-works with `0 tui`. Local entries accept `id`, `command`, and optional `args`,
+works with `0 web`. Local entries accept `id`, `command`, and optional `args`,
 `env` (string values), and `cwd`. For a Python stdio server, use `command:
 "python3"` and its script path in `args`; no Python-specific 0 plugin API is
 required. Provision server dependencies yourself.
@@ -389,7 +389,7 @@ export ZERO_MCP="$(node --input-type=module -e '
     headers: { Authorization: "ApiKey " + ELASTIC_API_KEY }
   }]));
 ')"
-0 console
+0 web
 ```
 
 The tools are discovered from your Elastic deployment; Zero does not hardcode a
@@ -399,7 +399,7 @@ for account setup. You can also connect Elastic from **Plugins** in the web UI.
 
 **Sources:** [`mcp-host.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/agent/mcp-host.ts),
 [`console.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/console.ts),
-[`tui/run.tsx`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/run.tsx).
+[`console-gateway.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/web/console-gateway.ts).
 
 ## Service plugins
 
@@ -443,11 +443,10 @@ the guest receives the updated adapters. Existing chats keep their original tool
 ## Native workers and multiple models
 
 Native sessions can use `spawn_agent` for one focused task or `spawn_agents`
-for a batch of up to eight. Batches default to four concurrent children;
-`env ZERO_SUBAGENT_CONCURRENCY=2 0 tui` lowers that concurrency. Each task
+for a configurable batch. Team capacity and concurrent execution are separate;
+`env ZERO_SUBAGENT_CONCURRENCY=2 0 web` lowers that concurrency. Each task
 gets fresh context and its own turn budget, while scope, rate limits and the
-parent's shared cost ceiling remain in force. Children do not receive recursive
-spawn tools. Findings merge back through the parent; a child failure is not
+parent's shared cost ceiling remain in force. Children may delegate within the audit's shared worker/depth limits. Findings merge back through the parent; a child failure is not
 silently a successful empty result.
 
 Use the [role model picker](/configuration/#multi-model-role-routing) to assign
@@ -729,7 +728,7 @@ To provision the default guest and start a session:
 
 ```bash
 docker build -f scripts/docker/Dockerfile --target toolbox -t 0-toolbox:local .
-env ZERO_PLUGIN_BACKEND=docker ZERO_PLUGIN_IMAGE=0-toolbox:local 0 tui
+env ZERO_PLUGIN_BACKEND=docker ZERO_PLUGIN_IMAGE=0-toolbox:local 0 web
 ```
 
 Self-extension is enabled by default for non-verifier sessions; an explicit
@@ -738,7 +737,7 @@ enablement does not install Docker or pull the guest image. Ask the agent to
 submit an executable through `self_extend`, inspect `list` for the retained
 version, and call its declared tool by name. There is no `0 plugin submit`
 command for this path. For measured evolution, start the session with
-`env ZERO_PLUGIN_EVOLUTION_CONFIG=/absolute/path/to/evolution.json 0 tui`
+`env ZERO_PLUGIN_EVOLUTION_CONFIG=/absolute/path/to/evolution.json 0 web`
 and use the `default` profile. Source-access consent and promotion settings in
 that operator-owned config are separate from self-extension enablement.
 
@@ -851,8 +850,8 @@ code: it has no installed entry point or child process. It is disabled until
 `0 plugin enable scope` explicitly activates it for the project. Read
 [Scope](/scope/) for the boundaries it controls.
 
-Use `0 plugin enable <id>` from the intended project, then launch `0 tui`
-there for agent access. The OpenTUI pins the approved plugin host for each chat;
+Use `0 plugin enable <id>` from the intended project, then launch `0 web`
+there for agent access. The browser console pins the approved plugin host for each chat;
 marketplace changes prepare future chats rather than replacing a live chat's
 tools. Start a new chat after changing enablement. Disabling a plugin is not a
 kill switch for already leased hosts: end their sessions to stop that code.

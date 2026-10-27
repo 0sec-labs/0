@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Command } from "commander";
+import { resolve } from "node:path";
 import {
   registerBinaryCommand,
   resolveBinaryRun,
@@ -74,7 +75,7 @@ describe("binary command", () => {
     expect(resolution.overseDir).toBe("/repo/0verse");
     expect(resolution.argv).toEqual([
       "scan",
-      "./target",
+      resolve("./target"),
       "--format",
       "ndjson",
       "--backend",

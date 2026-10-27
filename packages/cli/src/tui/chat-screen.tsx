@@ -56,12 +56,8 @@ import {
   type McpHost,
 } from "@0/core";
 import { decodePasteBytes, type ScrollBoxRenderable } from "@opentui/core";
-import {
-  useSettings,
-  updateSetting,
-  previewSetting,
-  reloadSettings,
-} from "./settings-store.js";
+import { updateSetting, previewSetting, reloadSettings } from "./settings-store.js";
+import { useSettings } from "./use-settings.js";
 import { createPreferredConsoleRuntime, saveAppliedModelPreference } from "./model-preference.js";
 import { useTheme, type Theme } from "./theme-context.js";
 import { modelProvider } from "@0/shared";

@@ -20,6 +20,8 @@ export type {
   ConsoleConversationHistory,
   ConsoleEngagementSelection,
   ConsoleSession,
+  ConsoleSourceContext,
+  ConsoleSourceLesson,
   ConsoleSessionConfig,
   ConsoleRenderCallbacks,
   ConsoleCompactionEvent,

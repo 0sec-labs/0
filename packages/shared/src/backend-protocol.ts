@@ -3,7 +3,7 @@ import { z } from "zod";
 /** Version of 0's frontend/engine HTTP and event contract, independent of model APIs. */
 export const BACKEND_PROTOCOL_VERSION = 1 as const;
 export const BACKEND_CAPABILITIES = [
-  "sessions", "workflows", "workflow-engine", "schedules", "approvals", "events", "workspaces", "artifacts", "model-connections", "process-controls", "operator-services", "learning",
+  "sessions", "workflows", "workflow-engine", "schedules", "approvals", "events", "workspaces", "artifacts", "model-connections", "provider-relay", "process-controls", "operator-services", "learning",
 ] as const;
 export type BackendCapability = typeof BACKEND_CAPABILITIES[number];
 export const BackendCapabilitySchema = z.enum(BACKEND_CAPABILITIES);
@@ -104,6 +104,7 @@ export function backendCapabilitiesForApiPath(pathname: string): BackendCapabili
   const capabilities = new Set<BackendCapability>();
   const add = (capability: BackendCapability) => { capabilities.add(capability); };
   if (pathname === "/api/backend/handshake") return [];
+  if (pathname === "/api/console/provider-relays" || pathname.startsWith("/api/console/provider-relays/")) return ["provider-relay"];
   if (pathname === "/api/workflow-engine/call") return ["workflow-engine"];
   if (parts[0] === "control" && parts.length === 2 && ["recover-stale-workers", "prune-stopped-workers", "reset-database", "start-daemon", "stop-daemon", "launch-run"].includes(parts[1]!)) return ["process-controls"];
   if (pathname === "/api/dashboard" || parts[0] === "scans" || parts[0] === "finding-family" || pathname === "/api/findings/export") add("artifacts");

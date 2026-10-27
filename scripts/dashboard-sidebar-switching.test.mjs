@@ -1,0 +1,74 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { build } from "esbuild";
+import { chromium } from "playwright";
+const dashboard = fileURLToPath(new URL("../packages/dashboard/", import.meta.url));
+
+test("sidebar switches without document reloads and late resumes cannot hijack selection", async () => {
+  const directory = await mkdtemp(resolve(dashboard, ".sidebar-switch-test-"));
+  let server, browser;
+  try {
+    const stub = resolve(directory, "stub.tsx");
+    await writeFile(stub, `import {useState} from "react";
+      const host={id:"local",name:"My Mac",status:"connected",platform:{os:"darwin"}};
+      export const useBackendSelection=()=>({backendId:"local",backends:[host]});
+      export const useTeamAccess=()=>({enabled:false});
+      export const usePersistentState=(_key,value)=>useState(value);
+      export const CHAT_DRAG_MIME="application/x-chat";
+      export const consoleSnapshotKey=(host,id)=>["console-snapshot",host,id];
+      export const createChatOnExecutionHost=async()=>({id:"created"});
+      const live=["alpha","beta"].map(id=>({id,title:id,target:"",status:"ready",messageCount:2,updatedAt:"2026-10-25T10:00:00Z",createdAt:"2026-10-25T10:00:00Z"}));
+      const saved=[{id:"saved",summary:"Saved chat",messageCount:2,savedAt:1},{id:"saved-second",summary:"Second saved chat",messageCount:2,savedAt:2},{id:"saved-cancel",summary:"Cancelled opening",messageCount:2,savedAt:3}];
+      const api={client:{backendId:"local",dispose(){}},listConsoleSessions:()=>window.blockHistory?new Promise(()=>{}):Promise.resolve(live),listSavedConsoleSessions:()=>Promise.resolve(saved),getConsoleSnapshot:async id=>({session:live.find(s=>s.id===id)}),resumeConsoleSession:(id)=>new Promise(resolve=>{window.resolveResume=()=>{window.blockHistory=true;resolve({...live[0],id:"resumed-"+id,title:"Resumed "+id,savedId:id});};})};
+      export const useBackendApi=()=>api;
+      export const createBackendApi=()=>api;
+      export const localControlFetch=()=>Promise.resolve(Response.json({}));
+    `);
+    const bundle = await build({ stdin: { contents: `
+      import React,{useState,useRef} from "react"; import {createRoot} from "react-dom/client";
+      import {BrowserRouter,useLocation} from "react-router-dom";
+      import {QueryClient,QueryClientProvider} from "@tanstack/react-query";
+      import {HostSidebarChatHistory} from "./src/components/host-sidebar-chat-history";
+      import {ConversationSkeleton} from "./src/console/loading-state";
+      function App(){const location=useLocation();const[pending,setPending]=useState(null);const current=useRef(null);const select=value=>{current.current=value;setPending(value);};return <><HostSidebarChatHistory onPendingChatChange={select} isPendingChatCurrent={value=>current.current?.id===value.id&&current.current?.backendId===value.backendId}/><button onClick={()=>select(null)}>Cancel opening</button><output id="route">{location.pathname}</output><h1>{pending?.title??location.pathname}</h1>{pending?<section data-pending-chat={pending.id}><ConversationSkeleton/></section>:<div id="transcript">Visible transcript: {location.pathname}</div>}</>;}
+      createRoot(document.getElementById("root")).render(<BrowserRouter><QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><App/></QueryClientProvider></BrowserRouter>);
+    `, resolveDir: dashboard, loader: "tsx" }, outfile: resolve(directory,"fixture.js"), write:false, bundle:true, platform:"browser",format:"esm",jsx:"automatic", loader:{".css":"empty",".svg":"dataurl"},alias:{"@/api":stub,"@/backend-context":stub,"@/components/team-access":stub,"@/lib/use-persistent-state":stub,"@/console/use-console-workspace":stub,"@/console/dock-workspace":stub,"@/console/model-source":stub,"@":resolve(dashboard,"src")},logLevel:"silent" });
+    let documents = 0;
+    server = createServer((request,response)=>{if(request.url==="/fixture.js"){response.writeHead(200,{"Content-Type":"application/javascript"});response.end(bundle.outputFiles[0].contents);}else{documents++;response.writeHead(200,{"Content-Type":"text/html"});response.end('<div id="root"></div><script type="module" src="/fixture.js"></script>');}});
+    await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
+    browser=await chromium.launch({headless:true});const page=await browser.newPage();
+    const errors=[];page.on("pageerror",error=>errors.push(error.message));
+    await page.goto(`http://127.0.0.1:${server.address().port}/`);
+    await page.getByRole("link",{name:"alpha",exact:true}).click();
+    await page.waitForFunction(()=>document.querySelector("#route").textContent==="/console/alpha");
+    await page.getByRole("link",{name:"Saved chat",exact:true}).click();
+    assert.equal(await page.locator("h1").innerText(),"Saved chat","title changes before the stalled resume finishes");
+    assert.equal(await page.locator("[data-pending-chat=saved]").count(),1,"selected chat gets a skeleton before network completion");
+    assert.equal(await page.locator("#transcript").count(),0,"old conversation is hidden immediately");
+    await page.getByRole("link",{name:"beta",exact:true}).click();
+    assert.equal(await page.locator("[data-pending-chat]").count(),0,"newer live selection clears the old pending skeleton");
+    await page.evaluate(()=>window.resolveResume());
+    await page.waitForFunction(()=>document.querySelector("#route").textContent==="/console/beta");
+    assert.equal(documents,1,"in-app navigation keeps the document and sidebar mounted");
+    await page.getByRole("link",{name:"Second saved chat",exact:true}).click();
+    assert.equal(await page.locator("h1").innerText(),"Second saved chat");
+    assert.equal(await page.locator("[data-pending-chat=saved-second]").count(),1);
+    await page.evaluate(()=>window.resolveResume());
+    await page.waitForFunction(()=>document.querySelector("#route").textContent==="/console/resumed-saved-second");
+    assert.equal(await page.locator("[data-pending-chat]").count(),0,"resolved chat replaces its pending skeleton");
+    assert.equal(documents,1,"opening a saved chat does not wait for the deliberately stalled history refresh");
+    await page.getByRole("link",{name:"alpha",exact:true}).click();
+    await page.waitForFunction(()=>document.querySelector("#route").textContent==="/console/alpha");
+    assert.equal(await page.getByRole("dialog").count(),0,"selecting a title never opens delete controls");
+    await page.getByRole("link",{name:"Cancelled opening",exact:true}).click();
+    await page.getByRole("button",{name:"Cancel opening",exact:true}).click();
+    await page.evaluate(()=>window.resolveResume());
+    await page.waitForFunction(()=>document.querySelector("#route").textContent==="/console/alpha");
+    assert.equal(await page.locator("[data-pending-chat]").count(),0,"pane changes can retire a pending selection without a stale resume navigating back");
+    assert.deepEqual(errors,[]);
+  } finally {await browser?.close();if(server)await new Promise(resolve=>server.close(resolve));await rm(directory,{recursive:true,force:true});}
+});

@@ -263,14 +263,15 @@ def test_fleet_records_become_analogical_links(tmp_path) -> None:  # type: ignor
 def test_mcp_recall_tool_opt_in(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.delenv("ZEROVERSE_FLYWHEEL", raising=False)
     assert "recall_similar" not in {t["name"] for t in mcp.active_tools()}
-    # the base four are always present and unchanged.
-    assert {t["name"] for t in mcp.TOOLS} == {
+    # The typed base tools are always available; recall remains opt-in.
+    assert {t["name"] for t in mcp.TOOLS} >= {
         "scan_binary", "list_findings", "get_pov", "get_report"}
     monkeypatch.setenv("ZEROVERSE_FLYWHEEL", "1")
     assert "recall_similar" in {t["name"] for t in mcp.active_tools()}
 
 
-def test_mcp_recall_dispatch_returns_memory_and_cost_route() -> None:
+def test_mcp_recall_dispatch_returns_memory_and_cost_route(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("ZEROVERSE_FLYWHEEL", "1")
     eng = mcp.Engine()
     out = json.loads(mcp.dispatch(eng, "recall_similar", {
         "format": "ELF", "arch": "x86-64", "bug_class": "CWE-78",

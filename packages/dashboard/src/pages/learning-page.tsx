@@ -1,5 +1,6 @@
-import { PageHeader } from "@/components/page-header";
+import { PageHeader, PageContent } from "@/components/page-header";
+import { MemoryPortability } from "@/components/memory-portability";
 import { LearningPanel } from "@/components/learning-panel";
 export function LearningPage() {
-  return <div className="w-full min-w-0 space-y-6"><PageHeader title="Learning" summary="What 0 has learned for future investigations." /><LearningPanel /></div>;
+  return <PageContent><PageHeader title="Memory" summary="Saved codebase lessons for future investigations. Current lessons can be reused when their cited files still match." actions={<MemoryPortability />} /><LearningPanel /></PageContent>;
 }

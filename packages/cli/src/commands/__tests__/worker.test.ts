@@ -2,10 +2,10 @@ import { Command } from "commander";
 import { describe, expect, it, vi } from "vitest";
 import { beforeEach } from "vitest";
 
-const mocks = vi.hoisted(() => ({ deployWorker: vi.fn() }));
+const mocks = vi.hoisted(() => ({ deployWorker: vi.fn(), repairWorker: vi.fn() }));
 vi.mock("../../worker-deploy.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../worker-deploy.js")>();
-  return { ...actual, deployWorker: mocks.deployWorker };
+  return { ...actual, deployWorker: mocks.deployWorker, repairWorker: mocks.repairWorker };
 });
 const { registerWorkerCommand } = await import("../worker.js");
 
@@ -16,7 +16,7 @@ async function runCli(argv: string[]): Promise<void> {
   await program.parseAsync(["node", "0", ...argv]);
 }
 
-beforeEach(() => mocks.deployWorker.mockReset());
+beforeEach(() => { mocks.deployWorker.mockReset(); mocks.repairWorker.mockReset(); });
 describe("worker deploy command", () => {
   it("deploys to an SSH host and prints the backend result", async () => {
     mocks.deployWorker.mockResolvedValue({ backendId: "ssh-worker", engine: "http://127.0.0.1:8100/", target: "/tmp/zero-engine/work/target", backendsConfig: "/x/backends.json", tokenEnv: "ZERO_SSH_WORKER_TOKEN" });
@@ -36,5 +36,29 @@ describe("worker deploy command", () => {
     await expect(runCli(["worker", "deploy", "--ssh", "-oProxyCommand=touch /tmp/pwned"])).rejects.toThrow(/--ssh/);
     await expect(runCli(["worker", "deploy", "--ssh", "ops@build-1", "--target-git", "https://x.test/r.git'; rm -rf / #"])).rejects.toThrow(/--target-git/);
     expect(mocks.deployWorker).not.toHaveBeenCalled();
+  });
+});
+
+describe("worker repair command", () => {
+  it("repairs only the requested managed ID and prints a machine-readable result", async () => {
+    const result = { backendId: "ssh-worker", reconnected: true, engineStarted: false };
+    mocks.repairWorker.mockResolvedValue(result);
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    try {
+      await runCli(["worker", "repair", "ssh-worker"]);
+      expect(mocks.repairWorker).toHaveBeenCalledWith("ssh-worker");
+      expect(write).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(String(write.mock.calls[0]![0]))).toEqual(result);
+      expect(mocks.deployWorker).not.toHaveBeenCalled();
+    } finally { write.mockRestore(); }
+  });
+
+  it("propagates repair failure without printing a success response", async () => {
+    mocks.repairWorker.mockRejectedValue(new Error("SSH authentication failed"));
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    try {
+      await expect(runCli(["worker", "repair", "ssh-worker"])).rejects.toThrow("SSH authentication failed");
+      expect(write).not.toHaveBeenCalled();
+    } finally { write.mockRestore(); }
   });
 });

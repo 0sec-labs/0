@@ -27,13 +27,8 @@ import {
 } from "@opentui/core";
 
 import { Cells, textCells } from "./primitives.js";
-import {
-  getAnalyticsSetupDraft,
-  previewSetting,
-  reloadSettings,
-  updateSetting,
-  useSettings,
-} from "./settings-store.js";
+import { getAnalyticsSetupDraft, previewSetting, reloadSettings, updateSetting } from "./settings-store.js";
+import { useSettings } from "./use-settings.js";
 import { SETTING_DEFS, type TuiSettings } from "./settings.js";
 import { SettingsPreview } from "./settings-preview.js";
 import { SurfaceContext, useSurfaceDimensions } from "./dialog-surface.js";

@@ -658,11 +658,13 @@ export class HuntMemoryStore {
    *
    * Iterates newest-first and stops early once `limit` valid results are
    * collected — avoids scanning the entire store when a bounded recent set
-   * satisfies the caller.
+   * satisfies the caller. Optional eligibility filtering applies before hashing
+   * and the result limit, so excluded records never consume a retrieval slot.
    */
-  recallCodebase(root: string, limit?: number): HuntRecord[] {
+  recallCodebase(root: string, limit?: number, accept?: (note: Readonly<HuntRecord>) => boolean): HuntRecord[] {
     this.ensureLoaded();
-    const cap = limit ?? 8;
+    const cap = Math.max(0, Math.floor(limit ?? 8));
+    if (!(cap > 0)) return [];
 
     let canonicalRoot: string;
     try {
@@ -674,11 +676,13 @@ export class HuntMemoryStore {
 
     const results: HuntRecord[] = [];
 
-    // Newest records are at higher indices (insertion order). Iterate in
-    // reverse to find the most recent valid records first, and stop once we
-    // have enough — avoids costly stat/hash on stale records.
-    for (let i = this.records.length - 1; i >= 0; i--) {
-      const r = this.records[i];
+    // Order before applying the limit: imports and injected clocks may append
+    // older notes after newer ones. Reverse first so stable timestamp ties keep
+    // the newest insertion, matching the existing recall behavior.
+    const candidates = this.records.filter(r => r.kind === "pattern" &&
+      r.vulnClass === "codebase-context" && r.codebase?.root === canonicalRoot)
+      .reverse().sort(byRecencyDesc);
+    for (const r of candidates) {
 
       // Only codebase-context pattern records with evidence.
       if (r.kind !== "pattern" || r.vulnClass !== "codebase-context") continue;
@@ -688,6 +692,9 @@ export class HuntMemoryStore {
 
       // Exact case-sensitive root match.
       if (r.codebase.root !== canonicalRoot) continue;
+
+      // Eligibility (for example an operator opt-out) precedes hashing and the cap.
+      if (accept && !accept(r)) continue;
 
       // Verify every cited file still exists, is within root (even if an
       // intermediate directory was replaced by a symlink after the note was
@@ -724,10 +731,6 @@ export class HuntMemoryStore {
       if (results.length >= cap) break;
     }
 
-    // Sort by createdAt for correctness — records loaded from disk or
-    // created via direct append may have timestamps that don't perfectly
-    // track insertion order.
-    results.sort(byRecencyDesc);
     return results;
   }
 

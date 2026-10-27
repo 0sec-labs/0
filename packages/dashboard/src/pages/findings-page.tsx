@@ -1,3 +1,6 @@
+import { Tooltip } from "@/components/ui/tooltip";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { Disclosure } from "@/components/ui/disclosure";
 import { AssessmentAccessMilestones } from "@/components/access-milestone";
 import { FindingImpactEditor } from "@/components/finding-impact-editor";
 import { getFindingPriority, compareFindingsByBusinessPriority } from "@0/shared/dist/finding-priority.js";
@@ -20,7 +23,7 @@ import { useBackendApi } from "@/api";
 import { EvidenceTabs } from "@/components/evidence-tabs";
 import { FindingWorkflowBoard } from "@/components/finding-workflow-board";
 import { InspectorPane } from "@/components/inspector-pane";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader, PageContent } from "@/components/page-header";
 import { useDashboardPanel } from "@/components/dashboard-panel";
 import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
 import {
@@ -499,7 +502,7 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
   ]);
 
   return (
-    <div className="space-y-6">
+    <PageContent width="wide">
       <PageHeader
         eyebrow="Findings"
         title="Findings"
@@ -694,7 +697,7 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
         </SheetContent>
       </Sheet>
 
-    </div>
+    </PageContent>
   );
 }
 
@@ -806,7 +809,7 @@ function FindingFamilyInspector({
       >
         <div className="flex flex-wrap items-center gap-2">
           <BusinessPriorityBadge finding={data.latest} />
-          <span className="flex items-center gap-1 text-xs text-muted-foreground" title={data.latest.cvssVector || "Technical severity"}>Technical <SeverityBadge severity={data.latest.severity} />{typeof data.latest.cvssScore === "number" && Number.isFinite(data.latest.cvssScore) ? ` · CVSS ${data.latest.cvssScore}` : null}</span>
+          <Tooltip content={data.latest.cvssVector || "Technical severity"}><span tabIndex={0} className="flex items-center gap-1 text-xs text-muted-foreground">Technical <SeverityBadge severity={data.latest.severity} />{typeof data.latest.cvssScore === "number" && Number.isFinite(data.latest.cvssScore) ? ` · CVSS ${data.latest.cvssScore}` : null}</span></Tooltip>
           <PhaseBadge value={data.workflow.phase} />
           <ReviewBadge value={data.workflow.reviewGate} />
           {data.latest.triageStatus !== "new" ? <StatusBadge value={data.latest.triageStatus} /> : null}
@@ -816,7 +819,7 @@ function FindingFamilyInspector({
         {findingLocation ? <div className="text-sm text-muted-foreground">{findingLocation}</div> : null}
 
         {blockedWorkItem || data.workflow.phase === "blocked" ? (
-          <div className="rounded-2xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm">
+          <div className="rounded-[var(--radius-panel,16px)] border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm">
             <span className="font-medium text-foreground">Blocked: </span>
             <span className="text-muted-foreground">{executionDetail}</span>
           </div>
@@ -857,7 +860,7 @@ function FindingFamilyInspector({
           placeholder="Note (optional)"
         />
 
-        <div className="space-y-2 rounded-2xl bg-muted/30 p-4">
+        <div className="space-y-2 rounded-[var(--radius-panel,16px)] bg-muted/30 p-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2 text-sm font-medium text-foreground">
               <MessageSquare className="size-4 text-primary-text" />
@@ -868,14 +871,14 @@ function FindingFamilyInspector({
               Copy
             </Button>
           </div>
-          <code className="block overflow-x-auto rounded-xl bg-background/80 px-3 py-2 font-mono text-sm text-foreground">
+          <code className="block overflow-x-auto rounded-[var(--radius-menu,12px)] bg-background/80 px-3 py-2 font-mono text-sm text-foreground">
             {handoffCommand}
           </code>
           {handoffNotice ? <div className="text-xs leading-5 text-muted-foreground">{handoffNotice}</div> : null}
         </div>
 
-        <details className="rounded-2xl bg-muted/30 px-4 py-3 text-sm">
-          <summary className="cursor-pointer font-medium text-foreground">Details</summary>
+        <Disclosure className="rounded-[var(--radius-panel,16px)] bg-muted/30 px-4 py-3 text-sm" summary={<> Details </>} triggerClassName="cursor-pointer font-medium text-foreground">
+
           <div className="mt-4 space-y-4">
             <div className="grid gap-3 md:grid-cols-2">
               <SummaryMetric label="Status" value={executionHeadline} />
@@ -932,7 +935,7 @@ function FindingFamilyInspector({
               </Button>
             </div>
           </div>
-        </details>
+        </Disclosure>
       </InspectorPane>
 
       <InspectorPane
@@ -949,7 +952,7 @@ function FindingFamilyInspector({
           <TabsContent value="runbook" className="space-y-5">
             <div className="space-y-3">
               {data.workItems.length === 0 ? (
-                <div className="rounded-2xl bg-muted/30 px-4 py-8 text-sm text-muted-foreground">
+                <div className="rounded-[var(--radius-panel,16px)] bg-muted/30 px-4 py-8 text-sm text-muted-foreground">
                   No steps yet.
                 </div>
               ) : (
@@ -963,13 +966,13 @@ function FindingFamilyInspector({
 
             <div className="space-y-3">
               {data.artifacts.length === 0 ? (
-                <div className="rounded-2xl bg-muted/30 px-4 py-8 text-sm text-muted-foreground">
+                <div className="rounded-[var(--radius-panel,16px)] bg-muted/30 px-4 py-8 text-sm text-muted-foreground">
                   No files yet.
                 </div>
               ) : (
                 <div className="grid gap-3">
                   {data.artifacts.map((artifact) => (
-                    <div key={artifact.id} className="rounded-2xl bg-muted/30 px-4 py-3">
+                    <div key={artifact.id} className="rounded-[var(--radius-panel,16px)] bg-muted/30 px-4 py-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="text-sm font-medium text-foreground">{artifact.label}</div>
@@ -1053,12 +1056,14 @@ function ThreadInbox({
   ];
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="mr-auto" />
-        <Button variant={queueSort === "business-impact" ? "default" : "ghost"} size="sm" onClick={() => onSortChange("business-impact")}>Business impact</Button>
-        <Button variant={queueSort === "attention" ? "default" : "ghost"} size="sm" onClick={() => onSortChange("attention")}>Needs attention</Button>
-        <Button variant={queueSort === "newest" ? "default" : "ghost"} size="sm" onClick={() => onSortChange("newest")}>Newest</Button>
-        <Button variant={queueSort === "severity" ? "default" : "ghost"} size="sm" onClick={() => onSortChange("severity")}>Technical severity</Button>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <span className="text-xs text-muted-foreground">Sort by</span>
+        <SegmentedControl label="Sort findings" value={queueSort} onValueChange={onSortChange} options={[
+          { value: "business-impact", label: "Business impact" },
+          { value: "attention", label: "Needs attention" },
+          { value: "newest", label: "Newest" },
+          { value: "severity", label: "Technical severity" },
+        ]} />
       </div>
       {groups.length === 0 ? <EmptyState title="No findings" /> : null}
       {sections.filter((section) => section.entries.length > 0).map((section) => (
@@ -1066,7 +1071,7 @@ function ThreadInbox({
           <h2 className="flex items-center gap-2 text-sm font-medium">
             {section.title}<span className="text-muted-foreground">{section.entries.length}</span>
           </h2>
-          <CardList className="overflow-hidden rounded-2xl">
+          <CardList className="overflow-hidden rounded-[var(--radius-panel,16px)]">
             {section.entries.map((group) => (
               <ThreadListItem
                 key={group.fingerprint}
@@ -1185,11 +1190,9 @@ function ThreadListItem({
 
   return (
     <CardListItem interactive selected={selected} className="p-0">
-      <button
-        type="button"
+      <Button variant="ghost" size="sm" type="button"
         onClick={() => onSelect(group.fingerprint)}
-        className="w-full px-4 py-4 text-left"
-      >
+        className="h-auto whitespace-normal justify-start font-normal w-full px-4 py-4 text-left">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 space-y-1">
             <div className="text-sm font-semibold leading-5 text-foreground">{group.latest.title}</div>
@@ -1200,13 +1203,13 @@ function ThreadListItem({
             {mode === "inbox" ? <ReviewBadge value={group.workflow.reviewGate} /> : null}
             {group.latest.triageStatus !== "new" ? <StatusBadge value={group.latest.triageStatus} /> : null}
             <BusinessPriorityBadge finding={group.latest} />
-            <span className="flex items-center gap-1 text-xs text-muted-foreground" title="Technical severity">Technical <SeverityBadge severity={group.latest.severity} /></span>
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">Technical <SeverityBadge severity={group.latest.severity} /></span>
           </div>
         </div>
         <div className="mt-1 text-xs text-muted-foreground">
           {saving ? "Saving..." : formatTime(group.workflow.updatedAt ?? group.latest.timestamp)}
         </div>
-      </button>
+      </Button>
     </CardListItem>
   );
 }
@@ -1251,7 +1254,7 @@ function ExecutionGraph({
             : "border-border bg-card";
 
         return (
-          <div key={item.id} className={`rounded-2xl border border-transparent px-4 py-3 ${toneClass}`}>
+          <div key={item.id} className={`rounded-[var(--radius-panel,16px)] border border-transparent px-4 py-3 ${toneClass}`}>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
@@ -1280,7 +1283,7 @@ function SummaryMetric({
   mono?: boolean;
 }) {
   return (
-    <div className="rounded-2xl bg-muted/30 px-4 py-3">
+    <div className="rounded-[var(--radius-panel,16px)] bg-muted/30 px-4 py-3">
       <div className="text-sm text-muted-foreground/70">{label}</div>
       <div className={mono ? "mt-2 truncate tabular-nums text-sm text-foreground" : "mt-2 text-sm font-medium text-foreground"}>
         {value}
@@ -1339,7 +1342,7 @@ function FilterRow({
   children: React.ReactNode;
 }) {
   return (
-    <fieldset className={`min-w-0 rounded-2xl bg-muted/30 px-4 py-4 ${className ?? ""}`}>
+    <fieldset className={`min-w-0 rounded-[var(--radius-panel,16px)] bg-muted/30 px-4 py-4 ${className ?? ""}`}>
       <legend className="float-left w-full text-sm font-medium">{label}</legend>
       <div className="clear-both flex flex-wrap gap-1.5 pt-3">{children}</div>
     </fieldset>

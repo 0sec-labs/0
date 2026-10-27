@@ -2,22 +2,24 @@ import { useEffect, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { Popover } from "@cloudflare/kumo/components/popover";
 import type { ConsoleRuntimeSnapshot } from "@0/shared";
+import { configureChatRuntime } from "./model-source";
 import { useBackendApi } from "@/api";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import type { ConsoleWorkspace } from "./use-console-workspace";
 
-const LABELS: Record<string, string> = { none: "None", low: "Low", medium: "Medium", high: "High", xhigh: "Very high", max: "Maximum" };
+export const REASONING_LABELS: Record<string, string> = { none: "None", low: "Low", medium: "Medium", high: "High", xhigh: "Very high", max: "Maximum" };
 
 /** A discrete effort slider, populated solely by the live engine capabilities. */
-export function ReasoningPicker({ workspace, sessionId, reasoning, disabled }: {
+export function ReasoningPicker({ workspace, sessionId, reasoning, disabled, inline = false }: {
   workspace: ConsoleWorkspace;
   sessionId: string;
   reasoning: ConsoleRuntimeSnapshot["reasoning"];
   disabled: boolean;
+  inline?: boolean;
 }) {
-  const { configureConsoleSession } = useBackendApi();
+  const api = useBackendApi();
   const [draft, setDraft] = useState(reasoning?.effort ?? "medium");
   const [open, setOpen] = useState(false);
   useEffect(() => { setDraft(reasoning?.effort ?? "medium"); }, [reasoning?.effort, sessionId]);
@@ -27,26 +29,31 @@ export function ReasoningPicker({ workspace, sessionId, reasoning, disabled }: {
     const effort = reasoning.options[nextIndex];
     if (!effort || effort === reasoning.effort || disabled || workspace.busy) return;
     void workspace.perform(async () => {
-      try { await configureConsoleSession(sessionId, { runtime: { reasoningEffort: effort } }); }
+      try { await configureChatRuntime(api,sessionId,{reasoningEffort:effort},workspace.snapshot?.runtime); }
       catch (error) { setDraft(reasoning.effort); throw error; }
     }, sessionId);
   };
+  const control = <div className="space-y-1" onKeyDown={event => { if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", " "].includes(event.key)) event.stopPropagation(); }}>
+    <div className="flex items-center justify-between gap-3 text-xs"><span className="text-muted-foreground">Thinking effort</span><span>{REASONING_LABELS[draft] ?? draft}</span></div>
+    <Slider min={0} max={reasoning.options.length - 1} step={1} value={index} label="Thinking effort" valueText={value => REASONING_LABELS[reasoning.options[value]!] ?? reasoning.options[value]!} disabled={disabled || workspace.busy} onValueChange={value => setDraft(reasoning.options[value] ?? reasoning.effort)} onValueCommitted={apply} />
+    <div className="flex justify-between text-[11px] text-muted-foreground"><span>{REASONING_LABELS[reasoning.options[0]!] ?? reasoning.options[0]}</span><span>{REASONING_LABELS[reasoning.options.at(-1)!] ?? reasoning.options.at(-1)}</span></div>
+  </div>;
+  if (inline) return <section aria-label="Model thinking effort" className="shrink-0 border-b border-border px-3 pb-3 pt-2">{control}</section>;
   return <Popover open={open} onOpenChange={setOpen}>
     <Tooltip content="Thinking effort" side="bottom"><Popover.Trigger render={<Button variant="ghost" size="sm" />} disabled={disabled}
-      aria-label={`Thinking effort: ${LABELS[reasoning.effort] ?? reasoning.effort}`}
-      className="gap-1 rounded-full px-2 text-xs text-muted-foreground">
-      <span>{LABELS[reasoning.effort] ?? reasoning.effort}</span><ChevronDown className="size-3" />
+      aria-label={`Thinking effort: ${REASONING_LABELS[reasoning.effort] ?? reasoning.effort}`}
+      className="gap-1 rounded-[var(--radius-control)] px-2 text-xs text-muted-foreground">
+      <span>{REASONING_LABELS[reasoning.effort] ?? reasoning.effort}</span><ChevronDown className="size-3" />
     </Popover.Trigger></Tooltip>
-    <Popover.Content side="top" align="end" sideOffset={10} positionMethod="fixed" className="w-64 rounded-2xl p-4 font-sans">
-      <Popover.Title className="text-sm font-medium">Thinking effort</Popover.Title>
-      <div className="mt-3 text-sm">{LABELS[draft] ?? draft}</div>
+    <Popover.Content side="top" align="end" sideOffset={10} positionMethod="fixed" className="ui-menu-surface ui-menu-form w-64 font-sans">
+      <Popover.Title className="flex items-baseline justify-between gap-3 text-sm font-medium">Thinking effort<span className="ui-menu-secondary">{REASONING_LABELS[draft] ?? draft}</span></Popover.Title>
       <Slider min={0} max={reasoning.options.length - 1} step={1} value={index}
-        label="Thinking effort" valueText={value => `${LABELS[reasoning.options[value]!] ?? reasoning.options[value]}, ${value + 1} of ${reasoning.options.length}`}
-        disabled={disabled || workspace.busy} className="mt-2"
+        label="Thinking effort" valueText={value => `${REASONING_LABELS[reasoning.options[value]!] ?? reasoning.options[value]}, ${value + 1} of ${reasoning.options.length}`}
+        disabled={disabled || workspace.busy} className="mt-3"
         onValueChange={value => setDraft(reasoning.options[value] ?? reasoning.effort)}
         onValueCommitted={apply} />
-      <div className="mt-1 flex justify-between text-xs text-muted-foreground"><span>{LABELS[reasoning.options[0]!] ?? reasoning.options[0]}</span><span>{LABELS[reasoning.options.at(-1)!] ?? reasoning.options.at(-1)}</span></div>
-      <Popover.Description className="mt-3 text-xs leading-5 text-muted-foreground">More thinking can improve difficult answers and uses more time and tokens.</Popover.Description>
+      <div className="ui-menu-secondary mt-1 flex justify-between"><span>{REASONING_LABELS[reasoning.options[0]!] ?? reasoning.options[0]}</span><span>{REASONING_LABELS[reasoning.options.at(-1)!] ?? reasoning.options.at(-1)}</span></div>
+      <Popover.Description className="ui-menu-secondary mt-3">More thinking uses more time and tokens.</Popover.Description>
     </Popover.Content>
   </Popover>;
 }

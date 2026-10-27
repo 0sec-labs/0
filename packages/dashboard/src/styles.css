@@ -1,6 +1,11 @@
 @import "@fontsource/ibm-plex-mono/400.css";
 @import "@cloudflare/kumo/styles/tailwind";
 @import "tailwindcss";
+@import "@0/ui/styles/motion.css";
+@import "@0/ui/styles/tokens.css";
+@import "@0/ui/styles/primitives.css";
+@import "@0/ui/styles/controls.css";
+@source "../../ui/src";
 @source "../node_modules/@cloudflare/kumo/dist/**/*.{js,jsx,ts,tsx}";
 @import "tw-animate-css";
 @import "./vendor/shadcn-tailwind.css";
@@ -21,6 +26,7 @@
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
+  --color-brand-orange: var(--brand-orange);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary-text: var(--primary-text);
@@ -62,16 +68,26 @@
 }
 
 :root {
-  color-scheme: dark;
+  /* Shared geometry: controls nest inside menus and panel surfaces. */
+  --workspace-canvas: #101011;
+  --workspace-panel: #ffffff;
+  --surface-selected: color-mix(in srgb, var(--workspace-panel) 88%, var(--foreground));
+  --surface-hover: color-mix(in srgb, var(--workspace-panel) 94%, var(--foreground));
+  color-scheme: light;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: #FD802E;
-  --primary-foreground: #ffffff;
-  --primary-text: #A7470B;
+  --brand-orange: #fd802e;
+  --switch-on: var(--brand-orange);
+  --switch-thumb-on: #18181b;
+  --primary: #ffffff;
+  --primary-foreground: #18181b;
+  --primary-hover: #e4e4e7;
+  --primary-border: #d4d4d8;
+  --primary-text: #27272a;
   --secondary: oklch(0.967 0.001 286.375);
   --secondary-foreground: oklch(0.21 0.006 285.885);
   --muted: oklch(0.97 0 0);
@@ -79,7 +95,7 @@
   --accent: oklch(0.97 0 0);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: #A7470B;
+  --ring: #71717a;
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   /* Filled actions keep a strong red; dark-mode error text uses a lighter red. */
@@ -93,11 +109,11 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  --chart-1: var(--primary);
-  --chart-2: color-mix(in oklab, var(--primary) 80%, var(--foreground));
-  --chart-3: color-mix(in oklab, var(--primary) 65%, var(--foreground));
-  --chart-4: color-mix(in oklab, var(--primary) 50%, var(--foreground));
-  --chart-5: color-mix(in oklab, var(--primary) 35%, var(--foreground));
+  --chart-1: var(--brand-orange);
+  --chart-2: color-mix(in oklab, var(--chart-1) 80%, var(--foreground));
+  --chart-3: color-mix(in oklab, var(--chart-1) 65%, var(--foreground));
+  --chart-4: color-mix(in oklab, var(--chart-1) 50%, var(--foreground));
+  --chart-5: color-mix(in oklab, var(--chart-1) 35%, var(--foreground));
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
   --sidebar-accent: oklch(0.97 0 0);
@@ -157,130 +173,104 @@
   }
 
   ::selection {
-    background: color-mix(in oklab, var(--primary) 28%, transparent);
+    background: color-mix(in oklab, var(--ring) 28%, transparent);
   }
   html {
     @apply font-sans;
   }
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: #FD802E;
-  --primary-foreground: #ffffff;
-  --primary-text: #FD802E;
-  --secondary: oklch(0.274 0.006 286.033);
+/* Navigation keeps dark local tokens in Light mode; portalled menus use the root theme. */
+.dark,
+.console-sidebar-surface {
+  color-scheme: dark;
+  --background: #101011;
+  --workspace-canvas: #101011;
+  --workspace-panel: #19191b;
+  --foreground: #ededee;
+  --card: #19191b;
+  --card-foreground: #ededee;
+  --popover: #222225;
+  --popover-foreground: #ededee;
+  --brand-orange: #fd802e;
+  --switch-on: var(--brand-orange);
+  --switch-thumb-on: #18181b;
+  --primary: #ffffff;
+  --primary-foreground: #18181b;
+  --primary-hover: #e4e4e7;
+  --primary-border: #ffffff;
+  --primary-text: #ededee;
+  --secondary: #222225;
   --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
+  --muted: #222225;
+  --muted-foreground: #a1a1aa;
+  --accent: #2b2b2e;
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: #FD802E;
-  --chart-1: var(--primary);
-  --chart-2: color-mix(in oklab, var(--primary) 80%, var(--foreground));
-  --chart-3: color-mix(in oklab, var(--primary) 65%, var(--foreground));
-  --chart-4: color-mix(in oklab, var(--primary) 50%, var(--foreground));
-  --chart-5: color-mix(in oklab, var(--primary) 35%, var(--foreground));
-  --sidebar: oklch(0.205 0 0);
+  --border: #ffffff1a;
+  --input: #ffffff26;
+  --ring: #a1a1aa;
+  --chart-1: var(--brand-orange);
+  --chart-2: color-mix(in oklab, var(--chart-1) 80%, var(--foreground));
+  --chart-3: color-mix(in oklab, var(--chart-1) 65%, var(--foreground));
+  --chart-4: color-mix(in oklab, var(--chart-1) 50%, var(--foreground));
+  --chart-5: color-mix(in oklab, var(--chart-1) 35%, var(--foreground));
+  --sidebar: #101011;
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent: #242427;
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: var(--ring);
 }
-/* One orange action color across Kumo and the browser workspace. */
+/* Kumo primary actions share the neutral action tokens with Button. */
 :root, [data-mode="dark"], [data-mode="light"] {
-  --color-kumo-brand: #f97316;
-  --color-kumo-brand-hover: #ea580c;
-  --text-color-kumo-brand: #f97316;
-  --color-kumo-focus: #f97316;
+  --color-kumo-brand: var(--primary);
+  --color-kumo-brand-hover: var(--primary-hover);
+  --text-color-kumo-brand: var(--primary-text);
+  --color-kumo-focus: var(--ring);
 }
-[data-kumo-component="Button"][style*="--color-kumo-brand"] { color: var(--primary-foreground) !important; }
-.console-frame { height: 100dvh; border: 0; border-radius: 0; box-shadow: none; }
+[data-kumo-component="Button"][style*="--color-kumo-brand"] {
+  color: var(--primary-foreground) !important;
+  box-shadow: 0 0 0 1px var(--primary-border);
+}
+[data-kumo-component="Button"][style*="--color-kumo-brand"]:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.console-frame { height: 100dvh; border: 0; border-radius: 0; box-shadow: none; background: var(--workspace-canvas); }
+.console-onboarding-frame { background: var(--background); }
+.console-page-workspace { background: var(--workspace-canvas); }
+.console-sidebar-surface { background: var(--background); color: var(--foreground); }
+.console-sidebar-surface [data-brand-mark="compact"] { color: #fcfaf6; }
+.console-sidebar-surface [data-brand-variant="ink"] { display: none; }
+.console-sidebar-surface [data-brand-variant="white"] { display: block; }
 .session-rail { background: var(--sidebar); }
 .session-row { transition: none; }
 .session-row:hover { background: var(--muted); }
 @media (prefers-reduced-motion: no-preference) {
-  .console-enter { animation: console-enter 160ms ease-out; }
+  .console-enter { animation: ui-surface-enter var(--ui-duration-enter) var(--ui-ease-out); }
   @keyframes console-enter { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
 }
 
 /* Quiet chat surfaces: separation by tone and spacing rather than rules. */
-.console-frame { --console-surface-radius: 16px; }
+.console-frame { --console-surface-radius: var(--radius-panel); }
 .console-message-surface, .console-frame .console-tool-activity { border-radius: var(--console-surface-radius); }
 .console-frame header, .console-frame footer { border: 0; }
-.console-frame .session-rail { background: color-mix(in srgb, var(--background), var(--foreground) 3%); }
+.console-frame .session-rail { background: var(--sidebar); }
 .console-frame .console-composer textarea { border: 0; box-shadow: none; }
 [data-reduced-motion="true"] *, [data-reduced-motion="true"] .console-entry,
 [data-reduced-motion="true"] .console-spinner, [data-reduced-motion="true"] .console-skeleton,
 [data-reduced-motion="true"] .console-enter { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 
-.console-frame .console-composer { background: color-mix(in srgb, var(--muted), var(--foreground) 8%); border: 0; border-radius: 24px; box-shadow: none; }
-.console-frame .console-composer:focus-within { background: color-mix(in srgb, var(--muted), var(--foreground) 10%); box-shadow: none; }
+.console-frame .console-composer { background: var(--field-surface); border: 0; border-radius: var(--radius-composer); box-shadow: none; }
+.console-frame .console-composer:focus-within { background: var(--field-surface); box-shadow: none; }
 .console-frame .console-composer input { border-color: transparent; background: transparent; }
 
-/* Shared conversation and settings geometry. */
-[data-slot="button"][data-size^="icon"] { border-radius: 50%; }
-[data-kumo-component="Button"] { border-radius: 9999px; }
-[data-slot="dialog-content"], [data-slot="sheet-content"] { border-radius: 24px; }
-[data-slot="dropdown-menu-content"], [data-slot="popover-content"], [data-slot="command"] { border-radius: 16px; }
-[data-slot="dropdown-menu-item"] { border-radius: 8px; }
-/* Kumo supplies its own attributes, separate from the Radix data-slot menus. */
-[role="menu"]:has([data-kumo-component="DropdownMenu"][data-kumo-part="item"]) {
-  border-radius: 16px;
-  padding: 8px;
-  font-family: var(--font-sans);
-  transform-origin: var(--transform-origin);
-  animation: none;
-}
-[data-kumo-component="DropdownMenu"][data-kumo-part="item"],
-[data-kumo-component="DropdownMenu"][data-kumo-part="link-item"] {
-  min-height: 36px;
-  gap: 12px;
-  padding: 8px 12px;
-  border-radius: 12px;
-  font-size: 14px;
-  line-height: 20px;
-  transition: background-color 120ms ease, color 120ms ease;
-}
-[data-kumo-component="DropdownMenu"][data-kumo-part="item"] > svg,
-[data-kumo-component="DropdownMenu"][data-kumo-part="link-item"] > svg {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  margin-right: 0;
-}
-@media (prefers-reduced-motion: no-preference) {
-  [role="menu"]:has([data-kumo-component="DropdownMenu"][data-kumo-part="item"]) {
-    transition: opacity 180ms cubic-bezier(0.23, 1, 0.32, 1), transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
-  }
-  [role="menu"]:has([data-kumo-component="DropdownMenu"][data-kumo-part="item"])[data-starting-style],
-  [role="menu"]:has([data-kumo-component="DropdownMenu"][data-kumo-part="item"])[data-ending-style] {
-    opacity: 0;
-    transform: translateY(2px) scale(0.98);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  [role="menu"]:has([data-kumo-component="DropdownMenu"][data-kumo-part="item"]),
-  [data-kumo-component="DropdownMenu"] { animation: none !important; transition: none !important; }
-}
-[data-reduced-motion="true"] [role="menu"]:has([data-kumo-component="DropdownMenu"][data-kumo-part="item"]),
-[data-reduced-motion="true"] [data-kumo-component="DropdownMenu"] { animation: none !important; transition: none !important; }
-[data-reduced-motion="true"] [role="menu"][data-starting-style],
-[data-reduced-motion="true"] [role="menu"][data-ending-style] { transform: none; }
 .console-controls .control-section { border: 0; background: transparent; box-shadow: none; border-radius: 0; padding-block: 12px; }
 .console-controls .control-section > [data-slot="card-header"], .console-controls .control-section > [data-slot="card-content"] { padding-inline: 0; }
-.console-controls input:not([type="checkbox"]), .console-controls select, .console-controls textarea { border-radius: 12px; background: var(--field-surface); border-color: var(--field-border); }
+.console-controls input:not([type="checkbox"]), .console-controls select, .console-controls textarea { border-radius: var(--radius-control); background: var(--field-surface); border-color: var(--field-border); }
 /* One quiet focus cue replaces the stacked component ring and orange border. */
 .console-frame input:not([type="checkbox"]):focus-visible,
 .console-controls input:not([type="checkbox"]):focus-visible,
@@ -306,15 +296,7 @@
 .console-controls > .grid > main { min-width: 0; }
 @media (max-width: 1023px) { .console-controls { margin-block: 0; padding: 0; } .console-controls > .grid > nav { position: static; } }
 
-/* Quiet secondary controls; orange identifies actions and keyboard focus. */
-.console-frame [data-slot="button"][data-variant="outline"],
-.console-controls [data-slot="button"][data-variant="outline"] { border-color: transparent; background: var(--muted); }
-.console-frame [data-slot="button"]:focus-visible,
-.console-controls [data-slot="button"]:focus-visible,
-.session-row button:focus-visible { box-shadow: none; outline: 1px solid var(--primary); outline-offset: 2px; }
-.console-controls .border-border { border-color: transparent; }
-.console-controls .border-dashed { border-style: none; background: var(--muted); border-radius: 16px; }
-.session-row { min-height: 40px; }
+.session-row { min-height: var(--control-height); }
 
 /* Keep panel contents mounted so both opening and closing can finish smoothly. */
 .console-details-panel { width: 0; opacity: 0; }
@@ -348,121 +330,20 @@
   mask-image: linear-gradient(to bottom, transparent, black 48px, black calc(100% - 48px), transparent);
 }
 
-[role="menu"][data-ending-style] { transition-duration: 120ms; }
-
-/* Popup geometry is shared across Radix and Kumo portal surfaces. */
-[data-slot="dropdown-menu-content"],
-[data-slot="popover-content"],
-[role="menu"]:has([data-kumo-component="DropdownMenu"]),
-.kumo-popover-popup {
-  max-height: min(28rem, calc(100dvh - 2rem));
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  border: 0;
-  border-radius: 16px;
-  background: var(--popover);
-  color: var(--popover-foreground);
-  box-shadow: 0 8px 32px rgb(0 0 0 / 24%);
-  outline: 1px solid color-mix(in srgb, var(--foreground), transparent 94%);
-}
-.kumo-popover-popup { padding: 16px; }
-[data-slot="dialog-content"], [data-slot="sheet-content"] {
-  box-shadow: 0 16px 64px rgb(0 0 0 / 28%);
-}
-[data-slot="dialog-content"] button:focus-visible,
-[data-slot="sheet-content"] button:focus-visible,
-[role="menu"] [role="menuitem"]:focus-visible,
-.kumo-popover-popup button:focus-visible {
-  box-shadow: none;
-  outline: 1px solid color-mix(in srgb, var(--foreground), transparent 55%);
-  outline-offset: -2px;
-}
-@media (prefers-reduced-motion: reduce) {
-  .kumo-popover-popup, [data-slot="dialog-content"], [data-slot="sheet-content"],
-  [data-slot="dialog-overlay"], [data-slot="sheet-overlay"] {
-    animation: none !important; transition: none !important;
-  }
-}
-[data-reduced-motion="true"] .kumo-popover-popup {
-  animation: none !important; transition: none !important;
-}
-
-/* Base UI Select uses a presentation popup around its scrolling listbox. */
-[role="presentation"][data-side]:has(> [role="listbox"] [data-kumo-component="Select"][data-kumo-part="option"]) {
-  display: flex;
-  flex-direction: column;
-  max-height: min(320px, var(--available-height, calc(100dvh - 2rem)));
-  overflow: hidden;
-  border: 0;
-  border-radius: 16px;
-  padding: 8px;
-  background: var(--popover);
-  color: var(--popover-foreground);
-  box-shadow: 0 8px 32px rgb(0 0 0 / 24%);
-  outline: 1px solid color-mix(in srgb, var(--foreground), transparent 94%);
-}
-[role="presentation"][data-side] > [role="listbox"]:has([data-kumo-component="Select"][data-kumo-part="option"]) {
-  min-height: 0;
-  flex: 1;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scroll-padding-block: 8px;
-}
-[data-kumo-component="Select"][data-kumo-part="option"] {
-  min-height: 36px;
-  border-radius: 12px;
-  padding: 8px 12px;
-  font-size: 14px;
-  line-height: 20px;
-}
-@media (prefers-reduced-motion: reduce) {
-  [role="presentation"][data-side]:has(> [role="listbox"] [data-kumo-component="Select"]) {
-    animation: none !important; transition: none !important;
-  }
-}
-[data-reduced-motion="true"] [role="presentation"][data-side]:has(> [role="listbox"] [data-kumo-component="Select"]) {
-  animation: none !important; transition: none !important;
-}
-
-/* Compact control hints and readable suggestion previews. */
-.kumo-tooltip-popup:has(.zero-tooltip-label),
-.kumo-tooltip-popup:has(.zero-tooltip-preview) {
-  border-radius: 16px;
-  background: var(--muted);
-  color: var(--foreground);
-  padding: 5px 12px;
-  outline: 1px solid color-mix(in srgb, var(--foreground), transparent 92%);
-  box-shadow: 0 4px 16px rgb(0 0 0 / 12%);
-}
-.kumo-tooltip-popup:has(.zero-tooltip-label) > :first-child,
-.kumo-tooltip-popup:has(.zero-tooltip-preview) > :first-child { display: none; }
-.kumo-tooltip-popup:has(.zero-tooltip-preview) {
-  width: min(360px, calc(100vw - 32px));
-  border-radius: 24px;
-  padding: 16px 20px;
-  background: var(--background);
-}
-.zero-tooltip-preview { white-space: normal; overflow-wrap: anywhere; line-height: 1.7; }
-@media (prefers-reduced-motion: reduce) { .kumo-tooltip-popup { transition: none; } }
-
 /* The working folder stays attached to the composer, above the writing area. */
 .console-composer-stack { position: relative; }
-.console-workspace-bar { margin: 0 12px -12px; padding: 5px 6px 17px; border-radius: 18px 18px 0 0; background: color-mix(in srgb, var(--muted), var(--background) 18%); }
+.console-workspace-bar { margin: 0 12px -12px; padding: 5px 6px 17px; border-radius: var(--radius-composer) var(--radius-composer) 0 0; background: color-mix(in srgb, var(--muted), var(--background) 18%); }
 .console-workspace-bar button { height: 28px; gap: 7px; padding-inline: 9px; font-size: 12px; font-weight: 400; }
-.console-frame .console-composer-stack .console-composer { border-radius: 22px; }
+.console-frame .console-composer-stack .console-composer { border-radius: var(--radius-composer); }
 
 /* Shared field surfaces remain visible inside cards, dialogs, and settings. */
-:root { --field-surface: var(--muted); --field-border: color-mix(in srgb, var(--foreground), transparent 86%); }
-.dark { --field-surface: color-mix(in srgb, var(--muted), var(--foreground) 8%); }
 [data-slot="input"], [data-slot="textarea"] { background: var(--field-surface); border-color: var(--field-border); }
 [data-slot="input"][aria-invalid="true"], [data-slot="textarea"][aria-invalid="true"] { border-color: var(--destructive); }
 
 /* The selected backend scope fills its mounted workspace. */
 .backend-content .console-frame { height: 100%; }
 
-/* Interaction feedback also covers native controls and Kumo's portal items.
-   A translucent overlay preserves filled/semantic colors and works on quiet
-   controls whose hover utility otherwise matches their surrounding surface. */
+/* Shared pointer, focus and selection feedback for native and portal controls. */
 :where(button, a[href], [role="button"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="option"], summary, select, input[type="checkbox"], input[type="radio"]):not(:disabled):not([aria-disabled="true"]):not([data-disabled]) {
   cursor: pointer;
 }
@@ -470,14 +351,137 @@
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
-@media (hover: hover) {
-  :where(button, a[data-slot="button"], [role="button"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="option"], summary):not(:disabled):not([aria-disabled="true"]):not([data-disabled]):hover {
-    background-image: linear-gradient(color-mix(in srgb, var(--foreground) 10%, transparent), color-mix(in srgb, var(--foreground) 10%, transparent));
-  }
-}
 :where([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="option"]):not([aria-disabled="true"]):not([data-disabled])[data-highlighted] {
   background-image: linear-gradient(color-mix(in srgb, var(--foreground) 10%, transparent), color-mix(in srgb, var(--foreground) 10%, transparent));
 }
 :where(button, [role="button"], [role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="option"], select, input[type="checkbox"], input[type="radio"]):is(:disabled, [aria-disabled="true"], [data-disabled]) {
   cursor: default;
 }
+
+/* Agent details share the measured slide used by the workspace details rail. */
+.console-agents-panel { width: 0; transition: width 220ms cubic-bezier(.2,.7,.2,1); }
+.console-agents-panel[data-open="true"] { width: var(--agents-panel-width, 400px); }
+.console-agents-panel .console-composer { border-radius: var(--radius-composer); }
+.console-frame .console-tool-activity > details > summary { width: fit-content; max-width: 100%; border-radius: var(--radius-control); }
+@media (prefers-reduced-motion: reduce) { .console-agents-panel { transition: none; } }
+[data-reduced-motion="true"] .console-agents-panel { transition: none; }
+.console-chat-column { container: console-chat / inline-size; }
+.console-conversation-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; max-width: 768px; margin-inline: auto; }
+.console-browser-previews { min-width: 0; align-self: start; }
+@container console-chat (min-width: 1120px) {
+  .console-conversation-layout:has(.console-browser-previews) { grid-template-columns: minmax(0, 768px) 300px; max-width: 1100px; }
+  .console-browser-previews { position: sticky; top: 0; }
+}
+.console-agents-panel[data-resizing] { transition: none; }
+
+
+/* Quiet, compact controls use the same response time across work surfaces. */
+@media (prefers-reduced-motion: no-preference) {
+  .console-frame :is(.console-composer button, .console-tool-activity > details > summary),
+  [aria-label="Agents"] button,
+  [aria-label="Browser captures"] button {
+    transition: background-color 120ms ease-out, color 120ms ease-out;
+  }
+}
+[aria-label="Browser captures"] article { border-radius: var(--radius-panel); }
+[aria-label="Browser captures"] article img { object-position: top center; }
+@media (hover: hover) {
+  .console-frame .console-tool-activity > details > summary:hover {
+    background-color: color-mix(in srgb, var(--muted) 65%, transparent);
+  }
+}
+
+/* Selected controls sit above their surface; inactive controls stay quiet. */
+[data-slot="tabs-list"]:not([data-variant="line"]) [data-slot="tabs-trigger"][data-state="active"] {
+  background:var(--surface-selected); color:var(--foreground);
+  box-shadow:inset 0 1px 0 color-mix(in srgb,var(--foreground) 5%,transparent),0 1px 2px rgb(0 0 0 / 10%);
+  border-color:color-mix(in srgb,var(--foreground) 6%,transparent);
+}
+/* Persistent navigation: explicit motion and a bounded nested chat list. */
+.console-navigation-rail { width:256px; transition:width 200ms cubic-bezier(.22,1,.36,1); }
+.console-navigation-rail[data-collapsed="true"] { width:48px; }
+.console-navigation-label { opacity:1; transition:opacity 140ms ease; }
+[data-collapsed="true"] .console-navigation-label { opacity:0; pointer-events:none; }
+.console-navigation-toggle { left:204px; transition:left 200ms cubic-bezier(.22,1,.36,1); }
+[data-collapsed="true"] .console-navigation-toggle { left:4px; }
+.console-chat-history-fold { display:grid; grid-template-rows:0fr; opacity:0; transition:grid-template-rows 180ms ease,opacity 140ms ease; }
+.console-chat-history-fold[data-open="true"] { grid-template-rows:1fr; opacity:1; }
+.console-navigation-history-slot { display:flex; flex-direction:column; height:100%; min-height:0; overflow:hidden; padding-block:4px; }
+.console-navigation-control { height:var(--control-height); font-size:14px; line-height:20px; border-radius:var(--radius-control); }
+.console-chat-history-chevron { transition:transform 180ms ease; }
+@media(prefers-reduced-motion:reduce) { .console-navigation-rail,.console-navigation-label,.console-navigation-toggle,.console-navigation-brand-compact,.console-chat-history-fold,.console-chat-history-chevron { transition:none; } }
+[data-reduced-motion="true"] :is(.console-navigation-rail,.console-navigation-label,.console-navigation-toggle,.console-navigation-brand-compact,.console-chat-history-fold,.console-chat-history-chevron) { transition:none; }
+/* One navigation row metric for actions, history entries and destinations. */
+.console-navigation-rail .session-rail { font-size:14px; line-height:20px; }
+.console-navigation-rail .session-row,
+.console-navigation-rail .session-row > a,
+.console-navigation-rail .session-row > button,
+.console-navigation-rail .session-rail > div > button {
+  min-height:var(--control-height); height:var(--control-height); border-radius:var(--radius-control); font-size:14px; line-height:20px;
+}
+.console-navigation-rail .session-row-actions button { border-radius:var(--radius-control); }
+
+/* Hover/focus previews overlay the workspace; only pinning reserves full width. */
+.console-navigation-slot { width:48px; transition:width 200ms cubic-bezier(.22,1,.36,1); }
+.console-navigation-slot[data-pinned="true"] { width:256px; }
+.console-navigation-slot > .console-navigation-rail { position:absolute; inset:0 auto 0 0; z-index:30; }
+.console-navigation-rail[data-floating="true"] { box-shadow:12px 0 28px rgb(0 0 0 / 15%); }
+.console-navigation-rail[data-collapsed="true"] :is([aria-label="Workspace destinations"],.console-navigation-footer) { width:40px; }
+.console-navigation-rail[data-collapsed="true"] .console-navigation-control:not(.console-navigation-toggle) { width:32px; margin-left:4px; padding-inline:0; justify-content:center; gap:0; }
+.console-navigation-rail[data-collapsed="true"] .console-navigation-control > .console-navigation-label { display:none; }
+.console-navigation-rail[data-collapsed="true"] .console-navigation-toggle { display:none; }
+.console-navigation-rail .console-navigation-toggle[aria-expanded="true"]:not(:hover) { background:transparent; }
+.console-navigation-new-chat { opacity:0; pointer-events:none; }
+.console-navigation-rail[data-collapsed="true"] .console-navigation-new-chat { opacity:1; pointer-events:auto; }
+@media(prefers-reduced-motion:reduce) { .console-navigation-slot { transition:none; } }
+[data-reduced-motion="true"] .console-navigation-slot { transition:none; }
+
+.console-navigation-rail[data-collapsed="true"] [aria-label="Choose computer"] { width:32px; padding-inline:0; justify-content:center; }
+.console-navigation-new-chat:focus-within { opacity:1; pointer-events:auto; }
+
+/* Keep model search fixed while only the catalog scrolls. */
+[role="menu"].console-model-picker {
+  max-height: min(360px, var(--available-height, calc(100dvh - 24px)));
+  overflow: hidden;
+  padding: 4px;
+}
+[role="menu"].console-model-picker > .overflow-y-auto {
+  flex: 1 1 auto;
+  scroll-padding-block: 4px;
+}
+
+/* Titles use the whole rail; contextual actions overlay only the active row. */
+.console-navigation-rail :is(.sidebar-history-row, .session-row) {
+  min-height:38px;
+  margin-block:2px;
+}
+.console-navigation-rail :is(.sidebar-history-row, .session-row) > :is(a, button):first-child {
+  height:38px;
+  min-height:38px;
+  padding-right:12px;
+}
+.console-navigation-rail :is(.sidebar-history-delete, .session-row-actions) {
+  background:var(--sidebar);
+  box-shadow:-8px 0 8px var(--sidebar);
+}
+.console-navigation-rail :is(.sidebar-history-row, .session-row):is(:hover, :has(:focus-visible)) :is(.sidebar-history-delete, .session-row-actions) {
+  background:var(--muted);
+  box-shadow:-8px 0 8px var(--muted);
+}
+
+/* User messages need their own opaque surface against the transcript. */
+.console-user-message {
+  background:var(--message-user-surface);
+  color:var(--message-user-foreground);
+  box-shadow:inset 0 0 0 1px rgb(0 0 0 / 4%);
+}
+.dark .console-user-message {
+  box-shadow:inset 0 0 0 1px rgb(255 255 255 / 5%);
+}
+
+
+/* Popup/feedback motion shares the same short, non-looping vocabulary. */
+@media(prefers-reduced-motion:no-preference) {
+  [popover]:popover-open { animation:ui-surface-enter var(--ui-duration-standard) var(--ui-ease-out) both; }
+}
+[data-reduced-motion="true"] [popover]:popover-open { animation:none; }
