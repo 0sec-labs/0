@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "study": "development-summary-ablation-121",
-  "preregistrationDigest": "sha256:6443adf8eb2eff62e341f9784c07ca506c09aca5bc533fa17e5903a444f74c4e",
-  "protocolDigest": "sha256:106f93d748d02f3771c5f0c03c220b2d111a267ae1e156ca6260a7c9d76a3abb",
-  "corpusDigest": "sha256:5ad3cc21819f1be13cef68322463007a28c93c58e88c5a72e09e093e2f79c10c",
+  "preregistrationDigest": "sha256:a68373d2268129f77e3d949c4267af94899c61fd6d474e74e5a35178ef46127d",
+  "protocolDigest": "sha256:6e64465a841dcdea128ea38d66dd0d78911ca2d48a26016d514a973fa0604dc1",
+  "corpusDigest": "sha256:2c13432438c95407124b339239470158cd0a8085217a3141a4b8d01a2a7f4fce",
   "mode": "controls",
   "conclusion": "inconclusive",
   "currentFeedbackRetained": true,
@@ -23,10 +23,10 @@
       "quality": {
         "attempts": 10,
         "verifiedCorrect": 4,
-        "positiveRecall": 0,
-        "falseAlarmRate": 0.3333333333333333,
+        "positiveRecall": 0.5,
+        "falseAlarmRate": 0.6666666666666666,
         "inconclusive": 0,
-        "p50Ms": 12.198667000000114,
+        "p50Ms": 7.161832999999888,
         "p95Ms": null
       },
       "controls": {
@@ -68,17 +68,17 @@
         "input": 1,
         "output": 1
       },
-      "elapsedMs": 3785.720542,
-      "cpuMs": 79.681
+      "elapsedMs": 2619.026458,
+      "cpuMs": 66.885
     },
     "compact-summary": {
       "quality": {
         "attempts": 10,
         "verifiedCorrect": 4,
-        "positiveRecall": 0,
-        "falseAlarmRate": 0.3333333333333333,
+        "positiveRecall": 0.5,
+        "falseAlarmRate": 0.6666666666666666,
         "inconclusive": 0,
-        "p50Ms": 10.075582999999824,
+        "p50Ms": 5.056875000000218,
         "p95Ms": null
       },
       "controls": {
@@ -120,14 +120,15 @@
         "input": 1,
         "output": 1
       },
-      "elapsedMs": 4279.820792,
-      "cpuMs": 63.407
+      "elapsedMs": 2285.0509999999995,
+      "cpuMs": 62.347
     }
   },
   "actualSharedMeteredTariffUsd": 0,
   "invoiceUsd": 0,
   "unknownUsage": false,
   "reasons": [
+    "source-pattern oracle agreement does not independently reproduce or verify a vulnerability",
     "public historical source may occur in model training data",
     "tiny convenience sample does not establish security generalization",
     "local compute monetary cost unpriced; wall/CPU measured separately",
@@ -137,12 +138,29 @@
     "insufficient independent final families for preregistered qualification",
     "paired quality gain not established"
   ],
-  "executed": "2026-10-24 UTC",
-  "scope": "Executed equal-limit current/compact deterministic-provider arms on downloaded advisory-labelled sources; no paid model dispatch.",
-  "unknownUsageStop": {
+  "purpose": "deterministic summary-controller smoke observation; no model calls or summary benefit claim",
+  "qualificationStatus": "not-qualified",
+  "supersedes": "Original summary control used invalid helper-only lodash corpus; superseded by corrected source selections.",
+  "unknownUsageControl": {
+    "schemaVersion": 1,
+    "study": "development-summary-ablation-121",
+    "preregistrationDigest": "sha256:a68373d2268129f77e3d949c4267af94899c61fd6d474e74e5a35178ef46127d",
+    "protocolDigest": "sha256:6e64465a841dcdea128ea38d66dd0d78911ca2d48a26016d514a973fa0604dc1",
+    "corpusDigest": "sha256:2c13432438c95407124b339239470158cd0a8085217a3141a4b8d01a2a7f4fce",
+    "mode": "controls",
     "conclusion": "inconclusive",
-    "unknownUsage": true,
-    "invoiceUsd": null,
+    "currentFeedbackRetained": true,
+    "broaderEnablement": false,
+    "automaticPromotion": false,
+    "primaryComparison": {
+      "independentFamilies": 0,
+      "meanGain": null,
+      "interval95": [
+        -1,
+        1
+      ],
+      "retentionRegressions": 0
+    },
     "arms": {
       "current-feedback": {
         "quality": {
@@ -193,10 +211,28 @@
           "input": 0,
           "output": 0
         },
-        "elapsedMs": 43.169791999999994,
-        "cpuMs": 0.852
+        "elapsedMs": 20.478792,
+        "cpuMs": 0.958
       },
       "compact-summary": null
-    }
+    },
+    "actualSharedMeteredTariffUsd": 0,
+    "invoiceUsd": null,
+    "unknownUsage": true,
+    "reasons": [
+      "source-pattern oracle agreement does not independently reproduce or verify a vulnerability",
+      "public historical source may occur in model training data",
+      "tiny convenience sample does not establish security generalization",
+      "local compute monetary cost unpriced; wall/CPU measured separately",
+      "ordinary provider token usage is metered tariff cost, not reconciled invoice cost",
+      "provider-default decoding temperature and seed not pinned by existing runtime",
+      "shared accounting stop before compact arm",
+      "deterministic controls only; no model-backed security efficacy evidence",
+      "insufficient independent final families for preregistered qualification",
+      "paired quality gain not established",
+      "injected regression control not demonstrated",
+      "unsettled dispatch or unknown token usage",
+      "provider invoice and full monetary cost not reconciled"
+    ]
   }
 }

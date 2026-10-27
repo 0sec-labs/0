@@ -27,7 +27,7 @@ export async function runSummaryAblation({ protocol, corpus, preregistration, mo
   if (preregistration.preregistrationDigest !== expected.preregistrationDigest || JSON.stringify(preregistration) !== JSON.stringify(expected)) throw new Error('summary preregistration changed');
   if (mode === 'provider') {
     if (approvedSharedBudgetUsd < preregistration.sharedCampaignBudgetUsd) throw new Error('both arms and final reserves need one approved shared spend cap');
-    if (!qualifiedPilotReport || qualifiedPilotReport.mode !== 'provider' || qualifiedPilotReport.protocolDigest !== protocol.protocolDigest || qualifiedPilotReport.cost?.unknownUsage !== false || typeof qualifiedPilotReport.cost?.billedUsd !== 'number' || !qualifiedPilotReport.receipts?.some(r => r.lane === 'final') || qualifiedPilotReport.pairedAnalysis?.regressionDetected !== true) throw new Error('summary execution is gated on completed model-backed pilot with reconciled billing and validated controls');
+    if (!qualifiedPilotReport || qualifiedPilotReport.conclusion !== 'qualified' || qualifiedPilotReport.mode !== 'provider' || qualifiedPilotReport.protocolDigest !== protocol.protocolDigest || qualifiedPilotReport.cost?.unknownUsage !== false || typeof qualifiedPilotReport.cost?.billedUsd !== 'number' || !qualifiedPilotReport.receipts?.some(r => r.lane === 'final') || qualifiedPilotReport.pairedAnalysis?.regressionDetected !== true) throw new Error('summary execution is gated on qualified model-backed pilot with reconciled billing and validated controls');
   }
   const compact = await createCompactFeedbackTransform(preregistration.summaryLimits);
   const results = {};

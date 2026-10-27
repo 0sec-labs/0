@@ -44,5 +44,6 @@ test('paid ablation requires shared cap and completed reconciled basic pilot', a
   const options = inputs(); let calls = 0; const providerFactory = () => { calls++; return deterministicControlProvider(); };
   await assert.rejects(runSummaryAblation({ ...options, mode: 'provider', providerFactory }), /shared spend cap/);
   await assert.rejects(runSummaryAblation({ ...options, mode: 'provider', providerFactory, approvedSharedBudgetUsd: 40 }), /reconciled billing/);
+  await assert.rejects(runSummaryAblation({ ...options, mode: 'provider', providerFactory, approvedSharedBudgetUsd: 40, qualifiedPilotReport: { mode: 'provider', protocolDigest: options.protocol.protocolDigest, conclusion: 'inconclusive', cost: { unknownUsage: false, billedUsd: 1 }, receipts: [{ lane: 'final' }], pairedAnalysis: { regressionDetected: true } } }), /qualified model-backed pilot/);
   assert.equal(calls, 0);
 });

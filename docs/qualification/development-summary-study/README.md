@@ -1,6 +1,11 @@
-# Issue 121: current-feedback versus compact-summary experiment
+# Issue 121: experimental development-summary ablation controller
 
-This focused study depends on the runnable #120 pilot (PR #195). It executes the
+This is experimental, opt-in controller infrastructure. It does not qualify a
+model-backed ablation or close issue #121. Committed artifacts use only
+deterministic controls and remain inconclusive. The earlier artifact based on
+conflicting lodash source labels is superseded by the corrected #120 corpus.
+
+This focused controller depends on the #120 study infrastructure. It executes the
 same frozen-parent, width-one source-review optimization twice, varying only the
 development-feedback representation. One arm receives the current pilot's bounded
 observed finding/outcome receipts; the other uses the existing
@@ -53,8 +58,10 @@ or dispatching the compact arm. This is reported as unknown, never zero cost.
 ## Paid measurement remains gated
 
 The `run` command additionally requires one approved shared cap covering both
-arms and a completed model-backed basic pilot with reconciled billing and
-validated controls. With the default base protocol the shared cap is $40, while
+arms and a qualified model-backed basic pilot with reconciled billing and
+validated controls. A completed-but-inconclusive parent is rejected. The current
+#120 controller always reports inconclusive, so none of its current reports can
+unlock paid ablation; a separately reviewed qualification remains required. With the default base protocol the shared cap is $40, while
 maximum declared dispatch reservations are $26.40. These are bounds, not an
 observed dollar bill. The driver refuses to start provider arms without that
 parent evidence and explicit cap. No paid calls were made for the committed
