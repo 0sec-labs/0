@@ -35,8 +35,9 @@ No paid model requests or customer-target assessments ran during this review.
 - **23 routing/runtime/scan-plan tests** pass. The actual built CLI fixture
   executes **64 mock calls across 32 trials**, including an intentionally failing
   model control. Fixture catalog estimates are not invoices.
-- **43 milestone tests plus 8 browser-boundary checks** pass: host-owned proof
-  production, cleanup, transport, replay, sanitization and browser-safe rendering.
+- **43 milestone tests** pass for host-owned proof production, cleanup,
+  transport, replay and sanitization. The dashboard regression script also passes
+  **8 checks**, including the milestone browser-safe import/render check.
 
 Representative evidence and reproduction contracts:
 
