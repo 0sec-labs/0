@@ -7141,7 +7141,7 @@ export class ToolExecutor {
       // check is skipped (conservative).
       // `this.ctx.scopePath` is guaranteed set by the workspace guard above.
       const sourceAbsolute = resolve(this.ctx.scopePath!, sourcePath);
-      const probe = probeFileRefTarget(sourceAbsolute);
+      const probe = probeFileRefTarget(sourceAbsolute, this.ctx.scopePath!);
       const lastLine =
         endLine !== undefined ? (endLine as number) : (startLine as number);
       if (!probe.exists) {
