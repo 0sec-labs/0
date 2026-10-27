@@ -99,7 +99,8 @@ export async function runPreregisteredStudy({ corpus, protocol, mode, provider, 
     const dev = corpus.cases.filter(c => c.lane === 'development');
     const baselineDev = [];
     for (const c of dev) for (let repeat = 0; repeat < protocol.repeats; repeat++) baselineDev.push(await evaluate(c, 'frozen-baseline', repeat, BASELINE_SKILL));
-    const feedback = feedbackTransform(baselineDev.map(row => ({ caseId: row.caseId, repeat: row.repeat, sourceDigest: row.sourceDigest, outcome: row.grade.outcome, correct: row.grade.correct, falseAlarm: row.grade.falseAlarm, observedFinding: row.observedFinding, traceRef: digest([row.caseId, row.repeat, row.chargeId]) })));
+    // Negative controls remain controller-only, including development negatives.
+    const feedback = feedbackTransform(baselineDev.filter(row => row.label === 'vulnerable').map(row => ({ caseId: row.caseId, repeat: row.repeat, sourceDigest: row.sourceDigest, outcome: row.grade.outcome, correct: row.grade.correct, falseAlarm: row.grade.falseAlarm, observedFinding: row.observedFinding, traceRef: digest([row.caseId, row.repeat, row.chargeId]) })));
     const prompt = JSON.stringify({ currentSkill: BASELINE_SKILL, developmentFeedback: feedback, instruction: 'Propose one bounded width-one skill improvement using only development observations. Preserve precise evidence and avoid false alarms.' });
     const proposed = await dispatch({ role: 'proposal', prompt });
     const parsed = proposed.completed ? jsonFinding(proposed.text) : null;

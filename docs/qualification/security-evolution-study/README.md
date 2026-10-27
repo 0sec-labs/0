@@ -1,6 +1,12 @@
-# Issue 120: finite source-review pilot
+# Issue 120: experimental source-review study controller
 
-This is a runnable, preregistered measurement pilot for one narrow workflow:
+This is experimental, opt-in controller infrastructure, not a qualified model-backed
+pilot. All committed observations use deterministic controls and no model calls.
+Issue #120 remains open. The runner always reports `conclusion: inconclusive`;
+these artifacts cannot establish security efficacy, promote an artifact or enable
+production optimization.
+
+The controller exercises a preregistered measurement path for one narrow workflow:
 JavaScript prototype-pollution source review. It uses the existing trusted
 `LlmApiRuntime` provider route and `ObjectiveOracle` finding-match evaluator.
 The width-one proposal uses production `proposeEvolutionEdits`, with its strict edit schema and immutable snapshot, restricted to a single skill file and one charged model turn. Candidate changes are bounded skill text, never executable code, and receive no
@@ -17,7 +23,7 @@ vulnerable/fixed version pairs, registry SHA-512 integrity and exact source hash
 | Selection | y18n | GHSA-c4w7-xm78-47vh | 4.0.0 / 4.0.1 |
 | Selection | qs | GHSA-hrpp-h998-j3pp | 6.10.2 / 6.10.3 |
 | Final | hoek | GHSA-jp4x-w63m-7wgm | 5.0.2 / 5.0.3 |
-| Final | lodash | GHSA-p6mc-m468-83gw | 4.17.18 / 4.17.19 |
+| Final | lodash | GHSA-p6mc-m468-83gw | 4.17.15 / 4.17.19 |
 
 Preparation checks the advisory's affected range and first patched version,
 rejects withdrawn advisories, downloads only allowlisted HTTPS registry/GitHub
@@ -26,13 +32,27 @@ memory. It runs no package installation scripts. Three small structural clean
 controls exercise JSON.parse, Object.fromEntries and null-prototype destinations.
 These are language-semantics controls, not claims that an arbitrary package is
 free of every vulnerability. Fixed labels concern the selected advisory only.
-Family and identical-source leakage across splits are rejected.
+Family and identical-source leakage across splits are rejected. Identical source
+cannot carry conflicting vulnerable/fixed labels, even within one split.
+
+The earlier control artifact was invalidated: lodash 4.17.18 and 4.17.19 had
+identical selected helper files despite opposite labels. The corrected selection
+uses the `baseSet` region from `lodash.js` in 4.17.15 and 4.17.19, plus its
+assignment helpers. `corpus-manifest.json` records full-file hashes, selected-byte
+hashes, exact character offsets and selector boundaries for replay. Admission
+checks selected bytes against this manifest; preparation verifies upstream package
+identity and tarball integrity. This is an operator-curated corpus, not an
+independent adjudication of every selected snippet's vulnerability semantics.
+The source-pattern oracle matches a label and literal sink; `verifiedCorrect`
+means agreement with that oracle, not executable vulnerability reproduction.
+Independent semantic curation and vulnerability-proof qualification remain open.
 
 The protocol hashes the loaded study scripts, runtime, production proposer and evaluator bytes. Changing them invalidates preregistration before dispatch.
 
 The final set is public historical material and may appear in model training data.
 It is sealed from the *study proposer*, not secret from the Internet. Only
-explicit development feedback and the current skill enter the proposal call.
+positive-case development feedback and the current skill enter the proposal call.
+All negative controls, including development negatives, remain controller-only.
 Do not give the proposer this controller source, corpus file or final report.
 `sourceTask()` passes only source bytes/digest to evaluated workers. Controller
 reports retain case-level evidence; do not add those reports to candidate archives.
@@ -52,7 +72,7 @@ node --test scripts/security-evolution-study.test.mjs
 
 Preparation is networked corpus retrieval; controls invoke no model API. The
 preregistered default reserves at most 132 calls / $13.20 under a $20 campaign cap,
-including complete independent final validation. Frozen baseline, one sequential
+including all declared final evaluation calls. Frozen baseline, one sequential
 proposal, A/A, injected regression and frozen-baseline extra attempts are declared
 before outcomes. The extra-attempt arm receives the same maximum additional
 call/spend allocation as candidate development plus proposal generation. Actual
@@ -96,7 +116,8 @@ temperature/seed remain unresolved in the existing runtime and are recorded as a
 qualification limitation. The artifact cannot be promoted automatically. Null or
 inconclusive results retain the existing implementation.
 
-See `control-result.json` for the executed zero-provider-cost corpus experiment.
+See `control-result.json` for the refreshed zero-provider-cost controller smoke observation.
+Its corpus/protocol digests supersede the invalidated helper-only lodash run.
 It tests the measurement path, not model-backed efficacy. A paid provider pilot,
 full billing reconciliation, adequately sampled independent final outcomes and
 qualified retention/provenance remain required before closing the efficacy gate.

@@ -1,0 +1,863 @@
+{
+  "schemaVersion": 1,
+  "scope": "bounded JavaScript prototype-pollution source review; fixed means fixed for the selected advisory, not globally vulnerability-free",
+  "contamination": "public historical advisories; no claim of post-training secrecy or security-generalization",
+  "advisories": [
+    {
+      "id": "GHSA-9c47-m6qq-7p4h",
+      "url": "https://github.com/advisories/GHSA-9c47-m6qq-7p4h",
+      "advisoryDigest": "sha256:80ec9607e34f4c47c48da8359834052bb4270edd71ab63ffa2ac384375123737",
+      "publishedAt": "2022-12-29T01:51:03Z",
+      "updatedAt": "2024-02-22T05:08:21Z",
+      "vulnerabilities": [
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "json5"
+          },
+          "vulnerable_version_range": ">= 2.0.0, < 2.2.2",
+          "first_patched_version": "2.2.2",
+          "vulnerable_functions": []
+        },
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "json5"
+          },
+          "vulnerable_version_range": "< 1.0.2",
+          "first_patched_version": "1.0.2",
+          "vulnerable_functions": []
+        }
+      ]
+    },
+    {
+      "id": "GHSA-xvch-5gv4-984h",
+      "url": "https://github.com/advisories/GHSA-xvch-5gv4-984h",
+      "advisoryDigest": "sha256:09327a510782af37284e93227b941d2166319d853f6f3064141f27afc0c46889",
+      "publishedAt": "2022-03-18T00:01:09Z",
+      "updatedAt": "2024-06-21T21:33:52Z",
+      "vulnerabilities": [
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "minimist"
+          },
+          "vulnerable_version_range": ">= 1.0.0, < 1.2.6",
+          "first_patched_version": "1.2.6",
+          "vulnerable_functions": []
+        },
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "minimist"
+          },
+          "vulnerable_version_range": "< 0.2.4",
+          "first_patched_version": "0.2.4",
+          "vulnerable_functions": []
+        }
+      ]
+    },
+    {
+      "id": "GHSA-c4w7-xm78-47vh",
+      "url": "https://github.com/advisories/GHSA-c4w7-xm78-47vh",
+      "advisoryDigest": "sha256:548559e66e5af87e9f97d30b93ed2779b839ac2a79af1ba35a8e09ce5fee5a18",
+      "publishedAt": "2021-03-29T16:05:12Z",
+      "updatedAt": "2023-11-29T22:45:30Z",
+      "vulnerabilities": [
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "y18n"
+          },
+          "vulnerable_version_range": "< 3.2.2",
+          "first_patched_version": "3.2.2",
+          "vulnerable_functions": []
+        },
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "y18n"
+          },
+          "vulnerable_version_range": "= 4.0.0",
+          "first_patched_version": "4.0.1",
+          "vulnerable_functions": []
+        },
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "y18n"
+          },
+          "vulnerable_version_range": ">= 5.0.0, < 5.0.5",
+          "first_patched_version": "5.0.5",
+          "vulnerable_functions": []
+        }
+      ]
+    },
+    {
+      "id": "GHSA-hrpp-h998-j3pp",
+      "url": "https://github.com/advisories/GHSA-hrpp-h998-j3pp",
+      "advisoryDigest": "sha256:fc6d6a90a7d86c5be9bc07dc25cb223dc846e917b8a564879de4ed1301685ede",
+      "publishedAt": "2022-11-27T00:30:50Z",
+      "updatedAt": "2025-04-29T15:41:45Z",
+      "vulnerabilities": [
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "qs"
+          },
+          "vulnerable_version_range": ">= 6.10.0, < 6.10.3",
+          "first_patched_version": "6.10.3",
+          "vulnerable_functions": []
+        },
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "qs"
+          },
+          "vulnerable_version_range": ">= 6.9.0, < 6.9.7",
+          "first_patched_version": "6.9.7",
+          "vulnerable_functions": []
+        },
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "qs"
+          },
+          "vulnerable_version_range": ">= 6.8.0, < 6.8.3",
+          "first_patched_version": "6.8.3",
+          "vulnerable_functions": []
+        },
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "qs"
+          },
+          "vulnerable_version_range": ">= 6.7.0, < 6.7.3",
+          "first_patched_version": "6.7.3",
+          "vulnerable_functions": []
+        },
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "qs"
+          },
+          "vulnerable_version_range": ">= 6.6.0, < 6.6.1",
+          "first_patched_version": "6.6.1",
+          "vulnerable_functions": []
+        },
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "qs"
+          },
+          "vulnerable_version_range": ">= 6.5.0, < 6.5.3",
+          "first_patched_version": "6.5.3",
+          "vulnerable_functions": []
+        },
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "qs"
+          },
+          "vulnerable_version_range": ">= 6.4.0, < 6.4.1",
+          "first_patched_version": "6.4.1",
+          "vulnerable_functions": []
+        },
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "qs"
+          },
+          "vulnerable_version_range": ">= 6.3.0, < 6.3.3",
+          "first_patched_version": "6.3.3",
+          "vulnerable_functions": []
+        },
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "qs"
+          },
+          "vulnerable_version_range": "< 6.2.4",
+          "first_patched_version": "6.2.4",
+          "vulnerable_functions": []
+        }
+      ]
+    },
+    {
+      "id": "GHSA-jp4x-w63m-7wgm",
+      "url": "https://github.com/advisories/GHSA-jp4x-w63m-7wgm",
+      "advisoryDigest": "sha256:4a249ae86b0119c3068da5db4da7f42523b8a4690c7e598d07e46375b49c711e",
+      "publishedAt": "2018-04-26T15:25:17Z",
+      "updatedAt": "2025-05-29T22:49:50Z",
+      "vulnerabilities": [
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "hoek"
+          },
+          "vulnerable_version_range": ">= 5.0.0, < 5.0.3",
+          "first_patched_version": "5.0.3",
+          "vulnerable_functions": []
+        },
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "hoek"
+          },
+          "vulnerable_version_range": "< 4.2.1",
+          "first_patched_version": "4.2.1",
+          "vulnerable_functions": []
+        }
+      ]
+    },
+    {
+      "id": "GHSA-p6mc-m468-83gw",
+      "url": "https://github.com/advisories/GHSA-p6mc-m468-83gw",
+      "advisoryDigest": "sha256:4f78fdc362a6edee776badf1ae0870d38940e55565fc5993937965bc869b36c2",
+      "publishedAt": "2020-07-15T19:15:48Z",
+      "updatedAt": "2025-08-12T21:43:40Z",
+      "vulnerabilities": [
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "lodash"
+          },
+          "vulnerable_version_range": ">= 3.7.0, < 4.17.19",
+          "first_patched_version": "4.17.19",
+          "vulnerable_functions": []
+        },
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "lodash-es"
+          },
+          "vulnerable_version_range": ">= 3.7.0, < 4.17.20",
+          "first_patched_version": "4.17.20",
+          "vulnerable_functions": []
+        },
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "lodash.pick"
+          },
+          "vulnerable_version_range": ">= 4.0.0, <= 4.4.0",
+          "first_patched_version": null,
+          "vulnerable_functions": []
+        },
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "lodash.set"
+          },
+          "vulnerable_version_range": ">= 3.7.0, <= 4.3.2",
+          "first_patched_version": null,
+          "vulnerable_functions": []
+        },
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "lodash.setwith"
+          },
+          "vulnerable_version_range": "<= 4.3.2",
+          "first_patched_version": null,
+          "vulnerable_functions": []
+        },
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "lodash.update"
+          },
+          "vulnerable_version_range": "<= 4.10.2",
+          "first_patched_version": null,
+          "vulnerable_functions": []
+        },
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "lodash.updatewith"
+          },
+          "vulnerable_version_range": "<= 4.10.2",
+          "first_patched_version": null,
+          "vulnerable_functions": []
+        },
+        {
+          "package": {
+            "ecosystem": "rubygems",
+            "name": "lodash-rails"
+          },
+          "vulnerable_version_range": ">= 3.7.0, < 4.17.19",
+          "first_patched_version": "4.17.19",
+          "vulnerable_functions": []
+        }
+      ]
+    }
+  ],
+  "digest": "sha256:2c13432438c95407124b339239470158cd0a8085217a3141a4b8d01a2a7f4fce",
+  "purpose": "operator-curated source provenance for controller-only observations; not independent vulnerability qualification",
+  "cases": [
+    {
+      "id": "sha256:32f5eb40bbb6061385f751e837bd916625597962c6c77a6121fdedf3f68231cd",
+      "family": "json5",
+      "lane": "development",
+      "label": "vulnerable",
+      "labelBasis": "upstream-advisory-version-pair",
+      "advisory": "GHSA-9c47-m6qq-7p4h",
+      "package": "json5",
+      "version": "2.2.1",
+      "tarballIntegrity": "sha512-1hqLFMSrGHRHxav9q9gNjJ5EXznIxGVO09xQRrwplcS8qs28pZ8s8hupZAmqDwZUmVZ2Qb2jnyPOWcDH8m8dlA==",
+      "tarballDigest": "sha256:1d044eb7a06ddb2429366e0630dd884d1e57f116e3704b293631fa4dde045a59",
+      "sourceDigest": "sha256:0ed1d9d2636c638cfc3cb85d4053aab753b448cca77f51f051759a3b286c9621",
+      "files": [
+        {
+          "path": "lib/parse.js",
+          "digest": "sha256:0e8f3ba60da219fa6e354e30cab708e35403258d1216cbfc9fbddf110b54d68e",
+          "fullFileBytes": 21393,
+          "selectedDigest": "sha256:0e8f3ba60da219fa6e354e30cab708e35403258d1216cbfc9fbddf110b54d68e",
+          "selectedBytes": 21393,
+          "fileRange": {
+            "start": 0,
+            "end": 21393
+          },
+          "sourceRange": {
+            "start": 17,
+            "end": 21410
+          },
+          "selector": null
+        }
+      ],
+      "sinks": [
+        "push",
+        "Object.defineProperty",
+        "parent"
+      ]
+    },
+    {
+      "id": "sha256:97b8c4126a3f8cdfab56637be6fe1cac8fcf394db4f58ba8cf07aa2c98b11ee5",
+      "family": "json5",
+      "lane": "development",
+      "label": "fixed",
+      "labelBasis": "upstream-advisory-version-pair",
+      "advisory": "GHSA-9c47-m6qq-7p4h",
+      "package": "json5",
+      "version": "2.2.2",
+      "tarballIntegrity": "sha512-46Tk9JiOL2z7ytNQWFLpj99RZkVgeHf87yGQKsIkaPz1qSH9UczKH1rO7K3wgRselo0tYMUNfecYpm/p1vC7tQ==",
+      "tarballDigest": "sha256:86f16f0b61deae8046bf4eef42c24deab0e9832e7d20a4aaee5620d726c86a39",
+      "sourceDigest": "sha256:d66fe986311fe3982f43768f5a2d22c40ad248e237a035edc7dc13c563469c34",
+      "files": [
+        {
+          "path": "lib/parse.js",
+          "digest": "sha256:a0a7c71884a9b55f336da99227c901993b5c4af975adfa21ad1af1e873e605ba",
+          "fullFileBytes": 22402,
+          "selectedDigest": "sha256:a0a7c71884a9b55f336da99227c901993b5c4af975adfa21ad1af1e873e605ba",
+          "selectedBytes": 22402,
+          "fileRange": {
+            "start": 0,
+            "end": 22402
+          },
+          "sourceRange": {
+            "start": 17,
+            "end": 22419
+          },
+          "selector": null
+        }
+      ],
+      "sinks": [
+        "push",
+        "Object.defineProperty",
+        "parent"
+      ]
+    },
+    {
+      "id": "sha256:8985452e266c2a404d12505f17b36e31627f8494b07e811735e594a6aa22ec1f",
+      "family": "minimist",
+      "lane": "development",
+      "label": "vulnerable",
+      "labelBasis": "upstream-advisory-version-pair",
+      "advisory": "GHSA-xvch-5gv4-984h",
+      "package": "minimist",
+      "version": "1.2.5",
+      "tarballIntegrity": "sha512-FM9nNUYrRBAELZQT3xeZQ7fmMOBg6nWNmJKTcgsJeaLstP/UODVpGsr5OhXhhXg6f+qtJ8uiZ+PUxkDWcgIXLw==",
+      "tarballDigest": "sha256:a1800ce4d39356e96497bd09a41fad0033a13dd8eeb469008333547505ce4350",
+      "sourceDigest": "sha256:e8dad86d2e54bc3afee97743656f739d41a9d6aab6108194378de6452cf2efab",
+      "files": [
+        {
+          "path": "index.js",
+          "digest": "sha256:0feebc85297a35829a4a3a6c5346ddcca582052e5ebf0d33bd024abe8cd5245b",
+          "fullFileBytes": 7652,
+          "selectedDigest": "sha256:0feebc85297a35829a4a3a6c5346ddcca582052e5ebf0d33bd024abe8cd5245b",
+          "selectedBytes": 7652,
+          "fileRange": {
+            "start": 0,
+            "end": 7652
+          },
+          "sourceRange": {
+            "start": 17,
+            "end": 7669
+          },
+          "selector": null
+        }
+      ],
+      "sinks": [
+        "setKey",
+        "__proto__",
+        "constructor"
+      ]
+    },
+    {
+      "id": "sha256:a340738ad5f13d2d907561ef2c1868995f18dcd7bb5d291dc9717cd21980c8cf",
+      "family": "minimist",
+      "lane": "development",
+      "label": "fixed",
+      "labelBasis": "upstream-advisory-version-pair",
+      "advisory": "GHSA-xvch-5gv4-984h",
+      "package": "minimist",
+      "version": "1.2.6",
+      "tarballIntegrity": "sha512-Jsjnk4bw3YJqYzbdyBiNsPWHPfO++UGG749Cxs6peCu5Xg4nrena6OVxOYxrQTqww0Jmwt+Ref8rggumkTLz9Q==",
+      "tarballDigest": "sha256:49c9124665fc1900e589be610b8dc69d5e61a179e9ed8547c6d61d30a225e726",
+      "sourceDigest": "sha256:be90c942aa236fa369544cb2a36ed1ed7e37229ca8f2cd8a987fbf27f3236f38",
+      "files": [
+        {
+          "path": "index.js",
+          "digest": "sha256:48ab32c4ba79cde9a1b1236437942567f97b8eac7ce17013b83b548c620db652",
+          "fullFileBytes": 7807,
+          "selectedDigest": "sha256:48ab32c4ba79cde9a1b1236437942567f97b8eac7ce17013b83b548c620db652",
+          "selectedBytes": 7807,
+          "fileRange": {
+            "start": 0,
+            "end": 7807
+          },
+          "sourceRange": {
+            "start": 17,
+            "end": 7824
+          },
+          "selector": null
+        }
+      ],
+      "sinks": [
+        "setKey",
+        "__proto__",
+        "constructor"
+      ]
+    },
+    {
+      "id": "sha256:8e7451616dbacb115fb42eaafeb18705aeb0b4684e3be0db4e63b71b23fe777b",
+      "family": "y18n",
+      "lane": "selection",
+      "label": "vulnerable",
+      "labelBasis": "upstream-advisory-version-pair",
+      "advisory": "GHSA-c4w7-xm78-47vh",
+      "package": "y18n",
+      "version": "4.0.0",
+      "tarballIntegrity": "sha512-r9S/ZyXu/Xu9q1tYlpsLIsa3EeLXXk0VwlxqTcFRfg9EhMW+17kbt9G0NrgCmhGb5vT2hyhJZLfDGx+7+5Uj/w==",
+      "tarballDigest": "sha256:b943bb06d2d33d846a5decf9f3a83509dda405862a2faa664dd6231f22dc216f",
+      "sourceDigest": "sha256:54b287b9cf737a35f670bcdf3f96808854ffcc0a1d548458bc722dc20f855e5c",
+      "files": [
+        {
+          "path": "index.js",
+          "digest": "sha256:19d5f0a6b40962c14af84f551b938fb5fe47fb59a4950bc0112d013c23c4a7e3",
+          "fullFileBytes": 5256,
+          "selectedDigest": "sha256:19d5f0a6b40962c14af84f551b938fb5fe47fb59a4950bc0112d013c23c4a7e3",
+          "selectedBytes": 5256,
+          "fileRange": {
+            "start": 0,
+            "end": 5256
+          },
+          "sourceRange": {
+            "start": 17,
+            "end": 5273
+          },
+          "selector": null
+        }
+      ],
+      "sinks": [
+        "__",
+        "locale",
+        "cache"
+      ]
+    },
+    {
+      "id": "sha256:4fbfb11eba5ddc9fad139fe8383672df90e1e8ab4b804561cdbc708765cedfbe",
+      "family": "y18n",
+      "lane": "selection",
+      "label": "fixed",
+      "labelBasis": "upstream-advisory-version-pair",
+      "advisory": "GHSA-c4w7-xm78-47vh",
+      "package": "y18n",
+      "version": "4.0.1",
+      "tarballIntegrity": "sha512-wNcy4NvjMYL8gogWWYAO7ZFWFfHcbdbE57tZO8e4cbpj8tfUcwrwqSl3ad8HxpYWCdXcJUCeKKZS62Av1affwQ==",
+      "tarballDigest": "sha256:cd11c323020c227a1dbebbae09c435d255a12a62586789129e5f178694f49fd8",
+      "sourceDigest": "sha256:39c7654d3f14842846fa8ed733ca52bcd275170fe9f51b1f7d16dceb09e71c76",
+      "files": [
+        {
+          "path": "index.js",
+          "digest": "sha256:ca78904cb3c3dc166f0fe659d2fa554847b52405249dffe3074e11bb32991657",
+          "fullFileBytes": 5273,
+          "selectedDigest": "sha256:ca78904cb3c3dc166f0fe659d2fa554847b52405249dffe3074e11bb32991657",
+          "selectedBytes": 5273,
+          "fileRange": {
+            "start": 0,
+            "end": 5273
+          },
+          "sourceRange": {
+            "start": 17,
+            "end": 5290
+          },
+          "selector": null
+        }
+      ],
+      "sinks": [
+        "__",
+        "locale",
+        "cache"
+      ]
+    },
+    {
+      "id": "sha256:6ab210bbdcb4304d09ab08ba3175ab16efcd2b927e838f1deb6586b311f76ff0",
+      "family": "qs",
+      "lane": "selection",
+      "label": "vulnerable",
+      "labelBasis": "upstream-advisory-version-pair",
+      "advisory": "GHSA-hrpp-h998-j3pp",
+      "package": "qs",
+      "version": "6.10.2",
+      "tarballIntegrity": "sha512-mSIdjzqznWgfd4pMii7sHtaYF8rx8861hBO80SraY5GT0XQibWZWJSid0avzHGkDIZLImux2S5mXO0Hfct2QCw==",
+      "tarballDigest": "sha256:02094e21dbd238fd54ade4e287b683c5518f19bc1519f542c6a3a1f38bbe5487",
+      "sourceDigest": "sha256:18dce7f91ee3bf8f241b6ed3ac0edab290b281710fda7278cedc437be029f704",
+      "files": [
+        {
+          "path": "lib/parse.js",
+          "digest": "sha256:9ed80bf4dc5eb2d4c609173bf50b18a53799199418795ce148f3e5abfae7ff8a",
+          "fullFileBytes": 9349,
+          "selectedDigest": "sha256:9ed80bf4dc5eb2d4c609173bf50b18a53799199418795ce148f3e5abfae7ff8a",
+          "selectedBytes": 9349,
+          "fileRange": {
+            "start": 0,
+            "end": 9343
+          },
+          "sourceRange": {
+            "start": 17,
+            "end": 9360
+          },
+          "selector": null
+        },
+        {
+          "path": "lib/utils.js",
+          "digest": "sha256:1a360b096b61cb5d5260e6543ed032677d7dcadb0bcf9ba5c42833ca75622e9b",
+          "fullFileBytes": 6823,
+          "selectedDigest": "sha256:1a360b096b61cb5d5260e6543ed032677d7dcadb0bcf9ba5c42833ca75622e9b",
+          "selectedBytes": 6823,
+          "fileRange": {
+            "start": 0,
+            "end": 6823
+          },
+          "sourceRange": {
+            "start": 9378,
+            "end": 16201
+          },
+          "selector": null
+        }
+      ],
+      "sinks": [
+        "parseObject",
+        "__proto__",
+        "parseKeys"
+      ]
+    },
+    {
+      "id": "sha256:e154d0935ad38c83fa9bd40d1196de2674f139b1215b7b22a5058ad0277fe32e",
+      "family": "qs",
+      "lane": "selection",
+      "label": "fixed",
+      "labelBasis": "upstream-advisory-version-pair",
+      "advisory": "GHSA-hrpp-h998-j3pp",
+      "package": "qs",
+      "version": "6.10.3",
+      "tarballIntegrity": "sha512-wr7M2E0OFRfIfJZjKGieI8lBKb7fRCH4Fv5KNPEs7gJ8jadvotdsS08PzOKR7opXhZ/Xkjtt3WF9g38drmyRqQ==",
+      "tarballDigest": "sha256:a870fe3cc87d4bdbedc5dd3fb83ead68b4cc6b01bf790daab4a432c4ba841617",
+      "sourceDigest": "sha256:87d97d99b5827ddf9ddf427e3590e97c1a5f98b3e4534a948d9d5ab9d02584a2",
+      "files": [
+        {
+          "path": "lib/parse.js",
+          "digest": "sha256:9611d65366166f5f826b647f6f2dc25ad94eb5d0259e9646bfd13784dfce907c",
+          "fullFileBytes": 9380,
+          "selectedDigest": "sha256:9611d65366166f5f826b647f6f2dc25ad94eb5d0259e9646bfd13784dfce907c",
+          "selectedBytes": 9380,
+          "fileRange": {
+            "start": 0,
+            "end": 9374
+          },
+          "sourceRange": {
+            "start": 17,
+            "end": 9391
+          },
+          "selector": null
+        },
+        {
+          "path": "lib/utils.js",
+          "digest": "sha256:1a360b096b61cb5d5260e6543ed032677d7dcadb0bcf9ba5c42833ca75622e9b",
+          "fullFileBytes": 6823,
+          "selectedDigest": "sha256:1a360b096b61cb5d5260e6543ed032677d7dcadb0bcf9ba5c42833ca75622e9b",
+          "selectedBytes": 6823,
+          "fileRange": {
+            "start": 0,
+            "end": 6823
+          },
+          "sourceRange": {
+            "start": 9409,
+            "end": 16232
+          },
+          "selector": null
+        }
+      ],
+      "sinks": [
+        "parseObject",
+        "__proto__",
+        "parseKeys"
+      ]
+    },
+    {
+      "id": "sha256:c5c0026f392c99b113831087e814d19bdbacf9bad6bf8b443934f4667a5f61f7",
+      "family": "hoek",
+      "lane": "final",
+      "label": "vulnerable",
+      "labelBasis": "upstream-advisory-version-pair",
+      "advisory": "GHSA-jp4x-w63m-7wgm",
+      "package": "hoek",
+      "version": "5.0.2",
+      "tarballIntegrity": "sha512-NA10UYP9ufCtY2qYGkZktcQXwVyYK4zK0gkaFSB96xhtlo6V8tKXdQgx8eHolQTRemaW0uLn8BhjhwqrOU+QLQ==",
+      "tarballDigest": "sha256:3e20c014c821022d8f16a9878cee59366d1d7f7be207474357f578e8e424038f",
+      "sourceDigest": "sha256:0eb8f8f9cd5da925e133ae859be4ee1f210eabded674c957b7bccfd191cba97c",
+      "files": [
+        {
+          "path": "lib/index.js",
+          "digest": "sha256:f095de94f32f72201278b5a093b2678f7aa3dee5fc96d10f47ca05cdf6d466ef",
+          "fullFileBytes": 24919,
+          "selectedDigest": "sha256:f095de94f32f72201278b5a093b2678f7aa3dee5fc96d10f47ca05cdf6d466ef",
+          "selectedBytes": 24919,
+          "fileRange": {
+            "start": 0,
+            "end": 24919
+          },
+          "sourceRange": {
+            "start": 17,
+            "end": 24936
+          },
+          "selector": null
+        }
+      ],
+      "sinks": [
+        "merge",
+        "key",
+        "__proto__"
+      ]
+    },
+    {
+      "id": "sha256:6d65a267c60702d70ea67d1f9129e3d943416f63cd8f3196c5e12edc0dc742f1",
+      "family": "hoek",
+      "lane": "final",
+      "label": "fixed",
+      "labelBasis": "upstream-advisory-version-pair",
+      "advisory": "GHSA-jp4x-w63m-7wgm",
+      "package": "hoek",
+      "version": "5.0.3",
+      "tarballIntegrity": "sha512-Bmr56pxML1c9kU+NS51SMFkiVQAb+9uFfXwyqR2tn4w2FPvmPt65eZ9aCcEfRXd9G74HkZnILC6p967pED4aiw==",
+      "tarballDigest": "sha256:a4a64d18cd724a4db65f8018967fcb212dd23ede963ae10b3b82ad07d5f79ae2",
+      "sourceDigest": "sha256:9166daf5b8fa71b1e19878792516e341aefd296142f8a8bf03771303d401b179",
+      "files": [
+        {
+          "path": "lib/index.js",
+          "digest": "sha256:02f4f680b1d651a49df9267cbd5fa035e58d1d7cb96792219a771dbb158229cb",
+          "fullFileBytes": 24033,
+          "selectedDigest": "sha256:02f4f680b1d651a49df9267cbd5fa035e58d1d7cb96792219a771dbb158229cb",
+          "selectedBytes": 24033,
+          "fileRange": {
+            "start": 0,
+            "end": 24033
+          },
+          "sourceRange": {
+            "start": 17,
+            "end": 24050
+          },
+          "selector": null
+        }
+      ],
+      "sinks": [
+        "merge",
+        "key",
+        "__proto__"
+      ]
+    },
+    {
+      "id": "sha256:7a482999c23dcdc579e5166ad98121cc8bc8643d09e9f3f7f3403c85e5ad1d66",
+      "family": "lodash",
+      "lane": "final",
+      "label": "vulnerable",
+      "labelBasis": "upstream-advisory-version-pair",
+      "advisory": "GHSA-p6mc-m468-83gw",
+      "package": "lodash",
+      "version": "4.17.15",
+      "tarballIntegrity": "sha512-8xOcRHvCjnocdS5cpwXQXVzmmh5e5+saE2QGoeQmbKmRS6J3VQppPOIt0MnmE+4xlZoumy0GPG0D0MVIQbNA1A==",
+      "tarballDigest": "sha256:541c2fe70b322dcaaf2df79e7c6117ca2ca392e9dc15a2cd6c4b3f5cebefcc0d",
+      "sourceDigest": "sha256:30c30c0931726e57099255ea5f57664deb6362312dc830b4aa6322040339594a",
+      "files": [
+        {
+          "path": "lodash.js",
+          "digest": "sha256:933bfeafa74baa6cfb898b91d8e7705209785f9455b2810d0738a0745e5cc6d5",
+          "fullFileBytes": 540512,
+          "selectedDigest": "sha256:e5df4235ffb0a9e0d68fbccaf3dcb7428fbe7557daeabf4514902e13a102b51c",
+          "selectedBytes": 1111,
+          "fileRange": {
+            "start": 129241,
+            "end": 130352
+          },
+          "sourceRange": {
+            "start": 17,
+            "end": 1128
+          },
+          "selector": {
+            "start": "function baseSet(",
+            "end": "var baseSetData ="
+          }
+        },
+        {
+          "path": "_assignValue.js",
+          "digest": "sha256:86658dd4d24a55b19ed938416c179d57a729bac601133c237ee9f900dd21027d",
+          "fullFileBytes": 899,
+          "selectedDigest": "sha256:86658dd4d24a55b19ed938416c179d57a729bac601133c237ee9f900dd21027d",
+          "selectedBytes": 899,
+          "fileRange": {
+            "start": 0,
+            "end": 899
+          },
+          "sourceRange": {
+            "start": 1146,
+            "end": 2045
+          },
+          "selector": null
+        },
+        {
+          "path": "_baseAssignValue.js",
+          "digest": "sha256:51498c7a9eb90edf2626bbb90dfd1119acb2ee9779c916ab3fb7b7285ba6c746",
+          "fullFileBytes": 625,
+          "selectedDigest": "sha256:51498c7a9eb90edf2626bbb90dfd1119acb2ee9779c916ab3fb7b7285ba6c746",
+          "selectedBytes": 625,
+          "fileRange": {
+            "start": 0,
+            "end": 625
+          },
+          "sourceRange": {
+            "start": 2063,
+            "end": 2688
+          },
+          "selector": null
+        }
+      ],
+      "sinks": [
+        "baseSet",
+        "assignValue",
+        "__proto__"
+      ]
+    },
+    {
+      "id": "sha256:2eaf4aa7f5adf651e4dcf3d85cef88174742e58732a5feec2a14310bec004c50",
+      "family": "lodash",
+      "lane": "final",
+      "label": "fixed",
+      "labelBasis": "upstream-advisory-version-pair",
+      "advisory": "GHSA-p6mc-m468-83gw",
+      "package": "lodash",
+      "version": "4.17.19",
+      "tarballIntegrity": "sha512-JNvd8XER9GQX0v2qJgsaN/mzFCNA5BRe/j8JN9d+tWyGLSodKQHKFicdwNYzWwI3wjRnaKPsGj1XkBjx/F96DQ==",
+      "tarballDigest": "sha256:d36e4d3da7ef0b9d6a60d1a9ca49d0acfe2213041b0ad56373176922255e415f",
+      "sourceDigest": "sha256:fe047b0c756bce3c0db9e5ee5d661cd36c2873c495515307855c04588720c50b",
+      "files": [
+        {
+          "path": "lodash.js",
+          "digest": "sha256:efa0ecfaf5548e32a16e18d3700436cd146c48b4f3712f095dae6f00100018e5",
+          "fullFileBytes": 542559,
+          "selectedDigest": "sha256:b1774d54c959e96df1dcec8a0d7307d8eff2396c617bcd70c4a41186f4087f56",
+          "selectedBytes": 1230,
+          "fileRange": {
+            "start": 129578,
+            "end": 130808
+          },
+          "sourceRange": {
+            "start": 17,
+            "end": 1247
+          },
+          "selector": {
+            "start": "function baseSet(",
+            "end": "var baseSetData ="
+          }
+        },
+        {
+          "path": "_assignValue.js",
+          "digest": "sha256:86658dd4d24a55b19ed938416c179d57a729bac601133c237ee9f900dd21027d",
+          "fullFileBytes": 899,
+          "selectedDigest": "sha256:86658dd4d24a55b19ed938416c179d57a729bac601133c237ee9f900dd21027d",
+          "selectedBytes": 899,
+          "fileRange": {
+            "start": 0,
+            "end": 899
+          },
+          "sourceRange": {
+            "start": 1265,
+            "end": 2164
+          },
+          "selector": null
+        },
+        {
+          "path": "_baseAssignValue.js",
+          "digest": "sha256:51498c7a9eb90edf2626bbb90dfd1119acb2ee9779c916ab3fb7b7285ba6c746",
+          "fullFileBytes": 625,
+          "selectedDigest": "sha256:51498c7a9eb90edf2626bbb90dfd1119acb2ee9779c916ab3fb7b7285ba6c746",
+          "selectedBytes": 625,
+          "fileRange": {
+            "start": 0,
+            "end": 625
+          },
+          "sourceRange": {
+            "start": 2182,
+            "end": 2807
+          },
+          "selector": null
+        }
+      ],
+      "sinks": [
+        "baseSet",
+        "assignValue",
+        "__proto__"
+      ]
+    },
+    {
+      "id": "sha256:4d094e75230499cc474522ebaa318fe8e636a8bb34ac8e813fefc27ddd904005",
+      "family": "structural-clean-development",
+      "lane": "development",
+      "label": "clean",
+      "labelBasis": "deterministic-language-semantics-control",
+      "labelRationale": "JSON.parse produces data properties and never copies input keys into an existing prototype.",
+      "sourceDigest": "sha256:4d094e75230499cc474522ebaa318fe8e636a8bb34ac8e813fefc27ddd904005",
+      "sinks": []
+    },
+    {
+      "id": "sha256:60c753b7ea5e1b89400b18c4e865045f6db9a6c04dffb668963f45de05a56a6f",
+      "family": "structural-clean-selection",
+      "lane": "selection",
+      "label": "clean",
+      "labelBasis": "deterministic-language-semantics-control",
+      "labelRationale": "Object.fromEntries creates own data properties, including an own __proto__ property.",
+      "sourceDigest": "sha256:60c753b7ea5e1b89400b18c4e865045f6db9a6c04dffb668963f45de05a56a6f",
+      "sinks": []
+    },
+    {
+      "id": "sha256:a3f961fb92d06f3f6439397cdd62b937380a1b99fa5256d0e4c3f00a59d73564",
+      "family": "structural-clean-final",
+      "lane": "final",
+      "label": "clean",
+      "labelBasis": "deterministic-language-semantics-control",
+      "labelRationale": "Destination has a null prototype and assignment cannot mutate Object.prototype.",
+      "sourceDigest": "sha256:a3f961fb92d06f3f6439397cdd62b937380a1b99fa5256d0e4c3f00a59d73564",
+      "sinks": []
+    }
+  ]
+}
