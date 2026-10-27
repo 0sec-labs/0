@@ -6,6 +6,14 @@ Issue #120 remains open. The runner always reports `conclusion: inconclusive`;
 these artifacts cannot establish security efficacy, promote an artifact or enable
 production optimization.
 
+#120 tracks a finite product go/no-go decision. A separately approved, independently
+adjudicated pilot may conclude negative or inconclusive and retain the baseline;
+no repeated expansion is required to obtain a positive result. The merged
+retention/provenance/exposure/accounting safeguards are implementation prerequisites,
+not separate evidence of optimizer benefit. Optional archive, feedback-summary and
+proposal-width studies remain deferred until a useful baseline and an observed
+bottleneck justify a separate comparison.
+
 The controller exercises a preregistered measurement path for one narrow workflow:
 JavaScript prototype-pollution source review. It uses the existing trusted
 `LlmApiRuntime` provider route and `ObjectiveOracle` finding-match evaluator.

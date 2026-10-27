@@ -39,3 +39,11 @@ No RCE, shell, credential foothold or lateral-movement claim is inferred from a 
 The caller does not choose the proof challenge. The host replaces the operator marker placeholder in the approved body and compares the owner postcondition with a fresh unpredictable nonce disclosed only after verification. An unrelated model assertion or previously observed marker cannot manufacture that proof. Confidence describes the deterministic observation; business severity stays explicitly unassessed until separately established.
 
 An HTTP denial/error code on an actor request is not itself proof that the state change was blocked: if the owner independently observes the fresh host challenge afterward, the observed field effect controls the milestone. Transport failures remain inconclusive.
+
+## Backlog disposition
+
+#166 is complete for the supported host-verified read/write and cleanup UI
+contract described above. Its examples of RCE, shell, credential foothold and
+lateral movement are deferred producer capabilities, not inferred proof classes.
+A future extension needs a concrete host-verification contract and controlled
+evidence before adding a confirmed label; this closure claims no such producer.

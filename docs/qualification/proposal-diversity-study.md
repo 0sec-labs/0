@@ -1,6 +1,9 @@
 # Bounded same-parent proposal-width study (#122)
 
-This is a conditional offline experiment, not an optimizer default. It reuses
+This experiment is deferred/not planned as an active commitment. #122 is
+consolidated as a conditional hypothesis in #120; reopen only after a useful basic
+pilot and an observed search bottleneck justify one separate finite comparison.
+The controller is retained, with no demonstrated model-backed benefit. It reuses
 #199's bounded search lifecycle and native metered model/snapshot/evaluator
 adapter. The existing pure `shortlistDiversityStudy` helper and its public API
 remain available; the new campaign module supplies the previously missing
