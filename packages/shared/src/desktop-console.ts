@@ -93,7 +93,9 @@ export interface DesktopConsoleUsage {
   turnTokenBudget: number | null;
   iterations: number;
   maxToolIterations: number;
-  kind?: "planner" | "plugin" | "compaction";
+  kind?: "planner" | "plugin" | "compaction" | "worker";
+  model?: string;
+  usageUnavailable?: boolean;
 }
 
 export interface DesktopConsoleTurnBudget {
