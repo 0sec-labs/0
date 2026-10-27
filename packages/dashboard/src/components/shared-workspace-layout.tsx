@@ -1,8 +1,8 @@
 import { TeamAccount } from "./team-access";
-import { BackendConnectionPicker } from "./backend-connection-picker";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Menu, BookOpen, MessageSquare, Plus, Plug, Settings, ShieldCheck, Workflow, Library } from "lucide-react";
+import { Menu, BookOpen, MessageSquare, Plus, Plug, Settings, ShieldCheck, Workflow, Library, Server } from "lucide-react";
+import { HostSidebarChatHistory } from "./host-sidebar-chat-history";
 import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -10,10 +10,11 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 const destinations = [
   { to: "/console", label: "Chat", icon: MessageSquare },
   { to: "/findings", label: "Findings", icon: ShieldCheck },
-  { to: "/workflows", label: "Workflows", icon: Workflow },
+  { to: "/automations", label: "Automations", icon: Workflow },
   { to: "/skills", label: "Skills", icon: Library },
+  { to: "/workers", label: "Hosts", icon: Server },
   { to: "/plugins", label: "Plugins", icon: Plug },
-    { to: "/learning", label: "Learning", icon: BookOpen },
+  { to: "/learning", label: "Memory", icon: BookOpen },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -23,9 +24,9 @@ export function SharedWorkspaceLayout({ children, onNew }: {
   onNew: () => void;
 }) {
   const [navigationOpen, setNavigationOpen] = useState(false);
-  return <div className="console-frame flex min-w-0 overflow-hidden bg-background text-foreground">
-    <div className="flex min-w-0 flex-1 flex-col">
-      <header className="flex shrink-0 items-center justify-between gap-2 px-3 py-3 sm:px-5 lg:hidden [@media(hover:none)]:flex">
+  return <div className="console-page-workspace flex h-full min-h-0 min-w-0 flex-1 overflow-hidden text-foreground">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <header className="console-sidebar-surface flex shrink-0 items-center justify-between gap-2 px-3 py-3 sm:px-5 lg:hidden [@media(hover:none)]:flex">
         <div className="flex min-w-0 items-center gap-2">
           <Button className="lg:hidden [@media(hover:none)]:inline-flex" variant="ghost" size="icon-sm" aria-label="Open navigation" onClick={() => setNavigationOpen(true)}><Menu className="size-4" /></Button>
         </div>
@@ -33,13 +34,14 @@ export function SharedWorkspaceLayout({ children, onNew }: {
           <Button className="lg:hidden" variant="ghost" size="icon-sm" aria-label="New chat" onClick={onNew}><Plus className="size-4" /></Button>
         </div>
       </header>
-      <main className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-5 py-5 sm:px-8"><BackendConnectionPicker />{children}</div>
+      <main className="m-2 min-h-0 flex-1 overflow-y-auto rounded-[var(--radius-panel)] bg-card shadow-[inset_0_0_0_1px_var(--border)]">
+        <div className="w-full min-w-0 px-5 py-5 sm:px-8">{children}</div>
       </main>
     </div>
     <Sheet open={navigationOpen} onOpenChange={setNavigationOpen}>
-      <SheetContent side="left" className="flex w-64 flex-col p-3">
+      <SheetContent side="left" className="console-sidebar-surface flex w-64 flex-col p-3">
         <SheetHeader className="px-3 py-4"><BrandMark compact className="size-7" /><SheetTitle className="sr-only">Command Center navigation</SheetTitle></SheetHeader>
+        <div className="min-h-0 flex-1 overflow-hidden"><HostSidebarChatHistory onSelect={() => setNavigationOpen(false)} /></div>
         <nav aria-label="Command Center pages" className="flex flex-col gap-1">
           {destinations.map(({ to, label, icon: Icon }) => <Button key={to} variant="ghost" asChild className="justify-start"><Link to={to} onClick={() => setNavigationOpen(false)}><Icon className="size-4" />{label}</Link></Button>)}
         </nav>

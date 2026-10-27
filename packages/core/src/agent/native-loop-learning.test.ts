@@ -64,6 +64,23 @@ describe("native source learning mirror", () => {
     expect(learning.listEvents().filter(event => event.kind === "source-context")).toEqual([]);
   });
 
+  it("honors Stop using for scan-agent hints without crowding out an older active lesson", async () => {
+    const remember = (summary: string) => memory.rememberCodebase({ root, paths: ["module.ts"], title: summary, summary, source: "test" });
+    remember("Older active source lesson");
+    for (let i = 0; i < 6; i++) remember(`Disabled source lesson ${i}`);
+    await runNativeAgentLoop({ config: config(root), db: null, learningStore: learning, huntMemoryStore: memory, runtime: runtime() });
+    for (const entry of learning.listKnowledge()) {
+      if (entry.summary.startsWith("Disabled")) learning.setKnowledgeStatus(entry.id, "disabled");
+    }
+    const executeNative = vi.fn(async () => ({ content: [{ type: "text" as const, text: "Reviewed" }], stopReason: "end_turn" as const, durationMs: 0 }));
+    await runNativeAgentLoop({ config: config(root, { scanId: "source-after-opt-out" }), db: null, learningStore: learning, huntMemoryStore: memory,
+      runtime: { type: "api", isAvailable: async () => true, executeNative } });
+    const request = JSON.stringify(executeNative.mock.calls);
+    expect(request).toContain("Older active source lesson");
+    expect(request).not.toContain("Disabled source lesson");
+    expect(learning.listKnowledge().filter(entry => entry.status === "disabled")).toHaveLength(6);
+  });
+
   it("rechecks source evidence on later recall and does not mirror changed files", async () => {
     memory.rememberCodebase({ root, paths: ["module.ts"], title: "Routing", summary: "Health route is declared in module.ts.", source: "test" });
     await runNativeAgentLoop({ config: config(root), db: null, learningStore: learning, huntMemoryStore: memory, runtime: runtime() });

@@ -57,13 +57,13 @@ export function analyticsOptedOut(env: NodeJS.ProcessEnv = process.env): boolean
 
 /**
  * Resolve the effective analytics tier. Any opt-out env forces "off"; when
- * `ZERO_ANALYTICS_LEVEL` is unset the default is "off". An unknown/invalid
+ * `ZERO_ANALYTICS_LEVEL` is unset the default is usage metrics only. An unknown/invalid
  * value still fails closed to "off".
  */
 export function resolveAnalyticsLevel(env: NodeJS.ProcessEnv = process.env): AnalyticsLevel {
   if (analyticsOptedOut(env)) return "off";
   const raw = env[ANALYTICS_LEVEL_ENV];
-  if (typeof raw !== "string") return "off";
+  if (typeof raw !== "string") return "usage";
   const normalized = raw.trim().toLowerCase();
   return isAnalyticsLevel(normalized) ? normalized : "off";
 }

@@ -1,3 +1,4 @@
+import { Disclosure } from "@/components/ui/disclosure";
 import { useId, useState, type FormEvent } from "react";
 import type {
   DesktopConsoleDecision,
@@ -77,7 +78,7 @@ function DetailBlock({ label, value }: { label: string; value: unknown }) {
   return (
     <div className="space-y-1.5">
       <h4 className="text-xs font-semibold text-muted-foreground">{label}</h4>
-      <pre className="whitespace-pre-wrap break-all rounded-xl bg-muted/40 p-3 font-mono text-xs text-foreground">
+      <pre className="whitespace-pre-wrap break-all rounded-[var(--radius-panel)] bg-muted/40 p-3 font-mono text-xs text-foreground">
         {typeof value === "string" ? value : JSON.stringify(value, null, 2) ?? String(value)}
       </pre>
     </div>
@@ -111,7 +112,7 @@ function QuestionBlock({
       tabIndex={-1}
       aria-describedby={`${descriptionId} ${hintId}${error ? ` ${errorId}` : ""}`}
       aria-invalid={Boolean(error)}
-      className="min-w-0 space-y-3 rounded-2xl bg-muted/20 p-4 disabled:opacity-60"
+      className="min-w-0 space-y-3 rounded-[var(--radius-panel)] bg-muted/20 p-4 disabled:opacity-60"
     >
       <legend className="px-1 text-sm font-semibold">{question.header}</legend>
       <p id={descriptionId} className="whitespace-pre-wrap break-words text-sm">{question.question}</p>
@@ -126,7 +127,7 @@ function QuestionBlock({
         const optionDescriptionId = `${optionId}-description`;
         const selected = answer.selectedLabels.includes(option.label);
         return (
-          <label key={optionIndex} htmlFor={optionId} className="flex items-start gap-3 rounded-xl bg-muted/30 p-3 transition-colors hover:bg-muted/60 has-[:checked]:bg-primary/10 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring/40">
+          <label key={optionIndex} htmlFor={optionId} className="flex items-start gap-3 rounded-[var(--radius-control)] bg-muted/30 p-3 transition-colors hover:bg-muted/60 has-[:checked]:bg-primary/10 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring/40">
             <input
               id={optionId}
               name={`${id}-options`}
@@ -223,7 +224,7 @@ function DecisionForm({ decision, busy, onResolve }: ApprovalPanelProps) {
       aria-labelledby={isQuestion && decision.resolved ? undefined : `${id}-title`}
       aria-busy={busy && !decision.resolved}
       onSubmit={handleSubmit}
-      className="space-y-4 rounded-2xl bg-card p-5 text-card-foreground"
+      className="space-y-4 rounded-[var(--radius-panel)] bg-card p-5 text-card-foreground"
     >
       {!(isQuestion && decision.resolved) && <div className="flex flex-wrap items-start gap-2">
         <Icon className="mt-0.5 size-4 shrink-0 text-primary-text" aria-hidden="true" />
@@ -234,7 +235,7 @@ function DecisionForm({ decision, busy, onResolve }: ApprovalPanelProps) {
       {!isQuestion && decision.kind !== "tool" && decision.detail && <p className="whitespace-pre-wrap break-words text-sm">{decision.detail}</p>}
       {decision.reason && <DetailBlock label="Why" value={decision.reason} />}
       {decision.call && (
-        <div className="space-y-2 rounded-xl bg-muted/20 p-3">
+        <div className="space-y-2 rounded-[var(--radius-panel)] bg-muted/20 p-3">
           <DetailBlock label="Tool" value={decision.call.name} />
           <DetailBlock label="Input" value={decision.call.arguments} />
         </div>
@@ -243,8 +244,8 @@ function DecisionForm({ decision, busy, onResolve }: ApprovalPanelProps) {
       {decision.unresolvedTargets && decision.unresolvedTargets.length > 0 && <DetailBlock label="Unknown destinations" value={decision.unresolvedTargets} />}
       {decision.requestedPath && <DetailBlock label="Folder to allow" value={decision.requestedPath} />}
       {decision.kind !== "operator-question" && (context || decision.currentScope !== undefined || decision.currentScopePath !== undefined) && (
-        <details aria-label="Current permissions" className="space-y-3 rounded-xl bg-muted/20 p-3">
-          <summary className="cursor-pointer text-sm text-muted-foreground">Current permissions</summary>
+        <Disclosure aria-label="Current permissions" className="space-y-3 rounded-[var(--radius-panel)] bg-muted/20 p-3" summary={<> Current permissions </>} triggerClassName="cursor-pointer text-sm text-muted-foreground">
+
           {context && (
             <>
               <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-[max-content_minmax(0,1fr)]">
@@ -257,7 +258,7 @@ function DecisionForm({ decision, busy, onResolve }: ApprovalPanelProps) {
           )}
           {decision.currentScope !== undefined && <DetailBlock label="Allowed targets" value={decision.currentScope ?? "None set."} />}
           {decision.currentScopePath !== undefined && <DetailBlock label="Allowed folder" value={decision.currentScopePath} />}
-        </details>
+        </Disclosure>
       )}
       {questions.length > 0 && (
         <div className="space-y-3">

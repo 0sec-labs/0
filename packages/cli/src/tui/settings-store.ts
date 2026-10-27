@@ -33,7 +33,6 @@
  * `0 config show` can label each key default/global/project.
  */
 
-import { useSyncExternalStore } from "react";
 import {
   ANALYTICS_LEVEL_ENV,
   analyticsPipeline,
@@ -317,14 +316,4 @@ export function __resetSettingsStoreForTests(): void {
   }
   bridgedAnalyticsEnv = undefined;
   analyticsPipeline.setLevel("off");
-}
-
-/**
- * React hook: subscribe to the store and re-render exactly when settings
- * change, never otherwise. A thin `useSyncExternalStore` — it does not tear
- * (the store hands back a stable reference between changes) and it unsubscribes
- * on unmount via the subscribe function's returned disposer.
- */
-export function useSettings(): TuiSettings {
-  return useSyncExternalStore(subscribeSettings, getSettings, getSettings);
 }

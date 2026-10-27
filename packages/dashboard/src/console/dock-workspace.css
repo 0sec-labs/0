@@ -1,0 +1,266 @@
+.console-dock-workspace {
+  --console-dock-panel-radius: var(--radius-panel);
+  --console-dock-menu-radius: var(--radius-menu);
+  --console-dock-control-radius: var(--radius-control);
+  position: relative;
+  isolation: isolate;
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 4px;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: var(--workspace-canvas);
+}
+
+.console-dock-workspace .dockview-theme-dark {
+  --dv-background-color: var(--workspace-canvas);
+  --dv-group-view-background-color: var(--workspace-panel);
+  --dv-tabs-and-actions-container-background-color: var(--workspace-panel);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--surface-selected);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--background);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--surface-selected);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--background);
+  --dv-activegroup-visiblepanel-tab-color: var(--foreground);
+  --dv-activegroup-hiddenpanel-tab-color: var(--muted-foreground);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--foreground);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--muted-foreground);
+  --dv-separator-border: transparent;
+  --dv-tabs-and-actions-container-height: 44px;
+  --dv-tab-font-size: 12px;
+  --dv-drag-over-background-color: color-mix(in srgb, var(--primary) 12%, transparent);
+  --dv-drag-over-border-color: var(--primary);
+}
+
+/* The grid paints the canvas between independently rounded panel surfaces. */
+.console-dock-workspace .dv-grid-view.dv-dockview {
+  background: var(--workspace-canvas);
+}
+
+.console-dock-workspace .dv-view:has(> .dv-groupview) {
+  padding: 4px;
+  box-sizing: border-box;
+}
+
+.console-dock-workspace .dv-groupview {
+  border-radius: var(--console-dock-panel-radius);
+  background: var(--workspace-panel);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--foreground) 4%, transparent), 0 1px 3px rgb(0 0 0 / 12%);
+}
+
+.console-dock-slot {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.console-dock-workspace .console-dock-slot {
+  --background: var(--workspace-panel);
+  border-radius: 0 0 var(--console-dock-panel-radius) var(--console-dock-panel-radius);
+  background: var(--workspace-panel);
+}
+
+.console-dock-slot > section {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Dockview already aligns persistent overlays to the inset group rectangle. */
+.console-dock-workspace .dv-render-overlay {
+  padding: 0;
+  box-sizing: border-box;
+  border-radius: 0 0 var(--console-dock-panel-radius) var(--console-dock-panel-radius);
+  clip-path: inset(0 round 0 0 var(--console-dock-panel-radius) var(--console-dock-panel-radius));
+  overflow: hidden;
+  background: transparent;
+}
+
+.console-dock-workspace .dv-render-overlay:has(.console-dock-chat) {
+  border-radius: var(--console-dock-panel-radius);
+  clip-path: inset(0 round var(--console-dock-panel-radius));
+}
+
+.console-dock-workspace .console-dock-chat {
+  border-radius: var(--console-dock-panel-radius);
+}
+
+.console-dock-workspace .console-dock-slot :is(video, canvas, iframe) {
+  border-radius: var(--console-dock-control-radius);
+}
+
+.console-dock-workspace .dv-tabs-and-actions-container {
+  padding-inline: 8px;
+  border: 0;
+  border-radius: var(--console-dock-panel-radius) var(--console-dock-panel-radius) 0 0;
+  background: transparent;
+}
+
+.console-dock-workspace .dv-tabs-container {
+  align-items: center;
+  gap: 4px;
+}
+
+/* The custom renderer supplies insets; Dockview must not add its own padding. */
+.console-dock-workspace .dv-tab {
+  height: 28px;
+  margin: 8px 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--console-dock-control-radius);
+  font-weight: 400;
+  cursor: grab;
+  transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease, box-shadow 140ms ease;
+  animation: console-dock-tab-enter 160ms cubic-bezier(.22, 1, .36, 1);
+}
+
+.console-dock-workspace .dv-tab:active { cursor: grabbing; }
+.console-dock-workspace .dv-tab::before { display: none; }
+.console-dock-workspace .dv-tab:not(.dv-active-tab) { background: transparent; color: var(--muted-foreground); }
+.console-dock-workspace .dv-tab:not(.dv-active-tab):hover { background: var(--surface-hover); }
+.console-dock-workspace .dv-tab.dv-active-tab {
+  background: var(--surface-selected);
+  color: var(--foreground);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--foreground) 5%, transparent), 0 1px 2px rgb(0 0 0 / 10%);
+}
+.console-dock-workspace .dv-tab.dv-active-tab:hover {
+  background: color-mix(in srgb, var(--surface-selected) 96%, var(--foreground));
+}
+.console-dock-workspace .dv-tab:focus-visible::after,
+.console-dock-workspace .dv-tab:has(:focus-visible)::after { border-radius: var(--console-dock-control-radius); }
+
+.console-dock-tab {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  user-select: none;
+}
+.console-dock-workspace .dv-tab .console-dock-tab { gap: 8px; padding: 0 2px 0 10px; }
+.console-dock-workspace .dv-tab .console-dock-tab:not(:has(button)) { padding-inline: 10px; }
+.console-dock-workspace .console-dock-tab > span {
+  min-width: 0;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.console-dock-workspace .console-dock-tab button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--console-dock-control-radius);
+  color: var(--muted-foreground);
+  opacity: .45;
+  cursor: default;
+  transition: opacity 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+.console-dock-workspace .dv-tab:is(:hover, :focus-within) .console-dock-tab button,
+.console-dock-workspace .dv-active-tab .console-dock-tab button { opacity: .8; }
+.console-dock-workspace .console-dock-tab button:is(:hover, :focus-visible) {
+  opacity: 1;
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+.console-dock-tab button:hover { color: var(--foreground); }
+.console-dock-tab button:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+
+.console-dock-workspace .dv-tabs-overflow-container,
+.console-dock-workspace .dv-tabs-overflow-dropdown-default,
+.console-dock-workspace .dv-context-menu { border-radius: var(--console-dock-menu-radius); }
+.console-dock-workspace .dv-tab--dragging,
+.console-dock-workspace .dv-tab-dragging { opacity: .45; }
+.console-dock-workspace .dv-tab-ghost-drag { border-radius: var(--console-dock-control-radius); box-shadow: 0 8px 28px #0004; }
+.console-dock-workspace .dv-drop-target-selection {
+  border-radius: var(--console-dock-panel-radius);
+  transition: opacity 140ms ease, background-color 140ms ease;
+}
+.console-dock-workspace .dv-drop-target-anchor { border-radius: var(--console-dock-panel-radius); }
+
+/* Sashes use centered grips, with no full-length separator behind them. */
+.console-dock-workspace .dv-split-view-container.dv-separator-border > .dv-view-container > .dv-view::before { display: none; }
+.console-dock-workspace .dv-sash { border-radius: 4px; background: transparent !important; }
+.console-dock-workspace .dv-sash::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  border-radius: 999px;
+  background: transparent;
+  transition: background-color 100ms ease;
+}
+.console-dock-workspace .dv-horizontal > .dv-sash-container > .dv-sash:not(.dv-disabled) { cursor: col-resize; }
+.console-dock-workspace .dv-vertical > .dv-sash-container > .dv-sash:not(.dv-disabled) { cursor: row-resize; }
+.console-dock-workspace .dv-horizontal > .dv-sash-container > .dv-sash:not(.dv-disabled)::after {
+  width: 3px;
+  height: 28px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: color-mix(in srgb, var(--muted-foreground) 35%, transparent);
+}
+.console-dock-workspace .dv-vertical > .dv-sash-container > .dv-sash:not(.dv-disabled)::after {
+  width: 28px;
+  height: 3px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: color-mix(in srgb, var(--muted-foreground) 35%, transparent);
+}
+.console-dock-workspace .dv-sash:not(.dv-disabled):is(:hover, :active)::after { background: var(--muted-foreground); }
+
+/* FLIP transactions animate open/close/drop, never continuous sash movement. */
+.console-dock-closing-surface {
+  position: absolute;
+  z-index: 8;
+  pointer-events: none;
+  border-radius: var(--console-dock-panel-radius);
+  background: var(--workspace-panel);
+  box-shadow: none;
+}
+@keyframes console-dock-tab-enter {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Every primary chat keeps the same visible tab strip, including a blank view. */
+.console-dock-workspace .dv-render-overlay:has(.console-dock-chat),
+.console-dock-workspace .console-dock-chat {
+  border-radius:0 0 var(--console-dock-panel-radius) var(--console-dock-panel-radius);
+  clip-path:inset(0 round 0 0 var(--console-dock-panel-radius) var(--console-dock-panel-radius));
+}
+
+@media (hover: none) {
+  .console-dock-workspace .console-dock-tab button { opacity: .8; }
+}
+@media (max-width: 767px) {
+  .console-dock-workspace { padding: 2px; }
+  .console-dock-workspace .console-dock-tab button { width: 28px; height: 28px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .console-dock-workspace .dv-tab { animation: none; }
+  .console-dock-workspace .dv-tab,
+  .console-dock-workspace .dv-drop-target-selection,
+  .console-dock-workspace .console-dock-tab button,
+  .console-dock-workspace .dv-sash::after { transition: none; }
+}
+[data-reduced-motion="true"] .console-dock-workspace .dv-tab { animation: none; }
+[data-reduced-motion="true"] .console-dock-workspace .dv-tab,
+[data-reduced-motion="true"] .console-dock-workspace .dv-drop-target-selection,
+[data-reduced-motion="true"] .console-dock-workspace .console-dock-tab button,
+[data-reduced-motion="true"] .console-dock-workspace .dv-sash::after { transition: none; }
+/* Chat actions belong to the tab bar, outside persistent content overlays. */
+.console-dock-actions { display:flex; align-items:center; height:100%; padding-inline:4px; pointer-events:auto; }
+.console-dock-actions:empty { display:none; }
+
+/* The unsent composer is an action, not a second history tab. */
+.console-dock-workspace .dv-tab:has([data-empty-placeholder]) { display:none; }
+
+.console-chat-drop-preview { position:absolute; z-index:80; display:none; pointer-events:none; place-items:center; border:1px solid var(--muted-foreground); border-radius:var(--radius-panel); background:color-mix(in srgb,var(--foreground) 8%,var(--background) 75%); color:var(--foreground); font-size:13px; backdrop-filter:blur(2px); }

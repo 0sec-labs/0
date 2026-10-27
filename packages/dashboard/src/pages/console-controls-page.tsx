@@ -1,27 +1,26 @@
 import { useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { ArrowLeft, Blocks, FolderCheck, HeartPulse, KeyRound, MessageSquare, Palette, Shield, Users, Rocket, Settings2, Sparkles, Wrench } from "lucide-react";
-import { PageHeader } from "@/components/page-header";
+import { ArrowLeft, Blocks, FolderCheck, HeartPulse, KeyRound, Rocket, Settings2, Sparkles, Wrench } from "lucide-react";
+import { PageHeader, PageContent } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { ConnectionsControl, ModelsControl } from "@/components/console-control/connections-control";
-import { SettingsControl, settingsCategories, type SettingsCategory } from "@/components/console-control/settings-control";
+import { SettingsControl, settingsCategories } from "@/components/console-control/settings-control";
 import { PluginsControl } from "@/components/console-control/plugins-control";
 import { DoctorControl, ProjectControl, ToolsControl } from "@/components/console-control/system-control";
 import { LauncherControl, FixControl } from "@/components/console-control/workflow-control";
 import { OnboardingControl } from "@/components/console-control/onboarding-control";
 import { consoleReturn } from "@/components/console-control/control-ui";
-import { cn } from "@/lib/utils";
 
 export type WebConsoleControlMode = "onboarding" | "connections" | "models" | "settings" | "plugins" | "doctor" | "tools" | "project" | "launch" | "fix";
 
 const pages = [
-  { mode: "onboarding", path: "/setup", label: "Setup", icon: Sparkles, description: "Get started in a few steps. You can change everything later." },
+  { mode: "onboarding", path: "/onboarding", label: "Onboarding", icon: Sparkles, description: "Get started in a few steps. You can change everything later." },
   { mode: "connections", path: "/connections", label: "Connections", icon: KeyRound, description: "" },
   { mode: "models", path: "/models", label: "Models", icon: Sparkles, description: "" },
   { mode: "project", path: "/project", label: "Workspace", icon: FolderCheck, description: "" },
-  { mode: "settings", path: "/settings", label: "General", icon: Settings2, description: "" },
+  { mode: "settings", path: "/settings", label: "Settings", icon: Settings2, description: "" },
   { mode: "plugins", path: "/plugins", label: "Plugins", icon: Blocks, description: "" },
-  { mode: "doctor", path: "/doctor", label: "Health", icon: HeartPulse, description: "" },
+  { mode: "doctor", path: "/doctor", label: "Diagnostics", icon: HeartPulse, description: "" },
   { mode: "tools", path: "/tools", label: "Tools", icon: Wrench, description: "" },
   { mode: "launch", path: "/audits", label: "Workflows", icon: Rocket, description: "Plan reusable workflows and track their runs. Limits apply to the whole run." },
   { mode: "fix", path: "/fix", label: "Fixes", icon: Wrench, description: "" },
@@ -56,24 +55,27 @@ export function WebConsoleControlsPage({ mode: passedMode }: { mode?: WebConsole
     : <FixControl sessionId={sessionId} />;
 
   if (mode === "plugins") {
-    return <main aria-label="Plugins" className="console-controls min-w-0 w-full space-y-6">
+    return <PageContent className="console-controls" aria-label="Plugins">
       <div ref={headingRef} tabIndex={-1} className="outline-none"><PageHeader title="Plugins" /></div>
       {content}
-    </main>;
+    </PageContent>;
   }
 
   if (mode === "launch") {
-    return <main aria-label="Workflows" className="mx-auto w-full max-w-5xl space-y-6 px-5 py-6 sm:px-8 lg:px-10">{content}</main>;
+    return <PageContent className="console-controls" aria-label="Workflows"><PageHeader title="Workflows" summary={page.description || undefined} />{content}</PageContent>;
   }
 
   const focused = mode === "onboarding";
 
-  return <div className={cn("console-controls mx-auto w-full space-y-6 px-5 py-6 sm:px-8 lg:px-10", focused ? "max-w-5xl" : "max-w-4xl")}>
-    {!focused && <div className="flex flex-wrap items-center justify-between gap-3"><Button asChild variant="ghost" size="sm"><Link to={returnTo}><ArrowLeft className="size-4" />Back to chat</Link></Button></div>}
-    {!focused && <div ref={headingRef} tabIndex={-1} className="outline-none"><h1 className="text-xl font-semibold tracking-tight">{mode === "settings" ? settingsCategories.find(item => item.id === category)?.label : page.label}</h1>{!focused && page.description && <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{page.description}</p>}</div>}
-    {focused ? <main className="min-w-0 space-y-6" aria-label={page.label}>{content}</main> : <div className="grid gap-6 lg:grid-cols-[13rem_minmax(0,1fr)]">
-      <nav aria-label="Sections" className="flex gap-1 overflow-x-auto pb-2 lg:block lg:space-y-1 lg:overflow-visible">{settingsCategories.map(item => { const icons: Record<SettingsCategory, typeof Settings2> = { general: Settings2, appearance: Palette, conversation: MessageSquare, agents: Users, privacy: Shield }; const Icon = icons[item.id]; return <Link key={item.id} to={`/settings${suffix}&section=${item.id}`} aria-current={mode === "settings" && category === item.id ? "page" : undefined} className={cn("flex shrink-0 items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm transition-colors focus-visible:outline focus-visible:outline-offset-2", mode === "settings" && category === item.id ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}><Icon className="size-4 shrink-0" />{item.label}</Link>; })}<div className="hidden py-2 lg:block" />{pages.filter(item => item.mode !== "launch" && item.mode !== "settings").map(item => <Link key={item.mode} to={`${item.path}${suffix}`} aria-current={mode === item.mode ? "page" : undefined} className={cn("flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:outline focus-visible:outline-offset-2", mode === item.mode ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}><item.icon className="size-4 shrink-0" />{item.label}</Link>)}</nav>
-      <main className="min-w-0 space-y-6" aria-label={page.label}>{content}</main>
-    </div>}
-  </div>;
+  return <PageContent className="console-controls">
+    {!focused && <div ref={headingRef} tabIndex={-1} className="outline-none"><PageHeader title={mode === "settings" ? "Settings" : page.label} summary={page.description || undefined} actions={<Button asChild variant="ghost" size="sm"><Link to={returnTo}><ArrowLeft className="size-4" />Back to chat</Link></Button>} /></div>}
+    {mode === "settings" && <nav aria-label="Account and diagnostics" className="flex flex-wrap gap-2">
+      {[{ path: "/connections", label: "Connections", icon: KeyRound }, { path: "/models", label: "Models", icon: Sparkles }, { path: "/doctor", label: "Diagnostics", icon: HeartPulse }].map(item => <Button key={item.path} variant="outline" size="sm" asChild><Link to={`${item.path}${suffix}`}><item.icon className="size-4" />{item.label}</Link></Button>)}
+    </nav>}
+    <section className="min-w-0 space-y-6" aria-label={mode === "settings" ? "Preferences" : page.label}>
+      {content}
+      {mode === "doctor" && <div className="flex flex-wrap gap-2"><Button variant="outline" asChild><Link to={`/tools${suffix}`}><Wrench className="size-4" />Available tools</Link></Button><Button variant="outline" asChild><Link to={`/fix${suffix}`}><Wrench className="size-4" />Review a code fix</Link></Button></div>}
+      {mode === "connections" && <Button variant="outline" asChild><Link to={`/project${suffix}`}><FolderCheck className="size-4" />Workspace settings</Link></Button>}
+    </section>
+  </PageContent>;
 }

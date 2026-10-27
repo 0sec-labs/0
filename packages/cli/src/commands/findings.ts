@@ -286,24 +286,6 @@ export function registerFindingsCommand(program: Command): void {
     .option("--all", "Show raw finding rows instead of grouped fingerprints", false)
     .action(async (opts: FindingsListOptions, command: Command) => {
       const resolved = resolveFindingsOptions(opts, command);
-      const limit = Number.parseInt(resolved.limit ?? "50", 10);
-      const selectedDbPath = resolveDbPath(resolved);
-      const { isBunRuntime, canUseOpenTui } = await import("../tui/runtime.js");
-      if (selectedDbPath && isBunRuntime() && canUseOpenTui()) {
-        const { showOpenTuiFindings } = await import("../tui/run.js");
-        await showOpenTuiFindings({
-          dbPath: selectedDbPath,
-          scan: resolved.scan,
-          severity: resolved.severity,
-          category: resolved.category,
-          status: resolved.status,
-          triage: resolved.triage,
-          limit,
-          all: resolved.all,
-        });
-        return;
-      }
-
       await renderFindingsList(resolved);
     });
 
@@ -313,24 +295,6 @@ export function registerFindingsCommand(program: Command): void {
       .description("List findings from the database")
   ).action(async (opts: FindingsListOptions, command: Command) => {
     const resolved = resolveFindingsOptions(opts, command);
-    const limit = Number.parseInt(resolved.limit ?? "50", 10);
-    const selectedDbPath = resolveDbPath(resolved);
-    const { isBunRuntime, canUseOpenTui } = await import("../tui/runtime.js");
-    if (selectedDbPath && isBunRuntime() && canUseOpenTui()) {
-      const { showOpenTuiFindings } = await import("../tui/run.js");
-      await showOpenTuiFindings({
-        dbPath: selectedDbPath,
-        scan: resolved.scan,
-        severity: resolved.severity,
-        category: resolved.category,
-        status: resolved.status,
-        triage: resolved.triage,
-        limit,
-        all: resolved.all,
-      });
-      return;
-    }
-
     await renderFindingsList(resolved);
   });
 

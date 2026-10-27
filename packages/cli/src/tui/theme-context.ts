@@ -21,7 +21,7 @@ import {
   type Theme,
 } from "./themes.js";
 import type { TuiSettings } from "./settings.js";
-import { useSettings } from "./settings-store.js";
+import { useSettings } from "./use-settings.js";
 
 export type { Theme } from "./themes.js";
 

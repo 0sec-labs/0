@@ -3,7 +3,7 @@ title: API Keys
 description: Supported LLM providers, environment variables, credential priority, model routing, and provider failover.
 ---
 
-The interactive 0 console uses your provider API key or supported subscription.
+The browser console and headless chat commands use your provider API key or supported subscription.
 Managed-service access is separately arranged with the operator and does not
 provide model inference to the local console.
 
@@ -514,4 +514,4 @@ It reports:
 - **CLI runtimes** found on `PATH` (claude, codex, gemini).
 - Configuration errors when the API runtime is set up but cannot be used.
 
-Under Bun with a compatible terminal, doctor launches the richer OpenTUI view.
+`doctor` prints the same scriptable diagnostics under Node and the standalone binary.

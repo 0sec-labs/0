@@ -1,0 +1,51 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { build } from "esbuild";
+
+const root=fileURLToPath(new URL("../",import.meta.url));
+test("shared disclosure keeps hidden state mounted and keyboard controls inert",async()=>{
+  const dashboard=resolve(root,"packages/dashboard");
+  const directory=await mkdtemp(resolve(dashboard,".disclosure-test-"));
+  try {
+    const output=resolve(directory,"fixture.mjs");
+    await build({stdin:{contents:`import React from 'react';import {renderToStaticMarkup} from 'react-dom/server';import {Disclosure} from './src/components/ui/disclosure';import {WorkerTree} from './src/console/worker-tree';import {MemoryRouter} from 'react-router-dom';import {ActivityIndicator,LoadingDots} from './src/console/loading-state';export const activity=props=>renderToStaticMarkup(React.createElement(ActivityIndicator,props));export const legacyMark=()=>renderToStaticMarkup(React.createElement(LoadingDots));export const render=props=>renderToStaticMarkup(React.createElement(Disclosure,{...props,actions:props.actions===true?React.createElement("button",{type:"button"},"New chat"):props.actions},React.createElement('input',{defaultValue:'preserved draft'})));export const tree=props=>renderToStaticMarkup(React.createElement(MemoryRouter,null,React.createElement(WorkerTree,props)));`,resolveDir:dashboard,loader:"tsx"},outfile:output,bundle:true,platform:"node",format:"esm",packages:"external",jsx:"automatic",alias:{"@":resolve(dashboard,"src")},logLevel:"silent"});
+    const {render,tree,activity,legacyMark}=await import(pathToFileURL(output).href);
+    const thinking=activity({label:"Thinking"});
+    assert.match(thinking,/role="status"/);
+    assert.match(thinking,/aria-hidden="true"[^>]*class="console-activity-mark/);
+    assert.equal((thinking.match(/<svg/g)||[]).length,1,"one stationary activity mark replaces separate bouncing dots");
+    assert.match(thinking,/Thinking/);
+    assert.doesNotMatch(thinking,/animate-spin|console-loading-dots/);
+    assert.match(activity({label:"Waiting for you",waiting:true}),/data-waiting="true"/);
+    assert.match(legacyMark(),/console-activity-mark/);
+    const closed=render({summary:"Work details"});
+    assert.match(closed,/<button[^>]*type="button"[^>]*aria-expanded="false"/);
+    assert.match(closed,/aria-controls="([^"]+)-content"/);
+    assert.match(closed,/aria-hidden="true" inert=""/);
+    assert.match(closed,/value="preserved draft"/,"closing keeps content state in the DOM");
+    assert.doesNotMatch(closed,/<details|<summary/);
+    const actions=render({summary:"Recents",actions:true});
+    assert.match(actions,/<button[^>]*>Recents<\/button><div[^>]*><button type="button">New chat<\/button>/,"header actions are sibling controls, never nested in the disclosure trigger");
+    const opened=render({summary:"Work details",defaultOpen:true});
+    assert.match(opened,/aria-expanded="true"/);
+    assert.match(opened,/aria-hidden="false"/);
+    assert.doesNotMatch(opened,/inert=""/);
+    const controlled=render({summary:"Work details",defaultOpen:true,open:false});
+    assert.match(controlled,/aria-expanded="false"/,"controlled state takes precedence");
+    const worker={id:"one",parentId:"main",name:"Review output",status:"completed",task:"Review",transcript:[]};
+    const history=tree({workers:[worker],sessionId:"session"});
+    assert.equal((history.match(/1 agent · 1 complete/g)||[]).length,1);
+    assert.doesNotMatch(history,/Running 1|1 agent<|1 agents<|data-lucide="bot"/);
+    assert.match(history,/Review output/);
+    assert.match(history,/aria-hidden="true" inert=""/);
+    const mixed=tree({workers:[worker,{...worker,id:"two",name:"Current task",status:"running"}],sessionId:"session"});
+    const liveSection=mixed.match(/<section aria-label="Agent activity"[\s\S]*?<\/section>/)?.[0];
+    assert.ok(liveSection);
+    assert.match(liveSection,/Current task/);
+    assert.doesNotMatch(liveSection,/Review output/,"completed agents never appear under the running label");
+    assert.match(mixed,/1 agent · 1 complete/,"finished activity remains separately expandable");
+  } finally {await rm(directory,{recursive:true,force:true});}
+});

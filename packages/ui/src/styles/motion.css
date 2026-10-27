@@ -1,0 +1,42 @@
+/* Shared motion vocabulary. Product layouts own geometry, controls own feedback. */
+:root {
+  --ui-duration-fast:120ms;
+  --ui-duration-standard:200ms;
+  --ui-duration-enter:240ms;
+  --ui-ease-out:cubic-bezier(.16,1,.3,1);
+}
+@keyframes ui-surface-enter {
+  from { opacity:0; transform:translateY(6px); }
+  to { opacity:1; transform:translateY(0); }
+}
+.ui-surface-enter { animation:ui-surface-enter var(--ui-duration-enter) var(--ui-ease-out) both; }
+@media (prefers-reduced-motion:reduce) {
+  .ui-surface-enter { animation:none; }
+}
+[data-reduced-motion="true"] .ui-surface-enter { animation:none; }
+
+/* In-progress text only; completed rows and idle chrome never shimmer. */
+@keyframes ui-text-shimmer { from { background-position:200% 0; } to { background-position:0% 0; } }
+@media(prefers-reduced-motion:no-preference) {
+  .ui-text-shimmer, .console-working-label {
+    background-image:linear-gradient(90deg,var(--muted-foreground) 0%,var(--muted-foreground) 40%,var(--foreground) 50%,var(--muted-foreground) 60%,var(--muted-foreground) 100%);
+    background-size:200% 100%; background-repeat:repeat;
+    -webkit-background-clip:text; background-clip:text;
+    -webkit-text-fill-color:transparent;
+    animation:ui-text-shimmer 2.5s linear infinite;
+  }
+}
+[data-reduced-motion="true"] :is(.ui-text-shimmer,.console-working-label) {
+  animation:none; background:none; -webkit-text-fill-color:currentColor;
+}
+@media(prefers-reduced-motion:no-preference) {
+  .ui-stagger-in > :nth-child(-n+8) { animation:ui-surface-enter 240ms var(--ui-ease-out) both; }
+  .ui-stagger-in > :nth-child(2) { animation-delay:30ms; }
+  .ui-stagger-in > :nth-child(3) { animation-delay:60ms; }
+  .ui-stagger-in > :nth-child(4) { animation-delay:90ms; }
+  .ui-stagger-in > :nth-child(5) { animation-delay:120ms; }
+  .ui-stagger-in > :nth-child(6) { animation-delay:150ms; }
+  .ui-stagger-in > :nth-child(7) { animation-delay:180ms; }
+  .ui-stagger-in > :nth-child(8) { animation-delay:210ms; }
+}
+[data-reduced-motion="true"] .ui-stagger-in > * { animation:none; }

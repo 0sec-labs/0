@@ -79,6 +79,28 @@ describe("spawn_agent lifecycle events", () => {
     }
   });
 
+  it("classifies an interrupted child as stopped without a raw abort error", async () => {
+    const events: SubagentLifecyclePayload[] = [];
+    eventBus.subscribe({ emit: (type, payload) => {
+      if (type === "subagent_lifecycle") events.push(payload as SubagentLifecyclePayload);
+    } });
+    const controller = new AbortController();
+    const factory = async () => {
+      controller.abort();
+      return unavailableFactory();
+    };
+    const executor = new ToolExecutor(toolContext(), undefined, undefined, factory);
+    const result = await executor.execute({
+      name: "spawn_agent", arguments: { task: "inspect the target", max_turns: 3 },
+    }, { signal: controller.signal });
+
+    expect(result.success).toBe(false);
+    expect(events.map(event => event.status)).toEqual(["queued", "stopped"]);
+    expect(events.at(-1)).toMatchObject({ summary: "Stopped", durationMs: expect.any(Number) });
+    expect(events.at(-1)?.error).toBeUndefined();
+    expect(execution.calls).toBe(0);
+  });
+
   it("fails closed when no child runtime factory is provided", async () => {
     vi.stubEnv("ZERO_FORCE_PROVIDER", "openai");
     vi.stubEnv("ZERO_SELECTED_PROVIDER", "");

@@ -1,3 +1,4 @@
+import { Skeleton } from "@0/ui/components/skeleton";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, ChevronRight, Play } from "lucide-react";
@@ -46,8 +47,8 @@ export function WorkflowAutomationControl({ workflow, disabled = false, onConfig
   const inactive = disabled || busy || !schedules.data || schedules.isError;
   return <div className="space-y-2">
     <div className="flex items-center justify-between gap-3">
-      <button type="button" disabled={disabled || busy} onClick={() => setOpen(true)} className="flex min-w-0 items-center gap-2 rounded-lg text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-50">
-        {summary.own.length ? <CalendarClock aria-hidden="true" className="size-4 shrink-0" /> : <Play aria-hidden="true" className="size-4 shrink-0" />}<span className="truncate">{schedules.isPending ? "Loading triggers…" : schedules.isError ? "Triggers unavailable" : summary.label}</span><ChevronRight aria-hidden="true" className="size-3.5 shrink-0" />
+      <button type="button" disabled={disabled || busy} onClick={() => setOpen(true)} className="flex min-w-0 items-center gap-2 rounded-[var(--radius-control,8px)] text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-50">
+        {summary.own.length ? <CalendarClock aria-hidden="true" className="size-4 shrink-0" /> : <Play aria-hidden="true" className="size-4 shrink-0" />}<span className="truncate">{schedules.isPending ? <span role="status" aria-label="Loading triggers"><Skeleton className="h-3 w-24" /></span> : schedules.isError ? "Triggers unavailable" : summary.label}</span><ChevronRight aria-hidden="true" className="size-3.5 shrink-0" />
       </button>
       <div className="flex shrink-0 items-center gap-2"><span className="text-xs text-muted-foreground">{summary.enabled ? "On" : "Off"}</span><Switch aria-label={`Automatic triggers for ${workflow.name}`} checked={summary.enabled} disabled={inactive} onCheckedChange={checked => { if (checked) void enable(); else void pause(); }} /></div>
     </div>

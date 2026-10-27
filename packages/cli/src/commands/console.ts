@@ -119,11 +119,11 @@ export function resolveConsoleAutonomyMode(opts: {
 }
 
 /**
- * `0 console` — the unified interactive chat cockpit.
+ * `0 console` — scriptable one-shot chat using the shared console engine.
  *
- * A single conversational surface where the operator talks to the engine and it
+ * A command interface where each supplied prompt reaches the engine, which
  * can invoke every 0 tool (recon, web pentest, source/package scan,
- * variant hunt, verify, patch-gen) in one place. Thin REPL over the engine-side
+ * variant hunt, verify, patch-gen) in one place. Noninteractive adapter over the engine-side
  * driver in `@0/core` (`createConsoleSession`) — the tool registry and LLM
  * runtime are the real ones the autonomous scanner uses; this command only owns
  * terminal I/O and rendering.
@@ -149,7 +149,7 @@ export function registerConsoleCommand(program: Command): void {
     .option("--allow-scanners", "Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off")
     .option("--resume [id]", "With a headless prompt, reopen a saved session by id or unique prefix; use browser history for a picker.")
     .option("--continue", "With a headless prompt, continue the most recent saved console session.")
-    .option("-p, --print [prompt]", "Non-interactive: run ONE prompt through the engine, print the result, and exit (no TUI). Reads the prompt from the argument or piped stdin. Combine with --continue/--resume to query a saved session. Also reachable as `0 -p <prompt>`.")
+    .option("-p, --print [prompt]", "Non-interactive: run ONE prompt through the engine, print the result, and exit. Reads the prompt from the argument or piped stdin. Combine with --continue/--resume to query a saved session. Also reachable as `0 -p <prompt>`.")
     .option("--prompt <text>", "Run one headless prompt (alias for --print)")
     .action(async (opts: ConsoleOptions) => {
       if (opts.prompt !== undefined) opts.print = opts.prompt;
@@ -234,7 +234,7 @@ export function registerConsoleCommand(program: Command): void {
 
       // Resolve a saved console session to resume/continue. `--continue` (and
       // the `0 -c` shortcut) → the single most-recent; `--resume <id>` → that id
-      // or a unique prefix; bare `--resume` (and `0 -r`) → an interactive picker.
+      // or a unique prefix; browser history provides interactive session selection.
       // A resumed session inherits its stored model/target unless overridden.
       let resumeMessages: readonly unknown[] | undefined;
       let resumedModel: string | undefined;
@@ -275,7 +275,7 @@ export function registerConsoleCommand(program: Command): void {
 
       // Non-interactive one-shot: run a single prompt headless and exit. Handled
       // BEFORE the TUI/readline branches — `-p` is a scriptable query, not a
-      // session — and reuses the same session build + `runTurn` the readline
+      // session — and reuses the same session build + `runTurn` the browser
       // console uses, so tool traces + the answer stream to stdout identically.
       if (opts.print !== undefined) {
         const promptText =
@@ -371,7 +371,7 @@ async function runTurn(
   if (outcome.stopReason === "error") {
     output.stderr(chalk.red(`\nengine error: ${outcome.error ?? "unknown"}\n`), "console.turn.error");
     if (/ChatGPT.*model.*not supported/i.test(outcome.error ?? "")) {
-      output.stderr(chalk.dim("Choose an available account/provider model with --model; the interactive /model picker lists the current account catalog. Alternatively configure a provider that supports the requested model. No replacement model was selected.\n"), "console.turn.model_unavailable");
+      output.stderr(chalk.dim("Choose an available account/provider model with --model; the browser model picker lists the current account catalog. Alternatively configure a provider that supports the requested model. No replacement model was selected.\n"), "console.turn.model_unavailable");
     }
   }
   return outcome;

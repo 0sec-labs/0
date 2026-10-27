@@ -5,7 +5,7 @@ vi.mock("./plugins/enablement.js", async (importOriginal) => ({
 }));
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
 import { gzipSync } from "node:zlib";
-import { fetchScoped } from "./http.js";
+import { fetchScoped, isAllowedLocalOrigin } from "./http.js";
 import { ScopePolicy } from "./scope/scope.js";
 
 const dns = vi.hoisted(() => ({ lookup: vi.fn() }));
@@ -29,11 +29,42 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   server.closeAllConnections();
   await new Promise<void>(resolve => server.close(() => resolve()));
 });
 
 describe("scoped HTTP physical network boundary", () => {
+  it("admits only the explicitly granted loopback origin from a no-target console", async () => {
+    await expect(fetchScoped(base, {}, { baseUrl: "", allowPublicNetwork: true })).rejects.toThrow(/Local\/internal HTTP/);
+    vi.stubEnv("ZERO_ALLOWED_LOCAL_ORIGINS", base);
+    const response = await fetchScoped(`${base}/dev`, {}, { baseUrl: "", allowPublicNetwork: true });
+    expect(await response.text()).toBe("fixture");
+    expect(dns.lookup).not.toHaveBeenCalled();
+    const sibling = new URL(base);
+    sibling.port = String(Number(sibling.port) + 1);
+    await expect(fetchScoped(sibling.href, {}, { baseUrl: "", allowPublicNetwork: true })).rejects.toThrow(/Local\/internal HTTP/);
+    expect(hits.map(hit => hit.url)).toEqual(["/dev"]);
+  });
+
+  it("does not turn a loopback grant into redirect or private DNS authority", async () => {
+    vi.stubEnv("ZERO_ALLOWED_LOCAL_ORIGINS", base);
+    serve = (_req, res) => { res.writeHead(302, { Location: "http://169.254.169.254/latest/meta-data/" }).end(); };
+    await expect(fetchScoped(base, { redirect: "follow" }, { baseUrl: "", allowPublicNetwork: true })).rejects.toThrow(/Local\/internal HTTP/);
+    await expect(fetchScoped("http://public.invalid/", {}, { baseUrl: "", allowPublicNetwork: true })).rejects.toThrow(/Local\/internal DNS/);
+    expect(hits).toHaveLength(1);
+  });
+
+  it("ignores non-literal, private-network, credentialed and path grants", () => {
+    for (const grant of ["http://localhost:48124", "http://10.0.0.1:48124", "http://user@127.0.0.1:48124", "http://127.0.0.1:48124/path"]) {
+      vi.stubEnv("ZERO_ALLOWED_LOCAL_ORIGINS", grant);
+      expect(isAllowedLocalOrigin("http://127.0.0.1:48124")).toBe(false);
+    }
+    vi.stubEnv("ZERO_ALLOWED_LOCAL_ORIGINS", "http://127.0.0.1:48124");
+    expect(isAllowedLocalOrigin("https://127.0.0.1:48124")).toBe(false);
+    expect(isAllowedLocalOrigin("http://localhost:48124")).toBe(false);
+  });
+
   it("binds absent scope to the base origin before resolving foreign hosts", async () => {
     await expect(fetchScoped("http://foreign.invalid/", {}, { baseUrl: base })).rejects.toThrow(/Cross-origin/);
     expect(dns.lookup).not.toHaveBeenCalled();

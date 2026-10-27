@@ -19,7 +19,6 @@ import {
   installConsolePresentationBridge,
   installProcessPresentationStreamBridge,
 } from "./presentation/process-output.js";
-import { setHerdrSink } from "./herdr-state.js";
 import { launchConfiguredWorkbench } from "./workbench.js";
 import { remoteBackendClientId } from "./backend-client-mode.js";
 import { savedConnectionEnvPatch } from "./connection-env.js";
@@ -79,9 +78,6 @@ eventBus.subscribe(presentationEventSink(presentationEventBus));
 // that socket is readable by any process running as this user.
 const herdrSink = createHerdrEventSink();
 if (herdrSink) eventBus.subscribe(herdrSink);
-// Parked so the interactive console can also report the `blocked` state,
-// which no bus event covers (approval gates resolve inline).
-setHerdrSink(herdrSink);
 import { detectAndRoute } from "./routing.js";
 import { runStartupUpdate } from "./utils/update-check.js";
 import { enforceSourceDistFreshness } from "./source-freshness.js";
@@ -89,7 +85,7 @@ import { enforceSourceDistFreshness } from "./source-freshness.js";
 enforceSourceDistFreshness({ entryUrl: import.meta.url });
 
 
-// Explicit automatic updates finish before command parsing or interactive work.
+// Explicit automatic updates finish before command parsing or browser startup.
 // Notification-only checks stay in the background; unset settings remain opt-in.
 if (!isWorkbenchManagement && !isRemoteBackendClient) await runStartupUpdate(VERSION);
 
@@ -202,7 +198,7 @@ if (userArgs.length === 0) {
   const program = await buildProgram();
   if (userArgs[0] === "-r" || userArgs[0] === "--resume") {
     // `0 -r [id]` is the top-level shortcut for `console --resume [id]`: resume a
-    // saved chat session by id/prefix, or open the picker with no id. commander's
+    // saved chat session by id/prefix when a headless prompt is supplied. commander's
     // root can't take a bare `-r`, so rewrite argv onto the `console` subcommand.
     process.argv = [process.argv[0], process.argv[1], "console", "--resume", ...userArgs.slice(1)];
     program.parse();

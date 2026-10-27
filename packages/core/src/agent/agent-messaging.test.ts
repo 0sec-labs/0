@@ -34,6 +34,7 @@ import {
   type MessagingRuntime,
 } from "./agent-messaging.js";
 import { ToolExecutor, buildSiblingMessagingBatch, buildSendMessageTool } from "./tools.js";
+import { AuditWorkerTree } from "./worker-tree.js";
 import type { ToolContext } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -870,6 +871,47 @@ describe("fan-out sibling messaging end-to-end (real mailbox)", () => {
       agentMessaging: rt,
     } as unknown as ToolContext;
   }
+
+  it("pages large live rosters without consuming the inbox drain allowance", async () => {
+    const ids = [A_ID, ...Array.from({ length: 1000 }, (_, index) => `${SIBLING_PREFIX}peer-${index}`)];
+    const [runtime] = buildSiblingMessagingBatch({ agentIds: [A_ID], livePeers: () => ids, scanId: SCAN, siblingChannelEnabled: true, projectPath: project, homeDir: home });
+    const description = (buildSendMessageTool(runtime).parameters as { to: { description: string } }).to.description;
+    expect(description).toContain(ids[1]);
+    expect(description).not.toContain(ids[1000]);
+    const exec = new ToolExecutor(ctxFor(runtime), null);
+    for (const offset of [0, 32, 64, 96, 128]) {
+      const page = await exec.execute({ name: "check_messages", arguments: { peers_only: true, peer_offset: offset } });
+      expect(page.success).toBe(true);
+      expect(page.output).toMatchObject({ peers: ids.slice(offset + 1, offset + 33), peerCount: 1000, nextPeerOffset: offset + 32 });
+    }
+    const inbox = await exec.execute({ name: "check_messages", arguments: {} });
+    expect(inbox.output).toMatchObject({ messages: [], note: "No new messages." });
+    const lastPage = await exec.execute({ name: "check_messages", arguments: { peers_only: true, peer_offset: 992 } });
+    expect(lastPage.output).toMatchObject({ peers: ids.slice(993), peerCount: 1000 });
+    expect(lastPage.output).not.toHaveProperty("nextPeerOffset");
+    const malformed = await exec.execute({ name: "check_messages", arguments: { peers_only: true, peer_offset: -1 } });
+    expect(malformed.success).toBe(false);
+  });
+
+  it("discovers a later swarm under the same coordinator and delivers a handoff", async () => {
+    const tree = new AuditWorkerTree(SCAN);
+    const leaseA = tree.acquire(A_ID, SCAN);
+    const [a] = buildSiblingMessagingBatch({ agentIds: [A_ID], livePeers: () => tree.peers(SCAN), scanId: SCAN, siblingChannelEnabled: true, projectPath: project, homeDir: home });
+    const [b] = buildSiblingMessagingBatch({ agentIds: [B_ID], livePeers: () => tree.peers(SCAN), scanId: SCAN, siblingChannelEnabled: true, projectPath: project, homeDir: home });
+    const execA = new ToolExecutor(ctxFor(a), null);
+    const execB = new ToolExecutor(ctxFor(b), null);
+    const leaseB = tree.acquire(B_ID, SCAN);
+    const discovery = await execA.execute({ name: "check_messages", arguments: {} });
+    expect(discovery.output).toMatchObject({ peers: [B_ID] });
+    const sent = await execA.execute({ name: "send_message", arguments: { to: B_ID, body: "Cross-swarm handoff: inspect orders" } });
+    expect(sent.success).toBe(true);
+    const got = await execB.execute({ name: "check_messages", arguments: {} });
+    expect((got.output as { messages: string[] }).messages[0]).toContain("Cross-swarm handoff");
+    leaseB.release();
+    const unavailable = await execA.execute({ name: "send_message", arguments: { to: B_ID, body: "late message" } });
+    expect(unavailable.success).toBe(false);
+    leaseA.release();
+  });
 
   it("child A → sibling B is delivered and B's check_messages drains it", async () => {
     const [a, b] = buildSiblingMessagingBatch({

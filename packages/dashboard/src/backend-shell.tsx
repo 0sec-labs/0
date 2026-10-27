@@ -7,10 +7,13 @@ import { BackendApiContext, BackendSelectionContext } from "./backend-context";
 import { backendRoute } from "./lib/backend-client";
 import { App } from "./App";
 import { BackendConnectionPicker } from "./components/backend-connection-picker";
+import { ActivityMark } from "./console/loading-state";
+import { descriptorForRoute } from "./console/chat-host-readiness";
+import { Button } from "./components/ui/button";
 import { TeamAccess } from "./components/team-access";
 
 async function controlJson(path: string, signal?: AbortSignal) {
-  const response = await localControlFetch(path, { signal });
+  const response = await localControlFetch(path, { signal:signal ? AbortSignal.any([signal,AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000) });
   if (response.status === 404) throw new Error("The running engine does not support backend connections. Restart 0 web from the current build, then reload this page.");
   if (!response.ok) throw new Error(`Connection service returned ${response.status}.`);
   if (!response.headers.get("content-type")?.includes("json")) throw new Error("Connection discovery returned a page instead of engine data. Open the URL printed by 0 web, rather than a standalone frontend development server.");
@@ -44,6 +47,7 @@ function ConnectedBackendShell() {
   const [backends, setBackends] = useState<BackendDescriptor[]>([]);
   const [selected, setSelected] = useState<BackendDescriptor | null>(null);
   const [error, setError] = useState("");
+  const [attemptBackendId,setAttemptBackendId]=useState(route.backendId);
   const [connectionStatus, setConnectionStatus] = useState("connecting");
   const identity = useRef("");
   const [refresh, setRefresh] = useState(0);
@@ -54,20 +58,22 @@ function ConnectedBackendShell() {
   }, []);
   useEffect(() => {
     let live = true;
+    const controller=new AbortController();
+    setAttemptBackendId(route.backendId);
     setSelected(null); setError(""); setConnectionStatus("connecting");
     void (async () => {
-      const registry = BackendListSchema.parse(await controlJson("/api/backends"));
+      const registry = BackendListSchema.parse(await controlJson("/api/backends",controller.signal));
       if (!live) return;
       setBackends(registry.backends);
       if (!registry.backends.some(backend => backend.id === route.backendId)) throw new Error("This engine connection is not registered on the trusted host.");
-      const result = await controlJson(`/api/backends/${encodeURIComponent(route.backendId)}/handshake`) as { backend?: unknown; handshake?: unknown; error?: string };
+      const result = await controlJson(`/api/backends/${encodeURIComponent(route.backendId)}/handshake`,controller.signal) as { backend?: unknown; handshake?: unknown; error?: string };
       const backend = BackendDescriptorSchema.parse(result.backend);
       if (backend.id !== route.backendId) throw new Error("Connection service returned another engine identity.");
       if (!result.handshake || backend.status !== "connected") throw new Error(result.error || backend.error || `Engine is ${backend.status}.`);
       const handshake = parseBackendHandshake(result.handshake);
       if (live) { identity.current = JSON.stringify([handshake.engineId, handshake.serverInstanceId, handshake.capabilities]); setConnectionStatus("connected"); setBackends(current => current.map(item => item.id === backend.id ? backend : item)); setSelected({ ...backend, protocolVersion: handshake.protocolVersion, capabilities: handshake.capabilities, platform: handshake.platform }); }
     })().catch(cause => { if (live) { setConnectionStatus("disconnected"); setError(cause instanceof Error ? cause.message : String(cause)); } });
-    return () => { live = false; };
+    return () => { live = false;controller.abort(); };
   }, [route.backendId, refresh]);
   useEffect(() => {
     if (!selected) return;
@@ -86,6 +92,7 @@ function ConnectedBackendShell() {
         if (nextIdentity !== identity.current) {
           // A changed engine epoch/capability contract discards local pending grants and reloads snapshots.
           identity.current = nextIdentity;
+          setSelected(null);setConnectionStatus("connecting");
           setRefresh(value => value + 1);
         } else { setConnectionStatus("connected"); setBackends(current => current.map(item => item.id === descriptor.id ? descriptor : item)); }
       } catch (cause) {
@@ -113,10 +120,14 @@ function ConnectedBackendShell() {
     if (backendId === route.backendId) return;
     // Resource navigation never carries another engine's session/run IDs.
     window.history.pushState(null, "", `/b/${encodeURIComponent(backendId)}/console`);
-    setSelected(null); setConnectionStatus("connecting");
+    setSelected(null); setError("");setConnectionStatus("connecting");
     setRoute({ backendId, basename: `/b/${backendId}` });
   };
-  return <BackendSelectionContext value={{ backends, backendId: route.backendId, status: connectionStatus, select, reconnect: () => setRefresh(value => value + 1) }}><div className="backend-shell flex h-dvh flex-col overflow-hidden">
-    {selected ? <BackendView key={`${route.backendId}:${refresh}`} descriptor={selected} basename={route.basename} /> : <div className="mx-auto max-w-xl p-8 text-sm" role="status"><BackendConnectionPicker />{error || "Connecting…"}{error && <button className="ml-3 underline" onClick={() => setRefresh(value => value + 1)}>Reconnect</button>}</div>}
+  const owner=descriptorForRoute(route.backendId,selected);
+  const currentError=attemptBackendId===route.backendId?error:"";
+  const status=attemptBackendId===route.backendId?connectionStatus:"connecting";
+  const reconnect=()=>{setSelected(null);setError("");setConnectionStatus("connecting");setRefresh(value=>value+1);};
+  return <BackendSelectionContext value={{ backends, backendId: route.backendId, status, select, reconnect }}><div className="backend-shell flex h-dvh flex-col overflow-hidden">
+    {owner ? <BackendView key={`${route.backendId}:${refresh}`} descriptor={owner} basename={route.basename} /> : <div className="mx-auto max-w-xl space-y-3 p-8 text-sm" role="status"><BackendConnectionPicker />{currentError ? <><p>{currentError}</p><Button variant="outline" size="sm" onClick={reconnect}>Reconnect</Button></> : <div className="flex items-center gap-2.5 text-muted-foreground"><ActivityMark /><span>Connecting to host…</span></div>}</div>}
   </div></BackendSelectionContext>;
 }

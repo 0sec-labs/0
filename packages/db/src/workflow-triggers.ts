@@ -33,7 +33,7 @@ export class WorkflowTriggerStore {
     const stamp = new Date(now).toISOString(); const trigger: WorkflowTrigger = { ...input, kind: "schedule", id: randomUUID(), version:1, nextFireAt: nextWorkflowTriggerFire(input.startAt, input.cadence, now), createdAt: stamp, updatedAt: stamp };
     this.#db.prepare("INSERT INTO workflow_triggers(id,workflow_id,enabled,next_fire_at,active_claim,trigger_json) VALUES(?,?,?,?,NULL,?)").run(trigger.id, trigger.workflowId, trigger.enabled ? 1 : 0, trigger.nextFireAt, JSON.stringify(trigger)); return trigger;
   }
-  update(id: string, update: Partial<Pick<WorkflowTrigger,"enabled"|"nextFireAt"|"lastStatus"|"lastError"|"lastExecutionId"|"reviewedModel"|"reviewedProviderId"|"reviewedConnectionIdentity">>, expectedVersion?:number): WorkflowTrigger | null {
+  update(id: string, update: Partial<Pick<WorkflowTrigger,"enabled"|"cadence"|"startAt"|"timezone"|"workflowRevision"|"nextFireAt"|"lastStatus"|"lastError"|"lastExecutionId"|"reviewedModel"|"reviewedProviderId"|"reviewedConnectionIdentity">>, expectedVersion?:number): WorkflowTrigger | null {
     return this.#db.transaction(() => { const current = this.get(id); if (!current) return null; if (expectedVersion !== undefined && (current.version ?? 1) !== expectedVersion) throw new Error("Schedule changed. Review it again before enabling."); const next = { ...current, ...update, version:(current.version ?? 1)+1, updatedAt: new Date().toISOString() }; if (!next.enabled && update.lastStatus === "running") next.lastStatus = "paused"; this.#write(next); return next; })();
   }
   delete(id: string): boolean { return this.#db.prepare("DELETE FROM workflow_triggers WHERE id = ? AND active_claim IS NULL").run(id).changes > 0; }

@@ -188,6 +188,22 @@ describe("launchOverseBinary / runOverseProcess", () => {
 });
 
 describe("executeOverseScan", () => {
+  it.each(["infra-failed", "unsupported", "skipped", "cancelled"])("does not report %s as a successful scan", async (state) => {
+    const res = await executeOverseScan({
+      args: goodArgs,
+      runner: stubRunner({kind: "exit", exitCode: 0, durationMs: 1,
+        combined: JSON.stringify({_meta: {contract_version: "1.5", terminal_state: state, status_reason: "backend unavailable"}})}),
+    });
+    expect(res.success).toBe(false);
+    expect(res.error).toContain("backend unavailable");
+    expect(res.output).toMatchObject({terminal_state: state, status_reason: "backend unavailable"});
+  });
+  it("does not treat a nonzero process exit as successful", async () => {
+    const res = await executeOverseScan({args: goodArgs, runner: stubRunner({kind: "exit", exitCode: 2, durationMs: 1, combined: ndjsonFixture()})});
+    expect(res.success).toBe(false);
+    expect(res.error).toContain("code 2");
+  });
+
   it("returns confirmed + hypotheses on a clean exit (stubbed subprocess)", async () => {
     const res = await executeOverseScan({
       args: goodArgs,

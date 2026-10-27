@@ -7,13 +7,7 @@ export function registerDoctorCommand(program: Command): void {
     .command("doctor")
     .description("Check local runtime prerequisites and suggest the next command")
     .action(async () => {
-      const { isBunRuntime, canUseOpenTui, getRuntimeMetadata } = await import("../tui/runtime.js");
-      if (isBunRuntime() && canUseOpenTui()) {
-        const { showOpenTuiDoctor } = await import("../tui/run.js");
-        await showOpenTuiDoctor();
-        return;
-      }
-
+      const { getRuntimeMetadata } = await import("../tui/runtime.js");
       const { hasApiKey, availableRuntimes, apiRuntime } = await getRuntimeAvailability();
       const runtime = getRuntimeMetadata();
       const nodeMajor = Number.parseInt(process.versions.node.split(".")[0] ?? "0", 10);

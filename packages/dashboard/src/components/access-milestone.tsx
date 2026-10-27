@@ -9,7 +9,7 @@ export function AccessMilestoneBanner({ milestone, scanId, at }: { milestone: Ac
   const cleanupDate = milestone.cleanupAt !== undefined && Number.isFinite(milestone.cleanupAt) && Math.abs(milestone.cleanupAt) <= 8_640_000_000_000_000 ? new Date(milestone.cleanupAt) : null;
   const confirmed = milestone.status === "confirmed";
   const blocked = milestone.status === "blocked";
-  return <section role={confirmed ? "alert" : "status"} aria-label={`${milestone.status} access milestone`} className={`rounded-lg border p-4 ${confirmed ? "border-red-500/50 bg-red-500/10" : blocked ? "border-slate-500/40 bg-slate-500/10" : "border-amber-500/40 bg-amber-500/10"}`}>
+  return <section role={confirmed ? "alert" : "status"} aria-label={`${milestone.status} access milestone`} className={`rounded-[var(--radius-panel,16px)] border p-4 ${confirmed ? "border-red-500/50 bg-red-500/10" : blocked ? "border-slate-500/40 bg-slate-500/10" : "border-amber-500/40 bg-amber-500/10"}`}>
     <p className={`text-xs font-medium uppercase ${confirmed ? "text-red-700 dark:text-red-300" : blocked ? "text-slate-700 dark:text-slate-300" : "text-amber-700 dark:text-amber-300"}`}>{confirmed ? "Confirmed access · deterministic ownership proof" : blocked ? "Access blocked · deterministic replay" : "Conditional impact · deterministic state transition"}</p>
     <h3 className="mt-1 font-semibold">{milestone.headline}</h3>
     <p className="mt-1 text-sm">{milestone.asset}</p>

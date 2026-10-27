@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 type PublicBlock =
   | { type: "text"; text: string }
+  | { type: "image"; mediaType: string; data: string; name?: string }
   | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
   | { type: "tool_result"; tool_use_id: string; content: string; is_error?: boolean };
 
@@ -40,6 +41,7 @@ function publicText(content: unknown): string | undefined {
 
 function publicBlock(value: unknown): PublicBlock | undefined {
   if (!record(value)) return undefined;
+  if (value.type === "image" && typeof value.mediaType === "string" && typeof value.data === "string") return { type: "image", mediaType: value.mediaType, data: value.data, ...(typeof value.name === "string" ? { name: value.name } : {}) };
   if (value.type === "text" && typeof value.text === "string") {
     return { type: "text", text: value.text };
   }
@@ -83,6 +85,7 @@ export function exportChatConversation(messages: readonly unknown[]): { text: st
   const text = publicMessages.map((message) => {
     const body = message.content.map((block) => {
       if (block.type === "text") return block.text;
+      if (block.type === "image") return `Image: ${block.name ?? block.mediaType}`;
       if (block.type === "tool_use") return `Tool: ${block.name} (${block.id})\n${JSON.stringify(block.input, null, 2)}`;
       return `Tool result: ${block.tool_use_id}${block.is_error ? " (error)" : ""}\n${block.content}`;
     }).join("\n\n");

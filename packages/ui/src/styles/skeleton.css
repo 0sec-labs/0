@@ -1,0 +1,9 @@
+/* Shared, theme-aware placeholders. The content footprint stays fixed while loading. */
+.ui-skeleton { position:relative; overflow:hidden; background:color-mix(in srgb,var(--muted-foreground) 13%,transparent); }
+.ui-skeleton::after { content:""; position:absolute; inset:0; pointer-events:none; background:linear-gradient(100deg,transparent 20%,color-mix(in srgb,var(--foreground) 7%,transparent) 50%,transparent 80%); transform:translateX(-100%); }
+@keyframes ui-skeleton-shimmer { to { transform:translateX(100%); } }
+@media(prefers-reduced-motion:no-preference) {
+  .ui-skeleton::after { animation:ui-skeleton-shimmer 1.8s ease-in-out infinite; }
+}
+@media(prefers-reduced-motion:reduce) { .ui-skeleton::after { animation:none; display:none; } }
+[data-reduced-motion="true"] .ui-skeleton::after { animation:none; display:none; }

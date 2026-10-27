@@ -176,7 +176,7 @@ function WorkflowColumn({
 
   return (
     <section className="flex w-[20rem] shrink-0 flex-col gap-3">
-      <div className="rounded-2xl px-3 py-2">
+      <div className="rounded-[var(--radius-panel,16px)] px-3 py-2">
         <div className="flex items-center justify-between gap-3">
           <div className="text-sm font-medium text-muted-foreground">
             {column.label}
@@ -190,7 +190,7 @@ function WorkflowColumn({
       <div
         ref={setNodeRef}
         className={cn(
-          "flex min-h-[20rem] flex-col gap-3 rounded-2xl bg-muted/20 p-2 transition-colors duration-150 motion-reduce:transition-none",
+          "flex min-h-[20rem] flex-col gap-3 rounded-[var(--radius-panel,16px)] bg-muted/20 p-2 transition-colors duration-150 motion-reduce:transition-none",
           isOver && "bg-primary/10 ring-1 ring-primary/30",
         )}
       >
@@ -207,7 +207,7 @@ function WorkflowColumn({
         </SortableContext>
 
         {groups.length === 0 ? (
-          <div className="flex flex-1 items-center justify-center rounded-2xl bg-transparent px-4 py-8 text-center text-xs text-muted-foreground">
+          <div className="flex flex-1 items-center justify-center rounded-[var(--radius-panel,16px)] bg-transparent px-4 py-8 text-center text-xs text-muted-foreground">
             Drop a finding here.
           </div>
         ) : null}
@@ -267,7 +267,7 @@ function WorkflowCard({
       {...attributes}
       {...listeners}
       className={cn(
-        "rounded-2xl bg-muted/30 p-3 text-left transition-[background-color,box-shadow] duration-150 motion-reduce:transition-none",
+        "rounded-[var(--radius-panel,16px)] bg-muted/30 p-3 text-left transition-[background-color,box-shadow] duration-150 motion-reduce:transition-none",
         "cursor-grab active:cursor-grabbing hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
         selected && "bg-muted ring-1 ring-primary/35",
         isDragging && !isOverlay && "opacity-30",
