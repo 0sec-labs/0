@@ -278,7 +278,7 @@ Other protocol types support separate host-brokered workflows. Their presence in
 
 Installation writes files without running code. Enablement records approval for
 the current project without starting the plugin. Direct `plugin run`, or loading
-an approved plugin for an OpenTUI chat, starts the child. Disabling removes
+an approved plugin for an browser console chat, starts the child. Disabling removes
 project approval but keeps files.
 
 Installed external files live under `~/.0/plugins/<id>/`; the built-in `scope`
@@ -289,18 +289,18 @@ the same capabilities do not by themselves invalidate that approval.
 
 ### Use an installed tool in a chat
 
-Enable it from the project where you intend to use it, then start `0 tui` from
-that directory. The OpenTUI loads approved marketplace tools into a host pinned
+Enable it from the project where you intend to use it, then start `0 web` from
+that directory. The browser console loads approved marketplace tools into a host pinned
 to each chat. Ask the agent for the declared tool (`foxguard_scan`, for example),
 not the registry ID (`foxguard.scanner`).
 
-If you install, enable, disable, or replace a plugin while the TUI is open,
+If you install, enable, disable, or replace a plugin while the browser is open,
 refresh through the marketplace and start a new chat. Existing chats keep their
 leased host until cleanup; disablement does not retroactively kill that running
 code. Close the old chats when revocation must take effect immediately. This
 host ownership is implemented in
 [`session-plugin-host.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/session-plugin-host.ts).
-With SmolVM selected, new web and OpenTUI chats automatically copy approved
+With SmolVM selected, new browser chats automatically copy approved
 installed plugins into private guest storage and load their tools inside the VM.
 The controller never executes their code. Approvals are mapped to the guest
 workspace, and changed capabilities require approval again. External executables
@@ -310,7 +310,7 @@ includes Foxguard). The workbench image pins Foxguard source revision
 support; the published 0.14.0 release predates `v2`. Build provenance lives at
 `/usr/local/share/0/foxguard-source.json` inside the guest. Existing chats keep
 their original tool set.
-Other CLI workflows do not automatically acquire this TUI host.
+Other CLI workflows do not automatically acquire this chat host.
 
 ### Update deliberately
 

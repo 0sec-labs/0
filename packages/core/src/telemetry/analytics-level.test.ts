@@ -29,8 +29,8 @@ describe("resolveAnalyticsLevel — parsing", () => {
     expect(resolveAnalyticsLevel({ "ZERO_ANALYTICS_LEVEL": "  FULL " })).toBe("full");
   });
 
-  it("does not authorize sharing without a choice", () => {
-    expect(resolveAnalyticsLevel({})).toBe("off");
+  it("defaults new installations to usage metrics only", () => {
+    expect(resolveAnalyticsLevel({})).toBe("usage");
   });
 
   it("respects environment opt-outs without a sharing choice", () => {

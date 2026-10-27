@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "protocolDigest": "sha256:106f93d748d02f3771c5f0c03c220b2d111a267ae1e156ca6260a7c9d76a3abb",
-  "corpusDigest": "sha256:5ad3cc21819f1be13cef68322463007a28c93c58e88c5a72e09e093e2f79c10c",
+  "protocolDigest": "sha256:6e64465a841dcdea128ea38d66dd0d78911ca2d48a26016d514a973fa0604dc1",
+  "corpusDigest": "sha256:2c13432438c95407124b339239470158cd0a8085217a3141a4b8d01a2a7f4fce",
   "mode": "controls",
   "conclusion": "inconclusive",
   "broaderEnablement": false,
@@ -22,37 +22,37 @@
     "frozen-baseline": {
       "attempts": 10,
       "verifiedCorrect": 4,
-      "positiveRecall": 0,
-      "falseAlarmRate": 0.3333333333333333,
+      "positiveRecall": 0.5,
+      "falseAlarmRate": 0.6666666666666666,
       "inconclusive": 0,
-      "p50Ms": 9.194916999999805,
+      "p50Ms": 5.069874999999911,
       "p95Ms": null
     },
     "sequential": {
       "attempts": 10,
       "verifiedCorrect": 4,
-      "positiveRecall": 0,
-      "falseAlarmRate": 0.3333333333333333,
+      "positiveRecall": 0.5,
+      "falseAlarmRate": 0.6666666666666666,
       "inconclusive": 0,
-      "p50Ms": 9.53079200000002,
+      "p50Ms": 5.063709000000017,
       "p95Ms": null
     },
     "baseline-extra-attempts": {
       "attempts": 21,
       "verifiedCorrect": 8,
-      "positiveRecall": 0,
-      "falseAlarmRate": 0.3333333333333333,
+      "positiveRecall": 0.4444444444444444,
+      "falseAlarmRate": 0.6666666666666666,
       "inconclusive": 0,
-      "p50Ms": 6.1542090000002645,
+      "p50Ms": 5.04362500000002,
       "p95Ms": null
     },
     "aa": {
       "attempts": 10,
       "verifiedCorrect": 4,
-      "positiveRecall": 0,
-      "falseAlarmRate": 0.3333333333333333,
+      "positiveRecall": 0.5,
+      "falseAlarmRate": 0.6666666666666666,
       "inconclusive": 0,
-      "p50Ms": 10.181708999999955,
+      "p50Ms": 5.0770840000000135,
       "p95Ms": null
     },
     "regression": {
@@ -61,7 +61,7 @@
       "positiveRecall": 0,
       "falseAlarmRate": 0,
       "inconclusive": 0,
-      "p50Ms": 9.955707999999959,
+      "p50Ms": 4.283083999999917,
       "p95Ms": null
     }
   },
@@ -96,9 +96,10 @@
     "modelUsageBasis": "provider token usage x frozen tariff; invoice remains separate",
     "localComputeUsd": null
   },
-  "elapsedMs": 3619.5480420000004,
-  "cpuMs": 79.322,
+  "elapsedMs": 1956.1433749999999,
+  "cpuMs": 57.338,
   "reasons": [
+    "source-pattern oracle agreement does not independently reproduce or verify a vulnerability",
     "public historical source may occur in model training data",
     "tiny convenience sample does not establish security generalization",
     "local compute monetary cost unpriced; wall/CPU measured separately",
@@ -108,10 +109,76 @@
     "insufficient independent final families for preregistered qualification",
     "paired quality gain not established"
   ],
-  "executed": "2026-10-24 UTC",
-  "scope": "Executed deterministic controls on downloaded advisory-labelled source; no paid model dispatch.",
-  "unknownUsageStop": {
+  "purpose": "deterministic controller smoke observation; no model calls or security efficacy claim",
+  "qualificationStatus": "not-qualified",
+  "supersedes": "Original helper-only lodash selection admitted identical sources with conflicting labels; old control results are invalidated.",
+  "unknownUsageControl": {
+    "schemaVersion": 1,
+    "protocolDigest": "sha256:6e64465a841dcdea128ea38d66dd0d78911ca2d48a26016d514a973fa0604dc1",
+    "corpusDigest": "sha256:2c13432438c95407124b339239470158cd0a8085217a3141a4b8d01a2a7f4fce",
+    "mode": "controls",
     "conclusion": "inconclusive",
+    "broaderEnablement": false,
+    "automaticPromotion": false,
+    "pairedAnalysis": {
+      "independentFamilies": 0,
+      "meanGain": null,
+      "interval95": [
+        -1,
+        1
+      ],
+      "assumption": "bounded independent-family Hoeffding interval; no IID claim beyond declared family assumption",
+      "retentionRegressions": 0,
+      "aaDisagreements": 0,
+      "regressionDetected": false
+    },
+    "arms": {
+      "frozen-baseline": {
+        "attempts": 0,
+        "verifiedCorrect": 0,
+        "positiveRecall": null,
+        "falseAlarmRate": null,
+        "inconclusive": 0,
+        "p50Ms": null,
+        "p95Ms": null
+      },
+      "sequential": {
+        "attempts": 0,
+        "verifiedCorrect": 0,
+        "positiveRecall": null,
+        "falseAlarmRate": null,
+        "inconclusive": 0,
+        "p50Ms": null,
+        "p95Ms": null
+      },
+      "baseline-extra-attempts": {
+        "attempts": 0,
+        "verifiedCorrect": 0,
+        "positiveRecall": null,
+        "falseAlarmRate": null,
+        "inconclusive": 0,
+        "p50Ms": null,
+        "p95Ms": null
+      },
+      "aa": {
+        "attempts": 0,
+        "verifiedCorrect": 0,
+        "positiveRecall": null,
+        "falseAlarmRate": null,
+        "inconclusive": 0,
+        "p50Ms": null,
+        "p95Ms": null
+      },
+      "regression": {
+        "attempts": 0,
+        "verifiedCorrect": 0,
+        "positiveRecall": null,
+        "falseAlarmRate": null,
+        "inconclusive": 0,
+        "p50Ms": null,
+        "p95Ms": null
+      }
+    },
     "cost": {
       "meteredTariffUsd": 0,
       "billedUsd": null,
@@ -143,7 +210,22 @@
       "modelUsageBasis": "provider token usage x frozen tariff; invoice remains separate",
       "localComputeUsd": null
     },
-    "elapsedMs": 35.23420900000001,
-    "cpuMs": 0.898
+    "elapsedMs": 20.951541,
+    "cpuMs": 0.752,
+    "reasons": [
+      "source-pattern oracle agreement does not independently reproduce or verify a vulnerability",
+      "public historical source may occur in model training data",
+      "tiny convenience sample does not establish security generalization",
+      "local compute monetary cost unpriced; wall/CPU measured separately",
+      "ordinary provider token usage is metered tariff cost, not reconciled invoice cost",
+      "provider-default decoding temperature and seed not pinned by existing runtime",
+      "provider token usage unknown; reconcile before further dispatch",
+      "deterministic controls only; no model-backed security efficacy evidence",
+      "insufficient independent final families for preregistered qualification",
+      "paired quality gain not established",
+      "injected regression control not demonstrated",
+      "unsettled dispatch or unknown token usage",
+      "provider invoice and full monetary cost not reconciled"
+    ]
   }
 }

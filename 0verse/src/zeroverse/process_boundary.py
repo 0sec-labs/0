@@ -50,6 +50,11 @@ def _stop(process: multiprocessing.Process, grace: float = 0.25) -> None:
                 return
             except ProcessLookupError:
                 pass
+            except PermissionError:
+                # macOS: the child may sit in a process group we cannot signal
+                # (e.g. hardened/sandboxed sessions). Fall through to the
+                # direct-kill fallback instead of crashing the pipeline.
+                pass
         if signum == signal.SIGTERM:
             process.terminate()
         else:

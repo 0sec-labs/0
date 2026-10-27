@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
-import { digest, admitCorpus, extractTarFiles, sourceTask } from './security-evolution-study/corpus.mjs';
+import { digest, admitCorpus, extractTarFiles, selectSourceUnits, sourceTask } from './security-evolution-study/corpus.mjs';
 import { BASELINE_SKILL, preregister, admitProtocol, analyzeStudy } from './security-evolution-study/protocol.mjs';
 import { runPreregisteredStudy, deterministicControlProvider } from './security-evolution-study/run.mjs';
 function fixture() {
@@ -29,6 +29,9 @@ test('source corpus binds bytes, disjoint families and all control lanes', () =>
   const { digest: _, ...content } = leaked; leaked.digest = digest(content);
   assert.throws(() => admitCorpus(leaked), /family leakage/);
   assert.deepEqual(Object.keys(sourceTask(corpus.cases[0])), ['source', 'sourceDigest']);
+  const conflicting = structuredClone(corpus); conflicting.cases[1].source = conflicting.cases[0].source; conflicting.cases[1].sourceDigest = conflicting.cases[0].sourceDigest;
+  const { digest: ignored, ...payload } = conflicting; conflicting.digest = digest(payload);
+  assert.throws(() => admitCorpus(conflicting), /conflicting independent labels/);
 });
 test('tar reader extracts exact regular entries without writing filesystem paths', () => {
   assert.deepEqual(extractTarFiles(tar('package/index.js', 'const value = 1;'), ['package/index.js']), [{ path: 'index.js', source: 'const value = 1;' }]);
@@ -66,7 +69,7 @@ test('paid path cannot dispatch without explicit cap and private final never rea
   assert.equal(calls, 0);
   const control = deterministicControlProvider();
   await runPreregisteredStudy({ corpus, protocol, mode: 'controls', provider: async input => {
-    if (input.role === 'proposal') { assert(!input.prompt.includes('selection')); assert(!input.prompt.includes('final')); assert(!input.prompt.includes(corpus.cases[6].id)); }
+    if (input.role === 'proposal') { assert(!input.prompt.includes('selection')); assert(!input.prompt.includes('final')); assert(!input.prompt.includes(corpus.cases[6].id)); for (const c of corpus.cases.filter(c => c.label !== 'vulnerable')) assert(!input.prompt.includes(c.id), 'negative controls must remain controller-only'); }
     return control(input);
   } });
 });
@@ -91,4 +94,24 @@ test('width-one provider proposer reuses production schema and preserves consume
   assert(JSON.parse(result.text).skill.includes('Preserve source evidence'));
   const rejected = await proposeCurrentWidthOne({ protocol, prompt: '{}', nativeCall: async () => ({ content: [], stopReason: 'end_turn', usage: { inputTokens: 100, outputTokens: 50 }, durationMs: 1 }) });
   assert.equal(rejected.completed, false); assert.equal(rejected.usage.outputTokens, 50);
+});
+
+test('curated source slices retain full-file hashes, exact offsets and selected hashes', () => {
+  const full = 'before\nfunction baseSet(object) { return object; }\nvar baseSetData = value;\nafter';
+  const selector = { start: 'function baseSet(', end: 'var baseSetData =' };
+  const { source, selections } = selectSourceUnits([{ path: 'lodash.js', source: full }], { slices: { 'lodash.js': selector } });
+  const selected = 'function baseSet(object) { return object; }\n';
+  assert.equal(source, `// source-unit-1\n${selected}`);
+  assert.equal(selections[0].digest, digest(full));
+  assert.equal(selections[0].selectedDigest, digest(selected));
+  assert.equal(full.slice(selections[0].fileRange.start, selections[0].fileRange.end), selected);
+  assert.equal(source.slice(selections[0].sourceRange.start, selections[0].sourceRange.end), selected);
+  assert.throws(() => selectSourceUnits([{ path: 'lodash.js', source: full + full }], { slices: { 'lodash.js': selector } }), /ambiguous/);
+  assert.throws(() => selectSourceUnits([{ path: 'large.js', source: 'a'.repeat(128 * 1024) }], {}), /byte cap/);
+  const corpus = fixture(); corpus.cases[0].source = source; corpus.cases[0].sourceDigest = digest(source); corpus.cases[0].files = selections;
+  const { digest: ignored, ...payload } = corpus; corpus.digest = digest(payload);
+  assert.equal(admitCorpus(corpus), corpus);
+  const forged = structuredClone(corpus); forged.cases[0].files[0].sourceRange.end--;
+  const { digest: ignoredAgain, ...forgedPayload } = forged; forged.digest = digest(forgedPayload);
+  assert.throws(() => admitCorpus(forged), /provenance mismatch/);
 });

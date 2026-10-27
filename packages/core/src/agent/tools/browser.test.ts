@@ -51,6 +51,7 @@ function fakePage(url = "https://target.test/"): BrowserPage {
       return "QUJD"; // base64 "ABC"
     },
     currentUrl: () => current,
+    title: async () => "Fake Page",
     drainDialogs: () => [],
     drainConsole: () => [],
   };
@@ -235,6 +236,44 @@ describe("executeBrowser screenshot image meta", () => {
   });
 });
 
+describe("display-only browser action previews", () => {
+  it.each([
+    { action: "navigate", url: "https://target.test/next" },
+    { action: "click", selector: "button" },
+    { action: "type", selector: "input", text: "hello" },
+  ])("previews $action without changing model-facing output", async args => {
+    const driver = pngDriver();
+    const result = await executeBrowser(scopedCtx(), args, { createDriver: async () => ({ driver }) });
+    expect(result.success).toBe(true);
+    expect(result.meta?.image?.imageBase64).toBe(ONE_BY_ONE_PNG_B64);
+    expect(JSON.stringify(result.output)).not.toContain(ONE_BY_ONE_PNG_B64);
+    expect(result.output).not.toHaveProperty("evidence_retention");
+  });
+
+  it.each(["failure", "oversized"])("keeps a successful click when capture is %s", async mode => {
+    const driver = pngDriver();
+    const page = await driver.tab("main");
+    page.screenshot = async () => {
+      if (mode === "failure") throw new Error("Screenshot unavailable");
+      return ONE_BY_ONE_PNG_B64 + "A".repeat(3 * 1024 * 1024);
+    };
+    const result = await executeBrowser(scopedCtx(), { action: "click", selector: "button" }, {
+      createDriver: async () => ({ driver }),
+    });
+    expect(result.success).toBe(true);
+    expect(result.output).toMatchObject({ clicked: "button" });
+    expect(result.meta?.image).toBeUndefined();
+  });
+
+  it("does not capture read-only content requests", async () => {
+    const driver = pngDriver();
+    const page = await driver.tab("main");
+    const capture = vi.spyOn(page, "screenshot");
+    await executeBrowser(scopedCtx(), { action: "get_content" }, { createDriver: async () => ({ driver }) });
+    expect(capture).not.toHaveBeenCalled();
+  });
+});
+
 // ── Driver options threading (attribution + scope-pinned interceptor) ─────────
 
 
@@ -347,6 +386,7 @@ function assistablePage(
       return "QUJD";
     },
     currentUrl: () => current,
+    title: async () => "Fake Page",
     drainDialogs: () => [],
     drainConsole: () => [],
     /** Mutate links for subsequent evaluate calls (simulates page transition). */
@@ -615,5 +655,31 @@ describe("PlaywrightDriver CDP backend", () => {
     await driver.tab("main");
     expect(launched).toBe(true);
     expect(connected).toBe(false);
+  });
+});
+
+
+describe("browser side panel identity metadata", () => {
+  it("keeps session/page identity across action snapshots and changes page identity after reopening", async () => {
+    const deps = { createDriver: fakeFactory, host: { driver: null as BrowserDriver | null } };
+    const first = await executeBrowser(scopedCtx(), { action: "navigate", url: "https://target.test/one", tab: "research" }, deps);
+    expect(first.meta?.browser).toMatchObject({ tab: "research", url: "https://target.test/one", title: "Fake Page", tabs: [{ tab: "research", url: "https://target.test/one" }] });
+    expect(Number.isFinite(Date.parse(first.meta!.browser!.capturedAt))).toBe(true);
+    const next = await executeBrowser(scopedCtx(), { action: "get_content", tab: "research" }, deps);
+    expect(next.meta?.browser?.sessionId).toBe(first.meta?.browser?.sessionId);
+    expect(next.meta?.browser?.pageId).toBe(first.meta?.browser?.pageId);
+    const closed = await executeBrowser(scopedCtx(), { action: "close", tab: "research" }, deps);
+    expect(closed.meta?.browser).toMatchObject({ closed: true, pageId: first.meta?.browser?.pageId, tabs: [] });
+    const reopened = await executeBrowser(scopedCtx(), { action: "navigate", url: "https://target.test/two", tab: "research" }, deps);
+    expect(reopened.meta?.browser?.sessionId).toBe(first.meta?.browser?.sessionId);
+    expect(reopened.meta?.browser?.pageId).not.toBe(first.meta?.browser?.pageId);
+  });
+  it("listing and closing tabs never create pages for the side panel", async () => {
+    const driver = fakeDriver(); const tab = vi.spyOn(driver, "tab");
+    const deps = { host: { driver } };
+    const listed = await executeBrowser(scopedCtx(), { action: "list_tabs" }, deps);
+    expect(listed.meta?.browser?.tabs).toEqual([]);
+    await executeBrowser(scopedCtx(), { action: "close", all: true }, deps);
+    expect(tab).not.toHaveBeenCalled();
   });
 });

@@ -43,6 +43,79 @@ async function options() {
   return { config: { workspaceRoot: root, target: root }, workbench: { schemaVersion: 1 as const, image: "/approved.tar", imageDigest: "sha256:" + "a".repeat(64), stateRoot: join(root, "state"), workspaceRoot: root, providers: ["chatgpt-codex"], github: false, cpus: 1, memoryMb: 512, storageGb: 1 }, selection: { model: "granted" }, provider: { provider: "chatgpt-codex" as const, models: ["granted"], request: vi.fn() }, network: false };
 }
 describe("host console VM controller", () => {
+  it("forwards bounded live memory provenance without restoring it from checkpoints", async () => {
+    const opts = await options();
+    const session = createWorkbenchConsoleSession(opts);
+    try {
+      await session.send("Inspect source");
+      expect(session.sourceContext).toBeUndefined();
+      const sourceContext = { status: "supplied", lessons: [{ title: "Routing", summary: "Inspect ownership checks", sourceLinks: [{ path: "routes.ts", hash: "sha256:" + "a".repeat(64) }] }] };
+      const emitState = (context: unknown) => mock.output!(JSON.stringify({ type: "state", snapshot: { scanId: session.scanId, messages: [], tools: [], target: "/workspace", autonomyMode: "standard", sourceContext: context } }) + "\n");
+      emitState(sourceContext);
+      expect(session.sourceContext).toEqual(sourceContext);
+      session.sourceContext!.lessons.splice(0);
+      expect(session.sourceContext).toEqual(sourceContext);
+      emitState({ status: "none", lessons: sourceContext.lessons });
+      expect(session.sourceContext).toBeUndefined();
+      emitState(sourceContext);
+      session.clearConversation();
+      expect(session.sourceContext).toBeUndefined();
+    } finally { await session.cleanup(); }
+  });
+
+  it("bridges skill editing and live editor context to host storage", async () => {
+    const opts = await options();
+    const skill = { id: "builtin/source-review", name: "source-review", revision: "a".repeat(64), writable: false };
+    const read = vi.fn(async () => skill);
+    const copy = vi.fn(async () => ({ ...skill, id: "workspace/copy", writable: true }));
+    const session = createWorkbenchConsoleSession({ ...opts, config: { ...opts.config, skillAuthoring: { read, create: async () => skill, update: async () => skill, copy }, skillEditor: { read: async () => skill } } });
+    try {
+      await session.send("Customize this skill");
+      const launch = mock.launches[0] as { transport: { initialInput: string } };
+      const init = JSON.parse(launch.transport.initialInput);
+      expect(init.callbacks).toEqual(expect.arrayContaining(["skillRead", "skillCreate", "skillSave", "skillCopy", "skillEditorRead"]));
+      expect(init.config.skillAuthoring).toBeUndefined();
+      expect(init.config.skillEditor).toBeUndefined();
+      const ask = async (id: string, name: string, args: unknown[]) => {
+        mock.output!(JSON.stringify({ type: "decision", id, name, args }) + "\n");
+        await vi.waitFor(() => expect(mock.requests.some(frame => frame.type === "decision-result" && frame.id === id)).toBe(true));
+        return mock.requests.find(frame => frame.type === "decision-result" && frame.id === id)!;
+      };
+      expect((await ask("context", "skillEditorRead", [])).value).toEqual(skill);
+      expect((await ask("read", "skillRead", [skill.id])).value).toEqual(skill);
+      const input = { content: "copy", expectedRevision: skill.revision };
+      await ask("copy", "skillCopy", [skill.id, input]);
+      expect(copy).toHaveBeenCalledWith(skill.id, input);
+    } finally { await session.cleanup(); }
+  });
+
+  it("bridges workflow editing and schedule lifecycle to host storage without serializing callbacks", async () => {
+    const opts = await options();
+    const workflow = { id: "workflow-bound", revision: 3, name: "Review", instructions: "", target: "", nodes: [], edges: [], createdAt: "2026-01-01", updatedAt: "2026-01-01" };
+    const save = vi.fn(async () => workflow);
+    const invoke = vi.fn(async () => ({ schedules: [] }));
+    const session = createWorkbenchConsoleSession({ ...opts, config: { ...opts.config, workflowAuthoring: { list: async () => [workflow], save, editor: { id: workflow.id, read: async () => workflow } }, workflowLifecycle: { invoke } } });
+    try {
+      await session.send("Change the workflow");
+      const launch = mock.launches[0] as { transport: { initialInput: string } };
+      const init = JSON.parse(launch.transport.initialInput);
+      expect(init.callbacks).toEqual(expect.arrayContaining(["workflowList", "workflowSave", "workflowEditorRead", "workflowInvoke"]));
+      expect(init.workflowEditorId).toBe(workflow.id);
+      expect(init.config.workflowAuthoring).toBeUndefined();
+      const ask = async (id: string, name: string, args: unknown[]) => {
+        mock.output!(JSON.stringify({ type: "decision", id, name, args }) + "\n");
+        await vi.waitFor(() => expect(mock.requests.some(frame => frame.type === "decision-result" && frame.id === id)).toBe(true));
+        return mock.requests.find(frame => frame.type === "decision-result" && frame.id === id)!;
+      };
+      expect((await ask("read", "workflowEditorRead", [])).value).toEqual(workflow);
+      expect((await ask("list", "workflowList", [])).value).toEqual([workflow]);
+      await ask("save", "workflowSave", [{ id: workflow.id, revision: 3 }]);
+      expect(save).toHaveBeenCalledWith({ id: workflow.id, revision: 3 });
+      await ask("schedule", "workflowInvoke", ["list_schedules", { workflowId: workflow.id }]);
+      expect(invoke).toHaveBeenCalledWith("list_schedules", { workflowId: workflow.id });
+    } finally { await session.cleanup(); }
+  });
+
   it("publishes startup phases and clears their message when the guest is ready", async () => {
     const opts = await options();
     const updates: Array<{ status: string; message?: string }> = [];
@@ -58,7 +131,10 @@ describe("host console VM controller", () => {
     const input = await options(); const session = createWorkbenchConsoleSession(input); const delta = vi.fn();
     await session.ready; session.setAutonomyMode("copilot"); expect(mock.launches).toHaveLength(0);
     expect((await session.send("message mentioning /private/host", { onAssistantDelta: delta })).assistantText).toBe("hello");
-    expect(delta).toHaveBeenCalledWith("hello"); await session.send("second"); expect(mock.launches).toHaveLength(1);
+    expect(delta).toHaveBeenCalledWith("hello");
+    const images = [{ mediaType: "image/png", data: "iVBORw0KGgo=", name: "paste.png" }];
+    await session.send("second", undefined, { images });
+    expect(mock.requests.filter(frame => frame.op === "send").at(-1)?.images).toEqual(images); expect(mock.launches).toHaveLength(1);
     expect(mock.launches[0]).toMatchObject({ workspaceMode: "snapshot", environment: { ZERO_PROVIDER: "chatgpt-codex" }, tty: false, network: false });
     expect(mock.requests.filter(frame => frame.op === "send").map(frame => frame.text)).toEqual(["message mentioning /private/host", "second"]);
     await session.cleanup(); expect(session.execution.status).toBe("stopped");

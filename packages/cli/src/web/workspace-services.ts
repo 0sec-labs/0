@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { LlmApiRuntime } from "@0/core";
 import { homeStateDir } from "@0/shared";
+import { RemoteProviderRelayBroker } from "./remote-provider-relay.js";
 import { ConsoleGateway } from "./console-gateway.js";
 import { SkillsStore } from "./skills.js";
 import { EngagementStore } from "./engagements.js";
@@ -10,10 +12,11 @@ import { WorkflowTriggerService } from "./workflow-triggers.js";
 import { GitHubPublicationAuth } from "./github-auth.js";
 import type { TeamAuth } from "./team-auth.js";
 
-type Options = { auth: TeamAuth; controlToken: string; engineBearer?: string; dbPath?: string; stateDir?: string; workspace?: string; scopePath?: string; target?: string; allowApply?: boolean; timeCapMs: number; costCapUsd: number };
+type Options = { relayEpoch?: string; auth: TeamAuth; controlToken: string; engineBearer?: string; dbPath?: string; stateDir?: string; workspace?: string; scopePath?: string; target?: string; allowApply?: boolean; timeCapMs: number; costCapUsd: number };
 export async function createWorkspaceServices(options: Options) {
   const skills = new SkillsStore({ workspace: options.workspace ?? process.cwd(), stateDir: options.stateDir ?? homeStateDir(), team: options.auth.enabled });
-  const gateway = new ConsoleGateway({ dbPath: options.dbPath, projectPath: options.workspace,
+  const remoteProviderRelays = new RemoteProviderRelayBroker({ epoch: options.relayEpoch ?? randomUUID() });
+  const gateway = new ConsoleGateway({ remoteProviderRelays, dbPath: options.dbPath, projectPath: options.workspace,
     skillAuthoring: (author, workspaceRoot) => { const actor = author ? options.auth.lookupUser(author.userId) : null; return skills.authoring({ canWrite: !options.auth.enabled || Boolean(actor && actor.role !== "viewer"), allowHostEdits: !options.auth.enabled || actor?.role === "owner" }, options.auth.enabled ? undefined : workspaceRoot); },
     skillDiscoveryOptions: workspaceRoot => ({ ...skills.discoveryOptions(), ...(options.auth.enabled ? {} : { projectRoot: workspaceRoot }) }),
     ...(options.stateDir ? { homeDir: options.stateDir } : {}),
@@ -25,7 +28,7 @@ export async function createWorkspaceServices(options: Options) {
   let triggers: WorkflowTriggerService | undefined;
   let github: GitHubPublicationAuth | undefined;
   const dispose = async () => {
-    const actions = [() => engine?.dispose(), () => triggers?.dispose(), () => gateway.closeAll(), () => workflows?.dispose(), () => operator.dispose(), () => github?.dispose()];
+    const actions = [() => remoteProviderRelays.dispose(),() => engine?.dispose(), () => triggers?.dispose(), () => gateway.closeAll(), () => workflows?.dispose(), () => operator.dispose(), () => github?.dispose()];
     let failure: unknown;
     for (const action of actions) { try { await action(); } catch (cause) { failure ??= cause; } }
     if (failure) throw failure;
@@ -50,7 +53,9 @@ export async function createWorkspaceServices(options: Options) {
         return { executionId: result.execution.id };
       },
     } });
+    const schedules = triggers;
+    gateway.attachScheduleLifecycle({ invoke: (sessionId, name, args, context) => schedules.invokeLifecycle(sessionId, name, args, context) });
     github = new GitHubPublicationAuth();
-    return { skills, gateway, engagements, operator, workflows: workflow, engine, triggers, github, dispose };
+    return { remoteProviderRelays, skills, gateway, engagements, operator, workflows: workflow, engine, triggers, github, dispose };
   } catch (cause) { await dispose().catch(() => {}); throw cause; }
 }

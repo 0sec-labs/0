@@ -8,7 +8,7 @@ export interface WorkflowTriggerAdapter {
   launch(trigger: WorkflowTrigger): Promise<{ executionId: string }>;
 }
 const createSchema = z.object({ workflowId: z.string().min(1).max(160), workflowRevision: z.number().int().positive(), sessionId: z.string().min(1).max(160), cadence: z.enum(["hourly","daily","weekly"]), startAt: z.string().datetime({offset:true}), timezone: z.string().min(1).max(100), enabled: z.boolean(), approval: z.literal("enable-reviewed-trigger").optional() }).strict();
-const toggleSchema = z.object({enabled:z.boolean(), approval:z.literal("enable-reviewed-trigger").optional()}).strict();
+const toggleSchema = z.object({enabled:z.boolean().optional(), cadence:z.enum(["hourly","daily","weekly"]).optional(), startAt:z.string().datetime({offset:true}).optional(), timezone:z.string().min(1).max(100).optional(), workflowRevision:z.number().int().positive().optional(), expectedVersion:z.number().int().positive().optional(), approval:z.literal("enable-reviewed-trigger").optional()}).strict().refine(value => ["enabled", "cadence", "startAt", "timezone", "workflowRevision"].some(key => key in value), "Provide a schedule change.");
 const PREFIX = "/api/console/workflow-triggers";
 const terminal = new Set(["completed","failed","cancelled","interrupted"]);
 export class WorkflowTriggerService {
@@ -46,19 +46,62 @@ export class WorkflowTriggerService {
       const trigger = this.#store.get(id); if (!trigger) return error(404,"Schedule not found.");
       if (method === "PATCH") {
         const patch = toggleSchema.parse(input);
+        if (patch.expectedVersion !== undefined && patch.expectedVersion !== (trigger.version ?? 1)) return error(409,"Schedule changed. Review it again before enabling.");
+        if (trigger.activeClaim && ["cadence", "startAt", "timezone", "workflowRevision"].some(key => key in patch)) return error(409,"Pause the schedule and wait for its active execution before editing.");
+        const changedTiming = patch.cadence !== undefined || patch.startAt !== undefined || patch.timezone !== undefined || patch.workflowRevision !== undefined;
+        // Editing a schedule never silently preserves automatic execution.
+        const enabled = patch.enabled ?? (changedTiming ? false : trigger.enabled);
+        const next = { ...trigger, ...patch, enabled };
+        try { new Intl.DateTimeFormat("en", { timeZone: next.timezone }); } catch { return error(400,"Choose a valid timezone."); }
         let identity: {model:string;providerId:string;connectionIdentity?:string} | void = undefined;
-        if (patch.enabled) {
+        if (enabled) {
           if (!patch.approval) return error(400,"Review this schedule before enabling it.");
           const definition = this.#workflows.get(trigger.workflowId);
-          if (definition?.revision !== trigger.workflowRevision) return error(409,"Workflow changed. Create a schedule for its current revision.");
-          identity = await this.#adapter.validate(trigger); this.#verifyIdentity(trigger,identity);
+          if (definition?.revision !== next.workflowRevision) return error(409,"Workflow changed. Review its current revision before scheduling.");
+          identity = await this.#adapter.validate(next);
+          if (!changedTiming) this.#verifyIdentity(trigger, identity);
         }
-        return {status:200,data:{trigger:publicTrigger(this.#store.update(id,{...(patch.enabled ? {reviewedModel:trigger.reviewedModel ?? identity?.model, reviewedProviderId:trigger.reviewedProviderId ?? identity?.providerId, reviewedConnectionIdentity:trigger.reviewedConnectionIdentity ?? identity?.connectionIdentity} : {}),enabled:patch.enabled,lastStatus:patch.enabled ? "scheduled" : "paused",lastError:undefined,nextFireAt:nextWorkflowTriggerFire(trigger.startAt,trigger.cadence,Date.now())}, patch.enabled ? trigger.version ?? 1 : undefined)!)}};
+        return {status:200,data:{trigger:publicTrigger(this.#store.update(id,{
+          cadence:next.cadence,startAt:next.startAt,timezone:next.timezone,workflowRevision:next.workflowRevision,
+          ...(enabled ? {reviewedModel:identity?.model, reviewedProviderId:identity?.providerId, reviewedConnectionIdentity:identity?.connectionIdentity} : {}),
+          enabled,lastStatus:enabled ? "scheduled" : "paused",lastError:undefined,nextFireAt:nextWorkflowTriggerFire(next.startAt,next.cadence,Date.now()),
+        }, enabled ? trigger.version ?? 1 : patch.expectedVersion)!)}};
       }
       if (method === "DELETE") { if (!this.#store.delete(id)) return error(409,"Pause the schedule and wait for its active execution before deleting."); return {status:200,data:{deleted:true}}; }
       return error(405,"Unsupported schedule action.");
     } catch (cause) { return error(cause instanceof z.ZodError ? 400 : 409, cause instanceof Error ? cause.message.slice(0,1000) : "Schedule could not be updated."); }
   }
+  /** Chat transport shares the same validation and scheduler as the HTTP editor. */
+  async invokeLifecycle(sessionId: string, name: string, args: Record<string, unknown>, context?: { workflowId?: string; activationApproved?: boolean }): Promise<unknown> {
+    const identifier = z.string().min(1).max(160);
+    if (name === "list_schedules") {
+      const request = z.object({ workflowId:identifier.optional() }).strict().parse(args);
+      if (context?.workflowId && request.workflowId && context.workflowId !== request.workflowId) throw new Error("This editor is bound to another workflow.");
+      return { schedules:this.#store.list(context?.workflowId ?? request.workflowId).filter(trigger => context?.workflowId || trigger.sessionId === sessionId).map(publicTrigger) };
+    }
+    let method: string; let path = PREFIX; let input: unknown;
+    if (name === "create_schedule") {
+      const request = createSchema.omit({sessionId:true,approval:true}).extend({enabled:z.boolean().default(false)}).parse(args);
+      if (context?.workflowId && context.workflowId !== request.workflowId) throw new Error("This editor is bound to another workflow.");
+      if (request.enabled && !context?.activationApproved) throw new Error("Schedule activation requires operator approval.");
+      method="POST"; input={...request,sessionId,...(request.enabled ? {approval:"enable-reviewed-trigger"} : {})};
+    } else if (name === "update_schedule" || name === "delete_schedule") {
+      const {id, ...fields} = z.object({id:identifier}).passthrough().parse(args);
+      const trigger = this.#store.get(id);
+      if (!trigger || (context?.workflowId ? trigger.workflowId !== context.workflowId : trigger.sessionId !== sessionId)) throw new Error("Schedule not found for this editor.");
+      path += `/${encodeURIComponent(id)}`;
+      if (name === "delete_schedule") { z.object({}).strict().parse(fields); method="DELETE"; input=undefined; }
+      else {
+        const patch = toggleSchema.parse(fields);
+        if (patch.enabled && !context?.activationApproved) throw new Error("Schedule activation requires operator approval.");
+        method="PATCH"; input={...patch,...(patch.enabled ? {approval:"enable-reviewed-trigger"} : {})};
+      }
+    } else throw new Error("Unknown schedule action.");
+    const result = await this.handle(method,new URL(path,"http://localhost"),input);
+    if (!result || result.status >= 400) throw new Error((result?.data as {error?:string})?.error ?? "Schedule could not be updated.");
+    return result.data;
+  }
+
   async tick(now = Date.now()): Promise<void> {
     if (this.#closed || this.#polling) return; this.#polling = true;
     try {

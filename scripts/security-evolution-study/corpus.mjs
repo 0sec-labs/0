@@ -8,7 +8,7 @@ export const FAMILIES = [
   { family: 'y18n', lane: 'selection', vulnerable: '4.0.0', fixed: '4.0.1', ghsa: 'GHSA-c4w7-xm78-47vh', files: ['index.js'], sinks: ['__', 'locale', 'cache'] },
   { family: 'qs', lane: 'selection', vulnerable: '6.10.2', fixed: '6.10.3', ghsa: 'GHSA-hrpp-h998-j3pp', files: ['lib/parse.js', 'lib/utils.js'], sinks: ['parseObject', '__proto__', 'parseKeys'] },
   { family: 'hoek', lane: 'final', vulnerable: '5.0.2', fixed: '5.0.3', ghsa: 'GHSA-jp4x-w63m-7wgm', files: ['lib/index.js'], sinks: ['merge', 'key', '__proto__'] },
-  { family: 'lodash', lane: 'final', vulnerable: '4.17.18', fixed: '4.17.19', ghsa: 'GHSA-p6mc-m468-83gw', files: ['_baseSet.js', '_baseZipObject.js', 'zipObjectDeep.js'], sinks: ['baseSet', 'zipObjectDeep', '__proto__'] },
+  { family: 'lodash', lane: 'final', vulnerable: '4.17.15', fixed: '4.17.19', ghsa: 'GHSA-p6mc-m468-83gw', files: ['lodash.js', '_assignValue.js', '_baseAssignValue.js'], slices: { 'lodash.js': { start: 'function baseSet(', end: 'var baseSetData =' } }, sinks: ['baseSet', 'assignValue', '__proto__'] },
 ];
 const CLEAN = [
   { lane: 'development', source: 'module.exports = function parse(input) { return JSON.parse(input); };\n', rationale: 'JSON.parse produces data properties and never copies input keys into an existing prototype.' },
@@ -30,13 +30,32 @@ export function extractTarFiles(gzip, wanted) {
     const type = header[156];
     if (wanted.includes(path)) {
       if (type !== 0 && type !== 48) throw new Error('selected source is not a regular tar entry');
-      if (found.has(path) || size > 128 * 1024) throw new Error('duplicate or oversized selected source');
+      if (found.has(path) || size > 1024 * 1024) throw new Error('duplicate or oversized selected source');
       found.set(path, new TextDecoder('utf-8', { fatal: true }).decode(tar.subarray(offset + 512, offset + 512 + size)));
     }
     offset += 512 + Math.ceil(size / 512) * 512;
   }
   if (wanted.some(path => !found.has(path))) throw new Error(`missing selected source: ${wanted.filter(path => !found.has(path)).join(',')}`);
   return wanted.map(path => ({ path: path.slice('package/'.length), source: found.get(path) }));
+}
+/** Keep each curated source unit traceable to exact full-file bytes and slice offsets. */
+export function selectSourceUnits(files, family) {
+  const selections = []; let source = '';
+  for (const [index, file] of files.entries()) {
+    const selector = family.slices?.[file.path];
+    let start = 0, end = file.source.length;
+    if (selector) {
+      start = file.source.indexOf(selector.start);
+      end = file.source.indexOf(selector.end, start + selector.start.length);
+      if (start < 0 || end <= start || file.source.indexOf(selector.start, start + selector.start.length) >= 0) throw new Error('ambiguous/missing curated source region');
+    }
+    const selected = file.source.slice(start, end);
+    source += `${index ? '\n' : ''}// source-unit-${index + 1}\n`;
+    const sourceStart = source.length; source += selected;
+    selections.push({ path: file.path, digest: digest(file.source), fullFileBytes: Buffer.byteLength(file.source), selectedDigest: digest(selected), selectedBytes: Buffer.byteLength(selected), fileRange: { start, end }, sourceRange: { start: sourceStart, end: source.length }, selector: selector ?? null });
+  }
+  if (Buffer.byteLength(source) > 128 * 1024) throw new Error('selected corpus source exceeds byte cap');
+  return { source, selections };
 }
 function versionInRange(version, range) {
   const compare = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] < y[i] ? -1 : 1; return 0; };
@@ -76,8 +95,8 @@ export async function preparePublicCorpus({ fetchResource = limitedFetch } = {})
       const integrity = `sha512-${createHash('sha512').update(gzip).digest('base64')}`;
       if (integrity !== metadata.dist.integrity) throw new Error('registry tarball integrity mismatch');
       const files = extractTarFiles(gzip, family.files.map(path => `package/${path}`));
-      const source = files.map((file, index) => `// source-unit-${index + 1}\n${file.source}`).join('\n');
-      cases.push({ id: digest([family.family, version, source]), family: family.family, lane: family.lane, label, labelBasis: 'upstream-advisory-version-pair', advisory: family.ghsa, package: family.family, version, tarballIntegrity: integrity, tarballDigest: digest(gzip), sourceDigest: digest(source), files: files.map(file => ({ path: file.path, digest: digest(file.source) })), sinks: family.sinks, source });
+      const { source, selections } = selectSourceUnits(files, family);
+      cases.push({ id: digest([family.family, version, source]), family: family.family, lane: family.lane, label, labelBasis: 'upstream-advisory-version-pair', advisory: family.ghsa, package: family.family, version, tarballIntegrity: integrity, tarballDigest: digest(gzip), sourceDigest: digest(source), files: selections, sinks: family.sinks, source });
     }
   }
   for (const clean of CLEAN) cases.push({ id: digest(clean.source), family: `structural-clean-${clean.lane}`, lane: clean.lane, label: 'clean', labelBasis: 'deterministic-language-semantics-control', labelRationale: clean.rationale, sourceDigest: digest(clean.source), sinks: [], source: clean.source });
@@ -89,10 +108,24 @@ export function admitCorpus(corpus) {
   if (corpus.schemaVersion !== 1 || !Array.isArray(corpus.cases) || corpus.cases.length > 100 || corpus.cases.length < 9) throw new Error('invalid finite corpus');
   const { digest: claimed, ...rest } = corpus;
   if (claimed !== digest(rest)) throw new Error('corpus digest mismatch');
-  const seen = new Set(); const sources = new Map(); const families = new Map();
+  const seen = new Set(); const sources = new Map(); const families = new Map(); const labelledSources = new Map();
   for (const c of corpus.cases) {
     if (!/^[a-z0-9-]{1,64}$/.test(c.family) || !['development', 'selection', 'final'].includes(c.lane) || !['vulnerable', 'fixed', 'clean'].includes(c.label) || typeof c.source !== 'string' || Buffer.byteLength(c.source) > 128 * 1024 || c.sourceDigest !== digest(c.source) || seen.has(c.id)) throw new Error('invalid/duplicate source case');
+    if (c.files) {
+      if (!Array.isArray(c.files) || c.files.length < 1 || c.files.length > 16) throw new Error('invalid source selection provenance');
+      let reconstructed = '';
+      for (const [index, file] of c.files.entries()) {
+        const { start, end } = file.sourceRange ?? {};
+        if (typeof file.path !== 'string' || !/^[a-zA-Z0-9_./-]+$/.test(file.path) || file.path.startsWith('/') || file.path.split('/').includes('..') || !/^sha256:[a-f0-9]{64}$/.test(file.digest ?? '') || !Number.isSafeInteger(file.fullFileBytes) || file.fullFileBytes < 0 || !Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end <= start || end > c.source.length || !Number.isSafeInteger(file.fileRange?.start) || !Number.isSafeInteger(file.fileRange?.end) || file.fileRange.start < 0 || file.fileRange.end <= file.fileRange.start || file.fileRange.end > file.fullFileBytes) throw new Error('invalid source selection provenance');
+        const selected = c.source.slice(start, end);
+        if (file.selectedDigest !== digest(selected) || file.selectedBytes !== Buffer.byteLength(selected)) throw new Error('selected source provenance mismatch');
+        reconstructed += `${index ? '\n' : ''}// source-unit-${index + 1}\n${selected}`;
+      }
+      if (reconstructed !== c.source) throw new Error('source selection boundaries mismatch');
+    }
     seen.add(c.id);
+    if (labelledSources.has(c.sourceDigest) && labelledSources.get(c.sourceDigest) !== c.label) throw new Error('identical source has conflicting independent labels; selected context is insufficient');
+    labelledSources.set(c.sourceDigest, c.label);
     if (families.has(c.family) && families.get(c.family) !== c.lane) throw new Error('family leakage across lanes');
     if (sources.has(c.sourceDigest) && sources.get(c.sourceDigest) !== c.lane) throw new Error('renamed source leakage across lanes');
     families.set(c.family, c.lane); sources.set(c.sourceDigest, c.lane);

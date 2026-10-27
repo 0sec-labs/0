@@ -33,7 +33,7 @@ import { eventBus } from "@0/core";
 
 import { useTheme, type Theme } from "./theme-context.js";
 import { useSymbols } from "./symbol-context.js";
-import { useSettings } from "./settings-store.js";
+import { useSettings } from "./use-settings.js";
 import { keyMatchesChord } from "./keybindings.js";
 import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
 import { operatorIcon, operatorTitle } from "./operator-icons.js";

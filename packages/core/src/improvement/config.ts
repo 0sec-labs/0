@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, resolve, sep } from "node:path";
 import { z } from "zod";
 import { DEFAULT_IMPROVEMENT_PROMOTION_POLICY } from "../bench/improvement-promotion.js";
 import type { EvolutionConfig } from "./types.js";
@@ -26,11 +26,16 @@ const schema = z.object({
   kind: z.enum(["source", "skill", "router", "lens"]).default("source"),
   command: argv,
   buildCommand: argv.optional(),
+  observationStorePath: z.string().min(1).max(4096).optional(),
   cases: z.array(z.object({
     id: z.string().min(1).max(128),
     lane: z.enum(["development", "held-out", "negative-control"]),
     input: z.unknown(),
     expected: z.unknown(),
+    curation: z.object({ observationId: z.string().regex(/^[a-f0-9]{64}$/),
+      approvalDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+      fixtureDigest: z.string().regex(/^(?:sha256:)?[a-f0-9]{64}$/),
+    }).strict().optional(),
   }).strict()).min(3).max(1000),
   repeats: z.number().int().min(2).max(20).default(3),
   maxIterations: z.number().int().min(1).max(100).default(3),
@@ -70,6 +75,8 @@ const schema = z.object({
     profileId: z.string().min(1).max(128),
     version: z.number().int().min(1),
     criticalCaseIds: z.array(z.string().min(1).max(128)).min(1).max(128),
+    previousProfileDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(),
+    rotationApprovalRef: z.string().min(1).max(512).optional(),
   }).strict().optional(),
 }).strict();
 
@@ -84,11 +91,23 @@ export function canonicalEvolutionJson(value: unknown): string {
   throw new Error("evolution cases must contain finite JSON values only");
 }
 
+function physicalProspectivePath(path: string): string {
+  let cursor = path; const suffix: string[] = [];
+  while (!existsSync(cursor)) {
+    const parent = dirname(cursor);
+    if (parent === cursor) throw new Error("cannot resolve evolution path authority");
+    suffix.unshift(basename(cursor)); cursor = parent;
+  }
+  return resolve(realpathSync(cursor), ...suffix);
+}
+
 export function parseEvolutionConfig(raw: unknown, baseDir = process.cwd()): EvolutionConfig {
   const parsed = schema.parse(raw);
   if (parsed.safety?.workerModel && !parsed.safety.enabled) {
     throw new Error("model-backed evolution workers require enabled durable safety accounting");
   }
+  if (parsed.cases.some(entry => entry.curation) && !parsed.observationStorePath) throw new Error("curated fixtures require an authoritative observation store");
+  if (parsed.observationStorePath) parsed.observationStorePath = resolve(baseDir, parsed.observationStorePath);
   const admitted = isAdmittedSmolvmWorkbench();
   if (admitted) {
     if (parsed.imageArchive) throw new Error("Admitted workbench images must use the host-approved catalog, not guest archive paths");
@@ -139,6 +158,11 @@ export function parseEvolutionConfig(raw: unknown, baseDir = process.cwd()): Evo
   if (sourceRoot === storePath) throw new Error("evolution store cannot be the source workspace");
   for (const selected of parsed.sourcePaths) {
     const source = resolve(sourceRoot, selected);
+    const observationStore = parsed.observationStorePath && physicalProspectivePath(parsed.observationStorePath);
+    const physicalSource = observationStore ? physicalProspectivePath(source) : source;
+    if (observationStore && (observationStore === physicalSource || observationStore.startsWith(`${physicalSource}${sep}`))) {
+      throw new Error("private observation queue cannot overlap selected model-readable source paths");
+    }
     if (storePath === source || storePath.startsWith(`${source}/`) || source.startsWith(`${storePath}/`)) {
       throw new Error("evolution store and selected source paths must not overlap");
     }

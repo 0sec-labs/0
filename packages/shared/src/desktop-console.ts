@@ -56,6 +56,10 @@ export interface ConsoleExecutionStatus {
 }
 
 export interface DesktopConsoleSession {
+  /** Workflow edited by this conversation, when opened from Automations. */
+  workflowId?: string;
+  /** Current skill being edited; follows an editable copy when customized. */
+  skillId?: string;
   /** Original durable conversation, when this engine resumes saved work. */
   savedId?: string;
   id: string;
@@ -160,7 +164,7 @@ interface DesktopConsoleEventBase {
 
 export type DesktopConsoleEventPayload =
   | { type: "session"; session: DesktopConsoleSession }
-  | { type: "user"; text: string; author?: ConsoleMessageAuthor }
+  | { type: "user"; text: string; attachments?: ConsoleMessageInput["attachments"]; author?: ConsoleMessageAuthor }
   | { type: "assistant-delta"; text: string }
   | { type: "reasoning-delta"; text: string }
   | { type: "tool-start"; call: DesktopConsoleToolCall }
@@ -193,6 +197,7 @@ export interface ConsoleRuntimeSelection {
 }
 
 export interface ConsoleRuntimeSnapshot {
+  modelSource?: "local" | "host";
   reasoning?: { effort: string; options: string[] } | null;
   providerId: string;
   providerLabel: string;
@@ -220,6 +225,7 @@ export interface ConsoleScopeEnforcement {
 }
 
 export interface ConsoleSessionConfiguration {
+  modelSource?: { kind: "local"; grantId: string };
   workspacePath?: string;
   title?: string;
   target?: string;
@@ -242,6 +248,7 @@ export interface ConsolePublicMessage {
   author?: ConsoleMessageAuthor;
   content: Array<
     | { type: "text"; text: string }
+    | { type: "image"; mediaType: string; data: string; name?: string }
     | { type: "tool_use"; id: string; name: string; input: Record<string, ConsoleJsonValue> }
     | { type: "tool_result"; tool_use_id: string; content: string; is_error?: boolean }
   >;
@@ -258,6 +265,7 @@ export interface ConsoleTurnOutcome {
 }
 
 export interface ConsoleQueuedMessage {
+  attachments?: ConsoleMessageInput["attachments"];
   id: string;
   text: string;
   createdAt: string;
@@ -325,6 +333,11 @@ export interface ConsoleSessionSnapshot {
   localScopePath?: string;
   workspacePath?: string;
   usage: { inputTokens: number; outputTokens: number; costUsd?: number; costKind?: "estimated" | "reported"; costUnavailable?: boolean };
+  /** Lessons supplied to the latest model request, not an assertion of reliance. */
+  sourceContext?: {
+    status: "not_requested" | "supplied" | "none";
+    lessons: Array<{ title: string; summary: string; sourceLinks: Array<{ path: string; hash: string }> }>;
+  };
   contextInputTokens?: number;
   contextWindowTokens?: number;
   lastOutcome: ConsoleTurnOutcome | null;
@@ -346,6 +359,11 @@ export interface ConsoleEventsPage {
 }
 
 export interface ConsoleCreateSessionInput {
+  /** Bind this chat to editing an existing workflow; never starts it. */
+  workflowId?: string;
+  /** Current skill being edited; follows an editable copy when customized. */
+  skillId?: string;
+  modelSource?: { kind: "local"; grantId: string };
   target?: string;
   role?: DesktopConsoleRole;
   autonomyMode?: DesktopConsoleAutonomyMode;
@@ -360,8 +378,8 @@ export interface ConsoleMessageInput {
   text: string;
   mode?: "send" | "queue" | "steer";
   workerId?: string;
-  /** References to daemon-local paths or text, not browser uploads or multimodal bytes. */
-  attachments?: Array<{ kind: "path" | "text"; value: string }>;
+  /** Explicit local paths, text files, or bounded raster image data URLs. */
+  attachments?: Array<{ kind: "path" | "text" | "image"; value: string; name?: string }>;
 }
 
 export interface ConsolePublicExport {

@@ -1,5 +1,7 @@
+import type { RemoteProviderRelayBroker } from "./remote-provider-relay.js";
+import { connectConsoleMcp } from "../console-mcp.js";
 import { loadServicePluginConnections } from "./service-plugins.js";
-import { matchChat, searchSavedChats, type ChatSearchResult } from "./chat-search.js";
+import { compareChatSearchResults, matchChat, searchSavedChats, type ChatSearchResult } from "./chat-search.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -8,13 +10,13 @@ import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from "node:
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
-  ScopePolicy, clampOutboundBody, connectMcpServers, connectServicePlugins, eventBus, getScopeEnforcementState, isDangerousLocalRoot, normalizeScopeHostname, parseMcpConfig, sendOperatorMessage,
+  ScopePolicy, clampOutboundBody, connectServicePlugins, eventBus, getScopeEnforcementState, isDangerousLocalRoot, normalizeScopeHostname, sendOperatorMessage,
   type AgentSkillDiscoveryOptions, type ConsoleSession, type ConsoleSessionConfig, type ConsoleSessionCheckpoint, type ConsoleScopeRequest,
   type ConsoleTurnOutcome as EngineTurnOutcome, type LlmApiRuntime, type NativeMessage, type NativeRuntime,
   type McpHost, type OperatorQuestionAnswer, type OperatorQuestionRequest, type ScopeJson, type ToolCall,
 } from "@0/core";
 import {
-  SecurityWorkflowBindingsSchema,
+  SecurityWorkflowBindingsSchema, parseSecurityWorkflowInput,
   DEFAULT_AUTONOMY_MODE, DESKTOP_CONSOLE_SCHEMA_VERSION, MODEL_PRICING, estimateCost,
   type ConsoleEventsPage, type ConsoleJsonValue, type ConsoleMessageInput, type ConsolePublicExport,
   type ConsolePublicMessage, type ConsoleQueuedMessage, type ConsoleMessageAuthor, type ConsoleUserAttribution, type ConsoleRuntimeSelection, type ConsoleRuntimeSnapshot,
@@ -50,6 +52,10 @@ export type ConsoleGatewaySessionFactoryInput = Omit<ConsoleSessionConfig, "db" 
 export interface ConsoleWorkflowLifecycleAdapter {
   invoke(sessionId: string, name: string, args: Record<string, unknown>, capabilities?: { allowApply?: boolean }): unknown | Promise<unknown>;
 }
+export interface ConsoleScheduleLifecycleAdapter {
+  invoke(sessionId:string, name:string, args:Record<string,unknown>, context?:{workflowId?:string;activationApproved?:boolean}):unknown|Promise<unknown>;
+}
+const SCHEDULE_TOOL_NAMES = new Set(["list_schedules", "create_schedule", "update_schedule", "delete_schedule"]);
 const workflowLaunchSchema = z.object({
   templateId: z.string().trim().min(1).max(160).optional(), workflowId: z.string().trim().min(1).max(160).optional(),
   revision: z.number().int().positive().optional(), target: z.string().trim().min(1).max(4096),
@@ -62,6 +68,7 @@ type QueuedWorkflowRequest = {
   status: "queued" | "awaiting-approval" | "starting" | "launched" | "failed" | "cancelled"; runId?: string; error?: string;
 };
 export interface ConsoleGatewayOptions {
+  remoteProviderRelays?: RemoteProviderRelayBroker;
   createSession?: (input: ConsoleGatewaySessionFactoryInput) => ConsoleSession | Promise<ConsoleSession>;
   now?: () => Date;
   createId?: () => string;
@@ -95,6 +102,9 @@ type PendingDecision = { decision: DesktopConsoleDecision; resolve: (response: D
 type ManagedSession = {
   id: string; createdAt: string; updatedAt: string; role: DesktopConsoleRole; target: string;
   autonomyMode: DesktopConsoleAutonomyMode; title: string; scope?: ScopePolicy; selection: ConsoleRuntimeSelection;
+  workflowId?: string;
+  skillId?: string;
+  modelRelayId?: string; requiresModelRelay?: boolean;
   runtime: LlmApiRuntime | null; info: ConsoleRuntimeSnapshot | null; session: ConsoleSession | null;
   initialization: Promise<ConsoleSession> | null; status: DesktopConsoleSessionStatus; sequence: number;
   events: DesktopConsoleEvent[]; listeners: Set<(event: DesktopConsoleEvent) => void>;
@@ -176,8 +186,9 @@ function scopePolicy(value: unknown): ScopePolicy | undefined {
 }
 function configuration(value: unknown): ConsoleSessionConfiguration {
   const raw = object(value, "Configuration");
-  allowedKeys(raw, ["title", "target", "autonomyMode", "scope", "runtime", "workspacePath"]);
+  allowedKeys(raw, ["title", "target", "autonomyMode", "scope", "runtime", "workspacePath", "modelSource"]);
   const result: ConsoleSessionConfiguration = {};
+  if (raw.modelSource !== undefined) result.modelSource = z.object({ kind: z.literal("local"), grantId: z.string().uuid() }).strict().parse(raw.modelSource);
   if (raw.workspacePath !== undefined) result.workspacePath = text(raw.workspacePath, "Workspace folder", MAX_TARGET_LENGTH);
   if (raw.title !== undefined) result.title = text(raw.title, "Title", 200);
   if (raw.target !== undefined) result.target = text(raw.target, "Target", MAX_TARGET_LENGTH, true);
@@ -204,6 +215,7 @@ function publicMessages(messages: readonly unknown[]): ConsolePublicMessage[] {
     const blocks = typeof value.content === "string" ? [{ type: "text", text: value.content }] : Array.isArray(value.content) ? value.content : [];
     const content: ConsolePublicMessage["content"] = blocks.flatMap((block): ConsolePublicMessage["content"] => {
       if (!record(block)) return [];
+      if (block.type === "image" && typeof block.mediaType === "string" && typeof block.data === "string") return [{ type: "image", mediaType: block.mediaType, data: block.data, ...(typeof block.name === "string" ? { name: block.name } : {}) }];
       if (block.type === "text" && typeof block.text === "string") return [{ type: "text", text: block.text }];
       if (block.type === "tool_use" && typeof block.id === "string" && typeof block.name === "string" && record(block.input)) return [{ type: "tool_use", id: block.id, name: block.name, input: json(block.input) as Record<string, ConsoleJsonValue> }];
       if (block.type === "tool_result" && typeof block.tool_use_id === "string" && typeof block.content === "string") return [{ type: "tool_result", tool_use_id: block.tool_use_id, content: block.content, ...(typeof block.is_error === "boolean" ? { is_error: block.is_error } : {}) }];
@@ -289,13 +301,28 @@ function messageInput(value: unknown): ConsoleMessageInput {
   if (raw.attachments !== undefined) {
     if (!Array.isArray(raw.attachments) || raw.attachments.length > 20) throw new ConsoleGatewayError("Attachments must be an array of at most 20 references.", 400);
     result.attachments = raw.attachments.map((value) => {
-      const attachment = object(value, "Attachment"); allowedKeys(attachment, ["kind", "value"]);
-      if (attachment.kind !== "path" && attachment.kind !== "text") throw new ConsoleGatewayError("Attachments support explicit local path or text references only.", 400);
-      return { kind: attachment.kind, value: text(attachment.value, "Attachment reference", MAX_MESSAGE_LENGTH) };
+      const attachment = object(value, "Attachment"); allowedKeys(attachment, ["kind", "value", "name"]);
+      if (attachment.kind !== "path" && attachment.kind !== "text" && attachment.kind !== "image") throw new ConsoleGatewayError("Attachments support explicit local path or text references only.", 400);
+      const name = attachment.name === undefined ? undefined : text(attachment.name, "Attachment name", 256);
+      if (attachment.kind === "image") {
+        const value = text(attachment.value, "Image", 650_000);
+        const match = /^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/]+={0,2})$/.exec(value);
+        if (!match || match[2]!.length % 4 !== 0) throw new ConsoleGatewayError("Images must be base64 PNG, JPEG, WebP, or GIF data URLs.", 400);
+        const bytes = Buffer.from(match[2]!, "base64");
+        const mime = match[1];
+        const valid = mime === "image/png" ? bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))
+          : mime === "image/jpeg" ? bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255
+          : mime === "image/gif" ? /^GIF8[79]a$/.test(bytes.subarray(0, 6).toString("ascii"))
+          : bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP";
+        if (!valid || bytes.toString("base64") !== match[2]) throw new ConsoleGatewayError("Image bytes do not match their declared format.", 400);
+        return { kind: "image" as const, value, ...(name ? { name } : {}) };
+      }
+      return { kind: attachment.kind, value: text(attachment.value, "Attachment reference", MAX_MESSAGE_LENGTH), ...(name ? { name } : {}) };
     });
   }
-  const expanded = [result.text, ...(result.attachments ?? []).map((item) => item.kind === "path" ? `Local path reference: ${item.value}` : item.value)].filter(Boolean).join("\n\n");
-  result.text = text(expanded, "Message", MAX_MESSAGE_LENGTH);
+  if ((result.attachments ?? []).reduce((sum, item) => sum + item.value.length, 0) > 650_000) throw new ConsoleGatewayError("Attachments exceed the 650,000 character total limit.", 400);
+  const expanded = [result.text, ...(result.attachments ?? []).filter(item => item.kind !== "image").map((item) => item.kind === "path" ? `Local path reference: ${item.value}` : item.value)].filter(Boolean).join("\n\n");
+  result.text = text(expanded, "Message", MAX_MESSAGE_LENGTH, result.attachments?.some(item => item.kind === "image") ?? false);
   return result;
 }
 
@@ -306,11 +333,16 @@ export class ConsoleGateway {
   readonly #options: ConsoleGatewayOptions;
   readonly #skillActor = new AsyncLocalStorage<ConsoleMessageAuthor | undefined>();
   #workflowLifecycle?: ConsoleWorkflowLifecycleAdapter;
+  #scheduleLifecycle?: ConsoleScheduleLifecycleAdapter;
   #sourceLearningStore?: LearningStore;
   #learningRecorder?: (event: { id: string; project: string; outcome: string }) => void;
   readonly #callIds = new WeakMap<object, string>();
   constructor(options: ConsoleGatewayOptions = {}) { this.#options = options; this.#now = options.now ?? (() => new Date()); this.#createId = options.createId ?? randomUUID; }
 
+  attachScheduleLifecycle(adapter: ConsoleScheduleLifecycleAdapter): void {
+    if (this.#scheduleLifecycle) throw new ConsoleGatewayError("Schedule lifecycle is already attached.",409);
+    this.#scheduleLifecycle=adapter;
+  }
   attachWorkflowLifecycle(adapter: ConsoleWorkflowLifecycleAdapter): void {
     if (this.#workflowLifecycle) throw new ConsoleGatewayError("Workflow lifecycle is already attached.", 409);
     this.#workflowLifecycle = adapter;
@@ -329,7 +361,7 @@ export class ConsoleGateway {
     return created;
   }
   #createRecord(value: unknown): DesktopConsoleSession {
-    const raw = object(value, "Session"); allowedKeys(raw, ["target", "role", "autonomyMode", "title", "scope", "runtime", "findingId", "findingIntent"]);
+    const raw = object(value, "Session"); allowedKeys(raw, ["target", "role", "autonomyMode", "title", "scope", "runtime", "findingId", "findingIntent", "modelSource", "workflowId", "skillId"]);
     const id = this.#createId();
     if (!isValidSessionId(id) || this.#sessions.has(id)) throw new ConsoleGatewayError("Generated session ID is invalid or already in use.", 500);
     const now = this.#now().toISOString();
@@ -343,7 +375,31 @@ export class ConsoleGateway {
         stagedPrompt = buildFindingChatPrompt(focus, intent);
       } catch (error) { throw new ConsoleGatewayError(errorMessage(error), 400); }
     } else if (raw.findingIntent !== undefined) throw new ConsoleGatewayError("Finding intent requires a finding ID.", 400);
+    let workflowId: string | undefined;
+    if (raw.workflowId !== undefined) {
+      workflowId = text(raw.workflowId, "Workflow ID", 128);
+      if (!/^[A-Za-z0-9_-]+$/.test(workflowId)) throw new ConsoleGatewayError("Invalid workflow ID.", 400);
+      const store = new SecurityWorkflowStore(this.#options.dbPath);
+      try { if (!store.get(workflowId)) throw new ConsoleGatewayError("Workflow definition was not found.", 404); }
+      finally { store.close(); }
+    }
+    let skillId: string | undefined;
+    if (raw.skillId !== undefined) {
+      if (workflowId) throw new ConsoleGatewayError("Choose either a workflow or skill editor.", 400);
+      skillId = text(raw.skillId, "Skill ID", 384);
+      if (/[\u0000-\u001f\u007f]/.test(skillId) || /(^|\/)\.\.?($|\/)/.test(skillId)) throw new ConsoleGatewayError("Invalid skill ID.", 400);
+      const candidate = this.#options.skillAuthoring?.(this.#skillActor.getStore(), this.#projectPath ?? process.cwd());
+      const adapter = typeof candidate === "function" ? candidate() : candidate;
+      if (!adapter) throw new ConsoleGatewayError("Skill editing is unavailable on this host.", 409);
+      try {
+        const current = adapter.read(skillId);
+        if (current instanceof Promise) throw new Error("Skill editor validation must use host storage.");
+        if (!current || typeof current !== "object" || (current as { id?: string }).id !== skillId) throw new Error("Skill was not found.");
+      } catch (cause) { throw new ConsoleGatewayError(errorMessage(cause), 404); }
+    }
     const managed: ManagedSession = {
+      ...(workflowId ? { workflowId } : {}),
+      ...(skillId ? { skillId } : {}),
       id, createdAt: now, updatedAt: now, target: raw.target === undefined ? "" : text(raw.target, "Target", MAX_TARGET_LENGTH, true),
       role: raw.role === undefined ? "audit" : role(raw.role), autonomyMode: raw.autonomyMode === undefined ? DEFAULT_AUTONOMY_MODE : mode(raw.autonomyMode),
       title: raw.title === undefined ? "New chat" : text(raw.title, "Title", 200),
@@ -355,6 +411,14 @@ export class ConsoleGateway {
       executionEpoch: 0, execution: { backend: consoleExecutionProfile(this.#options.homeDir), status: "pending", workspacePath: this.#projectPath },
       ...(focusedFinding ? { focusedFinding } : {}), ...(stagedPrompt ? { stagedPrompt } : {}),
     };
+    if (raw.modelSource !== undefined) {
+      const source = z.object({ kind: z.literal("local"), grantId: z.string().uuid() }).strict().parse(raw.modelSource);
+      if (!this.#options.remoteProviderRelays) throw new ConsoleGatewayError("This host does not support a local model relay.", 409);
+      managed.modelRelayId = source.grantId; managed.requiresModelRelay = true;
+      managed.runtime = this.#options.remoteProviderRelays.runtime(source.grantId, managed.id, managed.selection);
+      if (managed.selection.reasoningEffort) managed.runtime.setReasoningEffort(managed.selection.reasoningEffort);
+      managed.info = { ...describeWebConsoleRuntime(managed.runtime), modelSource: "local" };
+    }
     this.#sessions.set(id, managed); this.#emitSession(managed); return this.#summary(managed);
   }
   get(id: string): ConsoleSessionSnapshot {
@@ -371,6 +435,7 @@ export class ConsoleGateway {
       ...(managed.info?.contextWindowTokens != null ? { contextWindowTokens: managed.info.contextWindowTokens } : {}),
       lastOutcome: structuredClone(managed.lastOutcome), compaction: structuredClone(managed.compaction), harness: session?.harness?.snapshot() ?? structuredClone(managed.harness),
       objective: managed.objective, todos: structuredClone(managed.todos),
+      ...(session?.sourceContext ? { sourceContext: structuredClone(session.sourceContext) } : {}),
       tools: (session?.tools ?? []).map((tool) => ({ name: tool.name, description: tool.description, inputSchema: json({ type: "object", properties: tool.parameters, required: tool.required ?? [] }) })),
       ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}),
       ...(managed.focusedFinding ? { focusedFinding: structuredClone(managed.focusedFinding) } : {}), ...(managed.stagedPrompt ? { stagedPrompt: managed.stagedPrompt } : {}),
@@ -385,26 +450,47 @@ export class ConsoleGateway {
   subscribe(id: string, listener: (event: DesktopConsoleEvent) => void): () => void {
     const managed = this.#require(id); managed.listeners.add(listener); return () => managed.listeners.delete(listener);
   }
-  async send(id: string, value: unknown, author?: ConsoleMessageAuthor): Promise<DesktopConsoleSession> {
+  async send(id: string, value: unknown, author?: ConsoleMessageAuthor): Promise<DesktopConsoleSession & { queuedMessageId?: string }> {
     const managed = this.#requireOpen(id);
     if (managed.workflowDraining) throw new ConsoleGatewayError("Wait for the queued workflow launch and decisions to finish.", 409);
     const input = messageInput(value);
     const attribution = author === undefined ? undefined : serverAuthorSchema.parse(author);
+    if (input.workerId && input.attachments?.some(item => item.kind === "image")) throw new ConsoleGatewayError("Image attachments are not supported in worker messages yet.", 400);
     if (input.workerId) return this.sendWorker(id, input.workerId, input.text, attribution);
     if (managed.turn || managed.initialization || managed.configuration || managed.status === "working" || managed.pending.size) {
       if (input.mode !== "queue" && input.mode !== "steer") throw new ConsoleGatewayError("Console session is already processing a turn; choose queue or steer.", 409);
       if (managed.queued.length >= MAX_QUEUED_MESSAGES) throw new ConsoleGatewayError("The message queue is full.", 409);
-      managed.queued.push({ id: this.#createId(), text: input.text, createdAt: this.#now().toISOString(), ...(attribution ? { author: attribution } : {}) }); managed.pauseQueue = false;
+      const queuedMessageId = this.#createId();
+      managed.queued.push({ id: queuedMessageId, text: input.text, ...(input.attachments ? { attachments: input.attachments } : {}), createdAt: this.#now().toISOString(), ...(attribution ? { author: attribution } : {}) }); managed.pauseQueue = false;
       this.#emit(managed, { type: "queued", messages: structuredClone(managed.queued) });
       if (input.mode === "steer" && managed.abort) this.#cancelTurn(managed);
-      return this.#summary(managed);
+      return { ...this.#summary(managed), queuedMessageId };
     }
-    await this.#startTurn(managed, input.text, attribution); return this.#summary(managed);
+    await this.#startTurn(managed, input.text, attribution, input.attachments); return this.#summary(managed);
   }
   async cancel(id: string): Promise<DesktopConsoleSession> {
     const managed = this.#requireOpen(id);
     if (!managed.abort || !managed.turn) throw new ConsoleGatewayError("Console session has no active turn to cancel.", 409);
     managed.pauseQueue = true; this.#cancelTurn(managed); return this.#summary(managed);
+  }
+  sendQueuedNow(id: string, value: unknown): DesktopConsoleSession {
+    const managed = this.#requireOpen(id);
+    if (typeof value !== "string" || !value.trim()) throw new ConsoleGatewayError("Choose a queued message to send.", 409);
+    const index = managed.queued.findIndex(message => message.id === value);
+    if (index < 0) throw new ConsoleGatewayError("Queued message has already started or was removed.", 404);
+    if (managed.workflowDraining || managed.initialization || managed.configuration || managed.pendingConfiguration
+      || (managed.pending.size > 0 && !managed.abort)) {
+      throw new ConsoleGatewayError("Wait for pending initialization, configuration or workflow decisions before sending now.", 409);
+    }
+    // Reorder the retained object atomically; never construct another user message.
+    const [selected] = managed.queued.splice(index, 1);
+    managed.queued.unshift(selected!);
+    managed.pauseQueue = false;
+    this.#emit(managed, { type: "queued", messages: structuredClone(managed.queued) });
+    this.#save(managed);
+    if (managed.abort && managed.turn) this.#cancelTurn(managed);
+    else void this.#processIdleWork(managed);
+    return this.#summary(managed);
   }
   removeQueued(id: string, value?: unknown): DesktopConsoleSession {
     const managed = this.#requireOpen(id);
@@ -472,6 +558,7 @@ export class ConsoleGateway {
   }
   async configure(id: string, value: unknown): Promise<DesktopConsoleSession> {
     const managed = this.#requireOpen(id); const input = configuration(value);
+    if (input.modelSource) { this.#assertIdle(managed); if (!this.#options.remoteProviderRelays) throw new ConsoleGatewayError("This host does not support a local model relay.", 409); }
     if (input.workspacePath !== undefined) {
       this.#assertIdle(managed);
       if ([...managed.workers.values()].some(worker => Object.hasOwn(ACTIVE_WORKERS, worker.status))) throw new ConsoleGatewayError("Stop active agents before changing the workspace folder.", 409);
@@ -524,7 +611,7 @@ export class ConsoleGateway {
       const hadRuntime = managed.runtime !== null;
       await this.#ensureSession(managed);
       if (hadRuntime && managed.runtime) {
-        managed.info = await reloadWebConsoleRuntimeConnection(managed.runtime);
+        managed.info = managed.modelRelayId ? { ...describeWebConsoleRuntime(managed.runtime), modelSource: "local" } : await reloadWebConsoleRuntimeConnection(managed.runtime);
         managed.session?.reconfigureRuntime({ contextWindowTokens: managed.info.contextWindowTokens });
       }
       if (managed.status !== "closed") managed.status = "ready";
@@ -577,7 +664,7 @@ export class ConsoleGateway {
       if (result) live.push(result);
     }
     const saved = await searchSavedChats(this.#options.homeDir, query, excluded);
-    const all = [...live, ...saved.results].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id));
+    const all = [...live, ...saved.results].sort(compareChatSearchResults);
     const end = (offset as number) + (limit as number); const hasMore = all.length > end;
     return { results: all.slice(offset as number, end), hasMore, nextOffset: hasMore ? end : null, truncated: saved.truncated };
   }
@@ -596,7 +683,7 @@ export class ConsoleGateway {
     const initialMessages = this.#nativeSavedMessages(stored.messages);
     const existing = [...this.#sessions.values()].find((managed) => managed.status !== "closed" && (managed.savedId === id || managed.id === id));
     if (existing) {
-      if (!existing.session) { await this.#ensureSession(existing); existing.status = "ready"; this.#emitSession(existing); }
+      if (!existing.session && !(existing.requiresModelRelay && !existing.modelRelayId)) { await this.#ensureSession(existing); existing.status = "ready"; this.#emitSession(existing); }
       return this.#summary(existing);
     }
     // Restore validated working context, never infer permissions from transcript text.
@@ -605,10 +692,16 @@ export class ConsoleGateway {
     const defaults = {
       autonomyMode: "standard",
       target: configuration?.target ?? stored.target ?? "",
+      ...(configuration?.workflowId ? { workflowId: configuration.workflowId } : {}),
+      ...(configuration?.skillId ? { skillId: configuration.skillId } : {}),
       ...(configuration ? { role: configuration.role, runtime: configuration.runtime } : stored.model ? { runtime: { model: stored.model } } : {}),
     };
     const created = this.#createRecord({ ...defaults, ...raw }); const managed = this.#require(created.id);
     managed.initialMessages = initialMessages; managed.workspacePath = stored.cwd; managed.savedId = id; managed.title = raw.title === undefined ? stored.summary ?? stored.preview ?? "Resumed chat" : managed.title;
+    if (configuration?.modelSource === "local") {
+      managed.requiresModelRelay = true;
+      managed.info = { providerId: managed.selection.providerId ?? "chatgpt-codex", providerLabel: "Local model source", model: managed.selection.model ?? stored.model ?? "", configured: false, contextWindowTokens: null, modelSource: "local", connectionIdentity: null, diagnostics: { valid: false, reason: "local_model_reconnect", message: "Reconnect the local model source before continuing this remote chat." }, agentModels: managed.selection.agentModels ?? {}, singleModel: managed.selection.singleModel ?? false, autoRoute: managed.selection.autoRoute ?? false };
+    }
     managed.objective = stored.summary ?? "";
     if (stored.consoleState) {
       const state = stored.consoleState;
@@ -624,7 +717,7 @@ export class ConsoleGateway {
         try { managed.focusedFinding = loadFindingFocus(state.focusedFindingId, { dbPath: this.#options.dbPath }).finding; } catch { /* Evidence can be removed independently of this transcript. */ }
       }
     }
-    await this.#ensureSession(managed); this.#emitSession(managed); return this.#summary(managed);
+    if (!managed.requiresModelRelay || managed.modelRelayId) await this.#ensureSession(managed); this.#emitSession(managed); return this.#summary(managed);
   }
   deleteSaved(id: string): void {
     this.#stored(id);
@@ -770,6 +863,7 @@ export class ConsoleGateway {
   async close(id: string): Promise<void> {
     const managed = this.#require(id); if (managed.status === "closed") return;
     for (const request of managed.workflowRequests.values()) if (request.status !== "launched") { request.abort.abort(); request.status = "cancelled"; }
+    if (managed.modelRelayId) this.#options.remoteProviderRelays?.close(managed.modelRelayId);
     managed.status = "closed"; managed.pauseQueue = true; managed.queued = []; managed.abort?.abort(); this.#denyDecisions(managed);
     this.#emitSession(managed); await managed.initialization?.catch(() => undefined); await managed.configuration?.catch(() => undefined); await managed.turn;
     this.#save(managed); managed.busUnsubscribe?.(); managed.busUnsubscribe = null;
@@ -791,6 +885,7 @@ export class ConsoleGateway {
     if (managed.turn || managed.initialization || managed.configuration || managed.pending.size) throw new ConsoleGatewayError("Wait for the current turn and decisions to finish.", 409);
   }
   async #ensureSession(managed: ManagedSession): Promise<ConsoleSession> {
+    if (managed.requiresModelRelay && !managed.modelRelayId) throw new ConsoleGatewayError("Reconnect the local model source before continuing this remote chat.", 409);
     if (managed.session) {
       if (!this.#options.createSession && managed.execution.backend !== consoleExecutionProfile(this.#options.homeDir)) throw new ConsoleGatewayError("The execution profile changed. Start a new chat or resume its checkpoint with the selected profile before running more work.", 409);
       return managed.session;
@@ -802,17 +897,19 @@ export class ConsoleGateway {
       try {
         managed.messagingHome ??= mkdtempSync(join(tmpdir(), "0-web-messaging-"));
         const settings = getSettings();
-        const callbacks = this.#decisionCallbacks(managed);
-        const skillAuthoring = this.#options.skillAuthoring ? () => { const adapter = this.#options.skillAuthoring!(this.#skillActor.getStore(), managed.workspacePath ?? this.#projectPath ?? process.cwd()); return typeof adapter === "function" ? adapter() : adapter; } : undefined;
+        const callbacks = { ...this.#decisionCallbacks(managed), workflowAuthoring: this.#workflowAuthoring(managed), ...((this.#workflowLifecycle || this.#scheduleLifecycle) ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}) };
+        const skillAuthoring = this.#options.skillAuthoring ? () => this.#skillAuthoring(managed) : undefined;
+        const skillEditor = managed.skillId ? { read: async () => { const value = await this.#skillAuthoring(managed)?.read(managed.skillId!); return value as { id: string; name: string; revision: string; writable: boolean } | undefined; } } : undefined;
         const skillDiscoveryOptions = this.#options.skillDiscoveryOptions ? () => this.#options.skillDiscoveryOptions!(managed.workspacePath ?? this.#projectPath ?? process.cwd()) : undefined;
+        if (managed.modelRelayId && consoleExecutionProfile(this.#options.homeDir) === "smolvm") throw new ConsoleGatewayError("Local model relays currently require the operator-selected host execution profile on this host.", 409);
         if (this.#options.createSession) {
-          session = await this.#options.createSession({ scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, scope: managed.scope, skillDiscoveryOptions, skillAuthoring, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, codebaseLearning: true, ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}), ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
+          session = await this.#options.createSession({ scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, scope: managed.scope, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, initialMessages: managed.initialMessages, codebaseLearning: true, ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}), ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}), ...callbacks });
         } else if (consoleExecutionProfile(this.#options.homeDir) === "smolvm") {
           if (!managed.runtime) { const created = await createWebConsoleRuntime(managed.selection); managed.runtime = created.runtime; managed.info = created.info; }
           session = createLocalConsoleSession({
             runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
             scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, scope: managed.scope,
-            initialMessages: managed.initialMessages, workspaceRoot: managed.workspacePath ?? this.#projectPath, codebaseLearning: true,
+            initialMessages: managed.initialMessages, skillDiscoveryOptions, skillAuthoring, skillEditor, workspaceRoot: managed.workspacePath ?? this.#projectPath, codebaseLearning: true,
             ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}),
             allowModelSelfExtension: settings.allowModelSelfExtension, compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
             onHarnessUpdate: (harness) => { managed.harness = harness; this.#emit(managed, { type: "harness", harness }); }, ...callbacks,
@@ -825,17 +922,13 @@ export class ConsoleGateway {
           const manager = await getWebConsolePluginHostManager(); await manager.refresh(); const lease = manager.acquire();
           let mcpHost: McpHost | undefined;
           try {
-            mcpHost = await connectServicePlugins(loadServicePluginConnections(), await connectMcpServers(parseMcpConfig(process.env["ZERO_MCP"])));
+            mcpHost = await connectServicePlugins(loadServicePluginConnections(), await connectConsoleMcp(managed.workspacePath ?? this.#projectPath));
             session = createLocalConsoleSession({ runtime: managed.runtime, costModel: managed.runtime.resolvedModel(), contextWindowTokens: managed.info?.contextWindowTokens ?? undefined,
               compaction: { enabled: settings.autoCompaction, thresholdFraction: Number.parseFloat(settings.compactionThreshold) / 100 },
               scanId: managed.id, target: managed.target, role: managed.role, autonomyMode: managed.autonomyMode, scope: managed.scope,
-              initialMessages: managed.initialMessages, codebaseLearning: true, skillDiscoveryOptions, skillAuthoring,
+              initialMessages: managed.initialMessages, codebaseLearning: true, skillDiscoveryOptions, skillAuthoring, skillEditor,
               ...(this.#sourceLearningStore ? { learningStore: this.#sourceLearningStore } : {}),
               ...(this.#workflowLifecycle ? { workflowLifecycle: this.#workflowCallbacks(managed) } : {}),
-              workflowAuthoring: {
-                list: () => { const store = new SecurityWorkflowStore(this.#options.dbPath); try { return store.list(); } finally { store.close(); } },
-                save: input => { const store = new SecurityWorkflowStore(this.#options.dbPath); try { return store.save(input); } finally { store.close(); } },
-              },
               allowModelSelfExtension: settings.allowModelSelfExtension, workspaceRoot: managed.workspacePath ?? this.#projectPath, pluginHost: lease.host, ...(mcpHost ? { mcpHost } : {}),
               agentMessaging: { selfId: "Main", selfRole: "parent", siblingChannelEnabled: settings.allowSubagentPeerMessaging, operatorChannelEnabled: settings.allowSubagentOperatorMessaging, projectPath: managed.workspacePath ?? this.#projectPath, homeDir: managed.messagingHome },
               onHarnessUpdate: (harness) => { managed.harness = harness; this.#emit(managed, { type: "harness", harness }); }, ...callbacks,
@@ -862,6 +955,52 @@ export class ConsoleGateway {
     managed.initialization = initialize;
     try { return await initialize; } finally { if (managed.initialization === initialize) managed.initialization = null; }
   }
+  #skillAuthoring(managed: ManagedSession): Exclude<NonNullable<ConsoleSessionConfig["skillAuthoring"]>, Function> | undefined {
+    const candidate = this.#options.skillAuthoring?.(this.#skillActor.getStore(), managed.workspacePath ?? this.#projectPath ?? process.cwd());
+    const adapter = typeof candidate === "function" ? candidate() : candidate;
+    if (!adapter || !managed.skillId) return adapter;
+    const assertBound = (id: string) => { if (id !== managed.skillId) throw new ConsoleGatewayError("This editor can only edit its bound skill ID.", 400); };
+    return {
+      read: id => { assertBound(id); return adapter.read(id); },
+      create: () => { throw new ConsoleGatewayError("Use copy_skill to preserve the bound skill's supporting files.", 400); },
+      update: (id, input) => { assertBound(id); return adapter.update(id, input); },
+      copy: async (id, input) => {
+        assertBound(id);
+        const result = await adapter.copy(id, input);
+        const copied = result as { id?: unknown };
+        if (!copied || typeof copied.id !== "string" || !copied.id || copied.id === id) throw new ConsoleGatewayError("Skill copy did not return a new skill ID.", 500);
+        managed.skillId = copied.id;
+        this.#save(managed); this.#emitSession(managed);
+        return result;
+      },
+    };
+  }
+
+  #workflowAuthoring(managed: ManagedSession): NonNullable<ConsoleSessionConfig["workflowAuthoring"]> {
+    const read = <T>(operation: (store: SecurityWorkflowStore) => T): T => {
+      const store = new SecurityWorkflowStore(this.#options.dbPath);
+      try { return operation(store); } finally { store.close(); }
+    };
+    return {
+      list: () => read(store => {
+        if (!managed.workflowId) return store.list();
+        const workflow = store.get(managed.workflowId);
+        return workflow ? [workflow] : [];
+      }),
+      save: input => read(store => {
+        if (managed.workflowId) {
+          if (input.id !== managed.workflowId) throw new ConsoleGatewayError("This editor can only save its bound workflow ID.", 400);
+          if (typeof input.revision !== "number" || !Number.isSafeInteger(input.revision) || input.revision < 1) throw new ConsoleGatewayError("Editing requires the current workflow revision.", 409);
+          const current = store.get(managed.workflowId);
+          if (!current) throw new ConsoleGatewayError("Workflow definition was not found.", 404);
+          if (input.revision !== current.revision) throw new ConsoleGatewayError("Workflow changed. Reload before saving.", 409);
+        }
+        return store.save(input);
+      }),
+      ...(managed.workflowId ? { editor: { id: managed.workflowId, read: () => read(store => store.get(managed.workflowId!)) ?? undefined } } : {}),
+    };
+  }
+
   #decisionCallbacks(managed: ManagedSession): Pick<ConsoleSessionConfig, "requestScope" | "requestLocalScope" | "approveTool" | "escalateScopedAudit" | "askOperator"> {
     return {
       requestScope: async (request) => {
@@ -885,7 +1024,7 @@ export class ConsoleGateway {
   attachSourceLearning(store: LearningStore): void { this.#sourceLearningStore = store; }
 
   attachLearningRecorder(recorder: (event: { id: string; project: string; outcome: string }) => void): void { this.#learningRecorder = recorder; }
-  async #startTurn(managed: ManagedSession, body: string, author?: ConsoleMessageAuthor): Promise<void> {
+  async #startTurn(managed: ManagedSession, body: string, author?: ConsoleMessageAuthor, attachments?: ConsoleMessageInput["attachments"]): Promise<void> {
     managed.executionEpoch++;
     managed.status = "working"; this.#emitSession(managed);
     let session: ConsoleSession;
@@ -896,12 +1035,12 @@ export class ConsoleGateway {
     managed.stagedPrompt = undefined;
     const generateTitle = managed.title === "New chat" || managed.title === "New conversation" || managed.title === "New session";
     if (generateTitle) {
-      managed.title = body.replace(/\s+/g, " ").trim().slice(0, 80);
+      managed.title = (body || attachments?.find(item => item.kind === "image")?.name || "Image conversation").replace(/\s+/g, " ").trim().slice(0, 80);
     }
     const fallbackTitle = managed.title;
     managed.userAttributions.push({ text: body, ...(author ? { author: structuredClone(author) } : {}) });
     if (managed.userAttributions.length > 10000) managed.userAttributions.splice(0, managed.userAttributions.length - 10000);
-    this.#emitSession(managed); this.#emit(managed, { type: "user", text: body, ...(author ? { author: structuredClone(author) } : {}) });
+    this.#emitSession(managed); this.#emit(managed, { type: "user", text: body, attachments, ...(author ? { author: structuredClone(author) } : {}) });
     const turn = (async () => {
       try {
         const outcome = await this.#skillActor.run(author, () => session.send(body, {
@@ -922,7 +1061,7 @@ export class ConsoleGateway {
           onNotice: (text) => this.#emit(managed, { type: "notice", text }),
           onCompaction: (event) => { managed.compaction = json({ ...event, preCompactionMessages: publicMessages(event.preCompactionMessages) }); this.#emit(managed, { type: "compaction", compaction: managed.compaction }); },
           onHarnessUpdate: (harness) => { managed.harness = harness; this.#emit(managed, { type: "harness", harness }); },
-        }, { signal: abort.signal, generateTitle }));
+        }, { signal: abort.signal, generateTitle, images: attachments?.filter(item => item.kind === "image").map(item => { const comma = item.value.indexOf(","); return { mediaType: item.value.slice(5, item.value.indexOf(";")), data: item.value.slice(comma + 1), ...(item.name ? { name: item.name } : {}) }; }) }));
         if (outcome.stopReason === "end_turn" && outcome.conversationTitle && managed.title === fallbackTitle) {
           managed.title = outcome.conversationTitle;
           this.#emitSession(managed);
@@ -955,6 +1094,50 @@ export class ConsoleGateway {
   #workflowCallbacks(managed: ManagedSession): NonNullable<ConsoleSessionConfig["workflowLifecycle"]> {
     return { invoke: async (name, args) => {
       this.#requireOpen(managed.id);
+      if (managed.workflowId && ["list_workflows", "get_workflow", "save_workflow"].includes(name)) {
+        const authoring = this.#workflowAuthoring(managed);
+        if (name === "list_workflows") {
+          z.object({}).strict().parse(args);
+          return { workflows: await authoring.list() };
+        }
+        if (name === "get_workflow") {
+          const request = z.object({ id: z.string() }).strict().parse(args);
+          if (request.id !== managed.workflowId) throw new ConsoleGatewayError("This editor can only read its bound workflow ID.", 400);
+          const workflow = (await authoring.list())[0];
+          if (!workflow) throw new ConsoleGatewayError("Workflow definition was not found.", 404);
+          return { workflow };
+        }
+        const request = z.object({ definition: z.unknown(), expectedRevision: z.number().int().positive().optional() }).strict().parse(args);
+        const definition = parseSecurityWorkflowInput(request.definition);
+        return { workflow: await authoring.save({ ...definition, ...(request.expectedRevision !== undefined ? { revision: request.expectedRevision } : {}) }) };
+      }
+      if (SCHEDULE_TOOL_NAMES.has(name)) {
+        const schedules=this.#scheduleLifecycle;
+        if (!schedules) throw new ConsoleGatewayError("Scheduling is unavailable on this engine.",409);
+        if (name !== "list_schedules" && managed.autonomyMode === "recon") throw new ConsoleGatewayError("Recon mode cannot edit schedules.",403);
+        const context={workflowId:managed.workflowId};
+        let approved=false;
+        let request={...args};
+        if ((name === "create_schedule" || name === "update_schedule") && args.enabled === true) {
+          const epoch=managed.executionEpoch;
+          const signal=managed.abort?.signal;
+          if (name === "update_schedule") {
+            const response=await schedules.invoke(managed.id,"list_schedules",{},context) as {schedules?:Array<{id:string;version?:number}>};
+            const current=response.schedules?.find(item=>item.id===args.id);
+            if (!current) throw new ConsoleGatewayError("Schedule not found for this editor.",404);
+            request={...request,expectedVersion:current.version ?? 1};
+          }
+          const response=await this.#requestDecision(managed,{
+            kind:"tool",title:"Enable this schedule?",detail:`Enable recurring workflow execution with these settings: ${JSON.stringify(request).slice(0,4000)}`,
+            call:this.#withCallId({name,arguments:request}),
+          },managed.turnOwner ?? "schedule",signal);
+          if (!("approve" in response) || !response.approve) throw new ConsoleGatewayError("Schedule activation was declined.",403);
+          this.#requireOpen(managed.id);
+          if (signal?.aborted || managed.executionEpoch !== epoch) throw new ConsoleGatewayError("The chat changed while reviewing this schedule.",409);
+          approved=true;
+        }
+        return schedules.invoke(managed.id,name,request,{...context,activationApproved:approved});
+      }
       const adapter = this.#workflowLifecycle;
       if (!adapter) throw new ConsoleGatewayError("Workflow lifecycle is unavailable.", 409);
       if (name === "start_run") {
@@ -1055,7 +1238,7 @@ export class ConsoleGateway {
       if (managed.pauseQueue || managed.pendingConfiguration || !managed.queued.length) return;
       const next = managed.queued.shift()!;
       this.#emit(managed, { type: "queued", messages: structuredClone(managed.queued) });
-      try { await this.#startTurn(managed, next.text, next.author); }
+      try { await this.#startTurn(managed, next.text, next.author, next.attachments); }
       catch (error) {
         managed.queued.unshift(next); managed.pauseQueue = true;
         this.#emit(managed, { type: "queued", messages: structuredClone(managed.queued) });
@@ -1099,11 +1282,26 @@ export class ConsoleGateway {
           ...(input.scope !== undefined ? { scope: input.scope === null ? null : ScopePolicy.fromJson(input.scope) } : {}),
         });
       }
+      if (input.modelSource) {
+        const relay = this.#options.remoteProviderRelays!;
+        const selection = { ...managed.selection, ...input.runtime };
+        const candidate = relay.runtime(input.modelSource.grantId, managed.id, selection);
+        if (managed.runtime) managed.runtime.useGrantedProviderTransport(relay.transport(input.modelSource.grantId, managed.id), { model: candidate.resolvedModel(), agentModels: selection.agentModels, singleModel: selection.singleModel, autoRoute: selection.autoRoute });
+        else managed.runtime = candidate;
+        managed.modelRelayId = input.modelSource.grantId; managed.requiresModelRelay = true;
+        if (selection.reasoningEffort) managed.runtime.setReasoningEffort(selection.reasoningEffort);
+        managed.info = { ...describeWebConsoleRuntime(managed.runtime), modelSource: "local" };
+        managed.selection = selection;
+      }
       if (input.runtime) {
         if (!managed.session) managed.selection = { ...managed.selection, ...input.runtime };
         await this.#ensureSession(managed);
         if (managed.runtime) {
-          const info = await applyWebConsoleRuntimeSelection(managed.runtime, input.runtime); managed.info = info;
+          const info = managed.modelRelayId ? (() => {
+            managed.runtime!.reconfigure({ model: input.runtime!.model, provider: input.runtime!.providerId, agentModels: input.runtime!.agentModels, singleModel: input.runtime!.singleModel, autoRoute: input.runtime!.autoRoute });
+            if (input.runtime!.reasoningEffort) managed.runtime!.setReasoningEffort(input.runtime!.reasoningEffort);
+            return { ...describeWebConsoleRuntime(managed.runtime!), modelSource: "local" as const };
+          })() : await applyWebConsoleRuntimeSelection(managed.runtime, input.runtime); managed.info = info;
           managed.session?.reconfigureRuntime({ contextWindowTokens: info.contextWindowTokens });
           managed.selection = { ...managed.selection, ...input.runtime };
         } else managed.session?.reconfigureRuntime({ ...input.runtime, ...(input.runtime.providerId ? { provider: input.runtime.providerId } : {}) });
@@ -1148,9 +1346,11 @@ export class ConsoleGateway {
         if (!worker) { worker = { id, parentId: parent, name: typeof payload.name === "string" ? payload.name : "Worker", status: "queued", task: typeof payload.task === "string" ? payload.task : "", transcript: [] }; managed.workers.set(id, worker); managed.ownedIds.add(id); }
         worker.telemetry = { ...worker.telemetry, ...(json(payload) as Record<string, ConsoleJsonValue>) };
         if (type === "subagent_lifecycle") {
-          if (typeof payload.status === "string" && ["queued", "running", "parked", "completed", "failed"].includes(payload.status)) worker.status = payload.status as ConsoleWorker["status"];
+          if (typeof payload.status === "string" && ["queued", "running", "parked", "completed", "failed", "stopped"].includes(payload.status)) worker.status = payload.status as ConsoleWorker["status"];
           for (const [source, key] of [["name", "name"], ["task", "task"], ["summary", "summary"], ["error", "error"], ["model", "model"], ["role", "role"]] as const) if (typeof payload[source] === "string") worker[key] = payload[source];
-          if (worker.summary || worker.error) {
+          const cancelled = payload.status === "stopped" || payload.error_name === "AbortError" || payload.error === "This operation was aborted" || payload.error === "AbortError: This operation was aborted";
+          if (cancelled) { worker.status = "stopped"; delete worker.error; }
+          if (!cancelled && (worker.summary || worker.error)) {
             const final = worker.error ?? worker.summary!;
             if (!worker.transcript.some((entry) => entry.assistant === final)) worker.transcript.push({ turn: typeof payload.turns === "number" ? payload.turns : worker.transcript.length + 1, ts: this.#now().getTime(), assistant: final });
           }
@@ -1179,6 +1379,7 @@ export class ConsoleGateway {
       for (const block of message.content) {
         if (!record(block) ||
           (block.type === "text" ? typeof block.text !== "string" :
+            block.type === "image" ? !["image/png", "image/jpeg", "image/gif", "image/webp"].includes(String(block.mediaType)) || typeof block.data !== "string" || block.data.length > 650_000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(block.data) :
             block.type === "tool_use" ? typeof block.id !== "string" || typeof block.name !== "string" || !record(block.input) :
               block.type === "tool_result" ? typeof block.tool_use_id !== "string" || typeof block.content !== "string" || (block.is_error !== undefined && typeof block.is_error !== "boolean") : true)) {
           throw new ConsoleGatewayError("Saved transcript contains an invalid native content block.", 400);
@@ -1203,7 +1404,10 @@ export class ConsoleGateway {
     const id = managed.savedId ?? managed.id;
     const consoleState: StoredConsoleState = {
       configuration: {
+        ...(managed.requiresModelRelay ? { modelSource: "local" as const } : {}),
         target: managed.session?.target ?? managed.target, role: managed.role,
+        ...(managed.workflowId ? { workflowId: managed.workflowId } : {}),
+        ...(managed.skillId ? { skillId: managed.skillId } : {}),
         runtime: savedWebRuntimeSelection(managed.selection, managed.info),
       },
       version: 1, title: managed.title, objective: managed.objective, usage: { ...managed.usage },
@@ -1221,7 +1425,7 @@ export class ConsoleGateway {
   }
   #withCallId(call: ToolCall): DesktopConsoleToolCall { let id = this.#callIds.get(call); if (!id) { id = this.#createId(); this.#callIds.set(call, id); } return { id, name: call.name, arguments: json(call.arguments) }; }
   #summary(managed: ManagedSession): DesktopConsoleSession {
-    return { id: managed.id, ...(managed.savedId ? { savedId: managed.savedId } : {}), target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: managed.session?.autonomyMode ?? managed.autonomyMode, scopeConfigured: Boolean(managed.session?.scope ?? managed.scope), localScopeConfigured: Boolean(managed.session?.localScopePath), status: managed.status, createdAt: managed.createdAt, updatedAt: managed.updatedAt, title: managed.title, messageCount: (managed.session?.messages ?? managed.initialMessages).length + managed.queued.length, execution: structuredClone(managed.execution), ...(managed.info ? { runtime: structuredClone(managed.info) } : {}), ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}) };
+    return { id: managed.id, ...(managed.workflowId ? { workflowId: managed.workflowId } : {}), ...(managed.skillId ? { skillId: managed.skillId } : {}), ...(managed.savedId ? { savedId: managed.savedId } : {}), target: managed.session?.target ?? managed.target, role: managed.role, autonomyMode: managed.session?.autonomyMode ?? managed.autonomyMode, scopeConfigured: Boolean(managed.session?.scope ?? managed.scope), localScopeConfigured: Boolean(managed.session?.localScopePath), status: managed.status, createdAt: managed.createdAt, updatedAt: managed.updatedAt, title: managed.title, messageCount: (managed.session?.messages ?? managed.initialMessages).length + managed.queued.length, execution: structuredClone(managed.execution), ...(managed.info ? { runtime: structuredClone(managed.info) } : {}), ...(managed.pendingConfiguration ? { pendingConfiguration: structuredClone(managed.pendingConfiguration) } : {}) };
   }
   #emitSession(managed: ManagedSession): void { this.#emit(managed, { type: "session", session: this.#summary(managed) }); }
   #emit(managed: ManagedSession, payload: DesktopConsoleEventPayload): void {

@@ -1,11 +1,13 @@
-import { appendAccessMilestone } from "@0/shared/dist/access-milestone.js";
+import { ChoiceCard } from "@/components/ui/choice-card";
+import { Tooltip } from "@/components/ui/tooltip";
+import { appendAccessMilestone, visibleAccessMilestones } from "@0/shared/dist/access-milestone.js";
 import { AccessMilestoneBanner } from "@/components/access-milestone";
 import { useBackendApi } from "@/api";
 import { eventStream } from "@/lib/event-stream";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ArrowRight, Beaker, Bot, ChevronDown, FileSearch, Radio, Target, Terminal, Zap } from "lucide-react";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader, PageContent } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardEmpty, CardHeader, CardTitle } from "@/components/ui/card";
@@ -316,7 +318,15 @@ export function LivePage() {
       citedLeadId,
     };
     setHuntCards((prev) => {
-      if (event.kind === "access_milestone" && prev.some(existing => existing.event.kind === "access_milestone" && existing.event.milestone.key === event.milestone.key && existing.event.milestone.status === event.milestone.status)) return prev;
+      if (event.kind === "access_milestone") {
+        const index = prev.findIndex(existing => existing.event.kind === "access_milestone" && existing.event.milestone.key === event.milestone.key);
+        if (index >= 0) {
+          const existing = prev[index].event as Extract<osecHuntEvent, { kind: "access_milestone" }>;
+          const merged = appendAccessMilestone([{ milestone: existing.milestone }], { milestone: event.milestone });
+          if (merged[0].milestone === existing.milestone) return prev;
+          const next = [...prev]; next[index] = card; return next;
+        }
+      }
       return [card, ...prev].slice(0, MAX_HUNT_ROWS);
     });
   }, [mkId]);
@@ -500,7 +510,7 @@ export function LivePage() {
   }, []);
 
   return (
-    <div className="space-y-6">
+    <PageContent width="wide">
       <PageHeader
         title="Live"
         summary=""
@@ -518,7 +528,7 @@ export function LivePage() {
         )}
       />
 
-      {accessMilestones.slice(-3).map(item => <AccessMilestoneBanner key={item.milestone.key} milestone={item.milestone} scanId={item.scanId} at={item.ts * 1000} />)}
+      {visibleAccessMilestones(accessMilestones).map(item => <AccessMilestoneBanner key={item.milestone.key} milestone={item.milestone} scanId={item.scanId} at={item.ts * 1000} />)}
 
       <Card className="overflow-hidden">
         <CardHeader>
@@ -577,7 +587,7 @@ export function LivePage() {
             </div>
           ) : null}
           {lastError ? (
-            <div className="rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+            <div className="rounded-[var(--radius-menu,12px)] border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
               {lastError}
             </div>
           ) : null}
@@ -607,7 +617,7 @@ export function LivePage() {
           onCardClick={selectLeadFromHuntCard}
         />
       </section>
-    </div>
+    </PageContent>
   );
 }
 
@@ -664,7 +674,7 @@ function ProbeLane({
                 <div
                   key={alarm.id}
                   className={cn(
-                    "rounded-md border px-3 py-2 transition-colors",
+                    "rounded-[var(--radius-menu,12px)] border px-3 py-2 transition-colors",
                     highlightedAlarmId === alarm.id
                       ? "border-primary/40 bg-primary/8 ring-1 ring-primary/30"
                       : "border-destructive/20 bg-destructive/5",
@@ -698,16 +708,14 @@ function ProbeLane({
           </div>
           <div
             ref={streamRef}
-            className="max-h-[28rem] min-h-[12rem] overflow-y-auto rounded-md border border-border bg-muted/10 px-3 py-3 font-mono text-xs leading-relaxed"
+            className="max-h-[28rem] min-h-[12rem] overflow-y-auto rounded-[var(--radius-menu,12px)] border border-border bg-muted/10 px-3 py-3 font-mono text-xs leading-relaxed"
           >
             {tokens.length === 0 ? (
               <div className="text-muted-foreground">Waiting for code…</div>
             ) : (
               <div className="flex flex-wrap gap-x-0.5 gap-y-1">
                 {tokens.map((row) => (
-                  <span
-                    key={row.id}
-                    title={`score ${formatScore(row.score)} · pos ${row.position ?? "?"}`}
+                  <Tooltip key={row.id} content={`Score ${formatScore(row.score)} · position ${row.position ?? "unknown"}`}><span
                     className={cn(
                       "rounded-sm px-1 py-0.5",
                       scoreColorClass(row.score),
@@ -715,7 +723,7 @@ function ProbeLane({
                     )}
                   >
                     {row.token}
-                  </span>
+                  </span></Tooltip>
                 ))}
               </div>
             )}
@@ -769,18 +777,12 @@ function LeadLane({
             {leads.map((lead) => {
               const isSelected = lead.id === selectedLeadId;
               return (
-                <button
-                  key={lead.id}
+                <ChoiceCard key={lead.id}
                   type="button"
                   onClick={() => onSelectLead(lead.id)}
-                  className={cn(
-                    "w-full rounded-md border px-3 py-3 text-left transition-colors",
-                    isSelected
-                      ? "border-primary/40 bg-primary/8 ring-1 ring-primary/30"
-                      : "border-border bg-background hover:border-primary/20 hover:bg-primary/4",
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-2">
+                  selected={isSelected}
+                  className="w-full px-3 py-3 pr-9">
+                  <div className="flex w-full min-w-0 items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="truncate font-mono text-xs text-foreground">{lead.file}</div>
                       <div className="mt-0.5 text-[11px] text-muted-foreground">
@@ -796,7 +798,7 @@ function LeadLane({
                       {lead.top_cwe ? <Badge variant="danger">{lead.top_cwe}</Badge> : null}
                     </div>
                   </div>
-                </button>
+                </ChoiceCard>
               );
             })}
           </div>
@@ -831,7 +833,7 @@ function HuntLane({
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-3">
         {selectedLead ? (
-          <div className="rounded-md border border-primary/20 bg-primary/4 px-3 py-3">
+          <div className="rounded-[var(--radius-menu,12px)] border border-primary/20 bg-primary/4 px-3 py-3">
             <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-widest text-primary-text">
               <Target className="size-3" />
               Checking lead
@@ -884,11 +886,11 @@ function HuntCardView({
   const event = card.event;
   const interactive = card.citedLeadId !== null;
   const sharedClass = cn(
-    "block w-full rounded-md border px-3 py-3 text-left transition-colors",
+    "block w-full rounded-[var(--radius-menu,12px)] border px-3 py-3 text-left transition-colors",
     highlightLead
       ? "border-primary/40 bg-primary/8 ring-1 ring-primary/30"
       : interactive
-        ? "border-border bg-background hover:border-primary/20 hover:bg-primary/4 cursor-pointer"
+        ? "border-border bg-background"
         : "border-border bg-background",
   );
 
@@ -901,18 +903,18 @@ function HuntCardView({
   const footer = (
     <div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground">
       <span>{formatRelativeTs(card.ts, baseTs)}</span>
-      {interactive ? (
-        <ArrowRight className="size-3 text-primary-text" aria-label="Show lead" />
-      ) : null}
     </div>
   );
 
   if (interactive) {
     return (
-      <button type="button" onClick={onClick} className={sharedClass}>
+      <div className={sharedClass}>
         {body}
         {footer}
-      </button>
+        <Button variant="ghost" size="sm" type="button" onClick={onClick} className="mt-2 text-xs" aria-label="Show cited lead">
+          Show lead <ArrowRight className="size-3" />
+        </Button>
+      </div>
     );
   }
   return <div className={sharedClass}>{body}{footer}</div>;
@@ -931,9 +933,9 @@ function ToolUseBody({ event }: { event: Extract<osecHuntEvent, { kind: "tool_us
         <Badge variant={statusVariant}>{event.status ?? "running"}</Badge>
       </div>
       {event.args_preview ? (
-        <div className="truncate font-mono text-[11px] text-muted-foreground" title={event.args_preview}>
+        <Tooltip content={event.args_preview} preview><div tabIndex={0} className="truncate font-mono text-[11px] text-muted-foreground">
           {event.args_preview}
-        </div>
+        </div></Tooltip>
       ) : null}
       {event.file ? (
         <div className="font-mono text-[11px] text-primary-text">

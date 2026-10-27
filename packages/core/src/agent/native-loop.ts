@@ -1,3 +1,4 @@
+import { nativeToolBatches } from "./native-tool-batches.js";
 import { isLocalAdmissionLimit, isLocalAdmissionFailure } from "../runtime/request-admission.js";
 import { verifyOracleByCategory } from "../triage/oracles.js";
 import { assertWorkspaceIdentity, type WorkspaceIdentity } from "./workspace-identity.js";
@@ -940,7 +941,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   let sourceLearning: LearningService | undefined;
   let ownedLearningStore: LearningStore | undefined;
   let sourceLearningRoot: string | undefined;
-  const mirrorCodebaseNotes = (memory: HuntMemoryStore): void => {
+  const mirrorCodebaseNotes = (memory: HuntMemoryStore): ReturnType<LearningService["recallCodebaseNotes"]> | undefined => {
     if (!codebaseLearningEnabled || (!db && !opts.learningStore)) return;
     try {
       sourceLearningRoot ??= fs.realpathSync.native(config.scopePath!);
@@ -948,9 +949,10 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
         const store = opts.learningStore ?? (ownedLearningStore = new LearningStore(db!.databasePath));
         sourceLearning = new LearningService(store);
       }
-      sourceLearning.importCodebaseNotes(learningProjectId(sourceLearningRoot), sourceLearningRoot, memory, 8);
+      return sourceLearning.recallCodebaseNotes(learningProjectId(sourceLearningRoot), sourceLearningRoot, memory, 6);
     } catch {
-      // An auxiliary mirror cannot invalidate an accepted note or fail a scan.
+      // A failed ledger read cannot undo an opt-out; continue without hints.
+      return [];
     }
   };
   if (codebaseLearningEnabled) {
@@ -1103,8 +1105,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     if (codebaseLearningEnabled) {
       try {
         const memory = getHuntMemory();
-        const notes = memory?.recallCodebase(config.scopePath!, 6) ?? [];
-        if (memory) mirrorCodebaseNotes(memory);
+        const notes = memory ? mirrorCodebaseNotes(memory) ?? memory.recallCodebase(config.scopePath!, 6) : [];
         if (notes.length > 0) {
           const context = JSON.stringify(notes.map((note) => ({
             title: note.title, summary: note.summary, files: note.codebase!.files,
@@ -2630,189 +2631,205 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       }
     } : undefined;
 
-    for (const block of toolUseBlocks) {
-      const call: ToolCall = { name: block.name, arguments: block.input };
-      toolCalls.push(call);
-      onToolUpdate?.(state.turnCount, toolCalls, toolResults, textContent, turnTelemetry);
-      // Track the call signature for doom-loop detection (see after the loop).
-      toolCallLog.push(toolCallSignature(call.name, call.arguments));
-      if (toolCallLog.length > 12) toolCallLog.shift();
+    // Only independent local reads overlap. Stateful tools remain ordered barriers,
+    // and driver authority is checked serially. Receipts retain model call order.
+    for (const batch of nativeToolBatches(toolUseBlocks, !driven)) {
+      const pending = batch.map((block) => {
+        const call: ToolCall = { name: block.name, arguments: block.input };
+        toolCalls.push(call);
+        onToolUpdate?.(state.turnCount, toolCalls, toolResults, textContent, turnTelemetry);
+        // Track the call signature for doom-loop detection (see after the loop).
+        toolCallLog.push(toolCallSignature(call.name, call.arguments));
+        if (toolCallLog.length > 12) toolCallLog.shift();
 
-      // JIT rule injection: match atomic DO/DON'T rules against THIS action (the
-      // tool + its input + the file it edits + the phase) and collect any fresh
-      // ones to inject with the tool results below. Feature-gated (default OFF).
-      if (features.ruleInjection) {
-        const args = (call.arguments ?? {}) as Record<string, unknown>;
-        const editedPath = typeof args.path === "string" ? args.path : undefined;
-        const matched = selectRules(
-          SECURITY_RULES,
-          {
-            phase: derivePhase(),
-            toolName: call.name,
-            toolInput: (() => {
-              try {
-                return JSON.stringify(call.arguments);
-              } catch {
-                return String(call.arguments);
-              }
-            })(),
-            ...(editedPath ? { editedPath } : {}),
-          },
-          injectedRuleIds,
-        );
-        for (const m of matched) {
-          if (!turnRuleMatches.some((x) => x.id === m.id)) turnRuleMatches.push(m);
-          injectedRuleIds.add(m.id);
-        }
-      }
-
-      // Correlation id for this single invocation — threaded into the executor
-      // so any `tool_artifact` it persists carries the same key, and recorded
-      // on the action-log entry below.
-      const correlationId = newCorrelationId();
-      const toolStartedAt = Date.now();
-
-      // Bus event: tool_call_started. `args_preview` is a short, safe
-      // rendering of the tool invocation suitable for dashboard UI.
-      let argsPreview: string;
-      try {
-        argsPreview = toolCallPreview(call).slice(0, 200);
-      } catch {
-        argsPreview = block.name;
-      }
-      eventBus.emit("tool_call_started", {
-        tool: block.name,
-        turn: state.turnCount,
-        args_preview: argsPreview,
-        ts: toolStartedAt,
-      });
-
-      // Shadow journal: record the tool call (#494). `block.id` is the native
-      // tool_use id; reuse it as the callId so the matching tool_result entry
-      // joins to this call during rehydration.
-      shadowJournal.append({
-        kind: "tool_call",
-        tool: block.name,
-        arguments: block.input as Record<string, unknown>,
-        turn: state.turnCount,
-        callId: block.id,
-      });
-
-      currentRunContribution()?.record("tool_call", { callId: block.id, correlationId, tool: call.name, arguments: call.arguments });
-      let toolResult: ToolResult;
-      try { toolResult = await executor.execute(call, { correlationId, signal: executionSignal, assertAuthority }); }
-      catch (error) {
-        currentRunContribution()?.record("tool_result", { callId: block.id, correlationId, tool: call.name, error: error instanceof Error ? error.message : String(error), durationMs: Date.now() - toolStartedAt });
-        throw error;
-      }
-      currentRunContribution()?.record("tool_result", { callId: block.id, correlationId, tool: call.name, result: toolResult, durationMs: Date.now() - toolStartedAt });
-      // Normalize a failed result to a NON-EMPTY, informative reason at the
-      // source (see the direct-driver path above): folds any captured exit
-      // code / stdout tail into `error` so the model, the action log, the
-      // shadow journal, the bus event, and the operator's TUI card all carry
-      // the real failure detail instead of an empty/`unknown` placeholder.
-      if (!toolResult.success) toolResult.error = toolFailureText(block.name, toolResult);
-      const toolEndedAt = Date.now();
-      toolResults.push(toolResult);
-      onToolUpdate?.(state.turnCount, toolCalls, toolResults, textContent, turnTelemetry);
-      actionLog.push(
-        buildToolCallLogEntry({
-          call,
-          correlationId,
-          startedAt: toolStartedAt,
-          endedAt: toolEndedAt,
-          result: { success: toolResult.success, error: toolResult.error },
-        }),
-      );
-
-      // Shadow journal: record the tool result (#494). Large outputs are
-      // sidecarred by the writer; here we only attach the raw output and let
-      // the writer's threshold logic decide. Errors are recorded too.
-      shadowJournal.append({
-        kind: "tool_result",
-        tool: block.name,
-        ok: toolResult.success,
-        ...(toolResult.success ? { output: toolResult.output } : { error: toolResult.error }),
-        turn: state.turnCount,
-        callId: block.id,
-      });
-
-      // Bus event: tool_call_completed.
-      eventBus.emit("tool_call_completed", {
-        tool: block.name,
-        turn: state.turnCount,
-        duration_ms: toolEndedAt - toolStartedAt,
-        status: toolResult.success ? "ok" : "error",
-        // `toolResult.error` is normalized non-empty on failure above; this
-        // `??` is now purely defensive and stays honest, never "unknown".
-        ...(toolResult.success ? {} : { error: toolResult.error ?? `${block.name} failed without an error message` }),
-        ts: toolEndedAt,
-      });
-
-      // Analytics (commands tier): consent-gated + redacted inside the
-      // pipeline; fire-and-forget so it can never break or slow an audit. The
-      // raw args/output go straight to the choke point, never onto the bus.
-      try {
-        analyticsPipeline.recordCommand({
-          tool: block.name,
-          args: block.input,
-          output: toolResult.success ? toolResult.output : toolResult.error,
-          status: toolResult.success ? "ok" : "error",
-          durationMs: toolEndedAt - toolStartedAt,
-          turn: state.turnCount,
-        });
-      } catch {
-        /* telemetry never breaks the tool path */
-      }
-
-      // Bus event: finding_ingested — fires whenever the agent successfully
-      // saves a finding so downstream sinks (cloud relay, dashboard) see the
-      // finding at creation time rather than waiting for the final report.
-      // `input.confidence` is the hybrid value the `save_finding` tool
-      // stamped back onto the call args (LLM self-report clamped UP to a
-      // PoC-status floor — see agent/finding-confidence.ts), not the raw
-      // LLM-reported number.
-      await publishSavedFinding(call, toolResult, inlineValidationNotes);
-
-      // Check if agent called done
-      if (block.name === "done" && toolResult.success) {
-        state.done = true;
-        state.summary = (toolResult.output as { summary: string }).summary;
-      }
-
-      // Preserve tool output exactly as returned when serializing model context.
-      const resultContent = toolResult.success
-        ? JSON.stringify(toolResult.output)
-        : `Error: ${toolResult.error}`;
-      // 0#567 — harvest reusable footholds from evidence-bearing tool
-      // results into the loot ledger. Done on the raw output and only for tools whose
-      // output reflects target data — never our own trusted bookkeeping
-      // results (save_finding / query_findings / use_loot / done). Best-effort:
-      // a harvest failure must never abort the agent loop.
-      if (loot && toolResult.success && shouldHarvestLoot(block.name)) {
-        try {
-          const harvested = loot.harvest(resultContent, block.name, state.turnCount);
-          // 0#771 — if any newly-harvested value matches a credential a
-          // PRIOR scan recovered from a DIFFERENT source target, that's a
-          // cross-target reuse → emit a `credential_shared` journal entry. No-op
-          // when trustGraph is not opted in. Best-effort: never abort the loop.
-          if (trustGraph && harvested.length > 0) {
-            try {
-              trustGraph.noteHarvest(harvested, state.turnCount);
-            } catch {
-              /* credential_shared emit is best-effort */
-            }
+        // JIT rule injection: match atomic DO/DON'T rules against THIS action (the
+        // tool + its input + the file it edits + the phase) and collect any fresh
+        // ones to inject with the tool results below. Feature-gated (default OFF).
+        if (features.ruleInjection) {
+          const args = (call.arguments ?? {}) as Record<string, unknown>;
+          const editedPath = typeof args.path === "string" ? args.path : undefined;
+          const matched = selectRules(
+            SECURITY_RULES,
+            {
+              phase: derivePhase(),
+              toolName: call.name,
+              toolInput: (() => {
+                try {
+                  return JSON.stringify(call.arguments);
+                } catch {
+                  return String(call.arguments);
+                }
+              })(),
+              ...(editedPath ? { editedPath } : {}),
+            },
+            injectedRuleIds,
+          );
+          for (const m of matched) {
+            if (!turnRuleMatches.some((x) => x.id === m.id)) turnRuleMatches.push(m);
+            injectedRuleIds.add(m.id);
           }
-        } catch {
-          /* harvesting is best-effort */
         }
-      }
-      toolResultBlocks.push({
-        type: "tool_result",
-        tool_use_id: block.id,
-        content: resultContent,
-        is_error: !toolResult.success,
+
+        // Correlation id for this single invocation — threaded into the executor
+        // so any `tool_artifact` it persists carries the same key, and recorded
+        // on the action-log entry below.
+        const correlationId = newCorrelationId();
+        const toolStartedAt = Date.now();
+
+        // Bus event: tool_call_started. `args_preview` is a short, safe
+        // rendering of the tool invocation suitable for dashboard UI.
+        let argsPreview: string;
+        try {
+          argsPreview = toolCallPreview(call).slice(0, 200);
+        } catch {
+          argsPreview = block.name;
+        }
+        eventBus.emit("tool_call_started", {
+          tool: block.name,
+          turn: state.turnCount,
+          args_preview: argsPreview,
+          ts: toolStartedAt,
+        });
+
+        // Shadow journal: record the tool call (#494). `block.id` is the native
+        // tool_use id; reuse it as the callId so the matching tool_result entry
+        // joins to this call during rehydration.
+        shadowJournal.append({
+          kind: "tool_call",
+          tool: block.name,
+          arguments: block.input as Record<string, unknown>,
+          turn: state.turnCount,
+          callId: block.id,
+        });
+
+        currentRunContribution()?.record("tool_call", { callId: block.id, correlationId, tool: call.name, arguments: call.arguments });
+        const execution = executor.execute(call, { correlationId, signal: executionSignal, assertAuthority })
+          .then((toolResult) => ({ toolResult, toolEndedAt: Date.now() }));
+        return { block, call, correlationId, toolStartedAt, execution };
       });
+      // Drain every started call even if one throws, before crossing a stateful
+      // barrier or propagating an executor failure. No orphaned rejections.
+      const settled = await Promise.allSettled(pending.map((item) => item.execution));
+      let batchFailure: { error: unknown } | undefined;
+      for (const [index, item] of pending.entries()) {
+        const { block, call, correlationId, toolStartedAt } = item;
+        const outcome = settled[index];
+        if (outcome.status === "rejected") {
+          const error = outcome.reason;
+          currentRunContribution()?.record("tool_result", { callId: block.id, correlationId, tool: call.name, error: error instanceof Error ? error.message : String(error), durationMs: Date.now() - toolStartedAt });
+          batchFailure ??= { error };
+          continue;
+        }
+        const { toolResult, toolEndedAt } = outcome.value;
+        currentRunContribution()?.record("tool_result", { callId: block.id, correlationId, tool: call.name, result: toolResult, durationMs: toolEndedAt - toolStartedAt });
+        // Normalize a failed result to a NON-EMPTY, informative reason at the
+        // source (see the direct-driver path above): folds any captured exit
+        // code / stdout tail into `error` so the model, the action log, the
+        // shadow journal, the bus event, and the operator's TUI card all carry
+        // the real failure detail instead of an empty/`unknown` placeholder.
+        if (!toolResult.success) toolResult.error = toolFailureText(block.name, toolResult);
+        toolResults.push(toolResult);
+        onToolUpdate?.(state.turnCount, toolCalls, toolResults, textContent, turnTelemetry);
+        actionLog.push(
+          buildToolCallLogEntry({
+            call,
+            correlationId,
+            startedAt: toolStartedAt,
+            endedAt: toolEndedAt,
+            result: { success: toolResult.success, error: toolResult.error },
+          }),
+        );
+
+        // Shadow journal: record the tool result (#494). Large outputs are
+        // sidecarred by the writer; here we only attach the raw output and let
+        // the writer's threshold logic decide. Errors are recorded too.
+        shadowJournal.append({
+          kind: "tool_result",
+          tool: block.name,
+          ok: toolResult.success,
+          ...(toolResult.success ? { output: toolResult.output } : { error: toolResult.error }),
+          turn: state.turnCount,
+          callId: block.id,
+        });
+
+        // Bus event: tool_call_completed.
+        eventBus.emit("tool_call_completed", {
+          tool: block.name,
+          turn: state.turnCount,
+          duration_ms: toolEndedAt - toolStartedAt,
+          status: toolResult.success ? "ok" : "error",
+          // `toolResult.error` is normalized non-empty on failure above; this
+          // `??` is now purely defensive and stays honest, never "unknown".
+          ...(toolResult.success ? {} : { error: toolResult.error ?? `${block.name} failed without an error message` }),
+          ts: toolEndedAt,
+        });
+
+        // Analytics (commands tier): consent-gated + redacted inside the
+        // pipeline; fire-and-forget so it can never break or slow an audit. The
+        // raw args/output go straight to the choke point, never onto the bus.
+        try {
+          analyticsPipeline.recordCommand({
+            tool: block.name,
+            args: block.input,
+            output: toolResult.success ? toolResult.output : toolResult.error,
+            status: toolResult.success ? "ok" : "error",
+            durationMs: toolEndedAt - toolStartedAt,
+            turn: state.turnCount,
+          });
+        } catch {
+          /* telemetry never breaks the tool path */
+        }
+
+        // Bus event: finding_ingested — fires whenever the agent successfully
+        // saves a finding so downstream sinks (cloud relay, dashboard) see the
+        // finding at creation time rather than waiting for the final report.
+        // `input.confidence` is the hybrid value the `save_finding` tool
+        // stamped back onto the call args (LLM self-report clamped UP to a
+        // PoC-status floor — see agent/finding-confidence.ts), not the raw
+        // LLM-reported number.
+        await publishSavedFinding(call, toolResult, inlineValidationNotes);
+
+        // Check if agent called done
+        if (block.name === "done" && toolResult.success) {
+          state.done = true;
+          state.summary = (toolResult.output as { summary: string }).summary;
+        }
+
+        // Preserve tool output exactly as returned when serializing model context.
+        const resultContent = toolResult.success
+          ? JSON.stringify(toolResult.output)
+          : `Error: ${toolResult.error}`;
+        // 0#567 — harvest reusable footholds from evidence-bearing tool
+        // results into the loot ledger. Done on the raw output and only for tools whose
+        // output reflects target data — never our own trusted bookkeeping
+        // results (save_finding / query_findings / use_loot / done). Best-effort:
+        // a harvest failure must never abort the agent loop.
+        if (loot && toolResult.success && shouldHarvestLoot(block.name)) {
+          try {
+            const harvested = loot.harvest(resultContent, block.name, state.turnCount);
+            // 0#771 — if any newly-harvested value matches a credential a
+            // PRIOR scan recovered from a DIFFERENT source target, that's a
+            // cross-target reuse → emit a `credential_shared` journal entry. No-op
+            // when trustGraph is not opted in. Best-effort: never abort the loop.
+            if (trustGraph && harvested.length > 0) {
+              try {
+                trustGraph.noteHarvest(harvested, state.turnCount);
+              } catch {
+                /* credential_shared emit is best-effort */
+              }
+            }
+          } catch {
+            /* harvesting is best-effort */
+          }
+        }
+        toolResultBlocks.push({
+          type: "tool_result",
+          tool_use_id: block.id,
+          content: resultContent,
+          is_error: !toolResult.success,
+        });
+      }
+      if (batchFailure) throw batchFailure.error;
     }
 
     // Inline-validation notes (#554): append as text blocks to the SAME

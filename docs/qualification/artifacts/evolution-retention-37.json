@@ -1,0 +1,183 @@
+{
+  "schemaVersion": 1,
+  "contractDigest": "sha256:e8248ffb4c10470e0b20698be636c13fbcf786b8f441e3434822b81226ca1b7a",
+  "evidenceDigest": "sha256:4625dbdb09684bdd93de834a527ba6d1169cbcfd51a4c67ded0548fc918522ae",
+  "profileId": "synthetic-critical-panel",
+  "profileVersion": 1,
+  "protocolDigest": "sha256:30f0f887b00fd282cb0bb51281b5dedaf0ab52ebb8f9f0be6307f5a51ab8f268",
+  "comparisonDigest": "sha256:887bfa41565d5ab7dbacda49f5482a706b033088307ee5ec68c3e36f0fc5ada2",
+  "groups": [
+    {
+      "generationId": "aa",
+      "capabilityId": "old-critical",
+      "role": "retention",
+      "independentFamilies": 400,
+      "observations": 400,
+      "baselineRate": 0.75,
+      "candidateRate": 0.75,
+      "pairedDelta": 0,
+      "confidenceInterval": [
+        -0.17155325749530603,
+        0.17155325749530603
+      ],
+      "status": "pass"
+    },
+    {
+      "generationId": "aa",
+      "capabilityId": "new-capability",
+      "role": "adaptation",
+      "independentFamilies": 400,
+      "observations": 400,
+      "baselineRate": 0.75,
+      "candidateRate": 0.75,
+      "pairedDelta": 0,
+      "confidenceInterval": [
+        -0.17155325749530603,
+        0.17155325749530603
+      ],
+      "status": "pass"
+    },
+    {
+      "generationId": "aa",
+      "capabilityId": "safe-controls",
+      "role": "false-positive",
+      "independentFamilies": 400,
+      "observations": 400,
+      "baselineRate": 0,
+      "candidateRate": 0,
+      "pairedDelta": 0,
+      "confidenceInterval": [
+        -0.17155325749530603,
+        0.17155325749530603
+      ],
+      "status": "pass"
+    },
+    {
+      "generationId": "generation-2",
+      "capabilityId": "old-critical",
+      "role": "retention",
+      "independentFamilies": 400,
+      "observations": 400,
+      "baselineRate": 0.75,
+      "candidateRate": 0.75,
+      "pairedDelta": 0,
+      "confidenceInterval": [
+        -0.17155325749530603,
+        0.17155325749530603
+      ],
+      "status": "pass"
+    },
+    {
+      "generationId": "generation-2",
+      "capabilityId": "new-capability",
+      "role": "adaptation",
+      "independentFamilies": 400,
+      "observations": 400,
+      "baselineRate": 0.25,
+      "candidateRate": 0.75,
+      "pairedDelta": 0.5,
+      "confidenceInterval": [
+        0.32844674250469397,
+        0.671553257495306
+      ],
+      "status": "pass"
+    },
+    {
+      "generationId": "generation-2",
+      "capabilityId": "safe-controls",
+      "role": "false-positive",
+      "independentFamilies": 400,
+      "observations": 400,
+      "baselineRate": 0,
+      "candidateRate": 0,
+      "pairedDelta": 0,
+      "confidenceInterval": [
+        -0.17155325749530603,
+        0.17155325749530603
+      ],
+      "status": "pass"
+    },
+    {
+      "generationId": "regressor",
+      "capabilityId": "old-critical",
+      "role": "retention",
+      "independentFamilies": 400,
+      "observations": 400,
+      "baselineRate": 0.75,
+      "candidateRate": 0.25,
+      "pairedDelta": -0.5,
+      "confidenceInterval": [
+        -0.671553257495306,
+        -0.32844674250469397
+      ],
+      "status": "regression"
+    },
+    {
+      "generationId": "regressor",
+      "capabilityId": "new-capability",
+      "role": "adaptation",
+      "independentFamilies": 400,
+      "observations": 400,
+      "baselineRate": 0.25,
+      "candidateRate": 0.75,
+      "pairedDelta": 0.5,
+      "confidenceInterval": [
+        0.32844674250469397,
+        0.671553257495306
+      ],
+      "status": "pass"
+    },
+    {
+      "generationId": "regressor",
+      "capabilityId": "safe-controls",
+      "role": "false-positive",
+      "independentFamilies": 400,
+      "observations": 400,
+      "baselineRate": 0,
+      "candidateRate": 0,
+      "pairedDelta": 0,
+      "confidenceInterval": [
+        -0.17155325749530603,
+        0.17155325749530603
+      ],
+      "status": "pass"
+    }
+  ],
+  "generations": [
+    {
+      "id": "aa",
+      "arm": "aa",
+      "status": "qualified"
+    },
+    {
+      "id": "generation-2",
+      "arm": "candidate",
+      "status": "qualified"
+    },
+    {
+      "id": "regressor",
+      "arm": "regression-control",
+      "status": "rejected"
+    }
+  ],
+  "controls": {
+    "aaControlPassed": true,
+    "regressingControlDetected": true,
+    "aaRejected": 0,
+    "aaInconclusive": 0,
+    "candidateInconclusive": 0
+  },
+  "decision": "qualified",
+  "accounting": {
+    "observedCostUsd": 0.07200000000000478,
+    "estimatedCostUsd": 0,
+    "costUnknown": false,
+    "overBudget": false,
+    "workerExecutions": 7200,
+    "latencyP50Ms": 10,
+    "latencyP95Ms": 12,
+    "latencySamples": 7200
+  },
+  "limitation": "fixed predeclared independent-family study only; no adaptive-holdout validity, automatic promotion, or empirical benefit claim",
+  "evidenceKind": "deterministic-synthetic-controls-not-paid-security-benefit"
+}

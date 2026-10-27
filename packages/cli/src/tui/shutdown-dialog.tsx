@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
 import { useTheme } from "./theme-context.js";
-import { useSettings } from "./settings-store.js";
+import { useSettings } from "./use-settings.js";
 import { spinnerGlyph, UI_ANIMATION_INTERVAL_MS } from "./animations.js";
 import { Popup } from "./popup.js";
 

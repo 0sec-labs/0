@@ -1,0 +1,612 @@
+{
+  "evidenceKind": "deterministic-controller-control",
+  "mode": "null",
+  "productionDefaultsChanged": false,
+  "concurrency": 1,
+  "combinedPatches": false,
+  "maximumTotalSpendUsd": 1.6,
+  "report": {
+    "schemaVersion": 1,
+    "planDigest": "sha256:c5a903df9e6bae779142cb031df644425882c8cd9442674dd5a567cc57bc3982",
+    "trials": [
+      {
+        "seed": "control-1",
+        "arm": "width-one",
+        "parentId": "same-frozen-parent",
+        "width": 1,
+        "status": "completed",
+        "reason": null,
+        "proposals": 3,
+        "rejected": 1,
+        "duplicates": 1,
+        "workerExecutions": 14,
+        "retainedBytes": 932,
+        "charges": [
+          {
+            "id": "control-1:width-one:0:proposal",
+            "category": "proposal",
+            "actualUsd": 0.01
+          },
+          {
+            "id": "control-1:width-one:1:build",
+            "category": "build",
+            "actualUsd": 0.002
+          },
+          {
+            "id": "control-1:width-one:2:development",
+            "category": "compute",
+            "actualUsd": 0.02
+          },
+          {
+            "id": "control-1:width-one:3:proposal",
+            "category": "proposal",
+            "actualUsd": 0.01
+          },
+          {
+            "id": "control-1:width-one:4:proposal",
+            "category": "proposal",
+            "actualUsd": 0.01
+          },
+          {
+            "id": "control-1:width-one:5:build",
+            "category": "build",
+            "actualUsd": 0.002
+          },
+          {
+            "id": "control-1:width-one:6:final",
+            "category": "compute",
+            "actualUsd": 0.08
+          }
+        ],
+        "knownSpendUsd": 0.134,
+        "unknownCharges": 0,
+        "elapsedMs": 5,
+        "selectedDigest": "sha256:07e53a22d8ecea889a77b901601386d143e2ab402fc52dee4b3518062716ded1",
+        "final": {
+          "verifiedQuality": 0.75,
+          "falsePositives": 0,
+          "retentionPassed": true,
+          "evidenceValid": true,
+          "identity": {
+            "provider": "deterministic-control",
+            "resolvedModel": "none-controller-fixture-v1",
+            "modelVersionStatus": "pinned",
+            "sourceDigest": "sha256:859b9031340169ab0db6087c0a2b989ccdf436cb66ff6dab89e311fcac8989e9",
+            "imageDigest": "sha256:f8de05dc018abacced8c88b5d3c17cba1a4cd0102f50b1d8d79f925643c830bf",
+            "evaluatorDigest": "sha256:af92b95a080c353a59ced131fbf394ce8c9df6f33bd88c26368d784178b70585",
+            "decodingDigest": "sha256:7921ecde071acb088b762f1cc77acf8ead04729a4a80b848d3ecd3cc9ffc479c",
+            "harnessDigest": "sha256:07e53a22d8ecea889a77b901601386d143e2ab402fc52dee4b3518062716ded1"
+          }
+        }
+      },
+      {
+        "seed": "control-1",
+        "arm": "width-three",
+        "parentId": "same-frozen-parent",
+        "width": 3,
+        "status": "completed",
+        "reason": null,
+        "proposals": 3,
+        "rejected": 1,
+        "duplicates": 1,
+        "workerExecutions": 14,
+        "retainedBytes": 946,
+        "charges": [
+          {
+            "id": "control-1:width-three:0:proposal",
+            "category": "proposal",
+            "actualUsd": 0.01
+          },
+          {
+            "id": "control-1:width-three:1:build",
+            "category": "build",
+            "actualUsd": 0.002
+          },
+          {
+            "id": "control-1:width-three:2:development",
+            "category": "compute",
+            "actualUsd": 0.02
+          },
+          {
+            "id": "control-1:width-three:3:proposal",
+            "category": "proposal",
+            "actualUsd": 0.01
+          },
+          {
+            "id": "control-1:width-three:4:proposal",
+            "category": "proposal",
+            "actualUsd": 0.01
+          },
+          {
+            "id": "control-1:width-three:5:build",
+            "category": "build",
+            "actualUsd": 0.002
+          },
+          {
+            "id": "control-1:width-three:6:final",
+            "category": "compute",
+            "actualUsd": 0.08
+          }
+        ],
+        "knownSpendUsd": 0.134,
+        "unknownCharges": 0,
+        "elapsedMs": 5,
+        "selectedDigest": "sha256:07e53a22d8ecea889a77b901601386d143e2ab402fc52dee4b3518062716ded1",
+        "final": {
+          "verifiedQuality": 0.75,
+          "falsePositives": 0,
+          "retentionPassed": true,
+          "evidenceValid": true,
+          "identity": {
+            "provider": "deterministic-control",
+            "resolvedModel": "none-controller-fixture-v1",
+            "modelVersionStatus": "pinned",
+            "sourceDigest": "sha256:859b9031340169ab0db6087c0a2b989ccdf436cb66ff6dab89e311fcac8989e9",
+            "imageDigest": "sha256:f8de05dc018abacced8c88b5d3c17cba1a4cd0102f50b1d8d79f925643c830bf",
+            "evaluatorDigest": "sha256:af92b95a080c353a59ced131fbf394ce8c9df6f33bd88c26368d784178b70585",
+            "decodingDigest": "sha256:7921ecde071acb088b762f1cc77acf8ead04729a4a80b848d3ecd3cc9ffc479c",
+            "harnessDigest": "sha256:07e53a22d8ecea889a77b901601386d143e2ab402fc52dee4b3518062716ded1"
+          }
+        }
+      },
+      {
+        "seed": "control-2",
+        "arm": "width-three",
+        "parentId": "same-frozen-parent",
+        "width": 3,
+        "status": "completed",
+        "reason": null,
+        "proposals": 3,
+        "rejected": 1,
+        "duplicates": 1,
+        "workerExecutions": 14,
+        "retainedBytes": 946,
+        "charges": [
+          {
+            "id": "control-2:width-three:0:proposal",
+            "category": "proposal",
+            "actualUsd": 0.01
+          },
+          {
+            "id": "control-2:width-three:1:build",
+            "category": "build",
+            "actualUsd": 0.002
+          },
+          {
+            "id": "control-2:width-three:2:development",
+            "category": "compute",
+            "actualUsd": 0.02
+          },
+          {
+            "id": "control-2:width-three:3:proposal",
+            "category": "proposal",
+            "actualUsd": 0.01
+          },
+          {
+            "id": "control-2:width-three:4:proposal",
+            "category": "proposal",
+            "actualUsd": 0.01
+          },
+          {
+            "id": "control-2:width-three:5:build",
+            "category": "build",
+            "actualUsd": 0.002
+          },
+          {
+            "id": "control-2:width-three:6:final",
+            "category": "compute",
+            "actualUsd": 0.08
+          }
+        ],
+        "knownSpendUsd": 0.134,
+        "unknownCharges": 0,
+        "elapsedMs": 5,
+        "selectedDigest": "sha256:07e53a22d8ecea889a77b901601386d143e2ab402fc52dee4b3518062716ded1",
+        "final": {
+          "verifiedQuality": 0.75,
+          "falsePositives": 0,
+          "retentionPassed": true,
+          "evidenceValid": true,
+          "identity": {
+            "provider": "deterministic-control",
+            "resolvedModel": "none-controller-fixture-v1",
+            "modelVersionStatus": "pinned",
+            "sourceDigest": "sha256:859b9031340169ab0db6087c0a2b989ccdf436cb66ff6dab89e311fcac8989e9",
+            "imageDigest": "sha256:f8de05dc018abacced8c88b5d3c17cba1a4cd0102f50b1d8d79f925643c830bf",
+            "evaluatorDigest": "sha256:af92b95a080c353a59ced131fbf394ce8c9df6f33bd88c26368d784178b70585",
+            "decodingDigest": "sha256:7921ecde071acb088b762f1cc77acf8ead04729a4a80b848d3ecd3cc9ffc479c",
+            "harnessDigest": "sha256:07e53a22d8ecea889a77b901601386d143e2ab402fc52dee4b3518062716ded1"
+          }
+        }
+      },
+      {
+        "seed": "control-2",
+        "arm": "width-one",
+        "parentId": "same-frozen-parent",
+        "width": 1,
+        "status": "completed",
+        "reason": null,
+        "proposals": 3,
+        "rejected": 1,
+        "duplicates": 1,
+        "workerExecutions": 14,
+        "retainedBytes": 932,
+        "charges": [
+          {
+            "id": "control-2:width-one:0:proposal",
+            "category": "proposal",
+            "actualUsd": 0.01
+          },
+          {
+            "id": "control-2:width-one:1:build",
+            "category": "build",
+            "actualUsd": 0.002
+          },
+          {
+            "id": "control-2:width-one:2:development",
+            "category": "compute",
+            "actualUsd": 0.02
+          },
+          {
+            "id": "control-2:width-one:3:proposal",
+            "category": "proposal",
+            "actualUsd": 0.01
+          },
+          {
+            "id": "control-2:width-one:4:proposal",
+            "category": "proposal",
+            "actualUsd": 0.01
+          },
+          {
+            "id": "control-2:width-one:5:build",
+            "category": "build",
+            "actualUsd": 0.002
+          },
+          {
+            "id": "control-2:width-one:6:final",
+            "category": "compute",
+            "actualUsd": 0.08
+          }
+        ],
+        "knownSpendUsd": 0.134,
+        "unknownCharges": 0,
+        "elapsedMs": 5,
+        "selectedDigest": "sha256:07e53a22d8ecea889a77b901601386d143e2ab402fc52dee4b3518062716ded1",
+        "final": {
+          "verifiedQuality": 0.75,
+          "falsePositives": 0,
+          "retentionPassed": true,
+          "evidenceValid": true,
+          "identity": {
+            "provider": "deterministic-control",
+            "resolvedModel": "none-controller-fixture-v1",
+            "modelVersionStatus": "pinned",
+            "sourceDigest": "sha256:859b9031340169ab0db6087c0a2b989ccdf436cb66ff6dab89e311fcac8989e9",
+            "imageDigest": "sha256:f8de05dc018abacced8c88b5d3c17cba1a4cd0102f50b1d8d79f925643c830bf",
+            "evaluatorDigest": "sha256:af92b95a080c353a59ced131fbf394ce8c9df6f33bd88c26368d784178b70585",
+            "decodingDigest": "sha256:7921ecde071acb088b762f1cc77acf8ead04729a4a80b848d3ecd3cc9ffc479c",
+            "harnessDigest": "sha256:07e53a22d8ecea889a77b901601386d143e2ab402fc52dee4b3518062716ded1"
+          }
+        }
+      },
+      {
+        "seed": "control-3",
+        "arm": "width-one",
+        "parentId": "same-frozen-parent",
+        "width": 1,
+        "status": "completed",
+        "reason": null,
+        "proposals": 3,
+        "rejected": 1,
+        "duplicates": 1,
+        "workerExecutions": 14,
+        "retainedBytes": 932,
+        "charges": [
+          {
+            "id": "control-3:width-one:0:proposal",
+            "category": "proposal",
+            "actualUsd": 0.01
+          },
+          {
+            "id": "control-3:width-one:1:build",
+            "category": "build",
+            "actualUsd": 0.002
+          },
+          {
+            "id": "control-3:width-one:2:development",
+            "category": "compute",
+            "actualUsd": 0.02
+          },
+          {
+            "id": "control-3:width-one:3:proposal",
+            "category": "proposal",
+            "actualUsd": 0.01
+          },
+          {
+            "id": "control-3:width-one:4:proposal",
+            "category": "proposal",
+            "actualUsd": 0.01
+          },
+          {
+            "id": "control-3:width-one:5:build",
+            "category": "build",
+            "actualUsd": 0.002
+          },
+          {
+            "id": "control-3:width-one:6:final",
+            "category": "compute",
+            "actualUsd": 0.08
+          }
+        ],
+        "knownSpendUsd": 0.134,
+        "unknownCharges": 0,
+        "elapsedMs": 5,
+        "selectedDigest": "sha256:07e53a22d8ecea889a77b901601386d143e2ab402fc52dee4b3518062716ded1",
+        "final": {
+          "verifiedQuality": 0.75,
+          "falsePositives": 0,
+          "retentionPassed": true,
+          "evidenceValid": true,
+          "identity": {
+            "provider": "deterministic-control",
+            "resolvedModel": "none-controller-fixture-v1",
+            "modelVersionStatus": "pinned",
+            "sourceDigest": "sha256:859b9031340169ab0db6087c0a2b989ccdf436cb66ff6dab89e311fcac8989e9",
+            "imageDigest": "sha256:f8de05dc018abacced8c88b5d3c17cba1a4cd0102f50b1d8d79f925643c830bf",
+            "evaluatorDigest": "sha256:af92b95a080c353a59ced131fbf394ce8c9df6f33bd88c26368d784178b70585",
+            "decodingDigest": "sha256:7921ecde071acb088b762f1cc77acf8ead04729a4a80b848d3ecd3cc9ffc479c",
+            "harnessDigest": "sha256:07e53a22d8ecea889a77b901601386d143e2ab402fc52dee4b3518062716ded1"
+          }
+        }
+      },
+      {
+        "seed": "control-3",
+        "arm": "width-three",
+        "parentId": "same-frozen-parent",
+        "width": 3,
+        "status": "completed",
+        "reason": null,
+        "proposals": 3,
+        "rejected": 1,
+        "duplicates": 1,
+        "workerExecutions": 14,
+        "retainedBytes": 946,
+        "charges": [
+          {
+            "id": "control-3:width-three:0:proposal",
+            "category": "proposal",
+            "actualUsd": 0.01
+          },
+          {
+            "id": "control-3:width-three:1:build",
+            "category": "build",
+            "actualUsd": 0.002
+          },
+          {
+            "id": "control-3:width-three:2:development",
+            "category": "compute",
+            "actualUsd": 0.02
+          },
+          {
+            "id": "control-3:width-three:3:proposal",
+            "category": "proposal",
+            "actualUsd": 0.01
+          },
+          {
+            "id": "control-3:width-three:4:proposal",
+            "category": "proposal",
+            "actualUsd": 0.01
+          },
+          {
+            "id": "control-3:width-three:5:build",
+            "category": "build",
+            "actualUsd": 0.002
+          },
+          {
+            "id": "control-3:width-three:6:final",
+            "category": "compute",
+            "actualUsd": 0.08
+          }
+        ],
+        "knownSpendUsd": 0.134,
+        "unknownCharges": 0,
+        "elapsedMs": 5,
+        "selectedDigest": "sha256:07e53a22d8ecea889a77b901601386d143e2ab402fc52dee4b3518062716ded1",
+        "final": {
+          "verifiedQuality": 0.75,
+          "falsePositives": 0,
+          "retentionPassed": true,
+          "evidenceValid": true,
+          "identity": {
+            "provider": "deterministic-control",
+            "resolvedModel": "none-controller-fixture-v1",
+            "modelVersionStatus": "pinned",
+            "sourceDigest": "sha256:859b9031340169ab0db6087c0a2b989ccdf436cb66ff6dab89e311fcac8989e9",
+            "imageDigest": "sha256:f8de05dc018abacced8c88b5d3c17cba1a4cd0102f50b1d8d79f925643c830bf",
+            "evaluatorDigest": "sha256:af92b95a080c353a59ced131fbf394ce8c9df6f33bd88c26368d784178b70585",
+            "decodingDigest": "sha256:7921ecde071acb088b762f1cc77acf8ead04729a4a80b848d3ecd3cc9ffc479c",
+            "harnessDigest": "sha256:07e53a22d8ecea889a77b901601386d143e2ab402fc52dee4b3518062716ded1"
+          }
+        }
+      },
+      {
+        "seed": "control-4",
+        "arm": "width-three",
+        "parentId": "same-frozen-parent",
+        "width": 3,
+        "status": "completed",
+        "reason": null,
+        "proposals": 3,
+        "rejected": 1,
+        "duplicates": 1,
+        "workerExecutions": 14,
+        "retainedBytes": 946,
+        "charges": [
+          {
+            "id": "control-4:width-three:0:proposal",
+            "category": "proposal",
+            "actualUsd": 0.01
+          },
+          {
+            "id": "control-4:width-three:1:build",
+            "category": "build",
+            "actualUsd": 0.002
+          },
+          {
+            "id": "control-4:width-three:2:development",
+            "category": "compute",
+            "actualUsd": 0.02
+          },
+          {
+            "id": "control-4:width-three:3:proposal",
+            "category": "proposal",
+            "actualUsd": 0.01
+          },
+          {
+            "id": "control-4:width-three:4:proposal",
+            "category": "proposal",
+            "actualUsd": 0.01
+          },
+          {
+            "id": "control-4:width-three:5:build",
+            "category": "build",
+            "actualUsd": 0.002
+          },
+          {
+            "id": "control-4:width-three:6:final",
+            "category": "compute",
+            "actualUsd": 0.08
+          }
+        ],
+        "knownSpendUsd": 0.134,
+        "unknownCharges": 0,
+        "elapsedMs": 5,
+        "selectedDigest": "sha256:07e53a22d8ecea889a77b901601386d143e2ab402fc52dee4b3518062716ded1",
+        "final": {
+          "verifiedQuality": 0.75,
+          "falsePositives": 0,
+          "retentionPassed": true,
+          "evidenceValid": true,
+          "identity": {
+            "provider": "deterministic-control",
+            "resolvedModel": "none-controller-fixture-v1",
+            "modelVersionStatus": "pinned",
+            "sourceDigest": "sha256:859b9031340169ab0db6087c0a2b989ccdf436cb66ff6dab89e311fcac8989e9",
+            "imageDigest": "sha256:f8de05dc018abacced8c88b5d3c17cba1a4cd0102f50b1d8d79f925643c830bf",
+            "evaluatorDigest": "sha256:af92b95a080c353a59ced131fbf394ce8c9df6f33bd88c26368d784178b70585",
+            "decodingDigest": "sha256:7921ecde071acb088b762f1cc77acf8ead04729a4a80b848d3ecd3cc9ffc479c",
+            "harnessDigest": "sha256:07e53a22d8ecea889a77b901601386d143e2ab402fc52dee4b3518062716ded1"
+          }
+        }
+      },
+      {
+        "seed": "control-4",
+        "arm": "width-one",
+        "parentId": "same-frozen-parent",
+        "width": 1,
+        "status": "completed",
+        "reason": null,
+        "proposals": 3,
+        "rejected": 1,
+        "duplicates": 1,
+        "workerExecutions": 14,
+        "retainedBytes": 932,
+        "charges": [
+          {
+            "id": "control-4:width-one:0:proposal",
+            "category": "proposal",
+            "actualUsd": 0.01
+          },
+          {
+            "id": "control-4:width-one:1:build",
+            "category": "build",
+            "actualUsd": 0.002
+          },
+          {
+            "id": "control-4:width-one:2:development",
+            "category": "compute",
+            "actualUsd": 0.02
+          },
+          {
+            "id": "control-4:width-one:3:proposal",
+            "category": "proposal",
+            "actualUsd": 0.01
+          },
+          {
+            "id": "control-4:width-one:4:proposal",
+            "category": "proposal",
+            "actualUsd": 0.01
+          },
+          {
+            "id": "control-4:width-one:5:build",
+            "category": "build",
+            "actualUsd": 0.002
+          },
+          {
+            "id": "control-4:width-one:6:final",
+            "category": "compute",
+            "actualUsd": 0.08
+          }
+        ],
+        "knownSpendUsd": 0.134,
+        "unknownCharges": 0,
+        "elapsedMs": 5,
+        "selectedDigest": "sha256:07e53a22d8ecea889a77b901601386d143e2ab402fc52dee4b3518062716ded1",
+        "final": {
+          "verifiedQuality": 0.75,
+          "falsePositives": 0,
+          "retentionPassed": true,
+          "evidenceValid": true,
+          "identity": {
+            "provider": "deterministic-control",
+            "resolvedModel": "none-controller-fixture-v1",
+            "modelVersionStatus": "pinned",
+            "sourceDigest": "sha256:859b9031340169ab0db6087c0a2b989ccdf436cb66ff6dab89e311fcac8989e9",
+            "imageDigest": "sha256:f8de05dc018abacced8c88b5d3c17cba1a4cd0102f50b1d8d79f925643c830bf",
+            "evaluatorDigest": "sha256:af92b95a080c353a59ced131fbf394ce8c9df6f33bd88c26368d784178b70585",
+            "decodingDigest": "sha256:7921ecde071acb088b762f1cc77acf8ead04729a4a80b848d3ecd3cc9ffc479c",
+            "harnessDigest": "sha256:07e53a22d8ecea889a77b901601386d143e2ab402fc52dee4b3518062716ded1"
+          }
+        }
+      }
+    ],
+    "comparison": [
+      {
+        "arm": "width-one",
+        "pairs": 4,
+        "medianQuality": 0.75,
+        "bestQuality": 0.75,
+        "pairedMeanQualityDelta": 0,
+        "pairedMeanDelta95": [
+          -1,
+          1
+        ],
+        "falsePositives": 0,
+        "retentionFailures": 0,
+        "inconclusives": 0,
+        "knownSpendUsd": 0.536,
+        "unknownCharges": 0,
+        "elapsedMs": 20
+      },
+      {
+        "arm": "width-three",
+        "pairs": 4,
+        "medianQuality": 0.75,
+        "bestQuality": 0.75,
+        "pairedMeanQualityDelta": 0,
+        "pairedMeanDelta95": [
+          -1,
+          1
+        ],
+        "falsePositives": 0,
+        "retentionFailures": 0,
+        "inconclusives": 0,
+        "knownSpendUsd": 0.536,
+        "unknownCharges": 0,
+        "elapsedMs": 20
+      }
+    ],
+    "decision": "retain-default",
+    "automaticPromotion": false
+  }
+}

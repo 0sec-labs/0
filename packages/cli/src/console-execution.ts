@@ -83,10 +83,8 @@ export function createIsolatedConsoleSession(
         if (realpathSync(context.workspaceRoot) !== approvedWorkspace) return [];
         const memory = hostMemory();
         return withLearning(service => {
-          const entries = service.importCodebaseNotes(learningProjectId(context.scopePath), context.scopePath, memory, 8);
-          return memory.recallCodebase(context.scopePath, 6).flatMap(note => {
+          return service.recallCodebaseNotes(learningProjectId(context.scopePath), context.scopePath, memory, 6).flatMap(note => {
             const sourceLinks = note.codebase!.files.map(file => ({ path: file.path, hash: file.digest }));
-            if (!entries.some(entry => entry.status === "current" && entry.summary === note.summary && JSON.stringify(entry.sourceLinks) === JSON.stringify(sourceLinks))) return [];
             const lesson = { title: note.title, summary: note.summary, sourceLinks: sourceLinks.map(link => ({ ...link, path: relative(context.workspaceRoot, resolve(context.scopePath, link.path)).split(sep).join("/") })) };
             try { return [validateWorkbenchSourceLesson(lesson, context.workspaceRoot, context.scopePath)]; } catch { return []; }
           });

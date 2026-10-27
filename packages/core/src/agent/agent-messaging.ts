@@ -165,12 +165,11 @@ export interface MessagingRuntime {
    *     treated as a trust boundary (like the parent) and may address any
    *     shape-valid, non-self peer id.
    *
-   *   - CHILD (sibling channel): the OTHER children in THIS spawn batch — the
-   *     discovery seed (a sibling can otherwise never learn a sibling's id) AND
-   *     the batch-scoping allow-list. When present, a child's sibling `to` must
-   *     be on this list IN ADDITION to matching {@link siblingPrefix}, so even
-   *     though the `<scanId>-sub-` prefix is scan-wide a child can never reach a
-   *     sibling from another batch. When absent, the sibling check falls back to
+   *   - CHILD (sibling channel): explicit peers, either pinned to the spawn batch
+   *     or supplied dynamically from live siblings under the same coordinator.
+   *     This is both the discovery roster and the addressing allow-list. A
+   *     child's sibling `to` must be listed IN ADDITION to matching
+   *     {@link siblingPrefix}. When absent, the sibling check falls back to
    *     the prefix guard alone (backward-compatible with a runtime that never
    *     seeded a batch roster). Never consulted for the parent/operator branches
    *     of a child verdict — only the sibling branch reads it.
