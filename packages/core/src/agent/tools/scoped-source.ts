@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync, type Dirent } from "node:fs";
+import { closeSync, constants, fstatSync, openSync, readdirSync, read, readFile, statSync, type Dirent } from "node:fs";
 import { join, relative } from "node:path";
 import { resolveScopedPath } from "./scope-path.js";
 
@@ -70,6 +70,55 @@ function collectScopedFiles(scopePath: string, requestedPath: string | undefined
   return { root, files, truncated };
 }
 
+async function readBoundedDescriptor(fd: number, maxBytes: number, signal?: AbortSignal): Promise<string> {
+  // Reserve one sentinel byte so growth after fstat cannot bypass the search cap.
+  const buffer = Buffer.alloc(maxBytes + 1);
+  let length = 0;
+  while (length < buffer.length) {
+    signal?.throwIfAborted();
+    const bytes = await new Promise<number>((resolve, reject) => {
+      read(fd, buffer, length, buffer.length - length, length, (error, bytesRead) => {
+        if (error) reject(error);
+        else resolve(bytesRead);
+      });
+    });
+    signal?.throwIfAborted();
+    if (bytes === 0) break;
+    length += bytes;
+    if (length > maxBytes) throw new Error("source file exceeds searched-byte limit");
+  }
+  return buffer.subarray(0, length).toString("utf8");
+}
+
+/** Resolve and open without yielding, then read the selected inode asynchronously.
+ * A concurrent tool replacing the pathname or an ancestor cannot redirect the
+ * pending read. Directory traversal remains synchronous for the same reason.
+ */
+export async function readScopedFile(
+  scopePath: string | undefined,
+  requestedPath: string,
+  options: { signal?: AbortSignal; maxBytes?: number } = {},
+): Promise<string> {
+  options.signal?.throwIfAborted();
+  const path = resolveScopedPath(scopePath, requestedPath);
+  const fd = openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  try {
+    if (options.maxBytes !== undefined && fstatSync(fd).size > options.maxBytes) {
+      throw new Error("source file exceeds searched-byte limit");
+    }
+    const content = options.maxBytes !== undefined
+      ? await readBoundedDescriptor(fd, options.maxBytes, options.signal)
+      : await new Promise<string>((resolve, reject) => {
+        readFile(fd, { encoding: "utf8", signal: options.signal }, (error, value) => {
+          if (error) reject(error);
+          else resolve(value);
+        });
+      });
+    options.signal?.throwIfAborted();
+    return content;
+  } finally { closeSync(fd); }
+}
+
 export function listScopedFiles(
   scopePath: string,
   args: Record<string, unknown>,
@@ -83,14 +132,16 @@ export function listScopedFiles(
   };
 }
 
-export function searchScopedFiles(
+export async function searchScopedFiles(
   scopePath: string,
   args: Record<string, unknown>,
-): {
+  signal?: AbortSignal,
+): Promise<{
   matches: Array<{ path: string; line: number; content: string }>;
   truncated: boolean;
   skippedFiles: number;
-} {
+}> {
+  signal?.throwIfAborted();
   const query = typeof args.query === "string" ? args.query : "";
   if (query.length === 0 || query.length > 256) {
     throw new Error("query must be between 1 and 256 characters");
@@ -105,16 +156,14 @@ export function searchScopedFiles(
   let skippedFiles = 0;
 
   for (const file of collected.files) {
+    signal?.throwIfAborted();
     if (matches.length >= maxResults) break;
 
     let content: string;
     try {
-      if (statSync(file).size > MAX_SEARCH_FILE_BYTES) {
-        skippedFiles += 1;
-        continue;
-      }
-      content = readFileSync(file, "utf8");
+      content = await readScopedFile(scopePath, file, { signal, maxBytes: MAX_SEARCH_FILE_BYTES });
     } catch {
+      signal?.throwIfAborted();
       skippedFiles += 1;
       continue;
     }

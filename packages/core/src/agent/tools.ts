@@ -137,7 +137,7 @@ import {
   JSFUCK_XSS_PAYLOAD,
 } from "./payloads.js";
 import { parsePatch, applyPatchOps } from "./apply-patch.js";
-import { listScopedFiles, searchScopedFiles } from "./tools/scoped-source.js";
+import { listScopedFiles, readScopedFile, searchScopedFiles } from "./tools/scoped-source.js";
 import {
   normalizeFindingTitle,
   levenshtein,
@@ -7700,7 +7700,7 @@ export class ToolExecutor {
     return { success: true, output: { message: `Finding ${id} updated to ${status}` } };
   }
 
-  private readFile(args: Record<string, unknown>): ToolResult {
+  private async readFile(args: Record<string, unknown>): Promise<ToolResult> {
     if (isScopeEnforcementEnabled() && !this.ctx.scopePath) {
       return {
         success: false,
@@ -7710,8 +7710,7 @@ export class ToolExecutor {
     }
 
     const requestedPath = args.path as string;
-    const path = resolveScopedPath(this.ctx.scopePath, requestedPath);
-    const raw = readFileSync(path, "utf-8");
+    const raw = await readScopedFile(this.ctx.scopePath, requestedPath, { signal: this._executionContext.getStore()?.signal });
 
     // Windowing + argument validation live in ./tools/read-file-window.ts so
     // the arithmetic is unit-testable without a ToolExecutor. `offset` is
@@ -7751,7 +7750,7 @@ export class ToolExecutor {
     return { success: true, output: listScopedFiles(this.ctx.scopePath ?? process.cwd(), args) };
   }
 
-  private searchFiles(args: Record<string, unknown>): ToolResult {
+  private async searchFiles(args: Record<string, unknown>): Promise<ToolResult> {
     if (isScopeEnforcementEnabled() && !this.ctx.scopePath) {
       return {
         success: false,
@@ -7760,7 +7759,7 @@ export class ToolExecutor {
       };
     }
 
-    return { success: true, output: searchScopedFiles(this.ctx.scopePath ?? process.cwd(), args) };
+    return { success: true, output: await searchScopedFiles(this.ctx.scopePath ?? process.cwd(), args, this._executionContext.getStore()?.signal) };
   }
 
   /**
