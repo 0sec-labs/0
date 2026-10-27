@@ -152,6 +152,19 @@ export async function searchScopedFiles(
   const caseSensitive = args.case_sensitive === true;
   const needle = caseSensitive ? query : query.toLocaleLowerCase();
   const collected = collectScopedFiles(scopePath, requestedPath, MAX_SEARCHED_FILES);
+  const rootIdentity = statSync(collected.root, { bigint: true });
+  // Keep the original authority across asynchronous content reads. Re-resolving
+  // a replaced scope path must never silently authorize a different directory.
+  const assertRootIdentity = (): void => {
+    try {
+      const currentRoot = resolveScopedPath(scopePath, ".");
+      const currentIdentity = statSync(currentRoot, { bigint: true });
+      if (currentRoot === collected.root
+        && currentIdentity.dev === rootIdentity.dev
+        && currentIdentity.ino === rootIdentity.ino) return;
+    } catch { /* Missing or inaccessible authority also invalidates the search. */ }
+    throw new Error("Allowed scope root changed during search");
+  };
   const matches: Array<{ path: string; line: number; content: string }> = [];
   let skippedFiles = 0;
 
@@ -161,9 +174,12 @@ export async function searchScopedFiles(
 
     let content: string;
     try {
+      assertRootIdentity();
       content = await readScopedFile(scopePath, file, { signal, maxBytes: MAX_SEARCH_FILE_BYTES });
+      assertRootIdentity();
     } catch {
       signal?.throwIfAborted();
+      assertRootIdentity();
       skippedFiles += 1;
       continue;
     }
@@ -186,6 +202,7 @@ export async function searchScopedFiles(
     }
   }
 
+  assertRootIdentity();
   return {
     matches,
     truncated: collected.truncated || matches.length >= maxResults,

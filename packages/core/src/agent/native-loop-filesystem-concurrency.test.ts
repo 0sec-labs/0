@@ -170,3 +170,37 @@ it("bounds a searched file that grows after the size check without returning par
   expect(io.bytesRead).toBe(256 * 1024 + 1);
   expect(io.descriptors.size).toBe(0);
 }, 10_000);
+
+it.each(["root", "above-root", "root-directory"])(
+  "fails the whole search when its approved %s identity changes during content I/O", async swap => {
+    root = realpathSync(mkdtempSync(join(tmpdir(), "0-real-tool-io-")));
+    const authority = join(root, "authority"), scope = join(authority, "scope"), outside = join(root, "outside");
+    mkdirSync(scope, { recursive: true }); mkdirSync(join(outside, "scope"), { recursive: true });
+    writeFileSync(join(scope, "read-0.txt"), "safe first file\n");
+    writeFileSync(join(scope, "read-1.txt"), "safe second file\n");
+    writeFileSync(join(outside, "read-1.txt"), "SECRET_OUTSIDE_ROOT_SENTINEL\n");
+    writeFileSync(join(outside, "scope", "read-1.txt"), "SECRET_OUTSIDE_ROOT_SENTINEL\n");
+    io.root = scope;
+    const started = new Promise<void>(resolve => { io.onStart = resolve; });
+    const result = withLocalSourceBoundary(scope, () => executor(scope).execute({ name: "search_files",
+      arguments: { query: "SECRET_OUTSIDE_ROOT_SENTINEL" } }));
+    await started;
+    if (swap === "above-root") {
+      renameSync(authority, join(root, "original-authority"));
+      symlinkSync(outside, authority, "dir");
+    } else {
+      renameSync(scope, join(authority, "original-scope"));
+      if (swap === "root") symlinkSync(outside, scope, "dir");
+      else {
+        mkdirSync(scope);
+        writeFileSync(join(scope, "read-1.txt"), "SECRET_OUTSIDE_ROOT_SENTINEL\n");
+      }
+    }
+    io.releases[0]!();
+    const outcome = await result;
+    expect(outcome.success, JSON.stringify(outcome)).toBe(false);
+    expect(outcome.error).toMatch(/scope.*root.*changed/i);
+    expect(JSON.stringify(outcome)).not.toContain("SECRET_OUTSIDE_ROOT_SENTINEL");
+    expect(io.descriptors.size).toBe(0);
+  }, 10_000,
+);
