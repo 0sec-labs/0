@@ -168,18 +168,25 @@ export function createWorkbenchProviderBroker(options: WorkbenchProviderBrokerOp
           },
           async pull(stream) {
             try {
-              const chunk = await abortable(reader.read(), signal);
-              if (chunk.done) {
-                const tail = redactor.push(decoder.decode(), true);
-                if (tail) stream.enqueue(encoder.encode(tail));
-                finish(); stream.close(); return;
+              // A decoder/redactor may withhold a whole chunk. Returning without
+              // enqueueing would strand a pending read: the stream cannot request
+              // another pull until this demand is satisfied or externally pushed.
+              for (;;) {
+                signal.throwIfAborted();
+                const chunk = await abortable(reader.read(), signal);
+                signal.throwIfAborted();
+                if (chunk.done) {
+                  const tail = redactor.push(decoder.decode(), true);
+                  if (tail) stream.enqueue(encoder.encode(tail));
+                  finish(); stream.close(); return;
+                }
+                bytes += chunk.value.byteLength; totalBytes += chunk.value.byteLength;
+                if (bytes > grant.limits.maxResponseBytes || totalBytes > grant.limits.maxTotalResponseBytes) {
+                  controller.abort(); return;
+                }
+                const safe = redactor.push(decoder.decode(chunk.value, { stream: true }));
+                if (safe) { stream.enqueue(encoder.encode(safe)); return; }
               }
-              bytes += chunk.value.byteLength; totalBytes += chunk.value.byteLength;
-              if (bytes > grant.limits.maxResponseBytes || totalBytes > grant.limits.maxTotalResponseBytes) {
-                controller.abort(); return;
-              }
-              const safe = redactor.push(decoder.decode(chunk.value, { stream: true }));
-              if (safe) stream.enqueue(encoder.encode(safe));
             } catch {
               void reader.cancel().catch(() => {}); finish();
               if (!signal.aborted) stream.error(new Error("Provider response stream failed"));

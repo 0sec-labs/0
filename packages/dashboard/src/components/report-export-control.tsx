@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Download } from "lucide-react";
-import { DropdownMenu } from "@cloudflare/kumo/components/dropdown";
+import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { useBackendApi } from "@/api";
 import { Button } from "./ui/button";
 

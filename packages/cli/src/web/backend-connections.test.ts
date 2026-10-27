@@ -177,4 +177,42 @@ describe("trusted backend registry", () => {
     expect(records.every(row => !row.cookie && !row.browserToken)).toBe(true);
     expect(records.filter(row => row.expected).map(row => [row.authorization, row.expected])).toEqual([[`Bearer ${"a".repeat(32)}`, "engine-a"], [`Bearer ${"b".repeat(32)}`, "engine-b"]]);
   });
+  it("blocks browser access to raw relay grants before any trusted backend request or local rewrite", async () => {
+    const { registry, call } = fixture(["sessions", "provider-relay"]);
+    const proxy = createServer(async (req, res) => {
+      try { const result = await handleBackendConnectionRequest(req, res, new URL(req.url!, "http://localhost"), registry); res.statusCode = result.localPath ? 299 : 200; res.end(); }
+      catch (error) { res.statusCode = (error as { statusCode?: number }).statusCode ?? 500; res.end(); }
+    });
+    servers.push(proxy);
+    await new Promise<void>(done => proxy.listen(0, "127.0.0.1", done));
+    const { port } = proxy.address() as { port: number };
+    for (const backend of ["remote", "local"]) for (const suffix of ["", "/grant-id/requests"]) {
+      const result = await fetch(`http://127.0.0.1:${port}/api/backends/${backend}/proxy/api/console/provider-relays${suffix}`);
+      expect(result.status).toBe(403);
+    }
+    expect(call).not.toHaveBeenCalled();
+  });
+  it("releases local grants only after successful remote session close/delete responses", async () => {
+    const { registry, call } = fixture(); await registry.handshake("remote");
+    let upstreamStatus = 409;
+    call.mockImplementation(async () => new Response(JSON.stringify({ ok: upstreamStatus === 200 }), { status: upstreamStatus, headers: { "Content-Type": "application/json", "X-0-Engine-ID": "engine-a" } }));
+    const released = vi.fn(async () => {});
+    const proxy = createServer(async (req, res) => {
+      try { await handleBackendConnectionRequest(req, res, new URL(req.url!, "http://localhost"), registry, released); }
+      catch (error) { res.statusCode = (error as { statusCode?: number }).statusCode ?? 500; res.end(); }
+    });
+    servers.push(proxy); await new Promise<void>(done => proxy.listen(0, "127.0.0.1", done));
+    const { port } = proxy.address() as { port: number };
+    const base = `http://127.0.0.1:${port}/api/backends/remote/proxy/api/console/sessions/chat`;
+    const rejected = await fetch(base, { method: "DELETE" }); await rejected.text();
+    expect(rejected.status).toBe(409); expect(released).not.toHaveBeenCalled();
+    upstreamStatus = 200;
+    const closed = await fetch(base, { method: "DELETE" }); await closed.text();
+    expect(closed.status).toBe(200); expect(released).toHaveBeenLastCalledWith("remote", "chat");
+    const deleted = await fetch(`${base}/delete`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }); await deleted.text();
+    expect(deleted.status).toBe(200); expect(released).toHaveBeenCalledTimes(2);
+    const unrelated = await fetch(`${base}/configuration`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: "{}" }); await unrelated.text();
+    expect(released).toHaveBeenCalledTimes(2);
+  });
+
 });

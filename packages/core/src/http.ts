@@ -43,6 +43,24 @@ function isLocalHost(hostname: string): boolean {
   return name === "localhost" || name.endsWith(".localhost") || isPrivateAddress(name);
 }
 
+/** Host-owned opt-in for exact local development origins; never a tool argument. */
+export function isAllowedLocalOrigin(input: string | URL): boolean {
+  let candidate: URL;
+  try { candidate = new URL(input); } catch { return false; }
+  if (!["http:", "https:"].includes(candidate.protocol)
+    || !["127.0.0.1", "[::1]"].includes(candidate.hostname)
+    || candidate.username || candidate.password) return false;
+  return (process.env["ZERO_ALLOWED_LOCAL_ORIGINS"] ?? "").split(",").some(raw => {
+    try {
+      const grant = new URL(raw.trim());
+      return ["http:", "https:"].includes(grant.protocol)
+        && ["127.0.0.1", "[::1]"].includes(grant.hostname)
+        && !grant.username && !grant.password && grant.pathname === "/"
+        && !grant.search && !grant.hash && grant.origin === candidate.origin;
+    } catch { return false; }
+  });
+}
+
 function httpBase(policy: ScopedHttpPolicy): URL | undefined {
   if (isScopeEnforcementEnabled() && !policy.allowPublicNetwork) return new URL(policy.baseUrl);
   try {
@@ -61,7 +79,7 @@ function authorizeHttpUrl(input: string, policy: ScopedHttpPolicy): URL {
     throw new Error("Only HTTP(S) requests are supported");
   }
   if (url.username || url.password) throw new Error("URL-embedded credentials are not supported");
-  if (isLocalHost(url.hostname) && (!base || !isLocalHost(base.hostname))) {
+  if (isLocalHost(url.hostname) && (!base || !isLocalHost(base.hostname)) && !isAllowedLocalOrigin(url)) {
     throw new Error(`Local/internal HTTP request blocked: ${url.hostname}`);
   }
   if (isScopeEnforcementEnabled() && policy.deniedHosts?.has(normalizeScopeHostname(url.hostname))) {
@@ -70,7 +88,7 @@ function authorizeHttpUrl(input: string, policy: ScopedHttpPolicy): URL {
   if (policy.scope) {
     const verdict = policy.scope.enforce(url.href)
     if (!verdict.allowed) throw new Error(`Scope violation blocked: ${verdict.reason}`);
-  } else if (isScopeEnforcementEnabled() && !policy.allowPublicNetwork && url.origin !== base!.origin) {
+  } else if (isScopeEnforcementEnabled() && !policy.allowPublicNetwork && url.origin !== base!.origin && !isAllowedLocalOrigin(url)) {
     throw new Error(`Cross-origin HTTP request blocked: ${url.origin}`);
   }
   policy.validateUrl?.(url.href);
@@ -80,7 +98,8 @@ function authorizeHttpUrl(input: string, policy: ScopedHttpPolicy): URL {
 function authorizeAddress(url: URL, address: string, policy: ScopedHttpPolicy): void {
   if (!isIP(address)) throw new Error("DNS returned an invalid IP address");
   const base = httpBase(policy);
-  if (isPrivateAddress(address) && (!base || !isLocalHost(base.hostname))) {
+  if (isPrivateAddress(address) && (!base || !isLocalHost(base.hostname))
+    && !(isAllowedLocalOrigin(url) && address === url.hostname.replace(/^\[|\]$/g, ""))) {
     throw new Error(`Local/internal DNS address blocked for ${url.hostname}`);
   }
   if (!isScopeEnforcementEnabled() || (!policy.scope?.raw.out_of_scope?.length && !policy.deniedHosts?.size)) return;

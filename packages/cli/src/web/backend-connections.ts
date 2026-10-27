@@ -297,7 +297,7 @@ function attachmentHeaders(headers: Headers): Record<string, string> {
 
 function json(res: ServerResponse, status: number, value: unknown) { res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" }); res.end(JSON.stringify(value)); }
 /** Call only after local origin and control-token authorization. Returns a local dispatch rewrite. */
-export async function handleBackendConnectionRequest(req: IncomingMessage, res: ServerResponse, url: URL, registry: BackendConnectionRegistry): Promise<{ handled: boolean; localPath?: string }> {
+export async function handleBackendConnectionRequest(req: IncomingMessage, res: ServerResponse, url: URL, registry: BackendConnectionRegistry, onSessionClosed?: (backendId: string, sessionId: string) => void | Promise<void>): Promise<{ handled: boolean; localPath?: string }> {
   if (url.pathname === "/api/backends") { if (req.method !== "GET") throw new BackendConnectionError("Backend registry is read-only.", 405); registry.reload(); json(res, 200, { backends: registry.list() }); return { handled: true }; }
   if (url.pathname === "/api/backend/handshake") { if (req.method !== "GET") throw new BackendConnectionError("Method not allowed.", 405); json(res, 200, (await registry.handshake("local")).handshake); return { handled: true }; }
   const removal = url.pathname.match(/^\/api\/backends\/([^/]+)$/);
@@ -312,6 +312,7 @@ export async function handleBackendConnectionRequest(req: IncomingMessage, res: 
   const id = decodeURIComponent(match[1]!);
   if (match[2] === "handshake") { if (req.method !== "GET") throw new BackendConnectionError("Method not allowed.", 405); json(res, 200, await registry.handshake(id)); return { handled: true }; }
   const path = apiPath(`${url.pathname.slice(url.pathname.indexOf("/proxy/") + "/proxy".length)}${url.search}`);
+  if (new URL(path, "http://backend.invalid").pathname.startsWith("/api/console/provider-relays")) throw new BackendConnectionError("Provider relay grants are managed by the local engine.", 403);
   if (id === "local") return { handled: false, localPath: path };
   const abort = new AbortController();
   const disconnect = () => abort.abort();
@@ -320,6 +321,8 @@ export async function handleBackendConnectionRequest(req: IncomingMessage, res: 
     const body = ["GET", "HEAD"].includes(req.method ?? "GET") ? undefined : await requestJson(req);
     const stream = req.headers.accept?.includes("text/event-stream") === true;
     const response = await registry.request(id, path, { method: req.method, body, stream, signal: abort.signal, lastEventId: typeof req.headers["last-event-id"] === "string" ? req.headers["last-event-id"] : undefined, requestId: typeof req.headers["x-0-request-id"] === "string" ? req.headers["x-0-request-id"] : undefined });
+    const closedSession = /^\/api\/console\/sessions\/([^/]+)(\/delete)?$/.exec(new URL(path, "http://backend.invalid").pathname);
+    if (response.ok && closedSession && ((req.method === "DELETE" && !closedSession[2]) || (req.method === "POST" && closedSession[2]))) await onSessionClosed?.(id, decodeURIComponent(closedSession[1]!));
     if (res.destroyed) return { handled: true };
     res.writeHead(response.status, { "Content-Type": response.headers.get("content-type") ?? "application/json", ...attachmentHeaders(response.headers), "Cache-Control": "no-store", "X-0-Request-ID": response.headers.get("x-0-request-id") ?? randomUUID(), ...(response.headers.get("x-0-engine-id") ? { "X-0-Engine-ID": response.headers.get("x-0-engine-id")! } : {}), "X-Content-Type-Options": "nosniff", ...(stream ? { "X-Accel-Buffering": "no" } : {}) });
     if (!response.body) { res.end(); return { handled: true }; }

@@ -21,14 +21,6 @@ export function registerHistoryCommand(program: Command): void {
     .option("--limit <n>", "Number of scans to show", "10")
     .action(async (opts: HistoryOptions) => {
       const limit = Number.parseInt(opts.limit ?? "10", 10);
-      const { isBunRuntime, canUseOpenTui } = await import("../tui/runtime.js");
-      if (opts.dbPath && isBunRuntime() && canUseOpenTui()) {
-        const { showOpenTuiHistory } = await import("../tui/run.js");
-        await showOpenTuiHistory({ dbPath: opts.dbPath, limit });
-        return;
-      }
-
-
       const dbPaths = opts.dbPath
         ? [opts.dbPath]
         : listOsecRunDatabasePaths();

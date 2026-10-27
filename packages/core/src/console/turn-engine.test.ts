@@ -29,7 +29,7 @@ import { LlmApiRuntime } from "../runtime/llm-api.js";
 import { eventBus, type SubagentLifecyclePayload } from "../events/bus.js";
 import { MAX_OUTPUT_CAP_CONTINUATIONS } from "../agent/native-loop.js";
 
-import { DEFAULT_SECURITY_WORKFLOW_PLAN, type SecurityWorkflow, type SecurityWorkflowInput } from "@0/shared";
+import { estimateCost, DEFAULT_SECURITY_WORKFLOW_PLAN, type SecurityWorkflow, type SecurityWorkflowInput } from "@0/shared";
 import { setWorkspaceHarnessTrust } from "../plugins/harness-trust.js";
 
 /**
@@ -195,8 +195,9 @@ describe("createConsoleSession", () => {
     expect(outcome.assistantText).toContain("Here is the payload.");
     expect(outcome.usage.inputTokens).toBe(10);
 
-    // The runtime saw the real native tool schemas (registry wired end-to-end).
-    expect(runtime.calls[0].tools.some((t) => t.name === "payload_lookup")).toBe(true);
+    // Specialist schemas are discoverable while legacy dispatch remains compatible.
+    expect(session.tools.some((t) => t.name === "payload_lookup")).toBe(true);
+    expect(runtime.calls[0].tools.some((t) => t.name === "list_tools")).toBe(true);
     // The second runtime call carried the tool_result back into history.
     const secondCallMessages = runtime.calls[1].messages;
     const hasToolResult = secondCallMessages.some((m) =>
@@ -1801,6 +1802,21 @@ describe("Console turn budget — token guard and iteration backstop", () => {
     expect(samples[samples.length - 1].turnTokensUsed).toBe(outcome.budget.tokensUsed);
   });
 
+  it("preserves cache token categories in per-call pricing reports without adding them to token totals twice", async () => {
+    const reported = { inputTokens: 1000, outputTokens: 100, cachedInputTokens: 800, cacheWriteTokens: 100 };
+    const samples: ConsoleUsageReport[] = [];
+    const session = createConsoleSession({ runtime: new ScriptedRuntime([{ ...endTurn("done"), usage: reported }]) });
+    const outcome = await session.send("go", { onUsage: sample => samples.push(sample) });
+    expect(samples).toHaveLength(1);
+    expect(samples[0]).toMatchObject(reported);
+    expect(samples[0].turnTokensUsed).toBe(1100);
+    expect(outcome.budget.tokensUsed).toBe(1100);
+    // The gateway prices this exact callback. Cache reads/writes are included
+    // in prompt tokens, and must not silently be charged at full input rates.
+    expect(estimateCost(samples[0], "gpt-5.6-sol")).toBeCloseTo(0.004525, 10);
+    expect(estimateCost(samples[0], "gpt-5.6-sol")).toBeLessThan(estimateCost({ inputTokens: 1000, outputTokens: 100 }, "gpt-5.6-sol"));
+  });
+
   it("counts usage a runtime reports only through the stream callback, without double-counting", async () => {
     // Some provider wires surface usage on the return value, some only through
     // `callbacks.onUsage`. Both must land in the budget exactly once.
@@ -1817,7 +1833,7 @@ describe("Console turn budget — token guard and iteration backstop", () => {
         callbacks?: NativeStreamCallbacks,
       ): Promise<NativeRuntimeResult> {
         // Usage arrives ONLY via the callback — never on the result.
-        callbacks?.onUsage?.({ inputTokens: 100, outputTokens: 10 });
+        callbacks?.onUsage?.({ inputTokens: 100, outputTokens: 10, cachedInputTokens: 75, cacheWriteTokens: 5 });
         this.turn += 1;
         if (this.turn === 1) {
           return {
@@ -1840,6 +1856,7 @@ describe("Console turn budget — token guard and iteration backstop", () => {
     expect(outcome.usage).toEqual({ inputTokens: 200, outputTokens: 20 });
     // And the engine emitted exactly one authoritative sample per model call.
     expect(samples).toHaveLength(2);
+    expect(samples.map(sample => [sample.cachedInputTokens, sample.cacheWriteTokens])).toEqual([[75, 5], [75, 5]]);
   });
 
   it("resumes cleanly from the existing history after a budget stop, re-running nothing", async () => {
@@ -3357,6 +3374,34 @@ describe("console executable self-extension permissions", () => {
 });
 
 describe("createConsoleSession — MCP deferred tool loading", () => {
+  it("keeps specialist built-ins discoverable and loads a batch on the next round", async () => {
+    const runtime = new ScriptedRuntime([
+      { content: [{ type: "tool_use", id: "load-specialists", name: "load_tool", input: { names: ["crawl", "submit_form"] } }], stopReason: "tool_use", durationMs: 1 },
+      endTurn("ready"),
+    ]);
+    const session = createConsoleSession({ runtime });
+    expect(session.tools.some(tool => tool.name === "crawl")).toBe(true);
+    const outcome = await session.send("prepare the web tools");
+    const first = runtime.calls[0]!.tools.map(tool => tool.name);
+    expect(first).toContain("http_request");
+    expect(first).toContain("load_tool");
+    expect(first).not.toContain("crawl");
+    expect(first).not.toContain("submit_form");
+    expect(first.length).toBeLessThan(30);
+    expect(outcome.toolCalls[0]!.result.success).toBe(true);
+    expect(runtime.calls[1]!.tools.map(tool => tool.name)).toEqual(expect.arrayContaining(["crawl", "submit_form"]));
+    const checkpoint = session.exportCheckpoint();
+    expect(checkpoint.loadedMcpTools).toEqual(["crawl", "submit_form"]);
+    await session.cleanup();
+    const resumedRuntime = new ScriptedRuntime([endTurn("resumed")]);
+    const resumed = createConsoleSession({ runtime: resumedRuntime, initialCheckpoint: checkpoint });
+    try {
+      await resumed.send("continue");
+      expect(resumedRuntime.calls[0]!.tools.map(tool => tool.name)).toEqual(expect.arrayContaining(["crawl", "submit_form"]));
+    } finally { await resumed.cleanup(); }
+
+  });
+
   // A stub MCP host exposing an arbitrary catalog. Only the methods the turn
   // engine + executor touch are implemented.
   function stubMcpHost(count: number): {
@@ -3406,6 +3451,8 @@ describe("createConsoleSession — MCP deferred tool loading", () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       mcpHost: stubMcpHost(15) as any,
     });
+    expect(session.tools.filter(tool => tool.name.startsWith("mcp__srv__"))).toHaveLength(15);
+    expect(new Set(session.tools.map(tool => tool.name)).size).toBe(session.tools.length);
     const outcome = await session.send("use the mcp tools");
     expect(outcome.stopReason).toBe("end_turn");
 
@@ -3429,9 +3476,11 @@ describe("createConsoleSession — MCP deferred tool loading", () => {
     const runtime = new ScriptedRuntime([endTurn("ok")]);
     const session = createConsoleSession({
       runtime,
+      tools: [],
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       mcpHost: stubMcpHost(3) as any,
     });
+    expect(session.tools.filter(tool => tool.name.startsWith("mcp__srv__"))).toHaveLength(3);
     await session.send("hi");
     const names = runtime.calls[0].tools.map((t) => t.name);
     // All three advertised directly; no control tools needed.
@@ -3856,6 +3905,39 @@ describe("console workflow draft authoring", () => {
   };
   const saved: SecurityWorkflow = { ...input, id: "workflow-fixture", revision: 1, createdAt: "2026-09-30T00:00:00Z", updatedAt: "2026-09-30T00:00:00Z" };
 
+  it("refreshes skill editor context after customizing a read-only source", async () => {
+    let current = { id: "builtin/source-review", name: "source-review", revision: "a".repeat(64), writable: false };
+    const runtime = new ScriptedRuntime([endTurn("Copied."), endTurn("Saved.")]);
+    const session = createConsoleSession({ runtime, refineObjective: false, skillEditor: { read: () => current } });
+    try {
+      await session.send("Customize the skill");
+      expect(runtime.calls[0]?.system).toContain('skill "builtin/source-review"');
+      expect(runtime.calls[0]?.system).toContain("copy_skill");
+      expect(runtime.calls[0]?.system).toContain("preserving all supporting resources");
+      current = { ...current, id: "workspace/custom-review", revision: "b".repeat(64), writable: true };
+      await session.send("Refine the instructions");
+      expect(runtime.calls[1]?.system).toContain('skill "workspace/custom-review"');
+      expect(runtime.calls[1]?.system).toContain("save_skill");
+      expect(runtime.calls[1]?.system).toContain("Skill edits never execute its scripts");
+    } finally { await session.cleanup(); }
+  });
+
+  it("refreshes bound workflow revision for ordinary chat edits without running it", async () => {
+    let current = saved;
+    const runtime = new ScriptedRuntime([endTurn("Updated."), endTurn("Updated again.")]);
+    const session = createConsoleSession({ runtime, refineObjective: false, workflowAuthoring: { list: () => [current], save: () => current, editor: { id: saved.id, read: () => current } } });
+    try {
+      await session.send("Rename the dependency step.");
+      expect(runtime.calls[0]?.system).toContain('workflow "workflow-fixture" at current revision 1');
+      expect(runtime.calls[0]?.system).toContain("ordinary chat messages describe changes to this workflow");
+      expect(runtime.calls[0]?.system).toContain("Editing never runs the workflow, enables a schedule");
+      current = { ...saved, revision: 2 };
+      await session.send("Also review lockfiles.");
+      expect(runtime.calls[1]?.system).toContain("current revision 2");
+      expect(runtime.calls[1]?.system).not.toContain("current revision 1");
+    } finally { await session.cleanup(); }
+  });
+
   it("uses real structured tool calls to save a draft without executing or granting permissions", async () => {
     const save = vi.fn((_input: SecurityWorkflowInput) => saved); const list = vi.fn(() => [saved]); const approval = vi.fn(async () => true);
     const runtime = new ScriptedRuntime([
@@ -3874,13 +3956,14 @@ describe("console workflow draft authoring", () => {
       expect(readResult && "content" in readResult ? readResult.content : "").toContain('"edges"');
       expect(readResult && "content" in readResult ? readResult.content : "").toContain('"allowedAgentTools":["read_file"]');
       expect(runtime.calls[0]?.system).toContain("workflow.instructions only for description notes");
-      const saveTool = runtime.calls[0]?.tools.find(tool => tool.name === "console_save_workflow");
-      expect(JSON.stringify(saveTool?.input_schema)).toContain('"execution"');
-      expect(JSON.stringify(saveTool?.input_schema)).toContain('"allowedAgentTools"');
+      const saveTool = session.tools.find(tool => tool.name === "console_save_workflow");
+      expect(JSON.stringify(saveTool?.parameters)).toContain('"execution"');
+      expect(JSON.stringify(saveTool?.parameters)).toContain('"allowedAgentTools"');
       expect(approval).not.toHaveBeenCalled();
       expect(session.scope).toBeUndefined();
       expect(session.localScopePath).toBeUndefined();
-      expect(runtime.calls[0]?.tools.map(tool => tool.name)).toEqual(expect.arrayContaining(["console_save_workflow", "console_list_workflows"]));
+      expect(session.tools.map(tool => tool.name)).toEqual(expect.arrayContaining(["console_save_workflow", "console_list_workflows"]));
+      expect(runtime.calls[0]?.tools.map(tool => tool.name)).not.toContain("console_save_workflow");
       expect(runtime.calls[0]?.system).toContain("Do not claim saving runs or schedules it");
       const result = runtime.calls[1]?.messages.flatMap(message => message.content).find(block => block.type === "tool_result");
       expect(result && "content" in result ? result.content : "").toContain('"executed":false');
@@ -3946,7 +4029,8 @@ describe("caller-owned workflow lifecycle tools", () => {
       await session.send("Run the repository review workflow");
       expect(invoke).toHaveBeenCalledWith("list_templates", {});
       expect(invoke).toHaveBeenCalledWith("start_run", { templateId: "repository-review", target: "/fixture" });
-      expect(runtime.calls[0]!.tools.map(tool => tool.name)).toEqual(expect.arrayContaining(["list_templates", "start_run", "get_run", "get_run_results", "cancel_run"]));
+      expect(session.tools.map(tool => tool.name)).toEqual(expect.arrayContaining(["list_templates", "start_run", "get_run", "get_run_results", "cancel_run"]));
+      expect(runtime.calls[0]!.tools.map(tool => tool.name)).not.toContain("start_run");
       expect(runtime.calls[0]!.system).toContain("queued requestId");
       const result = runtime.calls[2]!.messages.flatMap(message => message.content).find(block => block.type === "tool_result" && block.tool_use_id === "launch-1");
       expect(result && "content" in result ? result.content : "").toContain('"status":"queued"');

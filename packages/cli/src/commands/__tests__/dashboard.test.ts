@@ -909,6 +909,38 @@ describe("dashboard — web console API", () => {
     expect(JSON.parse(captured.body)).toEqual({ error: "Invalid or missing control token" });
   });
 
+  it("requires control-token authentication for live browser listings and streams", async () => {
+    const headers = { "x-0-control-token": await getControlToken() };
+    const created = await invokeHandler(makeRequest({ method: "POST", url: "/api/console/sessions", headers, body: {} }));
+    const id = JSON.parse(created.body).session.id;
+    const base = `/api/console/sessions/${id}/browser/views`;
+    for (const url of [base, `${base}/foreign/stream`]) {
+      const denied = await invokeHandler(makeRequest({ method: "GET", url }));
+      expect(denied.statusCode).toBe(403);
+    }
+    const listed = await invokeHandler(makeRequest({ method: "GET", url: base, headers }));
+    expect(listed.statusCode).toBe(200); expect(JSON.parse(listed.body)).toEqual({ views: [] });
+    const foreign = await invokeHandler(makeRequest({ method: "GET", url: `${base}/foreign/stream`, headers }));
+    expect(foreign.statusCode).toBe(404);
+    const queryToken = await invokeHandler(makeRequest({ method: "GET", url: `${base}?token=secret`, headers }));
+    expect(queryToken.statusCode).toBe(400);
+  });
+
+  it("guards queued send-now by control token and rejects replacement content", async () => {
+    const { ConsoleGateway } = await import("../../web/console-gateway.js");
+    const headers = { "x-0-control-token": await getControlToken() };
+    const created = await invokeHandler(makeRequest({ method: "POST", url: "/api/console/sessions", headers, body: {} }));
+    const session = JSON.parse(created.body).session;
+    const promote = vi.spyOn(ConsoleGateway.prototype, "sendQueuedNow").mockReturnValue(session);
+    const url = `/api/console/sessions/${session.id}/queue/queued-1/send`;
+    const denied = await invokeHandler(makeRequest({ method: "POST", url, body: {} }));
+    expect(denied.statusCode).toBe(403); expect(promote).not.toHaveBeenCalled();
+    const response = await invokeHandler(makeRequest({ method: "POST", url, headers, body: {} }));
+    expect(response.statusCode).toBe(202); expect(promote).toHaveBeenCalledWith(session.id, "queued-1");
+    const replacement = await invokeHandler(makeRequest({ method: "POST", url, headers, body: { text: "Replacement", mode: "steer" } }));
+    expect(replacement.statusCode).toBe(400); expect(promote).toHaveBeenCalledTimes(1);
+  });
+
   it("dispatches explicit connection reload through the control-token gate and rejects body overrides", async () => {
     const { ConsoleGateway, ConsoleGatewayError } = await import("../../web/console-gateway.js");
     const token = await getControlToken(); const headers = { "x-0-control-token": token };

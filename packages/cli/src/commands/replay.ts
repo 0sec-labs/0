@@ -77,17 +77,11 @@ export async function replayScan(opts: { dbPath?: string; scan?: string }): Prom
 export function registerReplayCommand(program: Command): void {
   program
     .command("replay")
-    .description("Replay the last scan's attack chain as an animated terminal sequence")
+    .description("Print a replay of the last scan's attack chain")
     .option("--db-path <path>", "Path to SQLite database")
     .option("--scan <scanId>", "Replay a specific scan by ID (default: last scan)")
     .action(async (opts) => {
       try {
-        const { isBunRuntime, canUseOpenTui } = await import("../tui/runtime.js");
-        if (isBunRuntime() && canUseOpenTui()) {
-          const { showOpenTuiReplay } = await import("../tui/run.js");
-          await showOpenTuiReplay({ dbPath: opts.dbPath as string | undefined, scanId: opts.scan as string | undefined });
-          return;
-        }
         await replayScan(opts);
       } catch (err) {
         console.error(

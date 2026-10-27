@@ -39,7 +39,7 @@ class RunBudget:
     the dynamic fuzz complement."""
 
     attempt_limit: int = 16
-    wall_clock_seconds: float = 300.0
+    wall_clock_seconds: float = float(os.environ.get("ZEROVERSE_BUDGET_SECONDS", "300"))
     unknown_sink_oracle_attempts: int = 4
     # The fuzz complement runs LAST, after the per-candidate oracle loop, and it
     # competes for the same pool. On a target with many static hypotheses the loop

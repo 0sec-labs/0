@@ -250,7 +250,6 @@ export function registerScanCommand(program: Command): void {
       "--no-waf-evasion",
       "Disable adaptive WAF-evasion retries",
     )
-    .option("--tui", "Open the terminal UI after the scan completes", false)
     .option(
       "--features <list>",
       "Comma-separated feature flags to enable, e.g. 'fp-moat'",
@@ -658,7 +657,6 @@ export function registerScanCommand(program: Command): void {
         egats: opts.egats as boolean | undefined,
         costCeilingUsd: plan?.costCapUsd ?? costCeilingUsd,
         rateLimit,
-        tui: opts.tui as boolean,
         scopeFile,
         allowScanners: opts.allowScanners as boolean | undefined,
         attributionHeaders: opts.attributionHeader as string[] | undefined,

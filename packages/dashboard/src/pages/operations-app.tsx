@@ -21,7 +21,6 @@ import { TeamSettingsPage } from "@/pages/team-settings-page";
 import { SkillsPage } from "@/pages/skills-page";
 import { WorkersPage } from "@/pages/workers-page";
 import { WebConsoleControlsPage } from "@/pages/console-controls-page";
-import type { ThemesResponse } from "@/components/console-control/contracts";
 
 function isTypingTarget(target: EventTarget | null): boolean {
   const element = target as HTMLElement | null;
@@ -29,7 +28,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 export function OperationsApp() {
-  const { client, getDashboard, getScans, webFetchJson } = useBackendApi();
+  const { client, getDashboard, getScans } = useBackendApi();
   const location = useLocation();
   const operationsVisible = /^\/(?:dashboard|operations|threads|findings|runs|scans|live)(?:\/|$)/.test(location.pathname);
   const searchReturnFocus = useRef<HTMLElement | null>(null);
@@ -38,47 +37,6 @@ export function OperationsApp() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const dashboardQuery = useQuery({ queryKey: ["dashboard", client.backendId], queryFn: getDashboard, enabled: operationsVisible || paletteOpen, refetchInterval: 5000 });
   const scansQuery = useQuery({ queryKey: ["scans", client.backendId], queryFn: getScans, enabled: operationsVisible || paletteOpen, refetchInterval: 5000 });
-  const themesQuery = useQuery({
-    queryKey: ["console-themes", client.backendId],
-    queryFn: ({ signal }) => webFetchJson<ThemesResponse>("/api/console/themes", { signal }),
-    refetchInterval: 5000,
-  });
-  useEffect(() => {
-    const theme = themesQuery.data?.themes.find((item) => item.name === themesQuery.data?.active);
-    if (!theme) return;
-    const root = document.documentElement;
-    const dark = theme.mode !== "light";
-    root.classList.toggle("dark", dark);
-    root.dataset.mode = dark ? "dark" : "light";
-    root.style.colorScheme = dark ? "dark" : "light";
-    const tokens: Record<string, string | undefined> = {
-      "--background": dark ? "#0b0b0c" : "#ffffff",
-      "--foreground": dark ? "#f4f4f5" : "#18181b",
-      "--card": dark ? "#141415" : "#ffffff",
-      "--card-foreground": dark ? "#f4f4f5" : "#18181b",
-      "--popover": dark ? "#19191b" : "#ffffff",
-      "--popover-foreground": dark ? "#f4f4f5" : "#18181b",
-      "--primary": "#f97316",
-      "--primary-text": dark ? "#fb923c" : "#c2410c",
-      "--primary-foreground": "#ffffff",
-      "--secondary": dark ? "#1b1b1e" : "#f4f4f5",
-      "--secondary-foreground": dark ? "#f4f4f5" : "#18181b",
-      "--muted": dark ? "#1b1b1e" : "#f4f4f5",
-      "--muted-foreground": dark ? "#a1a1aa" : "#62626a",
-      "--accent": dark ? "#222225" : "#f4f4f5",
-      "--accent-foreground": dark ? "#f4f4f5" : "#18181b",
-      "--border": dark ? "#29292d" : "#e4e4e7",
-      "--input": dark ? "#343439" : "#d4d4d8",
-      "--ring": "#f97316",
-      "--destructive": theme.palette.ERROR,
-      "--sidebar": dark ? "#111113" : "#fafafa",
-      "--sidebar-foreground": dark ? "#f4f4f5" : "#18181b",
-      "--sidebar-border": dark ? "#29292d" : "#e4e4e7",
-    };
-    for (const [token, value] of Object.entries(tokens)) {
-      if (value && CSS.supports("color", value)) root.style.setProperty(token, value);
-    }
-  }, [themesQuery.data]);
   const handleHotkey = useEffectEvent((event: KeyboardEvent) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
       event.preventDefault();
@@ -129,10 +87,11 @@ export function OperationsApp() {
           <Route path="/console" element={<ConsolePage />} />
           <Route path="/console/:sessionId" element={<ConsolePage />} />
           <Route path="/console/saved/:savedId" element={<SavedConversationPage />} />
-          {["setup", "connections", "models", "settings", "plugins", "doctor", "tools", "project", "fix"].map((route) => (
+          {["/setup", "/console/setup", "/console/onboarding"].map(path => <Route key={path} path={path} element={<Navigate to={{ pathname: "/onboarding", search: location.search, hash: location.hash }} replace />} />)}
+          {["onboarding", "connections", "models", "settings", "plugins", "doctor", "tools", "project", "fix"].map((route) => (
             <Route key={route} path={`/${route}`} element={<WebConsoleControlsPage />} />
           ))}
-          {["workflows", "audits", "launcher", "launch"].map(route => <Route key={route} path={`/${route}`} element={<WorkflowsPage />} />)}
+          {["automations", "workflows", "audits", "launcher", "launch"].map(route => <Route key={route} path={`/${route}`} element={<WorkflowsPage />} />)}
           <Route path="/api-access" element={<FindingsApiAccessPage />} />
           <Route path="/team" element={<TeamSettingsPage />} />
           <Route path="/skills" element={<SkillsPage />} />

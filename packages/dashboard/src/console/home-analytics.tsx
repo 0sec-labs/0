@@ -27,7 +27,7 @@ export function HomeAnalytics() {
   const loading = dashboard.isPending || sessions.isPending || saved.isPending;
   const refreshing = dashboard.isFetching || sessions.isFetching || saved.isFetching;
   const refresh = () => void Promise.all([dashboard.refetch(), sessions.refetch(), saved.refetch()]);
-  const linkClass = "group flex min-w-0 items-start justify-between gap-3 rounded-xl px-3 py-3 transition-colors hover:bg-muted/60 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 motion-reduce:transition-none";
+  const linkClass = "group flex min-w-0 items-start justify-between gap-3 rounded-[var(--radius-control)] px-3 py-3 transition-colors hover:bg-muted/60 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-foreground/40 motion-reduce:transition-none";
 
   return <section aria-labelledby="home-activity-heading" className="mx-auto w-full max-w-3xl space-y-8 px-6 py-12">
     <div className="flex items-center justify-between gap-3"><h2 id="home-activity-heading" className="text-lg font-medium">Workspace activity</h2><Button variant="ghost" size="icon-sm" aria-label="Refresh workspace activity" title="Refresh workspace activity" disabled={refreshing} onClick={refresh}><RefreshCcw className="size-4" /></Button></div>
@@ -50,7 +50,7 @@ export function HomeAnalytics() {
       <section className="space-y-3"><h3 className="flex items-center gap-2 text-sm font-medium"><Activity className="size-4 text-muted-foreground" />Agents and tasks</h3>
         {activeFindings.length === 0 && activeWorkers.length === 0 ? <p className="py-3 text-sm text-muted-foreground">No workflow tasks running right now.</p> : <div className="grid gap-2 sm:grid-cols-2">
           {activeFindings.slice(0, 4).map(group => <Link key={group.fingerprint} to={`/findings/${encodeURIComponent(group.fingerprint)}`} className={linkClass}><div className="min-w-0"><p className="truncate text-sm">{group.latest.title}</p><p className="mt-1 text-xs text-muted-foreground">{group.workflow.activeAgentRoles.length ? group.workflow.activeAgentRoles.join(", ") : "In progress"}</p></div><LoadingDots className="console-loading-dots-compact" /></Link>)}
-          {activeWorkers.slice(0, 4).map(worker => <div key={worker.id} className="rounded-xl px-3 py-3"><div className="flex items-center justify-between gap-3"><p className="truncate text-sm">{worker.label}</p><span className="text-xs capitalize text-muted-foreground">{worker.status}</span></div><p className="mt-1 truncate text-xs text-muted-foreground">{worker.currentWorkItemTitle ?? (worker.currentWorkItemId ? "Working on a workflow task" : "Worker is idle")}</p>{worker.lastError && <p className="mt-1 text-xs text-destructive">{worker.lastError}</p>}</div>)}
+          {activeWorkers.slice(0, 4).map(worker => <div key={worker.id} className="rounded-[var(--radius-panel)] px-3 py-3"><div className="flex items-center justify-between gap-3"><p className="truncate text-sm">{worker.label}</p><span className="text-xs capitalize text-muted-foreground">{worker.status}</span></div><p className="mt-1 truncate text-xs text-muted-foreground">{worker.currentWorkItemTitle ?? (worker.currentWorkItemId ? "Working on a workflow task" : "Worker is idle")}</p>{worker.lastError && <p className="mt-1 text-xs text-destructive">{worker.lastError}</p>}</div>)}
         </div>}
       </section>
     </>}
