@@ -319,6 +319,17 @@ mod tests {
     }
 
     #[test]
+    fn rejects_rsa_authorization_policy_before_key_decoding() {
+        let rsa_policy = POLICY.replace("ssh-ed25519", "ssh-rsa");
+        let error = verify_ed25519(MATERIAL, SIGNATURE, IDENTITY, NAMESPACE, &rsa_policy)
+            .expect_err("RSA policies are not an enabled authorization mechanism");
+        assert!(error.contains("not an exact Ed25519 key"));
+        assert!(
+            verify_private_key_identity(PRIVATE_KEY.as_bytes(), IDENTITY, &rsa_policy).is_err()
+        );
+    }
+
+    #[test]
     fn private_key_is_bound_to_exact_policy_identity() {
         verify_private_key_identity(PRIVATE_KEY.as_bytes(), IDENTITY, POLICY).unwrap();
         assert!(
