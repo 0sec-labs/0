@@ -4,6 +4,8 @@
  * the driver lifecycle and the scope-pinned network interceptor.
  */
 import { z } from "zod";
+import { randomUUID } from "node:crypto";
+import { registerBrowserView, unregisterBrowserView, type BrowserViewFrame } from "../browser-live.js";
 import type { JevEvaluator } from "@0/shared";
 import type { ScopePolicy } from "../../scope/scope.js";
 import type { ScopeEnforcementState } from "../../scope/activation.js";
@@ -124,6 +126,10 @@ export interface BrowserPage {
   /** PNG screenshot as base64 (no data: prefix). */
   screenshot(): Promise<string>;
   currentUrl(): string;
+  /** Display title only; optional for alternate drivers. */
+  title?(): Promise<string>;
+  currentTitle?(): string | undefined;
+  streamFrames?(onFrame: (frame: BrowserViewFrame) => void): Promise<() => void>;
   /** Dialogs (alert/confirm/prompt) captured since the last drain — the XSS signal. */
   drainDialogs(): string[];
   /** Console messages captured since the last drain. */
@@ -202,7 +208,14 @@ interface BackendBrowser {
   contexts(): BackendContext[];
   close(): Promise<void>;
 }
+export interface BrowserCDPSession {
+  send(method: string, params?: Record<string, unknown>): Promise<unknown>;
+  on(event: string, callback: (payload: any) => void): void;
+  off?(event: string, callback: (payload: any) => void): void;
+  detach(): Promise<void>;
+}
 interface BackendContext {
+  newCDPSession?(page: BackendPage): Promise<BrowserCDPSession>;
   newPage(): Promise<BackendPage>;
   /** Pages already open in the context (used only to count adopted operator tabs). */
   pages(): BackendPage[];
@@ -250,10 +263,11 @@ export const createBrowserDriver: BrowserDriverFactory = async (opts) => {
 // Optional Playwright backend; ToolExecutor supplies the scope-pinned interceptor.
 // ─────────────────────────────────────────────────────────────────────────────
 
-class PlaywrightPage implements BrowserPage {
+export class PlaywrightPage implements BrowserPage {
+  private displayTitle?: string;
   private dialogs: string[] = [];
   private console: string[] = [];
-  constructor(private readonly page: BackendPage) {
+  constructor(private readonly page: BackendPage, private readonly context?: BackendContext) {
     page.on("dialog", (d) => {
       const dialog = d as { type(): string; message(): string; dismiss(): Promise<void> };
       this.dialogs.push(`${dialog.type()}: ${dialog.message()}`);
@@ -270,7 +284,8 @@ class PlaywrightPage implements BrowserPage {
       timeout: opts.timeoutMs,
       waitUntil: opts.waitUntil ?? "domcontentloaded",
     });
-    return { url: this.page.url(), status: resp?.status() ?? null, title: await this.page.title() };
+    this.displayTitle = await this.page.title();
+    return { url: this.page.url(), status: resp?.status() ?? null, title: this.displayTitle };
   }
   async click(selector: string, opts: { timeoutMs: number }): Promise<void> {
     await this.page.click(selector, { timeout: opts.timeoutMs });
@@ -295,6 +310,25 @@ class PlaywrightPage implements BrowserPage {
   }
   currentUrl(): string {
     return this.page.url();
+  }
+  async title(): Promise<string> { this.displayTitle = await this.page.title(); return this.displayTitle; }
+  currentTitle(): string | undefined { return this.displayTitle; }
+  async streamFrames(onFrame: (frame: BrowserViewFrame) => void): Promise<() => void> {
+    if (!this.context?.newCDPSession) throw new Error("Chromium live capture is unavailable");
+    const cdp = await this.context.newCDPSession(this.page);
+    let stopped = false; let lastFrame = 0;
+    const receive = (frame: { sessionId: number; data: string; metadata?: { deviceWidth?: number; deviceHeight?: number } }) => {
+      // Chromium requires an ACK even when a frame is discarded or the viewer is slow.
+      void cdp.send("Page.screencastFrameAck", { sessionId: frame.sessionId }).catch(() => {});
+      const now = Date.now();
+      if (stopped || now - lastFrame < 83 || typeof frame.data !== "string" || frame.data.length > 2_800_000 || Buffer.byteLength(frame.data, "base64") > 2 * 1024 * 1024) return;
+      lastFrame = now;
+      onFrame({ data: frame.data, mimeType: "image/jpeg", width: frame.metadata?.deviceWidth, height: frame.metadata?.deviceHeight, capturedAt: new Date(now).toISOString() });
+    };
+    cdp.on("Page.screencastFrame", receive);
+    const stop = () => { if (stopped) return; stopped = true; cdp.off?.("Page.screencastFrame", receive); void cdp.send("Page.stopScreencast").catch(() => {}).finally(() => cdp.detach().catch(() => {})); };
+    try { await cdp.send("Page.startScreencast", { format: "jpeg", quality: 60, maxWidth: 960, maxHeight: 600, everyNthFrame: 2 }); } catch (error) { stop(); throw error; }
+    return stop;
   }
   drainDialogs(): string[] {
     const out = this.dialogs;
@@ -428,7 +462,13 @@ export class PlaywrightDriver implements BrowserDriver {
     const existing = this.tabs.get(name);
     if (existing) return existing;
     const ctx = await this.ensureContext();
-    const page = new PlaywrightPage(await ctx.newPage());
+    const backendPage = await ctx.newPage();
+    const page = new PlaywrightPage(backendPage, ctx);
+    backendPage.on("close", () => {
+      const pageId = browserIdentities.get(this)?.pages.get(name);
+      if (pageId) unregisterBrowserView(pageId);
+      if (this.tabs.get(name) === page) { this.tabs.delete(name); browserIdentities.get(this)?.pages.delete(name); }
+    });
     this.tabs.set(name, page);
     return page;
   }
@@ -440,6 +480,8 @@ export class PlaywrightDriver implements BrowserDriver {
   async closeTab(name: string): Promise<boolean> {
     const page = this.tabs.get(name);
     if (!page) return false;
+    const pageId = browserIdentities.get(this)?.pages.get(name);
+    if (pageId) unregisterBrowserView(pageId);
     this.tabs.delete(name);
     // The underlying BackendPage close is reached via the concrete page; the
     // interface intentionally hides it (callers close by name).
@@ -480,6 +522,8 @@ export class PlaywrightDriver implements BrowserDriver {
  * needs. ToolExecutor passes its context directly.
  */
 export interface BrowserToolContext {
+  scanId?: string;
+  workerTree?: { rootId: string };
   target: string;
   scope?: ScopePolicy;
   scopeEnforcement?: ScopeEnforcementState;
@@ -731,6 +775,32 @@ async function assistBrowser(page: BrowserPage, ctx: BrowserToolContext,
   return handoff("Routine step limit reached");
 }
 
+/** Best-effort UI snapshot after an authorized visual action; never model input. */
+const browserIdentities = new WeakMap<BrowserDriver, { sessionId: string; pages: Map<string, string> }>();
+function browserIdentity(driver: BrowserDriver) {
+  let identity = browserIdentities.get(driver);
+  if (!identity) { identity = { sessionId: randomUUID(), pages: new Map() }; browserIdentities.set(driver, identity); }
+  for (const tab of driver.listTabs()) if (!identity.pages.has(tab.name)) identity.pages.set(tab.name, randomUUID());
+  return identity;
+}
+
+async function actionPreview(page: BrowserPage, ctx: BrowserToolContext, deps: BrowserToolDeps): Promise<ToolResult["meta"]> {
+  try {
+    deps.signal?.throwIfAborted();
+    deps.assertAuthority?.();
+    const url = page.currentUrl();
+    if (!gateUrl(ctx, url).ok) return undefined;
+    const imageBase64 = await page.screenshot();
+    if (imageBase64.length > Math.ceil(2 * 1024 * 1024 / 3) * 4) return undefined;
+    const dims = pngDimensions(imageBase64);
+    if (!dims || Buffer.byteLength(imageBase64, "base64") > 2 * 1024 * 1024) return undefined;
+    return { kind: "image", image: { imageBase64, mimeType: "image/png", ...dims, caption: url } };
+  } catch {
+    // A display failure must not change an otherwise successful browser action.
+    return undefined;
+  }
+}
+
 /**
  * Route browser actions and gate navigation targets. Screenshot results retain
  * PNG base64 together with image metadata.
@@ -824,12 +894,27 @@ export async function executeBrowser(
     if (host) host.driver = driver;
   }
 
+  const identity = browserIdentity(driver);
+  const getPage = async () => {
+    const page = await driver.tab(tabName);
+    browserIdentity(driver);
+    const pageId = identity.pages.get(tabName)!;
+    const producerId = ctx.scanId;
+    if (producerId) {
+      const ownerId = ctx.workerTree?.rootId ?? producerId;
+      registerBrowserView(ownerId, pageId, () => ({ id: pageId, pageId, sessionId: identity.sessionId, producerId, tab: tabName, url: page.currentUrl(), title: page.currentTitle?.(), liveAvailable: !!page.streamFrames }),
+        () => gateUrl(ctx, page.currentUrl()).ok,
+        page.streamFrames ? callback => page.streamFrames!(callback) : undefined);
+    }
+    return page;
+  };
   try {
+    const runAction = async (): Promise<ToolResult> => {
     switch (action as BrowserAction) {
       case "observe":
-        return { success: true, output: await observeLinks(await driver.tab(tabName), ctx, deps) };
+        return { success: true, output: await observeLinks(await getPage(), ctx, deps) };
       case "assist": {
-        const page = await driver.tab(tabName);
+        const page = await getPage();
         if (!(driver instanceof PlaywrightDriver) || !driver.canAssist) {
           return { success: true, output: { handoff: true, steps: [],
             reason: "Assistance requires an isolated browser with service-worker and WebSocket blocking; attached sessions remain main-model controlled" } };
@@ -840,7 +925,7 @@ export async function executeBrowser(
         // Force the CDP connection now (ensureContext runs on first tab()) so a
         // bad endpoint surfaces here as a clear error, and open one fresh,
         // authenticated page the agent can immediately navigate (scope-gated).
-        await driver.tab(tabName);
+        await getPage();
         return {
           success: true,
           output: {
@@ -869,7 +954,7 @@ export async function executeBrowser(
 
       case "navigate": {
         const rawUrl = args.url as string;
-        const page = await driver.tab(tabName);
+        const page = await getPage();
         const nav = await page.goto(rawUrl, { timeoutMs });
         // Post-navigation redirect re-check (0#218): goto follows redirects,
         // so an in-scope URL that 302s off-origin must be refused before any
@@ -888,12 +973,13 @@ export async function executeBrowser(
             dialogs: page.drainDialogs(),
             console: page.drainConsole().slice(0, 20),
           },
+          meta: await actionPreview(page, ctx, deps),
         };
       }
 
       case "click": {
         const selector = args.selector as string;
-        const page = await driver.tab(tabName);
+        const page = await getPage();
         await page.click(selector, { timeoutMs });
         return {
           success: true,
@@ -904,20 +990,22 @@ export async function executeBrowser(
             dialogs: page.drainDialogs(),
             console: page.drainConsole().slice(0, 20),
           },
+          meta: await actionPreview(page, ctx, deps),
         };
       }
 
       case "type": {
         const selector = args.selector as string;
         const text = args.text as string;
-        const page = await driver.tab(tabName);
+        const page = await getPage();
         await page.type(selector, text, { timeoutMs });
-        return { success: true, output: { tab: tabName, filled: selector, dialogs: page.drainDialogs() } };
+        return { success: true, output: { tab: tabName, filled: selector, dialogs: page.drainDialogs() },
+          meta: await actionPreview(page, ctx, deps) };
       }
 
       case "eval": {
         const expression = args.value as string;
-        const page = await driver.tab(tabName);
+        const page = await getPage();
         const raw = await page.evaluate(expression).catch((e: Error) => `Error: ${e.message}`);
         const result = typeof raw === "object" ? safeStringify(raw) : String(raw);
         return {
@@ -927,7 +1015,7 @@ export async function executeBrowser(
       }
 
       case "get_content": {
-        const page = await driver.tab(tabName);
+        const page = await getPage();
         const { html, text } = await page.content();
         return {
           success: true,
@@ -942,7 +1030,7 @@ export async function executeBrowser(
       }
 
       case "screenshot": {
-        const page = await driver.tab(tabName);
+        const page = await getPage();
         const url = page.currentUrl();
         // Full base64 for the display-only image card (never sent to the model);
         // a bounded copy rides `output` for the model-facing string, as before.
@@ -972,6 +1060,28 @@ export async function executeBrowser(
     }
     // Exhaustive — every BrowserAction is handled above.
     return fail(`Unhandled browser action: ${action}`);
+    };
+    const result = await runAction();
+    // Observe already-owned tabs only. Never create a page for display metadata.
+    const tabs = driver.listTabs();
+    browserIdentity(driver);
+    const current = tabs.find(tab => tab.name === tabName);
+    let title: string | undefined;
+    if (current && gateUrl(ctx, current.url).ok) {
+      try { title = (await (await getPage()).title?.())?.slice(0, 500); } catch { /* Optional display metadata. */ }
+    }
+    const browser: NonNullable<ToolResult["meta"]>["browser"] = {
+      sessionId: identity.sessionId, tab: tabName,
+      ...(identity.pages.has(tabName) ? { pageId: identity.pages.get(tabName)! } : {}),
+      ...(current && gateUrl(ctx, current.url).ok ? { url: current.url } : {}),
+      ...(title ? { title } : {}), capturedAt: new Date().toISOString(),
+      ...(action === "close" ? { closed: true } : {}),
+      tabs: tabs.filter(tab => gateUrl(ctx, tab.url).ok).map(tab => ({ pageId: identity.pages.get(tab.name)!, tab: tab.name, url: tab.url })),
+    };
+    result.meta = { ...result.meta, browser };
+    // A tab reopened under the same friendly name is a new page identity.
+    for (const name of identity.pages.keys()) if (!tabs.some(tab => tab.name === name)) { unregisterBrowserView(identity.pages.get(name)!); identity.pages.delete(name); }
+    return result;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return { success: false, output: null, error: msg.slice(0, 2_000) };

@@ -70,9 +70,9 @@ export function GitHubPublicationControl() {
       <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2 text-sm font-medium"><GitBranch className="size-4" />{account.data.account ?? "GitHub.com"}</div><Badge variant={account.data.connected ? "secondary" : "outline"}>{account.data.connected ? "Connected" : "Not connected"}</Badge></div>
       {account.data.connected && account.data.scopes.length > 0 && <p className="text-xs text-muted-foreground">Permissions: {account.data.scopes.join(", ")}</p>}
       {account.data.deviceAuth.phase !== "idle" && account.data.deviceAuth.phase !== "connected" && <p role="status" className="text-sm leading-relaxed text-muted-foreground">{account.data.deviceAuth.message}</p>}
-      {!account.data.available && <p className="rounded-md border border-border bg-muted/20 p-3 text-sm">GitHub isn't available on this computer. <Link to="/doctor" className="underline">Check requirements</Link>.</p>}
+      {!account.data.available && <p className="rounded-[var(--radius-menu,12px)] border border-border bg-muted/20 p-3 text-sm">GitHub isn't available on this computer. <Link to="/doctor" className="underline">Check requirements</Link>.</p>}
       <section className="space-y-3">
-        {account.data.deviceAuth.userCode && <div><p className="text-xs text-muted-foreground">Your code</p><code className="mt-1 inline-block rounded-md border border-border px-3 py-2 text-lg tracking-widest">{account.data.deviceAuth.userCode}</code></div>}
+        {account.data.deviceAuth.userCode && <div><p className="text-xs text-muted-foreground">Your code</p><code className="mt-1 inline-block rounded-[var(--radius-menu,12px)] border border-border px-3 py-2 text-lg tracking-widest">{account.data.deviceAuth.userCode}</code></div>}
         {verificationUrl && <Button asChild variant="outline"><a href={verificationUrl} target="_blank" rel="noopener noreferrer">Open GitHub<ExternalLink className="size-4" /></a></Button>}
         {account.data.deviceAuth.verificationUrl && !verificationUrl && <Feedback error="This sign-in link looks unsafe, so it wasn't opened." />}
         <div className="flex flex-wrap gap-2">{running

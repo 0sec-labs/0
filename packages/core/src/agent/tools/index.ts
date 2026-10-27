@@ -102,6 +102,7 @@ const TOOL_REGISTRY_ORDER = [
   "submit_form",
   "access_control_probe",
   "access_control_workflow",
+  "access_control_cleanup",
   "bash",
   "browser",
   "spawn_agent",

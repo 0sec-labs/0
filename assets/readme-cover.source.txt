@@ -1,38 +1,40 @@
-README artwork — 2026-10-23
+README UI tours and artwork — 2026-10-23
 
-Website source: ../0cloud/0-www, checkout revision
-01f662807e669435a0680fe06286b1fbf0a64c83.
-Existing website footage and art, with code-authored typography and diagrams.
-No mascot artwork is displayed.
+The main web UI tour is 8.5 seconds. Four feature tours add findings (7s),
+workflows (7.5s), hosts/plugins (7.5s), and skills/memory (6.5s).
+Cuts are immediate; camera emphasis settles in roughly 0.2 seconds.
+Feature tours use 16 fps for smoother camera motion; the retimed main review
+keeps the captured source cadence at 8 fps. The full
+navigation is visible in the opening context views of the feature tours.
+GIFs loop silently, MP4s provide full-resolution playback, and JPGs serve
+readers who prefer reduced motion. No explanatory captions are displayed
+under the embedded media in the README.
 
-readme-infrastructure.webp
-  Byte-for-byte copy of public/cloudlight/dependency-security-20261020.webp,
-  also used by HomeDependencySecurity.astro. Linked to the 0cloud waitlist.
+Sources
+  Main tour: real source-only review of assets/examples/demo-api in the 0 UI.
+  readme-ui-demo.source.mp4 retains the longer privacy-reviewed source edit.
+  Feature tours: actual 0 UI views captured from an isolated local demo DB.
+  The demo DB contains the two source findings and two source-backed lessons
+  from that review, prepared for demonstration. Findings remain discovered,
+  not runtime-verified; no payload was executed or fix applied.
+  Workflow steps, findings queue/board/evidence, local host selection, blank
+  GitHub connection dialog, extension controls, built-in skills, and lesson
+  source disclosures are genuine UI states. No UI controls were fabricated.
+  Private history, remote SSH inventories, and credentials are not published.
+  The workspace label in the local host picker is masked.
 
-readme-security-hero.gif / readme-security-hero.png
-  Existing public/hero/hero-logo-clear-20261020.mp4 footage, composited with
-  code-authored typography from readme-hero-overlay.html. No generated imagery.
-  Overlay exported with Chromium at 1440x800, transparent background.
-  Font: the website's Geist variable font (see public/fonts/geist-LICENSE.txt).
-  Video: scale to fill/crop 1440x800, overlay at 0,0; GIF at 800px wide,
-  6 fps, 256-color palette, Sierra dithering. Full original animation, silent loop.
-  PNG is the static alternative for prefers-reduced-motion.
+Website backgrounds
+  readme-cover.webp: public/cloudlight/soft-hero.webp (main tour).
+  readme-background-findings.webp: public/cloudlight/cloud-dusk.webp.
+  readme-background-workflows.webp: public/cloudlight/pointillist-hero.webp.
+  readme-background-tools.webp: public/cloudlight/coral-optics.webp.
+  readme-background-memory.webp: public/cloudlight/signal-field.webp.
+  readme-infrastructure.webp: public/cloudlight/dependency-security-20261020.webp.
+  These are byte-for-byte copies from ../0cloud/0-www, checkout
+  01f662807e669435a0680fe06286b1fbf0a64c83.
 
-readme-setup.svg / readme-setup-mobile.svg
-  Native SVG diagrams, including all typography and illustrations. Desktop
-  cards become stacked mobile cards via a picture source at 600px.
-
-readme-nav-*-light.svg / readme-nav-*-dark.svg
-  Native SVG navigation labels. Each is wrapped in its own real README link.
-  0cloud is the orange CTA. The source variants follow the reader's theme.
-
-readme-cli-demo.mp4 / readme-cli-demo.gif / readme-cli-demo.png
-  Edited terminal playback of actual 0 CLI output, captured on 2026-10-23.
-  Source transcript: readme-cli-demo.transcript.json; native playback layout:
-  readme-cli-demo.html. Commands: 0 --help; workflow list --templates;
-  workflow show --template repository-review; mcp-server --help.
-  jq extracts template IDs and step labels in the commands shown on screen.
-  All four commands exited successfully. No model invocation or scan is shown.
-  Rendered at 1200x760, 8 fps. Four six-second chapters, with command typing,
-  real output, chapter headings, and a subtle camera zoom. GIF loops silently.
-  PNG is the reduced-motion alternative. No browser-dashboard footage is used.
+Framing
+  readme-demo-frame.html defines the rounded window, border, shadow, and
+  background composition. The recorded UI pixels are framed through HTML/CSS,
+  with camera zooms applied inside the window. No mascot or promotional text
+  is added over the artwork or UI.

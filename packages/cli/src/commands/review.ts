@@ -64,7 +64,6 @@ export function registerReviewCommand(program: Command): void {
     .option("--api-key <key>", "API key for LLM provider")
     .option("-m, --model <model>", "LLM model to use")
     .option("--cost-ceiling <usd>", "Hard per-review USD cost ceiling. Aborts cleanly with partial findings if exceeded.")
-    .option("--tui", "Open the local terminal UI after the review completes", false)
     .option("--diff-base <ref>", "Git base ref to review against (for diff-aware review)")
     .option("--changed-only", "Restrict static scanner leads + prioritization to changed files", false)
     .option(
@@ -383,7 +382,6 @@ export function registerReviewCommand(program: Command): void {
         conversation: opts.conversation as string | undefined,
         priorFindings,
         npmDynamicDiscovery: opts.npmDynamic as boolean | undefined,
-        tui: opts.tui as boolean,
         seedFindings,
         seedOnly: opts.seedOnly as boolean,
         emit,

@@ -1,3 +1,4 @@
+import { PageHeader, PageContent } from "@/components/page-header";
 import { ReportExportControl } from "@/components/report-export-control";
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { NavLink, useNavigate, useParams } from "react-router-dom";
@@ -109,12 +110,13 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
   });
 
   return (
-    <div className="space-y-6">
+    <PageContent width="wide">
+      <PageHeader title="Run reports" summary="Review findings and retained evidence from past runs." />
       <Workspace className="xl:grid-cols-[22rem_minmax(0,1fr)]">
         <WorkspaceSidebar>
           <EntityList
-            title="Run reports"
-            description="Past runs by target"
+            title="Targets"
+            description="Choose a target to browse its runs."
             searchValue={search}
             onSearchChange={setSearch}
             searchPlaceholder="Search runs"
@@ -188,7 +190,7 @@ export function ScansPage({ scans }: { scans: ScanRecord[] }) {
           </WorkspaceMain>
         )}
       </Workspace>
-    </div>
+    </PageContent>
   );
 }
 

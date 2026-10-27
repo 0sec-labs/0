@@ -10,6 +10,7 @@ import {
   openSync,
   readdirSync,
   readFileSync,
+  readSync,
   realpathSync,
   renameSync,
   rmdirSync,
@@ -20,9 +21,11 @@ import {
 } from "node:fs";
 import { open, readFile, writeFile, mkdir, readdir, readlink, stat, unlink, rmdir, copyFile, chmod } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { canonicalEvolutionJson, parseEvolutionConfig } from "./config.js";
 import { acquireEvolutionController, EvolutionControllerBusyError } from "./controller-lock.js";
+import { assertEvolutionRetentionContinuity, declaredEvolutionRetentionProfileDigest } from "./retention.js";
 import { evolutionComparisonIdentity } from "./evaluation.js";
 import { assertEvolutionCampaignMode, campaignPromotionAllowed, compareEvolutionIdentities } from "./safety.js";
 import {
@@ -183,6 +186,27 @@ function validateSnapshotPath(absPath: string, sourceRoot: string, storePath: st
   }
 }
 
+/** Scope new benchmark authority protection to this engine package, including
+ * separately checked out @0/core sources; ordinary application benches remain editable. */
+function isTrustedEngineBenchAuthority(path: string): boolean {
+  const match = /^(.*)[/\\](?:src|dist)[/\\]bench[/\\](?:task-routing|local-ollama-routing|security-evolution-pilot|execution-evidence|improvement-promotion|improvement|oracle|runner|scorecard)\.[cm]?[jt]s$/i.exec(path);
+  if (!match) return false;
+  const packageRoot = resolve(match[1]!);
+  if (import.meta.url.startsWith("file:") && packageRoot === resolve(dirname(fileURLToPath(import.meta.url)), "../..")) return true;
+  let fd: number | undefined;
+  try {
+    fd = openSync(join(packageRoot, "package.json"), fsConst.O_RDONLY | fsConst.O_NOFOLLOW | fsConst.O_NONBLOCK);
+    const stat = fstatSync(fd);
+    if (!stat.isFile() || stat.size > 64 * 1024) return false;
+    const bytes = Buffer.alloc(64 * 1024 + 1);
+    const length = readSync(fd, bytes, 0, bytes.length, 0);
+    if (length !== stat.size || length > 64 * 1024) return false;
+    const manifest = JSON.parse(bytes.subarray(0, length).toString("utf8")) as { name?: unknown };
+    return manifest?.name === "@0/core";
+  } catch { return false; }
+  finally { if (fd !== undefined) closeSync(fd); }
+}
+
 function validateEditPath(editPath: string, config: EvolutionConfig): void {
   if (isAbsolute(editPath) || editPath.includes("..") || editPath.includes("\0")) {
     throw new Error(`edit path is absolute, has traversal or null byte: ${editPath}`);
@@ -208,9 +232,16 @@ function validateEditPath(editPath: string, config: EvolutionConfig): void {
     }
   }
 
+  if (isTrustedEngineBenchAuthority(resolve(config.sourceRoot, normalized))) {
+    throw new Error(`edit path targets protected code area in trusted engine benchmark authority: ${editPath}`);
+  }
+
   // Protected code paths
   const lower = `/${normalized.toLowerCase()}`;
   const protectedPatterns = [
+    // The composed controller anchor includes budget, provenance, lineage and
+    // study authority helpers, in both source and compiled distributions.
+    /[/\\]improvement[/\\](?:artifacts|controller-lock|safety|retention|provenance|curation-lineage|sandbox|rewrite|campaign-validation-budget|paired-retention(?:-receipt)?|paired-search-study|archive-study-runner|search-study-model-adapter|proposal-diversity-campaign)\./,
     /[/\\]improvement[/\\]evaluation\./,
     /[/\\]improvement[/\\]registry\./,
     /[/\\]improvement[/\\]loop\./,
@@ -716,12 +747,37 @@ function acquireEvolutionPromotionGate(storePath: string, receipt: EvolutionEval
   if (evolutionDigest(stored) !== receipt.configDigest) throw new Error("promotion configuration digest mismatch");
   const config = parseEvolutionConfig(stored);
   assertEvolutionCampaignMode(config);
+  const registry = loadRegistryRaw(storePath);
+  const previousVersion = registry.versions.find(version => version.id === registry.activeId);
+  if (previousVersion) {
+    const priorConfigRaw = readEvolutionArtifact(join(configsDir(storePath), `${configHexDigest(previousVersion.configDigest)}.json`));
+    if (evolutionDigest(priorConfigRaw) !== previousVersion.configDigest) throw new Error("prior retention configuration digest mismatch");
+    const previousConfig = parseEvolutionConfig(priorConfigRaw);
+    const previousReceipt = previousVersion.receiptDigest ? loadEvolutionReceipt(storePath, previousVersion.id) : null;
+    if (previousVersion.receiptDigest && previousReceipt?.receiptDigest !== previousVersion.receiptDigest) throw new Error("prior retention receipt identity mismatch");
+    if (previousVersion.receiptDigest && previousConfig.retentionPolicy && !previousReceipt?.retention?.profileDigest) {
+      throw new Error("prior retention evidence is unavailable; explicit cohort requalification required");
+    }
+    assertEvolutionRetentionContinuity(previousConfig.retentionPolicy, previousReceipt?.retention, config.retentionPolicy, receipt.retention, {
+      previous: declaredEvolutionRetentionProfileDigest(previousConfig), current: declaredEvolutionRetentionProfileDigest(config),
+    });
+  }
   if (!config.safety?.enabled) return undefined;
   const provenance = receipt.result.provenance;
   if (!provenance || provenance.compatibilityStatus !== "compatible" || !provenance.provider || !provenance.resolvedModel) {
     throw new Error("promotion requires observed compatible generator/evaluator provenance");
   }
-  const expected = evolutionComparisonIdentity(config, { provider: provenance.provider, model: provenance.resolvedModel });
+  const worker = provenance.evaluatedWorker;
+  const expected = evolutionComparisonIdentity(config, { provider: provenance.provider, model: provenance.resolvedModel,
+    modelVersionStatus: provenance.proposalModelRevision?.status,
+    ...(provenance.proposalModelRevision?.revision ? { modelRevision: provenance.proposalModelRevision.revision } : {}),
+    ...(provenance.proposalModelRevision?.decodingDigest ? { decodingDigest: provenance.proposalModelRevision.decodingDigest } : {}),
+  },
+    worker?.kind === "model" && worker.provider && worker.model ? {
+      provider: worker.provider, model: worker.model, modelVersionStatus: worker.revision.status,
+      ...(worker.revision.revision ? { modelRevision: worker.revision.revision } : {}),
+      ...(worker.revision.decodingDigest ? { decodingDigest: worker.revision.decodingDigest } : {}),
+    } : undefined);
   const comparison = compareEvolutionIdentities(expected, provenance);
   expected.compatibilityStatus = comparison.status;
   if (comparison.status !== "compatible"

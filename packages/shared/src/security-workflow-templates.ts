@@ -20,7 +20,7 @@ function operationTemplate(id: string, name: string, description: string, operat
 const FINDING_INPUT_REQUIREMENT = { names: ["finding", "findingPath", "findingId"], required: true, description: "Supply an existing finding, a finding JSON path, or a retained finding ID. Connected earlier finding evidence can also provide the input." };
 /** Ready-to-customize drafts; selecting one neither installs anything nor authorizes an assessment. */
 export const SECURITY_WORKFLOW_TEMPLATES: readonly SecurityWorkflowTemplate[] = [
-  template("repository-review", "Repository security review", "Review a local repository's trust boundaries, dependency exposure, and security-sensitive code.", "repository", [
+  template("repository-review", "Whitebox pentest", "Test a source repository for exploitable code paths, trust-boundary failures, dependency exposure, and unsafe configuration.", "repository", [
     phase("dependencies", "Dependency exposure", "known-vulnerabilities", "Inspect dependency manifests and lockfiles. Prioritize reachable vulnerable dependencies and supply-chain trust boundaries; distinguish confirmed exposure from version-only matches.", "quick"),
     phase("boundaries", "Trust boundaries", "unknown-vulnerabilities", "Trace authentication, authorization, tenant isolation, and privileged entry points in the authorized repository. Follow input-to-sink paths and report only supported security findings.", "deep"),
     phase("configuration", "Configuration and secrets", "misconfigurations", "Review repository configuration, credential handling, unsafe defaults, and sensitive debug surfaces. Do not expose secret values in reports."),

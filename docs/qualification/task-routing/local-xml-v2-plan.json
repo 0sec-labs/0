@@ -1,0 +1,28 @@
+{
+  "mode": "local-model",
+  "models": [
+    "zero-routing-qwen3-local-xml-v2:latest"
+  ],
+  "repeats": 1,
+  "maxCalls": 16,
+  "costCapUsd": 0,
+  "timeCapMs": 120000,
+  "authorizationRef": "Benign synthetic protocol controls; rerun after concrete renderer/parser mismatch correction only",
+  "workflow": {
+    "targetKind": "web",
+    "goal": "unknown-vulnerabilities",
+    "depth": "quick"
+  },
+  "local": {
+    "manifestDigest": "sha256:d9de54718cc8ca5e35f7011807537a9b85bc41e426e2754ac8617e4b8627dd4b",
+    "sourcePin": "Qwen/Qwen3-0.6B@c1899de289a04d12100db370d81485cdf75e47ca",
+    "weightsDigest": "sha256:f47f71177f32bcd101b7573ec9171e6a57f4f4d31148d38e382306f42996874b",
+    "maxInputTokens": 4096,
+    "maxOutputTokens": 256,
+    "totalTokenCap": 70000,
+    "protocol": {
+      "renderer": "qwen3-coder",
+      "parser": "qwen3-coder"
+    }
+  }
+}

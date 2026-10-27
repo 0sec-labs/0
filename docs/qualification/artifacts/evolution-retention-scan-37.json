@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "mocked-provider-ordinary-scan-no-paid-calls",
+  "ordinaryScanModelInvocations": 2,
+  "retentionPanelInvocations": 0,
+  "pairedStudyInvocations": 0,
+  "provenanceObservationInvocations": 0,
+  "unexpectedNetworkCalls": 0,
+  "limitation": "fixture call counts only, not production scan latency or stochastic benefit"
+}

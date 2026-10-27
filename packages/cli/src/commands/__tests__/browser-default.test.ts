@@ -1,0 +1,22 @@
+import { afterEach, expect, it, vi } from "vitest";
+const startup = vi.hoisted(() => ({ openWeb: vi.fn(), auth: vi.fn(), updates: vi.fn() }));
+vi.mock("@0/core", () => ({ analyticsPipeline: { setLevel() {}, flushNow: async () => {} }, createHerdrEventSink: () => null, configureRunContributionsFromEnvironment() {}, eventBus: { subscribe() {} }, maybeSubscribeOperationalEventSink() {}, presentationEventSink: () => ({}) }));
+vi.mock("../../tui/settings-store.js", () => ({ getSettings: () => ({}) }));
+vi.mock("../../codex-auth.js", () => ({ maybeLoadCodexAuth: startup.auth }));
+vi.mock("../../presentation/event-bus.js", () => ({ presentationEventBus: {} }));
+vi.mock("../../presentation/process-output.js", () => ({ installConsolePresentationBridge() {}, installProcessPresentationStreamBridge() {} }));
+vi.mock("../../workbench.js", () => ({ launchConfiguredWorkbench: async () => undefined }));
+vi.mock("../../backend-client-mode.js", () => ({ remoteBackendClientId: () => undefined }));
+vi.mock("../../connection-env.js", () => ({ savedConnectionEnvPatch: () => ({}) }));
+vi.mock("../../routing.js", () => ({ detectAndRoute: () => undefined }));
+vi.mock("../../utils/update-check.js", () => ({ runStartupUpdate: startup.updates }));
+vi.mock("../../source-freshness.js", () => ({ enforceSourceDistFreshness() {} }));
+vi.mock("../dashboard.js", () => ({ registerDashboardCommand: (program: import("commander").Command) => program.command("web").action(startup.openWeb) }));
+const originalArgs = process.argv;
+const listeners = process.listeners("beforeExit");
+afterEach(() => { process.argv = originalArgs; for (const listener of process.listeners("beforeExit")) if (!listeners.includes(listener)) process.removeListener("beforeExit", listener); });
+it("bare 0 opens the existing browser dashboard without loading command or renderer entrypoints", async () => {
+  process.argv = [process.execPath, "0"];
+  await import("../../index.js");
+  await vi.waitFor(() => expect(startup.openWeb).toHaveBeenCalledOnce());
+});

@@ -2488,6 +2488,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   private requestAdmission?: Promise<RequestAdmission>;
   private requestAdmissionIdentity?: string;
   private codexAuthState?: ChatGptCodexAuthState;
+  private grantedProviderTransport?: RuntimeConfig["providerTransport"];
   private workbenchProviderProxy?: { url: string; model: string };
   private geminiAuthState?: GeminiCodeAssistAuthState;
   private provider!: ApiProvider;
@@ -2525,6 +2526,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       };
       this.env = inherited.env;
       this.workbenchProviderProxy = inherited.workbenchProviderProxy;
+      this.grantedProviderTransport = inherited.grantedProviderTransport;
       this.provider = inherited.provider;
       this.apiKey = inherited.apiKey;
       this.baseUrl = inherited.baseUrl;
@@ -2560,6 +2562,18 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       ...config,
       ...(config.agentModels ? { agentModels: Object.freeze({ ...config.agentModels }) } : {}),
     };
+    this.grantedProviderTransport = config.providerTransport;
+    if (config.providerTransport) {
+      const grant = config.providerTransport;
+      if (grant.provider !== "chatgpt-codex" || (config.provider && config.provider !== grant.provider) || !config.model || !grant.models.includes(config.model)) throw new Error("Model is outside the explicit provider transport grant");
+      for (const model of Object.values(config.agentModels ?? {})) if (model !== "auto" && !grant.models.includes(model)) throw new Error("Worker model is outside the explicit provider transport grant");
+      this.env = Object.freeze({ ZERO_SKIP_PROVIDER_BANNER: "1" });
+      this.workbenchProviderProxy = undefined; this.azureConfig = parseCodexAzureConfig({});
+      this.fallbackChain = []; this.fallbackIndex = 0; this.provider = grant.provider; this.apiKey = "";
+      this.baseUrl = "https://provider-relay.invalid"; this.wireApi = "responses"; this.model = config.model;
+      this.codexAuthState = undefined; this.geminiAuthState = undefined; this.reasoningEffort = undefined;
+      this.serverCompactionTokens = config.serverCompactionTokens === undefined ? undefined : Math.max(1000, config.serverCompactionTokens); return;
+    }
     this.env = Object.freeze({ ...process.env, ...config.env });
     this.requestAdmission = undefined;
     this.requestAdmissionIdentity = undefined;
@@ -2648,6 +2662,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
 
   /** Non-secret identity for preferences scoped to the captured connection. */
   connectionIdentity(): string | undefined {
+    if (this.grantedProviderTransport) return this.grantedProviderTransport.identity;
     let identity: readonly string[];
     if (this.provider === "chatgpt-codex") {
       const state = this.codexAuthState;
@@ -2730,6 +2745,10 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
    * model / provider / role map with zero session teardown. Undefined fields
    * preserve the current state, except a provider change resets an omitted model.
    */
+  useGrantedProviderTransport(transport: NonNullable<RuntimeConfig["providerTransport"]>, selection: { model?: string; agentModels?: Record<string, string>; singleModel?: boolean; autoRoute?: boolean } = {}): void {
+    this.applyConfiguration({ ...this.config, apiKey: undefined, env: {}, providerTransport: transport, provider: transport.provider, model: selection.model ?? this.model, ...selection });
+  }
+
   reconfigure(sel: {
     model?: string;
     provider?: string;
@@ -2738,6 +2757,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     autoRoute?: boolean;
     env?: NodeJS.ProcessEnv;
   }): void {
+    if (this.grantedProviderTransport && ((sel.provider && sel.provider !== this.grantedProviderTransport.provider) || (sel.model && !this.grantedProviderTransport.models.includes(sel.model)) || Object.values(sel.agentModels ?? {}).some(model => model !== "auto" && !this.grantedProviderTransport!.models.includes(model)))) throw new Error("Selection is outside the explicit provider transport grant");
     const providerChanged = sel.provider !== undefined && sel.provider !== this.provider;
 
     if (providerChanged) {
@@ -2821,6 +2841,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
    * failover chain uses — including auth-only providers (chatgpt-codex OAuth).
    */
   accessibleProviders(): ApiProvider[] {
+    if (this.grantedProviderTransport) return [this.grantedProviderTransport.provider];
     if (this.workbenchProviderProxy) return ["chatgpt-codex"];
     const out: ApiProvider[] = [];
     for (const provider of Object.keys(DEFAULT_PROVIDER_MODELS) as ApiProvider[]) {
@@ -2838,6 +2859,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
    * provider has creds, so this is a helpful starting set, not the whole bound.
    */
   accessibleModels(): string[] {
+    if (this.grantedProviderTransport) return [...this.grantedProviderTransport.models];
     if (this.workbenchProviderProxy) return [this.workbenchProviderProxy.model];
     const models = new Set<string>();
     if (this.model) models.add(this.model);
@@ -2855,6 +2877,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
    * accessible defaults as a fallback for ids the router does not pattern-match.
    */
   private isModelAccessible(model: string): boolean {
+    if (this.grantedProviderTransport) return this.grantedProviderTransport.models.includes(model);
     if (this.workbenchProviderProxy) return this.accessibleModels().includes(model);
     if (providerForModel(model, this.env) !== undefined) return true;
     return this.accessibleModels().includes(model);
@@ -3241,6 +3264,8 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         for (const block of message.content) {
           if (block.type === "text") {
             parts.push({ text: block.text });
+          } else if (block.type === "image") {
+            parts.push({ inlineData: { mimeType: block.mediaType, data: block.data } });
           } else if (block.type === "tool_use") {
             toolNames.set(block.id, block.name);
             upstreamCallIds.set(block.id, block.id);
@@ -3555,7 +3580,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         // provider config / ZERO_* env), never user/attacker input; same
         // trusted endpoint the client already POSTed to, now wrapped in retry.
         // foxguard: ignore[js/no-ssrf]
-        res = this.workbenchProviderProxy ? await fetch(this.workbenchProviderProxy.url, {
+        res = this.grantedProviderTransport ? await this.grantedProviderTransport.request({ provider: "chatgpt-codex", model: this.model, body }, signal) : this.workbenchProviderProxy ? await fetch(this.workbenchProviderProxy.url, {
           method: "POST", redirect: "error", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ provider: this.provider, model: this.model, body }), signal,
         }) : await fetch(this.buildUrl(), {
@@ -3755,14 +3780,14 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     if (context?.signal?.aborted) {
       return { output: "", exitCode: null, timedOut: false, durationMs: 0, error: "API execution cancelled." };
     }
-    if (this.workbenchProviderProxy) {
+    if (this.grantedProviderTransport || this.workbenchProviderProxy) {
       const result = await this.executeNative(context?.systemPrompt ?? "", [
         { role: "user", content: [{ type: "text", text: prompt }] },
       ], [], undefined, context?.signal);
       return {
         output: result.content.filter((block): block is Extract<NativeContentBlock, { type: "text" }> => block.type === "text").map(block => block.text).join("\n"),
         exitCode: result.cancelled ? null : result.stopReason === "error" ? 1 : 0,
-        timedOut: false, durationMs: Date.now() - start, usage: result.usage, error: result.error,
+        timedOut: result.timedOut === true, durationMs: Date.now() - start, usage: result.usage, error: result.error,
       };
     }
 
@@ -3968,7 +3993,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         };
       }
       const msg = err instanceof Error ? err.message : String(err);
-      const timedOut = msg.includes("abort") || msg.includes("timeout");
+      // A transport may sanitize AbortError into a generic cancellation message.
+      // Operator-first cancellation was handled above; our timer remains authoritative.
+      const timedOut = controller.signal.aborted || msg.includes("abort") || msg.includes("timeout");
       return {
         output: "",
         exitCode: 1,
@@ -4083,6 +4110,12 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           chatMessages.push({ role: "system", content: system });
 
           for (const m of messages) {
+            if (m.role === "user" && m.content.some(block => block.type === "image") && m.content.every(block => block.type === "text" || block.type === "image")) {
+              chatMessages.push({ role: "user", content: m.content.map(block => block.type === "image"
+                ? { type: "image_url", image_url: { url: `data:${block.mediaType};base64,${block.data}` } }
+                : { type: "text", text: block.type === "text" ? block.text : "" }) });
+              continue;
+            }
             // Batch all tool_use blocks from the same message into a
             // single assistant message with a tool_calls array. gpt-5+
             // strictly validates that every assistant with tool_calls is
@@ -4115,6 +4148,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
                   flushAssistant();
                   chatMessages.push({ role: m.role, content: block.text });
                 }
+              } else if (block.type === "image") {
+                flushAssistant();
+                chatMessages.push({ role: m.role, content: [{ type: "image_url", image_url: { url: `data:${block.mediaType};base64,${block.data}` } }] });
               } else if (block.type === "tool_use") {
                 pendingToolCalls.push({
                   id: block.id,
@@ -4242,6 +4278,8 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
             for (const block of m.content) {
               if (block.type === "text") {
                 textBlocks.push({ type: textType, text: block.text });
+              } else if (block.type === "image") {
+                textBlocks.push({ type: "input_image", image_url: `data:${block.mediaType};base64,${block.data}` });
               } else if (block.type === "tool_use") {
                 // Flush any pending text blocks first
                 if (textBlocks.length > 0) {
@@ -4453,6 +4491,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
               role: m.role,
               content: m.content.map((block): WireBlock => {
                 if (block.type === "text") return { type: "text", text: block.text };
+                if (block.type === "image") return { type: "image", source: { type: "base64", media_type: block.mediaType, data: block.data } };
                 if (block.type === "tool_use") {
                   return { type: "tool_use", id: block.id, name: block.name, input: block.input };
                 }
@@ -4769,11 +4808,14 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         };
       }
       const msg = err instanceof Error ? err.message : String(err);
-      const timedOut = msg.includes("abort") || msg.includes("timeout");
+      // A transport may sanitize AbortError into a generic cancellation message.
+      // Operator-first cancellation was handled above; our timer remains authoritative.
+      const timedOut = controller.signal.aborted || msg.includes("abort") || msg.includes("timeout");
       return {
         content: [{ type: "text", text: "" }],
         stopReason: "error",
         durationMs: Date.now() - start,
+        ...(timedOut ? { timedOut: true } : {}),
         error: timedOut
           ? `${this.providerLabel} API request timed out`
           : `${this.providerLabel} API error: ${msg}`,
@@ -4800,6 +4842,16 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         error: `${this.providerLabel} API error: missing response body`,
       };
     }
+
+    let cancellationRequested = false;
+    const cancelReader = () => {
+      if (cancellationRequested) return;
+      cancellationRequested = true;
+      // A proxy may never acknowledge teardown. It must not delay a known
+      // terminal outcome, operator cancellation, or the idle bound.
+      try { void reader.cancel().catch(() => { /* best-effort */ }); }
+      catch { /* best-effort */ }
+    };
 
     // Idle watchdog on EVERY read — see llmStreamIdleTimeoutMs for why. The
     // overall request timer stays armed through this stream; the watchdog adds
@@ -4854,13 +4906,16 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           ...(operatorSignal && detach
             ? [
                 new Promise<never>((_resolve, reject) => {
+                  const abortError = () => opts?.abort?.operatorAborted()
+                    ? new OperatorAbortError()
+                    : new DOMException("Request deadline aborted the stream", "AbortError");
                   if (operatorSignal.aborted) {
-                    reject(new OperatorAbortError());
+                    reject(abortError());
                     return;
                   }
                   operatorSignal.addEventListener(
                     "abort",
-                    () => reject(new OperatorAbortError()),
+                    () => reject(abortError()),
                     { once: true, signal: detach.signal },
                   );
                 }),
@@ -4926,22 +4981,14 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           // Release the socket, then let executeNative's catch turn this into
           // the cancelled result. NOT a stall and NOT a timeout: no watchdog
           // diagnostic, no transient-class error the agent loop would retry.
-          try {
-            await reader.cancel();
-          } catch {
-            /* best-effort — the stream is already broken */
-          }
+          cancelReader();
           throw err instanceof OperatorAbortError ? err : new OperatorAbortError();
         }
         if (stalled) {
           // Release the held socket best-effort, then surface the stall as a
           // transient-class error (the agent loop's bounded retry applies; a
           // persistent server hold fails loudly via errorExit, never hangs).
-          try {
-            await reader.cancel();
-          } catch {
-            /* best-effort — the stream is already broken */
-          }
+          cancelReader();
           const secs = Math.round(stallIdleMs / 1000);
           diag.warn(
             "stream_stalled",
@@ -4959,6 +5006,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
             error: `${this.providerLabel} stream stalled — no SSE events for ${secs}s (server accepted but held the stream; transient)`,
           };
         }
+        cancelReader();
         throw err;
       }
       const { done, value } = chunk;
@@ -5010,6 +5058,16 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         if (eventTypes.size < 32) eventTypes.add(identifier(type) ?? "unrecognized");
         const terminal = type === "response.completed" ||
           (this.provider === "openrouter" && type === "response.done");
+        if (completedResponse && (
+          type === "response.output_text.delta" || type === "response.content_part.delta" ||
+          type === "response.output_item.added" || type === "response.output_item.done" ||
+          type === "response.reasoning_summary_text.delta" || type === "response.reasoning_summary_text.done"
+        )) {
+          // Validate already-buffered contradictions, but never assemble new
+          // output or invoke callbacks after the response's terminal boundary.
+          streamFailure = { event: type, status: null, code: "output_after_completion", errorType: null, reason: null };
+          break responses;
+        }
         if (terminal || type === "response.failed" || type === "response.incomplete" || type === "error") {
           const response = event.response && typeof event.response === "object" && !Array.isArray(event.response)
             ? event.response as Record<string, unknown> : undefined;
@@ -5115,14 +5173,26 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         }
 
       }
+      // Drain complete frames already in this read so rejection/malformed
+      // guards still apply. Completion never requires another read or HTTP EOF.
+      if (completedResponse) break;
     }
 
+    if (completedResponse || outputCapResponse || streamFailure) cancelReader();
     emitThinking(true);
+    if (!outputCapResponse && opts?.abort?.operatorAborted()) {
+      cancelReader();
+      return { ...this.cancelledResult(start), ...(responseUsage ? { usage: responseUsage } : {}) };
+    }
+    if (opts?.abort?.signal.aborted && !opts.abort.operatorAborted()) {
+      cancelReader();
+      throw new DOMException("Request deadline aborted the stream", "AbortError");
+    }
 
     if (outputCapResponse) {
       // Never replay opaque reasoning or dispatch ANY call from an incomplete
       // response, even when an individual item claimed to be done.
-      void reader.cancel().catch(() => { /* best-effort */ });
+      cancelReader();
       const finalOutput = Array.isArray(outputCapResponse.output)
         ? outputCapResponse.output as Array<Record<string, unknown>> : [];
       const output = finalOutput.length > 0 ? finalOutput : streamedOutputItems;
@@ -5154,7 +5224,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     if (!completedResponse || streamFailure) {
       if (streamFailure) {
         // Teardown must not delay an already-known terminal rejection.
-        void reader.cancel().catch(() => { /* best-effort */ });
+        cancelReader();
       }
       appendNativeTrace({
         kind: "native-response-stream-error",
@@ -5272,6 +5342,16 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       emitThinking(true);
     }
 
+    // A reasoning-summary fallback can call onThinking after the earlier
+    // stream guard. Operator cancellation still wins before publishing tools
+    // or providerRaw, without losing usage already observed on the wire.
+    if (opts?.abort?.operatorAborted()) {
+      return { ...this.cancelledResult(start), ...(responseUsage ? { usage: responseUsage } : {}) };
+    }
+    if (opts?.abort?.signal.aborted) {
+      throw new DOMException("Request deadline aborted the stream", "AbortError");
+    }
+
     return {
       content,
       stopReason: content.some((item) => item.type === "tool_use") ? "tool_use" : "end_turn",
@@ -5295,7 +5375,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   }
 
   async isAvailable(): Promise<boolean> {
-    if (this.workbenchProviderProxy) return true;
+    if (this.grantedProviderTransport || this.workbenchProviderProxy) return true;
     // Credential presence only; this does not promise provider readiness or funds.
     if (this.provider === "chatgpt-codex") {
       return this.codexAuthState !== undefined;

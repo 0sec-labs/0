@@ -1,77 +1,72 @@
-import { useLayoutEffect, useRef, useState } from "react";
-import { FileText, Play, ShieldCheck } from "lucide-react";
-import type { SecurityWorkflow, SecurityWorkflowExecution } from "@0/shared";
+import { ChoiceCard } from "@/components/ui/choice-card";
+import { ArrowDown, BadgeCheck, FileSearch, FileText, Play, Search, ShieldCheck, Wrench, Pencil } from "lucide-react";
+import type { SecurityWorkflow, SecurityWorkflowExecution, SecurityWorkflowNode } from "@0/shared";
+import { workflowOperationLabel } from "./workflow-labels";
 import { cn } from "@/lib/utils";
 
-const NODE_TYPES = { trigger: "Manual trigger", audit: "Security assessment", report: "Result collection", verify: "Finding verification", fix: "Fix candidate", research: "Security research", "deep-review": "Deep source review" };
-const NODE_ICONS = { trigger: Play, audit: ShieldCheck, verify: ShieldCheck, fix: FileText, research: ShieldCheck, "deep-review": ShieldCheck, report: FileText };
+const NODE_ICONS = { trigger: Play, audit: ShieldCheck, verify: BadgeCheck, fix: Wrench, research: Search, "deep-review": FileSearch, report: FileText };
+
+/** Stable dependency order, including disconnected nodes and malformed-cycle fallbacks. */
+export function workflowSequence(definition: Pick<SecurityWorkflow, "nodes" | "edges">): SecurityWorkflow["nodes"] {
+  const remaining = new Map(definition.nodes.map(node => [node.id, node]));
+  const incoming = new Map(definition.nodes.map(node => [node.id, new Set<string>()]));
+  for (const edge of definition.edges) if (remaining.has(edge.source) && remaining.has(edge.target)) incoming.get(edge.target)!.add(edge.source);
+  const ordered: SecurityWorkflow["nodes"] = [];
+  while (remaining.size) {
+    const next = [...remaining.values()].find(node => incoming.get(node.id)!.size === 0);
+    // Preserve every authored node when a saved definition contains a cycle.
+    if (!next) { ordered.push(...remaining.values()); break; }
+    ordered.push(next); remaining.delete(next.id);
+    for (const parents of incoming.values()) parents.delete(next.id);
+  }
+  return ordered;
+}
+
+/** Only saved step fields are summarized; schedules live outside the definition. */
+export function workflowStepDetails(node: SecurityWorkflowNode): string[] {
+  if (node.type === "trigger") return ["Starts manually; schedules are managed in Triggers."];
+  if (node.type === "report") return ["Collects results from the preceding steps."];
+  const details: string[] = [];
+  if (node.plan) {
+    details.push(`${node.plan.goal.replaceAll("-", " ")} · ${node.plan.depth} · ${node.plan.runCount} ${node.plan.executionMode} run${node.plan.runCount === 1 ? "" : "s"}`);
+    const duration = node.plan.timeCapMs % 60000 === 0 ? `${node.plan.timeCapMs / 60000} min` : `${node.plan.timeCapMs / 1000} sec`;
+    details.push(`Limits: ${duration} · $${node.plan.costCapUsd}`);
+  } else details.push("Limits: workflow defaults");
+  const tools = node.execution?.allowedAgentTools;
+  details.push(tools === undefined ? "Tools: default set" : tools.length ? `Tools: ${tools.join(", ")}` : "Tools: no agent tool calls");
+  if (node.type === "fix") details.push(node.fix?.mode === "apply" ? "Apply changes; separate permission is required." : "Prepare a fix candidate only.");
+  if (node.input?.fromStep) details.push(`Input: step ${node.input.fromStep}`);
+  if (node.input?.findingId) details.push(`Finding: ${node.input.findingId}`);
+  if (node.input?.scanId) details.push(`Run: ${node.input.scanId}`);
+  if (node.inputs && Object.keys(node.inputs).length) details.push(`Input bindings: ${Object.keys(node.inputs).join(", ")}`);
+  return details;
+}
 
 export function WorkflowGraph({ definition, selectedId, onSelect, execution }: { definition: SecurityWorkflow; execution?: SecurityWorkflowExecution; selectedId: string | null; onSelect: (id: string) => void }) {
-  const container = useRef<HTMLDivElement>(null);
-  const [availableWidth, setAvailableWidth] = useState(0);
-  useLayoutEffect(() => {
-    const element = container.current;
-    if (!element) return;
-    const update = () => setAvailableWidth(element.clientWidth);
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-  const levels: Record<string, number> = {};
-  definition.nodes.forEach(node => { levels[node.id] = 0; });
-  // A bounded pass gives disconnected nodes a place without trusting graph shape.
-  for (let pass = 0; pass < definition.nodes.length; pass++) {
-    let changed = false;
-    for (const edge of definition.edges) {
-      if (levels[edge.source] === undefined || levels[edge.target] === undefined) continue;
-      const next = Math.min(definition.nodes.length - 1, levels[edge.source]! + 1);
-      if (next > levels[edge.target]!) { levels[edge.target] = next; changed = true; }
-    }
-    if (!changed) break;
-  }
-  const columns = Math.max(1, Math.floor((availableWidth - 48 + 40) / 252));
-  const levelSizes: Record<number, number> = {};
-  definition.nodes.forEach(node => { const level = levels[node.id] ?? 0; levelSizes[level] = (levelSizes[level] ?? 0) + 1; });
-  const bandOffsets: Record<number, number> = { 0: 0 };
-  const maxLevel = Math.max(0, ...Object.values(levels));
-  for (let band = 1; band <= Math.floor(maxLevel / columns); band++) {
-    let previousRows = 1;
-    for (let column = 0; column < columns; column++) previousRows = Math.max(previousRows, levelSizes[(band - 1) * columns + column] ?? 0);
-    bandOffsets[band] = (bandOffsets[band - 1] ?? 0) + previousRows;
-  }
-  const rows: Record<number, number> = {};
-  const positions = Object.fromEntries(definition.nodes.map(node => {
-    const level = levels[node.id] ?? 0;
-    const column = level % columns;
-    const band = Math.floor(level / columns);
-    const row = rows[level] ?? 0;
-    rows[level] = row + 1;
-    return [node.id, { x: 24 + column * 252, y: 24 + ((bandOffsets[band] ?? 0) + row) * 140, band }];
-  }));
-  const width = Math.max(260, ...Object.values(positions).map(position => position.x + 236));
-  const height = Math.max(132, ...Object.values(positions).map(position => position.y + 108));
-  return <div ref={container} className="overflow-x-auto rounded-2xl bg-muted/20 py-4" aria-label="Workflow steps">
-    <div className="relative mx-auto" style={{ width, height }}>
-      <svg aria-hidden="true" className="pointer-events-none absolute inset-0" width={width} height={height}>
-        {definition.edges.map((edge, index) => {
-          const source = positions[edge.source], target = positions[edge.target];
-          if (!source || !target) return null;
-          const x = source.x + 212, y = source.y + 38, targetY = target.y + 38;
-          const path = source.band === target.band
-            ? `M ${x} ${y} C ${x + 20} ${y}, ${target.x - 20} ${targetY}, ${target.x} ${targetY}`
-            : `M ${source.x + 106} ${source.y + 80} C ${source.x + 106} ${source.y + 110}, ${target.x + 106} ${target.y - 30}, ${target.x + 106} ${target.y}`;
-          return <path key={`${edge.source}-${edge.target}-${index}`} d={path} fill="none" stroke="currentColor" strokeWidth="1.5" className="text-muted-foreground/35" />;
-        })}
-      </svg>
-      {definition.nodes.map(node => {
-        const Icon = NODE_ICONS[node.type as keyof typeof NODE_ICONS] ?? ShieldCheck, position = positions[node.id]!;
+  const nodes = workflowSequence(definition);
+  const labels = new Map(nodes.map(node => [node.id, node.label]));
+  return <div className="rounded-[var(--radius-panel)] bg-background/50 px-4 py-6 sm:px-6 sm:py-8" aria-label="Workflow steps">
+    <ol className="mx-auto w-full max-w-sm">
+      {nodes.map((node, index) => {
+        const Icon = NODE_ICONS[node.type as keyof typeof NODE_ICONS] ?? ShieldCheck;
         const status = execution?.nodeResults[node.id]?.status;
-        return <button type="button" key={node.id} title={node.label} aria-pressed={selectedId === node.id} aria-label={`${node.label}, ${NODE_TYPES[node.type]}, ${node.enabled ? "enabled" : "disabled"}`} onClick={() => onSelect(node.id)} style={{ left: position.x, top: position.y }} className={cn("absolute flex min-h-24 w-[212px] items-start gap-3 rounded-2xl bg-background px-4 py-3 text-left shadow-sm transition-[background-color,box-shadow] duration-150 motion-reduce:transition-none hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary", selectedId === node.id && "ring-1 ring-primary/50", !node.enabled && "opacity-50")}>
-          <Icon aria-hidden="true" className={cn("mt-1 size-4 shrink-0", node.enabled ? "text-primary" : "text-muted-foreground")} />
-          <span className="min-w-0"><span className="block line-clamp-2 break-words text-sm font-medium">{node.label}</span><span className="mt-1 block text-xs text-muted-foreground">{!node.enabled ? "Disabled" : node.type === "trigger" ? "Run manually" : node.type === "report" ? "Collect results" : node.type === "verify" ? "Finding verification" : node.type === "fix" ? "Fix candidate" : node.type === "research" ? "Security research" : node.type === "deep-review" ? "Deep source review" : "Security assessment"}{status && <span className="ml-2 text-foreground">· {status.replaceAll("_", " ")}</span>}</span></span>
-        </button>;
+        const previous = nodes[index - 1];
+        const parents = [...new Set(definition.edges.filter(edge => edge.target === node.id && labels.has(edge.source)).map(edge => edge.source))];
+        const direct = previous && parents.length === 1 && parents[0] === previous.id;
+        return <li key={node.id}>
+          {index > 0 && <div aria-hidden="true" className="flex h-5 items-center justify-center">{direct && <span className="flex h-full flex-col items-center"><span className="min-h-0 flex-1 border-l border-border" /><ArrowDown className="size-4 shrink-0 text-muted-foreground" /></span>}</div>}
+          <ChoiceCard selected={selectedId === node.id} aria-label={`Step ${index + 1}: ${node.label}, ${workflowOperationLabel(node, definition)}, ${node.enabled ? "enabled" : "disabled"}`} onClick={() => onSelect(node.id)} className={cn("group min-h-16 w-full items-center gap-3 p-3.5 pr-10 shadow-sm", selectedId !== node.id && "bg-muted/70")}>
+            <Icon aria-hidden="true" className="size-4 shrink-0 text-foreground/80" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium leading-5">{node.label}</span>
+              <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{workflowOperationLabel(node, definition)}{!node.enabled && " · Paused"}{status && ` · ${status.replaceAll("_", " ")}`}</span>
+              {parents.length > 0 && !direct && <span className="mt-2 block break-words text-xs leading-5 text-muted-foreground">After: {parents.map(id => labels.get(id)).join(", ")}</span>}
+            </span>
+            {selectedId !== node.id && <Pencil aria-hidden="true" className="absolute right-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />}
+          </ChoiceCard>
+        </li>;
       })}
-    </div>
+    </ol>
+    {nodes.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">No workflow steps yet.</p>}
   </div>;
 }

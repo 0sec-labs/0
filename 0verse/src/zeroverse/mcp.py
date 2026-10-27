@@ -3,7 +3,11 @@
 A stdio MCP server that exposes the 0verse engine as tools an external agent
 (Claude Desktop, Cursor, …) can call:
 
-    scan_binary(path, backend?)   run the pipeline on a binary -> run summary
+    get_capabilities()           catalog every CLI command and MCP integration status
+    triage_binary(path)           identify binary metadata without target execution
+    preflight_binary(path, ...)   probe stage prerequisites and report missing capabilities
+    list_bug_classes()            discover built-in detection lenses and oracle support
+    scan_binary(path, ...)        run the pipeline with typed, bounded ScanOptions
     list_findings()               the findings from the last scan (contract shape)
     get_pov(finding_id)           the reproducing PoV (script + repro command)
     get_report(format?)           the full report (md | json | ndjson | sarif)
@@ -20,9 +24,13 @@ fully unit-testable with a fake transport — no network, no SDK required.
 
 from __future__ import annotations
 
+import ast
+import dataclasses
 import json
+import math
 import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -62,8 +70,10 @@ TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "get_pov",
-        "description": ("The reproducing PoV for a finding id: replay script path, "
-                        "repro command, and the script body when present."),
+        "description": (
+            "The reproducing PoV for a finding id: replay script path, "
+            "repro command, and the script body when present."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {"finding_id": {"type": "string"}},
@@ -82,9 +92,82 @@ TOOLS: list[dict[str, Any]] = [
     },
 ]
 
+# These wrappers reuse existing typed APIs; research-specific CLI commands are
+# catalogued separately rather than exposed through an arbitrary command runner.
+TOOLS.extend(
+    [
+        {
+            "name": "triage_binary",
+            "description": (
+                "Identify binary format, architecture and mitigations without executing the target."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {"path": {"type": "string", "minLength": 1}},
+                "required": ["path"],
+            },
+        },
+        {
+            "name": "preflight_binary",
+            "description": (
+                "Probe required analysis/confirmation/fuzz capabilities before scanning. "
+                "Reports unavailable stages and reasons; never runs the target or installs "
+                "dependencies."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "minLength": 1},
+                    "confirm_binary": {"type": "string", "minLength": 1},
+                    "backend": {"type": "string", "enum": ["auto", "ghidra", "rizin", "angr"]},
+                    "profile": {"type": "string", "enum": ["analysis", "confirmation", "fuzz"]},
+                    "timeout_seconds": {"type": "number", "minimum": 1, "maximum": 120},
+                },
+                "required": ["path"],
+            },
+        },
+        {
+            "name": "get_capabilities",
+            "description": (
+                "Catalog the full CLI command surface with MCP-supported versus CLI-only "
+                "status, bridge tools, scan options, and execution/LLM limits. Discovery "
+                "only; does not install or run research commands."
+            ),
+            "inputSchema": {"type": "object", "properties": {}},
+        },
+        {
+            "name": "list_bug_classes",
+            "description": (
+                "List built-in detection lenses and which have generic confirming oracles. "
+                "Confirmable does not mean confirmed without a reproduced PoV."
+            ),
+            "inputSchema": {"type": "object", "properties": {}},
+        },
+    ]
+)
+TOOLS[0]["inputSchema"]["properties"].update(
+    {
+        "bug_class": {"type": "string", "minLength": 1},
+        "profile": {"type": "string", "enum": ["analysis", "confirmation", "fuzz"]},
+        "llm": {
+            "type": "string",
+            "enum": ["mock", "auto", "gateway", "claude", "glm", "openai", "codex"],
+            "description": (
+                "Default mock is deterministic, not real model analysis. Real providers "
+                "require configured credentials."
+            ),
+        },
+        "model": {"type": "string", "minLength": 1},
+        "confirm_binary": {"type": "string", "minLength": 1},
+        "output_dir": {"type": "string", "minLength": 1},
+        "wall_clock_seconds": {"type": "number", "minimum": 1, "maximum": 3600},
+        "attempt_limit": {"type": "integer", "minimum": 0, "maximum": 256},
+    }
+)
+
 # M7 #43 — the flywheel recall tool, matching the Crystalline MCP-server shape.
 # Registered only when the flywheel is opt-in enabled (ZEROVERSE_FLYWHEEL=1); the
-# base four tools above are always present. Memory is queryable + carries a
+# typed base tools above are always present. Memory is queryable + carries a
 # cost-router verdict, but it PRIMES only — it never confirms a finding.
 RECALL_TOOL: dict[str, Any] = {
     "name": "recall_similar",
@@ -110,8 +193,14 @@ RECALL_TOOL: dict[str, Any] = {
 }
 
 
+for _tool in [*TOOLS, RECALL_TOOL]:
+    _tool["inputSchema"]["additionalProperties"] = False
+RECALL_TOOL["inputSchema"]["properties"]["k"].update(minimum=1, maximum=100)
+RECALL_TOOL["inputSchema"]["properties"]["bits"].update(enum=[0, 16, 32, 64])
+
+
 def active_tools() -> list[dict[str, Any]]:
-    """The advertised tool set: the always-present base four, plus ``recall_similar``
+    """The advertised tool set: the always-present typed API tools, plus ``recall_similar``
     when the flywheel is opt-in enabled (ZEROVERSE_FLYWHEEL=1, default OFF)."""
     from .flywheel import flywheel_enabled
 
@@ -128,10 +217,28 @@ class Engine:
     def __init__(self) -> None:
         self._last: ScanResult | None = None
 
-    def scan_binary(self, path: str, backend: str | None = None) -> dict[str, Any]:
+    def scan_binary(self, path: str, backend: str | None = None, **options: Any) -> dict[str, Any]:
         if not path:
             raise ToolError("scan_binary requires a 'path'")
-        result = scan(path, ScanOptions(backend=backend))
+        from .preflight import RunBudget
+
+        path = str(_scoped_path(path))
+        if "confirm_binary" in options:
+            options["confirm_binary"] = str(_scoped_path(options["confirm_binary"]))
+        if "output_dir" in options:
+            options["output_dir"] = str(_scoped_path(options["output_dir"]))
+        elif os.environ.get("ZEROVERSE_WORKSPACE_ROOT"):
+            options["output_dir"] = tempfile.mkdtemp(prefix=".0verse-scan-", dir=_workspace_root())
+        attempts = options.pop("attempt_limit", 16)
+        seconds = options.pop("wall_clock_seconds", 300)
+        options["budget"] = RunBudget(
+            attempt_limit=attempts,
+            wall_clock_seconds=seconds,
+            unknown_sink_oracle_attempts=min(4, attempts),
+        )
+        options.setdefault("llm", "mock")
+        self._last = None
+        result = scan(path, ScanOptions(backend=backend, **options))
         self._last = result
         return {
             "binary": result.binary,
@@ -145,6 +252,8 @@ class Engine:
             "status_reason": result.status_reason,
             "contract_version": result.contract_version,
             "note": result.note,
+            "llm": options["llm"],
+            "stage_outcomes": [stage.to_dict() for stage in result.stage_outcomes],
         }
 
     def _require_last(self) -> ScanResult:
@@ -160,8 +269,8 @@ class Engine:
         for f in last.findings:
             if f.id == finding_id:
                 body = ""
-                if f.pov_path and Path(f.pov_path).is_file():
-                    body = Path(f.pov_path).read_text()
+                if f.pov_path and _scoped_path(f.pov_path).is_file():
+                    body = _scoped_path(f.pov_path).read_text()
                 return {
                     "id": f.id,
                     "confirmed": f.confirmed,
@@ -200,25 +309,241 @@ class Engine:
         return fw.recall_dict(query, k=int(args.get("k", 5) or 5))
 
 
+def _workspace_root() -> Path | None:
+    value = os.environ.get("ZEROVERSE_WORKSPACE_ROOT")
+    return Path(value).expanduser().resolve() if value else None
+
+
+def _scoped_path(value: str) -> Path:
+    path = Path(value).expanduser()
+    root = _workspace_root()
+    if root and not path.is_absolute():
+        path = root / path
+    resolved = path.resolve()
+    if root and not resolved.is_relative_to(root):
+        raise ToolError("path escapes the configured workspace root")
+    return resolved
+
+
+def _validate(value: Any, schema: dict[str, Any], label: str = "arguments") -> None:
+    kind = str(schema.get("type", ""))
+    valid = {
+        "object": isinstance(value, dict),
+        "array": isinstance(value, list),
+        "string": isinstance(value, str),
+        "integer": isinstance(value, int) and not isinstance(value, bool),
+        "number": isinstance(value, (int, float)) and not isinstance(value, bool),
+    }.get(kind, True)
+    if not valid:
+        raise ToolError(f"{label} must be {kind}")
+    if "enum" in schema and value not in schema["enum"]:
+        raise ToolError(f"{label} must be one of {schema['enum']}")
+    if kind == "object":
+        properties = schema.get("properties", {})
+        for required in schema.get("required", []):
+            if required not in value:
+                raise ToolError(f"{label}.{required} is required")
+        for key, child in value.items():
+            if key not in properties:
+                raise ToolError(f"unknown {label} field {key!r}")
+            _validate(child, properties[key], f"{label}.{key}")
+    if kind == "array":
+        if len(value) > 256:
+            raise ToolError(f"{label} contains too many entries")
+        for child in value:
+            _validate(child, schema.get("items", {}), label)
+    if kind == "string" and (not value.strip() or len(value) > 32768):
+        raise ToolError(f"{label} must be a non-empty bounded string")
+    if kind in ("number", "integer") and (
+        not math.isfinite(value)
+        or value < schema.get("minimum", -math.inf)
+        or value > schema.get("maximum", math.inf)
+    ):
+        raise ToolError(f"{label} is outside its finite supported range")
+
+
+def _cli_catalog() -> list[dict[str, str]]:
+    # Parse the shipped command declarations without executing CLI code or its
+    # research lanes. Literal loop registrations are included as well.
+    source = Path(__file__).with_name("cli.py").read_text()
+    tree = ast.parse(source)
+    commands: set[str] = set()
+    for node in ast.walk(tree):
+        if (
+            not isinstance(node, ast.Call)
+            or not isinstance(node.func, ast.Attribute)
+            or node.func.attr != "add_parser"
+            or not node.args
+        ):
+            continue
+        if isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+            name = node.args[0].value
+            owner = node.func.value
+            if isinstance(owner, ast.Name) and owner.id == "scout_sub":
+                name = f"scout {name}"
+            commands.add(name)
+        elif isinstance(node.args[0], ast.Name):
+            for loop in ast.walk(tree):
+                if not isinstance(loop, ast.For) or node not in list(ast.walk(loop)):
+                    continue
+                try:
+                    values = ast.literal_eval(loop.iter)
+                except (ValueError, TypeError):
+                    continue
+                for value in values:
+                    if isinstance(value, (tuple, list)) and value and isinstance(value[0], str):
+                        commands.add(value[0])
+    supported = {"triage": "triage_binary", "scan": "scan_binary", "run": "scan_binary"}
+    return [
+        {
+            "command": name,
+            "group": _command_group(name),
+            "status": "mcp-supported" if name in supported else "cli-only",
+            "tool": supported.get(name, ""),
+            "note": "Typed scan options only; not every CLI flag is exposed."
+            if name == "run"
+            else "",
+        }
+        for name in sorted(commands)
+    ]
+
+
+def _command_group(name: str) -> str:
+    if name.startswith("windows-"):
+        if any(word in name for word in ("token-", "lpe-", "bounty-")):
+            return "Windows execution evidence and validation (CLI-only)"
+        if any(
+            word in name for word in ("official-", "pdb-", "trust-", "authenticity-", "servicing-")
+        ):
+            return "Windows corpus provenance and symbols (CLI-only)"
+        return "Windows driver and IOCTL analysis (CLI-only)"
+    if name.startswith("hyperv-"):
+        return "Hyper-V authorization and evidence (CLI-only)"
+    if name.startswith("browser-"):
+        return "Browser research campaigns (CLI-only)"
+    if name.startswith("scout") or name == "fleet":
+        return "Firmware fleets and hardware scouting (CLI-only)"
+    if name == "research-feedback-import":
+        return "Research feedback ingestion (CLI-only)"
+    return "Binary analysis pipeline"
+
+
+def _capabilities() -> dict[str, Any]:
+    return {
+        "contract_version": CONTRACT_VERSION,
+        "tools": [tool["name"] for tool in active_tools()],
+        "cli_commands": _cli_catalog(),
+        "groups": [
+            "binary triage",
+            "scan and stage preflight",
+            "findings, PoVs and reports",
+            "bug-class lenses",
+            "optional flywheel recall",
+            "Windows driver and IOCTL analysis (CLI-only)",
+            "Windows corpus provenance and symbols (CLI-only)",
+            "Windows execution evidence and validation (CLI-only)",
+            "Hyper-V authorization and evidence (CLI-only)",
+            "Browser research campaigns (CLI-only)",
+            "Firmware fleets and hardware scouting (CLI-only)",
+            "Research feedback ingestion (CLI-only)",
+        ],
+        "scan_schema": TOOLS[0]["inputSchema"],
+        "workspace_scoped": _workspace_root() is not None,
+        "limits": [
+            "MCP does not expose an arbitrary CLI or executor.",
+            "Default llm=mock is deterministic, not real-provider analysis.",
+            "Confirmation and fuzzing require explicitly authorized execution capabilities.",
+            "A class with a generic oracle is not a confirmed finding without a reproduced PoV.",
+            "Capability discovery does not install dependencies or authorize execution.",
+        ],
+    }
+
+
+def _preflight(args: dict[str, Any]) -> dict[str, Any]:
+    from .ingest import triage
+    from .pipeline import SUPPORTED_FORMATS
+    from .preflight import BudgetTracker, RunBudget, probe_capabilities
+
+    target = _scoped_path(args["path"])
+    confirmation = _scoped_path(args.get("confirm_binary", args["path"]))
+    with tempfile.TemporaryDirectory(prefix=".0verse-preflight-", dir=_workspace_root()) as output:
+        plan = probe_capabilities(
+            triage(target),
+            confirmation_triage=triage(confirmation),
+            confirmation_path=confirmation,
+            profile=args.get("profile", "analysis"),
+            requested_backend=args.get("backend"),
+            execution_backend=None,
+            output_dir=Path(output),
+            budget=BudgetTracker.start(
+                RunBudget(wall_clock_seconds=args.get("timeout_seconds", 15))
+            ),
+            supported_formats=SUPPORTED_FORMATS,
+        )
+        return {
+            "disposition": plan.disposition,
+            "reason": plan.failure_reason,
+            "selected_backend": plan.selected_backend,
+            "execution_route": plan.execution_route,
+            "profile": plan.profile,
+            "capabilities": {
+                name: dataclasses.asdict(capability)
+                for name, capability in plan.named_capabilities()
+            },
+        }
+
+
 def dispatch(engine: Engine, name: str, arguments: dict[str, Any]) -> str:
-    """Run a tool and return its text result (JSON for structured tools). Raises
-    ``ToolError`` for unknown tools / bad args — the transport renders that as an
-    MCP tool error, never a crash."""
-    args = arguments or {}
-    if name == "scan_binary":
-        return json.dumps(engine.scan_binary(args.get("path", ""), args.get("backend")), indent=2)
-    if name == "list_findings":
-        return json.dumps(engine.list_findings(), indent=2)
-    if name == "get_pov":
-        return json.dumps(engine.get_pov(args.get("finding_id", "")), indent=2)
-    if name == "get_report":
-        return engine.get_report(args.get("format", "json"))
-    if name == "recall_similar":
-        return json.dumps(engine.recall_similar(args), indent=2)
+    """Validate the advertised schema and execute a typed, transport-free tool."""
+    tool = next((tool for tool in active_tools() if tool["name"] == name), None)
+    if tool is None:
+        raise ToolError(f"unknown or disabled tool {name!r}")
+    args = arguments
+    _validate(args, tool["inputSchema"])
+    try:
+        if name == "scan_binary":
+            result = engine.scan_binary(**args)
+            if result["terminal_state"] in ("infra-failed", "unsupported", "cancelled", "skipped"):
+                raise ToolError(json.dumps(result, indent=2))
+            return json.dumps(result, indent=2)
+        if name == "triage_binary":
+            from .ingest import triage
+
+            return json.dumps(dataclasses.asdict(triage(_scoped_path(args["path"]))), indent=2)
+        if name == "preflight_binary":
+            return json.dumps(_preflight(args), indent=2)
+        if name == "get_capabilities":
+            return json.dumps(_capabilities(), indent=2)
+        if name == "list_bug_classes":
+            from .bugclasses import BUG_CLASSES
+
+            return json.dumps(
+                [
+                    {
+                        "id": item.id,
+                        "label": item.label,
+                        "cwe": item.cwe,
+                        "confirmable": item.confirmable,
+                    }
+                    for item in BUG_CLASSES
+                ],
+                indent=2,
+            )
+        if name == "list_findings":
+            return json.dumps(engine.list_findings(), indent=2)
+        if name == "get_pov":
+            return json.dumps(engine.get_pov(args["finding_id"]), indent=2)
+        if name == "get_report":
+            return engine.get_report(args.get("format", "json"))
+        if name == "recall_similar":
+            return json.dumps(engine.recall_similar(args), indent=2)
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise ToolError(f"{name} failed: {exc}") from exc
     raise ToolError(f"unknown tool {name!r}")
 
 
 # --- JSON-RPC-over-stdio stub (used when the MCP SDK is absent) -------------
+
 
 def _rpc_result(req_id: Any, result: Any) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": req_id, "result": result}
@@ -236,30 +561,39 @@ def handle_rpc(engine: Engine, request: dict[str, Any]) -> dict[str, Any] | None
     params = request.get("params") or {}
 
     if method == "initialize":
-        return _rpc_result(req_id, {
-            "protocolVersion": PROTOCOL_VERSION,
-            "capabilities": {"tools": {}},
-            "serverInfo": SERVER_INFO,
-            "instructions": f"0verse engine, result contract v{CONTRACT_VERSION}",
-        })
+        return _rpc_result(
+            req_id,
+            {
+                "protocolVersion": PROTOCOL_VERSION,
+                "capabilities": {"tools": {}},
+                "serverInfo": SERVER_INFO,
+                "instructions": f"0verse engine, result contract v{CONTRACT_VERSION}",
+            },
+        )
     if method in ("notifications/initialized", "initialized"):
         return None
     if method == "tools/list":
         return _rpc_result(req_id, {"tools": active_tools()})
     if method == "tools/call":
         name = params.get("name", "")
-        arguments = params.get("arguments") or {}
+        arguments = params.get("arguments", {})
         try:
             text = dispatch(engine, name, arguments)
-            return _rpc_result(req_id, {
-                "content": [{"type": "text", "text": text}],
-                "isError": False,
-            })
+            return _rpc_result(
+                req_id,
+                {
+                    "content": [{"type": "text", "text": text}],
+                    "isError": False,
+                },
+            )
         except ToolError as exc:
-            return _rpc_result(req_id, {
-                "content": [{"type": "text", "text": str(exc)}],
-                "isError": True,
-            })
+            return _rpc_result(
+                req_id,
+                {
+                    "content": [{"type": "text", "text": str(exc)}],
+                    "isError": True,
+                },
+            )
     if method == "ping":
         return _rpc_result(req_id, {})
     return _rpc_error(req_id, -32601, f"method not found: {method}")
@@ -286,6 +620,7 @@ def serve_stub(stdin: TextIO | None = None, stdout: TextIO | None = None) -> Non
 
 # --- official MCP SDK transport (preferred) --------------------------------
 
+
 def _serve_sdk() -> bool:
     """Serve over the official MCP SDK. Returns False if the SDK isn't installed."""
     try:
@@ -302,18 +637,21 @@ def _serve_sdk() -> bool:
     @server.list_tools()  # type: ignore[untyped-decorator]
     async def _list_tools() -> list[Any]:
         return [
-            types.Tool(name=t["name"], description=t["description"],
-                       inputSchema=t["inputSchema"])
+            types.Tool(name=t["name"], description=t["description"], inputSchema=t["inputSchema"])
             for t in active_tools()
         ]
 
     @server.call_tool()  # type: ignore[untyped-decorator]
-    async def _call_tool(name: str, arguments: dict[str, Any]) -> list[Any]:
+    async def _call_tool(name: str, arguments: dict[str, Any]) -> Any:
         try:
             text = dispatch(engine, name, arguments)
         except ToolError as exc:
-            return [types.TextContent(type="text", text=str(exc))]
-        return [types.TextContent(type="text", text=text)]
+            return types.CallToolResult(
+                content=[types.TextContent(type="text", text=str(exc))], isError=True
+            )
+        return types.CallToolResult(
+            content=[types.TextContent(type="text", text=text)], isError=False
+        )
 
     async def _run() -> None:
         async with stdio_server() as (read, write):

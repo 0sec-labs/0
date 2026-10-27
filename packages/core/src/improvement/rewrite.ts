@@ -1,3 +1,5 @@
+import { observedEvolutionModelRevision } from "./provenance.js";
+import { campaignValidationBudget } from "./campaign-validation-budget.js";
 import { createHash } from "node:crypto";
 import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -97,11 +99,14 @@ export async function proposeEvolutionEdits(
   assertEvolutionCampaignMode(config);
   verifyEvolutionSnapshot(snapshot);
   const runtime = deps.model ? undefined : new LlmApiRuntime({ type: "api", timeout: 300000, ...(config.model ? { model: config.model } : {}) });
-  const observedIdentity = (): EvolutionModelIdentity | undefined => runtime
-    ? { provider: runtime.resolvedProvider(), model: runtime.resolvedModel(), pricingModel: runtime.resolvedPricingModel() }
-    : deps.modelIdentity?.();
+  const observedIdentity = (): EvolutionModelIdentity | undefined => {
+    const identity = runtime
+      ? { provider: runtime.resolvedProvider(), model: runtime.resolvedModel(), pricingModel: runtime.resolvedPricingModel() }
+      : deps.modelIdentity?.();
+    return identity ? structuredClone(identity) : undefined;
+  };
   let modelIdentity = observedIdentity();
-  const provenance = evolutionComparisonIdentity(config, modelIdentity);
+  const provenance = evolutionComparisonIdentity(config, modelIdentity, deps.workerModelIdentity?.());
   if (config.safety?.enabled) createOrLoadEvolutionCampaign(config.storePath, provenance, "evolution", config);
   const modelId = (): string => {
     const observed = observedIdentity();
@@ -142,7 +147,7 @@ export async function proposeEvolutionEdits(
       let reservationId: string | undefined;
       if (config.safety?.enabled) {
         const campaign = loadEvolutionCampaign(config.storePath);
-        const remaining = Math.min(config.maxModelCostUsd - modelCostUsd, campaign.maxModelCostUsd - campaign.cumulativeModelCostUsd);
+        const remaining = Math.min(config.maxModelCostUsd - modelCostUsd, campaign.maxModelCostUsd - campaign.cumulativeModelCostUsd, campaignValidationBudget(config).proposalUsd);
         reservationId = reserveCampaignDispatch(config.storePath, "model", remaining).id;
       }
       meteringIncomplete = true;
@@ -156,7 +161,7 @@ export async function proposeEvolutionEdits(
         const resolved = observedIdentity();
         actualIdentity = result.providerRaw
           ? { provider: result.providerRaw.provider, model: result.providerRaw.model,
-            ...(resolved?.provider === result.providerRaw.provider && resolved.model === result.providerRaw.model && resolved.pricingModel ? { pricingModel: resolved.pricingModel } : {}) }
+            ...(resolved?.provider === result.providerRaw.provider && resolved.model === result.providerRaw.model ? resolved : {}) }
           : resolved;
         const actualModel = actualIdentity?.pricingModel ?? (actualIdentity ? `${actualIdentity.provider}/${actualIdentity.model}` : modelId());
         const rates = getRates(actualModel);
@@ -173,6 +178,7 @@ export async function proposeEvolutionEdits(
       if (config.safety?.enabled) {
         const comparison = compareEvolutionIdentities(provenance, {
           ...provenance, resolvedModel: actualIdentity?.model ?? null, provider: actualIdentity?.provider ?? null,
+          proposalModelRevision: observedEvolutionModelRevision(actualIdentity),
         });
         if (comparison.status !== "compatible") {
           blockEvolutionCampaign(config.storePath, `generator provenance ${comparison.status}: ${comparison.reasons.join("; ")}`);

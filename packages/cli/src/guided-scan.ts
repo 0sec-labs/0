@@ -38,6 +38,7 @@ export async function collectGuidedScanPlan(options: {
   model?: string;
   agentModels?: Readonly<Record<string, string>>;
   singleModel?: boolean;
+  recommendRouting?: (plan: ScanPlan) => { assignments: Readonly<Record<string, string>>; reasons: Readonly<Record<string, string>> };
 }, io: PlannerIO): Promise<ScanPlan | undefined> {
   const choose = async <T extends string>(label: string, choices: readonly T[], recommended: T): Promise<T> => {
     while (true) {
@@ -71,7 +72,9 @@ export async function collectGuidedScanPlan(options: {
   const plan = { goal, depth, runCount, executionMode, timeCapMs, costCapUsd };
   validateScanPlan(plan);
   io.write(`\n${options.target} · ${formatGoal(goal)} · ${depth} · ${runCount} separate run(s) · ${executionMode} · ${formatTimeCap(timeCapMs)} total · $${costCapUsd} total estimated\n`);
-  io.write(`${scanRoutingSummary(options.model, options.agentModels, options.singleModel)}\nConfigured models are operator choices; no task-specific superiority is assumed. Override with --task-model ROLE=MODEL or --single-model.\n`);
+  const routing = options.singleModel ? undefined : options.recommendRouting?.(plan);
+  if (routing) for (const role of SCAN_MODEL_ROLES) io.write(`${role}: ${routing.reasons[role]}\n`);
+  io.write(`${scanRoutingSummary(options.model, routing?.assignments ?? options.agentModels, options.singleModel)}\nConfigured models are operator choices; no task-specific superiority is assumed. Override with --task-model ROLE=MODEL or --single-model.\n`);
   const confirmed = (await io.question("Start this plan? [y/N]: ")).trim().toLowerCase();
   return confirmed === "y" || confirmed === "yes" ? plan : undefined;
 }

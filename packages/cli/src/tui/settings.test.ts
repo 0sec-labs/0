@@ -132,6 +132,14 @@ describe("normalizeSettings", () => {
     expect(normalized.composerStyle).toBe(DEFAULT_SETTINGS.composerStyle);
   });
 
+  it("queues follow-ups by default and preserves explicit interrupt preferences", () => {
+    expect(DEFAULT_SETTINGS.busyInputMode).toBe("queue");
+    expect(normalizeSettings({}).busyInputMode).toBe("queue");
+    expect(normalizeSettings({ busyInputMode: "invalid" }).busyInputMode).toBe("queue");
+    expect(normalizeSettings({ busyInputMode: "steer" }).busyInputMode).toBe("steer");
+    expect(normalizeSettings({ busyInputMode: "queue" }).busyInputMode).toBe("queue");
+  });
+
   it("defaults transcript detail to a 20-line preview and honours a valid override", () => {
     expect(DEFAULT_SETTINGS.transcriptDetail).toBe("collapsed");
     expect(normalizeSettings({}).transcriptDetail).toBe("collapsed");
@@ -667,6 +675,18 @@ import { dirname } from "node:path";
 
 
 describe("public analytics consent", () => {
+  it("defaults fresh installations to usage metrics and reviewed diagnostics", () => {
+    const home = makeHome();
+    const project = makeProjectDir();
+    const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
+    expect(DEFAULT_SETTINGS.analyticsLevel).toBe("usage");
+    expect(settings.analyticsLevel).toBe("usage");
+    expect(settings.diagnosticReporting).toBe("ask");
+    expect(settings.diagnosticReportingPrompted).toBe(false);
+    expect(sources.analyticsLevel).toBe("default");
+    expect(sources.diagnosticReporting).toBe("default");
+  });
+
   it("narrows legacy content-sharing consent on load and persists only usage", () => {
     const home = makeHome();
     const project = makeProjectDir();

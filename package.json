@@ -1,7 +1,7 @@
 {
   "name": "0sec-cli",
   "type": "module",
-  "version": "0.24.1",
+  "version": "0.25.0",
   "description": "Your self-improving, open-source cybersecurity team.",
   "bin": {
     "0": "dist/0.js"
@@ -26,6 +26,7 @@
     "docs:check": "node scripts/sync-cli-docs.mjs --check",
     "docs:sync": "node scripts/sync-cli-docs.mjs --write",
     "dev": "node scripts/dev-web.mjs",
+    "setup:0verse": "node scripts/setup-0verse.mjs",
     "lint": "pnpm --filter '!@0/docs' -r exec tsc --noEmit",
     "test": "pnpm test:public",
     "test:review-local": "node scripts/review-local-smoke.mjs",
@@ -88,20 +89,18 @@
   },
   "packageManager": "pnpm@9.15.9",
   "dependencies": {
-    "@opentui/core": "0.5.4",
-    "@opentui/react": "0.5.4",
     "drizzle-orm": "^0.45.2",
     "node-sqlite3-wasm": "^0.8.55",
     "pdfkit": "^0.15.2",
     "playwright": "1.60.0",
-    "react": "^19.2.4",
     "tree-sitter": "file:vendor/tree-sitter-0.21.1-node24.tgz",
     "tree-sitter-c": "0.21.4"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
     "@types/pdfkit": "^0.13.9",
-    "esbuild": "^0.28.1"
+    "esbuild": "^0.28.1",
+    "react": "^19.2.4"
   },
   "pnpm": {
     "overrides": {

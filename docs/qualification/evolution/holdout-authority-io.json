@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "platform": "darwin",
+  "node": "v24.14.0",
+  "reservations": 100,
+  "p50Ms": 35.32312499999989,
+  "p95Ms": 42.777250000000095,
+  "maxMs": 48.186457999999675,
+  "campaignBytes": 5455,
+  "authorityBytes": 4032,
+  "atomicLedgerWritesPerReservation": 2,
+  "controllerLockOwnerWritesPerReservation": 2,
+  "fsyncCallsPerNormalReservation": 6,
+  "fullArchiveScansPerReservation": 0,
+  "modelCalls": 0
+}

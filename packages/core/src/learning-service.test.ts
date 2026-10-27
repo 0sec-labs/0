@@ -1,7 +1,7 @@
 import { mkdtempSync, writeFileSync, rmSync, chmodSync, readdirSync, mkdirSync, symlinkSync, unlinkSync, linkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { LearningStore } from "@0/db";
 import { LearningService } from "./learning-service.js";
 import { HuntMemoryStore } from "./memory/hunt-memory.js";
@@ -66,6 +66,44 @@ describe("LearningService", () => {
     expect(service.importCodebaseNotes("project", path, memory)).toEqual([]);
     expect(service.invalidateKnowledge("project", { "index.ts": digest })).toBe(0);
     expect(store.getKnowledge(entries[0].id)?.status).toBe("stale");
+  });
+
+  it("does not let disabled recent lessons crowd older active lessons out of a bounded recall", () => {
+    const path = root();
+    writeFileSync(join(path, "index.ts"), "export const a = 1;\n");
+    let timestamp = 0;
+    const memory = new HuntMemoryStore({ path: join(path, "memory.jsonl"), now: () => ++timestamp });
+    const remember = (summary: string) => memory.rememberCodebase({ root: path, paths: ["index.ts"], title: summary, summary, source: "manual" });
+    remember("Older useful lesson");
+    remember("Newer disabled lesson");
+    const store = open();
+    const service = new LearningService(store);
+    const initial = service.importCodebaseNotes("project", path, memory, 2);
+    store.setKnowledgeStatus(initial.find(entry => entry.summary === "Newer disabled lesson")!.id, "disabled");
+    expect(service.importCodebaseNotes("project", path, memory, 1).map(entry => entry.summary)).toEqual(["Older useful lesson"]);
+    expect(store.listKnowledge().find(entry => entry.summary === "Newer disabled lesson")!.status).toBe("disabled");
+  });
+
+  it("recalls admitted source records in one pass with shared eligibility and freshness checks", () => {
+    const path = root();
+    writeFileSync(join(path, "index.ts"), "export const a = 1;\n");
+    let timestamp = 0;
+    const memory = new HuntMemoryStore({ path: join(path, "memory.jsonl"), now: () => ++timestamp });
+    const older = memory.rememberCodebase({ root: path, paths: ["index.ts"], title: "Entry", summary: "Older useful source lesson", source: "manual" });
+    memory.rememberCodebase({ root: path, paths: ["index.ts"], title: "Disabled", summary: "Newest source lesson", source: "manual" });
+    const store = open();
+    const service = new LearningService(store);
+    const entries = service.importCodebaseNotes("project", path, memory, 2);
+    store.setKnowledgeStatus(entries.find(entry => entry.summary === "Newest source lesson")!.id, "disabled");
+    const recall = vi.spyOn(memory, "recallCodebase");
+    expect(service.recallCodebaseNotes("project", path, memory, 1)).toEqual([older]);
+    expect(recall).toHaveBeenCalledTimes(1);
+    writeFileSync(join(path, "index.ts"), "export const a = 2;\n");
+    expect(service.recallCodebaseNotes("project", path, memory)).toEqual([]);
+    expect(store.listKnowledge().find(entry => entry.summary === older.summary)!.status).toBe("stale");
+    // Restoring the original bytes does not reactivate previously stale evidence.
+    writeFileSync(join(path, "index.ts"), "export const a = 1;\n");
+    expect(service.recallCodebaseNotes("project", path, memory)).toEqual([]);
   });
 
   it("excludes symlink and hardlink replacements from retained source knowledge", () => {

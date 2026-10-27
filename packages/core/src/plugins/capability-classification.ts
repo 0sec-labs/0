@@ -8,6 +8,7 @@ export const NETWORK_CAPABLE_TOOLS: Readonly<Record<string, true>> = Object.free
   submit_form: true,
   access_control_probe: true,
   access_control_workflow: true,
+  access_control_cleanup: true,
   browser: true,
   wp_fingerprint: true,
   discover_api_surface: true,
@@ -37,6 +38,7 @@ export const NETWORK_CAPABLE_TOOLS: Readonly<Record<string, true>> = Object.free
 /** Copilot-exempt reads and authority-free session bookkeeping. */
 export const READ_ONLY_TOOLS: Readonly<Record<string, true>> = Object.freeze({
   read_file: true,
+  access_control_cleanup: true,
   search_files: true,
   list_files: true,
   query_findings: true,

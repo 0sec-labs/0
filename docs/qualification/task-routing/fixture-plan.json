@@ -1,0 +1,14 @@
+{
+  "mode": "fixture",
+  "models": ["gpt-4o-mini", "gpt-4o"],
+  "repeats": 2,
+  "maxCalls": 64,
+  "costCapUsd": 1,
+  "timeCapMs": 30000,
+  "authorizationRef": "public synthetic fixtures only; no provider requests",
+  "workflow": {
+    "targetKind": "web",
+    "goal": "unknown-vulnerabilities",
+    "depth": "quick"
+  }
+}

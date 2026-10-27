@@ -3,15 +3,18 @@ title: Engine Connections
 description: Register a remote 0 engine, keep credentials server-side, and select it from browser, CLI, or MCP.
 ---
 
-An engine owns its sessions, workflow runs, workspace paths, model connections,
-and execution environments. Selecting another engine changes where work runs.
+An engine owns its sessions, workflow runs, workspace paths and execution
+environments. It normally uses its own model connections; browser chats can
+explicitly use a local Codex connection through a scoped relay as described below.
+Selecting another engine changes where work runs.
 It does not select a model, copy a repository, or turn a model provider into a
 remote execution service.
 
 ## Run an engine on the server
 
-Install 0 and configure its model provider on the server using [API Keys](/api-keys/).
-Prepare the server's repositories, scope configuration, and any required SmolVM,
+Install 0 on the server. Configure its own model provider using [API Keys](/api-keys/)
+for host-managed models and CLI/MCP workflows, or use the local Codex relay for
+supported browser chats. Prepare the server's repositories, scope configuration, and any required SmolVM,
 Docker, replay, or research prerequisites there.
 
 Set the same secret in `ZERO_REMOTE_ENGINE_TOKEN` on the server and in the local
@@ -102,6 +105,26 @@ named local directory is a different resource.
 The handshake reports protocol version, engine identity, platform, and supported
 capabilities. An unreachable or incompatible connection cannot launch work through
 a local fallback. Missing executors and engine prerequisites fail before dispatch.
+
+## Use a local Codex connection for a remote chat
+
+For a browser chat, the execution host and model source are separate choices.
+Choose the registered server for execution and the local machine for its model
+source. A local `chatgpt-codex` account can then power the remote chat without
+signing that model account into the remote server. Local provider credentials
+stay on the local machine; authorized model requests and streamed responses
+travel through the scoped relay. Tool arguments/results and prompts can contain
+remote workspace data and are part of those model requests.
+
+This first release supports Codex only, with the remote engine's explicitly
+selected host-local execution profile. SmolVM-backed relay execution and other
+local providers are unsupported. The relay is bound to its granted chat/model
+and engine ownership; a restart or expired relay requires reconnection before
+continuing. Remote tools still run under the remote host's scope and permissions.
+The relay never supplies provider credentials to the remote host.
+
+The CLI/MCP workflow adapters below still use the execution engine's configured
+provider. Selecting a backend for a workflow does not grant a local model relay.
 
 ## Use CLI and MCP clients
 

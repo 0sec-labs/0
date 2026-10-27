@@ -55,7 +55,8 @@
  * history file may not take down a live console.
  */
 
-import { chmodSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { z } from "zod";
 import type { ConsoleJsonValue } from "@0/shared";
@@ -235,7 +236,7 @@ function sanitizeSummary(value: unknown): string | undefined {
  * `loadSession` cannot open. A non-finite `savedAt` sorts last rather than
  * rejecting the file — an unorderable transcript is still a recoverable one.
  */
-function toMeta(id: string, raw: unknown, messageCount: number): StoredSessionMeta {
+export function storedSessionMetadata(id: string, raw: unknown, messageCount: number): StoredSessionMeta {
   const savedAt = rawValue(raw, "savedAt");
   const cwd = rawValue(raw, "cwd");
   const target = optionalString(raw, "target");
@@ -277,6 +278,9 @@ const workerSchema = z.object({
 }).strict();
 const consoleStateSchema = z.object({
   configuration: z.object({
+    modelSource: z.literal("local").optional(),
+    workflowId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/).optional(),
+    skillId: z.string().min(1).max(384).refine(value => !/[\u0000-\u001f\u007f]/.test(value)).optional(),
     target: z.string().max(8_000), role: z.enum(["discovery", "attack", "verify", "report", "audit", "review"]),
     runtime: z.object({
       providerId: z.string().max(256).optional(), model: z.string().max(256).optional(),
@@ -303,7 +307,7 @@ const consoleStateSchema = z.object({
   }).strict().nullable(),
   workers: z.array(workerSchema).max(1_000),
   compaction: jsonValueSchema.nullable(),
-  queuedMessages: z.array(z.object({ id: z.string().max(256), text: boundedString, createdAt: z.string().max(64), author: messageAuthorSchema.optional() }).strict()).max(20),
+  queuedMessages: z.array(z.object({ attachments: z.array(z.object({ kind: z.enum(["path", "text", "image"]), value: z.string().max(650_000), name: z.string().max(256).optional() }).strict()).max(20).optional(), id: z.string().max(256), text: boundedString, createdAt: z.string().max(64), author: messageAuthorSchema.optional() }).strict()).max(20),
   userAttributions: z.array(z.object({ text: boundedString, author: messageAuthorSchema.optional() }).strict()).max(10000).optional(),
   focusedFindingId: z.string().max(256).optional(),
   stagedPrompt: boundedString.optional(),
@@ -357,7 +361,7 @@ function parseSession(id: string, text: string): StoredSession | null {
   const messages = rawValue(raw, "messages");
   if (!Array.isArray(messages)) return null;
   const consoleState = parseConsoleState(rawValue(raw, "consoleState"));
-  return { ...toMeta(id, raw, messages.length), messages, ...(consoleState ? { consoleState } : {}) };
+  return { ...storedSessionMetadata(id, raw, messages.length), messages, ...(consoleState ? { consoleState } : {}) };
 }
 
 /**
@@ -380,6 +384,7 @@ function parseSession(id: string, text: string): StoredSession | null {
  * drops it when blank — the field is persisted only when there is one to keep.
  */
 export function saveSession(session: StoredSession, homeDir?: string): boolean {
+  let pendingPath: string | undefined;
   try {
     if (!Array.isArray(session?.messages)) return false;
     const path = sessionFilePath(session.id, homeDir);
@@ -392,17 +397,28 @@ export function saveSession(session: StoredSession, homeDir?: string): boolean {
     chmodSync(dir, DIR_MODE);
 
     const payload: StoredSession = {
-      ...toMeta(session.id, session, session.messages.length),
+      ...storedSessionMetadata(session.id, session, session.messages.length),
       messages: session.messages,
       ...(consoleState ? { consoleState } : {}),
     };
     // Not pretty-printed, unlike the settings file next door: this one is not
     // meant to be read by hand, and a transcript's indentation is pure bulk.
-    writeFileSync(path, `${JSON.stringify(payload)}\n`, { encoding: "utf8", mode: FILE_MODE });
-    chmodSync(path, FILE_MODE);
+    // Replace only after the complete payload has been written. A failed write
+    // must leave the previous resumable transcript intact. The sibling staging
+    // file keeps rename atomic and is ignored by session discovery.
+    const serialized = `${JSON.stringify(payload)}\n`;
+    pendingPath = join(dir, `.${session.id}.${randomUUID()}.tmp`);
+    writeFileSync(pendingPath, serialized, { encoding: "utf8", mode: FILE_MODE, flag: "wx" });
+    chmodSync(pendingPath, FILE_MODE);
+    renameSync(pendingPath, path);
+    pendingPath = undefined;
     return true;
   } catch {
     return false;
+  } finally {
+    if (pendingPath !== undefined) {
+      try { rmSync(pendingPath, { force: true }); } catch { /* Preserve the total store API on cleanup failures. */ }
+    }
   }
 }
 

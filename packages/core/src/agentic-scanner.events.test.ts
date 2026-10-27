@@ -15,6 +15,9 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } 
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import * as retentionPanel from "./improvement/retention.js";
+import * as retentionStudy from "./improvement/paired-retention.js";
+import * as evolutionEvaluation from "./improvement/evaluation.js";
 import { agenticScan } from "./agentic-scanner.js";
 import { eventBus, type EventType } from "./events/bus.js";
 import { LlmApiRuntime } from "./runtime/llm-api.js";
@@ -190,6 +193,9 @@ describe("agenticScan: scan_completed emission", () => {
   });
 
   it("routes explicit codex live scans through the direct ChatGPT Codex provider when configured", async () => {
+    const panelSpy = vi.spyOn(retentionPanel, "evaluateEvolutionRetention");
+    const studySpy = vi.spyOn(retentionStudy, "analyzePairedRetention");
+    const provenanceSpy = vi.spyOn(evolutionEvaluation, "evolutionComparisonIdentity");
     process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"] = "fake-refresh-token";
     vi.mocked(LlmApiRuntime.prototype.getConfigurationDiagnostics).mockReturnValue({
       valid: true,
@@ -219,6 +225,18 @@ describe("agenticScan: scan_completed emission", () => {
 
     expect(report.findings).toHaveLength(0);
     expect(executeNativeSpy).toHaveBeenCalled();
+    expect(panelSpy).not.toHaveBeenCalled();
+    expect(studySpy).not.toHaveBeenCalled();
+    expect(provenanceSpy).not.toHaveBeenCalled();
+    if (process.env.ZERO_RETENTION_SCAN_METRICS) {
+      fs.mkdirSync(path.dirname(process.env.ZERO_RETENTION_SCAN_METRICS), { recursive: true });
+      fs.writeFileSync(process.env.ZERO_RETENTION_SCAN_METRICS, JSON.stringify({
+        schemaVersion: 1, evidenceKind: "mocked-provider-ordinary-scan-no-paid-calls", ordinaryScanModelInvocations: executeNativeSpy.mock.calls.length,
+        retentionPanelInvocations: panelSpy.mock.calls.length, pairedStudyInvocations: studySpy.mock.calls.length,
+        provenanceObservationInvocations: provenanceSpy.mock.calls.length, unexpectedNetworkCalls: unexpectedFetch.mock.calls.length,
+        limitation: "fixture call counts only, not production scan latency or stochastic benefit",
+      }, null, 2) + "\n");
+    }
 
     const completedEvents = events.filter((e) => e.type === "scan_completed");
     expect(completedEvents).toHaveLength(1);
