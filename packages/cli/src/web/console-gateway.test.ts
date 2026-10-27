@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eventBus, type ConsoleSession, type ConsoleTurnOutcome, type NativeMessage, type ToolCall } from "@0/core";
 import { LearningStore, SecurityWorkflowStore } from "@0/db";
+import { estimateCost } from "@0/shared";
 import { ConsoleGateway, ConsoleGatewayError, type ConsoleGatewaySessionFactoryInput, type ConsoleExecutionContext } from "./console-gateway.js";
 import { SkillsStore } from "./skills.js";
 import { loadSession, saveSession } from "../tui/session-store.js";
@@ -82,6 +83,39 @@ async function idle(instance: ConsoleGateway, id: string): Promise<void> {
 }
 
 describe("ConsoleGateway", () => {
+  it("prices worker deltas using their actual model and cache receipt", async () => {
+    const child = { inputTokens: 10_000, outputTokens: 100, cachedInputTokens: 9_000, cacheWriteTokens: 500 };
+    const parent = { inputTokens: 200, outputTokens: 20 };
+    const instance = gateway(input => {
+      const base = engine(input);
+      return { ...base, async send(text, callbacks, options) {
+        callbacks?.onUsage?.({ ...child, kind: "worker", model: "gpt-4.1", turnTokensUsed: 10_100, turnTokenBudget: Infinity, iterations: 1, maxToolIterations: 100 });
+        callbacks?.onUsage?.({ ...parent, kind: "planner", model: "gpt-4o", turnTokensUsed: 10_320, turnTokenBudget: Infinity, iterations: 1, maxToolIterations: 100 });
+        return base.send(text, callbacks, options);
+      } };
+    });
+    const chat = instance.create({});
+    await instance.send(chat.id, "Review with one worker."); await idle(instance, chat.id);
+    expect(instance.get(chat.id).usage).toMatchObject({
+      inputTokens: 10_200, outputTokens: 120, costUnavailable: false, costKind: "estimated",
+    });
+    expect(instance.get(chat.id).usage.costUsd).toBeCloseTo(estimateCost(child, "gpt-4.1") + estimateCost(parent, "gpt-4o"), 12);
+  });
+
+  it("retains unknown worker cost after later priced parent usage", async () => {
+    const instance = gateway(input => {
+      const base = engine(input);
+      return { ...base, async send(text, callbacks, options) {
+        callbacks?.onUsage?.({ inputTokens: 0, outputTokens: 0, kind: "worker", model: "gpt-4.1", usageUnavailable: true, turnTokensUsed: 0, turnTokenBudget: Infinity, iterations: 0, maxToolIterations: 100 });
+        callbacks?.onUsage?.({ inputTokens: 200, outputTokens: 20, kind: "planner", model: "gpt-4o", turnTokensUsed: 220, turnTokenBudget: Infinity, iterations: 1, maxToolIterations: 100 });
+        return base.send(text, callbacks, options);
+      } };
+    });
+    const chat = instance.create({});
+    await instance.send(chat.id, "Review with one worker."); await idle(instance, chat.id);
+    expect(instance.get(chat.id).usage.costUnavailable).toBe(true);
+  });
+
   it("binds skill edits, follows a preserved workspace copy, and restores that binding", async () => {
     const home = mkdtempSync(join(tmpdir(), "0-skill-chat-test-")); homes.push(home);
     const skills = new SkillsStore({ workspace: home, stateDir: join(home, "state") });
@@ -730,11 +764,11 @@ describe("ConsoleGateway", () => {
 
 
 describe("ConsoleGateway isolated execution boundaries", () => {
-  function isolatedGateway() {
+  function isolatedGateway(model = "granted-model") {
     isolated.profile = "smolvm";
     const home = mkdtempSync(join(tmpdir(), "0-web-isolated-test-")); homes.push(home);
-    const runtime = { resolvedModel: () => "granted-model", resolvedProvider: () => "chatgpt-codex", modelSelection: () => ({ agentModels: {}, singleModel: true, autoRoute: false }) };
-    const info = { providerId: "chatgpt-codex", providerLabel: "ChatGPT", model: "granted-model", configured: true,
+    const runtime = { resolvedModel: () => model, resolvedProvider: () => "chatgpt-codex", modelSelection: () => ({ agentModels: {}, singleModel: true, autoRoute: false }) };
+    const info = { providerId: "chatgpt-codex", providerLabel: "ChatGPT", model, configured: true,
       connectionIdentity: "fixture-account", diagnostics: { valid: true, reason: null, message: null },
       agentModels: {}, singleModel: true, autoRoute: false, contextWindowTokens: 100_000 };
     isolated.runtimeFactory.mockResolvedValue({ runtime, info });
@@ -755,6 +789,24 @@ describe("ConsoleGateway isolated execution boundaries", () => {
     });
     return { cleanup, reconfigure };
   }
+
+  it("never prices known worker tokens as the parent when the worker model is unknown", async () => {
+    const { instance } = isolatedGateway("gpt-4o");
+    isolated.localFactory.mockImplementation((input: ConsoleGatewaySessionFactoryInput): ConsoleSession => {
+      const base = engine(input);
+      return { ...base, async send(text, callbacks, options) {
+        callbacks?.onUsage?.({ inputTokens: 100, outputTokens: 10, kind: "worker", turnTokensUsed: 110, turnTokenBudget: Infinity, iterations: 0, maxToolIterations: 100 });
+        // The parent has a known runtime identity. It is a legitimate fallback
+        // for this planner receipt, but must never price the unidentified child.
+        callbacks?.onUsage?.({ inputTokens: 200, outputTokens: 20, kind: "planner", turnTokensUsed: 330, turnTokenBudget: Infinity, iterations: 1, maxToolIterations: 100 });
+        return base.send(text, callbacks, options);
+      } };
+    });
+    const chat = instance.create({});
+    await instance.send(chat.id, "Review with one worker."); await idle(instance, chat.id);
+    expect(instance.get(chat.id).usage).toMatchObject({ inputTokens: 300, outputTokens: 30, costUnavailable: true });
+    expect(instance.get(chat.id).usage.costUsd).toBeCloseTo(estimateCost({ inputTokens: 200, outputTokens: 20 }, "gpt-4o"), 12);
+  });
 
   it("passes the lesson store to the host VM adapter without opening host tool resources", async () => {
     const { instance } = isolatedGateway(); admitFixture();

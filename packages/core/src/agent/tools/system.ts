@@ -153,7 +153,7 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
   spawn_agent: {
     name: "spawn_agent",
     description:
-      "Delegate a focused task to an agent with fresh context and the parent's role, scope, tools and shared budget. Use for source investigation or an independent security lead. Children may delegate within the shared worker/depth bounds. Returns findings and a summary.",
+      "Delegate a focused task to an agent with fresh context and the parent's role, scope, permitted built-in tools and shared usage limits. Use for source investigation or an independent security lead. Children may delegate when their permitted tool set allows it, within the shared worker/depth bounds. Returns findings and a summary.",
     parameters: {
       task: { type: "string", description: "Self-contained task: target files or URL, objective, constraints and evidence required." },
       expected_workspace: expectedWorkspaceParameter,
@@ -167,7 +167,7 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
   spawn_agents: {
     name: "spawn_agents",
     description:
-      "Delegate independent tasks CONCURRENTLY (bounded), with fresh context and separate turn budgets but the same role, scope, tools and scan-wide cost budget. Use for source subsystems or independent security leads. Returns each agent's findings and summary. Default maximum 1024 tasks per call (configurable with ZERO_SUBAGENT_MAX_FANOUT); queued tasks execute in parallel pools; descendants share the audit's worker/depth bounds.",
+      "Delegate independent tasks CONCURRENTLY (bounded), with fresh context and separate turn budgets but the same role, scope, permitted built-in tools and shared usage limits. Use for source subsystems or independent security leads. Returns each agent's findings and summary. Default maximum 1024 tasks per call (configurable with ZERO_SUBAGENT_MAX_FANOUT); queued tasks execute in parallel pools; descendants share the audit's worker/depth bounds.",
     parameters: {
       context: {
         type: "string",
@@ -229,7 +229,7 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
   spawn_persistent_agent: {
     name: "spawn_persistent_agent",
     description:
-      "Spawn a LONG-LIVED teammate agent that runs a task, then PARKS (stays alive and addressable) instead of finishing. Message it with send_message to REVIVE it for follow-up work — it keeps its place in the roster between messages. Use for an ongoing collaborator you coordinate with over time; for a one-shot task use spawn_agent. Returns the agent's id and name immediately and runs in the background.",
+      "Spawn a LONG-LIVED teammate agent that runs a task, then PARKS (stays alive and addressable) instead of finishing. Follow-up work requires an enabled messaging route, such as operator agent controls; this tool does not itself provide the coordinator a messaging channel. Use for an ongoing collaborator you coordinate with over time; for a one-shot task use spawn_agent. Returns the agent's id and name immediately and runs in the background.",
     parameters: {
       task: { type: "string", description: "The initial task for the persistent agent. Be specific: target, goal, and what to report back." },
       name: { type: "string", description: "Optional display name (else an auto AdjectiveNoun name is assigned)." },

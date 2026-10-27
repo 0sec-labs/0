@@ -181,9 +181,13 @@ export interface ConsoleUsageReport extends TokenUsageForPricing {
   iterations: number;
   /** The runaway iteration backstop in force (`maxToolIterations`). */
   maxToolIterations: number;
-  /** Only planner input describes conversation occupancy. Plugin input belongs
-   * to a separate prompt; compaction is reserved for a future console emitter. */
-  kind: "planner" | "plugin" | "compaction";
+  /** Only planner input describes conversation occupancy. Plugin and worker
+   * input belongs to separate prompts. */
+  kind: "planner" | "plugin" | "compaction" | "worker";
+  /** Actual worker request model; omitted for the parent planner. */
+  model?: string;
+  /** The runtime completed without a usage receipt; zero is not known free. */
+  usageUnavailable?: boolean;
 }
 
 // ── Console autonomy / scope resolution (0 console) ──
@@ -1963,8 +1967,55 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   let unregisterContribution: (() => void) | undefined;
   let capturedRuntime: NativeRuntime | undefined;
   const pendingModelCalls = new Set<Promise<NativeRuntimeResult>>();
+  // A worker may outlive its spawning turn. Resolve the observer when usage
+  // arrives so later work reports to the current renderer, never an obsolete
+  // turn callback. Retiring closes this subscription; late provider charges
+  // after disposal cannot be reconciled here and must not be presented as a
+  // complete invoice or delivered to the retired renderer.
+  let delegatedUsageObserver: {
+    record: (usage: TokenUsageForPricing | undefined, model?: string) => void;
+    beforeRequest: () => void;
+  } | undefined;
+  const observeDelegatedRuntime = (child: NativeRuntime): NativeRuntime => new Proxy(child, {
+    get(target, key) {
+      if (key === "forkForSubagent" && target.forkForSubagent) {
+        return async (...args: Parameters<NonNullable<NativeRuntime["forkForSubagent"]>>) => {
+          if (closing) throw new Error("The console session is closing.");
+          return observeDelegatedRuntime(await target.forkForSubagent!(...args));
+        };
+      }
+      if (key === "executeNative") return async (...args: Parameters<NativeRuntime["executeNative"]>) => {
+        if (closing) throw new Error("The console session is closing.");
+        delegatedUsageObserver?.beforeRequest();
+        let streamed: TokenUsageForPricing | undefined;
+        let result: NativeRuntimeResult | undefined;
+        const [system, messages, tools, callbacks, signal] = args;
+        try {
+          result = await target.executeNative(system, messages, tools, {
+            ...callbacks,
+            onUsage: usage => { streamed = usage; callbacks?.onUsage?.(usage); },
+          }, signal);
+          return result;
+        } finally {
+          if (!closing) {
+            if (result?.usageByModel?.length) {
+              for (const entry of result.usageByModel) delegatedUsageObserver?.record(entry.usage, entry.model);
+            } else delegatedUsageObserver?.record(result?.usage ?? streamed, target.resolvedPricingModel?.() ?? target.resolvedModel?.());
+          }
+        }
+      };
+      const value = Reflect.get(target, key, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
   const runtime = new Proxy(config.runtime, {
     get(target, key) {
+      if (key === "forkForSubagent" && target.forkForSubagent) {
+        return async (...args: Parameters<NonNullable<NativeRuntime["forkForSubagent"]>>) => {
+          if (closing) throw new Error("The console session is closing.");
+          return observeDelegatedRuntime(await target.forkForSubagent!(...args));
+        };
+      }
       if (key === "executeNative") return (...args: Parameters<NativeRuntime["executeNative"]>) => {
         if (!contribution) return target.executeNative(...args);
         capturedRuntime ??= captureNativeRuntime(target, contribution);
@@ -3193,6 +3244,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     let unsubscribeHarness: (() => void) | undefined;
     const runCalls: Array<{ call: ToolCall; result: ToolResult }> = [];
     const usage = { inputTokens: 0, outputTokens: 0 };
+    let detachedUsageTokens = 0;
     let assistantText = "";
     let iterations = 0;
     const recordToolResult = (call: ToolCall, result: ToolResult, startedAt: number, findingsBefore: number): void => {
@@ -3292,11 +3344,18 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     const recordModelUsage = (
       kind: ConsoleUsageReport["kind"],
       delta?: TokenUsageForPricing,
+      model?: string,
     ): void => {
       if (delta) {
-        usage.inputTokens += delta.inputTokens;
-        usage.outputTokens += delta.outputTokens;
-        lastCallInputTokens = delta.inputTokens;
+        if (kind === "worker" && !turnActive) {
+          // Keep the already-returned outcome and budget immutable. The live
+          // session still receives each late worker delta through its renderer.
+          detachedUsageTokens += delta.inputTokens + delta.outputTokens;
+        } else {
+          usage.inputTokens += delta.inputTokens;
+          usage.outputTokens += delta.outputTokens;
+        }
+        if (kind !== "worker") lastCallInputTokens = delta.inputTokens;
         if (kind === "planner") lastPlannerInputTokens = delta.inputTokens;
       }
       callbacks?.onUsage?.({
@@ -3304,12 +3363,25 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         outputTokens: delta?.outputTokens ?? 0,
         ...(delta?.cachedInputTokens !== undefined ? { cachedInputTokens: delta.cachedInputTokens } : {}),
         ...(delta?.cacheWriteTokens !== undefined ? { cacheWriteTokens: delta.cacheWriteTokens } : {}),
-        turnTokensUsed: usage.inputTokens + usage.outputTokens,
+        turnTokensUsed: usage.inputTokens + usage.outputTokens + detachedUsageTokens,
         turnTokenBudget: maxTurnTokens,
         iterations,
         maxToolIterations,
         kind,
+        ...(model ? { model } : {}),
+        ...(kind === "worker" && delta === undefined ? { usageUnavailable: true } : {}),
       });
+    };
+    delegatedUsageObserver = {
+      record: (delta, model) => recordModelUsage("worker", delta, model),
+      beforeRequest: () => {
+        // This is a turn-token admission guard, not a provider billing cap.
+        // Already dispatched requests can finish; detached work after the turn
+        // retains its own worker limits and continues reporting session usage.
+        if (turnActive && usage.inputTokens + usage.outputTokens >= maxTurnTokens) {
+          throw new Error("Parent turn token budget is exhausted.");
+        }
+      },
     };
     const invokePluginModel = async (request: unknown, requestSignal?: AbortSignal) => {
       if (!turnActive) throw new Error("The parent console turn has ended.");
@@ -3848,6 +3920,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   const retire = (): Promise<{ warnings?: string[] }> => {
     if (retirement) return retirement;
     closing = true;
+    delegatedUsageObserver = undefined;
     objectiveService.dispose();
     const warnings: string[] = [];
     // Each drain step is bounded: a resource whose close never resolves (a live
