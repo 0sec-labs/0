@@ -1,0 +1,238 @@
+{
+  "schemaVersion": 1,
+  "study": "development-summary-ablation-121",
+  "preregistrationDigest": "sha256:a68373d2268129f77e3d949c4267af94899c61fd6d474e74e5a35178ef46127d",
+  "protocolDigest": "sha256:6e64465a841dcdea128ea38d66dd0d78911ca2d48a26016d514a973fa0604dc1",
+  "corpusDigest": "sha256:2c13432438c95407124b339239470158cd0a8085217a3141a4b8d01a2a7f4fce",
+  "mode": "controls",
+  "conclusion": "inconclusive",
+  "currentFeedbackRetained": true,
+  "broaderEnablement": false,
+  "automaticPromotion": false,
+  "primaryComparison": {
+    "independentFamilies": 3,
+    "meanGain": 0,
+    "interval95": [
+      -1,
+      1
+    ],
+    "retentionRegressions": 0
+  },
+  "arms": {
+    "current-feedback": {
+      "quality": {
+        "attempts": 10,
+        "verifiedCorrect": 4,
+        "positiveRecall": 0.5,
+        "falseAlarmRate": 0.6666666666666666,
+        "inconclusive": 0,
+        "p50Ms": 7.161832999999888,
+        "p95Ms": null
+      },
+      "controls": {
+        "aaDisagreements": 0,
+        "regressionDetected": true
+      },
+      "cost": {
+        "meteredTariffUsd": 0,
+        "billedUsd": 0,
+        "unknownUsage": false,
+        "byArm": {
+          "frozen-baseline": {
+            "meteredTariffUsd": 0,
+            "calls": 30
+          },
+          "sequential": {
+            "meteredTariffUsd": 0,
+            "calls": 31
+          },
+          "baseline-extra-attempts": {
+            "meteredTariffUsd": 0,
+            "calls": 31
+          },
+          "aa": {
+            "meteredTariffUsd": 0,
+            "calls": 20
+          },
+          "regression": {
+            "meteredTariffUsd": 0,
+            "calls": 20
+          }
+        },
+        "dispatchedCalls": 132,
+        "reservedMaximumUsd": 13.200000000000001,
+        "modelUsageBasis": "provider token usage x frozen tariff; invoice remains separate",
+        "localComputeUsd": null
+      },
+      "proposalTokens": {
+        "input": 1,
+        "output": 1
+      },
+      "elapsedMs": 2619.026458,
+      "cpuMs": 66.885
+    },
+    "compact-summary": {
+      "quality": {
+        "attempts": 10,
+        "verifiedCorrect": 4,
+        "positiveRecall": 0.5,
+        "falseAlarmRate": 0.6666666666666666,
+        "inconclusive": 0,
+        "p50Ms": 5.056875000000218,
+        "p95Ms": null
+      },
+      "controls": {
+        "aaDisagreements": 0,
+        "regressionDetected": true
+      },
+      "cost": {
+        "meteredTariffUsd": 0,
+        "billedUsd": 0,
+        "unknownUsage": false,
+        "byArm": {
+          "frozen-baseline": {
+            "meteredTariffUsd": 0,
+            "calls": 30
+          },
+          "sequential": {
+            "meteredTariffUsd": 0,
+            "calls": 31
+          },
+          "baseline-extra-attempts": {
+            "meteredTariffUsd": 0,
+            "calls": 31
+          },
+          "aa": {
+            "meteredTariffUsd": 0,
+            "calls": 20
+          },
+          "regression": {
+            "meteredTariffUsd": 0,
+            "calls": 20
+          }
+        },
+        "dispatchedCalls": 132,
+        "reservedMaximumUsd": 13.200000000000001,
+        "modelUsageBasis": "provider token usage x frozen tariff; invoice remains separate",
+        "localComputeUsd": null
+      },
+      "proposalTokens": {
+        "input": 1,
+        "output": 1
+      },
+      "elapsedMs": 2285.0509999999995,
+      "cpuMs": 62.347
+    }
+  },
+  "actualSharedMeteredTariffUsd": 0,
+  "invoiceUsd": 0,
+  "unknownUsage": false,
+  "reasons": [
+    "source-pattern oracle agreement does not independently reproduce or verify a vulnerability",
+    "public historical source may occur in model training data",
+    "tiny convenience sample does not establish security generalization",
+    "local compute monetary cost unpriced; wall/CPU measured separately",
+    "ordinary provider token usage is metered tariff cost, not reconciled invoice cost",
+    "provider-default decoding temperature and seed not pinned by existing runtime",
+    "deterministic controls only; no model-backed security efficacy evidence",
+    "insufficient independent final families for preregistered qualification",
+    "paired quality gain not established"
+  ],
+  "purpose": "deterministic summary-controller smoke observation; no model calls or summary benefit claim",
+  "qualificationStatus": "not-qualified",
+  "supersedes": "Original summary control used invalid helper-only lodash corpus; superseded by corrected source selections.",
+  "unknownUsageControl": {
+    "schemaVersion": 1,
+    "study": "development-summary-ablation-121",
+    "preregistrationDigest": "sha256:a68373d2268129f77e3d949c4267af94899c61fd6d474e74e5a35178ef46127d",
+    "protocolDigest": "sha256:6e64465a841dcdea128ea38d66dd0d78911ca2d48a26016d514a973fa0604dc1",
+    "corpusDigest": "sha256:2c13432438c95407124b339239470158cd0a8085217a3141a4b8d01a2a7f4fce",
+    "mode": "controls",
+    "conclusion": "inconclusive",
+    "currentFeedbackRetained": true,
+    "broaderEnablement": false,
+    "automaticPromotion": false,
+    "primaryComparison": {
+      "independentFamilies": 0,
+      "meanGain": null,
+      "interval95": [
+        -1,
+        1
+      ],
+      "retentionRegressions": 0
+    },
+    "arms": {
+      "current-feedback": {
+        "quality": {
+          "attempts": 0,
+          "verifiedCorrect": 0,
+          "positiveRecall": null,
+          "falseAlarmRate": null,
+          "inconclusive": 0,
+          "p50Ms": null,
+          "p95Ms": null
+        },
+        "controls": {
+          "aaDisagreements": 0,
+          "regressionDetected": false
+        },
+        "cost": {
+          "meteredTariffUsd": 0,
+          "billedUsd": null,
+          "unknownUsage": true,
+          "byArm": {
+            "frozen-baseline": {
+              "meteredTariffUsd": 0,
+              "calls": 1
+            },
+            "sequential": {
+              "meteredTariffUsd": 0,
+              "calls": 0
+            },
+            "baseline-extra-attempts": {
+              "meteredTariffUsd": 0,
+              "calls": 0
+            },
+            "aa": {
+              "meteredTariffUsd": 0,
+              "calls": 0
+            },
+            "regression": {
+              "meteredTariffUsd": 0,
+              "calls": 0
+            }
+          },
+          "dispatchedCalls": 1,
+          "reservedMaximumUsd": 0.1,
+          "modelUsageBasis": "provider token usage x frozen tariff; invoice remains separate",
+          "localComputeUsd": null
+        },
+        "proposalTokens": {
+          "input": 0,
+          "output": 0
+        },
+        "elapsedMs": 20.478792,
+        "cpuMs": 0.958
+      },
+      "compact-summary": null
+    },
+    "actualSharedMeteredTariffUsd": 0,
+    "invoiceUsd": null,
+    "unknownUsage": true,
+    "reasons": [
+      "source-pattern oracle agreement does not independently reproduce or verify a vulnerability",
+      "public historical source may occur in model training data",
+      "tiny convenience sample does not establish security generalization",
+      "local compute monetary cost unpriced; wall/CPU measured separately",
+      "ordinary provider token usage is metered tariff cost, not reconciled invoice cost",
+      "provider-default decoding temperature and seed not pinned by existing runtime",
+      "shared accounting stop before compact arm",
+      "deterministic controls only; no model-backed security efficacy evidence",
+      "insufficient independent final families for preregistered qualification",
+      "paired quality gain not established",
+      "injected regression control not demonstrated",
+      "unsettled dispatch or unknown token usage",
+      "provider invoice and full monetary cost not reconciled"
+    ]
+  }
+}
