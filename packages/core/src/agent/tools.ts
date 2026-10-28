@@ -7806,8 +7806,8 @@ export class ToolExecutor {
   /**
    * str_replace — exact-string file edit (Claude text_editor `str_replace`
    * contract). More reliable than `apply_patch` for single edits: there are no
-   * fragile context hunks to mismatch — `old_string` must match the file byte
-   * for byte (whitespace and indentation included) and, unless `replace_all` is
+   * fragile context hunks to mismatch — matching preserves whitespace and
+   * indentation, tolerates LF/CRLF for multiline blocks and, unless `replace_all` is
    * set, UNIQUELY. Same gate as `apply_patch`/`run_command`: refuses without a
    * `scopePath` and resolves the path through `resolveScopedPath` so the edit
    * can never escape the audit directory. Fail-soft — every error is a clear,
@@ -7887,15 +7887,51 @@ export class ToolExecutor {
       return { success: false, output: null, error: `str_replace: could not read ${rawPath}: ${msg}` };
     }
 
-    // Count exact (byte-for-byte) occurrences of old_string.
-    let occurrences = 0;
-    let searchFrom = 0;
-    for (;;) {
-      const hit = original.indexOf(oldString, searchFrom);
-      if (hit === -1) break;
-      occurrences += 1;
-      searchFrom = hit + oldString.length;
+    // Find all non-overlapping occurrences. For single-line strings, exact
+    // byte-for-byte matching is used. For multiline strings, line endings are
+    // matched as LF or CRLF, including mixtures within a block. Unmatched
+    // bytes are copied verbatim; replacement line endings follow the block.
+    const matches: Array<{ start: number; end: number; replacement: string }> = [];
+
+    if (!oldString.includes("\n")) {
+      let pos = 0;
+      while ((pos = original.indexOf(oldString, pos)) !== -1) {
+        matches.push({ start: pos, end: pos + oldString.length, replacement: newString });
+        pos += oldString.length;
+      }
+    } else {
+      // Compare logical newlines, recording each removed CR at its logical
+      // offset. Monotone cursors map matches back to untouched original bytes.
+      const removedCrOffsets: number[] = [];
+      const logicalOriginal = original.replace(/\r\n/g, (_ending, offset: number) => {
+        removedCrOffsets.push(offset - removedCrOffsets.length);
+        return "\n";
+      });
+      const logicalOld = oldString.replace(/\r\n/g, "\n");
+      const crlfNew = newString.replace(/\r?\n/g, "\r\n");
+      const lfNew = newString.replace(/\r?\n/g, "\n");
+      const mixedExact = oldString.includes("\r\n") && oldString.replace(/\r\n/g, "").includes("\n");
+      let removed = 0;
+      let pos = 0;
+      let hit: number;
+      while ((hit = logicalOriginal.indexOf(logicalOld, pos)) !== -1) {
+        while (removed < removedCrOffsets.length && removedCrOffsets[removed] < hit) removed++;
+        const start = hit + removed;
+        const logicalEnd = hit + logicalOld.length;
+        while (removed < removedCrOffsets.length && removedCrOffsets[removed] < logicalEnd) removed++;
+        const end = logicalEnd + removed;
+        const matched = original.slice(start, end);
+        // Preserve the prior literal replacement for an exact mixed-EOL block.
+        // Otherwise the first matched newline sets the replacement's style.
+        const replacement = mixedExact && matched === oldString
+          ? newString
+          : /\r?\n/.exec(matched)![0] === "\r\n" ? crlfNew : lfNew;
+        matches.push({ start, end, replacement });
+        pos = logicalEnd;
+      }
     }
+
+    const occurrences = matches.length;
 
     if (occurrences === 0) {
       return {
@@ -7913,12 +7949,22 @@ export class ToolExecutor {
     }
 
     // We only reach here when occurrences === 1, or replace_all is set. In both
-    // cases replacing every occurrence yields the intended result. split/join
-    // avoids String.prototype.replace's special `$` handling in the replacement.
+    // cases replacing matches in a single forward pass avoids cascading substitutions
+    // and preserves line endings outside the replaced regions.
     const replacements = replaceAll ? occurrences : 1;
-    const updated = replaceAll
-      ? original.split(oldString).join(newString)
-      : original.replace(oldString, () => newString);
+    let updated: string;
+    if (replaceAll) {
+      updated = "";
+      let lastIndex = 0;
+      for (const m of matches) {
+        updated += original.slice(lastIndex, m.start) + m.replacement;
+        lastIndex = m.end;
+      }
+      updated += original.slice(lastIndex);
+    } else {
+      const m = matches[0];
+      updated = original.slice(0, m.start) + m.replacement + original.slice(m.end);
+    }
 
     try {
       writeFileSync(abs, updated, "utf-8");
