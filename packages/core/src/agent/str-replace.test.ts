@@ -251,6 +251,107 @@ describe("str_replace (executor-level integration)", () => {
       expect(content.replace(/\r\n/g, "")).not.toContain("\n");
     });
 
+    it("retains exact matches with mixed line endings inside a block", async () => {
+      const target = join(tmp, "mixed-exact.ts");
+      writeFileSync(target, "header\r\na\r\nb\nc\nfooter");
+      const result = await scopedExecutor.execute({ name: "str_replace", arguments: {
+        path: "mixed-exact.ts", old_string: "a\r\nb\nc", new_string: "x\ny\r\nz",
+      } });
+      expect(result.success).toBe(true);
+      expect(readFileSync(target, "utf-8")).toBe("header\r\nx\ny\r\nz\nfooter");
+    });
+
+    it.each([false, true])("counts exact mixed and normalized matches together (replace_all=%s)", async replaceAll => {
+      const target = join(tmp, "mixed-exact-all.ts");
+      const original = "a\r\nb\nc|a\nb\nc|a\r\nb\r\nc";
+      writeFileSync(target, original);
+      const result = await scopedExecutor.execute({ name: "str_replace", arguments: {
+        path: "mixed-exact-all.ts", old_string: "a\r\nb\nc", new_string: "x\ny\r\nz", replace_all: replaceAll,
+      } });
+      expect(result.success).toBe(replaceAll);
+      if (replaceAll) {
+        expect(result.output).toEqual({ path: "mixed-exact-all.ts", replacements: 3 });
+        expect(readFileSync(target, "utf-8")).toBe("x\ny\r\nz|x\ny\nz|x\r\ny\r\nz");
+      } else {
+        expect(result.error).toMatch(/matches 3 locations/);
+        expect(readFileSync(target, "utf-8")).toBe(original);
+      }
+    });
+
+    it.each([false, true])("counts internally mixed and uniform logical copies (replace_all=%s)", async replaceAll => {
+      const target = join(tmp, "logical-mixed.ts");
+      const original = "a\r\nb\nc|a\nb\nc";
+      writeFileSync(target, original);
+      const result = await scopedExecutor.execute({ name: "str_replace", arguments: {
+        path: "logical-mixed.ts", old_string: "a\nb\nc", new_string: "x\ny\nz", replace_all: replaceAll,
+      } });
+      expect(result.success).toBe(replaceAll);
+      if (replaceAll) {
+        expect(result.output).toEqual({ path: "logical-mixed.ts", replacements: 2 });
+        expect(readFileSync(target, "utf-8")).toBe("x\r\ny\r\nz|x\ny\nz");
+      } else {
+        expect(result.error).toMatch(/matches 2 locations/);
+        expect(readFileSync(target, "utf-8")).toBe(original);
+      }
+    });
+
+    it("maps leading and trailing newlines back to complete original CRLF sequences", async () => {
+      const target = join(tmp, "newline-boundaries.ts");
+      writeFileSync(target, "prefix\r\nalpha\nbeta\r\ngamma\nsuffix");
+      const result = await scopedExecutor.execute({ name: "str_replace", arguments: {
+        path: "newline-boundaries.ts", old_string: "\nalpha\nbeta\n", new_string: "\nx\n",
+      } });
+      expect(result.success).toBe(true);
+      expect(readFileSync(target, "utf-8")).toBe("prefix\r\nx\r\ngamma\nsuffix");
+    });
+
+    it("replaces adjacent logical newlines without leaving CR bytes behind", async () => {
+      const target = join(tmp, "newline-only.ts");
+      writeFileSync(target, "a\r\n\nb\r\n");
+      const result = await scopedExecutor.execute({ name: "str_replace", arguments: {
+        path: "newline-only.ts", old_string: "\n", new_string: "|", replace_all: true,
+      } });
+      expect(result.success).toBe(true);
+      expect(result.output).toEqual({ path: "newline-only.ts", replacements: 3 });
+      expect(readFileSync(target, "utf-8")).toBe("a||b|");
+    });
+
+    it("does not normalize a lone carriage return into a newline", async () => {
+      const target = join(tmp, "lone-cr.ts");
+      const original = "a\rb\nc";
+      writeFileSync(target, original);
+      const result = await scopedExecutor.execute({ name: "str_replace", arguments: {
+        path: "lone-cr.ts", old_string: "a\nb\nc", new_string: "replacement",
+      } });
+      expect(result.success).toBe(false);
+      expect(readFileSync(target, "utf-8")).toBe(original);
+    });
+
+    it.each(["\n", "\r\n"])("does not repeatedly search for an absent line-ending variant (%j)", async ending => {
+      const target = join(tmp, "many-blocks.ts");
+      const oldString = "unique-first\nunique-second";
+      const block = oldString.replace(/\n/g, ending);
+      const original = (block + "|").repeat(1000);
+      const absent = oldString.replace(/\n/g, ending === "\n" ? "\r\n" : "\n");
+      writeFileSync(target, original);
+      const indexOf = String.prototype.indexOf;
+      let absentScans = 0;
+      const search = vi.spyOn(String.prototype, "indexOf").mockImplementation(function (this: string, needle: string, from?: number) {
+        if (String(this) === original && needle === absent) absentScans++;
+        return indexOf.call(this, needle, from);
+      });
+      try {
+        const result = await scopedExecutor.execute({ name: "str_replace", arguments: {
+          path: "many-blocks.ts", old_string: oldString, new_string: "replacement",
+        } });
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/matches 1000 locations/);
+        expect(absentScans).toBeLessThanOrEqual(1);
+        expect(search.mock.calls.filter(([needle]) => needle === oldString).length).toBeLessThanOrEqual(1001);
+      } finally { search.mockRestore(); }
+      expect(readFileSync(target, "utf-8")).toBe(original);
+    });
+
     it("single-line replacement in a CRLF file succeeds and preserves CRLF line endings", async () => {
       const target = join(tmp, "single-crlf.ts");
       writeFileSync(target, "const x = 1;\r\nconst y = 2;\r\n", "utf-8");

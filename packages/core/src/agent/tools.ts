@@ -7806,8 +7806,8 @@ export class ToolExecutor {
   /**
    * str_replace — exact-string file edit (Claude text_editor `str_replace`
    * contract). More reliable than `apply_patch` for single edits: there are no
-   * fragile context hunks to mismatch — `old_string` must match the file byte
-   * for byte (whitespace and indentation included) and, unless `replace_all` is
+   * fragile context hunks to mismatch — matching preserves whitespace and
+   * indentation, tolerates LF/CRLF for multiline blocks and, unless `replace_all` is
    * set, UNIQUELY. Same gate as `apply_patch`/`run_command`: refuses without a
    * `scopePath` and resolves the path through `resolveScopedPath` so the edit
    * can never escape the audit directory. Fail-soft — every error is a clear,
@@ -7889,8 +7889,8 @@ export class ToolExecutor {
 
     // Find all non-overlapping occurrences. For single-line strings, exact
     // byte-for-byte matching is used. For multiline strings, line endings are
-    // adapted to match the target block (e.g. LF input on CRLF content or vice-versa)
-    // while preserving each matched block's line endings.
+    // matched as LF or CRLF, including mixtures within a block. Unmatched
+    // bytes are copied verbatim; replacement line endings follow the block.
     const matches: Array<{ start: number; end: number; replacement: string }> = [];
 
     if (!oldString.includes("\n")) {
@@ -7900,32 +7900,34 @@ export class ToolExecutor {
         pos += oldString.length;
       }
     } else {
-      const crlfCandidate = oldString.replace(/\r?\n/g, "\r\n");
-      const lfCandidate = oldString.replace(/\r?\n/g, "\n");
+      // Compare logical newlines, recording each removed CR at its logical
+      // offset. Monotone cursors map matches back to untouched original bytes.
+      const removedCrOffsets: number[] = [];
+      const logicalOriginal = original.replace(/\r\n/g, (_ending, offset: number) => {
+        removedCrOffsets.push(offset - removedCrOffsets.length);
+        return "\n";
+      });
+      const logicalOld = oldString.replace(/\r\n/g, "\n");
       const crlfNew = newString.replace(/\r?\n/g, "\r\n");
       const lfNew = newString.replace(/\r?\n/g, "\n");
-
+      const mixedExact = oldString.includes("\r\n") && oldString.replace(/\r\n/g, "").includes("\n");
+      let removed = 0;
       let pos = 0;
-      while (pos < original.length) {
-        const nextCrlf = original.indexOf(crlfCandidate, pos);
-        let nextLf = original.indexOf(lfCandidate, pos);
-        if (lfCandidate.startsWith("\n")) {
-          while (nextLf !== -1 && nextLf > 0 && original[nextLf - 1] === "\r") {
-            nextLf = original.indexOf(lfCandidate, nextLf + 1);
-          }
-        }
-
-        if (nextCrlf === -1 && nextLf === -1) {
-          break;
-        }
-
-        if (nextCrlf !== -1 && (nextLf === -1 || nextCrlf <= nextLf)) {
-          matches.push({ start: nextCrlf, end: nextCrlf + crlfCandidate.length, replacement: crlfNew });
-          pos = nextCrlf + crlfCandidate.length;
-        } else if (nextLf !== -1) {
-          matches.push({ start: nextLf, end: nextLf + lfCandidate.length, replacement: lfNew });
-          pos = nextLf + lfCandidate.length;
-        }
+      let hit: number;
+      while ((hit = logicalOriginal.indexOf(logicalOld, pos)) !== -1) {
+        while (removed < removedCrOffsets.length && removedCrOffsets[removed] < hit) removed++;
+        const start = hit + removed;
+        const logicalEnd = hit + logicalOld.length;
+        while (removed < removedCrOffsets.length && removedCrOffsets[removed] < logicalEnd) removed++;
+        const end = logicalEnd + removed;
+        const matched = original.slice(start, end);
+        // Preserve the prior literal replacement for an exact mixed-EOL block.
+        // Otherwise the first matched newline sets the replacement's style.
+        const replacement = mixedExact && matched === oldString
+          ? newString
+          : /\r?\n/.exec(matched)![0] === "\r\n" ? crlfNew : lfNew;
+        matches.push({ start, end, replacement });
+        pos = logicalEnd;
       }
     }
 
