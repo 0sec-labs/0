@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { isScopedPath, resolveScopedPath } from "./scope-path.js";
 import { withLocalSourceBoundary } from "../../scope/local-source-boundary.js";
+import { withScopeEnforcement } from "../../scope/activation.js";
 
 const cleanupDirs: string[] = [];
 
@@ -69,6 +70,27 @@ describe("scope-path containment logic", () => {
 
       withLocalSourceBoundary("/", () => {
         expect(resolveScopedPath("/", syntheticChild)).toBe(resolve(syntheticChild));
+      });
+    });
+  });
+
+  describe("authorization gate composition", () => {
+    it.runIf(process.platform !== "win32")("accepts root descendants with engagement scope enforcement enabled", () => {
+      const child = createTempDir("0-test-scope-engagement-");
+      withScopeEnforcement({ pluginId: "scope", enabled: true, projectPath: "/", message: "test approval" }, () => {
+        expect(resolveScopedPath("/", child)).toBe(child);
+      });
+    });
+
+    it.runIf(process.platform !== "win32")("does not widen a local source boundary when tool scope is the filesystem root", () => {
+      const parent = createTempDir("0-test-scope-composition-");
+      const approved = join(parent, "approved");
+      const outside = join(parent, "outside.txt");
+      mkdirSync(approved);
+      writeFileSync(outside, "outside");
+      withLocalSourceBoundary(approved, () => {
+        expect(resolveScopedPath("/", approved)).toBe(approved);
+        expect(() => resolveScopedPath("/", outside)).toThrow(/escapes the approved source folder/);
       });
     });
   });
