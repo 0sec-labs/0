@@ -113,14 +113,15 @@ describe("handleOastRequest (server router)", () => {
       url: "/ingest/dns",
       host: "oast.test",
       body: { queryName: `${handle.token}.oast.test`, remoteAddress: "198.51.100.2" },
-    });
+      authorization: "Bearer dns-ingest-secret",
+    }, { ingestToken: "dns-ingest-secret" });
     expect(res.status).toBe(200);
     expect(store.poll(handle.token)).toHaveLength(1);
   });
 
   it("rejects a DNS ingest without a queryName", () => {
     const store = new OastStore({ baseDomain: "oast.test" });
-    const res = handleOastRequest(store, { method: "POST", url: "/ingest/dns", host: "oast.test", body: {} });
+    const res = handleOastRequest(store, { method: "POST", url: "/ingest/dns", host: "oast.test", body: {}, authorization: "Bearer dns-ingest-secret" }, { ingestToken: "dns-ingest-secret" });
     expect(res.status).toBe(400);
   });
 });

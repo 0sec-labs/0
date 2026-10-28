@@ -25,6 +25,7 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
+import { timingSafeEqual } from "node:crypto";
 import type { OastInteraction } from "./types.js";
 import { OastStore } from "./collaborator.js";
 
@@ -37,6 +38,7 @@ export interface OastRequest {
   remoteAddress?: string;
   /** Parsed JSON body, for POST /ingest/dns. */
   body?: unknown;
+  authorization?: string;
 }
 
 export interface OastServerResponse {
@@ -49,7 +51,7 @@ export interface OastServerResponse {
  * store, returns a status + JSON. This is the unit-testable heart of the
  * server; `createOastServer` is a thin node-http shell over it.
  */
-export function handleOastRequest(store: OastStore, req: OastRequest): OastServerResponse {
+export function handleOastRequest(store: OastStore, req: OastRequest, opts: { ingestToken?: string } = {}): OastServerResponse {
   const path = req.url.split("?")[0];
 
   if (req.method === "POST" && path === "/register") {
@@ -62,6 +64,13 @@ export function handleOastRequest(store: OastStore, req: OastRequest): OastServe
   }
 
   if (req.method === "POST" && path === "/ingest/dns") {
+    const expected = opts.ingestToken;
+    const provided = req.authorization?.startsWith("Bearer ") ? req.authorization.slice("Bearer ".length) : "";
+    const expectedBytes = expected ? Buffer.from(expected) : Buffer.alloc(0);
+    const providedBytes = Buffer.from(provided);
+    if (!expectedBytes.length || expectedBytes.length !== providedBytes.length || !timingSafeEqual(expectedBytes, providedBytes)) {
+      return { status: 403, json: { error: "DNS ingestion is not authorized" } };
+    }
     const body = (req.body ?? {}) as Partial<OastInteraction>;
     if (!body.queryName) {
       return { status: 400, json: { error: "queryName required" } };
@@ -116,12 +125,14 @@ function readJsonBody(req: IncomingMessage): Promise<unknown> {
 
 /**
  * Build (but do not listen on) a node-http collaborator server over `store`.
+ * Configure `ingestToken` with a private shared secret for the DNS front-end;
+ * DNS ingestion is disabled unless that secret is present and sent as Bearer auth.
  * Callers `.listen()` it, then `close()` to tear it down — the returned
  * `close()` awaits the socket fully closing, so tests/callers never leak an
  * open handle. Deployment concerns (TLS, DNS front-end, persistence) are
  * follow-up — see the file header.
  */
-export function createOastServer(opts: { baseDomain?: string; store?: OastStore } = {}): {
+export function createOastServer(opts: { baseDomain?: string; store?: OastStore; ingestToken?: string } = {}): {
   server: Server;
   store: OastStore;
   close: () => Promise<void>;
@@ -136,7 +147,8 @@ export function createOastServer(opts: { baseDomain?: string; store?: OastStore 
         host: req.headers.host ?? "",
         remoteAddress: req.socket.remoteAddress ?? undefined,
         body,
-      });
+        authorization: req.headers.authorization,
+      }, { ingestToken: opts.ingestToken });
       res.writeHead(result.status, { "content-type": "application/json" });
       res.end(JSON.stringify(result.json));
     })();
