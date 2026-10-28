@@ -39,14 +39,15 @@ function canonicalizePath(path: string): string {
   return resolve(realpathSync(existingPath), ...missingSegments);
 }
 
-function isScopedPath(scopePath: string, inputPath: string): boolean {
+export function isScopedPath(scopePath: string, inputPath: string): boolean {
   const root = realpathSync(scopePath);
   const logicalCandidate = isAbsolute(inputPath)
     ? resolve(inputPath)
     : resolve(root, inputPath);
   const candidate = canonicalizePath(logicalCandidate);
 
-  return candidate === root || candidate.startsWith(root + sep);
+  const prefix = root.endsWith(sep) ? root : root + sep;
+  return candidate === root || candidate.startsWith(prefix);
 }
 
 export function resolveScopedPath(scopePath: string | undefined, inputPath: string): string {
