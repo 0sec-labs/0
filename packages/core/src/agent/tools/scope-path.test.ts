@@ -64,7 +64,7 @@ describe("scope-path containment logic", () => {
     });
 
     it.runIf(process.platform !== "win32")("accepts synthetic non-existent children under an existing parent of '/'", () => {
-      const syntheticChild = join(tmpdir(), `synthetic-child-${Date.now()}.txt`);
+      const syntheticChild = join(createTempDir("0-test-scope-missing-"), "missing.txt");
       expect(isScopedPath("/", syntheticChild)).toBe(true);
 
       withLocalSourceBoundary("/", () => {
