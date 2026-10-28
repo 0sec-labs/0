@@ -7887,15 +7887,49 @@ export class ToolExecutor {
       return { success: false, output: null, error: `str_replace: could not read ${rawPath}: ${msg}` };
     }
 
-    // Count exact (byte-for-byte) occurrences of old_string.
-    let occurrences = 0;
-    let searchFrom = 0;
-    for (;;) {
-      const hit = original.indexOf(oldString, searchFrom);
-      if (hit === -1) break;
-      occurrences += 1;
-      searchFrom = hit + oldString.length;
+    // Find all non-overlapping occurrences. For single-line strings, exact
+    // byte-for-byte matching is used. For multiline strings, line endings are
+    // adapted to match the target block (e.g. LF input on CRLF content or vice-versa)
+    // while preserving each matched block's line endings.
+    const matches: Array<{ start: number; end: number; replacement: string }> = [];
+
+    if (!oldString.includes("\n")) {
+      let pos = 0;
+      while ((pos = original.indexOf(oldString, pos)) !== -1) {
+        matches.push({ start: pos, end: pos + oldString.length, replacement: newString });
+        pos += oldString.length;
+      }
+    } else {
+      const crlfCandidate = oldString.replace(/\r?\n/g, "\r\n");
+      const lfCandidate = oldString.replace(/\r?\n/g, "\n");
+      const crlfNew = newString.replace(/\r?\n/g, "\r\n");
+      const lfNew = newString.replace(/\r?\n/g, "\n");
+
+      let pos = 0;
+      while (pos < original.length) {
+        const nextCrlf = original.indexOf(crlfCandidate, pos);
+        let nextLf = original.indexOf(lfCandidate, pos);
+        if (lfCandidate.startsWith("\n")) {
+          while (nextLf !== -1 && nextLf > 0 && original[nextLf - 1] === "\r") {
+            nextLf = original.indexOf(lfCandidate, nextLf + 1);
+          }
+        }
+
+        if (nextCrlf === -1 && nextLf === -1) {
+          break;
+        }
+
+        if (nextCrlf !== -1 && (nextLf === -1 || nextCrlf <= nextLf)) {
+          matches.push({ start: nextCrlf, end: nextCrlf + crlfCandidate.length, replacement: crlfNew });
+          pos = nextCrlf + crlfCandidate.length;
+        } else if (nextLf !== -1) {
+          matches.push({ start: nextLf, end: nextLf + lfCandidate.length, replacement: lfNew });
+          pos = nextLf + lfCandidate.length;
+        }
+      }
     }
+
+    const occurrences = matches.length;
 
     if (occurrences === 0) {
       return {
@@ -7913,12 +7947,22 @@ export class ToolExecutor {
     }
 
     // We only reach here when occurrences === 1, or replace_all is set. In both
-    // cases replacing every occurrence yields the intended result. split/join
-    // avoids String.prototype.replace's special `$` handling in the replacement.
+    // cases replacing matches in a single forward pass avoids cascading substitutions
+    // and preserves line endings outside the replaced regions.
     const replacements = replaceAll ? occurrences : 1;
-    const updated = replaceAll
-      ? original.split(oldString).join(newString)
-      : original.replace(oldString, () => newString);
+    let updated: string;
+    if (replaceAll) {
+      updated = "";
+      let lastIndex = 0;
+      for (const m of matches) {
+        updated += original.slice(lastIndex, m.start) + m.replacement;
+        lastIndex = m.end;
+      }
+      updated += original.slice(lastIndex);
+    } else {
+      const m = matches[0];
+      updated = original.slice(0, m.start) + m.replacement + original.slice(m.end);
+    }
 
     try {
       writeFileSync(abs, updated, "utf-8");
