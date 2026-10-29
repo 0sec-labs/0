@@ -294,36 +294,32 @@ export function applyPatchOps(
  *      the corresponding source line; add lines are buffered for output.
  *   3. Splice the touched range out and replace it with the rebuilt block.
  */
-export function applyUpdateHunks(
-  source: string,
-  logicalPath: string,
-  hunks: PatchHunk[],
-): string {
-  // Preserve a trailing newline if it was there originally; we re-emit it.
-  const hadTrailingNewline = source.endsWith("\n");
-  const sourceBody = hadTrailingNewline ? source.slice(0, -1) : source;
-  let lines = sourceBody.split("\n");
+interface SourceLine {
+  text: string;
+  eol: string;
+}
 
-  for (const hunk of hunks) {
-    const anchorIdx = locateAnchor(lines, hunk.anchor, logicalPath);
-    const { newLines, consumed } = applyOneHunk(
-      lines,
-      anchorIdx,
-      hunk,
-      logicalPath,
-    );
-    lines = [
-      ...lines.slice(0, anchorIdx),
-      ...newLines,
-      ...lines.slice(anchorIdx + consumed),
-    ];
+function splitSourceLines(source: string): SourceLine[] {
+  if (source.length === 0) return [];
+
+  const rawLines = source.split(/(?<=\r?\n)/);
+  if (rawLines.length > 0 && rawLines[rawLines.length - 1] === "") {
+    rawLines.pop();
   }
 
-  return lines.join("\n") + (hadTrailingNewline ? "\n" : "");
+  return rawLines.map((raw) => {
+    if (raw.endsWith("\r\n")) {
+      return { text: raw.slice(0, -2), eol: "\r\n" };
+    }
+    if (raw.endsWith("\n")) {
+      return { text: raw.slice(0, -1), eol: "\n" };
+    }
+    return { text: raw, eol: "" };
+  });
 }
 
 function locateAnchor(
-  lines: string[],
+  lines: SourceLine[],
   anchor: string,
   logicalPath: string,
 ): number {
@@ -337,7 +333,7 @@ function locateAnchor(
   // for humans and should be predictable.
   const matches: number[] = [];
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i].includes(anchor)) {
+    if (lines[i].text.includes(anchor)) {
       matches.push(i);
     }
   }
@@ -355,45 +351,93 @@ function locateAnchor(
 }
 
 function applyOneHunk(
-  lines: string[],
+  lines: SourceLine[],
   anchorIdx: number,
   hunk: PatchHunk,
   logicalPath: string,
-): { newLines: string[]; consumed: number } {
-  const newLines: string[] = [];
+  defaultEol: string,
+): { newLines: SourceLine[]; consumed: number } {
+  const newLines: SourceLine[] = [];
   let cursor = anchorIdx;
+  let localEol =
+    lines[anchorIdx]?.eol && lines[anchorIdx].eol.length > 0
+      ? lines[anchorIdx].eol
+      : defaultEol;
 
   for (const entry of hunk.body) {
     if (entry.kind === "context") {
       const observed = lines[cursor];
-      if (observed === undefined || observed !== entry.text) {
+      if (observed === undefined || observed.text !== entry.text) {
         throw new Error(
           `apply_patch: context mismatch in ${logicalPath} at line ${cursor + 1}: expected ${JSON.stringify(
             entry.text,
-          )}, got ${JSON.stringify(observed ?? "<eof>")}`,
+          )}, got ${JSON.stringify(observed?.text ?? "<eof>")}`,
         );
       }
-      newLines.push(entry.text);
+      if (observed.eol) localEol = observed.eol;
+      if (newLines.length > 0 && newLines[newLines.length - 1].eol === "") {
+        newLines[newLines.length - 1].eol = localEol;
+      }
+      newLines.push({ text: observed.text, eol: observed.eol });
       cursor += 1;
       continue;
     }
     if (entry.kind === "del") {
       const observed = lines[cursor];
-      if (observed === undefined || observed !== entry.text) {
+      if (observed === undefined || observed.text !== entry.text) {
         throw new Error(
           `apply_patch: removed line mismatch in ${logicalPath} at line ${cursor + 1}: expected ${JSON.stringify(
             entry.text,
-          )}, got ${JSON.stringify(observed ?? "<eof>")}`,
+          )}, got ${JSON.stringify(observed?.text ?? "<eof>")}`,
         );
       }
+      if (observed.eol) localEol = observed.eol;
       // skip the source line (don't push it to newLines).
       cursor += 1;
       continue;
     }
     // add
-    newLines.push(entry.text);
+    if (newLines.length > 0 && newLines[newLines.length - 1].eol === "") {
+      newLines[newLines.length - 1].eol = localEol;
+    }
+    newLines.push({ text: entry.text, eol: localEol });
     // do NOT advance cursor — adds inject without consuming source.
   }
 
+  // If the last consumed line was the last line of the file and had no eol (missing trailing newline),
+  // and the hunk consumed up to EOF, the last replacement line also inherits no trailing newline.
+  if (cursor === lines.length && lines.length > 0 && lines[lines.length - 1].eol === "") {
+    if (newLines.length > 0) {
+      newLines[newLines.length - 1].eol = "";
+    }
+  }
+
   return { newLines, consumed: cursor - anchorIdx };
+}
+
+export function applyUpdateHunks(
+  source: string,
+  logicalPath: string,
+  hunks: PatchHunk[],
+): string {
+  const defaultEol = source.includes("\r\n") ? "\r\n" : "\n";
+  let lines = splitSourceLines(source);
+
+  for (const hunk of hunks) {
+    const anchorIdx = locateAnchor(lines, hunk.anchor, logicalPath);
+    const { newLines, consumed } = applyOneHunk(
+      lines,
+      anchorIdx,
+      hunk,
+      logicalPath,
+      defaultEol,
+    );
+    lines = [
+      ...lines.slice(0, anchorIdx),
+      ...newLines,
+      ...lines.slice(anchorIdx + consumed),
+    ];
+  }
+
+  return lines.map((l) => l.text + l.eol).join("");
 }
