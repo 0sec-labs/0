@@ -292,6 +292,66 @@ describe("applyUpdateHunks", () => {
     ]);
     expect(result).toBe(["ONE", "two", "three", "FOUR"].join("\n"));
   });
+
+  describe("line-ending adaptation and preservation", () => {
+    it("applies an update hunk to a CRLF file and preserves CRLF line endings", () => {
+      const src = ["alpha", "beta", "gamma", ""].join("\r\n");
+      const result = applyUpdateHunks(src, "x.ts", [
+        {
+          anchor: "beta",
+          body: [
+            { kind: "del", text: "beta" },
+            { kind: "add", text: "BETA" },
+          ],
+        },
+      ]);
+      expect(result).toBe(["alpha", "BETA", "gamma", ""].join("\r\n"));
+    });
+
+    it("preserves CRLF line endings when adding lines to a CRLF file", () => {
+      const src = ["line1", "line3", ""].join("\r\n");
+      const result = applyUpdateHunks(src, "x.ts", [
+        {
+          anchor: "line1",
+          body: [
+            { kind: "context", text: "line1" },
+            { kind: "add", text: "line2" },
+            { kind: "context", text: "line3" },
+          ],
+        },
+      ]);
+      expect(result).toBe(["line1", "line2", "line3", ""].join("\r\n"));
+    });
+
+    it("preserves missing trailing newline on a CRLF file", () => {
+      const src = ["alpha", "beta"].join("\r\n"); // no trailing newline
+      const result = applyUpdateHunks(src, "x.ts", [
+        {
+          anchor: "beta",
+          body: [
+            { kind: "del", text: "beta" },
+            { kind: "add", text: "B" },
+          ],
+        },
+      ]);
+      expect(result).toBe("alpha\r\nB");
+    });
+
+    it("preserves untouched lines and line endings in a mixed-line-ending file", () => {
+      const mixed = "header1\nheader2\nblock:\r\n  action\r\nfooter1\nfooter2\n";
+      const result = applyUpdateHunks(mixed, "x.ts", [
+        {
+          anchor: "block:",
+          body: [
+            { kind: "context", text: "block:" },
+            { kind: "del", text: "  action" },
+            { kind: "add", text: "  done" },
+          ],
+        },
+      ]);
+      expect(result).toBe("header1\nheader2\nblock:\r\n  done\r\nfooter1\nfooter2\n");
+    });
+  });
 });
 
 // ── End-to-end with real filesystem ──
@@ -473,6 +533,32 @@ describe("applyPatchOps (filesystem)", () => {
     expect(() => applyPatchOps(ops, resolver)).toThrow(
       /anchor "ghost-signature" not found in f\.ts/,
     );
+  });
+
+  it("round-trip: updates a CRLF file on disk while preserving CRLF line endings", () => {
+    const target = join(tmp, "crlf.ts");
+    const original = ["const a = 1;", "const b = 2;", "const c = 3;", ""].join("\r\n");
+    writeFileSync(target, original, "utf-8");
+
+    const patch = [
+      "*** Begin Patch",
+      "*** Update File: crlf.ts",
+      "@@ const a = 1;",
+      " const a = 1;",
+      "-const b = 2;",
+      "+const b = 20;",
+      "+const b2 = 21;",
+      " const c = 3;",
+      "*** End Patch",
+    ].join("\n");
+
+    const ops = parsePatch(patch);
+    const result = applyPatchOps(ops, resolver);
+    expect(result).toEqual({ applied: [{ kind: "update", path: "crlf.ts" }] });
+
+    const updated = readFileSync(target, "utf-8");
+    expect(updated).toBe(["const a = 1;", "const b = 20;", "const b2 = 21;", "const c = 3;", ""].join("\r\n"));
+    expect(updated).not.toMatch(/[^\r]\n/); // every newline is preceded by \r
   });
 
   it("refuses paths that escape scope", () => {
