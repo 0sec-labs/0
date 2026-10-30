@@ -12,8 +12,21 @@ test("sidebar rank survives opening, saved/live transitions and renames; new mes
   try {
     const output = resolve(directory, "fixture.mjs");
     await build({ entryPoints: [resolve(root, "packages/dashboard/src/console/sidebar-chat-order.ts")], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
-    const { rememberSidebarActivity, sortSidebarChats } = await import(pathToFileURL(output).href);
+    const { rememberSidebarActivity, sidebarChatDetails, sortSidebarChats } = await import(pathToFileURL(output).href);
     const activity = new Map();
+    const collisions = [
+      { kind: "live", key: "current-transcript", session: { title: "Review", status: "working", messageCount: 774 } },
+      { kind: "live", key: "earlier-transcript", session: { title: "Review", status: "failed", messageCount: 262 } },
+      { kind: "saved", key: "saved-transcript", session: { summary: " review ", messageCount: 20 } },
+      { kind: "live", key: "unique", session: { title: "Other", status: "ready" } },
+    ];
+    const details = sidebarChatDetails(collisions);
+    assert.equal(details.get("current-transcript"), "Responding · 774 messages · current-");
+    assert.equal(details.get("earlier-transcript"), "Needs attention · 262 messages · earlier-");
+    assert.equal(details.get("saved-transcript"), "Saved · 20 messages · saved-tr");
+    assert.equal(details.has("unique"), false);
+    assert.equal(collisions.length, 4, "distinct transcripts with matching titles stay accessible");
+
     const saved = (key, timestamp, count, title = key) => ({ kind: "saved", key, timestamp, session: { id: key, savedAt: timestamp, messageCount: count, summary: title } });
     const live = (key, timestamp, count, id = "new-runtime", title = key) => ({ kind: "live", key, timestamp, session: { id, savedId: key, messageCount: count, title, updatedAt: new Date(timestamp).toISOString() } });
     const order = rows => sortSidebarChats(rememberSidebarActivity(rows, activity), "updated").map(row => row.key);

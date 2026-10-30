@@ -34,3 +34,19 @@ export function sortSidebarChats(rows: SessionRailRow[], sort: "updated" | "name
   const needle = filter.trim().toLocaleLowerCase();
   return rows.filter(row => !needle || sidebarChatTitle(row).toLocaleLowerCase().includes(needle)).sort((a, b) => sort === "name" ? sidebarChatTitle(a).localeCompare(sidebarChatTitle(b)) || a.key.localeCompare(b.key) : b.timestamp - a.timestamp || a.key.localeCompare(b.key));
 }
+
+/** Equal titles can belong to separate transcripts; retain both and explain which is which. */
+export function sidebarChatDetails(rows: SessionRailRow[]): Map<string, string> {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const title = sidebarChatTitle(row).trim().toLocaleLowerCase();
+    counts.set(title, (counts.get(title) ?? 0) + 1);
+  }
+  const details = new Map<string, string>();
+  for (const row of rows) {
+    if ((counts.get(sidebarChatTitle(row).trim().toLocaleLowerCase()) ?? 0) < 2) continue;
+    const status = row.kind === "saved" ? "Saved" : ({ ready: "Ready", working: "Responding", waiting: "Waiting for you", failed: "Needs attention", closed: "Closed" }[row.session.status]);
+    details.set(row.key, `${status} · ${row.session.messageCount ?? 0} messages · ${row.key.slice(0, 8)}`);
+  }
+  return details;
+}

@@ -13,7 +13,7 @@ import { Button } from "./ui/button";
 import { DropdownMenu } from "./ui/dropdown-menu";
 import { Disclosure } from "./ui/disclosure";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
-import { rememberSidebarActivity, sortSidebarChats, type SidebarChatActivity } from "@/console/sidebar-chat-order";
+import { rememberSidebarActivity, sidebarChatDetails, sidebarChatTitle, sortSidebarChats, type SidebarChatActivity } from "@/console/sidebar-chat-order";
 import { orderSessionRail } from "@/console/session-rail-order";
 import { CHAT_DRAG_MIME } from "@/console/dock-workspace";
 import { createChatOnExecutionHost } from "@/console/model-source";
@@ -132,6 +132,7 @@ function HostChatGroup({ host, navigationVersion, onSelect, onPendingChatChange,
     const remembered = rememberSidebarActivity(orderSessionRail(live, saved, history.data?.saved ?? []), activityHistory.current.values);
     return sortSidebarChats(remembered, sort, filter);
   }, [history.data, account, team.enabled, selectedBackendId, host.id, selectedId, sort, filter]);
+  const rowDetails = sidebarChatDetails(rows);
   const offline = connectionStatus !== "connected";
   const unavailable = offline || history.isError;
   const open = (id: string, title: string, saved = false) => {
@@ -182,12 +183,13 @@ function HostChatGroup({ host, navigationVersion, onSelect, onPendingChatChange,
       <SelectionHighlight activeKey={`${selectedBackendId}:${openingId ?? selectedId}`} revision={rows.map(row => row.key).join(":")} />
       {rows.map(row => {
         const session = row.session;
-        const title = row.kind === "live" ? row.session.title || row.session.target || "Untitled chat" : row.session.summary || row.session.target || row.session.preview || "Past chat";
+        const title = sidebarChatTitle(row);
+        const detail = rowDetails.get(row.key);
         const isSaved = row.kind === "saved";
         const selected = openingId === session.id || selectedBackendId === host.id && selectedId === session.id;
         return <div key={row.key} data-ui-selected={selected || undefined} className="sidebar-history-row group relative z-10 flex min-w-0 items-center rounded-[var(--radius-control)] hover:bg-muted/50">
-          <Button variant="row" size="sm" asChild className="min-w-0 flex-1 justify-start px-3 font-normal">
-            <a onPointerEnter={() => { if (prefetchTimer.current) clearTimeout(prefetchTimer.current); prefetchTimer.current = setTimeout(() => prefetch(session.id, isSaved), 80); }} onPointerLeave={() => { if (prefetchTimer.current) clearTimeout(prefetchTimer.current); }} onFocus={() => prefetch(session.id, isSaved)} aria-busy={openingId === session.id || undefined} href={backendRouteHref(host.id, `/console/${isSaved ? "saved/" : ""}${encodeURIComponent(session.id)}`)} draggable={true} onDragStart={event => { suppressClickUntil.current = Number.POSITIVE_INFINITY; event.dataTransfer.setData(CHAT_DRAG_MIME, JSON.stringify({ id: session.id, sessionId: session.id, backendId: host.id, title, saved: isSaved })); event.dataTransfer.effectAllowed = "copy"; }} onDragEnd={() => { suppressClickUntil.current = Date.now() + 350; }} onClick={event => { if (Date.now() < suppressClickUntil.current) { event.preventDefault(); return; } if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); if (isSaved) void resume(session.id, title); else { if (currentApi.client.backendId === host.id && row.kind === "live") cache.setQueryData<import("@0/shared").DesktopConsoleSession[]>(["console-sessions"], previous => [...(previous ?? []).filter(item => item.id !== session.id), row.session]); open(session.id, title); } } }}><span title={title} className="min-w-0 flex-1 truncate text-left">{title}</span></a>
+          <Button variant="row" size="sm" asChild className={cn("min-w-0 flex-1 justify-start px-3 font-normal", detail && "h-auto min-h-8 py-1.5")}>
+            <a onPointerEnter={() => { if (prefetchTimer.current) clearTimeout(prefetchTimer.current); prefetchTimer.current = setTimeout(() => prefetch(session.id, isSaved), 80); }} onPointerLeave={() => { if (prefetchTimer.current) clearTimeout(prefetchTimer.current); }} onFocus={() => prefetch(session.id, isSaved)} aria-busy={openingId === session.id || undefined} href={backendRouteHref(host.id, `/console/${isSaved ? "saved/" : ""}${encodeURIComponent(session.id)}`)} draggable={true} onDragStart={event => { suppressClickUntil.current = Number.POSITIVE_INFINITY; event.dataTransfer.setData(CHAT_DRAG_MIME, JSON.stringify({ id: session.id, sessionId: session.id, backendId: host.id, title, saved: isSaved })); event.dataTransfer.effectAllowed = "copy"; }} onDragEnd={() => { suppressClickUntil.current = Date.now() + 350; }} onClick={event => { if (Date.now() < suppressClickUntil.current) { event.preventDefault(); return; } if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); if (isSaved) void resume(session.id, title); else { if (currentApi.client.backendId === host.id && row.kind === "live") cache.setQueryData<import("@0/shared").DesktopConsoleSession[]>(["console-sessions"], previous => [...(previous ?? []).filter(item => item.id !== session.id), row.session]); open(session.id, title); } } }}><span title={detail ? `${title} — ${detail}` : title} className="min-w-0 flex-1 text-left"><span className="block truncate">{title}</span>{detail && <span className="block truncate text-xs text-muted-foreground">{detail}</span>}</span></a>
           </Button>
           {row.kind === "live" && row.session.status === "working" && <span aria-label="Responding" className="size-1.5 shrink-0 rounded-full bg-current text-muted-foreground" />}
           {!readOnly && <Button variant="ghost" size="icon-xs" disabled={busy || unavailable} className="sidebar-history-delete absolute right-1 pointer-events-none opacity-0 text-muted-foreground hover:text-destructive group-hover:pointer-events-auto group-hover:opacity-100 group-has-[:focus-visible]:pointer-events-auto group-has-[:focus-visible]:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100" aria-label={`Delete ${title}`} onClick={() => setDeletion({ id: session.id, title, saved: isSaved })}><Trash2 className="size-3.5" /></Button>}

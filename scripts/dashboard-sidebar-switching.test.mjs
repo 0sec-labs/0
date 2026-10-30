@@ -22,6 +22,7 @@ test("sidebar switches without document reloads and late resumes cannot hijack s
       export const consoleSnapshotKey=(host,id)=>["console-snapshot",host,id];
       export const createChatOnExecutionHost=async()=>({id:"created"});
       const live=["alpha","beta"].map(id=>({id,title:id,target:"",status:"ready",messageCount:2,updatedAt:"2026-10-25T10:00:00Z",createdAt:"2026-10-25T10:00:00Z"}));
+      live.push({...live[0],id:"review-one",title:"Same review",messageCount:843},{...live[0],id:"review-two",title:"Same review",messageCount:262});
       const saved=[{id:"saved",summary:"Saved chat",messageCount:2,savedAt:1},{id:"saved-second",summary:"Second saved chat",messageCount:2,savedAt:2},{id:"saved-cancel",summary:"Cancelled opening",messageCount:2,savedAt:3}];
       const api={client:{backendId:"local",dispose(){}},listConsoleSessions:()=>window.blockHistory?new Promise(()=>{}):Promise.resolve(live),listSavedConsoleSessions:()=>Promise.resolve(saved),getConsoleSnapshot:async id=>({session:live.find(s=>s.id===id)}),resumeConsoleSession:(id)=>new Promise(resolve=>{window.resolveResume=()=>{window.blockHistory=true;resolve({...live[0],id:"resumed-"+id,title:"Resumed "+id,savedId:id});};})};
       export const useBackendApi=()=>api;
@@ -43,6 +44,14 @@ test("sidebar switches without document reloads and late resumes cannot hijack s
     browser=await chromium.launch({headless:true});const page=await browser.newPage();
     const errors=[];page.on("pageerror",error=>errors.push(error.message));
     await page.goto(`http://127.0.0.1:${server.address().port}/`);
+    const sameTitle = page.locator('a').filter({hasText:"Same review"});
+    await sameTitle.first().waitFor();
+    assert.equal(await sameTitle.count(),2,"distinct transcripts with the same title both remain visible");
+    assert.equal(await sameTitle.nth(0).getAttribute("href"),"/console/review-one");
+    assert.equal(await sameTitle.nth(1).getAttribute("href"),"/console/review-two");
+    assert.match(await sameTitle.nth(0).innerText(),/Ready · 843 messages · review-o/);
+    assert.match(await sameTitle.nth(1).innerText(),/Ready · 262 messages · review-t/);
+    assert.equal(await page.getByRole("link",{name:"alpha",exact:true}).innerText(),"alpha","unique titles keep their compact row");
     await page.getByRole("link",{name:"alpha",exact:true}).click();
     await page.waitForFunction(()=>document.querySelector("#route").textContent==="/console/alpha");
     await page.getByRole("link",{name:"Saved chat",exact:true}).click();
