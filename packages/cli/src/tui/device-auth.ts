@@ -213,6 +213,8 @@ export interface LoopbackRedirect {
  */
 export interface LoopbackServer {
   readonly port: number;
+  /** Random transaction-specific path for the real listener; injected test servers may omit it. */
+  readonly callbackPath?: string;
   close(): void;
 }
 
@@ -286,10 +288,11 @@ const defaultCreatePkcePair = (): PkcePair => {
  * "you can close this" page, and forwards the `code`/`error` query to the engine.
  */
 const defaultServerFactory: LoopbackServerFactory = async ({ onRedirect }) => {
+  const callbackPath = `/callback/${randomBytes(32).toString("base64url")}`;
   let delivered = false;
   const server = createServer((req, res) => {
     const requestUrl = new URL(req.url ?? "/", "http://127.0.0.1");
-    if (requestUrl.pathname !== "/callback") {
+    if (requestUrl.pathname !== callbackPath) {
       res.statusCode = 404;
       res.end("Not found");
       return;
@@ -310,7 +313,7 @@ const defaultServerFactory: LoopbackServerFactory = async ({ onRedirect }) => {
   });
   const address = server.address();
   const port = typeof address === "object" && address !== null ? address.port : 0;
-  return { port, close: () => server.close() };
+  return { port, callbackPath, close: () => server.close() };
 };
 
 /** The operator-facing label for a provider id, falling back to the id itself. */
@@ -630,7 +633,7 @@ export function startDeviceAuth(
       return;
     }
 
-    const redirectUri = `http://localhost:${server.port}/callback`;
+    const redirectUri = `http://localhost:${server.port}${server.callbackPath ?? "/callback"}`;
     // A fresh CSRF `state` per sign-in (RFC 6749 §10.12). Providers that want
     // one (Google) carry it on the authorize URL; OpenRouter simply ignores it.
     const state = base64url(randomBytes(16)).replace(/[^a-zA-Z0-9]/g, "").slice(0, 32);
