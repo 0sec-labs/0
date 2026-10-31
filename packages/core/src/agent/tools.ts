@@ -1,6 +1,7 @@
+import { confirmedStateProof, latestStateProof, observedState, stateContract, stateDigest } from "./access-milestone-proof.js";
 import { subagentBatchLimit, subagentConcurrency } from "./subagent-limits.js";
 import { parseRequest, type OracleResult } from "../triage/oracles.js";
-import { assertWorkspaceIdentity, captureWorkspaceIdentity, type WorkspaceIdentity } from "./workspace-identity.js";
+import { assertExpectedWorkspace, assertWorkspaceIdentity, captureWorkspaceIdentity, type ExpectedWorkspace, type WorkspaceIdentity } from "./workspace-identity.js";
 import { filterWorkflowAgentTools, isWorkflowAgentToolAllowed } from "../workflow-execution-policy.js";
 import { retainBrowserScreenshot } from "../browser-evidence.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -13,6 +14,7 @@ import type {
   Finding,
   SourceVerificationSummary,
   AttackResult,
+  AccessControlFixture,
   PocStep,
   TargetInfo,
   VerificationSpec,
@@ -135,7 +137,7 @@ import {
   JSFUCK_XSS_PAYLOAD,
 } from "./payloads.js";
 import { parsePatch, applyPatchOps } from "./apply-patch.js";
-import { listScopedFiles, searchScopedFiles } from "./tools/scoped-source.js";
+import { listScopedFiles, readScopedFile, searchScopedFiles } from "./tools/scoped-source.js";
 import {
   normalizeFindingTitle,
   levenshtein,
@@ -286,8 +288,8 @@ const rememberCodebaseArgsSchema = z.object({
 const selfExtendArgsSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("submit"),
-    manifest: z.record(z.unknown()),
-    files: z.record(z.string()).refine((files) => Object.keys(files).length > 0, "files must not be empty"),
+    manifest: z.record(z.string(), z.unknown()),
+    files: z.record(z.string(), z.string()).refine((files) => Object.keys(files).length > 0, "files must not be empty"),
     entry: z.string().min(1).max(1024),
     kind: z.enum(["tool", "skill", "agent"]).optional(),
   }).strip(),
@@ -1892,6 +1894,7 @@ export interface ProbeResponse {
   body: string;
   /** Set when the response body exceeds the 10k capture ceiling. */
   truncated?: boolean;
+  redacted?: boolean;
 }
 
 /** Normalize a response body for similarity comparison. */
@@ -2405,6 +2408,13 @@ const PERSIST_IDLE_TTL_MS = 300_000;
 /** Hard cap on how many times a persistent agent may be revived. */
 const PERSIST_MAX_REVIVES = 25;
 
+const expectedWorkspaceSchema = z.object({
+  path: z.string().min(1).max(4096).refine(isAbsolute, "expected_workspace.path must be absolute"),
+  head: z.string().regex(/^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$/, "expected_workspace.head must be a full Git commit hash"),
+  origin: z.string().min(1).max(4096).optional(),
+}).strict();
+const subagentWorkspaceSchema = z.object({ expected_workspace: expectedWorkspaceSchema.optional() });
+
 const subagentModelSelectionSchema = z.object({
   role: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
@@ -2419,10 +2429,10 @@ const subagentModelSelectionSchema = z.object({
 const spawnPersistentAgentArgsSchema = subagentModelSelectionSchema
   .extend({
     task: z
-      .string({ required_error: "task is required", invalid_type_error: "task must be a string" })
+      .string({ error: issue => issue.input === undefined ? "task is required" : "task must be a string" })
       .min(1, "task must not be empty"),
     name: z.string().min(1).max(48).optional(),
-    max_turns: z.number({ invalid_type_error: "max_turns must be a number" }).int().positive().optional(),
+    max_turns: z.number({ error: "max_turns must be a number" }).int().positive().optional(),
   })
   .strip();
 
@@ -2455,8 +2465,7 @@ const MONITOR_POLL_MS = 300;
 const monitorArgsSchema = z
   .object({
     op: z.enum(["start", "logs", "wait", "stop", "ps", "send"], {
-      required_error: "op is required",
-      invalid_type_error: "op must be one of start|logs|wait|stop|ps|send",
+      error: issue => issue.input === undefined ? "op is required" : "op must be one of start|logs|wait|stop|ps|send",
     }),
     name: z.string().min(1).max(64).optional(),
     command: z.string().min(1).optional(),
@@ -4445,6 +4454,7 @@ export class ToolExecutor {
       if (this.ctx.rateLimiter) this.ctx.rateLimiter.noteResponse(url, res);
       principal.capture(res);
       const text = await res.text();
+      const safeText = redactAuthValues(text, allHeaders.flatMap(([name, value]) => [value, value.replace(/^(?:Bearer|Basic)\s+/i, ""), ...(name.toLowerCase() === "cookie" ? value.split(";").map(pair => pair.slice(pair.indexOf("=") + 1).trim()) : [])]));
       return {
         identity: principal.label,
         role: principal.role,
@@ -4452,7 +4462,8 @@ export class ToolExecutor {
         method,
         status: res.status,
         contentType: res.headers.get("content-type") ?? "",
-        body: redactAuthValues(text, allHeaders.flatMap(([name, value]) => [value, value.replace(/^(?:Bearer|Basic)\s+/i, ""), ...(name.toLowerCase() === "cookie" ? value.split(";").map(pair => pair.slice(pair.indexOf("=") + 1).trim()) : [])])).slice(0, 10_000),
+        body: safeText.slice(0, 10_000),
+        redacted: safeText !== text,
         ...(text.length > 10_000 ? { truncated: true } : {}),
       };
     } finally {
@@ -4463,7 +4474,7 @@ export class ToolExecutor {
   private static readonly accessProbeSchema = z.object({
     url: z.string().min(1),
     method: z.enum(["GET", "POST", "PUT", "DELETE", "PATCH"]).optional(),
-    body: z.string().optional(), headers: z.record(z.string()).optional(),
+    body: z.string().optional(), headers: z.record(z.string(), z.string()).optional(),
     baseline_identity: z.string().min(1).optional(),
     compare_identities: z.array(z.string().min(1)).min(1).max(16).optional(),
     expect_denied: z.boolean().optional(),
@@ -4555,6 +4566,9 @@ export class ToolExecutor {
         identity: label,
         role: principal.role,
         status: resp.status,
+        truncated: resp.truncated ?? false,
+        response_digest: "sha256:" + createHash("sha256").update(resp.body).digest("hex"),
+        owner_marker_observed: typeof ownershipMarker === "string" && resp.body.includes(ownershipMarker),
         ...diff,
         evidence: probeEvidence(resp),
       });
@@ -4584,12 +4598,35 @@ export class ToolExecutor {
           : `No access-control break reproduced at ${baselineResp.url}.`,
     };
 
+    // Only the operator-owned fixture can establish restricted ownership for
+    // a public milestone. Model-supplied expect_denied/markers are insufficient.
+    const fixture = method === "GET" && body === undefined && Object.keys(extraHeaders).length === 0
+      ? this.ctx.accessControlFixtures?.find(f => {
+        try { return new URL(f.url).href === baselineResp.url && f.ownerIdentity === baseline.label
+          && f.ownershipMarker === ownershipMarker && expectDenied; } catch { return false; }
+      }) : undefined;
+    const qualified = fixture ? comparisons.filter(c => fixture.comparisonIdentities.includes(String(c.identity))) : [];
+    const markerObserved = typeof ownershipMarker === "string" && baselineResp.body.includes(ownershipMarker);
+    const confirmedRead = !baselineResp.truncated && markerObserved && qualified.some(c => c.broken === true && c.truncated === false);
+    const blockedRead = !baselineResp.truncated && is2xx(baselineResp.status) && markerObserved
+      && qualified.length > 0 && fixture!.comparisonIdentities.every(identity => qualified.some(c => c.identity === identity))
+      && qualified.every(c => c.verdict === "properly_denied" && c.truncated === false);
     this.persistToolArtifact("access_control_probe", {
       url: baselineResp.url,
       method,
       baseline: baseline.label,
       compared: compareLabels,
       broken_count: broken.length,
+      ...(confirmedRead || blockedRead ? { access_proof: {
+        schema: "0.access-proof/v1", authority: "operator-fixture", access_class: "unauthorized-read",
+        status: confirmedRead ? "confirmed" : "blocked", baseline_status: baselineResp.status,
+        owner_marker_observed: true, comparison_marker_observed: confirmedRead,
+        cleanup: "not-required",
+        baseline_observation: { status: baselineResp.status, truncated: baselineResp.truncated ?? false,
+          response_digest: "sha256:" + createHash("sha256").update(baselineResp.body).digest("hex"), marker_observed: true },
+        comparison_observations: (confirmedRead ? qualified.filter(c => c.broken === true && c.truncated === false) : qualified).map(c => ({ identity: c.identity, status: c.status,
+          truncated: c.truncated, response_digest: c.response_digest, marker_observed: c.owner_marker_observed })),
+      } } : {}),
     });
 
     return { success: true, output };
@@ -4606,7 +4643,7 @@ export class ToolExecutor {
       method: z.enum(["GET", "POST", "PUT", "DELETE", "PATCH"]),
       url: z.string().min(1),
       body: z.string().optional(),
-      headers: z.record(z.string()).optional(),
+      headers: z.record(z.string(), z.string()).optional(),
     }).strict()).min(1).max(10),
   }).strict();
 
@@ -4620,6 +4657,17 @@ export class ToolExecutor {
     const actor = principals.find((p) => p.label === args.actor_identity);
     if (!owner || !actor || owner.label === actor.label) {
       return { success: false, output: null, error: "Configure distinct owner_identity and actor_identity principals" };
+    }
+    // The model supplies the operator placeholder, never the proof challenge.
+    // Issue a fresh host-only nonce and bind it to the actor request body before
+    // dispatch; it is disclosed only after the final owner observation.
+    const stateFixture = stateContract(this.ctx.accessControlFixtures, args.observation_url, owner.label, actor.label, args.observation_json_pointer);
+    const challengeIssued = !!stateFixture && args.expected_state === stateFixture.ownershipMarker
+      && args.steps.some(step => typeof step.body === "string" && step.body.includes(stateFixture.ownershipMarker));
+    if (challengeIssued) {
+      const challenge = "zero-state-" + randomUUID();
+      args.steps = args.steps.map(step => ({ ...step, ...(step.body ? { body: step.body.split(stateFixture!.ownershipMarker).join(challenge) } : {}) }));
+      args.expected_state = challenge;
     }
     const ownerHeaders = owner.headers();
     const actorHeaders = actor.headers();
@@ -4671,7 +4719,13 @@ export class ToolExecutor {
         if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, sanitize(item)]));
         return value;
       };
+      const contract = stateContract(this.ctx.accessControlFixtures, args.observation_url, owner.label, actor.label, args.observation_json_pointer);
+      const prior = contract ? this.retainedStateAccessProof(contract) : undefined;
+      const proof = verdict === "confirmed" && contract ? confirmedStateProof(contract, {
+        before, after, steps: evidence, expected: args.expected_state, prior, now: Date.now(), challengeIssued,
+      }) : null;
       const output = {
+        ...(proof ? { state_access_proof: proof } : {}),
         workflow: "access_control_workflow", owner_identity: safe(owner.label), actor_identity: safe(actor.label),
         observation_url: safe(args.observation_url), observation_json_pointer: safe(args.observation_json_pointer),
         expected_state: safe(args.expected_state), observation_before: sanitize(before), steps: sanitize(evidence),
@@ -4683,7 +4737,7 @@ export class ToolExecutor {
     const observe = async (): Promise<{ evidence: Record<string, unknown>; value?: unknown; error?: string }> => {
       try {
         const response = await this.fetchAs(owner, args.observation_url, "GET", undefined, {});
-        const observation: Record<string, unknown> = { status: response.status, truncated: response.truncated ?? false };
+        const observation: Record<string, unknown> = { status: response.status, truncated: response.truncated ?? false, redacted: response.redacted ?? false };
         if (response.status < 200 || response.status >= 300 || response.truncated) {
           return { evidence: observation, error: "Owner observation was unsuccessful or truncated" };
         }
@@ -4700,6 +4754,8 @@ export class ToolExecutor {
           value = (value as Record<string, unknown>)[key];
         }
         observation.field_present = true;
+        observation.value_type = value === null ? "null" : typeof value;
+        observation.value_truncated = typeof value === "string" && value.length > 500;
         observation.json_pointer_value = typeof value === "string" ? value.slice(0, 500) : value === null ? null : typeof value;
         return { evidence: observation, value };
       } catch (error) {
@@ -4715,7 +4771,9 @@ export class ToolExecutor {
       try {
         const response = await this.fetchAs(actor, step.url, step.method, step.body, step.headers ?? {});
         evidence.push({ step_index: index, method: step.method, url: step.url, status: response.status,
-          body_length: response.body.length, truncated: response.truncated ?? false });
+          body_length: response.body.length, truncated: response.truncated ?? false,
+          request_body_digest: step.body === undefined ? null : "sha256:" + createHash("sha256").update(step.body).digest("hex"), request_body_bytes: step.body === undefined ? 0 : Buffer.byteLength(step.body, "utf8"),
+          retained_response_digest: "sha256:" + createHash("sha256").update(response.body).digest("hex"), response_redacted: response.redacted ?? false, request_marker_sent: typeof step.body === "string" && step.body.includes(args.expected_state) });
         // An HTTP denial is observable evidence; a transport error is not.
       } catch (error) {
         evidence.push({ step_index: index, method: step.method, url: step.url, error: safe(error instanceof Error ? error.message : String(error)) });
@@ -4729,6 +4787,36 @@ export class ToolExecutor {
     if (observation.value === args.expected_state) return finish("confirmed", "Owner observed the unique expected marker only after the distinct actor workflow");
     if (Object.is(observation.value, baseline.value)) return finish("no_change", "Actor requests did not change the observed state");
     return finish("inconclusive", "State changed, but not to the declared marker; attribution is uncertain");
+  }
+
+  private retainedStateAccessProof(fixture: AccessControlFixture) {
+    try { return this.db ? latestStateProof(this.db.getRecentScanEvents(this.ctx.scanId, "tool_artifact", 500, ["access_control_workflow", "access_control_cleanup"]), fixture) : undefined; }
+    catch { return undefined; }
+  }
+
+  /** Read-only cleanup verification: never performs compensating mutations. */
+  private async accessControlCleanup(raw: Record<string, unknown>): Promise<ToolResult> {
+    const parsed = z.object({ observation_url: z.string().min(1).max(8192), owner_identity: z.string().min(1).max(64) }).strict().safeParse(raw);
+    if (!parsed.success) return { success: false, output: null, error: "Provide observation_url and owner_identity only" };
+    const { observation_url, owner_identity } = parsed.data;
+    const contract = stateContract(this.ctx.accessControlFixtures, observation_url, owner_identity);
+    const owner = this.resolveProbeIdentities().find(identity => identity.label === owner_identity);
+    if (!contract?.stateChange || !owner || !this.db) return { success: false, output: null, error: "A retained operator-owned state-change proof and owner identity are required" };
+    const prior = this.retainedStateAccessProof(contract);
+    if (!prior) return { success: false, output: null, error: "No matching retained state-change proof is available; cleanup remains unverified" };
+    try {
+      const response = await this.fetchAs(owner, observation_url, "GET", undefined, {});
+      if (!is2xx(response.status) || response.truncated || response.redacted) throw new Error("Owner cleanup observation was unsuccessful or incomplete");
+      const digest = stateDigest(observedState(response.body, contract.stateChange.jsonPointer));
+      const proof = { ...prior, cleanup: digest === prior.baseline_digest ? "completed" as const : "failed" as const, cleanup_at: Date.now(), cleanup_revision: prior.cleanup_revision + 1 };
+      const output = { workflow: "access_control_cleanup", observation_url: contract.url, state_access_proof: proof,
+        observation: { status: response.status, truncated: false, value_digest: digest } };
+      this.persistToolArtifact("access_control_cleanup", output);
+      return { success: true, output };
+    } catch {
+      // Do not expose private response data or infer cleanup from an error.
+      return { success: false, output: null, error: "Cleanup observation was unavailable; the retained cleanup status is unchanged" };
+    }
   }
 
   /**
@@ -6103,6 +6191,7 @@ export class ToolExecutor {
     selection?: SubagentModelSelection,
     admittedLease?: ReturnType<AuditWorkerTree["acquire"]>,
     sharedContext?: string,
+    expectedWorkspace?: ExpectedWorkspace,
   ): Promise<SubagentOutcome> {
     const startedAt = Date.now();
     let lease = admittedLease;
@@ -6113,6 +6202,7 @@ export class ToolExecutor {
       const signal = callerSignal ? AbortSignal.any([callerSignal, lease.signal]) : lease.signal;
       childSignal = signal;
       signal.throwIfAborted();
+      if (expectedWorkspace) assertExpectedWorkspace(expectedWorkspace, this.ctx.scopePath);
       if (!this._childRuntimeFactory) throw new Error("Parent runtime does not support subagent inference");
       // Single-child path resolves deps here (inside the try, so an import
       // failure still emits `failed`); the concurrent batch pre-resolves once
@@ -6196,6 +6286,7 @@ export class ToolExecutor {
       const delegationSystemPrompt = this.ctx.delegationSystemPrompt ?? `You are a focused ${this.ctx.role ?? "attack"} agent.`;
       this._workspaceIdentity ??= captureWorkspaceIdentity(this.ctx.scopePath);
       if (this._workspaceIdentity) assertWorkspaceIdentity(this._workspaceIdentity, this.ctx.scopePath);
+      if (expectedWorkspace) assertExpectedWorkspace(expectedWorkspace, this.ctx.scopePath);
       const state = await runNativeAgentLoop({
         config: {
           role: this.ctx.role ?? "attack",
@@ -6515,7 +6606,7 @@ export class ToolExecutor {
         agent_id: base.agent_id,
         name: displayName,
         task,
-        note: `Persistent agent "${displayName}" is running; it will PARK when its task is done. Message it with send_message to revive it for follow-up work.`,
+        note: `Persistent agent "${displayName}" is running; it will PARK when its task is done. ${childMessaging ? "Follow-up work requires an enabled messaging route, such as operator agent controls." : "This session has no messaging route for this worker; use spawn_agent for a one-shot task."}`,
       },
     };
   }
@@ -6664,6 +6755,11 @@ export class ToolExecutor {
     if (!task) return { success: false, output: null, error: "Task description is required" };
     const selection = subagentModelSelectionSchema.safeParse(args);
     if (!selection.success) return { success: false, output: null, error: selection.error.issues[0]?.message ?? "Invalid model selection" };
+    const workspace = subagentWorkspaceSchema.safeParse(args);
+    if (!workspace.success) return { success: false, output: null, error: workspace.error.issues[0]?.message ?? "Invalid expected workspace" };
+    try { if (workspace.data.expected_workspace) assertExpectedWorkspace(workspace.data.expected_workspace, this.ctx.scopePath); }
+    catch (error) { return { success: false, output: null, error: (error as Error).message }; }
+
 
     const maxTurns = Math.min((args.max_turns as number) ?? 40, 120);
     const base = this.buildSubagentLifecycleBase(task, maxTurns);
@@ -6673,7 +6769,7 @@ export class ToolExecutor {
     // queued — before any async setup
     eventBus.emit("subagent_lifecycle", { ...base, status: "queued" as const });
 
-    const outcome = await this.runOneSubagent(task, maxTurns, base, undefined, undefined, selection.data, lease);
+    const outcome = await this.runOneSubagent(task, maxTurns, base, undefined, undefined, selection.data, lease, undefined, workspace.data.expected_workspace);
     // Preserve accepted findings even if a later model request failed.
     this.mergeSubagentFindings(outcome.findings ?? []);
     if (!outcome.ok) {
@@ -6733,7 +6829,7 @@ export class ToolExecutor {
     const batchContext = typeof args.context === "string" && args.context.trim() ? args.context : undefined;
 
     // Normalize + validate each task entry before any side effect.
-    const specs: Array<{ task: string; maxTurns: number; base: SubagentLifecycleBase; selection: SubagentModelSelection; lease?: ReturnType<AuditWorkerTree["acquire"]> }> = [];
+    const specs: Array<{ task: string; maxTurns: number; base: SubagentLifecycleBase; selection: SubagentModelSelection; expectedWorkspace?: ExpectedWorkspace; lease?: ReturnType<AuditWorkerTree["acquire"]> }> = [];
     for (let i = 0; i < rawTasks.length; i++) {
       const entry = rawTasks[i] as Record<string, unknown> | undefined;
       const task = entry?.task;
@@ -6746,8 +6842,12 @@ export class ToolExecutor {
       }
       const selection = subagentModelSelectionSchema.safeParse(entry);
       if (!selection.success) return { success: false, output: null, error: `tasks[${i}]: ${selection.error.issues[0]?.message ?? "Invalid model selection"}` };
+      const workspace = subagentWorkspaceSchema.safeParse(entry);
+      if (!workspace.success) return { success: false, output: null, error: `tasks[${i}]: ${workspace.error.issues[0]?.message ?? "Invalid expected workspace"}` };
+      try { if (workspace.data.expected_workspace) assertExpectedWorkspace(workspace.data.expected_workspace, this.ctx.scopePath); }
+      catch (error) { return { success: false, output: null, error: `tasks[${i}]: ${(error as Error).message}` }; }
       const maxTurns = Math.min((entry?.max_turns as number) ?? 40, 120);
-      specs.push({ task, maxTurns, base: this.buildSubagentLifecycleBase(task, maxTurns), selection: selection.data });
+      specs.push({ task, maxTurns, base: this.buildSubagentLifecycleBase(task, maxTurns), selection: selection.data, expectedWorkspace: workspace.data.expected_workspace });
     }
 
     // Reserve queued work too, so stop-all cannot miss later concurrency waves.
@@ -6812,6 +6912,7 @@ export class ToolExecutor {
           spec.selection,
           spec.lease,
           batchContext,
+          spec.expectedWorkspace,
         ),
     );
 
@@ -7037,7 +7138,7 @@ export class ToolExecutor {
       // check is skipped (conservative).
       // `this.ctx.scopePath` is guaranteed set by the workspace guard above.
       const sourceAbsolute = resolve(this.ctx.scopePath!, sourcePath);
-      const probe = probeFileRefTarget(sourceAbsolute);
+      const probe = probeFileRefTarget(sourceAbsolute, this.ctx.scopePath!);
       const lastLine =
         endLine !== undefined ? (endLine as number) : (startLine as number);
       if (!probe.exists) {
@@ -7596,7 +7697,7 @@ export class ToolExecutor {
     return { success: true, output: { message: `Finding ${id} updated to ${status}` } };
   }
 
-  private readFile(args: Record<string, unknown>): ToolResult {
+  private async readFile(args: Record<string, unknown>): Promise<ToolResult> {
     if (isScopeEnforcementEnabled() && !this.ctx.scopePath) {
       return {
         success: false,
@@ -7606,8 +7707,7 @@ export class ToolExecutor {
     }
 
     const requestedPath = args.path as string;
-    const path = resolveScopedPath(this.ctx.scopePath, requestedPath);
-    const raw = readFileSync(path, "utf-8");
+    const raw = await readScopedFile(this.ctx.scopePath, requestedPath, { signal: this._executionContext.getStore()?.signal });
 
     // Windowing + argument validation live in ./tools/read-file-window.ts so
     // the arithmetic is unit-testable without a ToolExecutor. `offset` is
@@ -7647,7 +7747,7 @@ export class ToolExecutor {
     return { success: true, output: listScopedFiles(this.ctx.scopePath ?? process.cwd(), args) };
   }
 
-  private searchFiles(args: Record<string, unknown>): ToolResult {
+  private async searchFiles(args: Record<string, unknown>): Promise<ToolResult> {
     if (isScopeEnforcementEnabled() && !this.ctx.scopePath) {
       return {
         success: false,
@@ -7656,7 +7756,7 @@ export class ToolExecutor {
       };
     }
 
-    return { success: true, output: searchScopedFiles(this.ctx.scopePath ?? process.cwd(), args) };
+    return { success: true, output: await searchScopedFiles(this.ctx.scopePath ?? process.cwd(), args, this._executionContext.getStore()?.signal) };
   }
 
   /**
@@ -7703,8 +7803,8 @@ export class ToolExecutor {
   /**
    * str_replace — exact-string file edit (Claude text_editor `str_replace`
    * contract). More reliable than `apply_patch` for single edits: there are no
-   * fragile context hunks to mismatch — `old_string` must match the file byte
-   * for byte (whitespace and indentation included) and, unless `replace_all` is
+   * fragile context hunks to mismatch — matching preserves whitespace and
+   * indentation, tolerates LF/CRLF for multiline blocks and, unless `replace_all` is
    * set, UNIQUELY. Same gate as `apply_patch`/`run_command`: refuses without a
    * `scopePath` and resolves the path through `resolveScopedPath` so the edit
    * can never escape the audit directory. Fail-soft — every error is a clear,
@@ -7784,15 +7884,51 @@ export class ToolExecutor {
       return { success: false, output: null, error: `str_replace: could not read ${rawPath}: ${msg}` };
     }
 
-    // Count exact (byte-for-byte) occurrences of old_string.
-    let occurrences = 0;
-    let searchFrom = 0;
-    for (;;) {
-      const hit = original.indexOf(oldString, searchFrom);
-      if (hit === -1) break;
-      occurrences += 1;
-      searchFrom = hit + oldString.length;
+    // Find all non-overlapping occurrences. For single-line strings, exact
+    // byte-for-byte matching is used. For multiline strings, line endings are
+    // matched as LF or CRLF, including mixtures within a block. Unmatched
+    // bytes are copied verbatim; replacement line endings follow the block.
+    const matches: Array<{ start: number; end: number; replacement: string }> = [];
+
+    if (!oldString.includes("\n")) {
+      let pos = 0;
+      while ((pos = original.indexOf(oldString, pos)) !== -1) {
+        matches.push({ start: pos, end: pos + oldString.length, replacement: newString });
+        pos += oldString.length;
+      }
+    } else {
+      // Compare logical newlines, recording each removed CR at its logical
+      // offset. Monotone cursors map matches back to untouched original bytes.
+      const removedCrOffsets: number[] = [];
+      const logicalOriginal = original.replace(/\r\n/g, (_ending, offset: number) => {
+        removedCrOffsets.push(offset - removedCrOffsets.length);
+        return "\n";
+      });
+      const logicalOld = oldString.replace(/\r\n/g, "\n");
+      const crlfNew = newString.replace(/\r?\n/g, "\r\n");
+      const lfNew = newString.replace(/\r?\n/g, "\n");
+      const mixedExact = oldString.includes("\r\n") && oldString.replace(/\r\n/g, "").includes("\n");
+      let removed = 0;
+      let pos = 0;
+      let hit: number;
+      while ((hit = logicalOriginal.indexOf(logicalOld, pos)) !== -1) {
+        while (removed < removedCrOffsets.length && removedCrOffsets[removed] < hit) removed++;
+        const start = hit + removed;
+        const logicalEnd = hit + logicalOld.length;
+        while (removed < removedCrOffsets.length && removedCrOffsets[removed] < logicalEnd) removed++;
+        const end = logicalEnd + removed;
+        const matched = original.slice(start, end);
+        // Preserve the prior literal replacement for an exact mixed-EOL block.
+        // Otherwise the first matched newline sets the replacement's style.
+        const replacement = mixedExact && matched === oldString
+          ? newString
+          : /\r?\n/.exec(matched)![0] === "\r\n" ? crlfNew : lfNew;
+        matches.push({ start, end, replacement });
+        pos = logicalEnd;
+      }
     }
+
+    const occurrences = matches.length;
 
     if (occurrences === 0) {
       return {
@@ -7810,12 +7946,22 @@ export class ToolExecutor {
     }
 
     // We only reach here when occurrences === 1, or replace_all is set. In both
-    // cases replacing every occurrence yields the intended result. split/join
-    // avoids String.prototype.replace's special `$` handling in the replacement.
+    // cases replacing matches in a single forward pass avoids cascading substitutions
+    // and preserves line endings outside the replaced regions.
     const replacements = replaceAll ? occurrences : 1;
-    const updated = replaceAll
-      ? original.split(oldString).join(newString)
-      : original.replace(oldString, () => newString);
+    let updated: string;
+    if (replaceAll) {
+      updated = "";
+      let lastIndex = 0;
+      for (const m of matches) {
+        updated += original.slice(lastIndex, m.start) + m.replacement;
+        lastIndex = m.end;
+      }
+      updated += original.slice(lastIndex);
+    } else {
+      const m = matches[0];
+      updated = original.slice(0, m.start) + m.replacement + original.slice(m.end);
+    }
 
     try {
       writeFileSync(abs, updated, "utf-8");
@@ -9421,6 +9567,7 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     "submit_form",
     "access_control_probe",
     "access_control_workflow",
+    "access_control_cleanup",
     "bash",
     // js_eval / python_eval are thin, effectful wrappers over the same guarded
     // shellExec path as bash — advertised to the network roles alongside it,

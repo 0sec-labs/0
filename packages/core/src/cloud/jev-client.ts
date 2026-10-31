@@ -70,7 +70,7 @@ export interface HostedJevEvaluationResult extends JevEvaluationResult {
 // ── Session validation ──
 
 const sessionResponseSchema = z.object({
-  sessionId: z.string().uuid(),
+  sessionId: z.guid(),
   features: z.array(z.string()),
   maxRequests: z.number().int().positive(),
   maxCostUsd: z.number().positive(),
@@ -79,7 +79,7 @@ const sessionResponseSchema = z.object({
 
 const evaluateResponseSchema = z.object({
   model: z.string().min(1),
-  answers: z.record(z.unknown()),
+  answers: z.record(z.string(), z.unknown()),
   usage: z.object({
     inputTokens: z.number().int().nonnegative(),
     outputTokens: z.number().int().nonnegative(),

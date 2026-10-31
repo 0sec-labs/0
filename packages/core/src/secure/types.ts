@@ -29,6 +29,18 @@ export interface BehavioralRepairResult {
   verification?: BehavioralProbeResult;
   changedFiles?: string[];
   artifactDir: string;
+  /**
+   * Compact tail of the failed leg's own command log, so the delivered
+   * result is self-diagnosing without a sandbox artifact bundle. Text
+   * only, capped — the full files stay in the sandbox artifactDir.
+   */
+  evidence?: {
+    label: string;
+    exitCode: number | null;
+    interrupted: boolean;
+    stdoutTail: string;
+    stderrTail: string;
+  };
 }
 
 
@@ -60,6 +72,13 @@ export interface BehavioralRepairOptions {
   maxTurns: number;
   timeoutMs: number;
   signal?: AbortSignal;
+  /**
+   * Caller-supplied bound for the SHARED baseline establishment leg
+   * (clone + setup + regression command). The per-finding repair budget
+   * must not bound the baseline: a cold toolchain compile is legitimate
+   * and shared across findings. Falls back to `signal` when omitted.
+   */
+  baselineSignal?: AbortSignal;
   projectContext?: PreparedProjectContext;
   /**
    * Developer-choice learnings: how this tenant responded to past repairs.

@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync, readFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -104,6 +104,13 @@ async function seedRejectedCandidate(cfg: EvolutionConfig) {
 // ---------------------------------------------------------------------------
 
 describe("cross-invocation feedback recovery", () => {
+  it.each(["changed", "deleted"])("does not reuse source knowledge after selected source is %s", async state => {
+    await seedRejectedCandidate(config);
+    const file = join(config.sourceRoot, "src/worker.cjs");
+    if (state === "changed") writeFileSync(file, "different source revision\n"); else unlinkSync(file);
+    expect(tryRecoverPreviousFeedback(config, loadEvolutionRegistry(config.storePath), config.storePath)).toBeNull();
+  });
+
   it("recovers feedback from the most recent compatible rejected candidate", async () => {
     const { proposal } = await seedRejectedCandidate(config);
     const registry = loadEvolutionRegistry(config.storePath);

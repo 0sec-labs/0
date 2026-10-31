@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 
 const require = createRequire(new URL("../packages/dashboard/package.json", import.meta.url));
-const { QueryClient } = require("@tanstack/react-query");
+const { QueryClient, isCancelledError } = require("@tanstack/react-query");
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 
 test("chat snapshots render warm, resume event cursors, resync mutations and isolate host/accounts", async () => {
@@ -41,14 +41,14 @@ test("chat snapshots render warm, resume event cursors, resync mutations and iso
     getConsoleEvents: async (id, after) => { events.push([id, after]); return { events: [], cursor: after }; },
     listConsoleSessions: async () => [], listSavedConsoleSessions: async () => [],
   };
-  globalThis.__snapshotCacheTest = { useState, useRef, useMemo, useEffect, cache, team, api };
+  globalThis.__snapshotCacheTest = { useState, useRef, useMemo, useEffect, cache, team, api, isCancelledError };
   let originalNow = Date.now;
   try {
     const output = join(directory, "hook.mjs");
     await build({ entryPoints: [fileURLToPath(new URL("../packages/dashboard/src/console/use-console-workspace.ts", import.meta.url))], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent", plugins: [{ name: "snapshot-hook-boundaries", setup(build) {
       const sources = {
         react: 'const h=globalThis.__snapshotCacheTest; export const {useState,useRef,useMemo,useEffect}=h;',
-        "@tanstack/react-query": 'const h=globalThis.__snapshotCacheTest; export const useQueryClient=()=>h.cache; export const useQuery=o=>({isSuccess:true,isFetching:false,data:o.queryKey[0]==="console-snapshot"?h.cache.getQueryData(o.queryKey):[]});',
+        "@tanstack/react-query": 'const h=globalThis.__snapshotCacheTest; export const isCancelledError=h.isCancelledError; export const useQueryClient=()=>h.cache; export const useQuery=o=>({isSuccess:true,isFetching:false,data:o.queryKey[0]==="console-snapshot"?h.cache.getQueryData(o.queryKey):[]});',
         "@/api": 'export const useBackendApi=()=>globalThis.__snapshotCacheTest.api; export const localControlFetch=(...args)=>{const fn=globalThis.__snapshotCacheTest.api.localControlFetch; if(!fn)throw new Error("Unexpected relay request"); return fn(...args);};',
         "@/components/team-access": 'export const useTeamAccess=()=>globalThis.__snapshotCacheTest.team;',
         "@/lib/use-persistent-state": 'import {useState} from "react"; export const usePersistentState=(_key,value)=>useState(value);',

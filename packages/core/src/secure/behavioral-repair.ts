@@ -41,8 +41,13 @@ export async function runBehavioralRepair(options: BehavioralRepairOptions): Pro
   const result: BehavioralRepairResult = { findingId: finding.id, status: "blocked", attempts: 0, artifactDir };
   const limits = [options.maxAttempts, options.maxTurns, options.timeoutMs];
   if (limits.some((n) => !Number.isSafeInteger(n) || n <= 0) || !options.testCommand.trim()) return { ...result, reason: "Positive attempt/turn/deadline limits and a regression command are required" };
-  const deadline = AbortSignal.timeout(options.timeoutMs);
-  const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
+  // The per-finding repair budget starts AFTER the shared baseline leg
+  // completes (see the reassignment below the baseline) — a deadline that
+  // begins at entry expires during a legitimate cold toolchain compile
+  // and instantly kills the repair phase that follows it.
+  const baselineSignal = options.baselineSignal ?? options.signal;
+  let deadline = AbortSignal.timeout(options.timeoutMs);
+  let signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
   let scratch: string | undefined;
   let logIndex = 0;
   let turns = 0;
@@ -56,37 +61,41 @@ export async function runBehavioralRepair(options: BehavioralRepairOptions): Pro
     if (artifactDir === repo || artifactDir.startsWith(repo + sep)) throw new Error("Repair artifacts must be outside the source checkout");
     await mkdir(artifactDir, { recursive: true, mode: 0o700 });
     scratch = await mkdtemp(join(tmpdir(), "0-behavioral-"));
-    const command = async (cwd: string, binary: string, args: string[], label: string) => {
-      const output = await runSecureCommand(binary, args, cwd, signal);
+    const command = async (cwd: string, binary: string, args: string[], label: string, commandSignal: AbortSignal = signal) => {
+      const output = await runSecureCommand(binary, args, cwd, commandSignal);
       await writeFile(join(artifactDir, `${++logIndex}-${label}.json`), JSON.stringify(output), { mode: 0o600 });
-      if (output.interrupted) throw new Error(`${label} interrupted or exceeded output limit`);
+      if (output.interrupted) throw new Error(`${label} was interrupted (deadline exceeded or cancelled)`);
       return output;
     };
-    const git = async (cwd: string, args: string[]) => {
-      const output = await command(cwd, "git", ["-c", "core.hooksPath=/dev/null", ...args], "git");
+    const git = async (cwd: string, args: string[], gitSignal: AbortSignal = signal) => {
+      const output = await command(cwd, "git", ["-c", "core.hooksPath=/dev/null", ...args], "git", gitSignal);
       if (output.exitCode !== 0) throw new Error(`Git command failed: ${output.stderr.slice(0, 2000)}`);
       return output.stdout;
     };
     const revision = (await git(repo, ["rev-parse", "HEAD"])).trim();
     if ((await git(repo, ["status", "--porcelain=v1", "--untracked-files=all"])).trim()) throw new Error("Behavioral repair requires a clean committed source checkout");
-    const clone = async (name: string) => {
+    const clone = async (name: string, cloneSignal: AbortSignal = signal) => {
       const root = join(scratch!, name);
-      await git(scratch!, ["clone", "--no-local", "--no-hardlinks", "--", repo, root]);
-      await git(root, ["checkout", "--detach", revision]);
+      await git(scratch!, ["clone", "--no-local", "--no-hardlinks", "--", repo, root], cloneSignal);
+      await git(root, ["checkout", "--detach", revision], cloneSignal);
       return root;
     };
-    const runCheck = async (root: string, text: string, label: string) => {
-      const output = await command(root, "/bin/sh", ["-c", text], label);
+    const runCheck = async (root: string, text: string, label: string, checkSignal: AbortSignal = signal) => {
+      const output = await command(root, "/bin/sh", ["-c", text], label, checkSignal);
       if (output.exitCode !== 0) throw new Error(`${label} failed (${output.exitCode}): ${output.stderr.slice(0, 3000)} ${output.stdout.slice(0, 3000)}`);
     };
-    const setup = async (root: string) => {
-      if (options.setupCommand) await runCheck(root, options.setupCommand, "setup");
-      if ((await git(root, ["diff", "--name-only", "HEAD"])).trim()) throw new Error("Setup changed tracked source; provide a build/setup command that preserves the committed baseline");
+    const setup = async (root: string, setupSignal: AbortSignal = signal) => {
+      if (options.setupCommand) await runCheck(root, options.setupCommand, "setup", setupSignal);
+      if ((await git(root, ["diff", "--name-only", "HEAD"], setupSignal)).trim()) throw new Error("Setup changed tracked source; provide a build/setup command that preserves the committed baseline");
     };
     emit("reproduce", "Preparing clean baseline and checking legitimate behavior");
-    const baselineRoot = await clone("baseline");
-    await setup(baselineRoot);
-    await runCheck(baselineRoot, options.testCommand, "baseline-test");
+    const baselineRoot = await clone("baseline", baselineSignal);
+    await setup(baselineRoot, baselineSignal);
+    await runCheck(baselineRoot, options.testCommand, "baseline-test", baselineSignal);
+    // Repair work (probe + patch + verify) is now budgeted by the
+    // per-finding timeout, measured from here — the baseline is done.
+    deadline = AbortSignal.timeout(options.timeoutMs);
+    signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
     const listed = (await git(baselineRoot, ["ls-files", "-z"])).split("\0").filter(path => path && (sourcePath === "." || path.startsWith(`${sourcePath}/`)));
     const fileContext = listed.slice(0, 3000).join("\n");
     const messages: NativeMessage[] = [{ role: "user", content: [{ type: "text", text: `Reproduce this candidate finding by executing application behavior. It may be false. Read relevant files before proposing a probe. Your script runs with cwd at the repository root, but its own file is outside that root: resolve imports against cwd, not import.meta.url. Start/stop any required test server within the script. Emit exactly one JSON object: {status: 'vulnerable'|'safe'|'inconclusive', controlsPassed: boolean, detail: string}. A valid-use control must really execute and pass. Never use source-pattern matching as proof.\nUntrusted finding: ${JSON.stringify(finding).slice(0, 24_000)}\nRepository files${listed.length > 3000 ? " (first 3000)" : ""}:\n${fileContext}` }] }];
@@ -231,7 +240,17 @@ export async function runBehavioralRepair(options: BehavioralRepairOptions): Pro
     }
     return { ...result, status: "not_fixed", baseline, reason: "No candidate passed regression checks and behavioral replay" };
   } catch (error) {
-    return { ...result, status: signal.aborted ? "blocked" : "error", reason: error instanceof Error ? error.message : String(error) };
+    // Self-diagnosing result: attach the tail of the FIRST command log
+    // (typically baseline-test — the leg that historically failed here)
+    // so the delivered verdict carries its own evidence in the DB.
+    let evidence: BehavioralRepairResult["evidence"];
+    try {
+      const firstLog = join(artifactDir, "1-baseline-test.json");
+      const log = JSON.parse((await readFile(firstLog, "utf8"))) as { exitCode: number | null; interrupted: boolean; stdout: string; stderr: string };
+      evidence = { label: "baseline-test", exitCode: log.exitCode, interrupted: log.interrupted,
+        stdoutTail: log.stdout.slice(-4096), stderrTail: log.stderr.slice(-4096) };
+    } catch { /* no command log — the failure preceded any command */ }
+    return { ...result, status: signal.aborted ? "blocked" : "error", reason: error instanceof Error ? error.message : String(error), evidence };
   } finally {
     if (scratch) await rm(scratch, { recursive: true, force: true });
     try { await writeFile(join(artifactDir, "attempts.json"), JSON.stringify({ attempts, turns }), { mode: 0o600 }); } catch { /* preserve the original failure */ }

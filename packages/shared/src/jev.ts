@@ -128,7 +128,7 @@ const questionSchema = z.discriminatedUnion("type", [
 ]);
 const normalizedAnswerSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("boolean"), probability }),
-  z.object({ type: z.literal("choice"), choice: z.string(), probabilities: z.record(probability) }),
+  z.object({ type: z.literal("choice"), choice: z.string(), probabilities: z.record(z.string(), probability) }),
 ]);
 const usageSchema = z.object({
   inputTokens: z.number().int().nonnegative().max(MAX_INPUT_TOKENS),
@@ -223,7 +223,7 @@ export function createJevEvaluator(config: JevConfig): JevEvaluator {
             body: JSON.stringify({ feature: config.feature, state: request.state, questions }),
           });
           if (!response.ok) throw new Error(`Jev provider returned HTTP ${response.status}`);
-          const body = z.object({ model: z.string().min(1), answers: z.record(z.unknown()), usage: usageSchema })
+          const body = z.object({ model: z.string().min(1), answers: z.record(z.string(), z.unknown()), usage: usageSchema })
             .parse(await response.json());
           model = body.model;
           rawUsage = body.usage;

@@ -6,7 +6,7 @@ import { z } from "zod";
 import { ensureEvolutionDirectory, readEvolutionArtifact } from "../improvement/artifacts.js";
 import { acquireEvolutionController } from "../improvement/controller-lock.js";
 
-const grantsSchema = z.object({ schema: z.literal(1), workspaces: z.record(z.boolean()) }).strict();
+const grantsSchema = z.object({ schema: z.literal(1), workspaces: z.record(z.string(), z.boolean()) }).strict();
 const storage = () => join(homeStateDir(), "harness-trust");
 
 /** Operator-owned grant, never inferred from workspace contents or model permissions. */

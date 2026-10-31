@@ -29,6 +29,7 @@ vi.mock("../run.js", () => ({
   runUnified: runUnifiedMock,
 }));
 
+const recommendQualifiedRoutingMock = vi.fn();
 const loadScopeMock = vi.fn();
 const parseRateLimitFlagMock = vi.fn();
 const resolveAttributionMock = vi.fn();
@@ -38,6 +39,8 @@ const extractEngagementFromScopeJsonMock = vi.fn();
 const targetRequiresScopeMock = vi.fn((target: string) => /^https?:\/\//.test(target));
 const networkScopeRequiredRefusalMock = vi.fn((target: string) => `scope required for ${target}`);
 vi.mock("@0/core", () => ({
+  recommendQualifiedRouting: recommendQualifiedRoutingMock,
+  LlmApiRuntime: class { resolvedProvider() { return "openai"; } },
   getScopeEnforcementState: () => ({ pluginId: "scope", enabled: true, projectPath: process.cwd(), message: "Scope plugin enabled" }),
   loadScope: loadScopeMock,
   parseRateLimitFlag: parseRateLimitFlagMock,
@@ -651,5 +654,60 @@ describe("multi-identity ownership fixture inputs", () => {
       expect(() => parseIdentitiesFile(file)).toThrow("Invalid --identities file");
       try { parseIdentitiesFile(file); } catch (error) { expect(String(error)).not.toContain("DO_NOT_ECHO_THIS"); }
     } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+});
+
+
+describe("explicit task model options", () => {
+  it("threads operator-approved assignments into one scan without enabling implicit routing", async () => {
+    await runCli(["scan", "--target", "https://example.com", "--format", "json", "--task-model", "discovery=gpt-4o", "--task-model", "verify=claude-sonnet-4-20250514"]);
+    expect(runUnifiedMock).toHaveBeenCalledWith(expect.objectContaining({ agentModels: { discovery: "gpt-4o", verify: "claude-sonnet-4-20250514" } }));
+    expect(runUnifiedMock.mock.calls[0]![0].autoRoute).toBeUndefined();
+  });
+  it("supports an explicit single-model override", async () => {
+    await runCli(["scan", "--target", "https://example.com", "--format", "json", "--model", "gpt-4o", "--single-model", "--task-model", "verify=other"]);
+    expect(runUnifiedMock).toHaveBeenCalledWith(expect.objectContaining({ model: "gpt-4o", singleModel: true }));
+  });
+});
+
+describe("automatic guided terminal setup", () => {
+  it.each([undefined, "1250"])("keeps request timeout %s separate from the confirmed plan deadline", async (timeout) => {
+    const planner = await import("../../guided-scan.js");
+    const plan = { goal: "misconfigurations" as const, depth: "quick" as const, runCount: 2, executionMode: "parallel" as const, timeCapMs: 90_000, costCapUsd: 0.75 };
+    const guided = vi.spyOn(planner, "guidedScanPlan").mockResolvedValue(plan);
+    const input = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
+    const output = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
+    try {
+      Object.defineProperty(process.stdin, "isTTY", { value: true, configurable: true });
+      Object.defineProperty(process.stdout, "isTTY", { value: true, configurable: true });
+      await runCli(["scan", "--target", "https://example.com", "--depth", "quick", ...(timeout ? ["--timeout", timeout] : [])]);
+      expect(guided).toHaveBeenCalledWith(expect.objectContaining({ target: "https://example.com", depth: "quick" }));
+      expect(runUnifiedMock).toHaveBeenCalledWith(expect.objectContaining({ plan, timeout: timeout ? Number(timeout) : 30_000, costCeilingUsd: 0.75 }));
+      guided.mockResolvedValue(undefined);
+      runUnifiedMock.mockClear();
+      await runCli(["scan", "--target", "https://example.com"]);
+      expect(runUnifiedMock).not.toHaveBeenCalled();
+    } finally {
+      if (input) Object.defineProperty(process.stdin, "isTTY", input); else delete (process.stdin as { isTTY?: boolean }).isTTY;
+      if (output) Object.defineProperty(process.stdout, "isTTY", output); else delete (process.stdout as { isTTY?: boolean }).isTTY;
+    }
+  });
+});
+
+
+describe("reviewed task routing command integration", () => {
+  it("requires explicit approvals and shared caps, applies manual overrides and preserves the plan", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "routing-scan-"));
+    try {
+      const path = join(directory, "report.json"); writeFileSync(path, "{}");
+      recommendQualifiedRoutingMock.mockReturnValue({ assignments: { discovery: "qualified-cheap", attack: "qualified-analysis", verify: "qualified-verify", report: "qualified-cheap" }, reasons: { discovery: "recon controls", attack: "analysis controls", verify: "verify controls", report: "report controls" } });
+      await runCli(["scan", "--target", "https://example.com", "--runtime", "api", "--format", "json", "--routing-report", path, "--routing-model", "qualified-cheap", "--routing-model", "qualified-analysis", "--routing-review-ref", "review-ref", "--goal", "unknown-vulnerabilities", "--depth", "quick", "--plan-time-cap", "120000", "--cost-ceiling", "1", "--task-model", "verify=operator-pin"]);
+      expect(recommendQualifiedRoutingMock).toHaveBeenCalledWith({}, expect.objectContaining({ approvedModels: ["qualified-cheap", "qualified-analysis"], provider: "openai", reviewRef: "review-ref", workflow: { targetKind: "web", goal: "unknown-vulnerabilities", depth: "quick" } }));
+      expect(runUnifiedMock).toHaveBeenCalledWith(expect.objectContaining({ agentModels: { discovery: "qualified-cheap", attack: "qualified-analysis", verify: "operator-pin", report: "qualified-cheap" }, timeout: 30000, plan: expect.objectContaining({ costCapUsd: 1, timeCapMs: 120000 }) }));
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+  it("does not load routing evidence when a single-model run is explicitly selected", async () => {
+    await runCli(["scan", "--target", "https://example.com", "--runtime", "api", "--format", "json", "--routing-report", "/does/not/exist", "--single-model"]);
+    expect(runUnifiedMock).toHaveBeenCalledWith(expect.objectContaining({ singleModel: true }));
   });
 });

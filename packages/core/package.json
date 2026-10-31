@@ -25,7 +25,7 @@
     "tree-sitter": "file:../../vendor/tree-sitter-0.21.1-node24.tgz",
     "tree-sitter-c": "0.21.4",
     "yaml": "^2.4.0",
-    "zod": "^3.25.76",
+    "zod": "^4.6.6",
     "pdfkit": "^0.15.2"
   },
   "optionalDependencies": {

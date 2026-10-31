@@ -37,7 +37,7 @@ export const SecurityWorkflowBindingsSchema = z.unknown().superRefine((bindings,
     }
   }
   if (new TextEncoder().encode(JSON.stringify(bindings)).byteLength > 32_768) context.addIssue({ code: z.ZodIssueCode.custom, message: "Workflow inputs must be at most 32 KiB." });
-}).pipe(z.record(z.unknown()));
+}).pipe(z.record(z.string(), z.unknown()));
 const inputSchema = z.object({ findingId: identifier.optional(), scanId: identifier.optional(), dbPath: z.string().trim().min(1).max(4096).optional(), fromStep: identifier.optional(), artifactId: identifier.optional() }).strict();
 const nodeSchema = z.object({ id: identifier, type: z.enum(["trigger", "audit", "report", "verify", "fix", "research", "deep-review"]), label: z.string().trim().min(1).max(160), enabled: z.boolean(), plan: planSchema.optional(), execution: executionSchema.optional(), input: inputSchema.optional(), inputs: SecurityWorkflowBindingsSchema.superRefine((bindings, context) => {
   const pending: unknown[] = [bindings];

@@ -1,10 +1,11 @@
+import { withQualificationDirectories } from './qualification-directories.mjs';
 // Real production-adapter qualification. Requires a freshly rebuilt pnpm build:bundle.
 // Usage: node docs/qualification/run-smolvm-source-learning.mjs NODE_FIXTURE.tar LINUX_NODE_MODULES REPORT.json
 // Uses three fresh VMs, deterministic host SSE fixtures, no live account or networking.
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdtemp, mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
-import { realpathSync, existsSync } from 'node:fs';
+import { mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -31,7 +32,10 @@ const buildAtStart=await identity();
 const {resolveSmolvmImage}=await import(repository+'/packages/core/dist/runtime/smolvm.js');
 const imageDigest=await resolveSmolvmImage(image);
 const originalConfig=loadWorkbenchConfig(); assert(originalConfig,'Existing approved workbench is required');
-const root=realpathSync(await mkdtemp(join(dirname(repository),'0-learning-vm-qualification-')));
+// Scratch lives beside the checkout, not os.tmpdir(): workbench refuses workspaces under /var (macOS tmpdir is /private/var/folders).
+const scratchRoot=process.env.ZERO_QUALIFICATION_TMPDIR?resolve(process.env.ZERO_QUALIFICATION_TMPDIR):dirname(repository);
+await withQualificationDirectories(scratchRoot, async directories => {
+const root=await directories.scratch('0-learning-vm-qualification-');
 const home=join(root,'operator'),workspace=join(root,'source'),dbPath=join(root,'learning.sqlite'),sourceRoot=join(workspace,'service');
 await mkdir(home,{mode:0o700});await mkdir(workspace,{mode:0o700});await mkdir(sourceRoot,{mode:0o700});
 await writeFile(join(sourceRoot,'routes.ts'),'export const routeMarker = "customer-route";\n');
@@ -49,6 +53,7 @@ let phase='save',call=0;
 const sse=output=>new Response(`data: ${JSON.stringify({type:'response.completed',response:{status:'completed',output,usage:{input_tokens:30,output_tokens:10}}})}\n\n`,{headers:{'Content-Type':'text/event-stream'}});
 const functionCall=(name,args)=>[{type:'function_call',id:'fc_'+randomUUID(),call_id:randomUUID(),name,arguments:JSON.stringify(args)}];
 const answer=()=>sse([{type:'message',role:'assistant',content:[{type:'output_text',text:'Fixture step complete.'}]}]);
+const report={schemaVersion:1,startedAt:new Date().toISOString(),headAtTest:execFileSync('git',['rev-parse','HEAD'],{cwd:repository,encoding:'utf8'}).trim(),buildIdentity:buildAtStart,imageDigest,provider:'deterministic host SSE fixture',liveAccountUsed:false,network:false,hostCredentialsForwarded:false,workspace:root,outcome:'pending',checks:{}};
 const originalFetch=globalThis.fetch;
 globalThis.fetch=async(url,options)=>{
  assert.equal(String(url),'https://chatgpt.com/backend-api/codex/responses','Unexpected host network attempt');
@@ -66,7 +71,6 @@ function create() {
  const session=createIsolatedConsoleSession({runtime,target:'source:'+sourceRoot,workspaceRoot:workspace,codebaseLearning:true,tools:[core.TOOL_DEFINITIONS.read_file,core.TOOL_DEFINITIONS.remember_codebase],learningStore:learning,huntMemoryStore:memory,autonomyMode:'yolo',maxToolIterations:8,maxTurnTokens:64000,refineObjective:false,allowModelSelfExtension:false},{homeDir:home,dbPath,workspaceRoot:workspace,assets:{cliDist:repository+'/dist',dependencies},onExecution:state=>executions.push({phase,status:state.status,runId:state.runId})});
  assert(session,'Production adapter did not create isolated session');sessions.push(session);deadlines.set(session,AbortSignal.timeout(240000));return session;
 }
-const report={schemaVersion:1,startedAt:new Date().toISOString(),headAtTest:execFileSync('git',['rev-parse','HEAD'],{cwd:repository,encoding:'utf8'}).trim(),buildIdentity:buildAtStart,imageDigest,provider:'deterministic host SSE fixture',liveAccountUsed:false,network:false,hostCredentialsForwarded:false,workspace:root,outcome:'pending',checks:{}};
 async function turn(session,text) {
  const result=await session.send(text,{onToolResult:(tool,result)=>tools.push({phase,name:tool.name,success:result.success})},{signal:deadlines.get(session)});
  assert.equal(result.stopReason,'end_turn');return result;
@@ -103,4 +107,8 @@ finally {
  await writeFile(reportPath,JSON.stringify(report,null,2)+'\n',{mode:0o600});
  console.log(JSON.stringify({outcome:report.outcome,error:report.error,checks:report.checks,providerRequests:report.providerRequests,report:reportPath}));
  process.exitCode=report.outcome==='passed'?0:1;
+ // Isolated operator home, learning DB and source fixture are scratch; the report is the durable record.
+ // The outer resource scope also covers fixture setup and report-write failures.
 }
+
+});

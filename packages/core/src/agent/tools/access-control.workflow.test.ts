@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { accessMilestoneFromArtifact } from "@0/shared";
 import { osecDB } from "@0/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -17,12 +18,12 @@ const request = {
   observation_url: `${target}/resource`, observation_json_pointer: "/marker", expected_state: "unique-marker",
   steps: [{ method: "POST", url: `${target}/resource`, body: '{"marker":"unique-marker"}' }],
 };
-function executor(db: osecDB | null = null) {
+function executor(db: osecDB | null = null, fixtures?: ToolContext["accessControlFixtures"]) {
   const session = new SessionEngine([
     { label: "owner", role: "admin", auth: { type: "bearer", token: "owner-secret" } },
     { label: "actor", role: "user", auth: { type: "bearer", token: "actor-secret" } },
   ]);
-  const context: ToolContext = { target, scanId: "workflow", findings: [], attackResults: [], targetInfo: {}, session };
+  const context: ToolContext = { target, scanId: "workflow", findings: [], attackResults: [], targetInfo: {}, session, accessControlFixtures: fixtures };
   return new ToolExecutor(context, db);
 }
 const response = (marker: unknown, status = 200) => new Response(JSON.stringify({ marker }), { status });
@@ -125,5 +126,151 @@ describe("access_control_workflow", () => {
     const result = await executor().execute({ name: "access_control_workflow", arguments: request });
     expect(result.output).toMatchObject({ verdict: "no_change" });
     expect(fetchScoped).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("operator-owned read milestone receipts", () => {
+  const marker = "PRIVATE_OWNER_CANARY_12345";
+  const fixture = { url: `${target}/resource`, ownerIdentity: "owner", comparisonIdentities: ["actor"], ownershipMarker: marker };
+  const probe = { url: fixture.url, baseline_identity: "owner", compare_identities: ["actor"], ownership_marker: marker, expect_denied: true };
+  it.each([true, false])("retains confirmed or blocked read proof only with a configured fixture (allowed=%s)", async allowed => {
+    const db = new osecDB(":memory:");
+    db.createScan({ target, mode: "web", depth: "default", format: "json", timeout: 5000, runtime: "api" }, "workflow");
+    vi.mocked(fetchScoped).mockResolvedValueOnce(response(marker)).mockResolvedValueOnce(allowed ? response(marker) : response(null, 403));
+    try {
+      await executor(db, [fixture]).execute({ name: "access_control_probe", arguments: probe });
+      const artifact = db.getEvents("workflow", { eventType: "tool_artifact" })[0];
+      const milestone = accessMilestoneFromArtifact(artifact.eventType, JSON.parse(artifact.payload), artifact.scanId);
+      expect(milestone).toMatchObject({ status: allowed ? "confirmed" : "blocked", cleanup: "not-required", asset: target });
+      expect(artifact.payload).not.toContain(marker); expect(artifact.payload).not.toContain("owner-secret");
+    } finally { db.close(); }
+  });
+  it.each(["truncated", "partial-coverage"])("does not overstate %s evidence", async kind => {
+    const db = new osecDB(":memory:");
+    db.createScan({ target, mode: "web", depth: "default", format: "json", timeout: 5000, runtime: "api" }, "workflow");
+    vi.mocked(fetchScoped).mockResolvedValueOnce(response(marker)).mockResolvedValueOnce(kind === "truncated" ? response(marker + "x".repeat(11000)) : response(null, 403));
+    try {
+      await executor(db, [{ ...fixture, comparisonIdentities: kind === "partial-coverage" ? ["actor", "untested"] : ["actor"] }]).execute({ name: "access_control_probe", arguments: probe });
+      const artifact = db.getEvents("workflow", { eventType: "tool_artifact" })[0];
+      expect(accessMilestoneFromArtifact(artifact.eventType, JSON.parse(artifact.payload), artifact.scanId)).toBeNull();
+    } finally { db.close(); }
+  });
+  it("does not elevate a model-supplied ownership assertion into a milestone", async () => {
+    const db = new osecDB(":memory:");
+    db.createScan({ target, mode: "web", depth: "default", format: "json", timeout: 5000, runtime: "api" }, "workflow");
+    vi.mocked(fetchScoped).mockImplementation(async () => response(marker));
+    try {
+      await executor(db).execute({ name: "access_control_probe", arguments: probe });
+      const artifact = db.getEvents("workflow", { eventType: "tool_artifact" })[0];
+      expect(accessMilestoneFromArtifact(artifact.eventType, JSON.parse(artifact.payload), artifact.scanId)).toBeNull();
+    } finally { db.close(); }
+  });
+});
+
+describe("fixture-backed state milestones and read-only cleanup", () => {
+  const writeMarker = "PRIVATE_STATE_MARKER_34f70dff321e45";
+  const writeRequest = { ...request, expected_state: writeMarker, steps: [{ ...request.steps[0], body: JSON.stringify({ marker: writeMarker }) }] };
+  const fixture = { url: request.observation_url, ownerIdentity: "owner", comparisonIdentities: ["actor"],
+    ownershipMarker: writeMarker, stateChange: { disposable: true as const, jsonPointer: "/marker", stepUrls: [request.observation_url] } };
+  function database() {
+    const db = new osecDB(":memory:");
+    db.createScan({ target, mode: "web", depth: "default", format: "json", timeout: 5000, runtime: "api" }, "workflow");
+    return db;
+  }
+  const cleanup = { name: "access_control_cleanup", arguments: { observation_url: request.observation_url, owner_identity: "owner" } };
+  it("emits a confirmed write only for the operator restriction, then recovers cleanup authority in a fresh executor", async () => {
+    const db = database(); let marker: string | null = "original-private-state";
+    vi.mocked(fetchScoped).mockImplementation(async (_url: unknown, init: RequestInit) => {
+      if (init.method === "POST") marker = JSON.parse(String(init.body)).marker;
+      return response(marker);
+    });
+    try {
+      const result = await executor(db, [fixture]).execute({ name: "access_control_workflow", arguments: writeRequest });
+      const proof = (result.output as any).state_access_proof;
+      const sentBody = String(vi.mocked(fetchScoped).mock.calls[1][1]?.body);
+      expect(sentBody).not.toContain(writeMarker);
+      expect((result.output as any).steps[0].request_body_digest).toBe("sha256:" + createHash("sha256").update(sentBody).digest("hex"));
+      expect((result.output as any).steps[0].request_body_bytes).toBe(Buffer.byteLength(sentBody));
+      expect(proof).toMatchObject({ challenge_bound: true, access_class: "unauthorized-write", status: "confirmed", cleanup: "required", generation: 1 });
+      const original = db.getEvents("workflow", { eventType: "tool_artifact" })[0];
+      expect(accessMilestoneFromArtifact(original.eventType, JSON.parse(original.payload), original.scanId, original.id)).toMatchObject({ status: "confirmed", severity: "unassessed", cleanup: "required", accessLevel: "Resource write" });
+      marker = "original-private-state";
+      vi.mocked(fetchScoped).mockClear();
+      const restored = await executor(db, [fixture]).execute(cleanup);
+      expect(restored).toMatchObject({ success: true, output: { state_access_proof: { proof_id: proof.proof_id, cleanup: "completed", cleanup_revision: 1 } } });
+      expect(vi.mocked(fetchScoped)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(fetchScoped).mock.calls[0][1]).toMatchObject({ method: "GET" });
+      const receipt = db.getRecentScanEvents("workflow", "tool_artifact", 5)[0];
+      const milestone = accessMilestoneFromArtifact(receipt.eventType, JSON.parse(receipt.payload), receipt.scanId, receipt.id)!;
+      expect(milestone).toMatchObject({ status: "confirmed", cleanup: "completed", evidenceEventId: original.id, cleanupEvidenceEventId: receipt.id });
+      expect(receipt.payload).not.toContain("original-private-state");
+      expect(receipt.payload).not.toContain("owner-secret");
+    } finally { db.close(); }
+  });
+  it("uses the observed state effect rather than treating an HTTP denial as proof of blocking", async () => {
+    const db = database(); let marker = "before";
+    vi.mocked(fetchScoped).mockImplementation(async (_url: unknown, init: RequestInit) => {
+      if (init.method === "POST") { marker = JSON.parse(String(init.body)).marker; return response(null, 403); }
+      return response(marker);
+    });
+    try {
+      const result = await executor(db, [fixture]).execute({ name: "access_control_workflow", arguments: writeRequest });
+      expect((result.output as any).state_access_proof).toMatchObject({ status: "confirmed", cleanup: "required", challenge_bound: true });
+      const event = db.getEvents("workflow", { eventType: "tool_artifact" })[0];
+      expect(accessMilestoneFromArtifact(event.eventType, JSON.parse(event.payload), event.scanId, event.id)?.status).toBe("confirmed");
+    } finally { db.close(); }
+  });
+  it.each(["unconfigured", "wrong-pointer", "wrong-step", "redacted", "long-baseline", "numeric-baseline"])("does not elevate %s observations", async kind => {
+    const db = database();
+    const configured = kind === "unconfigured" ? undefined : [{ ...fixture, stateChange: { ...fixture.stateChange,
+      jsonPointer: kind === "wrong-pointer" ? "/other" : "/marker", stepUrls: kind === "wrong-step" ? [`${target}/other`] : fixture.stateChange.stepUrls } }];
+    const baseline = kind === "redacted" ? "owner-secret" : kind === "long-baseline" ? "x".repeat(501) : kind === "numeric-baseline" ? 42 : "before";
+    let marker: unknown = baseline;
+    vi.mocked(fetchScoped).mockImplementation(async (_url: unknown, init: RequestInit) => {
+      if (init.method === "POST") marker = JSON.parse(String(init.body)).marker;
+      return response(marker);
+    });
+    try {
+      const result = await executor(db, configured).execute({ name: "access_control_workflow", arguments: writeRequest });
+      expect((result.output as any).state_access_proof).toBeUndefined();
+    } finally { db.close(); }
+  });
+  it("cleanup needs a retained matching contract and never accepts a supplied baseline", async () => {
+    const db = database();
+    try {
+      expect((await executor(db, [fixture]).execute(cleanup)).success).toBe(false);
+      expect((await executor(db, [fixture]).execute({ ...cleanup, arguments: { ...cleanup.arguments, baseline_digest: "forged" } })).success).toBe(false);
+      expect(fetchScoped).not.toHaveBeenCalled();
+    } finally { db.close(); }
+  });
+  it("keeps failed cleanup distinct from unavailable observation and preserves the original proof", async () => {
+    const db = database();
+    let marker = "before";
+    vi.mocked(fetchScoped).mockImplementation(async (_url: unknown, init: RequestInit) => {
+      if (init.method === "POST") marker = JSON.parse(String(init.body)).marker;
+      return response(marker);
+    });
+    try {
+      await executor(db, [fixture]).execute({ name: "access_control_workflow", arguments: writeRequest });
+      vi.mocked(fetchScoped).mockResolvedValueOnce(response("still-changed"));
+      expect(await executor(db, [fixture]).execute(cleanup)).toMatchObject({ success: true, output: { state_access_proof: { status: "confirmed", cleanup: "failed" } } });
+      const count = db.getEvents("workflow").length;
+      vi.mocked(fetchScoped).mockResolvedValueOnce(response(null, 403));
+      expect((await executor(db, [fixture]).execute(cleanup)).success).toBe(false);
+      expect(db.getEvents("workflow")).toHaveLength(count);
+    } finally { db.close(); }
+  });
+  it("a state-restoration workflow updates cleanup, rather than creating a second compromise", async () => {
+    const db = database();
+    let marker = "before";
+    vi.mocked(fetchScoped).mockImplementation(async (_url: unknown, init: RequestInit) => {
+      if (init.method === "POST") marker = JSON.parse(String(init.body)).marker;
+      return response(marker);
+    });
+    try {
+      const first = await executor(db, [fixture]).execute({ name: "access_control_workflow", arguments: writeRequest });
+      const restored = await executor(db, [fixture]).execute({ name: "access_control_workflow", arguments: { ...writeRequest, expected_state: "before", steps: [{ ...writeRequest.steps[0], body: JSON.stringify({ marker: "before" }) }] } });
+      expect((restored.output as any).state_access_proof).toMatchObject({ proof_id: (first.output as any).state_access_proof.proof_id, generation: 1, cleanup: "completed" });
+    } finally { db.close(); }
   });
 });

@@ -118,13 +118,12 @@ testpaths = ["tests"]
 
 [tool.uv]
 # Security floors for optional MCP authentication and PoC HTTP dependencies.
-constraint-dependencies = ["pyjwt>=2.15.0", "urllib3>=2.8.0", "gitpython>=3.1.62", "mako>=1.4.2"]
+constraint-dependencies = ["pyjwt>=2.15.0", "urllib3>=2.8.0", "gitpython>=3.2.1", "certifi>=2026.10.19", "mako>=1.4.2"]
 # python-fx (transitive via qiling → firmware extra) hard-pins `pillow<11`, which
-# blocks the pillow CVE patch (needs >=12.3.0). pillow's basic image ops (open,
-# resize, getpixel) that python-fx uses are backward-compatible across 10→12, and
-# this only affects the optional firmware emulation lane — so override the cap to
-# take the security fix. Revisit if python-fx ever relaxes its pin.
+# blocks the Pillow security fixes (needs >=13.0.0). Override that cap for the
+# optional firmware lane rather than retain the vulnerable image decoders.
+# Revisit if python-fx relaxes its pin.
 # angr pins the older Capstone 5.0.6 wheel. Keep its existing analyzer version
 # while applying the compatible 5.0.x parser security patch, rather than
 # resolving an older angr release merely to escape that exact transitive pin.
-override-dependencies = ["pillow>=12.3.0", "capstone>=5.0.8,<6"]
+override-dependencies = ["pillow>=13.0.0", "capstone>=5.0.8,<6"]

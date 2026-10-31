@@ -1,9 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import { closeSync, constants, fchmodSync, fsyncSync, openSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
+import { homedir } from "node:os";
 import { canonicalEvolutionJson } from "./config.js";
 import { ensureEvolutionDirectory, readEvolutionArtifact } from "./artifacts.js";
-import { acquireEvolutionController } from "./controller-lock.js";
+import { acquireEvolutionController, EvolutionControllerBusyError } from "./controller-lock.js";
+import { observedEvolutionModelRevision, type EvolutionModelRevision } from "./provenance.js";
+import type { EvolutionModelIdentity } from "./types.js";
 import type { EvolutionCase, EvolutionConfig } from "./types.js";
 
 export type EvolutionCompatibilityStatus = "compatible" | "incompatible" | "unknown";
@@ -23,6 +26,10 @@ export interface EvolutionComparisonIdentity {
   harnessRevision: string;
   toolRevision: string;
   sourceRevision: string;
+  /** Actual evaluated worker contract, separate from the proposal generator. */
+  proposalModelRevision?: EvolutionModelRevision;
+  curationLineageDigest?: string;
+  evaluatedWorker?: { kind: "deterministic" } | { kind: "model"; provider: string | null; model: string | null; revision: EvolutionModelRevision };
   compatibilityStatus: EvolutionCompatibilityStatus;
 }
 export interface EvolutionCompatibility { status: EvolutionCompatibilityStatus; reasons: string[] }
@@ -42,7 +49,7 @@ export function evolutionCorpusIdentity(cases: readonly EvolutionCase[]): {
 }
 export function createEvolutionComparisonIdentity(
   config: EvolutionConfig, evaluatorDigest: string,
-  options: { evaluatorSemantics?: string; resolvedModel?: string | null; provider?: string | null; harnessRevision?: string; toolRevision?: string; sourceRevision?: string } = {},
+  options: { evaluatorSemantics?: string; resolvedModel?: string | null; provider?: string | null; harnessRevision?: string; toolRevision?: string; sourceRevision?: string; generatorIdentity?: EvolutionModelIdentity; workerIdentity?: EvolutionModelIdentity } = {},
 ): EvolutionComparisonIdentity {
   return {
     schemaVersion: 1, ...evolutionCorpusIdentity(config.cases), evaluatorDigest,
@@ -51,12 +58,17 @@ export function createEvolutionComparisonIdentity(
     resolvedModel: options.resolvedModel ?? null, provider: options.provider ?? null,
     harnessRevision: options.harnessRevision ?? digest({ command: config.command, buildCommand: config.buildCommand ?? null, backend: config.backend ?? "docker", image: config.image, timeoutMs: config.timeoutMs, memoryMb: config.memoryMb, cpus: config.cpus, maxOutputBytes: config.maxOutputBytes }),
     toolRevision: options.toolRevision ?? digest(canonicalEvolutionJson.toString()),
-    sourceRevision: options.sourceRevision ?? evaluatorDigest,
+    sourceRevision: options.sourceRevision ?? "unresolved",
+    proposalModelRevision: observedEvolutionModelRevision(options.generatorIdentity),
+    evaluatedWorker: config.safety?.workerModel
+      ? { kind: "model", provider: options.workerIdentity?.provider ?? null, model: options.workerIdentity?.model ?? null, revision: observedEvolutionModelRevision(options.workerIdentity) }
+      : { kind: "deterministic" },
     compatibilityStatus: "unknown",
   };
 }
 export function compareEvolutionIdentities(left: EvolutionComparisonIdentity, right: EvolutionComparisonIdentity): EvolutionCompatibility {
   const reasons: string[] = [];
+  if (!left.evaluatedWorker || !right.evaluatedWorker) return { status: "unknown", reasons: ["evaluated worker identity is unavailable"] };
   for (const key of ["development", "heldOut", "negativeControl"] as const) {
     if (left[key].digest !== right[key].digest) reasons.push(`${key} corpus differs`);
   }
@@ -67,20 +79,35 @@ export function compareEvolutionIdentities(left: EvolutionComparisonIdentity, ri
   ] as const) {
     if (left[key] !== null && right[key] !== null && left[key] !== right[key]) reasons.push(`${label} differs`);
   }
+  if (left.curationLineageDigest !== right.curationLineageDigest) reasons.push("curated observation lineage differs");
+  if (canonicalEvolutionJson(left.proposalModelRevision ?? null) !== canonicalEvolutionJson(right.proposalModelRevision ?? null)) reasons.push("proposal model revision differs");
+  if (canonicalEvolutionJson(left.evaluatedWorker ?? null) !== canonicalEvolutionJson(right.evaluatedWorker ?? null)) reasons.push("evaluated worker differs");
+  for (const worker of [left.evaluatedWorker, right.evaluatedWorker]) {
+    if (worker?.kind === "model" && (!worker.provider || !worker.model || worker.revision?.status !== "pinned"
+      || !worker.revision.revision || !worker.revision.decodingDigest)) {
+      return { status: "unknown", reasons: ["evaluated worker revision/decoding identity is floating or unavailable"] };
+    }
+  }
   if (reasons.length > 0) return { status: "incompatible", reasons };
+  if (![left.sourceRevision, right.sourceRevision, left.evaluatorDigest, right.evaluatorDigest, left.harnessRevision, right.harnessRevision, left.toolRevision, right.toolRevision].every(value => typeof value === "string" && /^sha256:[a-f0-9]{64}$/.test(value))) {
+    return { status: "unknown", reasons: ["source byte identity is unresolved"] };
+  }
   if (!left.resolvedModel || !right.resolvedModel || !left.provider || !right.provider) {
     return { status: "unknown", reasons: ["model/provider identity is unresolved"] };
   }
   return { status: "compatible", reasons: [] };
 }
 export function holdoutExposureIdentity(identity: EvolutionComparisonIdentity): string {
-  return digest({ heldOutCorpus: identity.heldOut.digest, evaluator: identity.evaluatorDigest, semantics: identity.evaluatorSemantics });
+  // Selection thresholds, profile labels and semantics metadata cannot buy
+  // another query against unchanged data and unchanged executable oracle.
+  return digest({ heldOutCorpus: identity.heldOut.digest, evaluator: identity.evaluatorDigest });
 }
 export interface CampaignDispatchReservation {
   id: string; kind: "model" | "evaluation"; reservedCostUsd: number;
   state: "reserved" | "completed" | "unknown"; actualCostUsd: number | null;
   receiptDigest: string | null; createdAt: string; completedAt: string | null;
   ownerPid: number;
+  ownerLeaseId?: string;
 }
 export interface HoldoutExposureRecord { identity: string; limit: number; consumed: number; reservationIds: string[] }
 export interface EvolutionCampaignLedger {
@@ -89,16 +116,23 @@ export interface EvolutionCampaignLedger {
   cumulativeModelCostUsd: number; cumulativeEvaluationCostUsd: number;
   maxModelCostUsd: number; maxEvaluationCostUsd: number;
   reservations: CampaignDispatchReservation[]; exposures: HoldoutExposureRecord[];
+  holdoutAuthorityRoot?: string;
   unknownCost: boolean; resumeReason: string; updatedAt: string;
 }
+const MAX_CAMPAIGN_RECORDS = 10_000;
 const ledgerPath = (root: string): string => join(root, "campaign-ledger.json");
 const campaignKey = (identity: EvolutionComparisonIdentity): string => digest({
   development: identity.development.digest, heldOut: identity.heldOut.digest, negativeControl: identity.negativeControl.digest,
   evaluatorDigest: identity.evaluatorDigest, evaluatorSemantics: identity.evaluatorSemantics,
   harnessRevision: identity.harnessRevision, toolRevision: identity.toolRevision, sourceRevision: identity.sourceRevision,
+  evaluatedWorker: identity.evaluatedWorker ?? null,
+  curationLineageDigest: identity.curationLineageDigest ?? null,
 });
 function writeLedger(root: string, ledger: EvolutionCampaignLedger): void {
-  const path = ledgerPath(root);
+  writePrivateLedger(root, "campaign-ledger.json", ledger);
+}
+function writePrivateLedger(root: string, name: string, ledger: unknown): void {
+  const path = join(root, name);
   const directory = ensureEvolutionDirectory(dirname(path));
   const temporary = join(directory, `.campaign-${randomUUID()}.tmp`);
   const fd = openSync(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
@@ -108,8 +142,19 @@ function writeLedger(root: string, ledger: EvolutionCampaignLedger): void {
   const directoryFd = openSync(directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
   try { fsyncSync(directoryFd); } finally { closeSync(directoryFd); }
 }
+/** Match the pass lease as well as PID: a later pass/PID reuse is not the old dispatcher. */
+function campaignControllerLease(root: string): string | undefined {
+  let owner: { pid?: unknown; startedAt?: unknown; leaseId?: unknown };
+  try { owner = readEvolutionArtifact(join(root, "controller.lock")) as typeof owner; }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error; }
+  if (owner.pid !== process.pid) throw new EvolutionControllerBusyError("campaign belongs to another controller; acquire the pass lease before mutation");
+  const token = owner.leaseId ?? owner.startedAt;
+  if (typeof token !== "string" || !token) throw new Error("invalid campaign controller lease identity");
+  return token;
+}
 function mutateLedger<T>(root: string, mutate: (ledger: EvolutionCampaignLedger) => T): T {
   ensureEvolutionDirectory(root);
+  campaignControllerLease(root);
   // The pass owns root/controller.lock. Ledger transactions have their own lease
   // so the durable reservation does not deadlock inside the owning pass.
   const release = acquireEvolutionController(join(root, "campaign"));
@@ -128,6 +173,7 @@ export function createOrLoadEvolutionCampaign(
     throw new Error("campaign budget bounds must be finite and positive");
   }
   ensureEvolutionDirectory(root);
+  const controllerLease = campaignControllerLease(root);
   const release = acquireEvolutionController(join(root, "campaign"));
   try {
     let existing: EvolutionCampaignLedger | undefined;
@@ -141,6 +187,11 @@ export function createOrLoadEvolutionCampaign(
       if (!Number.isFinite(existing.maxModelCostUsd) || !Number.isFinite(existing.maxEvaluationCostUsd)) throw new Error("campaign lacks durable budget bounds; operator reconciliation required");
       for (const reservation of existing.reservations) {
         if (reservation.state !== "reserved") continue;
+        if (reservation.ownerLeaseId !== controllerLease) {
+          reservation.state = "unknown"; existing.unknownCost = true; existing.status = "blocked";
+          existing.resumeReason = "dispatch pass lease changed; operator reconciliation required";
+          continue;
+        }
         if (!Number.isSafeInteger(reservation.ownerPid) || reservation.ownerPid <= 0) {
           reservation.state = "unknown"; existing.unknownCost = true; existing.status = "blocked";
           existing.resumeReason = "dispatch owner is unknown; operator reconciliation required";
@@ -153,6 +204,26 @@ export function createOrLoadEvolutionCampaign(
           existing.unknownCost = true; existing.status = "blocked";
           existing.resumeReason = "interrupted dispatch has unknown cost; operator reconciliation required";
         }
+      }
+      if (existing.exposures.length) {
+        const authorityRoot = ensureEvolutionDirectory(evolutionHoldoutAuthorityRoot());
+        if (existing.holdoutAuthorityRoot && existing.holdoutAuthorityRoot !== authorityRoot) throw new Error("holdout authority changed; operator reconciliation required");
+        const key = holdoutExposureIdentity(existing.comparisonIdentity);
+        const legacyKey = digest({ heldOutCorpus: existing.comparisonIdentity.heldOut.digest, evaluator: existing.comparisonIdentity.evaluatorDigest, semantics: existing.comparisonIdentity.evaluatorSemantics });
+        // Import the old shared authority, not only this store's possibly stale
+        // mirror. Controller upgrades must inventory every legacy policy key.
+        try {
+          const legacy = readEvolutionArtifact(join(authorityRoot, legacyKey.replace("sha256:", ""), "holdout-exposure.json")) as HoldoutExposureRecord;
+          if (legacy.identity !== legacyKey || !Number.isSafeInteger(legacy.consumed) || legacy.consumed < 0
+            || !Number.isSafeInteger(legacy.limit) || legacy.limit <= 0 || !Array.isArray(legacy.reservationIds)) throw new Error("invalid legacy holdout authority");
+          reserveSharedHoldoutExposure(key, 0, legacy.limit, legacy.consumed, legacy.reservationIds);
+        } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+        for (const exposure of existing.exposures) {
+          if (exposure.identity === legacyKey) exposure.identity = key;
+          if (exposure.identity !== key) throw new Error("unrecognized historical holdout identity; operator reconciliation required");
+          reserveSharedHoldoutExposure(key, 0, exposure.limit, exposure.consumed, exposure.reservationIds);
+        }
+        existing.holdoutAuthorityRoot = authorityRoot;
       }
       existing.updatedAt = new Date().toISOString(); writeLedger(root, existing);
       return existing;
@@ -176,10 +247,26 @@ export function loadEvolutionCampaign(root: string): EvolutionCampaignLedger {
     || ledger.reservations.some((entry) => !entry || typeof entry.id !== "string"
       || !["model", "evaluation"].includes(entry.kind) || !["reserved", "completed", "unknown"].includes(entry.state)
       || !Number.isFinite(entry.reservedCostUsd) || entry.reservedCostUsd <= 0
+      || (entry.ownerLeaseId !== undefined && typeof entry.ownerLeaseId !== "string")
       || (entry.state === "completed" && (entry.actualCostUsd === null || !Number.isFinite(entry.actualCostUsd) || entry.actualCostUsd < 0)))
     || ledger.exposures.some((entry) => !entry || !Number.isSafeInteger(entry.limit) || entry.limit <= 0
       || !Number.isSafeInteger(entry.consumed) || entry.consumed < 0 || entry.consumed > entry.limit
       || !Array.isArray(entry.reservationIds))) throw new Error("invalid durable campaign ledger");
+  const ids = ledger.reservations.map((entry) => entry.id);
+  const exposureIds = ledger.exposures.map((entry) => entry.identity);
+  const modelTotal = ledger.reservations.filter((entry) => entry.kind === "model" && entry.state === "completed")
+    .reduce((sum, entry) => sum + entry.actualCostUsd!, 0);
+  const evaluationTotal = ledger.reservations.filter((entry) => entry.kind === "evaluation" && entry.state === "completed")
+    .reduce((sum, entry) => sum + entry.actualCostUsd!, 0);
+  if (ids.length > MAX_CAMPAIGN_RECORDS || new Set(ids).size !== ids.length
+    || new Set(exposureIds).size !== exposureIds.length
+    || ledger.exposures.some((entry) => entry.reservationIds.length > MAX_CAMPAIGN_RECORDS
+      || new Set(entry.reservationIds).size !== entry.reservationIds.length)
+    || Math.abs(modelTotal - ledger.cumulativeModelCostUsd) > 1e-9 * Math.max(1, modelTotal)
+    || Math.abs(evaluationTotal - ledger.cumulativeEvaluationCostUsd) > 1e-9 * Math.max(1, evaluationTotal)
+    || ledger.unknownCost !== ledger.reservations.some((entry) => entry.state === "unknown")) {
+    throw new Error("inconsistent durable campaign accounting");
+  }
   return ledger;
 }
 
@@ -198,11 +285,16 @@ export function reserveCampaignDispatch(root: string, kind: "model" | "evaluatio
   return mutateLedger(root, (ledger) => {
     if (ledger.unknownCost || ledger.status === "blocked") throw new Error("campaign is blocked pending unknown-cost reconciliation");
     if (ledger.status === "exhausted") throw new Error("campaign budget is exhausted");
+    if (ledger.reservations.length >= MAX_CAMPAIGN_RECORDS) {
+      ledger.status = "exhausted"; ledger.resumeReason = "campaign dispatch record limit reached; operator archival required";
+      throw new Error(ledger.resumeReason);
+    }
     const spent = kind === "model" ? ledger.cumulativeModelCostUsd : ledger.cumulativeEvaluationCostUsd;
     const limit = kind === "model" ? ledger.maxModelCostUsd : ledger.maxEvaluationCostUsd;
     const pending = ledger.reservations.filter((entry) => entry.kind === kind && entry.state === "reserved").reduce((sum, entry) => sum + entry.reservedCostUsd, 0);
     if (spent + pending + reservedCostUsd > limit) throw new Error("campaign budget cannot cover the next bounded dispatch");
-    const reservation: CampaignDispatchReservation = { id: randomUUID(), kind, reservedCostUsd, state: "reserved", actualCostUsd: null, receiptDigest: null, createdAt: new Date().toISOString(), completedAt: null, ownerPid: process.pid };
+    const ownerLeaseId = campaignControllerLease(root);
+    const reservation: CampaignDispatchReservation = { id: randomUUID(), kind, reservedCostUsd, state: "reserved", actualCostUsd: null, receiptDigest: null, createdAt: new Date().toISOString(), completedAt: null, ownerPid: process.pid, ...(ownerLeaseId ? { ownerLeaseId } : {}) };
     ledger.reservations.push(reservation); ledger.status = "running"; return reservation;
   });
 }
@@ -229,6 +321,9 @@ export function settleCampaignDispatch(root: string, reservationId: string, actu
     const reservation = ledger.reservations.find((entry) => entry.id === reservationId);
     if (!reservation) throw new Error("unknown campaign dispatch reservation");
     if (reservation.state !== "reserved") return ledger;
+    if (reservation.ownerPid !== process.pid || reservation.ownerLeaseId !== campaignControllerLease(root)) {
+      throw new Error("dispatch owner changed; reconcile with an authoritative receipt instead of ordinary settlement");
+    }
     settleReservation(ledger, reservation, actualCostUsd, receiptDigest); return ledger;
   });
 }
@@ -250,17 +345,92 @@ export function reconcileCampaignDispatch(root: string, reservationId: string, a
     });
   } finally { release(); }
 }
+/** Stable operator authority, independent of candidate config, campaign names and store locations. */
+export function evolutionHoldoutAuthorityRoot(): string {
+  const root = process.env.ZERO_EVOLUTION_AUTHORITY_ROOT ?? join(homedir(), ".0", "evolution-authority", "holdouts");
+  if (!isAbsolute(root)) throw new Error("holdout authority must be an absolute controller-owned directory");
+  return root;
+}
+function reserveSharedHoldoutExposure(identity: string, queries: number, limit: number, minimumConsumed: number, localIds: readonly string[]): HoldoutExposureRecord {
+  if (!Number.isSafeInteger(minimumConsumed) || minimumConsumed < 0 || minimumConsumed > limit
+    || localIds.length > MAX_CAMPAIGN_RECORDS || localIds.some(id => typeof id !== "string")
+    || new Set(localIds).size !== localIds.length) throw new Error("invalid legacy holdout consumption; operator reconciliation required");
+  const root = join(evolutionHoldoutAuthorityRoot(), identity.replace("sha256:", ""));
+  ensureEvolutionDirectory(root);
+  const release = acquireEvolutionController(root);
+  try {
+    let record: HoldoutExposureRecord;
+    try { record = readEvolutionArtifact(join(root, "holdout-exposure.json")) as HoldoutExposureRecord; }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      record = { identity, consumed: 0, limit, reservationIds: [] };
+    }
+    if (record.identity !== identity || !Number.isSafeInteger(record.consumed) || record.consumed < 0
+      || !Number.isSafeInteger(record.limit) || record.limit <= 0 || record.consumed > record.limit
+      || !Array.isArray(record.reservationIds) || record.reservationIds.length > MAX_CAMPAIGN_RECORDS
+      || record.reservationIds.some(id => typeof id !== "string") || new Set(record.reservationIds).size !== record.reservationIds.length) {
+      throw new Error("invalid shared holdout authority record; operator reconciliation required");
+    }
+    if (record.limit !== limit) throw new Error("shared holdout exposure limit cannot change for the same corpus/evaluator identity");
+    const unseen = localIds.filter(id => !record.reservationIds.includes(id));
+    if (minimumConsumed > 0 && localIds.length === 0) throw new Error("legacy holdout consumption lacks reservation identities; operator reconciliation required");
+    if (unseen.length || record.consumed < minimumConsumed) {
+      // Legacy IDs let copied stores deduplicate. Distinct/partly overlapping
+      // histories debit the entire local total conservatively: old ledgers did
+      // not retain per-ID query counts, so exact union costs are unknowable.
+      record.consumed = Math.min(limit, Math.max(record.consumed, minimumConsumed) + (record.reservationIds.length && unseen.length ? minimumConsumed : 0));
+      if (record.reservationIds.length + unseen.length <= MAX_CAMPAIGN_RECORDS) record.reservationIds.push(...unseen);
+      else record.consumed = limit;
+      writePrivateLedger(root, "holdout-exposure.json", record);
+    }
+    if (queries === 0) return record;
+    if (record.consumed + queries > record.limit) throw new Error("holdout exposure exhausted; operator must supply a fresh curated holdout");
+    if (record.reservationIds.length >= MAX_CAMPAIGN_RECORDS) throw new Error("holdout exposure record limit reached; operator archival required");
+    record.consumed += queries;
+    record.reservationIds.push(randomUUID());
+    writePrivateLedger(root, "holdout-exposure.json", record);
+    return record;
+  } finally { release(); }
+}
+
 export function reserveHoldoutExposure(root: string, identity: EvolutionComparisonIdentity, queries: number, limit: number): HoldoutExposureRecord {
   if (!Number.isSafeInteger(queries) || queries <= 0 || !Number.isSafeInteger(limit) || limit <= 0) throw new Error("holdout exposure values must be positive integers");
   return mutateLedger(root, (ledger) => {
+    if (ledger.unknownCost || ledger.status === "blocked" || ledger.status === "exhausted") {
+      throw new Error(`holdout campaign ${ledger.status}: ${ledger.resumeReason}`);
+    }
     const compatibility = compareEvolutionIdentities(ledger.comparisonIdentity, identity);
     if (compatibility.status !== "compatible") throw new Error(`holdout provenance ${compatibility.status}`);
+    const authorityRoot = ensureEvolutionDirectory(evolutionHoldoutAuthorityRoot());
+    if (ledger.holdoutAuthorityRoot && ledger.holdoutAuthorityRoot !== authorityRoot) {
+      ledger.status = "blocked"; ledger.resumeReason = "holdout authority changed; operator reconciliation required";
+      throw new Error(ledger.resumeReason);
+    }
+    ledger.holdoutAuthorityRoot = authorityRoot;
     const key = holdoutExposureIdentity(identity);
+    if (ledger.exposures.some(entry => entry.identity !== key)) {
+      throw new Error("legacy holdout authority migration requires reopening the campaign before dispatch");
+    }
     const current = ledger.exposures.find((entry) => entry.identity === key);
     const record = current ?? { identity: key, limit, consumed: 0, reservationIds: [] };
     if (current && record.limit !== limit) throw new Error("holdout exposure limit cannot change without a fresh corpus/evaluator identity");
     if (record.consumed + queries > record.limit) { ledger.status = "exhausted"; ledger.resumeReason = "holdout exposure exhausted; operator must provide a fresh curated holdout"; throw new Error("holdout exposure exhausted"); }
-    record.consumed += queries; record.reservationIds.push(randomUUID());
+    if (record.reservationIds.length >= MAX_CAMPAIGN_RECORDS) {
+      ledger.status = "exhausted"; ledger.resumeReason = "holdout record limit reached; operator archival required";
+      throw new Error(ledger.resumeReason);
+    }
+    // Debit the shared authority first. A crash before the local mirror is
+    // persisted may overcount, never refund or replay a sealed query for free.
+    let shared: HoldoutExposureRecord;
+    try { shared = reserveSharedHoldoutExposure(key, queries, limit, record.consumed, record.reservationIds); }
+    catch (error) {
+      if (error instanceof EvolutionControllerBusyError) throw error;
+      ledger.status = /exhausted|record limit/.test((error as Error).message) ? "exhausted" : "blocked";
+      ledger.resumeReason = (error as Error).message;
+      throw error;
+    }
+    record.consumed = Math.max(record.consumed + queries, shared.consumed);
+    record.reservationIds.push(shared.reservationIds.at(-1)!);
     if (!current) ledger.exposures.push(record); return record;
   });
 }
@@ -269,6 +439,19 @@ export function campaignPromotionAllowed(root: string, identity?: EvolutionCompa
   if (ledger.unknownCost || ledger.status === "blocked") return { allowed: false, reason: ledger.unknownCost ? "campaign is blocked pending unknown-cost reconciliation" : ledger.resumeReason };
   if (ledger.reservations.some((entry) => entry.state !== "completed")) return { allowed: false, reason: "campaign has pending or unknown-cost dispatches" };
   if (ledger.status === "exhausted") return { allowed: false, reason: ledger.resumeReason };
+  const authorityRoot = ensureEvolutionDirectory(evolutionHoldoutAuthorityRoot());
+  if (ledger.holdoutAuthorityRoot && ledger.holdoutAuthorityRoot !== authorityRoot) return { allowed: false, reason: "holdout authority changed; operator reconciliation required" };
+  try {
+    const key = holdoutExposureIdentity(identity ?? ledger.comparisonIdentity);
+    const exposure = readEvolutionArtifact(join(authorityRoot, key.replace("sha256:", ""), "holdout-exposure.json")) as HoldoutExposureRecord;
+    if (exposure.identity !== key || !Number.isSafeInteger(exposure.limit) || exposure.limit <= 0
+      || !Number.isSafeInteger(exposure.consumed) || exposure.consumed < 0 || exposure.consumed >= exposure.limit) {
+      return { allowed: false, reason: "shared holdout exposure exhausted or invalid; independently curated fresh holdout required" };
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    if (ledger.exposures.length) return { allowed: false, reason: "shared holdout authority missing; operator reconciliation required" };
+  }
   const comparison = compareEvolutionIdentities(ledger.comparisonIdentity, identity ?? ledger.comparisonIdentity);
   if (comparison.status !== "compatible" || identity?.compatibilityStatus === "unknown" || identity?.compatibilityStatus === "incompatible") return { allowed: false, reason: `campaign provenance ${comparison.status}: ${comparison.reasons.join("; ")}` };
   return { allowed: true };

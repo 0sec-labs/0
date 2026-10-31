@@ -111,8 +111,7 @@ export const overseArgsSchema = z
   .object({
     binary_path: z
       .string({
-        required_error: "analyze_binary: 'binary_path' must be a non-empty string",
-        invalid_type_error: "analyze_binary: 'binary_path' must be a non-empty string",
+        error: "analyze_binary: 'binary_path' must be a non-empty string",
       })
       .min(1, "analyze_binary: 'binary_path' must be a non-empty string")
       .max(
@@ -121,20 +120,16 @@ export const overseArgsSchema = z
       ),
     bug_class: z
       .enum(BUG_CLASS_ENUM, {
-        errorMap: () => ({
-          message: `analyze_binary: 'bug_class' must be one of ${BUG_CLASS_ENUM.join("|")}`,
-        }),
+        error: `analyze_binary: 'bug_class' must be one of ${BUG_CLASS_ENUM.join("|")}`,
       })
       .default("memory-safety"),
     backend: z
       .enum(BACKEND_ENUM, {
-        errorMap: () => ({
-          message: `analyze_binary: 'backend' must be one of ${BACKEND_ENUM.join("|")}`,
-        }),
+        error: `analyze_binary: 'backend' must be one of ${BACKEND_ENUM.join("|")}`,
       })
       .default("auto"),
     timeout_s: z
-      .number({ invalid_type_error: "analyze_binary: 'timeout_s' must be a number" })
+      .number({ error: "analyze_binary: 'timeout_s' must be a number" })
       .positive("analyze_binary: 'timeout_s' must be positive")
       .nullish()
       .transform((n) => (n == null ? undefined : n)),

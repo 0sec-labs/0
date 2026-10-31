@@ -50,7 +50,7 @@ export const AgentActionTargetMetadataSchema = z.object({
   target_version: z.string().min(1),
   policy_version: z.string().min(1),
   model_version: z.string().min(1),
-  tool_versions: z.record(z.string().min(1)),
+  tool_versions: z.record(z.string(), z.string().min(1)),
   configuration_sha256: Sha256Schema,
 }).strict();
 export type AgentActionTargetMetadata = z.infer<typeof AgentActionTargetMetadataSchema>;

@@ -172,7 +172,9 @@ export async function readGitStatus(
   try {
     const { stdout } = await execFileAsync(
       "git",
-      ["status", "--porcelain=v2", "--branch"],
+      // Status polling must not refresh/write the shared index. Killing a
+      // time-boxed optional refresh can otherwise leave an index.lock behind.
+      ["--no-optional-locks", "status", "--porcelain=v2", "--branch"],
       {
         cwd,
         timeout: timeoutMs,

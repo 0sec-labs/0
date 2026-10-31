@@ -1,7 +1,7 @@
 {
   "name": "0sec-cli",
   "type": "module",
-  "version": "0.24.1",
+  "version": "0.25.0",
   "description": "Your self-improving, open-source cybersecurity team.",
   "bin": {
     "0": "dist/0.js"
@@ -29,7 +29,8 @@
     "setup:0verse": "node scripts/setup-0verse.mjs",
     "lint": "pnpm --filter '!@0/docs' -r exec tsc --noEmit",
     "test": "pnpm test:public",
-    "test:public": "pnpm --filter @0/core test && pnpm --filter @0/test-targets test && pnpm --filter @0/cli test && pnpm test:workspace-support && pnpm test:dashboard-browser && pnpm test:team-workspace-api && pnpm test:runtime-lock && pnpm test:bundle-skills && pnpm test:public-source-export && pnpm test:dev-engine && node --test scripts/dsh-0-mcp.test.mjs && pnpm test:docs-pointers",
+    "test:review-local": "node scripts/review-local-smoke.mjs",
+    "test:public": "pnpm --filter @0/core test && pnpm --filter @0/test-targets test && pnpm --filter @0/cli test && pnpm test:workspace-support && pnpm test:dashboard-browser && pnpm test:team-workspace-api && pnpm test:runtime-lock && pnpm test:bundle-skills && pnpm test:public-source-export && pnpm test:dev-engine && node --test scripts/dsh-0-mcp.test.mjs && pnpm test:docs-pointers && pnpm test:security-evolution-study && pnpm test:security-evolution-summary-study",
     "test:workspace-support": "pnpm --filter @0/shared --filter @0/llm-redteam --filter @0/benchmark test",
     "test:dashboard-browser": "node --test scripts/dashboard-browser-imports.test.mjs",
     "test:team-workspace-api": "node scripts/smoke-team-workspace.mjs",
@@ -50,7 +51,9 @@
     "clean": "pnpm -r clean",
     "vulnerable": "PORT=43100 pnpm --filter @0/test-targets vulnerable",
     "safe": "PORT=43101 pnpm --filter @0/test-targets safe",
-    "dev:packages": "pnpm -r --parallel dev"
+    "dev:packages": "pnpm -r --parallel dev",
+    "test:security-evolution-study": "node --test scripts/security-evolution-study.test.mjs",
+    "test:security-evolution-summary-study": "node --test scripts/security-evolution-summary-study.test.mjs"
   },
   "keywords": [
     "security",
@@ -104,33 +107,38 @@
     "overrides": {
       "esbuild": "^0.28.1",
       "brace-expansion": "^5.0.11",
-      "undici@^6.0.0": "6.28.1",
-      "undici@^7.0.0": "7.29.1",
-      "undici@^8.0.0": "8.10.2",
+      "undici@^6.0.0": "6.29.1",
+      "undici@^7.0.0": "7.30.1",
+      "undici@^8.0.0": "8.12.2",
       "js-yaml": "^4.3.2",
       "smol-toml": "^1.9.0",
       "svgo": "^4.0.2",
-      "ip-address": "^10.7.1",
+      "ip-address": "^10.7.4",
       "nanoid@<3.3.18": "3.3.18",
       "devalue@<5.9.2": "^5.9.2",
-      "hono": "^4.13.5",
+      "hono": "^4.13.11",
       "@hono/node-server": "^1.19.15",
-      "dompurify": "^3.4.16",
+      "dompurify": "^3.4.17",
       "mermaid": "^11.16.1",
       "postcss": "^8.5.18",
-      "fast-uri": "^3.1.7",
+      "fast-uri": "^3.1.9",
       "shell-quote": "^1.11.0",
       "sharp": "^0.35.5",
-      "body-parser@1": "^1.20.6",
-      "body-parser@2": "^2.3.0",
-      "qs": "^6.16.0",
+      "body-parser@1": "^1.20.9",
+      "body-parser@2": "^2.4.0",
+      "qs": "^6.16.1",
       "browserslist": "^4.28.8",
       "http-cache-semantics": "^4.3.0",
       "proxy-addr": "^2.0.8",
       "source-map-js": "^1.2.2",
       "katex": "^0.19.0",
       "postcss-selector-parser@^6.0.0": "^7.1.6",
-      "postcss-selector-parser@^7.0.0": "^7.1.6"
+      "postcss-selector-parser@^7.0.0": "^7.1.6",
+      "zod": "4.6.6",
+      "vitest": "4.1.12",
+      "astro": "7.3.3",
+      "vite": "^8.2.4",
+      "@astrojs/markdown-remark": "^7.3.0"
     }
   }
 }

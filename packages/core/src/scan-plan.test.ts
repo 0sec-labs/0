@@ -99,3 +99,34 @@ describe("scan plan execution", () => {
     }
   });
 });
+
+describe("budgeted model routing", () => {
+  it("preserves live routing policy and charges differently routed children to the same cap", async () => {
+    const { budgetNativeRuntime, ScanBudgetError } = await import("./scan-plan.js");
+    const ledger = new ScanCostLedger();
+    const selections: unknown[] = [];
+    const calls: string[] = [];
+    let singleModel = false;
+    const create = (model: string): import("./runtime/types.js").NativeRuntime => ({
+      type: "api",
+      isAvailable: async () => true,
+      resolvedModel: () => model,
+      modelSelection: () => ({ agentModels: { verify: "gpt-4o" }, singleModel, autoRoute: false }),
+      reconfigure: selection => { singleModel = selection.singleModel ?? singleModel; },
+      forkForSubagent: async (_timeout, selection) => { selections.push(selection); return create(singleModel ? model : selection?.model ?? "gpt-4o"); },
+      executeNative: async () => { calls.push(model); return { content: [], stopReason: "end_turn", durationMs: 1, usage: { inputTokens: 1_000, outputTokens: 100 } }; },
+    });
+    const root = budgetNativeRuntime(create("claude-sonnet-4-20250514"), ledger, undefined, 0.001);
+    expect(root.modelSelection?.()).toEqual({ agentModels: { verify: "gpt-4o" }, singleModel: false, autoRoute: false });
+    const child = await root.forkForSubagent!(1_000, { role: "verify", model: "gpt-4o" });
+    await child.executeNative("scope and evidence", [], []);
+    expect(selections).toEqual([{ role: "verify", model: "gpt-4o" }]);
+    expect(calls).toEqual(["gpt-4o"]);
+    expect(ledger.totalCostUsd()).toBeGreaterThan(0.001);
+    await expect(root.executeNative("scope and evidence", [], [])).rejects.toBeInstanceOf(ScanBudgetError);
+    root.reconfigure?.({ singleModel: true });
+    expect(root.modelSelection?.().singleModel).toBe(true);
+    expect(child.modelSelection?.().singleModel).toBe(true);
+    expect(calls).toHaveLength(1);
+  });
+});

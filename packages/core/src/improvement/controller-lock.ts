@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { closeSync, constants, fstatSync, fsyncSync, lstatSync, openSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ensureEvolutionDirectory, readEvolutionArtifact } from "./artifacts.js";
@@ -50,7 +51,7 @@ export function acquireEvolutionController(storePath: string): () => void {
       }
       continue;
     }
-    writeFileSync(fd, JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }));
+    writeFileSync(fd, JSON.stringify({ pid: process.pid, leaseId: randomUUID(), startedAt: new Date().toISOString() }));
     fsyncSync(fd);
     const identity = fstatSync(fd);
     closeSync(fd);

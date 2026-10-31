@@ -47,7 +47,7 @@ const contentBlock = z.discriminatedUnion("type", [
   z.object({ type: z.literal("text"), text: z.string() }).strict(),
   z.object({
     type: z.literal("tool_use"), id: z.string().min(1), name: z.string().min(1),
-    input: z.record(z.unknown()),
+    input: z.record(z.string(), z.unknown()),
   }).strict(),
   z.object({
     type: z.literal("tool_result"), tool_use_id: z.string().min(1),
@@ -63,7 +63,7 @@ const modelRequest = z.object({
   tools: z.array(z.object({
     name: z.string().min(1).max(128), description: z.string(),
     input_schema: z.object({
-      type: z.literal("object"), properties: z.record(z.unknown()),
+      type: z.literal("object"), properties: z.record(z.string(), z.unknown()),
       required: z.array(z.string()).optional(),
     }).strict(),
   }).strict()).max(128).default([]),

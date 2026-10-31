@@ -7,6 +7,7 @@ import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig, NamedI
 import { getScopeEnforcementState, networkScopeRequiredRefusal, targetRequiresScope } from "@0/core";
 import { renderReplay } from "../formatters/replay.js";
 import { runUnified } from "./run.js";
+import { guidedScanPlan, parseScanModelAssignments } from "../guided-scan.js";
 import { reportSummarySchema, formatZodError } from "@0/shared";
 
 /**
@@ -72,14 +73,22 @@ export function parseIdentitiesFile(path: string): NamedIdentity[] {
 }
 
 const fixtureSchema = z.array(z.object({
-  url: z.string().url().refine(url => /^https?:/.test(url)),
+  url: z.string().url().max(8192).refine(url => { const parsed = new URL(url); return /^https?:/.test(url) && !parsed.username && !parsed.password; }),
   ownerIdentity: z.string().min(1),
   comparisonIdentities: z.array(z.string().min(1)).min(1).max(16),
   ownershipMarker: z.string().min(16).max(500),
-}).strict()).min(1).max(100);
+  stateChange: z.object({
+    disposable: z.literal(true),
+    jsonPointer: z.string().regex(/^(?:\/(?:[^~]|~[01])*)?$/),
+    stepUrls: z.array(z.string().url().max(8192).refine(url => /^https?:/.test(url))).min(1).max(10),
+  }).strict().optional(),
+}).strict().refine(fixture => !fixture.stateChange || fixture.stateChange.stepUrls.every(url => {
+  const step = new URL(url), observation = new URL(fixture.url);
+  return step.origin === observation.origin && !step.username && !step.password;
+}))).min(1).max(100);
 export function parseAccessControlFixturesFile(path: string): AccessControlFixture[] {
   try { return fixtureSchema.parse(JSON.parse(readFileSync(path, "utf8"))); }
-  catch { throw new Error("Invalid --access-control-fixtures file: expected read-only ownership fixtures with URLs, owner/comparison labels and private markers"); }
+  catch { throw new Error("Invalid --access-control-fixtures file: expected ownership fixtures with URLs, owner/comparison labels, private markers and valid optional disposable-state contracts"); }
 }
 
 /**
@@ -200,6 +209,14 @@ export function registerScanCommand(program: Command): void {
     .option("--db-path <path>", "Path to SQLite database")
     .option("--api-key <key>", "API key for LLM provider")
     .option("-m, --model <model>", "LLM model to use")
+    .option("--task-model <role=model>", "Explicit task model: discovery, attack, verify, report (repeatable)", (value: string, previous: string[] = []) => [...previous, value])
+    .option("--routing-report <file>", "Reviewed model-api task qualification report; opt-in recommendations only")
+    .option("--routing-model <model>", "Approve a model candidate for the reviewed routing plan (repeatable)", (value: string, previous: string[] = []) => [...previous, value])
+    .option("--routing-review-ref <ref>", "Review reference confirming provider/workflow authorization and model evidence limitations")
+    .option("--goal <goal>", "Noninteractive routing goal: known-vulnerabilities, unknown-vulnerabilities, misconfigurations")
+    .option("--plan-time-cap <ms>", "Overall wall-clock cap required for a noninteractive routing plan")
+    .option("--single-model", "Use the selected model for every task, ignoring task assignments")
+    .option("--no-guided", "Skip interactive scan planning and use explicit command options")
     .option("--repo <path>", "Source code path for white-box scanning")
     .option("--access-control-fixtures <file>", "JSON file of known private resource ownership fixtures for IDOR verification")
     .option("--identities <file>", "Restricted JSON file with named test identities for access-control replay")
@@ -220,7 +237,7 @@ export function registerScanCommand(program: Command): void {
     .option("--export <target>", "Export findings to issue tracker (e.g. github:owner/repo)")
     .addOption(new Option("--race", "Best-of-N strategy racing (benchmark/CTF only)").default(false).hideHelp())
     .addOption(new Option("--egats", "Evidence-gated attack tree search").default(false).hideHelp())
-    .option("--cost-ceiling <usd>", "Hard per-scan USD cost ceiling; aborts with partial findings if exceeded")
+    .option("--cost-ceiling <usd>", "Estimated USD stopping threshold; in-flight usage may overshoot, partial findings retained")
     .option(
       "--rate-limit <spec>",
       "Per-host requests/sec cap, e.g. '5' or 'host=5,*=3' (default 5)",
@@ -250,7 +267,7 @@ export function registerScanCommand(program: Command): void {
     .addOption(new Option("--branch-from <entry-index>", "Branch the journal at an entry index before resuming (with --resume)").hideHelp())
     .option("--verbose", "Show detailed output", false)
     .addOption(new Option("--replay", "Replay the last scan's results").default(false).hideHelp())
-    .action(async (opts) => {
+    .action(async (opts, command: Command) => {
       // ── Replay last scan (--replay flag) ──
       if (opts.replay) {
         try {
@@ -582,6 +599,36 @@ export function registerScanCommand(program: Command): void {
         }
       }
 
+      const manualModels = parseScanModelAssignments((opts.taskModel as string[] | undefined) ?? []);
+      let agentModels = manualModels;
+      let recommendRouting: ((plan: import("@0/shared").ScanPlan) => { assignments: Readonly<Record<string, string>>; reasons: Readonly<Record<string, string>> }) | undefined;
+      if (opts.routingReport && !opts.singleModel) {
+        if (opts.runtime !== "api") throw new Error("Reviewed routing requires --runtime api; no unsupported runtime or provider substitution.");
+        if (!opts.routingReviewRef || !(opts.routingModel as string[] | undefined)?.length) throw new Error("--routing-report requires --routing-model approvals and --routing-review-ref confirming the workflow/provider review.");
+        const { readRoutingJson } = await import("./routing.js");
+        const { recommendQualifiedRouting, LlmApiRuntime } = await import("@0/core");
+        const raw = readRoutingJson(String(opts.routingReport));
+        const current = new LlmApiRuntime({ type: "api", timeout: parseInt(opts.timeout, 10), model: opts.model });
+        recommendRouting = selectedPlan => {
+          const result = recommendQualifiedRouting(raw, { approvedModels: opts.routingModel as string[], provider: current.resolvedProvider(), reviewRef: String(opts.routingReviewRef), workflow: { targetKind: "web", goal: selectedPlan.goal, depth: selectedPlan.depth }, minimumRepeats: 2 });
+          agentModels = { ...result.assignments, ...manualModels };
+          return { assignments: agentModels, reasons: Object.fromEntries(Object.entries(result.reasons).map(([role, reason]) => [role, manualModels[role] ? `Operator override: ${manualModels[role]}.` : reason])) };
+        };
+      }
+      const interactivePlanning = opts.guided !== false && opts.format === "terminal" && process.stdin.isTTY && process.stdout.isTTY && !opts.resume;
+      let plan = interactivePlanning
+        ? await guidedScanPlan({ target: opts.target, depth: command.getOptionValueSource("depth") === "cli" ? opts.depth as ScanDepth : undefined, costCapUsd: costCeilingUsd, model: opts.model, agentModels, singleModel: opts.singleModel, ...(recommendRouting ? { recommendRouting } : {}) })
+        : undefined;
+      if (interactivePlanning && !plan) return;
+      if (!interactivePlanning && recommendRouting) {
+        if (!opts.goal || !opts.planTimeCap || costCeilingUsd === undefined) throw new Error("Noninteractive reviewed routing requires --goal, --plan-time-cap and --cost-ceiling.");
+        plan = { goal: opts.goal, depth: opts.depth, runCount: 1, executionMode: "sequential", timeCapMs: Number(opts.planTimeCap), costCapUsd: costCeilingUsd };
+        const { validateScanPlan } = await import("@0/shared");
+        validateScanPlan(plan!);
+        const routing = recommendRouting(plan!);
+        for (const [role, model] of Object.entries(routing.assignments)) console.error(`${role}: ${model} — ${routing.reasons[role]}`);
+      }
+      const hasAssignments = Object.keys(agentModels).length > 0;
       const branchFrom = opts.branchFrom as string | undefined;
       await runUnified({
         target: opts.target,
@@ -589,7 +636,10 @@ export function registerScanCommand(program: Command): void {
         resumeScanId: opts.resume as string | undefined,
         branchFromEntry: branchFrom !== undefined ? parseInt(branchFrom, 10) : undefined,
         mode,
-        depth: opts.depth as ScanDepth,
+        depth: plan?.depth ?? opts.depth as ScanDepth,
+        plan,
+        ...(hasAssignments ? { agentModels } : {}),
+        ...(opts.singleModel !== undefined ? { singleModel: opts.singleModel as boolean } : {}),
         format: (opts.format === "md" ? "markdown" : opts.format) as OutputFormat,
         runtime: (opts.runtime as RuntimeMode) ?? "auto",
         timeout: parseInt(opts.timeout, 10),
@@ -605,7 +655,7 @@ export function registerScanCommand(program: Command): void {
         exportTarget: opts.export as string | undefined,
         race: opts.race as boolean | undefined,
         egats: opts.egats as boolean | undefined,
-        costCeilingUsd,
+        costCeilingUsd: plan?.costCapUsd ?? costCeilingUsd,
         rateLimit,
         scopeFile,
         allowScanners: opts.allowScanners as boolean | undefined,

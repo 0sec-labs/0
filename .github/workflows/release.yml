@@ -78,7 +78,7 @@ jobs:
         # generates the embedded asset manifest.
         run: |
           pnpm --filter "@0/cli..." build
-          pnpm --filter @0/dashboard build
+          pnpm --filter "@0/dashboard..." build
       - name: Compile native binary
         shell: bash
         run: bash scripts/bun-compile.sh "" "dist-bin/${{ matrix.asset }}"

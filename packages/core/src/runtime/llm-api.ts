@@ -2130,7 +2130,7 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
     }
     const provider = pinnedProviderRaw as ApiProvider;
     const model = preferredModel ?? env["ZERO_MODEL"] ??
-      (provider === "azure" ? env.AZURE_OPENAI_MODEL ?? parseCodexAzureConfig(env).model : undefined) ??
+      (provider === "azure" ? env.AZURE_OPENAI_MODEL ?? parseCodexAzureConfig(env).model : provider === "openai" ? env.OPENAI_MODEL : undefined) ??
       (configProvider !== undefined ? DEFAULT_PROVIDER_MODELS[provider] : undefined);
     if (model === undefined || model === "") {
       if (provider === "azure") throw new Error("Choose an Azure deployment model in Connections to finish setup.");
@@ -2170,7 +2170,7 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
       provider: "openai",
       apiKey: configApiKey,
       baseUrl: "https://api.openai.com/v1",
-      defaultModel: DEFAULT_OPENAI_MODEL,
+      defaultModel: env.OPENAI_MODEL ?? DEFAULT_OPENAI_MODEL,
       wireApi: openAICompatibleWireApi(env, "OPENAI_WIRE_API"),
     };
   }
@@ -2244,7 +2244,7 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
         baseUrl: "https://openrouter.ai/api/v1", defaultModel: DEFAULT_OPENROUTER_MODEL, wireApi: openAICompatibleWireApi(env, "OPENROUTER_WIRE_API") };
     case "openai":
       return { provider: "openai", apiKey: env.OPENAI_API_KEY as string,
-        baseUrl: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1", defaultModel: DEFAULT_OPENAI_MODEL, wireApi: openAICompatibleWireApi(env, "OPENAI_WIRE_API") };
+        baseUrl: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1", defaultModel: env.OPENAI_MODEL ?? DEFAULT_OPENAI_MODEL, wireApi: openAICompatibleWireApi(env, "OPENAI_WIRE_API") };
     default:
       break; // fall through to env-priority detection
   }
@@ -2335,7 +2335,7 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
       provider: "openai",
       apiKey: openaiKey,
       baseUrl: env.OPENAI_BASE_URL ?? "https://api.openai.com/v1",
-      defaultModel: DEFAULT_OPENAI_MODEL,
+      defaultModel: env.OPENAI_MODEL ?? DEFAULT_OPENAI_MODEL,
       wireApi: openAICompatibleWireApi(env, "OPENAI_WIRE_API"),
     };
   }
@@ -4004,7 +4004,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         };
       }
       const msg = err instanceof Error ? err.message : String(err);
-      // A relay may sanitize AbortError into a generic cancellation message.
+      // A transport may sanitize AbortError into a generic cancellation message.
       // Operator-first cancellation was handled above; our timer remains authoritative.
       const timedOut = controller.signal.aborted || msg.includes("abort") || msg.includes("timeout");
       return {
@@ -4819,7 +4819,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         };
       }
       const msg = err instanceof Error ? err.message : String(err);
-      // A relay may sanitize AbortError into a generic cancellation message.
+      // A transport may sanitize AbortError into a generic cancellation message.
       // Operator-first cancellation was handled above; our timer remains authoritative.
       const timedOut = controller.signal.aborted || msg.includes("abort") || msg.includes("timeout");
       return {

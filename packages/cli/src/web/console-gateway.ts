@@ -1051,12 +1051,17 @@ export class ConsoleGateway {
           onToolResult: (call, result) => this.#emit(managed, { type: "tool-result", call: this.#withCallId(call), result: json(result) }),
           onUsage: (usage) => {
             managed.usage.inputTokens += usage.inputTokens; managed.usage.outputTokens += usage.outputTokens;
-            const model = managed.runtime?.resolvedModel() ?? managed.info?.model;
-            if (model && Object.hasOwn(MODEL_PRICING, model)) {
-              if (managed.usage.inputTokens === usage.inputTokens && managed.usage.outputTokens === usage.outputTokens) managed.usage.costUnavailable = false;
+            const model = usage.kind === "worker" ? usage.model : usage.model ?? managed.runtime?.resolvedModel() ?? managed.info?.model;
+            if (!usage.usageUnavailable && model && Object.hasOwn(MODEL_PRICING, model)) {
+              if (managed.usage.costUsd === undefined && managed.usage.inputTokens === usage.inputTokens && managed.usage.outputTokens === usage.outputTokens) managed.usage.costUnavailable = false;
               managed.usage.costUsd = (managed.usage.costUsd ?? 0) + estimateCost(usage, model);
               managed.usage.costKind = "estimated";
-            } else managed.usage.costUnavailable = true;
+            } else {
+              managed.usage.costUnavailable = true;
+              // Preserve the known lower bound and the unknown-history marker,
+              // even when the missing receipt contributes zero known tokens.
+              managed.usage.costUsd ??= 0;
+            }
             if (usage.kind === "planner") managed.contextInputTokens = usage.inputTokens;
             this.#emit(managed, { type: "usage", usage: { ...usage, turnTokenBudget: Number.isFinite(usage.turnTokenBudget) ? usage.turnTokenBudget : null, maxToolIterations: Number.isFinite(usage.maxToolIterations) ? usage.maxToolIterations : null } });
           },

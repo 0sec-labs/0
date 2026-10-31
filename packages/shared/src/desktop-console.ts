@@ -94,7 +94,9 @@ export interface DesktopConsoleUsage {
   iterations: number;
   /** null means unlimited tool rounds. */
   maxToolIterations: number | null;
-  kind?: "planner" | "plugin" | "compaction";
+  kind?: "planner" | "plugin" | "compaction" | "worker";
+  model?: string;
+  usageUnavailable?: boolean;
 }
 
 export interface DesktopConsoleTurnBudget {

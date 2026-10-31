@@ -55,7 +55,7 @@ const httpExerciseSchema = z
   .object({
     method: z.string().min(1),
     path: z.string().optional(),
-    headers: z.record(z.string()).optional(),
+    headers: z.record(z.string(), z.string()).optional(),
     body: z.string().optional(),
   })
   .strict();

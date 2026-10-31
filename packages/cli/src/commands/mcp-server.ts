@@ -152,7 +152,7 @@ function zodForParam(param: ToolParam): z.ZodTypeAny {
   } else if (param.type === "boolean") {
     schema = z.boolean();
   } else if (param.type === "object") {
-    schema = z.record(z.unknown());
+    schema = z.record(z.string(), z.unknown());
   } else {
     schema = z.string();
   }
@@ -161,7 +161,7 @@ function zodForParam(param: ToolParam): z.ZodTypeAny {
 
 function zodForTool(tool: ReturnType<typeof getToolsForRole>[number]): z.ZodObject<z.ZodRawShape> {
   const required = new Set(tool.required ?? []);
-  const shape: z.ZodRawShape = {};
+  const shape: Record<string, z.ZodTypeAny> = {};
   for (const [name, param] of Object.entries(tool.parameters)) {
     const schema = zodForParam(param);
     shape[name] = required.has(name) ? schema : schema.optional();
@@ -309,13 +309,13 @@ async function registerWorkflowTools(server: McpServer, selected: ReadonlySet<st
     { name: "resume_scan", description: "Resume a retained scan in a selected session; this does not restart a workflow graph.", schema: z.object({ sessionId: id, scanId: id, branchFromEntry: z.number().int().nonnegative().optional(), timeCapMs: z.number().int().positive().max(86_400_000).optional(), costCapUsd: z.number().positive().max(1000).optional() }).strict(), run: (args: any) => sessionRuntime.resumeScan(args) },
     { name: "get_session_events", description: "Read session events after an engine event cursor.", schema: z.object({ sessionId: id, after: z.number().int().nonnegative().optional() }).strict(), run: (args: any) => sessionRuntime.getSessionEvents(args.sessionId, args.after) },
     { name: "list_sessions", description: "List live sessions on the selected engine.", schema: z.object({}).strict(), run: () => sessionRuntime.listSessions() },
-    { name: "create_session", description: "Create a session within the engine's configured admission grants.", schema: z.object({ config: z.record(z.unknown()).optional() }).strict(), run: (args: any) => sessionRuntime.createSession(args.config) },
+    { name: "create_session", description: "Create a session within the engine's configured admission grants.", schema: z.object({ config: z.record(z.string(), z.unknown()).optional() }).strict(), run: (args: any) => sessionRuntime.createSession(args.config) },
     { name: "attach_session", description: "Attach to an existing engine session without recreating it.", schema: z.object({ sessionId: id }).strict(), run: (args: any) => sessionRuntime.attachSession(args.sessionId) },
     { name: "get_session", description: "Read an existing engine session.", schema: z.object({ sessionId: id }).strict(), run: (args: any) => sessionRuntime.getSession(args.sessionId) },
     { name: "send_message", description: "Send a message to an engine session.", schema: z.object({ sessionId: id, text: z.string().min(1).max(65536) }).strict(), run: (args: any) => sessionRuntime.sendMessage(args.sessionId, args.text) },
     { name: "continue_session", description: "Continue an engine session.", schema: z.object({ sessionId: id, text: z.string().max(65536).optional() }).strict(), run: (args: any) => sessionRuntime.continueSession(args.sessionId, args.text) },
     { name: "cancel_session", description: "Explicitly cancel an engine session's active work.", schema: z.object({ sessionId: id }).strict(), run: (args: any) => sessionRuntime.cancelSession(args.sessionId) },
-    { name: "resolve_decision", description: "Respond to a pending engine session decision.", schema: z.object({ sessionId: id, decisionId: id, response: z.record(z.unknown()) }).strict(), run: (args: any) => sessionRuntime.resolveDecision(args.sessionId, args.decisionId, args.response) },
+    { name: "resolve_decision", description: "Respond to a pending engine session decision.", schema: z.object({ sessionId: id, decisionId: id, response: z.record(z.string(), z.unknown()) }).strict(), run: (args: any) => sessionRuntime.resolveDecision(args.sessionId, args.decisionId, args.response) },
     { name: "list_saved_sessions", description: "List retained session snapshots on the engine.", schema: z.object({}).strict(), run: () => sessionRuntime.listSavedSessions() },
     { name: "resume_session", description: "Resume a saved snapshot as a new session; admission grants are revalidated.", schema: z.object({ savedSessionId: id }).strict(), run: (args: any) => sessionRuntime.resumeSession(args.savedSessionId) },
     { name: "list_templates", description: "List workflow templates and supported target types.", schema: z.object({}).strict(), run: () => runtime.listTemplates() },
@@ -323,7 +323,7 @@ async function registerWorkflowTools(server: McpServer, selected: ReadonlySet<st
     { name: "list_runs", description: "List workflow runs visible to this execution owner on the selected engine.", schema: z.object({}).strict(), run: () => runtime.listRuns() },
     { name: "list_workflows", description: "List saved workflow definitions.", schema: z.object({}).strict(), run: () => runtime.listWorkflows() },
     { name: "get_workflow", description: "Read a saved workflow and its revision.", schema: z.object({ id }).strict(), run: (args: any) => runtime.getWorkflow(args.id) },
-    { name: "save_workflow", description: "Validate and save a workflow definition with optional revision protection.", schema: z.object({ definition: z.record(z.unknown()), expectedRevision: z.number().int().positive().optional() }).strict(), run: (args: any) => runtime.saveWorkflow(args.definition, args.expectedRevision) },
+    { name: "save_workflow", description: "Validate and save a workflow definition with optional revision protection.", schema: z.object({ definition: z.record(z.string(), z.unknown()), expectedRevision: z.number().int().positive().optional() }).strict(), run: (args: any) => runtime.saveWorkflow(args.definition, args.expectedRevision) },
     { name: "start_run", description: "Start a template or saved workflow using 0's configured model provider. Returns a run ID promptly. Target must be within the server's authorized workspace or live scope.", schema: z.object({ sessionId: id.optional(), templateId: id.optional(), workflowId: id.optional(), revision: z.number().int().positive().optional(), target: z.string().trim().min(1).max(4096), idempotencyKey: id.optional(), inputs: workflowInputsSchema.optional(), allowApply: z.boolean().optional(), timeCapMs: z.number().int().positive().max(86_400_000).optional(), costCapUsd: z.number().positive().max(1000).optional() }).strict(), run: (args: any) => {
       if (Boolean(args.templateId) === Boolean(args.workflowId)) throw new Error("Select exactly one templateId or workflowId.");
       if (args.workflowId && !args.revision) throw new Error("Saved workflow runs require a pinned revision.");

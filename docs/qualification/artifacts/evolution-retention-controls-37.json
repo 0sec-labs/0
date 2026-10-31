@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "seeded-synthetic-stochastic-controls-not-model-benefit",
+  "independentSeeds": 32,
+  "familiesPerPanel": 400,
+  "familyIndependenceAssumption": "synthetically generated independent families",
+  "comparisonsPerStudy": 9,
+  "confidenceAlpha": 0.05,
+  "practicalMargins": [
+    {
+      "role": "retention",
+      "margin": 0.2
+    },
+    {
+      "role": "adaptation",
+      "margin": 0.2
+    },
+    {
+      "role": "false-positive",
+      "margin": 0.2
+    }
+  ],
+  "aaFalseRejections": 0,
+  "aaFalseRejectionRateCI95": [
+    0,
+    0.1071791982550706
+  ],
+  "aaInconclusive": 15,
+  "regressingControlsDetected": 32,
+  "regressingControlDetectionRateCI95": [
+    0.8928208017449293,
+    1
+  ],
+  "qualifiedStudies": 15,
+  "analysisP50Ms": 23.324499999999944,
+  "analysisP95Ms": 26.674959000000058,
+  "modelCalls": 0,
+  "actualProviderSpendUsd": 0,
+  "limitation": "32 synthetic seeded studies test policy behavior and uncertainty; they do not establish security effect sizes or adaptive-holdout validity"
+}

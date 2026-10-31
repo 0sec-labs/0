@@ -32,13 +32,13 @@ const manifestSchema = z.unknown().transform((value, ctx): PluginManifest => {
   return z.NEVER;
 });
 const versionSchema = z.object({
-  versionId: z.string().uuid(), lineageId: z.string().uuid(),
+  versionId: z.guid(), lineageId: z.guid(),
   kind: z.enum(["tool", "skill", "agent"]), entry: z.string().refine(safePath),
   evidenceStatus: z.enum(["structural", "measured"]), manifestDigest: digestSchema,
   manifest: manifestSchema, createdAt: z.string(), failureCount: z.number().int().nonnegative(),
   lastError: z.string().max(MAX_RESULT_CHARS).optional(),
   backend: z.enum(["docker", "smolvm"]), image: digestSchema, imageArchive: z.string().optional(),
-  snapshot: z.object({ id: z.string().uuid(), root: z.string(), digest: digestSchema,
+  snapshot: z.object({ id: z.guid(), root: z.string(), digest: digestSchema,
     files: z.array(z.object({ path: z.string().refine(safePath), digest: digestSchema, bytes: z.number().int().nonnegative() }).strict()).min(1).max(128),
   }).strict(),
   evolutionVersionId: z.string().optional(), receiptDigest: digestSchema.optional(),
@@ -53,11 +53,11 @@ const versionSchema = z.object({
   }
 });
 const recordSchema = z.object({
-  id: z.string(), name: z.string(), activeVersionId: z.string().uuid(),
-  evolutionEpoch: z.string().uuid(),
+  id: z.string(), name: z.string(), activeVersionId: z.guid(),
+  evolutionEpoch: z.guid(),
   versions: z.array(versionSchema).min(1).max(MAX_VERSIONS), createdAt: z.number(), updatedAt: z.number(),
 }).strict();
-const registrySchema = z.object({ schema: z.literal(1), plugins: z.record(recordSchema) }).strict();
+const registrySchema = z.object({ schema: z.literal(1), plugins: z.record(z.string(), recordSchema) }).strict();
 export type PluginVersionRecord = z.infer<typeof versionSchema>;
 export type PluginRecord = z.infer<typeof recordSchema>;
 type RegistryFile = z.infer<typeof registrySchema>;

@@ -72,6 +72,39 @@ function reseal(evaluation: EvolutionEvaluation): EvolutionEvaluation {
 }
 
 describe("evolution snapshot boundaries", () => {
+  it("protects trusted engine benchmark entries without banning unrelated app benches", async () => {
+    const engine = join(config.sourceRoot, "packages/core"), app = join(config.sourceRoot, "app");
+    mkdirSync(engine, { recursive: true }); mkdirSync(app);
+    writeFileSync(join(engine, "package.json"), JSON.stringify({ name: "@0/core" }));
+    writeFileSync(join(app, "package.json"), JSON.stringify({ name: "unrelated-application" }));
+    const selected = parseEvolutionConfig({ ...config, sourcePaths: ["src", "packages", "app"], editablePaths: ["src", "packages", "app"] });
+    const baseline = await snapshotEvolutionSource(selected);
+    for (const name of ["task-routing", "local-ollama-routing", "security-evolution-pilot", "execution-evidence"]) {
+      for (const path of [`packages/core/src/bench/${name}.ts`, `packages/core/dist/bench/${name}.js`]) {
+        await expect(createEvolutionCandidate(baseline, { rationale: "test engine authority", modelCostUsd: 0,
+          edits: [{ path, beforeDigest: null, content: "export const fixture = true;\n" }] }, selected)).rejects.toThrow(/protected code area/);
+      }
+    }
+    const candidate = await createEvolutionCandidate(baseline, { rationale: "ordinary app benchmark", modelCostUsd: 0,
+      edits: [{ path: "app/src/bench/task-routing.ts", beforeDigest: null, content: "export const fixture = true;\n" }] }, selected);
+    expect(candidate.files.some(file => file.path === "app/src/bench/task-routing.ts")).toBe(true);
+  });
+
+  it("protects composed source/dist controller helpers while permitting unrelated app helpers", async () => {
+    mkdirSync(join(config.sourceRoot, "dist"));
+    const selected = parseEvolutionConfig({ ...config, sourcePaths: ["src", "dist"], editablePaths: ["src", "dist"] });
+    const baseline = await snapshotEvolutionSource(selected);
+    for (const name of ["artifacts", "controller-lock", "safety", "retention", "provenance", "curation-lineage", "sandbox", "rewrite", "campaign-validation-budget", "paired-retention", "paired-retention-receipt", "paired-search-study", "archive-study-runner", "search-study-model-adapter", "proposal-diversity-campaign"]) {
+      for (const path of [`src/improvement/${name}.ts`, `dist/improvement/${name}.js`]) {
+        await expect(createEvolutionCandidate(baseline, { rationale: "test controller boundary", modelCostUsd: 0,
+          edits: [{ path, beforeDigest: null, content: "export const fixture = true;\n" }] }, selected)).rejects.toThrow(/protected code area/);
+      }
+    }
+    const app = await createEvolutionCandidate(baseline, { rationale: "ordinary application helper", modelCostUsd: 0,
+      edits: [{ path: "src/safety.ts", beforeDigest: null, content: "export const fixture = true;\n" }] }, selected);
+    expect(app.files.some(file => file.path === "src/safety.ts")).toBe(true);
+  });
+
   it("rejects source aliases rather than uploading files outside the selected tree", async () => {
     const path = join(config.sourceRoot, "src/alias.cjs");
     symlinkSync(join(config.sourceRoot, "src/worker.cjs"), path);
@@ -142,6 +175,42 @@ describe("evolution snapshot boundaries", () => {
 });
 
 describe("evolution promotion and replay", () => {
+  it("blocks replacement of the initial declared critical cohort before its first promotion", async () => {
+    config = { ...config, retentionPolicy: { profileId: "critical-authority", version: 1, criticalCaseIds: ["held-out-0", "negative-control-0"] } };
+    const first = await staged(false);
+    const replacement = { ...config, retentionPolicy: { ...config.retentionPolicy!, criticalCaseIds: ["held-out-1", "negative-control-0"] } };
+    const evaluation = await evaluateEvolutionCandidate(first.baseline.snapshot, first.version.snapshot, replacement, { sandbox: async ({ snapshot, input }) => {
+      const value = input as { index: number; unsafe: boolean };
+      return { exitCode: 0, stdout: JSON.stringify({ unsafe: value.unsafe && (snapshot.id === first.version.id || value.index % 3 !== 2) }), stderr: "", durationMs: 1, timedOut: false };
+    } });
+    expect(evaluation.decision.status).toBe("requires_human_approval");
+    const version = { ...first.version, configDigest: evaluation.configDigest, receiptDigest: evaluation.receiptDigest };
+    await recordEvolutionVersion(config.storePath, version, replacement, evaluation);
+    await expect(startEvolutionCanary(config.storePath, version.id, first.baseline.id)).rejects.toThrow(/approved versioned rotation/);
+    expect(loadEvolutionRegistry(config.storePath).activeId).toBe(first.baseline.id);
+  });
+
+  it("blocks silent retirement of a previously promoted critical capability across generations", async () => {
+    config = { ...config, retentionPolicy: { profileId: "critical-authority", version: 1, criticalCaseIds: ["held-out-0", "negative-control-0"] } };
+    const first = await staged();
+    await startEvolutionCanary(config.storePath, first.version.id, first.baseline.id); retainCanaries(first.version, first.evaluation);
+    await promoteEvolutionVersion(config.storePath, first.version.id, first.baseline.id);
+    const narrowed = { ...config, retentionPolicy: { ...config.retentionPolicy!, criticalCaseIds: ["negative-control-0"] } };
+    const candidate = await createEvolutionCandidate(first.version.snapshot, { rationale: "new capability with forgotten old authority", modelCostUsd: 0,
+      edits: [{ path: "src/worker.cjs", beforeDigest: first.version.snapshot.files[0]!.digest, content: improved + "// generation two\n" }] }, narrowed);
+    const evaluation = await evaluateEvolutionCandidate(first.version.snapshot, candidate, narrowed, { sandbox: async ({ snapshot, input }) => {
+      const value = input as { index: number; unsafe: boolean };
+      const detected = value.unsafe && value.index !== 3 && (snapshot.id === candidate.id || value.index % 3 !== 2);
+      return { exitCode: 0, stdout: JSON.stringify({ unsafe: detected }), stderr: "", durationMs: 1, timedOut: false };
+    } });
+    expect(evaluation.decision.status).toBe("requires_human_approval");
+    const version: EvolutionVersion = { ...first.version, id: candidate.id, snapshot: candidate, parentId: first.version.id,
+      status: "candidate", configDigest: evaluation.configDigest, receiptDigest: evaluation.receiptDigest };
+    await recordEvolutionVersion(config.storePath, version, narrowed, evaluation);
+    await expect(startEvolutionCanary(config.storePath, version.id, first.version.id)).rejects.toThrow(/approved versioned rotation/);
+    expect(loadEvolutionRegistry(config.storePath).activeId).toBe(first.version.id);
+  });
+
   it("requires every canary, preserves prior worker pins, and restores the accepted parent", async () => {
     const { baseline, version, evaluation } = await staged();
     expect((await pinEvolutionVersion(config.storePath, "existing-worker")).id).toBe(baseline.id);

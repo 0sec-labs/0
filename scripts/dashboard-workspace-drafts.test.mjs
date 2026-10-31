@@ -5,6 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import { createRequire } from "node:module";
+
+const require = createRequire(new URL("../packages/dashboard/package.json", import.meta.url));
+const { isCancelledError } = require("@tanstack/react-query");
 
 // Exercise the production hook's asynchronous state transitions with isolated
 // network/effect boundaries. State slots retain their values across renders;
@@ -18,7 +22,7 @@ test("workspace sends target root/worker drafts independently and retain failed 
     return [slots[index], value => { slots[index] = typeof value === "function" ? value(slots[index]) : value; }];
   };
   const calls = []; const dispatches = [];
-  globalThis.__workspaceDraftTest = { useState, useRef: initial => { const [ref] = useState(() => ({ current: initial })); return ref; }, api: {
+  globalThis.__workspaceDraftTest = { isCancelledError, useState, useRef: initial => { const [ref] = useState(() => ({ current: initial })); return ref; }, api: {
     client: { backendId: "local" },
     webFetchJson: (path, input) => { dispatches.push({ path, input }); return new Promise((resolve, reject) => { deferred = { resolve, reject }; }); },
     sendConsoleMessage: (session, input) => { calls.push({ session, input }); return new Promise((resolve, reject) => { deferred = { resolve, reject }; }); },
@@ -28,7 +32,7 @@ test("workspace sends target root/worker drafts independently and retain failed 
     await build({ entryPoints: [fileURLToPath(new URL("../packages/dashboard/src/console/use-console-workspace.ts", import.meta.url))], outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent", plugins: [{ name: "isolated-hook-boundaries", setup(build) {
       const sources = {
         react: 'export const useState=globalThis.__workspaceDraftTest.useState; export const useRef=globalThis.__workspaceDraftTest.useRef; export const useEffect=()=>{}; export const useMemo=fn=>fn();',
-        "@tanstack/react-query": 'export const useQuery=options=>({isSuccess:true,data:options.queryKey[0]==="console-snapshot"?undefined:[],isFetching:false}); export const useQueryClient=()=>({invalidateQueries:async()=>{}});',
+        "@tanstack/react-query": 'export const isCancelledError=globalThis.__workspaceDraftTest.isCancelledError; export const useQuery=options=>({isSuccess:true,data:options.queryKey[0]==="console-snapshot"?undefined:[],isFetching:false}); export const useQueryClient=()=>({invalidateQueries:async()=>{}});',
         "@/api": 'export const useBackendApi=()=>globalThis.__workspaceDraftTest.api; export const localControlFetch=(...args)=>{const fn=globalThis.__workspaceDraftTest.api.localControlFetch; if(!fn)throw new Error("Unexpected relay request"); return fn(...args);};',
         "@/components/team-access": 'export const useTeamAccess=()=>({enabled:false});',
         "@/lib/use-persistent-state": 'import {useState} from "react"; export const usePersistentState=(_key,initial)=>useState(initial);',

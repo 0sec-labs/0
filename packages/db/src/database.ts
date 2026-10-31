@@ -6,7 +6,7 @@ import {
 } from "./wasm-shim.js";
 import { homeStateDir, ImpactAssessmentSchema, type ImpactAssessment } from "@0/shared";
 import { ensureDatabaseDirectory } from "./db-directory.js";
-import { asc, eq, desc, and, gt, inArray, or } from "drizzle-orm";
+import { asc, eq, desc, and, gt, inArray, or, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import {
@@ -1630,6 +1630,16 @@ export class osecDB {
       .where(and(...conditions))
       .orderBy(schema.pipelineEvents.timestamp)
       .all();
+  }
+
+  /** Bounded retained receipts for explicit verification lifecycle recovery. */
+  getRecentScanEvents(scanId: string, eventType: string, limit = 100, tools?: string[]) {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw new Error("invalid scan event limit");
+    if (tools && (!tools.length || tools.length > 10 || tools.some(tool => !/^[a-z_]{1,64}$/.test(tool)))) throw new Error("invalid receipt tools");
+    return this.db.select().from(schema.pipelineEvents)
+      .where(and(eq(schema.pipelineEvents.scanId, scanId), eq(schema.pipelineEvents.eventType, eventType),
+        tools ? inArray(sql<string>`CASE WHEN json_valid(${schema.pipelineEvents.payload}) THEN json_extract(${schema.pipelineEvents.payload}, '$.tool') ELSE '' END`, tools) : undefined))
+      .orderBy(desc(schema.pipelineEvents.timestamp), desc(schema.pipelineEvents.id)).limit(limit).all();
   }
 
   listRecentEvents(limit = 50) {

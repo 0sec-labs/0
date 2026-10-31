@@ -1,10 +1,11 @@
 import { chmodSync, mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { pairedRetentionObservationsFromReceipt } from "./paired-retention-receipt.js";
 import { estimateCost } from "@0/shared";
 import { parseEvolutionConfig } from "./config.js";
-import { evaluateEvolutionCandidate } from "./evaluation.js";
+import { evaluateEvolutionCandidate, evolutionComparisonIdentity } from "./evaluation.js";
 import { createEvolutionCandidate, snapshotEvolutionSource } from "./registry.js";
 import { proposeEvolutionEdits } from "./rewrite.js";
 import {
@@ -14,8 +15,16 @@ import {
 import { promoteEvolutionVersion, recordEvolutionVersion, startEvolutionCanary } from "./registry.js";
 import type { EvolutionConfig, EvolutionSandbox, EvolutionSnapshot } from "./types.js";
 
+const pinnedWorker = { provider: "openai", model: "gpt-4o-mini", modelVersionStatus: "pinned" as const,
+  modelRevision: "provider-release-2026-10-23", decodingDigest: "sha256:" + "d".repeat(64) };
 const directories: string[] = [];
+beforeEach(() => {
+  const root = mkdtempSync(join(tmpdir(), "0-evaluation-authority-"));
+  directories.push(root);
+  vi.stubEnv("ZERO_EVOLUTION_AUTHORITY_ROOT", root);
+});
 afterEach(() => {
+  vi.unstubAllEnvs();
   const unlock = (directory: string): void => {
     chmodSync(directory, 0o700);
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -84,6 +93,204 @@ function probe(candidateId: string, mode: "correct" | "unrelated" | "negative-er
 }
 
 describe("independent evolution oracle", () => {
+  it("records a sealed critical panel and rejects losses even when the baseline also fails it", async () => {
+    const { config, baseline, candidate } = await setup();
+    config.retentionPolicy = { profileId: "older-parser-capability", version: 1, criticalCaseIds: ["held-out-2"] };
+    const passing = await evaluateEvolutionCandidate(baseline, candidate, config, { sandbox: probe(candidate.id, "correct") });
+    expect(passing.retention).toMatchObject({ passed: true, checkedCases: 1 });
+    expect(passing.decision.status).toBe("requires_human_approval");
+    const delegate = probe(candidate.id, "correct");
+    const failing: EvolutionSandbox = async request => {
+      const execution = await delegate(request);
+      // Both baseline and candidate lose a capability from an older profile.
+      // This loss is invisible to immediate-baseline retention alone.
+      if ((request.input as { key: number }).key === 5) execution.stdout = JSON.stringify({ findings: [] });
+      return execution;
+    };
+    const rejected = await evaluateEvolutionCandidate(baseline, candidate, config, { sandbox: failing });
+    expect(rejected.retention?.passed).toBe(false);
+    expect(rejected.result.ciPassed).toBe(false);
+    expect(rejected.decision.status).toBe("rejected");
+    expect(rejected.retention?.profileDigest).toBe(passing.retention?.profileDigest);
+  });
+
+  it("rejects oversized fixture collections before inspecting attacker-controlled entries", async () => {
+    const { config } = await setup();
+    let inspected = 0;
+    const oversized = Array.from({ length: 1001 }, () => new Proxy({}, {
+      get: () => { inspected++; throw new Error("oversized collection entries must not be parsed"); },
+    }));
+    expect(() => parseEvolutionConfig({ ...config, cases: oversized })).toThrow(/too_big/);
+    expect(inspected).toBe(0);
+  });
+
+  it("retains every nested promotion-policy default when the object is omitted", async () => {
+    const { config } = await setup();
+    const { promotionPolicy: _policy, ...withoutPolicy } = config;
+    const cases = (["development", "held-out", "negative-control"] as const).flatMap((lane) =>
+      Array.from({ length: 10 }, (_, index) => ({ id: `${lane}-${index}`, lane, input: { lane, index }, expected: true })),
+    );
+    expect(parseEvolutionConfig({ ...withoutPolicy, cases }).promotionPolicy).toEqual({
+      minimumCases: 10, minimumDevelopmentLift: 0.05, minimumHeldOutLift: 0.03,
+      maximumNegativeControlFpDelta: 0, maximumCostMultiplier: 1.5,
+    });
+  });
+
+  it("keeps private observation queues outside candidate/model-readable source snapshots", async () => {
+    const { config } = await setup();
+    expect(() => parseEvolutionConfig({ ...config, observationStorePath: join(config.sourceRoot, "src", "observations.json") })).toThrow(/private observation queue cannot overlap/);
+  });
+
+  it("adapts immutable sealed execution receipts into paired observations without model summaries", async () => {
+    const { config, baseline, candidate } = await setup();
+    const evaluation = await evaluateEvolutionCandidate(baseline, candidate, config, { sandbox: probe(candidate.id, "correct") });
+    const panel = [{ caseId: "held-out-0", capabilityId: "old-critical", familyDigest: "sha256:" + "f".repeat(64) }];
+    const rows = pairedRetentionObservationsFromReceipt(evaluation, "generation-2", panel, { authorityPreserved: true, evidenceCorrect: true });
+    expect(rows).toHaveLength(config.repeats);
+    expect(rows.every(row => row.candidate.succeeded && row.baseline.executed && row.candidate.executed)).toBe(true);
+    expect(rows[0]!.candidate.costUsd).toBeNull();
+    expect(rows[0]!.candidate.estimatedCostUsd).toBe(evaluation.attempts.candidate.find(a => a.caseId === panel[0]!.caseId)!.costUsd);
+    const reconciled = pairedRetentionObservationsFromReceipt(evaluation, "generation-2", panel, { authorityPreserved: true, evidenceCorrect: true }, {
+      baseline: [{ caseId: panel[0]!.caseId, repeat: 0, actualCostUsd: 0.002, receiptDigest: "sha256:" + "c".repeat(64) }],
+      candidate: [{ caseId: panel[0]!.caseId, repeat: 0, actualCostUsd: 0.003, receiptDigest: "sha256:" + "d".repeat(64) }],
+    });
+    expect(reconciled[0]!.candidate.costUsd).toBe(0.003);
+    expect(new Set(rows.map(row => row.familyDigest)).size).toBe(1);
+    expect(JSON.stringify(rows)).not.toContain("held-out-0");
+    expect(() => pairedRetentionObservationsFromReceipt({ ...evaluation, receiptDigest: "sha256:" + "0".repeat(64) }, "generation-2", panel, { authorityPreserved: true, evidenceCorrect: true })).toThrow(/integrity/);
+    expect(() => pairedRetentionObservationsFromReceipt(evaluation, "generation-2", [{ ...panel[0]!, caseId: "development-0" }], { authorityPreserved: true, evidenceCorrect: true })).toThrow(/sealed lanes/);
+    const missing = pairedRetentionObservationsFromReceipt(evaluation, "generation-2", [{ ...panel[0]!, caseId: "missing" }], { authorityPreserved: true, evidenceCorrect: true });
+    expect(missing[0]).toMatchObject({ inconclusive: true, baseline: { costUsd: null, executed: false }, candidate: { costUsd: null, executed: false } });
+  });
+
+  it("observes selected source bytes and rejects stale provenance after a source edit", async () => {
+    const { config } = await setup();
+    const identity = { provider: "openai", model: "gpt-4o" };
+    const before = evolutionComparisonIdentity(config, identity);
+    writeFileSync(join(config.sourceRoot, "src/detector.js"), "export const revision = 99;\n");
+    const after = evolutionComparisonIdentity(config, identity);
+    expect(after.sourceRevision).not.toBe(before.sourceRevision);
+    expect(after.evaluatorDigest).toBe(before.evaluatorDigest);
+    expect(before.sourceRevision).not.toBe(before.evaluatorDigest);
+  });
+
+  it("rejects a declared model worker before dispatch when durable safety is disabled", async () => {
+    const { config, baseline, candidate } = await setup();
+    let dispatched = false;
+    await expect(evaluateEvolutionCandidate(baseline, candidate, {
+      ...config, safety: { enabled: false, holdoutExposureLimit: 100,
+        workerModel: { provider: "openai", model: "gpt-4o-mini", maxCostUsdPerExecution: 0.01 } },
+    }, { sandbox: async () => { dispatched = true; throw new Error("must not dispatch"); } })).rejects.toThrow(/require enabled durable safety/);
+    expect(dispatched).toBe(false);
+  });
+
+  it.each([undefined, { enabled: false, holdoutExposureLimit: 100 }, { enabled: true, holdoutExposureLimit: 100 }])(
+    "rejects undeclared model billing instead of reporting compute-only evaluation cost (safety %j)", async (safety) => {
+      const { config, baseline, candidate } = await setup();
+      const sandbox = probe(candidate.id, "correct");
+      let dispatched = 0;
+      await expect(evaluateEvolutionCandidate(baseline, candidate, { ...config, ...(safety ? { safety } : {}) }, {
+        workerModelIdentity: () => pinnedWorker,
+      modelIdentity: () => ({ provider: "openai", model: "proposal-model" }),
+        sandbox: async (request) => {
+          dispatched++;
+          return { ...await sandbox(request), workerModelUsage: {
+            ...pinnedWorker, provider: "openai", model: "gpt-4o-mini", costUsd: 100, receiptDigest: "sha256:" + "c".repeat(64),
+          } };
+        },
+      })).rejects.toThrow(/undeclared worker model charge/);
+      expect(dispatched).toBe(1);
+      if (safety?.enabled) expect(loadEvolutionCampaign(config.storePath).unknownCost).toBe(true);
+    },
+  );
+
+  it.each(["floating", "unavailable"] as const)("does not dispatch a model worker with %s version evidence", async modelVersionStatus => {
+    const { config, baseline, candidate } = await setup(); let calls = 0;
+    await expect(evaluateEvolutionCandidate(baseline, candidate, {
+      ...config, safety: { enabled: true, holdoutExposureLimit: 100,
+        workerModel: { provider: pinnedWorker.provider, model: pinnedWorker.model, maxCostUsdPerExecution: 0.01 } },
+    }, { modelIdentity: () => ({ provider: "proposal-provider", model: "alias" }),
+      workerModelIdentity: () => ({ ...pinnedWorker, modelVersionStatus }),
+      sandbox: async () => { calls++; throw new Error("must not dispatch"); },
+    })).rejects.toThrow(/floating or unavailable/);
+    expect(calls).toBe(0);
+  });
+
+  it("reserves and settles evaluated worker model charges separately from compute", async () => {
+    const { config, baseline, candidate } = await setup();
+    const safe = { ...config, safety: { enabled: true, holdoutExposureLimit: 100,
+      workerModel: { provider: "openai", model: "gpt-4o-mini", maxCostUsdPerExecution: 0.01 } } };
+    const base = probe(candidate.id, "correct");
+    const evaluated = await evaluateEvolutionCandidate(baseline, candidate, safe, {
+      workerModelIdentity: () => pinnedWorker,
+      modelIdentity: () => ({ provider: "anthropic", model: "proposal-model" }),
+      sandbox: async (request) => {
+        const ledger = loadEvolutionCampaign(config.storePath);
+        expect(ledger.reservations.filter((entry) => entry.state === "reserved").map((entry) => entry.kind)).toEqual(["evaluation", "model"]);
+        return { ...await base(request), workerModelUsage: {
+          ...pinnedWorker, provider: "openai", model: "gpt-4o-mini", costUsd: 0.001, receiptDigest: "sha256:" + "a".repeat(64),
+        } };
+      },
+    });
+    const ledger = loadEvolutionCampaign(config.storePath);
+    expect(ledger.cumulativeModelCostUsd).toBeCloseTo(0.036);
+    expect(ledger.cumulativeEvaluationCostUsd).toBeCloseTo(0.00036);
+    expect(evaluated.result.provenance?.resolvedModel).toBe("proposal-model");
+    expect(evaluated.result.provenance?.evaluatedWorker).toEqual({ kind: "model", provider: "openai", model: "gpt-4o-mini",
+      revision: { status: "pinned", revision: pinnedWorker.modelRevision, decodingDigest: pinnedWorker.decodingDigest } });
+    expect(evaluated.attempts.candidate[0]?.costUsd).toBeCloseTo(0.00101);
+  });
+
+  it("blocks model evaluation when host billing evidence is missing", async () => {
+    const { config, baseline, candidate } = await setup();
+    const safe = { ...config, safety: { enabled: true, holdoutExposureLimit: 100,
+      workerModel: { provider: "openai", model: "gpt-4o-mini", maxCostUsdPerExecution: 0.01 } } };
+    let dispatches = 0;
+    const sandbox = probe(candidate.id, "correct");
+    await expect(evaluateEvolutionCandidate(baseline, candidate, safe, {
+      workerModelIdentity: () => pinnedWorker,
+      modelIdentity: () => ({ provider: "openai", model: "proposal-model" }),
+      sandbox: async (request) => { dispatches++; return sandbox(request); },
+    })).rejects.toThrow(/cost is unknown/);
+    expect(dispatches).toBe(1);
+    const ledger = loadEvolutionCampaign(config.storePath);
+    expect(ledger.unknownCost).toBe(true);
+    expect(ledger.reservations.find((entry) => entry.kind === "model")?.state).toBe("unknown");
+    expect(ledger.cumulativeEvaluationCostUsd).toBeCloseTo(0.00001);
+  });
+
+  it("rejects in-place mutation of adapter revision/decoder observations after dispatch", async () => {
+    const { config, baseline, candidate } = await setup();
+    const mutableWorker = { ...pinnedWorker }; const delegate = probe(candidate.id, "correct");
+    await expect(evaluateEvolutionCandidate(baseline, candidate, {
+      ...config, safety: { enabled: true, holdoutExposureLimit: 100,
+        workerModel: { provider: pinnedWorker.provider, model: pinnedWorker.model, maxCostUsdPerExecution: 0.01 } },
+    }, { modelIdentity: () => ({ provider: "proposal", model: "alias" }), workerModelIdentity: () => mutableWorker,
+      sandbox: async request => {
+        mutableWorker.modelRevision = "changed-in-place-release"; mutableWorker.decodingDigest = "sha256:" + "e".repeat(64);
+        return { ...await delegate(request), workerModelUsage: { ...mutableWorker, costUsd: 0.002, receiptDigest: "sha256:" + "a".repeat(64) } };
+      },
+    })).rejects.toThrow(/worker provenance differs/);
+    expect(loadEvolutionCampaign(config.storePath).cumulativeModelCostUsd).toBe(0.002);
+    expect(campaignPromotionAllowed(config.storePath).allowed).toBe(false);
+  });
+
+  it("settles an observed worker failover charge before blocking provenance", async () => {
+    const { config, baseline, candidate } = await setup();
+    const safe = { ...config, safety: { enabled: true, holdoutExposureLimit: 100,
+      workerModel: { provider: "openai", model: "gpt-4o-mini", maxCostUsdPerExecution: 0.01 } } };
+    const sandbox = probe(candidate.id, "correct");
+    await expect(evaluateEvolutionCandidate(baseline, candidate, safe, {
+      workerModelIdentity: () => pinnedWorker,
+      modelIdentity: () => ({ provider: "openai", model: "proposal-model" }),
+      sandbox: async (request) => ({ ...await sandbox(request), workerModelUsage: {
+        ...pinnedWorker, provider: "other", model: "unapproved", costUsd: 0.002, receiptDigest: "sha256:" + "b".repeat(64),
+      } }),
+    })).rejects.toThrow(/worker provenance differs/);
+    expect(loadEvolutionCampaign(config.storePath).cumulativeModelCostUsd).toBe(0.002);
+    expect(campaignPromotionAllowed(config.storePath).allowed).toBe(false);
+  });
+
   it("requires the intended output, not any finding produced by the candidate", async () => {
     const { config, baseline, candidate } = await setup();
     const correct = await evaluateEvolutionCandidate(baseline, candidate, config, { sandbox: probe(candidate.id, "correct") });
@@ -164,6 +371,7 @@ describe("independent evolution oracle", () => {
     await expect(evaluateEvolutionCandidate(baseline, candidate, {
       ...config, timeoutMs: 1000, safety: { enabled: true, holdoutExposureLimit: 100 },
     }, {
+      workerModelIdentity: () => pinnedWorker,
       modelIdentity: () => ({ provider: "openai", model: "gpt-4o" }),
       sandbox: async () => ({ exitCode: 0, stdout: "{}", stderr: "", durationMs: 2000, timedOut: false }),
       evaluationBudget: {
@@ -180,9 +388,21 @@ describe("independent evolution oracle", () => {
     expect(charged).toBe(0.002);
   });
 
+  it("does not call a proposal model when complete configured validation cannot fit", async () => {
+    const { config, baseline } = await setup();
+    let calls = 0;
+    await expect(proposeEvolutionEdits(baseline, { ...config, model: "gpt-4o", maxEvaluationCostUsd: 0.01,
+      allowModelSourceAccess: true, safety: { enabled: true, holdoutExposureLimit: 100 } }, "development only", {
+      modelIdentity: () => ({ provider: "openai", model: "gpt-4o" }),
+      model: async () => { calls++; throw new Error("must not dispatch"); },
+    })).rejects.toThrow(/complete independent validation/);
+    expect(calls).toBe(0);
+    expect(loadEvolutionCampaign(config.storePath).reservations).toEqual([]);
+  });
+
   it("reserves real generation before dispatch and retains failed-call unknown cost", async () => {
     const { config, baseline } = await setup();
-    const safe = { ...config, model: "anthropic/claude-sonnet-4-6", allowModelSourceAccess: true, safety: { enabled: true, holdoutExposureLimit: 100 } };
+    const safe = { ...config, maxEvaluationCostUsd: 10, model: "anthropic/claude-sonnet-4-6", allowModelSourceAccess: true, safety: { enabled: true, holdoutExposureLimit: 100 } };
     const modelIdentity = () => ({ provider: "anthropic", model: "claude-sonnet-4-6", pricingModel: "anthropic/claude-sonnet-4-6" });
     const usage = { inputTokens: 1000, outputTokens: 100, cacheWriteTokens: 1000 };
     const proposal = await proposeEvolutionEdits(baseline, safe, "development only", {
@@ -219,8 +439,9 @@ describe("independent evolution oracle", () => {
     let resolvedModel = "gpt-4o";
     const usage = { inputTokens: 100, outputTokens: 10 };
     await expect(proposeEvolutionEdits(baseline, {
-      ...config, model: "gpt-4o", allowModelSourceAccess: true, safety: { enabled: true, holdoutExposureLimit: 100 },
+      ...config, maxEvaluationCostUsd: 10, model: "gpt-4o", allowModelSourceAccess: true, safety: { enabled: true, holdoutExposureLimit: 100 },
     }, "development only", {
+      workerModelIdentity: () => pinnedWorker,
       modelIdentity: () => ({ provider: "openai", model: resolvedModel, pricingModel: `openai/${resolvedModel}` }),
       model: async () => {
         resolvedModel = "gpt-4o-mini";
@@ -239,13 +460,13 @@ describe("independent evolution oracle", () => {
 
   it("cannot reset the evaluator or holdout exposure by relabeling and reordering fixtures", async () => {
     const { config, baseline, candidate } = await setup();
-    const safe = { ...config, safety: { enabled: true, holdoutExposureLimit: 12 } };
+    const safe = { ...config, safety: { enabled: true, holdoutExposureLimit: 24 } };
     const deps = { sandbox: probe(candidate.id, "correct"), modelIdentity: () => ({ provider: "openai", model: "gpt-4o" }) };
     await evaluateEvolutionCandidate(baseline, candidate, safe, deps);
     await expect(evaluateEvolutionCandidate(baseline, candidate, {
       ...safe, cases: [...safe.cases].reverse().map((entry) => ({ ...entry, id: `renamed-${entry.id}` })),
     }, deps)).rejects.toThrow(/holdout exposure exhausted/);
-    expect(loadEvolutionCampaign(config.storePath).exposures[0]?.consumed).toBe(12);
+    expect(loadEvolutionCampaign(config.storePath).exposures[0]?.consumed).toBe(24);
   });
 
   it("enforces pending and unknown-cost gates inside canary and promotion CAS transitions", async () => {

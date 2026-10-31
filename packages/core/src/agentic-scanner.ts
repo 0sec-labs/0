@@ -944,9 +944,14 @@ async function agenticScanInternal(opts: AgenticScanOptions): Promise<ScanReport
   }
 
   const rootNativeRuntime = budgetNativeRuntime(opts.nativeRuntime ?? cliNativeRuntime ?? nativeApiRuntime, scanCostLedger, config.signal, config.costCeilingUsd, config.plan);
-  const roleRuntime = async (role: string): Promise<NativeRuntime> => useNative && rootNativeRuntime.forkForSubagent
-    ? rootNativeRuntime.forkForSubagent(config.timeout ?? 120_000, { role })
-    : rootNativeRuntime;
+  const roleRuntime = async (role: "discovery" | "attack" | "verify" | "report"): Promise<NativeRuntime> => {
+    const selected = useNative && rootNativeRuntime.forkForSubagent
+      ? await rootNativeRuntime.forkForSubagent(config.timeout ?? 120_000, { role })
+      : rootNativeRuntime;
+    const model = selected.resolvedModel?.();
+    if (model) emit({ type: "stage:start", stage: role, message: `Using ${model} for ${role}.` });
+    return selected;
+  };
   let nativeRuntime = await roleRuntime("discovery");
 
   const legacyRuntimeForRole = (role: "discovery" | "attack" | "verify") => createRuntime({

@@ -41,7 +41,7 @@ describe.each(branches)("timeout origin: $transport $method", ({ transport, meth
       ? new LlmApiRuntime({ type: "api", timeout: 20, provider: "chatgpt-codex", model: "gpt-6.1-sol",
         providerTransport: { provider: "chatgpt-codex", models: ["gpt-6.1-sol"], identity: "synthetic-timeout-regression", request: relayRequest } })
       : new LlmApiRuntime({ type: "api", timeout: 20, provider: "openai", model: "gpt-4o", env: {
-        OPENAI_API_KEY: "synthetic-unused-credential", OPENAI_WIRE_API: "chat_completions",
+        OPENAI_API_KEY: "synthetic-unused-credential", OPENAI_BASE_URL: "https://api.openai.com/v1", OPENAI_WIRE_API: "chat_completions",
         ZERO_FORCE_PROVIDER: "", ZERO_SELECTED_PROVIDER: "", ZERO_LLM_FALLBACK: "", ZERO_SKIP_PROVIDER_BANNER: "1",
       } });
     const pending = method === "native"
@@ -73,6 +73,9 @@ describe.each(branches)("timeout origin: $transport $method", ({ transport, meth
     if (transport === "relay") {
       expect(fetch).not.toHaveBeenCalled();
       expect(relayRequest).toHaveBeenCalledTimes(1);
-    } else expect(fetch).toHaveBeenCalledTimes(1);
+    } else {
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(fetch.mock.calls[0]?.[0]).toBe("https://api.openai.com/v1/chat/completions");
+    }
   });
 });

@@ -1,0 +1,231 @@
+{
+  "schemaVersion": 1,
+  "protocolDigest": "sha256:6e64465a841dcdea128ea38d66dd0d78911ca2d48a26016d514a973fa0604dc1",
+  "corpusDigest": "sha256:2c13432438c95407124b339239470158cd0a8085217a3141a4b8d01a2a7f4fce",
+  "mode": "controls",
+  "conclusion": "inconclusive",
+  "broaderEnablement": false,
+  "automaticPromotion": false,
+  "pairedAnalysis": {
+    "independentFamilies": 3,
+    "meanGain": 0,
+    "interval95": [
+      -1,
+      1
+    ],
+    "assumption": "bounded independent-family Hoeffding interval; no IID claim beyond declared family assumption",
+    "retentionRegressions": 0,
+    "aaDisagreements": 0,
+    "regressionDetected": true
+  },
+  "arms": {
+    "frozen-baseline": {
+      "attempts": 10,
+      "verifiedCorrect": 4,
+      "positiveRecall": 0.5,
+      "falseAlarmRate": 0.6666666666666666,
+      "inconclusive": 0,
+      "p50Ms": 5.069874999999911,
+      "p95Ms": null
+    },
+    "sequential": {
+      "attempts": 10,
+      "verifiedCorrect": 4,
+      "positiveRecall": 0.5,
+      "falseAlarmRate": 0.6666666666666666,
+      "inconclusive": 0,
+      "p50Ms": 5.063709000000017,
+      "p95Ms": null
+    },
+    "baseline-extra-attempts": {
+      "attempts": 21,
+      "verifiedCorrect": 8,
+      "positiveRecall": 0.4444444444444444,
+      "falseAlarmRate": 0.6666666666666666,
+      "inconclusive": 0,
+      "p50Ms": 5.04362500000002,
+      "p95Ms": null
+    },
+    "aa": {
+      "attempts": 10,
+      "verifiedCorrect": 4,
+      "positiveRecall": 0.5,
+      "falseAlarmRate": 0.6666666666666666,
+      "inconclusive": 0,
+      "p50Ms": 5.0770840000000135,
+      "p95Ms": null
+    },
+    "regression": {
+      "attempts": 10,
+      "verifiedCorrect": 6,
+      "positiveRecall": 0,
+      "falseAlarmRate": 0,
+      "inconclusive": 0,
+      "p50Ms": 4.283083999999917,
+      "p95Ms": null
+    }
+  },
+  "cost": {
+    "meteredTariffUsd": 0,
+    "billedUsd": 0,
+    "unknownUsage": false,
+    "byArm": {
+      "frozen-baseline": {
+        "meteredTariffUsd": 0,
+        "calls": 30
+      },
+      "sequential": {
+        "meteredTariffUsd": 0,
+        "calls": 31
+      },
+      "baseline-extra-attempts": {
+        "meteredTariffUsd": 0,
+        "calls": 31
+      },
+      "aa": {
+        "meteredTariffUsd": 0,
+        "calls": 20
+      },
+      "regression": {
+        "meteredTariffUsd": 0,
+        "calls": 20
+      }
+    },
+    "dispatchedCalls": 132,
+    "reservedMaximumUsd": 13.200000000000001,
+    "modelUsageBasis": "provider token usage x frozen tariff; invoice remains separate",
+    "localComputeUsd": null
+  },
+  "elapsedMs": 1956.1433749999999,
+  "cpuMs": 57.338,
+  "reasons": [
+    "source-pattern oracle agreement does not independently reproduce or verify a vulnerability",
+    "public historical source may occur in model training data",
+    "tiny convenience sample does not establish security generalization",
+    "local compute monetary cost unpriced; wall/CPU measured separately",
+    "ordinary provider token usage is metered tariff cost, not reconciled invoice cost",
+    "provider-default decoding temperature and seed not pinned by existing runtime",
+    "deterministic controls only; no model-backed security efficacy evidence",
+    "insufficient independent final families for preregistered qualification",
+    "paired quality gain not established"
+  ],
+  "purpose": "deterministic controller smoke observation; no model calls or security efficacy claim",
+  "qualificationStatus": "not-qualified",
+  "supersedes": "Original helper-only lodash selection admitted identical sources with conflicting labels; old control results are invalidated.",
+  "unknownUsageControl": {
+    "schemaVersion": 1,
+    "protocolDigest": "sha256:6e64465a841dcdea128ea38d66dd0d78911ca2d48a26016d514a973fa0604dc1",
+    "corpusDigest": "sha256:2c13432438c95407124b339239470158cd0a8085217a3141a4b8d01a2a7f4fce",
+    "mode": "controls",
+    "conclusion": "inconclusive",
+    "broaderEnablement": false,
+    "automaticPromotion": false,
+    "pairedAnalysis": {
+      "independentFamilies": 0,
+      "meanGain": null,
+      "interval95": [
+        -1,
+        1
+      ],
+      "assumption": "bounded independent-family Hoeffding interval; no IID claim beyond declared family assumption",
+      "retentionRegressions": 0,
+      "aaDisagreements": 0,
+      "regressionDetected": false
+    },
+    "arms": {
+      "frozen-baseline": {
+        "attempts": 0,
+        "verifiedCorrect": 0,
+        "positiveRecall": null,
+        "falseAlarmRate": null,
+        "inconclusive": 0,
+        "p50Ms": null,
+        "p95Ms": null
+      },
+      "sequential": {
+        "attempts": 0,
+        "verifiedCorrect": 0,
+        "positiveRecall": null,
+        "falseAlarmRate": null,
+        "inconclusive": 0,
+        "p50Ms": null,
+        "p95Ms": null
+      },
+      "baseline-extra-attempts": {
+        "attempts": 0,
+        "verifiedCorrect": 0,
+        "positiveRecall": null,
+        "falseAlarmRate": null,
+        "inconclusive": 0,
+        "p50Ms": null,
+        "p95Ms": null
+      },
+      "aa": {
+        "attempts": 0,
+        "verifiedCorrect": 0,
+        "positiveRecall": null,
+        "falseAlarmRate": null,
+        "inconclusive": 0,
+        "p50Ms": null,
+        "p95Ms": null
+      },
+      "regression": {
+        "attempts": 0,
+        "verifiedCorrect": 0,
+        "positiveRecall": null,
+        "falseAlarmRate": null,
+        "inconclusive": 0,
+        "p50Ms": null,
+        "p95Ms": null
+      }
+    },
+    "cost": {
+      "meteredTariffUsd": 0,
+      "billedUsd": null,
+      "unknownUsage": true,
+      "byArm": {
+        "frozen-baseline": {
+          "meteredTariffUsd": 0,
+          "calls": 1
+        },
+        "sequential": {
+          "meteredTariffUsd": 0,
+          "calls": 0
+        },
+        "baseline-extra-attempts": {
+          "meteredTariffUsd": 0,
+          "calls": 0
+        },
+        "aa": {
+          "meteredTariffUsd": 0,
+          "calls": 0
+        },
+        "regression": {
+          "meteredTariffUsd": 0,
+          "calls": 0
+        }
+      },
+      "dispatchedCalls": 1,
+      "reservedMaximumUsd": 0.1,
+      "modelUsageBasis": "provider token usage x frozen tariff; invoice remains separate",
+      "localComputeUsd": null
+    },
+    "elapsedMs": 20.951541,
+    "cpuMs": 0.752,
+    "reasons": [
+      "source-pattern oracle agreement does not independently reproduce or verify a vulnerability",
+      "public historical source may occur in model training data",
+      "tiny convenience sample does not establish security generalization",
+      "local compute monetary cost unpriced; wall/CPU measured separately",
+      "ordinary provider token usage is metered tariff cost, not reconciled invoice cost",
+      "provider-default decoding temperature and seed not pinned by existing runtime",
+      "provider token usage unknown; reconcile before further dispatch",
+      "deterministic controls only; no model-backed security efficacy evidence",
+      "insufficient independent final families for preregistered qualification",
+      "paired quality gain not established",
+      "injected regression control not demonstrated",
+      "unsettled dispatch or unknown token usage",
+      "provider invoice and full monetary cost not reconciled"
+    ]
+  }
+}

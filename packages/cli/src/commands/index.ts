@@ -63,3 +63,4 @@ export { registerWorkflowCommand } from "./workflow.js";
 export { registerTeamCommand } from "./team.js";
 
 export { registerApiCommand } from "./api.js";
+export { registerRoutingCommand } from "./routing.js";

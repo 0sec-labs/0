@@ -42,7 +42,7 @@ beforeEach(() => {
   vi.stubEnv("HOME", testHome);
   vi.stubEnv("ZERO_SKIP_PROVIDER_BANNER", "1");
   for (const info of PROVIDERS) for (const key of info.envVars) vi.stubEnv(key, undefined);
-  for (const key of ["ZERO_MODEL", "ZERO_PROVIDER", "ZERO_SELECTED_PROVIDER", "ZERO_FORCE_PROVIDER", "ZERO_LLM_FALLBACK"]) vi.stubEnv(key, undefined);
+  for (const key of ["ZERO_MODEL", "ZERO_PROVIDER", "ZERO_SELECTED_PROVIDER", "ZERO_FORCE_PROVIDER", "ZERO_LLM_FALLBACK", "OPENAI_MODEL"]) vi.stubEnv(key, undefined);
   vi.stubEnv("OPENAI_API_KEY", "synthetic-openai-key");
   vi.stubEnv("DEEPSEEK_API_KEY", "synthetic-deepseek-key");
   vi.spyOn(LlmApiRuntime.prototype, "availableModelCatalog").mockImplementation(async function(this: LlmApiRuntime) {
@@ -91,7 +91,15 @@ describe("web model connection inspection", () => {
   it("reports configured OpenAI credentials without requiring a chosen model", async () => {
     const result = await new WebOperatorServices().handle("/api/console/providers", "GET", undefined, new URLSearchParams());
     const data = result?.data as { providers: Array<{ id: string; configured: boolean; diagnostics: { valid: boolean; message: string | null } }> };
-    expect(data.providers.find((provider) => provider.id === "openai")).toMatchObject({ configured: true, diagnostics: { valid: true, message: null } });
+    expect(data.providers.find((provider) => provider.id === "openai")).toMatchObject({ label: "OpenAI / Custom AI Provider", configured: true, diagnostics: { valid: true, message: null } });
+  });
+
+  it("keeps a configured custom model selectable when gateway discovery fails", async () => {
+    vi.stubEnv("OPENAI_BASE_URL", "http://192.0.2.10:20128/v1");
+    vi.stubEnv("OPENAI_MODEL", "9router/unlisted-model");
+    vi.mocked(LlmApiRuntime.prototype.availableModelCatalog).mockRejectedValue(new Error("No model catalog"));
+    const result = await new WebOperatorServices().handle("/api/console/models", "GET", undefined, new URLSearchParams("providerId=openai"));
+    expect(result?.data).toMatchObject({ models: [{ id: "9router/unlisted-model", provider: "openai", source: "account" }] });
   });
 
   it("returns only account-discovered OpenAI models without requiring a chosen model", async () => {

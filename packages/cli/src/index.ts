@@ -104,6 +104,7 @@ async function buildProgram(): Promise<Command> {
     }
   });
   c.registerScanCommand(program);
+  c.registerRoutingCommand(program);
   c.registerResumeCommand(program);
   c.registerReplayCommand(program);
   c.registerHistoryCommand(program);

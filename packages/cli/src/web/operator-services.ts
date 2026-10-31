@@ -333,7 +333,7 @@ export class WebOperatorServices {
         }
       }
       return {
-        id: info.id, label: info.label, methods: info.methods, configured,
+        id: info.id, label: info.id === "openai" ? "OpenAI / Custom AI Provider" : info.label, methods: info.methods, configured,
         source: configured ? environment ? "environment" : store.providers[info.id] ? "account-store" : "codex-file" : null,
         diagnostics, accounts, configuration: configs[info.id] ?? {}, auth: this.#authStatus(info.id, configured),
       };
@@ -352,6 +352,12 @@ export class WebOperatorServices {
       contextWindowTokens: model.contextTokens ?? resolveContextLimit({ modelId: model.id, providerId: model.provider })?.tokens ?? null,
       source: model.source === "catalog" ? "public-catalog" as const : "account" as const,
     }));
+    // Custom OpenAI-compatible gateways may omit /models or publish an incomplete
+    // catalog. The operator's configured ID remains selectable in either case.
+    const configuredModel = env.OPENAI_MODEL;
+    if (configuredModel && ids.includes("openai") && !rows.some(row => row.provider === "openai" && row.id === configuredModel)) {
+      rows.unshift({ id: configuredModel, provider: "openai", price: "Unknown rate", contextWindowTokens: null, source: "account" });
+    }
     return { models: rows, providerId: providerId ?? null,
       diagnostics: discovered.diagnostics.map(item => ({ ...item, message: publicMessage(item.message) })), roles: MODEL_ROLES };
   }

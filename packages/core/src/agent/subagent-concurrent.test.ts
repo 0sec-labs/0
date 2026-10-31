@@ -132,6 +132,51 @@ describe("spawn_agents — concurrent subagent dispatch", () => {
     } finally { vi.unstubAllEnvs(); rmSync(root, { recursive: true, force: true }); }
   });
 
+  it("validates explicit pinned revisions and source paths before any child inference", async () => {
+    const root = mkdtempSync(join(tmpdir(), "0-worker-pinned-target-"));
+    const createRepo = (name: string) => {
+      const dir = join(root, name); mkdirSync(dir);
+      const git = (args: string[]) => execFileSync("git", args, { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+      git(["init", "-q"]);
+      git(["remote", "add", "origin", `https://example.test/${name}.git`]);
+      writeFileSync(join(dir, `${name}.txt`), name);
+      git(["add", "."]);
+      git(["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", name]);
+      return { path: dir, head: git(["rev-parse", "HEAD"]) };
+    };
+    try {
+      const a = createRepo("a"), b = createRepo("b");
+      h.impl = async () => fakeState([]);
+      const fork = vi.fn(fakeRuntime);
+      const executor = new ToolExecutor(toolContext({ role: "audit", scopePath: b.path, workspaceRoot: a.path }), undefined, undefined, fork);
+      const task = { task: "Review the pinned source", expected_workspace: b };
+      const valid = await executor.execute({ name: "spawn_agents", arguments: { tasks: [task] } });
+      expect(valid.output).toMatchObject({ succeeded: 1, failed: 0 });
+      expect(h.configs[0].workspaceIdentity.head).toBe(b.head);
+      fork.mockClear(); h.configs = [];
+      for (const expected of [
+        { ...b, head: "0".repeat(40) },
+        a,
+        { ...b, origin: "https://user:secret@example.test/wrong.git" },
+        { ...b, path: join(root, "missing") },
+      ]) {
+        for (const name of ["spawn_agent", "spawn_agents"]) {
+          const request = { ...task, expected_workspace: expected };
+          const result = await executor.execute({ name, arguments: name === "spawn_agent" ? request : { tasks: [task, request] } });
+          expect(result.success).toBe(false);
+          expect(result.error).toContain("workspace_mismatch");
+          expect(result.error).not.toContain("secret");
+        }
+      }
+      for (const expected of [{ path: "relative", head: b.head }, { ...b, head: "HEAD" }, { ...b, head: "abc1234" }, { ...b, unexpected: true }]) {
+        const result = await executor.execute({ name: "spawn_agents", arguments: { tasks: [{ ...task, expected_workspace: expected }] } });
+        expect(result.success).toBe(false);
+      }
+      expect(fork).not.toHaveBeenCalled();
+      expect(h.configs).toEqual([]);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
   it("(1) runs two children to completion, merges findings, distinct agent_ids", async () => {
     const { events, unsubscribe } = collectLifecycle();
     // One finding per child, tagged with the task so we can assert the merge.

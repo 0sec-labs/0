@@ -46,6 +46,10 @@ export PATH="$HOME/.0/bin:$PATH"
 0
 ```
 
+`0` opens the local browser console without an account. `0 web` remains a
+compatibility alias. The interactive terminal UI is retired; headless CLI commands
+and MCP remain available.
+
 Configure a [model provider](https://docs.0.security/api-keys/) to run AI workflows.
 See [installation](https://docs.0.security/getting-started/) and
 [troubleshooting](https://docs.0.security/troubleshooting/).

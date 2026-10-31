@@ -31,12 +31,12 @@ export function matchConversation(document: ConversationDocument, query: string)
 }
 
 /** One bounded, asynchronous reader for the canonical saved transcripts. */
-export async function searchConversations(options: { homeDir?: string; cwd?: string; excludedIds?: ReadonlySet<string>; query?: string } = {}) {
+export async function readConversationCatalog(options: { homeDir?: string; cwd?: string; excludedIds?: ReadonlySet<string> } = {}) {
   const dir = sessionsDir(options.homeDir);
-  const conversations: ConversationMatch[] = [];
+  const documents: ConversationDocument[] = [];
   let truncated = false;
   let entries;
-  try { entries = await readdir(dir, { withFileTypes: true }); } catch { return { conversations, truncated }; }
+  try { entries = await readdir(dir, { withFileTypes: true }); } catch { return { documents, truncated }; }
   const candidates = entries.filter(entry => entry.isFile() && entry.name.endsWith(".json") && isValidSessionId(entry.name.slice(0, -5)) && !options.excludedIds?.has(entry.name.slice(0, -5)))
     .sort((a, b) => a.name.localeCompare(b.name));
   if (candidates.length > MAX_FILES) truncated = true;
@@ -67,11 +67,18 @@ export async function searchConversations(options: { homeDir?: string; cwd?: str
       const session = storedSessionMetadata(file.name.slice(0, -5), raw, raw.messages.length);
       if (options.cwd !== undefined && session.cwd !== options.cwd) continue;
       const title = typeof raw.consoleState?.title === "string" ? raw.consoleState.title : session.summary ?? session.preview;
-      const match = matchConversation({ session, title: cleanConversationText(title), text: extractConversationText(raw.messages) }, options.query ?? "");
-      if (match) conversations.push(match);
+      documents.push({ session, title: cleanConversationText(title), text: extractConversationText(raw.messages) });
     } catch { /* A corrupt or concurrently removed transcript cannot break history. */ }
     finally { try { await handle?.close(); } catch { /* Keep partial history usable. */ } }
   }
-  conversations.sort((a, b) => b.score - a.score || b.session.savedAt - a.session.savedAt || a.session.id.localeCompare(b.session.id));
+  return { documents, truncated };
+}
+
+export async function searchConversations(options: { homeDir?: string; cwd?: string; excludedIds?: ReadonlySet<string>; query?: string } = {}) {
+  const { documents, truncated } = await readConversationCatalog(options);
+  const conversations = documents.flatMap(document => {
+    const result = matchConversation(document, options.query ?? "");
+    return result ? [result] : [];
+  }).sort((a, b) => b.score - a.score || b.session.savedAt - a.session.savedAt || a.session.id.localeCompare(b.session.id));
   return { conversations, truncated };
 }

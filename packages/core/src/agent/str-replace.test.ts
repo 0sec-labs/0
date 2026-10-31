@@ -229,6 +229,384 @@ describe("str_replace (executor-level integration)", () => {
     expect(result.error).toMatch(/identical/);
   });
 
+
+  describe("line-ending adaptation (CRLF and LF interoperability)", () => {
+    it("matches multiline LF search string against CRLF file and formats replacement with CRLF", async () => {
+      const target = join(tmp, "crlf.ts");
+      writeFileSync(target, "function foo() {\r\n  const a = 1;\r\n  return a;\r\n}\r\n", "utf-8");
+
+      const result = await scopedExecutor.execute({
+        name: "str_replace",
+        arguments: {
+          path: "crlf.ts",
+          old_string: "  const a = 1;\n  return a;",
+          new_string: "  const a = 2;\n  const b = 3;\n  return a + b;",
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.output).toEqual({ path: "crlf.ts", replacements: 1 });
+      const content = readFileSync(target, "utf-8");
+      expect(content).toBe("function foo() {\r\n  const a = 2;\r\n  const b = 3;\r\n  return a + b;\r\n}\r\n");
+      expect(content.replace(/\r\n/g, "")).not.toContain("\n");
+    });
+
+    it("retains exact matches with mixed line endings inside a block", async () => {
+      const target = join(tmp, "mixed-exact.ts");
+      writeFileSync(target, "header\r\na\r\nb\nc\nfooter");
+      const result = await scopedExecutor.execute({ name: "str_replace", arguments: {
+        path: "mixed-exact.ts", old_string: "a\r\nb\nc", new_string: "x\ny\r\nz",
+      } });
+      expect(result.success).toBe(true);
+      expect(readFileSync(target, "utf-8")).toBe("header\r\nx\ny\r\nz\nfooter");
+    });
+
+    it.each([false, true])("counts exact mixed and normalized matches together (replace_all=%s)", async replaceAll => {
+      const target = join(tmp, "mixed-exact-all.ts");
+      const original = "a\r\nb\nc|a\nb\nc|a\r\nb\r\nc";
+      writeFileSync(target, original);
+      const result = await scopedExecutor.execute({ name: "str_replace", arguments: {
+        path: "mixed-exact-all.ts", old_string: "a\r\nb\nc", new_string: "x\ny\r\nz", replace_all: replaceAll,
+      } });
+      expect(result.success).toBe(replaceAll);
+      if (replaceAll) {
+        expect(result.output).toEqual({ path: "mixed-exact-all.ts", replacements: 3 });
+        expect(readFileSync(target, "utf-8")).toBe("x\ny\r\nz|x\ny\nz|x\r\ny\r\nz");
+      } else {
+        expect(result.error).toMatch(/matches 3 locations/);
+        expect(readFileSync(target, "utf-8")).toBe(original);
+      }
+    });
+
+    it.each([false, true])("counts internally mixed and uniform logical copies (replace_all=%s)", async replaceAll => {
+      const target = join(tmp, "logical-mixed.ts");
+      const original = "a\r\nb\nc|a\nb\nc";
+      writeFileSync(target, original);
+      const result = await scopedExecutor.execute({ name: "str_replace", arguments: {
+        path: "logical-mixed.ts", old_string: "a\nb\nc", new_string: "x\ny\nz", replace_all: replaceAll,
+      } });
+      expect(result.success).toBe(replaceAll);
+      if (replaceAll) {
+        expect(result.output).toEqual({ path: "logical-mixed.ts", replacements: 2 });
+        expect(readFileSync(target, "utf-8")).toBe("x\r\ny\r\nz|x\ny\nz");
+      } else {
+        expect(result.error).toMatch(/matches 2 locations/);
+        expect(readFileSync(target, "utf-8")).toBe(original);
+      }
+    });
+
+    it("maps leading and trailing newlines back to complete original CRLF sequences", async () => {
+      const target = join(tmp, "newline-boundaries.ts");
+      writeFileSync(target, "prefix\r\nalpha\nbeta\r\ngamma\nsuffix");
+      const result = await scopedExecutor.execute({ name: "str_replace", arguments: {
+        path: "newline-boundaries.ts", old_string: "\nalpha\nbeta\n", new_string: "\nx\n",
+      } });
+      expect(result.success).toBe(true);
+      expect(readFileSync(target, "utf-8")).toBe("prefix\r\nx\r\ngamma\nsuffix");
+    });
+
+    it("replaces adjacent logical newlines without leaving CR bytes behind", async () => {
+      const target = join(tmp, "newline-only.ts");
+      writeFileSync(target, "a\r\n\nb\r\n");
+      const result = await scopedExecutor.execute({ name: "str_replace", arguments: {
+        path: "newline-only.ts", old_string: "\n", new_string: "|", replace_all: true,
+      } });
+      expect(result.success).toBe(true);
+      expect(result.output).toEqual({ path: "newline-only.ts", replacements: 3 });
+      expect(readFileSync(target, "utf-8")).toBe("a||b|");
+    });
+
+    it("does not normalize a lone carriage return into a newline", async () => {
+      const target = join(tmp, "lone-cr.ts");
+      const original = "a\rb\nc";
+      writeFileSync(target, original);
+      const result = await scopedExecutor.execute({ name: "str_replace", arguments: {
+        path: "lone-cr.ts", old_string: "a\nb\nc", new_string: "replacement",
+      } });
+      expect(result.success).toBe(false);
+      expect(readFileSync(target, "utf-8")).toBe(original);
+    });
+
+    it.each(["\n", "\r\n"])("does not repeatedly search for an absent line-ending variant (%j)", async ending => {
+      const target = join(tmp, "many-blocks.ts");
+      const oldString = "unique-first\nunique-second";
+      const block = oldString.replace(/\n/g, ending);
+      const original = (block + "|").repeat(1000);
+      const absent = oldString.replace(/\n/g, ending === "\n" ? "\r\n" : "\n");
+      writeFileSync(target, original);
+      const indexOf = String.prototype.indexOf;
+      let absentScans = 0;
+      const search = vi.spyOn(String.prototype, "indexOf").mockImplementation(function (this: string, needle: string, from?: number) {
+        if (String(this) === original && needle === absent) absentScans++;
+        return indexOf.call(this, needle, from);
+      });
+      try {
+        const result = await scopedExecutor.execute({ name: "str_replace", arguments: {
+          path: "many-blocks.ts", old_string: oldString, new_string: "replacement",
+        } });
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/matches 1000 locations/);
+        expect(absentScans).toBeLessThanOrEqual(1);
+        expect(search.mock.calls.filter(([needle]) => needle === oldString).length).toBeLessThanOrEqual(1001);
+      } finally { search.mockRestore(); }
+      expect(readFileSync(target, "utf-8")).toBe(original);
+    });
+
+    it("single-line replacement in a CRLF file succeeds and preserves CRLF line endings", async () => {
+      const target = join(tmp, "single-crlf.ts");
+      writeFileSync(target, "const x = 1;\r\nconst y = 2;\r\n", "utf-8");
+
+      const result = await scopedExecutor.execute({
+        name: "str_replace",
+        arguments: {
+          path: "single-crlf.ts",
+          old_string: "const x = 1;",
+          new_string: "const x = 42;",
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(readFileSync(target, "utf-8")).toBe("const x = 42;\r\nconst y = 2;\r\n");
+    });
+
+    it("LF file continues to match and replace with LF without introducing CRLF", async () => {
+      const target = join(tmp, "lf.ts");
+      writeFileSync(target, "function bar() {\n  return 1;\n}\n", "utf-8");
+
+      const result = await scopedExecutor.execute({
+        name: "str_replace",
+        arguments: {
+          path: "lf.ts",
+          old_string: "function bar() {\n  return 1;\n}",
+          new_string: "function bar() {\n  return 2;\n}",
+        },
+      });
+
+      expect(result.success).toBe(true);
+      const content = readFileSync(target, "utf-8");
+      expect(content).toBe("function bar() {\n  return 2;\n}\n");
+      expect(content).not.toContain("\r");
+    });
+
+    it("explicit CRLF input matches and replaces correctly on CRLF file", async () => {
+      const target = join(tmp, "explicit-crlf.ts");
+      writeFileSync(target, "line 1\r\nline 2\r\n", "utf-8");
+
+      const result = await scopedExecutor.execute({
+        name: "str_replace",
+        arguments: {
+          path: "explicit-crlf.ts",
+          old_string: "line 1\r\nline 2",
+          new_string: "first\r\nsecond",
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(readFileSync(target, "utf-8")).toBe("first\r\nsecond\r\n");
+    });
+
+    it("multiple matches with replace_all: true are all replaced on CRLF file", async () => {
+      const target = join(tmp, "crlf-all.ts");
+      writeFileSync(target, "repeat:\r\n  step\r\nrepeat:\r\n  step\r\n", "utf-8");
+
+      const result = await scopedExecutor.execute({
+        name: "str_replace",
+        arguments: {
+          path: "crlf-all.ts",
+          old_string: "repeat:\n  step",
+          new_string: "done:\n  ok",
+          replace_all: true,
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.output).toEqual({ path: "crlf-all.ts", replacements: 2 });
+      expect(readFileSync(target, "utf-8")).toBe("done:\r\n  ok\r\ndone:\r\n  ok\r\n");
+    });
+
+    it("multiple matches with replace_all: false are rejected as ambiguous on CRLF file", async () => {
+      const target = join(tmp, "crlf-ambig.ts");
+      writeFileSync(target, "block:\r\n  action\r\nblock:\r\n  action\r\n", "utf-8");
+
+      const result = await scopedExecutor.execute({
+        name: "str_replace",
+        arguments: {
+          path: "crlf-ambig.ts",
+          old_string: "block:\n  action",
+          new_string: "block:\n  modified",
+        },
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/matches 2 locations in crlf-ambig\.ts; not unique/);
+      expect(readFileSync(target, "utf-8")).toBe("block:\r\n  action\r\nblock:\r\n  action\r\n");
+    });
+
+    it("mixed-line-ending file retains unrelated line endings across the file", async () => {
+      const target = join(tmp, "mixed.ts");
+      const mixed = "header1\r\nheader2\r\ntarget:\r\n  foo\r\nfooter1\nfooter2\n";
+      writeFileSync(target, mixed, "utf-8");
+
+      const result = await scopedExecutor.execute({
+        name: "str_replace",
+        arguments: {
+          path: "mixed.ts",
+          old_string: "target:\n  foo",
+          new_string: "target:\n  bar\n  baz",
+        },
+      });
+
+      expect(result.success).toBe(true);
+      const content = readFileSync(target, "utf-8");
+      expect(content).toContain("target:\r\n  bar\r\n  baz\r\n");
+      expect(content.startsWith("header1\r\nheader2\r\n")).toBe(true);
+      expect(content.endsWith("footer1\nfooter2\n")).toBe(true);
+    });
+
+    it("CRLF input on an LF file adapts to match and preserves LF line endings", async () => {
+      const target = join(tmp, "crlf-to-lf.ts");
+      writeFileSync(target, "line 1\nline 2\nline 3\n", "utf-8");
+
+      const result = await scopedExecutor.execute({
+        name: "str_replace",
+        arguments: {
+          path: "crlf-to-lf.ts",
+          old_string: "line 1\r\nline 2",
+          new_string: "alpha\r\nbeta",
+        },
+      });
+
+      expect(result.success).toBe(true);
+      const content = readFileSync(target, "utf-8");
+      expect(content).toBe("alpha\nbeta\nline 3\n");
+      expect(content).not.toContain("\r");
+    });
+
+    it("mixed-line-ending file: adapts CRLF query to match an LF block in a file that has CRLF elsewhere", async () => {
+      const target = join(tmp, "mixed-crlf-elsewhere.ts");
+      const mixed = "header1\r\nheader2\r\nfunction run() {\n  return 42;\n}\nfooter1\r\nfooter2\r\n";
+      writeFileSync(target, mixed, "utf-8");
+
+      const result = await scopedExecutor.execute({
+        name: "str_replace",
+        arguments: {
+          path: "mixed-crlf-elsewhere.ts",
+          old_string: "function run() {\r\n  return 42;\r\n}",
+          new_string: "function run() {\r\n  return 100;\r\n}",
+        },
+      });
+
+      expect(result.success).toBe(true);
+      const content = readFileSync(target, "utf-8");
+      expect(content).toContain("function run() {\n  return 100;\n}\n");
+      expect(content.startsWith("header1\r\nheader2\r\n")).toBe(true);
+      expect(content.endsWith("footer1\r\nfooter2\r\n")).toBe(true);
+    });
+
+    it("mixed-line-ending file: rejects ambiguity when the same logical multiline block occurs once with LF and once with CRLF (replace_all: false)", async () => {
+      const target = join(tmp, "mixed-dup-reject.ts");
+      const mixed = "header\r\nblock:\r\n  action\r\nmiddle\nblock:\n  action\nfooter\r\n";
+      writeFileSync(target, mixed, "utf-8");
+
+      const result = await scopedExecutor.execute({
+        name: "str_replace",
+        arguments: {
+          path: "mixed-dup-reject.ts",
+          old_string: "block:\n  action",
+          new_string: "block:\n  done",
+          replace_all: false,
+        },
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/matches 2 locations in mixed-dup-reject\.ts; not unique/);
+      expect(result.error).toMatch(/replace_all/);
+      expect(readFileSync(target, "utf-8")).toBe(mixed);
+    });
+
+    it("mixed-line-ending file: replaces both occurrences when the same logical multiline block occurs once with LF and once with CRLF (replace_all: true)", async () => {
+      const target = join(tmp, "mixed-dup-replace-all.ts");
+      const mixed = "header\r\nblock:\r\n  action\r\nmiddle\nblock:\n  action\nfooter\r\n";
+      writeFileSync(target, mixed, "utf-8");
+
+      const result = await scopedExecutor.execute({
+        name: "str_replace",
+        arguments: {
+          path: "mixed-dup-replace-all.ts",
+          old_string: "block:\n  action",
+          new_string: "block:\n  done",
+          replace_all: true,
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.output).toEqual({ path: "mixed-dup-replace-all.ts", replacements: 2 });
+      const content = readFileSync(target, "utf-8");
+      expect(content).toBe("header\r\nblock:\r\n  done\r\nmiddle\nblock:\n  done\nfooter\r\n");
+      expect((result.meta as ToolResultMeta).removed).toBe(4);
+      expect((result.meta as ToolResultMeta).added).toBe(4);
+    });
+
+    it("multiline matching uses non-overlapping semantics (same as exact matching)", async () => {
+      const target = join(tmp, "overlap.ts");
+      // "a\r\na\na" contains [0,4) for CRLF "a\r\na" and [3,6) for LF "a\na", overlapping at index 3
+      writeFileSync(target, "a\r\na\na", "utf-8");
+
+      const result = await scopedExecutor.execute({
+        name: "str_replace",
+        arguments: {
+          path: "overlap.ts",
+          old_string: "a\na",
+          new_string: "b\nb",
+          replace_all: false,
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.output).toEqual({ path: "overlap.ts", replacements: 1 });
+      expect(readFileSync(target, "utf-8")).toBe("b\r\nb\na");
+    });
+
+    it("treats special replacement patterns ($&, $', $`) literally in multiline replacements on CRLF files", async () => {
+      const target = join(tmp, "special-dollar-crlf.ts");
+      writeFileSync(target, "start:\r\n  val1\r\n  val2\r\nend\r\n", "utf-8");
+
+      const result = await scopedExecutor.execute({
+        name: "str_replace",
+        arguments: {
+          path: "special-dollar-crlf.ts",
+          old_string: "start:\n  val1\n  val2",
+          new_string: "start:\n  $& matched\n  $' post\n  $` pre",
+        },
+      });
+
+      expect(result.success).toBe(true);
+      const content = readFileSync(target, "utf-8");
+      expect(content).toBe("start:\r\n  $& matched\r\n  $' post\r\n  $` pre\r\nend\r\n");
+    });
+
+    it("preserves literal $&, $', $` and all bytes outside matched regions with replace_all: true on mixed CRLF/LF file", async () => {
+      const target = join(tmp, "mixed-dollar-all.ts");
+      const mixed = "header:\r\nblock:\r\n  old\r\nmiddle:\nblock:\n  old\nfooter:\r\n";
+      writeFileSync(target, mixed, "utf-8");
+
+      const result = await scopedExecutor.execute({
+        name: "str_replace",
+        arguments: {
+          path: "mixed-dollar-all.ts",
+          old_string: "block:\n  old",
+          new_string: "block:\n  $& and $'",
+          replace_all: true,
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.output).toEqual({ path: "mixed-dollar-all.ts", replacements: 2 });
+      const content = readFileSync(target, "utf-8");
+      expect(content).toBe("header:\r\nblock:\r\n  $& and $'\r\nmiddle:\nblock:\n  $& and $'\nfooter:\r\n");
+    });
+  });
+
   it("edits a file in a nested subdirectory of the scope", async () => {
     mkdirSync(join(tmp, "src", "lib"), { recursive: true });
     const nested = join(tmp, "src", "lib", "n.ts");

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -34,6 +34,24 @@ describe("validateFileRef", () => {
 
   it("accepts a real file without a line ref", () => {
     expect(validateFileRef("package.json", scope)).toEqual({ valid: true });
+  });
+
+  it("rejects file and directory symlinks leaving the scope while allowing in-scope links", () => {
+    const outside = mkdtempSync(join(tmpdir(), "0-parser-outside-"));
+    try {
+      writeFileSync(join(outside, "private.ts"), "private source\n");
+      symlinkSync(join(outside, "private.ts"), join(scope, "external.ts"));
+      symlinkSync(outside, join(scope, "external-dir"), "dir");
+      symlinkSync(join(scope, "src", "index.ts"), join(scope, "internal.ts"));
+      symlinkSync(join(scope, "missing.ts"), join(scope, "dangling.ts"));
+      expect(validateFileRef("external.ts:1", scope).valid).toBe(false);
+      expect(validateFileRef("external-dir/private.ts:1", scope).valid).toBe(false);
+      expect(validateFileRef("dangling.ts:1", scope).valid).toBe(false);
+      expect(validateFileRef("internal.ts:5", scope)).toEqual({ valid: true });
+      expect(validateFileRef("internal.ts:6", scope).valid).toBe(false);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 
   it("rejects a fabricated path that doesn't exist", () => {

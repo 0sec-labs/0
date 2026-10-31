@@ -38,6 +38,10 @@ export interface ToolParam {
   type: "string" | "number" | "boolean" | "object" | "array";
   description: string;
   enum?: string[];
+  /** Nested JSON-schema object contracts, forwarded unchanged to the runtime. */
+  properties?: Record<string, ToolParam>;
+  required?: string[];
+  additionalProperties?: boolean;
   /**
    * JSON-schema `items` for `type: "array"` params (e.g. `spawn_agents`'
    * `tasks` list). Passed through verbatim into the tool's `input_schema` so

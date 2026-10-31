@@ -13,6 +13,15 @@
 import type { ToolDefinition } from "../types.js";
 
 export const accessControlToolDefinitions: Record<string, ToolDefinition> = {
+  access_control_cleanup: {
+    name: "access_control_cleanup",
+    description: "Read-only verification that an operator-declared disposable resource returned to its retained pre-proof state. Uses the configured owner and JSON pointer; never sends cleanup mutations and never accepts a caller-supplied baseline. Run after separately authorized cleanup. An error leaves cleanup unverified.",
+    parameters: {
+      observation_url: { type: "string", description: "Exact observation URL of the retained operator-owned state-change proof." },
+      owner_identity: { type: "string", description: "Configured owner identity used by that proof." },
+    },
+    required: ["observation_url", "owner_identity"],
+  },
   access_control_probe: {
     name: "access_control_probe",
     description:
@@ -48,8 +57,9 @@ export const accessControlToolDefinitions: Record<string, ToolDefinition> = {
       "Stateful access-control workflow: observe a JSON resource as the owner, execute " +
       "a bounded sequence of HTTP requests as a different identity (the actor), then " +
       "re-observe and detect whether the actor caused a state transition to an expected " +
-      "marker value. Complements access_control_probe by detecting UNAUTHORIZED STATE " +
-      "CHANGE, not just unauthorized read (2xx). " +
+      "marker value. A state transition alone is conditional authorization evidence. " +
+      "A confirmed unauthorized-write milestone additionally requires a matching operator-owned disposable stateChange fixture, its ownershipMarker placeholder as expected_state and in an allowed actor request body. The host substitutes a fresh private challenge before dispatch, so the caller cannot choose proof evidence. " +
+      "Use access_control_cleanup after separately authorized restoration to verify the observed field without further mutations. " +
       "Caller must set allow_mutation=true and explain disposable-resource use; the tool " +
       "never auto-creates destructive cleanup. Returns explicit confirmed / no_change / " +
       "inconclusive verdicts with per-step evidence.",
@@ -133,4 +143,5 @@ export const accessControlToolDefinitions: Record<string, ToolDefinition> = {
 export const accessControlDispatch: Record<string, string> = {
   access_control_probe: "accessControlProbe",
   access_control_workflow: "accessControlWorkflow",
+  access_control_cleanup: "accessControlCleanup",
 };

@@ -16,6 +16,10 @@
  */
 
 import { afterEach, expect, test } from "vitest";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { launch, type TuiHandle } from "../index.js";
 import { HOME_READY } from "./_helpers.js";
 import {
@@ -27,9 +31,17 @@ import {
 } from "../../../src/tui/themes.js";
 
 let tui: TuiHandle | undefined;
+let repositoryFixture: { path: string; previousCwd: string } | undefined;
 afterEach(async () => {
-  await tui?.close();
-  tui = undefined;
+  try { await tui?.close(); }
+  finally {
+    tui = undefined;
+    if (repositoryFixture) {
+      process.chdir(repositoryFixture.previousCwd);
+      rmSync(repositoryFixture.path, { recursive: true, force: true });
+      repositoryFixture = undefined;
+    }
+  }
 });
 
 test("header paints a wide PRIMARY strip with a legible foreground", async () => {
@@ -125,6 +137,12 @@ test("header bar bleeds to BOTH terminal edges (column 0 and the last column)", 
 });
 
 test("Git-aware home suggestions draft a read-only repository review", async () => {
+  // Exercise real Git discovery against a tiny repo instead of timing the
+  // operator's large, concurrently changing checkout against its 250ms budget.
+  const path = mkdtempSync(join(tmpdir(), "0-home-git-"));
+  repositoryFixture = { path, previousCwd: process.cwd() };
+  execFileSync("git", ["init", "--quiet", "--initial-branch=main", path]);
+  process.chdir(path);
   tui = await launch({
     cols: 100,
     rows: 34,

@@ -1,6 +1,6 @@
 {
   "name": "@0/cli",
-  "version": "0.24.1",
+  "version": "0.25.0",
   "description": "0.security CLI \u2014 the self-improving, open-source cybersecurity harness for agent-driven security research and verification.",
   "type": "module",
   "bin": {
@@ -32,7 +32,7 @@
     "string-width": "7.2.0",
     "web-tree-sitter": "0.25.10",
     "ws": "^8.20.0",
-    "zod": "^3.25.76"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/pdfkit": "^0.13.9",
